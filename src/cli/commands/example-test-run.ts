@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { runToolCapturingStdout } from '../lib/run-tool.js';
 import {
   chunkDescribeTitle,
@@ -183,18 +183,18 @@ function observeExample(
 
 function printRunResult(result: VerifyExampleRunResult): void {
   if (result.records.length === 0) {
-    console.log(chalk.green(`✓ ${result.relTestFilePath} has no translated examples to run.`));
+    console.log(styleText('green', `✓ ${result.relTestFilePath} has no translated examples to run.`));
     return;
   }
   const disagrees = result.records.filter((r) => r.verdict === 'disagrees');
   console.log(
-    chalk.green(
+    styleText('green', 
       `✓ Ran ${result.relTestFilePath}: ${result.records.length - disagrees.length} agree, ` +
         `${disagrees.length} disagree.`,
     ),
   );
   for (const record of disagrees) {
-    console.log(chalk.yellow(`  ⚠ ${record.slicePath}:${record.lineNumber} — ${record.observed}`));
+    console.log(styleText('yellow', `  ⚠ ${record.slicePath}:${record.lineNumber} — ${record.observed}`));
   }
 }
 

@@ -34,7 +34,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import open from 'open';
 import type { Plugin as VitePlugin } from 'vite';
 
@@ -321,7 +321,7 @@ export async function openWorldRun(
         // rebuild have run and been answered. Vite has hot-reloaded its UI to
         // match rules the world only now has.
         connections.forgetAll({ type: 'world_reload' });
-        console.log(chalk.green('  Reloaded. The world is durable and running the new rules.\n'));
+        console.log(styleText('green', '  Reloaded. The world is durable and running the new rules.\n'));
         return;
       }
       connections.broadcast({ type: 'world_rules_reload', ...notice });
@@ -495,10 +495,10 @@ export async function startWorldDevServer(
     launched: run.launchedBefore,
     storePath: run.storePath,
   })) {
-    console.log(chalk.dim(`  ${line}`));
+    console.log(styleText('dim', `  ${line}`));
   }
   for (const file of created) {
-    console.log(chalk.dim(`  Wrote ${file} -- a world project needs an entry, and this one had none.`));
+    console.log(styleText('dim', `  Wrote ${file} -- a world project needs an entry, and this one had none.`));
   }
 
   const worldSocket = claimWebSocketPath(WORLD_WS_PATH, run.connections.accept);
@@ -554,11 +554,11 @@ export async function startWorldDevServer(
     join: 'others can join this world',
     networkUrls: served.networkUrls,
     say: (line) => console.log(line),
-    green: chalk.green,
-    cyan: chalk.cyan,
+    green: (text: string) => styleText('green', text),
+    cyan: (text: string) => styleText('cyan', text),
   });
   if (options.openBrowser) await open(hostUrl);
-  console.log(chalk.green('\n  Ready! Press Ctrl+C to stop.\n'));
+  console.log(styleText('green', '\n  Ready! Press Ctrl+C to stop.\n'));
 
   // ONE ORDERLY STOP, WHOEVER ASKS (#231). A signal and a programmatic caller
   // reach the same run, so the two can never run the teardown twice, and the
@@ -578,7 +578,7 @@ function reportMigration(started: { migrated?: WorldMigrationOutcome }): void {
   if (started.migrated === undefined) return;
   const { from, to, partitions, created, events } = started.migrated;
   console.log(
-    chalk.green(
+    styleText('green', 
       `  Migrated this world from state version ${from} to ${to}: ` +
         `${partitions} partition(s), ${created} new partition root(s) and ` +
         `${events} queued event(s), in one durable step.`,

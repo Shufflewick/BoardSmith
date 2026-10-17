@@ -6,7 +6,7 @@ import { sha256Hex } from '../lib/hash.js';
 import { withLedgerLock } from '../lib/ledger-lock.js';
 import { promises as fs } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { parseSliceSource, readRecordedSourcePaths, sliceDocuments } from './rulebook-sources.js';
 
 /**
@@ -922,12 +922,12 @@ export async function verifyRunInitCommand(
     return result;
   }
 
-  console.log(chalk.green(created ? '✓ Allocated verify run' : '✓ Resuming existing verify run'));
-  console.log(`  ${chalk.gray('run-id:')} ${runId}`);
-  console.log(`  ${chalk.gray('staging:')} ${result.stagingDir}`);
-  console.log(`  ${chalk.gray('ledger:')} ${result.ledgerPath}`);
+  console.log(styleText('green', created ? '✓ Allocated verify run' : '✓ Resuming existing verify run'));
+  console.log(`  ${styleText('gray', 'run-id:')} ${runId}`);
+  console.log(`  ${styleText('gray', 'staging:')} ${result.stagingDir}`);
+  console.log(`  ${styleText('gray', 'ledger:')} ${result.ledgerPath}`);
   for (const r of ranges) {
-    console.log(`  ${chalk.gray('range:')} ${r.rangeId} — pages ${r.pages} of ${r.source}`);
+    console.log(`  ${styleText('gray', 'range:')} ${r.rangeId} — pages ${r.pages} of ${r.source}`);
   }
   return result;
 }
@@ -1036,7 +1036,7 @@ async function recordRangeMarker(
     if (completeRanges.has(rangeId)) {
       const result: VerifyRunRangeActionResult = { runId, rangeId, action: kind, alreadyRecorded: true };
       if (options.json) console.log(JSON.stringify(result, null, 2));
-      else console.log(chalk.gray(`= range "${rangeId}" was already complete for run ${runId} — no-op`));
+      else console.log(styleText('gray', `= range "${rangeId}" was already complete for run ${runId} — no-op`));
       return result;
     }
   } else {
@@ -1061,9 +1061,9 @@ async function recordRangeMarker(
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
   } else if (kind === 'range-complete') {
-    console.log(chalk.green(`✓ Range "${rangeId}" marked complete`));
+    console.log(styleText('green', `✓ Range "${rangeId}" marked complete`));
   } else {
-    console.log(chalk.yellow(`↺ Range "${rangeId}" reset — its prior units will read as NOT recorded`));
+    console.log(styleText('yellow', `↺ Range "${rangeId}" reset — its prior units will read as NOT recorded`));
   }
   return result;
 }
@@ -1180,7 +1180,7 @@ async function recordInRun(
     if (options.json) {
       console.log(JSON.stringify(result, null, 2));
     } else {
-      console.log(chalk.gray(`= unit "${unit}" was already recorded for run ${runId} — no-op`));
+      console.log(styleText('gray', `= unit "${unit}" was already recorded for run ${runId} — no-op`));
     }
     return result;
   }
@@ -1239,9 +1239,9 @@ async function recordInRun(
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
   } else {
-    console.log(chalk.green(`✓ Recorded unit "${unit}"`));
-    console.log(`  ${chalk.gray('slice:')} ${relToStaging}`);
-    console.log(`  ${chalk.gray('sha256:')} ${hash}`);
+    console.log(styleText('green', `✓ Recorded unit "${unit}"`));
+    console.log(`  ${styleText('gray', 'slice:')} ${relToStaging}`);
+    console.log(`  ${styleText('gray', 'sha256:')} ${hash}`);
   }
   return result;
 }
@@ -1360,7 +1360,7 @@ export async function verifyRunStatusCommand(
   };
 
   for (const w of warnings) {
-    console.error(chalk.yellow(`⚠ ${w}`));
+    console.error(styleText('yellow', `⚠ ${w}`));
   }
 
   if (options.json) {
@@ -1368,14 +1368,14 @@ export async function verifyRunStatusCommand(
     return result;
   }
 
-  console.log(chalk.green(`✓ Verify run ${runId} — ${result.count} unit(s) recorded`));
-  console.log(`  ${chalk.gray('staging:')} ${result.stagingDir}`);
+  console.log(styleText('green', `✓ Verify run ${runId} — ${result.count} unit(s) recorded`));
+  console.log(`  ${styleText('gray', 'staging:')} ${result.stagingDir}`);
   for (const unitId of result.recorded) {
-    console.log(`  ${chalk.gray('-')} ${unitId}`);
+    console.log(`  ${styleText('gray', '-')} ${unitId}`);
   }
   if (manifestRanges.length > 0) {
-    console.log(`  ${chalk.gray('ranges recorded:')} ${rangesRecorded.join(', ') || '(none)'}`);
-    console.log(`  ${chalk.gray('ranges pending:')} ${rangesPending.join(', ') || '(none)'}`);
+    console.log(`  ${styleText('gray', 'ranges recorded:')} ${rangesRecorded.join(', ') || '(none)'}`);
+    console.log(`  ${styleText('gray', 'ranges pending:')} ${rangesPending.join(', ') || '(none)'}`);
   }
   return result;
 }

@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import ora from 'ora';
 import { getApiKey, saveApiKey, hasLegacyApiKeyField, globalConfigPath } from '../lib/config.js';
 import { readDistDir, createZip, formatBytes } from '../lib/zip.js';
@@ -37,7 +37,7 @@ import { publishGate, recordPublished } from '../lib/publish-gate.js';
  * carry on with a half-published version.
  */
 function reportPublishFailure(err: unknown): never {
-  console.error(chalk.red(isPublishError(err) ? err.message : String(err)));
+  console.error(styleText('red', isPublishError(err) ? err.message : String(err)));
   process.exit(1);
 }
 
@@ -134,7 +134,7 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
     target = resolveTarget(options);
   } catch (error) {
     if (!(error instanceof PublishTargetError)) throw error;
-    console.error(chalk.red(error.message));
+    console.error(styleText('red', error.message));
     process.exit(1);
   }
 
@@ -144,7 +144,7 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
   requireTableUi(cwd, config);
   const verified = await publishGate(cwd);
   if ('problem' in verified) {
-    console.error(chalk.red(verified.problem));
+    console.error(styleText('red', verified.problem));
     process.exit(1);
   }
 
@@ -154,30 +154,30 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
 
   if (apiKey) {
     if (!apiKey.startsWith('spk_')) {
-      console.error(chalk.red('API key must start with spk_'));
+      console.error(styleText('red', 'API key must start with spk_'));
       process.exit(1);
     }
     saveApiKey(target, apiKey);
-    console.log(chalk.green(`API key saved for ${target}.`));
+    console.log(styleText('green', `API key saved for ${target}.`));
   } else {
     apiKey = getApiKey(target);
     if (!apiKey) {
-      console.error(chalk.red(`No API key configured for the ${target} platform.`));
+      console.error(styleText('red', `No API key configured for the ${target} platform.`));
       if (hasLegacyApiKeyField()) {
-        console.error(chalk.dim(
+        console.error(styleText('dim', 
           `${globalConfigPath()} still holds a single "apiKey" from before dev and prod had ` +
           `separate key stores. It is not read for any target — save the key against the one you want.`
         ));
       }
-      console.error(chalk.dim(`Run: boardsmith publish --${target} --api-key spk_YOUR_KEY`));
+      console.error(styleText('dim', `Run: boardsmith publish --${target} --api-key spk_YOUR_KEY`));
       process.exit(1);
     }
   }
 
   const version = pkg.version;
   if (!version) {
-    console.error(chalk.red('No version field in package.json.'));
-    console.error(chalk.dim('Add a "version" field (e.g., "1.0.0") to your package.json.'));
+    console.error(styleText('red', 'No version field in package.json.'));
+    console.error(styleText('dim', 'Add a "version" field (e.g., "1.0.0") to your package.json.'));
     process.exit(1);
   }
 
@@ -202,16 +202,16 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
   } else if (existingPublisherId) {
     targetPublisherId = existingPublisherId;
   } else {
-    console.error(chalk.red(`No publisher target for new game "${displayName}".`));
-    console.error(chalk.dim('Pass --publisher <slug> to specify which publisher owns this game.'));
+    console.error(styleText('red', `No publisher target for new game "${displayName}".`));
+    console.error(styleText('dim', 'Pass --publisher <slug> to specify which publisher owns this game.'));
     process.exit(1);
   }
   // Slug used when naming the publisher in access/scope error messages.
   const effectiveSlug = options.publisher ?? existingPublisherSlug ?? existingPublisherId ?? '(unknown)';
 
-  console.log(chalk.cyan(`\nPublishing ${displayName} v${version}\n`));
-  console.log(chalk.dim(`  Platform:  ${platformUrl}`));
-  console.log(chalk.dim(`  API Key:   ${apiKey.slice(0, 12)}...`));
+  console.log(styleText('cyan', `\nPublishing ${displayName} v${version}\n`));
+  console.log(styleText('dim', `  Platform:  ${platformUrl}`));
+  console.log(styleText('dim', `  API Key:   ${apiKey.slice(0, 12)}...`));
   console.log('');
 
   // -- Preflight: check version availability before building --
@@ -220,8 +220,8 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
   } catch (err: unknown) {
     if (isPublishError(err) && err.kind === 'VERSION_EXISTS') {
       // The platform's message names the latest published version.
-      console.error(chalk.red(err.message));
-      console.error(chalk.dim('Bump the version in package.json past it and try again.'));
+      console.error(styleText('red', err.message));
+      console.error(styleText('dim', 'Bump the version in package.json past it and try again.'));
       process.exit(1);
     }
     // Network errors during preflight are non-fatal — continue with build
@@ -229,11 +229,11 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
   }
 
   // -- Validate (throws, stopping publish, on failure) --
-  console.log(chalk.cyan('Running pre-publish validation...\n'));
+  console.log(styleText('cyan', 'Running pre-publish validation...\n'));
   await validateCommand();
 
   // -- Build --
-  console.log(chalk.cyan('\nBuilding for production...\n'));
+  console.log(styleText('cyan', '\nBuilding for production...\n'));
   await buildCommand({ outDir: 'dist' });
 
   // -- Package --
@@ -244,7 +244,7 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
     fileMap = readDistDir(distDir);
   } catch (err: unknown) {
     spinner.fail('Packaging failed');
-    console.error(chalk.red((err as Error).message));
+    console.error(styleText('red', (err as Error).message));
     process.exit(1);
   }
 
@@ -257,19 +257,19 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
   const sizeCheck = await validateBundleSize(cwd, resolveWorldMode(config));
   if (!sizeCheck.passed) {
     spinner.fail('Packaging failed');
-    for (const issue of sizeCheck.details ?? []) console.error(chalk.red(issue));
+    for (const issue of sizeCheck.details ?? []) console.error(styleText('red', issue));
     process.exit(1);
   }
 
   spinner.succeed(`Packaged ${fileMap.size} files (${formatBytes(zip.length)})`);
 
   if (options.dryRun) {
-    console.log(chalk.yellow('\nDry run — skipping upload.\n'));
-    console.log(chalk.dim('Would publish:'));
-    console.log(chalk.dim(`  Game:    ${displayName}`));
-    console.log(chalk.dim(`  Version: ${version}`));
-    console.log(chalk.dim(`  Files:   ${fileMap.size}`));
-    console.log(chalk.dim(`  Size:    ${formatBytes(zip.length)}`));
+    console.log(styleText('yellow', '\nDry run — skipping upload.\n'));
+    console.log(styleText('dim', 'Would publish:'));
+    console.log(styleText('dim', `  Game:    ${displayName}`));
+    console.log(styleText('dim', `  Version: ${version}`));
+    console.log(styleText('dim', `  Files:   ${fileMap.size}`));
+    console.log(styleText('dim', `  Size:    ${formatBytes(zip.length)}`));
     console.log('');
     return;
   }
@@ -294,22 +294,22 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
   } catch (err: unknown) {
     if (isPublishError(err) && err.kind === 'VERSION_EXISTS') {
       spinner.fail('Publish failed');
-      console.error(chalk.red(err.message));
-      console.error(chalk.dim('Bump the version in package.json past it and try again.'));
+      console.error(styleText('red', err.message));
+      console.error(styleText('dim', 'Bump the version in package.json past it and try again.'));
       process.exit(1);
     }
     if (isPublishError(err) && err.kind === 'NO_ACCESS') {
       spinner.fail('Publish failed');
-      console.error(chalk.red(
+      console.error(styleText('red', 
         `You don't have develop access to this game under publisher \`${effectiveSlug}\`. `
         + 'Ask an owner or manager to grant you develop access, then try again.',
       ));
-      if (targetPublisherId) console.error(chalk.dim(staleIdsHint(target)));
+      if (targetPublisherId) console.error(styleText('dim', staleIdsHint(target)));
       process.exit(1);
     }
     if (isPublishError(err) && err.kind === 'SCOPE_VIOLATION') {
       spinner.fail('Publish failed');
-      console.error(chalk.red(
+      console.error(styleText('red', 
         `This API key is scoped to a different publisher and can't publish to \`${effectiveSlug}\`.`,
       ));
       process.exit(1);
@@ -347,8 +347,8 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
     const result = await completePublish(platformUrl, apiKey, initResult.versionId);
     spinner.succeed('Published!');
     console.log('');
-    console.log(chalk.green(`  ${displayName} v${version}`));
-    console.log(chalk.green(`  ${result.gameUrl}`));
+    console.log(styleText('green', `  ${displayName} v${version}`));
+    console.log(styleText('green', `  ${result.gameUrl}`));
     console.log('');
   } catch (err: unknown) {
     spinner.fail('Finalize failed');
@@ -372,7 +372,7 @@ export async function abortInFlightPublish(
   try {
     await abortPublish(platformUrl, apiKey, versionId);
   } catch {
-    console.error(chalk.dim('(Could not clean up the in-flight version; it will be swept automatically.)'));
+    console.error(styleText('dim', '(Could not clean up the in-flight version; it will be swept automatically.)'));
   }
 }
 
@@ -409,17 +409,17 @@ async function preflightAudience(platformUrl: string, audience: unknown): Promis
   try {
     ({ audiences } = await fetchTaxonomy(platformUrl));
   } catch (err: unknown) {
-    console.error(chalk.red(isPublishError(err) ? err.message : String(err)));
-    console.error(chalk.dim('Could not verify "audience" against the platform taxonomy. Check your connection and try again.'));
+    console.error(styleText('red', isPublishError(err) ? err.message : String(err)));
+    console.error(styleText('dim', 'Could not verify "audience" against the platform taxonomy. Check your connection and try again.'));
     process.exit(1);
   }
 
   const mismatch = describeAudienceMismatch(audience, audiences);
   if (!mismatch) return;
 
-  console.error(chalk.red(mismatch[0]));
+  console.error(styleText('red', mismatch[0]));
   for (const line of mismatch.slice(1)) {
-    console.error(chalk.dim(line));
+    console.error(styleText('dim', line));
   }
   process.exit(1);
 }
@@ -430,8 +430,8 @@ function toSlug(name: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '');
   if (!SLUG_PATTERN.test(slug)) {
-    console.error(chalk.red(`Cannot derive a valid slug from name "${name}".`));
-    console.error(chalk.dim('The "name" field in boardsmith.json must produce a valid slug (lowercase alphanumeric with hyphens).'));
+    console.error(styleText('red', `Cannot derive a valid slug from name "${name}".`));
+    console.error(styleText('dim', 'The "name" field in boardsmith.json must produce a valid slug (lowercase alphanumeric with hyphens).'));
     process.exit(1);
   }
   return slug;

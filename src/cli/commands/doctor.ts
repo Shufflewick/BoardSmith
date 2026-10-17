@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { gitSucceeds } from '../lib/git-output.js';
 import { join, relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import {
   CHUNKS_DIR,
   DESIGN_DIR,
@@ -392,25 +392,25 @@ function summarize(projectDir: string, findings: DoctorFinding[]): DoctorResult 
 
 /** A config finding as a report line: what is missing or outdated, and until fixed, what to do. */
 function configLine(f: DoctorFinding, rel: (p: string) => string): string {
-  const where = `${rel(f.from)} ${chalk.dim('->')} ${rel(f.to)} built with defineGameViteConfig`;
-  if (f.fixed) return `${chalk.green('fixed   ')} ${where}`;
-  return `${chalk.yellow(f.kind === 'test-config-missing' ? 'missing ' : 'outdated')} ${where}\n          ${f.detail}`;
+  const where = `${rel(f.from)} ${styleText('dim', '->')} ${rel(f.to)} built with defineGameViteConfig`;
+  if (f.fixed) return `${styleText('green', 'fixed   ')} ${where}`;
+  return `${styleText('yellow', f.kind === 'test-config-missing' ? 'missing ' : 'outdated')} ${where}\n          ${f.detail}`;
 }
 
 /** One finding as a report line; `rel` makes a project path relative to where doctor was run. */
 function reportLine(f: DoctorFinding, rel: (p: string) => string): string {
   switch (f.kind) {
     case 'move-conflict':
-      return `${chalk.red('conflict')} ${rel(f.from)}\n          ${f.detail}`;
+      return `${styleText('red', 'conflict')} ${rel(f.from)}\n          ${f.detail}`;
     case 'test-config-needs-edit':
-      return `${chalk.red('edit    ')} ${rel(f.from)}\n          ${f.detail}`;
+      return `${styleText('red', 'edit    ')} ${rel(f.from)}\n          ${f.detail}`;
     case 'test-config-missing':
     case 'test-run-collects-worktrees':
       return configLine(f, rel);
     case 'scratch-dir-not-ignored':
-      return `${f.fixed ? chalk.green('ignored ') : chalk.yellow('untracked')} ${rel(f.from)} ${chalk.dim('->')} adds ${GITIGNORE_ENTRY}`;
+      return `${f.fixed ? styleText('green', 'ignored ') : styleText('yellow', 'untracked')} ${rel(f.from)} ${styleText('dim', '->')} adds ${GITIGNORE_ENTRY}`;
     default:
-      return `${f.fixed ? chalk.green('moved   ') : chalk.yellow('misplaced')} ${rel(f.from)} ${chalk.dim('->')} ${rel(f.to)}`;
+      return `${f.fixed ? styleText('green', 'moved   ') : styleText('yellow', 'misplaced')} ${rel(f.from)} ${styleText('dim', '->')} ${rel(f.to)}`;
   }
 }
 
@@ -418,7 +418,7 @@ function printReport(result: DoctorResult, fixed: boolean): void {
   const rel = (p: string) => relative(process.cwd(), join(result.projectDir, p)) || p;
 
   if (result.healthy) {
-    console.log(chalk.green(`✓ layout is current — ${DESIGN_DIR}/ holds every design artifact`));
+    console.log(styleText('green', `✓ layout is current — ${DESIGN_DIR}/ holds every design artifact`));
     return;
   }
 
@@ -438,7 +438,7 @@ function printReport(result: DoctorResult, fixed: boolean): void {
  * it is offered only for those; conflicts are sent to the hand-edit instructions printed above.
  */
 function closingAdvice(pending: number, conflicts: number): string {
-  const fixCommand = chalk.cyan('boardsmith doctor --fix');
+  const fixCommand = styleText('cyan', 'boardsmith doctor --fix');
   const handEdit = '--fix cannot resolve them. Follow the instructions printed under each one above.';
   if (conflicts === 0) return `${pending} to fix.\nRun ${fixCommand} to put them right.`;
   if (pending === 0) return `${conflicts} conflict(s) need a hand edit; ${handEdit}`;

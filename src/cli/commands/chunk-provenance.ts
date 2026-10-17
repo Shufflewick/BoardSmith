@@ -10,7 +10,7 @@ import { assertBareName } from '../lib/user-name.js';
 import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { normalizeEdition } from './ingest-archive.js';
 import {
   NON_SLICE_FILES,
@@ -791,7 +791,7 @@ function reportUpToDate(
   engineRecorded: number | undefined,
 ): void {
   console.log(
-    chalk.green(
+    styleText('green', 
       `✓ ${relChunkMdPath(slug)} — Verified Against up to date (${record.scope}${record.reason ? `, ${record.reason}` : ''})`,
     ),
   );
@@ -893,7 +893,7 @@ export async function chunkCheckCommand(
 
   if (signoffProblems.length) {
     if (!options.json) {
-      console.error(chalk.red(`${relChunkPath}'s verified status is not backed by a valid sign-off:`));
+      console.error(styleText('red', `${relChunkPath}'s verified status is not backed by a valid sign-off:`));
       for (const p of signoffProblems) console.error(`  • ${p}`);
       console.error('');
     }
@@ -922,13 +922,13 @@ export async function chunkCheckCommand(
       if (!bullets.length) bullets.push('provenance fields refreshed');
     }
 
-    console.error(chalk.yellow(`${relChunkPath}'s "${VERIFIED_AGAINST_HEADING}" was out of sync. It has been REPAIRED:`));
+    console.error(styleText('yellow', `${relChunkPath}'s "${VERIFIED_AGAINST_HEADING}" was out of sync. It has been REPAIRED:`));
     for (const b of bullets) {
       console.error(`  • ${b}`);
     }
     console.error('');
-    console.error(chalk.yellow(`Re-read ${relChunkPath} before continuing — the copy you have is stale.`));
-    console.error(chalk.dim(`Then re-run \`boardsmith chunk-check ${slug}\`; it will pass.`));
+    console.error(styleText('yellow', `Re-read ${relChunkPath} before continuing — the copy you have is stale.`));
+    console.error(styleText('dim', `Then re-run \`boardsmith chunk-check ${slug}\`; it will pass.`));
   }
 
   // Set the exit code rather than throwing: `program.parse()` does not await action handlers, so
@@ -1293,7 +1293,7 @@ export async function chunkProvenanceStatusCommand(
   const engineKeys = Object.keys(byEngineRevision);
   if (editionKeys.length > 1 || skillsHashKeys.length > 1 || engineKeys.length > 1) {
     console.log('');
-    console.log(chalk.yellow('Drift:'));
+    console.log(styleText('yellow', 'Drift:'));
     if (editionKeys.length > 1) {
       for (const key of editionKeys) {
         console.log(`  edition ${key}: ${byEdition[key].join(', ')}`);
@@ -1319,7 +1319,7 @@ export async function chunkProvenanceStatusCommand(
     // `chunk-check` — goes unread too.
     if (projectProvenanceState === 'pre-provenance') {
       console.log(
-        chalk.yellow(
+        styleText('yellow', 
           `NO RECORDED PROVENANCE YET — this project's verifications predate provenance ` +
             `recording, so all ${verifiedWithoutProvenance.length} verified chunk(s) lack a ` +
             `"${VERIFIED_AGAINST_HEADING}" block. This is expected for a project built before ` +
@@ -1329,7 +1329,7 @@ export async function chunkProvenanceStatusCommand(
       );
     } else {
       console.log(
-        chalk.red(
+        styleText('red', 
           `VERIFIED WITHOUT PROVENANCE — this project DOES record provenance elsewhere, yet ` +
             `these chunks' Status claims verification with no valid ` +
             `"${VERIFIED_AGAINST_HEADING}" block behind it. That is the signature of a skipped ` +
@@ -1345,7 +1345,7 @@ export async function chunkProvenanceStatusCommand(
   if (verifiedWithoutSignoff.length) {
     console.log('');
     console.log(
-      chalk.red(
+      styleText('red', 
         `VERIFIED WITHOUT SIGN-OFF: these chunks' Status claims verification that no valid ` +
           `designer sign-off backs. Set each back to built and have the designer sign it off ` +
           `with \`boardsmith chunk-signoff <slug>\`:`,

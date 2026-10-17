@@ -11,7 +11,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 
 import { buildFormatFixture, computeFingerprints } from '../../contract/fingerprint.js';
 import type { EngineContract } from '../../contract/index.js';
@@ -132,17 +132,17 @@ export function nextContract(
 }
 
 function reportCheck(contract: EngineContract, diff: ReturnType<typeof diffContract>): void {
-  console.log(chalk.cyan('\nEngine contract\n'));
+  console.log(styleText('cyan', '\nEngine contract\n'));
   console.log(`  revision        ${contract.revision}`);
   console.log(`  surfaceHash     ${contract.surfaceHash}`);
   console.log(`  payloadHash     ${contract.payloadHash}`);
-  console.log(`  formatHash      ${contract.formatHash ?? chalk.red('none declared')}`);
+  console.log(`  formatHash      ${contract.formatHash ?? styleText('red', 'none declared')}`);
 
   const head = contract.history[contract.history.length - 1];
-  if (head) console.log(chalk.dim(`\n  r${head.revision} (${head.date}) — ${head.summary}`));
+  if (head) console.log(styleText('dim', `\n  r${head.revision} (${head.date}) — ${head.summary}`));
 
   if (!diff.drifted) {
-    console.log(chalk.green('\n✓ The engine matches its committed contract.\n'));
+    console.log(styleText('green', '\n✓ The engine matches its committed contract.\n'));
     return;
   }
 
@@ -152,20 +152,20 @@ function reportCheck(contract: EngineContract, diff: ReturnType<typeof diffContr
     diff.formatChanged && 'world serialization format',
   ].filter(Boolean).join(' and ');
 
-  console.error(chalk.red(`\n✗ Contract drift: the ${moved} changed.\n`));
+  console.error(styleText('red', `\n✗ Contract drift: the ${moved} changed.\n`));
   console.error('Record it so ShufflewickPub learns about it:');
-  console.error(chalk.bold('  boardsmith contract --update --summary "<one sentence for the platform team>"'));
-  console.error(chalk.dim('\nSee docs/engine-contract.md.\n'));
+  console.error(styleText('bold', '  boardsmith contract --update --summary "<one sentence for the platform team>"'));
+  console.error(styleText('dim', '\nSee docs/engine-contract.md.\n'));
 }
 
 export async function contractCommand(options: ContractOptions): Promise<void> {
   const contract = readContract();
   if (contract === null) {
-    console.error(chalk.red('\n`boardsmith contract` only works inside the BoardSmith repository.\n'));
+    console.error(styleText('red', '\n`boardsmith contract` only works inside the BoardSmith repository.\n'));
     console.error('It reads and writes src/contract/engine-contract.json, which is a');
     console.error('development-time file — an installed copy of BoardSmith has nothing to record.');
-    console.error(chalk.dim('\nTo see which engine a project is running, check its own vendored copy:'));
-    console.error(chalk.dim('  node_modules/boardsmith/src/contract/engine-contract.json\n'));
+    console.error(styleText('dim', '\nTo see which engine a project is running, check its own vendored copy:'));
+    console.error(styleText('dim', '  node_modules/boardsmith/src/contract/engine-contract.json\n'));
     process.exitCode = 1;
     return;
   }
@@ -176,12 +176,12 @@ export async function contractCommand(options: ContractOptions): Promise<void> {
   if (options.regenerateFormat === true) {
     const fixture = await buildFormatFixture();
     writeFileSync(FORMAT_FIXTURE_PATH, `${JSON.stringify(fixture, null, 2)}\n`);
-    console.log(chalk.yellow('\n! Regenerated src/contract/format-fixture.json.\n'));
+    console.log(styleText('yellow', '\n! Regenerated src/contract/format-fixture.json.\n'));
     console.log('Every world whose partitions were written under the OLD corpus can no longer');
     console.log('be read by this engine. On ShufflewickPub those worlds end: there is no');
     console.log('migration, because nothing can read them.');
-    console.log(chalk.dim('\nRecord the new format:'));
-    console.log(chalk.dim('  boardsmith contract --update --summary "<what stored bytes now look like>"\n'));
+    console.log(styleText('dim', '\nRecord the new format:'));
+    console.log(styleText('dim', '  boardsmith contract --update --summary "<what stored bytes now look like>"\n'));
   }
 
   const computed = await computeFingerprints();
@@ -195,10 +195,10 @@ export async function contractCommand(options: ContractOptions): Promise<void> {
 
   const summary = (options.summary ?? '').trim();
   if (!summary) {
-    console.error(chalk.red('\n--summary is required when recording a contract revision.\n'));
+    console.error(styleText('red', '\n--summary is required when recording a contract revision.\n'));
     console.error('It is the text ShufflewickPub\'s `npm run vendor:check` shows the person');
     console.error('deciding whether to re-vendor, so write it for them:');
-    console.error(chalk.bold('  boardsmith contract --update --summary "Deck defaults to count-only; draw piles report size again"'));
+    console.error(styleText('bold', '  boardsmith contract --update --summary "Deck defaults to count-only; draw piles report size again"'));
     console.error('');
     process.exitCode = 1;
     return;
@@ -206,7 +206,7 @@ export async function contractCommand(options: ContractOptions): Promise<void> {
 
   const verdict = recordable(diff, { adopt: options.adopt === true });
   if (verdict.reason === 'nothing') {
-    console.error(chalk.yellow('\nNothing to record — the API surface, the player-view payload and the world serialization format are all unchanged.\n'));
+    console.error(styleText('yellow', '\nNothing to record — the API surface, the player-view payload and the world serialization format are all unchanged.\n'));
     console.error('If your change affects the platform in a way neither fingerprint can see');
     console.error('(an exported TYPE, say — see the KNOWN LIMIT in src/contract/fingerprint.ts),');
     console.error('extend the fixture in fingerprint.ts so it does, then re-run this.\n');
@@ -214,15 +214,15 @@ export async function contractCommand(options: ContractOptions): Promise<void> {
     console.error('this build — a performance fix, which alters no surface, no payload and no');
     console.error('stored byte — it needs a number of its own, because the platform archives an');
     console.error('engine build under its revision and will not overwrite one:');
-    console.error(chalk.bold('  boardsmith contract --update --adopt --summary "<why the platform must run this build>"'));
+    console.error(styleText('bold', '  boardsmith contract --update --adopt --summary "<why the platform must run this build>"'));
     console.error('');
     process.exitCode = 1;
     return;
   }
   if (verdict.reason === 'adopt-not-needed') {
-    console.error(chalk.yellow('\n--adopt is for a change no fingerprint can see, and this one moved the contract.\n'));
+    console.error(styleText('yellow', '\n--adopt is for a change no fingerprint can see, and this one moved the contract.\n'));
     console.error('Record it as the ordinary revision it is, without the flag:');
-    console.error(chalk.bold('  boardsmith contract --update --summary "<one sentence for the platform team>"'));
+    console.error(styleText('bold', '  boardsmith contract --update --summary "<one sentence for the platform team>"'));
     console.error('');
     process.exitCode = 1;
     return;
@@ -238,15 +238,15 @@ export async function contractCommand(options: ContractOptions): Promise<void> {
   const changed = [
     diff.surfaceChanged && 'exported API surface',
     diff.payloadChanged && 'player-view payload',
-    diff.formatChanged && chalk.yellow(
+    diff.formatChanged && styleText('yellow', 
       'world serialization format (a live world may not cross this)',
     ),
     verdict.reason === 'adopt' && 'nothing a fingerprint can see — recorded so the platform can archive and run this build',
   ].filter(Boolean);
 
-  console.log(chalk.green(`\n✓ Engine contract revision ${contract.revision} → ${updated.revision}`));
+  console.log(styleText('green', `\n✓ Engine contract revision ${contract.revision} → ${updated.revision}`));
   console.log(`  Changed: ${changed.join(', ')}`);
   console.log(`  Summary: ${summary}`);
-  console.log(chalk.dim('\nCommit src/contract/engine-contract.json, then re-vendor on the platform:'));
-  console.log(chalk.dim('  cd ~/ShufflewickPub && npm run vendor:boardsmith\n'));
+  console.log(styleText('dim', '\nCommit src/contract/engine-contract.json, then re-vendor on the platform:'));
+  console.log(styleText('dim', '  cd ~/ShufflewickPub && npm run vendor:boardsmith\n'));
 }

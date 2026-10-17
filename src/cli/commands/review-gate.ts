@@ -26,7 +26,7 @@
  * round reviewed goes back to the reviewer.
  */
 import { relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { ESCALATION_LADDER, type WorkRole } from '../lib/agent-roles.js';
 import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { assertBareName } from '../lib/user-name.js';
@@ -174,7 +174,7 @@ export async function reviewGateCommand(
     since: options.since,
   });
   if (!gate.open) {
-    console.error(chalk.red(gate.refusal));
+    console.error(styleText('red', gate.refusal));
     process.exitCode = 1;
     return;
   }

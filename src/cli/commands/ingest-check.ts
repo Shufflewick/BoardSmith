@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { ingestGapsCommand, relabelDerivedLines } from './ingest-archive.js';
 import { checkSliceSources, describeSliceSourceProblems } from './rulebook-sources.js';
 import {
@@ -99,7 +99,7 @@ function reportIngestCheck(check: IngestCheck): void {
   if (!wasRepaired(check) && !leftUnrepaired(check)) {
     const n = check.gaps.gapsWritten;
     console.log(
-      chalk.green(
+      styleText('green', 
         `✓ Ingest synthesis up to date — ${n} open rules ${plural(n, 'gap', 'gaps')}, no Derived/Visual misfiling`,
       ),
     );
@@ -107,23 +107,23 @@ function reportIngestCheck(check: IngestCheck): void {
   }
   if (wasRepaired(check)) reportRepairs(check);
   if (check.sourceProblems.length > 0) {
-    console.error(chalk.red('rulebook/ slices do not all say which document they came from. NOT repaired:'));
+    console.error(styleText('red', 'rulebook/ slices do not all say which document they came from. NOT repaired:'));
     for (const line of check.sourceProblems) console.error(line);
   }
   if (check.examples.lost.length > 0) {
-    console.error(chalk.red('Recorded worked examples no longer point at their text. NOT repaired:'));
+    console.error(styleText('red', 'Recorded worked examples no longer point at their text. NOT repaired:'));
     for (const line of describeUnanchoredExamples(check.examples.lost)) console.error(line);
   }
 }
 
 function reportRepairs({ relabel, gaps, examples }: IngestCheck): void {
-  console.error(chalk.yellow('rulebook/ was out of sync with its slices. It has been REPAIRED:'));
+  console.error(styleText('yellow', 'rulebook/ was out of sync with its slices. It has been REPAIRED:'));
   if (relabel.relabelled) {
     console.error(
       `  • relabelled ${relabel.relabelled} presentation ${plural(relabel.relabelled, 'line', 'lines')} Derived → Visual`,
     );
     for (const c of relabel.changes) {
-      console.error(`      ${chalk.gray(`${c.file}:${c.line}`)} matched "${c.matched}"`);
+      console.error(`      ${styleText('gray', `${c.file}:${c.line}`)} matched "${c.matched}"`);
     }
   }
   if (gaps.changed) {
@@ -139,6 +139,6 @@ function reportRepairs({ relabel, gaps, examples }: IngestCheck): void {
     for (const m of examples.moved) console.error(`      ${m.from} → ${m.to}`);
   }
   console.error('');
-  console.error(chalk.yellow('Re-read rulebook/INDEX.md before continuing — the copy you have is stale.'));
-  console.error(chalk.dim('Then re-run `boardsmith ingest-check`; it will pass once nothing below is left.'));
+  console.error(styleText('yellow', 'Re-read rulebook/INDEX.md before continuing — the copy you have is stale.'));
+  console.error(styleText('dim', 'Then re-run `boardsmith ingest-check`; it will pass once nothing below is left.'));
 }

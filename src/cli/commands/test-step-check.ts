@@ -40,7 +40,7 @@
  */
 import { promises as fs } from 'node:fs';
 import { join, relative, resolve as pathResolve, sep } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import {
   claimsInForce,
   extractSection,
@@ -745,7 +745,7 @@ export async function testStepCheckCommand(
       testFiles,
       added,
       claims: liveClaims,
-      log: options.json ? () => {} : (line) => console.error(chalk.dim(line)),
+      log: options.json ? () => {} : (line) => console.error(styleText('dim', line)),
     });
     result.mutation = mutation.summary;
     result.findings.push(...mutation.findings);
@@ -771,11 +771,11 @@ function printReport(result: TestStepCheckResult): void {
     );
   }
   if (result.findings.length === 0) {
-    console.log(chalk.green('Passed: every claim has a test that can fail, and every verb runs through the engine.'));
+    console.log(styleText('green', 'Passed: every claim has a test that can fail, and every verb runs through the engine.'));
     return;
   }
-  console.log(chalk.red(`${result.findings.length} finding(s). The test step does not pass until each is fixed:`));
+  console.log(styleText('red', `${result.findings.length} finding(s). The test step does not pass until each is fixed:`));
   for (const f of result.findings) {
-    console.log(`\n${chalk.bold(`${f.kind}: ${f.subject}`)}\n  ${f.detail}`);
+    console.log(`\n${styleText('bold', `${f.kind}: ${f.subject}`)}\n  ${f.detail}`);
   }
 }

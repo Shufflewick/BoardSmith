@@ -9,7 +9,7 @@ import {
 } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { findHeadingIndex, parseRulings } from './build-manifest.js';
 import { allocatedNumber } from '../lib/ledger-entries.js';
 import {
@@ -658,12 +658,12 @@ export async function verifyImpactGateCommand(
   }
 
   if (contradictions.length === 0) {
-    console.log(chalk.green(`✓ No contradictory findings pending adjudication — run ${runId}`));
+    console.log(styleText('green', `✓ No contradictory findings pending adjudication — run ${runId}`));
     return result;
   }
 
   console.log(
-    chalk.yellow(
+    styleText('yellow', 
       `⚠ ${pending.length} of ${contradictions.length} contradictory finding(s) pending adjudication — run ${runId}`,
     ),
   );
@@ -916,11 +916,11 @@ export async function verifyImpactAdjudicateCommand(options: {
 
   if (outcome === 'resolved') {
     console.log(
-      chalk.green(`✓ Recorded Ruling ${rulingNumber} for pair ${pairId} (run ${runId})`),
+      styleText('green', `✓ Recorded Ruling ${rulingNumber} for pair ${pairId} (run ${runId})`),
     );
   } else {
     console.log(
-      chalk.yellow(`⚠ Pair ${pairId} deferred as UNADJUDICATED — remains pending (run ${runId})`),
+      styleText('yellow', `⚠ Pair ${pairId} deferred as UNADJUDICATED — remains pending (run ${runId})`),
     );
   }
   return result;
@@ -1107,15 +1107,15 @@ function emptyDispositionCounts(): Record<RepairGateDisposition, number> {
 function printImpactHumanReport(result: VerifyImpactStatusResult): void {
   const { staleFraction, staleSlugs, dispositionCounts, contradictionsPending, entries } = result;
 
-  console.log(chalk.green(`✓ Verify-impact status — run ${result.runId}`));
-  console.log(`  ${chalk.gray('rules-stale:')} ${staleFraction.stale} of ${staleFraction.total} chunks rules-stale`);
+  console.log(styleText('green', `✓ Verify-impact status — run ${result.runId}`));
+  console.log(`  ${styleText('gray', 'rules-stale:')} ${staleFraction.stale} of ${staleFraction.total} chunks rules-stale`);
   if (staleSlugs.length > 0) {
     // Decision 15: EVERY stale slug, no cap, no "and N more".
-    console.log(`  ${chalk.yellow('stale chunks:')} ${staleSlugs.join(', ')}`);
+    console.log(`  ${styleText('yellow', 'stale chunks:')} ${staleSlugs.join(', ')}`);
   }
   if (contradictionsPending.length > 0) {
     console.log(
-      `  ${chalk.yellow('contradictions pending adjudication:')} ${contradictionsPending.join(', ')}`,
+      `  ${styleText('yellow', 'contradictions pending adjudication:')} ${contradictionsPending.join(', ')}`,
     );
   }
 
@@ -1273,7 +1273,7 @@ function refuseApply(
     return result;
   }
   console.log(
-    chalk.yellow(
+    styleText('yellow', 
       `⚠ ${pendingPairs.length} ${reason}.\n` +
         pendingPairs
           .map((p) => `    boardsmith ${command} --run-id ${runId} --pair-id ${p} ${flag} ...`)
@@ -1473,9 +1473,9 @@ export async function verifyImpactApplyCommand(
     return result;
   }
 
-  console.log(chalk.green(`✓ Marked ${marked.length} chunk(s) rules-stale — run ${runId}`));
+  console.log(styleText('green', `✓ Marked ${marked.length} chunk(s) rules-stale — run ${runId}`));
   if (skippedTailEntries.length > 0) {
-    console.log(`  ${chalk.yellow('skipped (sketch-level tail entries):')} ${skippedTailEntries.join(', ')}`);
+    console.log(`  ${styleText('yellow', 'skipped (sketch-level tail entries):')} ${skippedTailEntries.join(', ')}`);
   }
   return result;
 }

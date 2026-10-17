@@ -2,7 +2,7 @@ import { designChunksDir, designRulebookDir } from '../lib/project-paths.js';
 import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { atomicWriteFile } from './verify-run.js';
 import { withLedgerLock } from '../lib/ledger-lock.js';
 import { readFencedJsonLedger, type FencedJsonLedgerFile } from '../lib/fenced-json-ledger.js';
@@ -898,7 +898,7 @@ export function describeUnanchoredExamples(unanchored: readonly UnanchoredExampl
 function printUnanchoredExamples(unanchored: readonly UnanchoredExample[]): void {
   if (unanchored.length === 0) return;
   console.log(
-    chalk.yellow(`  ⚠ ${unanchored.length} recorded example(s) no longer sit on the line they cite:`),
+    styleText('yellow', `  ⚠ ${unanchored.length} recorded example(s) no longer sit on the line they cite:`),
   );
   for (const line of describeUnanchoredExamples(unanchored)) console.log(`  ${line}`);
 }
@@ -912,7 +912,7 @@ function printSlicesWithoutExamples(slices: readonly VerifyExampleReplaySlice[])
   }
   if (changed.length > 0) {
     console.log(
-      chalk.yellow(
+      styleText('yellow', 
         `  ⚠ ${changed.length} slice(s) recorded as having no worked examples have changed since, ` +
           `so they are pending again: extract and record each once more.`,
       ),
@@ -922,7 +922,7 @@ function printSlicesWithoutExamples(slices: readonly VerifyExampleReplaySlice[])
   const examplesChanged = slices.filter((s) => s.examples === 'slice-changed');
   if (examplesChanged.length > 0) {
     console.log(
-      chalk.yellow(
+      styleText('yellow', 
         `  ⚠ ${examplesChanged.length} slice(s) with recorded worked examples have changed since they ` +
           `were extracted, or were recorded before the ledger kept a fingerprint of the slice, so they ` +
           `may hold examples nobody has tested: extract and record each once more.`,
@@ -1161,13 +1161,13 @@ export async function verifyExampleReplayCommand(
   }
 
   console.log(
-    chalk.green(
+    styleText('green', 
       `✓ Example replay — ${slices.length} slice(s), ${verdicts.length} recorded verdict(s)`,
     ),
   );
   if (verdicts.length < 10) {
     console.log(
-      chalk.yellow(
+      styleText('yellow', 
         `  n = ${verdicts.length} — too small to distinguish the mechanism working from luck; ` +
           `read the per-example rows, not the totals.`,
       ),
@@ -1186,7 +1186,7 @@ export async function verifyExampleReplayCommand(
   }
   if (unarchivedSources.length > 0) {
     console.log(
-      chalk.yellow(
+      styleText('yellow', 
         `  ⚠ ${unarchivedSources.length} unarchived source document(s) present: ` +
           `${unarchivedSources.join(', ')} — a "disagrees" finding against a slice these may ` +
           `cover is downgraded to quote-unverified rather than reported as a confident accusation.`,
@@ -1213,14 +1213,14 @@ export async function verifyExampleReplayCommand(
   );
 
   if (disagreesVerified.length > 0) {
-    console.log(chalk.yellow(`  mismatch, quotes source-verified:`));
+    console.log(styleText('yellow', `  mismatch, quotes source-verified:`));
     for (const finding of disagreesVerified) {
       console.log(`    ⚠ ${finding.slicePath}:${finding.lineNumber} — ${finding.reason}`);
     }
   }
   if (disagreesUnverified.length > 0) {
     console.log(
-      chalk.yellow(
+      styleText('yellow', 
         `  mismatch, quotes NOT source-verified — read as a question about the quote, not an ` +
           `accusation against the code:`,
       ),
@@ -1231,7 +1231,7 @@ export async function verifyExampleReplayCommand(
   }
   if (notRun.length > 0) {
     console.log(
-      chalk.yellow(
+      styleText('yellow', 
         `  translated but not run yet — run boardsmith verify-example-emit and then ` +
           `boardsmith verify-example-run for a chunk that cites each slice:`,
       ),
@@ -1240,7 +1240,7 @@ export async function verifyExampleReplayCommand(
   }
   for (const finding of otherFindings) {
     console.log(
-      chalk.yellow(
+      styleText('yellow', 
         `  ⚠ ${finding.verdict} (worth a human glance, never a verdict) — ` +
           `${finding.slicePath}:${finding.lineNumber}`,
       ),
@@ -1697,7 +1697,7 @@ export async function verifyExampleRecordCommand(
     return result;
   }
   console.log(
-    chalk.green(
+    styleText('green', 
       records.length > 0
         ? `✓ Recorded ${records.length} worked example(s) for ${slicePath} (provenance: ${provenance}).`
         : `✓ Recorded ${slicePath} as having no worked examples; it stays checked until the lines ` +
@@ -1713,7 +1713,7 @@ export async function verifyExampleRecordCommand(
     );
   }
   for (const repair of repairs) {
-    console.log(chalk.yellow(`  ⚠ JSON transport repair — ${repair}`));
+    console.log(styleText('yellow', `  ⚠ JSON transport repair — ${repair}`));
   }
   return result;
 }
@@ -1821,7 +1821,7 @@ export async function verifyExampleTranslateCommand(
   }
 
   console.log(
-    chalk.green(
+    styleText('green', 
       `✓ Example translate — ${slicePath}: ${payloads.length} payload(s), ` +
         `${result.notTranslated.length} not translated.`,
     ),
@@ -1834,7 +1834,7 @@ export async function verifyExampleTranslateCommand(
     console.log(`  ⚠ ${slicePath}:${nt.lineNumber} — not translated: ${nt.reason}`);
   }
   for (const repair of result.repairs) {
-    console.log(chalk.yellow(`  ⚠ JSON transport repair — ${repair}`));
+    console.log(styleText('yellow', `  ⚠ JSON transport repair — ${repair}`));
   }
 
   return result;

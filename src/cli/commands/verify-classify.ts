@@ -8,7 +8,7 @@ import {
 } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
 import { basename, isAbsolute, join, relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { withLedgerLock } from '../lib/ledger-lock.js';
 import {
   type VerificationScope,
@@ -818,24 +818,24 @@ export async function verifyClassifyPairsCommand(
 
   const result: VerifyClassifyPairsResult = { runId, pairs, provenance, warnings, summary };
 
-  for (const w of warnings) console.error(chalk.yellow(`⚠ ${w}`));
+  for (const w of warnings) console.error(styleText('yellow', `⚠ ${w}`));
 
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
     return result;
   }
 
-  console.log(chalk.green(`✓ Verify-classify pairs — run ${runId}`));
+  console.log(styleText('green', `✓ Verify-classify pairs — run ${runId}`));
   console.log(
-    `  ${chalk.gray('paired:')} ${summary.paired}  ${chalk.gray('presentation-only:')} ` +
-      `${summary.presentationOnly}  ${chalk.gray('unpaired:')} ${summary.unpaired}`,
+    `  ${styleText('gray', 'paired:')} ${summary.paired}  ${styleText('gray', 'presentation-only:')} ` +
+      `${summary.presentationOnly}  ${styleText('gray', 'unpaired:')} ${summary.unpaired}`,
   );
   // Report volume, not emptiness (172's finding): one line per pair, grouped by kind, never a
   // per-line body dump.
   for (const kind of PAIR_KINDS) {
     const group = pairs.filter((p) => p.kind === kind);
     if (group.length === 0) continue;
-    console.log(`  ${chalk.gray(`${kind}:`)} ${group.length} group(s)`);
+    console.log(`  ${styleText('gray', `${kind}:`)} ${group.length} group(s)`);
     for (const p of group) {
       console.log(
         `    - ${p.pairId} (live:${p.liveSlices.length} staged:${p.stagedSlices.length}` +
@@ -863,7 +863,7 @@ const RULE_DELTA_SET: ReadonlySet<string> = new Set(RULE_DELTA_KINDS);
  *
  * A missing or out-of-enum `--label` is never thrown on — it is a subagent-fidelity failure, not
  * a caller bug (decision 8) — it silently normalizes to `unclassified` with a
- * `console.error(chalk.yellow(...))` warning naming what was received verbatim. `sharper`/
+ * `console.error(styleText('yellow', ...))` warning naming what was received verbatim. `sharper`/
  * `contradictory` additionally REQUIRE both `--quoted-pass1` and `--quoted-pass2` non-empty
  * (decision 9); either missing (or whitespace-only) demotes the same way, naming which quote was
  * absent, never recording an evidence-free `sharper`/`contradictory`.
@@ -905,7 +905,7 @@ export async function verifyClassifyRecordCommand(
       `"unclassified" rather than guessing (decision 8: a malformed subagent return is never ` +
       `silently "cosmetic").`;
     warnings.push(warning);
-    console.error(chalk.yellow(`⚠ ${warning}`));
+    console.error(styleText('yellow', `⚠ ${warning}`));
   }
 
   const quotedPass1 = (options.quotedPass1 ?? '').trim();
@@ -920,7 +920,7 @@ export async function verifyClassifyRecordCommand(
         `(decision 9) — ${missing.join(' and ')} was empty/whitespace-only. Recording ` +
         `"unclassified" rather than an evidence-free "${ruleDelta}".`;
       warnings.push(warning);
-      console.error(chalk.yellow(`⚠ ${warning}`));
+      console.error(styleText('yellow', `⚠ ${warning}`));
       ruleDelta = 'unclassified';
     }
   }
@@ -963,7 +963,7 @@ export async function verifyClassifyRecordCommand(
     return result;
   }
   console.log(
-    chalk.green(`✓ Recorded classification for pair "${pair.pairId}": ${ruleDelta} (stale: ${stale})`),
+    styleText('green', `✓ Recorded classification for pair "${pair.pairId}": ${ruleDelta} (stale: ${stale})`),
   );
   return result;
 }
@@ -1562,7 +1562,7 @@ export async function verifyClassifyStatusCommand(
     chunkVerdicts,
   };
 
-  for (const w of warnings) console.error(chalk.yellow(`⚠ ${w}`));
+  for (const w of warnings) console.error(styleText('yellow', `⚠ ${w}`));
 
   if (options.quiet) return result;
 
@@ -1571,18 +1571,18 @@ export async function verifyClassifyStatusCommand(
     return result;
   }
 
-  console.log(chalk.green(`✓ Verify-classify status — run ${runId}`));
+  console.log(styleText('green', `✓ Verify-classify status — run ${runId}`));
   console.log(
-    `  ${chalk.gray('classified:')} ${summary.classified}/${summary.paired} paired group(s) — ` +
+    `  ${styleText('gray', 'classified:')} ${summary.classified}/${summary.paired} paired group(s) — ` +
       `${summary.cosmetic} cosmetic, ${summary.sharper} sharper, ${summary.contradictory} contradictory, ` +
       `${summary.unclassified} unclassified (cosmeticPct: ${summary.cosmeticPct}%)`,
   );
   if (pendingPairs.length > 0) {
-    console.log(`  ${chalk.yellow('pending:')} ${pendingPairs.join(', ')}`);
+    console.log(`  ${styleText('yellow', 'pending:')} ${pendingPairs.join(', ')}`);
   }
   const staleChunks = chunkVerdicts.filter((c) => c.stale);
   if (staleChunks.length > 0) {
-    console.log(`  ${chalk.yellow('stale chunks:')} ${staleChunks.map((c) => c.slug).join(', ')}`);
+    console.log(`  ${styleText('yellow', 'stale chunks:')} ${staleChunks.map((c) => c.slug).join(', ')}`);
   }
   return result;
 }
