@@ -1,5 +1,11 @@
 # Migration Guide
 
+## `toDebugString` drops the unused `showHidden` option (#913)
+
+`DebugStringOptions.showHidden` is removed; it was never read. Delete it from
+any `toDebugString(game, { ... })` call. The "Current Player" line now reads
+`(seat N)` instead of `(position undefined)`.
+
 ## Chunk work runs `boardsmith verify --chunk <slug>`, with no selection (#985)
 
 `boardsmith verify --selection <path>` is removed, and so is the `focused`
