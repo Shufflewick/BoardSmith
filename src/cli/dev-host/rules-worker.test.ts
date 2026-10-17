@@ -260,17 +260,27 @@ describe('#885: the world road', () => {
     expect(liveRulesWorkers() - before).toBe(1);
   }, 60_000);
 
-  it('says so when a rule throws from a timer, refuses the world its calls, and opens it again on the next save', async () => {
-    const before = liveRulesWorkers();
-    const world = await servedWorld();
-    expect(await world.stoke()).toMatchObject({ ok: true });
+  /**
+   * `spark` ends the world's worker from a timer. Resolves once the terminal
+   * has said so and the worker is gone, and answers what the terminal said.
+   */
+  async function sparked(world: Awaited<ReturnType<typeof servedWorld>>, before: number) {
     const said = vi.spyOn(console, 'error').mockImplementation(() => {});
-
     expect(await world.act('spark')).toMatchObject({ ok: true });
     await vi.waitFor(() =>
       expect(said.mock.calls.flat().join('\n')).toContain('Your rules stopped running: a spark from a timer'),
     );
-    expect(liveRulesWorkers() - before).toBe(0);
+    // The message comes with the worker's `error`; its `exit`, which drops the count, lands on a later turn.
+    await vi.waitFor(() => expect(liveRulesWorkers() - before).toBe(0));
+    return said;
+  }
+
+  it('says so when a rule throws from a timer, refuses the world its calls, and opens it again on the next save', async () => {
+    const before = liveRulesWorkers();
+    const world = await servedWorld();
+    expect(await world.stoke()).toMatchObject({ ok: true });
+    const said = await sparked(world, before);
+
     const refused = world.server.received((m) => m.type === 'action');
     void world.stoke();
     await refused;
@@ -285,6 +295,29 @@ describe('#885: the world road', () => {
     await world.rejoin();
     expect(await world.stoke()).toMatchObject({ ok: true });
     // 1 checkpointed before the worker stopped, then 2 on the rules the save started.
+    await vi.waitFor(() => expect(world.logs()).toBe(3));
+    expect(liveRulesWorkers() - before).toBe(1);
+  }, 60_000);
+
+  it('says no world is open when the rules stopped and the edit cannot run it, stops that edit, and opens it on the next save', async () => {
+    const before = liveRulesWorkers();
+    const world = await servedWorld();
+    expect(await world.stoke()).toMatchObject({ ok: true });
+    const said = await sparked(world, before);
+
+    // Loads, but the world was recorded at stateVersion 0 and this edit declares no migration (#200).
+    world.save(worldRules(2).replace('maxPlayers: 1,', 'maxPlayers: 1, stateVersion: 3,'));
+    await world.reload();
+    expect(said.mock.calls.flat().join('\n')).toContain(
+      'Those rules cannot run this world, and the rules it had stopped running, so no world is open. ' +
+        'Nothing was changed on disk. Save a rules file to open it again:',
+    );
+    expect(liveRulesWorkers() - before).toBe(0);
+
+    world.save(worldRules(2));
+    await world.reload();
+    await world.rejoin();
+    expect(await world.stoke()).toMatchObject({ ok: true });
     await vi.waitFor(() => expect(world.logs()).toBe(3));
     expect(liveRulesWorkers() - before).toBe(1);
   }, 60_000);
