@@ -16,7 +16,10 @@ import { createAnimationEvents, animationTimeline } from '../ui/composables/useA
 const def = botGameDef;
 const options = botGameOptions;
 
-type SeatState = { animationEvents?: AnimationEvent[]; gameInstanceId?: string; restoreEpoch?: number; viewerSeat?: number; isDemoRunning?: boolean };
+type SeatState = {
+  animationEvents?: AnimationEvent[]; gameInstanceId?: string; restoreEpoch?: number; viewerSeat?: number; isDemoRunning?: boolean;
+  demoControls?: { canStepBack: boolean };
+};
 
 async function until(pred: () => boolean): Promise<void> {
   for (let i = 0; i < 500; i++) {
@@ -97,6 +100,40 @@ describe('demo step back (#449 review)', () => {
 
     await host.handleOp(1, { type: 'demoStop' });
     await until(() => seat1.value?.isDemoRunning === undefined);
+  });
+
+  it('keeps only the last 20 moves to step back through, however long the demo runs (#818)', async () => {
+    let moves = 0;
+    let seat1: SeatState | undefined;
+    const host = new SnapshotSessionHost({
+      playerCount: 2,
+      executeOp: async (snap, pend, op) => {
+        const res = await executeOp(def, options, snap, pend, op);
+        if (op.type === 'action' && res.success) moves++;
+        return res;
+      },
+      persist: () => {},
+      push: () => {},
+      record: ({ players: views }) => {
+        seat1 = (views[0] as { state: SeatState }).state;
+      },
+    });
+    host.setBotSeats([{ seat: 2, level: '1' }]);
+    await host.start();
+
+    await host.handleOp(1, { type: 'demoStart', delay: 0 });
+    await until(() => moves >= 25);
+    await host.handleOp(1, { type: 'demoControl', control: 'pause' });
+
+    let backs = 0;
+    while (seat1?.demoControls?.canStepBack === true) {
+      await host.handleOp(1, { type: 'demoControl', control: 'back' });
+      backs++;
+    }
+    expect(backs).toBe(20);
+
+    await host.handleOp(1, { type: 'demoStop' });
+    await until(() => seat1?.isDemoRunning === undefined);
   });
 
   it('names no timeline when the state does not say which game, restore or seat it is', () => {

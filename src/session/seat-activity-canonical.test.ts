@@ -12,7 +12,6 @@ import {
   type FlowState,
 } from '../engine/index.js';
 import { createPlayerView } from '../engine/utils/index.js';
-import { isPlayersTurn } from './utils.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { succeeded } from './op-result.test-helper.js';
 
@@ -22,7 +21,7 @@ import { succeeded } from './op-result.test-helper.js';
 // currentPlayer for sequential steps). Before centralization each consumer
 // re-derived this branch by hand and they drifted; here we assert the single
 // source of truth handles both modes and that the boolean predicates
-// (isPlayersTurn / Game.canPlayerAct) agree with it.
+// (Game.canPlayerAct) agree with it.
 // ---------------------------------------------------------------------------
 
 function sequentialState(currentPlayer: number, actions: string[]): FlowState {
@@ -87,19 +86,6 @@ describe('canonical seat-activity predicates', () => {
     expect(dueSeats(undefined)).toEqual([]);
     expect(canSeatAct(undefined, 1)).toBe(false);
     expect(availableActionsForSeat(null, 1)).toEqual([]);
-  });
-
-  it('isPlayersTurn delegates to the canonical predicate in both modes', () => {
-    const seq = sequentialState(2, ['move']);
-    expect(isPlayersTurn(seq, 2)).toBe(canSeatAct(seq, 2));
-    expect(isPlayersTurn(seq, 1)).toBe(canSeatAct(seq, 1));
-
-    const sim = simultaneousState([
-      { playerIndex: 1, availableActions: ['play'], completed: false },
-      { playerIndex: 2, availableActions: ['play'], completed: true },
-    ]);
-    expect(isPlayersTurn(sim, 1)).toBe(canSeatAct(sim, 1));
-    expect(isPlayersTurn(sim, 2)).toBe(canSeatAct(sim, 2));
   });
 });
 

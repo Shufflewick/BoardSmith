@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { contrastInk } from './color-contrast';
-import { STANDARD_PLAYER_COLORS } from '../../session/colors.js';
+import { createColorOption } from '../../session/colors.js';
 
 describe('contrastInk', () => {
   it('picks black ink for a near-white seat color', () => {
@@ -42,17 +42,17 @@ describe('contrastInk', () => {
     expect(() => contrastInk('not-a-color')).toThrow(/#rgb|#rrggbb|rgb\(|rgba\(/);
   });
 
-  it('covers the full STANDARD_PLAYER_COLORS palette without throwing', () => {
+  it('covers the full default player palette without throwing', () => {
     // Reads the REAL exported palette. A hardcoded copy of the hex values used
     // to live here, which meant adding or changing a player colour could not
     // fail this test — exactly the case it exists to catch.
-    for (const { value, label } of STANDARD_PLAYER_COLORS) {
+    for (const { value, label } of createColorOption().choices) {
       expect(() => contrastInk(value), `${label} (${value})`).not.toThrow();
     }
   });
 
   it('picks a readable ink for every colour in the real palette', () => {
-    for (const { value, label } of STANDARD_PLAYER_COLORS) {
+    for (const { value, label } of createColorOption().choices) {
       const { ink } = contrastInk(value);
       expect(['#ffffff', '#000000'], `${label} (${value})`).toContain(ink);
     }
