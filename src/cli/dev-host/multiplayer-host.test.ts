@@ -53,7 +53,9 @@ const altDef = {
   maxPlayers: 2,
 } satisfies GameDefinitionLike;
 
-function makeAltHost(opts: { debug?: boolean; playerCount?: number; failStart?: () => boolean } = {}) {
+function makeAltHost(
+  opts: { debug?: boolean; playerCount?: number; failStart?: () => boolean; refuseStart?: () => boolean } = {},
+) {
   const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
   const playerCount = opts.playerCount ?? 2;
   const host = new MultiplayerHost({
@@ -64,6 +66,9 @@ function makeAltHost(opts: { debug?: boolean; playerCount?: number; failStart?: 
     debug: opts.debug,
     executeOp: (gameOptions, snap, pend, op, hostOptions) => {
       if (op.type === 'start' && opts.failStart?.()) throw new Error('The deck is missing.');
+      if (op.type === 'start' && opts.refuseStart?.()) {
+        return { success: false, error: 'The deck is missing.', category: 'bundle' } as const;
+      }
       return executeOp({ ...altDef, maxPlayers: playerCount }, gameOptions, snap, pend, op, hostOptions);
     },
     send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
@@ -381,12 +386,65 @@ describe('MultiplayerHost — a restart that fails (#880)', () => {
     expect(lastOfType('A', 'error')).toMatchObject({ message: expect.stringMatching(/no game is running.*reload/i), requestId: 'r1' });
     expect(told.message).toBe(
       "The game could not start (Cannot read properties of undefined (reading 'cards')). " +
-        'Fix the problem, then reload this page to start a game.',
+        'Fix the problem, then press "New game".',
     );
 
     failStart = false;
     await host.handleMessage('A', { type: 'hello' }); // the reload the message asks for
     expect(lastOfType('A', 'init').seat).toBe(1);
+  });
+});
+
+describe('MultiplayerHost — New game after a failed start (#1039)', () => {
+  let logged: unknown[][] = [];
+  const realError = console.error;
+  beforeEach(() => {
+    logged = [];
+    console.error = (...args: unknown[]) => { logged.push(args); };
+    return () => { console.error = realError; };
+  });
+
+  it('starts a game when the first start failed', async () => {
+    let failStart = true;
+    const { host, lastOfType } = makeAltHost({ refuseStart: () => failStart });
+    await host.handleMessage('A', { type: 'hello' }); // A = seat 1; its start fails
+    failStart = false;
+    await host.handleMessage('A', { type: 'restart' });
+    expect(lastOfType('A', 'init').seat).toBe(1);
+    expect(lastOfType('A', 'error').message).toBe(
+      'The game could not start (The deck is missing.). Fix the problem, then press "New game".',
+    );
+  });
+
+  it('starts a game when a restart failed', async () => {
+    let failStart = false;
+    const { host, lastOfType, clear } = makeAltHost({ failStart: () => failStart });
+    await host.handleMessage('A', { type: 'hello' });
+    failStart = true;
+    await host.handleMessage('A', { type: 'restart' });
+    failStart = false;
+    clear();
+    await host.handleMessage('A', { type: 'restart' });
+    expect(lastOfType('A', 'error')).toBeUndefined();
+    expect(lastOfType('A', 'init').seat).toBe(1);
+  });
+
+  it('prints a refused start in the terminal as one readable line', async () => {
+    const { host } = makeAltHost({ refuseStart: () => true });
+    await host.handleMessage('A', { type: 'hello' });
+    expect(logged).toEqual([
+      ['[boardsmith dev] The game could not start (The deck is missing.). Fix the problem, then press "New game".'],
+    ]);
+  });
+
+  it('prints a start that crashed in the terminal with its stack', async () => {
+    const { host } = makeAltHost({ failStart: () => true });
+    await host.handleMessage('A', { type: 'hello' });
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toEqual([
+      '[boardsmith dev] The game could not start (The deck is missing.). Fix the problem, then press "New game".',
+      expect.stringMatching(/^Error: The deck is missing\.\n\s+at /),
+    ]);
   });
 });
 
