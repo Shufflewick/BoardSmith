@@ -69,7 +69,7 @@ The rules `boardsmith build` publishes carry the whole list on their `gameDefini
 - `ExecutorOp` - The ops a platform executor runs: `start`, `action`, `expireSeat`, `selectionStep`, `resolveChoices`, `cancelAction`, `undo`, `botSuggest`
 - `DevOp` - Ops `executeOp` runs only inside `boardsmith dev` (the `debug*` family, `restoreEarlier`, tutorial, `hint`, `heatmapToggle`)
 - `HostOp` - Lifecycle ops `SnapshotSessionHost.handleOp` handles itself and `executeOp` never sees (`demoStart`, `demoStop`, `demoControl`, `convertSeatToBot`)
-- `Op` - `ExecutorOp | DevOp | HostOp`, what `handleOp` takes; `handleOp` refuses `botSuggest`, since its answer is a bot seat's move and only the host's own bot pump searches (#1100)
+- `Op` - `ExecutorOp | DevOp | HostOp`, what `handleOp` takes. `handleOp` refuses the host-only ops `start`, `restoreEarlier` and `botSuggest` (#1100, #1102): the host sends them itself through `executeOp`, and `SnapshotSessionHost.start()` and `SnapshotSessionHost.restoreEarlier(snapshot)` are the host's entry points for the first two
 - `OpResultFor<T>` - What an op of type `T` answers: its own success shape, or the shared `OpFailure`
 - `OpResult` - What any op answers; narrow it with `OpResultFor`
 - `OpFailure` - Every refusal: `{ success: false, error, errorCode?, category }`

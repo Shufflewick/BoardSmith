@@ -9,7 +9,7 @@ import type {
   ReadOnlyOpType,
   StateEnvelope,
 } from './stateless-ops.js';
-import { closesSeat, debugOpRefusal, isReadOnlyOp, type DebugHistoryEntry } from './stateless-ops.js';
+import { closesSeat, debugOpRefusal, HOST_ONLY_OP_TYPES, isReadOnlyOp, type DebugHistoryEntry } from './stateless-ops.js';
 import type { Annotation, FlowState } from '../engine/index.js';
 import type { GameStateSnapshot } from '../engine/utils/index.js';
 import type { HistoryEntry } from '../engine/action/types.js';
@@ -1051,6 +1051,16 @@ export class SnapshotSessionHost {
   }
 
   /**
+   * Replace the game with `snapshot`, an earlier or arranged position of this
+   * game, as a restore every seat sees, and wake the bots when it is a bot
+   * seat's turn. Host-only: `handleOp` refuses `restoreEarlier` from a seat
+   * (#1102). Resolves once published; the bots' replies follow ({@link settled}).
+   */
+  async restoreEarlier(snapshot: GameStateSnapshot): Promise<OpResultFor<'restoreEarlier'>> {
+    return (await this.applyMutatingOp(null, { type: 'restoreEarlier', snapshot })) as OpResultFor<'restoreEarlier'>;
+  }
+
+  /**
    * Run `op` for `seat` and answer with that op's own result. Read-only ops
    * (a choices query, the read-only debug ops) do NOT mutate or broadcast.
    * State-mutating ops broadcast and persist the new state, THEN resolve,
@@ -1067,13 +1077,13 @@ export class SnapshotSessionHost {
     // #481: debug ops need debugging on.
     const debugRefused = debugOpRefusal(op, this.adapters.debug === true);
     if (debugRefused) return debugRefused;
-    // #1100: its answer is a bot seat's move with that move's args, which may be hidden from the caller.
-    if (op.type === 'botSuggest') {
+    // #1100, #1102: start, restoreEarlier and botSuggest would let a seat restart the game, replace it, or read a bot's hidden move.
+    if (HOST_ONLY_OP_TYPES.has(op.type)) {
       return {
         success: false,
         error:
-          `Seat ${seat} sent 'botSuggest', and was refused: only the host itself searches for a bot's move. ` +
-          'Ask for a hint to see a suggested move for your own seat.',
+          `Seat ${seat} sent '${op.type}', and was refused: only the host sends '${op.type}', ` +
+          'by calling executeOp itself, never through handleOp.',
         category: 'protocol',
       };
     }
@@ -1199,7 +1209,7 @@ export class SnapshotSessionHost {
    * than a client waits for the answer to a move that has already landed. What
    * they change reaches every seat as an ordinary publish.
    */
-  private async applyMutatingOp(seat: number, op: MutatingOp): Promise<OpResult> {
+  private async applyMutatingOp(seat: number | null, op: MutatingOp): Promise<OpResult> {
     const res = await this.enqueue(() => this.commitMutatingOp(seat, op));
     if (!res.success) return res;
     const actionCompleted = completesAction(op, res);
@@ -1211,7 +1221,7 @@ export class SnapshotSessionHost {
     // anyway. A rewind or a restore can target ANY point, which is what made it reachable.)
     const wakesBots = actionCompleted || op.type === 'undo' || op.type === 'debugRewind' || op.type === 'restoreEarlier';
     if (!wakesBots) return res;
-    const tracked: Promise<void> = this.afterMove(`seat ${seat}'s ${op.type}`, actionCompleted).finally(() =>
+    const tracked: Promise<void> = this.afterMove(`${seat === null ? 'the host' : `seat ${seat}`}'s ${op.type}`, actionCompleted).finally(() =>
       this.backgroundWork.delete(tracked),
     );
     this.backgroundWork.add(tracked);
@@ -1279,7 +1289,7 @@ export class SnapshotSessionHost {
   }
 
   /** Execute `op`, then hold, publish and persist what it made. Runs inside the one-at-a-time section. */
-  private async commitMutatingOp(seat: number, op: MutatingOp): Promise<OpResult> {
+  private async commitMutatingOp(seat: number | null, op: MutatingOp): Promise<OpResult> {
     // An op that closes the seat (the seat's own action, or the host closing a
     // seat at a deadline) runs without the seat's in-progress selection: it does not
     // continue those picks. They are dropped only once the close SUCCEEDS. A
@@ -1287,15 +1297,19 @@ export class SnapshotSessionHost {
     // the round it named is over (a stale submission), in which case the picks
     // belong to the new round and must survive.
     const closing = closesSeat(op);
-    const res = await this.adapters.executeOp(this.snapshot, closing ? null : this.pendingStates.get(seat) ?? null, op);
+    const res = await this.adapters.executeOp(
+      this.snapshot,
+      closing || seat === null ? null : this.pendingStates.get(seat) ?? null,
+      op,
+    );
     if (!res.success) return res;
-    if (closing) this.pendingStates.delete(seat);
+    if (closing && seat !== null) this.pendingStates.delete(seat);
     // Only a selection step leaves the seat mid-action; every other op ends it.
     const pending = 'pendingState' in res ? res.pendingState : null;
 
     // Clear hint for the acting seat on successful action/selectionStep (completion):
     // a hint answers the position the seat was in, which its move just changed.
-    if (completesAction(op, res)) {
+    if (seat !== null && completesAction(op, res)) {
       const seatTransient = this.transientTeachingState.get(seat);
       if (seatTransient?.hint) {
         const { hint: _h, ...rest } = seatTransient;
@@ -1307,9 +1321,9 @@ export class SnapshotSessionHost {
       }
     }
 
-    if (op.type === 'undo' || op.type === 'debugRewind') this.#forgetReplacedTree();
+    if (op.type === 'undo' || op.type === 'debugRewind' || op.type === 'restoreEarlier') this.#forgetReplacedTree();
 
-    await this.apply(res, seat, pending);
+    await this.apply(res, seat ?? undefined, pending);
     return res;
   }
 

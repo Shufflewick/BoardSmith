@@ -1,6 +1,6 @@
 {
-  "revision": 221,
-  "surfaceHash": "e27511a58b559664",
+  "revision": 222,
+  "surfaceHash": "3f5c7262183b6d37",
   "payloadHash": "2d1f6110b53a0159",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1711,6 +1711,14 @@
       "payloadHash": "2d1f6110b53a0159",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A text pick's pattern on the wire now carries the regex's flags as { source, flags, message }, and a client must compile it as new RegExp(source, flags); the shared ActionPanel does so and no longer sets the HTML pattern attribute, so a u or i pattern no longer refuses text the server accepts (#890)."
+    },
+    {
+      "revision": 222,
+      "date": "2026-10-17",
+      "surfaceHash": "3f5c7262183b6d37",
+      "payloadHash": "2d1f6110b53a0159",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "SnapshotSessionHost.handleOp now refuses start, restoreEarlier and botSuggest from a seat with a protocol refusal, since only the host sends them; a host restores a position with the new SnapshotSessionHost.restoreEarlier(snapshot), which also clears every seat's half-made picks and hints (#1102)."
     }
   ]
 }
