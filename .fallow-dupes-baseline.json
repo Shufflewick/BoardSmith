@@ -26,7 +26,7 @@
     "src/ui/components/helpers/HintOverlay.vue:310-328|src/ui/components/helpers/TutorialOverlay.vue:412-434",
     "src/ui/components/GameHistory.vue:388-404|src/ui/components/auto-ui/ActionPanel.vue:2284-2304|src/ui/components/auto-ui/ActionPanel.vue:2637-2653",
     "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue:136-154|src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:237-255",
-    "src/session/stateless-ops.ts:1094-1111|src/session/stateless-ops.ts:1184-1199",
+    "src/session/stateless-ops.ts:1049-1066|src/session/stateless-ops.ts:1139-1154",
     "src/ui/components/auto-ui/renderers/CardRenderer.vue:73-79|src/ui/components/auto-ui/renderers/DeckRenderer.vue:40-46|src/ui/components/auto-ui/renderers/HandRenderer.vue:55-63",
     "src/ui/composables/useFLIP.ts:276-287|src/ui/composables/useFLIP.ts:323-337",
     "src/cli/commands/verify-impact.ts:1165-1171|src/cli/commands/verify-impact.ts:1375-1380",

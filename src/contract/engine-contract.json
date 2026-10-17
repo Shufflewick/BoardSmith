@@ -1,6 +1,6 @@
 {
   "revision": 222,
-  "surfaceHash": "3f5c7262183b6d37",
+  "surfaceHash": "bf6eabfd14b1e167",
   "payloadHash": "2d1f6110b53a0159",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1715,10 +1715,10 @@
     {
       "revision": 222,
       "date": "2026-10-17",
-      "surfaceHash": "3f5c7262183b6d37",
+      "surfaceHash": "bf6eabfd14b1e167",
       "payloadHash": "2d1f6110b53a0159",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "SnapshotSessionHost.handleOp now refuses start, restoreEarlier and botSuggest from a seat with a protocol refusal, since only the host sends them; a host restores a position with the new SnapshotSessionHost.restoreEarlier(snapshot), which also clears every seat's half-made picks and hints (#1102)."
+      "summary": "SnapshotSessionHost.handleOp now refuses start, restoreEarlier and botSuggest from a seat with a protocol refusal, since only the host sends them; a host uses host.start(), the new host.restoreEarlier(snapshot) and host.runBotTurns(), and a restore drops every seat's half-made picks and hints (#1102)."
     }
   ]
 }

@@ -262,51 +262,6 @@ export const SUBMISSION_OP_TYPES: ReadonlySet<Op['type']> = new Set(
   Object.keys(SUBMISSION_OP_TYPE_MAP) as SubmissionOpType[],
 );
 
-/**
- * Who sends each op, enumerated ONCE (#1102). A `host` op is composed only by
- * the session host itself, which runs it through `executeOp` directly, so
- * `SnapshotSessionHost.handleOp` refuses it from a seat: `start` would begin
- * the game again, `restoreEarlier` replaces the game with the sender's
- * snapshot, and `botSuggest` answers with a bot seat's move, which may be
- * hidden from the sender. `expireSeat` and `convertSeatToBot` are host
- * decisions too, but hosts send them through `handleOp`, and each is refused
- * when it names a seat other than the caller (#738, #950). The `Record` makes
- * every new op choose.
- */
-const OP_SENDER: Record<Op['type'], 'seat' | 'host'> = {
-  start: 'host',
-  action: 'seat',
-  expireSeat: 'seat',
-  selectionStep: 'seat',
-  resolveChoices: 'seat',
-  cancelAction: 'seat',
-  undo: 'seat',
-  botSuggest: 'host',
-  debugHistory: 'seat',
-  debugStateAt: 'seat',
-  debugStateDiff: 'seat',
-  debugActionTraces: 'seat',
-  debugFlowState: 'seat',
-  debugCustomData: 'seat',
-  debugRewind: 'seat',
-  debugReorder: 'seat',
-  debugTransfer: 'seat',
-  debugShuffle: 'seat',
-  debugDeckView: 'seat',
-  restoreEarlier: 'host',
-  startTutorial: 'seat',
-  exitTutorial: 'seat',
-  hint: 'seat',
-  heatmapToggle: 'seat',
-  demoStart: 'seat',
-  demoStop: 'seat',
-  demoControl: 'seat',
-  convertSeatToBot: 'seat',
-};
-export const HOST_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set(
-  (Object.keys(OP_SENDER) as Op['type'][]).filter((type) => OP_SENDER[type] === 'host'),
-);
-
 /** Every debug op: the op types whose name starts with `debug`. */
 export type DebugOpType = Extract<Op['type'], `debug${string}`>;
 

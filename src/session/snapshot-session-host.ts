@@ -9,7 +9,7 @@ import type {
   ReadOnlyOpType,
   StateEnvelope,
 } from './stateless-ops.js';
-import { closesSeat, debugOpRefusal, HOST_ONLY_OP_TYPES, isReadOnlyOp, type DebugHistoryEntry } from './stateless-ops.js';
+import { closesSeat, debugOpRefusal, isReadOnlyOp, type DebugHistoryEntry } from './stateless-ops.js';
 import type { Annotation, FlowState } from '../engine/index.js';
 import type { GameStateSnapshot } from '../engine/utils/index.js';
 import type { HistoryEntry } from '../engine/action/types.js';
@@ -124,6 +124,51 @@ function completesAction(op: Op, res: OpResult): boolean {
  * its own state rather than as a move.
  */
 type MutatingOp = Exclude<ExecutableOp, { type: ReadOnlyOpType | 'hint' | 'heatmapToggle' }>;
+
+/**
+ * Who sends each op, enumerated ONCE (#1102). A `host` op is composed only by
+ * the session host itself, which runs it through `executeOp` directly, so
+ * `handleOp` refuses it from a seat: `start` would begin
+ * the game again, `restoreEarlier` replaces the game with the sender's
+ * snapshot, and `botSuggest` answers with a bot seat's move, which may be
+ * hidden from the sender. `expireSeat` and `convertSeatToBot` are host
+ * decisions too, but hosts send them through `handleOp`, and each is refused
+ * when it names a seat other than the caller (#738, #950). The `Record` makes
+ * every new op choose.
+ */
+const OP_SENDER: Record<Op['type'], 'seat' | 'host'> = {
+  start: 'host',
+  action: 'seat',
+  expireSeat: 'seat',
+  selectionStep: 'seat',
+  resolveChoices: 'seat',
+  cancelAction: 'seat',
+  undo: 'seat',
+  botSuggest: 'host',
+  debugHistory: 'seat',
+  debugStateAt: 'seat',
+  debugStateDiff: 'seat',
+  debugActionTraces: 'seat',
+  debugFlowState: 'seat',
+  debugCustomData: 'seat',
+  debugRewind: 'seat',
+  debugReorder: 'seat',
+  debugTransfer: 'seat',
+  debugShuffle: 'seat',
+  debugDeckView: 'seat',
+  restoreEarlier: 'host',
+  startTutorial: 'seat',
+  exitTutorial: 'seat',
+  hint: 'seat',
+  heatmapToggle: 'seat',
+  demoStart: 'seat',
+  demoStop: 'seat',
+  demoControl: 'seat',
+  convertSeatToBot: 'seat',
+};
+const HOST_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set(
+  (Object.keys(OP_SENDER) as Op['type'][]).filter((type) => OP_SENDER[type] === 'host'),
+);
 
 /**
  * Consecutive persist() failures before `persistenceHealthy` flips false
@@ -1082,8 +1127,8 @@ export class SnapshotSessionHost {
       return {
         success: false,
         error:
-          `Seat ${seat} sent '${op.type}', and was refused: only the host sends '${op.type}', ` +
-          'by calling executeOp itself, never through handleOp.',
+          `Seat ${seat} sent '${op.type}', and was refused: only the host itself sends it, ` +
+          'through host.start(), host.restoreEarlier(snapshot) or host.runBotTurns(), never through handleOp.',
         category: 'protocol',
       };
     }
