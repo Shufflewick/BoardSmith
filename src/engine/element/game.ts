@@ -616,7 +616,7 @@ const SAFE_LAYOUT_KEYS = new Set([
   '$type', '$layout',
   '$direction', '$gap', '$overlap', '$fan', '$fanAngle', '$align',
   '$rowLabels', '$columnLabels', '$rowCoord', '$colCoord',
-  '$hexOrientation', '$coordSystem', '$qCoord', '$rCoord', '$sCoord',
+  '$hexOrientation', '$coordSystem', '$qCoord', '$rCoord',
   '$hexSize',
 ]);
 

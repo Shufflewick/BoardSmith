@@ -4,11 +4,10 @@
  * Provides helpers for working with hex-based games like Hex, Settlers of Catan,
  * Hive, and other games using hexagonal tiles.
  *
- * Supports both coordinate systems:
- * - Axial coordinates (q, r) - most common for hex grids
- * - Cube coordinates (x, y, z) where x + y + z = 0
+ * Cells are addressed by axial coordinates (q, r), read from the cell
+ * attributes the board names in `$qCoord`/`$rCoord` (default `q` and `r`).
  *
- * And both orientations:
+ * Both orientations:
  * - Pointy-top (flat sides on left/right)
  * - Flat-top (flat sides on top/bottom)
  *
@@ -31,8 +30,6 @@
  *   gameView: () => props.gameView,
  *   boardClassName: 'Board',
  *   cellClassName: 'Cell',
- *   qAttr: 'q',
- *   rAttr: 'r',
  * });
  *
  * // Get pixel position for a hex cell
@@ -55,9 +52,9 @@ export interface HexGridOptions {
   boardClassName?: string;
   /** Class name of cell elements (default: 'Cell') */
   cellClassName?: string;
-  /** Attribute name for q coordinate (default: 'q') */
+  /** Attribute name for q coordinate (default: the board's `$qCoord`, else 'q') */
   qAttr?: string;
-  /** Attribute name for r coordinate (default: 'r') */
+  /** Attribute name for r coordinate (default: the board's `$rCoord`, else 'r') */
   rAttr?: string;
   /** Default hex size in pixels (default: 50, can be overridden by board attributes) */
   defaultHexSize?: number;
@@ -129,6 +126,23 @@ const POINTY_NEIGHBORS = [
 const FLAT_NEIGHBORS = POINTY_NEIGHBORS; // Same offsets work for both orientations
 
 /**
+ * The cell attribute names a hex board's axial coordinates live in: its
+ * `$qCoord`/`$rCoord`, default `q` and `r`. Refuses a board whose
+ * `$coordSystem` is anything but axial, the only system BoardSmith draws.
+ */
+export function hexCoordNames(board: { attributes?: Record<string, unknown> }): { q: string; r: string } {
+  const attrs = board.attributes ?? {};
+  const system = attrs.$coordSystem;
+  if (system !== undefined && system !== 'axial') {
+    throw new Error(
+      `This hex board sets $coordSystem '${String(system)}', but BoardSmith supports only 'axial'. ` +
+      `Give each cell axial coordinates in the attributes named by $qCoord/$rCoord, and set $coordSystem = 'axial' or leave it out.`,
+    );
+  }
+  return { q: (attrs.$qCoord as string | undefined) ?? 'q', r: (attrs.$rCoord as string | undefined) ?? 'r' };
+}
+
+/**
  * Create hex grid utilities for a hexagonal game board.
  */
 export function useHexGrid<TCell = GameViewElement>(
@@ -138,8 +152,6 @@ export function useHexGrid<TCell = GameViewElement>(
     gameView,
     boardClassName = 'Board',
     cellClassName = 'Cell',
-    qAttr = 'q',
-    rAttr = 'r',
     defaultHexSize = 50,
     defaultOrientation = 'pointy',
   } = options;
@@ -177,9 +189,16 @@ export function useHexGrid<TCell = GameViewElement>(
     ) as unknown as TCell[];
   });
 
+  // Cell attributes holding q and r: explicit options win over the board's own names
+  const coordAttrs = computed(() => {
+    const names = board.value ? hexCoordNames(board.value) : { q: 'q', r: 'r' };
+    return { q: options.qAttr ?? names.q, r: options.rAttr ?? names.r };
+  });
+
   // Build a map of cells keyed by "q,r"
   const cellMap = computed<Map<string, TCell>>(() => {
     const map = new Map<string, TCell>();
+    const { q: qAttr, r: rAttr } = coordAttrs.value;
     for (const cell of cells.value) {
       const attrs = getAttrs(cell as unknown as GameViewElement);
       const q = attrs[qAttr as keyof typeof attrs];
@@ -268,6 +287,7 @@ export function useHexGrid<TCell = GameViewElement>(
     let minY = Infinity;
     let maxY = -Infinity;
 
+    const { q: qAttr, r: rAttr } = coordAttrs.value;
     for (const cell of cellList) {
       const attrs = getAttrs(cell as unknown as GameViewElement);
       const q = (attrs[qAttr as keyof typeof attrs] as number | undefined) ?? 0;

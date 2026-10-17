@@ -257,6 +257,28 @@ describe('useHexGrid', () => {
     expect(grid(gameView([...cells, nameless])).cellMap.value.size).toBe(3);
   });
 
+  describe('coordinate attribute names', () => {
+    const colRow = (col: number, row: number): GameViewElement =>
+      ({ id: col * 100 + row, className: 'Cell', name: `${col},${row}`, attributes: { col, row }, children: [] } as GameViewElement);
+    const colRowView = gameView([colRow(0, 0), colRow(1, 0), colRow(0, 1)], { $qCoord: 'col', $rCoord: 'row' });
+
+    it("reads the board's $qCoord/$rCoord, as AutoUI does", () => {
+      const hex = grid(colRowView);
+      expect(hex.cellMap.value.size).toBe(3);
+      expect(hex.getCellAt(1, 0)?.name).toBe('1,0');
+    });
+
+    it("lets explicit qAttr/rAttr override the board's names", () => {
+      const view = gameView([cell(2, 1)], { $qCoord: 'col', $rCoord: 'row' });
+      expect(grid(view, { qAttr: 'q', rAttr: 'r' }).getCellAt(2, 1)?.name).toBe('2,1');
+    });
+
+    it('refuses a board whose coordinate system is not axial', () => {
+      const offset = gameView(cells, { $coordSystem: 'offset' });
+      expect(() => grid(offset).cellMap.value).toThrow(/\$coordSystem 'offset'.*only 'axial'/s);
+    });
+  });
+
   it('finds a child of a given class at a coordinate', () => {
     const view = gameView([cell(0, 0, [piece('Stone', 11)]), cell(1, 0)]);
     expect(grid(view).getChildAt(0, 0, 'Stone')?.id).toBe(11);

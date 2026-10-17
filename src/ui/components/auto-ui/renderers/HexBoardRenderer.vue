@@ -29,7 +29,7 @@
  */
 
 import { computed, inject, nextTick, watch, type ComputedRef } from 'vue';
-import { hexToPixel, getHexPolygonPoints } from '../../../composables/useHexGrid.js';
+import { hexToPixel, getHexPolygonPoints, hexCoordNames } from '../../../composables/useHexGrid.js';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import { useSelectableGrid } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
@@ -70,12 +70,9 @@ const orientation = computed(
 );
 
 // Coordinate attribute names declared on the board element
-const qCoordName = computed(
-  () => (props.element.attributes?.$qCoord as string | undefined) ?? 'q'
-);
-const rCoordName = computed(
-  () => (props.element.attributes?.$rCoord as string | undefined) ?? 'r'
-);
+const coordNames = computed(() => hexCoordNames(props.element));
+const qCoordName = computed(() => coordNames.value.q);
+const rCoordName = computed(() => coordNames.value.r);
 
 // ── Closed-form functions (no hand-rolled trig) ──────────────────────────────
 
