@@ -74,7 +74,7 @@ import {
   unreadableShorthand,
 } from '../lib/ledger-allocation.js';
 import { describeFinding, ledgerCheck } from './ledger-check.js';
-import { type TestRunner, checkConstraints, runVitest } from './constraint-check.js';
+import { type TestRunner, checkConstraints, runVitest, unranTestsProblem } from './constraint-check.js';
 import { VERIFIED, assessSignoffs, checkSignoff, chunkCodeFiles, unaccountedEdits } from './chunk-signoff.js';
 import { verifiedAgainstIsCurrent } from './chunk-provenance.js';
 import { checkClaimQuotes } from './claim-quotes.js';
@@ -565,31 +565,18 @@ async function ownTestsFailure(
   const what = `${slug}'s own tests (${tests.join(', ')}) fail`;
   if ('refused' in run) return [what, run.refused];
   if (!run.ok) return [what, tail(run.output)];
-  if (run.ran === undefined) {
-    return [
-      `${slug}'s own tests cannot be confirmed`,
-      `vitest's JSON report, which names the test files it ran, is missing or unreadable, so the run does not show they ran. ` +
-        `Run them in the chunk's worktree to see why vitest wrote no report.`,
-    ];
-  }
+  const unran = unranTestsProblem(run.ran, tests);
+  if (unran) return [`${slug}'s own tests ${unran[0]}`, unran[1]];
   const own = new Set(tests.map((t) => posix.normalize(t)));
-  const ran = new Set(run.ran.map((f) => posix.normalize(f)));
-  const missing = tests.filter((t) => !ran.has(posix.normalize(t)));
-  const they = (files: string[]) => (files.length === 1 ? 'it' : 'them');
-  if (missing.length) {
-    return [
-      `${slug}'s own tests did not all run`,
-      `${missing.join(', ')} did not run: the project's vitest config excludes ${they(missing)}, ` +
-        `or does not include ${they(missing)}, so the run proves nothing about ${they(missing)}.`,
-    ];
-  }
+  // unranTestsProblem refuses an undefined `ran`, so it is set here.
+  const ran = new Set(run.ran!.map((f) => posix.normalize(f)));
   const extra = [...ran].filter((f) => !own.has(f)).sort();
   if (extra.length === 0) return undefined;
   return [
     `${slug}'s own tests did not run alone`,
     `${extra.join(', ')} ran with them, because vitest runs every collected file whose path contains a named one. ` +
       `A file outside the chunk's Spec Manifest can share state with its tests, so the run does not show their result is their own. ` +
-      `Rename the test files so no path contains another, or leave ${they(extra)} out of the vitest config's include.`,
+      `Rename the test files so no path contains another, or leave ${extra.length === 1 ? 'it' : 'them'} out of the vitest config's include.`,
   ];
 }
 

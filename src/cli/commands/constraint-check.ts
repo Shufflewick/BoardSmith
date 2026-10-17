@@ -419,6 +419,30 @@ export function testFilesInReport(text: string | undefined, root: string): strin
   return results.map((r: { name: string }) => relative(root, r.name).split(sep).join(posix.sep));
 }
 
+/**
+ * Why a passing run does not show every file in `tests` ran, as `[verdict, detail]`, or `undefined`
+ * when it does. vitest skips a named file its config excludes and still exits 0 (#479, #821), so
+ * only `ran` shows a file was left out, and a run that cannot say which files ran proves nothing.
+ */
+export function unranTestsProblem(ran: string[] | undefined, tests: readonly string[]): [string, string] | undefined {
+  if (ran === undefined) {
+    return [
+      'cannot be confirmed',
+      `vitest's JSON report, which names the test files it ran, is missing or unreadable, so the run does not show they ran. ` +
+        `Run them by hand to see why vitest wrote no report.`,
+    ];
+  }
+  const ranSet = new Set(ran.map((f) => posix.normalize(f)));
+  const missing = tests.filter((t) => !ranSet.has(posix.normalize(t)));
+  if (missing.length === 0) return undefined;
+  const they = missing.length === 1 ? 'it' : 'them';
+  return [
+    'did not all run',
+    `${missing.join(', ')} did not run: the project's vitest config excludes ${they}, or does not include ${they}, ` +
+      `so the run proves nothing about ${they}. Fix the config's test include or exclude, or the path.`,
+  ];
+}
+
 /** The last lines of a test run, which is where vitest says what failed. */
 function tail(output: string, lines = 25): string {
   return output.trimEnd().split('\n').slice(-lines).join('\n');
@@ -463,6 +487,9 @@ export async function checkConstraints(
       refusals.push(run.refused);
     } else if (!run.ok) {
       refusals.push(`The constraint tests failed (${tests.join(', ')}). A measured constraint does not hold:\n${tail(run.output)}`);
+    } else {
+      const unran = unranTestsProblem(run.ran, tests);
+      if (unran) refusals.push(`The constraint tests ${unran[0]}, so no measured constraint is shown to hold: ${unran[1]}`);
     }
   }
   return { constraints, structures, tests, refusals };
