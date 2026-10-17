@@ -357,11 +357,11 @@ interface StepWindow {
 interface DevPersistenceOptions {
   store: PersistenceStore;
   /**
-   * This session's own id. It is what a game uses to name an APPEND
-   * collision-free (`death:${sessionKey}`), so it must be stable for the life
-   * of the session and different from the next one's.
+   * This dev run's id. Each game started in the run is handed its own session
+   * key, `<runKey>-<n>` (#883): a game uses it to name an APPEND
+   * collision-free (`death:${sessionKey}`), so it must differ between games.
    */
-  sessionKey: string;
+  runKey: string;
   /**
    * The version stamped onto every row this session writes. `boardsmith dev`
    * has no published version, so the CLI passes a marker that says so rather
@@ -488,6 +488,8 @@ export class MultiplayerHost {
    * roster is fixed when the session starts.
    */
   private persistPlayers: PersistPlayer[] = [];
+  /** How many games this run has started, which numbers each game's session key. */
+  private gamesStarted = 0;
   private readonly clock: WorldHostClock;
   /** The open step's window, or null before the first broadcast of a session. */
   private window: StepWindow | null = null;
@@ -1166,7 +1168,8 @@ export class MultiplayerHost {
     }));
     const persistence = this.opts.persistence;
     if (!persistence) return;
-    const read = persistence.store.readForSession(persistence.sessionKey, this.persistPlayers);
+    const sessionKey = `${persistence.runKey}-${++this.gamesStarted}`;
+    const read = persistence.store.readForSession(sessionKey, this.persistPlayers);
     if (read === null) return;
     if (read.dropped.length > 0) {
       console.warn(
