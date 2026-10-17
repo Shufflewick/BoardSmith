@@ -26,8 +26,7 @@ import type { Component } from 'vue';
 import type { VueWrapper } from '@vue/test-utils';
 import type { default as AutoUIComponent } from '../ui/components/auto-ui/AutoUI.vue';
 import type { GameRootView } from '../ui/types.js';
-import { isEngineRootField, type ElementJSON, type SeatViewJSON } from '../engine/index.js';
-import { SEAT_ROOT_FIELDS } from '../engine/element/game.js';
+import { isEngineRootField, type AnimationEvent, type ElementJSON, type SeatViewJSON } from '../engine/index.js';
 import { PERSIST_KEY } from '../persistence/persistence.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE, isHiddenPlaceholder } from '../engine/element/hidden-placeholder.js';
 import type { BoardInteraction } from '../ui/composables/useBoardInteraction.js';
@@ -1298,19 +1297,37 @@ function isRootBookkeeping(key: string): boolean {
   return isEngineRootField(key) || key === PERSIST_KEY;
 }
 
+/** The fields a seat's view carries on its root beside the element's own. */
+type SeatRootField = Exclude<keyof SeatViewJSON, keyof ElementJSON>;
+
+// `satisfies Record`, so a field added to or dropped from the seat view fails the type check here.
+const SEAT_ROOT_FIELDS = Object.keys({
+  phase: true,
+  isFinished: true,
+  settings: true,
+  animationEvents: true,
+} satisfies Record<SeatRootField, true>) as SeatRootField[];
+
+/** A root field's value with the engine's event numbering left out: it counts events, it is not one (#489). */
+function comparableRootField(root: SeatViewJSON, field: SeatRootField): unknown {
+  if (field !== 'animationEvents') return root[field];
+  return root.animationEvents?.map(({ id: _id, seatIds: _seatIds, ...event }: AnimationEvent) => event);
+}
+
 /**
  * Each value the root holds in a field `Game.toJSON()` writes beside its
- * attributes (`settings` and the rest) that the seat view's same field does not
- * carry (#1064): another seat's `actionTempState`, or a key the game's
- * `playerView` withholds.
+ * attributes (`settings` and the rest) that the seat is not sent anywhere in its
+ * view (#1064): another seat's `actionTempState`, a key the game's `playerView`
+ * withholds, another seat's private animation event. A value the view carries
+ * elsewhere, such as the id of an element the seat can see, is no secret.
  */
-function rootFieldCandidates(root: ElementJSON, seatView: ElementJSON): Array<{ attribute: string; value: string }> {
-  return SEAT_ROOT_FIELDS.flatMap((field) => {
-    const sent = new Set(identityStringsIn((seatView as Record<string, unknown>)[field]));
-    return identityStringsIn((root as Record<string, unknown>)[field])
+function rootFieldCandidates(root: SeatViewJSON, seatView: SeatViewJSON): Array<{ attribute: string; value: string }> {
+  const sent = new Set(identityStringsIn(seatView));
+  return SEAT_ROOT_FIELDS.flatMap((field) =>
+    identityStringsIn(comparableRootField(root, field))
       .filter((value) => !sent.has(value))
-      .map((value) => ({ attribute: field, value }));
-  });
+      .map((value) => ({ attribute: field, value })),
+  );
 }
 
 /** Result of {@link deriveLeakDetectionData}: forbidden markers plus, for every
@@ -1336,7 +1353,7 @@ interface LeakDetectionData {
  */
 function deriveLeakDetectionData(
   unredacted: readonly ElementJSON[],
-  finalTree: ElementJSON,
+  finalTree: SeatViewJSON,
 ): LeakDetectionData {
   const nodesById = new Map<number, ElementJSON>();
   indexNodesById(finalTree, nodesById);
@@ -1351,7 +1368,7 @@ function deriveLeakDetectionData(
     );
     const elementLabel = `${unfiltered.className}#${unfiltered.id}`;
     if (isRoot) {
-      for (const c of rootFieldCandidates(unfiltered, finalTree)) {
+      for (const c of rootFieldCandidates(unfiltered as SeatViewJSON, finalTree)) {
         markers.push({ ...c, elementId: unfiltered.id, elementLabel });
       }
     }

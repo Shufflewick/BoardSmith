@@ -436,15 +436,6 @@ export type SeatViewJSON = ReturnType<typeof withoutRestoreOnlyFields>;
 /** The root fields `toJSON()` writes for restores and no seat's view carries. */
 export type RestoreOnlyRootField = Exclude<keyof ReturnType<Game['toJSON']>, keyof SeatViewJSON>;
 
-/** The fields a seat's view carries on its root beside the element's own, each narrowed to the seat. */
-type SeatRootField = Exclude<keyof SeatViewJSON, keyof ElementJSON>;
-
-// A Record, so a field added to or dropped from the seat view fails the type check here.
-const SEAT_ROOT_FIELD_SET: Record<SeatRootField, true> = { phase: true, isFinished: true, settings: true, animationEvents: true };
-
-/** {@link SeatRootField} at run time, for the hidden-info leak gate (#1064). */
-export const SEAT_ROOT_FIELDS = Object.keys(SEAT_ROOT_FIELD_SET) as readonly SeatRootField[];
-
 /**
  * Game phase
  */

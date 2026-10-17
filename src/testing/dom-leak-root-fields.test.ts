@@ -10,7 +10,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { defineComponent, h } from 'vue';
-import { Game, Player, Action, actionStep, actionTempState, type ElementJSON, type GameOptions } from '../engine/index.js';
+import { Game, Player, Space, Action, actionStep, actionTempState, type ElementJSON, type GameOptions } from '../engine/index.js';
 import { TestGame } from './test-game.js';
 import { assertNoHiddenInfoLeak, preloadSeatRenderer } from './dom-leak.js';
 
@@ -64,5 +64,55 @@ describe('assertNoHiddenInfoLeak — the root\'s top-level fields (#1064)', () =
       expect(JSON.stringify(tg.getPlayerView(1).state)).toContain(value);
       await expect(assertNoHiddenInfoLeak(tg, 1, { component: board(value) })).resolves.toBeUndefined();
     }
+  });
+});
+
+class HandleGame extends Game<HandleGame, Player> {
+  sector: Space;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.sector = this.create(Space, 'sector');
+    // The pattern docs/common-pitfalls.md teaches: keep an element's id in temp state.
+    actionTempState(this, this.getPlayer(2)!, 'explore').set('sectorId', this.sector.id);
+    for (let i = 0; i < 100; i++) this.animateTo([2], 'peek', { card: 'PRIVATEPEEKXYZ' });
+    this.animate('score', { points: 5 });
+    this.registerAction(Action.create<HandleGame>('pass').execute(() => ({ success: true })));
+    this.setFlow({ root: actionStep({ actions: ['pass'] }) });
+  }
+}
+
+const makeHandleGame = () => TestGame.create(HandleGame, { playerCount: 2, seed: 'root-fields-handles' });
+
+describe('assertNoHiddenInfoLeak — root fields hold no false alarms (#1064)', () => {
+  it('accepts another seat\'s temp state holding the id of an element the seat can see', async () => {
+    const tg = makeHandleGame();
+    const id = String(tg.game.sector.id);
+    expect(id.length).toBeGreaterThanOrEqual(3);
+    const sectorBoard = defineComponent({
+      name: 'SectorBoard',
+      setup: () => () => h('div', { class: 'board', 'data-element-id': id }),
+    });
+
+    await expect(assertNoHiddenInfoLeak(tg, 1, { component: sectorBoard })).resolves.toBeUndefined();
+  });
+
+  it('catches another seat\'s private animateTo event, rendered anyway', async () => {
+    const tg = makeHandleGame();
+    expect(JSON.stringify(tg.getPlayerView(1).state)).not.toContain('PRIVATEPEEKXYZ');
+
+    await expect(assertNoHiddenInfoLeak(tg, 1, { component: board('PRIVATEPEEKXYZ') })).rejects.toThrow(
+      /PRIVATEPEEKXYZ.*animationEvents/,
+    );
+  });
+
+  it('does not mark the engine\'s event numbering once more than 100 events have been sent', async () => {
+    const tg = makeHandleGame();
+    const scoreBoard = defineComponent({
+      name: 'ScoreBoard',
+      setup: () => () => h('div', { class: 'board', 'data-score': '1013' }),
+    });
+
+    await expect(assertNoHiddenInfoLeak(tg, 1, { component: scoreBoard })).resolves.toBeUndefined();
   });
 });
