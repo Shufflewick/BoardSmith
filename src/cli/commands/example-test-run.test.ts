@@ -135,6 +135,31 @@ describe('verifyExampleRunCommand', () => {
     await expectRunRefused(project, /rulebook\/02-punch\.md:3 was skipped/);
   }, 60_000);
 
+  it('a translated test that makes no assertions is refused, not recorded as agrees (#826)', async () => {
+    await recordExampleReplayVerdicts(project, [
+      notRunRecord(2, PASSING),
+      notRunRecord(3, "it('ends EXHAUSTED', () => {});"),
+    ]);
+    await verifyExampleEmitCommand({ project, chunk: 'punch' });
+
+    await expectRunRefused(
+      project,
+      /test "ends EXHAUSTED" for the worked example at rulebook\/02-punch\.md:3 makes no assertions.*expect\(/s,
+    );
+  }, 60_000);
+
+  it('a test that throws before asserting anything still failed against the game: disagrees, not refused (#826)', async () => {
+    await recordExampleReplayVerdicts(project, [
+      notRunRecord(2, "it('ends EXHAUSTED', () => {\n  throw new Error('punch is not modelled');\n});"),
+    ]);
+    await verifyExampleEmitCommand({ project, chunk: 'punch' });
+
+    const result = await verifyExampleRunCommand({ project, chunk: 'punch' });
+    expect(result.records.map((r) => [r.verdict, r.observed])).toEqual([
+      ['disagrees', 'Error: punch is not modelled'],
+    ]);
+  }, 60_000);
+
   it('a file that fails to load is refused with what vitest said, and nothing is recorded', async () => {
     const usesMissingModule = "it('ends EXHAUSTED', () => {\n  expect(punch()).toBe('EXHAUSTED');\n});";
     await recordExampleReplayVerdicts(project, [
