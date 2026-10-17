@@ -42,14 +42,6 @@ interface PackResult {
 }
 
 /**
- * Check if a package name is a BoardSmith package.
- */
-function isBoardSmithPackage(name: string | undefined): boolean {
-  if (!name) return false;
-  return name === 'boardsmith' || name === 'eslint-plugin-boardsmith';
-}
-
-/**
  * Discover the single boardsmith package at the monorepo root.
  * After monorepo collapse, there's only one package to pack.
  */
