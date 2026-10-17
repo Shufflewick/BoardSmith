@@ -2707,6 +2707,12 @@ is asked nothing and shown no sequence number; they are told what became of the
 order, because "the colony you founded was already founded" is something they are
 entitled to know before pressing anything.
 
+Each order is written down with the seat that sent it, and a page recovers only
+its own seat's orders, because the host keeps receipts per player: another
+seat's order would have no receipt there and would run again as the wrong
+player. Tabs open on the same world share the book and re-read it before every
+change, so one tab never erases another's orders.
+
 The page does not wait for a reload to ask, either. When a command gets no
 answer in time, the page sends the same order once more straight away. If that
 is also unanswered, the player is told to reload the page to check, because the

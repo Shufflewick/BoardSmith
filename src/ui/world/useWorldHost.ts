@@ -449,7 +449,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     // to be dispatched at all.
     if (!recovered && data.phase === 'watching' && data.seat !== null) {
       recovered = true;
-      void recover();
+      void recover(data.seat);
     }
   }
 
@@ -505,8 +505,8 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
    * and a question about a sequence number in the middle of a game is the
    * failure this replaces.
    */
-  async function recover(): Promise<void> {
-    const outstanding = orders.pending();
+  async function recover(forSeat: number): Promise<void> {
+    const outstanding = orders.pending(forSeat);
     if (outstanding.length === 0) return;
     recovering.value = true;
     const notices: string[] = [];
@@ -797,7 +797,15 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     // `someRef.value` is exactly what a caller will hand this -- so the book
     // takes the JSON round trip on the way in, and what it stores is what goes
     // on the wire.
-    return await dispatch(orders.open(command, args ?? {}));
+    // An order belongs to the seat that sent it, so a page with no seat yet has
+    // nobody to send one as (#889).
+    if (seat.value === null) {
+      return {
+        ok: false,
+        message: 'This page has not been given a seat in this world yet. Wait for it to load, then try again.',
+      };
+    }
+    return await dispatch(orders.open(seat.value, command, args ?? {}));
   }
 
   function start(): void {
