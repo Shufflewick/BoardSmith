@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import type { GameDefinition } from '../../session/index.js';
-import { Game, Player } from '../../engine/index.js';
+import { Game, Player, type GameOptions } from '../../engine/index.js';
 import { buildOutputDir, deriveManifest, resolveUiBuild } from './build.js';
 import { fixedDeployDefinition } from '../../session/testing/fixtures/timed-step-fixture.js';
 
@@ -61,6 +61,18 @@ function derive(
 }
 
 describe('deriveManifest', () => {
+  it('builds the game once per seat count to find its timed steps (#818)', () => {
+    const builtAt: number[] = [];
+    class CountedGame extends Game<CountedGame, Player> {
+      constructor(options: GameOptions) {
+        super(options);
+        builtAt.push(options.playerCount);
+      }
+    }
+    derive({}, { ...makeGameDefinition(2, 4), gameClass: CountedGame });
+    expect(builtAt).toEqual([2, 3, 4]);
+  });
+
   it('derives playerCount from gameDefinition.minPlayers/maxPlayers', () => {
     const manifest = derive({ name: 'fixture', displayName: 'Fixture Game' });
 

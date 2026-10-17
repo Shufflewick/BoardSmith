@@ -1446,7 +1446,8 @@ describe('per-chunk verdict roll-up (VERIFY-01) — decision 18: line-level attr
     const escalateAfterSharper = afterSharper.chunkVerdicts.find((c) => c.slug === 'escalate')!;
     expect(escalateAfterSharper.ruleDelta).toBe('sharper');
     expect(escalateAfterSharper.stale).toBe(true);
-    expect(new Set(escalateAfterSharper.pairIds)).toEqual(new Set([pairIdA, pairIdB]));
+    // C is still pending: it counts as unclassified (#830), outranked here by sharper.
+    expect(new Set(escalateAfterSharper.pairIds)).toEqual(new Set([pairIdA, pairIdB, pairIdC]));
 
     await verifyClassifyRecordCommand({
       project,
@@ -1495,6 +1496,17 @@ describe('per-chunk verdict roll-up (VERIFY-01) — decision 18: line-level attr
     expect(e.ruleDelta).toBe('unclassified');
     expect(e.stale).toBe(true);
     expect(e.pairIds).toContain(pairIdUnpaired);
+  });
+
+  it('chunk-2b: a chunk citing a paired group not yet classified (still in pendingPairs) is reported unclassified, never clean (#830)', async () => {
+    const { project, runId, pairIdA } = await threeGroupProject();
+    await writeChunkCiting(project, 'chunk-a', ['a.md']);
+    const result = await verifyClassifyStatusCommand({ project, runId, json: true });
+    expect(result.pendingPairs).toContain(pairIdA);
+    const a = result.chunkVerdicts.find((c) => c.slug === 'chunk-a')!;
+    expect(a.ruleDelta).toBe('unclassified');
+    expect(a.stale).toBe(true);
+    expect(a.pairIds).toContain(pairIdA);
   });
 
   it('chunk-3: no CHUNK.md/SKETCH.md file is written or modified by verify-classify-status or verify-classify-record', async () => {

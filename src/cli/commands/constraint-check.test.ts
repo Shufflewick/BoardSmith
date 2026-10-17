@@ -40,7 +40,7 @@ const MAIL = [
   '- Chunk: clans',
 ].join('\n');
 
-const passingRunner: TestRunner = async () => ({ ok: true, output: '' });
+const passingRunner: TestRunner = async (_dir, files) => ({ ok: true, output: '', ran: [...files] });
 
 /** Exactly one refusal, matching every pattern. */
 function expectOneRefusal(refusals: string[], ...patterns: RegExp[]): void {
@@ -146,7 +146,7 @@ const CLAUDE_MD = [
 
 const C1 = [
   '### C1',
-  '- Quote: A partition is refused past 512 KiB',
+  '- Quote: A partition is refused past 512 KiB, in UTF-8 bytes, at genesis and at every checkpoint.',
   '- Source: CLAUDE.md',
   '- Kind: measured',
   '- Test: tests/world-budget.test.ts',
@@ -185,6 +185,27 @@ describe("every hard constraint in the project's CLAUDE.md is in the ledger", ()
       'design/CONSTRAINTS.md': ledger(`${C1.replace('512 KiB', '1 MiB')}\n\n${C2}\n`),
     });
     expect(refusals.join('\n')).toMatch(/C1.*1 MiB/s);
+  });
+
+  it('refuses an empty or one- or two-word quote, which would match nearly any text (#819)', async () => {
+    for (const quote of ['**', 'A', 'A partition']) {
+      const refusals = await refusalsFor({
+        'CLAUDE.md': CLAUDE_MD,
+        'tests/world-budget.test.ts': 'test\n',
+        'design/CONSTRAINTS.md': ledger(`${C1}\n\n${C2}\n\n${C1.replace(/C1/, 'C3').replace(/- Quote: .*/, `- Quote: ${quote}`)}\n`),
+      });
+      expectOneRefusal(refusals, /C3's quote .*at least 3.*Quote the whole constraint from CLAUDE\.md/);
+    }
+  });
+
+  it('counts a hard constraint as quoted only by a quote holding the whole bullet (#819)', async () => {
+    const part = C1.replace(/- Quote: .*/, '- Quote: A partition is refused past 512 KiB');
+    const refusals = await refusalsFor({
+      'CLAUDE.md': CLAUDE_MD,
+      'tests/world-budget.test.ts': 'test\n',
+      'design/CONSTRAINTS.md': ledger(`${part}\n\n${C2}\n`),
+    });
+    expectOneRefusal(refusals, /hard constraint "A partition is refused past 512 KiB, in UTF-8 bytes/, /quotes it whole/);
   });
 
   it('refuses a measured constraint whose test does not exist', async () => {
@@ -263,6 +284,43 @@ describe('measured constraints run as code', () => {
 
     expect((await checkConstraints(project, { runTests: passingRunner })).refusals).toEqual([]);
   });
+
+  it('refuses a constraint whose test file did not run, or a run that cannot say which ran (#821)', async () => {
+    const project = await makeProject({
+      'CLAUDE.md': CLAUDE_MD,
+      'tests/world-budget.test.ts': 'test\n',
+      'design/CONSTRAINTS.md': ledger(`${C1}\n\n${C2}\n`),
+    });
+    const skipped = await checkConstraints(project, { runTests: async () => ({ ok: true, output: '', ran: [] }) });
+    expectOneRefusal(skipped.refusals, /tests\/world-budget\.test\.ts did not run/, /include/);
+    const unknown = await checkConstraints(project, { runTests: async () => ({ ok: true, output: '' }) });
+    expectOneRefusal(unknown.refusals, /cannot be confirmed/, /JSON report/);
+  });
+
+  it('refuses a constraint whose test file the real vitest config excludes, and holds once it runs (#821)', async () => {
+    const files = {
+      'CLAUDE.md': CLAUDE_MD,
+      'tests/world-budget.test.ts': "import { it } from 'vitest';\nit('holds', () => {});\n",
+      // A second named file that does run, so vitest still exits 0 with the excluded one skipped.
+      'tests/mail-budget.test.ts': "import { it } from 'vitest';\n// MAILBOX_CAP\nit('holds', () => {});\n",
+      'src/rules/mail.ts': 'export const MAILBOX_CAP = 20;\n',
+      'design/CONSTRAINTS.md': ledger(
+        `${C1}\n\n${C2}\n`,
+        `${MAIL}\n- Cap: MAILBOX_CAP in src/rules/mail.ts\n- Measured by: tests/mail-budget.test.ts\n`,
+      ),
+      'package.json': '{ "type": "module" }\n',
+    };
+    const excluding = GAME_VITE_CONFIG.replace(
+      'defineGameViteConfig()',
+      "defineGameViteConfig({ test: { exclude: ['tests/world-budget.test.ts'] } })",
+    );
+    const project = await makeProject({ ...files, [GAME_VITE_CONFIG_FILE]: excluding });
+    linkGameModules(project);
+    expectOneRefusal((await checkConstraints(project, { runTests: runVitest })).refusals, /tests\/world-budget\.test\.ts did not run/);
+
+    await fs.writeFile(join(project, GAME_VITE_CONFIG_FILE), GAME_VITE_CONFIG);
+    expect((await checkConstraints(project, { runTests: runVitest })).refusals).toEqual([]);
+  }, 60_000);
 
   it('does not run tests when the ledger itself is refused', async () => {
     const project = await makeProject({ 'design/CONSTRAINTS.md': ledger('', MAIL) });

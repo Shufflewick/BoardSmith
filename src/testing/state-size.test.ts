@@ -50,7 +50,6 @@ function play(actions: number, checkpoints?: { max?: number }) {
   runner.start();
   for (let i = 0; i < actions; i++) {
     runner.performAction('pass', (i % 2) + 1, {});
-    runner.captureCheckpoint();
   }
   return runner.getSnapshot();
 }
@@ -80,44 +79,44 @@ describe('measureSnapshotSize', () => {
   });
 });
 
-describe('measureSnapshotSize — sparse checkpoint windows (issue 143)', () => {
-  /**
-   * The documented-but-wrong recipe: perform N actions, snapshot ONCE at the
-   * end. Checkpoints are captured through the snapshot funnel, so every slot
-   * between the start and the final action is left uncaptured.
-   */
-  function playSnapshottingOnlyAtTheEnd(actions: number) {
+/**
+ * `scout` hands its seat a follow-up into `loot`, which the step never offers,
+ * so the seat holds it until a host closes the seat (`closeExpiredHeldSeat`).
+ */
+class HeldSeatGame extends Game<HeldSeatGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([Token, Board]);
+    const board = this.create(Board, 'board');
+    for (let i = 0; i < 30; i++) board.create(Token, `t-${i}`);
+    this.registerActions(
+      Action.create('scout').prompt('Scout').execute(() => ({ success: true, followUp: { action: 'loot', args: {} } })),
+      Action.create('loot').prompt('Loot').condition({ 'only as a follow-up': () => false }).execute(() => {}),
+    );
+    this.setFlow({
+      root: loop({ while: () => true, maxIterations: 200, do: eachPlayer({ do: actionStep({ actions: ['scout'] }) }) }),
+    });
+  }
+}
+
+describe('measureSnapshotSize — one snapshot after many actions (#802)', () => {
+  it('captures every slot when a seat expires between actions', () => {
     const runner = new GameRunner({
-      GameClass: BudgetGame,
-      gameType: 'budget-game',
+      GameClass: HeldSeatGame,
+      gameType: 'held-seat-game',
       gameOptions: { playerCount: 2, seed: 'budget' },
       checkpoints: { history: 'full' },
     });
     runner.start();
-    for (let i = 0; i < actions; i++) {
-      runner.performAction('pass', (i % 2) + 1, {});
-    }
-    return runner.getSnapshot();
-  }
-
-  it('refuses to average over uncaptured slots instead of reporting a wrong multiplier', () => {
-    const snapshot = playSnapshottingOnlyAtTheEnd(20);
-    expect(() => measureSnapshotSize(snapshot)).toThrow(/never captured/);
+    expect(runner.performAction('scout', 1, {}).success).toBe(true);
+    expect(runner.closeExpiredHeldSeat(1, 'pass')).toBeDefined();
+    expect(runner.performAction('scout', 2, {}).success).toBe(true);
+    const snapshot = runner.getSnapshot();
+    expect(snapshot.actionCheckpoints?.entries).toHaveLength(4);
+    expect(snapshot.actionCheckpoints?.entries.every((entry) => entry != null)).toBe(true);
   });
 
-  it('names the counts and the fix in the error', () => {
-    const snapshot = playSnapshottingOnlyAtTheEnd(20);
-    let message = '';
-    try {
-      measureSnapshotSize(snapshot);
-    } catch (error) {
-      message = (error as Error).message;
-    }
-    expect(message).toContain('19 of 21');
-    expect(message).toContain('getSnapshot()');
-  });
-
-  it('measures normally once the snapshot funnel ran after every action', () => {
+  it('measures one snapshot taken after many actions', () => {
     const size = measureSnapshotSize(play(20));
     expect(size.checkpointCount).toBe(21);
     expect(size.bytesPerCheckpoint).toBeGreaterThan(size.treeBytes * 0.9);
