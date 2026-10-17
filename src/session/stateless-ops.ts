@@ -167,6 +167,9 @@ export type DevOp =
   | { type: 'debugReorder'; cardId: number; targetIndex: number }
   | { type: 'debugTransfer'; cardId: number; targetDeckId: number; position: 'first' | 'last' }
   | { type: 'debugShuffle'; deckId: number }
+  // debugDeckView: the whole table with nothing hidden, so the Decks tab can
+  // list a face-down deck's real cards by the ids its edits send (#898).
+  | { type: 'debugDeckView' }
   /**
    * restoreEarlier: go back to a WHOLE earlier snapshot of this game that the
    * host kept itself -- a demo stepping back one move. Run against the CURRENT
@@ -279,6 +282,7 @@ const DEBUG_OP_TYPE_MAP: Record<DebugOpType, true> = {
   debugReorder: true,
   debugTransfer: true,
   debugShuffle: true,
+  debugDeckView: true,
 };
 export const DEBUG_OP_TYPES: ReadonlySet<Op['type']> = new Set(Object.keys(DEBUG_OP_TYPE_MAP) as DebugOpType[]);
 
@@ -295,6 +299,7 @@ export type ReadOnlyOpType =
   | 'debugActionTraces'
   | 'debugFlowState'
   | 'debugCustomData'
+  | 'debugDeckView'
   | 'botSuggest';
 
 const READ_ONLY_OP_TYPE_MAP: Record<ReadOnlyOpType, true> = {
@@ -305,6 +310,7 @@ const READ_ONLY_OP_TYPE_MAP: Record<ReadOnlyOpType, true> = {
   debugActionTraces: true,
   debugFlowState: true,
   debugCustomData: true,
+  debugDeckView: true,
   botSuggest: true,
 };
 export const READ_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set(Object.keys(READ_ONLY_OP_TYPE_MAP) as ReadOnlyOpType[]);
@@ -438,6 +444,8 @@ export interface OpSuccessFields {
   debugReorder: Record<never, never>;
   debugTransfer: Record<never, never>;
   debugShuffle: Record<never, never>;
+  /** The game as `toJSON()` writes it: every element, none hidden from any seat. */
+  debugDeckView: { view: ReturnType<Game['toJSON']> };
   restoreEarlier: Record<never, never>;
   startTutorial: Record<never, never>;
   exitTutorial: Record<never, never>;
@@ -1520,6 +1528,19 @@ function handleDebugCustomData(
   };
 }
 
+function handleDebugDeckView(
+  def: RunnerDef,
+  gameOptions: { playerCount: number; [key: string]: unknown },
+  snapshot: GameStateSnapshot,
+): OpResultFor<'debugDeckView'> {
+  const runner = runnerFromSnapshot(snapshot, def);
+  return {
+    success: true,
+    ...stateEnvelope(runner, gameOptions.playerCount),
+    view: (runner.game as Game).toJSON(),
+  };
+}
+
 function handleDebugRewind(
   def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
@@ -1737,6 +1758,8 @@ async function runOp(
         return handleDebugFlowState(def, gameOptions, snap, pendingState, op);
       case 'debugCustomData':
         return handleDebugCustomData(def, gameOptions, snap, op);
+      case 'debugDeckView':
+        return handleDebugDeckView(def, gameOptions, snap);
       case 'debugRewind':
         return handleDebugRewind(def, gameOptions, snap, op);
       case 'restoreEarlier':

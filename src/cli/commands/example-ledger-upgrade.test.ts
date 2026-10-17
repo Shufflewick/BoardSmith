@@ -143,7 +143,8 @@ describe('example-ledger-upgrade (#371)', () => {
     ]);
     const report = await verifyExampleReplayCommand({ project, json: true });
     expect(report.unanchored).toEqual([]);
-    expect(report.slices.find((s) => s.slicePath === PUNCH)?.pending).toBe(false);
+    // An old record carries no extraction hash, so its slice is pending until recorded again (#835).
+    expect(report.slices.find((s) => s.slicePath === PUNCH)?.examples).toBe('slice-changed');
   });
 
   it('does not count the citation header a record also quotes as a line its example could be on', async () => {
@@ -210,7 +211,7 @@ describe('example-ledger-upgrade (#371)', () => {
     const report = await verifyExampleReplayCommand({ project, json: true });
     expect(report.slices.find((s) => s.slicePath === PUNCH)?.pending).toBe(true);
     expect(report.slices.find((s) => s.slicePath === TERRAIN)?.pending).toBe(true);
-    expect(report.slices.find((s) => s.slicePath === LADDER)?.pending).toBe(false);
+    expect(report.slices.find((s) => s.slicePath === LADDER)?.examples).toBe('slice-changed');
   });
 
   it('treats a quote whose only line is identical text on several lines, or a line another record holds, as ambiguous', async () => {
@@ -231,6 +232,23 @@ describe('example-ledger-upgrade (#371)', () => {
       { exampleId: `${TERRAIN}:4`, reason: 'quote-ambiguous' },
       { exampleId: `${PUNCH}:4`, reason: 'slice-recorded-again' },
       { exampleId: `${PUNCH}:3`, reason: 'quote-ambiguous' },
+    ]);
+  });
+
+  it('never moves an upgraded record onto the id of a kept record it does not move (#836)', async () => {
+    // The kept record's text has slid to line 6, but the upgrade moves only the records it upgrades.
+    const project = await makeProject({ [PUNCH]: `# Punch\n\np.2, Punch Examples:\n\n${READY_LINE}\n${TIRED_LINE}\n` });
+    await writeOldLedger(project, [
+      oldRecord(PUNCH, 4, 'If you are punched while READY, you become EXHAUSTED.'),
+      { ...oldRecord(PUNCH, 5, 'If you are punched while EXHAUSTED, you stay EXHAUSTED.'), lineText: TIRED_LINE },
+    ]);
+
+    const result = await upgrade(project);
+
+    expect(result.reanchored).toEqual([]);
+    expect(result.dropped).toEqual([
+      { exampleId: `${PUNCH}:4`, reason: 'quote-ambiguous' },
+      { exampleId: `${PUNCH}:5`, reason: 'slice-recorded-again' },
     ]);
   });
 

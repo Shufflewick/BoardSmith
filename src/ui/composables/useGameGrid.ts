@@ -74,7 +74,7 @@ export interface GameGridReturn<TCell = GameViewElement> {
   getChildAt: (row: number, col: number, className: string) => GameViewElement | undefined;
   /** Get all children of a specific class at row/col */
   getChildrenAt: (row: number, col: number, className: string) => GameViewElement[];
-  /** Convert row/col to algebraic notation (a1-h8 style) */
+  /** Convert row/col to algebraic notation (a1-h8 style; columns past z are aa, ab, ...) */
   toNotation: (row: number, col: number) => string;
   /** Convert algebraic notation to row/col */
   fromNotation: (notation: string) => { row: number; col: number } | null;
@@ -155,31 +155,18 @@ export function useGameGrid<TCell = GameViewElement>(
 
   /**
    * Convert row/col to algebraic notation (chess-style: a1-h8).
-   * Column 0 = 'a', Column 7 = 'h'
+   * Column 0 = 'a', column 25 = 'z', column 26 = 'aa'.
    * Row depends on rowZeroAtTop: if true, row 0 = '8', row 7 = '1'
    */
   function toNotation(row: number, col: number): string {
-    const colLetter = String.fromCharCode(97 + col); // a-h
-    const rowNumber = rowZeroAtTop ? rows - row : row + 1;
-    return `${colLetter}${rowNumber}`;
+    return toAlgebraicNotation(row, col, { rows, rowZeroAtTop });
   }
 
   /**
    * Convert algebraic notation to row/col.
    */
   function fromNotation(notation: string): { row: number; col: number } | null {
-    if (notation.length < 2) return null;
-
-    const colLetter = notation[0].toLowerCase();
-    const rowNumber = parseInt(notation.slice(1), 10);
-
-    if (colLetter < 'a' || colLetter > String.fromCharCode(96 + cols)) return null;
-    if (isNaN(rowNumber) || rowNumber < 1 || rowNumber > rows) return null;
-
-    const col = colLetter.charCodeAt(0) - 97;
-    const row = rowZeroAtTop ? rows - rowNumber : rowNumber - 1;
-
-    return { row, col };
+    return fromAlgebraicNotation(notation, { rows, cols, rowZeroAtTop });
   }
 
   function* iterateCells(): IterableIterator<[string, TCell]> {
@@ -227,9 +214,12 @@ export function toAlgebraicNotation(
   options: { rows?: number; rowZeroAtTop?: boolean } = {}
 ): string {
   const { rows = 8, rowZeroAtTop = true } = options;
-  const colLetter = String.fromCharCode(97 + col);
+  let colLetters = '';
+  for (let n = col + 1; n > 0; n = Math.floor((n - 1) / 26)) {
+    colLetters = String.fromCharCode(97 + ((n - 1) % 26)) + colLetters;
+  }
   const rowNumber = rowZeroAtTop ? rows - row : row + 1;
-  return `${colLetter}${rowNumber}`;
+  return `${colLetters}${rowNumber}`;
 }
 
 export function fromAlgebraicNotation(
@@ -238,16 +228,15 @@ export function fromAlgebraicNotation(
 ): { row: number; col: number } | null {
   const { rows = 8, cols = 8, rowZeroAtTop = true } = options;
 
-  if (notation.length < 2) return null;
+  const match = /^([a-z]+)([1-9]\d*)$/i.exec(notation);
+  if (!match) return null;
 
-  const colLetter = notation[0].toLowerCase();
-  const rowNumber = parseInt(notation.slice(1), 10);
+  let col = 0;
+  for (const letter of match[1].toLowerCase()) col = col * 26 + letter.charCodeAt(0) - 96;
+  col -= 1;
+  const rowNumber = Number(match[2]);
+  if (col >= cols || rowNumber > rows) return null;
 
-  if (colLetter < 'a' || colLetter > String.fromCharCode(96 + cols)) return null;
-  if (isNaN(rowNumber) || rowNumber < 1 || rowNumber > rows) return null;
-
-  const col = colLetter.charCodeAt(0) - 97;
   const row = rowZeroAtTop ? rows - rowNumber : rowNumber - 1;
-
   return { row, col };
 }
