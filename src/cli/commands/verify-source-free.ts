@@ -1,5 +1,5 @@
 import { resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import {
   computeVerificationScope,
   SCOPE_CODE_ONLY,
@@ -291,7 +291,7 @@ export async function verifySourceFreeCheckCommand(
 
   if (report.sourceFree) {
     console.log(
-      chalk.yellow(
+      styleText('yellow',
         `⚠ Source-free mode — scope: ${report.scope}${
           report.reason ? ` (${report.reason})` : ''
         }`,
@@ -310,7 +310,7 @@ export async function verifySourceFreeCheckCommand(
       console.log(`    - ${entry.defectClass} — would have been caught by ${entry.wouldHaveBeenCaughtBy}`);
     }
   } else {
-    console.log(chalk.green(`✓ Full scope — every pipeline step runs; nothing is skipped.`));
+    console.log(styleText('green', `✓ Full scope — every pipeline step runs; nothing is skipped.`));
     console.log(`  ${report.checksRun.length} source-free check(s) among the steps that ran:`);
     for (const check of report.checksRun) {
       console.log(`    - ${check.command} (${check.checkId})`);

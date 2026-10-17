@@ -100,14 +100,14 @@ export function groupElementsByClass(view: unknown): Record<string, GroupedEleme
 }
 
 /**
- * Every deck in the tree, with its cards. A node counts as a deck when the game
- * marked it `$type: 'deck'` or when its class name says so.
+ * Every deck in the tree, with its cards. A node counts as a deck when its
+ * attributes carry `$type: 'deck'` (every `Deck` does) or when its class name says so.
  */
 export function discoverDecks(view: unknown): DeckInfo[] {
   const decks: DeckInfo[] = [];
 
   walk(view, (obj) => {
-    const isDeck = obj.$type === 'deck'
+    const isDeck = asNode(obj.attributes)?.$type === 'deck'
       || (typeof obj.className === 'string' && obj.className.toLowerCase().includes('deck'));
     if (!isDeck || typeof obj.id !== 'number') return;
 
@@ -163,11 +163,6 @@ export function discoverCardContainers(view: unknown): CardContainerInfo[] {
 /** Notation, then name, then id — the first thing the element actually has. */
 export function getElementDisplayName(element: Pick<GroupedElement, 'id' | 'name' | 'notation'>): string {
   return element.notation || element.name || `#${element.id}`;
-}
-
-/** Same rule as `getElementDisplayName`, for a card inside a deck. */
-export function getCardDisplayName(card: Pick<DeckCard, 'id' | 'name' | 'notation'>): string {
-  return card.notation || card.name || `#${card.id}`;
 }
 
 /**

@@ -20,6 +20,11 @@ export interface DeckWorkbenchOptions {
   bridge: DebugBridge;
   /** Everything a card could be transferred into, including the source. */
   cardContainers: ComputedRef<CardContainerInfo[]> | Ref<CardContainerInfo[]>;
+  /**
+   * Called after each edit the host accepted. An edit inside a face-down deck
+   * changes no seat's view, so no new state arrives to say it landed (#898).
+   */
+  afterEdit: () => void;
 }
 
 export interface DeckWorkbench {
@@ -51,20 +56,18 @@ export interface DeckWorkbench {
 }
 
 export function useDeckWorkbench(options: DeckWorkbenchOptions): DeckWorkbench {
-  const { bridge, cardContainers } = options;
+  const { bridge, cardContainers, afterEdit } = options;
 
   const deckManipulationLoading = ref(false);
   const deckManipulationError = ref<string | null>(null);
 
-  /**
-   * Run one edit. The host broadcasts the new state, so the view updates
-   * without a local refresh — there is nothing to re-fetch here.
-   */
+  /** Run one edit, then tell the caller it landed. */
   async function runEdit(edit: () => Promise<void>): Promise<void> {
     deckManipulationLoading.value = true;
     deckManipulationError.value = null;
     try {
       await edit();
+      afterEdit();
     } catch (err) {
       deckManipulationError.value = err instanceof Error ? err.message : 'Debug request failed';
     } finally {

@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 
 import { getProjectContext, loadGameDefinition } from './game-runtime.js';
 import { constructGame } from '../../engine/element/game.js';
@@ -48,7 +48,7 @@ export async function addUiCommand(): Promise<void> {
     await mkdir(dirname(join(cwd, file.path)), { recursive: true });
     await writeFile(join(cwd, file.path), file.content);
   }
-  console.log(chalk.green('Added the UI:'));
-  for (const file of files) console.log(chalk.dim(`  ${file.path}`));
-  console.log(`\nRun ${chalk.cyan('boardsmith dev')} to play the game in your browser.`);
+  console.log(styleText('green', 'Added the UI:'));
+  for (const file of files) console.log(styleText('dim', `  ${file.path}`));
+  console.log(`\nRun ${styleText('cyan', 'boardsmith dev')} to play the game in your browser.`);
 }

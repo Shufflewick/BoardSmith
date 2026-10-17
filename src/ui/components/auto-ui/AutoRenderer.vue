@@ -21,6 +21,7 @@ import './builtin-renderers.js';
 
 import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import type { PresentationOverlay } from './presentation.js';
+import { parseImageInfo, type ImageInfo } from '../../utils/image.js';
 import { useFlyingElements } from '../../composables/useFlyingElements.js';
 import FlyingCardsOverlay from '../helpers/FlyingCardsOverlay.vue';
 import { DIE_ANIMATION_CONTEXT_KEY, createDieAnimationContext } from '../dice/die3d-state.js';
@@ -43,13 +44,6 @@ export interface GameElement {
   children?: GameElement[];
   childCount?: number;
 }
-
-// ---------------------------------------------------------------------------
-// Type for image info (used by findDefaultBackImage and per-element renderers)
-// ---------------------------------------------------------------------------
-type ImageInfo =
-  | { type: 'url'; src: string }
-  | { type: 'sprite'; sprite: string; x: number; y: number; width: number; height: number };
 
 // ---------------------------------------------------------------------------
 // Props — interaction arrays removed (useBoardInteraction provides those)
@@ -87,23 +81,9 @@ function findDefaultBackImage(element: GameElement | null | undefined): ImageInf
   if (!element) return null;
 
   // Check this element's $images
-  const images = element.attributes?.$images as { back?: string | { sprite: string; x?: number; y?: number; width?: number; height?: number } } | undefined;
-  if (images?.back) {
-    if (typeof images.back === 'string') {
-      return { type: 'url', src: images.back };
-    }
-    // For coordinate-based sprites, return the FULL sprite object with coordinates
-    if (typeof images.back === 'object' && images.back.sprite && typeof images.back.x === 'number' && typeof images.back.y === 'number') {
-      return {
-        type: 'sprite',
-        sprite: images.back.sprite,
-        x: images.back.x,
-        y: images.back.y,
-        width: images.back.width ?? 238,
-        height: images.back.height ?? 333,
-      };
-    }
-  }
+  const images = element.attributes?.$images as Record<string, unknown> | undefined;
+  const back = parseImageInfo(images?.back);
+  if (back) return back;
 
   // Recursively check children
   if (element.children) {

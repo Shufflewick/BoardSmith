@@ -44,7 +44,12 @@ export async function serveSockets(onConnection: (socket: WebSocket) => void): P
     // Registered AFTER the road's own handler, so by the time this sees a
     // message the handler has already taken it.
     socket.on('message', (raw) => {
-      const message = JSON.parse(raw.toString()) as Frame;
+      let message: Frame;
+      try {
+        message = JSON.parse(raw.toString()) as Frame;
+      } catch {
+        return; // a test sending a frame that is not JSON (#879) waits on none
+      }
       for (const waiter of [...waiters]) {
         if (!waiter.accept(message)) continue;
         waiters.splice(waiters.indexOf(waiter), 1);
