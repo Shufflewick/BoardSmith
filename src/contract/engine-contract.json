@@ -1,6 +1,6 @@
 {
-  "revision": 221,
-  "surfaceHash": "e27511a58b559664",
+  "revision": 222,
+  "surfaceHash": "2c198f7c5caf50ba",
   "payloadHash": "2d1f6110b53a0159",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1711,6 +1711,14 @@
       "payloadHash": "2d1f6110b53a0159",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A text pick's pattern on the wire now carries the regex's flags as { source, flags, message }, and a client must compile it as new RegExp(source, flags); the shared ActionPanel does so and no longer sets the HTML pattern attribute, so a u or i pattern no longer refuses text the server accepts (#890)."
+    },
+    {
+      "revision": 222,
+      "date": "2026-10-17",
+      "surfaceHash": "2c198f7c5caf50ba",
+      "payloadHash": "2d1f6110b53a0159",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "ActionResult gains rulesError, set by the engine when execute() or onSelect threw something that is not a PlayerFacingError; a seated world action whose result carries it now throws a WorldRefusal with the new game-owned code rules-error (same message as before), while the rules saying no still travels as a plain Error and a clock action's crash is not coded yet (#847)."
     }
   ]
 }
