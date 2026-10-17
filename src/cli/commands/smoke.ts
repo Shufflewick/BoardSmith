@@ -35,6 +35,7 @@ import { gitOutput as git } from '../lib/git-output.js';
 import { requireTableUi } from '../lib/game-project.js';
 import type { VerifyCheckOutcome } from '../lib/verify-result.js';
 import { SMOKE_ANNOTATION, SMOKE_SEEDS_ENV, SMOKE_SPEC_PATH, smokeSummary, type SmokeRecord } from '../../testing/browser-smoke-verdict.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 
 /** Where each run's copy of the project lives, inside the project's own `.boardsmith/`. */
 const SMOKE_DIR = join('.boardsmith', 'smoke');
@@ -127,7 +128,7 @@ async function copyProject(projectDir: string, copy: string): Promise<void> {
   });
   for (const path of new Set(listed.split('\0').filter(Boolean))) {
     const from = join(projectDir, path);
-    const stat = await fs.lstat(from).catch(() => undefined);
+    const stat = await readIfExists(from, fs.lstat);
     if (stat === undefined) continue; // tracked, but deleted in the working tree
     const to = join(copy, path);
     await fs.mkdir(dirname(to), { recursive: true });
@@ -139,6 +140,7 @@ async function copyProject(projectDir: string, copy: string): Promise<void> {
 /** Removes a run's copy, and the smoke directory once no run is left in it. */
 async function removeCopy(projectDir: string, copy: string): Promise<void> {
   await fs.rm(copy, { recursive: true, force: true });
+  // Best effort: another run's copy still in the folder keeps it, which is what should happen.
   await fs.rmdir(join(projectDir, SMOKE_DIR)).catch(() => undefined);
 }
 

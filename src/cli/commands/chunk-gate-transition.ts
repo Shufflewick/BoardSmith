@@ -31,6 +31,7 @@ import {
 import { parseInterpretationQuotes, unquotedClaims } from './claim-quotes.js';
 import { atomicWriteFile } from './verify-run.js';
 import { verifiedProblem } from '../lib/verify-result.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 
 /**
  * `boardsmith chunk-gate-transition --by <designer>` (#397): the one-time transition for chunks a
@@ -96,14 +97,14 @@ async function wholeFileHash(projectDir: string, chunkText: string): Promise<str
   const lines: string[] = [];
   for (const path of paths) {
     const abs = resolveManifestPath(projectDir, path);
-    const content = abs === 'escapes' ? undefined : await fs.readFile(abs).catch(() => undefined);
+    const content = abs === 'escapes' ? undefined : await readIfExists(abs, fs.readFile);
     lines.push(`${path}\t${abs === 'escapes' ? 'outside the project' : content ? sha256Hex(content) : 'missing'}`);
   }
   return sha256Hex(lines.join('\n'));
 }
 
 async function readChunk(dir: string, slug: string): Promise<string | undefined> {
-  return fs.readFile(chunkMdPath(dir, slug), 'utf-8').catch(() => undefined);
+  return readIfExists(chunkMdPath(dir, slug), (path) => fs.readFile(path, 'utf-8'));
 }
 
 /**

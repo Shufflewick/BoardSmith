@@ -70,6 +70,7 @@ import { NUMBERED_LEDGER_SPECS, provisionalHeadings, provisionalReferences } fro
 import { checkCrossChunkLedger } from './cross-chunk.js';
 import { type VerifyLookup, type VerifyOnFile, checkRunLogRoles, reviewRoundCommits, runLogEntries } from '../lib/run-log-roles.js';
 import { readVerifyResult, verifyResultPath, verifyResultsDir } from '../lib/verify-result.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 
 export type LedgerFindingKind =
   | 'duplicate-number'
@@ -545,8 +546,8 @@ async function provisionalCitedOnMainLine(projectDir: string, headed: LedgerFind
     .filter(Boolean);
   const found: LedgerFinding[] = [];
   for (const file of [...new Set(files)].sort()) {
-    const buffer = await fs.readFile(pathJoin(projectDir, file)).catch(() => undefined);
-    // A file deleted from the working tree, or a binary file, cites nothing.
+    const buffer = await readIfExists(pathJoin(projectDir, file), async (path) => ((await fs.stat(path)).isFile() ? fs.readFile(path) : undefined));
+    // A file deleted from the working tree, a folder git lists (a submodule, a link to a folder), or a binary file, cites nothing.
     if (buffer === undefined || buffer.includes(0)) continue;
     for (const id of provisionalReferences(file, buffer.toString('utf-8'))) {
       if (already.has(`${file}\0${id}`)) continue;

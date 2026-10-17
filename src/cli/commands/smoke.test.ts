@@ -7,7 +7,7 @@
  */
 import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';
-import { existsSync } from 'node:fs';
+import { chmodSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -117,6 +117,17 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.counts).toMatchObject({ actions: 2 });
     expect(pids.length).toBeGreaterThanOrEqual(2);
     expect(execFileSync('git', ['status', '--porcelain'], { cwd: dir, encoding: 'utf-8' })).toBe('');
+  });
+
+  it('refuses a tracked file it cannot look at when it copies the game, rather than leaving it out of the copy', async () => {
+    const dir = await smokeProject(false, { 'notes/rules.md': 'house rules\n' });
+    chmodSync(join(dir, 'notes'), 0o000);
+    try {
+      await expect(runSmoke({ projectDir: dir, log: quiet })).rejects.toThrow(`Could not read ${join(dir, 'notes', 'rules.md')} (EACCES)`);
+    } finally {
+      chmodSync(join(dir, 'notes'), 0o755);
+    }
+    expect(existsSync(join(dir, '.boardsmith', 'smoke'))).toBe(false);
   });
 
   it("walks the world scaffold: the page attaches to a seat and takes the world's verb, with no error", async () => {

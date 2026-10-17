@@ -400,6 +400,20 @@ describe('boardsmith verify --chunk <slug>: the chunk\'s fast checks', () => {
     );
   });
 
+  it('refuses a chunk whose CHUNK.md it cannot read, rather than asking for its tests', async () => {
+    const dir = await gameOnBranch(false);
+    await chunkWithoutTests(dir, '| exempt | a restyle, no rules change | n/a |');
+    const chunkMd = join(dir, 'design', 'chunks', 'combat', 'CHUNK.md');
+    await fs.rm(chunkMd);
+    await fs.symlink('CHUNK.md', chunkMd);
+    commitAll(dir, 'chunk-combat/a CHUNK.md that links to itself');
+
+    const { result } = await runVerify({ projectDir: dir, chunk: 'combat', log: () => {} });
+
+    expect(result.passed).toBe(false);
+    expect(check(result, 'test').summary).toContain(`Could not read ${chunkMd} (ELOOP)`);
+  });
+
   it('a full result satisfies no chunk gate, and the chunk\'s fast checks satisfy only its own', async () => {
     const dir = await gameOnBranch(false);
     const { result } = await runVerify({ projectDir: dir, base: 'main', checks: CHECKS, log: () => {} });

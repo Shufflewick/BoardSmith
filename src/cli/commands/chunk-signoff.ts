@@ -28,6 +28,7 @@ import { checkConstraints } from './constraint-check.js';
 import { verifiedProblem } from '../lib/verify-result.js';
 import { escapeRegExp } from '../lib/regexp.js';
 import { gitOutput as git } from '../lib/git-output.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 
 /**
  * `boardsmith chunk-signoff` / `boardsmith chunk-waiver` / `checkSignoff()`: who may say a chunk
@@ -274,7 +275,7 @@ export async function chunkCodeFiles(projectDir: string, chunkText: string): Pro
       continue;
     }
     if (isInside(design, abs)) continue;
-    const content = await fs.readFile(abs).catch(() => undefined);
+    const content = await readIfExists(abs, fs.readFile);
     files[path] = content ? sha256Hex(content) : MISSING;
   }
   return files;
@@ -461,7 +462,7 @@ function splitList(raw: string): string[] {
 }
 
 async function readWaivers(projectDir: string): Promise<Waiver[]> {
-  const text = await fs.readFile(designPath(projectDir, WAIVERS_MD), 'utf-8').catch(() => '');
+  const text = (await readIfExists(designPath(projectDir, WAIVERS_MD), (path) => fs.readFile(path, 'utf-8'))) ?? '';
   return parseWaivers(text);
 }
 
@@ -660,7 +661,7 @@ async function readProjectState(dir: string): Promise<ProjectState> {
 async function readChunkStates(dir: string): Promise<ChunkState[]> {
   const states: ChunkState[] = [];
   for (const slug of await chunkSlugs(dir)) {
-    const text = await fs.readFile(chunkMdPath(dir, slug), 'utf-8').catch(() => undefined);
+    const text = await readIfExists(chunkMdPath(dir, slug), (path) => fs.readFile(path, 'utf-8'));
     if (text === undefined) continue;
     states.push({
       slug,

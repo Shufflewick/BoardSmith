@@ -13,6 +13,7 @@ import {
   recordExampleReplayVerdicts,
   type ExampleReplayRecord,
 } from './verify-example-replay.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 
 /**
  * `example-test-run.ts` — where a worked example's `agrees`/`disagrees` verdict comes from (#319).
@@ -217,10 +218,10 @@ export async function verifyExampleRunCommand(
   const chunk = options.chunk;
   const tests = await renderChunkExampleTests(projectDir, chunk);
 
-  const onDisk = await fs.readFile(tests.testFilePath, 'utf-8').catch(() => null);
+  const onDisk = await readIfExists(tests.testFilePath, (path) => fs.readFile(path, 'utf-8'));
   if (onDisk !== tests.fileText) {
     throw new Error(
-      `${tests.relTestFilePath} is ${onDisk === null ? 'missing' : 'out of date with the ledger'}.\n` +
+      `${tests.relTestFilePath} is ${onDisk === undefined ? 'missing' : 'out of date with the ledger'}.\n` +
         `Run \`boardsmith verify-example-emit --chunk ${chunk}\` first, then run this again.`,
     );
   }
