@@ -1139,6 +1139,8 @@ const actionAnimations = useActionAnimations({
 props.actionController.onBeforeAutoExecute(actionAnimations.onBeforeAutoExecute);
 ```
 
+A `{selection}` placeholder goes only inside a double-quoted attribute value, as above. Its value is escaped for that spot, so quotes and backslashes in it are safe; a placeholder anywhere else (`#card-{card}`, `[data-x='{card}']`) is refused when `useActionAnimations` is set up.
+
 In template:
 ```vue
 <FlyingCardsOverlay :flying-cards="actionAnimations.flyingElements" />

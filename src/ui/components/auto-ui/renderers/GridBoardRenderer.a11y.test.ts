@@ -82,6 +82,14 @@ describe('GridBoardRenderer a11y — role=grid/gridcell + roving tabindex', () =
     }
   });
 
+  it('labels unnamed cells past column z aa, ab, ... (#868)', () => {
+    const board = buildGridElement(28, 1);
+    for (const cell of board.children!) delete cell.name;
+    const labels = mountBoard(board).wrapper.findAll('[role="gridcell"]').map((c) => c.attributes('aria-label') ?? '');
+    expect(labels[25]).toMatch(/^z1,/);
+    expect(labels[27]).toMatch(/^ab1,/);
+  });
+
   it('exactly one cell has tabindex="0" initially', () => {
     const { wrapper } = mountBoard(buildGridElement(3, 3));
     const cells = wrapper.findAll('[role="gridcell"]');

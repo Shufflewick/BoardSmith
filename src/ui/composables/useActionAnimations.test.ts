@@ -175,6 +175,46 @@ describe('useActionAnimations', () => {
     });
   });
 
+  describe('selector values (#868)', () => {
+    it('finds elements whose interpolated values hold quotes and backslashes', async () => {
+      const cardId = 'ace "high" \\ 1';
+      makeElement('data-card-id', cardId);
+      makeElement('data-zone', 'hand');
+      const { gameViewRef, onBeforeAutoExecute } = animate(moveConfig);
+
+      await onBeforeAutoExecute('moveCard', { cardId, zone: 'hand' });
+      enableAnimationTestMode();
+      await reply(gameViewRef, fake);
+
+      expect(getAnimationTrace()).toEqual([expect.objectContaining({ kind: 'action', element: cardId })]);
+    });
+  });
+
+  describe('selector templates (#868)', () => {
+    const setUp = (config: Partial<ActionAnimationConfig>) => animate({ ...moveConfig, ...config });
+
+    it.each([
+      ['an id selector', { elementSelector: '#card-{cardId}' }],
+      ['an unquoted attribute value', { elementSelector: '[data-card-id={cardId}]' }],
+      ['a single-quoted attribute value', { elementSelector: "[data-card-id='{cardId}']" }],
+      ['a single-quoted string that itself holds ="..."', { elementSelector: `[data-card-id='a="{cardId}"']` }],
+      ['a class name after a quoted value', { elementSelector: '[data-zone="hand"] .card-{cardId}' }],
+      ['the destination selector', { destinationSelector: '.zone-{zone}' }],
+    ])('refuses a placeholder in %s, naming the action and the fix', (_label, config) => {
+      expect(() => setUp(config)).toThrow(/"moveCard".*\{(cardId|zone)\}.*\[data-attribute="\{(cardId|zone)\}"\]/s);
+    });
+
+    it.each([
+      ["MERC's template", { elementSelector: '[data-combatant="{combatantName}"]', destinationSelector: () => null }],
+      ['several attributes and operators', { elementSelector: '.card[data-player="{player}"][data-piece^="{piece}"]' }],
+      ['an escaped quote inside the value', { elementSelector: '[data-card-id="a\\"{cardId}"]' }],
+      ['a :not(...) around the attribute', { elementSelector: '.card:not([data-card-id="{cardId}"])' }],
+      ["a single quote inside the double-quoted value", { elementSelector: `[data-card-id="it's {cardId}"]` }],
+    ])('accepts placeholders inside double-quoted attribute values: %s', (_label, config) => {
+      expect(() => setUp(config)).not.toThrow();
+    });
+  });
+
   describe('real path (fake timers)', () => {
     it('drives the setTimeout-based lifecycle to completion with source+destination in the DOM', async () => {
       vi.useFakeTimers({
