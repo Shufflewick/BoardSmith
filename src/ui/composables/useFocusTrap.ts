@@ -40,10 +40,10 @@ export interface FocusTrapOptions {
 const FOCUSABLE_SELECTOR = [
   'a[href]',
   'area[href]',
-  'button:not([disabled])',
-  'input:not([disabled])',
-  'select:not([disabled])',
-  'textarea:not([disabled])',
+  'button:not(:disabled)',
+  'input:not(:disabled)',
+  'select:not(:disabled)',
+  'textarea:not(:disabled)',
   'iframe',
   'object',
   'embed',
@@ -51,8 +51,17 @@ const FOCUSABLE_SELECTOR = [
   '[contenteditable]',
 ].join(', ');
 
+// A hidden or inert match cannot take focus, so the Tab wrap must not stop on it (#1024).
+function canTakeFocus(el: HTMLElement): boolean {
+  if (el.closest('[inert]')) return false;
+  for (let node: HTMLElement | null = el; node; node = node.parentElement) {
+    if (getComputedStyle(node).display === 'none') return false;
+  }
+  return getComputedStyle(el).visibility === 'visible';
+}
+
 function getFocusable(container: HTMLElement): HTMLElement[] {
-  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(canTakeFocus);
 }
 
 // ---------------------------------------------------------------------------

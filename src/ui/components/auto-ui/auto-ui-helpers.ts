@@ -29,7 +29,7 @@ export type PieceVisual =
 // GridResult — discriminated union returned by resolveGridSize
 // ---------------------------------------------------------------------------
 export type GridResult =
-  | { ok: true; rows: number; cols: number }
+  | { ok: true; rows: number; cols: number; position: (cell: GameElement) => { row: number; col: number } }
   | { ok: false; error: string };
 
 // ---------------------------------------------------------------------------
@@ -101,69 +101,48 @@ export function resolvePieceVisual(element: GameElement): PieceVisual {
 // ---------------------------------------------------------------------------
 // resolveGridSize
 //
-// Returns the grid dimensions needed to render a board element, or an
-// actionable error when coordinates cannot be resolved.
-//
-// Resolution order (D-02):
-//   1. Explicit $rowCoord/$colCoord — checked BEFORE children-length guard
-//      so an empty-but-declared grid returns {ok:true, rows:0, cols:0} (Pitfall 6)
-//   2. Inferred: first two numeric, non-underscore-prefixed attributes on first child
-//   3. Neither available → {ok:false, error} (D-03): no exceptions emitted
-//
-// Grid size resolution for grid board elements.
+// Returns the grid dimensions and each cell's 0-based position, read from the
+// coordinate attributes the Grid declares ($rowCoord/$colCoord) and offset by
+// their minimum, or an actionable error. Never guesses coordinate names and
+// never uses tree order: boards built column by column or with gaps are common.
 // ---------------------------------------------------------------------------
 export function resolveGridSize(element: GameElement): GridResult {
-  const attrs = element.attributes ?? {};
+  const rowCoord = element.attributes?.$rowCoord as string | undefined;
+  const colCoord = element.attributes?.$colCoord as string | undefined;
+  if (!rowCoord || !colCoord) {
+    return { ok: false, error: `${cantRender(element)} — declare $rowCoord/$colCoord on the Grid element` };
+  }
+  const error = cellCoordinateError(element, rowCoord, colCoord);
+  if (error) return { ok: false, error };
   const children = element.children ?? [];
-
-  const rowCoord = attrs.$rowCoord as string | undefined;
-  const colCoord = attrs.$colCoord as string | undefined;
-
-  // Path 1: explicit $rowCoord/$colCoord — checked FIRST, before children-length guard
-  // This ensures an empty but properly configured grid returns {ok:true, rows:0, cols:0}
-  if (rowCoord && colCoord) {
-    if (children.length === 0) {
-      return { ok: true, rows: 0, cols: 0 };
-    }
-    let maxRow = 0;
-    let maxCol = 0;
-    for (const child of children) {
-      const ca = child.attributes ?? {};
-      const rowVal = ca[rowCoord];
-      const colVal = ca[colCoord];
-      if (typeof rowVal === 'number') maxRow = Math.max(maxRow, rowVal);
-      if (typeof colVal === 'number') maxCol = Math.max(maxCol, colVal);
-    }
-    return { ok: true, rows: maxRow + 1, cols: maxCol + 1 };
-  }
-
-  // Path 2: infer from first child's first two numeric, non-underscore-prefixed attributes
-  if (children.length > 0) {
-    const firstChild = children[0];
-    const numericAttrs = Object.entries(firstChild.attributes ?? {})
-      .filter(([k, v]) => typeof v === 'number' && !k.startsWith('_'))
-      .map(([k]) => k)
-      .slice(0, 2);
-
-    if (numericAttrs.length >= 2) {
-      const [first, second] = numericAttrs;
-      let maxFirst = 0;
-      let maxSecond = 0;
-      for (const child of children) {
-        const ca = child.attributes ?? {};
-        const firstVal = ca[first];
-        const secondVal = ca[second];
-        if (typeof firstVal === 'number') maxFirst = Math.max(maxFirst, firstVal);
-        if (typeof secondVal === 'number') maxSecond = Math.max(maxSecond, secondVal);
-      }
-      return { ok: true, rows: maxFirst + 1, cols: maxSecond + 1 };
-    }
-  }
-
-  // Path 3: neither coordinate path resolved — loud error (D-02, D-03)
-  // Error string names the element and the props to add; no file paths or stack traces
+  const coord = (cell: GameElement, name: string) => cell.attributes![name] as number;
+  const [minRow, rows] = span(children.map((c) => coord(c, rowCoord)));
+  const [minCol, cols] = span(children.map((c) => coord(c, colCoord)));
   return {
-    ok: false,
-    error: `Grid "${element.name ?? element.id}" can't render — declare $rowCoord/$colCoord on the Grid element`,
+    ok: true,
+    rows,
+    cols,
+    position: (cell) => ({ row: coord(cell, rowCoord) - minRow, col: coord(cell, colCoord) - minCol }),
   };
+}
+
+const cantRender = (grid: GameElement) => `Grid "${grid.name ?? grid.id}" can't render`;
+
+/** Why a grid's cells cannot be placed, or undefined when every cell has both declared coordinates. */
+function cellCoordinateError(element: GameElement, rowCoord: string, colCoord: string): string | undefined {
+  for (const child of element.children ?? []) {
+    const missing = [rowCoord, colCoord].find((name) => typeof child.attributes?.[name] !== 'number');
+    if (missing) {
+      return `${cantRender(element)}: cell "${child.name ?? child.id}" has no numeric "${missing}"; give every cell numeric ${rowCoord} and ${colCoord} values`;
+    }
+  }
+  return undefined;
+}
+
+/** [minimum, count from minimum to maximum inclusive] of some coordinates; [0, 0] for none. */
+function span(values: number[]): [number, number] {
+  if (values.length === 0) return [0, 0];
+  const min = values.reduce((a, b) => Math.min(a, b));
+  const max = values.reduce((a, b) => Math.max(a, b));
+  return [min, max - min + 1];
 }

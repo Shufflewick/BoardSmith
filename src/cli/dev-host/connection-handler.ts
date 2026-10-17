@@ -3,6 +3,7 @@ import type { WebSocket } from 'ws';
 import { claimWebSocketPath } from '../commands/dev-server.js';
 import type { ClientInbound, HostOutbound, MultiplayerHost } from './multiplayer-host.js';
 import type { RulesReloadQueue } from './rules-reload-queue.js';
+import { parseSocketMessage } from './socket-message.js';
 import { DEV_HOST_WS_PATH } from './socket-path.js';
 
 /**
@@ -100,12 +101,8 @@ export function createDevHostConnectionHandler(opts: DevHostConnectionOptions): 
     let clientId: string | null = null;
 
     socket.on('message', (raw) => {
-      let msg: { type?: string; clientId?: unknown; [key: string]: unknown };
-      try {
-        msg = JSON.parse(raw.toString());
-      } catch {
-        return;
-      }
+      const msg = parseSocketMessage(raw);
+      if (msg === null) return;
       if (msg.type === 'hello') {
         if (msg.runId !== undefined && msg.runId !== runId) {
           send({ type: 'stale_run' });

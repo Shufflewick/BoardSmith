@@ -15,7 +15,7 @@
  * Takes the view it renders and the panel's copy-with-toast; owns everything
  * else about its own concern.
  */
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import {
   groupElementsByClass,
   filterElementGroups,
@@ -53,6 +53,15 @@ const selectedElement = computed<GroupedElement | null>(() => {
     if (found) return found;
   }
   return null;
+});
+
+// A selection whose element left the view (time travel, or a move into a
+// face-down deck) is dropped with its board highlight. A tab off screen gets no
+// view, which says nothing about the element, so it keeps its selection.
+watch([selectedElement, () => props.view], ([element, view]) => {
+  if (element || view === undefined || selectedElementId.value === null) return;
+  selectedElementId.value = null;
+  emit('highlight-element', null);
 });
 
 function toggleElementGroup(className: string) {
@@ -195,10 +204,6 @@ async function copyElementToClipboard(element: GroupedElement) {
   letter-spacing: 0.5px;
 }
 /* Elements Section */
-.elements-section {
-  border-bottom: 1px solid var(--bsg-line);
-  padding-bottom: 16px;
-}
 .no-elements {
   color: var(--bsg-ink-3);
   font-style: italic;

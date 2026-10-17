@@ -98,6 +98,7 @@ import { tryUseBoardInteraction } from './useBoardInteraction.js';
 import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
 import { isDevThrowEnabled } from '../../utils/dev.js';
 import { isHiddenPlaceholder } from '../../engine/element/hidden-placeholder.js';
+import type { SpriteData } from '../utils/image.js';
 
 /**
  * Game element type for auto-watch mode
@@ -124,9 +125,9 @@ export interface FlyingCardData {
   /** Custom back color/gradient (e.g., 'var(--bsg-surface-2)' or 'linear-gradient(...)') */
   backColor?: string;
   /** Face image - URL string or sprite object */
-  faceImage?: string | { sprite: string; x: number; y: number; width?: number; height?: number };
+  faceImage?: string | SpriteData;
   /** Back image - URL string or sprite object */
-  backImage?: string | { sprite: string; x: number; y: number; width?: number; height?: number };
+  backImage?: string | SpriteData;
   /** Player seat who owns this element (for piece rendering) */
   playerSeat?: number;
   /** Any additional data for custom rendering */

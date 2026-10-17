@@ -22,12 +22,14 @@ import { describe, expect, it } from "vitest";
 import { Game, Piece, Player, Space } from "../engine/index.js";
 import type { GameElement } from "../engine/index.js";
 import { PlayerFacingError } from "../engine/errors.js";
+import { rulesErrorSentence } from "../engine/action/rules-error.js";
 import type { ActionDefinition, ElementJSON, GameOptions } from "../engine/index.js";
 import { assertWorldEngineConformance } from "./engine-conformance.test-helper.js";
 import { BoardSmithWorldEngine } from "./engine.js";
 import { worldAction, worldClockAction } from "./action.js";
 import type { StoredPartition, WorldPartitionSource } from "./contract.js";
 import { worldBudgets } from "./budgets.js";
+import { WorldRefusal } from "./refusals.js";
 import {
   Holding,
   VillageFixture,
@@ -342,9 +344,8 @@ const tearOwn = worldAction<WorldFixtureGame>("tearOwn")
   });
 
 /**
- * MUTATES, RETURNS, and only then fails: the event names a scope that is
- * neither "world" nor a partition. The #151 shape -- the handler SUCCEEDED, so
- * a catch around `execute` alone would never see the refusal.
+ * MUTATES, then emits in a scope that is neither "world" nor a partition it
+ * declared, which `emit` refuses at the line (#933).
  */
 const misroute = worldAction<WorldFixtureGame>("misroute")
   .needs(() => [ROOM_ONE])
@@ -384,6 +385,18 @@ const refuseUnreadably = worldAction<WorldFixtureGame>("refuseUnreadably")
   .execute(() => {
     throw new Error("The hearth is full: it holds 3 logs and you offered 14.");
   });
+
+/** A refusal whose words happen to be the engine's crash sentence: still a refusal (#847). */
+const refuseInCrashWords = worldAction<WorldFixtureGame>("refuseInCrashWords")
+  .needs(() => [ROOM_ONE])
+  .execute(() => {
+    throw new PlayerFacingError(rulesErrorSentence("refuseInCrashWords"));
+  });
+
+/** The same words returned as `{ success: false, error }`: also a refusal (#847). */
+const returnCrashWords = worldAction<WorldFixtureGame>("returnCrashWords")
+  .needs(() => [ROOM_ONE])
+  .execute(() => ({ success: false, error: rulesErrorSentence("returnCrashWords") }));
 
 /**
  * MUTATES, RETURNS, and fails the OTHER post-run check: it moves a token into a
@@ -445,7 +458,7 @@ const throwToken = worldAction<WorldFixtureGame>("throwToken")
     const token = room.first(Token);
     if (!token) throw new Error("throwToken needs a token in room-one");
     token.putInto(ctx.game.room("room-two"));
-    ctx.world.emit(ROOM_TWO, { landed: token.name });
+    ctx.world.emit(ROOM_ONE, { thrown: token.name });
   });
 
 /**
@@ -528,6 +541,8 @@ const ACTIONS: readonly ActionDefinition[] = [
   refuseInWords,
   refuseInWordsAfterWriting,
   refuseUnreadably,
+  refuseInCrashWords,
+  returnCrashWords,
 ];
 
 function newEngine(store: WorldPartitionSource = new CountingStore(genesis())) {
@@ -1340,11 +1355,7 @@ describe("#68 — a refused command leaves the world unchanged", () => {
     ).toEqual([ROOM_ONE]);
   });
 
-  it("rolls back a handler that SUCCEEDED and then failed event routing (#151)", async () => {
-    // The refusal is thrown by `audienceOf`, AFTER `run` returned -- the exact
-    // window #151 names: the tree holds the full mutation, the player is told
-    // `refused`, and until the rollback covered it the phantom change waited to
-    // ride the next checkpoint of the same partition.
+  it("rolls back a handler that mutated and then emitted in an undeclared scope (#933)", async () => {
     const engine = newEngine();
     await engine.applyCommand("player-a", { name: "touch", args: {} }, STAMP);
 
@@ -1685,6 +1696,19 @@ describe("#186 — a world can say something a player reads", () => {
       }
     });
 
+    it("rolls back a handler that SUCCEEDED and then failed event routing (#151)", async () => {
+      // `undecided-audience` is thrown AFTER the handler returned, with the
+      // room already changed: the window #151 names.
+      const engine = twoSeats(twoStep);
+      await engine.hydrate([ROOM_ONE, ROOM_TWO]);
+      const before = await engine.serializePartitions([ROOM_ONE]);
+
+      const refused = await refusalOf(engine.applyCommand("player-a", { name: "say", args: {} }, STAMP));
+
+      expect(refused).toMatchObject({ code: "undecided-audience" });
+      expect(await engine.serializePartitions([ROOM_ONE])).toEqual(before);
+    });
+
     it("needs nothing more loaded once a view already names the scope", async () => {
       const engine = twoSeats((_seat, world) => [ROOM_ONE, ...(world.partition(ROOM_TWO) ? [ROOM_TWO] : [])]);
       await engine.hydrate([ROOM_ONE]);
@@ -1733,6 +1757,88 @@ describe("#186 — a world can say something a player reads", () => {
 
     expect(result.events[0]).not.toHaveProperty("text");
     expect(result.events[0]).not.toHaveProperty("type");
+  });
+});
+
+describe("#933 — an event's scope is held to the declaration, not to residency", () => {
+  const shoutNextDoor = worldAction<WorldFixtureGame>("shoutNextDoor")
+    .needs(() => [ROOM_ONE])
+    .execute((_args, ctx) => {
+      ctx.world.emit(ROOM_TWO, {});
+    });
+  const shoutHere = worldAction<WorldFixtureGame>("shoutHere")
+    .needs(() => [ROOM_ONE])
+    .execute((_args, ctx) => {
+      ctx.world.emit(ROOM_ONE, { here: true });
+      ctx.world.emit("world", { everybody: true });
+    });
+  const clockShoutNextDoor = worldClockAction<WorldFixtureGame>("clockShoutNextDoor")
+    .needs(() => [ROOM_ONE])
+    .execute((_args, ctx) => {
+      ctx.world.emit(ROOM_TWO, {});
+    });
+
+  function shoutingEngine() {
+    return new BoardSmithWorldEngine({
+      game: newWorldGame(),
+      seats: new Map([["player-a", 1]]),
+      store: new CountingStore(genesis()),
+      actions: [shoutNextDoor, shoutHere, clockShoutNextDoor],
+      view: () => [ROOM_ONE, ROOM_TWO],
+    });
+  }
+
+  async function refusalOf(run: Promise<unknown>): Promise<unknown> {
+    try {
+      await run;
+    } catch (error) {
+      return error;
+    }
+    return undefined;
+  }
+
+  it("refuses an undeclared scope the same way whether or not it is resident", async () => {
+    for (const resident of [[ROOM_ONE, ROOM_TWO], [ROOM_ONE], []]) {
+      const engine = shoutingEngine();
+      await engine.hydrate(resident);
+      const refused = await refusalOf(
+        engine.applyCommand("player-a", { name: "shoutNextDoor", args: {} }, STAMP),
+      );
+      expect(refused).toMatchObject({ code: "undeclared-partition" });
+      expect((refused as Error).message).toContain(`"${ROOM_TWO}"`);
+    }
+  });
+
+  it("refuses it after an eviction left the scope cold", async () => {
+    const engine = shoutingEngine();
+    await engine.hydrate([ROOM_ONE, ROOM_TWO]);
+    engine.evict([ROOM_TWO]);
+    const refused = await refusalOf(
+      engine.applyCommand("player-a", { name: "shoutNextDoor", args: {} }, STAMP),
+    );
+    expect(refused).toMatchObject({ code: "undeclared-partition" });
+  });
+
+  it("refuses it on the clock's road too", async () => {
+    const engine = shoutingEngine();
+    await engine.hydrate([ROOM_ONE, ROOM_TWO]);
+    const refused = await refusalOf(
+      engine.onEvent(
+        { name: "clockShoutNextDoor", args: {} },
+        { due: 5_000, missedCount: 0 },
+        EVENT_STAMP,
+      ),
+    );
+    expect(refused).toMatchObject({ code: "undeclared-partition" });
+  });
+
+  it("still routes an event in a declared partition and in the world scope", async () => {
+    const engine = shoutingEngine();
+    const result = await engine.applyCommand("player-a", { name: "shoutHere", args: {} }, STAMP);
+    expect(result.events).toEqual([
+      { scope: ROOM_ONE, payload: { here: true }, seats: [1] },
+      { scope: "world", payload: { everybody: true }, seats: [1] },
+    ]);
   });
 });
 
@@ -1787,6 +1893,21 @@ describe("#191 — a refusal written for a player reaches one", () => {
     // assertion holds either way.
     expect(refusal).not.toBe(SENTENCE);
     expect(refusal).toContain("error in the game's rules");
+  });
+
+  it("codes a crash in the rules rules-error and leaves a refusal uncoded, so a caller can tell them apart (#847)", async () => {
+    const engine = newEngine();
+    const thrown = (name: string) =>
+      engine.applyCommand("player-a", { name, args: {} }, STAMP).then(() => null, (error: unknown) => error);
+
+    const crash = await thrown("refuseUnreadably");
+    expect(crash).toBeInstanceOf(WorldRefusal);
+    expect(crash).toMatchObject({ code: "rules-error", owner: "game" });
+    expect((crash as Error).message).toContain("error in the game's rules");
+    expect(await thrown("refuseInWords")).not.toBeInstanceOf(WorldRefusal);
+    // Coded by what the engine knows happened, never by the words a refusal carries.
+    expect(await thrown("refuseInCrashWords")).not.toBeInstanceOf(WorldRefusal);
+    expect(await thrown("returnCrashWords")).not.toBeInstanceOf(WorldRefusal);
   });
 
   it("leaves the world unchanged either way, because a refusal is still a refusal", async () => {

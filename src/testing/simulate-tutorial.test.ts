@@ -14,6 +14,8 @@ import { describe, it, expect } from 'vitest';
 import {
   Game,
   Player,
+  Piece,
+  Space,
   Action,
   type FlowDefinition,
   loop,
@@ -70,6 +72,31 @@ class TutSimGame extends Game<TutSimGame, Player> {
   }
 }
 
+class Token extends Piece<TokenGame> {}
+class Bag extends Space<TokenGame> {}
+
+/** One `take` action that picks a token, and a preset that replaces every token. */
+class TokenGame extends Game<TokenGame, Player> {
+  bag!: Bag;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.bag = this.create(Bag, 'bag');
+    this.bag.create(Token, 'token');
+    this.registerAction(
+      Action.create<TokenGame>('take')
+        .chooseElement('token', { elementClass: Token, from: (ctx) => ctx.game.bag })
+        .execute(() => ({ success: true })),
+    );
+    this.setFlow({ root: loop({ while: () => true, maxIterations: 50, do: eachPlayer({ do: actionStep({ actions: ['take'] }) }) }) });
+  }
+
+  resetToPreset(): void {
+    for (const token of this.bag.all(Token)) token.remove();
+    this.bag.create(Token, 'token');
+  }
+}
+
 // ============================================
 // Tutorial definitions
 // ============================================
@@ -114,7 +141,7 @@ describe('simulateTutorial', () => {
       // Single-player: tutorial seat always has the next turn.
       const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'happy-seed' });
       const result = simulateTutorial(testGame, HAPPY_TUTORIAL, {
-        scenario: [
+        scenario: () => [
           { action: 'move', expectStep: 'step-pass' },
           { action: 'pass' },
         ],
@@ -128,7 +155,7 @@ describe('simulateTutorial', () => {
     it("runs for the tutorial's learnerSeat (#552)", () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'happy-seed' });
 
-      const result = simulateTutorial(testGame, { ...HAPPY_TUTORIAL, learnerSeat: 2 }, { scenario: [] });
+      const result = simulateTutorial(testGame, { ...HAPPY_TUTORIAL, learnerSeat: 2 }, { scenario: () => [] });
 
       expect(testGame.game.tutorialProgress.get(2)).toEqual({ stepId: 'step-move', status: 'running' });
       expect(testGame.game.tutorialProgress.has(1)).toBe(false);
@@ -138,7 +165,7 @@ describe('simulateTutorial', () => {
     it('assertTutorialCompletes does not throw when tutorial completed', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'happy-seed' });
       const result = simulateTutorial(testGame, HAPPY_TUTORIAL, {
-        scenario: [
+        scenario: () => [
           { action: 'move' },
           { action: 'pass' },
         ],
@@ -150,7 +177,7 @@ describe('simulateTutorial', () => {
     it('records the effective game seed in the result (seed traceability)', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'happy-seed' });
       const result = simulateTutorial(testGame, HAPPY_TUTORIAL, {
-        scenario: [{ action: 'move' }, { action: 'pass' }],
+        scenario: () => [{ action: 'move' }, { action: 'pass' }],
       });
 
       expect(result.seed).toBe('happy-seed');
@@ -162,7 +189,7 @@ describe('simulateTutorial', () => {
 
       expect(() =>
         simulateTutorial(testGame, HAPPY_TUTORIAL, {
-          scenario: [{ action: 'move' }, { action: 'pass' }],
+          scenario: () => [{ action: 'move' }, { action: 'pass' }],
           seed: 'different-seed',
         }),
       ).toThrow(/does not match/);
@@ -172,7 +199,7 @@ describe('simulateTutorial', () => {
       const run1 = () => {
         const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'pinned' });
         return simulateTutorial(testGame, HAPPY_TUTORIAL, {
-          scenario: [{ action: 'move' }, { action: 'pass' }],
+          scenario: () => [{ action: 'move' }, { action: 'pass' }],
           seed: 'pinned',
         });
       };
@@ -180,7 +207,7 @@ describe('simulateTutorial', () => {
       const run2 = () => {
         const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'pinned' });
         return simulateTutorial(testGame, HAPPY_TUTORIAL, {
-          scenario: [{ action: 'move' }, { action: 'pass' }],
+          scenario: () => [{ action: 'move' }, { action: 'pass' }],
           seed: 'pinned',
         });
       };
@@ -205,7 +232,7 @@ describe('simulateTutorial', () => {
 
       expect(() =>
         simulateTutorial(testGame, def, {
-          scenario: [{ action: 'pass' }], // 'pass' is blocked on step-1
+          scenario: () => [{ action: 'pass' }], // 'pass' is blocked on step-1
         })
       ).toThrow(/gate|disabled|step-1|pass/i);
     });
@@ -222,7 +249,7 @@ describe('simulateTutorial', () => {
       let message = '';
       try {
         simulateTutorial(testGame, def, {
-          scenario: [{ action: 'pass' }],
+          scenario: () => [{ action: 'pass' }],
         });
       } catch (err) {
         message = (err as Error).message;
@@ -253,7 +280,7 @@ describe('simulateTutorial', () => {
 
       expect(() =>
         simulateTutorial(testGame, def, {
-          scenario: [
+          scenario: () => [
             { action: 'move', expectStep: 'step-2' }, // predicate won't fire after 1 move
           ],
         })
@@ -265,7 +292,7 @@ describe('simulateTutorial', () => {
     it('result.completed is false when scenario ends before last step', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'non-complete' });
       const result = simulateTutorial(testGame, NO_AUTO_ADVANCE_TUTORIAL, {
-        scenario: [
+        scenario: () => [
           { action: 'move' }, // gate on step-1 allows this, but no advanceWhen to move to step-2
         ],
       });
@@ -276,7 +303,7 @@ describe('simulateTutorial', () => {
     it('assertTutorialCompletes throws when tutorial is not complete', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'non-complete' });
       const result = simulateTutorial(testGame, NO_AUTO_ADVANCE_TUTORIAL, {
-        scenario: [
+        scenario: () => [
           { action: 'move' },
         ],
       });
@@ -292,63 +319,87 @@ describe('simulateTutorial', () => {
 
       expect(() =>
         simulateTutorial(testGame, emptyDef, {
-          scenario: [],
+          scenario: () => [],
         })
       ).toThrow(/no steps|empty/i);
     });
   });
 
-  describe('WR-02 — gate-drift detection for non-primary seats', () => {
-    it('detects a gate violation on a non-primary seat (seat override in scenario)', () => {
-      // Two-player game: seat 1 is the learner (primary), seat 2 performs a move.
-      // The tutorial definition blocks 'pass' on step-1 for ALL seats.
-      // Without WR-02 fix, seat 2's gate would be unchecked (uninitialized progress → {} disabled actions).
-      const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'wr02' });
+  describe('starts the tutorial the way the server does (#914)', () => {
+    it('gives the learner the opening turn when the flow would open with another seat', () => {
+      // Seat 1 opens TutSimGame; the server restarts the flow with seat 2 to move.
+      const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'learner-2' });
 
-      const def: TutorialDefinition = {
-        learnerSeat: 1,
-        steps: [
-          { id: 'step-1', gate: { action: 'move' } }, // 'pass' is blocked on step-1
-        ],
-      };
+      const result = simulateTutorial(testGame, { ...HAPPY_TUTORIAL, learnerSeat: 2 }, {
+        scenario: () => [{ action: 'move', expectStep: 'step-pass' }],
+      });
 
-      // Move from seat 1 is fine (gate allows 'move'). Then seat 2 tries 'pass', which is gated.
-      expect(() =>
-        simulateTutorial(testGame, def, {
-          scenario: [
-            { action: 'move' },           // seat 1 moves — OK
-            { action: 'pass', seat: 2 },  // seat 2 passes — should throw (gate blocks 'pass')
-          ],
-        })
-      ).toThrow(/gate|disabled|step-1|pass/i);
+      expect(result.finalStepId).toBe('step-pass');
     });
 
-    it('initializes all scenario seats so gate checks work for non-primary seats', () => {
-      // After simulateTutorial initializes all seats, seat 2 must also have progress
-      // and its gate checks must be evaluated (not silently bypassed). Verify by running a
-      // two-seat scenario where both seats perform the gate-allowed action 'move'.
-      // No advanceWhen — the tutorial does not auto-advance, keeping all seats on step-move.
-      const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'wr02-init' });
+    it('does not gate opponent moves, since only the learner has a tutorial', () => {
+      const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'opponent' });
+      const def: TutorialDefinition = { learnerSeat: 1, steps: [{ id: 'step-1', gate: { action: 'move' } }] };
 
+      simulateTutorial(testGame, def, {
+        scenario: () => [
+          { action: 'move' },
+          { action: 'pass', seat: 2 }, // 'pass' is gated for the learner only
+        ],
+      });
+
+      expect(testGame.game.tutorialProgress.has(2)).toBe(false);
+    });
+
+    it("applies the tutorial's setup before the first step", () => {
+      const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'setup' });
+
+      const result = simulateTutorial(testGame, {
+        ...HAPPY_TUTORIAL,
+        setup: (game) => { (game as TutSimGame).moveCount = 1; },
+      }, { scenario: () => [] });
+
+      expect(result.stepsVisited).toEqual(['step-move', 'step-pass']);
+    });
+
+    it('refuses a game that is already over, as the server does', () => {
+      const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'over' });
+      testGame.game.finish([]);
+
+      expect(() => simulateTutorial(testGame, HAPPY_TUTORIAL, { scenario: () => [] })).toThrow(/game is over/);
+    });
+
+    it('builds the scenario from the board setup left, so a setup that replaces elements still passes (#1079)', () => {
+      const testGame = TestGame.create(TokenGame, { playerCount: 1, seed: 'post-setup' });
       const def: TutorialDefinition = {
         learnerSeat: 1,
-        steps: [
-          // No advanceWhen — gate check only. Both seats remain on this step.
-          { id: 'step-move', gate: { action: 'move' } },
-          { id: 'done', gate: { action: 'pass' } },
-        ],
+        steps: [{ id: 'take-a-token', gate: { action: 'take' } }],
+        setup: (game) => (game as TokenGame).resetToPreset(),
       };
 
-      // Both seats use 'move', which is allowed on step-move. The scenario must
-      // not throw even though seat 2 is a non-primary seat.
-      expect(() =>
-        simulateTutorial(testGame, def, {
-          scenario: [
-            { action: 'move' },           // seat 1 moves — allowed on step-move
-            { action: 'move', seat: 2 },  // seat 2 moves — seat 2 must be initialized with progress
-          ],
-        })
-      ).not.toThrow();
+      const result = simulateTutorial(testGame, def, {
+        scenario: (game) => [{ action: 'take', args: { token: game.bag.first(Token)! } }],
+      });
+
+      expect(result.finalStepId).toBe('take-a-token');
+    });
+
+    it('calls the scenario once, after the tutorial has started with setup applied (#1079)', () => {
+      const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'scenario-once' });
+      const seen: Array<{ passCount: number; started: boolean }> = [];
+
+      simulateTutorial(testGame, {
+        ...HAPPY_TUTORIAL,
+        setup: (game) => { (game as TutSimGame).passCount = 7; },
+      }, {
+        scenario: (game) => {
+          seen.push({ passCount: game.passCount, started: game.tutorialProgress.has(1) });
+          return [{ action: 'move' }];
+        },
+      });
+
+      expect(seen).toEqual([{ passCount: 7, started: true }]);
+      expect(testGame.game.moveCount).toBe(1);
     });
   });
 });
