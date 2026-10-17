@@ -357,6 +357,14 @@ describe('exampleReplayLedgerPath / replaceExampleReplayVerdicts / recordExample
     );
   });
 
+  it('keeps every record when several record calls run in parallel (#831)', async () => {
+    const records = [1, 2, 3, 4, 5, 6].map((n) => recordFor(`rulebook/0${n}-x.md`, n));
+    await Promise.all(records.map((r) => recordExampleReplayVerdicts(dir, [r])));
+    expect((await readExampleReplayVerdicts(dir)).map((r) => r.exampleId).sort()).toEqual(
+      records.map((r) => r.exampleId).sort(),
+    );
+  });
+
   it('recording B leaves a previously-recorded A byte-identical, and both are readable', async () => {
     const a = recordFor('rulebook/01-a.md', 1);
     await recordExampleReplayVerdicts(dir, [a]);

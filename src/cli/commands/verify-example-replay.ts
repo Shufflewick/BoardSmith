@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import { atomicWriteFile } from './verify-run.js';
+import { withLedgerLock } from '../lib/ledger-lock.js';
 import { readFencedJsonLedger, type FencedJsonLedgerFile } from '../lib/fenced-json-ledger.js';
 import {
   readLiveSlices,
@@ -519,8 +520,17 @@ export async function replaceExampleReplayVerdicts(
   projectDir: string,
   records: ExampleReplayRecord[],
 ): Promise<{ ledgerPath: string }> {
-  const { slicesWithoutExamples } = await readExampleReplayLedger(projectDir);
-  return writeExampleReplayLedger(projectDir, { records, slicesWithoutExamples });
+  return withExampleReplayLedgerLock(projectDir, async () => {
+    const { slicesWithoutExamples } = await readExampleReplayLedger(projectDir);
+    return writeExampleReplayLedger(projectDir, { records, slicesWithoutExamples });
+  });
+}
+
+/** Runs one read-modify-write of the ledger while holding its lock (#831). */
+async function withExampleReplayLedgerLock<T>(projectDir: string, work: () => Promise<T>): Promise<T> {
+  const ledgerPath = exampleReplayLedgerPath(projectDir);
+  await fs.mkdir(dirname(ledgerPath), { recursive: true });
+  return withLedgerLock(ledgerPath, work);
 }
 
 /**
@@ -535,13 +545,14 @@ export async function recordExampleReplayVerdicts(
   projectDir: string,
   records: ExampleReplayRecord[],
 ): Promise<{ ledgerPath: string }> {
-  const existing = await readExampleReplayVerdicts(projectDir);
-  const incomingKeys = new Set(records.map((r) => exampleReplayKey(r)));
-  const merged = [
-    ...existing.filter((r) => !incomingKeys.has(exampleReplayKey(r))),
-    ...records,
-  ];
-  return replaceExampleReplayVerdicts(projectDir, merged);
+  return withExampleReplayLedgerLock(projectDir, async () => {
+    const existing = await readExampleReplayLedger(projectDir);
+    const incomingKeys = new Set(records.map((r) => exampleReplayKey(r)));
+    return writeExampleReplayLedger(projectDir, {
+      records: [...existing.records.filter((r) => !incomingKeys.has(exampleReplayKey(r))), ...records],
+      slicesWithoutExamples: existing.slicesWithoutExamples,
+    });
+  });
 }
 
 /**
@@ -557,16 +568,18 @@ async function replaceSliceExampleReplayVerdicts(
   slicePath: string,
   recorded: { records: ExampleReplayRecord[] } | { noExamples: SliceWithoutExamplesRecord },
 ): Promise<{ ledgerPath: string }> {
-  const existing = await readExampleReplayLedger(projectDir);
-  return writeExampleReplayLedger(projectDir, {
-    records: [
-      ...existing.records.filter((r) => r.slicePath !== slicePath),
-      ...('records' in recorded ? recorded.records : []),
-    ],
-    slicesWithoutExamples: [
-      ...existing.slicesWithoutExamples.filter((s) => s.slicePath !== slicePath),
-      ...('noExamples' in recorded ? [recorded.noExamples] : []),
-    ],
+  return withExampleReplayLedgerLock(projectDir, async () => {
+    const existing = await readExampleReplayLedger(projectDir);
+    return writeExampleReplayLedger(projectDir, {
+      records: [
+        ...existing.records.filter((r) => r.slicePath !== slicePath),
+        ...('records' in recorded ? recorded.records : []),
+      ],
+      slicesWithoutExamples: [
+        ...existing.slicesWithoutExamples.filter((s) => s.slicePath !== slicePath),
+        ...('noExamples' in recorded ? [recorded.noExamples] : []),
+      ],
+    });
   });
 }
 
