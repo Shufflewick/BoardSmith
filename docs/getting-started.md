@@ -350,7 +350,16 @@ skipped.
 Commit first: a tree with uncommitted changes is refused before any check runs.
 The result is written to `.boardsmith/verify/<commit>.json`, tied to that one
 commit, to the base it measured from, and to whether the tree stayed clean while
-the checks ran. `boardsmith verify --check` exits 0 only when the current commit,
+the checks ran. The BoardSmith commit it names is the one the run started with.
+What the tests run with must also hold still for the whole run: the BoardSmith
+the command runs and the game loads (its commit and uncommitted changes), the
+installed packages, and the packages linked from outside the repository. If any
+of these changes, for example a linked BoardSmith checkout moves to a new
+commit, the run stops before its next mutant and ends with an error naming what
+changed. It records no result and keeps no mutant outcome, since checks after
+the change ran against different code. Run it again in a checkout nothing else
+edits while it runs, such as a separate BoardSmith worktree.
+`boardsmith verify --check` exits 0 only when the current commit,
 on a clean tree, has a passing full result, and otherwise says what to run.
 
 For a chunk the `bs-` skills build, `boardsmith verify --chunk <slug>` runs only
