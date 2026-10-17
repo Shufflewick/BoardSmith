@@ -86,6 +86,62 @@ describe('ingest harness work dir', () => {
     expect(res.stderr).toContain('is your home folder');
   });
 
+  it('refuses the home folder named with its case changed on a case-insensitive disk', (ctx) => {
+    const sandbox = fixtureSandbox('bs-harness-homecase-');
+    const home = sandbox.env.HOME;
+    const recased = home.toUpperCase();
+    if (!existsSync(recased)) ctx.skip();
+    writeStageMarker(recased);
+    writeFileSync(path.join(home, 'keep.txt'), 'mine');
+
+    const res = runHarness(sandbox, ['stage', '--work-dir', recased]);
+
+    expect(existsSync(path.join(home, 'keep.txt'))).toBe(true);
+    expect(res.status).toBe(1);
+    expect(res.stderr).toContain('is your home folder');
+  });
+
+  it('refuses a folder that holds the home folder, even with a state file naming itself', () => {
+    const sandbox = fixtureSandbox('bs-harness-homeparent-');
+    const parent = path.dirname(sandbox.env.HOME);
+    writeStageMarker(parent);
+    writeFileSync(path.join(sandbox.env.HOME, 'keep.txt'), 'mine');
+
+    const res = runHarness(sandbox, ['stage', '--work-dir', parent]);
+
+    expect(existsSync(path.join(sandbox.env.HOME, 'keep.txt'))).toBe(true);
+    expect(res.status).toBe(1);
+    expect(res.stderr).toContain('holds your home folder');
+  });
+
+  it('refuses a folder that holds the BoardSmith checkout', () => {
+    const sandbox = fixtureSandbox('bs-harness-repoparent-');
+    const repoParent = path.resolve(path.dirname(RUN), '..', '..', '..');
+
+    const res = runHarness(sandbox, ['stage', '--work-dir', repoParent]);
+
+    expect(res.status).toBe(1);
+    expect(res.stderr).toContain('holds the BoardSmith checkout');
+  });
+
+  it.each([
+    ['an early marker with no folder', '{}'],
+    ['JSON null', 'null'],
+    ['invalid JSON', '{not json'],
+  ])('refuses a folder whose state file is %s, and leaves it untouched', (_label, contents) => {
+    const sandbox = fixtureSandbox('bs-harness-badstate-');
+    const victim = path.join(sandbox.root, 'victim');
+    mkdirSync(victim);
+    writeFileSync(path.join(victim, '.harness-stage-state.json'), contents);
+    writeFileSync(path.join(victim, 'keep.txt'), 'mine');
+
+    const res = runHarness(sandbox, ['stage', '--work-dir', victim]);
+
+    expect(existsSync(path.join(victim, 'keep.txt'))).toBe(true);
+    expect(res.status).toBe(1);
+    expect(res.stderr).toContain('does not name the folder it was written for');
+  });
+
   it('refuses a folder with a .git at its top even when it holds a state file naming itself', () => {
     const sandbox = fixtureSandbox('bs-harness-checkout-');
     const checkout = path.join(sandbox.root, 'checkout');

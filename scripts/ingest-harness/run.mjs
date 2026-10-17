@@ -166,21 +166,31 @@ function readStageState(subcommand, workDir) {
 
 // Deletes nothing it cannot prove an earlier stage made: a state file alone can be copied (#1065).
 function refuseUnlessStagedHere(workDir) {
-  const real = realpathSync(workDir);
+  // .native gives the on-disk case, so a recased path on a case-insensitive disk still matches.
+  const real = realpathSync.native(workDir);
   const refuse = (why) =>
     fail(
       `--work-dir ${workDir} ${why}. Refusing to delete it. Pass a folder that does not exist yet, or leave ` +
         `out --work-dir to stage into a fresh temp folder.`,
     );
-  if (real === realpathSync(os.homedir())) refuse('is your home folder');
-  if (real === realpathSync(REPO_ROOT)) refuse('is the BoardSmith checkout');
+  const isOrHolds = (dir) => dir === real || dir.startsWith(real + path.sep);
+  const home = realpathSync.native(os.homedir());
+  const checkout = realpathSync.native(REPO_ROOT);
+  if (real === home) refuse('is your home folder');
+  if (isOrHolds(home)) refuse('holds your home folder');
+  if (real === checkout) refuse('is the BoardSmith checkout');
+  if (isOrHolds(checkout)) refuse('holds the BoardSmith checkout');
   if (existsSync(path.join(real, '.git'))) refuse('has a .git at its top, so it is a repository, not a folder stage made');
   if (!existsSync(stateFilePath(real))) refuse('already exists and has no .harness-stage-state.json, so this harness did not stage it');
-  let stagedFor;
+  let state;
   try {
-    stagedFor = JSON.parse(readFileSync(stateFilePath(real), 'utf8')).workDir;
+    state = JSON.parse(readFileSync(stateFilePath(real), 'utf8'));
   } catch {
-    refuse('has a .harness-stage-state.json that is not valid JSON, so this harness did not write it');
+    state = null;
+  }
+  const stagedFor = state?.workDir;
+  if (typeof stagedFor !== 'string') {
+    refuse('has a .harness-stage-state.json that does not name the folder it was written for, so this harness did not write it');
   }
   if (stagedFor !== real) refuse(`has a .harness-stage-state.json that was written for ${stagedFor}, not this folder`);
 }
@@ -205,7 +215,7 @@ function stage(opts) {
   const { source, expectHash, referenceRepo } = opts;
   const workDir = prepareWorkDir(opts.workDir);
   // Marks the folder as ours at once, so a stage that fails partway can still be re-staged.
-  writeFileSync(stateFilePath(workDir), JSON.stringify({ workDir: realpathSync(workDir) }));
+  writeFileSync(stateFilePath(workDir), JSON.stringify({ workDir: realpathSync.native(workDir) }));
 
   console.log(`[stage] installing current working tree's skill text into ${workDir} (--local --force)`);
   execFileSync('node', [path.join(REPO_ROOT, 'bin', 'boardsmith.js'), 'claude', '--local', '--force'], {
@@ -287,7 +297,7 @@ function stage(opts) {
   console.log(`[stage] sandboxed copy verified: ${stagedCopyPath} matches --expect-hash`);
 
   const state = {
-    workDir: realpathSync(workDir),
+    workDir: realpathSync.native(workDir),
     source,
     sourceFileName,
     stagedCopyPath,
