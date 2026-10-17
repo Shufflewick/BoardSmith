@@ -482,3 +482,127 @@ describe('#147/#73: a card game can determinize a hidden hand', () => {
     expect([3, 4]).toContain(move!.args.rank);
   });
 });
+
+// ============================================================================
+// #871: the contract checks which container each known element sits in, not
+// the order of a container's children. Seat 1 sees its own two cards; the other
+// hands reach it as anonymous placeholders, whose identity means nothing but
+// whose COUNT per hand, by back, the seat does know. Each hand holds one red-
+// and one blue-backed card. A face-down card on the open table keeps its real
+// id, so where it sits is known too.
+// ============================================================================
+
+class TrickGame extends Game<TrickGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([HandCard, Space]);
+    for (const player of this.players) {
+      const hand = this.create(Space<TrickGame>, `hand-${player.seat}`);
+      hand.player = player;
+      hand.contentsVisibleToOwner();
+      for (const [rank, back] of [[player.seat * 10 + 1, 'red'], [player.seat * 10 + 2, 'blue']] as const) {
+        hand.create(HandCard, `card-${rank}`, { rank, $images: { face: `${rank}.svg`, back } });
+      }
+    }
+    this.create(Space<TrickGame>, 'table').create(HandCard, 'face-down', { rank: 99 }).showOnlyTo(2);
+    this.setFlow({ root: actionStep({ actions: [], player: (ctx) => ctx.game.getPlayer(1)! }) });
+  }
+
+  hand(seat: number): Space<TrickGame> {
+    return this.first(Space<TrickGame>, `hand-${seat}`)!;
+  }
+
+  get table(): Space<TrickGame> {
+    return this.first(Space<TrickGame>, 'table')!;
+  }
+}
+
+function trickSandboxForSeat1(): TrickGame {
+  const options = { playerCount: 3, seed: 'tricks', elementIdKey: '0000000000000871' };
+  const truth = new TrickGame(options);
+  const sandbox = new TrickGame(options);
+  sandbox.loadSerializedState(truth.toJSONForPlayer(1));
+  return sandbox;
+}
+
+describe('#871 determinization: which container an element sits in is known', () => {
+  it('refuses a sampler that moves a card the seat can see into another hand, naming both hands', () => {
+    const sandbox = trickSandboxForSeat1();
+    const card = sandbox.hand(1).first(HandCard)!;
+
+    expect(() => applyDeterminization(sandbox, 1, (game) => {
+      card.putInto((game as TrickGame).hand(2));
+    }, () => 0.5)).toThrow(
+      new RegExp(`moved HandCard#${card.id} "card-11" from Space#${sandbox.hand(1).id} "hand-1" to Space#${sandbox.hand(2).id} "hand-2"`),
+    );
+  });
+
+  it('accepts a sampler that reorders the cards of a hand the seat can see', () => {
+    const sandbox = trickSandboxForSeat1();
+    const last = sandbox.hand(1).last(HandCard)!;
+
+    applyDeterminization(sandbox, 1, (game) => {
+      last.putInto((game as TrickGame).hand(1), { position: 'first' });
+    }, () => 0.5);
+
+    expect(sandbox.hand(1).first(HandCard)).toBe(last);
+  });
+
+  it('accepts a sampler that shuffles face-down placeholders within their hand', () => {
+    const sandbox = trickSandboxForSeat1();
+    const [a, b] = sandbox.hand(2).all(HandCard);
+
+    applyDeterminization(sandbox, 1, () => {
+      a.putInto(sandbox.hand(2), { position: 'last' });
+    }, () => 0.5);
+
+    expect(sandbox.hand(2).all(HandCard)).toEqual([b, a]);
+  });
+
+  it('accepts a sampler that swaps face-down placeholders between hidden hands', () => {
+    const sandbox = trickSandboxForSeat1();
+    const fromTwo = sandbox.hand(2).first(HandCard)!;
+    const fromThree = sandbox.hand(3).first(HandCard)!;
+
+    applyDeterminization(sandbox, 1, () => {
+      fromTwo.putInto(sandbox.hand(3));
+      fromThree.putInto(sandbox.hand(2));
+    }, () => 0.5);
+
+    expect(fromTwo.parent).toBe(sandbox.hand(3));
+  });
+
+  it('refuses a sampler that moves a placeholder so a hidden hand changes size', () => {
+    const sandbox = trickSandboxForSeat1();
+    const placeholder = sandbox.hand(2).first(HandCard)!;
+
+    expect(() => applyDeterminization(sandbox, 1, () => {
+      placeholder.putInto(sandbox.hand(3));
+    }, () => 0.5)).toThrow(
+      new RegExp(`Space#${sandbox.hand(2).id} "hand-2" held 1 face-down HandCard \\(.*back=string:red.*\\) placeholders and now holds 0`),
+    );
+  });
+
+  it('refuses a sampler that swaps placeholders with different backs between hidden hands', () => {
+    const sandbox = trickSandboxForSeat1();
+    const red = sandbox.hand(2).first(HandCard)!;
+    const blue = sandbox.hand(3).last(HandCard)!;
+
+    expect(() => applyDeterminization(sandbox, 1, () => {
+      red.putInto(sandbox.hand(3));
+      blue.putInto(sandbox.hand(2));
+    }, () => 0.5)).toThrow(/"hand-2" held 1 face-down HandCard \(.*back=string:red.*\) placeholders and now holds 0/);
+  });
+
+  it('refuses a sampler that moves a face-down card off the open table', () => {
+    const sandbox = trickSandboxForSeat1();
+    const faceDown = sandbox.table.first(HandCard)!;
+    expect(faceDown.isAttributeRedacted('rank')).toBe(true);
+
+    expect(() => applyDeterminization(sandbox, 1, () => {
+      faceDown.putInto(sandbox.hand(2));
+    }, () => 0.5)).toThrow(
+      new RegExp(`moved HandCard#${faceDown.id} from Space#${sandbox.table.id} "table" to Space#${sandbox.hand(2).id} "hand-2"`),
+    );
+  });
+});

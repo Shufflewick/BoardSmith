@@ -9,6 +9,7 @@ import {
 import { promises as fs } from 'node:fs';
 import { basename, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
+import { withLedgerLock } from '../lib/ledger-lock.js';
 import {
   type VerificationScope,
   computeVerificationScope,
@@ -34,6 +35,7 @@ import {
   ledgerFilePath,
   listRunIds,
   parseLedgerBody,
+  missingRunMessage,
   readLedgerOrThrow,
   resolveLedgerState,
   stagingSlicesDir,
@@ -656,14 +658,7 @@ async function resolveRunId(projectDir: string, runId?: string): Promise<string>
       );
     }
     const existing = await listRunIds(projectDir);
-    if (!existing.includes(runId)) {
-      throw new Error(
-        `No verify run "${runId}" found in ${projectDir}.\n` +
-          (existing.length > 0
-            ? `Runs that do exist: ${existing.join(', ')}.`
-            : `No verify runs exist yet — run \`boardsmith verify-run-init\` first.`),
-      );
-    }
+    if (!existing.includes(runId)) throw new Error(await missingRunMessage(projectDir, runId));
     return runId;
   }
   const runIds = await listRunIds(projectDir);
@@ -951,9 +946,10 @@ export async function verifyClassifyRecordCommand(
 
   const ledgerFile = ledgerFilePath(projectDir, runId);
   const relLedgerPath = relative(projectDir, ledgerFile);
-  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
-  const newText = appendLedgerLine(ledgerText, relLedgerPath, JSON.stringify(record));
-  await atomicWriteFile(ledgerFile, newText);
+  await withLedgerLock(ledgerFile, async () => {
+    const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
+    await atomicWriteFile(ledgerFile, appendLedgerLine(ledgerText, relLedgerPath, JSON.stringify(record)));
+  });
 
   const result: VerifyClassifyRecordResult = { runId, record, warnings };
   if (options.json) {

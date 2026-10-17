@@ -14,7 +14,7 @@
 
 import { ref, readonly } from 'vue';
 
-/** The DOM id of the singleton tooltip, for `aria-describedby`. */
+/** The DOM id of the singleton tooltip. */
 export const DISABLED_TOOLTIP_ID = 'bs-disabled-reason-tip';
 
 /** Max width of the tooltip box, in px. Shared with the placement maths. */
