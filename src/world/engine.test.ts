@@ -1339,9 +1339,7 @@ describe("#68 — a refused command leaves the world unchanged", () => {
     ).toEqual([ROOM_ONE]);
   });
 
-  it("rolls back a handler that mutated and then emitted in an undeclared scope (#151, #933)", async () => {
-    // The tree holds the mutation when `emit` refuses, so without the rollback
-    // the phantom change would ride the next checkpoint of the same partition.
+  it("rolls back a handler that mutated and then emitted in an undeclared scope (#933)", async () => {
     const engine = newEngine();
     await engine.applyCommand("player-a", { name: "touch", args: {} }, STAMP);
 
@@ -1680,6 +1678,19 @@ describe("#186 — a world can say something a player reads", () => {
         expect(refused).toMatchObject({ code: "undecided-audience" });
         expect((refused as Error).message).toContain(`"${ROOM_TWO}"`);
       }
+    });
+
+    it("rolls back a handler that SUCCEEDED and then failed event routing (#151)", async () => {
+      // `undecided-audience` is thrown AFTER the handler returned, with the
+      // room already changed: the window #151 names.
+      const engine = twoSeats(twoStep);
+      await engine.hydrate([ROOM_ONE, ROOM_TWO]);
+      const before = await engine.serializePartitions([ROOM_ONE]);
+
+      const refused = await refusalOf(engine.applyCommand("player-a", { name: "say", args: {} }, STAMP));
+
+      expect(refused).toMatchObject({ code: "undecided-audience" });
+      expect(await engine.serializePartitions([ROOM_ONE])).toEqual(before);
     });
 
     it("needs nothing more loaded once a view already names the scope", async () => {

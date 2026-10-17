@@ -3536,8 +3536,8 @@ function assertDeclared(command: string, name: string, declared: readonly string
   if (refusal !== null) throw refusal;
 }
 
-/** The same question, answered rather than raised, for the one caller that has
- *  to record a refusal before it propagates. */
+/** The same question, answered rather than raised, for `ctx.world.partition`,
+ *  which has to record a refusal before it propagates. */
 function declaredRefusal(
   command: string,
   name: string,
