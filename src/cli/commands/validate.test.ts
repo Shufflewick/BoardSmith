@@ -470,6 +470,22 @@ describe('validateBundleSize measures the real publish zip, not the raw dist (WR
     expect(passed).toBe(false);
     expect(details).toMatch(/file ceiling/i);
   }, 60_000);
+
+  it('WARNS, never passes, when there is no build to measure (#845)', async () => {
+    const result = await validateBundleSize(tempTree('bs-bundle-size-'), false);
+    expect(result).toMatchObject({ passed: false, severity: 'warning' });
+    expect(result.message).toMatch(/not measured/i);
+  });
+
+  it('WARNS, never passes, when the built dist cannot be packaged to measure (#845)', async () => {
+    const cwd = tempTree('bs-bundle-size-');
+    makeDist(cwd, 16);
+    rmSync(join(cwd, 'dist', 'manifest.json'));
+    const result = await validateBundleSize(cwd, false);
+    expect(result).toMatchObject({ passed: false, severity: 'warning' });
+    expect(result.message).toMatch(/not measured/i);
+    expect((result.details ?? []).join('\n')).toMatch(/not measurable/);
+  });
 });
 
 /**

@@ -834,6 +834,8 @@ async function validateSecurity(cwd: string): Promise<ValidationResult> {
   };
 }
 
+const NOT_MEASURED = 'Bundle size not measured; publish builds and checks it before upload';
+
 /**
  * Bundle sizes, measured in the units the SERVER measures them in — and only
  * the gates that actually apply to this game's backend.
@@ -847,18 +849,20 @@ export async function validateBundleSize(cwd: string, worldMode: boolean): Promi
   const distDir = join(cwd, 'dist');
   const rulesJsPath = join(distDir, 'rules', 'rules.js');
 
-  // If no build exists, skip — publish will build automatically
+  // Unmeasured is a warning, not a pass: publish builds and measures again (#845).
   if (!existsSync(distDir) || !existsSync(rulesJsPath)) {
     return {
       name: 'Bundle Size',
-      passed: true,
-      message: '',
-      details: ['No build found — sizes will be checked after build during publish'],
+      passed: false,
+      severity: 'warning',
+      message: NOT_MEASURED,
+      details: ['No build found in dist/. Run `boardsmith build` to measure it now.'],
     };
   }
 
   const issues: string[] = [];
   const notes: string[] = [];
+  let measured = true;
 
   const rulesSource = readFileSync(rulesJsPath, 'utf-8');
   const rulesRawBytes = Buffer.byteLength(rulesSource, 'utf-8');
@@ -900,15 +904,17 @@ export async function validateBundleSize(cwd: string, worldMode: boolean): Promi
     // dist/ is incomplete (e.g. missing manifest.json) so the real publish zip
     // cannot be assembled — publish rebuilds and gates the zip itself.
     const reason = (error as Error).message.split('\n')[0];
-    notes.push(`Compressed bundle: not measurable (${reason}) — checked again during publish`);
+    notes.push(`Compressed bundle: not measurable (${reason}). Run \`boardsmith build\` to measure it now.`);
+    measured = false;
   }
 
-  return {
-    name: 'Bundle Size',
-    passed: issues.length === 0,
-    message: issues.length > 0 ? 'Bundle size limits exceeded' : '',
-    details: issues.length > 0 ? issues : notes,
-  };
+  if (issues.length > 0) {
+    return { name: 'Bundle Size', passed: false, message: 'Bundle size limits exceeded', details: issues };
+  }
+  if (!measured) {
+    return { name: 'Bundle Size', passed: false, severity: 'warning', message: NOT_MEASURED, details: notes };
+  }
+  return { name: 'Bundle Size', passed: true, message: '', details: notes };
 }
 
 /** Files in `dir` with the given extension, or none if `dir` does not exist. */
