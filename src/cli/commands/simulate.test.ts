@@ -253,6 +253,7 @@ describe('simulateCommand', () => {
 
   it('IN-01: exits non-zero with an actionable message on a non-positive --players flag', () => {
     expect(nonPositivePlayers.exitCode).toBe(1);
+    expect(nonPositivePlayers.output).toContain('--players takes positive whole numbers');
   });
 });
 
