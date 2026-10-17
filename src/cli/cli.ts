@@ -364,6 +364,7 @@ export function createProgram(): Command {
     .option('--project <dir>', 'Project directory (defaults to cwd)')
     .option('--skip-relabel', 'Do not relabel presentation-only Derived lines first')
     .option('--json', 'Emit JSON instead of human-readable output')
+    .option('--print-changed', 'Print only the paths of the files it changed, each followed by a NUL byte')
     .action(discardResult(ingestGapsCommand));
 
   program

@@ -4,7 +4,7 @@ import {
 import { resolveUserPath } from '../lib/user-path.js';
 import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import { DERIVED_LINE_RE } from './derived-line-pattern.js';
 import {
@@ -306,9 +306,10 @@ ${INDEX_HEADINGS[2]}
  * the slice-side marker count, so dedup here would make a working sweep look like a dropping one.
  */
 export async function ingestGapsCommand(
-  options: { project?: string; json?: boolean; skipRelabel?: boolean; quiet?: boolean } = {},
-): Promise<{ gapsWritten: number; slicesScanned: number; changed: boolean }> {
+  options: { project?: string; json?: boolean; skipRelabel?: boolean; quiet?: boolean; printChanged?: boolean } = {},
+): Promise<{ gapsWritten: number; slicesScanned: number; changed: boolean; files: string[] }> {
   const projectDir = resolve(options.project ?? process.cwd());
+  const quiet = options.quiet || options.printChanged;
 
   // Relabel FIRST, as part of this command rather than as a second one the session must
   // remember. Both were separate commands for one run: the archive landed (it is forced by an
@@ -318,13 +319,12 @@ export async function ingestGapsCommand(
   //
   // Ordering matters: relabelling moves presentation lines off the Derived prefix, and the gaps
   // sweep below reads final slice content.
-  let relabelled = 0;
-  if (!options.skipRelabel) {
-    relabelled = (
-      await relabelDerivedLines({ project: projectDir, quiet: options.quiet })
-    ).relabelled;
-  }
   const rulebookDir = designRulebookDir(projectDir);
+  const files = new Set<string>();
+  if (!options.skipRelabel) {
+    const { changes } = await relabelDerivedLines({ project: projectDir, quiet });
+    for (const c of changes) files.add(relative(projectDir, join(rulebookDir, c.file)));
+  }
   const indexPath = join(rulebookDir, 'INDEX.md');
 
   let index: string;
@@ -375,21 +375,25 @@ export async function ingestGapsCommand(
   const body = entries.length
     ? `\n${entries.join('\n')}\n`
     : `\n${GAPS_EMPTY}\n`;
-  const changed = before !== body || relabelled > 0;
-
   if (before !== body) {
     await fs.writeFile(
       indexPath,
       index.slice(0, begin + GAPS_BEGIN.length) + body + index.slice(end),
     );
+    files.add(relative(projectDir, indexPath));
   }
 
-  const result = { gapsWritten: entries.length, slicesScanned: names.length, changed };
+  const result = { gapsWritten: entries.length, slicesScanned: names.length, changed: files.size > 0, files: [...files] };
+  if (options.printChanged) {
+    // NUL-terminated so the pre-commit hook can hand any file name to `git add` intact.
+    process.stdout.write(result.files.map((f) => `${f}\0`).join(''));
+    return result;
+  }
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
     return result;
   }
-  if (!options.quiet) {
+  if (!quiet) {
     console.log(
       chalk.green(
         `✓ Filled ${heading} — ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} from ${names.length} slice${names.length === 1 ? '' : 's'}`,
