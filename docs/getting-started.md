@@ -262,12 +262,19 @@ it to pass. Once Vitest confirms that a mutant made a test fail, the mutation
 check stops that run's workers, including tests already running. A surviving
 mutant still runs the whole suite to completion.
 
-A game with a Vitest workspace (`vitest.workspace.ts` beside its config, or
-`test.workspace` in it) gets each mutant in every project the workspace
-defines inline, such as `{ extends: './vitest.browser.config.ts' }`. A project
-named only by a path or glob builds its own config, which the mutation check
-cannot change, so the check refuses to run, names the project, and says how to
-write it inline.
+A game with Vitest projects (`test.projects` in its config, or a workspace:
+`test.workspace`, or `vitest.workspace.ts` beside its config) gets each mutant
+in every project defined inline, such as
+`{ extends: './vitest.browser.config.ts' }`. A project named only by a path or
+glob builds its own config, which the mutation check cannot change, so the
+check refuses to run, names the project, and says how to write it inline. That
+includes a workspace that names the root config itself:
+
+```
+Vitest project "my-game" (vitest.config.ts) does not load the mutation check's mutant, so its tests would run against the original code. Name it in the workspace as an inline project, { extends: './vitest.config.ts' }, and run the check again.
+```
+
+Vitest's browser mode is not yet tested with the mutation check.
 
 Stopping mutation verification with Ctrl+C or SIGTERM stops its Vitest process
 group and waits for it to close before removing that run's temporary files.

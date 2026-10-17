@@ -8,6 +8,7 @@ import {
   runDiffMutationCheck,
   runMutationCheck,
   spreadOrder,
+  writeRunConfig,
 } from './test-step-mutation.js';
 import { parseSource } from './test-step-ast.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
@@ -826,6 +827,90 @@ it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
         /Vitest project ".+" \(project\.config\.mts\) does not load the mutation check's mutant, so its tests would run against the original code\. Name it in the workspace as an inline project, \{ extends: '\.\/project\.config\.mts' \}, and run the check again\./,
       );
     }, 120_000);
+
+    it('runs each mutant in a project the workspace defines by a function', async () => {
+      const result = await diffCheck({
+        'vitest.workspace.mts': workspace("async () => ({ extends: './project.config.mts', test: { name: 'from-a-function' } })"),
+      });
+      expect(result.survivors).toEqual([]);
+      expect(result.summary.killed).toBe(result.summary.mutants);
+      expect(result.summary.mutants).toBeGreaterThan(0);
+    }, 120_000);
+
+    it('refuses a workspace that names the root config itself, which the mutant cannot reach', async () => {
+      await expect(diffCheck({ 'vitest.config.mts': PROJECT_CONFIG, 'vitest.workspace.mts': workspace("'./vitest.config.mts'") })).rejects.toThrow(
+        /Vitest project ".+" \(vitest\.config\.mts\) does not load the mutation check's mutant[^]*\{ extends: '\.\/vitest\.config\.mts' \}/,
+      );
+    }, 120_000);
+
+    // No Vitest 3 is installed here, so these read the generated config the way Vitest 3 would.
+    describe('the generated config, as Vitest 3 reads it', () => {
+      const HOOK = 'boardsmith-mutant';
+      const hasHook = (project: { plugins?: Array<{ name?: string }> }) => project.plugins?.some((p) => p.name === HOOK) ?? false;
+
+      async function generated(files: Record<string, string>, vitestMajor: number) {
+        const project = await makeProject({ 'src/rules.ts': RULES, ...files });
+        const workDir = join(project, '.boardsmith', 'run');
+        await fs.mkdir(workDir, { recursive: true });
+        const configPath = await writeRunConfig(project, workDir, vitestMajor);
+        vi.stubEnv('BOARDSMITH_WORKSPACE', undefined);
+        onTestFinished(() => vi.unstubAllEnvs());
+        // Dynamic import: the config this test just generated.
+        const { default: config } = await import(configPath);
+        return { project, workDir, config: await config({ command: 'serve', mode: 'test' }) };
+      }
+
+      it('adds the mutant to each inline project of test.projects, resolving its paths against the root', async () => {
+        const { project, config } = await generated({
+          'vitest.config.ts': `import { defineConfig } from 'vitest/config';
+export default defineConfig({ test: { projects: [{ extends: './a.config.ts', root: './sub', test: { name: 'a' } }, './b.config.ts'] } });
+`,
+        }, 3);
+        const [inline, byPath] = config.test.projects;
+        const hooked = await inline;
+        expect(hasHook(hooked)).toBe(true);
+        expect(hooked.extends).toBe(join(project, 'a.config.ts'));
+        expect(hooked.root).toBe(join(project, 'sub'));
+        expect(hooked.test.name).toBe('a');
+        expect(byPath).toBe('./b.config.ts');
+        expect(config.test.workspace).toBeUndefined();
+      });
+
+      it('adds the mutant to each inline project of an array test.workspace', async () => {
+        const { config } = await generated({
+          'vitest.config.ts': `import { defineConfig } from 'vitest/config';
+export default defineConfig({ test: { workspace: [{ test: { name: 'a' } }] } });
+`,
+        }, 3);
+        expect(hasHook(await config.test.workspace[0])).toBe(true);
+      });
+
+      async function workspaceProject(vitestMajor: number) {
+        const { project, workDir, config } = await generated({
+          'vitest.config.ts': `import { defineConfig } from 'vitest/config';
+export default defineConfig({ test: { workspace: './config/projects.ts' } });
+`,
+          'config/projects.ts': "export default [{ extends: '../a.config.ts', root: '../sub' }];\n",
+        }, vitestMajor);
+        expect(config.test.workspace).toBe(join(workDir, 'workspace.mjs'));
+        // Dynamic import: the workspace module this test just generated.
+        const { default: entries } = await import(config.test.workspace);
+        return { project, hooked: await entries[0] };
+      }
+
+      it("resolves a workspace file's extends and root against that file under Vitest 3", async () => {
+        const { project, hooked } = await workspaceProject(3);
+        expect(hasHook(hooked)).toBe(true);
+        expect(hooked.extends).toBe(join(project, 'a.config.ts'));
+        expect(hooked.root).toBe(join(project, 'sub'));
+      });
+
+      it("resolves a workspace file's root against the project under Vitest 2, as Vitest 2 does", async () => {
+        const { project, hooked } = await workspaceProject(2);
+        expect(hooked.extends).toBe(join(project, 'a.config.ts'));
+        expect(hooked.root).toBe(join(dirname(project), 'sub'));
+      });
+    });
   });
 
   it('runs nothing when no changed line can be mutated', async () => {
