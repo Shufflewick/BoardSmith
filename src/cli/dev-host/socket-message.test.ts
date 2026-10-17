@@ -10,6 +10,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import { createDevHostConnectionHandler } from './connection-handler.js';
+import { pageText } from './socket-message.js';
 import { openSocketPage, serveSockets } from './socket-page.test-helper.js';
 import { createWorldConnections } from './world-connections.js';
 import type { LocalWorldHost } from './world-host.js';
@@ -65,7 +66,19 @@ describe('#1089: a page-chosen message type in the dev server log', () => {
     socket.send(JSON.stringify({ type: 'hello', clientId: 'p1' }));
     socket.send(JSON.stringify({ type: hostile }));
 
-    expectEscapedAndCapped(await logged);
+    // Only the quoted type: under FORCE_COLOR the line's own red styling starts with an ESC.
+    expectEscapedAndCapped(/world message '(.*)' failed/s.exec(await logged)?.[1] ?? '');
     socket.terminate();
+  });
+});
+
+describe('#1089: pageText', () => {
+  it('keeps text of exactly 200 characters whole, and notes the one past it', () => {
+    expect(pageText('a'.repeat(200))).toBe('a'.repeat(200));
+    expect(pageText('a'.repeat(201))).toBe(`${'a'.repeat(200)}... (1 more characters)`);
+  });
+
+  it('escapes DEL and both ends of C1', () => {
+    expect(pageText('\u007f\u0080\u009f')).toBe('\\u007f\\u0080\\u009f');
   });
 });
