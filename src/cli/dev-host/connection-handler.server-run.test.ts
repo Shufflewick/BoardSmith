@@ -181,7 +181,37 @@ describe('#879: a frame that is not a message', () => {
 
     expect((await seatsSeenBy(page)).find((s) => s.seat === 1)).toMatchObject({ mine: true, connected: true });
     expect(warn).toHaveBeenCalledTimes(5);
-    for (const [line] of warn.mock.calls) expect(String(line)).toContain("'A'");
+    for (const [line] of warn.mock.calls) expect(String(line)).toContain('"A"');
+  });
+
+  it('that is not JSON, or comes before hello, is warned about too', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const run = await startRun();
+    const early = new WebSocket(`ws://127.0.0.1:${run.port}`);
+    await new Promise((resolve) => early.once('open', resolve));
+    early.send('null');
+    await run.server.received(() => true);
+    const { page } = await seatedPage(run, 'A');
+    page.socket.send('not json');
+
+    expect((await seatsSeenBy(page)).find((s) => s.seat === 1)).toMatchObject({ mine: true, connected: true });
+    expect(warn.mock.calls.map(([line]) => String(line))).toEqual([
+      expect.stringContaining('a page that has not said hello'),
+      expect.stringContaining('"A"'),
+    ]);
+    early.terminate();
+  });
+
+  it('from a page whose id is hostile is warned about on one short line', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { page } = await seatedPage(await startRun(), `evil\n\u001b[31m${'x'.repeat(100_000)}`);
+    page.socket.send('null');
+
+    await seatsSeenBy(page);
+    expect(warn).toHaveBeenCalledTimes(1);
+    const line = String(warn.mock.calls[0]?.[0]);
+    expect(line).not.toMatch(/[\u0000-\u001f]/);
+    expect(line.length).toBeLessThan(200);
   });
 
   it('that throws while being handled is reported, and the page is still served', async () => {

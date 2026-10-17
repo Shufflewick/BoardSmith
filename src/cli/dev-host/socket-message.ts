@@ -10,6 +10,9 @@
  */
 import type { RawData, WebSocket } from 'ws';
 
+/** Text a page chose, as one quoted, escaped line of at most 64 of its characters, for the dev server's log. */
+export const quotedForLog = (text: string): string => JSON.stringify(text.slice(0, 64));
+
 /** A frame that parsed to an object with a string `type`. */
 type SocketMessage = { type: string; [key: string]: unknown };
 
@@ -39,7 +42,7 @@ export function onSocketMessage(
     const message = parse(raw);
     if (message === null) {
       const id = clientId();
-      const page = id === null ? 'a page that has not said hello' : `page '${id}'`;
+      const page = id === null ? 'a page that has not said hello' : `page ${quotedForLog(id)}`;
       console.warn(`[boardsmith dev] ignored a frame from ${page} that is not a message with a string type`);
       return;
     }

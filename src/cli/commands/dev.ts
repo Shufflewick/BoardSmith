@@ -10,6 +10,7 @@ import { createColorOption, type ColorChoice, type ColorOptionDefinition, type G
 import type { GameStateSnapshot } from '../../engine/utils/index.js';
 import { MultiplayerHost, type TableRules } from '../dev-host/multiplayer-host.js';
 import { claimDevHostSocket } from '../dev-host/connection-handler.js';
+import { quotedForLog } from '../dev-host/socket-message.js';
 import { devStorePath, loadDevStore } from '../dev-host/persistence-file-store.js';
 import { resetWorldStore, worldResetNotice, worldStoreDir } from '../dev-host/world-store.js';
 import { announceHost, hostHoldings, onShutdown, type HostHoldings } from '../dev-host/shutdown.js';
@@ -1026,7 +1027,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
         // throw to, and a stack trace in its log is the same leak (#240).
         console.error(
           chalk.red(
-            `[boardsmith dev] message '${msgType}' failed: ${err instanceof Error ? err.message : String(err)}`,
+            `[boardsmith dev] message ${quotedForLog(msgType)} failed: ${err instanceof Error ? err.message : String(err)}`,
           ),
         ),
     });

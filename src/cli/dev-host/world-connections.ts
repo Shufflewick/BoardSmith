@@ -15,7 +15,7 @@ import chalk from 'chalk';
 import { WebSocket } from 'ws';
 
 import type { RulesReloadQueue } from './rules-reload-queue.js';
-import { onSocketMessage } from './socket-message.js';
+import { onSocketMessage, quotedForLog } from './socket-message.js';
 import type { LocalWorldHost, WorldDevRequest } from './world-host.js';
 
 /**
@@ -84,7 +84,7 @@ export function createWorldConnections(
   const reportFailure = (error: unknown, messageType: string): void =>
     console.error(
       chalk.red(
-        `[boardsmith dev] world message '${messageType}' failed: ` +
+        `[boardsmith dev] world message ${quotedForLog(messageType)} failed: ` +
           `${error instanceof Error ? error.message : String(error)}`,
       ),
     );

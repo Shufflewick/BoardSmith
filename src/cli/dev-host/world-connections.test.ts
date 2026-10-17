@@ -186,7 +186,7 @@ describe('#879: a frame that is not a message', () => {
 
     expect(await stoke(page, 'r1')).toMatchObject({ ok: true });
     expect(warn).toHaveBeenCalledTimes(5);
-    for (const [line] of warn.mock.calls) expect(String(line)).toContain("'p1'");
+    for (const [line] of warn.mock.calls) expect(String(line)).toContain('"p1"');
   });
 
   it('that throws while being handled is reported, and the page is still served', async () => {
@@ -207,5 +207,29 @@ describe('#879: a frame that is not a message', () => {
 
     expect(await stoke(page, 'r1')).toMatchObject({ ok: true });
     expect(error).toHaveBeenCalledWith(expect.stringContaining('the queue broke'));
+  });
+
+  it('that throws under a hostile type is reported on one short line', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let breakNext = false;
+    const { port } = await serve({
+      admit: (message) => {
+        if (breakNext) {
+          breakNext = false;
+          throw new Error('the queue broke');
+        }
+        return message.run();
+      },
+    });
+    const page = await open(port, 'p1');
+    breakNext = true;
+    page.send({ type: `evil\n\u001b[31m${'x'.repeat(100_000)}` });
+
+    await stoke(page, 'r1');
+    expect(error).toHaveBeenCalledTimes(1);
+    const line = String(error.mock.calls[0]?.[0]);
+    expect(line).toContain('the queue broke');
+    expect(line).not.toContain('\n');
+    expect(line.length).toBeLessThan(200);
   });
 });

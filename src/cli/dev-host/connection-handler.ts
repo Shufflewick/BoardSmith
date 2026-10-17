@@ -23,7 +23,7 @@ interface DevHostConnectionOptions {
   mpHost: Pick<MultiplayerHost, 'handleMessage' | 'disconnect'>;
   clients: Map<string, WebSocket>;
   queue: Pick<RulesReloadQueue, 'admit'>;
-  /** Called when an async message dispatch rejects; receives the failing message type. */
+  /** Called when handling a message throws or its dispatch rejects; receives the page-chosen message type, unescaped. */
   onError: (err: unknown, msgType: string) => void;
 }
 
