@@ -222,6 +222,14 @@
       ]
     },
     {
+      "content": "acb2e8b5b4423ed8",
+      "lines": 26,
+      "files": [
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue",
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue"
+      ]
+    },
+    {
       "content": "b05c8e271786b50b",
       "lines": 20,
       "files": [
@@ -344,6 +352,14 @@
       "files": [
         "src/ui/components/helpers/HintOverlay.vue",
         "src/ui/components/helpers/TutorialOverlay.vue"
+      ]
+    },
+    {
+      "content": "fd899edcd7857c9a",
+      "lines": 40,
+      "files": [
+        "src/ui/composables/useGameGrid.ts",
+        "src/ui/composables/useHexGrid.ts"
       ]
     }
   ]

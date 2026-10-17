@@ -12,7 +12,8 @@
 import type { Game, GameClass, TutorialDefinition, Annotation, FlowState, FollowUpOffer } from '../engine/index.js';
 import type { HistoryEntry } from '../engine/action/types.js';
 import { ErrorCode, type ChoiceWithRefs, type ValidElement } from '../types/protocol.js';
-import { dueSeats, canSeatAct, availableActionsForSeat, flowBoundaryKey, toPublicFlowState } from '../engine/index.js';
+import { dueSeats, canSeatAct, availableActionsForSeat, flowBoundaryKey, toPublicFlowState, PlayerFacingError } from '../engine/index.js';
+import { withDevDetail } from '../engine/action/rules-error.js';
 import type { BoundaryKeyState } from '../engine/index.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState, WarningEntry } from './types.js';
 import { validateTutorialDefinition, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
@@ -339,7 +340,7 @@ export interface OpFailure {
    * handler carries the code they gave (e.g. NOT_YOUR_TURN, ENGINE_ERROR,
    * CHOICES_EVALUATION_ERROR), and a code is never invented for one that gave
    * none. The engine's own protocol refusals carry their own code
-   * (STALE_SUBMISSION).
+   * (STALE_SUBMISSION), and an op that crashed carries ENGINE_ERROR (#1045).
    */
   errorCode?: ErrorCode;
   category: OpFailureCategory;
@@ -685,6 +686,20 @@ function errorResult(
     ...(errorCode === undefined ? {} : { errorCode }),
     category,
   };
+}
+
+/**
+ * The refusal for a throw out of an op (#1045). A `PlayerFacingError` was written to be read and
+ * travels verbatim; anything else is a crash, logged here and replaced by a fixed sentence.
+ */
+function unexpectedErrorResult(error: unknown): OpFailure {
+  if (error instanceof PlayerFacingError) return errorResult(error, 'executor');
+  console.error('[BoardSmith] An op failed unexpectedly:', error);
+  return errorResult(
+    withDevDetail('The game could not process that request because of an error. Try again, or reload the page.', error),
+    'executor',
+    ErrorCode.ENGINE_ERROR,
+  );
 }
 
 /**
@@ -1780,6 +1795,6 @@ async function runOp(
       'protocol',
     );
   } catch (err) {
-    return errorResult(err, 'executor');
+    return unexpectedErrorResult(err);
   }
 }

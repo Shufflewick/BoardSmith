@@ -1476,7 +1476,9 @@ export class ResidentWorld {
 }
 
 /** What went wrong, as a sentence. A `WorldRefusal`'s message is the one the
- *  author can act on, so it is passed through unedited. */
+ *  author can act on, so it is passed through unedited. Any other thrown text
+ *  is passed too, deliberately: only `boardsmith dev` and `TestWorld` drive a
+ *  resident world, so the reader is the author (#1045). */
 export function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }

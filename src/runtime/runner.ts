@@ -1,5 +1,5 @@
 import { secureRandomHex } from '../utils/secure-random.js';
-import { NOTHING_CHANGED, rulesErrorSentence } from '../engine/action/rules-error.js';
+import { NOTHING_CHANGED, rulesErrorSentence, withDevDetail } from '../engine/action/rules-error.js';
 import { ActionExecutor, evaluateConditionWithTrace } from '../engine/action/action.js';
 import {
   createActionCheckpoint,
@@ -41,7 +41,6 @@ import { ErrorCode, type GameOptionDefinition } from '../types/protocol.js';
 import { fillGameOptionDefaults } from '../session/game-option-selection.js';
 import { PlayerFacingError } from '../engine/errors.js';
 import { constructGame, animationFloorOf, type AnimationFloor } from '../engine/element/game.js';
-import { isDevThrowEnabled } from '../utils/dev.js';
 import type { RandomState } from '../utils/random.js';
 import type { MessageEntry } from '../engine/index.js';
 
@@ -673,11 +672,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       }
       return {
         success: false,
-        error: error instanceof PlayerFacingError
-          ? error.message
-          : isDevThrowEnabled()
-            ? `${rulesErrorSentence(actionName)} (${error instanceof Error ? error.message : String(error)})`
-            : rulesErrorSentence(actionName),
+        error: error instanceof PlayerFacingError ? error.message : withDevDetail(rulesErrorSentence(actionName), error),
         errorCode: ErrorCode.ENGINE_ERROR,
       };
     }
