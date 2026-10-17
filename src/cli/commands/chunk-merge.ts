@@ -22,8 +22,8 @@
  *   3. On the combined tree, before anything is committed, it re-runs every tree-wide check:
  *      the chunk is verified; the chunks really built alongside it (not yet verified on the main
  *      line when the branch left, merged by chunk-merge since, or whose code the main line
- *      reworked since, #442) were allowed to be (the
- *      `parallel-check` pair rule); `ledger-check`; `constraint-check` with its measurement tests;
+ *      reworked since, #442) were allowed to be (`parallel-check`'s sketch-entry, run-alone,
+ *      citation and pair rules, #820); `ledger-check`; `constraint-check` with its measurement tests;
  *      every verified chunk's sign-off still stands for its code (`assessSignoffs`); and the
  *      project's whole test suite.
  *      Any failure, or error, aborts the merge and leaves the main line exactly as it was.
