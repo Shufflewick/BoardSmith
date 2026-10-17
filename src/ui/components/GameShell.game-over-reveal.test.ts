@@ -85,9 +85,11 @@ async function settle(): Promise<void> {
 
 const mounted: Array<{ unmount(): void }> = [];
 
-async function mountShell(board: ReturnType<typeof defineComponent>, props?: NonNullable<Parameters<typeof mountPlatformShell>[0]>['props']) {
+type ShellOptions = NonNullable<Parameters<typeof mountPlatformShell>[0]>;
+
+async function mountShell(board: ReturnType<typeof defineComponent>, props?: ShellOptions['props'], slots?: ShellOptions['slots']) {
   enterIframe();
-  const wrapper = mountPlatformShell({ board, props });
+  const wrapper = mountPlatformShell({ board, props, slots });
   mounted.push(wrapper);
   await nextTick();
   post({ type: 'init', seat: 1 });
@@ -209,6 +211,28 @@ describe('the table ending (#419)', () => {
     for (const value of [true, false, true]) await after(shell, () => { shown.value = value; });
 
     expect(assertive(shell.spy)).toEqual([ALICE_WINS]);
+  });
+});
+
+describe('the ending offers no restart (#902)', () => {
+  // A deployed host has no restart op, so a New Game or Rematch here could only fail.
+  it('the card offers only Close', async () => {
+    const shell = await mountShell(PlainBoard);
+    await after(shell, complete);
+
+    const labels = shell.wrapper.findAll('.game-over-card button').map((b) => b.attributes('aria-label') ?? b.text());
+    expect(labels).toEqual(['Close']);
+  });
+
+  it('a #game-over slot is handed winners, players, isDraw and dismiss, and nothing that restarts', async () => {
+    let handed: Record<string, unknown> = {};
+    const shell = await mountShell(PlainBoard, undefined, {
+      'game-over': (slotProps) => { handed = slotProps; return h('div', 'custom ending'); },
+    });
+    await after(shell, complete);
+
+    // `key` is Vue's own, added to a slot rendered under v-if.
+    expect(Object.keys(handed).filter((k) => k !== 'key').sort()).toEqual(['dismiss', 'isDraw', 'players', 'winners']);
   });
 });
 

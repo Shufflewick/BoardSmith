@@ -89,6 +89,7 @@ async function serveWorld(edit: WorldRuntime | Error, clock?: WorldHostClock) {
   const run = await openWorldRun({
     cwd,
     displayName: 'Camp',
+    port: 5173,
     runtime: beforeEdit,
     ...(clock === undefined ? {} : { clock }),
     reloadRules: async () => {

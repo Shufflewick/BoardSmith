@@ -161,7 +161,7 @@ export function createProgram(): Command {
   program
     .command('build')
     .description('Build this workspace for distribution (a game bundle, or BoardSmith\'s CLI)')
-    .option('-o, --out-dir <dir>', 'Output directory', 'dist')
+    .option('-o, --out-dir <dir>', 'Output directory, emptied before each build', 'dist')
     .action(buildCommand);
 
   // Packing for local development
