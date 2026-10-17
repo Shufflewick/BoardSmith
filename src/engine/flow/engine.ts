@@ -1820,9 +1820,7 @@ export class FlowEngine<G extends Game = Game> {
     context: FlowContext<G>
   ): StepResult {
     const iteration = (frame.data?.iteration as number) ?? 0;
-    const times = Math.max(0, config.times);
-
-    if (iteration >= times) {
+    if (iteration >= config.times) {
       frame.completed = true;
       return { awaitingInput: false };
     }
@@ -2072,8 +2070,9 @@ export class FlowEngine<G extends Game = Game> {
     const [heldSeat] = Object.keys(this.heldFollowUps(frame)).map(Number);
     if (heldSeat !== undefined) return this.awaitHeldSeat(frame, config, context, heldSeat);
 
-    // Check skip condition
-    if (config.skipIf?.(context)) {
+    // skipIf is settled on entry only, so a later move cannot skip past minMoves.
+    const entering = frame.data?.moveCount === undefined;
+    if (entering && config.skipIf?.(context)) {
       this.currentActionConfig = undefined;
       this.moveCount = 0;
       frame.completed = true;
@@ -2084,17 +2083,16 @@ export class FlowEngine<G extends Game = Game> {
     // at 0: `turnScope` decides whether this entry continues the run the same
     // seat is already on, which is what gives undo its reach across the frame
     // boundary a loop iteration or a sibling step creates.
-    if (frame.data?.moveCount === undefined) {
-      const entryPlayer = config.player ? config.player(context) : context.player;
-      if (!entryPlayer) {
-        throw new Error('ActionStep requires a player');
-      }
+    // The entry's player is used for this pass too, so `player` is asked once per pass.
+    let player: PlayerOf<G> | undefined;
+    if (entering) {
+      player = this.actionStepPlayer(config, context);
       // Resolved BEFORE the assignment: `entryRun` may also mark the
       // frame, and a spread evaluated first would discard that mark.
-      const start = this.entryRun(config, entryPlayer, frame);
+      const start = this.entryRun(config, player, frame);
       frame.data = { ...frame.data, moveCount: start.moves, actionCount: start.actions };
     }
-    const moveCount = frame.data.moveCount as number;
+    const moveCount = (frame.data as { moveCount: number }).moveCount;
 
     // Save previous player on first entry so we can restore after a player: override completes.
     // This prevents a player override from leaking into subsequent sibling steps.
@@ -2113,11 +2111,7 @@ export class FlowEngine<G extends Game = Game> {
 
     const minMovesMet = !config.minMoves || moveCount >= config.minMoves;
 
-    // Determine player
-    const player = config.player ? config.player(context) : context.player;
-    if (!player) {
-      throw new Error('ActionStep requires a player');
-    }
+    player ??= this.actionStepPlayer(config, context);
 
     // Current while its conditions are checked, so `ctx.player.isCurrent()` holds for it.
     this.currentPlayer = player;
@@ -2148,6 +2142,15 @@ export class FlowEngine<G extends Game = Game> {
 
     // Don't mark completed yet - we'll continue after input
     return { awaitingInput: true };
+  }
+
+  /** The seat an action step prompts: its `player`, or the flow's current player. */
+  private actionStepPlayer(config: ActionStepConfig<G>, context: FlowContext<G>): PlayerOf<G> {
+    const player = config.player ? config.player(context) : context.player;
+    if (!player) {
+      throw new Error('ActionStep requires a player');
+    }
+    return player;
   }
 
   /**

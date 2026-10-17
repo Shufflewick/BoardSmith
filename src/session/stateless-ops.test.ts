@@ -7,6 +7,13 @@ import { playThenAcknowledgeFixtureDefinition } from './testing/fixtures/play-th
 import { ErrorCode } from '../types/protocol.js';
 import { PickHandler } from './pick-handler.js';
 import { succeeded, refused } from './op-result.test-helper.js';
+import { buildPlayerState } from './utils.js';
+
+// Pass-through spy: lets a test count the views an op builds (#816).
+vi.mock('./utils.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./utils.js')>();
+  return { ...actual, buildPlayerState: vi.fn(actual.buildPlayerState) };
+});
 
 // ---------------------------------------------------------------------------
 // Inline game: player 1 repeatedly takes a "pass" action in a loop.
@@ -927,6 +934,25 @@ describe('executeOp', () => {
       expect(res.hintAnnotation).toBeDefined();
       expect(res.hintAnnotation!.seat).toBe(1);
       expect(res.hintAnnotation!.annotation.text).toBe('Suggested move');
+    });
+
+    // ── hint + heatmapToggle: no state envelope (#816) ─────────────────────
+
+    it('hint and heatmapToggle answer with no state and build no view', async () => {
+      const snapshot = await startBotGame();
+      const ops = [
+        { type: 'hint', seat: 1 },
+        { type: 'heatmapToggle', seat: 1, visible: true },
+        { type: 'heatmapToggle', seat: 1, visible: false },
+      ] as const;
+      for (const op of ops) {
+        vi.mocked(buildPlayerState).mockClear();
+        const res = succeeded(await executeOp(botGameDef, botGameOptions, snapshot, null, op));
+        expect(res).not.toHaveProperty('snapshot');
+        expect(res).not.toHaveProperty('playerViews');
+        expect(res).not.toHaveProperty('spectatorView');
+        expect(buildPlayerState).not.toHaveBeenCalled();
+      }
     });
 
     // ── hint: fail-loud — seat not awaiting input ─────────────────────────

@@ -1115,6 +1115,40 @@ describe('SnapshotSessionHost', () => {
       expect(lastBroadcastState(broadcastLog, 1).demoControls).toBeUndefined();
     });
 
+    it('refuses a demo delay that is not a whole number of milliseconds up to an hour, by name (#818)', async () => {
+      const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {});
+      const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
+      await host.start();
+
+      for (const delay of [-1, 1.5, Number.NaN, 3_600_001, '500']) {
+        const res = await host.handleOp(1, { type: 'demoStart', delay } as never);
+        expect(res).toEqual({
+          success: false,
+          error: `The demo delay must be a whole number of milliseconds from 0 to 3600000, but it is ${typeof delay === 'number' ? delay : JSON.stringify(delay)}.`,
+          category: 'protocol',
+        });
+      }
+      // Had a refused start begun the demo, this one would be ignored and the
+      // echoed delay would be the refused value.
+      await host.handleOp(1, { type: 'demoStart', delay: 3_600_000 });
+      const waitFor = async (pred: () => boolean) => {
+        for (let i = 0; i < 100; i++) {
+          if (pred()) return;
+          await new Promise((r) => setTimeout(r, 10));
+        }
+        throw new Error('condition not met in time');
+      };
+      await waitFor(() => lastBroadcastState(broadcastLog, 1).demoControls !== undefined);
+      expect(lastBroadcastState(broadcastLog, 1).demoControls?.delay).toBe(3_600_000);
+
+      const res = await host.handleOp(1, { type: 'demoControl', control: 'play', delay: -5 });
+      expect(res.success).toBe(false);
+      expect(res.error).toContain('-5');
+      expect(lastBroadcastState(broadcastLog, 1).demoControls?.delay).toBe(3_600_000);
+      await host.handleOp(1, { type: 'demoStop' });
+    });
+
     // ── Test (5): hint + heatmap coexist on the same seat ────────────────────
 
     it('per-seat hint and heatmap coexist — storing heatmap does not overwrite hint', async () => {

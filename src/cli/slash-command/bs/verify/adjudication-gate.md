@@ -103,8 +103,9 @@ restating them: the rules-staleness marker lands in each affected chunk's CHUNK.
 first and SKETCH.md second — never SKETCH.md alone — with the marker's own value written last,
 the same discipline the `Status:` line already follows; the impact map is appended to the run's own
 ledger (never a second, standalone write path). State plainly that the command REFUSES to write
-anything while any contradiction is still `pending` — so the gate has structural teeth, and this
-prose is a description of that refusal, not the only thing enforcing it.
+anything while any pair is still unclassified (it names each pair and the `verify-classify-record`
+command to run) or any contradiction is still `pending` — so the gate has structural teeth, and
+this prose is a description of that refusal, not the only thing enforcing it.
 
 ## 6. Report
 
@@ -136,7 +137,8 @@ status — belongs to the repair step, never this one.
 There is no flag, option, or unattended-mode carve-out anywhere in this file's prose, and none in
 the four commands it drives: `verify-impact-gate` and `verify-impact-status` are read-only reports;
 `verify-impact-adjudicate` accepts exactly `resolved` or `UNADJUDICATED`, nothing else;
-`verify-impact-apply` refuses outright while any contradiction is still pending. An unattended run
+`verify-impact-apply` refuses outright while any pair is still unclassified or any contradiction is
+still pending. An unattended run
 that reaches sub-step 4 with a pending contradiction stops there and resumes on a later invocation —
 it never has a shortcut to take instead.
 
