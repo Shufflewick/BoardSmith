@@ -36,21 +36,24 @@ const scopeOf = (node) => {
   return scope;
 };
 
+/** The name `node` assigns and the value it assigns, when it is `const x = v` or `x = v`. */
+function assignmentAt(node) {
+  if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+    return { name: node.name.text, value: bare(node.initializer) };
+  }
+  const assigns = ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken;
+  return assigns && ts.isIdentifier(node.left) ? { name: node.left.text, value: bare(node.right) } : undefined;
+}
+
 /** Every `expect(...)` in a source whose subject measures a clock difference, with any matcher. */
 function wallClockBudgets(source) {
   const sourceFile = ts.createSourceFile('scanned.ts', source, ts.ScriptTarget.Latest, true);
   const assignments = [];
   const expects = [];
   const visit = (node) => {
-    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
-      assignments.push({ name: node.name.text, value: bare(node.initializer), scope: scopeOf(node) });
-    } else if (
-      ts.isBinaryExpression(node)
-      && node.operatorToken.kind === ts.SyntaxKind.EqualsToken
-      && ts.isIdentifier(node.left)
-    ) {
-      assignments.push({ name: node.left.text, value: bare(node.right), scope: scopeOf(node) });
-    } else if (ts.isCallExpression(node) && node.expression.getText() === 'expect' && node.arguments.length > 0) {
+    const assignment = assignmentAt(node);
+    if (assignment) assignments.push({ ...assignment, scope: scopeOf(node) });
+    else if (ts.isCallExpression(node) && node.expression.getText() === 'expect' && node.arguments.length > 0) {
       expects.push(node);
     }
     ts.forEachChild(node, visit);
