@@ -69,23 +69,23 @@ describe('evolution', () => {
       expect(changed).not.toEqual(original);
     });
 
-    it('keeps weights within bounds [-20, 20]', () => {
-      // Start with extreme weights
+    it('perturbs authored weights without capping them (#869)', () => {
+      // Cribbage's bot.ts weights; evaluation normalises by total weight, so only ratios matter
       const objectives = [
-        createObjective('feature-a', 19),
-        createObjective('feature-b', -19),
+        createObjective('a', 50),
+        createObjective('b', 25),
+        createObjective('c', 2),
       ];
-      const rng = createSeededRandom('bounds-test');
+      const rng = createSeededRandom('scale-test');
 
-      // Mutate many times with high sigma
-      let current = objectives;
-      for (let i = 0; i < 100; i++) {
-        current = mutateWeights(current, 5.0, rng);
-      }
-
-      for (const obj of current) {
-        expect(obj.weight).toBeGreaterThanOrEqual(-20);
-        expect(obj.weight).toBeLessThanOrEqual(20);
+      for (let i = 0; i < 50; i++) {
+        const [a, b, c] = mutateWeights(objectives, 1.0, rng).map(o => Math.abs(o.weight));
+        // Sign flips are deliberate; magnitudes stay within a few sigma of the original
+        expect(a).toBeGreaterThan(40);
+        expect(a).toBeLessThan(60);
+        expect(b).toBeGreaterThan(15);
+        expect(b).toBeLessThan(35);
+        expect(c).toBeLessThan(10);
       }
     });
 
@@ -114,23 +114,28 @@ describe('evolution', () => {
   });
 
   describe('crossoverWeights', () => {
-    it('combines features from both parents', () => {
-      const parent1 = [
-        createObjective('feature-a', 5),
-        createObjective('feature-b', 3),
-      ];
-      const parent2 = [
-        createObjective('feature-a', -2),
-        createObjective('feature-c', 7),
-      ];
+    it('keeps every objective, each weight from one parent', () => {
+      const parent1 = [createObjective('feature-a', 5), createObjective('feature-b', 3)];
+      const parent2 = [createObjective('feature-a', -2), createObjective('feature-b', 7)];
       const rng = createSeededRandom('crossover');
 
       const child = crossoverWeights(parent1, parent2, rng);
 
-      // Child should have features from both parents
-      const childIds = child.map(o => o.id);
-      // feature-a is in both, so it should always be present
-      expect(childIds).toContain('feature-a');
+      expect(child.map(o => o.id)).toEqual(['feature-a', 'feature-b']);
+      expect([5, -2]).toContain(child[0].weight);
+      expect([3, 7]).toContain(child[1].weight);
+    });
+
+    it('refuses parents that do not hold the same objectives', () => {
+      const rng = createSeededRandom('mismatch');
+      const a = createObjective('feature-a', 1);
+      const b = createObjective('feature-b', 2);
+      const c = createObjective('feature-c', 3);
+
+      // A missing id, an extra id, and the same count with a different id.
+      expect(() => crossoverWeights([a, b], [a], rng)).toThrow(/feature-b/);
+      expect(() => crossoverWeights([a], [a, b], rng)).toThrow(/feature-b/);
+      expect(() => crossoverWeights([a, b], [a, c], rng)).toThrow(/feature-b/);
     });
 
     it('for shared features, picks weight from one parent', () => {
@@ -213,7 +218,7 @@ describe('evolution', () => {
     it('returns exactly lambda items', () => {
       const parents = [
         [createObjective('a', 1), createObjective('b', 2)],
-        [createObjective('a', 3), createObjective('c', 4)],
+        [createObjective('a', 3), createObjective('b', 4)],
       ];
       const rng = createSeededRandom('offspring-count');
 
@@ -255,7 +260,7 @@ describe('evolution', () => {
     it('produces deterministic results with same seed', () => {
       const parents = [
         [createObjective('a', 5), createObjective('b', 3)],
-        [createObjective('a', -5), createObjective('c', 7)],
+        [createObjective('a', -5), createObjective('b', 7)],
       ];
 
       const rng1 = createSeededRandom('determinism');

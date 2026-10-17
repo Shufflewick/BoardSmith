@@ -164,6 +164,7 @@ function observeExample(
     provenance: record.provenance,
     testFilePath: relTestFilePath,
     translation: record.translation,
+    extractionHash: record.extractionHash,
   };
   if (failed.length === 0) {
     return createExampleReplayRecord({

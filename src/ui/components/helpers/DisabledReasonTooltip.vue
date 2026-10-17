@@ -16,8 +16,8 @@
  * Security: the reason is game-authored text, rendered by Vue interpolation
  * only — never `v-html`. Mirrors the rule in ActionHelpPopover / TutorialOverlay.
  *
- * Accessibility: `role="tooltip"` with a stable id; the directive points the
- * described control at it with `aria-describedby` while it is open.
+ * Accessibility: `role="tooltip"` with a stable id. Screen readers get the
+ * reason from the directive's own hidden node, which exists while this is closed (#865).
  */
 import { computed, ref, watch, nextTick } from 'vue';
 import {

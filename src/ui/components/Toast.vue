@@ -38,11 +38,13 @@ const { toasts, remove } = useToast();
   font-family: var(--bsg-font);
   position: fixed;
   bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
+  /* Spans the viewport less a margin, so a long message wraps on a phone instead of running off it. */
+  left: 16px;
+  right: 16px;
   z-index: 9999;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 8px;
   pointer-events: none;
 }
@@ -56,7 +58,6 @@ const { toasts, remove } = useToast();
   font-size: 0.9rem;
   pointer-events: auto;
   box-shadow: var(--bsg-shadow-sm);
-  white-space: nowrap;
 }
 
 .toast-dismiss {

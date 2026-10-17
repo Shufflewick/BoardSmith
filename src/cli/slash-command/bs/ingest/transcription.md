@@ -98,7 +98,7 @@ Fill `{rulebookPath}` with the actual path to the PDF/image files/text and `{N}`
 range — a fresh-context subagent has no inherited knowledge of where the source lives. Fill
 `{sourceRecord}` with that same document as `rulebook/INDEX.md` records it: the `Source:` header
 value for the rulebook, or the `## Additional Sources` row for any other document
-(`rulebook/source/<file>`). The subagent writes it as each slice's `Source:` line, which is how
+(`rulebook/source/<file>`; a `\|` in that row stands for a `|` in the file name). The subagent writes it as each slice's `Source:` line, which is how
 every later step knows which document a slice's `p.N` citations belong to. If you transcribe a
 short document inline instead, you write that line yourself, per the contract.
 
