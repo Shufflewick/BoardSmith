@@ -894,7 +894,7 @@ Per-player settings that appear for each player slot in the lobby.
 
 #### Color Palette
 
-Custom player colors for the color picker. If omitted, the standard 8-color palette is used.
+Custom player colors for the color picker. If omitted, the engine's 16 named colours (`DEFAULT_COLOR_PALETTE`) are used. A colour list declared in code (a `color` player option such as `createColorOption()`, or `gameDefinition.colorPalette`) is never published, so `boardsmith dev` refuses to start unless it matches exactly what the lobby will offer; declare custom colours in `boardsmith.json`'s `colorPalette` instead.
 
 ```json
 {
