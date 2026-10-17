@@ -46,18 +46,23 @@ export interface DebugStringOptions {
  *
  * @example
  * ```typescript
- * console.log(toDebugString(game));
+ * console.log(toDebugString(game, { maxDepth: 1 }));
  * // Game: MyGame
+ * // Phase: started
  * // Current Player: Player 1 (seat 1)
  * // Flow position: step *play*, waiting on seat 1
  * //
  * // Players:
- * //   [1] Player 1: score=10, hand(5)
- * //   [2] Player 2: score=15, hand(4)
+ * //   [1] Player 1: (no attributes)
+ * //   [2] Player 2: (no attributes)
  * //
  * // Elements:
- * //   deck (id=1): 32 children
- * //   discard (id=2): 10 children
+ * //   Player 1 (id=1)
+ * //   Player 2 (id=2)
+ * //   deck (id=3): 3 children
+ * //     ... (3 more elements)
+ * //   discard (id=4): 1 children
+ * //     ... (1 more elements)
  * ```
  */
 export function toDebugString(game: Game, options: DebugStringOptions = {}): string {
