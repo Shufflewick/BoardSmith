@@ -1274,7 +1274,7 @@ export class Game<
     this.settings.playerCount = options.playerCount;
     const playerNames = Array.from(
       { length: options.playerCount },
-      (_, i) => options.playerNames?.[i] ?? seatDisplayName(i + 1)
+      (_, i) => seatDisplayName(i + 1, options.playerNames?.[i])
     );
     this.settings.playerNames = playerNames;
 
