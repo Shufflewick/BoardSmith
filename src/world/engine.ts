@@ -2918,16 +2918,9 @@ export class BoardSmithWorldEngine implements WorldEngine {
       emit: (scope: string, payload: unknown, narration?: WorldNarrationLine) => {
         // HELD TO THE DECLARATION, not to residency (#933), so what an earlier
         // command or a wake left loaded cannot decide whether this is refused.
-        if (scope !== WORLD_SCOPE && !named.includes(scope)) {
-          raise(
-            worldRefusal(
-              "undeclared-partition",
-              `Action "${action}" emitted an event in "${scope}", which it did not declare. An ` +
-                `event's scope is "${WORLD_SCOPE}" (everybody seated here) or a partition the ` +
-                "action names in needs(). Declare it there, or fix the name if it is a typo.",
-            ),
-          );
-        }
+        const undeclared =
+          scope === WORLD_SCOPE ? null : declaredRefusal(action, scope, named, emittedIn);
+        if (undeclared !== null) raise(undeclared);
         // NORMALIZED HERE AND NOWHERE ELSE (#186). A game may write a bare
         // string or the `{ text, type }` `GameHistory` takes; everything
         // downstream -- the routing, the host, the shell's filter -- reads one
@@ -3536,20 +3529,26 @@ function assertDeclared(command: string, name: string, declared: readonly string
   if (refusal !== null) throw refusal;
 }
 
-/** The same question, answered rather than raised, for `ctx.world.partition`,
- *  which has to record a refusal before it propagates. */
+const askedFor = (command: string, name: string): string =>
+  `Action "${command}" asked for partition "${name}", which it did not declare. ` +
+  `Name it in the needs() of the step that reaches it, so the host loads it before that step ` +
+  `runs; an undeclared partition is not resident and would not be reported dirty either.`;
+
+const emittedIn = (command: string, name: string): string =>
+  `Action "${command}" emitted an event in "${name}", which it did not declare. An ` +
+  `event's scope is "${WORLD_SCOPE}" (everybody seated here) or a partition the ` +
+  "action names in needs(). Declare it there, or fix the name if it is a typo.";
+
+/** The same question, answered rather than raised, for the dispatch facilities
+ *  (`partition` and `emit`), which record a refusal before it propagates. */
 function declaredRefusal(
   command: string,
   name: string,
   declared: readonly string[],
+  wording: (command: string, name: string) => string = askedFor,
 ): WorldRefusal | null {
   if (declared.includes(name)) return null;
-  return worldRefusal(
-    "undeclared-partition",
-    `Action "${command}" asked for partition "${name}", which it did not declare. ` +
-      `Name it in the needs() of the step that reaches it, so the host loads it before that step ` +
-      `runs; an undeclared partition is not resident and would not be reported dirty either.`,
-  );
+  return worldRefusal("undeclared-partition", wording(command, name));
 }
 
 /**

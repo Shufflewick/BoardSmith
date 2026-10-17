@@ -191,7 +191,7 @@ export const WORLD_REFUSALS = {
   // ---- GAME: the bundle's own doing; dead-letters, never parks ----
   "undeclared-partition": {
     owner: "game",
-    why: "a handler read a partition its partitions() did not declare -- a bundle bug, and the same bundle will do it again next time",
+    why: "a handler read, or emitted an event in, a partition its partitions() did not declare -- a bundle bug, and the same bundle will do it again next time",
   },
   "undeclared-activity": {
     owner: "game",

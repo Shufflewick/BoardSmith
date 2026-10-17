@@ -148,11 +148,12 @@ export interface WorldFacilities {
    * A world's narration is its routed events. `scope` is either the reserved
    * `"world"` -- everybody in this world -- or the NAME OF A PARTITION this
    * action declared in `needs()`, whose audience is the seats that can see it.
-   * Any other scope is refused with `undeclared-partition`, loaded or not (#933). That narrowing is what makes a
-   * broadcast cost what the room costs rather than what the world contains, and
-   * it is why a world action emits rather than calling `game.message()`: the
-   * message log lives outside every partition, so nothing ever checkpoints it
-   * and nobody who was not connected would see it.
+   * That narrowing is what makes a broadcast cost what the room costs rather
+   * than what the world contains, and it is why a world action emits rather
+   * than calling `game.message()`: the message log lives outside every
+   * partition, so nothing ever checkpoints it and nobody who was not connected
+   * would see it. Any other scope is refused with `undeclared-partition`,
+   * loaded or not (#933).
    *
    * Who can see a scope is the ENGINE's answer and not the game's: an action
    * says where something happened, and the world is what decides who was there.
