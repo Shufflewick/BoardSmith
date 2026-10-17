@@ -581,6 +581,8 @@ const {
 // unfiltered. If this is ever empty when it should not be, fix
 // `buildPlayerState`/`getFormattedMessages`, do not reintroduce a second source.
 const gameMessages = computed(() => state.value?.state?.messages ?? []);
+// The seat's line number of its first line, once the game prunes its log (#903).
+const messageOffset = computed(() => state.value?.state?.messageOffset ?? 0);
 
 // ── Unread log entries at the compact tier (#22) ───────────────────────────
 //
@@ -595,22 +597,28 @@ const gameMessages = computed(() => state.value?.state?.messages ?? []);
 // by a game — a game-supplied number would be a second definition of "how much
 // log is there".
 
+/** How many lines this seat has been sent, pruned ones included: a line number, not the window's length (#903). */
+const logEnd = computed(() => messageOffset.value + gameMessages.value.length);
+
 /** How many entries had been written when the player last had the log open. */
 const logReadWatermark = ref(0);
 
 const unreadLogCount = computed(() =>
-  Math.max(0, gameMessages.value.length - logReadWatermark.value)
+  Math.max(0, logEnd.value - logReadWatermark.value)
 );
 
 /**
  * Opening the log marks it read; so does new activity arriving while it is
  * already open, which is the case that would otherwise show a badge behind a
- * panel the player is looking at.
+ * panel the player is looking at. Line numbers start again in a new game, and
+ * are reused after an undo takes lines back, so both lower the watermark.
  */
 watch(
-  [mobileExpanded, () => gameMessages.value.length],
-  ([expanded, length]) => {
-    if (expanded) logReadWatermark.value = length;
+  [mobileExpanded, logEnd, () => state.value?.state.gameInstanceId],
+  ([expanded, end, game], previous) => {
+    if (expanded) logReadWatermark.value = end;
+    else if (previous?.[2] !== undefined && game !== previous[2]) logReadWatermark.value = 0;
+    else if (end < logReadWatermark.value) logReadWatermark.value = end;
   },
   { immediate: true }
 );
@@ -1409,6 +1417,7 @@ defineExpose({
       :due-seats="dueSeatsNow"
       :show-turn-status="props.showTurnStatus"
       :messages="gameMessages"
+      :message-offset="messageOffset"
       :unread-log-count="unreadLogCount"
       :may-act="isMyTurn"
       :available-actions="gatedAvailableActions"

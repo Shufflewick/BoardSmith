@@ -1,7 +1,7 @@
 {
-  "revision": 220,
-  "surfaceHash": "e27511a58b559664",
-  "payloadHash": "d98d9c3e91308953",
+  "revision": 221,
+  "surfaceHash": "c5473b99dea85111",
+  "payloadHash": "5f89a405b7080543",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
@@ -1703,6 +1703,14 @@
       "payloadHash": "d98d9c3e91308953",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "An action step asks skipIf only on entry and asks player once on entry and again after each move, so the seat can still change mid-step, and it no longer saves a seat in its saved state; repeat() refuses counts that are not whole numbers of 0 or more, and scoring tracks refuse maxEntries below 1 (#786)."
+    },
+    {
+      "revision": 221,
+      "date": "2026-10-17",
+      "surfaceHash": "c5473b99dea85111",
+      "payloadHash": "5f89a405b7080543",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Each seat's player view carries messageOffset, how many of its own log lines the game has pruned, so the log and unread badge count by line number at a cap; the engine counts pruned lines by audience in two new restore-only root fields so no seat learns how many private lines another got (#903)."
     }
   ]
 }

@@ -119,6 +119,55 @@ describe('GameHistory', () => {
     });
   });
 
+  /**
+   * #903: a game that calls `pruneMessages` sends a sliding window, with
+   * `messageOffset` saying which of the seat's lines comes first.
+   */
+  describe('a pruned log (#903)', () => {
+    afterEach(() => vi.useRealTimers());
+
+    it('drops the trimmed lines and keeps the others as drawn, so nothing is re-announced', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(2026, 0, 1, 10, 0));
+      const wrapper = mount(GameHistory, { props: { messages: ['a', 'b', 'c'], messageOffset: 0 } });
+      await nextTick();
+      const [, b, c] = wrapper.findAll('.message').map((line) => line.element);
+
+      vi.setSystemTime(new Date(2026, 0, 1, 10, 5));
+      await wrapper.setProps({ messages: ['b', 'c', 'd'], messageOffset: 1 });
+      await nextTick();
+
+      const lines = wrapper.findAll('.message');
+      expect(lines.map((line) => line.find('.text').text())).toEqual(['b', 'c', 'd']);
+      // The same nodes: a role="log" region announces inserted nodes, not kept ones.
+      expect(lines[0].element).toBe(b);
+      expect(lines[1].element).toBe(c);
+      expect(lines.map((line) => line.find('.timestamp').text())).toEqual(['10:00', '10:00', '10:05']);
+    });
+
+    it('shows a new line after Clear when the log is at its cap', async () => {
+      const wrapper = mount(GameHistory, { props: { messages: ['a', 'b'], messageOffset: 0 } });
+      await nextTick();
+      (wrapper.vm as any).clearHistory();
+      await nextTick();
+
+      await wrapper.setProps({ messages: ['b', 'c'], messageOffset: 1 });
+      await nextTick();
+
+      expect(wrapper.findAll('.message .text').map((line) => line.text())).toEqual(['c']);
+    });
+
+    it('redraws when an undo replaced a line inside the window', async () => {
+      const wrapper = mount(GameHistory, { props: { messages: ['b', 'c'], messageOffset: 1 } });
+      await nextTick();
+
+      await wrapper.setProps({ messages: ['b', 'x'], messageOffset: 1 });
+      await nextTick();
+
+      expect(wrapper.findAll('.message .text').map((line) => line.text())).toEqual(['b', 'x']);
+    });
+  });
+
   // -------------------------------------------------------------------------
 
   describe('log header', () => {

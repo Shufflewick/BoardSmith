@@ -36,7 +36,7 @@ import type {
   SerializedAction,
   HistoryEntry,
 } from '../engine/action/types.js';
-import type { RandomnessPolicy } from '../engine/element/game.js';
+import type { LogEviction, RandomnessPolicy } from '../engine/element/game.js';
 import { ErrorCode, type GameOptionDefinition } from '../types/protocol.js';
 import { fillGameOptionDefaults } from '../session/game-option-selection.js';
 import { PlayerFacingError } from '../engine/errors.js';
@@ -196,10 +196,18 @@ export interface PendingStepResult {
 function checkpointWithLiveLog(
   checkpoint: ActionCheckpoint,
   log: MessageEntry[],
-  evicted: number,
+  live: LogEviction,
 ): { state: ActionCheckpoint['state']; messageLog: MessageEntry[] } {
-  const state = { ...checkpoint.state, messagesEvicted: evicted };
+  // Every count is replaced, absent ones included: the per-seat offsets (#903)
+  // describe the live log's front exactly as the total does.
+  const state = {
+    ...checkpoint.state,
+    messagesEvicted: live.messagesEvicted,
+    messagesEvictedPublic: live.messagesEvictedPublic,
+    messagesEvictedTo: live.messagesEvictedTo,
+  };
   if (checkpoint.messageCount === undefined) return { state, messageLog: log };
+  const evicted = live.messagesEvicted ?? 0;
   // The watermark counts entries EVER WRITTEN; `evicted` says how many of those
   // are no longer in the log. The difference is the boundary's position in the
   // log as it stands now — negative when every line from that boundary has
@@ -584,7 +592,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
         'per-action checkpoints are disabled for this session.';
     }
 
-    const { state, messageLog } = checkpointWithLiveLog(checkpoint, this.game.messages ?? [], this.game.messagesEvicted);
+    const { state, messageLog } = checkpointWithLiveLog(checkpoint, this.game.messages ?? [], this.game.logEviction);
     this.game.loadSerializedState(state, { messageLog });
     this.game.relinkFlowElements();
     if (checkpoint.sequence !== undefined) {
@@ -1480,10 +1488,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // A checkpoint predating the watermark has no recorded boundary, so the
     // honest restore is the whole log rather than a guess.
     const fullLog = snapshot.messageLog ?? [];
-    // `messagesEvicted` rides in the snapshot's own state, which is where the
+    // The eviction counts ride in the snapshot's own state, which is where the
     // log's position bookkeeping lives.
-    const evicted = (snapshot.state as { messagesEvicted?: number }).messagesEvicted ?? 0;
-    const { state, messageLog } = checkpointWithLiveLog(checkpoint, fullLog, evicted);
+    const { state, messageLog } = checkpointWithLiveLog(checkpoint, fullLog, snapshot.state);
 
     return GameRunner.fromSnapshot<G>(
       {
