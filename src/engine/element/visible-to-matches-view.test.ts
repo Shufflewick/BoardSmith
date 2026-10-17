@@ -57,36 +57,36 @@ describe('isVisibleTo matches the seat view (#1062)', () => {
   });
 
   const owns: Own[] = ['none', 'hideFromAll', 'showToAll'];
-  const zones: Zone[] = ['none', 'contentsHidden'];
-  const levels = owns.flatMap((own) => zones.map((zone) => ({ own, zone })));
+  const levels = owns.flatMap((own) => (['none', 'contentsHidden'] as Zone[]).map((zone) => ({ own, zone })));
+  const cases = levels.flatMap((outer) =>
+    levels.flatMap((middle) => levels.flatMap((inner) => owns.map((leaf) => ({ boxes: [outer, middle, inner], leaf })))),
+  );
+
+  /** Three nested boxes holding a card, each given its own and zone visibility. */
+  function build({ boxes, leaf }: (typeof cases)[number]): { game: TestGame; elements: GameElement[] } {
+    const game = new TestGame({ playerCount: 2 });
+    const elements: GameElement[] = [];
+    let parent: Game | Box = game;
+    for (const [i, level] of boxes.entries()) {
+      const box: Box = parent.create(Box, `box${i}`);
+      applyOwn(box, level.own);
+      if (level.zone === 'contentsHidden') box.contentsHidden();
+      elements.push(box);
+      parent = box;
+    }
+    const card = parent.create(Card, 'card');
+    applyOwn(card, leaf);
+    return { game, elements: [...elements, card] };
+  }
 
   it('agrees for every seat across hideFromAll, contentsHidden and showToAll, three spaces deep', () => {
-    for (const outer of levels) {
-      for (const middle of levels) {
-        for (const inner of levels) {
-          for (const leaf of owns) {
-            const game = new TestGame({ playerCount: 2 });
-            const boxes: Box[] = [];
-            let parent: Game | Box = game;
-            for (const [i, level] of [outer, middle, inner].entries()) {
-              const box: Box = parent.create(Box, `box${i}`);
-              applyOwn(box, level.own);
-              if (level.zone === 'contentsHidden') box.contentsHidden();
-              boxes.push(box);
-              parent = box;
-            }
-            const card = parent.create(Card, 'card');
-            applyOwn(card, leaf);
-
-            const label = JSON.stringify({ outer, middle, inner, leaf });
-            for (const element of [...boxes, card]) {
-              for (const seat of SEATS) {
-                expect(element.isVisibleTo(seat ?? -1), `${element.name} seat ${seat} ${label}`).toBe(
-                  revealedIn(game, seat, element),
-                );
-              }
-            }
-          }
+    for (const c of cases) {
+      const { game, elements } = build(c);
+      for (const element of elements) {
+        for (const seat of SEATS) {
+          expect(element.isVisibleTo(seat ?? -1), `${element.name} seat ${seat} ${JSON.stringify(c)}`).toBe(
+            revealedIn(game, seat, element),
+          );
         }
       }
     }
