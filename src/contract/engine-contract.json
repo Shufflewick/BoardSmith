@@ -1,7 +1,7 @@
 {
-  "revision": 218,
-  "surfaceHash": "eb4da63d186fdc00",
-  "payloadHash": "d98d9c3e91308953",
+  "revision": 222,
+  "surfaceHash": "2c198f7c5caf50ba",
+  "payloadHash": "2d1f6110b53a0159",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
@@ -1683,8 +1683,40 @@
     {
       "revision": 218,
       "date": "2026-10-17",
-      "surfaceHash": "eb4da63d186fdc00",
+      "surfaceHash": "eac42bcea41efca7",
       "payloadHash": "d98d9c3e91308953",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "STANDARD_PLAYER_COLORS is removed from boardsmith/session and boardsmith/ui, and createColorOption() defaults to the engine's 16-colour DEFAULT_COLOR_PALETTE with its names (Black is #2c3e50) (#814)."
+    },
+    {
+      "revision": 219,
+      "date": "2026-10-17",
+      "surfaceHash": "42270c2a4d03684b",
+      "payloadHash": "d98d9c3e91308953",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "boardsmith/session no longer exports generateGameId or isPlayersTurn; nothing used them (#817)."
+    },
+    {
+      "revision": 220,
+      "date": "2026-10-17",
+      "surfaceHash": "e27511a58b559664",
+      "payloadHash": "d98d9c3e91308953",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "An action step asks skipIf only on entry and asks player once on entry and again after each move, so the seat can still change mid-step, and it no longer saves a seat in its saved state; repeat() refuses counts that are not whole numbers of 0 or more, and scoring tracks refuse maxEntries below 1 (#786)."
+    },
+    {
+      "revision": 221,
+      "date": "2026-10-17",
+      "surfaceHash": "e27511a58b559664",
+      "payloadHash": "2d1f6110b53a0159",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A text pick's pattern on the wire now carries the regex's flags as { source, flags, message }, and a client must compile it as new RegExp(source, flags); the shared ActionPanel does so and no longer sets the HTML pattern attribute, so a u or i pattern no longer refuses text the server accepts (#890)."
+    },
+    {
+      "revision": 222,
+      "date": "2026-10-17",
+      "surfaceHash": "2c198f7c5caf50ba",
+      "payloadHash": "2d1f6110b53a0159",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "ActionResult gains rulesError, set by the engine when execute() or onSelect threw something that is not a PlayerFacingError; a seated world action whose result carries it now throws a WorldRefusal with the new game-owned code rules-error (same message as before), while the rules saying no still travels as a plain Error and a clock action's crash is not coded yet (#847)."
     }

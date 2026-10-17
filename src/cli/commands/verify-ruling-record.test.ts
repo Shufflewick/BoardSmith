@@ -8,10 +8,10 @@ import {
   createRulingVerdictRecord,
   readRulingVerdicts,
   recordRulingVerdicts,
-  rulingVerdictsLedgerPath,
   verifyRulingRecheckCommand,
   verifyRulingRecordCommand,
 } from './verify-ruling-recheck.js';
+import { ledgerFilePath, rulingVerdictsLedgerPath } from './verify-run.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
@@ -37,6 +37,7 @@ async function makeProject(count: number, runId = RUN_ID): Promise<string> {
   const slices = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'slices');
   await fs.mkdir(slices, { recursive: true });
   await fs.writeFile(join(slices, '01-setup.md'), '# Setup\n\nFresh transcription.\n');
+  await fs.writeFile(ledgerFilePath(project, runId), '# Verify Run\n');
 
   const parts: string[] = [];
   for (let i = 1; i <= count; i++) {
@@ -314,6 +315,101 @@ describe('verifyRulingRecordCommand — the CLI write surface', () => {
         json: true,
       }),
     ).rejects.toThrow(/not a valid verify run id/);
+  });
+
+  it('refuses a well-formed run id that names no run, and creates no run folder for it', async () => {
+    // A mistyped id that sorts last would otherwise become the default run (#833).
+    const project = await makeProject(3);
+    const typo = '2099-01-01T00-00-00Z';
+    const err = await verifyRulingRecordCommand({
+      project,
+      runId: typo,
+      number: 1,
+      verdict: 'still-needed',
+      reasoning: 'x',
+      json: true,
+    }).catch((e: Error) => e);
+
+    expect((err as Error).message).toMatch(/No verify run "2099-01-01T00-00-00Z" found/);
+    expect((err as Error).message).toContain(`Runs that do exist: ${RUN_ID}.`);
+    await expect(fs.access(join(project, DESIGN_DIR, 'rulebook', '.verify', typo))).rejects.toThrow();
+  });
+
+  it('a run folder with no RUN.md (left by the old bug) is named as not a run, to be removed', async () => {
+    const project = await makeProject(3);
+    const fake = '2099-01-01T00-00-00Z';
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook', '.verify', fake), { recursive: true });
+    const err = await verifyRulingRecordCommand({
+      project,
+      runId: fake,
+      number: 1,
+      verdict: 'still-needed',
+      reasoning: 'x',
+      json: true,
+    }).catch((e: Error) => e);
+
+    const message = (err as Error).message;
+    expect(message).toContain(`${DESIGN_DIR}/rulebook/.verify/${fake}/ has no RUN.md`);
+    expect(message).toMatch(/verify-run-init did not make it/);
+    expect(message).toMatch(/Remove that folder/);
+    expect(message).not.toMatch(/Runs that do exist/);
+  });
+
+  it('a run folder with no RUN.md but recorded verdicts says to re-record them before removing it', async () => {
+    const project = await makeProject(3);
+    const fake = '2099-01-01T00-00-00Z';
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook', '.verify', fake), { recursive: true });
+    await fs.writeFile(rulingVerdictsLedgerPath(project, fake), '# Ruling Verdicts\n');
+    const err = await verifyRulingRecordCommand({
+      project,
+      runId: fake,
+      number: 1,
+      verdict: 'still-needed',
+      reasoning: 'x',
+      json: true,
+    }).catch((e: Error) => e);
+
+    const message = (err as Error).message;
+    expect(message).toContain(`${DESIGN_DIR}/rulebook/.verify/${fake}/RULING-VERDICTS.md`);
+    expect(message).toMatch(/re-record them against the right run/);
+    expect(message).toMatch(/before removing the folder/);
+    expect(message).not.toMatch(/Remove that folder; it is not a verify run/);
+  });
+
+  it('a run whose RUN.md exists but cannot be read is never named as a folder to remove', async () => {
+    const project = await makeProject(3);
+    const odd = '2099-01-01T00-00-00Z';
+    await fs.mkdir(ledgerFilePath(project, odd), { recursive: true });
+    const err = await verifyRulingRecordCommand({
+      project,
+      runId: odd,
+      number: 1,
+      verdict: 'still-needed',
+      reasoning: 'x',
+      json: true,
+    }).catch((e: Error) => e);
+
+    const message = (err as Error).message;
+    expect(message).toContain(`${DESIGN_DIR}/rulebook/.verify/${odd}/RUN.md could not be read`);
+    expect(message).not.toMatch(/has no RUN\.md/);
+    expect(message).not.toMatch(/Remove that folder/);
+  });
+
+  it('with no runs at all, says so and points at verify-run-init without the mistyped id', async () => {
+    const project = join(dir, 'empty');
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
+    const err = await verifyRulingRecordCommand({
+      project,
+      runId: '2099-01-01T00-00-00Z',
+      number: 1,
+      verdict: 'still-needed',
+      reasoning: 'x',
+      json: true,
+    }).catch((e: Error) => e);
+
+    expect((err as Error).message).toContain(
+      'No verify runs exist yet. Run `boardsmith verify-run-init` first.',
+    );
   });
 
   it('never writes into RULINGS.md', async () => {

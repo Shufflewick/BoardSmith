@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Game, Player, Piece, Space, Action, actionStep, type GameOptions } from '../engine/index.js';
 import { deserializeAction } from '../engine/utils/index.js';
 import { recordedAction } from './testing/history-labels.js';
@@ -161,14 +161,26 @@ function createManager() {
 }
 
 describe('PendingActionManager', () => {
-  it('includes animation events from onSelect in the returned state', async () => {
-    const { manager } = createManager();
+  it('leaves animation events from onSelect in the seat view the caller builds', async () => {
+    const { manager, runner } = createManager();
 
     const result = await manager.processSelectionStep(1, 'color', 'red', 'pick');
 
-    expect(result.state).toBeDefined();
-    expect(result.state!.animationEvents).toHaveLength(1);
-    expect(result.state!.animationEvents![0].type).toBe('color-picked');
+    expect(result.success).toBe(true);
+    const events = runner.getPlayerView(1).state.animationEvents;
+    expect(events).toHaveLength(1);
+    expect(events![0].type).toBe('color-picked');
+  });
+
+  it('builds no seat view during a pick step: the caller builds every view once (#813)', async () => {
+    const { manager, runner } = createManager();
+    const views = vi.spyOn(runner, 'getPlayerView');
+
+    await manager.processSelectionStep(1, 'color', 'red', 'pick');
+    const done = await manager.processSelectionStep(1, 'size', 'M');
+
+    expect(done.actionComplete).toBe(true);
+    expect(views).not.toHaveBeenCalled();
   });
 
   it('processes chooseElement step after chooseFrom with onSelect (element ID resolution)', async () => {

@@ -57,6 +57,11 @@ describe('toAlgebraicNotation', () => {
       .toEqual(['a', 'b', 'c', 'z']);
   });
 
+  it('names columns past z like a spreadsheet: aa, ab, ... az, ba (#868)', () => {
+    expect([26, 27, 51, 52, 701, 702].map((col) => toAlgebraicNotation(7, col)))
+      .toEqual(['aa1', 'ab1', 'az1', 'ba1', 'zz1', 'aaa1']);
+  });
+
   it('gives every square on an 8x8 board a distinct name', () => {
     const names = new Set<string>();
     for (let row = 0; row < 8; row++) {
@@ -80,6 +85,19 @@ describe('fromAlgebraicNotation', () => {
     for (let row = 0; row < 8; row++) {
       expect(fromAlgebraicNotation(toAlgebraicNotation(row, 3, options), options))
         .toEqual({ row, col: 3 });
+    }
+  });
+
+  it('round-trips every column of a 60-column board (#868)', () => {
+    for (let col = 0; col < 60; col++) {
+      expect(fromAlgebraicNotation(toAlgebraicNotation(3, col), { cols: 60 })).toEqual({ row: 3, col });
+    }
+    expect(fromAlgebraicNotation('ba1', { cols: 52 })).toBeNull();
+  });
+
+  it('rejects trailing or embedded junk (#868)', () => {
+    for (const input of ['a1zz', 'a1 ', ' a1', 'a 1', 'a01', 'a1.5', 'a+1']) {
+      expect(fromAlgebraicNotation(input)).toBeNull();
     }
   });
 
@@ -181,6 +199,13 @@ describe('useGameGrid', () => {
     const board = grid(gameView(SQUARES));
     expect(board.toNotation(2, 3)).toBe(toAlgebraicNotation(2, 3));
     expect(board.fromNotation('c6')).toEqual(fromAlgebraicNotation('c6'));
+  });
+
+  it('names wide boards and rejects junk the same way as the standalone helpers (#868)', () => {
+    const board = grid(gameView(SQUARES), { rows: 4, cols: 30 });
+    expect(board.toNotation(0, 27)).toBe('ab4');
+    expect(board.fromNotation('ab4')).toEqual({ row: 0, col: 27 });
+    expect(board.fromNotation('a1zz')).toBeNull();
   });
 
   it('iterates every mapped cell with its key', () => {

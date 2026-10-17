@@ -3,16 +3,13 @@
  * ControlsMenu — ⋯ controls popover anchored at the far-left of the action bar.
  *
  * Provides a single trigger button (aria-haspopup="menu") plus a role="menu" popover
- * containing game-control items: Auto end turn, Undo, zoom magnifier, New game.
+ * containing game-control items: Auto end turn, Undo, zoom magnifier.
  * The popover is teleported to <body> with fixed positioning (openUp/align props) so
  * the action bar's overflow:auto can't clip it.
  *
- * Bridge contract: New game emits 'menu-item-click' with the item id so
- * GameShell.handleMenuItemClick can post the bridge message to the host — do not
- * restart directly here (that is GameShell's job).
- *
  * There is no Leave item: the host page around the game's frame is where a
- * player leaves a game (#515).
+ * player leaves a game (#515). There is no New game item: a deployed host has
+ * no restart op (#902).
  *
  * Phase 102 adds the Appearance and Debug panel items.
  */
@@ -96,7 +93,6 @@ const emit = defineEmits<{
   /** One-shot re-fit of the board to the available space. */
   'fit-zoom': [];
   'undo': [];
-  'menu-item-click': [id: string];
   /**
    * Emitted when the user selects a Teaching group item, a Tutorial item, or
    * a global display toggle.
@@ -176,11 +172,6 @@ function handleZoomInput(event: Event) {
 
 function handleUndo() {
   emit('undo');
-  close();
-}
-
-function handleNewGame() {
-  emit('menu-item-click', 'new-game');
   close();
 }
 </script>
@@ -283,20 +274,6 @@ function handleNewGame() {
           </button>
         </span>
       </div>
-
-      <div class="sep"></div>
-      <div class="grouplabel">Session</div>
-
-      <!-- New game -->
-      <button
-        class="mi"
-        type="button"
-        role="menuitem"
-        @click="handleNewGame"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v16H4zM14 8l4 4-4 4M9 12h9" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        New game
-      </button>
 
       <!-- Teaching group: one section for ALL teaching aids. Visible when the game
            has a bot player (showHint !== undefined) OR a tutorial (hasTutorial),

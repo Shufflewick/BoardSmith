@@ -4,7 +4,7 @@
  * every bot is built from.
  */
 import { describe, it, expect } from 'vitest';
-import { parseBotLevel, DEFAULT_CONFIG, DIFFICULTY_PRESETS } from './index.js';
+import { parseBotLevel, DEFAULT_CONFIG, DIFFICULTY_PRESETS, MAX_BOT_ITERATIONS } from './index.js';
 
 describe('parseBotLevel', () => {
   it.each(['easy', 'medium', 'hard'])('passes the preset name %s straight through', (level) => {
@@ -28,6 +28,20 @@ describe('parseBotLevel', () => {
   it('rejects a nonsensical iteration count rather than substituting a preset', () => {
     expect(() => parseBotLevel('0')).toThrow();
     expect(() => parseBotLevel('-50')).toThrow();
+  });
+
+  it('rejects the names every object inherits, which are not presets (#818)', () => {
+    for (const name of ['constructor', 'toString', 'hasOwnProperty', '__proto__']) {
+      expect(() => parseBotLevel(name), name).toThrow(`Unknown bot level "${name}"`);
+    }
+  });
+
+  it('accepts an iteration count up to the cap, and refuses one above it by name (#818)', () => {
+    expect(parseBotLevel(String(MAX_BOT_ITERATIONS))).toBe(MAX_BOT_ITERATIONS);
+    expect(() => parseBotLevel(String(MAX_BOT_ITERATIONS + 1))).toThrow(
+      `Bot level ${MAX_BOT_ITERATIONS + 1} asks for more search iterations than the most a bot runs, ${MAX_BOT_ITERATIONS}.`,
+    );
+    expect(() => parseBotLevel('9'.repeat(400))).toThrow(/more search iterations/);
   });
 
   it('rejects a numeric string with trailing text rather than guessing a count', () => {

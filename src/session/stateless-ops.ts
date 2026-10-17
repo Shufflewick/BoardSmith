@@ -167,13 +167,17 @@ export type DevOp =
   | { type: 'debugReorder'; cardId: number; targetIndex: number }
   | { type: 'debugTransfer'; cardId: number; targetDeckId: number; position: 'first' | 'last' }
   | { type: 'debugShuffle'; deckId: number }
+  // debugDeckView: the whole table with nothing hidden, so the Decks tab can
+  // list a face-down deck's real cards by the ids its edits send (#898).
+  | { type: 'debugDeckView' }
   /**
    * restoreEarlier: go back to a WHOLE earlier snapshot of this game that the
    * host kept itself -- a demo stepping back one move. Run against the CURRENT
    * snapshot, and a restore in every sense a client sees
    * (`restoreEarlierSnapshot`): the restore epoch advances, so seats drop stale
    * element ids and reset their animation watermark. Only the host composes it
-   * (`SnapshotSessionHost`'s demo); no client message maps to it.
+   * (`SnapshotSessionHost`'s demo, and the headless session's `arrange`); no
+   * client message maps to it.
    */
   | { type: 'restoreEarlier'; snapshot: unknown }
   | { type: 'startTutorial'; player: number }
@@ -278,6 +282,7 @@ const DEBUG_OP_TYPE_MAP: Record<DebugOpType, true> = {
   debugReorder: true,
   debugTransfer: true,
   debugShuffle: true,
+  debugDeckView: true,
 };
 export const DEBUG_OP_TYPES: ReadonlySet<Op['type']> = new Set(Object.keys(DEBUG_OP_TYPE_MAP) as DebugOpType[]);
 
@@ -294,6 +299,7 @@ export type ReadOnlyOpType =
   | 'debugActionTraces'
   | 'debugFlowState'
   | 'debugCustomData'
+  | 'debugDeckView'
   | 'botSuggest';
 
 const READ_ONLY_OP_TYPE_MAP: Record<ReadOnlyOpType, true> = {
@@ -304,6 +310,7 @@ const READ_ONLY_OP_TYPE_MAP: Record<ReadOnlyOpType, true> = {
   debugActionTraces: true,
   debugFlowState: true,
   debugCustomData: true,
+  debugDeckView: true,
   botSuggest: true,
 };
 export const READ_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set(Object.keys(READ_ONLY_OP_TYPE_MAP) as ReadOnlyOpType[]);
@@ -437,6 +444,8 @@ export interface OpSuccessFields {
   debugReorder: Record<never, never>;
   debugTransfer: Record<never, never>;
   debugShuffle: Record<never, never>;
+  /** The game as `toJSON()` writes it: every element, none hidden from any seat. */
+  debugDeckView: { view: ReturnType<Game['toJSON']> };
   restoreEarlier: Record<never, never>;
   startTutorial: Record<never, never>;
   exitTutorial: Record<never, never>;
@@ -473,11 +482,11 @@ export interface OpSuccessFields {
 }
 
 /**
- * The ops whose success carries no {@link StateEnvelope}: a choices query and a
- * bot's search change nothing and answer one caller (#450, #675), and the
- * host's lifecycle ops publish through the host itself.
+ * The ops whose success carries no {@link StateEnvelope}: a choices query, a
+ * bot's search and a hint or heatmap change nothing and answer one caller
+ * (#450, #675, #816), and the host's lifecycle ops publish through the host itself.
  */
-type StatelessOpType = 'resolveChoices' | 'botSuggest' | HostOp['type'];
+type StatelessOpType = 'resolveChoices' | 'botSuggest' | 'hint' | 'heatmapToggle' | HostOp['type'];
 
 /**
  * What every success shares. `error` and `errorCode` are named only to say they
@@ -1082,7 +1091,6 @@ async function handleHint(
 
   return {
     success: true,
-    ...stateEnvelope(runner, gameOptions.playerCount),
     hintAnnotation: { seat: op.seat, annotation },
   };
 }
@@ -1117,7 +1125,6 @@ async function handleHeatmapToggle(
   if (!op.visible) {
     return {
       success: true,
-      ...stateEnvelope(runner, gameOptions.playerCount),
       heatmapUpdate: { seat: op.seat, visible: false, entries: [] },
     };
   }
@@ -1177,7 +1184,6 @@ async function handleHeatmapToggle(
 
   return {
     success: true,
-    ...stateEnvelope(runner, gameOptions.playerCount),
     heatmapUpdate: { seat: op.seat, visible: true, entries },
   };
 }
@@ -1522,6 +1528,19 @@ function handleDebugCustomData(
   };
 }
 
+function handleDebugDeckView(
+  def: RunnerDef,
+  gameOptions: { playerCount: number; [key: string]: unknown },
+  snapshot: GameStateSnapshot,
+): OpResultFor<'debugDeckView'> {
+  const runner = runnerFromSnapshot(snapshot, def);
+  return {
+    success: true,
+    ...stateEnvelope(runner, gameOptions.playerCount),
+    view: (runner.game as Game).toJSON(),
+  };
+}
+
 function handleDebugRewind(
   def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
@@ -1720,7 +1739,7 @@ async function runOp(
       case 'expireSeat':
         return handleExpireSeat(def, gameOptions, snap, op);
       case 'selectionStep':
-        return handleSelectionStep(def, gameOptions, snap, pendingState, op);
+        return await handleSelectionStep(def, gameOptions, snap, pendingState, op);
       case 'resolveChoices':
         return handleResolveChoices(def, gameOptions, snap, pendingState, op);
       case 'cancelAction':
@@ -1739,6 +1758,8 @@ async function runOp(
         return handleDebugFlowState(def, gameOptions, snap, pendingState, op);
       case 'debugCustomData':
         return handleDebugCustomData(def, gameOptions, snap, op);
+      case 'debugDeckView':
+        return handleDebugDeckView(def, gameOptions, snap);
       case 'debugRewind':
         return handleDebugRewind(def, gameOptions, snap, op);
       case 'restoreEarlier':
@@ -1762,9 +1783,9 @@ async function runOp(
           spaceId: op.deckId,
         });
       case 'hint':
-        return handleHint(def, gameOptions, snap, op, teachingDisabled);
+        return await handleHint(def, gameOptions, snap, op, teachingDisabled);
       case 'heatmapToggle':
-        return handleHeatmapToggle(def, gameOptions, snap, op, teachingDisabled);
+        return await handleHeatmapToggle(def, gameOptions, snap, op, teachingDisabled);
       case 'botSuggest':
         // Refused up front, not left to throw from inside the search: an MCTS
         // playout draws thousands of times, and an order-entry session has no
@@ -1776,7 +1797,7 @@ async function runOp(
             'protocol',
           );
         }
-        return handleBotSuggest(def, snap, op);
+        return await handleBotSuggest(def, snap, op);
       case 'startTutorial':
         return handleStartTutorial(def, gameOptions, snap, op, teachingDisabled);
       case 'exitTutorial': {

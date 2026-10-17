@@ -108,5 +108,43 @@ ruleTester.run('no-element-identity-comparison', rule, {
       `,
       errors: [{ messageId: 'identityIncludes' }],
     },
+    // Games extend the engine's element classes, not GameElement directly (#872).
+    ...['Piece', 'Space', 'Card'].map((base) => ({
+      code: `
+        class Token extends ${base}<MyGame> {}
+        const same = (a: Token, b: Token) => a === b;
+      `,
+      output: `
+        class Token extends ${base}<MyGame> {}
+        const same = (a: Token, b: Token) => a.id === b.id;
+      `,
+      errors: [{ messageId: 'identityComparison' as const }],
+    })),
+    // A two-level chain through an engine class (#872).
+    {
+      code: `
+        class Pawn extends Card {}
+        class Card extends Piece<MyGame> {}
+        const same = (a: Pawn, b: Pawn) => a === b;
+      `,
+      output: `
+        class Pawn extends Card {}
+        class Card extends Piece<MyGame> {}
+        const same = (a: Pawn, b: Pawn) => a.id === b.id;
+      `,
+      errors: [{ messageId: 'identityComparison' as const }],
+    },
+    // Game and Player are engine element classes, so their subclasses are elements too (#872).
+    ...['Game', 'Player'].map((base) => ({
+      code: `
+        class Mine extends ${base} {}
+        const same = (a: Mine, b: Mine) => a === b;
+      `,
+      output: `
+        class Mine extends ${base} {}
+        const same = (a: Mine, b: Mine) => a.id === b.id;
+      `,
+      errors: [{ messageId: 'identityComparison' as const }],
+    })),
   ],
 });

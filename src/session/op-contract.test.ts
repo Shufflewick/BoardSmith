@@ -145,6 +145,10 @@ describe('parseExecutorOp (#530)', () => {
       [{ type: 'botSuggest', seats: 'all' }, /"seats" must be a list of \{ seat, level\? \}/],
       [{ type: 'botSuggest', seats: [{ seat: 1, extra: true }] }, /"seats" must be a list of \{ seat, level\? \}/],
       [{ type: 'botSuggest', seats: [{ seat: 1, level: 3 }] }, /"seats" must be a list of \{ seat, level\? \}/],
+      // A level parseBotLevel refuses is refused here, not when the bot is built (#818).
+      [{ type: 'botSuggest', seats: [{ seat: 1, level: 'expert' }] }, /level a bot level: easy, medium, hard/],
+      [{ type: 'botSuggest', seats: [{ seat: 1, level: 'constructor' }] }, /level a bot level/],
+      [{ type: 'botSuggest', seats: [{ seat: 1, level: '100001' }] }, /level a bot level/],
     ];
     for (const [value, message] of cases) {
       const parsed = parseExecutorOp(value);
@@ -216,6 +220,11 @@ describe('the result of each op (#530, #536)', () => {
     expectTypeOf<Succeeded<'botSuggest'>>().not.toHaveProperty('snapshot');
     expectTypeOf<Succeeded<'botSuggest'>>().not.toHaveProperty('playerViews');
     expectTypeOf<Succeeded<'botSuggest'>>().not.toHaveProperty('spectatorView');
+    // A hint or heatmap is the host's transient teaching state; it returns no game state (#816).
+    expectTypeOf<Succeeded<'hint'>>().not.toHaveProperty('snapshot');
+    expectTypeOf<Succeeded<'hint'>>().not.toHaveProperty('playerViews');
+    expectTypeOf<Succeeded<'heatmapToggle'>>().not.toHaveProperty('snapshot');
+    expectTypeOf<Succeeded<'heatmapToggle'>>().not.toHaveProperty('spectatorView');
     // The host's lifecycle ops publish through the host; their answer carries no state.
     expectTypeOf<Succeeded<'demoStart'>>().not.toHaveProperty('snapshot');
     expectTypeOf<Succeeded<'convertSeatToBot'>['convertedSeat']>().toEqualTypeOf<number>();
