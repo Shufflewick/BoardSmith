@@ -118,8 +118,9 @@ export function createActionMutators(
     // would wipe that pick and the bridge would cancel it. Same guard as the
     // controller's own post-send clear in `sendAndResolve`.
     const startTick = controller.actionStartTick.value;
-    // execute() never throws: a failure lands in the controller's `lastError`,
-    // which the shell reports once.
+    // execute() never throws. A failure lands in the controller's `lastError`,
+    // which the shell reports once; its refusals while executing or viewing
+    // history set no lastError and come back only in its result.
     await controller.execute(actionName, filteredArgs);
     if (controller.actionStartTick.value === startTick) board?.clear();
     return true;

@@ -288,17 +288,36 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // Not set as lastError: the player moved on themselves, so there is nothing to report.
   const MOVED_ON: PickValidationResult = { valid: false, error: 'The action changed before the server answered this pick.' };
 
-  /** Send one pick step of the current action. Resolves null when the action moved on before the reply. */
+  /** Publish the action a pick step completed, with the result its response carries. */
+  function resolveStep(actionName: string, player: number, result: PickStepResponse): void {
+    resolveAction(actionName, player, { success: true, data: result.data, message: result.message, followUp: result.followUp });
+  }
+
+  /**
+   * Send one pick step of the current action. Resolves null when the action
+   * moved on before the reply, which then touches nothing current. A step that
+   * completed its action still reached the server first, so that action really
+   * committed and its result is published under its own name (as sendAndResolve
+   * does); its followUp is left to the server, which holds it for the seat.
+   */
   async function sendStep(
     stepFn: NonNullable<typeof options.pickStep>,
     selectionName: string,
     value: unknown,
   ): Promise<PickStepResponse | null> {
     const seq = actionStartTick.value;
+    const actionName = currentAction.value as string;
+    const player = playerSeat?.value ?? 0;
     stepSeq = seq;
     try {
-      const result = await stepFn(playerSeat?.value ?? 0, selectionName, value, currentAction.value as string, buildServerArgs());
-      return actionMovedOn(seq) ? null : result;
+      const result = await stepFn(player, selectionName, value, actionName, buildServerArgs());
+      if (!actionMovedOn(seq)) return result;
+      if (result.success && result.actionComplete) resolveStep(actionName, player, result);
+      return null;
+    } catch (err) {
+      // A failed step of an abandoned action is nothing the player needs told.
+      if (actionMovedOn(seq)) return null;
+      throw err;
     } finally {
       if (stepSeq === seq) stepSeq = null;
     }
@@ -2123,12 +2142,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         // The server ran execute() on THIS step, so its return value rides this
         // response (BUG-017/BUG-012). Publishing it here is what makes a repeating
         // action's `data` reach the board on the same terms as a single-step one's.
-        resolveAction(completedActionName ?? '', player, {
-          success: true,
-          data: result.data,
-          message: result.message,
-          followUp: result.followUp,
-        });
+        resolveStep(completedActionName ?? '', player, result);
 
         // Handle followUp: chain to next action (same pattern as executeCurrentAction)
         if (result.followUp) {
@@ -2208,12 +2222,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         // The server ran execute() on THIS step, so its return value rides this
         // response (BUG-017/BUG-012) — without carrying it here, every onSelect-routed
         // action would still hand the board `undefined`.
-        resolveAction(completedActionName ?? '', player, {
-          success: true,
-          data: result.data,
-          message: result.message,
-          followUp: result.followUp,
-        });
+        resolveStep(completedActionName ?? '', player, result);
 
         // Handle followUp: chain to next action (same pattern as executeCurrentAction)
         if (result.followUp) {

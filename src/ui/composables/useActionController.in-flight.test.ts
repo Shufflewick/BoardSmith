@@ -246,14 +246,20 @@ describe('a pick step that is still awaiting the server (#854)', () => {
     return { ...t, fill };
   }
 
-  it('a completing reply that arrives after cancel and a new action leaves the new action alone', async () => {
+  it('a completing reply that arrives after cancel and a new action is published under the old action, leaving the new one alone', async () => {
     const t = await cancelMidStepThenDraw('move', 'piece', 'p1');
+    await t.controller.fill('piece', 'c1');
     t.steps.reply(0, { success: true, actionComplete: true, data: { moved: 'p1' } });
     await t.fill;
     await flush();
 
     expect(t.controller.currentAction.value).toBe('draw');
-    expect(t.controller.lastActionResult.value).toBeNull();
+    expect(t.controller.currentArgs.value).toEqual({ piece: 'c1' });
+    expect(t.controller.lastActionResult.value).toEqual({
+      action: 'move',
+      seat: 0,
+      result: { success: true, data: { moved: 'p1' }, message: undefined, followUp: undefined },
+    });
   });
 
   it('a continuing reply that arrives after cancel and a new action does not write into it or send its next pick', async () => {
@@ -267,7 +273,7 @@ describe('a pick step that is still awaiting the server (#854)', () => {
     expect(t.steps.fn).toHaveBeenCalledTimes(1);
   });
 
-  it('a repeating pick reply that arrives after the action was cancelled and started again leaves the new one alone', async () => {
+  it('a repeating pick reply that completes after the action was cancelled and started again is published, leaving the new one alone', async () => {
     const { controller, steps } = controllerWithHeldSteps();
     await controller.start('collect');
     const stale = controller.fill('gem', 'ruby');
@@ -279,9 +285,31 @@ describe('a pick step that is still awaiting the server (#854)', () => {
     await flush();
 
     expect(controller.currentAction.value).toBe('collect');
-    expect(controller.lastActionResult.value).toBeNull();
+    expect(controller.repeatingState.value?.accumulated.map(a => a.value)).toEqual(['opal']);
+    expect(controller.lastActionResult.value?.result.data).toEqual({ gems: ['ruby'] });
     steps.reply(1, { success: true });
     await fresh;
+  });
+
+  it('a step that fails after its action was cancelled shows no error', async () => {
+    let fail!: (err: Error) => void;
+    const pickStep = vi.fn(() => new Promise<PickStepResponse>((_, reject) => { fail = reject; }));
+    const controller = useActionController({
+      sendAction: vi.fn(async () => ({ success: true })),
+      availableActions: ref(['move']),
+      actionMetadata: ref(metadata),
+      isMyTurn: ref(true),
+      pickStep,
+      autoFill: false,
+    });
+    await controller.start('move');
+    const fill = controller.fill('piece', 'p1');
+    controller.cancel();
+    fail(new Error('connection lost'));
+    await fill;
+
+    expect(controller.lastError.value).toBeNull();
+    expect(controller.errorTick.value).toBe(0);
   });
 
   it('cancel while the first step is out tells the server, which is holding the action by then', async () => {
@@ -328,5 +356,55 @@ describe('a pick step that is still awaiting the server (#854)', () => {
     await flush();
 
     expect(steps.fn).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("a follow-up's first fetch that answers after the follow-up was cancelled", () => {
+  it('does not send a pick step for the action current by then', async () => {
+    const targets = [{ value: 'a', display: 'A' }, { value: 'b', display: 'B' }];
+    const chase: EnrichedActionMetadata = {
+      name: 'chase',
+      prompt: 'Chase',
+      selections: [{ name: 'target', type: 'choice', prompt: 'Target', choices: [targets[0]] }],
+    };
+    const metadata: Record<string, EnrichedActionMetadata> = {
+      go: { name: 'go', prompt: 'Go', selections: [] },
+      draw: {
+        name: 'draw',
+        prompt: 'Draw',
+        selections: [{ name: 'target', type: 'choice', prompt: 'Target', hasOnSelect: true, choices: targets }],
+      },
+    };
+    const fetches = heldCalls<ChoicesReply>();
+    const steps = heldCalls<PickStepResponse>();
+    const controller = useActionController({
+      sendAction: vi.fn(async () => ({ success: true, followUp: { action: 'chase', args: {}, metadata: chase } })),
+      availableActions: ref(['go', 'draw']),
+      actionMetadata: ref(metadata),
+      isMyTurn: ref(true),
+      fetchPickChoices: fetches.fn,
+      pickStep: steps.fn,
+      autoFill: true,
+      autoExecute: true,
+    });
+
+    await controller.execute('go');
+    await flush();
+    expect(controller.currentAction.value).toBe('chase');
+    controller.cancel();
+    void controller.start('draw');
+    await flush();
+    fetches.reply(1, { success: true, choices: targets });
+    await flush();
+    const fill = controller.fill('target', 'a');
+    await flush();
+    steps.reply(0, { success: true });
+    await fill;
+    // chase's own fetch, answered last: it offers one target, which would auto-fill.
+    fetches.reply(0, { success: true, choices: [targets[0]] });
+    await flush();
+
+    expect(controller.currentAction.value).toBe('draw');
+    expect(steps.fn).toHaveBeenCalledTimes(1);
   });
 });
