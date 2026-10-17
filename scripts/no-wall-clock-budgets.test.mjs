@@ -12,9 +12,10 @@
  * `src/ui/composables/useBoardInteraction.test.ts`), or prove the path taken
  * by what it returned. This scan reads the syntax tree and fails on any
  * `expect(...)` whose subject subtracts a clock read, or a variable assigned
- * one, directly or through a variable holding that difference, whatever the
- * matcher (#919). "A variable" is a declaration, parameter, destructuring
- * default, class field or object property, and TypeScript's checker resolves
+ * one, directly or through any chain of variables holding that difference,
+ * whatever the matcher (#919, #1083). "A variable" is a declaration, parameter,
+ * destructuring default, name destructured from a literal, class field, object
+ * property or function declaration's return, and TypeScript's checker resolves
  * each name to the declaration it refers to, so shadowing follows the
  * language's own scope rules rather than a copy of them.
  *
@@ -44,11 +45,13 @@ const isClockRead = (node) => {
   if (ts.isBinaryExpression(value) && ARITHMETIC.includes(value.operatorToken.kind)) {
     return isClockRead(value.left) || isClockRead(value.right);
   }
-  const callee = ts.isCallExpression(value) && value.expression.getText();
-  return Boolean(callee) && CLOCKS.some((clock) => callee === clock || callee.endsWith(`.${clock}`));
+  if (!ts.isCallExpression(value)) return false;
+  const callee = value.expression.getText();
+  // A read passed through a call (`Math.round(performance.now())`) still moves with the clock.
+  return CLOCKS.some((clock) => callee === clock || callee.endsWith(`.${clock}`)) || value.arguments.some(isClockRead);
 };
 
-const OPTIONS = { noLib: true, noResolve: true, types: [] };
+const OPTIONS = { noLib: true, noResolve: true, types: [], allowJs: true };
 /** A checker over `sourceFile` alone, used only to resolve each name to the declaration it refers to. */
 function checkerFor(sourceFile) {
   const host = ts.createCompilerHost(OPTIONS);
@@ -57,28 +60,74 @@ function checkerFor(sourceFile) {
 }
 
 const HAS_VALUE = [ts.isVariableDeclaration, ts.isParameter, ts.isBindingElement, ts.isPropertyDeclaration, ts.isPropertyAssignment];
-/** The name `node` gives a value to, and that value: a declaration, parameter, field, property or default, or `x = v`. */
-function assignmentAt(node) {
-  if (HAS_VALUE.some((is) => is(node)) && node.initializer) return { target: node.name, value: node.initializer };
-  if (ts.isShorthandPropertyAssignment(node) && node.objectAssignmentInitializer) {
-    return { target: node.name, value: node.objectAssignmentInitializer };
+/**
+ * What a name destructured with no default takes from the array or object literal it is destructured from: the
+ * matching element, every element from a rest on, or the matching property.
+ */
+function destructured(element) {
+  const pattern = element.parent;
+  const from = pattern.parent.initializer && bare(pattern.parent.initializer);
+  if (from && ts.isArrayLiteralExpression(from)) {
+    const at = pattern.elements.indexOf(element);
+    return from.elements.slice(at, element.dotDotDotToken ? undefined : at + 1);
   }
-  if (!ts.isBinaryExpression(node) || node.operatorToken.kind !== ts.SyntaxKind.EqualsToken) return undefined;
-  return { target: ts.isPropertyAccessExpression(node.left) ? node.left.name : node.left, value: node.right };
+  if (!from || !ts.isObjectLiteralExpression(from) || element.dotDotDotToken) return [];
+  return propertyValue(from, (element.propertyName ?? element.name).getText());
 }
 
+/** The value an object literal gives `key`, written as a property or a shorthand. */
+function propertyValue(literal, key) {
+  const property = literal.properties.find(({ name }) => name?.getText() === key);
+  if (!property) return [];
+  return [ts.isShorthandPropertyAssignment(property) ? property.name : property.initializer].filter(Boolean);
+}
+
+/** What a function returns: an arrow's expression body, or each `return` not inside a nested function. */
+const returnsOf = (fn) => (!fn.body ? [] : ts.isBlock(fn.body) ? returned(fn.body) : [fn.body]);
+/** What `node` returns, leaving out the returns of functions nested in it. */
+function returned(node) {
+  if (ts.isReturnStatement(node)) return node.expression ? [node.expression] : [];
+  const found = [];
+  if (!ts.isFunctionLike(node)) ts.forEachChild(node, (child) => { found.push(...returned(child)); });
+  return found;
+}
+
+const isCompound = (kind) => kind >= ts.SyntaxKind.FirstCompoundAssignment && kind <= ts.SyntaxKind.LastCompoundAssignment;
+/**
+ * The name `node` gives values to, and those values: a declaration, parameter, field, property or default, a name
+ * destructured from a literal, what a function declaration returns, `x = v`, or `x += v` (whose value is the whole
+ * expression, so `x -= performance.now()` is a subtraction).
+ */
+function assignmentAt(node) {
+  const value = HAS_VALUE.some((is) => is(node)) ? node.initializer : ts.isShorthandPropertyAssignment(node) && node.objectAssignmentInitializer;
+  if (value) return { target: node.name, values: [value] };
+  if (ts.isBindingElement(node)) return { target: node.name, values: destructured(node) };
+  if (ts.isFunctionDeclaration(node) && node.name && node.body) return { target: node.name, values: returnsOf(node) };
+  return ts.isBinaryExpression(node) ? binaryAssignment(node) : undefined;
+}
+
+/** `x = v` gives `x` the value `v`; `x += v` gives it the whole expression. */
+function binaryAssignment(node) {
+  const { kind } = node.operatorToken;
+  if (kind !== ts.SyntaxKind.EqualsToken && !isCompound(kind)) return undefined;
+  const target = ts.isPropertyAccessExpression(node.left) ? node.left.name : node.left;
+  return { target, values: [kind === ts.SyntaxKind.EqualsToken ? node.right : node] };
+}
+
+const EXPECTS = ['expect', 'expect.soft'];
 /** Every `expect(...)` in a source whose subject measures a clock difference, with any matcher. */
-function wallClockBudgets(source) {
+function wallClockBudgets(source, fileName = 'scanned.ts') {
   // Every finding needs a clock read written out, and most files have none: skip building a checker for them.
   if (!CLOCKS.some((clock) => source.includes(clock))) return [];
-  const sourceFile = ts.createSourceFile('scanned.ts', source, ts.ScriptTarget.Latest, true);
+  const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
   const checker = checkerFor(sourceFile);
   const assignments = [];
   const expects = [];
   const visit = (node) => {
     const assignment = assignmentAt(node);
-    if (assignment && ts.isMemberName(assignment.target)) assignments.push(assignment);
-    else if (ts.isCallExpression(node) && node.expression.getText() === 'expect' && node.arguments.length > 0) {
+    if (assignment && ts.isMemberName(assignment.target)) {
+      assignments.push(...assignment.values.map((value) => ({ target: assignment.target, value })));
+    } else if (ts.isCallExpression(node) && EXPECTS.includes(node.expression.getText()) && node.arguments.length > 0) {
       expects.push(node);
     }
     ts.forEachChild(node, visit);
@@ -102,14 +151,21 @@ function wallClockBudgets(source) {
   const nameOf = (node) => (ts.isPropertyAccessExpression(node) ? node.name : node);
   const isClockTerm = (node) => isClockRead(node) || holds(clockVars, nameOf(bare(node)));
   let durations = new Set();
-  /** Whether `node` subtracts a clock read or a name holding one, or reads a name holding such a difference. */
-  const measures = (node) =>
-    (ts.isBinaryExpression(node)
-      && node.operatorToken.kind === ts.SyntaxKind.MinusToken
-      && (isClockTerm(node.left) || isClockTerm(node.right)))
-    || holds(durations, node)
-    || ts.forEachChild(node, measures) === true;
-  durations = bindingsOf(assignments.filter(({ value }) => measures(value)));
+  /**
+   * Whether `node` subtracts a clock read or a name holding one, or reads a name holding such a difference. A
+   * function counts by what it returns, so a clock used only as a timeout inside it does not.
+   */
+  const subtractsClock = (node) => ts.isBinaryExpression(node)
+    && [ts.SyntaxKind.MinusToken, ts.SyntaxKind.MinusEqualsToken].includes(node.operatorToken.kind)
+    && (isClockTerm(node.left) || isClockTerm(node.right));
+  const measures = (node) => (ts.isFunctionLike(node)
+    ? returnsOf(node).some(measures)
+    : subtractsClock(node) || holds(durations, node) || ts.forEachChild(node, measures) === true);
+  // Until nothing changes, so a duration handed from name to name is followed to the end.
+  for (let size = -1; size !== durations.size;) {
+    size = durations.size;
+    durations = bindingsOf(assignments.filter(({ value }) => measures(value)));
+  }
 
   const lines = source.split('\n');
   return expects
@@ -312,6 +368,65 @@ describe('wallClockBudgets', () => {
     expect(wallClockBudgets(source)).toHaveLength(1);
   });
 
+  it('finds a clock read passed through a call (#1083)', () => {
+    const source = ['const t0 = Math.round(performance.now());', 'expect(Math.round(performance.now()) - t0).toBeLessThan(5);'];
+    expect(wallClockBudgets(source.join('\n'))).toHaveLength(1);
+  });
+
+  it('finds a duration assigned to this in a JavaScript constructor with no declared field (#1083)', () => {
+    const source = 'class C { constructor() { this.e = Date.now() - s; } check() { expect(this.e).toBeLessThan(5); } }';
+    expect(wallClockBudgets(source, 'x.test.mjs')).toHaveLength(1);
+  });
+
+  it('finds a duration passed along through other names (#1083)', () => {
+    const start = 'const duration = Date.now() - s;';
+    const forms = {
+      'a plain copy': 'const d = duration;\nexpect(d).toBeLessThan(5);',
+      'an array rest': 'const [...r] = [duration];\nexpect(r[0]).toBeLessThan(5);',
+      'an array element': 'const [, d] = [1, duration];\nexpect(d).toBeLessThan(5);',
+      'an object literal': 'const { a } = { a: duration };\nexpect(a).toBeLessThan(5);',
+      'a renamed shorthand': 'const { duration: a } = { duration };\nexpect(a).toBeLessThan(5);',
+      'a function declaration': 'function took() { return duration; }\nexpect(took()).toBeLessThan(5);',
+    };
+    for (const [form, rest] of Object.entries(forms)) {
+      expect(wallClockBudgets(`${start}\n${rest}`), form).toHaveLength(1);
+    }
+  });
+
+  it('does not flag a name destructured beside a duration (#1083)', () => {
+    const start = 'const duration = Date.now() - s;';
+    expect(wallClockBudgets(`${start}\nconst [d, n] = [duration, 3];\nexpect(n).toBe(3);`)).toEqual([]);
+    expect(wallClockBudgets(`${start}\nconst [d, ...r] = [duration, 3];\nexpect(r).toEqual([3]);`)).toEqual([]);
+    expect(wallClockBudgets(`${start}\nconst { a, b } = { a: duration, b: 3 };\nexpect(b).toBe(3);`)).toEqual([]);
+  });
+
+  it('does not flag a function that times out on the clock but returns something else (#1083)', () => {
+    const source = 'function waitFor() { const s = Date.now(); while (Date.now() - s < 5) {} return done; }';
+    expect(wallClockBudgets(`${source}\nexpect(waitFor()).toBe(true);`)).toEqual([]);
+  });
+
+  it('judges arrows, function expressions and methods by what they return, not by their bodies (#1083)', () => {
+    const wait = '{ const s = Date.now(); while (Date.now() - s < 5) {} return done; }';
+    const awaited = `const waitFor = async () => ${wait};\nconst ok = await waitFor();\nexpect(ok).toBe(true);`;
+    const expression = `const waitFor = function () ${wait};\nexpect(waitFor()).toBe(true);`;
+    const method = `const h = { wait() ${wait}, n: 3 };\nconst n = h.n;\nexpect(n).toBe(3);`;
+    expect(wallClockBudgets(awaited)).toEqual([]);
+    expect(wallClockBudgets(expression)).toEqual([]);
+    expect(wallClockBudgets(method)).toEqual([]);
+    expect(wallClockBudgets('const took = () => Date.now() - s;\nexpect(took()).toBeLessThan(5);')).toHaveLength(1);
+    expect(wallClockBudgets('const took = () => { return Date.now() - s; };\nexpect(took()).toBeLessThan(5);')).toHaveLength(1);
+  });
+
+  it('finds a duration built by compound assignment (#1083)', () => {
+    expect(wallClockBudgets('let e = 0;\ne += Date.now() - s;\nexpect(e).toBeLessThan(5);')).toHaveLength(1);
+    expect(wallClockBudgets('let e = Date.now();\ne -= s;\nexpect(e).toBeLessThan(5);')).toHaveLength(1);
+    expect(wallClockBudgets('let e = 0;\ne -= performance.now();\nexpect(e).toBeLessThan(5);')).toHaveLength(1);
+  });
+
+  it('finds a budget asserted with expect.soft (#1083)', () => {
+    expect(wallClockBudgets('expect.soft(Date.now() - start).toBeLessThan(500);')).toHaveLength(1);
+  });
+
   it('leaves a timestamp checked against the clock alone', () => {
     expect(wallClockBudgets('expect(entry.timestamp).toBeLessThanOrEqual(Date.now());')).toEqual([]);
   });
@@ -323,14 +438,15 @@ describe('the test suite (#360)', () => {
       // This file's own examples above are budgets on purpose.
       .filter(({ path }) => path !== 'scripts/no-wall-clock-budgets.test.mjs');
     const findings = tracked.flatMap(({ path, text }) =>
-      wallClockBudgets(text).map(
+      wallClockBudgets(text, path).map(
         ({ line, text }) => `${path}:${line}  ${text}`,
       ),
     );
     expect(
       findings,
       'These tests assert how long something took, which fails on a busy machine with nothing '
-        + 'wrong. Assert the work done instead (calls, reads, timers scheduled) or the path taken.',
+        + 'wrong. Assert the work done instead (calls, reads, timers scheduled) or the path taken '
+        + '(CLAUDE.md, "Testing": never assert how long something took).',
     ).toEqual([]);
   });
 });
