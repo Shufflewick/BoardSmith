@@ -1433,6 +1433,26 @@ describe('a staged slice edited after its pair was classified (#837)', () => {
     expect(status.summary.classified).toBe(1);
   });
 
+  it('does not advise resetting a complete range, which is refused', async () => {
+    const { project, runId, pairIdA } = await threeGroupProject();
+    const stagingDirAbs = stagingSlicesDir(project, runId);
+    await fs.writeFile(join(stagingDirAbs, 'ua2.md'), 'p.1, A:\n"Rule A second staged text."\n');
+    await verifyRunRecordCommand({ project, runId, unit: 'ua2', slice: 'ua2.md', range: 'r2', json: true });
+    await verifyRunRecordCommand({ project, runId, completeRange: 'r2', json: true });
+    await verifyClassifyRecordCommand({ project, runId, pairId: pairIdA, label: 'cosmetic', json: true });
+
+    await fs.writeFile(join(stagingDirAbs, 'ua2.md'), 'p.1, A:\n"Rule A edited after classifying."\n');
+
+    const pairs = await verifyClassifyPairsCommand({ project, runId, json: true });
+    const ua2Warning = pairs.warnings.find((w) => w.includes('"ua2"') && w.includes('sha256'));
+    expect(ua2Warning).toBeDefined();
+    expect(ua2Warning).not.toContain('--reset-range');
+    expect(ua2Warning).toContain('range "r2" is complete, so it cannot be recorded again in this run');
+    await expect(verifyRunRecordCommand({ project, runId, resetRange: 'r2', json: true })).rejects.toThrow(
+      'Refusing to reset a complete range',
+    );
+  });
+
   it('re-opens a pair whose unit was reset and recorded again with new text, though its units and slices are unchanged', async () => {
     const { project, runId, pairIdA } = await threeGroupProject();
     const stagingDirAbs = stagingSlicesDir(project, runId);

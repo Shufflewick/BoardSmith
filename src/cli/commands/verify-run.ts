@@ -870,6 +870,7 @@ export async function readRunLedgerState(
 export async function checkRecordedSlices(
   stagingDir: string,
   records: LedgerRecord[],
+  completeRanges: Set<string>,
 ): Promise<{ intact: { record: LedgerRecord; bytes: Buffer }[]; missing: LedgerRecord[]; warnings: string[] }> {
   const intact: { record: LedgerRecord; bytes: Buffer }[] = [];
   const missing: LedgerRecord[] = [];
@@ -892,13 +893,19 @@ export async function checkRecordedSlices(
     }
     if (sha256Hex(bytes) !== record.sha256) {
       const mismatch = `unit "${record.unitId}"'s recorded sha256 no longer matches ${record.slicePath} on disk (hand-edit or tamper detected)`;
+      // A complete range cannot be reset, so its unit is as final as one recorded without a range.
+      const final = !record.rangeId
+        ? 'It was recorded without a range'
+        : completeRanges.has(record.rangeId)
+          ? `Its range "${record.rangeId}" is complete`
+          : undefined;
       warnings.push(
-        record.rangeId
-          ? `${mismatch} — treating as NOT recorded. Restore the slice's recorded text, or reset its range ` +
-              `with \`verify-run-record --reset-range ${record.rangeId}\` and record it again.`
-          : `${mismatch} — leaving its slice out. It was recorded without a range, so it cannot be recorded ` +
+        final
+          ? `${mismatch} — leaving its slice out. ${final}, so it cannot be recorded ` +
               `again in this run. Restore the slice's recorded text, or, if that text is lost, start a new run ` +
-              `with \`boardsmith verify-run-init\` (no \`--run-id\`).`,
+              `with \`boardsmith verify-run-init\` (no \`--run-id\`).`
+          : `${mismatch} — treating as NOT recorded. Restore the slice's recorded text, or reset its range ` +
+              `with \`verify-run-record --reset-range ${record.rangeId}\` and record it again.`,
       );
       continue;
     }
@@ -1377,7 +1384,7 @@ export async function verifyRunStatusCommand(
   const { lines, malformedLines } = parseLedgerBody(ledgerText, relLedgerPath);
   const { recorded: activeRecords, completeRanges } = resolveLedgerState(lines);
 
-  const { intact, missing, warnings } = await checkRecordedSlices(stagingDir, activeRecords);
+  const { intact, missing, warnings } = await checkRecordedSlices(stagingDir, activeRecords, completeRanges);
   for (const rec of missing) {
     warnings.push(
       `unit "${rec.unitId}"'s recorded slice ${rec.slicePath} was not found on disk — treating as NOT recorded`,

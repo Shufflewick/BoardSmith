@@ -727,8 +727,8 @@ async function computeRunPairs(
   );
 
   const stagingDir = stagingSlicesDir(projectDir, runId);
-  const { recorded, classifications, recordedSinceClassified } = await readRunLedgerState(projectDir, runId);
-  const { intact, missing, warnings: sliceWarnings } = await checkRecordedSlices(stagingDir, recorded);
+  const { recorded, classifications, recordedSinceClassified, completeRanges } = await readRunLedgerState(projectDir, runId);
+  const { intact, missing, warnings: sliceWarnings } = await checkRecordedSlices(stagingDir, recorded, completeRanges);
   warnings.push(...sliceWarnings);
 
   for (const record of missing) {
