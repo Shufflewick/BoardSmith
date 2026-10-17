@@ -1282,6 +1282,7 @@ export class Game<
     };
 
     super(ctx);
+    this._ctx._elementsById.set(this._t.id, this);
 
     this.random = random;
     // LOAD-BEARING. `G` is the game's own concrete class (`class MyGame extends
@@ -1563,6 +1564,7 @@ export class Game<
     name: string
   ): T {
     const element = new elementClass(this._ctx);
+    this._ctx._elementsById.set(element._t.id, element);
     element.name = name;
     element.game = this;
 

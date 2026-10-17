@@ -174,14 +174,25 @@ describe('the id index holds every element in the game tree and the pile', () =>
   });
 });
 
-describe('a refused create leaves nothing in the id index (#963)', () => {
-  /** Create a card whose attributes cannot be applied, and return the id it was given. */
+/** A card whose own constructor throws after the base constructor has run (#1093). */
+class BrokenCard extends Card {
+  constructor(ctx: ConstructorParameters<typeof Card>[0]) {
+    super(ctx);
+    throw new Error('broken card');
+  }
+}
+
+describe.each([
+  ['its attributes fail to apply (#963)', (parent: GameElement) => parent.create(Card, 'bad', { id: 5 } as never), /reserved/i],
+  ['its subclass constructor throws (#1093)', (parent: GameElement) => parent.create(BrokenCard, 'bad'), /broken card/],
+] as const)('a create refused because %s leaves nothing in the id index', (_why, refuse, message) => {
+  /** Make the refused create, and return the id it was given. */
   function refusedCreate(game: IndexGame, parent: GameElement): number {
-    expect(() => parent.create(Card, 'bad', { id: 5 } as never)).toThrow(/reserved/i);
+    expect(() => refuse(parent)).toThrow(message);
     return game._ctx.ids.mint(game._ctx.sequence - 1);
   }
 
-  it('does not hold an element whose attributes failed to apply', () => {
+  it('does not hold the half-built element', () => {
     const { game, hand } = table();
     const id = refusedCreate(game, hand);
     expect(game._ctx._elementsById.has(id)).toBe(false);
