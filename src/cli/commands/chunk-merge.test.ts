@@ -672,7 +672,7 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
   };
 
   /** A chunk whose Build Manifest names the shared file (src/world.ts), with a quoted claim and its own test. */
-  async function sharedChunkMd(slug: string, claim: string, shared: string): Promise<string> {
+  async function sharedChunkMd(slug: string, claim: string, shared = 'src/world.ts'): Promise<string> {
     return (await chunkMd(slug))
       .replace(`| src/${slug}.ts | written |`, `| src/${slug}.ts | written |\n| ${shared} | written |`)
       .replace(/^1\. \*\*<!-- claim text -->\*\*\n.*\n.*\n/m, `${claim}\n`)
