@@ -13,8 +13,8 @@
  * by what it returned. This scan reads the syntax tree and fails on any
  * `expect(...)` whose subject subtracts a clock read, or a variable assigned
  * one, directly or through a variable holding that difference, whatever the
- * matcher (#919). A variable counts only in the function it was assigned in
- * and the functions inside it.
+ * matcher (#919). A variable counts only in the function it was declared in
+ * and the functions inside it that do not declare the same name again.
  *
  * It does not flag a timestamp checked against the clock
  * (`expect(entry.timestamp).toBeLessThanOrEqual(Date.now())`), which is a
@@ -25,11 +25,15 @@ import { describe, it, expect } from 'vitest';
 import ts from 'typescript';
 import { trackedTestFiles } from './tracked-tests.test-helper.mjs';
 
-const CLOCKS = new Set(['Date.now', 'performance.now', 'process.hrtime', 'process.hrtime.bigint']);
+const CLOCKS = ['Date.now', 'performance.now', 'process.hrtime', 'process.hrtime.bigint'];
 
 const bare = (node) => (ts.isParenthesizedExpression(node) ? bare(node.expression) : node);
-const isClockRead = (node) => ts.isCallExpression(node) && CLOCKS.has(node.expression.getText());
-/** The function (or file) whose body `node` is in, which is where a name assigned there is visible. */
+/** Whether `node` calls a clock, bare or through an object such as `globalThis` or `window`. */
+const isClockRead = (node) => {
+  const callee = ts.isCallExpression(node) && node.expression.getText();
+  return Boolean(callee) && CLOCKS.some((clock) => callee === clock || callee.endsWith(`.${clock}`));
+};
+/** The function (or file) whose body `node` is in, which is where a name declared there is visible. */
 const scopeOf = (node) => {
   let scope = node.parent;
   while (scope.parent && !ts.isFunctionLike(scope)) scope = scope.parent;
@@ -50,9 +54,14 @@ function wallClockBudgets(source) {
   const sourceFile = ts.createSourceFile('scanned.ts', source, ts.ScriptTarget.Latest, true);
   const assignments = [];
   const expects = [];
+  const declared = new Map();
   const visit = (node) => {
+    if ((ts.isVariableDeclaration(node) || ts.isParameter(node)) && ts.isIdentifier(node.name)) {
+      const scope = scopeOf(node);
+      declared.set(scope, (declared.get(scope) ?? new Set()).add(node.name.text));
+    }
     const assignment = assignmentAt(node);
-    if (assignment) assignments.push({ ...assignment, scope: scopeOf(node) });
+    if (assignment) assignments.push({ ...assignment, at: node });
     else if (ts.isCallExpression(node) && node.expression.getText() === 'expect' && node.arguments.length > 0) {
       expects.push(node);
     }
@@ -60,13 +69,16 @@ function wallClockBudgets(source) {
   };
   visit(sourceFile);
 
-  /** Whether identifier `node` is a name recorded in `names` for its function or one enclosing it. */
-  const tracked = (names, node) => {
-    const scopes = names.get(node.text);
-    for (let scope = scopeOf(node); scope; scope = scope.parent && scopeOf(scope)) if (scopes?.has(scope)) return true;
-    return false;
+  /** The function that declares `name` as seen from `node`; an undeclared name belongs to the file. */
+  const declaringScope = (name, node) => {
+    for (let scope = scopeOf(node); scope; scope = scope.parent && scopeOf(scope)) {
+      if (declared.get(scope)?.has(name)) return scope;
+    }
+    return sourceFile;
   };
-  const record = (names, { name, scope }) => names.set(name, (names.get(name) ?? new Set()).add(scope));
+  /** Whether identifier `node` refers to the declaration of a name recorded in `names`. */
+  const tracked = (names, node) => names.get(node.text)?.has(declaringScope(node.text, node)) === true;
+  const record = (names, { name, at }) => names.set(name, (names.get(name) ?? new Set()).add(declaringScope(name, at)));
   const isReference = (node) =>
     ts.isIdentifier(node) && !(ts.isPropertyAccessExpression(node.parent) && node.parent.name === node);
 
@@ -146,6 +158,57 @@ describe('wallClockBudgets', () => {
       "it('b', () => { const delta = 3; expect(delta).toBe(3); });",
     ].join('\n');
     expect(wallClockBudgets(source)).toEqual([]);
+  });
+
+  it('finds a duration assigned in a hook and asserted in a test (#919)', () => {
+    const source = [
+      'let duration;',
+      'beforeAll(() => { const t0 = Date.now(); work(); duration = Date.now() - t0; });',
+      "it('x', () => { expect(duration).toBeLessThan(5); });",
+    ].join('\n');
+    expect(wallClockBudgets(source)).toHaveLength(1);
+  });
+
+  it('finds clock reads assigned in a hook and subtracted in a test (#919)', () => {
+    const source = [
+      'let t0, t1;',
+      'beforeAll(() => { t0 = performance.now(); work(); t1 = performance.now(); });',
+      "it('x', () => { expect(t1 - t0).toBeLessThan(5); });",
+    ].join('\n');
+    expect(wallClockBudgets(source)).toHaveLength(1);
+  });
+
+  it('finds a duration assigned in an outer describe and asserted in an inner test (#919)', () => {
+    const source = [
+      "describe('d', () => {",
+      '  let elapsed;',
+      '  beforeAll(() => { const t0 = Date.now(); work(); elapsed = Date.now() - t0; });',
+      "  describe('inner', () => { it('x', () => { expect(elapsed).toBeLessThan(5); }); });",
+      '});',
+    ].join('\n');
+    expect(wallClockBudgets(source)).toHaveLength(1);
+  });
+
+  it('finds an inline clock difference in a test against a start read in a hook (#919)', () => {
+    const source = [
+      'let t0;',
+      'beforeAll(() => { t0 = performance.now(); });',
+      "it('x', () => { work(); expect(performance.now() - t0).toBeLessThan(5); });",
+    ].join('\n');
+    expect(wallClockBudgets(source)).toHaveLength(1);
+  });
+
+  it('finds a clock read through globalThis or window (#919)', () => {
+    expect(wallClockBudgets('expect(globalThis.performance.now() - start).toBeLessThan(5);')).toHaveLength(1);
+    expect(wallClockBudgets('expect(window.performance.now() - start).toBeLessThan(5);')).toHaveLength(1);
+  });
+
+  it('does not flag an inner name that shadows an outer duration (#919)', () => {
+    const outer = 'const delta = performance.now() - started;';
+    const redeclared = [outer, "it('x', () => { const delta = 3; expect(delta).toBe(3); });"].join('\n');
+    const parameter = [outer, "it.each([3])('x', (delta) => { expect(delta).toBe(3); });"].join('\n');
+    expect(wallClockBudgets(redeclared)).toEqual([]);
+    expect(wallClockBudgets(parameter)).toEqual([]);
   });
 
   it('leaves a timestamp checked against the clock alone', () => {
