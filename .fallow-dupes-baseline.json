@@ -61,7 +61,7 @@
     "src/engine/element/game.ts:3779-3783|src/engine/element/game.ts:3811-3815",
     "src/ui/components/auto-ui/renderers/CardRenderer.vue:52-68|src/ui/components/auto-ui/renderers/HandRenderer.vue:44-62",
     "src/ui/components/auto-ui/renderers/CardRenderer.vue:571-581|src/ui/components/auto-ui/renderers/HandRenderer.vue:543-553",
-    "src/cli/commands/verify-classify.ts:714-720|src/cli/commands/verify-run.ts:1185-1190"
+    "src/cli/commands/verify-classify.ts:714-720|src/cli/commands/verify-run.ts:1201-1206"
   ],
   "clone_fingerprints": [
     "dup:32ca16c6:2",

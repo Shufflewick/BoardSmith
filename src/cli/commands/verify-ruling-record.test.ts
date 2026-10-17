@@ -8,11 +8,10 @@ import {
   createRulingVerdictRecord,
   readRulingVerdicts,
   recordRulingVerdicts,
-  rulingVerdictsLedgerPath,
   verifyRulingRecheckCommand,
   verifyRulingRecordCommand,
 } from './verify-ruling-recheck.js';
-import { ledgerFilePath } from './verify-run.js';
+import { ledgerFilePath, rulingVerdictsLedgerPath } from './verify-run.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
@@ -354,6 +353,27 @@ describe('verifyRulingRecordCommand — the CLI write surface', () => {
     expect(message).toMatch(/verify-run-init did not make it/);
     expect(message).toMatch(/Remove that folder/);
     expect(message).not.toMatch(/Runs that do exist/);
+  });
+
+  it('a run folder with no RUN.md but recorded verdicts says to re-record them before removing it', async () => {
+    const project = await makeProject(3);
+    const fake = '2099-01-01T00-00-00Z';
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook', '.verify', fake), { recursive: true });
+    await fs.writeFile(rulingVerdictsLedgerPath(project, fake), '# Ruling Verdicts\n');
+    const err = await verifyRulingRecordCommand({
+      project,
+      runId: fake,
+      number: 1,
+      verdict: 'still-needed',
+      reasoning: 'x',
+      json: true,
+    }).catch((e: Error) => e);
+
+    const message = (err as Error).message;
+    expect(message).toContain(`${DESIGN_DIR}/rulebook/.verify/${fake}/RULING-VERDICTS.md`);
+    expect(message).toMatch(/re-record them against the right run/);
+    expect(message).toMatch(/before removing the folder/);
+    expect(message).not.toMatch(/Remove that folder; it is not a verify run/);
   });
 
   it('a run whose RUN.md exists but cannot be read is never named as a folder to remove', async () => {

@@ -314,6 +314,15 @@ export function stagingSlicesDir(projectDir: string, runId: string): string {
 }
 
 /**
+ * This run's own ledger path — `rulebook/.verify/<runId>/RULING-VERDICTS.md`. Run-scoped, unlike
+ * CHECK-04's and CHECK-06's project-level ledgers: a ruling's verdict is a judgment against ONE
+ * run's fresh transcription, so it cannot outlive the run that produced it.
+ */
+export function rulingVerdictsLedgerPath(projectDir: string, runId: string): string {
+  return join(runRootDir(projectDir, runId), 'RULING-VERDICTS.md');
+}
+
+/**
  * The single path-computation authority for a run's ledger file. Exported (174-02) so
  * `verify-classify.ts` — the second caller sharing this ledger — can locate the SAME `RUN.md`
  * `verify-run.ts` reads and writes, rather than re-deriving the path.
@@ -963,10 +972,17 @@ export async function missingRunMessage(projectDir: string, runId: string): Prom
   }
   const runDir = runRootDir(projectDir, runId);
   if (await exists(runDir)) {
-    return (
-      `${relative(projectDir, runDir)}/ has no RUN.md, so verify-run-init did not make it.\n` +
-      `Remove that folder; it is not a verify run.`
-    );
+    const noRun = `${relative(projectDir, runDir)}/ has no RUN.md, so verify-run-init did not make it.\n`;
+    const verdicts = rulingVerdictsLedgerPath(projectDir, runId);
+    if (await exists(verdicts)) {
+      return (
+        noRun +
+        `It holds ${relative(projectDir, verdicts)}: verdicts recorded under the mistyped id "${runId}". ` +
+        `Use \`boardsmith verify-ruling-record --run-id <right run>\` to re-record them against the right run ` +
+        `before removing the folder.`
+      );
+    }
+    return noRun + `Remove that folder; it is not a verify run.`;
   }
   const existing: string[] = [];
   for (const id of await listRunIds(projectDir)) {
@@ -980,7 +996,7 @@ export async function missingRunMessage(projectDir: string, runId: string): Prom
   );
 }
 
-async function exists(path: string): Promise<boolean> {
+export async function exists(path: string): Promise<boolean> {
   try {
     await fs.access(path);
     return true;

@@ -12,12 +12,13 @@ import { readFencedJsonLedger } from '../lib/fenced-json-ledger.js';
 import { withLedgerLock } from '../lib/ledger-lock.js';
 import {
   atomicWriteFile,
+  exists,
   ledgerFilePath,
   listRunIds,
   missingRunMessage,
   readLedgerOrThrow,
   RUN_ID_RE,
-  runRootDir,
+  rulingVerdictsLedgerPath,
   stagingSlicesDir,
 } from './verify-run.js';
 
@@ -209,9 +210,10 @@ export type FreshTranscriptionResolution =
 /**
  * Resolves the fresh STAGED transcription a re-check judgment reads against — never the live
  * `rulebook/` slices (decision 9: auditing against the pass-1 slices would re-check code against
- * the very text staleness was computed from). If no run is staged, an explicit `--run-id` does
- * not resolve, or the staged slices directory exists but is empty, this reports SCOPE-LIMITED
- * (PROV-02's pattern) — it never throws and never silently falls back to a live slice path.
+ * the very text staleness was computed from). If no run is staged, an explicit `--run-id` names
+ * no run (the shared `missingRunMessage`), a real run's slices folder is missing, a file, or
+ * unreadable (a message naming that folder and its remedies), or the folder is empty, this reports
+ * SCOPE-LIMITED (PROV-02's pattern) — it never throws and never silently falls back to a live slice path.
  * Every path this function can return is rooted at the dot-prefixed `rulebook/.verify/` staging
  * tree (`stagingSlicesDir`'s own convention: "dot-prefixed so no walker mistakes a staged slice
  * for a live one") — never a bare `rulebook/<file>.md` live-slice path.
@@ -254,18 +256,13 @@ export async function resolveFreshTranscription(
   let entryNames: string[];
   try {
     entryNames = await fs.readdir(stagingDir, { recursive: true });
-  } catch {
-    // A real run with no readable slices folder is not a missing run, and must never be called one (#1002).
-    const isRun = await fs.access(ledgerFilePath(projectDir, resolvedRunId)).then(() => true, () => false);
-    return {
-      scopeLimited: true,
-      reason: isRun
-        ? `Verify run "${resolvedRunId}" has no slices folder at ${relative(projectDir, stagingDir)} ` +
-          `(it is missing or is not a folder). \`boardsmith verify-run-init --run-id ${resolvedRunId}\` ` +
-          `creates it and keeps RUN.md; move aside any file in its place first.`
-        : await missingRunMessage(projectDir, resolvedRunId),
-      missingPath: relative(projectDir, stagingDir),
-    };
+  } catch (err) {
+    const missingPath = relative(projectDir, stagingDir);
+    // A real run with no usable slices folder is not a missing run, and must never be called one (#1002).
+    if (!(await exists(ledgerFilePath(projectDir, resolvedRunId)))) {
+      return { scopeLimited: true, reason: await missingRunMessage(projectDir, resolvedRunId), missingPath };
+    }
+    return { scopeLimited: true, reason: slicesUnusableMessage(resolvedRunId, missingPath, err), missingPath };
   }
   // Exclude any path with a `superseded/` directory component (176-06 ADDED ITEM 1, promoted
   // from 176-05's reported finding). A staged tree MAY retain a `slices/superseded/` subfolder
@@ -296,6 +293,23 @@ export async function resolveFreshTranscription(
     stagingDir: relative(projectDir, stagingDir),
     slicePaths,
   };
+}
+
+/** Why a real run's `slices/` cannot be read, and the remedies that leave its RUN.md alone. */
+function slicesUnusableMessage(runId: string, slicesPath: string, err: unknown): string {
+  const code = (err as NodeJS.ErrnoException).code;
+  const run = `Verify run "${runId}"`;
+  // Re-init of the same id would only make an empty folder; its records block restaging there.
+  const remedies =
+    `If the run was committed, run \`git restore ${slicesPath}\` in the project folder; ` +
+    `otherwise start a new run with \`boardsmith verify-run-init\`.`;
+  if (code === 'ENOENT') {
+    return `${run}'s staged transcription is missing: ${slicesPath} does not exist. ${remedies}`;
+  }
+  if (code === 'ENOTDIR') {
+    return `${run}'s staged transcription is missing: ${slicesPath} is a file, not a folder. Move that file aside. ${remedies}`;
+  }
+  return `${run}'s staged transcription at ${slicesPath} could not be read (${code ?? String(err)}). Check its permissions.`;
 }
 
 // -------------------------------------------------------------------------------------------
@@ -422,14 +436,6 @@ export async function verifyRulingRecheckCommand(
   return result;
 }
 
-/**
- * This run's own ledger path — `rulebook/.verify/<runId>/RULING-VERDICTS.md`. Run-scoped, unlike
- * CHECK-04's and CHECK-06's project-level ledgers: a ruling's verdict is a judgment against ONE
- * run's fresh transcription, so it cannot outlive the run that produced it.
- */
-export function rulingVerdictsLedgerPath(projectDir: string, runId: string): string {
-  return join(runRootDir(projectDir, runId), 'RULING-VERDICTS.md');
-}
 
 /**
  * Persists verdicts to this run's ledger through `atomicWriteFile` — the ONE atomic ledger write

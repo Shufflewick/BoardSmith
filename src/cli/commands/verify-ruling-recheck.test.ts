@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { promises as fs, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   RULING_VERDICTS,
@@ -13,6 +14,7 @@ import {
   readRulingVerdicts,
   verifyRulingRecheckCommand,
 } from './verify-ruling-recheck.js';
+import { verifyRunInitCommand } from './verify-run.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
@@ -206,25 +208,77 @@ describe('resolveFreshTranscription', () => {
     }
   });
 
-  it.each([
-    ['missing', async (_slices: string) => {}],
-    ['a file', async (slices: string) => fs.writeFile(slices, 'not a folder')],
-  ])('a real run whose slices folder is %s is named as such, never as a run to remove (#1002)', async (_label, makeSlices) => {
-    const project = join(dir, 'game');
+  describe('a real run (it has RUN.md) whose slices folder cannot be used (#1002)', () => {
     const runId = '2026-07-30T10-00-00Z';
-    const runDir = join(project, DESIGN_DIR, 'rulebook', '.verify', runId);
-    await fs.mkdir(runDir, { recursive: true });
-    await fs.writeFile(join(runDir, 'RUN.md'), '# Verify Run\n');
-    await makeSlices(join(runDir, 'slices'));
-    const result = await resolveFreshTranscription(project, runId);
-    expect(result.scopeLimited).toBe(true);
-    if (result.scopeLimited) {
-      expect(result.reason).toContain(`Verify run "${runId}"`);
-      expect(result.reason).toContain(`${DESIGN_DIR}/rulebook/.verify/${runId}/slices`);
-      expect(result.reason).toContain('verify-run-init');
-      expect(result.reason).not.toMatch(/has no RUN\.md/);
-      expect(result.reason).not.toMatch(/Remove that folder/);
+    let project: string;
+    let runDir: string;
+    let slices: string;
+    const slicesRel = `${DESIGN_DIR}/rulebook/.verify/${runId}/slices`;
+    const git = (...args: string[]) => execFileSync('git', args, { cwd: project, stdio: 'ignore' });
+
+    beforeEach(async () => {
+      project = join(dir, 'game');
+      runDir = join(project, DESIGN_DIR, 'rulebook', '.verify', runId);
+      slices = join(runDir, 'slices');
+      await fs.mkdir(slices, { recursive: true });
+      await fs.writeFile(join(runDir, 'RUN.md'), '# Verify Run\n\n- unit 01 done\n');
+      await fs.writeFile(join(slices, '01-setup.md'), '# Setup\n');
+    });
+
+    function expectNeverCalledFake(reason: string) {
+      expect(reason).toContain(`Verify run "${runId}"`);
+      expect(reason).not.toMatch(/has no RUN\.md/);
+      expect(reason).not.toMatch(/Remove that folder/);
     }
+
+    it('missing: says the staged transcription is missing, and its two remedies leave RUN.md untouched', async () => {
+      git('init', '-q');
+      git('add', '-A');
+      git('-c', 'user.email=t@example.com', '-c', 'user.name=T', 'commit', '-q', '-m', 'run');
+      await fs.rm(slices, { recursive: true });
+      const runMd = await fs.readFile(join(runDir, 'RUN.md'));
+
+      const result = await resolveFreshTranscription(project, runId);
+      expect(result.scopeLimited).toBe(true);
+      if (!result.scopeLimited) return;
+      expectNeverCalledFake(result.reason);
+      expect(result.reason).toContain('staged transcription is missing');
+      expect(result.reason).toContain(`\`git restore ${slicesRel}\``);
+      expect(result.reason).toContain('`boardsmith verify-run-init`');
+      expect(result.reason).not.toContain('--run-id');
+      expect(result.reason).not.toMatch(/move .* aside/i);
+
+      git('restore', slicesRel);
+      await verifyRunInitCommand({ project, json: true });
+      expect(await fs.readFile(join(runDir, 'RUN.md'))).toEqual(runMd);
+      expect((await resolveFreshTranscription(project, runId)).scopeLimited).toBe(false);
+    });
+
+    it('a file in its place: says so and to move the file aside first', async () => {
+      await fs.rm(slices, { recursive: true });
+      await fs.writeFile(slices, 'not a folder');
+      const result = await resolveFreshTranscription(project, runId);
+      expect(result.scopeLimited).toBe(true);
+      if (!result.scopeLimited) return;
+      expectNeverCalledFake(result.reason);
+      expect(result.reason).toContain(`${slicesRel} is a file, not a folder`);
+      expect(result.reason).toMatch(/Move that file aside/);
+      expect(result.reason).toContain(`\`git restore ${slicesRel}\``);
+    });
+
+    it('unreadable: says it could not be read, not that it is missing', async () => {
+      await fs.chmod(slices, 0o000);
+      try {
+        const result = await resolveFreshTranscription(project, runId);
+        expect(result.scopeLimited).toBe(true);
+        if (!result.scopeLimited) return;
+        expectNeverCalledFake(result.reason);
+        expect(result.reason).toContain(`${slicesRel} could not be read`);
+        expect(result.reason).not.toMatch(/missing/);
+      } finally {
+        await fs.chmod(slices, 0o755);
+      }
+    });
   });
 
   it('returns scopeLimited for a malformed --run-id, never throwing', async () => {
