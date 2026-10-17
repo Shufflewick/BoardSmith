@@ -451,18 +451,24 @@ function drawSet(bounds: { min: number; max?: number }, candidates: unknown[], r
 }
 
 /**
- * Send one drafted command. The rules saying no to a random answer leaves the
- * world as it was and is part of driving it; the WORLD refusing it is a fault
- * in the bundle, and is reported with the move that found it.
+ * Send one drafted command. The rules saying no to a random answer (a plain
+ * Error) leaves the world as it was and is part of driving it; the rules
+ * crashing on it or the WORLD refusing it is a fault in the bundle, and is
+ * reported with the move that found it. Anything else is not the world's to
+ * throw, and propagates as it is.
  */
 async function takeMove(world: TestWorld, seat: number, move: DraftedMove): Promise<void> {
   try {
     await world.take(seat, move.name, move.args);
   } catch (error) {
-    if (!(error instanceof WorldRefusal)) return;
+    if (!(error instanceof WorldRefusal)) {
+      if (error instanceof Error && error.constructor === Error) return;
+      throw error;
+    }
+    const what = error.code === 'rules-error' ? 'crashed in the game\'s rules' : `was refused by the world (${error.code})`;
     throw new Error(
       `driving the world, seat ${seat}'s '${move.name}' with ${JSON.stringify(move.args)} ` +
-        `was refused by the world (${error.code}): ${error.message.replace(/\.$/, '')}`,
+        `${what}: ${error.message.replace(/\.$/, '')}`,
     );
   }
 }

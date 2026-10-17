@@ -273,6 +273,18 @@ describe('auditWorldChoiceCardinality', () => {
     );
   });
 
+  it('stops and names the move when the rules crash on it, rather than counting the crash as a no (#847)', async () => {
+    await expect(auditWorldChoiceCardinality(cardinalityWorld(['grow', 'shout']), { seed: 'audit' })).rejects.toThrow(
+      /seat \d's 'grow'.*"how":"tall".*crashed.*error in the game's rules/s,
+    );
+  });
+
+  it('counts the rules refusing a move as part of driving the world (#847)', async () => {
+    expect(await auditWorldChoiceCardinality(cardinalityWorld(['balk', 'shout']), { seed: 'audit' })).toEqual([
+      { action: 'shout', selection: 'verb', maxCandidates: 40 },
+    ]);
+  });
+
   it('stops and names the move when the world itself refuses one', async () => {
     await expect(auditWorldChoiceCardinality(cardinalityWorld(['trespass']), { seed: 'audit' })).rejects.toThrow(
       /seat 1's 'trespass'.*"how":"quietly".*elsewhere/s,

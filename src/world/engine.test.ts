@@ -28,6 +28,7 @@ import { BoardSmithWorldEngine } from "./engine.js";
 import { worldAction, worldClockAction } from "./action.js";
 import type { StoredPartition, WorldPartitionSource } from "./contract.js";
 import { worldBudgets } from "./budgets.js";
+import { WorldRefusal } from "./refusals.js";
 import {
   Holding,
   VillageFixture,
@@ -1787,6 +1788,18 @@ describe("#191 — a refusal written for a player reaches one", () => {
     // assertion holds either way.
     expect(refusal).not.toBe(SENTENCE);
     expect(refusal).toContain("error in the game's rules");
+  });
+
+  it("codes a crash in the rules rules-error and leaves a refusal uncoded, so a caller can tell them apart (#847)", async () => {
+    const engine = newEngine();
+    const thrown = (name: string) =>
+      engine.applyCommand("player-a", { name, args: {} }, STAMP).then(() => null, (error: unknown) => error);
+
+    const crash = await thrown("refuseUnreadably");
+    expect(crash).toBeInstanceOf(WorldRefusal);
+    expect(crash).toMatchObject({ code: "rules-error", owner: "game" });
+    expect((crash as Error).message).toContain("error in the game's rules");
+    expect(await thrown("refuseInWords")).not.toBeInstanceOf(WorldRefusal);
   });
 
   it("leaves the world unchanged either way, because a refusal is still a refusal", async () => {
