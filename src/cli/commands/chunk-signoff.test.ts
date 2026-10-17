@@ -274,6 +274,19 @@ describe('waivers — scoped to named chunks, and they expire', () => {
     const second = await recordWaiver({ project, chunks: 'b', by: 'Jane', expires: '2026-09-30', reason: 'y', now: NOW });
     expect([first, second]).toEqual(['W1', 'W2']);
   });
+
+  it('two waivers recorded at once never lose one: each is recorded or refused (#829)', async () => {
+    const project = await makeProject([{ slug: 'a' }, { slug: 'b' }]);
+    const results = await Promise.allSettled([
+      recordWaiver({ project, chunks: 'a', by: 'Jane', expires: '2026-09-30', reason: 'x', now: NOW }),
+      recordWaiver({ project, chunks: 'b', by: 'Jane', expires: '2026-09-30', reason: 'y', now: NOW }),
+    ]);
+    const ids = results.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+    for (const r of results) if (r.status === 'rejected') expect(String(r.reason)).toMatch(/chunk-waiver/);
+    const ledger = await fs.readFile(join(project, DESIGN_DIR, WAIVERS_MD), 'utf-8');
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ledger.match(/^### Waiver /gm)).toHaveLength(ids.length);
+  });
 });
 
 describe('checkSignoff — refuses a verified status that no sign-off backs', () => {

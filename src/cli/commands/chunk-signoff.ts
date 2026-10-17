@@ -1,6 +1,6 @@
 import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
-import { isAbsolute, posix, relative, resolve, sep } from 'node:path';
+import { isAbsolute, join, posix, relative, resolve, sep } from 'node:path';
 import chalk from 'chalk';
 import {
   GATE_TRANSITION_MD,
@@ -27,6 +27,7 @@ import { checkConstraints } from './constraint-check.js';
 import { verifiedProblem } from '../lib/verify-result.js';
 import { escapeRegExp } from '../lib/regexp.js';
 import { gitOutput as git } from '../lib/git-output.js';
+import { takeOsLock } from '../lib/os-lock.js';
 
 /**
  * `boardsmith chunk-signoff` / `boardsmith chunk-waiver` / `checkSignoff()`: who may say a chunk
@@ -1117,6 +1118,18 @@ export async function recordWaiver(options: WaiverOptions): Promise<string> {
   assertWaiverTerms(options, now);
   const chunks = waiverChunks(options.chunks, await readSketch(dir));
 
+  // Two runs reading the ledger at once would both take the next id, and one waiver would be lost.
+  await fs.mkdir(join(dir, '.boardsmith'), { recursive: true });
+  const lock = await takeOsLock(join(dir, '.boardsmith', 'chunk-waiver.flock'), 'chunk-waiver', `chunk-waiver for ${chunks.join(', ')}`);
+  if (typeof lock === 'string') throw new Error(lock);
+  try {
+    return await appendWaiver(dir, chunks, options, now);
+  } finally {
+    await lock.release();
+  }
+}
+
+async function appendWaiver(dir: string, chunks: string[], options: WaiverOptions, now: Date): Promise<string> {
   const ledgerPath = designPath(dir, WAIVERS_MD);
   const existing = await fs.readFile(ledgerPath, 'utf-8').catch(() => WAIVERS_HEADER);
   const next = parseWaivers(existing).reduce((max, w) => Math.max(max, Number(w.id.slice(1))), 0) + 1;
