@@ -26,7 +26,7 @@ import { existsSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { withFixtureWorld } from './fixture-world.test-helper.js';
 import { WORLD_IFRAME_PATH } from './dev-world.js';
@@ -124,6 +124,10 @@ await withFixtureWorld(${JSON.stringify({ slug: 'fixture-yard', displayName: 'Fi
 });
 `;
     const run = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', serveUntilStopped], { cwd: REPO_ROOT });
+    // Whatever the outcome: a timeout or a failed assertion must not leave it and its host running.
+    onTestFinished(() => {
+      if (run.exitCode === null && run.signalCode === null) process.kill(run.pid!, 'SIGTERM');
+    });
     let output = '';
     run.stderr.on('data', (chunk) => (output += chunk));
     const [hostUrl, fixture] = await new Promise<string[]>((resolve, reject) => {

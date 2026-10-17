@@ -53,6 +53,7 @@ import {
   summarise,
   surfaceOf,
   waitForAction,
+  waitUntil,
 } from './browser-harness.mjs';
 
 // ── The fixture world ────────────────────────────────────────────────────────
@@ -344,16 +345,19 @@ async function drive({ launch, hostUrl }) {
 
         await surface.locator('[data-fixture="garden"]').click({ position: { x: 5, y: 5 } });
         await page.waitForTimeout(200);
-        // Nothing on this board starts an action, so the bar must still be down:
-        // it opens for a QUESTION, not for a click.
+        // The click lands on empty board, which starts nothing, so the bar must
+        // still be down: it opens for a QUESTION, not for a click.
         const afterClick = await measure(page);
         assert(afterClick.start === null,
           'the bar came up for a board click that asked nothing');
 
         // The next question, started from the board with the bar still down.
         await surface.locator('[data-fixture="start-tend"]').click();
-        await page.waitForTimeout(200);
-        const nextQuestion = await measure(page);
+        const nextQuestion = await waitUntil(
+          () => measure(page),
+          (shot) => shot.choice !== null && shot.choice.height > 0,
+          5_000,
+        );
         assert(nextQuestion.choice !== null && nextQuestion.choice.height > 0,
           'a new question started with the bar down, and its choice controls stayed hidden');
       });
