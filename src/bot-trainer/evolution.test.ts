@@ -69,23 +69,23 @@ describe('evolution', () => {
       expect(changed).not.toEqual(original);
     });
 
-    it('keeps weights within bounds [-20, 20]', () => {
-      // Start with extreme weights
+    it('perturbs authored weights without capping them (#869)', () => {
+      // Cribbage's bot.ts weights; evaluation normalises by total weight, so only ratios matter
       const objectives = [
-        createObjective('feature-a', 19),
-        createObjective('feature-b', -19),
+        createObjective('a', 50),
+        createObjective('b', 25),
+        createObjective('c', 2),
       ];
-      const rng = createSeededRandom('bounds-test');
+      const rng = createSeededRandom('scale-test');
 
-      // Mutate many times with high sigma
-      let current = objectives;
-      for (let i = 0; i < 100; i++) {
-        current = mutateWeights(current, 5.0, rng);
-      }
-
-      for (const obj of current) {
-        expect(obj.weight).toBeGreaterThanOrEqual(-20);
-        expect(obj.weight).toBeLessThanOrEqual(20);
+      for (let i = 0; i < 50; i++) {
+        const [a, b, c] = mutateWeights(objectives, 1.0, rng).map(o => Math.abs(o.weight));
+        // Sign flips are deliberate; magnitudes stay within a few sigma of the original
+        expect(a).toBeGreaterThan(40);
+        expect(a).toBeLessThan(60);
+        expect(b).toBeGreaterThan(15);
+        expect(b).toBeLessThan(35);
+        expect(c).toBeLessThan(10);
       }
     });
 
