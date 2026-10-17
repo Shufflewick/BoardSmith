@@ -12,10 +12,11 @@
  * open, the same map `sendFrame` sends through, so the world can never believe
  * in a page its frames are no longer reaching, or skip one they still reach.
  */
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { WebSocket } from 'ws';
 
 import type { RulesReloadQueue } from './rules-reload-queue.js';
+import { parseSocketMessage } from './socket-message.js';
 import type { LocalWorldHost, WorldDevRequest } from './world-host.js';
 
 /**
@@ -96,12 +97,8 @@ export function createWorldConnections(
     accept(socket) {
       let clientId: string | null = null;
       socket.on('message', (raw) => {
-        let message: { type?: string; clientId?: unknown; [key: string]: unknown };
-        try {
-          message = JSON.parse(raw.toString());
-        } catch {
-          return;
-        }
+        const message = parseSocketMessage(raw);
+        if (message === null) return;
         if (message.type === 'hello') {
           clientId =
             typeof message.clientId === 'string'
@@ -129,7 +126,7 @@ export function createWorldConnections(
             // The message, not the error object, exactly as `reloadWorld` in
             // `dev-world.ts` does it (#240).
             console.error(
-              chalk.red(
+              styleText('red',
                 `[boardsmith dev] world message '${String(message.type)}' failed: ` +
                   `${error instanceof Error ? error.message : String(error)}`,
               ),
@@ -148,7 +145,7 @@ export function createWorldConnections(
           // did (#387): it can start a departure's clock command.
           queue
             .admit({ run: () => host().disconnect(gone) })
-            .catch((error: unknown) => console.error(chalk.red(`[boardsmith dev] a page leaving the world failed: ${error instanceof Error ? error.message : String(error)}`)));
+            .catch((error: unknown) => console.error(styleText('red', `[boardsmith dev] a page leaving the world failed: ${error instanceof Error ? error.message : String(error)}`)));
         }
       });
     },

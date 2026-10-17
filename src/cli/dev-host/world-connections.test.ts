@@ -202,3 +202,15 @@ describe('#284: a page killed while the host is pushing', () => {
     expect(rules.walked()).not.toContain(3);
   });
 });
+
+describe('#879: a frame that is not a message', () => {
+  it('is dropped, and the page is still served', async () => {
+    const { port } = await serve();
+    const page = await open(port, 'p1');
+    for (const junk of ['null', '42', '"x"', '[]', '{}', 'not json']) page.socket.send(junk);
+
+    const answered = page.next((frame) => frame.type === 'world_response' && frame.requestId === 'r1');
+    page.send({ type: 'action', requestId: 'r1', order: { id: 'r1', at: Date.now() }, action: 'stoke', args: {} });
+    expect(await answered).toMatchObject({ ok: true });
+  });
+});

@@ -13,7 +13,7 @@
  */
 import { parentPort, Worker, workerData } from 'node:worker_threads';
 
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 
 /** Host -> worker: one call. */
 interface Call {
@@ -127,7 +127,7 @@ export async function startRulesWorker(bundlePath: string, data: unknown): Promi
   const ready = new Promise<unknown>((resolve, reject) => {
     const stop = (why: string): void => {
       // Nothing may be waiting on a worker that stops between calls, so say so here.
-      if (loaded && stopped === null) console.error(chalk.red(`[boardsmith dev] Your rules stopped running: ${why}`));
+      if (loaded && stopped === null) console.error(styleText('red', `[boardsmith dev] Your rules stopped running: ${why}`));
       stopped ??= why;
       reject(new Error(why));
       for (const call of pending.values()) call.reject(new Error(stopped));

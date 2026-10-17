@@ -73,6 +73,8 @@ export const ENGINE_OWNED_GAME_FIELDS = {
   _animationEventSeq: 'engine-set',
   _animationSeqBySeat: 'engine-set',
   _messagesEvicted: 'engine-set',
+  _messagesEvictedPublic: 'engine-set',
+  _messagesEvictedTo: 'engine-set',
   _constructorOptions: 'fixed',
   _initError: 'engine-set',
 } as const satisfies Record<string, 'fixed' | 'engine-set'>;

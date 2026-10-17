@@ -29,7 +29,7 @@
  */
 import { promises as fs } from 'node:fs';
 import { resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { SKETCH_MD, chunkMdPath, designPath, designRulebookDir } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
 import { extractSection } from './build-manifest.js';
@@ -371,7 +371,7 @@ export async function parallelCheckCommand(
       assertBareName('<slugs...>', slug, 'Pass chunk slugs from SKETCH.md\'s Ordered Chunk List.');
     }
   } catch (error) {
-    console.error(chalk.red((error as Error).message));
+    console.error(styleText('red', (error as Error).message));
     process.exitCode = 1;
     return;
   }
@@ -382,9 +382,9 @@ export async function parallelCheckCommand(
     return;
   }
   if (refusals.length === 0) {
-    console.log(chalk.green(`✓ ${slugs.join(', ')} may be built at the same time, each in its own worktree.`));
+    console.log(styleText('green', `✓ ${slugs.join(', ')} may be built at the same time, each in its own worktree.`));
     return;
   }
-  console.error(chalk.red(`These chunks may not be built at the same time. Build them one after the other, or fix:`));
+  console.error(styleText('red', `These chunks may not be built at the same time. Build them one after the other, or fix:`));
   for (const refusal of refusals) console.error(`  • ${refusal}`);
 }

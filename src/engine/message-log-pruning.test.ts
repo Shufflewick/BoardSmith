@@ -22,6 +22,8 @@
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Action, loop, eachPlayer, actionStep, type FlowContext, type GameOptions } from './index.js';
 import { GameRunner } from '../runtime/runner.js';
+import { createPlayerView } from './utils/index.js';
+import { buildPlayerState } from '../session/utils.js';
 
 class ChattyGame extends Game<ChattyGame, Player> {
   constructor(options: GameOptions) {
@@ -30,6 +32,11 @@ class ChattyGame extends Game<ChattyGame, Player> {
       Action.create<ChattyGame>('speak').prompt('Speak').execute((_a, ctx) => {
         const game = ctx.game as ChattyGame;
         game.message(`line ${game.messages.length + 1}`);
+      }),
+    );
+    this.registerAction(
+      Action.create<ChattyGame>('whisper').prompt('Whisper').execute((_a, ctx) => {
+        (ctx.game as ChattyGame).messageTo(ctx.player!, `whisper to ${ctx.player!.seat}`);
       }),
     );
     this.registerAction(
@@ -42,7 +49,7 @@ class ChattyGame extends Game<ChattyGame, Player> {
       root: loop({
         while: (ctx: FlowContext) => (ctx.get<number>('round') ?? 1) <= 20,
         maxIterations: 60,
-        do: eachPlayer({ do: actionStep({ actions: ['speak', 'fumble'] }) }),
+        do: eachPlayer({ do: actionStep({ actions: ['speak', 'whisper', 'fumble'] }) }),
       }),
       setup: (ctx) => ctx.set('round', 1),
     });
@@ -236,5 +243,115 @@ describe('a restore keeps the live eviction count (#803)', () => {
 
     expect(runner.game.messages.map((m) => m.text)).toEqual(['line 2', 'line 3']);
     expect(runner.game.messagesEvicted).toBe(1);
+  });
+});
+
+/**
+ * Each seat numbers its own lines (#903). The log a seat receives is filtered to
+ * the lines it may see, so the game-wide `messagesEvicted` is not its offset:
+ * it counts other seats' private lines too, and sending it would tell a seat how
+ * many of those there were. The engine counts evictions per audience instead.
+ */
+describe("each seat's own eviction offset (#903)", () => {
+  const newGame = () => new ChattyGame({ playerCount: 2, seed: 'chat', elementIdKey: '00000000000000b3' });
+  const offsetOf = (game: Game, seat: number) => createPlayerView(game, seat).messageOffset ?? 0;
+
+  it('counts only the evicted lines that seat could see', () => {
+    const game = newGame();
+    game.message('public');
+    game.messageTo(1, 'to one');
+    game.messageTo(2, 'to two');
+    game.messageTo([1, 2], 'to both');
+    game.messageTo(1, 'to one again');
+    game.message('kept');
+    const seen = [0, 1, 2].map((seat) => createPlayerView(game, seat).messages.length);
+
+    game.pruneMessages({ keepLast: 1 });
+
+    expect([0, 1, 2].map((seat) => offsetOf(game, seat))).toEqual([1, 4, 3]);
+    // A seat's lines keep their numbers: offset plus what it holds is what it saw.
+    for (const seat of [0, 1, 2]) {
+      expect(offsetOf(game, seat) + createPlayerView(game, seat).messages.length).toBe(seen[seat]);
+    }
+  });
+
+  it("does not move when only another seat's lines are evicted, and the view carries no other count", () => {
+    const game = newGame();
+    game.messageTo(1, 'secret');
+    game.messageTo(1, 'another secret');
+    game.message('public');
+
+    game.pruneMessages({ keepLast: 1 });
+
+    expect(offsetOf(game, 1)).toBe(2);
+    expect(createPlayerView(game, 2).messageOffset).toBeUndefined();
+    const seatTwo = JSON.stringify(createPlayerView(game, 2));
+    expect(seatTwo).not.toContain('messagesEvicted');
+    expect(seatTwo).not.toContain('secret');
+  });
+
+  it('counts a line once for a seat named twice in its audience', () => {
+    const game = newGame();
+    game.messageTo([1, 1], 'twice addressed');
+    game.message('public');
+    game.pruneMessages({ keepLast: 1 });
+    expect(offsetOf(game, 1)).toBe(1);
+  });
+
+  it('keeps every seat\'s offset across a restore', () => {
+    const game = newGame();
+    game.messageTo(1, 'to one');
+    game.message('public');
+    game.message('kept');
+    game.pruneMessages({ keepLast: 1 });
+
+    const restored = newGame();
+    restored.loadSerializedState(game.toJSON(), { messageLog: [...game.messages] });
+
+    expect([0, 1, 2].map((seat) => offsetOf(restored, seat))).toEqual([1, 2, 1]);
+  });
+
+  function whisperedThenPruned(): GameRunner<ChattyGame> {
+    const runner = new GameRunner({
+      GameClass: ChattyGame,
+      gameType: 'chatty',
+      gameOptions: { playerCount: 2, playerNames: ['A', 'B'], seed: 'chat' },
+      checkpoints: { history: 'full' },
+    });
+    runner.start();
+    for (const [action, seat] of [['whisper', 1], ['speak', 2], ['whisper', 1], ['speak', 2]] as const) {
+      runner.performAction(action, seat, {});
+      runner.captureCheckpoint();
+    }
+    // 'whisper to 1', 'line 2', 'whisper to 1', 'line 4': keep the last one.
+    runner.game.pruneMessages({ keepLast: 1 });
+    return runner;
+  }
+
+  it('an undo keeps the live offsets, as it keeps the live eviction count (#803)', () => {
+    const live = whisperedThenPruned();
+    const offsets = [0, 1, 2].map((seat) => offsetOf(live.game, seat));
+    expect(offsets).toEqual([1, 3, 1]);
+
+    const undone = GameRunner.fromCheckpoint(live.getSnapshot(), 3, ChattyGame, { checkpoints: { history: 'full' } });
+    expect([0, 1, 2].map((seat) => offsetOf(undone!.game, seat))).toEqual(offsets);
+
+    // And again from the undone runner, which is where a stale count would show.
+    const twice = GameRunner.fromCheckpoint(undone!.getSnapshot(), 2, ChattyGame);
+    expect([0, 1, 2].map((seat) => offsetOf(twice!.game, seat))).toEqual(offsets);
+  });
+
+  it("reaches each seat's session state as its own offset", () => {
+    const runner = whisperedThenPruned();
+    const state = (seat: number) => buildPlayerState(runner, ['A', 'B'], seat);
+    expect([1, 2].map((seat) => state(seat).messageOffset)).toEqual([3, 1]);
+    expect(JSON.stringify(state(2))).not.toContain('messagesEvicted');
+  });
+
+  it('a failed action rolls back without resetting the offsets', () => {
+    const runner = whisperedThenPruned();
+    const result = runner.performAction('fumble', 1, {});
+    expect(result.success).toBe(false);
+    expect([0, 1, 2].map((seat) => offsetOf(runner.game, seat))).toEqual([1, 3, 1]);
   });
 });

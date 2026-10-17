@@ -89,3 +89,21 @@ describe('HistoryTab seat badge (#622, #641)', () => {
     ]);
   });
 });
+
+describe('HistoryTab step back (#900)', () => {
+  const history = [1, 2, 3, 4, 5].map(() => ({ name: 'pass', player: 1, args: {} }));
+
+  it('steps back from the live position to the last action', async () => {
+    const wrapper = mountHistory({ actionHistory: history, players: [] });
+    const back = wrapper.findAll('.timeline-controls button')[0]!;
+    expect(back.attributes('disabled')).toBeUndefined();
+    await back.trigger('click');
+    expect(wrapper.emitted('select-action')).toEqual([[4]]);
+  });
+
+  it('is disabled at the first position', async () => {
+    const wrapper = mountHistory({ actionHistory: history, players: [] });
+    await wrapper.setProps({ selectedActionIndex: 0, isViewingHistory: true });
+    expect(wrapper.findAll('.timeline-controls button')[0]!.attributes('disabled')).toBeDefined();
+  });
+});

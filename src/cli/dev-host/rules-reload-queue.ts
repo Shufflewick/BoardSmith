@@ -44,7 +44,7 @@
  * next move goes through `hold`, and a chain of bot moves reads
  * `reloadPending` and stops between moves until the reload has settled.
  */
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 
 import type { HostWorkGate } from '../../session/host-work-gate.js';
 import type { WorldHostClock } from './node-world-clock.js';
@@ -166,20 +166,20 @@ export function createRulesReloadQueue<R>(args: {
   let reloading: Promise<void> = Promise.resolve();
 
   const reload = async (file: string): Promise<Settled> => {
-    console.log(chalk.dim(`\n  ${file} changed -- reloading the ${args.what}'s rules...`));
+    console.log(styleText('dim', `\n  ${file} changed -- reloading the ${args.what}'s rules...`));
     let rules: R;
     try {
       rules = await args.load();
     } catch (error) {
       const message = `Your edited rules did not load, so this ${args.what} is still running the ones it had: ${messageOf(error)}`;
-      console.error(chalk.red(`  ${message}`));
+      console.error(styleText('red', `  ${message}`));
       return { ok: false, message };
     }
     try {
       await args.adopt(rules);
     } catch (error) {
       const message = messageOf(error);
-      console.error(chalk.red(`  ${message}`));
+      console.error(styleText('red', `  ${message}`));
       return { ok: false, message };
     }
     return { ok: true };
@@ -241,7 +241,7 @@ export function createRulesReloadQueue<R>(args: {
 
     hold(work) {
       admit({ run: async () => work() }).catch((error: unknown) =>
-        console.error(chalk.red(`  [boardsmith dev] the ${args.what}'s own work failed: ${messageOf(error)}`)),
+        console.error(styleText('red', `  [boardsmith dev] the ${args.what}'s own work failed: ${messageOf(error)}`)),
       );
     },
   };

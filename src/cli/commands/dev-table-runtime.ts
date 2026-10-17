@@ -13,7 +13,7 @@
  * `../dev-host/rules-worker.ts`), and a reload throws the old one away, so no
  * rules bundle is ever imported into this process.
  */
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 
 import type { GameDefinition, RulesReload } from '../../session/index.js';
 import type { MultiplayerHost, TableRules } from '../dev-host/multiplayer-host.js';
@@ -153,7 +153,7 @@ export function tableRulesReloadQueue(args: {
         await replaced.close();
       }
       const said = describeTableReload(outcome);
-      if (said !== null) console.log(chalk.green(`  ${said}\n`));
+      if (said !== null) console.log(styleText('green', `  ${said}\n`));
     },
     tell: (notice) => args.host.tellRulesReload(notice),
   });

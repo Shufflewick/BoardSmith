@@ -2,14 +2,11 @@ import {
   chunkMdPath,
 } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { join, resolve } from 'node:path';
+import { styleText } from 'node:util';
 import {
   atomicWriteFile,
-  ledgerFilePath,
-  parseLedgerBody,
-  readLedgerOrThrow,
-  resolveLedgerState,
+  readRunLedgerState,
   stagingSlicesDir,
   type ClassificationRecord,
 } from './verify-run.js';
@@ -385,11 +382,7 @@ export async function verifyRepairStatusCommand(
   const rows: RepairStatusRow[] = [];
 
   if (staleEntries.length > 0 && runId !== undefined) {
-    const ledgerFile = ledgerFilePath(projectDir, runId);
-    const relLedgerPath = relative(projectDir, ledgerFile);
-    const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
-    const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
-    const { classifications } = resolveLedgerState(lines);
+    const { classifications } = await readRunLedgerState(projectDir, runId);
     const stagedDir = stagingSlicesDir(projectDir, runId);
 
     for (const entry of staleEntries) {
@@ -427,10 +420,10 @@ export async function verifyRepairStatusCommand(
     return result;
   }
 
-  console.log(chalk.green(`✓ Repair status — ${rows.length} stale chunk(s)`));
+  console.log(styleText('green', `✓ Repair status — ${rows.length} stale chunk(s)`));
   for (const row of rows) {
     if (row.scopeLimited) {
-      console.log(chalk.yellow(`  ${row.slug}: scope-limited — ${row.scopeLimitedReason}`));
+      console.log(styleText('yellow', `  ${row.slug}: scope-limited — ${row.scopeLimitedReason}`));
     } else if (row.roundPlan.disposition === 'triage') {
       console.log(`  ${row.slug}: round budget exhausted — ${row.roundPlan.reason}`);
     } else {
@@ -438,7 +431,7 @@ export async function verifyRepairStatusCommand(
     }
   }
   for (const warning of warnings) {
-    console.log(chalk.yellow(`⚠ ${warning}`));
+    console.log(styleText('yellow', `⚠ ${warning}`));
   }
   return result;
 }
