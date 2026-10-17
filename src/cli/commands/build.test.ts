@@ -491,7 +491,9 @@ describe('command build directories (WR-02, #391)', () => {
 
     it(`${command} only removes its own build directory`, () => {
       const rmTargets = [...src.matchAll(/rmSync\(([^,)]+)/g)].map((m) => m[1].trim());
-      expect(rmTargets.filter((target) => target !== 'tempDir' && target !== 'viteCacheDir')).toEqual([]);
+      // build also deletes its own output folder, behind emptyBuildOutputDir's guard (#842).
+      const own = command === 'build' ? ['tempDir', 'viteCacheDir', 'outDir'] : ['tempDir', 'viteCacheDir'];
+      expect(rmTargets.filter((target) => !own.includes(target))).toEqual([]);
     });
   }
 });
