@@ -7,12 +7,15 @@
 
 import { describe, it, expect } from 'vitest';
 import { spawnSync, execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fixtureSandbox } from '../../src/testing/fixture-sandbox.test-helper.ts';
 
-const RUN = path.join(path.dirname(fileURLToPath(import.meta.url)), 'run.mjs');
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const RUN = path.join(HERE, 'run.mjs');
+const CONFORMING = path.join(HERE, '__fixtures__', 'conforming');
+const CONFORMING_SOURCE_HASH = '94b836814e8d4849fdff5f5e782a78a7c0a5b8f008808384096cb95359106a89';
 
 function runHarness(sandbox, args) {
   // The driver shells out to git and node; any node it starts inherits the same write limit.
@@ -107,5 +110,45 @@ describe('ingest harness work dir', () => {
     expect(outerCommits.stdout.trim()).toBe('');
     expect(res.status).toBe(1);
     expect(res.stderr).toContain('has no .git of its own');
+  });
+});
+
+// A staged run whose project passes every produced-artifact check, so only the drive outcome decides the verdict.
+function assertAfterDrive(drive) {
+  const sandbox = fixtureSandbox('bs-harness-verdict-', { tools: ['git'] });
+  const workDir = path.join(sandbox.root, 'run');
+  const project = path.join(workDir, 'seven');
+  const reference = path.join(sandbox.root, 'reference');
+  cpSync(CONFORMING, project, { recursive: true });
+  git(sandbox, ['init', '-q', project]);
+  git(sandbox, ['init', '-q', reference]);
+  git(sandbox, ['-C', reference, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'ref']);
+  const refHead = git(sandbox, ['-C', reference, 'rev-parse', 'HEAD']).trim();
+  writeFileSync(
+    path.join(workDir, '.harness-stage-state.json'),
+    JSON.stringify({ sourceFileName: 'rules.pdf', expectHash: CONFORMING_SOURCE_HASH, refHead, stagedAt: 'x', ...drive }),
+  );
+  return runHarness(sandbox, ['assert', '--work-dir', workDir, '--reference-repo', reference]);
+}
+
+describe('ingest harness overall verdict (#918)', () => {
+  it('passes when every check passes and the session completed', () => {
+    const res = assertAfterDrive({ turnsTaken: 6, maxTurns: 12, stoppedReason: 'completed', hitTurnCap: false });
+    expect(res.stdout, res.stderr).toContain('OVERALL: PASS');
+    expect(res.status).toBe(0);
+  });
+
+  it('fails when the session hit the turn cap, even with every check passing', () => {
+    const res = assertAfterDrive({ turnsTaken: 12, maxTurns: 12, stoppedReason: 'turn-cap', hitTurnCap: true });
+    expect(res.stdout, res.stderr).toContain('SUMMARY: 11/11 checks passing.');
+    expect(res.stdout).toContain('OVERALL: FAIL');
+    expect(res.status).toBe(1);
+  });
+
+  it('fails when the session exited non-zero, even with every check passing', () => {
+    const res = assertAfterDrive({ turnsTaken: 3, maxTurns: 12, stoppedReason: 'nonzero-exit', hitTurnCap: false });
+    expect(res.stdout, res.stderr).toContain('SUMMARY: 11/11 checks passing.');
+    expect(res.stdout).toContain('OVERALL: FAIL');
+    expect(res.status).toBe(1);
   });
 });

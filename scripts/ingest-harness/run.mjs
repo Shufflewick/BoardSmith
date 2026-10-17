@@ -509,7 +509,8 @@ function assertCmd(opts) {
       : c;
   });
   const allChecks = [...checksGating, gCheck];
-  const overallPass = checksGating.every((c) => c.pass) && gPass;
+  const overallPass =
+    checksGating.every((c) => c.pass) && gPass && !state.hitTurnCap && state.stoppedReason === 'completed';
   const passCount = allChecks.filter((c) => c.pass).length;
 
   console.log('');
