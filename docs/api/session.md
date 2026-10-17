@@ -20,7 +20,6 @@ ShufflewickPub all run it.
 import {
   SnapshotSessionHost,
   executeOp,
-  generateGameId,
   type GameDefinition,
   type Op,
 } from 'boardsmith/session';
@@ -48,8 +47,6 @@ Node, and `boardsmith/session` also runs on Workers and in browsers.
 
 ### Utilities
 
-- `generateGameId()` - Generate unique game ID
-- `isPlayersTurn()` - Check if it's a player's turn
 - `buildPlayerState()` - Build player-specific state view
 
 ### Game Options

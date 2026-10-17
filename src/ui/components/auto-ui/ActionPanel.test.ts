@@ -27,7 +27,6 @@ import { mount } from '@vue/test-utils';
 import ActionPanel from './ActionPanel.vue';
 import { splitAnchoredChoices } from './action-panel-helpers.js';
 import type { ChoiceWithRefs } from '../../composables/useActionControllerTypes.js';
-import { DISABLED_TOOLTIP_ID } from '../../composables/useDisabledReasonTooltip.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 import { stubActionController } from './action-panel-controller.test-helper.js';
 import {
@@ -463,8 +462,9 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
     const btn = wrapper.find('[data-bs-action="build"]');
     expect(btn.attributes('aria-disabled')).toBe('true');
     expect(btn.attributes('data-bs-disabled-reason')).toBe('You need 3 wood; you have 1.');
-    // Points at the shared tooltip, so a screen reader reads the reason on focus.
-    expect(btn.attributes('aria-describedby')).toBe(DISABLED_TOOLTIP_ID);
+    // Described by a node holding the reason, there whether or not the tooltip shows (#865).
+    const describedById = btn.attributes('aria-describedby')!;
+    expect(document.getElementById(describedById)?.textContent).toBe('You need 3 wood; you have 1.');
     // Never the native attribute: that would drop the button out of the tab
     // order and take the reason with it.
     expect(btn.attributes('disabled')).toBeUndefined();

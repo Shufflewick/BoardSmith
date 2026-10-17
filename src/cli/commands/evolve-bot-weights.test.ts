@@ -201,3 +201,23 @@ describe('evolve-bot-weights keeps bot.ts unless the confirmation accepts the ne
   });
 });
 
+describe('evolve-bot-weights refuses a numeric option that is not a positive whole number (#844)', () => {
+  // `parseInt('two')` was NaN, so no worker started and the run never settled.
+  const refusedDir = projectWith('export const gameDefinition = {};\n');
+  const flags = ['generations', 'population', 'mcts', 'workers'] as const;
+  const badValues = ['two', '0', '-1', '1.5', ''];
+
+  it.each(flags.flatMap((flag) => badValues.map((value) => [flag, value] as const)))(
+    '--%s "%s" is refused by name before anything is built',
+    async (flag, value) => {
+      const run = await evolveIn(refusedDir, { [flag]: value });
+      expect(run.error).toBeInstanceOf(Error);
+      expect((run.error as Error).message).toBe(
+        `--${flag} takes a positive whole number, got "${value}".`,
+      );
+      expect(run.evolverCalls).toHaveLength(0);
+      expect(commandBuildDirs(refusedDir, 'evolve-bot-weights')).toEqual([]);
+      expect(readFileSync(join(refusedDir, 'src', 'rules', 'bot.ts'), 'utf-8')).toBe(BOT);
+    },
+  );
+});

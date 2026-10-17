@@ -8,6 +8,7 @@ import { promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import { atomicWriteFile } from './verify-run.js';
+import { withLedgerLock } from '../lib/ledger-lock.js';
 import { readFencedJsonLedger } from '../lib/fenced-json-ledger.js';
 import { isPresentationLine } from './verify-classify.js';
 import { DERIVED_LINE_RE, annotationLineStartRe } from './derived-line-pattern.js';
@@ -569,10 +570,14 @@ export async function recordDeriveCheckVerdicts(
   projectDir: string,
   records: DeriveCheckRecord[],
 ): Promise<{ ledgerPath: string }> {
-  const existing = await readDeriveCheckVerdicts(projectDir);
-  const incomingKeys = new Set(records.map((r) => deriveCheckKey(r)));
-  const merged = [...existing.filter((r) => !incomingKeys.has(deriveCheckKey(r))), ...records];
-  return replaceDeriveCheckVerdicts(projectDir, merged);
+  const ledgerPath = deriveCheckLedgerPath(projectDir);
+  await fs.mkdir(dirname(ledgerPath), { recursive: true });
+  return withLedgerLock(ledgerPath, async () => {
+    const existing = await readDeriveCheckVerdicts(projectDir);
+    const incomingKeys = new Set(records.map((r) => deriveCheckKey(r)));
+    const merged = [...existing.filter((r) => !incomingKeys.has(deriveCheckKey(r))), ...records];
+    return replaceDeriveCheckVerdicts(projectDir, merged);
+  });
 }
 
 /**
