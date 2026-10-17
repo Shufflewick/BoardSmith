@@ -83,7 +83,7 @@ describe('loadWorldRuntime (#283)', () => {
     const frames: Array<{ clientId: string; message: { type: string; actions?: unknown } }> = [];
     runtime.worker.listen((event) => {
       const told = event as WorldEvent;
-      if ('send' in told) frames.push(told.send as (typeof frames)[number]);
+      if ('send' in told) frames.push({ clientId: told.send.clientId, message: JSON.parse(told.send.frame) });
     });
     await runtime.worker.call('open', { storePath: storePath(), worldName: 'Yard', budgets: worldBudgets(), pages: ['page-1'] });
     closing.push(async () => {

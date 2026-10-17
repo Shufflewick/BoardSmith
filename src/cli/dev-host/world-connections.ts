@@ -42,6 +42,8 @@ function refusalOf(message: WorldDevRequest): ((text: string) => Record<string, 
 interface WorldConnections {
   /** One frame to one page, dropped when that page's socket is not open. */
   send(clientId: string, message: unknown): void;
+  /** {@link WorldConnections.send} for a frame already encoded as JSON. */
+  sendFrame(clientId: string, frame: string): void;
   /** One frame to every open page. */
   broadcast(message: unknown): void;
   /** Whether this page's socket is open right now -- the host's `isOpen`. */
@@ -88,6 +90,10 @@ export function createWorldConnections(
   return {
     send(clientId, message) {
       openSocket(clientId)?.send(JSON.stringify(message));
+    },
+
+    sendFrame(clientId, frame) {
+      openSocket(clientId)?.send(frame);
     },
 
     broadcast(message) {

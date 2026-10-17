@@ -42,9 +42,14 @@ export interface OpenedWorld {
   readonly migrated?: WorldMigrationOutcome;
 }
 
-/** What the worker tells the host unasked: a frame for a page, or work for the reload queue to hold (#387). */
+/**
+ * What the worker tells the host unasked: a frame for a page, or work for the
+ * reload queue to hold (#387). A frame is sent as its JSON, the form the wire
+ * takes: a view can hold arrays the read-only projection answered, which
+ * structured clone refuses and JSON reads like any other.
+ */
 export type WorldEvent =
-  | { readonly send: { readonly clientId: string; readonly message: unknown } }
+  | { readonly send: { readonly clientId: string; readonly frame: string } }
   | { readonly hold: number };
 
 /** Serve the world to the host; `rules` is the bundle's `gameDefinition`. */
@@ -77,7 +82,7 @@ export function serveWorld(rules: GameDefinition | undefined): void {
             seed: `world:${definition.gameType}`,
             budgets,
             store,
-            send: (clientId, message) => emit({ send: { clientId, message } } satisfies WorldEvent),
+            send: (clientId, message) => emit({ send: { clientId, frame: JSON.stringify(message) } } satisfies WorldEvent),
             isOpen: (clientId) => open.has(clientId),
             // The world's own alarm and a departure's grace wait in the host's
             // reload queue with the pages' commands while an edit rebuilds (#387).

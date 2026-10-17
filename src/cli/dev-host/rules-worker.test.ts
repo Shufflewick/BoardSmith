@@ -41,17 +41,22 @@ function tableRules(step: number): string {
   ].join('\n');
 }
 
-/** A one-fire world whose `stoke` adds `step` logs. */
+/**
+ * A one-fire world whose `stoke` adds `step` logs. `feed` chooses from the
+ * fire's embers, read through the world's read-only projection, so the offers
+ * a page is sent carry what that projection answered.
+ */
 function worldRules(step: number): string {
   return [
-    "import { Game, Space } from 'boardsmith';",
+    "import { Game, Piece, Space } from 'boardsmith';",
     "import { worldAction } from 'boardsmith/world';",
     markLine,
     'class Fire extends Space { logs = 0; }',
+    'class Ember extends Piece {}',
     'class Camp extends Game {',
     '  constructor(options: ConstructorParameters<typeof Game>[0]) {',
     '    super(options);',
-    '    this.registerElements([Fire]);',
+    '    this.registerElements([Fire, Ember]);',
     '  }',
     '}',
     'export const gameDefinition = {',
@@ -60,9 +65,12 @@ function worldRules(step: number): string {
     '  world: {',
     '    maxPlayers: 1,',
     "    actions: [worldAction('stoke').needs(() => ['fire'])",
-    `      .execute((_args: unknown, ctx: { world: { partition(name: string): unknown } }) => { (ctx.world.partition('fire') as Fire).logs += ${step}; })],`,
+    `      .execute((_args: unknown, ctx: { world: { partition(name: string): unknown } }) => { (ctx.world.partition('fire') as Fire).logs += ${step}; }),`,
+    "      worldAction('feed').needs(() => ['fire'])",
+    "      .chooseFrom('ember', { choices: ({ game }: { game: Camp }) => game.all(Ember).map((ember) => ember.name!) })",
+    '      .execute(() => {})],',
     "    view: () => ['fire'],",
-    "    genesis: (game: Camp) => ({ fire: game.create(Fire, 'fire') }),",
+    "    genesis: (game: Camp) => { const fire = game.create(Fire, 'fire'); fire.create(Ember, 'birch'); return { fire }; },",
     '  },',
     '};',
   ].join('\n');
