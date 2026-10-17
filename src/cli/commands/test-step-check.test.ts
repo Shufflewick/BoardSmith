@@ -605,6 +605,9 @@ export function hexToRgb(hex: string): number[] { return [parseInt(hex.slice(1, 
     ['globs with a brace set that climbs into src/ (#841)', `const g = import.meta.glob("../../docs/{../src,x}/*.ts", { eager: true });\nvoid g;\n`, 1, '../../docs/{../src,x}/*.ts'],
     ['globs with an extglob that climbs into src/ (#841)', `const g = import.meta.glob("../../docs/@(x|../src)/*.ts", { eager: true });\nvoid g;\n`, 1, '../../docs/@(x|../src)/*.ts'],
     ['globs from above the project back into it (#841)', `const g = import.meta.glob("../../../*/src/x.ts", { eager: true });\nvoid g;\n`, 1, '../../../*/src/x.ts'],
+    ['globs src/ from the root with a doubled slash (#841)', `const g = import.meta.glob("//src/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '//src/rules/*.ts'],
+    ['globs src/ from the root with a tripled slash (#841)', `const g = import.meta.glob("///src/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '///src/rules/*.ts'],
+    ['globs with a brace set holding a ) that climbs into src/ (#841)', `const g = import.meta.glob("../../docs/{x),../src}/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '../../docs/{x),../src}/rules/*.ts'],
     ['globs with a pattern this check cannot read (#841)', `const PATTERN = '../../src/rules/*.ts';\nconst rules = import.meta.glob(PATTERN, { eager: true });\nvoid rules;\n`, 2, 'a pattern this check cannot read'],
   ])('reports a guard that %s from the game\'s src/ (#485)', async (_what, guard, line, module) => {
     const findings = await findingsFor({
@@ -622,7 +625,8 @@ export function hexToRgb(hex: string): number[] { return [parseInt(hex.slice(1, 
       'src/rules/auction.ts': RULES,
       'tests/guards/a11y-floor.test.ts': `const a = import.meta.glob('../../src/ui/**/*.vue', { query: '?raw', import: 'default', eager: true });
 const b = import.meta.glob(['../../src/rules/*.ts'], { as: 'raw', eager: true });
-void a; void b;
+const c = import.meta.glob('../../src/rules/*.ts', { 'query': '?raw', eager: true });
+void a; void b; void c;
 `,
     });
     expect(findings).toEqual([]);

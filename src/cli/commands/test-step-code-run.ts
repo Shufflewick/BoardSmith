@@ -111,15 +111,23 @@ function isImportGlob(node: AstNode): boolean {
     (object.meta as AstNode).name === 'import' && (callee.property as AstNode).name === 'glob';
 }
 
+/** The key a property is written with, `query` or `'query'`; undefined for a spread or a computed key. */
+function propertyKey(property: AstNode): string | undefined {
+  if (property.type !== 'Property' || property.computed) return undefined;
+  const key = property.key as AstNode;
+  const name = key.name ?? key.value;
+  return typeof name === 'string' ? name : undefined;
+}
+
 /** Glob options as written, by key; undefined when they are not an object literal this can read. */
 function globOptions(node: AstNode | undefined): Map<string, AstNode> | undefined {
   if (!node) return new Map();
   if (node.type !== 'ObjectExpression') return undefined;
   const options = new Map<string, AstNode>();
   for (const property of node.properties as AstNode[]) {
-    const key = property.key as AstNode | undefined;
-    if (property.type !== 'Property' || property.computed || key?.type !== 'Identifier') return undefined;
-    options.set(key.name as string, property.value as AstNode);
+    const name = propertyKey(property);
+    if (name === undefined) return undefined;
+    options.set(name, property.value as AstNode);
   }
   return options;
 }
@@ -131,20 +139,18 @@ const optionIs = (options: Map<string, AstNode>, key: string, value: string): bo
 /** Where the game's code lives: a glob reaching either loads it. */
 const CODE_DIRS = ['src/', 'tests/'];
 
-/** A brace set, extglob or class whose alternatives cross folders, which no fixed folder bounds. */
-const FOLDER_CROSSING_GROUP = /[{([][^})\]]*(\/|\.\.)/;
-
 /**
  * Whether a glob pattern can match a file under the game's `src/` or `tests/`. Like vite, it joins
- * the whole pattern to the importer's folder first, wildcards as plain segments, so `docs/*\/../..`
- * cancels out; then the folder before the first glob character must lie under, or contain, one of them.
+ * the whole pattern to the importer's folder (or the root) first, wildcards as plain segments, so
+ * `docs/*\/../..` cancels out; then the folder before the first glob character must lie under, or
+ * contain, one of them.
  */
 function globReachesCode(pattern: string, file: string): boolean {
   const relative = pattern.startsWith('./') || pattern.startsWith('../');
   if (!relative && !pattern.startsWith('/')) return true; // an alias or a bare `**`, which reach from the root
-  if (FOLDER_CROSSING_GROUP.test(pattern)) return true;
-  const joined = relative ? posix.join(posix.dirname(file), pattern) : posix.normalize(pattern.slice(1));
-  if (joined === '..' || joined.startsWith('../')) return true; // above the project, from where a wildcard can reach back in
+  const joined = relative ? posix.join(posix.dirname(file), pattern) : posix.join('.', pattern.slice(1));
+  // A `..` the join left is above the project or inside a glob group, where no fixed folder bounds it.
+  if (joined.includes('..')) return true;
   const fixed = joined.split(/[*?[{(]/)[0];
   const dir = fixed.slice(0, fixed.lastIndexOf('/') + 1);
   return CODE_DIRS.some((code) => dir.startsWith(code) || code.startsWith(dir));
