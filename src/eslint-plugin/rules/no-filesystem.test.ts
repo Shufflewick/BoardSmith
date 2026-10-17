@@ -19,6 +19,9 @@ ruleTester.run('no-filesystem', rule, {
     { code: `const path = board.route(from, to);` },
     // A string mentioning a module name is not an import.
     { code: `const label = 'fs';` },
+    // A local export and an alias of a namespace are not module loads.
+    { code: `const x = 1; export { x };` },
+    { code: `import A = Board.Space;` },
   ],
   invalid: [
     { code: `import fs from 'fs';`, errors: [{ messageId: 'noFs' }] },
@@ -33,6 +36,13 @@ ruleTester.run('no-filesystem', rule, {
     { code: `const fs = require('fs');`, errors: [{ messageId: 'noFs' }] },
     { code: `const mod = await import('node:fs');`, errors: [{ messageId: 'noFs' }] },
     { code: 'const mod = await import(`node:fs`);', errors: [{ messageId: 'noFs' }] },
+    // Re-exports and TypeScript's `import = require` load the module too (#876).
+    { code: `export { readFileSync } from 'fs';`, errors: [{ messageId: 'noFs' }] },
+    { code: `export { readFileSync } from 'node:fs';`, errors: [{ messageId: 'noFs' }] },
+    { code: `export * from 'fs';`, errors: [{ messageId: 'noFs' }] },
+    { code: `export * from 'node:fs';`, errors: [{ messageId: 'noFs' }] },
+    { code: `import fs = require('fs');`, errors: [{ messageId: 'noFs' }] },
+    { code: `import fs = require('node:fs');`, errors: [{ messageId: 'noFs' }] },
 
     // `os` is on the forbidden list, and the reason it is forbidden is that it
     // is nondeterministic host state — NOT that it executes child processes.

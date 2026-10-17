@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, onTestFinished } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
@@ -253,6 +253,73 @@ it('claim 1 — red', () => { expect(1).toBe(2); });
     );
     expect(result.findings.map((f) => f.kind)).toEqual(['suite-not-green']);
     expect(result.summary.mutants).toBe(0);
+  }, 60_000);
+
+  // #840: a file that fails as a whole, or runs no test of a claim, must not read as a pass.
+  it('refuses a test file whose beforeAll throws, naming the file and the error', async () => {
+    const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
+    const result = await check(
+      project,
+      `import { it, expect, beforeAll } from 'vitest';
+import { bid } from '../src/rules';
+beforeAll(() => { throw new Error('the auction fixture is missing'); });
+it('claim 1 — a higher offer wins', () => { expect(bid(3, 4)).toBe(true); });
+`,
+      [1],
+    );
+    expect(result.findings.map((f) => `${f.kind} ${f.subject}`)).toEqual(['suite-not-green tests/auction.test.ts']);
+    expect(result.findings[0].detail).toContain('the auction fixture is missing');
+    expect(result.summary.mutants).toBe(0);
+  }, 60_000);
+
+  it('refuses a test file whose import fails, naming paths only within the project', async () => {
+    const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
+    const result = await check(
+      project,
+      `import { it, expect } from 'vitest';
+import { bid } from '../src/missing';
+it('claim 1 — a higher offer wins', () => { expect(bid(3, 4)).toBe(true); });
+`,
+      [1],
+    );
+    expect(result.findings.map((f) => `${f.kind} ${f.subject}`)).toEqual(['suite-not-green tests/auction.test.ts']);
+    expect(result.findings[0].detail).toContain('src/missing');
+    // project may be the unresolved /var/... form of vitest's /private/var/..., which contains it.
+    expect(result.findings[0].detail).not.toContain(project);
+    expect(result.summary.mutants).toBe(0);
+  }, 60_000);
+
+  it('refuses a test file whose only test is an empty it.each', async () => {
+    const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
+    const result = await check(
+      project,
+      `import { it, expect } from 'vitest';
+import { bid } from '../src/rules';
+it.each([] as number[])('claim 1 — offer %i wins', (offer) => { expect(bid(3, offer)).toBe(true); });
+`,
+      [1],
+    );
+    expect(result.findings.map((f) => `${f.kind} ${f.subject}`)).toEqual(['suite-not-green tests/auction.test.ts']);
+    expect(result.findings[0].detail).toContain('No test suite found in file tests/auction.test.ts');
+    expect(result.summary.mutants).toBe(0);
+  }, 60_000);
+
+  it('reports a claim whose only test a stray .only skipped', async () => {
+    // vitest refuses .only under CI, which the child run inherits; this case is about a run that allows it.
+    vi.stubEnv('CI', undefined);
+    onTestFinished(() => { vi.unstubAllEnvs(); });
+    const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
+    const result = await check(
+      project,
+      `import { it, expect } from 'vitest';
+import { bid } from '../src/rules';
+it('claim 1 — a higher offer wins', () => { expect(bid(3, 4)).toBe(true); });
+it.only('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
+`,
+      [1],
+    );
+    expect(result.findings.map((f) => `${f.kind} ${f.subject}`)).toEqual(['claim-survives-mutation claim 1']);
+    expect(result.findings[0].detail).toContain('No test citing claim 1 ran and passed');
   }, 60_000);
 
   it('mutates a component the chunk changed, so a mounted test of it is credited and a tautology is not (#425)', async () => {

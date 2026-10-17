@@ -101,10 +101,10 @@ export interface UseFLIPOptions {
   /** Minimum movement threshold in pixels (default: 1) */
   threshold?: number;
 
-  /** Callback when animation starts */
+  /** Callback when animation starts (once, even if runs overlap) */
   onAnimationStart?: () => void;
 
-  /** Callback when animation ends */
+  /** Callback when the last running animation ends */
   onAnimationEnd?: () => void;
 
   /**
@@ -210,6 +210,7 @@ export function useFLIP(options: UseFLIPOptions): UseFLIPReturn {
   } = options;
 
   const isAnimating = ref(false);
+  let activeRuns = 0;
 
   // Build list of container handlers
   const handlers: ContainerHandler[] = [];
@@ -364,14 +365,19 @@ export function useFLIP(options: UseFLIPOptions): UseFLIPReturn {
     }
 
     if (hasAnyAnimations) {
-      isAnimating.value = true;
-      onAnimationStart?.();
-
-      // Wait for all animations to complete
-      await Promise.all(allAnimations.map((a) => a.finished));
-
-      isAnimating.value = false;
-      onAnimationEnd?.();
+      // Runs can overlap: start and end fire once for the whole busy period.
+      if (activeRuns++ === 0) {
+        isAnimating.value = true;
+        onAnimationStart?.();
+      }
+      try {
+        await Promise.all(allAnimations.map((a) => a.finished));
+      } finally {
+        if (--activeRuns === 0) {
+          isAnimating.value = false;
+          onAnimationEnd?.();
+        }
+      }
     }
   }
 
