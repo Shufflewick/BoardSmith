@@ -1162,7 +1162,8 @@ Three things worth knowing:
 - **It runs at availability time, with empty args** — like `.condition()`. A
   rule that needs the resolved selections belongs in `.validate()`, which runs
   at submit time and returns the same `string`-or-not shape.
-- **A disabled action stays in `availableActions`** on purpose. That is what
+- **A disabled action stays in `availableActions`** on purpose, even when
+  every choice of its first selection is disabled too. That is what
   lets the panel draw it. The reason travels beside it in
   `PlayerGameState.disabledActions`, which is also where tutorial-gate reasons
   arrive — one channel, so a custom UI has one thing to read.
