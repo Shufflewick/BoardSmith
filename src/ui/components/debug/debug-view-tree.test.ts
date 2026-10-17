@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
+import { Game, Player, Card, Deck, type GameOptions } from '../../../engine/index.js';
 import {
   groupElementsByClass,
   discoverDecks,
   discoverCardContainers,
   getElementDisplayName,
-  getCardDisplayName,
   cardMatchesSearch,
   filterElementGroups,
   filterDecks,
@@ -20,7 +20,7 @@ const VIEW = {
       id: 2,
       className: 'MainDeck',
       name: 'Draw',
-      $type: 'deck',
+      attributes: { $type: 'deck' },
       children: [
         { id: 10, className: 'Card', name: 'Ace', notation: 'AS' },
         { id: 11, className: 'Card', name: 'King' },
@@ -70,7 +70,23 @@ describe('groupElementsByClass', () => {
   });
 });
 
+/** A deck whose class name does not say "Deck", as Go Fish's pond is. */
+class Pond extends Deck<PondGame, Player> {}
+class PondGame extends Game<PondGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.create(Pond, 'pond').create(Card, 'fish');
+  }
+}
+
 describe('discoverDecks', () => {
+  it('finds a deck by the $type the engine writes, in a seat view and in the unfiltered table (#898)', () => {
+    const game = new PondGame({ playerCount: 2, seed: 'pond' });
+    for (const view of [game.toJSONForPlayer(1), game.toJSON()]) {
+      expect(discoverDecks(view).map((d) => d.name)).toEqual(['pond']);
+    }
+  });
+
   it('finds a deck by its $type marker', () => {
     expect(discoverDecks(VIEW).map(d => d.id)).toEqual([2]);
   });
@@ -87,19 +103,19 @@ describe('discoverDecks', () => {
   });
 
   it('names an unnamed deck after its id', () => {
-    const [deck] = discoverDecks({ id: 9, $type: 'deck' });
+    const [deck] = discoverDecks({ id: 9, attributes: { $type: 'deck' } });
     expect(deck.name).toBe('Deck #9');
     expect(deck.className).toBe('Deck');
     expect(deck.cards).toEqual([]);
   });
 
   it('ignores non-object and id-less children when collecting cards', () => {
-    const [deck] = discoverDecks({ id: 9, $type: 'deck', children: [null, 'x', { className: 'Ghost' }] });
+    const [deck] = discoverDecks({ id: 9, attributes: { $type: 'deck' }, children: [null, 'x', { className: 'Ghost' }] });
     expect(deck.cards).toEqual([]);
   });
 
   it('finds decks nested inside other elements', () => {
-    const decks = discoverDecks({ id: 1, children: [{ id: 2, children: [{ id: 3, $type: 'deck' }] }] });
+    const decks = discoverDecks({ id: 1, children: [{ id: 2, children: [{ id: 3, attributes: { $type: 'deck' } }] }] });
     expect(decks.map(d => d.id)).toEqual([3]);
   });
 });
@@ -131,9 +147,6 @@ describe('display names', () => {
     expect(getElementDisplayName({ id: 4, notation: 'a1', name: 'x' })).toBe('a1');
     expect(getElementDisplayName({ id: 4, name: 'x' })).toBe('x');
     expect(getElementDisplayName({ id: 4 })).toBe('#4');
-    expect(getCardDisplayName({ id: 10, notation: 'AS', name: 'Ace' })).toBe('AS');
-    expect(getCardDisplayName({ id: 11, name: 'King' })).toBe('King');
-    expect(getCardDisplayName({ id: 12 })).toBe('#12');
   });
 });
 

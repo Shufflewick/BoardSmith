@@ -1632,7 +1632,9 @@ deck edits) are gated separately: the host refuses them unless it runs with
 `debug: true` (default `false`). In `boardsmith dev` the
 Debug panel and its tools are on only while one person (one browser) holds
 every human seat; once a second person sits down they are off for everyone
-until `boardsmith dev --debug` forces them on.
+until `boardsmith dev --debug` forces them on. With `--debug`, every seated
+person can see every face-down card and every other player's hand: the Decks
+tab's `debugDeckView` op returns the table with nothing hidden (#898).
 
 4. **Check the sequence counter** - if it's much higher than element count, elements are being created and removed (normal but worth investigating)
 

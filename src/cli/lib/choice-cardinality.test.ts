@@ -15,6 +15,7 @@ import {
   TypedNameGame,
   UnfinishedWideGame,
   WideGame,
+  balked,
   cardinalityWorld,
 } from './choice-cardinality.fixture.js';
 
@@ -271,6 +272,26 @@ describe('auditWorldChoiceCardinality', () => {
     await expect(auditWorldChoiceCardinality(cardinalityWorld(['flood']), { seed: 'audit' })).rejects.toThrow(
       /seat 1's offers.*250 candidates.*200/s,
     );
+  });
+
+  it('stops and names the move when the rules crash on it, rather than counting the crash as a no (#847)', async () => {
+    await expect(auditWorldChoiceCardinality(cardinalityWorld(['grow', 'shout']), { seed: 'audit' })).rejects.toThrow(
+      /seat \d's 'grow'.*"how":"tall".*crashed.*error in the game's rules/s,
+    );
+  });
+
+  it('stops and names the move when a selection callback crashes on it (#847)', async () => {
+    await expect(auditWorldChoiceCardinality(cardinalityWorld(['sift', 'shout']), { seed: 'audit' })).rejects.toThrow(
+      /seat \d's 'sift' with \{"how":"finely"\} threw TypeError: the sieve is undefined/,
+    );
+  });
+
+  it('counts the rules refusing a move as part of driving the world (#847)', async () => {
+    balked.times = 0;
+    expect(await auditWorldChoiceCardinality(cardinalityWorld(['balk', 'shout']), { seed: 'audit' })).toEqual([
+      { action: 'shout', selection: 'verb', maxCandidates: 40 },
+    ]);
+    expect(balked.times).toBeGreaterThan(0);
   });
 
   it('stops and names the move when the world itself refuses one', async () => {
