@@ -1158,7 +1158,7 @@ function handleSwitchPlayer(position: number) {
 }
 
 function handleRestartGame() {
-  // The host owns the session; ask it to start a fresh game.
+  // Debug panel only (#902): the host owns the session; ask it to start a fresh game.
   void platformRequest('debug:restart', {}).then((result) => toastRefusal(result, 'Could not start a new game.'));
 }
 
@@ -1185,15 +1185,6 @@ watch(() => state.value?.state.gameInstanceId, (game, previous) => {
 // Debug highlight handler - highlights an element on the board
 function handleHighlightElement(elementId: number | null) {
   debugHighlightedElementId.value = elementId;
-}
-
-// Menu handlers
-function handleMenuItemClick(id: string) {
-  if (id === 'new-game') {
-    // D11 (ENDGAME-02): "New Game" restarts via the same real restart path as
-    // Rematch.
-    handleRestartGame();
-  }
 }
 
 // Retry handler — wired from AutoUI → GameShell when the user clicks Retry
@@ -1441,8 +1432,8 @@ defineExpose({
              (holdGameOverUntil) holds the card back too (#419).
              A filled #game-over slot replaces the default card entirely; providesOwnGameOverUi
              suppresses BOTH (the game renders its own end state on its own board). Dismissing
-             (close button / Escape) reveals the board without restarting or leaving.
-             @new-game and @rematch both restart via the one real restart path (D11/ENDGAME-02). -->
+             (close button / Escape) reveals the board without leaving. There is no
+             New Game or Rematch: a deployed host has no restart op (#902). -->
         <template v-if="gameOverRevealed && !props.providesOwnGameOverUi && !gameOverDismissed">
           <slot
             v-if="$slots['game-over']"
@@ -1450,8 +1441,6 @@ defineExpose({
             :winners="gameOverWinners"
             :players="players"
             :is-draw="isDraw"
-            :rematch="handleRestartGame"
-            :new-game="() => handleMenuItemClick('new-game')"
             :dismiss="dismissGameOver"
           />
           <GameOverCard
@@ -1459,8 +1448,6 @@ defineExpose({
             :winner-seats="winnerSeats"
             :players="players"
             :is-draw="isDraw"
-            @new-game="handleMenuItemClick('new-game')"
-            @rematch="handleRestartGame"
             @dismiss="dismissGameOver"
           />
         </template>
@@ -1639,7 +1626,6 @@ defineExpose({
           :is-tutorial-running="isTutorialRunningProp"
           :teaching-disabled="teachingDisabledProp"
           @undo="handleUndo"
-          @menu-item-click="handleMenuItemClick"
           @teaching-action="handleTeachingAction"
         />
       </template>
