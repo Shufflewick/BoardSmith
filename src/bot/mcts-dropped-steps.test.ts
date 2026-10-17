@@ -17,6 +17,9 @@ import {
   Action,
   sequence,
   execute,
+  loop,
+  eachPlayer,
+  actionStep,
   simultaneousActionStep,
   type GameOptions,
 } from '../engine/index.js';
@@ -206,5 +209,73 @@ describe('a search that throws away its steps', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     await searchFor(newRunner(), supposeRanks);
     expect(droppedStepWarnings(warn)).toEqual([]);
+  });
+});
+
+/** Seat 1 picks `a` or `b`; the game refuses `refused` cleanly, changing nothing. */
+function refusingGame(refused: string[]) {
+  return class RefusingGame extends Game<RefusingGame, Player> {
+    constructor(options: GameOptions) {
+      super(options);
+      this.registerAction(
+        Action.create<RefusingGame>('draw')
+          .chooseFrom('bucket', { prompt: 'Draw from', choices: ['a', 'b'] })
+          .execute((args) => (refused.includes(args.bucket as string)
+            ? { success: false, error: 'The well is dry.' }
+            : { success: true })),
+      );
+      this.setFlow({
+        root: loop({ maxIterations: 100, do: eachPlayer({ do: actionStep({ actions: ['draw'] }) }) }),
+      });
+    }
+  };
+}
+
+async function searchRefusing(refused: string[], parallel = 1) {
+  const GameClass = refusingGame(refused);
+  const game = new GameClass({ playerCount: 2, seed: 'refusing' });
+  game.startFlow();
+  const bot = new MCTSBot(
+    game, GameClass, 'refusing', 1, [],
+    { iterations: ITERATIONS, playoutDepth: 4, async: false, timeout: Infinity, seed: 'refusing-bot', parallel },
+  );
+  return bot.play();
+}
+
+/** The warnings the search gave about choosing its move at random. */
+function randomChoiceWarnings(warn: ReturnType<typeof vi.spyOn>): string[] {
+  return warn.mock.calls.map((call) => String(call[0])).filter((message) => message.includes('at random'));
+}
+
+describe('a search whose every move at the root was refused (#874)', () => {
+  it('warns once that the bot chose at random, with the refusal and what to check', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await searchRefusing(['a', 'b']);
+
+    const warnings = randomChoiceWarnings(warn);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain('refused every move');
+    expect(warnings[0]).toContain('chose its move at random');
+    expect(warnings[0]).toContain('The well is dry.');
+    expect(warnings[0]).toContain('success: false');
+  });
+
+  it('warns once for a bot that splits its move into sub-searches', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await searchRefusing(['a', 'b'], 2);
+    expect(randomChoiceWarnings(warn)).toHaveLength(1);
+  });
+
+  it('does not warn when some move at the root could be played', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await searchRefusing(['a']);
+    expect(randomChoiceWarnings(warn)).toEqual([]);
+  });
+
+  it('does not warn in production', async () => {
+    inProductionMode();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await searchRefusing(['a', 'b']);
+    expect(randomChoiceWarnings(warn)).toEqual([]);
   });
 });

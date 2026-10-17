@@ -25,14 +25,6 @@
       ]
     },
     {
-      "content": "09c9b40c0db05b9c",
-      "lines": 14,
-      "files": [
-        "src/cli/lib/asset-scan.ts",
-        "src/cli/lib/sandbox-scan.ts"
-      ]
-    },
-    {
       "content": "1207ddfa1fa44b57",
       "lines": 8,
       "files": [
@@ -45,13 +37,6 @@
       "files": [
         "src/ui/composables/useFlyingElements.ts",
         "src/ui/composables/usePlayerStatAnimation.ts"
-      ]
-    },
-    {
-      "content": "1d9b4d4490603442",
-      "lines": 26,
-      "files": [
-        "src/ui/composables/useActionController.ts"
       ]
     },
     {
@@ -68,13 +53,6 @@
       "files": [
         "src/ui/components/auto-ui/renderers/HandRenderer.vue",
         "src/ui/components/auto-ui/renderers/SpaceRenderer.vue"
-      ]
-    },
-    {
-      "content": "234f79452343bbf1",
-      "lines": 12,
-      "files": [
-        "src/ui/composables/useActionController.ts"
       ]
     },
     {
@@ -151,13 +129,6 @@
       "lines": 7,
       "files": [
         "src/cli/commands/verify-impact.ts"
-      ]
-    },
-    {
-      "content": "587c819dbf096ab7",
-      "lines": 12,
-      "files": [
-        "src/ui/composables/useGameGrid.ts"
       ]
     },
     {
@@ -317,13 +288,6 @@
       "files": [
         "src/cli/commands/verify-classify.ts",
         "src/cli/commands/verify-repair.ts"
-      ]
-    },
-    {
-      "content": "b4e62e419abed712",
-      "lines": 22,
-      "files": [
-        "src/cli/commands/ingest-archive.ts"
       ]
     },
     {

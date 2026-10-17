@@ -62,3 +62,26 @@ describe('parallel MCTS time budget (#634)', () => {
     expect(elapsed).toBeGreaterThanOrEqual(timeout);
   });
 });
+
+describe('parallel MCTS with fewer iterations than sub-searches (#876)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('runs no sub-search with zero iterations', async () => {
+    type Internals = { config: { iterations: number }; runSearch(): Promise<unknown> };
+    const proto = MCTSBot.prototype as unknown as Internals;
+    const runSearch = proto.runSearch;
+    const perSearch: number[] = [];
+    vi.spyOn(proto, 'runSearch').mockImplementation(function (this: Internals) {
+      perSearch.push(this.config.iterations);
+      return runSearch.call(this);
+    });
+    const bot = new MCTSBot(newGame(), ChoiceGame, 'choice', 1, [], {
+      iterations: 3, parallel: 4, seed: 'bs876', timeout: Infinity, async: false,
+    });
+
+    expect(await bot.play()).not.toBeNull();
+    expect(perSearch).toEqual([1, 1, 1]);
+  });
+});
