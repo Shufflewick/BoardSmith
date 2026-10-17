@@ -1,6 +1,6 @@
 {
-  "revision": 220,
-  "surfaceHash": "e27511a58b559664",
+  "revision": 221,
+  "surfaceHash": "5e657bebf1332ac6",
   "payloadHash": "d98d9c3e91308953",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1703,6 +1703,14 @@
       "payloadHash": "d98d9c3e91308953",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "An action step asks skipIf only on entry and asks player once on entry and again after each move, so the seat can still change mid-step, and it no longer saves a seat in its saved state; repeat() refuses counts that are not whole numbers of 0 or more, and scoring tracks refuse maxEntries below 1 (#786)."
+    },
+    {
+      "revision": 221,
+      "date": "2026-10-17",
+      "surfaceHash": "5e657bebf1332ac6",
+      "payloadHash": "d98d9c3e91308953",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "An event's scope is held to the command's declaration: emitting in a partition the action did not declare is refused with undeclared-partition whether or not it is resident, and the unknown-scope refusal is removed (#933)."
     }
   ]
 }

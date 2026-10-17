@@ -342,9 +342,8 @@ const tearOwn = worldAction<WorldFixtureGame>("tearOwn")
   });
 
 /**
- * MUTATES, RETURNS, and only then fails: the event names a scope that is
- * neither "world" nor a partition. The #151 shape -- the handler SUCCEEDED, so
- * a catch around `execute` alone would never see the refusal.
+ * MUTATES, then emits in a scope that is neither "world" nor a partition it
+ * declared, which `emit` refuses at the line (#933).
  */
 const misroute = worldAction<WorldFixtureGame>("misroute")
   .needs(() => [ROOM_ONE])
@@ -445,7 +444,7 @@ const throwToken = worldAction<WorldFixtureGame>("throwToken")
     const token = room.first(Token);
     if (!token) throw new Error("throwToken needs a token in room-one");
     token.putInto(ctx.game.room("room-two"));
-    ctx.world.emit(ROOM_TWO, { landed: token.name });
+    ctx.world.emit(ROOM_ONE, { thrown: token.name });
   });
 
 /**
@@ -1340,11 +1339,9 @@ describe("#68 — a refused command leaves the world unchanged", () => {
     ).toEqual([ROOM_ONE]);
   });
 
-  it("rolls back a handler that SUCCEEDED and then failed event routing (#151)", async () => {
-    // The refusal is thrown by `audienceOf`, AFTER `run` returned -- the exact
-    // window #151 names: the tree holds the full mutation, the player is told
-    // `refused`, and until the rollback covered it the phantom change waited to
-    // ride the next checkpoint of the same partition.
+  it("rolls back a handler that mutated and then emitted in an undeclared scope (#151, #933)", async () => {
+    // The tree holds the mutation when `emit` refuses, so without the rollback
+    // the phantom change would ride the next checkpoint of the same partition.
     const engine = newEngine();
     await engine.applyCommand("player-a", { name: "touch", args: {} }, STAMP);
 
@@ -1733,6 +1730,88 @@ describe("#186 — a world can say something a player reads", () => {
 
     expect(result.events[0]).not.toHaveProperty("text");
     expect(result.events[0]).not.toHaveProperty("type");
+  });
+});
+
+describe("#933 — an event's scope is held to the declaration, not to residency", () => {
+  const shoutNextDoor = worldAction<WorldFixtureGame>("shoutNextDoor")
+    .needs(() => [ROOM_ONE])
+    .execute((_args, ctx) => {
+      ctx.world.emit(ROOM_TWO, {});
+    });
+  const shoutHere = worldAction<WorldFixtureGame>("shoutHere")
+    .needs(() => [ROOM_ONE])
+    .execute((_args, ctx) => {
+      ctx.world.emit(ROOM_ONE, { here: true });
+      ctx.world.emit("world", { everybody: true });
+    });
+  const clockShoutNextDoor = worldClockAction<WorldFixtureGame>("clockShoutNextDoor")
+    .needs(() => [ROOM_ONE])
+    .execute((_args, ctx) => {
+      ctx.world.emit(ROOM_TWO, {});
+    });
+
+  function shoutingEngine() {
+    return new BoardSmithWorldEngine({
+      game: newWorldGame(),
+      seats: new Map([["player-a", 1]]),
+      store: new CountingStore(genesis()),
+      actions: [shoutNextDoor, shoutHere, clockShoutNextDoor],
+      view: () => [ROOM_ONE, ROOM_TWO],
+    });
+  }
+
+  async function refusalOf(run: Promise<unknown>): Promise<unknown> {
+    try {
+      await run;
+    } catch (error) {
+      return error;
+    }
+    return undefined;
+  }
+
+  it("refuses an undeclared scope the same way whether or not it is resident", async () => {
+    for (const resident of [[ROOM_ONE, ROOM_TWO], [ROOM_ONE], []]) {
+      const engine = shoutingEngine();
+      await engine.hydrate(resident);
+      const refused = await refusalOf(
+        engine.applyCommand("player-a", { name: "shoutNextDoor", args: {} }, STAMP),
+      );
+      expect(refused).toMatchObject({ code: "undeclared-partition" });
+      expect((refused as Error).message).toContain(`"${ROOM_TWO}"`);
+    }
+  });
+
+  it("refuses it after an eviction left the scope cold", async () => {
+    const engine = shoutingEngine();
+    await engine.hydrate([ROOM_ONE, ROOM_TWO]);
+    engine.evict([ROOM_TWO]);
+    const refused = await refusalOf(
+      engine.applyCommand("player-a", { name: "shoutNextDoor", args: {} }, STAMP),
+    );
+    expect(refused).toMatchObject({ code: "undeclared-partition" });
+  });
+
+  it("refuses it on the clock's road too", async () => {
+    const engine = shoutingEngine();
+    await engine.hydrate([ROOM_ONE, ROOM_TWO]);
+    const refused = await refusalOf(
+      engine.onEvent(
+        { name: "clockShoutNextDoor", args: {} },
+        { due: 5_000, missedCount: 0 },
+        EVENT_STAMP,
+      ),
+    );
+    expect(refused).toMatchObject({ code: "undeclared-partition" });
+  });
+
+  it("still routes an event in a declared partition and in the world scope", async () => {
+    const engine = shoutingEngine();
+    const result = await engine.applyCommand("player-a", { name: "shoutHere", args: {} }, STAMP);
+    expect(result.events).toEqual([
+      { scope: ROOM_ONE, payload: { here: true }, seats: [1] },
+      { scope: "world", payload: { everybody: true }, seats: [1] },
+    ]);
   });
 });
 

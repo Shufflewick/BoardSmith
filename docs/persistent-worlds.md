@@ -1013,7 +1013,7 @@ ctx.world.emit(roomPartition(here.key), { said: seat, text });
 world contains. A scope is either:
 
 - the reserved string **`"world"`**, meaning everybody seated in this world; or
-- **the name of a partition this world currently has loaded**.
+- **the name of a partition the action declared** in `needs()`.
 
 The engine resolves the scope into the seats that can see it, and the host's job
 is a membership test against the seat behind each attached socket. You express
@@ -1029,9 +1029,9 @@ seat's view could only say whether it names the scope by reading a partition the
 command did not declare, the command is refused with `undecided-audience`:
 declare that partition in the action, or narrow who can see the scope with an
 owner or `addVisibleTo`. A scope that is neither the reserved word nor a
-loaded partition is refused with `unknown-scope`: an event addressed to a place
-nobody can be in reaches nobody, and it is better refused than delivered silently
-to no one.
+partition the action declared is refused with `undeclared-partition`, at the
+`emit` line, whether or not that partition happens to be loaded: what an earlier
+command or a wake left resident never decides whether a command is refused.
 
 Nothing reads inside `payload`. It is yours.
 
@@ -2750,10 +2750,9 @@ thing next time.
 | `world-migration-unavailable` | A world's recorded `stateVersion` and its bundle's differ, and no migration in that bundle can cross the gap: none declared, one declared from a different version, or a bundle older than the world. Also a `create` or `derive` hook whose answer is not `name -> element`, or that names a partition the world already holds; a hook that allocated a top-level element and never answered it as a partition root (#246); a survey digest past `survey.maxBytes` or past the host's own ceiling, whether it was folded on this call or carried into it as bytes (#255); and a paged survey migration run with no `pass`, or a transform pass handed no digest. The world is not changed. |
 | `invalid-world-action` | A world action the platform cannot offer or cannot bound: an action not built with `worldAction()`, an unbounded `from`/`filter`/`elementClass` element form, an element selection with no `elements:`, a candidate outside what the step declared, a selection past `maxCandidatesPerSelection`, a dependent or repeating selection, a seatless action that asks a question, or a round declared before a step the action does not have. |
 | `not-in-a-world` | An action built with `worldAction()` reached `ctx.world` with no world running it -- registered on a table, or reached after the dispatch that bound its facilities finished. |
-| `undeclared-partition` | `execute` read a partition the action's own walk did not declare. |
+| `undeclared-partition` | `execute` read, or emitted an event in, a partition the action's own walk did not declare. |
 | `declaration-unsettled` | A `world.view` named something new on every round. **A view only**, since an action's walk has no ceiling to trip. |
 | `declaration-write` | A declaration, a view or a migration's `survey.root` tried to write through the read-only projection. Do it in `execute`, or in the migration's `partition` hook. |
-| `unknown-scope` | An event was addressed to something that is neither `"world"` nor a loaded partition. |
 | `undecided-audience` | A seat's `world.view` could only say whether it names an event's scope by reading a partition the command did not declare. Declare it in the action, or narrow who can see the scope in the tree. |
 | `partition-missing` | A declaration named a partition this world's store does not have, and `world.createPartition` did not build one for that name either. Usually a typo, or a partition nothing has created yet. |
 | `invalid-partition-name` | A partition name a store may not hold: empty, over 128 characters, outside `A-Za-z0-9._:@/-`, one of `__proto__`, `constructor`, `prototype`, or `notice`, the scope a seat's notices are delivered live on. |

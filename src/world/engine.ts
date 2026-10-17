@@ -2916,6 +2916,18 @@ export class BoardSmithWorldEngine implements WorldEngine {
         return root;
       },
       emit: (scope: string, payload: unknown, narration?: WorldNarrationLine) => {
+        // HELD TO THE DECLARATION, not to residency (#933), so what an earlier
+        // command or a wake left loaded cannot decide whether this is refused.
+        if (scope !== WORLD_SCOPE && !named.includes(scope)) {
+          raise(
+            worldRefusal(
+              "undeclared-partition",
+              `Action "${action}" emitted an event in "${scope}", which it did not declare. An ` +
+                `event's scope is "${WORLD_SCOPE}" (everybody seated here) or a partition the ` +
+                "action names in needs(). Declare it there, or fix the name if it is a typo.",
+            ),
+          );
+        }
         // NORMALIZED HERE AND NOWHERE ELSE (#186). A game may write a bare
         // string or the `{ text, type }` `GameHistory` takes; everything
         // downstream -- the routing, the host, the shell's filter -- reads one
@@ -3060,9 +3072,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
    *     those, only the seats whose `world.view` names the partition (#717),
    *     judged by `viewTells`.
    *
-   * A SCOPE THAT NAMES NOTHING IS A REFUSAL, not an event delivered to nobody.
-   * The silent version is invisible: the game author sees an event that never
-   * arrives, and cannot tell that from nobody having been watching.
+   * A SCOPE THAT NAMES NOTHING NEVER GETS HERE: `emit` refused it when the
+   * command did not declare it (#933), and a declared partition is resident.
    *
    * The whole roster is walked for the tree check, and each seat that passes it
    * runs its `world.view` once per command (`views` holds the answers), so a
@@ -3077,17 +3088,6 @@ export class BoardSmithWorldEngine implements WorldEngine {
   ): readonly number[] {
     const all = [...this.seats.values()];
     if (scope === WORLD_SCOPE) return all;
-
-    if (!this.residentIds.has(scope)) {
-      throw worldRefusal(
-        "unknown-scope",
-        `Command "${commandName}" addressed an event to scope "${scope}", which is neither the ` +
-          `reserved "${WORLD_SCOPE}" scope nor a partition this world has loaded. An event's scope ` +
-          `is how the platform decides who is told about it, so one nobody can be in would be ` +
-          `delivered to nobody at all -- silently. Name a partition the command declared, or ` +
-          `"${WORLD_SCOPE}" if everybody should hear it.`,
-      );
-    }
 
     const root = this.rootOf(scope);
     const owner = root.getEffectiveOwner();
