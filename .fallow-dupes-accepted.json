@@ -154,13 +154,6 @@
       ]
     },
     {
-      "content": "587c819dbf096ab7",
-      "lines": 12,
-      "files": [
-        "src/ui/composables/useGameGrid.ts"
-      ]
-    },
-    {
       "content": "64c9b55ecd6a877d",
       "lines": 21,
       "files": [
