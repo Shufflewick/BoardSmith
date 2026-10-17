@@ -648,6 +648,17 @@ async function sha256OfDir(root: string): Promise<Record<string, string>> {
   return map;
 }
 
+/** Everything a run printed to stdout through console.log, joined as the terminal would see it. */
+async function captureStdout(run: () => Promise<unknown>): Promise<string> {
+  const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  try {
+    await run();
+    return logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+  } finally {
+    logSpy.mockRestore();
+  }
+}
+
 async function singleContradictoryPairProject(
   projectRoot: string,
 ): Promise<{ project: string; runId: string; pairId: string }> {
@@ -705,6 +716,14 @@ describe('contradictory — verifyImpactGateCommand: read-only, exit-0, no-bypas
     expect(process.exitCode === undefined || process.exitCode === 0).toBe(true);
 
     process.exitCode = previousExitCode;
+  });
+
+  it('--json: stdout is exactly one parseable JSON object, with no inner report printed ahead of it (#832)', async () => {
+    const { project, runId, pairId } = await singleContradictoryPairProject(gateDir);
+
+    const stdout = await captureStdout(() => verifyImpactGateCommand({ project, runId, json: true }));
+
+    expect(JSON.parse(stdout).pending).toContain(pairId);
   });
 
   it('contradictory: verifyImpactGateCommand is read-only — a whole-project sha256 map is byte-identical before and after', async () => {
@@ -899,6 +918,16 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
         json: true,
       }),
     ).rejects.toThrow(/decision/);
+  });
+
+  it('--json: stdout is exactly one parseable JSON object, with no inner report printed ahead of it (#832)', async () => {
+    const { project, runId, pairId } = await contradictoryProjectWithRulings();
+
+    const stdout = await captureStdout(() =>
+      verifyImpactAdjudicateCommand({ project, runId, pairId, outcome: 'UNADJUDICATED', json: true }),
+    );
+
+    expect(JSON.parse(stdout).outcome).toBe('UNADJUDICATED');
   });
 
   it('unadjudicated: outcome "UNADJUDICATED" writes NO RULINGS.md entry (sha256 unchanged) and records an AdjudicationRecord with that outcome', async () => {
@@ -1439,6 +1468,14 @@ describe('contradictory / marker — verifyImpactApplyCommand', () => {
     const parsed = parseRulesStaleness(chunkText);
     expect(parsed.state).toBe('rules-stale');
     expect(parsed.record?.adjudication).toBe('UNADJUDICATED');
+  });
+
+  it('--json: stdout is exactly one parseable JSON object, with no inner report printed ahead of it (#832)', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+
+    const stdout = await captureStdout(() => verifyImpactApplyCommand({ project, runId, json: true }));
+
+    expect(JSON.parse(stdout).marked.some((m: { slug: string }) => m.slug === 'movement')).toBe(true);
   });
 
   it('marker: a chunk whose ChunkVerdict.stale is false is left byte-identical after the run', async () => {
