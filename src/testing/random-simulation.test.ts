@@ -269,7 +269,7 @@ describe('simulateRandomGames', () => {
     expect(results.completed).toBe(0);
     expect(results.stuck).toBe(20);
     for (const game of results.games) {
-      expect(game.error).toMatch(/^Action 'pick' rejected the move \{"value":3\} that policy 'random' chose: /);
+      expect(game.error).toMatch(/^Action 'pick' rejected the move \{"value":3\}, chosen by policy 'random': /);
     }
   });
 

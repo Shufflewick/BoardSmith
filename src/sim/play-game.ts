@@ -14,6 +14,15 @@ import { createTestGame, type TestGame } from '../testing/test-game.js';
 import { SeededRandom } from '../utils/random.js';
 import type { Policy, SimulatedGame } from './policies.js';
 
+/** The move's args as the action history would write them, or a plain note when they cannot be written. */
+function describeMove(args: Record<string, unknown>, game: Game, action: string): string {
+  try {
+    return `the move ${JSON.stringify(encodeValue(args, game._ctx, `action '${action}'`, 'args'))}`;
+  } catch {
+    return 'a move that could not be shown';
+  }
+}
+
 /**
  * Says whether a game has reached the place it is meant to rest: return the
  * reason it rests there, or `false` when it is not there. The simulator asks it
@@ -44,7 +53,7 @@ export interface SingleGameResult {
    * Whether the simulation got stuck: no seat had an enabled action and the
    * game did not declare that stop a rest, it could not produce a valid move
    * (e.g. an action requires input the random simulator cannot generate),
-   * or a move built from the engine's own choices was rejected. See {@link SingleGameResult.error}.
+   * or the game rejected a move a policy chose. See {@link SingleGameResult.error}.
    */
   stuck: boolean;
   /**
@@ -397,13 +406,12 @@ export async function playGame<G extends Game>(
         continue;
       }
 
-      // A move built from the engine's own choices was rejected: availability and
-      // validation disagree, so fail the game on the first one (#910).
+      // The game rejected the move a policy chose: fail the game on the first one (#910).
       recorder.discard();
       stuck = true;
       stuckReason =
-        `Action '${choice.action}' rejected the move ${JSON.stringify(encodeValue(choice.args, testGame.game._ctx, `action '${choice.action}'`, 'args'))} ` +
-        `that policy '${policy.name}' chose: ${result.error ?? 'unknown error'}. A simulated game fails on its first rejected move: ` +
+        `Action '${choice.action}' rejected ${describeMove(choice.args, testGame.game, choice.action)}, chosen by policy '${policy.name}': ` +
+        `${(result.error ?? 'unknown error').replace(/\.$/, '')}. A simulated game fails on its first rejected move: ` +
         'an action must accept every move its enabled choices offer, and a policy must choose only from them.';
       break;
     }
