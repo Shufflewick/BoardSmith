@@ -68,3 +68,36 @@ describe('#738: an op naming another seat is refused', () => {
     expect(res.success, !res.success ? res.error : '').toBe(true);
   });
 });
+
+// #950: hint, heatmapToggle and convertSeatToBot name their seat as `seat`, not `player`.
+describe('#950: an op naming another seat as `seat` is refused', () => {
+  const opsAsSeat1: Op[] = [
+    { type: 'hint', seat: 1 },
+    { type: 'heatmapToggle', seat: 1, visible: true },
+    { type: 'convertSeatToBot', seat: 1 },
+  ];
+
+  it('refuses every seat-naming op from seat 2 that names seat 1, without running it', async () => {
+    const { host, executed } = await startedHost();
+    host.setBotSeats([{ seat: 1 }]);
+    for (const op of opsAsSeat1) {
+      const res = await host.handleOp(2, op);
+      expect(res.success, op.type).toBe(false);
+      expect(!res.success && res.error, op.type).toMatch(/seat 2 sent '\w+' as seat 1/i);
+    }
+    expect(executed).toEqual([]);
+  });
+});
+
+// #1100: botSuggest names no one seat, and answers with a bot seat's move and its args.
+describe('#1100: botSuggest through handleOp is refused', () => {
+  it("refuses a seat asking for another seat's bot move, without running it", async () => {
+    const { host, executed } = await startedHost();
+    host.setBotSeats([{ seat: 2 }]);
+    const res = await host.handleOp(1, { type: 'botSuggest', seats: [{ seat: 2 }] });
+    expect(res.success).toBe(false);
+    expect(!res.success && res.error).toMatch(/botSuggest.*only the host/i);
+    expect(!res.success && res.category).toBe('protocol');
+    expect(executed).toEqual([]);
+  });
+});

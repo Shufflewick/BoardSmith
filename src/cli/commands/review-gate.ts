@@ -1,5 +1,5 @@
 /**
- * `boardsmith review-gate <slug> [--work-role <role>] [--since <commit>] [--project <dir>]` (#454).
+ * `boardsmith review-gate <slug> [--project <dir>]` (#454).
  *
  * Model reviewers used to spend most of their tokens re-running checks that need no model: the
  * suite, typecheck, build, validate, and breaking code to see whether a test notices. So no model
@@ -17,18 +17,21 @@
  *     that only the fast checks ran, each one's outcome, where the result file is, the change
  *     under review, that the full checks run at publish, and not to run any check.
  *
- * THE SIZE RULE (`reviewLevel`). Only a small change made by the mechanical role may skip review or
- * have a light one; everything else is reviewed in full. A mechanical change is measured from the
- * commit before it began (`--since`), in lines added plus lines removed; a changed binary file
- * counts as too large to lighten.
+ * WHAT IS UNDER REVIEW comes from the chunk's run log, `design/run-log/<slug>.md`, never from the
+ * caller (#829): the change since the commit the latest review round reviewed (the chunk's verify
+ * base before any round), and the role of every dispatch logged since that round.
  *
- * `--since` also scopes a re-review: after a repair, only the change since the commit the last
- * round reviewed goes back to the reviewer.
+ * THE SIZE RULE (`reviewLevel`). Only a small change made by the mechanical role may skip review or
+ * have a light one; everything else is reviewed in full. A change is mechanical only when every
+ * dispatch since the last round was, and is measured in lines added plus lines removed; a changed
+ * binary file counts as too large to lighten.
  */
+import { promises as fs } from 'node:fs';
 import { relative, resolve } from 'node:path';
-import chalk from 'chalk';
-import { ESCALATION_LADDER, type WorkRole } from '../lib/agent-roles.js';
+import { styleText } from 'node:util';
 import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
+import { RUN_LOG_DIR, designPath } from '../lib/project-paths.js';
+import { reviewScope } from '../lib/run-log-roles.js';
 import { assertBareName } from '../lib/user-name.js';
 import {
   type VerifyResult,
@@ -46,10 +49,14 @@ export const LIGHT_REVIEW_LINES = 200;
 
 type ReviewLevel = 'none' | 'light' | 'full';
 
-/** How much review a change needs, from the role that made it and its size in changed lines. */
-export function reviewLevel(workRole: WorkRole, changedLines: number): { level: ReviewLevel; reason: string } {
-  if (workRole !== 'mechanical') {
-    return { level: 'full', reason: `work by the ${workRole} role is always reviewed in full` };
+/** How much review a change needs, from the roles of the dispatches that made it and its size in changed lines. */
+export function reviewLevel(roles: string[], changedLines: number): { level: ReviewLevel; reason: string } {
+  if (roles.length === 0) {
+    return { level: 'full', reason: 'the run log records no dispatch since the last review round, so who did the work is unknown' };
+  }
+  const others = [...new Set(roles.filter((role) => role !== 'mechanical'))];
+  if (others.length) {
+    return { level: 'full', reason: `work by the ${others.join(' and ')} role${others.length > 1 ? 's' : ''} is always reviewed in full` };
   }
   const size = Number.isFinite(changedLines) ? `${changedLines} changed lines` : 'a changed binary file';
   if (changedLines <= SMALL_CHANGE_LINES) {
@@ -75,15 +82,15 @@ async function changedLinesBetween(projectDir: string, from: string, to: string)
   return total;
 }
 
-/** The commit `since` names, checked to be `head` or a commit before it. */
-async function sinceCommit(projectDir: string, since: string, head: string): Promise<string> {
+/** The commit a run log's review round reviewed, checked to be `head` or a commit before it. */
+async function sinceCommit(projectDir: string, slug: string, since: { round: string; commit: string }, head: string): Promise<string> {
   const refusal = new Error(
-    `--since ${since} is not a commit before the one under review (${short(head)}). ` +
-      'Pass the commit the change under review started from: for a re-review, the commit the last round reviewed.',
+    `design/${RUN_LOG_DIR}/${slug}.md: ${since.round} says it reviewed ${since.commit}, which is not a commit before the one ` +
+      `under review (${short(head)}). Fix its "- Verify:" line to the commit review-gate named for that round.`,
   );
   let commit: string;
   try {
-    commit = (await git(projectDir, ['rev-parse', '--verify', '--quiet', `${since}^{commit}`])).trim();
+    commit = (await git(projectDir, ['rev-parse', '--verify', '--quiet', `${since.commit}^{commit}`])).trim();
   } catch {
     throw refusal;
   }
@@ -92,14 +99,14 @@ async function sinceCommit(projectDir: string, since: string, head: string): Pro
   return commit;
 }
 
-function parseWorkRole(value: string | undefined): WorkRole | undefined {
-  if (value === undefined) return undefined;
-  if (!(ESCALATION_LADDER as readonly string[]).includes(value)) {
-    throw new Error(
-      `--work-role names the role that did the work under review: mechanical, bounded or judgement. Got "${value}".`,
-    );
+/** The chunk's run log, or empty when it has none yet. */
+async function readRunLog(projectDir: string, slug: string): Promise<string> {
+  try {
+    return await fs.readFile(designPath(projectDir, `${RUN_LOG_DIR}/${slug}.md`), 'utf-8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return '';
+    throw err;
   }
-  return value as WorkRole;
 }
 
 /** The text every review prompt carries: which checks ran, what they found, and which run at publish (#985). */
@@ -125,20 +132,8 @@ type ReviewGate =
  * Whether a model review of chunk `slug`'s work may start, and if so how much review it needs and
  * the brief its prompts carry. Throws on arguments it cannot use.
  */
-export async function reviewGate(options: {
-  projectDir: string;
-  slug: string;
-  workRole?: string;
-  since?: string;
-}): Promise<ReviewGate> {
+export async function reviewGate(options: { projectDir: string; slug: string }): Promise<ReviewGate> {
   assertBareName('<slug>', options.slug, "Pass the chunk's slug, as SKETCH.md's Ordered Chunk List names it.");
-  const workRole = parseWorkRole(options.workRole);
-  if (workRole === 'mechanical' && options.since === undefined) {
-    throw new Error(
-      'A mechanical change is sized from the commit before it began: pass --since <that commit>, so the size rule measures ' +
-        'that change and not the whole chunk.',
-    );
-  }
   const problem = await verifiedProblem(options.projectDir, options.slug);
   if (problem !== undefined) {
     return {
@@ -157,24 +152,17 @@ export async function reviewGate(options: {
   if (result === undefined || result === 'unreadable') {
     throw new Error('The verify result for the current commit could not be read. Run `boardsmith verify` again.');
   }
-  const from = options.since === undefined ? result.base.commit : await sinceCommit(options.projectDir, options.since, result.commit);
+  const scope = reviewScope(await readRunLog(options.projectDir, options.slug), `design/${RUN_LOG_DIR}/${options.slug}.md`);
+  const from = scope.since === undefined ? result.base.commit : await sinceCommit(options.projectDir, options.slug, scope.since, result.commit);
   const changedLines = await changedLinesBetween(options.projectDir, from, result.commit);
-  const { level, reason } = reviewLevel(workRole ?? 'judgement', changedLines);
+  const { level, reason } = reviewLevel(scope.roles, changedLines);
   return { open: true, level, reason, changedLines, brief: reviewBrief(options.projectDir, options.slug, result, from) };
 }
 
-export async function reviewGateCommand(
-  slug: string,
-  options: { project?: string; workRole?: string; since?: string },
-): Promise<void> {
-  const gate = await reviewGate({
-    projectDir: resolve(options.project ?? process.cwd()),
-    slug,
-    workRole: options.workRole,
-    since: options.since,
-  });
+export async function reviewGateCommand(slug: string, options: { project?: string }): Promise<void> {
+  const gate = await reviewGate({ projectDir: resolve(options.project ?? process.cwd()), slug });
   if (!gate.open) {
-    console.error(chalk.red(gate.refusal));
+    console.error(styleText('red', gate.refusal));
     process.exitCode = 1;
     return;
   }
