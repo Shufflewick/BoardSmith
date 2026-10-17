@@ -117,6 +117,20 @@ describe('history loading', () => {
     expect(timeline.actionHistory.value).toEqual(HISTORY);
     expect(timeline.historyLoading.value).toBe(false);
   });
+
+  it('leaves the error empty when an older load fails after the newest succeeded', async () => {
+    const pending: Array<{ resolve: (v: SerializedAction[]) => void; reject: (e: Error) => void }> = [];
+    const history = vi.fn(() => new Promise<SerializedAction[]>((resolve, reject) => { pending.push({ resolve, reject }); }));
+    const { timeline } = setup({ history });
+    const first = timeline.fetchHistory();
+    const second = timeline.fetchHistory();
+    pending[1]!.resolve(HISTORY);
+    await second;
+    pending[0]!.reject(new Error('older failed'));
+    await first;
+    expect(timeline.historyError.value).toBeNull();
+    expect(timeline.actionHistory.value).toEqual(HISTORY);
+  });
 });
 
 describe('staleness', () => {
