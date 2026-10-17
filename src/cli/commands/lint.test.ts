@@ -9,8 +9,11 @@
  * learns to ignore lint output. The AST rule that gets this right already
  * exists as the ESLint plugin's `no-element-identity-comparison`.
  */
-import { describe, it, expect } from 'vitest';
-import { lintFile } from './lint.js';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { lintCommand, lintFile } from './lint.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const rulesFor = (code: string): string[] =>
   lintFile('game.ts', code).map((issue) => issue.rule);
@@ -52,5 +55,29 @@ describe('the rules that were never the problem still fire', () => {
 
   it('leaves ordinary game code alone', () => {
     expect(rulesFor('const total = game.all(Card).length + 1;')).toEqual([]);
+  });
+});
+
+describe('a selected check with no config fails instead of passing (#846)', () => {
+  const originalCwd = process.cwd();
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.chdir(originalCwd);
+  });
+
+  it('lint --eslint in a project with no ESLint config exits 1 and names the missing file', async () => {
+    const dir = tempTree('boardsmith-lint-no-eslint-');
+    writeFileSync(join(dir, 'boardsmith.json'), '{}');
+    process.chdir(dir);
+    const errors: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args) => { errors.push(args.join(' ')); });
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(process, 'exit').mockImplementation((code) => { throw new Error(`exit ${code}`); });
+
+    await expect(lintCommand({ eslint: true })).rejects.toThrow('exit 1');
+    expect(errors.join('\n')).toContain('eslint.config.mjs');
+    // A game has no docs/ folder, so the advice names the package's own export and a public page.
+    expect(errors.join('\n')).toContain('boardsmith/eslint-plugin');
+    expect(errors.join('\n')).toContain('https://github.com/Shufflewick/BoardSmith/blob/main/docs/api/eslint-plugin.md');
   });
 });

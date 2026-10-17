@@ -254,7 +254,22 @@ function timedStepsOf(definition: CapabilityInputs['definition'], build: FlowBui
  * minPlayers/maxPlayers yields nothing here because `capabilityContradictions`
  * refuses it by name.
  */
-function findTimedBuild(definition: CapabilityInputs['definition']): { timed?: TimedBuild; refusal?: string } {
+function findTimedBuild(definition: CapabilityInputs['definition']): TimedBuildSearch {
+  let search = timedBuildSearches.get(definition);
+  if (search === undefined) {
+    search = searchTimedBuild(definition);
+    timedBuildSearches.set(definition, search);
+  }
+  return search;
+}
+
+type TimedBuildSearch = { timed?: TimedBuild; refusal?: string };
+
+// `boardsmith build` asks both `capabilityContradictions` and `resolveCapabilities`
+// about one compiled definition, and each search constructs the game per seat count.
+const timedBuildSearches = new WeakMap<CapabilityInputs['definition'], TimedBuildSearch>();
+
+function searchTimedBuild(definition: CapabilityInputs['definition']): TimedBuildSearch {
   const { minPlayers, maxPlayers } = definition;
   if (!Number.isInteger(minPlayers) || !Number.isInteger(maxPlayers)) return {};
   const declared = declaredGameOptionsOf(definition) ?? {};

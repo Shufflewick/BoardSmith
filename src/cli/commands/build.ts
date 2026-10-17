@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, realpathSync, writeFileSync, mkdirSync, cpSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync, mkdirSync, cpSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { isAbsolute, join, relative, sep } from 'node:path';
 import { build as viteBuild } from 'vite';
 import chalk from 'chalk';
 import ora from 'ora';
@@ -373,6 +374,44 @@ export function buildOutputDir(cwd: string, outDir: string | undefined): string 
   return resolveUserPath(cwd, outDir ?? DEFAULT_OUT_DIR);
 }
 
+/**
+ * Why build must not empty `outDir`, or undefined when it may (#842). It may only when the folder
+ * is missing, empty, or holds `rules/rules.js`, which only a build writes, and is not a symlink, the
+ * project, a folder holding it or the home folder. Native realpath, because on macOS the plain one
+ * keeps the letter case typed and `/USERS/me` would not match `/Users/me`.
+ */
+export function outDirRefusal(projectDir: string, outDir: string): string | undefined {
+  if (!existsSync(outDir)) return undefined;
+  if (lstatSync(outDir).isSymbolicLink()) {
+    return 'it is a symlink, and emptying it would remove only the link and send the build somewhere new.';
+  }
+  const real = realpathSync.native(outDir);
+  if (isSameOrInside(realpathSync.native(projectDir), real)) return 'it is the project folder or a folder holding it.';
+  if (real === realpathSync.native(homedir())) return 'it is your home folder.';
+  if (!statSync(real).isDirectory()) return 'it is a file, not a folder.';
+  if (readdirSync(real).length > 0 && !existsSync(join(real, 'rules', 'rules.js'))) {
+    return 'it is not empty and has no rules/rules.js, so it does not look like an earlier build output.';
+  }
+  return undefined;
+}
+
+function isSameOrInside(path: string, folder: string): boolean {
+  const fromFolder = relative(folder, path);
+  return !isAbsolute(fromFolder) && fromFolder !== '..' && !fromFolder.startsWith(`..${sep}`);
+}
+
+/** Deletes `outDir`, so no file an earlier build wrote ships in this one (#842), or throws why not. */
+function emptyBuildOutputDir(projectDir: string, outDir: string): void {
+  const refusal = outDirRefusal(projectDir, outDir);
+  if (refusal !== undefined) {
+    throw new Error(
+      `Refusing to empty the build output folder ${outDir}: ${refusal} ` +
+      `Build deletes everything in its output folder first, so pass --out-dir a folder used only for build output, such as ${join(projectDir, 'dist')}.`,
+    );
+  }
+  if (existsSync(outDir)) rmSync(outDir, { recursive: true });
+}
+
 /** `boardsmith build`, in the current directory. */
 export async function buildCommand(options: BuildOptions): Promise<void> {
   await buildProject(process.cwd(), options);
@@ -426,6 +465,7 @@ async function buildProjectIn(projectDir: string, options: BuildOptions): Promis
   const rulesPath = resolveRulesDir(cwd, config);
   const rulesIndexPath = requireRulesIndex(rulesPath);
   requireTableUi(cwd, config);
+  emptyBuildOutputDir(cwd, outDir);
 
   console.log(chalk.cyan(`\nBuilding ${config.displayName || config.name}...\n`));
 

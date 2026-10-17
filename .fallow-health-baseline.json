@@ -205,10 +205,10 @@
         "count": 1
       },
       "complexity_high": {
-        "count": 2
+        "count": 1
       },
       "complexity_moderate": {
-        "count": 3
+        "count": 4
       }
     },
     "src/cli/dev-host/DevHost.vue": {
