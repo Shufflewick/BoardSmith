@@ -10,20 +10,20 @@
  * heuristic locked in 152-CONTEXT.md. `AssetImage` lives in `boardsmith/ui`
  * (issue #81), so no path inside a game is exempt: routing art through
  * `<AssetImage>` is the one sanctioned path, and anything else is a FAIL regardless
- * of what `src` resolves to. Today the `bs-build-chunk` skill's `test` step is the
- * caller (see build/test.md); any future CLI wiring (`boardsmith build`/`lint`)
+ * of what `src` resolves to. Today the `/bs:build-chunk` `test` step is the
+ * caller (see `src/cli/slash-command/bs/build/test.md`); any future CLI wiring
  * should delegate here too rather than growing a second, subtly different regex
  * scanner — the single-source-of-truth pattern `sandbox-scan.ts` established.
  *
- * WR-02: this module is re-exported from `boardsmith/testing`
- * (`src/testing/index.ts`) so games can call the gate directly. It is ALSO
- * imported by a hardcoded relative path from the `bs-build-chunk` skill's
- * `build/test.md`. If you move or rename this file, update BOTH of those
- * importers — neither is caught by this package's own type-check.
+ * Games import it from its own subpath, `boardsmith/asset-scan` (the `exports`
+ * entry in package.json), not from `boardsmith/testing`, so the testing barrel
+ * stays free of Node types (see `src/testing/index.ts`). If you move or rename
+ * this file, update that `exports` entry.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { extname, join, relative } from 'node:path';
+import ts from 'typescript';
 import { collectSourceFiles } from './source-files.js';
 
 export interface AssetViolation {
@@ -39,7 +39,7 @@ export interface AssetViolation {
 const BARE_IMG_TAG = /<img[\s/>]/i;
 
 /**
- * Blank out comment spans (JS `//`, JS `/* *\/`, Vue `<!-- -->`) across an entire
+ * Blank out comment spans (JS `//`, JS `/* *\/`, Vue `<!-- -->`) across a `.vue`
  * file's lines, replacing comment characters with spaces so every line keeps its
  * original length and 1-based index — callers that report `AssetViolation.line`
  * against the ORIGINAL source stay accurate. Block-comment and HTML-comment open
@@ -54,9 +54,10 @@ const BARE_IMG_TAG = /<img[\s/>]/i;
  * naive scanner that only special-cases `https://`-style `:`-prefixed URLs
  * blanks the rest of the line on any OTHER live `//` — including a bare
  * `<img>` tag later on that same line — silently defeating the ASSET-02
- * build gate. Quote state resets at the start of each live (non-comment)
- * segment scanned and does not persist across lines (multi-line JS template
- * literals are out of scope — see 162-CONTEXT.md D17 discretion).
+ * build gate. Quote state does not persist across lines, so a multi-line
+ * template literal, a regex `\/` or JSX text in a `.vue` `<script>` block can
+ * still be misread; every other source file goes through `stripScriptComments`,
+ * which uses TypeScript's own parser instead (#852).
  */
 interface StripCommentsResult {
   lines: string[];
@@ -164,6 +165,50 @@ function stripComments(lines: string[]): StripCommentsResult {
   };
 }
 
+const SCRIPT_KINDS: Record<string, ts.ScriptKind> = { '.tsx': ts.ScriptKind.TSX, '.jsx': ts.ScriptKind.JSX, '.js': ts.ScriptKind.JS, '.mjs': ts.ScriptKind.JS, '.cjs': ts.ScriptKind.JS };
+
+/**
+ * Blank out the comments of a script file (`.ts`, `.tsx`, `.js` and the rest),
+ * keeping line count and lengths. The comments come from TypeScript's parser, so
+ * comment-looking text inside a template literal, a regex or JSX text is kept
+ * and still scanned (#852).
+ */
+function stripScriptComments(content: string, filePath: string): StripCommentsResult {
+  const source = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true, SCRIPT_KINDS[extname(filePath)] ?? ts.ScriptKind.TS);
+  const tokens: ts.Node[] = [];
+  // A JSDoc node lies inside its comment, which the token it documents already reports.
+  const isJSDoc = (node: ts.Node): boolean => node.kind >= ts.SyntaxKind.FirstJSDocNode && node.kind <= ts.SyntaxKind.LastJSDocNode;
+  const visit = (node: ts.Node): void => {
+    const children = node.getChildren(source).filter((child) => !isJSDoc(child));
+    if (children.length > 0) children.forEach(visit);
+    else tokens.push(node);
+  };
+  visit(source);
+  const comments = new Map<number, number>();
+  const collect = (ranges: ts.CommentRange[] | undefined): void => { for (const r of ranges ?? []) comments.set(r.pos, r.end); };
+  // Leading ranges start after a line break, trailing ones before it; JSX text has no trivia, so a `//` in it is text.
+  tokens.forEach((token, i) => {
+    if (token.kind === ts.SyntaxKind.JsxText) return;
+    collect(ts.getLeadingCommentRanges(content, token.pos));
+    if (tokens[i + 1]?.kind !== ts.SyntaxKind.JsxText) collect(ts.getTrailingCommentRanges(content, token.end));
+  });
+
+  const parts: string[] = [];
+  let cursor = 0;
+  let unterminated: StripCommentsResult['unterminated'];
+  for (const [start, end] of [...comments].sort((a, b) => a[0] - b[0])) {
+    if (end <= cursor) continue;
+    const comment = content.slice(start, end);
+    parts.push(content.slice(cursor, start), content.slice(Math.max(start, cursor), end).replace(/[^\r\n]/g, ' '));
+    cursor = end;
+    if (comment.startsWith('/*') && (comment.length < 4 || !comment.endsWith('*/'))) {
+      unterminated = { line: source.getLineAndCharacterOfPosition(start).line + 1, kind: 'block' };
+    }
+  }
+  parts.push(content.slice(cursor));
+  return { lines: parts.join('').split('\n'), unterminated };
+}
+
 /**
  * Scan `<cwd>/src/ui` for bare `<img` tags.
  * Returns one violation per offending line; an empty array is a PASS.
@@ -179,7 +224,7 @@ export function scanAssetReachability(cwd: string): AssetViolation[] {
 
     const content = readFileSync(filePath, 'utf-8');
     const lines = content.split('\n');
-    const { lines: scanLines, unterminated } = stripComments(lines);
+    const { lines: scanLines, unterminated } = filePath.endsWith('.vue') ? stripComments(lines) : stripScriptComments(content, filePath);
     for (let i = 0; i < lines.length; i++) {
       if (BARE_IMG_TAG.test(scanLines[i])) {
         violations.push({
