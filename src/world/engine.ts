@@ -130,6 +130,7 @@ import {
   type WorldNoticeWrite,
 } from "./notices.js";
 import { devWarn, evaluateCondition, GameElement } from "../engine/index.js";
+import { failedExecute } from "../engine/action/action.js";
 import { readOnlyProjection } from "./readonly.js";
 import { assertAnsweredAllocations, assertCreatedRoots } from "./migration.js";
 import { worldBudgets, type WorldBudgets } from "./budgets.js";
@@ -3031,7 +3032,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
   private executeSeatless(
     definition: ActionDefinition,
     args: Readonly<Record<string, unknown>>,
-  ): { success: boolean; error?: string } {
+  ): ActionResult {
     try {
       const result = definition.execute({ ...args }, {
         game: this.game,
@@ -3039,10 +3040,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
       } as unknown as ActionContext);
       return result ?? { success: true };
     } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
+      // The seated road's crash handling, so a clock crash is coded and worded the same (#1045).
+      return failedExecute(definition.name, error);
     }
   }
 

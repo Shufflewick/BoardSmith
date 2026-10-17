@@ -1,4 +1,4 @@
-import { rulesErrorSentence } from './rules-error.js';
+import { rulesErrorSentence, withDevDetail } from './rules-error.js';
 import type { GameElement } from '../element/game-element.js';
 import { isElement } from '../element/game-element.js';
 import type { Player } from '../player/player.js';
@@ -65,7 +65,7 @@ const NO_LONGER_AVAILABLE =
  *   applied part of its changes before it stopped and rolls the game back
  *   (#44). A clean refusal carries no such mark, because it mutated nothing.
  */
-function failedExecute(actionName: string, error: unknown): ActionResult {
+export function failedExecute(actionName: string, error: unknown): ActionResult {
   // #31: a game saying "I cannot resolve this from the information state I
   // have" is an expected answer inside a bot's redacted sandbox, not a crash.
   // Logging it printed a stack per rollout — measured at 198 MB in 15 seconds
@@ -100,10 +100,7 @@ function failedExecute(actionName: string, error: unknown): ActionResult {
   // where the reader is the author who needs it and there is no player to leak
   // to. In production it goes no further than the log above.
   if (error instanceof PlayerFacingError) return { success: false, error: error.message, partiallyApplied: true };
-  const message = isDevThrowEnabled()
-    ? `${generic} (${error instanceof Error ? error.message : String(error)})`
-    : generic;
-  return { success: false, error: message, partiallyApplied: true, rulesError: true };
+  return { success: false, error: withDevDetail(generic, error), partiallyApplied: true, rulesError: true };
 }
 
 /**

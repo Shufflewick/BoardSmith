@@ -3,6 +3,14 @@ import { Game, Player, Space, Piece, Action, actionStep, type GameOptions, type 
 import { createHeadlessSession, type HeadlessSession } from '../testing/headless-session.js';
 import { succeeded } from './op-result.test-helper.js';
 import { ErrorCode } from '../types/protocol.js';
+import { rulesErrorSentence } from '../engine/action/rules-error.js';
+
+// Lets a test run as a deployed host does, where no dev detail travels (#1045).
+const devThrow = vi.hoisted(() => ({ enabled: true }));
+vi.mock('../utils/dev.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/dev.js')>();
+  return { ...actual, isDevThrowEnabled: () => devThrow.enabled };
+});
 
 // These run on the live session host (`SnapshotSessionHost` over `executeOp`),
 // which answers a pick's choices with the `resolveChoices` op.
@@ -510,6 +518,22 @@ describe('PickHandler structured warnings (ERR-01)', () => {
     expect(result.success).toBe(false);
     expect(result.errorCode).toBe(ErrorCode.CHOICES_EVALUATION_ERROR);
     expect('warnings' in result).toBe(false);
+  });
+
+  test('a throwing getChoices() tells the player the shared crash sentence, and the thrown text only in dev (#1045)', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    devThrow.enabled = false;
+    try {
+      const deployed = await pickChoices(session, 'pickThrowChoices', 'option', 1, { trigger: true });
+      expect(deployed.success).toBe(false);
+      expect(deployed.error).toBe(rulesErrorSentence('pickThrowChoices'));
+      devThrow.enabled = true;
+      const dev = await pickChoices(session, 'pickThrowChoices', 'option', 1, { trigger: true });
+      expect(dev.error).toBe(`${rulesErrorSentence('pickThrowChoices')} (choices boom)`);
+    } finally {
+      devThrow.enabled = true;
+      consoleSpy.mockRestore();
+    }
   });
 
   test('warning messages contain no stack trace or file path', async () => {
