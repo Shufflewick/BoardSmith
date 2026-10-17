@@ -3,6 +3,7 @@ import type { WebSocket } from 'ws';
 import { claimWebSocketPath } from '../commands/dev-server.js';
 import type { ClientInbound, HostOutbound, MultiplayerHost } from './multiplayer-host.js';
 import type { RulesReloadQueue } from './rules-reload-queue.js';
+import { onSocketMessage } from './socket-message.js';
 import { DEV_HOST_WS_PATH } from './socket-path.js';
 
 /**
@@ -99,30 +100,29 @@ export function createDevHostConnectionHandler(opts: DevHostConnectionOptions): 
 
     let clientId: string | null = null;
 
-    socket.on('message', (raw) => {
-      let msg: { type?: string; clientId?: unknown; [key: string]: unknown };
-      try {
-        msg = JSON.parse(raw.toString());
-      } catch {
-        return;
-      }
-      if (msg.type === 'hello') {
-        if (msg.runId !== undefined && msg.runId !== runId) {
-          send({ type: 'stale_run' });
+    onSocketMessage(
+      socket,
+      () => clientId,
+      (msg) => {
+        if (msg.type === 'hello') {
+          if (msg.runId !== undefined && msg.runId !== runId) {
+            send({ type: 'stale_run' });
+            return;
+          }
+          send({ type: 'welcome', runId });
+          clientId =
+            typeof msg.clientId === 'string' ? msg.clientId : `anon-${Math.random().toString(36).slice(2)}`;
+          clients.set(clientId, socket);
+          dispatch(clientId, { type: 'hello' });
           return;
         }
-        send({ type: 'welcome', runId });
-        clientId =
-          typeof msg.clientId === 'string' ? msg.clientId : `anon-${Math.random().toString(36).slice(2)}`;
-        clients.set(clientId, socket);
-        dispatch(clientId, { type: 'hello' });
-        return;
-      }
-      // A client must identify itself via `hello` first; a tab from an earlier
-      // run never does (#416).
-      if (!clientId) return;
-      dispatch(clientId, msg as ClientInbound);
-    });
+        // A client must identify itself via `hello` first; a tab from an earlier
+        // run never does (#416).
+        if (!clientId) return;
+        dispatch(clientId, msg as ClientInbound);
+      },
+      onError,
+    );
 
     socket.on('close', () => {
       // Only tear down if THIS socket still owns the clientId mapping. A stale

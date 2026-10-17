@@ -8,7 +8,7 @@
  * `terminate()` -- no closing handshake, the socket simply goes, exactly as it
  * does when a driver process or a browser tab is killed.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebSocketServer } from 'ws';
 
 import { Game, Player, Space, type GameElement, type GameOptions } from '../../engine/index.js';
@@ -72,17 +72,20 @@ let cleanup: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
   for (const step of cleanup.reverse()) await step();
   cleanup = [];
+  vi.restoreAllMocks();
   walked = [];
   duringWalk = () => {};
 });
 
-async function serve(): Promise<{ host: LocalWorldHost; port: number }> {
+async function serve(
+  queue: Parameters<typeof createWorldConnections>[1] = { admit: (message) => message.run() },
+): Promise<{ host: LocalWorldHost; port: number }> {
   const budgets = worldBudgets();
   const dir = tempTree('bs-world-connections-');
   const store = openWorldStore(worldStorePath(dir), budgets);
   // Asked for on each message, as the dev server asks, so it may be declared
   // after the connections that read it.
-  const connections = createWorldConnections(() => host, { admit: (message) => message.run() });
+  const connections = createWorldConnections(() => host, queue);
   const host = new LocalWorldHost({
     definition,
     worldName: 'Camp',
@@ -164,5 +167,45 @@ describe('#284: a page killed while the host is pushing', () => {
     expect(await again).toMatchObject({ requestId: 'r2', ok: true });
     expect((await state).presence).toEqual([1, 2]);
     expect(JSON.stringify((await state).view)).toContain('"logs":2');
+  });
+});
+
+describe('#879: a frame that is not a message', () => {
+  /** Send one `stoke` and resolve with its answer. */
+  async function stoke(page: Awaited<ReturnType<typeof open>>, requestId: string) {
+    const answered = page.next((frame) => frame.type === 'world_response' && frame.requestId === requestId);
+    page.send({ type: 'action', requestId, order: { id: requestId, at: Date.now() }, action: 'stoke', args: {} });
+    return answered;
+  }
+
+  it('is ignored with a warning naming the page, and the page is still served', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { port } = await serve();
+    const page = await open(port, 'p1');
+    for (const junk of ['null', '42', '"x"', '[]', '{}']) page.socket.send(junk);
+
+    expect(await stoke(page, 'r1')).toMatchObject({ ok: true });
+    expect(warn).toHaveBeenCalledTimes(5);
+    for (const [line] of warn.mock.calls) expect(String(line)).toContain("'p1'");
+  });
+
+  it('that throws while being handled is reported, and the page is still served', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    let breakNext = false;
+    const { port } = await serve({
+      admit: (message) => {
+        if (breakNext) {
+          breakNext = false;
+          throw new Error('the queue broke');
+        }
+        return message.run();
+      },
+    });
+    const page = await open(port, 'p1');
+    breakNext = true;
+    page.send({ type: 'action', requestId: 'lost', order: { id: 'lost', at: Date.now() }, action: 'stoke', args: {} });
+
+    expect(await stoke(page, 'r1')).toMatchObject({ ok: true });
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('the queue broke'));
   });
 });

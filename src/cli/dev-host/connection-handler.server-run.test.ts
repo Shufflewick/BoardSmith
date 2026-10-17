@@ -17,7 +17,7 @@
  * Driven over real sockets through the handler `boardsmith dev` runs, into a
  * real `MultiplayerHost` for each run.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import { executeOp } from '../../session/index.js';
 import { eachPlayerFixtureDefinition as game } from '../../session/testing/fixtures/each-player-fixture.js';
@@ -34,7 +34,10 @@ afterEach(async () => {
 });
 
 /** One `boardsmith dev` run: a fresh two-seat host behind a fresh connection handler. */
-async function startRun() {
+async function startRun({
+  queue = { admit: (work) => work.run() },
+  onError = fail,
+}: Partial<Pick<Parameters<typeof createDevHostConnectionHandler>[0], 'queue' | 'onError'>> = {}) {
   const pages = new Map<string, WebSocket>();
   const graces = manualGraceTimer();
   const deliver = (clientId: string, frame: unknown) => {
@@ -50,7 +53,7 @@ async function startRun() {
     send: deliver,
   });
   const server = await serveSockets(
-    createDevHostConnectionHandler({ mpHost, clients: pages, queue: { admit: (work) => work.run() }, onError: fail }),
+    createDevHostConnectionHandler({ mpHost, clients: pages, queue, onError }),
   );
   let stopped = false;
   const run = {
@@ -165,5 +168,42 @@ describe('#416: a reconnect within the same run keeps its seat (#412)', () => {
     const { page } = await seatedPage(run, 'A');
     expect(page.frames.find((f) => f.type === 'init')?.seat).toBe(1);
     expect(run.graces.armed()).toEqual([]);
+  });
+});
+
+describe('#879: a frame that is not a message', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('is ignored with a warning naming the page, and the page is still served', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { page } = await seatedPage(await startRun(), 'A');
+    for (const junk of ['null', '42', '"x"', '[]', '{}']) page.socket.send(junk);
+
+    expect((await seatsSeenBy(page)).find((s) => s.seat === 1)).toMatchObject({ mine: true, connected: true });
+    expect(warn).toHaveBeenCalledTimes(5);
+    for (const [line] of warn.mock.calls) expect(String(line)).toContain("'A'");
+  });
+
+  it('that throws while being handled is reported, and the page is still served', async () => {
+    const reported: Array<[unknown, string]> = [];
+    let breakNext = false;
+    const run = await startRun({
+      queue: {
+        admit: (work) => {
+          if (breakNext) {
+            breakNext = false;
+            throw new Error('the queue broke');
+          }
+          return work.run();
+        },
+      },
+      onError: (err, msgType) => reported.push([err, msgType]),
+    });
+    const { page } = await seatedPage(run, 'A');
+    breakNext = true;
+    page.send({ type: 'getLobby', requestId: 'lost' });
+
+    expect((await seatsSeenBy(page)).find((s) => s.seat === 1)).toMatchObject({ mine: true, connected: true });
+    expect(reported).toEqual([[new Error('the queue broke'), 'getLobby']]);
   });
 });
