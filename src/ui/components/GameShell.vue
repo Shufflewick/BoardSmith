@@ -473,10 +473,6 @@ function hostResult<T extends { success: boolean }>(raw: Record<string, unknown>
   return { ...raw, success: raw.success === true } as T;
 }
 
-/** Read an error message off an untyped host response, with a fallback. */
-function hostErrorText(raw: Record<string, unknown>, fallback: string): string {
-  return typeof raw.error === 'string' && raw.error.length > 0 ? raw.error : fallback;
-}
 
 // The wire itself lives in `usePlatformTransport` — request ids, the pending
 // map, the timeout, and the response hand-off. What stays here is the ONE thing
@@ -769,11 +765,7 @@ async function handleUndo(): Promise<void> {
     toast.error('Return to the current position before undoing.');
     return;
   }
-  const result = await platformRequest('undo', { player: playerSeat.value });
-  if (!result.success) {
-    console.error('Undo failed:', result.error);
-    toast.error(hostErrorText(result, 'Undo failed.'));
-  }
+  toastRefusal(await platformRequest('undo', { player: playerSeat.value }), 'Undo failed.');
   // State update arrives via the game_state broadcast.
 }
 
@@ -1161,12 +1153,13 @@ if (inHost) {
 function handleSwitchPlayer(position: number) {
   // The host owns which seat the iframe renders; ask it to switch (the dev
   // host reloads this iframe as that seat).
-  void platformRequest('debug:switch-seat', { seat: position });
+  void platformRequest('debug:switch-seat', { seat: position })
+    .then((result) => toastRefusal(result, 'Could not switch seats.'));
 }
 
 function handleRestartGame() {
   // The host owns the session; ask it to start a fresh game.
-  void platformRequest('debug:restart', {});
+  void platformRequest('debug:restart', {}).then((result) => toastRefusal(result, 'Could not start a new game.'));
 }
 
 // Time travel handler - updates the game view to show historical state
