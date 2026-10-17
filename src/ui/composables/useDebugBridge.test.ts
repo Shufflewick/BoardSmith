@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createDebugBridge, type PlatformRequest } from './useDebugBridge.js';
+import { newestWins, createDebugBridge, type PlatformRequest } from './useDebugBridge.js';
 
 function bridgeWith(handler: PlatformRequest) {
   const platformRequest = vi.fn(handler);
@@ -187,5 +187,16 @@ describe('debug bridge transfer position', () => {
     const { bridge, platformRequest } = bridgeWith(ok);
     await bridge.transferCard(1, 2, 'first');
     expect(platformRequest.mock.calls[0][1]).toMatchObject({ position: 'first' });
+  });
+});
+
+describe('newestWins', () => {
+  it('keeps only the latest ticket current', () => {
+    const ticket = newestWins();
+    const first = ticket();
+    expect(first()).toBe(true);
+    const second = ticket();
+    expect(first()).toBe(false);
+    expect(second()).toBe(true);
   });
 });

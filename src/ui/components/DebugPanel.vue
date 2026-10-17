@@ -45,7 +45,7 @@ import HistoryTab from './debug/HistoryTab.vue';
 import LogsTab from './debug/LogsTab.vue';
 import ControlsTab from './debug/ControlsTab.vue';
 import StateTab from './debug/StateTab.vue';
-import { useDebugBridge, type ActionTrace, type FlowContext, type FlowStateInfo, type LogEntry, type ElementDiff } from '../composables/useDebugBridge.js';
+import { useDebugBridge, newestWins, type ActionTrace, type FlowContext, type FlowStateInfo, type LogEntry, type ElementDiff } from '../composables/useDebugBridge.js';
 import { useDebugTimeline } from '../composables/useDebugTimeline.js';
 import { useStateTree } from '../composables/useStateTree.js';
 import type { PlayerState } from '../../client/types.js';
@@ -302,18 +302,6 @@ function downloadState() {
   a.download = 'game-state.json';
   a.click();
   URL.revokeObjectURL(url);
-}
-
-/**
- * A new state asks again even while an answer is on its way, so each fetch
- * takes a ticket and applies its answer only if no later fetch started (#901).
- */
-function newestWins(): () => () => boolean {
-  let latest = 0;
-  return () => {
-    const ticket = ++latest;
-    return () => ticket === latest;
-  };
 }
 
 // ── Actions tab ─────────────────────────────────────────────────────────────

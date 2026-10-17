@@ -69,6 +69,7 @@ interface Vm {
   fetchHistory: () => Promise<void>;
   logEntries: unknown[];
   logsError: string | null;
+  logsLoading: boolean;
   fetchLogs: () => Promise<void>;
   selectedActionIndex: number | null;
   historicalState: unknown;
@@ -772,5 +773,6 @@ describe('DebugPanel refetch while a fetch is in flight (#901)', () => {
     pending[0]!({ success: true, entries: [{ severity: 'info', message: 'older', source: 's', timestamp: 1 }] });
     await first;
     expect((vm.logEntries as Array<{ message: string }>).map((e) => e.message)).toEqual(['newest']);
+    expect(vm.logsLoading).toBe(false);
   });
 });

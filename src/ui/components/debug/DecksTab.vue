@@ -28,7 +28,7 @@ import {
   getElementDisplayName,
   type DeckInfo,
 } from './debug-view-tree.js';
-import { useDebugBridge } from '../../composables/useDebugBridge.js';
+import { useDebugBridge, newestWins } from '../../composables/useDebugBridge.js';
 import { useDeckWorkbench } from '../../composables/useDeckWorkbench.js';
 import DebugButton from './DebugButton.vue';
 import DebugDialog from './DebugDialog.vue';
@@ -52,18 +52,18 @@ const selectedDeckCard = ref<{ deckId: number; cardId: number } | null>(null);
 /** The host's last unfiltered table, and why the last request for it failed. */
 const liveTable = ref<unknown>(undefined);
 const liveTableError = ref<string | null>(null);
-let liveTableRequest = 0;
+const liveTableTicket = newestWins();
 
 /** Ask the host for the live table; the newest request wins. */
 async function fetchLiveTable(): Promise<void> {
-  const request = ++liveTableRequest;
+  const isNewest = liveTableTicket();
   try {
     const table = await bridge.deckView();
-    if (request !== liveTableRequest) return;
+    if (!isNewest()) return;
     liveTable.value = table;
     liveTableError.value = null;
   } catch (err) {
-    if (request === liveTableRequest) liveTableError.value = err instanceof Error ? err.message : String(err);
+    if (isNewest()) liveTableError.value = err instanceof Error ? err.message : String(err);
   }
 }
 
@@ -470,6 +470,8 @@ const transferDialogShown = computed(() => transferDialogOpen.value && !props.is
   background: var(--bsg-disabled-surface);
   color: var(--bsg-disabled-ink);
   cursor: not-allowed;
+  /* The icons are emoji, which ignore the text colour. */
+  opacity: 0.4;
 }
 /* Deck cards list */
 .deck-cards {
@@ -572,6 +574,7 @@ const transferDialogShown = computed(() => transferDialogOpen.value && !props.is
   border-color: var(--bsg-line);
   color: var(--bsg-disabled-ink);
   cursor: not-allowed;
+  opacity: 0.4;
 }
 /* Deck loading indicator */
 .deck-loading {
