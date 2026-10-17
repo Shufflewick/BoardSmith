@@ -46,7 +46,7 @@
     "src/ui/composables/useFlyingElements.ts:125-161|src/ui/composables/usePlayerStatAnimation.ts:48-76",
     "src/ui/components/PlayShell.vue:752-764|src/ui/components/PlayShell.vue:946-958",
     "src/cli/commands/verify-classify.ts:1500-1505|src/cli/commands/verify-repair.ts:388-393",
-    "src/engine/element/game-element.ts:1084-1090|src/engine/element/game-element.ts:1145-1151",
+    "src/engine/element/game-element.ts:1087-1093|src/engine/element/game-element.ts:1148-1154",
     "src/ui/composables/useFLIP.ts:334-342|src/ui/composables/useFLIP.ts:480-487",
     "src/ui/components/auto-ui/renderers/DieRenderer.vue:80-97|src/ui/components/auto-ui/renderers/PieceRenderer.vue:75-88",
     "src/cli/commands/verify-classify.ts:1563-1570|src/cli/commands/verify-classify.ts:817-824",
