@@ -76,13 +76,15 @@ afterEach(async () => {
   duringWalk = () => {};
 });
 
-async function serve(): Promise<{ host: LocalWorldHost; port: number }> {
+async function serve(
+  queue: Parameters<typeof createWorldConnections>[1] = { admit: (message) => message.run() },
+): Promise<{ host: LocalWorldHost; port: number }> {
   const budgets = worldBudgets();
   const dir = tempTree('bs-world-connections-');
   const store = openWorldStore(worldStorePath(dir), budgets);
   // Asked for on each message, as the dev server asks, so it may be declared
   // after the connections that read it.
-  const connections = createWorldConnections(() => host, { admit: (message) => message.run() });
+  const connections = createWorldConnections(() => host, queue);
   const host = new LocalWorldHost({
     definition,
     worldName: 'Camp',
@@ -104,8 +106,13 @@ async function serve(): Promise<{ host: LocalWorldHost; port: number }> {
   return { host, port: (wss.address() as { port: number }).port };
 }
 
-async function open(port: number, clientId: string) {
-  const page = await openSocketPage(port, clientId, (frame) => frame.type === 'world_offers');
+async function open(port: number, clientId: string, loadId?: string) {
+  const page = await openSocketPage(
+    port,
+    clientId,
+    (frame) => frame.type === 'world_offers',
+    loadId === undefined ? {} : { loadId },
+  );
   cleanup.push(() => page.socket.terminate());
   return page;
 }
@@ -176,5 +183,48 @@ describe('#879: a frame that is not a message', () => {
     const answered = page.next((frame) => frame.type === 'world_response' && frame.requestId === 'r1');
     page.send({ type: 'action', requestId: 'r1', order: { id: 'r1', at: Date.now() }, action: 'stoke', args: {} });
     expect(await answered).toMatchObject({ ok: true });
+  });
+});
+
+describe('#1099: a reply to a page that reloaded', () => {
+  it('never answers the new page load\'s request that reused the same id', async () => {
+    // Messages wait while `holding`, as a saved rules edit holds them (#379),
+    // and run in order once released.
+    let holding = false;
+    const held: Array<() => Promise<void>> = [];
+    let arrived: () => void = () => {};
+    const { host, port } = await serve({
+      admit: (message) => {
+        if (!holding) return message.run();
+        held.push(message.run);
+        arrived();
+        return Promise.resolve();
+      },
+    });
+    const waitForHeld = () => new Promise<void>((resolve) => (arrived = resolve));
+
+    const before = await open(port, 'p1', 'load-1');
+    holding = true;
+    let heldNow = waitForHeld();
+    // The old page's wc-0 is refused, so its answer is told from the new one's.
+    before.send({ type: 'action', requestId: 'wc-0', order: { id: 'o1', at: Date.now() }, action: 'nope', args: {} });
+    await heldNow;
+
+    // THE RELOAD: the new page greets before the old socket closes, and
+    // numbers its requests from wc-0 again.
+    holding = false;
+    const after = await open(port, 'p1', 'load-2');
+    before.socket.terminate();
+    holding = true;
+    heldNow = waitForHeld();
+    const answered = after.next((frame) => frame.type === 'world_response' && frame.requestId === 'wc-0');
+    after.send({ type: 'action', requestId: 'wc-0', order: { id: 'o2', at: Date.now() }, action: 'stoke', args: {} });
+    await heldNow;
+    holding = false;
+    for (const run of held.splice(0)) await run();
+
+    expect(await answered).toMatchObject({ ok: true });
+    await host.settled();
+    expect(after.frames.filter((frame) => frame.type === 'world_response')).toHaveLength(1);
   });
 });
