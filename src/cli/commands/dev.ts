@@ -149,9 +149,7 @@ export function parseBotSeats(raw: string[] | undefined): number[] {
  */
 export function resolveEffectivePlayerCount(playerCount: number, minPlayers: number, maxPlayers: number): number {
   if (playerCount < minPlayers || playerCount > maxPlayers) {
-    throw new DevFlagError(
-      `Error: --players ${playerCount} is out of range for this game (must be between ${minPlayers} and ${maxPlayers}).`,
-    );
+    throw new Error(`--players takes a whole number from ${minPlayers} to ${maxPlayers} for this game, got "${playerCount}".`);
   }
   return playerCount;
 }
@@ -630,6 +628,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
 
   // Fail-fast on non-numeric --port/--players/--bot (CLIX-06): actionable errors before any server work.
   const port = parsePositiveWholeNumber('--port', options.port);
+  if (port > 65535) throw new Error(`--port takes a port number from 1 to 65535, got "${options.port}".`);
   const botPlayers = parseBotSeats(options.bot);
   // NOTE: --players is resolved AFTER gameDefinition loads (D14) — its default
   // is the game's minPlayers, not a literal, so it cannot be parsed this early.
