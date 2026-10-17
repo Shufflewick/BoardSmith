@@ -197,7 +197,9 @@ boardsmith dev --lan               # shorthand for --host 0.0.0.0
 boardsmith dev --lock-teaching
 
 # Keep the Debug panel on with several people seated. Without it, debugging is
-# on only while one browser holds every human seat (solo or hot-seat play)
+# on only while one browser holds every human seat (solo or hot-seat play).
+# With it, every seated person's Decks tab shows every face-down card and
+# every other player's hand, so use it only at a table you trust.
 boardsmith dev --debug
 
 # Don't auto-launch a browser tab (for scripts/CI driving the dev host,

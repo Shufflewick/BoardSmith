@@ -1208,8 +1208,8 @@ export class SnapshotSessionHost {
     // arrive is a human action the bot seat is not going to take. The table
     // just sits there. (Undo alone never showed this — it rewinds to the
     // requesting seat's own turn start, so the pump would find no due bot seat
-    // anyway. A rewind can target ANY point, which is what made it reachable.)
-    const wakesBots = actionCompleted || op.type === 'undo' || op.type === 'debugRewind';
+    // anyway. A rewind or a restore can target ANY point, which is what made it reachable.)
+    const wakesBots = actionCompleted || op.type === 'undo' || op.type === 'debugRewind' || op.type === 'restoreEarlier';
     if (!wakesBots) return res;
     const tracked: Promise<void> = this.afterMove(`seat ${seat}'s ${op.type}`, actionCompleted).finally(() =>
       this.backgroundWork.delete(tracked),
