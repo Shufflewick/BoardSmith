@@ -1,5 +1,5 @@
 import { secureRandomHex } from '../utils/secure-random.js';
-import { rulesErrorSentence, withDevDetail } from '../engine/action/rules-error.js';
+import { NOTHING_CHANGED, rulesErrorSentence, withDevDetail } from '../engine/action/rules-error.js';
 import { ActionExecutor, evaluateConditionWithTrace } from '../engine/action/action.js';
 import {
   createActionCheckpoint,
@@ -36,7 +36,7 @@ import type {
   SerializedAction,
   HistoryEntry,
 } from '../engine/action/types.js';
-import type { RandomnessPolicy } from '../engine/element/game.js';
+import type { LogEviction, RandomnessPolicy } from '../engine/element/game.js';
 import { ErrorCode, type GameOptionDefinition } from '../types/protocol.js';
 import { fillGameOptionDefaults } from '../session/game-option-selection.js';
 import { PlayerFacingError } from '../engine/errors.js';
@@ -195,10 +195,18 @@ export interface PendingStepResult {
 function checkpointWithLiveLog(
   checkpoint: ActionCheckpoint,
   log: MessageEntry[],
-  evicted: number,
+  live: LogEviction,
 ): { state: ActionCheckpoint['state']; messageLog: MessageEntry[] } {
-  const state = { ...checkpoint.state, messagesEvicted: evicted };
+  // Every count is replaced, absent ones included: the per-seat offsets (#903)
+  // describe the live log's front exactly as the total does.
+  const state = {
+    ...checkpoint.state,
+    messagesEvicted: live.messagesEvicted,
+    messagesEvictedPublic: live.messagesEvictedPublic,
+    messagesEvictedTo: live.messagesEvictedTo,
+  };
   if (checkpoint.messageCount === undefined) return { state, messageLog: log };
+  const evicted = live.messagesEvicted ?? 0;
   // The watermark counts entries EVER WRITTEN; `evicted` says how many of those
   // are no longer in the log. The difference is the boundary's position in the
   // log as it stands now — negative when every line from that boundary has
@@ -570,27 +578,31 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * deliberately stayed put on the failure, and its position is already right.
    * The elements it holds are pointed at the rebuilt tree (#679).
    *
-   * @returns undefined when the rollback succeeded, or a sentence to append to
-   *   the player-facing error when there was no checkpoint to restore. A game
-   *   running with `checkpoints: { enabled: false }` has nothing to roll back
-   *   to, and saying so is far better than reporting that nothing happened
-   *   when something did.
+   * @returns the player-facing error to report: `error` as it is when the
+   *   rollback succeeded, or, when there was no checkpoint to restore (only a
+   *   game running with `checkpoints: { enabled: false }`, since
+   *   `ensureHeadCheckpoint` captures one otherwise, #802), `error` without the
+   *   engine's "nothing was changed" and with a sentence saying the game may
+   *   still hold the action's partial changes (#808).
    */
-  private rollbackToPreActionState(): string | undefined {
+  private rollbackToPreActionState(error: string | undefined): string | undefined {
     const checkpoint = this.actionCheckpoints[this.headOffset];
     if (!checkpoint) {
-      return 'The game could not be rolled back, so its state may be inconsistent — ' +
-        'per-action checkpoints are disabled for this session.';
+      const kept = error === undefined ? '' : `${error.replace(` ${NOTHING_CHANGED}`, '')} `;
+      return kept +
+        'The action failed part way through, and the game may still hold its partial changes, ' +
+        'because per-action checkpoints are turned off for this session so it could not be undone. ' +
+        'Check the board before playing on, or restart the game from a save.';
     }
 
-    const { state, messageLog } = checkpointWithLiveLog(checkpoint, this.game.messages ?? [], this.game.messagesEvicted);
+    const { state, messageLog } = checkpointWithLiveLog(checkpoint, this.game.messages ?? [], this.game.logEviction);
     this.game.loadSerializedState(state, { messageLog });
     this.game.relinkFlowElements();
     if (checkpoint.sequence !== undefined) {
       this.game._ctx.sequence = checkpoint.sequence;
     }
     this.game.setRandomState(checkpoint.randomState);
-    return undefined;
+    return error;
   }
 
   /**
@@ -672,10 +684,11 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       // may have applied part of its changes before it stopped — leaving the tree
       // half-moved while the player is told nothing happened, and persisting
       // that disagreement at the next snapshot. Undo it.
-      const rollback = flowState.actionPartiallyApplied ? this.rollbackToPreActionState() : undefined;
       return {
         success: false,
-        error: rollback === undefined ? flowState.actionError : `${flowState.actionError} ${rollback}`,
+        error: flowState.actionPartiallyApplied
+          ? this.rollbackToPreActionState(flowState.actionError)
+          : flowState.actionError,
         errorCode: ErrorCode.ACTION_EXECUTION_ERROR,
         flowState,
       };
@@ -761,8 +774,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       this.game.continueFlowAfterPendingAction(actionResult, playerPosition);
       return actionResult;
     }
-    const rollback = actionResult.partiallyApplied ? this.rollbackToPreActionState() : undefined;
-    return rollback === undefined ? actionResult : { ...actionResult, error: `${actionResult.error} ${rollback}` };
+    if (!actionResult.partiallyApplied) return actionResult;
+    return { ...actionResult, error: this.rollbackToPreActionState(actionResult.error) };
   }
 
   /**
@@ -1475,10 +1488,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // A checkpoint predating the watermark has no recorded boundary, so the
     // honest restore is the whole log rather than a guess.
     const fullLog = snapshot.messageLog ?? [];
-    // `messagesEvicted` rides in the snapshot's own state, which is where the
+    // The eviction counts ride in the snapshot's own state, which is where the
     // log's position bookkeeping lives.
-    const evicted = (snapshot.state as { messagesEvicted?: number }).messagesEvicted ?? 0;
-    const { state, messageLog } = checkpointWithLiveLog(checkpoint, fullLog, evicted);
+    const { state, messageLog } = checkpointWithLiveLog(checkpoint, fullLog, snapshot.state);
 
     return GameRunner.fromSnapshot<G>(
       {

@@ -94,7 +94,7 @@ describe('ZoomPreviewOverlay', () => {
       overlay(state({
         cardData: {
           rank: 'A', suit: 'H',
-          faceImage: { sprite: '/cards.png', x: 0, y: 0, width: 238, height: 333 },
+          faceImage: { sprite: '/cards.png', x: 0, y: 0, width: 238, height: 333, sheetWidth: 3094, sheetHeight: 1665 },
         },
       }));
       expect(rendered()!.querySelector('.preview-sprite')).not.toBeNull();

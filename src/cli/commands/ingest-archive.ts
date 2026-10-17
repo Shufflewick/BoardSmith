@@ -4,8 +4,8 @@ import {
 import { resolveUserPath } from '../lib/user-path.js';
 import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
-import chalk from 'chalk';
+import { basename, dirname, join, relative, resolve } from 'node:path';
+import { styleText } from 'node:util';
 import { DERIVED_LINE_RE } from './derived-line-pattern.js';
 import {
   ADDITIONAL_SOURCES_BEGIN,
@@ -306,9 +306,10 @@ ${INDEX_HEADINGS[2]}
  * the slice-side marker count, so dedup here would make a working sweep look like a dropping one.
  */
 export async function ingestGapsCommand(
-  options: { project?: string; json?: boolean; skipRelabel?: boolean; quiet?: boolean } = {},
-): Promise<{ gapsWritten: number; slicesScanned: number; changed: boolean }> {
+  options: { project?: string; json?: boolean; skipRelabel?: boolean; quiet?: boolean; printChanged?: boolean } = {},
+): Promise<{ gapsWritten: number; slicesScanned: number; changed: boolean; files: string[] }> {
   const projectDir = resolve(options.project ?? process.cwd());
+  const quiet = options.quiet || options.printChanged;
 
   // Relabel FIRST, as part of this command rather than as a second one the session must
   // remember. Both were separate commands for one run: the archive landed (it is forced by an
@@ -318,13 +319,12 @@ export async function ingestGapsCommand(
   //
   // Ordering matters: relabelling moves presentation lines off the Derived prefix, and the gaps
   // sweep below reads final slice content.
-  let relabelled = 0;
-  if (!options.skipRelabel) {
-    relabelled = (
-      await relabelDerivedLines({ project: projectDir, quiet: options.quiet })
-    ).relabelled;
-  }
   const rulebookDir = designRulebookDir(projectDir);
+  const files = new Set<string>();
+  if (!options.skipRelabel) {
+    const { changes } = await relabelDerivedLines({ project: projectDir, quiet });
+    for (const c of changes) files.add(relative(projectDir, join(rulebookDir, c.file)));
+  }
   const indexPath = join(rulebookDir, 'INDEX.md');
 
   let index: string;
@@ -375,23 +375,27 @@ export async function ingestGapsCommand(
   const body = entries.length
     ? `\n${entries.join('\n')}\n`
     : `\n${GAPS_EMPTY}\n`;
-  const changed = before !== body || relabelled > 0;
-
   if (before !== body) {
     await fs.writeFile(
       indexPath,
       index.slice(0, begin + GAPS_BEGIN.length) + body + index.slice(end),
     );
+    files.add(relative(projectDir, indexPath));
   }
 
-  const result = { gapsWritten: entries.length, slicesScanned: names.length, changed };
+  const result = { gapsWritten: entries.length, slicesScanned: names.length, changed: files.size > 0, files: [...files] };
+  if (options.printChanged) {
+    // NUL-terminated so the pre-commit hook can hand any file name to `git add` intact.
+    process.stdout.write(result.files.map((f) => `${f}\0`).join(''));
+    return result;
+  }
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
     return result;
   }
-  if (!options.quiet) {
+  if (!quiet) {
     console.log(
-      chalk.green(
+      styleText('green',
         `✓ Filled ${heading} — ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} from ${names.length} slice${names.length === 1 ? '' : 's'}`,
       ),
     );
@@ -514,16 +518,16 @@ export async function relabelDerivedLines(
   const result = { relabelled: changed.length, changes: changed };
   if (options.quiet) return result;
   if (!changed.length) {
-    console.log(chalk.green('✓ No Derived (p. line carries presentation-only vocabulary'));
+    console.log(styleText('green', '✓ No Derived (p. line carries presentation-only vocabulary'));
     return result;
   }
   console.log(
-    chalk.green(
+    styleText('green',
       `✓ Relabelled ${changed.length} line${changed.length === 1 ? '' : 's'} Derived → Visual`,
     ),
   );
   for (const c of changed) {
-    console.log(`  ${chalk.gray(`${c.file}:${c.line}`)} matched "${c.matched}"`);
+    console.log(`  ${styleText('gray', `${c.file}:${c.line}`)} matched "${c.matched}"`);
   }
   return result;
 }
@@ -745,42 +749,42 @@ export async function ingestArchiveCommand(
   }
 
   if (recordedAsAdditionalSource) {
-    console.log(chalk.green('✓ Archived ADDITIONAL source rulebook (a different primary source is already recorded)'));
-    console.log(`  ${chalk.gray('path:')} ${relArchivePath}`);
-    console.log(`  ${chalk.gray('sha256:')} ${sourceHash}`);
+    console.log(styleText('green', '✓ Archived ADDITIONAL source rulebook (a different primary source is already recorded)'));
+    console.log(`  ${styleText('gray', 'path:')} ${relArchivePath}`);
+    console.log(`  ${styleText('gray', 'sha256:')} ${sourceHash}`);
     console.log(
-      `  ${chalk.gray('index:')} rulebook/INDEX.md's "${ADDITIONAL_SOURCES_HEADING}" section updated (primary Source:/Source hash: untouched)`,
+      `  ${styleText('gray', 'index:')} rulebook/INDEX.md's "${ADDITIONAL_SOURCES_HEADING}" section updated (primary Source:/Source hash: untouched)`,
     );
   } else {
-    console.log(chalk.green('✓ Archived source rulebook'));
-    console.log(`  ${chalk.gray('path:')} ${relArchivePath}`);
-    console.log(`  ${chalk.gray('sha256:')} ${sourceHash}`);
+    console.log(styleText('green', '✓ Archived source rulebook'));
+    console.log(`  ${styleText('gray', 'path:')} ${relArchivePath}`);
+    console.log(`  ${styleText('gray', 'sha256:')} ${sourceHash}`);
     // Only report the header as updated when it was actually brought to the four-line contract —
     // the unconditional "provenance header updated" message is what hid this defect (T-173-03).
     if (wroteIndex) {
       console.log(
-        `  ${chalk.gray('index:')} rulebook/INDEX.md written with provenance header + section scaffolding`,
+        `  ${styleText('gray', 'index:')} rulebook/INDEX.md written with provenance header + section scaffolding`,
       );
     } else if (headerBroughtToContract) {
       console.log(
-        `  ${chalk.gray('index:')} rulebook/INDEX.md provenance header updated (existing sections untouched)`,
+        `  ${styleText('gray', 'index:')} rulebook/INDEX.md provenance header updated (existing sections untouched)`,
       );
     } else {
       console.log(
-        `  ${chalk.gray('index:')} rulebook/INDEX.md was NOT updated — its provenance header was already at contract`,
+        `  ${styleText('gray', 'index:')} rulebook/INDEX.md was NOT updated — its provenance header was already at contract`,
       );
     }
   }
   for (const extra of additionalSources) {
-    console.log(chalk.green('✓ Archived additional source'));
-    console.log(`  ${chalk.gray('path:')} ${extra.archivedPath}`);
-    console.log(`  ${chalk.gray('sha256:')} ${extra.sourceHash}`);
-    console.log(`  ${chalk.gray('index:')} recorded in rulebook/INDEX.md's "${ADDITIONAL_SOURCES_HEADING}" section`);
+    console.log(styleText('green', '✓ Archived additional source'));
+    console.log(`  ${styleText('gray', 'path:')} ${extra.archivedPath}`);
+    console.log(`  ${styleText('gray', 'sha256:')} ${extra.sourceHash}`);
+    console.log(`  ${styleText('gray', 'index:')} recorded in rulebook/INDEX.md's "${ADDITIONAL_SOURCES_HEADING}" section`);
   }
   if (recordedAsAdditionalSource) return;
   console.log();
-  console.log(chalk.gray('Fill the scaffolded sections from the transcription summaries.'));
-  console.log(chalk.gray('Keep every heading exactly as written — downstream tooling parses them.'));
+  console.log(styleText('gray', 'Fill the scaffolded sections from the transcription summaries.'));
+  console.log(styleText('gray', 'Keep every heading exactly as written — downstream tooling parses them.'));
 }
 
 /** The line-bounds of one matched `^Label:` line (multiline-anchored), or `undefined` if absent. */
