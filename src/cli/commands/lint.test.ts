@@ -76,5 +76,8 @@ describe('a selected check with no config fails instead of passing (#846)', () =
 
     await expect(lintCommand({ eslint: true })).rejects.toThrow('exit 1');
     expect(errors.join('\n')).toContain('eslint.config.mjs');
+    // A game has no docs/ folder, so the advice names the package's own export and a public page.
+    expect(errors.join('\n')).toContain('boardsmith/eslint-plugin');
+    expect(errors.join('\n')).toContain('https://github.com/Shufflewick/BoardSmith/blob/main/docs/api/eslint-plugin.md');
   });
 });
