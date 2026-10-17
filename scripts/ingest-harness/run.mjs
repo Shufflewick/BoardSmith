@@ -45,7 +45,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomUUID } from 'node:crypto';
-import { checkIngestArtifacts, CHECK_IDS } from './check.mjs';
+import { checkIngestArtifacts } from './check.mjs';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
