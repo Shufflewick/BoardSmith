@@ -167,14 +167,12 @@ export function getPlayerAttribute<T>(
 }
 
 /**
- * Find all hand elements in the game view.
+ * Find all hand elements anywhere in the game view tree.
  */
 export function findAllHands(
   gameView: GameViewElement | null | undefined
 ): GameViewElement[] {
-  if (!gameView?.children) return [];
-
-  return gameView.children.filter((c) => getAttrs(c).$type === 'hand');
+  return findElements(gameView, { type: 'hand' });
 }
 
 /**
