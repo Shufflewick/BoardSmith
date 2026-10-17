@@ -142,6 +142,12 @@ describe('generateBoardsmithJson', () => {
     expect(parsed).not.toHaveProperty('thumbnail');
   });
 
+  // Issue 930: nothing ever read `scoreboard`; the scaffold was its only writer.
+  it('emits no scoreboard key', () => {
+    const parsed = JSON.parse(generateBoardsmithJson(config));
+    expect(parsed).not.toHaveProperty('scoreboard');
+  });
+
   it('threads a caller-supplied audience and tags through', () => {
     const parsed = JSON.parse(generateBoardsmithJson({ ...config, audience: 'strategy', tags: ['abstract'] }));
     expect(parsed.audience).toBe('strategy');

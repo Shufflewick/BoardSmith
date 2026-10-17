@@ -175,7 +175,6 @@ export function generateBoardsmithJson(config: ProjectConfig): string {
     // shipped a manifest naming a file the bundle did not carry (issue 142).
     // Add it once there is art behind it; `boardsmith validate` now fails on a
     // declared asset path that resolves to nothing.
-    scoreboard: { stats: ['score'] },
     // No `ui` field, deliberately. A game's UIs are declared in src/ui/uis.ts
     // (defineGameUIs) — the one place. The manifest used to carry a `"ui"` key
     // that nothing read after scaffolding, so it rotted: most games dropped it,

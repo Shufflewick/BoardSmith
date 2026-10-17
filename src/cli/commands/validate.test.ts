@@ -251,6 +251,14 @@ describe('validate.ts checkMetadataIssues', () => {
     expect(issues[0]).toContain('defineGameUIs');
   });
 
+  // Issue 930: nothing ever read `scoreboard`, so a leftover one is refused with a pointed message.
+  it("rejects a leftover 'scoreboard' key and says to remove it", () => {
+    const issues = checkMetadataIssues({ ...validConfig(), scoreboard: { stats: ['score'] } });
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain("Unknown key 'scoreboard'");
+    expect(issues[0]).toContain('Remove this key from boardsmith.json');
+  });
+
   it('passes a config carrying the editor $schema key (CR-02 regression)', () => {
     const issues = checkMetadataIssues({
       $schema: 'https://boardsmith.io/schemas/boardsmith.schema.json',

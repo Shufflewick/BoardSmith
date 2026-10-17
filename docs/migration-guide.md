@@ -1,5 +1,11 @@
 # Migration Guide
 
+## The `scoreboard` key is removed from boardsmith.json (#930)
+
+Nothing ever read `scoreboard`; only `boardsmith new` wrote it. `boardsmith
+validate` now refuses it as an unknown key. Delete it from your
+`boardsmith.json`.
+
 ## Chunk work runs `boardsmith verify --chunk <slug>`, with no selection (#985)
 
 `boardsmith verify --selection <path>` is removed, and so is the `focused`
