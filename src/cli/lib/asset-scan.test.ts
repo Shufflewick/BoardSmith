@@ -235,8 +235,21 @@ describe('scanAssetReachability', () => {
     ['src/ui/b.ts', 'export const t = `\n  /* x\n  <img src="y">\n  */\n`;\n', 3],
     ['src/ui/c.ts', "s.replace(/\\//g, '-'); el.innerHTML = '<img src=\"y\">';\n", 1],
     ['src/ui/d.tsx', 'export const D = () => <p>a // b <img src="y" /></p>;\n', 1],
+    ['src/ui/k.tsx', 'export const K = () => <p>// b <img src="y" /></p>;\n', 1],
+    ['src/ui/l.tsx', 'export const L = () => <p>{x}/* b */ <img src="y" /></p>;\n', 1],
   ])('flags a live <img> after comment-looking text that is not a comment in %s', (file, content, line) => {
     expect(scanWith({ [file]: content }).map((v) => v.line)).toEqual([line]);
+  });
+
+  // Review of #852: a comment after code on the same line is still a comment.
+  it.each([
+    ['src/ui/f.ts', 'export const a = 1; // <img>\n'],
+    ['src/ui/g.ts', 'export const a = 1; /* <img src="y"> */ export const b = 2;\n'],
+    ['src/ui/h.tsx', 'export const H = () => <p>{/* <img /> */}</p>;\n'],
+    ['src/ui/i.ts', '#!/usr/bin/env node\n// <img>\nexport const a = 1;\n'],
+    ['src/ui/j.ts', 'export const a = 1;\n// <img>'],
+  ])('does NOT flag <img> in a comment that follows code in %s', (file, content) => {
+    expect(scanWith({ [file]: content })).toEqual([]);
   });
 
   it('surfaces an unterminated block comment in a .ts file (WR-01)', () => {

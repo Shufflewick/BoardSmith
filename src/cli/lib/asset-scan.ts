@@ -175,15 +175,23 @@ const SCRIPT_KINDS: Record<string, ts.ScriptKind> = { '.tsx': ts.ScriptKind.TSX,
  */
 function stripScriptComments(content: string, filePath: string): StripCommentsResult {
   const source = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true, SCRIPT_KINDS[extname(filePath)] ?? ts.ScriptKind.TS);
-  const comments = new Map<number, number>();
+  const tokens: ts.Node[] = [];
   const visit = (node: ts.Node): void => {
+    // A JSDoc node lies inside its comment, which the next real token already reports.
+    if (node.kind >= ts.SyntaxKind.FirstJSDocNode && node.kind <= ts.SyntaxKind.LastJSDocNode) return;
     const children = node.getChildren(source);
-    if (children.length > 0) { children.forEach(visit); return; }
-    // JSX text has no trivia: a `//` in it is text, not a comment.
-    if (node.kind === ts.SyntaxKind.JsxText) return;
-    for (const range of ts.getLeadingCommentRanges(content, node.pos) ?? []) comments.set(range.pos, range.end);
+    if (children.length > 0) children.forEach(visit);
+    else tokens.push(node);
   };
   visit(source);
+  const comments = new Map<number, number>();
+  const collect = (ranges: ts.CommentRange[] | undefined): void => { for (const r of ranges ?? []) comments.set(r.pos, r.end); };
+  // Leading ranges start after a line break, trailing ones before it; JSX text has no trivia, so a `//` in it is text.
+  tokens.forEach((token, i) => {
+    if (token.kind === ts.SyntaxKind.JsxText) return;
+    collect(ts.getLeadingCommentRanges(content, token.pos));
+    if (tokens[i + 1]?.kind !== ts.SyntaxKind.JsxText) collect(ts.getTrailingCommentRanges(content, token.end));
+  });
 
   let text = content;
   let unterminated: StripCommentsResult['unterminated'];
