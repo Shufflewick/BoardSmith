@@ -38,6 +38,35 @@ describe('ingest harness work dir', () => {
     expect(res.stderr).toContain('.harness-stage-state.json');
   });
 
+  it('recreates an existing --work-dir that an earlier stage made', () => {
+    const sandbox = fixtureSandbox('bs-harness-restage-');
+    const workDir = path.join(sandbox.root, 'run');
+    mkdirSync(workDir);
+    writeFileSync(path.join(workDir, '.harness-stage-state.json'), '{}');
+    writeFileSync(path.join(workDir, 'old.txt'), 'from the last run');
+
+    const res = runHarness(sandbox, ['stage', '--work-dir', workDir, '--source', path.join(sandbox.root, 'missing.pdf')]);
+
+    expect(existsSync(path.join(workDir, 'old.txt'))).toBe(false);
+    expect(res.stdout).toContain(`[stage] created throwaway dir: ${workDir}`);
+  });
+
+  it('re-stages a --work-dir whose earlier stage failed partway, and drive says that stage did not finish', () => {
+    const sandbox = fixtureSandbox('bs-harness-failed-');
+    const workDir = path.join(sandbox.root, 'run');
+    const args = ['stage', '--work-dir', workDir, '--source', path.join(sandbox.root, 'missing.pdf')];
+
+    const first = runHarness(sandbox, args);
+    expect(first.status).toBe(1);
+    const drive = runHarness(sandbox, ['drive', '--work-dir', workDir]);
+    expect(drive.status).toBe(1);
+    expect(drive.stderr).toContain('did not finish');
+
+    const second = runHarness(sandbox, args);
+    expect(second.stderr).not.toContain('did not stage it');
+    expect(second.stdout).toContain(`[stage] created throwaway dir: ${workDir}`);
+  });
+
   it('stages into a fresh folder under the temp directory when no --work-dir is given', () => {
     const sandbox = fixtureSandbox('bs-harness-default-');
 
@@ -69,7 +98,7 @@ describe('ingest harness work dir', () => {
     git(sandbox, ['init', '-q', reference]);
     writeFileSync(
       path.join(workDir, '.harness-stage-state.json'),
-      JSON.stringify({ sourceFileName: 'rules.pdf', expectHash: 'x', refHead: 'x' }),
+      JSON.stringify({ sourceFileName: 'rules.pdf', expectHash: 'x', refHead: 'x', stagedAt: 'x' }),
     );
 
     const res = runHarness(sandbox, ['assert', '--work-dir', workDir, '--reference-repo', reference]);

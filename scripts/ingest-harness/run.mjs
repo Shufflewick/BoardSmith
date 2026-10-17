@@ -154,7 +154,9 @@ function readStageState(subcommand, workDir) {
   if (workDir === undefined) fail(`'${subcommand}' needs --work-dir <dir>: pass the folder 'stage' printed.`);
   const statePath = stateFilePath(workDir);
   if (!existsSync(statePath)) fail(`no stage state found at ${statePath} — run 'stage' first`);
-  return JSON.parse(readFileSync(statePath, 'utf8'));
+  const state = JSON.parse(readFileSync(statePath, 'utf8'));
+  if (!state.stagedAt) fail(`the last 'stage' into ${workDir} did not finish; run 'stage --work-dir ${workDir}' again`);
+  return state;
 }
 
 // ---------------------------------------------------------------------------
@@ -186,6 +188,8 @@ function prepareWorkDir(workDir) {
 function stage(opts) {
   const { source, expectHash, referenceRepo } = opts;
   const workDir = prepareWorkDir(opts.workDir);
+  // Marks the folder as ours at once, so a stage that fails partway can still be re-staged.
+  writeFileSync(stateFilePath(workDir), '{}');
 
   console.log(`[stage] installing current working tree's skill text into ${workDir} (--local --force)`);
   execFileSync('node', [path.join(REPO_ROOT, 'bin', 'boardsmith.js'), 'claude', '--local', '--force'], {
@@ -397,12 +401,6 @@ function assertCmd(opts) {
   }
 
   const projectDir = findProjectDir(workDir);
-  if (!existsSync(path.join(projectDir, '.git'))) {
-    fail(
-      `the project ${projectDir} has no .git of its own, so a commit there would land in whatever repository ` +
-        `encloses it. The driven session should have run git init in the project; refusing to commit.`,
-    );
-  }
 
   // ---------------------------------------------------------------------------------------
   // Phase A — assert the state the session ACTUALLY LEFT, before any synthesis runs.
@@ -459,6 +457,12 @@ function assertCmd(opts) {
   // Phase B2 — the pre-commit hook is the backstop for every later commit. Prove it still works
   // and is idempotent: after ingest-check has already repaired everything, a commit must not
   // change the artifacts again.
+  if (!existsSync(path.join(projectDir, '.git'))) {
+    fail(
+      `the project ${projectDir} has no .git of its own, so a commit there would land in whatever repository ` +
+        `encloses it. The driven session should have run git init in the project; refusing to commit.`,
+    );
+  }
   try {
     execFileSync('git', ['-C', projectDir, 'add', '-A'], { stdio: 'ignore' });
     execFileSync(
