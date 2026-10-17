@@ -361,14 +361,6 @@
       ]
     },
     {
-      "content": "d046fe4d078dae95",
-      "lines": 28,
-      "files": [
-        "src/eslint-plugin/rules/no-element-array-state.ts",
-        "src/eslint-plugin/rules/no-element-identity-comparison.ts"
-      ]
-    },
-    {
       "content": "d4073999f27adcf2",
       "lines": 103,
       "files": [
@@ -381,14 +373,6 @@
       "lines": 5,
       "files": [
         "src/engine/element/game.ts"
-      ]
-    },
-    {
-      "content": "ec739362a9313d9d",
-      "lines": 52,
-      "files": [
-        "src/eslint-plugin/rules/no-element-array-state.ts",
-        "src/eslint-plugin/rules/no-element-identity-comparison.ts"
       ]
     },
     {
