@@ -131,7 +131,8 @@ Options:
                            silent pass.
   --turns-only             Diagnostic mode: print only how many turns the most recent 'drive' run
                            took (and whether it hit the cap) and exit — skips the nine
-                           produced-artifact checks entirely. Exit 1 if the turn cap was hit.
+                           produced-artifact checks entirely. Exit 1 unless the session completed
+                           (a turn-cap hit or a non-zero session exit fails).
   --json                   Emit assert's result as a single JSON object on stdout
   --help                   Show this help
 `);
@@ -379,10 +380,14 @@ function turnDiagnosticLine(state) {
   const maxTurns = state.maxTurns ?? 'unknown';
   const stoppedReason = state.stoppedReason ?? 'unknown';
   const hitCap = state.hitTurnCap === true;
-  return (
-    `Turns taken: ${turnsTaken} (cap: ${maxTurns}, stopped: ${stoppedReason})` +
-    (hitCap ? ' — TURN CAP HIT: reported as a failure, not evaluated further as a pass.' : '')
-  );
+  let note = '';
+  if (hitCap) note = ' — TURN CAP HIT: reported as a failure, not evaluated further as a pass.';
+  else if (!sessionCompleted(state)) note = ' — SESSION DID NOT COMPLETE: reported as a failure, whatever the checks say.';
+  return `Turns taken: ${turnsTaken} (cap: ${maxTurns}, stopped: ${stoppedReason})${note}`;
+}
+
+function sessionCompleted(state) {
+  return state.stoppedReason === 'completed';
 }
 
 function assertCmd(opts) {
@@ -397,7 +402,7 @@ function assertCmd(opts) {
       '[assert] --turns-only: skipped the nine produced-artifact checks. A run that "completes"',
     );
     console.log('in 1-2 turns has not reproduced interactive session shape at all.');
-    process.exit(state.hitTurnCap ? 1 : 0);
+    process.exit(sessionCompleted(state) ? 0 : 1);
   }
 
   const projectDir = findProjectDir(workDir);
@@ -509,7 +514,7 @@ function assertCmd(opts) {
       : c;
   });
   const allChecks = [...checksGating, gCheck];
-  const overallPass = checksGating.every((c) => c.pass) && gPass;
+  const overallPass = checksGating.every((c) => c.pass) && gPass && sessionCompleted(state);
   const passCount = allChecks.filter((c) => c.pass).length;
 
   console.log('');
