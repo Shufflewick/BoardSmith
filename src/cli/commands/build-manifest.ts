@@ -132,18 +132,21 @@ function bareWord(word: string): string {
  * bracketed or dashed prose about it, which real manifests fill with code names.
  */
 function unreadablePath(text: string): string | undefined {
-  const isPath = (word: string) => bareWord(word).match(PATH_TOKEN) !== null;
   const pathList = text.replace(/\([^)]*\)/g, ' ').split(ANNOTATION_START, 1)[0] ?? '';
   for (const item of pathList.split(',')) {
-    const words = item.trim().split(/\s+/);
-    for (const word of words) {
-      const bare = bareWord(word);
-      const found = bare.match(PATH_TOKEN);
-      if (found && (found.length > 1 || found[0] !== bare)) return bare;
-    }
-    if (words.length > 1 && !isPath(words[0]!) && words.some(isPath)) return words.join(' ');
+    const words = item.trim().split(/\s+/).map(bareWord);
+    const partlyRead = words.find((word) => {
+      const found = word.match(PATH_TOKEN);
+      return found !== null && (found.length > 1 || found[0] !== word);
+    });
+    if (partlyRead !== undefined) return partlyRead;
+    if (!isPath(words[0]!) && words.some(isPath)) return words.join(' ');
   }
   return undefined;
+}
+
+function isPath(word: string): boolean {
+  return word.match(PATH_TOKEN) !== null;
 }
 
 /** A File cell's paths, in order: backticked paths whole, the rest by PATH_TOKEN. */
