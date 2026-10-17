@@ -386,22 +386,24 @@ describe('every call that takes a pick value resolves it by the same rule (#857)
     expect(controller.getCollectedPick('fruit')).toEqual({ value: FRUIT[1], display: 'Banana', skipped: false });
   });
 
-  it('starts an action holding the offered value for an arg named by shorthand', async () => {
+  it('starts an action holding an arg as given, for the server to judge', async () => {
     const { controller } = fruitController({});
 
     await controller.start('eat', { args: { fruit: 'a' } });
 
-    expect(controller.currentArgs.value.fruit).toEqual(FRUIT[0]);
-    expect(controller.getCollectedPick('fruit')?.display).toBe('Apple');
+    expect(controller.currentArgs.value.fruit).toBe('a');
+    expect(controller.getCollectedPick('fruit')).toEqual({ value: 'a', display: 'a', skipped: false });
   });
 
-  it('refuses to start an action with an arg fill would refuse, and says why', async () => {
-    const { controller } = fruitController({ choices: [{ ...fruitChoices[0], disabled: 'Too ripe' }, fruitChoices[1]] });
+  it('refuses to start an action with a list for a pick that takes one element, and says why', async () => {
+    const { controller } = fruitController({ type: 'element' });
 
-    const result = await controller.start('eat', { args: { fruit: 'Apple' } });
+    const result = await controller.start('eat', { args: { fruit: [1, 2] } });
 
-    expect(result).toEqual({ success: false, error: 'Selection disabled: Too ripe' });
-    expect(controller.lastError.value).toBe('Selection disabled: Too ripe');
+    const error = 'Selection "fruit" expects a single element, got an array of 2. '
+      + 'Submit one element or element ID; use chooseElements for multi-element selections.';
+    expect(result).toEqual({ success: false, error });
+    expect(controller.lastError.value).toBe(error);
     expect(controller.currentAction.value).toBe(null);
   });
 });
@@ -410,7 +412,7 @@ describe('execute() resolves against the choices of the action it runs (#857)', 
   const SCOUT_IN_A = { id: 'scout', name: 'Scout', onlyInA: true };
   const SCOUT_IN_B = { id: 'scout', name: 'Scout' };
 
-  function twoActionTable() {
+  function twoActionTable(autoFill = false) {
     const sendAction = createMockSendAction();
     const target = (choices?: Array<{ value: unknown; display: string }>) =>
       [{ name: 'target', type: 'choice' as const, prompt: 'Which?', ...(choices && { choices }) }];
@@ -418,13 +420,14 @@ describe('execute() resolves against the choices of the action it runs (#857)', 
       sendAction,
       availableActions: ref(['scoutA', 'scoutB', 'scoutC']),
       actionMetadata: ref<Record<string, EnrichedActionMetadata>>({
-        scoutA: { name: 'scoutA', prompt: 'A', selections: target() },
+        // manual: with auto-fill on, scoutA's one fetched choice stays on offer instead of filling itself.
+        scoutA: { name: 'scoutA', prompt: 'A', manual: true, selections: target() },
         scoutB: { name: 'scoutB', prompt: 'B', selections: target([{ value: SCOUT_IN_B, display: 'Scout' }]) },
         scoutC: { name: 'scoutC', prompt: 'C', selections: target() },
       }),
       fetchPickChoices: vi.fn(async () => ({ success: true, choices: [{ value: SCOUT_IN_A, display: 'Scout' }] })),
       isMyTurn: ref(true),
-      autoFill: false,
+      autoFill,
       autoExecute: false,
     });
     return { controller, sendAction };
@@ -447,5 +450,18 @@ describe('execute() resolves against the choices of the action it runs (#857)', 
     await controller.execute('scoutC', { target: 'Scout' });
 
     expect(sendAction).toHaveBeenCalledWith('scoutC', { target: 'Scout' });
+  });
+
+  it("auto-fills from the executed action's own choice, never the open action's", async () => {
+    const { controller, sendAction } = twoActionTable(true);
+    await controller.start('scoutA');
+    expect(controller.currentChoices.value[0]?.value).toEqual(SCOUT_IN_A);
+
+    await controller.execute('scoutB');
+    expect(sendAction).toHaveBeenCalledWith('scoutB', { target: SCOUT_IN_B });
+
+    const result = await controller.execute('scoutC');
+    expect(result).toEqual({ success: false, error: 'Missing required selection: "target"' });
+    expect(sendAction).not.toHaveBeenCalledWith('scoutC', expect.anything());
   });
 });

@@ -1876,31 +1876,26 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /**
-   * start()'s args, each held as fill would hold it and judged against the
-   * action's own metadata, since the run has fetched nothing yet; or the
-   * refusal for the first that fill would refuse. As in execute(), a pick
-   * whose choices hang on another pick is left to the server.
+   * The refusal for a start() arg the controller can see is malformed: a list
+   * for a pick that takes one element. Every other arg is held as given and
+   * judged by the server, since the run has fetched no choices to name it by;
+   * `prefill` is the way to have the controller resolve a value against the
+   * pick's choices once they arrive.
    */
-  function resolveStartArgs(
-    meta: EnrichedActionMetadata,
-    initialArgs: Record<string, unknown>,
-  ): Map<string, { value: unknown; display: string }> | string {
-    const startArgs = new Map<string, { value: unknown; display: string }>();
+  function startArgsRefusal(meta: EnrichedActionMetadata, initialArgs: Record<string, unknown>): string | undefined {
     for (const [name, value] of Object.entries(initialArgs)) {
       const selection = meta.selections.find((s) => s.name === name);
-      const judged = selection && !selection.filterBy && !selection.dependsOn;
-      const resolved = judged ? resolvePick(selection, value, null) : { value };
-      if (resolved.refusal) return resolved.refusal;
-      startArgs.set(name, { value: resolved.value, display: resolved.choice?.display ?? getDisplayFromValue(resolved.value) });
+      const refusal = selection?.type === 'element' ? oneElementListRefusal(name, value) : undefined;
+      if (refusal) return refusal;
     }
-    return startArgs;
+    return undefined;
   }
 
   /**
    * Begin wizard mode for an action (fetches the first selection's choices).
    *
    * The returned ControllerActionResult reflects ONLY start()'s synchronous pre-checks
-   * (action availability, action metadata presence, args fill would refuse) — a `{ success: true }` result
+   * (action availability, action metadata presence, a list for a single-element pick) — a `{ success: true }` result
    * means wizard mode began, NOT that the action has been (or ever will be)
    * executed on the server. The eventual server outcome arrives later via the
    * auto-execute watcher / executeCurrentAction(), which callers can observe via
@@ -1969,17 +1964,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       );
     }
 
-    const startArgs = resolveStartArgs(meta, initialArgs);
-    if (typeof startArgs === 'string') {
-      setError(startArgs);
-      return { success: false, error: startArgs };
+    const refusal = startArgsRefusal(meta, initialArgs);
+    if (refusal) {
+      setError(refusal);
+      return { success: false, error: refusal };
     }
 
     currentAction.value = actionName;
     actionStartTick.value++;
     clearArgs();
     clearAdvancedState();
-    for (const [name, { value }] of startArgs) currentArgs.value[name] = value;
+    Object.assign(currentArgs.value, initialArgs);
     lastError.value = null;
 
     // PIT OF SUCCESS: Create snapshot - FREEZE the metadata
@@ -1993,8 +1988,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       choiceFetches: new Map(),
     };
 
-    for (const [name, { value, display }] of startArgs) {
-      actionSnapshot.value.collectedPicks.set(name, { value, display, skipped: false });
+    for (const [name, value] of Object.entries(initialArgs)) {
+      actionSnapshot.value.collectedPicks.set(name, { value, display: getDisplayFromValue(value), skipped: false });
     }
 
     // Fetch choices for the first selection that needs input
