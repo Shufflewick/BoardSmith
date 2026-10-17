@@ -17,7 +17,9 @@
  * parameter (including what a call passes it), destructuring default, name
  * destructured at any depth from a literal or a variable, by declaration or
  * assignment, class field, object property, or the return of a function
- * declaration or method, and TypeScript's checker resolves
+ * declaration, method or getter. A property is judged by its own value, not by
+ * what else its object holds; an array element taken from a variable rather
+ * than a literal takes the whole array. TypeScript's checker resolves
  * each name to the declaration it refers to, so shadowing follows the
  * language's own scope rules rather than a copy of them.
  *
@@ -76,6 +78,7 @@ function returned(node) {
 /** The value a declaration, parameter, field, property or default gives its name, if it gives one. */
 const declaredValue = (node) => (HAS_VALUE.some((is) => is(node)) ? node.initializer
   : ts.isShorthandPropertyAssignment(node) && node.objectAssignmentInitializer);
+const RETURNS = [ts.isFunctionDeclaration, ts.isMethodDeclaration, ts.isGetAccessorDeclaration];
 const isCompound = (kind) => kind >= ts.SyntaxKind.FirstCompoundAssignment && kind <= ts.SyntaxKind.LastCompoundAssignment;
 
 const EXPECTS = ['expect', 'expect.soft', 'vi.expect', 'vi.expect.soft'];
@@ -88,6 +91,7 @@ function wallClockBudgets(source, fileName = 'scanned.ts') {
 
   /** What each value gives element `at` of an array pattern, or every element from `at` on for a rest. */
   const elementsAt = (values, at, rest) => values.map(bare).flatMap((from) => (ts.isArrayLiteralExpression(from)
+    // Whole on purpose: an array held in a variable can be pushed to or reordered, so its positions are unknown.
     ? from.elements.slice(at, rest ? undefined : at + 1) : [from]));
   /**
    * What each value gives property `key`: the name of the property its type declares, which holds that property's
@@ -131,14 +135,14 @@ function wallClockBudgets(source, fileName = 'scanned.ts') {
   };
   /**
    * The names `node` gives values to, and those values: a declaration, parameter, field, property or default (each
-   * name of a pattern its own part), what a function declaration or method returns, what a call passes to the
+   * name of a pattern its own part), what a function declaration, method or getter returns, what a call passes to the
    * function's parameters, `x = v`, or `x += v` (whose value is the whole expression, so `x -= performance.now()` is a
    * subtraction).
    */
   const assignmentsAt = (node) => {
     const value = declaredValue(node);
     if (value) return unpack(node.name, [value]);
-    if ((ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node)) && node.name && node.body) {
+    if (RETURNS.some((is) => is(node)) && node.name && node.body) {
       return [{ target: node.name, values: returnsOf(node) }];
     }
     if (ts.isCallExpression(node) || ts.isNewExpression(node)) return passed(node);
@@ -177,6 +181,28 @@ function wallClockBudgets(source, fileName = 'scanned.ts') {
   const holds = (bindings, node) => ts.isMemberName(node) && bindingsAt(node).some((binding) => bindings.has(binding));
   const bindingsOf = (entries) => new Set(entries.flatMap(({ target }) => bindingsAt(target)));
 
+  const valuesOf = new Map();
+  for (const { target, value } of assignments) {
+    for (const binding of bindingsAt(target)) valuesOf.set(binding, [...valuesOf.get(binding) ?? [], value]);
+  }
+  const reading = new Set();
+  /**
+   * Whether `access` reads a duration. A property the file declares holds its own value, whatever else the object
+   * holds (`h.n` beside `h.took()`); one it does not, read from a name, is judged over each value given that name,
+   * property by property. The bases being read are skipped, so names given each other's properties do not loop.
+   */
+  const readsDuration = (access) => {
+    if (checker.getSymbolAtLocation(access.name)) return holds(durations, access.name);
+    const base = bare(access.expression);
+    if (!ts.isMemberName(base)) return measures(base);
+    const bindings = bindingsAt(base).filter((binding) => !reading.has(binding));
+    bindings.forEach((binding) => reading.add(binding));
+    const values = bindings.flatMap((binding) => valuesOf.get(binding) ?? []);
+    const found = memberOf(values, access.name.text).some(measures);
+    bindings.forEach((binding) => reading.delete(binding));
+    return found;
+  };
+
   const clockVars = bindingsOf(assignments.filter(({ value }) => isClockRead(value)));
   const nameOf = (node) => (ts.isPropertyAccessExpression(node) ? node.name : node);
   const isClockTerm = (node) => isClockRead(node) || holds(clockVars, nameOf(bare(node)));
@@ -190,8 +216,7 @@ function wallClockBudgets(source, fileName = 'scanned.ts') {
     && (isClockTerm(node.left) || isClockTerm(node.right));
   const measures = (node) => {
     if (ts.isFunctionLike(node)) return returnsOf(node).some(measures);
-    // A property the file declares holds its own value, whatever else the object holds (`h.n` beside `h.took()`).
-    if (ts.isPropertyAccessExpression(node) && checker.getSymbolAtLocation(node.name)) return holds(durations, node.name);
+    if (ts.isPropertyAccessExpression(node)) return readsDuration(node);
     return subtractsClock(node) || holds(durations, node) || ts.forEachChild(node, measures) === true;
   };
   // Until nothing changes, so a duration handed from name to name is followed to the end.
@@ -504,6 +529,22 @@ describe('wallClockBudgets', () => {
     const start = 'const duration = Date.now() - s;';
     expect(wallClockBudgets(`${start}\nlet d, n;\n[d, n] = [duration, 3];\nexpect(n).toBe(3);`)).toEqual([]);
     expect(wallClockBudgets(`${start}\nconst o = { a: duration, n: 3 };\nconst { n } = o;\nexpect(n).toBe(3);`)).toEqual([]);
+  });
+
+  it('finds a duration returned by an object or class getter (#1104)', () => {
+    expect(wallClockBudgets('const h = { get took() { return Date.now() - s; } };\nexpect(h.took).toBeLessThan(5);')).toHaveLength(1);
+    expect(wallClockBudgets('class A { get took() { return Date.now() - s; } }\nexpect(new A().took).toBeLessThan(5);')).toHaveLength(1);
+  });
+
+  it('judges a property of a parameter by the value passed for it, not by the whole object (#1104)', () => {
+    const helper = 'function f(o) { expect(o.n).toBe(3); }';
+    expect(wallClockBudgets(`${helper}\nf({ t: Date.now() - s, n: 3 });`, 'x.test.mjs')).toEqual([]);
+    expect(wallClockBudgets(`${helper}\nf({ t: 0, n: Date.now() - s });`, 'x.test.mjs')).toHaveLength(1);
+  });
+
+  it('takes an array held in a variable whole, since its positions are unknown (#1104)', () => {
+    const source = 'const t = [Date.now() - s, 3];\nconst [, n] = t;\nexpect(n).toBe(3);';
+    expect(wallClockBudgets(source)).toHaveLength(1);
   });
 
   it('finds a budget asserted with vi.expect (#1104)', () => {
