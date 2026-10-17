@@ -143,7 +143,7 @@ function numberLiteral(expression: ts.Expression): number | undefined {
   return undefined;
 }
 
-/** `source` with its weight-evolution comment added before the imports, or replaced. */
+/** `source` with its weight-evolution comment replaced, or added before the imports (or at the top when there are none). */
 function withEvolutionMetadata(source: string, stats: NonNullable<UpdateWeightsOptions['evolutionStats']>): string {
   const metadataComment = [
     `//`,
@@ -156,17 +156,9 @@ function withEvolutionMetadata(source: string, stats: NonNullable<UpdateWeightsO
     `//`,
   ].join('\n');
 
-  const importIndex = source.indexOf('import ');
-  if (importIndex < 0) {
-    throw new Error(
-      'bot.ts has no import statement, so evolve-bot-weights cannot place its run record above the imports. ' +
-        "Add the bot's imports (such as `import type { Game } from 'boardsmith';`) and run it again.",
-    );
-  }
-  const beforeImport = source.slice(0, importIndex);
-  const afterImport = source.slice(importIndex);
-  if (beforeImport.includes('Weight Evolution')) {
-    return beforeImport.replace(/\/\/\s*\n\/\/ Weight Evolution[^]*?\/\/\s*\n/, metadataComment + '\n') + afterImport;
-  }
-  return beforeImport + metadataComment + '\n' + afterImport;
+  const previousBlock = /\/\/\s*\n\/\/ Weight Evolution[^]*?\/\/\s*\n/;
+  if (previousBlock.test(source)) return source.replace(previousBlock, metadataComment + '\n');
+  // A bot.ts with no import is valid: the record then goes at the top.
+  const at = Math.max(source.indexOf('import '), 0);
+  return source.slice(0, at) + metadataComment + '\n' + source.slice(at);
 }

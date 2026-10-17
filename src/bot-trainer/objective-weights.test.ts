@@ -179,10 +179,17 @@ describe('updateBotWeights', () => {
       expect(twice).toContain('Generations: 9');
     });
 
-    it('refuses a bot.ts with no import rather than silently leaving the run unrecorded', () => {
+    it('records the run at the top of a bot.ts with no import, and replaces it on the next run', () => {
       const noImport = BOT_FILE.replace("import type { Game } from 'boardsmith';\n", '');
-      expect(() => updateBotWeights(noImport, [], { addMetadata: true, evolutionStats: stats }))
-        .toThrow(/no import/);
+      const once = updateBotWeights(noImport, [], { addMetadata: true, evolutionStats: stats });
+      expect(once.indexOf('Weight Evolution')).toBeGreaterThanOrEqual(0);
+      expect(once.indexOf('Weight Evolution')).toBeLessThan(once.indexOf('export const bot'));
+      const twice = updateBotWeights(once, [], {
+        addMetadata: true,
+        evolutionStats: { ...stats, generations: 9 },
+      });
+      expect(twice.match(/Weight Evolution/g)).toHaveLength(1);
+      expect(twice).toContain('Generations: 9');
     });
 
     it('does nothing when the flag is set but no stats are given', () => {
