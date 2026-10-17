@@ -503,43 +503,67 @@ describe('SnapshotSessionHost', () => {
       expect(botCallCount).toBeGreaterThanOrEqual(1);
     });
 
-    it('caps the bot pump at MAX_BOT_MOVES (500) and logs when a runaway bundle never stops', async () => {
-      const base = {
-        success: true,
-        snapshot: { flowState: {}, winners: [], actionHistory: [] },
-        playerViews: [],
-      };
-
-      let botCallCount = 0;
+    /** Adapters for an all-bot table whose bot seat 2 always finds a move; the game ends after `movesToEnd` of them. */
+    function allBotTable(movesToEnd: number, extra: Partial<SnapshotSessionAdapters> = {}) {
+      const counts = { botMoves: 0 };
+      const snapshotAt = (complete: boolean) => ({ flowState: { complete }, winners: [], actionHistory: [] });
       const adapters: SnapshotSessionAdapters = {
         playerCount: 2,
-        // A buggy bundle whose bot ALWAYS finds a move — would loop forever
-        // without the cap.
         executeOp: stubExecuteOp(async (_snap, _pend, op) => {
           if (op.type === 'botSuggest') return { success: true, botPlayer: 2, suggestedAction: 'go', suggestedArgs: {} };
-          if (op.type === 'action' && op.player === 2) {
-            botCallCount++;
-            return { ...base };
-          }
-          return { ...base };
+          if (op.type === 'action' && op.player === 2) counts.botMoves++;
+          return { success: true, snapshot: snapshotAt(counts.botMoves >= movesToEnd), playerViews: [] };
         }),
         record: () => {}, push: () => {},
+        ...extra,
       };
+      return { adapters, counts };
+    }
 
-      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
+    it('lets an all-bot game that needs more than 500 bot moves finish (#815)', async () => {
+      const { adapters, counts } = allBotTable(1_200);
       const host = new SnapshotSessionHost(adapters);
       host.setBotSeats([{ seat: 2 }]);
       await host.start();
 
-      // Must terminate (not hang) and stop exactly at the cap.
       await host.runBotTurns();
 
-      expect(botCallCount).toBe(500);
-      expect(errSpy).toHaveBeenCalledWith(
-        '[SnapshotSessionHost] bot pump hit MAX_BOT_MOVES cap (500); stopping to avoid runaway.',
-      );
+      expect(counts.botMoves).toBe(1_200);
+      expect(host.isComplete).toBe(true);
+    });
 
+    it('stops a bot run that never ends at 20000 moves, reports it once, and lets timers run meanwhile (#815)', async () => {
+      const reported: unknown[] = [];
+      const { adapters, counts } = allBotTable(Infinity, { onBackgroundError: (error) => reported.push(error) });
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
+      await host.start();
+
+      let movesWhenTimerRan: number | null = null;
+      setTimeout(() => { movesWhenTimerRan = counts.botMoves; }, 0);
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) });
+      await host.settled();
+
+      expect(counts.botMoves).toBe(20_000);
+      expect(reported).toHaveLength(1);
+      expect(String(reported[0])).toMatch(/20000 moves in a row without the game ending/);
+      // The run yields to the event loop between stretches, so the host's other work is not starved.
+      expect(movesWhenTimerRan).not.toBeNull();
+      expect(movesWhenTimerRan!).toBeLessThan(20_000);
+      errSpy.mockRestore();
+    });
+
+    it('hands a never-ending bot run to the caller of runBotTurns, not onBackgroundError (#815)', async () => {
+      const reported: unknown[] = [];
+      const { adapters } = allBotTable(Infinity, { onBackgroundError: (error) => reported.push(error) });
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
+      await host.start();
+
+      await expect(host.runBotTurns()).rejects.toThrow(/20000 moves in a row/);
+      expect(reported).toHaveLength(0);
       errSpy.mockRestore();
     });
   });
@@ -1450,6 +1474,87 @@ describe('SnapshotSessionHost', () => {
       // Custom narrator includes all args — 'direction=left' is now visible
       expect(text).toBe('Player 1: move direction=left');
     });
+
+    // ── #809: a demo loop that throws is reported, not left as an unhandled rejection ──
+
+    async function demoThatThrows(throwOn: 'botSuggest' | 'action') {
+      const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const unhandled: unknown[] = [];
+      const onUnhandled = (reason: unknown) => unhandled.push(reason);
+      process.on('unhandledRejection', onUnhandled);
+      try {
+        const { adapters, broadcastLog } = makeDemoAdapters(botGameOptions);
+        const realExecute = adapters.executeOp;
+        adapters.executeOp = (snap, pend, op) => {
+          if (op.type === throwOn) return Promise.reject(new Error('The executor did not answer in time.'));
+          return realExecute(snap, pend, op);
+        };
+        const backgroundErrors: unknown[] = [];
+        adapters.onBackgroundError = (error) => backgroundErrors.push(error);
+        const host = new SnapshotSessionHost(adapters);
+        host.setBotSeats([{ seat: 1 }]);
+        await host.start();
+        broadcastLog.length = 0;
+
+        succeeded(await host.handleOp(1, { type: 'demoStart', delay: 0 }));
+        await vi.waitFor(() => expect(host.demoRunning).toBe(false));
+        // Node reports an unhandled rejection after the microtasks of the turn it happened in.
+        for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve));
+
+        expect(unhandled).toEqual([]);
+        expect(backgroundErrors.map((e) => (e as Error).message)).toEqual(['The executor did not answer in time.']);
+        expect(String(errors.mock.calls.at(-1)?.[0])).toMatch(/the demo failed: The executor did not answer in time\..* The demo has stopped/);
+        expect(broadcastState(broadcastLog, broadcastLog.length - 1, 1).isDemoRunning).toBeUndefined();
+      } finally {
+        process.off('unhandledRejection', onUnhandled);
+        errors.mockRestore();
+      }
+    }
+
+    it('a botSuggest that rejects stops the demo, tells clients, and goes to onBackgroundError once (#809)', async () => {
+      await demoThatThrows('botSuggest');
+    });
+
+    it("a demo move whose executor call rejects stops the demo, tells clients, and goes to onBackgroundError once (#809)", async () => {
+      await demoThatThrows('action');
+    });
+
+    it.each(['record', 'push'] as const)(
+      "a %s that throws on the demo's first broadcast stops the demo, and the next demoStart starts one (#809)",
+      async (adapter) => {
+        const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+        try {
+          const { adapters, broadcastLog } = makeDemoAdapters(botGameOptions, { maxSuggestions: 1 });
+          let failNext = false;
+          const real = adapters[adapter] as (...args: unknown[]) => void;
+          adapters[adapter] = ((...args: unknown[]) => {
+            if (failNext) {
+              failNext = false;
+              throw new Error('The broadcast adapter is down.');
+            }
+            real(...args);
+          }) as never;
+          const backgroundErrors: unknown[] = [];
+          adapters.onBackgroundError = (error) => backgroundErrors.push(error);
+          const host = new SnapshotSessionHost(adapters);
+          host.setBotSeats([{ seat: 1 }]);
+          await host.start();
+
+          failNext = true;
+          succeeded(await host.handleOp(1, { type: 'demoStart', delay: 0 }));
+          await vi.waitFor(() => expect(backgroundErrors).toHaveLength(1));
+          expect(host.demoRunning).toBe(false);
+
+          broadcastLog.length = 0;
+          succeeded(await host.handleOp(1, { type: 'demoStart', delay: 0 }));
+          expect(broadcastState(broadcastLog, 0, 1).isDemoRunning).toBe(true);
+          await vi.waitFor(() => expect(host.demoRunning).toBe(false));
+          expect(backgroundErrors).toHaveLength(1);
+        } finally {
+          errors.mockRestore();
+        }
+      },
+    );
 
   });
 
