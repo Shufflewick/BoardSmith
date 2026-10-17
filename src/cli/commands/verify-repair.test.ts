@@ -77,7 +77,6 @@ function fakeEntry(overrides: Partial<ImpactMapEntry> & { slug: string }): Impac
       disposition: 'close-without-replaytest',
       nextStatus: 'verified',
       clearMarker: true,
-      reverifyStamp: true,
       reason: 'test fixture gate',
     },
     markerState: overrides.markerState ?? 'rules-stale',

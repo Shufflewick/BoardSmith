@@ -10,7 +10,6 @@ import {
   EXAMPLE_REPLAY_LEDGER_END,
   createExampleReplayRecord,
   exampleReplayLedgerPath,
-  replaceExampleReplayVerdicts,
   recordExampleReplayVerdicts,
   readExampleReplayVerdicts,
   verifyExampleReplayCommand,
@@ -344,7 +343,7 @@ function recordFor(
   });
 }
 
-describe('exampleReplayLedgerPath / replaceExampleReplayVerdicts / recordExampleReplayVerdicts / readExampleReplayVerdicts — ledger', () => {
+describe('exampleReplayLedgerPath / recordExampleReplayVerdicts / readExampleReplayVerdicts — ledger', () => {
   let dir: string;
 
   beforeEach(async () => {
@@ -354,6 +353,14 @@ describe('exampleReplayLedgerPath / replaceExampleReplayVerdicts / recordExample
   it('exampleReplayLedgerPath resolves to rulebook/.example-replay/EXAMPLE-VERDICTS.md', () => {
     expect(exampleReplayLedgerPath('/project')).toBe(
       join('/project', DESIGN_DIR, 'rulebook', '.example-replay', 'EXAMPLE-VERDICTS.md'),
+    );
+  });
+
+  it('keeps every record when several record calls run in parallel (#831)', async () => {
+    const records = [1, 2, 3, 4, 5, 6].map((n) => recordFor(`rulebook/0${n}-x.md`, n));
+    await Promise.all(records.map((r) => recordExampleReplayVerdicts(dir, [r])));
+    expect((await readExampleReplayVerdicts(dir)).map((r) => r.exampleId).sort()).toEqual(
+      records.map((r) => r.exampleId).sort(),
     );
   });
 
@@ -393,7 +400,7 @@ describe('exampleReplayLedgerPath / replaceExampleReplayVerdicts / recordExample
 
   it('a hand-corrupted ledger entry (verdict outside the set) makes the read THROW, naming the offending exampleId', async () => {
     const good = recordFor('rulebook/01-a.md', 1);
-    await replaceExampleReplayVerdicts(dir, [good]);
+    await recordExampleReplayVerdicts(dir, [good]);
     const ledgerPath = exampleReplayLedgerPath(dir);
     const original = await fs.readFile(ledgerPath, 'utf-8');
     const corrupted = original.replace('"agrees"', '"banana"');
@@ -410,7 +417,7 @@ describe('exampleReplayLedgerPath / replaceExampleReplayVerdicts / recordExample
       expected: 'Guard becomes READY',
       observed: 'Guard remained EXHAUSTED',
     });
-    await replaceExampleReplayVerdicts(dir, [good]);
+    await recordExampleReplayVerdicts(dir, [good]);
     const ledgerPath = exampleReplayLedgerPath(dir);
     const original = await fs.readFile(ledgerPath, 'utf-8');
     const corrupted = original.replace('"Guard becomes READY"', '""');
@@ -423,7 +430,7 @@ describe('exampleReplayLedgerPath / replaceExampleReplayVerdicts / recordExample
 
   it('a ledger file whose closing fence is truncated makes the read throw, never returns []', async () => {
     const good = recordFor('rulebook/01-a.md', 1);
-    await replaceExampleReplayVerdicts(dir, [good]);
+    await recordExampleReplayVerdicts(dir, [good]);
     const ledgerPath = exampleReplayLedgerPath(dir);
     const original = await fs.readFile(ledgerPath, 'utf-8');
     const truncated = original.replace('<!-- boardsmith:example-replay-verdicts:end -->', '');
@@ -437,7 +444,7 @@ describe('exampleReplayLedgerPath / replaceExampleReplayVerdicts / recordExample
   // than throw the "malformed ledger" error this function's doc comment promises.
   it('a ledger with the end fence appearing before the begin fence throws, never silently returns an empty/wrong body', async () => {
     const good = recordFor('rulebook/01-a.md', 1);
-    await replaceExampleReplayVerdicts(dir, [good]);
+    await recordExampleReplayVerdicts(dir, [good]);
     const ledgerPath = exampleReplayLedgerPath(dir);
     const original = await fs.readFile(ledgerPath, 'utf-8');
 
@@ -569,8 +576,10 @@ describe('verifyExampleReplayCommand — command', () => {
   it('a slice with a recorded verdict is reported not-pending', async () => {
     const text = 'p.1, Definitions:\n"A worked example lives here."\n';
     const project = await makeProject({ 'rulebook/01-x.md': text });
+    const { lines } = buildExampleExtractionPayload({ path: 'rulebook/01-x.md', text });
+    const extractionHash = createHash('sha256').update(lines.map((l) => l.text).join('\n')).digest('hex');
     await recordExampleReplayVerdicts(project, [
-      recordFor('rulebook/01-x.md', 2, { lineText: '"A worked example lives here."' }),
+      recordFor('rulebook/01-x.md', 2, { lineText: '"A worked example lives here."', extractionHash }),
     ]);
 
     const result = await verifyExampleReplayCommand({ project });
@@ -1250,6 +1259,19 @@ describe('worked examples stay anchored to their slice line (#350)', () => {
     expect(await reanchorExampleLedger(project)).toEqual({ moved: [], lost: [] });
   });
 
+  it('reanchoring alongside a record call keeps the record (#831)', async () => {
+    const project = await makeProject({ [SLICE]: SLICE_TEXT });
+    await recordBoth(project);
+    await insertSourceLine(project);
+    const added = recordFor('rulebook/09-z.md', 3);
+
+    await Promise.all([reanchorExampleLedger(project), recordExampleReplayVerdicts(project, [added])]);
+
+    expect((await readExampleReplayVerdicts(project)).map((r) => r.exampleId).sort()).toEqual(
+      [`${SLICE}:6`, `${SLICE}:7`, added.exampleId].sort(),
+    );
+  });
+
   it('a record whose text is no longer in its slice is reported lost and left as it was', async () => {
     const project = await makeProject({ [SLICE]: SLICE_TEXT });
     await recordBoth(project);
@@ -1446,6 +1468,106 @@ describe('a slice recorded with no worked examples (#370)', () => {
     const slice = await sliceReport(project);
     expect(slice?.notDispatchable).toBe('no-extractable-content');
     expect(slice?.pending).toBe(false);
+  });
+});
+
+describe('a slice recorded with worked examples goes pending when its text changes (#835)', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = tempTree('bs-verify-example-changed-');
+  });
+
+  const { makeProject, writeJson } = designProjectFixtures(() => dir);
+  const { writeExtraction, writeTranslations } = exampleReturnWriters(writeJson);
+
+  const SLICE = 'rulebook/03-terrain.md';
+  const SLICE_TEXT =
+    '# Terrain\n\np.3, Terrain:\n"Hills slow every unit that crosses them."\n' +
+    'Example (p.3): "A Crawler crossing a hill moves 1 space."\n';
+  const SECOND_EXAMPLE = 'Example (p.3): "A Walker crossing a hill moves 2 spaces."';
+
+  const slicePathOnDisk = (project: string) => join(project, DESIGN_DIR, SLICE);
+  const sliceReport = async (project: string) =>
+    (await verifyExampleReplayCommand({ project, json: true })).slices.find((s) => s.slicePath === SLICE);
+
+  /** Records SLICE with one worked example per line in `lineNumbers`, as verify-example-record does. */
+  async function recordExamples(project: string, lineNumbers: number[]): Promise<void> {
+    const extraction = await writeExtraction(
+      'extraction.json',
+      lineNumbers.map((lineNumber) => ({
+        lineNumber,
+        pageCitation: 'p.3, Terrain',
+        kind: 'transition',
+        sourceText: 'crossing a hill moves',
+        setup: 'A unit stands before a hill.',
+        action: 'The unit moves.',
+        expected: 'It moves.',
+      })),
+    );
+    const translations = await writeTranslations(
+      'translations.json',
+      lineNumbers.map((lineNumber) => ({
+        slicePath: SLICE,
+        lineNumber,
+        testCode: '',
+        imports: [],
+        verdictHint: 'unexecutable',
+        unexecutableReason: 'no-matching-symbol',
+      })),
+    );
+    await verifyExampleRecordCommand({ project, slicePath: SLICE, extraction, translations, json: true });
+  }
+
+  it('is not pending while the lines the extractor reads are unchanged', async () => {
+    const project = await makeProject({ [SLICE]: SLICE_TEXT });
+    await recordExamples(project, [5]);
+
+    expect((await sliceReport(project))?.pending).toBe(false);
+  });
+
+  it('is pending once a second worked example is added, says why, and is recorded again after re-extraction', async () => {
+    const project = await makeProject({ [SLICE]: SLICE_TEXT });
+    await recordExamples(project, [5]);
+    await fs.writeFile(slicePathOnDisk(project), `${SLICE_TEXT}${SECOND_EXAMPLE}\n`);
+
+    const changed = await sliceReport(project);
+    expect(changed?.pending).toBe(true);
+    expect(changed?.examples).toBe('slice-changed');
+    expect(await printedReport(project)).toContain(`${SLICE}\n`);
+
+    await recordExamples(project, [5, 6]);
+
+    const rerecorded = await sliceReport(project);
+    expect(rerecorded?.pending).toBe(false);
+    expect(rerecorded?.examples).toBe('recorded');
+  });
+
+  it('keeps its extraction hash through verify-example-run\'s upsert and ingest-check\'s re-anchoring', async () => {
+    const project = await makeProject({ [SLICE]: SLICE_TEXT });
+    await recordExamples(project, [5]);
+    const [record] = await readExampleReplayVerdicts(project);
+    await recordExampleReplayVerdicts(project, [
+      createExampleReplayRecord({ ...record, supportingQuoteLines: [...record.supportingQuoteLines] }),
+    ]);
+    await fs.writeFile(
+      slicePathOnDisk(project),
+      SLICE_TEXT.replace('# Terrain\n', '# Terrain\n\nSource: rulebook/source/rules.pdf\n'),
+    );
+    expect((await reanchorExampleLedger(project)).moved).toHaveLength(1);
+
+    expect((await sliceReport(project))?.pending).toBe(false);
+  });
+
+  it('a record with no extraction hash leaves its slice pending: nothing says its extraction is current', async () => {
+    const project = await makeProject({ [SLICE]: SLICE_TEXT });
+    await recordExampleReplayVerdicts(project, [
+      recordFor(SLICE, 5, { lineText: 'Example (p.3): "A Crawler crossing a hill moves 1 space."' }),
+    ]);
+
+    const slice = await sliceReport(project);
+    expect(slice?.pending).toBe(true);
+    expect(slice?.examples).toBe('slice-changed');
   });
 });
 

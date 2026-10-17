@@ -316,16 +316,19 @@ Two of them read as the worked examples:
   when an entry unmounts.
 
 ```sh
-boardsmith test --browser                # every one, as `agent-policy verify` runs them
+boardsmith test --browser                # every one, as a thread merge runs them
 node scripts/ordered-list-browser.mjs    # one, with its checks printed as it goes
 ```
 
 `boardsmith test --browser` (`vitest.browser.config.ts`, #533) runs one case per
 `scripts/*-browser.mjs`, found by name, that runs the script and expects it to
-exit 0; `agent-policy verify` runs it as its `browser` check. They are **not**
+exit 0. A thread merge runs it as its `browser` step when the merge changes
+`src/ui/`, `src/cli/dev-host/`, `src/world/` or a browser script
+(`thread.extraMergeSteps` in `.agent-policy.json`); `agent-policy verify` does not
+run it, so run it by hand while working on those areas. They are **not**
 part of a plain `boardsmith test`, so the default suite needs no Chromium, and
-`--browser` skips the type check a plain run does first, since verify's `test`
-check has done it on the same commit. They use
+`--browser` skips the type check a plain run does first, since the merge's
+`typecheck` check has done it on the same commit. They use
 BoardSmith's own Playwright and the Chromium `boardsmith install-browser` puts on
 the machine, found the same way as the smoke check below. They never skip: with
 that Chromium missing one says to run `boardsmith install-browser` and exits
