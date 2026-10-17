@@ -66,3 +66,34 @@ describe('#777: restoring a save inside a removed branch is refused', () => {
     );
   });
 });
+
+class NestedGame extends Game<NestedGame> {
+  static rules: Rules = 'old';
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerActions(Action.create<NestedGame>('a').execute(() => ({ success: true })));
+    const step = (name: string) => actionStep<NestedGame>({ name, actions: ['a'] });
+    const middle = NestedGame.rules === 'old' ? sequence(step('inner-a'), step('inner-b')) : step('middle');
+    this.setFlow({ root: sequence(step('first'), middle, step('last')) });
+  }
+}
+
+describe('restoring a save deeper than the current rules go is refused', () => {
+  it('refuses a save inside a sequence the rules replaced with a single step', () => {
+    NestedGame.rules = 'old';
+    const live = new NestedGame({ playerCount: 1, seed: 's' });
+    live.startFlow();
+    live.continueFlow('a', {}, 1);
+    live.continueFlow('a', {}, 1);
+    expect(live.getFlowDebugInfo().step).toBe('inner-b');
+    const saved = live.getFlowState()!;
+
+    NestedGame.rules = 'new';
+    const restored = new NestedGame({ playerCount: 1, seed: 's' });
+    restored.startFlow();
+    expect(() => restored.restoreFlowState(saved)).toThrow(
+      /Flow position invalid: .*"middle".*no longer have/,
+    );
+  });
+});

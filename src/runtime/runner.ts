@@ -189,27 +189,33 @@ export interface PendingStepResult {
  * and provides serialization utilities for client-server sync
  */
 /**
- * The log as it stood at a checkpoint boundary (#25).
+ * A checkpoint's tree paired with the live log as it stood at that boundary (#25).
  *
  * The watermark is ABSOLUTE — entries ever written — so a log a game has pruned
  * still restores exactly the lines that existed at the boundary and survive:
  * front eviction shifts every position by a known amount, and that amount is
  * what `evicted` carries.
  *
+ * The restored tree takes the LIVE eviction count, not the checkpoint's own:
+ * the log handed back is a slice of the live log, so its first entry sits at
+ * the live offset. Keeping the checkpoint's older count would make the next
+ * restore from this one slice the wrong boundary (#803).
+ *
  * A checkpoint with no recorded watermark restores the whole log, which is the
  * honest reading of no recorded boundary.
  */
-function messagesUpTo(
+function checkpointWithLiveLog(
+  checkpoint: ActionCheckpoint,
   log: MessageEntry[],
-  watermark: number | undefined,
   evicted: number,
-): MessageEntry[] {
-  if (watermark === undefined) return log;
+): { state: ActionCheckpoint['state']; messageLog: MessageEntry[] } {
+  const state = { ...checkpoint.state, messagesEvicted: evicted };
+  if (checkpoint.messageCount === undefined) return { state, messageLog: log };
   // The watermark counts entries EVER WRITTEN; `evicted` says how many of those
   // are no longer in the log. The difference is the boundary's position in the
   // log as it stands now — negative when every line from that boundary has
   // since been evicted, which honestly restores nothing rather than guessing.
-  return log.slice(0, Math.max(0, watermark - evicted));
+  return { state, messageLog: log.slice(0, Math.max(0, checkpoint.messageCount - evicted)) };
 }
 
 export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptions> {
@@ -578,9 +584,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
         'per-action checkpoints are disabled for this session.';
     }
 
-    this.game.loadSerializedState(checkpoint.state, {
-      messageLog: messagesUpTo(this.game.messages ?? [], checkpoint.messageCount, this.game.messagesEvicted),
-    });
+    const { state, messageLog } = checkpointWithLiveLog(checkpoint, this.game.messages ?? [], this.game.messagesEvicted);
+    this.game.loadSerializedState(state, { messageLog });
     this.game.relinkFlowElements();
     if (checkpoint.sequence !== undefined) {
       this.game._ctx.sequence = checkpoint.sequence;
@@ -1392,8 +1397,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // just loaded). restoreFlowState builds a fresh FlowEngine from the saved
     // position, so it does not require a prior start().
     //
-    // Element-valued flow variables (e.g. eachPlayer's currentPlayer, an
-    // executeForEach `as` binding) were serialized to element markers by
+    // Element-valued flow variables (e.g. a setVar value or a
+    // forEach `as` binding) were serialized to element markers by
     // getPosition; restoreFlowState relinks them to the loaded tree internally.
     if (snapshot.flowState) {
       runner.game.restoreFlowState(snapshot.flowState);
@@ -1477,13 +1482,13 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // `messagesEvicted` rides in the snapshot's own state, which is where the
     // log's position bookkeeping lives.
     const evicted = (snapshot.state as { messagesEvicted?: number }).messagesEvicted ?? 0;
-    const messageLog = messagesUpTo(fullLog, checkpoint.messageCount, evicted);
+    const { state, messageLog } = checkpointWithLiveLog(checkpoint, fullLog, evicted);
 
     return GameRunner.fromSnapshot<G>(
       {
         version: snapshot.version,
         gameType: snapshot.gameType,
-        state: checkpoint.state,
+        state,
         messageLog,
         flowState: checkpoint.flowState,
         winners: checkpoint.winners,
