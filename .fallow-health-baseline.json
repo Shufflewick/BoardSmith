@@ -577,7 +577,7 @@
         "count": 1
       },
       "complexity_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "src/ui/components/helpers/FlyingCardsOverlay.vue": {
