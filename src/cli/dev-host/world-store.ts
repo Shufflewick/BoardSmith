@@ -180,11 +180,11 @@ export function takeWorldLock(path: string, holder: { readonly port?: number } =
     // Exclusive locking mode keeps this lock after the commit, until the connection closes.
     db.exec('BEGIN EXCLUSIVE');
     db.exec('COMMIT');
+    writeFileSync(holderPath(path), JSON.stringify({ pid: process.pid, port: holder.port }));
   } catch (error) {
     db.close();
     throw (error as { errcode?: number }).errcode === SQLITE_BUSY ? heldElsewhere(path) : error;
   }
-  writeFileSync(holderPath(path), JSON.stringify({ pid: process.pid, port: holder.port }));
   let released = false;
   return {
     release(): void {

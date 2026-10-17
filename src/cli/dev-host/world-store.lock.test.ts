@@ -9,13 +9,13 @@
  */
 import { describe, expect, it } from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, rmdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { worldBudgets } from '../../world/budgets.js';
 import { fixtureSandbox } from '../../testing/fixture-sandbox.test-helper.js';
-import { openWorldStore, resetWorldStore, worldStorePath } from './world-store.js';
+import { openWorldStore, resetWorldStore, takeWorldLock, worldStorePath } from './world-store.js';
 
 const CHILD = join(dirname(fileURLToPath(import.meta.url)), 'world-store-child.test-helper.mjs');
 const BUDGETS = worldBudgets();
@@ -83,5 +83,14 @@ describe('a world store is held by one run at a time', () => {
     await gone;
     expect(resetWorldStore(sandbox.root)).toBe(true);
     expect(existsSync(path)).toBe(false);
+  });
+
+  it('lets go of the world when it cannot record its holder (#1040)', () => {
+    const path = worldStorePath(fixtureSandbox('bs-world-lock-holder-').root);
+    // A directory where the holder note goes, so writing the note fails.
+    mkdirSync(`${path}.holder`, { recursive: true });
+    expect(() => takeWorldLock(path)).toThrow(/EISDIR/);
+    rmdirSync(`${path}.holder`);
+    takeWorldLock(path).release();
   });
 });

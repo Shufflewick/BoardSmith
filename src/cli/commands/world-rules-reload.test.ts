@@ -13,6 +13,7 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { buildFailure, rulesProject } from '../dev-host/rules-project.test-helper.js';
 import { openSocketPage, serveSockets } from '../dev-host/socket-page.test-helper.js';
 import type { WorldHostClock } from '../dev-host/node-world-clock.js';
+import { takeWorldLock, worldStorePath } from '../dev-host/world-store.js';
 import { loadWorldRuntime, openWorldRun, type WorldRuntime } from './dev-world.js';
 
 /**
@@ -307,4 +308,24 @@ describe('#1040: a second run started during a reload', () => {
     expect((outcome as Error).message).toContain(`(pid ${process.pid}, port 5173)`);
     expect(console.log).toHaveBeenCalledWith(expect.stringContaining('Reloaded. The world is durable'));
   }, 30_000);
+
+  it('lets go of the world when closing it fails', async () => {
+    const cwd = tempTree('bs-world-close-lock-');
+    const failingClose: WorldRuntime = {
+      ...beforeEdit,
+      openWorldStore: (...args) => {
+        const store = beforeEdit.openWorldStore(...args);
+        return {
+          ...store,
+          close: () => {
+            store.close();
+            throw new Error('the disk went away');
+          },
+        };
+      },
+    };
+    const run = await openWorldRun({ cwd, displayName: 'Camp', port: 5173, runtime: failingClose, reloadRules: async () => beforeEdit });
+    await expect(run.close()).rejects.toThrow('the disk went away');
+    takeWorldLock(worldStorePath(cwd)).release();
+  });
 });

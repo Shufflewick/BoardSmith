@@ -435,8 +435,11 @@ async function openWorld(
     storePath: store.path,
     launchedBefore,
     close: async () => {
-      await worldHost.close();
-      lock.release();
+      try {
+        await worldHost.close();
+      } finally {
+        lock.release();
+      }
     },
   };
 }
