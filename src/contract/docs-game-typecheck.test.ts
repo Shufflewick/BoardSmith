@@ -35,7 +35,7 @@ for (const [path, code] of gameBlockFiles(blocks)) {
   writeFileSync(file, code);
 }
 writeFileSync(join(root, 'game.tsconfig.json'), gameTsConfig(['docs/**/*.ts', 'src/cli/slash-command/aspects/**/*.ts']));
-// Loaded here, where no test timeout applies: it transforms the sandbox's whole boardsmith install (#1127).
+// Loaded here, not in the test, so a busy machine's slow import meets no test timeout (#1069).
 const { MyGame } = (await import(join(root, 'docs/getting-started/src/rules/game.ts'))) as {
   MyGame: new (options: GameOptions) => Game & { deck: { count(): number } };
 };
