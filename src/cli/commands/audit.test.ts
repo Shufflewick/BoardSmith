@@ -1,8 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   AUDIT_ORDER,
+  auditCommand,
   rekeyDupesBaseline,
   runChangedFilesAudit,
   runDupesBaselineCheck,
@@ -606,5 +607,27 @@ describe('AUDIT_ORDER', () => {
    */
   it('does not make the whole-repository sweep a gate check (#265)', () => {
     expect([...AUDIT_ORDER]).not.toContain('sweep');
+  });
+});
+
+describe('a skipped baseline check is not reported as clean (#846)', () => {
+  const originalCwd = process.cwd();
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.chdir(originalCwd);
+  });
+
+  it('lists both baseline checks as skipped and never prints "Audit clean"', async () => {
+    const dir = tempTree('bs-audit-skips-');
+    writeFileSync(join(dir, 'boardsmith.json'), '{}');
+    process.chdir(dir);
+    const lines: string[] = [];
+    vi.spyOn(console, 'log').mockImplementation((...args) => { lines.push(args.join(' ')); });
+
+    await auditCommand({ healthBaseline: true, dupesBaseline: true });
+
+    const out = lines.join('\n');
+    expect(out).not.toContain('Audit clean');
+    expect(out).toMatch(/Skipped: dupes baseline, health baseline/);
   });
 });
