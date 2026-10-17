@@ -6,7 +6,7 @@
  */
 
 import type { Game } from '../engine/element/game.js';
-import type { Space } from '../engine/element/space.js';
+import { Space } from '../engine/element/space.js';
 import { childrenChanged } from '../engine/element/cell-index.js';
 
 /** Move an element to a new parent. */
@@ -77,9 +77,15 @@ function executeMove(game: Game, command: MoveCommand): CommandResult {
 }
 
 function executeShuffle(game: Game, command: ShuffleCommand): CommandResult {
-  const space = game.getElementById(command.spaceId) as Space | undefined;
+  const space = game.getElementById(command.spaceId);
   if (!space) {
     return { success: false, error: `Space not found: ${command.spaceId}` };
+  }
+  if (!(space instanceof Space)) {
+    return {
+      success: false,
+      error: `Element ${space.id} ("${space.name}") is not a space, so it has no children to shuffle. Shuffle the space that holds it.`,
+    };
   }
   space.shuffleInternal();
   return { success: true };
@@ -99,11 +105,15 @@ function executeReorderChild(game: Game, command: ReorderChildCommand): CommandR
   if (currentIndex === -1) {
     return { success: false, error: `Element not found in parent's children` };
   }
-  if (command.targetIndex < 0 || command.targetIndex >= children.length) {
-    return { success: false, error: `Invalid target index: ${command.targetIndex}` };
+  const { targetIndex } = command;
+  if (!Number.isInteger(targetIndex) || targetIndex < 0 || targetIndex >= children.length) {
+    return {
+      success: false,
+      error: `Invalid target index: ${targetIndex}. Use a whole number from 0 to ${children.length - 1}.`,
+    };
   }
   children.splice(currentIndex, 1);
-  children.splice(command.targetIndex, 0, element);
+  children.splice(targetIndex, 0, element);
   childrenChanged(parent);
   return { success: true };
 }
