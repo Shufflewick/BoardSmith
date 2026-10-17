@@ -40,7 +40,7 @@ const MAIL = [
   '- Chunk: clans',
 ].join('\n');
 
-const passingRunner: TestRunner = async () => ({ ok: true, output: '' });
+const passingRunner: TestRunner = async (_dir, files) => ({ ok: true, output: '', ran: [...files] });
 
 /** Exactly one refusal, matching every pattern. */
 function expectOneRefusal(refusals: string[], ...patterns: RegExp[]): void {
@@ -263,6 +263,43 @@ describe('measured constraints run as code', () => {
 
     expect((await checkConstraints(project, { runTests: passingRunner })).refusals).toEqual([]);
   });
+
+  it('refuses a constraint whose test file did not run, or a run that cannot say which ran (#821)', async () => {
+    const project = await makeProject({
+      'CLAUDE.md': CLAUDE_MD,
+      'tests/world-budget.test.ts': 'test\n',
+      'design/CONSTRAINTS.md': ledger(`${C1}\n\n${C2}\n`),
+    });
+    const skipped = await checkConstraints(project, { runTests: async () => ({ ok: true, output: '', ran: [] }) });
+    expectOneRefusal(skipped.refusals, /tests\/world-budget\.test\.ts did not run/, /include/);
+    const unknown = await checkConstraints(project, { runTests: async () => ({ ok: true, output: '' }) });
+    expectOneRefusal(unknown.refusals, /cannot be confirmed/, /JSON report/);
+  });
+
+  it('refuses a constraint whose test file the real vitest config excludes, and holds once it runs (#821)', async () => {
+    const files = {
+      'CLAUDE.md': CLAUDE_MD,
+      'tests/world-budget.test.ts': "import { it } from 'vitest';\nit('holds', () => {});\n",
+      // A second named file that does run, so vitest still exits 0 with the excluded one skipped.
+      'tests/mail-budget.test.ts': "import { it } from 'vitest';\n// MAILBOX_CAP\nit('holds', () => {});\n",
+      'src/rules/mail.ts': 'export const MAILBOX_CAP = 20;\n',
+      'design/CONSTRAINTS.md': ledger(
+        `${C1}\n\n${C2}\n`,
+        `${MAIL}\n- Cap: MAILBOX_CAP in src/rules/mail.ts\n- Measured by: tests/mail-budget.test.ts\n`,
+      ),
+      'package.json': '{ "type": "module" }\n',
+    };
+    const excluding = GAME_VITE_CONFIG.replace(
+      'defineGameViteConfig()',
+      "defineGameViteConfig({ test: { exclude: ['tests/world-budget.test.ts'] } })",
+    );
+    const project = await makeProject({ ...files, [GAME_VITE_CONFIG_FILE]: excluding });
+    linkGameModules(project);
+    expectOneRefusal((await checkConstraints(project, { runTests: runVitest })).refusals, /tests\/world-budget\.test\.ts did not run/);
+
+    await fs.writeFile(join(project, GAME_VITE_CONFIG_FILE), GAME_VITE_CONFIG);
+    expect((await checkConstraints(project, { runTests: runVitest })).refusals).toEqual([]);
+  }, 60_000);
 
   it('does not run tests when the ledger itself is refused', async () => {
     const project = await makeProject({ 'design/CONSTRAINTS.md': ledger('', MAIL) });
