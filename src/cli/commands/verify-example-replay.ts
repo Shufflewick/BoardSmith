@@ -2,8 +2,9 @@ import { designChunksDir, designRulebookDir } from '../lib/project-paths.js';
 import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { atomicWriteFile } from './verify-run.js';
+import { withLedgerLock } from '../lib/ledger-lock.js';
 import { readFencedJsonLedger, type FencedJsonLedgerFile } from '../lib/fenced-json-ledger.js';
 import {
   readLiveSlices,
@@ -181,6 +182,12 @@ export interface ExampleReplayRecord {
   readonly testFilePath?: string;
   /** Present exactly when `verdict` is `not-run`, `agrees` or `disagrees`. */
   readonly translation?: ExampleTranslation;
+  /**
+   * `sliceExtractionHash` of the slice when it was extracted (#835). When it no longer matches,
+   * the slice may have gained an example, and `verify-example-replay` reports it pending. A record
+   * written before records carried it has none, and its slice is pending until recorded again.
+   */
+  readonly extractionHash?: string;
 }
 
 /**
@@ -224,6 +231,7 @@ export function createExampleReplayRecord(input: {
   recordedAt?: string;
   testFilePath?: string;
   translation?: ExampleTranslation;
+  extractionHash?: string;
 }): ExampleReplayRecord {
   const location = `${input.slicePath}:${input.lineNumber}`;
 
@@ -246,6 +254,7 @@ export function createExampleReplayRecord(input: {
     );
   }
   assertReasonAndLineText(location, input.reason, input.lineText);
+  const extractionHash = optionalExtractionHash(location, input.extractionHash);
 
   const expected = input.expected ?? '';
   const observed = input.observed ?? '';
@@ -326,7 +335,20 @@ export function createExampleReplayRecord(input: {
     recordedAt: input.recordedAt ?? new Date().toISOString(),
     ...(input.testFilePath ? { testFilePath: input.testFilePath } : {}),
     ...(translation ? { translation: frozenTranslation(translation) } : {}),
+    ...extractionHash,
   });
+}
+
+/** `{ extractionHash }` when the record has one (#835), refusing one that is not a SHA-256 digest. */
+function optionalExtractionHash(location: string, hash: string | undefined): { extractionHash?: string } {
+  if (hash === undefined) return {};
+  if (!SHA256_HEX_RE.test(hash)) {
+    throw new Error(
+      `${location}'s extractionHash is not a SHA-256 hex digest.\n` +
+        `Record the slice again with verify-example-record, which computes it.`,
+    );
+  }
+  return { extractionHash: hash };
 }
 
 /** Every record says why it has its verdict, and which slice text it cites (#350). */
@@ -443,7 +465,7 @@ function createSliceWithoutExamplesRecord(input: {
 }
 
 // -------------------------------------------------------------------------------------------
-// Task 2 — exampleReplayLedgerPath / replaceExampleReplayVerdicts / recordExampleReplayVerdicts /
+// Task 2 — exampleReplayLedgerPath / recordExampleReplayVerdicts /
 // readExampleReplayVerdicts — the atomic upsert-append ledger triad (CR-02/CR-04/CR-06)
 // -------------------------------------------------------------------------------------------
 
@@ -510,24 +532,18 @@ export async function writeExampleReplayLedger(
   return { ledgerPath: relative(projectDir, ledgerPath) };
 }
 
-/**
- * Replaces every example record in the ledger with exactly `records`, keeping the slices recorded
- * as having no worked examples. A full rewrite, never the callable the workflow uses per-batch
- * (see `recordExampleReplayVerdicts` for that).
- */
-export async function replaceExampleReplayVerdicts(
-  projectDir: string,
-  records: ExampleReplayRecord[],
-): Promise<{ ledgerPath: string }> {
-  const { slicesWithoutExamples } = await readExampleReplayLedger(projectDir);
-  return writeExampleReplayLedger(projectDir, { records, slicesWithoutExamples });
+/** Runs one read-modify-write of the ledger while holding its lock (#831). */
+export async function withExampleReplayLedgerLock<T>(projectDir: string, work: () => Promise<T>): Promise<T> {
+  const ledgerPath = exampleReplayLedgerPath(projectDir);
+  await fs.mkdir(dirname(ledgerPath), { recursive: true });
+  return withLedgerLock(ledgerPath, work);
 }
 
 /**
  * Records a BATCH of verdicts, upserting each by `exampleId` (CR-06): reads the ledger's
  * existing records, replaces any record already recorded for the same `exampleId` (keeping every
  * other record untouched, in existing order), appends new ids last (so the ledger diff stays
- * reviewable), then writes the merged set through `replaceExampleReplayVerdicts` — so there is
+ * reviewable), then writes the merged set through `writeExampleReplayLedger` — so there is
  * still exactly ONE durable write path in the module. Recording example B's verdict never
  * destroys example A's; re-recording example A replaces A's entry in place.
  */
@@ -535,13 +551,14 @@ export async function recordExampleReplayVerdicts(
   projectDir: string,
   records: ExampleReplayRecord[],
 ): Promise<{ ledgerPath: string }> {
-  const existing = await readExampleReplayVerdicts(projectDir);
-  const incomingKeys = new Set(records.map((r) => exampleReplayKey(r)));
-  const merged = [
-    ...existing.filter((r) => !incomingKeys.has(exampleReplayKey(r))),
-    ...records,
-  ];
-  return replaceExampleReplayVerdicts(projectDir, merged);
+  return withExampleReplayLedgerLock(projectDir, async () => {
+    const existing = await readExampleReplayLedger(projectDir);
+    const incomingKeys = new Set(records.map((r) => exampleReplayKey(r)));
+    return writeExampleReplayLedger(projectDir, {
+      records: [...existing.records.filter((r) => !incomingKeys.has(exampleReplayKey(r))), ...records],
+      slicesWithoutExamples: existing.slicesWithoutExamples,
+    });
+  });
 }
 
 /**
@@ -557,16 +574,18 @@ async function replaceSliceExampleReplayVerdicts(
   slicePath: string,
   recorded: { records: ExampleReplayRecord[] } | { noExamples: SliceWithoutExamplesRecord },
 ): Promise<{ ledgerPath: string }> {
-  const existing = await readExampleReplayLedger(projectDir);
-  return writeExampleReplayLedger(projectDir, {
-    records: [
-      ...existing.records.filter((r) => r.slicePath !== slicePath),
-      ...('records' in recorded ? recorded.records : []),
-    ],
-    slicesWithoutExamples: [
-      ...existing.slicesWithoutExamples.filter((s) => s.slicePath !== slicePath),
-      ...('noExamples' in recorded ? [recorded.noExamples] : []),
-    ],
+  return withExampleReplayLedgerLock(projectDir, async () => {
+    const existing = await readExampleReplayLedger(projectDir);
+    return writeExampleReplayLedger(projectDir, {
+      records: [
+        ...existing.records.filter((r) => r.slicePath !== slicePath),
+        ...('records' in recorded ? recorded.records : []),
+      ],
+      slicesWithoutExamples: [
+        ...existing.slicesWithoutExamples.filter((s) => s.slicePath !== slicePath),
+        ...('noExamples' in recorded ? [recorded.noExamples] : []),
+      ],
+    });
   });
 }
 
@@ -695,6 +714,7 @@ function readExampleRecordLine(r: Record<string, unknown>): ExampleReplayRecord 
     recordedAt: r.recordedAt !== undefined ? String(r.recordedAt) : undefined,
     testFilePath: r.testFilePath !== undefined ? String(r.testFilePath) : undefined,
     translation: readLedgerTranslation(r.translation),
+    extractionHash: r.extractionHash !== undefined ? String(r.extractionHash) : undefined,
   });
 }
 
@@ -728,9 +748,9 @@ function readLedgerTranslation(raw: unknown): ExampleTranslation | undefined {
 
 /**
  * A recorded example whose slice line no longer holds its `lineText`. `moved`: the text is now on
- * exactly one other line, `movedTo`, that no other record holds. `text-gone`: the slice no longer
- * contains it. `text-ambiguous`: it is on several other lines, or on one another record already
- * holds, so which one the example is cannot be told from the text.
+ * exactly one other line, `movedTo`, whose id no other record keeps or moves to. `text-gone`: the
+ * slice no longer contains it. `text-ambiguous`: it is on several other lines, or on one whose id
+ * another record keeps or also moves to, so which one the example is cannot be told from the text.
  */
 interface UnanchoredExample {
   exampleId: string;
@@ -748,32 +768,43 @@ type LostExample = Omit<UnanchoredExample, 'movedTo'> & {
 /**
  * Every record in `records` whose slice is among `slices` and whose line no longer reads its
  * `lineText`, in ledger order. A record whose slice is not among `slices` is not checked here.
- * Lines are compared trimmed, the way `buildExampleExtractionPayload` numbered them.
+ * When `movable` is given, only records with those ids are checked; every other record keeps its
+ * id, so none is moved onto it. Lines are compared trimmed, the way
+ * `buildExampleExtractionPayload` numbered them.
  */
 export function findUnanchoredExamples(
   records: readonly ExampleReplayRecord[],
   slices: readonly { path: string; text: string }[],
+  movable?: ReadonlySet<string>,
 ): UnanchoredExample[] {
   const linesBySlice = new Map(slices.map((s) => [s.path, s.text.split('\n').map((l) => l.trim())]));
-  const anchored = (r: ExampleReplayRecord) =>
-    linesBySlice.get(r.slicePath)?.[r.lineNumber - 1] === r.lineText;
-  const held = new Set(records.filter(anchored).map((r) => r.exampleId));
-
-  const unanchored: UnanchoredExample[] = [];
+  const foundAt = new Map<ExampleReplayRecord, number[]>();
   for (const r of records) {
     const lines = linesBySlice.get(r.slicePath);
-    if (lines === undefined || anchored(r)) continue;
-    const at = lines.flatMap((line, i) => (line === r.lineText ? [i + 1] : []));
-    const base = { exampleId: r.exampleId, slicePath: r.slicePath, lineText: r.lineText };
-    if (at.length === 0) {
-      unanchored.push({ ...base, reason: 'text-gone' });
-    } else if (at.length > 1 || held.has(workedExampleId({ slicePath: r.slicePath, lineNumber: at[0] }))) {
-      unanchored.push({ ...base, reason: 'text-ambiguous' });
-    } else {
-      unanchored.push({ ...base, reason: 'moved', movedTo: at[0] });
-    }
+    if (lines === undefined || lines[r.lineNumber - 1] === r.lineText) continue;
+    if (movable !== undefined && !movable.has(r.exampleId)) continue;
+    foundAt.set(r, lines.flatMap((line, i) => (line === r.lineText ? [i + 1] : [])));
   }
-  return unanchored;
+  // A move onto an id another record keeps, or another move also takes, would give two records one id (#836).
+  let movers = [...foundAt].flatMap(([r, at]) =>
+    at.length === 1 ? [{ r, to: workedExampleId({ slicePath: r.slicePath, lineNumber: at[0] }) }] : [],
+  );
+  for (;;) {
+    const moving = new Set(movers.map((m) => m.r));
+    const held = new Set(records.filter((r) => !moving.has(r)).map((r) => r.exampleId));
+    const targets = movers.map((m) => m.to);
+    const safe = movers.filter((m) => !held.has(m.to) && targets.indexOf(m.to) === targets.lastIndexOf(m.to));
+    if (safe.length === movers.length) break;
+    movers = safe;
+  }
+
+  const moving = new Set(movers.map((m) => m.r));
+  return [...foundAt].map(([r, at]): UnanchoredExample => {
+    const base = { exampleId: r.exampleId, slicePath: r.slicePath, lineText: r.lineText };
+    if (at.length === 0) return { ...base, reason: 'text-gone' };
+    if (!moving.has(r)) return { ...base, reason: 'text-ambiguous' };
+    return { ...base, reason: 'moved', movedTo: at[0] };
+  });
 }
 
 function isLost(u: UnanchoredExample): u is LostExample {
@@ -795,12 +826,14 @@ export interface ReanchorResult {
  * keeps its ledger pointing at the right lines. Writes nothing when nothing moved.
  */
 export async function reanchorExampleLedger(projectDir: string): Promise<ReanchorResult> {
-  const records = await readExampleReplayVerdicts(projectDir);
-  if (records.length === 0) return { moved: [], lost: [] };
-  const unanchored = findUnanchoredExamples(records, await readLiveSlices(projectDir));
-  const { rewritten, moved } = moveUnanchoredExamples(records, unanchored);
-  if (moved.length > 0) await replaceExampleReplayVerdicts(projectDir, rewritten);
-  return { moved, lost: unanchored.filter(isLost) };
+  return withExampleReplayLedgerLock(projectDir, async () => {
+    const { records, slicesWithoutExamples } = await readExampleReplayLedger(projectDir);
+    if (records.length === 0) return { moved: [], lost: [] };
+    const unanchored = findUnanchoredExamples(records, await readLiveSlices(projectDir));
+    const { rewritten, moved } = moveUnanchoredExamples(records, unanchored);
+    if (moved.length > 0) await writeExampleReplayLedger(projectDir, { records: rewritten, slicesWithoutExamples });
+    return { moved, lost: unanchored.filter(isLost) };
+  });
 }
 
 /**
@@ -843,7 +876,8 @@ export function describeUnanchoredExamples(unanchored: readonly UnanchoredExampl
     } else if (u.reason === 'text-gone') {
       lines.push(`  ${where}: its line "${u.lineText}" is no longer in the slice.`);
     } else {
-      lines.push(`  ${where}: its line "${u.lineText}" is on several other lines, so it cannot be placed.`);
+      lines.push(`  ${where}: its line "${u.lineText}" is on several other lines, or its new line is kept by, ` +
+          `or also wanted by, another example, so it cannot be placed.`);
     }
   }
   if (unanchored.some((u) => u.reason === 'moved')) {
@@ -864,7 +898,7 @@ export function describeUnanchoredExamples(unanchored: readonly UnanchoredExampl
 function printUnanchoredExamples(unanchored: readonly UnanchoredExample[]): void {
   if (unanchored.length === 0) return;
   console.log(
-    chalk.yellow(`  ⚠ ${unanchored.length} recorded example(s) no longer sit on the line they cite:`),
+    styleText('yellow', `  ⚠ ${unanchored.length} recorded example(s) no longer sit on the line they cite:`),
   );
   for (const line of describeUnanchoredExamples(unanchored)) console.log(`  ${line}`);
 }
@@ -878,12 +912,23 @@ function printSlicesWithoutExamples(slices: readonly VerifyExampleReplaySlice[])
   }
   if (changed.length > 0) {
     console.log(
-      chalk.yellow(
+      styleText('yellow',
         `  ⚠ ${changed.length} slice(s) recorded as having no worked examples have changed since, ` +
           `so they are pending again: extract and record each once more.`,
       ),
     );
     for (const s of changed) console.log(`    ${s.slicePath}`);
+  }
+  const examplesChanged = slices.filter((s) => s.examples === 'slice-changed');
+  if (examplesChanged.length > 0) {
+    console.log(
+      styleText('yellow',
+        `  ⚠ ${examplesChanged.length} slice(s) with recorded worked examples have changed since they ` +
+          `were extracted, or were recorded before the ledger kept a fingerprint of the slice, so they ` +
+          `may hold examples nobody has tested: extract and record each once more.`,
+      ),
+    );
+    for (const s of examplesChanged) console.log(`    ${s.slicePath}`);
   }
 }
 
@@ -930,8 +975,14 @@ export interface VerifyExampleReplaySlice {
    */
   noWorkedExamples?: 'recorded' | 'slice-changed';
   /**
-   * `true` when the slice has something for the extractor to read and the ledger records neither
-   * an example of it nor, for its current text, that it has none; or when one of its recorded
+   * Set when the ledger records worked examples for this slice (#835): `recorded` while the lines
+   * the extractor reads are unchanged since, `slice-changed` once they have changed or a record
+   * carries no `extractionHash` (the slice is then pending, since it may have gained an example).
+   */
+  examples?: 'recorded' | 'slice-changed';
+  /**
+   * `true` when the slice has something for the extractor to read and the ledger records, for its
+   * current text, neither its examples (#835) nor that it has none; or when one of its recorded
    * examples' text is no longer in it (`unanchored`, #350). A slice with nothing to extract
    * (`notDispatchable`) is pending only in that last case.
    */
@@ -1041,7 +1092,8 @@ export async function verifyExampleReplayCommand(
   const slices: VerifyExampleReplaySlice[] = liveSlices
     .map((s): VerifyExampleReplaySlice => {
       const lost = slicesWithLostExamples.has(s.path);
-      const hasExamples = verdicts.some((v) => v.slicePath === s.path);
+      const sliceRecords = verdicts.filter((v) => v.slicePath === s.path);
+      const hasExamples = sliceRecords.length > 0;
       let extraction: ExampleExtractionPayload;
       try {
         extraction = buildExampleExtractionPayload({ path: s.path, text: s.text });
@@ -1054,11 +1106,21 @@ export async function verifyExampleReplayCommand(
       if (extraction.lines.length === 0) {
         return { slicePath: s.path, notDispatchable: 'no-extractable-content', pending: lost };
       }
+      const hash = sliceExtractionHash({ path: s.path, text: s.text });
+      if (hasExamples) {
+        const current = sliceRecords.every((r) => r.extractionHash === hash);
+        return {
+          slicePath: s.path,
+          extractionPayload: extraction.payload,
+          examples: current ? 'recorded' : 'slice-changed',
+          pending: lost || !current,
+        };
+      }
       const none = withoutExamples.get(s.path);
       if (none === undefined) {
-        return { slicePath: s.path, extractionPayload: extraction.payload, pending: lost || !hasExamples };
+        return { slicePath: s.path, extractionPayload: extraction.payload, pending: true };
       }
-      const current = none.extractionHash === sliceExtractionHash({ path: s.path, text: s.text });
+      const current = none.extractionHash === hash;
       return {
         slicePath: s.path,
         extractionPayload: extraction.payload,
@@ -1099,13 +1161,13 @@ export async function verifyExampleReplayCommand(
   }
 
   console.log(
-    chalk.green(
+    styleText('green',
       `✓ Example replay — ${slices.length} slice(s), ${verdicts.length} recorded verdict(s)`,
     ),
   );
   if (verdicts.length < 10) {
     console.log(
-      chalk.yellow(
+      styleText('yellow',
         `  n = ${verdicts.length} — too small to distinguish the mechanism working from luck; ` +
           `read the per-example rows, not the totals.`,
       ),
@@ -1124,7 +1186,7 @@ export async function verifyExampleReplayCommand(
   }
   if (unarchivedSources.length > 0) {
     console.log(
-      chalk.yellow(
+      styleText('yellow',
         `  ⚠ ${unarchivedSources.length} unarchived source document(s) present: ` +
           `${unarchivedSources.join(', ')} — a "disagrees" finding against a slice these may ` +
           `cover is downgraded to quote-unverified rather than reported as a confident accusation.`,
@@ -1151,14 +1213,14 @@ export async function verifyExampleReplayCommand(
   );
 
   if (disagreesVerified.length > 0) {
-    console.log(chalk.yellow(`  mismatch, quotes source-verified:`));
+    console.log(styleText('yellow', `  mismatch, quotes source-verified:`));
     for (const finding of disagreesVerified) {
       console.log(`    ⚠ ${finding.slicePath}:${finding.lineNumber} — ${finding.reason}`);
     }
   }
   if (disagreesUnverified.length > 0) {
     console.log(
-      chalk.yellow(
+      styleText('yellow',
         `  mismatch, quotes NOT source-verified — read as a question about the quote, not an ` +
           `accusation against the code:`,
       ),
@@ -1169,7 +1231,7 @@ export async function verifyExampleReplayCommand(
   }
   if (notRun.length > 0) {
     console.log(
-      chalk.yellow(
+      styleText('yellow',
         `  translated but not run yet — run boardsmith verify-example-emit and then ` +
           `boardsmith verify-example-run for a chunk that cites each slice:`,
       ),
@@ -1178,7 +1240,7 @@ export async function verifyExampleReplayCommand(
   }
   for (const finding of otherFindings) {
     console.log(
-      chalk.yellow(
+      styleText('yellow',
         `  ⚠ ${finding.verdict} (worth a human glance, never a verdict) — ` +
           `${finding.slicePath}:${finding.lineNumber}`,
       ),
@@ -1560,6 +1622,7 @@ export async function verifyExampleRecordCommand(
     buildExampleExtractionPayload({ path: slicePath, text: sliceText }).lines.map((l) => [l.lineNumber, l.text]),
   );
   const lineText = (lineNumber: number): string => lineTextAt.get(lineNumber) ?? '';
+  const extractionHash = sliceExtractionHash({ path: slicePath, text: sliceText });
 
   const translatedRecords: ExampleReplayRecord[] = [...specsById.values()].map((spec) => {
     const outcome = readTranslatorOutcome(spec.id, translations.byId.get(spec.id));
@@ -1571,6 +1634,7 @@ export async function verifyExampleRecordCommand(
       kind: spec.kind,
       supportingQuoteLines: [...spec.supportingQuoteLines],
       provenance,
+      extractionHash,
     };
     if (outcome.kind === 'unexecutable') {
       return createExampleReplayRecord({ ...common, verdict: 'unexecutable', reason: outcome.reason });
@@ -1604,6 +1668,7 @@ export async function verifyExampleRecordCommand(
       contradictionB: entry.supportingQuoteLines[1] ?? '',
       supportingQuoteLines: entry.supportingQuoteLines,
       provenance,
+      extractionHash,
     }),
   );
 
@@ -1621,7 +1686,7 @@ export async function verifyExampleRecordCommand(
       : {
           noExamples: createSliceWithoutExamplesRecord({
             slicePath,
-            extractionHash: sliceExtractionHash({ path: slicePath, text: sliceText }),
+            extractionHash,
           }),
         },
   );
@@ -1632,7 +1697,7 @@ export async function verifyExampleRecordCommand(
     return result;
   }
   console.log(
-    chalk.green(
+    styleText('green',
       records.length > 0
         ? `✓ Recorded ${records.length} worked example(s) for ${slicePath} (provenance: ${provenance}).`
         : `✓ Recorded ${slicePath} as having no worked examples; it stays checked until the lines ` +
@@ -1648,7 +1713,7 @@ export async function verifyExampleRecordCommand(
     );
   }
   for (const repair of repairs) {
-    console.log(chalk.yellow(`  ⚠ JSON transport repair — ${repair}`));
+    console.log(styleText('yellow', `  ⚠ JSON transport repair — ${repair}`));
   }
   return result;
 }
@@ -1756,7 +1821,7 @@ export async function verifyExampleTranslateCommand(
   }
 
   console.log(
-    chalk.green(
+    styleText('green',
       `✓ Example translate — ${slicePath}: ${payloads.length} payload(s), ` +
         `${result.notTranslated.length} not translated.`,
     ),
@@ -1769,7 +1834,7 @@ export async function verifyExampleTranslateCommand(
     console.log(`  ⚠ ${slicePath}:${nt.lineNumber} — not translated: ${nt.reason}`);
   }
   for (const repair of result.repairs) {
-    console.log(chalk.yellow(`  ⚠ JSON transport repair — ${repair}`));
+    console.log(styleText('yellow', `  ⚠ JSON transport repair — ${repair}`));
   }
 
   return result;

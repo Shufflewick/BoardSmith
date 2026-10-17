@@ -42,7 +42,7 @@ import type { PickChoicesResult, PickStepResponse } from '../composables/useActi
 import type { GameState, PlayerState } from '../../client/types.js';
 import type { GameRootView } from '../types.js';
 import turnNotificationSound from '../assets/turn-notification.mp3';
-import { usePlatformTransport } from '../composables/usePlatformTransport.js';
+import { hostRefusal, usePlatformTransport } from '../composables/usePlatformTransport.js';
 
 // Get or set the global "Show action help" preference.
 // Key: boardsmith_action_help; default ON (true) when absent.
@@ -473,10 +473,6 @@ function hostResult<T extends { success: boolean }>(raw: Record<string, unknown>
   return { ...raw, success: raw.success === true } as T;
 }
 
-/** Read an error message off an untyped host response, with a fallback. */
-function hostErrorText(raw: Record<string, unknown>, fallback: string): string {
-  return typeof raw.error === 'string' && raw.error.length > 0 ? raw.error : fallback;
-}
 
 // The wire itself lives in `usePlatformTransport` — request ids, the pending
 // map, the timeout, and the response hand-off. What stays here is the ONE thing
@@ -492,6 +488,12 @@ const platformTransport = usePlatformTransport({
 
 function platformRequest(op: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
   return platformTransport.request(op, payload);
+}
+
+/** Show the player a host refusal; the transport resolves one rather than rejecting. */
+function toastRefusal(result: Record<string, unknown>, failed: string, unsupported?: string): void {
+  const refusal = hostRefusal(result, failed, unsupported);
+  if (refusal) toast.error(refusal);
 }
 
 // Board interaction state (shared between ActionPanel and game board)
@@ -546,7 +548,7 @@ const tableSeat = useTableSeat({
     })),
   // Cancel pending action on server (for onSelect-routed actions)
   cancelPendingAction: async (player) => {
-    await platformRequest('cancel_action', { player });
+    toastRefusal(await platformRequest('cancel_action', { player }), 'Could not cancel the action.');
   },
   // Phase 3: Repeating selections - processed step by step on server
   pickStep: async (player, selectionName, value, actionName, initialArgs) =>
@@ -581,6 +583,8 @@ const {
 // unfiltered. If this is ever empty when it should not be, fix
 // `buildPlayerState`/`getFormattedMessages`, do not reintroduce a second source.
 const gameMessages = computed(() => state.value?.state?.messages ?? []);
+// The seat's line number of its first line, once the game prunes its log (#903).
+const messageOffset = computed(() => state.value?.state?.messageOffset ?? 0);
 
 // ── Unread log entries at the compact tier (#22) ───────────────────────────
 //
@@ -595,22 +599,29 @@ const gameMessages = computed(() => state.value?.state?.messages ?? []);
 // by a game — a game-supplied number would be a second definition of "how much
 // log is there".
 
+/** How many lines this seat has been sent, pruned ones included: a line number, not the window's length (#903). */
+const logEnd = computed(() => messageOffset.value + gameMessages.value.length);
+
 /** How many entries had been written when the player last had the log open. */
 const logReadWatermark = ref(0);
 
+// Never more than the log holds: lines the game pruned unread are not behind the toggle.
 const unreadLogCount = computed(() =>
-  Math.max(0, gameMessages.value.length - logReadWatermark.value)
+  Math.min(gameMessages.value.length, Math.max(0, logEnd.value - logReadWatermark.value))
 );
 
 /**
  * Opening the log marks it read; so does new activity arriving while it is
  * already open, which is the case that would otherwise show a badge behind a
- * panel the player is looking at.
+ * panel the player is looking at. Line numbers start again in a new game, and
+ * are reused after an undo takes lines back, so both lower the watermark.
  */
 watch(
-  [mobileExpanded, () => gameMessages.value.length],
-  ([expanded, length]) => {
-    if (expanded) logReadWatermark.value = length;
+  [mobileExpanded, logEnd, () => state.value?.state.gameInstanceId],
+  ([expanded, end, game], previous) => {
+    if (expanded) logReadWatermark.value = end;
+    else if (previous?.[2] !== undefined && game !== previous[2]) logReadWatermark.value = 0;
+    else if (end < logReadWatermark.value) logReadWatermark.value = end;
   },
   { immediate: true }
 );
@@ -763,11 +774,7 @@ async function handleUndo(): Promise<void> {
     toast.error('Return to the current position before undoing.');
     return;
   }
-  const result = await platformRequest('undo', { player: playerSeat.value });
-  if (!result.success) {
-    console.error('Undo failed:', result.error);
-    toast.error(hostErrorText(result, 'Undo failed.'));
-  }
+  toastRefusal(await platformRequest('undo', { player: playerSeat.value }), 'Undo failed.');
   // State update arrives via the game_state broadcast.
 }
 
@@ -871,11 +878,8 @@ async function sendDemoControl(
   control: 'pause' | 'play' | 'step' | 'back',
   delay?: number
 ): Promise<void> {
-  try {
-    await platformRequest('demo-control', delay !== undefined ? { control, delay } : { control });
-  } catch {
-    toast.error('Demo control failed.');
-  }
+  const result = await platformRequest('demo-control', delay !== undefined ? { control, delay } : { control });
+  toastRefusal(result, 'Demo control failed.', 'This table does not support demo controls.');
 }
 
 function setDemoSpeed(delay: number): void {
@@ -1158,12 +1162,13 @@ if (inHost) {
 function handleSwitchPlayer(position: number) {
   // The host owns which seat the iframe renders; ask it to switch (the dev
   // host reloads this iframe as that seat).
-  void platformRequest('debug:switch-seat', { seat: position });
+  void platformRequest('debug:switch-seat', { seat: position })
+    .then((result) => toastRefusal(result, 'Could not switch seats.'));
 }
 
 function handleRestartGame() {
-  // The host owns the session; ask it to start a fresh game.
-  void platformRequest('debug:restart', {});
+  // Debug panel only (#902): the host owns the session; ask it to start a fresh game.
+  void platformRequest('debug:restart', {}).then((result) => toastRefusal(result, 'Could not start a new game.'));
 }
 
 // Time travel handler - updates the game view to show historical state
@@ -1189,15 +1194,6 @@ watch(() => state.value?.state.gameInstanceId, (game, previous) => {
 // Debug highlight handler - highlights an element on the board
 function handleHighlightElement(elementId: number | null) {
   debugHighlightedElementId.value = elementId;
-}
-
-// Menu handlers
-function handleMenuItemClick(id: string) {
-  if (id === 'new-game') {
-    // D11 (ENDGAME-02): "New Game" restarts via the same real restart path as
-    // Rematch.
-    handleRestartGame();
-  }
 }
 
 // Retry handler — wired from AutoUI → GameShell when the user clicks Retry
@@ -1248,7 +1244,7 @@ watch(
       // now derived from broadcast state (WR-04), so we only fire the request;
       // the session broadcasts the updated state on its own.
       if (isDemoRunning.value) {
-        void platformRequest('demo-stop', {}).catch(() => {/* best-effort */});
+        void platformRequest('demo-stop', {}).then((result) => toastRefusal(result, 'Failed to stop demo.'));
       }
     }
   },
@@ -1409,6 +1405,7 @@ defineExpose({
       :due-seats="dueSeatsNow"
       :show-turn-status="props.showTurnStatus"
       :messages="gameMessages"
+      :message-offset="messageOffset"
       :unread-log-count="unreadLogCount"
       :may-act="isMyTurn"
       :available-actions="gatedAvailableActions"
@@ -1445,8 +1442,8 @@ defineExpose({
              (holdGameOverUntil) holds the card back too (#419).
              A filled #game-over slot replaces the default card entirely; providesOwnGameOverUi
              suppresses BOTH (the game renders its own end state on its own board). Dismissing
-             (close button / Escape) reveals the board without restarting or leaving.
-             @new-game and @rematch both restart via the one real restart path (D11/ENDGAME-02). -->
+             (close button / Escape) reveals the board without leaving. There is no
+             New Game or Rematch: a deployed host has no restart op (#902). -->
         <template v-if="gameOverRevealed && !props.providesOwnGameOverUi && !gameOverDismissed">
           <slot
             v-if="$slots['game-over']"
@@ -1454,8 +1451,6 @@ defineExpose({
             :winners="gameOverWinners"
             :players="players"
             :is-draw="isDraw"
-            :rematch="handleRestartGame"
-            :new-game="() => handleMenuItemClick('new-game')"
             :dismiss="dismissGameOver"
           />
           <GameOverCard
@@ -1463,8 +1458,6 @@ defineExpose({
             :winner-seats="winnerSeats"
             :players="players"
             :is-draw="isDraw"
-            @new-game="handleMenuItemClick('new-game')"
-            @rematch="handleRestartGame"
             @dismiss="dismissGameOver"
           />
         </template>
@@ -1643,7 +1636,6 @@ defineExpose({
           :is-tutorial-running="isTutorialRunningProp"
           :teaching-disabled="teachingDisabledProp"
           @undo="handleUndo"
-          @menu-item-click="handleMenuItemClick"
           @teaching-action="handleTeachingAction"
         />
       </template>

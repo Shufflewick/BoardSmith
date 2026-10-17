@@ -679,6 +679,21 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
     expect(m.refused.get('kindle')).toBeUndefined();
   });
 
+  it('#923: forgets the refused numbers once the action is taken, so a bid that must beat the last never runs out of tries', () => {
+    const w = walk({});
+    const m = memory();
+    for (const [low, high] of [['1', '2'], ['2', '3'], ['3', '4']]) {
+      typedANumber(m, 'bid', 'amount', low);
+      recordResolved([failed('bid', `Bid more than ${low}.`)], w, m);
+      typedANumber(m, 'bid', 'amount', high);
+      recordResolved([{ action: 'bid', success: true }], w, m);
+    }
+    expect(w.errors).toEqual([]);
+    expect(m.failed.size).toBe(0);
+    // The walk's next number starts from the field's least again (`numberToEnter` reads this count).
+    expect(m.refused.get('bid')).toBeUndefined();
+  });
+
   it('#470: reports a failed action with what the walk typed in it, and counts each taken action as the game moving on', () => {
     const w = walk({ wanting: new Map([['greet', 'whom'], ['wave', 'whom']]) });
     const m = memory();

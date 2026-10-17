@@ -205,10 +205,10 @@
         "count": 1
       },
       "complexity_high": {
-        "count": 2
+        "count": 1
       },
       "complexity_moderate": {
-        "count": 3
+        "count": 4
       }
     },
     "src/cli/dev-host/DevHost.vue": {
@@ -363,14 +363,19 @@
         "count": 1
       }
     },
+    "src/eslint-plugin/rules/element-types.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
     "src/eslint-plugin/rules/no-element-array-state.ts": {
       "complexity_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "src/eslint-plugin/rules/no-element-identity-comparison.ts": {
       "complexity_moderate": {
-        "count": 3
+        "count": 1
       }
     },
     "src/runtime/runner.ts": {
@@ -481,11 +486,6 @@
         "count": 1
       }
     },
-    "src/ui/components/auto-ui/AutoRenderer.vue": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/ui/components/auto-ui/auto-ui-helpers.ts": {
       "complexity_moderate": {
         "count": 1
@@ -503,7 +503,7 @@
     },
     "src/ui/components/auto-ui/renderers/CardRenderer.vue": {
       "complexity_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue": {
@@ -513,9 +513,6 @@
     },
     "src/ui/components/auto-ui/renderers/HandRenderer.vue": {
       "complexity_high": {
-        "count": 1
-      },
-      "complexity_moderate": {
         "count": 1
       }
     },

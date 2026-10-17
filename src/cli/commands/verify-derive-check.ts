@@ -6,8 +6,9 @@ import {
 import type { Role } from '../lib/agent-roles.js';
 import { promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { atomicWriteFile } from './verify-run.js';
+import { withLedgerLock } from '../lib/ledger-lock.js';
 import { readFencedJsonLedger } from '../lib/fenced-json-ledger.js';
 import { isPresentationLine } from './verify-classify.js';
 import { DERIVED_LINE_RE, annotationLineStartRe } from './derived-line-pattern.js';
@@ -569,10 +570,14 @@ export async function recordDeriveCheckVerdicts(
   projectDir: string,
   records: DeriveCheckRecord[],
 ): Promise<{ ledgerPath: string }> {
-  const existing = await readDeriveCheckVerdicts(projectDir);
-  const incomingKeys = new Set(records.map((r) => deriveCheckKey(r)));
-  const merged = [...existing.filter((r) => !incomingKeys.has(deriveCheckKey(r))), ...records];
-  return replaceDeriveCheckVerdicts(projectDir, merged);
+  const ledgerPath = deriveCheckLedgerPath(projectDir);
+  await fs.mkdir(dirname(ledgerPath), { recursive: true });
+  return withLedgerLock(ledgerPath, async () => {
+    const existing = await readDeriveCheckVerdicts(projectDir);
+    const incomingKeys = new Set(records.map((r) => deriveCheckKey(r)));
+    const merged = [...existing.filter((r) => !incomingKeys.has(deriveCheckKey(r))), ...records];
+    return replaceDeriveCheckVerdicts(projectDir, merged);
+  });
 }
 
 /**
@@ -821,7 +826,7 @@ export async function verifyDeriveCheckCommand(
   }
 
   console.log(
-    chalk.green(
+    styleText('green',
       `✓ Derive check — ${candidates.length} rule-bearing candidate(s) across ${slices.length} ` +
         `slice(s), ${pendingCount} pending`,
     ),
@@ -838,7 +843,7 @@ export async function verifyDeriveCheckCommand(
       continue;
     }
     console.log(
-      chalk.yellow(
+      styleText('yellow',
         `  ⚠ ${finding.verdict} (worth a human glance, never a verdict) — ` +
           `${finding.slicePath}:${finding.lineNumber}`,
       ),
@@ -846,10 +851,10 @@ export async function verifyDeriveCheckCommand(
     console.log(`    Reason: ${finding.reason}`);
   }
   for (const stale of staleRecords) {
-    console.log(chalk.yellow(`  ⚠ STALE — ${stale}`));
+    console.log(styleText('yellow', `  ⚠ STALE — ${stale}`));
   }
   for (const orphan of orphanedRecords) {
-    console.log(chalk.yellow(`  ⚠ ORPHANED — ${orphan}`));
+    console.log(styleText('yellow', `  ⚠ ORPHANED — ${orphan}`));
   }
 
   return result;
@@ -1481,14 +1486,14 @@ export async function verifyDeriveRecordCommand(
     return result;
   }
   console.log(
-    chalk.green(
+    styleText('green',
       `✓ Recorded ${records.length} derive-check verdict(s) for ${slicePath} ` +
         `(${grounding.rejected.length} grounding rejection(s)).`,
     ),
   );
   console.log(`  Ledger: ${ledgerPath}`);
   for (const repair of repairs) {
-    console.log(chalk.yellow(`  ⚠ JSON transport repair — ${repair}`));
+    console.log(styleText('yellow', `  ⚠ JSON transport repair — ${repair}`));
   }
   return result;
 }

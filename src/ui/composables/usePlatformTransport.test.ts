@@ -88,13 +88,13 @@ describe('usePlatformTransport', () => {
     await expect(pending).resolves.toMatchObject({ success: true });
   });
 
-  it('resolves a timed-out request as a failure naming the op', async () => {
+  it('resolves a timed-out request as a failure a player can read', async () => {
     const { transport } = makeTransport();
     const pending = transport.request('debug:state', {});
 
     vi.advanceTimersByTime(20_000);
 
-    await expect(pending).resolves.toEqual({ success: false, error: "Timed out on 'debug:state'" });
+    await expect(pending).resolves.toEqual({ success: false, error: 'The table did not answer in time. Try again.' });
     expect(transport.pendingCount()).toBe(0);
   });
 
@@ -106,7 +106,7 @@ describe('usePlatformTransport', () => {
     // No throw, no second resolution: the entry is already gone.
     transport.handleResponse({ requestId: 'req-0', result: { success: true } });
 
-    await expect(pending).resolves.toEqual({ success: false, error: "Timed out on 'undo'" });
+    await expect(pending).resolves.toEqual({ success: false, error: 'The table did not answer in time. Try again.' });
   });
 
   it('ignores a response for a request id it never issued', async () => {

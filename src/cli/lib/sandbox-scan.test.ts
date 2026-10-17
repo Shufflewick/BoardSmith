@@ -30,6 +30,17 @@ describe('scanSandboxViolations', () => {
     expect(violations[0].line).toBe(1);
   });
 
+  // TypeScript bundler resolution and Vite import these extensions, so game code can live in them (#848).
+  it.each(['mts', 'cts', 'mjs', 'cjs'])('flags forbidden APIs in a .%s file', (ext) => {
+    write(`src/rules/rng.${ext}`, 'export const x = Math.random() + Date.now();\nexport const y = fetch("/x");\n');
+    expect(scanSandboxViolations(dir).filter((v) => v.file === `src/rules/rng.${ext}`)).toHaveLength(3);
+  });
+
+  it.each(['d.ts', 'd.mts', 'd.cts'])('skips a .%s declaration file', (ext) => {
+    write(`src/rules/x.${ext}`, 'export const x = Math.random();\n');
+    expect(scanSandboxViolations(dir)).toEqual([]);
+  });
+
   // Security rules (network/filesystem/eval) are enforced everywhere, including
   // UI helpers outside src/rules.
   it('flags security violations in UI helpers outside src/rules', () => {

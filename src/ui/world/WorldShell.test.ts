@@ -6,7 +6,7 @@ import WorldShell from './WorldShell.vue';
 import { useWorld, type WorldContext } from './useWorld.js';
 import { WORLD_HOST_SOURCE, WORLD_UI_SOURCE } from './worldProtocol.js';
 import { orderBookKey } from './orderBook.js';
-import { defineGameUIs, defaultUI } from '../game-uis.js';
+import { defineGameUIs, defaultUI, devUI } from '../game-uis.js';
 import { useToast } from '../composables/useToast.js';
 import { useDebugBridge, type DebugBridge } from '../composables/useDebugBridge.js';
 import { countPageSingletons, unresolvedComponents } from '../components/page-singletons.test-helper.js';
@@ -518,6 +518,20 @@ describe('WorldShell — the shared chrome (#170)', () => {
     expect(wrapper.text()).toContain('defaultUI()');
     wrapper.unmount();
   });
+
+  it('renders the default UI and never a devUI() entry: a world has no dev UI switcher (#896)', async () => {
+    const DevBoard = defineComponent({ setup: () => () => h('p', { class: 'dev-board' }, 'dev') });
+    const wrapper = mount(WorldShell, {
+      props: {
+        uis: defineGameUIs({ Dev: devUI(async () => ({ default: DevBoard })), Rooms: defaultUI(Rooms) }),
+        displayName: 'Gloamhall',
+      },
+    });
+    await drawn(wrapper, stateFrame());
+    expect(wrapper.find('.rooms').exists()).toBe(true);
+    expect(wrapper.find('.dev-board').exists()).toBe(false);
+    wrapper.unmount();
+  });
 });
 
 /**
@@ -555,7 +569,7 @@ describe('WorldShell — recovering an order left over from the last page (#195)
   function leaveUnanswered(action: string, args: Record<string, unknown>): void {
     localStorage.setItem(
       orderBookKey(location.pathname),
-      JSON.stringify([{ id: 'o-left-over', at: 1, action, args }]),
+      JSON.stringify([{ id: 'o-left-over', seat: 4, at: 1, action, args }]),
     );
   }
 

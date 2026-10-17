@@ -1,7 +1,7 @@
 import { designRulebookDir } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
 import { join, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 
 /**
  * Which documents a project's rules come from, and which one each slice was transcribed from.
@@ -49,14 +49,15 @@ export function parseAdditionalSources(indexText: string): AdditionalSourceRecor
   if (begin === -1 || end === -1 || end < begin) return [];
   const body = indexText.slice(begin + ADDITIONAL_SOURCES_BEGIN.length, end);
   const records: AdditionalSourceRecord[] = [];
-  for (const row of body.matchAll(/^\|\s*([^|]+?)\s*\|\s*([0-9a-f]{64})\s*\|\s*$/gm)) {
-    records.push({ path: row[1].trim(), sourceHash: row[2].trim() });
+  // A `|` in a file name is written as `\|` so it cannot end the cell (#823).
+  for (const row of body.matchAll(/^\|\s*((?:\\\||[^|])+?)\s*\|\s*([0-9a-f]{64})\s*\|\s*$/gm)) {
+    records.push({ path: row[1].trim().replaceAll('\\|', '|'), sourceHash: row[2].trim() });
   }
   return records;
 }
 
 /** Every archived document lives here, relative to the design directory. */
-const ARCHIVE_PREFIX = 'rulebook/source/';
+export const ARCHIVE_PREFIX = 'rulebook/source/';
 
 /**
  * Every archived document `INDEX.md` records: the primary `Source:` first, then each
@@ -243,8 +244,8 @@ export async function ingestSliceSourceCommand(
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
   } else {
-    console.log(chalk.green(`✓ ${written.length} slice${written.length === 1 ? ' now names' : 's now name'} ${document}`));
-    if (unchanged.length > 0) console.log(chalk.gray(`  already recorded: ${unchanged.join(', ')}`));
+    console.log(styleText('green', `✓ ${written.length} slice${written.length === 1 ? ' now names' : 's now name'} ${document}`));
+    if (unchanged.length > 0) console.log(styleText('gray', `  already recorded: ${unchanged.join(', ')}`));
   }
   return result;
 }
