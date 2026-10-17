@@ -6,8 +6,10 @@
  *
  * Capabilities:
  *   - open(): saves document.activeElement, then on nextTick focuses first
- *     focusable element inside the dialog; applies inert to sibling DOM nodes.
- *   - close(): restores focus to the previously-focused element; removes inert.
+ *     focusable element inside the dialog; applies inert to the siblings of the
+ *     dialog and of each of its ancestors up to <body>.
+ *   - close(): restores focus to the previously-focused element; removes the
+ *     inert that open() added.
  *   - handleKeydown(e): traps Tab within the focusable set (cycle on boundaries);
  *     closes via onClose on Escape ONLY when escapeToClose is true.
  *
@@ -63,10 +65,9 @@ export function useFocusTrap(
 ) {
   const escapeToClose = options?.escapeToClose ?? true;
   let previouslyFocused: HTMLElement | null = null;
-  // Saved reference to the body-level host node whose siblings receive inert.
-  // Using a plain variable (not dialogRef) means cleanup works even after the
-  // Vue template ref is cleared at unmount (CR-02 guard).
-  let _inertRoot: HTMLElement | null = null;
+  // The elements open() made inert. Kept apart from dialogRef so cleanup works
+  // even after the Vue template ref is cleared at unmount (CR-02 guard).
+  let _inerted: HTMLElement[] | null = null;
 
   // --------------------------------------------------------------------------
   // open() — save context, apply inert, focus first element
@@ -93,7 +94,7 @@ export function useFocusTrap(
 
   // An owner that unmounts while open (ControlsMenu, #862) must not leave the app inert.
   onScopeDispose(() => {
-    if (_inertRoot) close();
+    if (_inerted) close();
   });
 
   // --------------------------------------------------------------------------
@@ -132,43 +133,34 @@ export function useFocusTrap(
   }
 
   // --------------------------------------------------------------------------
-  // Inert helpers — apply/remove at body-child scope (CR-01)
+  // Inert helpers (CR-01, #863)
   //
-  // Walk up from the dialog to the direct child of <body> (the "scoping root"),
-  // then apply `inert` to all of its siblings. This ensures Tab cannot escape
-  // to any other top-level DOM subtree regardless of how deeply the dialog is
-  // nested inside its parent components.
+  // Walk up from the dialog to <body> and apply `inert` to the siblings at
+  // every level, so a dialog nested inside the app (GameOverCard, anything
+  // teleported to #bs-game-modal) leaves the board and Action Panel
+  // unreachable, not just the other children of <body>. Only the elements
+  // this trap made inert are recorded, so close() never clears an `inert`
+  // someone else set, and a trap opened over another restores it on close.
   // --------------------------------------------------------------------------
 
-  function getScopingRoot(): HTMLElement | null {
+  function applySiblingInert() {
+    const added: HTMLElement[] = [];
     let node: HTMLElement | null = dialogRef.value;
-    while (node && node.parentElement && node.parentElement !== document.body) {
+    while (node && node !== document.body && node.parentElement) {
+      for (const sibling of Array.from(node.parentElement.children) as HTMLElement[]) {
+        if (sibling !== node && !sibling.hasAttribute('inert')) {
+          sibling.setAttribute('inert', '');
+          added.push(sibling);
+        }
+      }
       node = node.parentElement;
     }
-    return node;
-  }
-
-  function applySiblingInert() {
-    const target = getScopingRoot();
-    const parent = target?.parentElement;
-    if (!target || !parent) return;
-    for (const child of Array.from(parent.children)) {
-      if (child !== target) {
-        (child as HTMLElement).setAttribute('inert', '');
-      }
-    }
-    _inertRoot = target;
+    _inerted = added;
   }
 
   function removeSiblingInert() {
-    const parent = _inertRoot?.parentElement;
-    if (!parent) return;
-    for (const child of Array.from(parent.children)) {
-      if (child !== _inertRoot) {
-        (child as HTMLElement).removeAttribute('inert');
-      }
-    }
-    _inertRoot = null;
+    for (const el of _inerted ?? []) el.removeAttribute('inert');
+    _inerted = null;
   }
 
   return { open, close, handleKeydown };

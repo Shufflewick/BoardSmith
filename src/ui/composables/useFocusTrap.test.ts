@@ -263,7 +263,7 @@ describe('useFocusTrap', () => {
     dialogRef.value = null;
 
     close();
-    // Cleanup must use _inertRoot (not dialogRef) so inert is removed even with null ref
+    // Cleanup must use the recorded elements (not dialogRef) so inert is removed even with null ref
     expect(sibling.hasAttribute('inert')).toBe(false);
   });
 
@@ -280,5 +280,68 @@ describe('useFocusTrap', () => {
 
     scope.stop();
     expect(app.hasAttribute('inert')).toBe(false);
+  });
+
+  // body > [#app > [#board, #shell > [#action-panel, #bs-game-modal > dialog]], #other]
+  function buildAppTree() {
+    const el = (id: string, parent: HTMLElement) => {
+      const node = document.createElement('div');
+      node.id = id;
+      parent.appendChild(node);
+      return node;
+    };
+    const app = el('app', document.body);
+    const board = el('board', app);
+    const shell = el('shell', app);
+    const actionPanel = el('action-panel', shell);
+    const modalHost = el('bs-game-modal', shell);
+    const other = el('other', document.body);
+    const dialog = el('dialog', modalHost);
+    dialog.innerHTML = '<button>OK</button>';
+    return { app, board, shell, actionPanel, modalHost, other, dialog };
+  }
+
+  it('a dialog inside #app makes the siblings at every level inert, but not its ancestors (#863)', () => {
+    const t = buildAppTree();
+    const { open, close } = useFocusTrap(ref(t.dialog), { onClose: vi.fn() });
+
+    open();
+    for (const el of [t.board, t.actionPanel, t.other]) expect(el.hasAttribute('inert'), el.id).toBe(true);
+    for (const el of [t.app, t.shell, t.modalHost, t.dialog]) expect(el.hasAttribute('inert'), el.id).toBe(false);
+
+    close();
+    for (const el of [t.board, t.actionPanel, t.other]) expect(el.hasAttribute('inert'), el.id).toBe(false);
+  });
+
+  it('close() leaves elements that were already inert before open() inert (#863)', () => {
+    const t = buildAppTree();
+    t.actionPanel.setAttribute('inert', '');
+    t.other.setAttribute('inert', '');
+    const { open, close } = useFocusTrap(ref(t.dialog), { onClose: vi.fn() });
+
+    open();
+    close();
+
+    expect(t.actionPanel.hasAttribute('inert')).toBe(true);
+    expect(t.other.hasAttribute('inert')).toBe(true);
+    expect(t.board.hasAttribute('inert')).toBe(false);
+  });
+
+  it('a second trap opened over the first restores the first trap\'s state on close (#863)', () => {
+    const t = buildAppTree();
+    const popover = appendDialog('<button>Menu</button>');
+    const a = useFocusTrap(ref(t.dialog), { onClose: vi.fn() });
+    const b = useFocusTrap(ref(popover), { onClose: vi.fn() });
+
+    a.open();
+    b.open();
+    expect(t.app.hasAttribute('inert')).toBe(true);
+
+    b.close();
+    expect(t.app.hasAttribute('inert')).toBe(false);
+    for (const el of [t.board, t.actionPanel, t.other]) expect(el.hasAttribute('inert'), el.id).toBe(true);
+
+    a.close();
+    for (const el of [t.board, t.actionPanel, t.other]) expect(el.hasAttribute('inert'), el.id).toBe(false);
   });
 });
