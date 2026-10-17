@@ -17,6 +17,7 @@ import { extractSection, parseRulings, stripHtmlComments } from './build-manifes
 import { ENTRY_NUMBER, entryHeadingPattern } from '../lib/ledger-entries.js';
 import { escapeRegExp } from '../lib/regexp.js';
 import { toolCommand } from '../lib/run-tool.js';
+import { shortQuoteProblem } from '../lib/quote-length.js';
 
 /**
  * `boardsmith constraint-check [slug]`: does the project hold its own hard constraints (#288)?
@@ -185,7 +186,10 @@ function quoteRefusal(c: HardConstraint, source: string | undefined): string | u
   if (source === undefined) {
     return `${c.id} quotes ${c.source}, which does not exist. Give the file it is quoted from, relative to the project root.`;
   }
-  if (normalize(source).includes(normalize(c.quote))) return undefined;
+  const quote = normalize(c.quote);
+  const short = shortQuoteProblem(quote);
+  if (short !== undefined) return `${c.id}'s quote "${quote}" ${short}. Quote the whole constraint from ${c.source}.`;
+  if (normalize(source).includes(quote)) return undefined;
   return `${c.id}'s quote "${c.quote}" is not in ${c.source}. Copy the constraint's exact words from ${c.source}.`;
 }
 
@@ -212,17 +216,17 @@ async function constraintRefusals(projectDir: string, constraints: HardConstrain
   return refusals.filter((r): r is string => r !== undefined);
 }
 
-/** Every hard-constraint bullet in CLAUDE.md must be quoted by some ledger entry. */
+/** Every hard-constraint bullet in CLAUDE.md must be quoted whole by some ledger entry. */
 function coverageRefusals(claudeMd: string | undefined, constraints: HardConstraint[]): string[] {
   const quotes = constraints
     .filter((c) => c.source === 'CLAUDE.md' && c.quote)
     .map((c) => normalize(c.quote));
   return hardConstraintBullets(claudeMd)
-    .filter((bullet) => !quotes.some((q) => bullet.includes(q)))
+    .filter((bullet) => !quotes.some((q) => q.includes(bullet)))
     .map(
       (bullet) =>
         `CLAUDE.md states the hard constraint "${bullet}", and no entry in design/${CONSTRAINTS_MD} ` +
-        `quotes it. Add a "### C<n>" entry quoting it, so the constraints lens checks every chunk against it.`,
+        `quotes it whole. Add a "### C<n>" entry quoting the whole bullet, so the constraints lens checks every chunk against it.`,
     );
 }
 

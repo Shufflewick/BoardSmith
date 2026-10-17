@@ -146,7 +146,7 @@ const CLAUDE_MD = [
 
 const C1 = [
   '### C1',
-  '- Quote: A partition is refused past 512 KiB',
+  '- Quote: A partition is refused past 512 KiB, in UTF-8 bytes, at genesis and at every checkpoint.',
   '- Source: CLAUDE.md',
   '- Kind: measured',
   '- Test: tests/world-budget.test.ts',
@@ -185,6 +185,27 @@ describe("every hard constraint in the project's CLAUDE.md is in the ledger", ()
       'design/CONSTRAINTS.md': ledger(`${C1.replace('512 KiB', '1 MiB')}\n\n${C2}\n`),
     });
     expect(refusals.join('\n')).toMatch(/C1.*1 MiB/s);
+  });
+
+  it('refuses an empty or one- or two-word quote, which would match nearly any text (#819)', async () => {
+    for (const quote of ['**', 'A', 'A partition']) {
+      const refusals = await refusalsFor({
+        'CLAUDE.md': CLAUDE_MD,
+        'tests/world-budget.test.ts': 'test\n',
+        'design/CONSTRAINTS.md': ledger(`${C1}\n\n${C2}\n\n${C1.replace(/C1/, 'C3').replace(/- Quote: .*/, `- Quote: ${quote}`)}\n`),
+      });
+      expectOneRefusal(refusals, /C3's quote .*at least 3.*Quote the whole constraint from CLAUDE\.md/);
+    }
+  });
+
+  it('counts a hard constraint as quoted only by a quote holding the whole bullet (#819)', async () => {
+    const part = C1.replace(/- Quote: .*/, '- Quote: A partition is refused past 512 KiB');
+    const refusals = await refusalsFor({
+      'CLAUDE.md': CLAUDE_MD,
+      'tests/world-budget.test.ts': 'test\n',
+      'design/CONSTRAINTS.md': ledger(`${part}\n\n${C2}\n`),
+    });
+    expectOneRefusal(refusals, /hard constraint "A partition is refused past 512 KiB, in UTF-8 bytes/, /quotes it whole/);
   });
 
   it('refuses a measured constraint whose test does not exist', async () => {
