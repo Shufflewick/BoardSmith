@@ -571,17 +571,17 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * deliberately stayed put on the failure, and its position is already right.
    * The elements it holds are pointed at the rebuilt tree (#679).
    *
-   * @returns the player-facing error to report: `error` as it is when the
-   *   rollback succeeded, or, when there was no checkpoint to restore (only a
-   *   game running with `checkpoints: { enabled: false }`, since
-   *   `ensureHeadCheckpoint` captures one otherwise, #802), `error` without the
-   *   engine's "nothing was changed" and with a sentence saying the game may
-   *   still hold the action's partial changes (#808).
+   * @returns the player-facing error to report: `error` followed by
+   *   `NOTHING_CHANGED` when the rollback succeeded, or, when there was no
+   *   checkpoint to restore (only a game running with
+   *   `checkpoints: { enabled: false }`, since `ensureHeadCheckpoint` captures
+   *   one otherwise, #802), by a sentence saying the game may still hold the
+   *   action's partial changes (#808, #989).
    */
-  private rollbackToPreActionState(error: string | undefined): string | undefined {
+  private rollbackToPreActionState(error: string | undefined): string {
+    const kept = error === undefined ? '' : `${error} `;
     const checkpoint = this.actionCheckpoints[this.headOffset];
     if (!checkpoint) {
-      const kept = error === undefined ? '' : `${error.replace(` ${NOTHING_CHANGED}`, '')} `;
       return kept +
         'The action failed part way through, and the game may still hold its partial changes, ' +
         'because per-action checkpoints are turned off for this session so it could not be undone. ' +
@@ -595,7 +595,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       this.game._ctx.sequence = checkpoint.sequence;
     }
     this.game.setRandomState(checkpoint.randomState);
-    return error;
+    return kept + NOTHING_CHANGED;
   }
 
   /**
