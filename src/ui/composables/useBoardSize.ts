@@ -78,8 +78,11 @@ export function useBoardSize(boardEl: Ref<HTMLElement | null>) {
   }
 
   let regionObserver: ResizeObserver | null = null;
+  let firstFrame: number | null = null;
 
   function teardown() {
+    if (firstFrame !== null) cancelAnimationFrame(firstFrame);
+    firstFrame = null;
     regionObserver?.disconnect();
     regionObserver = null;
     window.removeEventListener('resize', measure);
@@ -93,7 +96,10 @@ export function useBoardSize(boardEl: Ref<HTMLElement | null>) {
     measure();
     // Re-measure once after layout settles (fonts / iframe sizing can shift
     // the region between mount and first paint).
-    requestAnimationFrame(measure);
+    firstFrame = requestAnimationFrame(() => {
+      firstFrame = null;
+      measure();
+    });
 
     const region = el.closest('.boardregion') as HTMLElement | null;
     if (region && typeof ResizeObserver !== 'undefined') {

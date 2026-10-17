@@ -23,6 +23,8 @@
  *  - `aria-disabled="true"` — NOT the native `disabled` attribute, which drops
  *    the control out of the tab order, so a keyboard or screen-reader user
  *    could never reach the reason at all.
+ *  - `aria-describedby` naming a hidden node of its own that holds the reason,
+ *    so assistive tech has it whether or not the tooltip is open.
  *  - the shared tooltip on hover, on tap, and on focus the player moved
  *    themselves — never on focus a redraw placed, which nothing would close
  *    (#261). Tap matters as much as hover: the native `title` this replaces
@@ -42,7 +44,7 @@ import {
   showDisabledReasonOnFocus,
   hideDisabledReason,
   trackInputModality,
-  DISABLED_TOOLTIP_ID,
+  useDisabledReasonTooltip,
 } from '../composables/useDisabledReasonTooltip.js';
 
 /** Why a control is disabled, or `false`/`null`/`undefined` when it is not. */
@@ -62,6 +64,8 @@ export function isDisabled(reason: DisabledReason): reason is string {
 /** Per-element listener bundle, so `unmounted` can detach exactly what it attached. */
 interface Attached {
   reason: string;
+  /** The `hidden` node `aria-describedby` names, holding the reason (#865). */
+  description: HTMLElement;
   show: () => void;
   showOnFocus: () => void;
   hide: () => void;
@@ -71,6 +75,8 @@ interface Attached {
 }
 
 const attached = new WeakMap<HTMLElement, Attached>();
+
+let descriptionCount = 0;
 
 function detach(el: HTMLElement): void {
   const a = attached.get(el);
@@ -83,6 +89,7 @@ function detach(el: HTMLElement): void {
   el.removeEventListener('click', a.blockPointer, true);
   el.removeEventListener('keydown', a.blockKey, true);
   attached.delete(el);
+  a.description.remove();
   hideDisabledReason(el);
   el.removeAttribute('aria-disabled');
   el.removeAttribute('aria-describedby');
@@ -96,12 +103,25 @@ function attach(el: HTMLElement, reason: string): void {
     // update in place rather than churning listeners.
     if (existing.reason === reason) return;
     existing.reason = reason;
+    existing.description.textContent = reason;
     el.setAttribute('data-bs-disabled-reason', reason);
+    if (useDisabledReasonTooltip().anchor.value === el) showDisabledReason(el, reason);
     return;
   }
 
+  // In the document whether or not the tooltip shows, so browse mode and iOS
+  // VoiceOver read it too. `hidden` still counts for aria-describedby, and keeps
+  // the text out of the reading order. Under <body>, not beside `el`, so Vue's
+  // own patching of `el`'s siblings never meets a node it did not create.
+  const description = el.ownerDocument.createElement('span');
+  description.id = `bs-disabled-reason-${++descriptionCount}`;
+  description.hidden = true;
+  description.textContent = reason;
+  el.ownerDocument.body.appendChild(description);
+
   const bundle: Attached = {
     reason,
+    description,
     show: () => showDisabledReason(el, attached.get(el)?.reason ?? reason),
     // Focus is the one entry point the player may not have asked for: the panel
     // moves focus back into itself after every redraw, and a bubble opened that
@@ -144,7 +164,7 @@ function attach(el: HTMLElement, reason: string): void {
   attached.set(el, bundle);
 
   el.setAttribute('aria-disabled', 'true');
-  el.setAttribute('aria-describedby', DISABLED_TOOLTIP_ID);
+  el.setAttribute('aria-describedby', description.id);
   el.setAttribute('data-bs-disabled-reason', reason);
 }
 

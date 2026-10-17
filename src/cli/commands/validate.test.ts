@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -24,6 +24,7 @@ import {
   successGuidance,
   typeScriptFailureDetails,
   validateProject,
+  listVitestFiles,
 } from './validate.js';
 import { ENGINE_REVISION } from '../../contract/index.js';
 import {
@@ -696,6 +697,20 @@ describe('validate.ts validateAssetPaths — declared manifest assets must resol
     expect(result.passed).toBe(false);
     expect((result.details ?? []).join('\n')).toContain('/cards/');
   });
+
+  it('matches a public folder whose name has regex characters literally (#846)', async () => {
+    mkdirSync(join(projectDir, 'public', 'art (v2)'), { recursive: true });
+    mkdirSync(join(projectDir, 'public', 'a.b'), { recursive: true });
+    const result = await scanShippedFile(
+      join('data', 'cards.json'),
+      JSON.stringify([{ image: '/art (v2)/one.png', other: '/axb/two.png' }]),
+    );
+
+    expect(result.passed).toBe(false);
+    const details = (result.details ?? []).join('\n');
+    expect(details).toContain('"/art (v2)/..."');
+    expect(details).not.toContain('a.b');
+  });
 });
 
 /**
@@ -1245,5 +1260,25 @@ describe('a project with no vitest is told to install it, never to run npx (#595
     expect(output).toContain('vitest is not installed in this project.');
     expect(output).toContain('npm install -D vitest');
     expect(output).not.toContain('npx vitest');
+  });
+});
+
+describe('listVitestFiles — only real test files, whatever else vitest prints (#846)', () => {
+  it('ignores a line a config prints to stdout', async () => {
+    const dir = tempTree('boardsmith-vitest-list-');
+    symlinkSync(fileURLToPath(new URL('../../../node_modules', import.meta.url)), join(dir, 'node_modules'), 'dir');
+    writeFileSync(join(dir, 'package.json'), '{"type":"module"}\n');
+    writeFileSync(
+      join(dir, 'vitest.config.mjs'),
+      "console.log('hello from the config');\nexport default { test: { include: ['tests/**/*.test.ts'] } };\n",
+    );
+    mkdirSync(join(dir, 'tests'));
+    writeFileSync(join(dir, 'tests', 'a.test.ts'), "import { it } from 'vitest';\nit('a', () => {});\n");
+
+    const listing = await listVitestFiles(dir);
+
+    expect(listing.ok).toBe(true);
+    expect(listing.files).toHaveLength(1);
+    expect(listing.files[0]).toMatch(/tests\/a\.test\.ts$/);
   });
 });
