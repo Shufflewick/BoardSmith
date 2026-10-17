@@ -407,8 +407,10 @@ export function locateFences(
       `${relLedgerPath} is missing its machine-owned fences.\n` +
         `Expected ${RUN_LEDGER_BEGIN} ... ${RUN_LEDGER_END}.\n` +
         `This file is written by \`boardsmith verify-run-init\`/\`verify-run-record\`, never by\n` +
-        `hand. Restore it by re-running \`boardsmith verify-run-init --run-id <id>\`, then re-run\n` +
-        `this command.`,
+        `hand, and re-running verify-run-init with this run's id leaves it as it is.\n` +
+        `From the project directory, restore the committed copy with \`git restore ${relLedgerPath}\`,\n` +
+        `then re-run this command. If it was never committed, start a new run with\n` +
+        `\`boardsmith verify-run-init\` (no --run-id) and stage its slices again.`,
     );
   }
   return { beginIdx, endIdx };

@@ -372,6 +372,27 @@ describe('verifyRunRecordCommand / verifyRunStatusCommand — ledger', () => {
       verifyRunRecordCommand({ project, runId, unit: 'x', slice: '03-setup.md', json: true }),
     ).rejects.toThrow(/machine-owned fences/);
   });
+
+  it('L9: the repair the fences error advises restores a working run (#1006)', async () => {
+    const { project, runId } = await initAndStage();
+    execSync('git init', { cwd: project, stdio: 'ignore' });
+    execSync('git add -A', { cwd: project, stdio: 'ignore' });
+    execSync('git -c user.email=t@t -c user.name=t commit -m run', { cwd: project, stdio: 'ignore' });
+    const ledgerAbs = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'RUN.md');
+    await fs.writeFile(ledgerAbs, '# Verify Run Ledger\n\nno fences here\n');
+
+    const message = await verifyRunStatusCommand({ project, runId, json: true }).then(
+      () => '',
+      (err: Error) => err.message,
+    );
+    expect(message).not.toMatch(/verify-run-init --run-id/);
+    const advised = message.match(/`(git restore [^`]+)`/)?.[1];
+    expect(advised).toBeDefined();
+    execSync(advised!, { cwd: project, stdio: 'ignore' });
+
+    const status = await verifyRunStatusCommand({ project, runId, json: true });
+    expect(status.count).toBe(0);
+  });
 });
 
 // -------------------------------------------------------------------------------------------
