@@ -119,6 +119,15 @@ function completesAction(op: Op, res: OpResult): boolean {
 }
 
 /**
+ * Whether `op` replaces the position every seat was looking at: an undo or a
+ * rewind goes back to another one, and a tutorial's setup rewrites the board
+ * (#1082). What any seat holds against the old position goes with it.
+ */
+function replacesPosition(op: Op): boolean {
+  return op.type === 'undo' || op.type === 'debugRewind' || op.type === 'startTutorial';
+}
+
+/**
  * The ops that change the game and run through `executeOp`: every executable
  * op except the read-only ones and the teaching ops, which the host keeps as
  * its own state rather than as a move.
@@ -1295,7 +1304,7 @@ export class SnapshotSessionHost {
       }
     }
 
-    if (op.type === 'undo' || op.type === 'debugRewind') this.#forgetReplacedTree();
+    if (replacesPosition(op)) this.#forgetReplacedTree();
 
     await this.apply(res, seat, pending);
     return res;
@@ -1329,10 +1338,11 @@ export class SnapshotSessionHost {
 
   /**
    * Drop what every seat holds against a runner that was just replaced (undo,
-   * rewind, a demo's step back, a rules reload): hints, heatmaps, narration and
-   * half-made selections, which hold element ids from the old game tree. `apply`
-   * drops only the acting seat's selection, so another seat would otherwise stay
-   * mid-chain against a tree that no longer exists. A rules reload that restored
+   * rewind, a tutorial start, a demo's step back, a rules reload): hints,
+   * heatmaps, narration and half-made selections, which hold element ids from
+   * the old game tree. `apply` drops only the acting seat's selection, so
+   * another seat would otherwise stay mid-chain against a tree that no longer
+   * exists. A rules reload that restored
    * the saved tree keeps the selections: the tree they point into is unchanged.
    */
   #forgetReplacedTree({ keepPendingSelections = false } = {}): void {

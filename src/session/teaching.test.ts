@@ -5,7 +5,8 @@
  * - A hint, a heatmap and demo narration are the host's transient state. They
  *   are merged into the views it publishes and never enter what it stores.
  * - A debug rewind, like an undo, drops a hint chosen for a position that no
- *   longer exists.
+ *   longer exists, and so does starting the tutorial, whose setup replaces the
+ *   board (#1082).
  * - A visible heatmap follows the turn: it is emptied (still toggled on) while
  *   its seat is off turn and recomputed when the seat is on turn again.
  */
@@ -31,6 +32,7 @@ const def = {
   minPlayers: 2,
   maxPlayers: 2,
   bot: pickBot,
+  tutorial: { learnerSeat: 1, steps: [{ id: 'pick', gate: { action: 'pick' }, content: [{ text: 'Pick an option.' }] }] },
 };
 
 async function table() {
@@ -81,6 +83,19 @@ describe('a rewind drops a stale hint', () => {
     if (!rewound.success) throw new Error(rewound.error);
 
     expect(session.playerState(2).hint).toBeUndefined();
+  });
+});
+
+describe('starting the tutorial drops a stale hint (#1082)', () => {
+  it('the tutorial start publishes seat 1 no hint', SEARCH_CEILING, async () => {
+    const session = await table();
+    expect((await session.send(1, { type: 'hint', seat: 1 })).success).toBe(true);
+    expect(session.playerState(1).hint).toBeDefined();
+
+    const started = await session.send(1, { type: 'startTutorial', player: 1 });
+    if (!started.success) throw new Error(started.error);
+
+    expect(session.playerState(1).hint).toBeUndefined();
   });
 });
 
