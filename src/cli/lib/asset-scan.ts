@@ -176,10 +176,10 @@ const SCRIPT_KINDS: Record<string, ts.ScriptKind> = { '.tsx': ts.ScriptKind.TSX,
 function stripScriptComments(content: string, filePath: string): StripCommentsResult {
   const source = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true, SCRIPT_KINDS[extname(filePath)] ?? ts.ScriptKind.TS);
   const tokens: ts.Node[] = [];
+  // A JSDoc node lies inside its comment, which the token it documents already reports.
+  const isJSDoc = (node: ts.Node): boolean => node.kind >= ts.SyntaxKind.FirstJSDocNode && node.kind <= ts.SyntaxKind.LastJSDocNode;
   const visit = (node: ts.Node): void => {
-    // A JSDoc node lies inside its comment, which the next real token already reports.
-    if (node.kind >= ts.SyntaxKind.FirstJSDocNode && node.kind <= ts.SyntaxKind.LastJSDocNode) return;
-    const children = node.getChildren(source);
+    const children = node.getChildren(source).filter((child) => !isJSDoc(child));
     if (children.length > 0) children.forEach(visit);
     else tokens.push(node);
   };
@@ -193,16 +193,20 @@ function stripScriptComments(content: string, filePath: string): StripCommentsRe
     if (tokens[i + 1]?.kind !== ts.SyntaxKind.JsxText) collect(ts.getTrailingCommentRanges(content, token.end));
   });
 
-  let text = content;
+  const parts: string[] = [];
+  let cursor = 0;
   let unterminated: StripCommentsResult['unterminated'];
-  for (const [start, end] of comments) {
+  for (const [start, end] of [...comments].sort((a, b) => a[0] - b[0])) {
+    if (end <= cursor) continue;
     const comment = content.slice(start, end);
-    text = text.slice(0, start) + comment.replace(/[^\r\n]/g, ' ') + text.slice(end);
+    parts.push(content.slice(cursor, start), content.slice(Math.max(start, cursor), end).replace(/[^\r\n]/g, ' '));
+    cursor = end;
     if (comment.startsWith('/*') && (comment.length < 4 || !comment.endsWith('*/'))) {
       unterminated = { line: source.getLineAndCharacterOfPosition(start).line + 1, kind: 'block' };
     }
   }
-  return { lines: text.split('\n'), unterminated };
+  parts.push(content.slice(cursor));
+  return { lines: parts.join('').split('\n'), unterminated };
 }
 
 /**

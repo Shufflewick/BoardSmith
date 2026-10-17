@@ -237,6 +237,7 @@ describe('scanAssetReachability', () => {
     ['src/ui/d.tsx', 'export const D = () => <p>a // b <img src="y" /></p>;\n', 1],
     ['src/ui/k.tsx', 'export const K = () => <p>// b <img src="y" /></p>;\n', 1],
     ['src/ui/l.tsx', 'export const L = () => <p>{x}/* b */ <img src="y" /></p>;\n', 1],
+    ['src/ui/o.ts', '/** @see x // y */ export const h = \'<img src="y">\';\n', 1],
   ])('flags a live <img> after comment-looking text that is not a comment in %s', (file, content, line) => {
     expect(scanWith({ [file]: content }).map((v) => v.line)).toEqual([line]);
   });
@@ -248,12 +249,17 @@ describe('scanAssetReachability', () => {
     ['src/ui/h.tsx', 'export const H = () => <p>{/* <img /> */}</p>;\n'],
     ['src/ui/i.ts', '#!/usr/bin/env node\n// <img>\nexport const a = 1;\n'],
     ['src/ui/j.ts', 'export const a = 1;\n// <img>'],
+    ['src/ui/m.ts', 'export const a = 1;\n/** <img> */\n'],
+    ['src/ui/n.ts', 'export const a = 1;\n/** doc */\n// <img>\n'],
   ])('does NOT flag <img> in a comment that follows code in %s', (file, content) => {
     expect(scanWith({ [file]: content })).toEqual([]);
   });
 
-  it('surfaces an unterminated block comment in a .ts file (WR-01)', () => {
-    const violations = scanWith({ 'src/ui/e.ts': 'export const x = 1;\n/* never closed\n<img src="y">\n' });
+  it.each([
+    ['src/ui/e.ts', 'export const x = 1;\n/* never closed\n<img src="y">\n'],
+    ['src/ui/p.ts', 'export const x = 1;\n/** never closed <img>\n<img src="y">\n'],
+  ])('surfaces an unterminated block comment in %s (WR-01)', (file, content) => {
+    const violations = scanWith({ [file]: content });
     expect(violations.map((v) => [v.line, /unterminated/.test(v.message)])).toEqual([[2, true]]);
   });
 
