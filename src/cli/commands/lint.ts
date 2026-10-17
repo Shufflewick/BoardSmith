@@ -479,9 +479,9 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   }
 
   if (options.css && !hasCssConfig) {
-    console.error(chalk.red('\nlint --css: this project has no Stylelint config, so Stylelint cannot run.'));
-    console.error(chalk.dim("Add a .stylelintrc.cjs to the project root with customSyntax: 'postcss-html' (so it reads the <style> blocks in .vue files), or drop --css."));
-    console.error(chalk.dim('The game also needs both packages installed: npm install -D stylelint postcss-html\n'));
+    console.error(styleText('red', '\nlint --css: this project has no Stylelint config, so Stylelint cannot run.'));
+    console.error(styleText('dim', "Add a .stylelintrc.cjs to the project root with customSyntax: 'postcss-html' (so it reads the <style> blocks in .vue files), or drop --css."));
+    console.error(styleText('dim', 'The game also needs both packages installed: npm install -D stylelint postcss-html\n'));
     process.exit(1);
   }
 
