@@ -32,11 +32,17 @@ class ChattyGame extends Game<ChattyGame, Player> {
         game.message(`line ${game.messages.length + 1}`);
       }),
     );
+    this.registerAction(
+      Action.create<ChattyGame>('fumble').prompt('Fumble').execute((_a, ctx) => {
+        (ctx.game as ChattyGame).message('fumbled');
+        throw new Error('fumble always fails part-way');
+      }),
+    );
     this.setFlow({
       root: loop({
         while: (ctx: FlowContext) => (ctx.get<number>('round') ?? 1) <= 20,
         maxIterations: 60,
-        do: eachPlayer({ do: actionStep({ actions: ['speak'] }) }),
+        do: eachPlayer({ do: actionStep({ actions: ['speak', 'fumble'] }) }),
       }),
       setup: (ctx) => ctx.set('round', 1),
     });
@@ -197,5 +203,38 @@ describe('a checkpoint restore after pruning (#25)', () => {
     expect(restored!.game.messages.map((m) => m.text)).toEqual(
       runner.game.messages.slice(0, 3).map((m) => m.text),
     );
+  });
+});
+
+describe('a restore keeps the live eviction count (#803)', () => {
+  function prunedAfterThree(): GameRunner<ChattyGame> {
+    const runner = played(3);
+    runner.game.pruneMessages({ keepLast: 2 });
+    expect(runner.game.messages.map((m) => m.text)).toEqual(['line 2', 'line 3']);
+    return runner;
+  }
+
+  it('a second undo restores the same log as restoring that action directly', () => {
+    const direct = GameRunner.fromCheckpoint(prunedAfterThree().getSnapshot(), 1, ChattyGame);
+    expect(direct!.game.messages.map((m) => m.text)).toEqual([]);
+
+    // Full history, as played() runs, so the undone runner still holds action 1.
+    const once = GameRunner.fromCheckpoint(prunedAfterThree().getSnapshot(), 2, ChattyGame, {
+      checkpoints: { history: 'full' },
+    });
+    expect(once!.game.messages.map((m) => m.text)).toEqual(['line 2']);
+    expect(once!.game.messagesEvicted).toBe(1);
+
+    const twice = GameRunner.fromCheckpoint(once!.getSnapshot(), 1, ChattyGame);
+    expect(twice!.game.messages.map((m) => m.text)).toEqual([]);
+  });
+
+  it('a failed action rolls back without resetting the eviction count', () => {
+    const runner = prunedAfterThree();
+    const result = runner.performAction('fumble', 2, {});
+    expect(result.success).toBe(false);
+
+    expect(runner.game.messages.map((m) => m.text)).toEqual(['line 2', 'line 3']);
+    expect(runner.game.messagesEvicted).toBe(1);
   });
 });
