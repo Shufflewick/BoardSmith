@@ -8,7 +8,7 @@
  * spend anything on a push.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { mount, flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import DebugPanel from './DebugPanel.vue';
 import { GAME_CONTEXT_KEYS } from '../composables/useGameContext.js';
@@ -48,7 +48,9 @@ function stateWithCard() {
 }
 
 function mountPanel(expanded: boolean) {
-  const host = vi.fn<Op>(async () => ({ success: true }));
+  // The Decks tab reads the host's unfiltered table, which here is the seat's own view.
+  const host: ReturnType<typeof vi.fn<Op>> = vi.fn<Op>(async (op) =>
+    op === 'debug:deck-view' ? { success: true, view: wrapper.props('state').state.view } : { success: true });
   const wrapper = mount(DebugPanel, {
     props: { state: stateWithCard(), playerSeat: 1, expanded },
     global: { provide: { [GAME_CONTEXT_KEYS.platformRequest as symbol]: host } },
@@ -112,6 +114,7 @@ describe('the debug panel on a push (#748)', () => {
     const withDeck = stateWithCard();
     withDeck.state.view.children.push({ id: 3, className: 'Deck', name: 'Draw pile' } as never);
     await wrapper.setProps({ state: withDeck });
+    await flushPromises();
     expect(wrapper.find('#debug-panel-decks .deck-name').text()).toBe('Draw pile');
     expect(viewTree.groupElementsByClass).not.toHaveBeenCalled();
     wrapper.unmount();

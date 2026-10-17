@@ -15,6 +15,7 @@ import chalk from 'chalk';
 import { WebSocket } from 'ws';
 
 import type { RulesReloadQueue } from './rules-reload-queue.js';
+import { parseSocketMessage } from './socket-message.js';
 import type { LocalWorldHost, WorldDevRequest } from './world-host.js';
 
 /**
@@ -94,12 +95,8 @@ export function createWorldConnections(
     accept(socket) {
       let clientId: string | null = null;
       socket.on('message', (raw) => {
-        let message: { type?: string; clientId?: unknown; [key: string]: unknown };
-        try {
-          message = JSON.parse(raw.toString());
-        } catch {
-          return;
-        }
+        const message = parseSocketMessage(raw);
+        if (message === null) return;
         if (message.type === 'hello') {
           clientId =
             typeof message.clientId === 'string'

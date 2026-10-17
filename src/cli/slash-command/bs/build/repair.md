@@ -70,7 +70,7 @@ Applied here: `repair` and `audit` stay in the same group specifically so a repa
 fixes findings can be re-checked by a fresh audit round without a session handoff in between —
 unless the round bound above has been reached, in which case repair routes to the round-3 user
 triage instead of dispatching another audit round. The next audit round starts only through
-`npx boardsmith review-gate <slug> --since <the commit the last round reviewed>`, so it reviews
+`npx boardsmith review-gate <slug>`, which reads the last round from the run log, so it reviews
 only what the repair changed (`routing.md` "No Review Before Verify").
 
 ## Persisting Dispositions — Write Before the Next Audit Round Starts

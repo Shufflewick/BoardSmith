@@ -153,6 +153,8 @@ export interface DebugBridge {
   transferCard(cardId: number, targetDeckId: number, position: TransferPosition): Promise<void>;
   /** Shuffle one deck in place. */
   shuffleDeck(deckId: number): Promise<void>;
+  /** The live table with nothing hidden, face-down cards included, by their real ids (#898). */
+  deckView(): Promise<Record<string, unknown>>;
 }
 
 /**
@@ -260,6 +262,26 @@ export function createDebugBridge(platformRequest: PlatformRequest | null): Debu
     async shuffleDeck(deckId) {
       await send('debug:shuffle-deck', { deckId }, 'Failed to shuffle deck');
     },
+
+    async deckView() {
+      const data = await send('debug:deck-view', {}, 'Failed to fetch the decks');
+      if (!isRecord(data.view)) throw new Error('The host answered debug:deck-view without the table.');
+      return data.view;
+    },
+  };
+}
+
+/**
+ * A panel fetch asks again whenever a new state arrives, even while an earlier
+ * answer is on its way, and those answers can land in any order (#901). Each
+ * fetch takes a ticket from this and applies its answer only while the ticket
+ * is still the newest.
+ */
+export function newestWins(): () => () => boolean {
+  let latest = 0;
+  return () => {
+    const ticket = ++latest;
+    return () => ticket === latest;
   };
 }
 

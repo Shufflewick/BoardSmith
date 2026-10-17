@@ -179,7 +179,7 @@ export function designerNameProblem(by: string, flag: string): string | undefine
 // ---------------------------------------------------------------------------------------------
 
 export function readStatus(chunkText: string): string | undefined {
-  return /^Status:\s*(.*)$/m.exec(chunkText)?.[1].trim();
+  return /^Status:[ \t]*(.*)$/m.exec(chunkText)?.[1].trim();
 }
 
 /** The number of real items in `## Verified Checklist` (template placeholders excluded). */
