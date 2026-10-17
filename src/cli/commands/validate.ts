@@ -274,6 +274,11 @@ export function checkMetadataIssues(config: Record<string, unknown>): string[] {
         + 'which is the single source of truth for which boards exist and which one ships. '
         + 'Remove this key from boardsmith.json.',
       );
+    } else if (key === 'scoreboard') {
+      issues.push(
+        "Unknown key 'scoreboard': nothing in BoardSmith or the platform ever read it. "
+        + 'Remove this key from boardsmith.json.',
+      );
     } else if (key === 'playerCount') {
       issues.push(
         "Unknown key 'playerCount' — player count is now derived from your gameDefinition (compiled rules), remove this key from boardsmith.json.",
