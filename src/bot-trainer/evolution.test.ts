@@ -126,6 +126,18 @@ describe('evolution', () => {
       expect([3, 7]).toContain(child[1].weight);
     });
 
+    it('refuses parents that do not hold the same objectives', () => {
+      const rng = createSeededRandom('mismatch');
+      const a = createObjective('feature-a', 1);
+      const b = createObjective('feature-b', 2);
+      const c = createObjective('feature-c', 3);
+
+      // A missing id, an extra id, and the same count with a different id.
+      expect(() => crossoverWeights([a, b], [a], rng)).toThrow(/feature-b/);
+      expect(() => crossoverWeights([a], [a, b], rng)).toThrow(/feature-b/);
+      expect(() => crossoverWeights([a, b], [a, c], rng)).toThrow(/feature-b/);
+    });
+
     it('for shared features, picks weight from one parent', () => {
       const parent1 = [createObjective('shared', 10)];
       const parent2 = [createObjective('shared', -10)];

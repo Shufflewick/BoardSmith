@@ -66,8 +66,8 @@ export function mutateWeights(
 
 /**
  * Crossover two parent objective sets: each objective's weight comes from one
- * parent at random. Both parents descend from the same objective set (mutation
- * keeps every id), so they hold the same ids.
+ * parent at random. Both parents must hold the same ids, as every set descended
+ * from one objective set does (mutation keeps every id); other parents throw.
  *
  * @param parent1 - First parent objectives
  * @param parent2 - Second parent objectives, with the same ids as parent1
@@ -80,6 +80,17 @@ export function crossoverWeights(
   rng: () => number
 ): ObjectiveWeight[] {
   const byId = new Map(parent2.map(o => [o.id, o]));
+  const ids1 = new Set(parent1.map(o => o.id));
+  const unmatched = [
+    ...parent1.filter(o => !byId.has(o.id)),
+    ...parent2.filter(o => !ids1.has(o.id)),
+  ].map(o => o.id);
+  if (unmatched.length > 0) {
+    throw new Error(
+      `Cannot cross over two objective sets that hold different objectives. Only one parent has: ${unmatched.join(', ')}. `
+      + 'Both parents must descend from the same objective set.',
+    );
+  }
   return parent1.map(o => ({ ...(rng() < 0.5 ? o : byId.get(o.id)!) }));
 }
 
