@@ -30,9 +30,15 @@ describe('#1061: GameOverCard title clears the Close button', () => {
     expect(close).toMatch(/\bheight: var\(--goc-close\);/);
   });
 
-  it('pads the title inline by that same size, less the card padding the button already covers', () => {
+  it('pads the card sides from one custom property', () => {
+    const card = rule('.game-over-card');
+    expect(card).toMatch(/ --goc-pad-x: var\(--bsg-s5\);/);
+    expect(card).toMatch(/\bpadding: var\(--bsg-s6\) var\(--goc-pad-x\);/);
+  });
+
+  it('pads the title inline by the button size, less that same card padding the button already covers', () => {
     expect(rule('.game-over-title')).toMatch(
-      /\bpadding-inline: calc\(var\(--goc-close\) \+ var\(--bsg-s2\) - var\(--bsg-s5\)\);/,
+      /\bpadding-inline: calc\(var\(--goc-close\) \+ var\(--bsg-s2\) - var\(--goc-pad-x\)\);/,
     );
   });
 
