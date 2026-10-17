@@ -85,6 +85,7 @@ import {
 } from '../../world/partition-store.js';
 import {
   secondEndingRefused,
+  rewrittenPartitionRows,
   storablePartitionRows,
   type WorldCheckpointExtras,
   type WorldSeatRecord,
@@ -315,6 +316,10 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
     return row?.value;
   }
 
+  function parentOf(name: string): number | undefined {
+    return (stmt.knownParent.get(name) as { parent_id: number } | undefined)?.parent_id;
+  }
+
   /** Every write below is one transaction on THIS store's handle. */
   function transact(body: () => void): void {
     transactOn(db, body);
@@ -392,13 +397,7 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
       checkpoint: WorldSerialized,
       extras: WorldCheckpointExtras = {},
     ): Promise<void> {
-      const rows = Object.entries(checkpoint.partitions).map(([name, json]) => {
-        assertStorablePartitionName(name);
-        assertPartitionWithinBudget(name, json, budgets);
-        const known = stmt.knownParent.get(name) as { parent_id: number } | undefined;
-        if (!known) throw unknownPartition(name);
-        return { name, parentId: known.parent_id, json };
-      });
+      const rows = rewrittenPartitionRows(checkpoint.partitions, parentOf, budgets);
       const endedAt = readEndedAt();
       if (extras.endedAt !== undefined && endedAt !== undefined) throw secondEndingRefused(endedAt);
       const schedule = extras.schedule ?? [];
@@ -605,11 +604,7 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
     },
 
     migrate({ partitions, created, events, toStateVersion }): void {
-      const rows = Object.entries(partitions).map(([name, json]) => {
-        const known = stmt.knownParent.get(name) as { parent_id: number } | undefined;
-        if (!known) throw unknownPartition(name);
-        return { name, parentId: known.parent_id, json };
-      });
+      const rows = rewrittenPartitionRows(partitions, parentOf, budgets);
       // NEW ROOTS CARRY THEIR OWN PARENT, because there is no row to read one
       // from -- and they are checked here, before the transaction opens, for
       // the reason `createAll` checks its own: a migration refused halfway is
@@ -1075,17 +1070,6 @@ function transactOn(db: SqliteDatabase, body: () => void): void {
     db.exec('ROLLBACK');
     throw error;
   }
-}
-
-function unknownPartition(name: string): Error {
-  const error = new Error(
-    `The checkpoint named partition ${JSON.stringify(name)}, which this store has neither read ` +
-      `nor created, so it does not know where the subtree hangs. Something reached the world tree ` +
-      `without going through the partition store, and writing it under a guessed parent would ` +
-      `graft it into the wrong place on the next wake.`,
-  );
-  error.name = 'checkpoint-unknown-partition';
-  return error;
 }
 
 /** The little of `node:sqlite` this file uses, named so nothing here depends on
