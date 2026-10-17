@@ -419,6 +419,7 @@ function refusedCommit(reason: string): OpFailure {
   );
 }
 
+const NO_GAME = 'No game is running. Reload this page to start one.';
 const FOLLOW_EXPOSES = 'Someone else holds a seat, and following would show you their hand and let you play for them.';
 const FOLLOW_SHARED = `Follow active seat ended. ${FOLLOW_EXPOSES}`;
 
@@ -940,7 +941,7 @@ export class MultiplayerHost {
     msg: Extract<ClientInbound, { type: 'server_request' }>,
   ): Promise<void> {
     if (this.phase !== 'playing' || !this.session) {
-      this.send(clientId, { type: 'error', message: 'Game has not started.', requestId: msg.requestId ?? null });
+      this.send(clientId, { type: 'error', message: NO_GAME, requestId: msg.requestId ?? null });
       return;
     }
     if (this.stranded !== null) {
@@ -982,7 +983,7 @@ export class MultiplayerHost {
     msg: Extract<ClientInbound, { type: 'getState' }>,
   ): void {
     if (this.phase !== 'playing' || !this.session) {
-      this.send(clientId, { type: 'error', message: 'Game has not started.', requestId: msg.requestId ?? null });
+      this.send(clientId, { type: 'error', message: NO_GAME, requestId: msg.requestId ?? null });
       return;
     }
     const seat = this.seatOf(clientId, msg.requestId);
@@ -1321,7 +1322,11 @@ export class MultiplayerHost {
       await session.start();
     } catch (err) {
       this.starting = false;
-      const message = err instanceof Error ? err.message : 'Failed to start the game.';
+      // A restart disposed the old session above, so nothing is left to play (#880).
+      this.session = null;
+      this.phase = 'lobby';
+      const reason = err instanceof Error ? err.message : String(err);
+      const message = `The game could not start: ${reason} Fix the problem, then reload this page to start a game.`;
       for (const clientId of this.connected) this.send(clientId, { type: 'error', message });
       return;
     }

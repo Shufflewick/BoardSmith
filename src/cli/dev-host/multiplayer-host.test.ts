@@ -301,6 +301,45 @@ describe('MultiplayerHost — seat stability on reconnect', () => {
   });
 });
 
+describe('MultiplayerHost — a restart that fails (#880)', () => {
+  it('leaves no dead game behind: moves are refused, every page is told why, and a reload starts a game', async () => {
+    let failStart = false;
+    const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
+    const host = new MultiplayerHost({
+      playerCount: 2,
+      minPlayers: 2,
+      maxPlayers: def.maxPlayers,
+      makeSeed: () => 'mp',
+      executeOp: (gameOptions, snap, pend, op, hostOptions) => {
+        if (op.type === 'start' && failStart) throw new Error('setup() read an undefined deck.');
+        return executeOp(altDef, gameOptions, snap, pend, op, hostOptions);
+      },
+      send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
+    });
+    const to = (clientId: string) => sent.filter((e) => e.clientId === clientId).map((e) => e.msg);
+    const lastOfType = (clientId: string, type: HostOutbound['type']) =>
+      [...to(clientId)].reverse().find((m) => m.type === type) as any;
+    await host.handleMessage('A', { type: 'hello' }); // A = seat 1
+    failStart = true;
+    await host.handleMessage('A', { type: 'restart' });
+    const told = lastOfType('A', 'error');
+    sent.length = 0;
+    await host.handleMessage('A', {
+      type: 'server_request',
+      requestId: 'r1',
+      op: 'action',
+      payload: { actionName: 'pass', args: {}, boundaryKey: clientKey('A') },
+    });
+    expect(to('A').some((m) => m.type === 'server_response')).toBe(false);
+    expect(lastOfType('A', 'error')).toMatchObject({ message: expect.stringMatching(/no game is running.*reload/i), requestId: 'r1' });
+    expect(told.message).toMatch(/could not start.*undefined deck.*reload/i);
+
+    failStart = false;
+    await host.handleMessage('A', { type: 'hello' }); // the reload the message asks for
+    expect(lastOfType('A', 'init').seat).toBe(1);
+  });
+});
+
 describe('MultiplayerHost — stale disconnect after reconnect (DEF-C session-layer canary)', () => {
   it('drops broadcasts to a seat when a STALE disconnect() arrives after its reconnect hello (documents the consequence the dev.ts transport-layer guard must prevent)', async () => {
     // This test intentionally drives the sequence that `MultiplayerHost`'s
