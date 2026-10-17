@@ -111,7 +111,7 @@ function isImportGlob(node: AstNode): boolean {
     (object.meta as AstNode).name === 'import' && (callee.property as AstNode).name === 'glob';
 }
 
-/** The key a property is written with, `query` or `'query'`; undefined for a spread or a computed key. */
+/** The key a property is written with, `query` or `'query'`; undefined for a spread, a computed key or a numeric key. */
 function propertyKey(property: AstNode): string | undefined {
   if (property.type !== 'Property' || property.computed) return undefined;
   const key = property.key as AstNode;
@@ -149,10 +149,13 @@ function globReachesCode(pattern: string, file: string): boolean {
   const relative = pattern.startsWith('./') || pattern.startsWith('../');
   if (!relative && !pattern.startsWith('/')) return true; // an alias or a bare `**`, which reach from the root
   const joined = relative ? posix.join(posix.dirname(file), pattern) : posix.join('.', pattern.slice(1));
-  // A `..` the join left is above the project or inside a glob group, where no fixed folder bounds it.
+  // A `..` the join left is above the project or inside a glob group, where no fixed folder bounds it;
+  // a name like `notes..md` also contains one and is reported, the safe side.
   if (joined.includes('..')) return true;
   const fixed = joined.split(/[*?[{(]/)[0];
-  const dir = fixed.slice(0, fixed.lastIndexOf('/') + 1);
+  const dir = fixed.slice(0, fixed.lastIndexOf('/') + 1).toLowerCase();
+  // A case-insensitive disk (macOS, Windows) matches `SRC/` and `ſrc/` to `src/`; no fold of non-ASCII is sure.
+  if (/[^\x00-\x7f]/.test(dir)) return true;
   return CODE_DIRS.some((code) => dir.startsWith(code) || code.startsWith(dir));
 }
 
