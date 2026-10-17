@@ -1601,6 +1601,14 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   async function execute(actionName: string, args: Record<string, unknown> = {}): Promise<ControllerActionResult> {
+    if (isExecuting.value) {
+      return { success: false, error: 'Action already executing' };
+    }
+
+    if (isViewingHistoryValue()) {
+      return { success: false, error: 'Cannot execute an action while viewing historical state.' };
+    }
+
     if (!isMyTurn.value) {
       return { success: false, error: 'Not your turn' };
     }

@@ -47,7 +47,7 @@ export interface ActionMutators {
     actionName: string,
     options?: { args?: Record<string, unknown>; prefill?: Record<string, unknown> },
   ): Promise<StartOutcome>;
-  /** Execute an action outright. Resolves `false` when a guard refused it. */
+  /** Execute an action outright. Resolves `false` when a seat guard refused it; execute() refuses the rest itself. */
   executeAction(actionName: string, args: Record<string, unknown>): Promise<boolean>;
   /** Answer the open pick. Resolves `true` when the controller accepted the value. */
   setSelectionValue(selectionName: string, value: unknown): Promise<boolean>;
@@ -66,7 +66,6 @@ type MutatorController = Pick<
   | 'appendListEntry'
   | 'resumeFollowUp'
   | 'heldFollowUp'
-  | 'isExecuting'
   | 'actionStartTick'
   | 'currentPick'
   | 'currentChoices'
@@ -107,8 +106,6 @@ export function createActionMutators(
   }
 
   async function executeAction(actionName: string, args: Record<string, unknown>): Promise<boolean> {
-    if (guards.isViewingHistory()) return false;
-    if (controller.isExecuting.value) return false;
     if (!guards.isMyTurn()) return false;
     if (guards.isCompleted()) return false;
     if (guards.disabledReason(actionName)) return false;
