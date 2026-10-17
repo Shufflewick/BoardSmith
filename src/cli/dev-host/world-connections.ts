@@ -15,7 +15,7 @@ import chalk from 'chalk';
 import { WebSocket } from 'ws';
 
 import type { RulesReloadQueue } from './rules-reload-queue.js';
-import { onSocketMessage, quotedForLog } from './socket-message.js';
+import { parseSocketMessage } from './socket-message.js';
 import type { LocalWorldHost, WorldDevRequest } from './world-host.js';
 
 /**
@@ -79,16 +79,6 @@ export function createWorldConnections(
     return socket !== undefined && socket.readyState === WebSocket.OPEN ? socket : undefined;
   };
 
-  // The message, not the error object, exactly as `reloadWorld` in
-  // `dev-world.ts` does it (#240).
-  const reportFailure = (error: unknown, messageType: string): void =>
-    console.error(
-      chalk.red(
-        `[boardsmith dev] world message ${quotedForLog(messageType)} failed: ` +
-          `${error instanceof Error ? error.message : String(error)}`,
-      ),
-    );
-
   return {
     send(clientId, message) {
       openSocket(clientId)?.send(JSON.stringify(message));
@@ -104,36 +94,42 @@ export function createWorldConnections(
 
     accept(socket) {
       let clientId: string | null = null;
-      onSocketMessage(
-        socket,
-        () => clientId,
-        (message) => {
-          if (message.type === 'hello') {
-            clientId =
-              typeof message.clientId === 'string'
-                ? message.clientId
-                : `anon-${Math.random().toString(36).slice(2)}`;
-            clients.set(clientId, socket);
-          }
-          if (clientId === null) return; // a client identifies itself first
-          const from = clientId;
-          const request = message as unknown as WorldDevRequest;
-          const refusal = refusalOf(request);
-          void queue
-            .admit({
-              run: () => host().handleMessage(from, request),
-              ...(refusal === null
-                ? {}
-                : {
-                    refuse: (text: string) => {
-                      if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(refusal(text)));
-                    },
-                  }),
-            })
-            .catch((error: unknown) => reportFailure(error, message.type));
-        },
-        reportFailure,
-      );
+      socket.on('message', (raw) => {
+        const message = parseSocketMessage(raw);
+        if (message === null) return;
+        if (message.type === 'hello') {
+          clientId =
+            typeof message.clientId === 'string'
+              ? message.clientId
+              : `anon-${Math.random().toString(36).slice(2)}`;
+          clients.set(clientId, socket);
+        }
+        if (clientId === null) return; // a client identifies itself first
+        const from = clientId;
+        const request = message as unknown as WorldDevRequest;
+        const refusal = refusalOf(request);
+        void queue
+          .admit({
+            run: () => host().handleMessage(from, request),
+            ...(refusal === null
+              ? {}
+              : {
+                  refuse: (text: string) => {
+                    if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(refusal(text)));
+                  },
+                }),
+          })
+          .catch((error: unknown) =>
+            // The message, not the error object, exactly as `reloadWorld` in
+            // `dev-world.ts` does it (#240).
+            console.error(
+              chalk.red(
+                `[boardsmith dev] world message '${String(message.type)}' failed: ` +
+                  `${error instanceof Error ? error.message : String(error)}`,
+              ),
+            ),
+          );
+      });
       socket.on('close', () => {
         // Only tear down if THIS socket still owns the id: a reload's new socket
         // may be helloed before the old one's close fires, and a stale close
