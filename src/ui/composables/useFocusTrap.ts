@@ -6,10 +6,10 @@
  *
  * Capabilities:
  *   - open(): saves document.activeElement, then on nextTick focuses first
- *     focusable element inside the dialog; applies inert to the siblings of the
- *     dialog and of each of its ancestors up to <body>.
- *   - close(): restores focus to the previously-focused element; removes the
- *     inert that open() added.
+ *     focusable element inside the dialog; makes the page behind it inert.
+ *     Opening an open trap does nothing.
+ *   - close(): restores focus to the previously-focused element; hands inert
+ *     back to the trap below, if any. Closing a closed trap does nothing.
  *   - handleKeydown(e): traps Tab within the focusable set (cycle on boundaries);
  *     closes via onClose on Escape ONLY when escapeToClose is true.
  *
@@ -56,6 +56,40 @@ function getFocusable(container: HTMLElement): HTMLElement[] {
 }
 
 // ---------------------------------------------------------------------------
+// Inert (CR-01, #863)
+//
+// Only the newest open trap is modal: the siblings of its dialog and of each
+// of the dialog's ancestors up to <body> are inert, so a dialog nested inside
+// the app (GameOverCard, anything teleported to #bs-game-modal) leaves the
+// board and Action Panel unreachable. Every open or close recomputes this from
+// the stack of open traps, so traps can close in any order, and a dialog that
+// opens inside an older trap's background (the game ends while ControlsMenu is
+// open) is reachable until it closes. Only `inert` this module added is ever
+// removed; `inert` the page set itself is left alone, even on the dialog's path.
+// ---------------------------------------------------------------------------
+
+const openTraps: Array<Ref<HTMLElement | null>> = [];
+let inertAdded: HTMLElement[] = [];
+
+function inertSiblingsOf(node: HTMLElement, parent: HTMLElement) {
+  for (const sibling of Array.from(parent.children) as HTMLElement[]) {
+    if (sibling === node || sibling.hasAttribute('inert')) continue;
+    sibling.setAttribute('inert', '');
+    inertAdded.push(sibling);
+  }
+}
+
+function syncInert() {
+  for (const el of inertAdded) el.removeAttribute('inert');
+  inertAdded = [];
+  let node = openTraps.filter((r) => r.value).at(-1)?.value ?? null;
+  while (node && node !== document.body && node.parentElement) {
+    inertSiblingsOf(node, node.parentElement);
+    node = node.parentElement;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // useFocusTrap
 // ---------------------------------------------------------------------------
 
@@ -65,17 +99,16 @@ export function useFocusTrap(
 ) {
   const escapeToClose = options?.escapeToClose ?? true;
   let previouslyFocused: HTMLElement | null = null;
-  // The elements open() made inert. Kept apart from dialogRef so cleanup works
-  // even after the Vue template ref is cleared at unmount (CR-02 guard).
-  let _inerted: HTMLElement[] | null = null;
 
   // --------------------------------------------------------------------------
   // open() — save context, apply inert, focus first element
   // --------------------------------------------------------------------------
 
   function open() {
+    if (openTraps.includes(dialogRef)) return;
     previouslyFocused = document.activeElement as HTMLElement | null;
-    applySiblingInert();
+    openTraps.push(dialogRef);
+    syncInert();
     nextTick(() => {
       if (!dialogRef.value) return;
       const focusable = getFocusable(dialogRef.value);
@@ -88,13 +121,16 @@ export function useFocusTrap(
   // --------------------------------------------------------------------------
 
   function close() {
-    removeSiblingInert();
+    const index = openTraps.indexOf(dialogRef);
+    if (index === -1) return;
+    openTraps.splice(index, 1);
+    syncInert();
     previouslyFocused?.focus();
   }
 
   // An owner that unmounts while open (ControlsMenu, #862) must not leave the app inert.
   onScopeDispose(() => {
-    if (_inerted) close();
+    close();
   });
 
   // --------------------------------------------------------------------------
@@ -130,37 +166,6 @@ export function useFocusTrap(
         first.focus();
       }
     }
-  }
-
-  // --------------------------------------------------------------------------
-  // Inert helpers (CR-01, #863)
-  //
-  // Walk up from the dialog to <body> and apply `inert` to the siblings at
-  // every level, so a dialog nested inside the app (GameOverCard, anything
-  // teleported to #bs-game-modal) leaves the board and Action Panel
-  // unreachable, not just the other children of <body>. Only the elements
-  // this trap made inert are recorded, so close() never clears an `inert`
-  // someone else set, and a trap opened over another restores it on close.
-  // --------------------------------------------------------------------------
-
-  function applySiblingInert() {
-    const added: HTMLElement[] = [];
-    let node: HTMLElement | null = dialogRef.value;
-    while (node && node !== document.body && node.parentElement) {
-      for (const sibling of Array.from(node.parentElement.children) as HTMLElement[]) {
-        if (sibling !== node && !sibling.hasAttribute('inert')) {
-          sibling.setAttribute('inert', '');
-          added.push(sibling);
-        }
-      }
-      node = node.parentElement;
-    }
-    _inerted = added;
-  }
-
-  function removeSiblingInert() {
-    for (const el of _inerted ?? []) el.removeAttribute('inert');
-    _inerted = null;
   }
 
   return { open, close, handleKeydown };
