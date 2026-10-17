@@ -18,7 +18,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
-import { loadWorldRuntime, openWorldRun } from '../commands/dev-world.js';
+import { bundleWorldRules, openWorldRun, startWorldRuntime } from '../commands/dev-world.js';
 import { rulesProject } from './rules-project.test-helper.js';
 import { openSocketPage, serveSockets } from './socket-page.test-helper.js';
 
@@ -90,7 +90,7 @@ export const gameDefinition = {
 
 // Bundling is the slow part, so it happens here, where no test timeout applies (#363).
 const project = rulesProject('bs-world-connections-', RULES);
-const runtime = await loadWorldRuntime(project.rulesPath, project.tempDir, 'monorepo');
+const bundlePath = await bundleWorldRules(project.rulesPath, project.tempDir, 'monorepo');
 
 let cleanup: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
@@ -125,6 +125,9 @@ function rulesLine() {
 }
 
 async function serve() {
+  // Each run gets its own worker: a run stops the worker it runs in when it closes.
+  const runtime = await startWorldRuntime(bundlePath);
+  cleanup.push(() => runtime.worker.close());
   const run = await openWorldRun({
     cwd: tempTree('bs-world-connections-run-'),
     displayName: 'Camp',
@@ -205,8 +208,8 @@ describe('#284: a page killed while the host is pushing', () => {
 
 describe('#879: a frame that is not a message', () => {
   it('is dropped, and the page is still served', async () => {
-    const { port } = await serve();
-    const page = await open(port, 'p1');
+    const { server } = await serve();
+    const page = await open(server.port, 'p1');
     for (const junk of ['null', '42', '"x"', '[]', '{}', 'not json']) page.socket.send(junk);
 
     const answered = page.next((frame) => frame.type === 'world_response' && frame.requestId === 'r1');
