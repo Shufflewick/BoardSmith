@@ -23,7 +23,7 @@ import { fileURLToPath } from 'node:url';
 
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 import { freePort } from '../lib/free-port.js';
-import { hostHoldings } from '../dev-host/shutdown.js';
+import { hostHoldings, onShutdown, type HostHoldings } from '../dev-host/shutdown.js';
 import { loadWorldRuntime, startWorldDevServer } from './dev-world.js';
 import { makeCommandBuildDir } from '../lib/command-build-dir.js';
 
@@ -117,29 +117,28 @@ function writeWorldFixture(spec: FixtureWorldSpec): string {
  * way `boardsmith dev` does: the rules and the host that runs them come out of
  * one bundle (#283), and a rule reload rebuilds both.
  *
- * @returns the host, whose `stop()` is the only thing that ends it
+ * @returns where the host is served; `holdings.run()` is the only thing that ends it
  */
-async function startWorldHost(fixture: string, displayName: string) {
+async function startWorldHost(fixture: string, displayName: string, holdings: HostHoldings): Promise<string> {
   const port = await freePort();
   const tempDir = makeCommandBuildDir(fixture, 'dev');
   const rulesPath = join(fixture, 'src', 'rules');
-  const host = await startWorldDevServer({
+  await startWorldDevServer({
     cwd: fixture,
     uiPath: fixture,
-    runtime: await loadWorldRuntime(rulesPath, tempDir, 'standalone'),
+    runtime: await holdings.acquire(() => loadWorldRuntime(rulesPath, tempDir, 'standalone'), () => []),
     displayName,
     context: 'standalone',
     port,
     host: '127.0.0.1',
-    // The fixture is removed whole once the host has stopped, so the build
-    // directory inside it is not held separately.
-    holdings: hostHoldings(),
+    // The build directory is inside the fixture, which is held whole.
+    holdings,
     openBrowser: false,
     reloadRules: () => loadWorldRuntime(rulesPath, tempDir, 'standalone'),
   });
   // The host reports the URL Vite resolved, which is `localhost`; a check has
   // to reach the interface the port was actually taken on.
-  return { hostUrl: `http://127.0.0.1:${port}/`, stop: host.stop };
+  return `http://127.0.0.1:${port}/`;
 }
 
 /**
@@ -158,12 +157,13 @@ async function startWorldHost(fixture: string, displayName: string) {
  * underneath the removal. `process.exit()` cannot rescue that: the writes are
  * already in flight, and an exit does not wait for them, it abandons them.
  *
- * So the host's `stop()` is awaited in the INNER guard and the fixture is
- * removed in the OUTER one. When `stop()` resolves the world lock has drained,
- * the store handle is closed and Vite is down: there is no writer left to race.
- * Both guards are `finally`, so a body that throws is cleaned up the same way
- * as one that passes -- and neither guard can be skipped by an exit, because
- * this function returns before any script exits.
+ * So the fixture is held FIRST in the host's holdings, and closing them
+ * closes it LAST: the world lock has drained, the store handle is closed and
+ * Vite is down before the tree is removed, so there is no writer left to race.
+ * The holdings close in a `finally`, so a body that throws is cleaned up the
+ * same way as one that passes, and on SIGINT or SIGTERM through `onShutdown`,
+ * as `boardsmith dev` does, so a run stopped by the browser suite's hang guard
+ * leaves no `bs-<slug>-*` project behind (#922).
  *
  * @param body called with the served fixture; its return value is passed on
  */
@@ -172,14 +172,16 @@ export async function withFixtureWorld<T>(
   body: (served: ServedFixture) => Promise<T>,
 ): Promise<T> {
   const fixture = writeWorldFixture(spec);
+  const holdings = hostHoldings();
+  holdings.hold([{ name: `the fixture project (${fixture})`, close: () => rmSync(fixture, { recursive: true, force: true }) }]);
+  const shutdown = onShutdown(holdings, { say: (line) => console.error(line) });
   try {
-    const { hostUrl, stop } = await startWorldHost(fixture, spec.displayName);
-    try {
-      return await body({ hostUrl, fixture });
-    } finally {
-      await stop();
-    }
+    return await body({ hostUrl: await startWorldHost(fixture, spec.displayName, holdings), fixture });
   } finally {
-    rmSync(fixture, { recursive: true, force: true });
+    try {
+      await holdings.run();
+    } finally {
+      shutdown.cancel();
+    }
   }
 }

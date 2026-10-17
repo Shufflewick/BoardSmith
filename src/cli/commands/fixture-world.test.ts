@@ -20,14 +20,18 @@
  * those answers are in, with the optimiser's first run still in flight: a stop
  * then used to never finish (#366).
  */
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { existsSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { describe, expect, it, vi } from 'vitest';
 
 import { withFixtureWorld } from './fixture-world.test-helper.js';
 import { WORLD_IFRAME_PATH } from './dev-world.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
+import { REPO_ROOT } from '../spawn-cli.test-helper.js';
 
 // Bundling the rules and starting Vite is the slow part, seconds on a busy
 // machine. A hang guard, not a budget.
@@ -109,5 +113,33 @@ describe('withFixtureWorld (#357)', () => {
     expect(seen?.status).toBe(404);
     expect(seen?.answer).toContain(`This is a persistent-world run. The world's own surface is ${WORLD_IFRAME_PATH}`);
     expect(existsSync(seen!.fixture), 'the fixture outlived its host').toBe(false);
+  });
+
+  it('stops the host and removes the project when its process is sent SIGTERM (#922)', async () => {
+    const serveUntilStopped = `
+const { withFixtureWorld } = await import(${JSON.stringify(pathToFileURL(join(REPO_ROOT, 'src/cli/commands/fixture-world.test-helper.ts')).href)});
+await withFixtureWorld(${JSON.stringify({ slug: 'fixture-yard', displayName: 'Fixture Yard', gameClass: 'YardGame', rules: RULES, boardFile: 'YardBoard', board: BOARD })}, async ({ hostUrl, fixture }) => {
+  console.log('SERVING ' + hostUrl + ' ' + fixture);
+  await new Promise(() => {});
+});
+`;
+    const run = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', serveUntilStopped], { cwd: REPO_ROOT });
+    let output = '';
+    run.stderr.on('data', (chunk) => (output += chunk));
+    const [hostUrl, fixture] = await new Promise<string[]>((resolve, reject) => {
+      run.stdout.on('data', (chunk) => {
+        output += chunk;
+        const serving = /SERVING (\S+) (\S+)/.exec(output);
+        if (serving) resolve([serving[1], serving[2]]);
+      });
+      run.on('exit', () => reject(new Error(`the fixture process stopped before it served:\n${output}`)));
+    });
+
+    const exited = once(run, 'exit');
+    run.kill('SIGTERM');
+    await exited;
+
+    await expect(fetch(hostUrl), 'the host outlived its process').rejects.toThrow();
+    expect(existsSync(fixture), `the fixture outlived its process:\n${output}`).toBe(false);
   });
 });
