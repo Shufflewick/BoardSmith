@@ -533,7 +533,9 @@ To let players choose colors when they set up a game, define `colorPalette` in `
 }
 ```
 
-If `colorPalette` is omitted, the standard 8-color palette is used. Plain hex strings are also accepted (e.g., `["#ff0000", "#0000ff"]`).
+If `colorPalette` is omitted, the engine's 16 named colours (`DEFAULT_COLOR_PALETTE`: Red, Blue, Green, Yellow, ...) are used. Plain hex strings are also accepted (e.g., `["#ff0000", "#0000ff"]`).
+
+A colour list declared in code (a `color` player option such as `createColorOption()`, or `gameDefinition.colorPalette`) is never published, so `boardsmith dev` refuses to start unless it matches exactly what the lobby will offer; declare custom colours in `boardsmith.json`'s `colorPalette` instead.
 
 ## Helper Components
 
@@ -1102,10 +1104,15 @@ When `elementSelector` equals `destinationSelector`, the composable auto-detects
 ```typescript
 import { useActionAnimations, FlyingCardsOverlay } from 'boardsmith/ui';
 
+// The board receives `actionController` and `gameView` as props from GameShell.
+const props = defineProps<{ actionController: UseActionControllerReturn; gameView: GameViewElement | null }>();
 const gameViewRef = ref(null);
+watchEffect(() => { gameViewRef.value = props.gameView; });
 
 const actionAnimations = useActionAnimations({
   gameView: gameViewRef,
+  // Tells the composable how each action ended, so a refused one puts its element back.
+  actionController: props.actionController,
   animations: [
     // Movement animation (element moves to a different destination)
     {
@@ -1126,14 +1133,13 @@ const actionAnimations = useActionAnimations({
   ],
 });
 
-// Register with actionController (in GameTable setup)
-function setupAnimations(actionController, gameView) {
-  gameViewRef.value = gameView;
-  // Returns an unregister function. Called inside setup(), the hook is also
-  // unregistered automatically when the component's effect scope disposes.
-  return actionController.onBeforeAutoExecute(actionAnimations.onBeforeAutoExecute);
-}
+// Returns an unregister function. Called inside setup(), the hook is also
+// unregistered automatically when the component's effect scope disposes.
+// A game may wrap this hook (to skip some actions, say); the outcome still arrives.
+props.actionController.onBeforeAutoExecute(actionAnimations.onBeforeAutoExecute);
 ```
+
+A `{selection}` placeholder goes only inside a double-quoted attribute value, as above. Its value is escaped for that spot, so quotes and backslashes in it are safe; a placeholder anywhere else (`#card-{card}`, `[data-x='{card}']`) is refused when `useActionAnimations` is set up.
 
 In template:
 ```vue
@@ -1149,6 +1155,8 @@ When the composable detects a flip-in-place animation (`elementSelector === dest
 - Configures internal timing to avoid flash/flicker issues
 
 You don't need to set `hideDestination`, `flip`, or `crossfadeDuration` - they're configured automatically.
+
+**When it plays:** the composable listens to `actionController.onAfterAutoExecute` for each action's result. The flight plays only once the server has accepted the action and the state it produced has rendered; a state update from another seat while the action is in flight does not play it. If the server refuses the action, or it is cancelled before it is sent, the hidden element gets back exactly the inline styles it had and no flight plays.
 
 **Animation Config Options:**
 

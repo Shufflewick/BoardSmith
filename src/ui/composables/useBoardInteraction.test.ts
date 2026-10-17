@@ -127,6 +127,22 @@ describe('requestBoardFocus', () => {
 // #313 — a board of thousands of candidates is asked about each of its spaces
 // ---------------------------------------------------------------------------
 
+/** Count every read of a target's `ref`, so the test asserts the work done (#360). */
+function counted(targets: BoardTarget[]): { targets: BoardTarget[]; reads: () => number } {
+  let refReads = 0;
+  const wrapped = targets.map((target) => {
+    const { ref, ...rest } = target;
+    return Object.defineProperty(rest, 'ref', {
+      enumerable: true,
+      get: () => {
+        refReads++;
+        return ref;
+      },
+    }) as BoardTarget;
+  });
+  return { targets: wrapped, reads: () => refReads };
+}
+
 describe('candidate lookups on a large pick (#313)', () => {
   /** Windup Warfare's placePack: one notation-anchored candidate per space. */
   function spaces(n: number): BoardTarget[] {
@@ -147,19 +163,9 @@ describe('candidate lookups on a large pick (#313)', () => {
     // The proof is the work done, not the time taken (#360): every read of a
     // candidate's `ref` is counted. Indexing the list reads each one once; a scan
     // per question would read them millions of times.
-    let refReads = 0;
-    const counted = spaces(3720).map((candidate) => {
-      const { ref, ...rest } = candidate;
-      return Object.defineProperty(rest, 'ref', {
-        enumerable: true,
-        get: () => {
-          refReads++;
-          return ref;
-        },
-      }) as BoardTarget;
-    });
+    const { targets, reads } = counted(spaces(3720));
     const interaction = createBoardInteraction();
-    interaction.setValidElements(counted, () => {});
+    interaction.setValidElements(targets, () => {});
 
     let selectable = 0;
     let disabled = 0;
@@ -172,7 +178,7 @@ describe('candidate lookups on a large pick (#313)', () => {
 
     expect(selectable).toBe(3720);
     expect(disabled).toBe(1860);
-    expect(refReads).toBe(3720);
+    expect(reads()).toBe(3720);
   });
 
   it('keeps the list order when two candidates match one element', () => {
@@ -212,6 +218,88 @@ describe('candidate lookups on a large pick (#313)', () => {
     expect(isA1.value).toBe(true);
 
     interaction.clear();
+    await nextTick();
+    expect(isA1.value).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #858 — the board asks whether each space is a drop target on every dragenter
+// ---------------------------------------------------------------------------
+
+describe('drop-target lookups on a large drag (#858)', () => {
+  it('answers for every space of a 3,720-target drag without rescanning the list per space', () => {
+    const { targets, reads } = counted(
+      Array.from({ length: 3720 }, (_, i) => ({ id: -1 - i, ref: { notation: `s${i}` } })),
+    );
+    const interaction = createBoardInteraction();
+    interaction.startDrag({ id: 1 });
+    interaction.setDropTargets(targets, () => {});
+
+    let hits = 0;
+    for (let pass = 0; pass < 2; pass++) {
+      for (let i = 0; i < 3720; i++) {
+        if (interaction.isDropTarget({ id: 1000 + i, notation: `s${i}` })) hits++;
+      }
+    }
+
+    expect(hits).toBe(7440);
+    expect(reads()).toBe(3720);
+  });
+
+  it('matches by id, notation or name, and never by a ref without any', () => {
+    const interaction = createBoardInteraction();
+    interaction.startDrag({ id: 1 });
+    interaction.setDropTargets(
+      [
+        { id: 5, ref: { id: 5, name: 'Militia' } },
+        { id: -1, ref: { notation: 'a1' } },
+        { id: -2, ref: { name: 'north-gate' } },
+        { id: -3, ref: {} },
+      ],
+      () => {},
+    );
+
+    expect(interaction.isDropTarget({ id: 5 })).toBe(true);
+    expect(interaction.isDropTarget({ id: 6, name: 'Militia' })).toBe(false);
+    expect(interaction.isDropTarget({ notation: 'a1' })).toBe(true);
+    expect(interaction.isDropTarget({ id: 9, name: 'north-gate' })).toBe(true);
+    expect(interaction.isDropTarget({ id: 9, notation: 'b2', name: 'south-gate' })).toBe(false);
+    expect(interaction.isDropTarget({})).toBe(false);
+  });
+
+  it('is never a drop target while nothing is being dragged', () => {
+    const interaction = createBoardInteraction();
+    interaction.setDropTargets([{ id: 5, ref: { id: 5 } }], () => {});
+    expect(interaction.isDropTarget({ id: 5 })).toBe(false);
+  });
+
+  it('drops on the first target in list order that matches', () => {
+    const interaction = createBoardInteraction();
+    const onDrop = vi.fn();
+    interaction.startDrag({ id: 1 });
+    interaction.setDropTargets(
+      [
+        { id: -1, ref: { notation: 'a1' } },
+        { id: 7, ref: { id: 7 } },
+      ],
+      onDrop,
+    );
+    interaction.triggerDrop({ id: 7, notation: 'a1' });
+    expect(onDrop).toHaveBeenCalledWith(-1);
+  });
+
+  it('a computed reading isDropTarget follows a new target list', async () => {
+    const interaction = createBoardInteraction();
+    interaction.startDrag({ id: 1 });
+    const isA1 = computed(() => interaction.isDropTarget({ notation: 'a1' }));
+    expect(isA1.value).toBe(false);
+
+    interaction.setDropTargets([{ id: -1, ref: { notation: 'a1' } }], () => {});
+    await nextTick();
+    expect(isA1.value).toBe(true);
+
+    interaction.endDrag();
     await nextTick();
     expect(isA1.value).toBe(false);
   });

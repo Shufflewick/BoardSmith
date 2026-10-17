@@ -390,7 +390,7 @@ shorthand that names no id it can map: a dash then a plain number after a provis
 - Maximum **3 audit rounds** per chunk.
 - Round N+1 auditors see the existing findings ledger (stable IDs) and report **only NEW findings** — they do not re-litigate findings already recorded.
 - After round 3, any remaining findings are triaged with the user: real blocker, defer to a later chunk, or auditor was wrong (refuted).
-- The rounds follow the role ladder (`routing.md`): a repair runs at the role that last changed the work on its first failure there and one role up on its second, and the triage after round 3 ends the loop wherever the ladder stands. Each later round reviews only the change since the round before (`boardsmith review-gate --since`).
+- The rounds follow the role ladder (`routing.md`): a repair runs at the role that last changed the work on its first failure there and one role up on its second, and the triage after round 3 ends the loop wherever the ladder stands. Each later round reviews only the change since the round before (`boardsmith review-gate` reads the round before from the run log).
 
 ## Redteam Escalation
 

@@ -161,7 +161,7 @@ export function createProgram(): Command {
   program
     .command('build')
     .description('Build this workspace for distribution (a game bundle, or BoardSmith\'s CLI)')
-    .option('-o, --out-dir <dir>', 'Output directory', 'dist')
+    .option('-o, --out-dir <dir>', 'Output directory, emptied before each build', 'dist')
     .action(buildCommand);
 
   // Packing for local development
@@ -232,10 +232,8 @@ export function createProgram(): Command {
       "Refuse a model review of a chunk's work unless `boardsmith verify --chunk <slug>` passed for this commit; " +
         'when open, print the review level and the verify brief every review prompt carries',
     )
-    .option('--work-role <role>', 'The role that did the work under review (mechanical, bounded or judgement); only small mechanical changes skip or lighten review')
-    .option('--since <commit>', 'Review only the change since this commit: the one the last round reviewed, or where a mechanical change began')
     .option('--project <dir>', 'Project directory (defaults to cwd)')
-    .action((slug: string, options: { workRole?: string; since?: string; project?: string }) => reviewGateCommand(slug, options));
+    .action((slug: string, options: { project?: string }) => reviewGateCommand(slug, options));
 
   // The bs- skills name roles, never models (#454): which agent type each role is dispatched as.
   program
@@ -366,6 +364,7 @@ export function createProgram(): Command {
     .option('--project <dir>', 'Project directory (defaults to cwd)')
     .option('--skip-relabel', 'Do not relabel presentation-only Derived lines first')
     .option('--json', 'Emit JSON instead of human-readable output')
+    .option('--print-changed', 'Print only the paths of the files it changed, each followed by a NUL byte')
     .action(discardResult(ingestGapsCommand));
 
   program
@@ -390,10 +389,6 @@ export function createProgram(): Command {
     .command('chunk-check <slug>')
     .description("Record or repair a chunk's Verified Against provenance block, and exit non-zero if it was stale")
     .option('--project <dir>', 'Project directory (defaults to cwd)')
-    .option(
-      '--reverified-no-code-change <range>',
-      'Record a re-verification that found no code change (e.g. <verified-hash>..<head> — 0 manifest files changed)',
-    )
     .option('--json', 'Emit JSON instead of human-readable output')
     .action(chunkCheckCommand);
 

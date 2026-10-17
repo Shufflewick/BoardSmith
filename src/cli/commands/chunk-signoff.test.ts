@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -16,6 +16,7 @@ import {
   recordWaiver,
   recordReopen,
   parseSignoff,
+  readStatus,
 } from './chunk-signoff.js';
 import { chunkCheckCommand, chunkProvenanceStatusCommand } from './chunk-provenance.js';
 import {
@@ -178,6 +179,13 @@ describe('recordSignoff — a chunk does not reach verified while a constraint d
     );
     await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
     expect(await readChunk(project, 'deal')).toMatch(/^Status: verified$/m);
+  });
+});
+
+describe('readStatus', () => {
+  it('reads an empty Status line as empty, never the line below it (#829)', () => {
+    expect(readStatus('Status:\nverified\n')).toBe('');
+    expect(readStatus('Status:  built  \n')).toBe('built');
   });
 });
 
@@ -506,6 +514,15 @@ describe('an edit to a shared file is accounted for by the chunk that made it (#
     expect((await assessSignoffs(project)).get('shop')!.sharedEdits).toEqual([
       { path: 'src/rules.ts', coveredBy: 'deal, shop', how: 'merged' },
     ]);
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await chunkProvenanceStatusCommand({ project });
+      const out = log.mock.calls.map((c) => c.join(' ')).join('\n');
+      expect(out).toContain('src/rules.ts (vouched for by the merge of deal, shop)');
+      expect(out).toContain('or is building it, or the merge named vouched for it):');
+    } finally {
+      log.mockRestore();
+    }
 
     await fs.writeFile(ledger, record(createHash('sha256').update('rules v2').digest('hex'), new Date('2026-09-26T00:00:00Z')));
     expect((await checkSignoff(project, 'deal')).join('\n')).toContain('src/rules.ts');

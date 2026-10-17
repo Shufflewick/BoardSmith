@@ -280,11 +280,11 @@ function located(findings: LedgerFinding[]): Array<`${string}:${LedgerFindingKin
   return findings.map((f) => `${f.ledger}:${f.kind}` as const);
 }
 
-async function project(files: Record<string, string>): Promise<string> {
+async function project(files: Record<string, string>, objectFormat = 'sha1'): Promise<string> {
   const tree = tempTree('bs-ledger-check-');
   const dir = join(tree, 'proj');
   await fs.mkdir(join(dir, 'design'), { recursive: true });
-  execSync('git init', { cwd: dir, stdio: 'ignore' });
+  execSync(`git init --object-format=${objectFormat}`, { cwd: dir, stdio: 'ignore' });
   for (const [name, text] of Object.entries(files)) {
     await fs.mkdir(dirname(join(dir, 'design', name)), { recursive: true });
     await fs.writeFile(join(dir, 'design', name), text);
@@ -332,6 +332,16 @@ describe('ledgerCheck — the whole project', () => {
     const result = await ledgerCheck(dir);
     expect(located(result.findings)).toEqual(['run-log/core-loop.md:run-timestamp']);
     expect(result.findings[0].detail).toMatch(/Finished at/);
+  });
+
+  it('reads blame in a SHA-256 repository, whose hashes are 64 characters (#829)', async () => {
+    const dir = await project(
+      { 'run-log/core-loop.md': dispatch(1, '2026-09-23T10:00:00Z', 'closed', '2026-09-23T11:00:00Z') },
+      'sha256',
+    );
+    commitAt(dir, '2026-09-23T10:30:00Z');
+    const result = await ledgerCheck(dir);
+    expect(located(result.findings)).toEqual(['run-log/core-loop.md:run-timestamp']);
   });
 
   it('checks every chunk run log on its own, so two chunks built at once never share a field (#294)', async () => {
@@ -815,8 +825,8 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
           '   > if (this.complete) { return this.finish();',
           '   Source: ../node_modules/boardsmith/src/engine/flow/engine.ts:2-3',
           '2. **The same, cited from the project root.**',
-          '   > return this.finish();',
-          '   Source: node_modules/boardsmith/src/engine/flow/engine.ts:3',
+          '   > return this.finish(); }',
+          '   Source: node_modules/boardsmith/src/engine/flow/engine.ts:3-4',
         ),
       },
       { 'src/engine/flow/engine.ts': engineTs },

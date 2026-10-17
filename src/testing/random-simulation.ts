@@ -98,7 +98,7 @@ export interface SimulationResults {
   timedOut: number;
   /** Number of games that exceeded max actions */
   exceededMaxActions: number;
-  /** Number of games that got stuck (no generatable move / repeated rejections / an undeclared stop) */
+  /** Number of games that got stuck (no generatable move / a rejected engine-generated move / an undeclared stop) */
   stuck: number;
   /** Number of games that stopped at a rest their `isResting` declared */
   resting: number;

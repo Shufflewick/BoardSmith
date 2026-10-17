@@ -189,3 +189,19 @@ export async function actWithinPageTime<T>(
     await meanwhile?.();
   }
 }
+
+/** How much of each page's time the walk gives errors its last press raised to reach the page's listeners. */
+const LAST_ERRORS_MS = 250;
+
+/**
+ * Waits until {@link LAST_ERRORS_MS} of each of `pages`' own time has passed, so errors the walk's
+ * last press raised in any seat's browser land before the verdict, however starved that browser is (#925).
+ */
+export async function lastErrorsLand(pages: readonly object[]): Promise<void> {
+  await Promise.all(
+    pages.map(async (page) => {
+      const over = stopwatch(page);
+      while (!over(LAST_ERRORS_MS)) await new Promise((tick) => setTimeout(tick, ANSWER_TICK_MS));
+    }),
+  );
+}

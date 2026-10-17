@@ -4,13 +4,14 @@ import {
 import { resolveUserPath } from '../lib/user-path.js';
 import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import { DERIVED_LINE_RE } from './derived-line-pattern.js';
 import {
   ADDITIONAL_SOURCES_BEGIN,
   ADDITIONAL_SOURCES_END,
   ADDITIONAL_SOURCES_HEADING,
+  ARCHIVE_PREFIX,
   type AdditionalSourceRecord,
   parseAdditionalSources,
 } from './rulebook-sources.js';
@@ -151,7 +152,7 @@ function isoDate(now: Date): string {
 
 /** Renders the `## Additional Sources` section body (between the fences), one row per record. */
 function renderAdditionalSourcesSection(records: AdditionalSourceRecord[]): string {
-  const rows = records.map((r) => `| ${r.path} | ${r.sourceHash} |`).join('\n');
+  const rows = records.map((r) => `| ${r.path.replaceAll('|', '\\|')} | ${r.sourceHash} |`).join('\n');
   return `${ADDITIONAL_SOURCES_HEADING}
 
 <!-- MACHINE-OWNED. Do not write between the fences below, and do not move or delete them.
@@ -305,9 +306,10 @@ ${INDEX_HEADINGS[2]}
  * the slice-side marker count, so dedup here would make a working sweep look like a dropping one.
  */
 export async function ingestGapsCommand(
-  options: { project?: string; json?: boolean; skipRelabel?: boolean; quiet?: boolean } = {},
-): Promise<{ gapsWritten: number; slicesScanned: number; changed: boolean }> {
+  options: { project?: string; json?: boolean; skipRelabel?: boolean; quiet?: boolean; printChanged?: boolean } = {},
+): Promise<{ gapsWritten: number; slicesScanned: number; changed: boolean; files: string[] }> {
   const projectDir = resolve(options.project ?? process.cwd());
+  const quiet = options.quiet || options.printChanged;
 
   // Relabel FIRST, as part of this command rather than as a second one the session must
   // remember. Both were separate commands for one run: the archive landed (it is forced by an
@@ -317,13 +319,12 @@ export async function ingestGapsCommand(
   //
   // Ordering matters: relabelling moves presentation lines off the Derived prefix, and the gaps
   // sweep below reads final slice content.
-  let relabelled = 0;
-  if (!options.skipRelabel) {
-    relabelled = (
-      await relabelDerivedLines({ project: projectDir, quiet: options.quiet })
-    ).relabelled;
-  }
   const rulebookDir = designRulebookDir(projectDir);
+  const files = new Set<string>();
+  if (!options.skipRelabel) {
+    const { changes } = await relabelDerivedLines({ project: projectDir, quiet });
+    for (const c of changes) files.add(relative(projectDir, join(rulebookDir, c.file)));
+  }
   const indexPath = join(rulebookDir, 'INDEX.md');
 
   let index: string;
@@ -374,19 +375,25 @@ export async function ingestGapsCommand(
   const body = entries.length
     ? `\n${entries.join('\n')}\n`
     : `\n${GAPS_EMPTY}\n`;
-  const changed = before !== body || relabelled > 0;
+  if (before !== body) {
+    await fs.writeFile(
+      indexPath,
+      index.slice(0, begin + GAPS_BEGIN.length) + body + index.slice(end),
+    );
+    files.add(relative(projectDir, indexPath));
+  }
 
-  await fs.writeFile(
-    indexPath,
-    index.slice(0, begin + GAPS_BEGIN.length) + body + index.slice(end),
-  );
-
-  const result = { gapsWritten: entries.length, slicesScanned: names.length, changed };
+  const result = { gapsWritten: entries.length, slicesScanned: names.length, changed: files.size > 0, files: [...files] };
+  if (options.printChanged) {
+    // NUL-terminated so the pre-commit hook can hand any file name to `git add` intact.
+    process.stdout.write(result.files.map((f) => `${f}\0`).join(''));
+    return result;
+  }
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
     return result;
   }
-  if (!options.quiet) {
+  if (!quiet) {
     console.log(
       chalk.green(
         `✓ Filled ${heading} — ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} from ${names.length} slice${names.length === 1 ? '' : 's'}`,
@@ -562,7 +569,7 @@ async function readSourceToArchive(
     sourcePath,
     bytes,
     archivePath: archivePathFor(projectDir, userPath),
-    relArchivePath: `rulebook/source/${basename(sourcePath)}`,
+    relArchivePath: `${ARCHIVE_PREFIX}${basename(sourcePath)}`,
   };
 }
 
@@ -792,6 +799,22 @@ function findLabelLine(
 }
 
 /**
+ * Whether a `Source:` line is a bare path (replaceable in place) rather than the first line of
+ * wrapped prose. A space is allowed only in an archived path, whose file name may have one (#823).
+ */
+function isBarePathSource(text: string, sourceLine: { end: number; value: string }): boolean {
+  const lineEnd = text.indexOf('\n', sourceLine.end);
+  const nextLine = lineEnd === -1 ? undefined : text.slice(lineEnd + 1).split('\n')[0];
+  return (
+    (sourceLine.value.startsWith(ARCHIVE_PREFIX) || !/\s/.test(sourceLine.value)) &&
+    (nextLine === undefined ||
+      nextLine.trim() === '' ||
+      nextLine.startsWith('## ') ||
+      HEADER_LABELS.some((label) => nextLine.startsWith(label)))
+  );
+}
+
+/**
  * Reads the PRIMARY `Source:`/`Source hash:` pair ONLY when it is already fully canonical — a
  * bare path (never wrapped prose) with a `Source hash:` line present too. Returns `undefined`
  * for every other shape (no `Source:` line at all, a `Source hash:` line missing, or the
@@ -800,28 +823,15 @@ function findLabelLine(
  * (`ingestArchiveCommand`, deciding whether the CURRENT archive call names a genuinely DIFFERENT
  * primary source) only acts on this when the comparison is actually meaningful.
  *
- * Mirrors the `isBarePath` classification inside `repairExistingIndex`'s own `Source:` branch —
- * duplicated rather than extracted, matching this file's own established precedent for a single
- * small predicate two call sites both need at slightly different points in the file's control
- * flow. (The `ANY_ANNOTATION_LINE_RE`/filter duplication this comment used to point at as
- * precedent was itself consolidated away in 177.1-01 — `verify-enumerate.ts` and
- * `verify-derive-check.ts` now both import `ANNOTATION_CITATION_RE` from
- * `derived-line-pattern.ts` rather than re-spelling it.)
+ * Shares `isBarePathSource` with `repairExistingIndex`'s own `Source:` branch, so the two can
+ * never disagree about which shape a `Source:` line has.
  */
 function readCanonicalPrimarySource(text: string): { path: string; hash: string } | undefined {
   const sourceLine = findLabelLine(text, 'Source:');
   const hashLine = findLabelLine(text, 'Source hash:');
   if (!sourceLine || !hashLine) return undefined;
 
-  const lineEnd = text.indexOf('\n', sourceLine.end);
-  const nextLine = lineEnd === -1 ? undefined : text.slice(lineEnd + 1).split('\n')[0];
-  const isBarePath =
-    !/\s/.test(sourceLine.value) &&
-    (nextLine === undefined ||
-      nextLine.trim() === '' ||
-      nextLine.startsWith('## ') ||
-      HEADER_LABELS.some((label) => nextLine.startsWith(label)));
-  if (!isBarePath) return undefined;
+  if (!isBarePathSource(text, sourceLine)) return undefined;
 
   return { path: sourceLine.value, hash: hashLine.value };
 }
@@ -923,14 +933,7 @@ async function repairExistingIndex(
     // continuation line, which is non-blank and would otherwise look like wrapped prose again.
   } else {
     const lineEnd = text.indexOf('\n', sourceLine.end);
-    const nextLine = lineEnd === -1 ? undefined : text.slice(lineEnd + 1).split('\n')[0];
-    const isBarePath =
-      !/\s/.test(sourceLine.value) &&
-      (nextLine === undefined ||
-        nextLine.trim() === '' ||
-        nextLine.startsWith('## ') ||
-        HEADER_LABELS.some((label) => nextLine.startsWith(label)));
-    if (isBarePath) {
+    if (isBarePathSource(text, sourceLine)) {
       // bare path (today's shape) — replace the line in place.
       text = text.slice(0, sourceLine.start) + `Source: ${relArchivePath}` + text.slice(sourceLine.end);
     } else {

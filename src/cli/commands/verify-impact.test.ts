@@ -649,6 +649,17 @@ async function sha256OfDir(root: string): Promise<Record<string, string>> {
   return map;
 }
 
+/** Everything a run printed to stdout through console.log, joined as the terminal would see it. */
+async function captureStdout(run: () => Promise<unknown>): Promise<string> {
+  const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  try {
+    await run();
+    return logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+  } finally {
+    logSpy.mockRestore();
+  }
+}
+
 async function singleContradictoryPairProject(
   projectRoot: string,
 ): Promise<{ project: string; runId: string; pairId: string }> {
@@ -706,6 +717,14 @@ describe('contradictory — verifyImpactGateCommand: read-only, exit-0, no-bypas
     expect(process.exitCode === undefined || process.exitCode === 0).toBe(true);
 
     process.exitCode = previousExitCode;
+  });
+
+  it('--json: stdout is exactly one parseable JSON object, with no inner report printed ahead of it (#832)', async () => {
+    const { project, runId, pairId } = await singleContradictoryPairProject(gateDir);
+
+    const stdout = await captureStdout(() => verifyImpactGateCommand({ project, runId, json: true }));
+
+    expect(JSON.parse(stdout).pending).toContain(pairId);
   });
 
   it('contradictory: verifyImpactGateCommand is read-only — a whole-project sha256 map is byte-identical before and after', async () => {
@@ -902,6 +921,16 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
     ).rejects.toThrow(/decision/);
   });
 
+  it('--json: stdout is exactly one parseable JSON object, with no inner report printed ahead of it (#832)', async () => {
+    const { project, runId, pairId } = await contradictoryProjectWithRulings();
+
+    const stdout = await captureStdout(() =>
+      verifyImpactAdjudicateCommand({ project, runId, pairId, outcome: 'UNADJUDICATED', json: true }),
+    );
+
+    expect(JSON.parse(stdout).outcome).toBe('UNADJUDICATED');
+  });
+
   it('unadjudicated: outcome "UNADJUDICATED" writes NO RULINGS.md entry (sha256 unchanged) and records an AdjudicationRecord with that outcome', async () => {
     const { project, runId, pairId } = await contradictoryProjectWithRulings();
     const before = await fs.readFile(join(project, DESIGN_DIR, 'RULINGS.md'));
@@ -1071,17 +1100,15 @@ describe('repair-gate — computeRepairGate (pure, total)', () => {
       disposition: 'reopen-playtest',
       nextStatus: 'built',
       clearMarker: true,
-      reverifyStamp: false,
     });
   });
 
-  it('no-code-change: verified + stale + clean -> close-without-replaytest, nextStatus verified, reverifyStamp true', () => {
+  it('no-code-change: verified + stale + clean -> close-without-replaytest, nextStatus verified', () => {
     const gate = computeRepairGate({ status: 'verified', stale: true, driftState: 'clean' });
     expect(gate).toMatchObject({
       disposition: 'close-without-replaytest',
       nextStatus: 'verified',
       clearMarker: true,
-      reverifyStamp: true,
     });
   });
 
@@ -1454,6 +1481,24 @@ describe('contradictory / marker — verifyImpactApplyCommand', () => {
     expect(parsed.record?.adjudication).toBe('UNADJUDICATED');
   });
 
+  it('--json: stdout is exactly one parseable JSON object, with no inner report printed ahead of it (#832)', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+
+    const stdout = await captureStdout(() => verifyImpactApplyCommand({ project, runId, json: true }));
+
+    expect(JSON.parse(stdout).marked.some((m: { slug: string }) => m.slug === 'movement')).toBe(true);
+  });
+
+  it('--json: a refusal for an unclassified pair is exactly one parseable JSON object too (#832, #830)', async () => {
+    const { project, runId, pairId } = await buildImpactTestProject(root, { drift: 'clean', leaveXUnclassified: true });
+
+    const stdout = await captureStdout(() => verifyImpactApplyCommand({ project, runId, json: true }));
+
+    const parsed = JSON.parse(stdout);
+    expect(parsed.blocked).toBe(true);
+    expect(parsed.pendingPairs).toEqual([pairId]);
+  });
+
   it('unclassified: a pair still pending classification blocks the write entirely, naming the pair and verify-classify-record (#830)', async () => {
     const { project, runId, pairId } = await buildImpactTestProject(root, { drift: 'clean', leaveXUnclassified: true });
     const before = await sha256OfProject(project);
@@ -1541,7 +1586,7 @@ describe('contradictory / marker — verifyImpactApplyCommand', () => {
  */
 
 describe('cli.ts — verify-impact-* registration', () => {
-  it('registers all four verify-impact-* commands, chunk-check gains --reverified-no-code-change, and no command declares a bypass option', async () => {
+  it('registers all four verify-impact-* commands, chunk-check takes no --reverified-no-code-change (#827), and no command declares a bypass option', async () => {
     const cliSource = await fs.readFile(join(__dirname, '..', 'cli.ts'), 'utf-8');
 
     for (const name of [
@@ -1554,7 +1599,7 @@ describe('cli.ts — verify-impact-* registration', () => {
     }
 
     expect((cliSource.match(/verify-impact-/g) ?? []).length).toBeGreaterThanOrEqual(4);
-    expect(cliSource).toContain('--reverified-no-code-change');
+    expect(cliSource).not.toContain('--reverified-no-code-change');
 
     // Scoped to the verify-impact-* registration block only — `--force` legitimately exists
     // elsewhere in cli.ts (the unrelated `claude` command's `--force` to overwrite skills).

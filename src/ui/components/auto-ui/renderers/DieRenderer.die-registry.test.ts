@@ -28,4 +28,11 @@ describe('DieRenderer and the die registry', () => {
 
     expect(wrapper.find('.registered-die').text()).toBe('d8:5');
   });
+
+  it('says a never-rolled die has no face yet, not "showing 0" (#892)', () => {
+    const unrolled = { ...element, attributes: { ...element.attributes, value: 0 } };
+    const wrapper = mount(DieRenderer, { props: { element: unrolled } });
+
+    expect(wrapper.find('.die-container').attributes('aria-label')).toBe('red-die, d8 not rolled yet');
+  });
 });

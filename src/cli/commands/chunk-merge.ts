@@ -22,8 +22,8 @@
  *   3. On the combined tree, before anything is committed, it re-runs every tree-wide check:
  *      the chunk is verified; the chunks really built alongside it (not yet verified on the main
  *      line when the branch left, merged by chunk-merge since, or whose code the main line
- *      reworked since, #442) were allowed to be (the
- *      `parallel-check` pair rule); `ledger-check`; `constraint-check` with its measurement tests;
+ *      reworked since, #442) were allowed to be (`parallel-check`'s sketch-entry, run-alone,
+ *      citation and pair rules, #820); `ledger-check`; `constraint-check` with its measurement tests;
  *      every verified chunk's sign-off still stands for its code (`assessSignoffs`); and the
  *      project's whole test suite.
  *      Any failure, or error, aborts the merge and leaves the main line exactly as it was.
@@ -74,12 +74,12 @@ import {
   unreadableShorthand,
 } from '../lib/ledger-allocation.js';
 import { describeFinding, ledgerCheck } from './ledger-check.js';
-import { type TestRunner, checkConstraints, runVitest } from './constraint-check.js';
-import { VERIFIED, assessSignoffs, checkSignoff, chunkCodeFiles, unaccountedEdits } from './chunk-signoff.js';
+import { type TestRunner, checkConstraints, runVitest, unranTestsProblem } from './constraint-check.js';
+import { VERIFIED, assessSignoffs, checkSignoff, chunkCodeFiles, readStatus, unaccountedEdits } from './chunk-signoff.js';
 import { verifiedAgainstIsCurrent } from './chunk-provenance.js';
 import { checkClaimQuotes } from './claim-quotes.js';
 import { parseSpecManifest } from './test-step-check.js';
-import { chunkCitations, pairProblems, readSketchChunks } from './parallel-check.js';
+import { besideAnyProblems, pairProblems, readSketchChunks } from './parallel-check.js';
 import { appendCrossChunkEntry, changedSide, crossReferences } from './cross-chunk.js';
 import { takeOsLock } from '../lib/os-lock.js';
 import { onlyTestCollectionChanged } from '../lib/test-config-edit.js';
@@ -203,8 +203,11 @@ async function resolveConflicts(ctx: MergeContext): Promise<string[]> {
   for (const name of conflicted) {
     const inDesign = name.startsWith(`${ctx.prefix}${DESIGN_DIR}/`) && name.endsWith('.md');
     const path = join(top, name);
-    const outcome = inDesign ? resolveDesignConflicts(await fs.readFile(path, 'utf-8')) : undefined;
-    if (!outcome || outcome.unresolved > 0) {
+    // A rename/rename conflict leaves no file at the old path; like any conflict here, a person settles it.
+    const text = inDesign ? await fs.readFile(path, 'utf-8').catch(() => undefined) : undefined;
+    const outcome = text === undefined ? undefined : resolveDesignConflicts(text);
+    // Unchanged text had no markers to resolve: a modify/delete conflict, which a person must settle.
+    if (!outcome || outcome.unresolved > 0 || outcome.text === text) {
       left.push(name);
       continue;
     }
@@ -374,7 +377,7 @@ async function changedBy(ctx: MergeContext, commit: string): Promise<string[]> {
 
 /** A CHUNK.md's Status, or `missing` when it has none (or there is no CHUNK.md). */
 function statusOf(chunkText: string): string {
-  return /^Status:\s*(.*)$/m.exec(chunkText)?.[1].trim() ?? 'missing';
+  return readStatus(chunkText) ?? 'missing';
 }
 
 async function verifiedProblem(ctx: MergeContext): Promise<string[]> {
@@ -390,13 +393,12 @@ async function concurrencyProblems(ctx: MergeContext, alongside: string[]): Prom
   if (alongside.length === 0) return [];
   const chunks = await readSketchChunks(ctx.projectDir);
   const bySlug = new Map(chunks.map((c) => [c.slug, c]));
-  const self = bySlug.get(ctx.slug);
-  if (!self) return [`${SKETCH_MD} has no entry for ${ctx.slug}.`];
-  const mine = await chunkCitations(ctx.projectDir, self);
-  const problems: string[] = [];
+  const mine = await besideAnyProblems(ctx.projectDir, bySlug, ctx.slug);
+  const problems = [...mine.problems];
   for (const other of alongside) {
-    const chunk = bySlug.get(other);
-    if (chunk) problems.push(...pairProblems(chunks, mine, await chunkCitations(ctx.projectDir, chunk)));
+    const theirs = await besideAnyProblems(ctx.projectDir, bySlug, other);
+    problems.push(...theirs.problems);
+    if (mine.citations && theirs.citations) problems.push(...pairProblems(chunks, mine.citations, theirs.citations));
   }
   return problems;
 }
@@ -566,31 +568,18 @@ async function ownTestsFailure(
   const what = `${slug}'s own tests (${tests.join(', ')}) fail`;
   if ('refused' in run) return [what, run.refused];
   if (!run.ok) return [what, tail(run.output)];
-  if (run.ran === undefined) {
-    return [
-      `${slug}'s own tests cannot be confirmed`,
-      `vitest's JSON report, which names the test files it ran, is missing or unreadable, so the run does not show they ran. ` +
-        `Run them in the chunk's worktree to see why vitest wrote no report.`,
-    ];
-  }
+  const unran = unranTestsProblem(run.ran, tests);
+  if (unran) return [`${slug}'s own tests ${unran[0]}`, unran[1]];
   const own = new Set(tests.map((t) => posix.normalize(t)));
-  const ran = new Set(run.ran.map((f) => posix.normalize(f)));
-  const missing = tests.filter((t) => !ran.has(posix.normalize(t)));
-  const they = (files: string[]) => (files.length === 1 ? 'it' : 'them');
-  if (missing.length) {
-    return [
-      `${slug}'s own tests did not all run`,
-      `${missing.join(', ')} did not run: the project's vitest config excludes ${they(missing)}, ` +
-        `or does not include ${they(missing)}, so the run proves nothing about ${they(missing)}.`,
-    ];
-  }
+  // unranTestsProblem refuses an undefined `ran`, so it is set here.
+  const ran = new Set(run.ran!.map((f) => posix.normalize(f)));
   const extra = [...ran].filter((f) => !own.has(f)).sort();
   if (extra.length === 0) return undefined;
   return [
     `${slug}'s own tests did not run alone`,
     `${extra.join(', ')} ran with them, because vitest runs every collected file whose path contains a named one. ` +
       `A file outside the chunk's Spec Manifest can share state with its tests, so the run does not show their result is their own. ` +
-      `Rename the test files so no path contains another, or leave ${they(extra)} out of the vitest config's include.`,
+      `Rename the test files so no path contains another, or leave ${extra.length === 1 ? 'it' : 'them'} out of the vitest config's include.`,
   ];
 }
 
@@ -725,10 +714,19 @@ async function readContext(projectDir: string, slug: string, branch: string): Pr
   };
 }
 
-/** Starts the merge without committing it; returns the files whose conflicts remain. */
-async function startMerge(ctx: MergeContext): Promise<string[]> {
-  const merged = await gitSucceeds(ctx.top, ['-c', 'merge.conflictStyle=diff3', 'merge', '--no-ff', '--no-commit', ctx.branchCommit]);
-  const left = merged ? [] : await resolveConflicts(ctx);
+/**
+ * Starts the merge without committing it; returns the files whose conflicts remain, or, when git
+ * refused to start the merge at all (no MERGE_HEAD, e.g. an untracked file in the way), why.
+ */
+async function startMerge(ctx: MergeContext): Promise<string[] | string> {
+  const failure = await git(ctx.top, ['-c', 'merge.conflictStyle=diff3', 'merge', '--no-ff', '--no-commit', ctx.branchCommit]).then(
+    () => undefined,
+    (error: Error) => error.message,
+  );
+  if (failure !== undefined && !(await gitSucceeds(ctx.top, ['rev-parse', '--verify', '--quiet', 'MERGE_HEAD']))) {
+    return `Git would not start merging ${ctx.branch}; fix what it reports. ${failure}`;
+  }
+  const left = failure === undefined ? [] : await resolveConflicts(ctx);
   if (left.length === 0) await keepMainLock(ctx);
   return left;
 }
@@ -755,7 +753,9 @@ async function mergeLocked(ctx: MergeContext, runTests: TestRunner): Promise<Chu
   if (before.length) return refused(before);
 
   try {
-    return await checkStartedMerge(ctx, await startMerge(ctx), runTests);
+    const left = await startMerge(ctx);
+    if (typeof left === 'string') return refused([left]);
+    return await checkStartedMerge(ctx, left, runTests);
   } catch (error) {
     // A step that throws must not leave the main checkout mid-merge.
     await gitSucceeds(ctx.top, ['merge', '--abort']);

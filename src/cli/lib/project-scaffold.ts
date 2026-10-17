@@ -9,11 +9,8 @@ import { DESIGN_DIR, SCRATCH_DIR } from './project-paths.js';
 import { GAME_VITE_CONFIG, GAME_VITE_CONFIG_FILE } from './test-run-scope.js';
 import { TABLE_UI_ENTRY, TABLE_UI_PATHS } from './game-project.js';
 import { SMOKE_SPEC_PATH } from '../../testing/browser-smoke-verdict.js';
-import { existsSync } from 'node:fs';
-import { join, dirname, relative, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import { boardsmithPackageRoot } from './boardsmith-version.js';
+import { relative, resolve } from 'node:path';
 
 import type { GameBackend } from '../../session/index.js';
 
@@ -32,7 +29,6 @@ interface ProjectConfigBase {
   description: string;
   audience?: string;
   tags?: string[];
-  ui?: string;
 }
 
 /**
@@ -66,58 +62,21 @@ export interface GeneratedFile {
 }
 
 /**
- * Check if running from local dev environment
- */
-export function getMonorepoRoot(): string | null {
-  // Try multiple possible paths depending on how CLI is built/bundled:
-  // - Unbundled: dist/cli/lib/project-scaffold.js -> go up 3 levels
-  // - Bundled:   dist/cli/cli.mjs -> go up 2 levels
-  // - Source:    src/cli/lib/project-scaffold.ts -> go up 3 levels
-  const candidates = [
-    join(__dirname, '..', '..', '..'),  // lib -> cli -> dist -> BoardSmith
-    join(__dirname, '..', '..'),        // cli -> dist -> BoardSmith (bundled)
-  ];
-
-  for (const candidate of candidates) {
-    const enginePath = join(candidate, 'src', 'engine');
-    const uiPath = join(candidate, 'src', 'ui');
-    if (existsSync(enginePath) && existsSync(uiPath)) {
-      return candidate;
-    }
-  }
-  return null;
-}
-
-/**
- * Get the `boardsmith` dependency spec for a project being scaffolded at
- * `projectPath` — a local `file:` link when the CLI can see the monorepo,
- * the published version otherwise.
+ * The `boardsmith` dependency spec for a project being scaffolded at
+ * `projectPath`: a `file:` link to the BoardSmith package that is running
+ * init, a checkout or an installed copy alike, so the project symlinks to it
+ * the way the example games link to the checkout. Never a registry spec: the
+ * npm name `boardsmith` is not ours (#849).
  *
- * The local link is RELATIVE to `projectPath`. An absolute `file:` path bakes
+ * The link is RELATIVE to `projectPath`. An absolute `file:` path bakes
  * the scaffolding developer's home directory into the new game's
  * package.json, so `npm install` fails on every other machine and in CI — the
  * defect issue 142 was filed for, after it reached five games.
  */
-export function getDependencyPaths(projectPath: string): {
-  boardsmith: string;
-  isLocalDev: boolean;
-} {
-  const monorepoRoot = getMonorepoRoot();
-
-  if (monorepoRoot !== null) {
-    // `relative` between two absolute paths; `resolve` first so a caller's
-    // relative projectPath still produces a link that resolves correctly.
-    const link = relative(resolve(projectPath), resolve(monorepoRoot));
-    return {
-      boardsmith: `file:${toPosixPath(link)}`,
-      isLocalDev: true,
-    };
-  }
-
-  return {
-    boardsmith: '^0.0.1',
-    isLocalDev: false,
-  };
+export function boardsmithDependencySpec(projectPath: string): string {
+  // `resolve` first so a caller's relative projectPath still produces a link that resolves correctly.
+  const link = relative(resolve(projectPath), boardsmithPackageRoot());
+  return `file:${toPosixPath(link)}`;
 }
 
 /**
@@ -189,8 +148,6 @@ export function generateBoardsmithJson(config: ProjectConfig): string {
  * Generate package.json
  */
 export function generatePackageJson(config: ProjectConfig, projectPath: string): string {
-  const deps = getDependencyPaths(projectPath);
-
   // No `scripts` block, deliberately. The BoardSmith CLI is the one way to
   // build, test, lint, and validate a game — `npx boardsmith test`, not
   // `npm test`. Script aliases would fork that into two commands that drift
@@ -202,7 +159,7 @@ export function generatePackageJson(config: ProjectConfig, projectPath: string):
     version: '0.0.1',
     type: 'module',
     dependencies: {
-      boardsmith: deps.boardsmith,
+      boardsmith: boardsmithDependencySpec(projectPath),
       vue: '^3.4.0',
     },
     devDependencies: {
@@ -389,10 +346,8 @@ export { App };
  * stub kept dev-only; when the author is ready they swap which one is wrapped
  * in `defaultUI()`. That swap is the whole migration.
  */
-export function generateUisTs(config: TableUiConfig): string {
-  const custom = config.ui && config.ui !== 'auto' ? config.ui : undefined;
-  if (!custom) {
-    return `import { defineGameUIs, defaultUI, devUI } from 'boardsmith/ui';
+export function generateUisTs(): string {
+  return `import { defineGameUIs, defaultUI, devUI } from 'boardsmith/ui';
 import AutoUI from 'boardsmith/ui/auto-ui';
 
 /**
@@ -401,31 +356,13 @@ import AutoUI from 'boardsmith/ui/auto-ui';
  *
  * devUI() entries exist only under \`boardsmith dev\`. They are stripped from
  * production builds entirely: JS, CSS, and assets. Building your own board?
- * Move defaultUI() onto it and delete the Auto line: GameShell offers the
- * auto-UI under \`boardsmith dev\` by itself.
+ * Move defaultUI() onto it and delete the Auto and Custom lines and the
+ * AutoUI and devUI imports: GameShell offers the auto-UI under
+ * \`boardsmith dev\` by itself.
  */
 export default defineGameUIs({
   Auto: defaultUI(AutoUI),
   Custom: devUI(() => import('./components/GameTable.vue')),
-});
-`;
-  }
-  const name = custom.split('/').pop()?.replace(/\.vue$/, '') || 'GameUI';
-  return `import { defineGameUIs, defaultUI } from 'boardsmith/ui';
-import ${name} from '${custom}';
-
-/**
- * Every UI this game has. Exactly one must be defaultUI() — that is what
- * players get; the compiler rejects zero or two.
- *
- * The shipped board is imported statically so it can never fail to arrive
- * separately from the app. Add other boards with devUI(() => import(...)):
- * they exist only under \`boardsmith dev\` and production strips them entirely,
- * JS, CSS, and assets. GameShell offers the auto-UI under \`boardsmith dev\`
- * by itself; it does not need listing here.
- */
-export default defineGameUIs({
-  ${name}: defaultUI(${name}),
 });
 `;
 }
@@ -473,7 +410,7 @@ import uis from './uis.js';
  *
  * Optional custom-UI stub — start here when you want a bespoke interface.
  * The auto-UI ships and handles everything until you're ready to fill this in.
- * To activate: set boardsmith.json "ui" to the path of this file.
+ * To activate: move defaultUI() onto it in src/ui/uis.ts.
  */
 export function generateGameTableVue(): string {
   return `<script setup lang="ts">
@@ -482,12 +419,21 @@ export function generateGameTableVue(): string {
  *
  * The auto-UI (AutoUI) renders your game out of the box and can ship as-is
  * for simple games. Fill this component in when you want full control over
- * how the game looks, then update boardsmith.json:
+ * how the game looks, then move defaultUI() onto this component in
+ * src/ui/uis.ts, so the whole file reads:
  *
- *   "ui": "./ui/components/GameTable.vue"
+ *   import { defineGameUIs, defaultUI } from 'boardsmith/ui';
+ *   import GameTable from './components/GameTable.vue';
  *
- * Pit of Success: the easy path (keeping "ui": "auto") is the right path —
- * switch here only when you're ready to invest in a custom interface.
+ *   export default defineGameUIs({
+ *     GameTable: defaultUI(GameTable),
+ *   });
+ *
+ * That drops the Auto and Custom lines, \`import AutoUI\` and devUI: GameShell
+ * offers the auto-UI under \`boardsmith dev\` by itself.
+ *
+ * Pit of Success: the easy path (keeping the auto-UI as the default) is the
+ * right path; switch here only when you're ready to invest in a custom interface.
  */
 import { computed } from 'vue';
 import type { TableBoardProps } from 'boardsmith/ui';
@@ -721,8 +667,8 @@ export function generateScaffoldFiles(config: ProjectConfig, projectPath: string
   return [...shared, { path: 'src/rules/index.ts', content: generateRulesIndexTs(config) }];
 }
 
-/** What a table's UI files read from the project: its display name and, optionally, its custom board. */
-type TableUiConfig = Pick<ProjectConfigBase, 'displayName' | 'ui'>;
+/** What a table's UI files read from the project: its display name. */
+type TableUiConfig = Pick<ProjectConfigBase, 'displayName'>;
 
 /**
  * A table's UI, one file for each of {@link TABLE_UI_PATHS}: the page and its entry point, the game
@@ -734,7 +680,7 @@ export function tableUiFiles(config: TableUiConfig, actions: readonly string[]):
     [TABLE_UI_ENTRY]: generateIndexHtml(config),
     'src/main.ts': generateMainTs(),
     'src/ui/index.ts': generateUiIndexTs(),
-    'src/ui/uis.ts': generateUisTs(config),
+    'src/ui/uis.ts': generateUisTs(),
     'src/ui/App.vue': generateAppVue(),
     'src/ui/components/GameTable.vue': generateGameTableVue(),
     'tests/a11y.example.test.ts': generateA11yExampleTestTs(),
