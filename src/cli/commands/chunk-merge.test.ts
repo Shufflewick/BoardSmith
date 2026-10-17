@@ -563,6 +563,35 @@ describe('chunkMerge: preconditions', () => {
   });
 });
 
+describe('chunkMerge: a design file one side deleted and the other edited (#825)', () => {
+  // git leaves a modify/delete conflict with no markers, so there is nothing a merge may resolve.
+  async function expectRefused(): Promise<void> {
+    const before = head();
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([expect.stringMatching(/conflicts in design\/rulebook\/05-market\.md/)]);
+    expect([head(), status()]).toEqual([before, '']);
+  }
+
+  it('refuses when the branch deleted it and the main line edited it', async () => {
+    const worktree = await buildOnBranch('trading', 100);
+    git(worktree, 'rm', '-q', 'design/rulebook/05-market.md');
+    git(worktree, 'commit', '-q', '-m', 'chunk-trading/drop market');
+    await fs.appendFile(join(main, 'design/rulebook/05-market.md'), 'Prices rise.\n');
+    git(main, 'commit', '-q', '-am', 'edit market');
+    await expectRefused();
+  });
+
+  it('refuses when the main line deleted it and the branch edited it', async () => {
+    const worktree = await buildOnBranch('trading', 100);
+    await fs.appendFile(join(worktree, 'design/rulebook/05-market.md'), 'Prices rise.\n');
+    git(worktree, 'commit', '-q', '-am', 'chunk-trading/edit market');
+    git(main, 'rm', '-q', 'design/rulebook/05-market.md');
+    git(main, 'commit', '-q', '-m', 'drop market');
+    await expectRefused();
+  });
+});
+
 describe('chunkMerge: a source file two chunks built together both edited (#403)', () => {
   /** One rules module both chunks add to, each in its own part. */
   const world = (trading: number, quests: number) =>
