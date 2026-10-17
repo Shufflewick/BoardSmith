@@ -2707,6 +2707,21 @@ is asked nothing and shown no sequence number; they are told what became of the
 order, because "the colony you founded was already founded" is something they are
 entitled to know before pressing anything.
 
+Each order is written down with the seat that sent it, and a page recovers only
+its own seat's orders, because the host keeps receipts per player: another
+seat's order would have no receipt there and would run again as the wrong
+player. Tabs open on the same world share the book and re-read it before every
+change, so one tab never erases another's orders.
+
+The page does not wait for a reload to ask, either. When a command gets no
+answer in time, the page sends the same order once more straight away. If that
+is also unanswered, the player is told to reload the page to check, because the
+reload asks about the same order. In a browser that refuses storage the page
+keeps no record across a reload, so the player is told to look at the world
+before pressing again instead. A reply that turns up after the page stopped
+waiting is still the order's answer: it strikes the order out, and answers the
+player if the second send is still waiting.
+
 **So do not build any of this into your game.** A `seq` selection on an action, a
 game-owned receipt ledger, or a rule that keeps a consumed candidate alive so a
 retry can reach it are all the same mistake: transport bookkeeping in a place the

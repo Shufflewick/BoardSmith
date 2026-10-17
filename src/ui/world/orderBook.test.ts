@@ -44,17 +44,17 @@ const book = (storage: OrderStorage | null, ids = ['o1', 'o2', 'o3']) => {
 describe('the order book', () => {
   it('writes an order down as it is opened, before its command could be sent', () => {
     const storage = memoryStorage();
-    const order = book(storage).open('found', { name: 'Ceres' });
-    expect(order).toEqual({ id: 'o1', at: 5_000, action: 'found', args: { name: 'Ceres' } });
+    const order = book(storage).open(3, 'found', { name: 'Ceres' });
+    expect(order).toEqual({ id: 'o1', seat: 3, at: 5_000, action: 'found', args: { name: 'Ceres' } });
     expect(JSON.parse(storage.store.get('k') as string)).toEqual([order]);
   });
 
   it('strikes one out once its fate is known', () => {
     const storage = memoryStorage();
     const one = book(storage);
-    one.open('found', {});
+    one.open(3, 'found', {});
     one.settle('o1');
-    expect(one.pending()).toEqual([]);
+    expect(one.pending(3)).toEqual([]);
     expect(JSON.parse(storage.store.get('k') as string)).toEqual([]);
   });
 
@@ -62,35 +62,66 @@ describe('the order book', () => {
     // THE WHOLE POINT. A reload is a new book over the same storage.
     const storage = memoryStorage();
     const one = book(storage);
-    one.open('found', { name: 'Ceres' });
-    one.open('build', { what: 'shipyard' });
+    one.open(3, 'found', { name: 'Ceres' });
+    one.open(3, 'build', { what: 'shipyard' });
     one.settle('o2');
 
     const reloaded = book(storage, ['o9']);
-    expect(reloaded.pending()).toEqual([
-      { id: 'o1', at: 5_000, action: 'found', args: { name: 'Ceres' } },
+    expect(reloaded.pending(3)).toEqual([
+      { id: 'o1', seat: 3, at: 5_000, action: 'found', args: { name: 'Ceres' } },
     ]);
+  });
+
+  it("does not erase another tab's orders when it writes (#889)", () => {
+    // Two tabs open on one world are two books over one storage.
+    const storage = memoryStorage();
+    const first = book(storage, ['a1']);
+    const second = book(storage, ['b1', 'b2']);
+    first.open(3, 'found', {});
+    second.open(3, 'chat', {});
+    expect(first.pending(3).map((order) => order.id)).toEqual(['a1', 'b1']);
+
+    second.open(3, 'wave', {});
+    second.settle('b1');
+    first.settle('nothing-of-mine');
+    expect(book(storage, []).pending(3).map((order) => order.id)).toEqual(['a1', 'b2']);
+  });
+
+  it('ignores a stored order with no seat, since no seat may ask about it (#889)', () => {
+    const stored = JSON.stringify([{ id: 'old', at: 1, action: 'found', args: {} }]);
+    expect(book(memoryStorage({ k: stored })).pending(3)).toEqual([]);
+  });
+
+  it('gives each seat only the orders it sent (#889)', () => {
+    // The host keeps receipts per player, so one seat re-sending another's order
+    // would run it a second time, as the wrong player.
+    const storage = memoryStorage();
+    const one = book(storage);
+    one.open(3, 'found', {});
+    one.open(5, 'build', {});
+    expect(book(storage, []).pending(5).map((order) => order.id)).toEqual(['o2']);
+    expect(book(storage, []).pending(3).map((order) => order.id)).toEqual(['o1']);
   });
 
   it('keeps the arguments, so a retry need not ask the player to choose again', () => {
     const storage = memoryStorage();
-    book(storage).open('build', { site: 'plot-4', tier: 2 });
-    expect(book(storage, ['o9']).pending()[0]?.args).toEqual({ site: 'plot-4', tier: 2 });
+    book(storage).open(3, 'build', { site: 'plot-4', tier: 2 });
+    expect(book(storage, ['o9']).pending(3)[0]?.args).toEqual({ site: 'plot-4', tier: 2 });
   });
 
   it('is bounded, because a page that hears nothing for a month is not a ledger', () => {
     const storage = memoryStorage();
     const many = createOrderBook({ key: 'k', storage, now: () => 1, mintId: mintCounter() });
-    for (let i = 0; i < ORDERS_KEPT + 5; i++) many.open('chop', {});
-    expect(many.pending()).toHaveLength(ORDERS_KEPT);
+    for (let i = 0; i < ORDERS_KEPT + 5; i++) many.open(3, 'chop', {});
+    expect(many.pending(3)).toHaveLength(ORDERS_KEPT);
     // The oldest go: they are the ones least likely to still be answerable.
-    expect(many.pending()[0]?.id).toBe('order-6');
+    expect(many.pending(3)[0]?.id).toBe('order-6');
   });
 
   it('ignores a book that is not one, rather than refusing to run the world', () => {
-    expect(book(memoryStorage({ k: 'not json' })).pending()).toEqual([]);
-    expect(book(memoryStorage({ k: '{"orders":1}' })).pending()).toEqual([]);
-    expect(book(memoryStorage({ k: '[{"id":""}]' })).pending()).toEqual([]);
+    expect(book(memoryStorage({ k: 'not json' })).pending(3)).toEqual([]);
+    expect(book(memoryStorage({ k: '{"orders":1}' })).pending(3)).toEqual([]);
+    expect(book(memoryStorage({ k: '[{"id":""}]' })).pending(3)).toEqual([]);
   });
 
   it('still acts with no storage at all, and says it is not durable', () => {
@@ -100,9 +131,9 @@ describe('the order book', () => {
       // on every call, so "durable" is about what works, not what was handed
       // over.
       expect(nowhere.durable).toBe(false);
-      expect(nowhere.open('found', {}).id).toBe('o1');
+      expect(nowhere.open(3, 'found', {}).id).toBe('o1');
       // It acted; what it cannot do is find that order again after a reload.
-      expect(book(storage, ['o9']).pending()).toEqual([]);
+      expect(book(storage, ['o9']).pending(3)).toEqual([]);
     }
   });
 });

@@ -31,8 +31,6 @@ export interface DebugStringOptions {
   showIds?: boolean;
   /** Maximum depth of element tree to show (default: 3) */
   maxDepth?: number;
-  /** Include hidden information (default: false) */
-  showHidden?: boolean;
   /** Include element attributes (default: true) */
   showAttributes?: boolean;
 }
@@ -51,7 +49,7 @@ export interface DebugStringOptions {
  * console.log(toDebugString(game));
  * // Game: MyGame
  * // Phase: playing
- * // Current Player: Player 1 (position 0)
+ * // Current Player: Player 1 (seat 1)
  * //
  * // Players:
  * //   [0] Player 1: hand(5 cards), score=10
@@ -73,7 +71,7 @@ export function toDebugString(game: Game, options: DebugStringOptions = {}): str
     lines.push(`Phase: ${(game as any).phase}`);
   }
   if (game.currentPlayer) {
-    lines.push(`Current Player: ${game.currentPlayer.name} (position ${game.currentPlayer.position})`);
+    lines.push(`Current Player: ${game.currentPlayer.name} (seat ${game.currentPlayer.seat})`);
   }
   // Human-readable flow position (FLOW-01 locked decision: integrated into
   // toDebugString() as the one source of truth all layers reuse). Reuses
@@ -126,8 +124,7 @@ function printElementTree(
     return;
   }
 
-  const children = element.all?.() || [];
-  for (const child of children) {
+  for (const child of element.children) {
     const idStr = showIds ? ` (id=${(child as any).id || (child as any)._t?.id || '?'})` : '';
     const name = (child as any).name || child.constructor.name;
     const count = child.all?.().length || 0;
@@ -313,7 +310,7 @@ function findDiffs(before: any, after: any, path: string, diffs: string[]): void
     return;
   }
 
-  if (typeof before !== 'object' || before === null) {
+  if (typeof before !== 'object' || before === null || after === null) {
     if (before !== after) {
       diffs.push(`${path}: ${JSON.stringify(before)} → ${JSON.stringify(after)}`);
     }

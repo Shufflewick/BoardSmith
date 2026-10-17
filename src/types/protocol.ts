@@ -657,11 +657,13 @@ export interface PickMetadata<TElement extends ValidElement = ValidElement> {
   valueLabels?: Record<string, string>;
   // Text-specific properties
   /**
-   * For text inputs: the regex the text must match, as its source, and the
-   * sentence a player is shown when it does not (#394). One field, so a client
-   * never holds a pattern without the words for refusing it.
+   * For text inputs: the regex the text must match, as its source and flags,
+   * and the sentence a player is shown when it does not (#394). One field, so a
+   * client never holds a pattern without the words for refusing it. Compile it
+   * as `new RegExp(source, flags)`: without its flags a `u` or `i` pattern
+   * refuses text the server accepts (#890).
    */
-  pattern?: { source: string; message: string };
+  pattern?: { source: string; flags: string; message: string };
   /** For text inputs: minimum length */
   minLength?: number;
   /** For text inputs: maximum length */

@@ -51,9 +51,9 @@
  * table dev store does.
  *
  * A DIRECTORY rather than the table store's single dotfile, because SQLite owns
- * more than one file: `world.db` is accompanied by `world.db-wal` and
- * `world.db-shm` while the database is open, and a rollback of the last
- * transaction is read out of them. One directory keeps them together, makes the
+ * more than one file: `world.db` is accompanied by `world.db-wal` while the
+ * database is open, and a rollback of the last transaction is read out of it;
+ * `world.db.holder` names the run holding it (#881). One directory keeps them together, makes the
  * ignore rule one line, and makes `boardsmith dev --reset` one removal that
  * cannot leave a sidecar behind describing a database that is gone.
  *
@@ -68,7 +68,7 @@
  * host's own answer from its open connections at the instant it asks.
  */
 
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 
@@ -198,28 +198,42 @@ export interface LocalWorldStore extends WorldStore {
  * for itself would be a second place a laptop and the platform could silently
  * disagree about how large a partition may be, which is exactly what #165 moved
  * the budgets into the library to prevent.
+ *
+ * ONE RUN PER WORLD (#881). Two runs on one database each write whole
+ * partitions back over the other's and both fire the same scheduled events, so
+ * the connection holds the file exclusively until it closes. The OS drops that
+ * lock when the process dies, so a crashed run leaves nothing to clean up.
+ * `port` is only recorded, to name this run in a second one's refusal.
  */
-export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldStore {
+export function openWorldStore(
+  path: string,
+  budgets: WorldBudgets,
+  holder: { readonly port?: number } = {},
+): LocalWorldStore {
   mkdirSync(dirname(path), { recursive: true });
   const db = new (loadSqlite().DatabaseSync)(path);
   let closed = false;
 
-  // WAL, because a dev host writes small and often and a rollback journal
-  // rewrites the whole page set for each of them. FULL rather than WAL's usual
-  // NORMAL: NORMAL lets the last few commits live in the OS page cache, which
-  // survives this process dying but not the machine doing so -- and "close the
-  // laptop and open it again" is the acceptance sentence for this store.
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA synchronous = FULL');
   // CLOSED IF IT REFUSES TO OPEN. A store this code cannot read is a startup
   // failure the host reports and exits on, and a connection left behind holds
   // SQLite's WAL sidecars open against a database the author is about to move
   // aside or hand to a `boardsmith dev` that CAN read it.
   try {
+    // EXCLUSIVE before WAL, so the WAL index lives in this process's memory and
+    // the first access below takes a lock held for the connection's life.
+    db.exec('PRAGMA locking_mode = EXCLUSIVE');
+    // WAL, because a dev host writes small and often and a rollback journal
+    // rewrites the whole page set for each of them. FULL rather than WAL's usual
+    // NORMAL: NORMAL lets the last few commits live in the OS page cache, which
+    // survives this process dying but not the machine doing so -- and "close the
+    // laptop and open it again" is the acceptance sentence for this store.
+    db.exec('PRAGMA journal_mode = WAL');
+    writeFileSync(holderPath(path), JSON.stringify({ pid: process.pid, port: holder.port }));
+    db.exec('PRAGMA synchronous = FULL');
     prepareSchema(db, path);
   } catch (error) {
     db.close();
-    throw error;
+    throw (error as { errcode?: number }).errcode === SQLITE_BUSY ? heldElsewhere(path) : error;
   }
 
   const stmt = {
@@ -986,6 +1000,33 @@ export function prepareSchema(
     if (stamped !== step.to) throw upgradeLeftWrongStamp(step, stamped, path);
     at = step.to;
   }
+}
+
+/** SQLite's "database is locked". */
+const SQLITE_BUSY = 5;
+
+/** Where the run holding a store records who it is. */
+function holderPath(path: string): string {
+  return `${path}.holder`;
+}
+
+/** The refusal a second run gets, naming the run that holds the world. */
+function heldElsewhere(path: string): Error {
+  let held: { pid?: number; port?: number } = {};
+  try {
+    held = JSON.parse(readFileSync(holderPath(path), 'utf8')) as typeof held;
+  } catch {
+    // Unrecorded: the refusal below still stands, it just cannot name the run.
+  }
+  const who =
+    held.pid === undefined
+      ? 'another `boardsmith dev` (it did not record its pid)'
+      : `another \`boardsmith dev\` (pid ${held.pid}${held.port === undefined ? '' : `, port ${held.port}`})`;
+  return new Error(
+    `The world at ${path} is already open in ${who}. Two runs on one world overwrite each ` +
+      `other's rooms and both fire its scheduled events, so this one will not open it. Stop that ` +
+      `run (Ctrl+C in its terminal${held.pid === undefined ? '' : `, or \`kill ${held.pid}\``}) and start this one again.`,
+  );
 }
 
 /**

@@ -1,7 +1,7 @@
 {
-  "revision": 220,
+  "revision": 221,
   "surfaceHash": "e27511a58b559664",
-  "payloadHash": "d98d9c3e91308953",
+  "payloadHash": "2d1f6110b53a0159",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
@@ -1703,6 +1703,14 @@
       "payloadHash": "d98d9c3e91308953",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "An action step asks skipIf only on entry and asks player once on entry and again after each move, so the seat can still change mid-step, and it no longer saves a seat in its saved state; repeat() refuses counts that are not whole numbers of 0 or more, and scoring tracks refuse maxEntries below 1 (#786)."
+    },
+    {
+      "revision": 221,
+      "date": "2026-10-17",
+      "surfaceHash": "e27511a58b559664",
+      "payloadHash": "2d1f6110b53a0159",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A text pick's pattern on the wire now carries the regex's flags as { source, flags, message }, and a client must compile it as new RegExp(source, flags); the shared ActionPanel does so and no longer sets the HTML pattern attribute, so a u or i pattern no longer refuses text the server accepts (#890)."
     }
   ]
 }

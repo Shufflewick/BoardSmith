@@ -1250,6 +1250,39 @@ export interface VerifyImpactApplyResult {
   warnings: string[];
 }
 
+/** The blocked result `verify-impact-apply` returns, writing nothing, with the command to run per pair. */
+function refuseApply(
+  runId: string,
+  pendingPairs: string[],
+  warnings: string[],
+  json: boolean | undefined,
+  reason: string,
+  flag: string,
+  command: string,
+): VerifyImpactApplyResult {
+  const result: VerifyImpactApplyResult = {
+    runId,
+    blocked: true,
+    pendingPairs,
+    marked: [],
+    skippedTailEntries: [],
+    warnings,
+  };
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+  console.log(
+    chalk.yellow(
+      `⚠ ${pendingPairs.length} ${reason}.\n` +
+        pendingPairs
+          .map((p) => `    boardsmith ${command} --run-id ${runId} --pair-id ${p} ${flag} ...`)
+          .join('\n'),
+    ),
+  );
+  return result;
+}
+
 /**
  * `boardsmith verify-impact-apply` — VERIFY-05's write orchestration: the staleness write,
  * refusing structurally while any contradiction is un-adjudicated.
@@ -1259,6 +1292,8 @@ export interface VerifyImpactApplyResult {
  * gate to the write it guards).
  *
  * Sequence (`build/ask.md`'s Gate-Before-Write applied to a CLI):
+ *   0. Any pair still in `pendingPairs` blocks the ENTIRE write (#830): a pair classified later
+ *      could come back cosmetic, and nothing clears a marker from a chunk that is no longer stale.
  *   1. Resolve the run, compute `collectContradictions`. Any `adjudication === 'pending'` blocks
  *      the ENTIRE write — nothing is touched, and the result names every pending pair plus the
  *      exact next command (decision 6 — the gate fires BEFORE any staleness write).
@@ -1309,34 +1344,30 @@ export async function verifyImpactApplyCommand(
   });
   const pendingContradictions = contradictions.filter((c) => c.adjudication === 'pending');
 
-  if (pendingContradictions.length > 0) {
-    const pendingPairs = pendingContradictions.map((c) => c.pairId);
-    const result: VerifyImpactApplyResult = {
+  if (classifyStatus.pendingPairs.length > 0) {
+    return refuseApply(
       runId,
-      blocked: true,
-      pendingPairs,
-      marked: [],
-      skippedTailEntries: [],
-      warnings: classifyStatus.warnings,
-    };
-    if (options.json) {
-      console.log(JSON.stringify(result, null, 2));
-      return result;
-    }
-    console.log(
-      chalk.yellow(
-        `⚠ ${pendingPairs.length} contradictory finding(s) still pending adjudication — writes ` +
-          `nothing until every one is resolved.\n` +
-          pendingPairs
-            .map(
-              (p) =>
-                `    boardsmith verify-impact-adjudicate --run-id ${runId} --pair-id ${p} ` +
-                `--outcome resolved|UNADJUDICATED ...`,
-            )
-            .join('\n'),
-      ),
+      classifyStatus.pendingPairs,
+      classifyStatus.warnings,
+      options.json,
+      'pair(s) not yet classified — writes nothing until every pair has a verdict. Classify ' +
+        'each, then run verify-impact-apply again',
+      '--label cosmetic|sharper|contradictory',
+      'verify-classify-record',
     );
-    return result;
+  }
+
+  if (pendingContradictions.length > 0) {
+    return refuseApply(
+      runId,
+      pendingContradictions.map((c) => c.pairId),
+      classifyStatus.warnings,
+      options.json,
+      'contradictory finding(s) still pending adjudication — writes nothing until every one is ' +
+        'resolved',
+      '--outcome resolved|UNADJUDICATED',
+      'verify-impact-adjudicate',
+    );
   }
 
   const [driftResult, provenanceResult] = await Promise.all([
