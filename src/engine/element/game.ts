@@ -5364,6 +5364,15 @@ export class Game<
         container._t.children.push(child);
       }
     }
+    const builtFor = this.getConstructorOptions().playerCount;
+    if (this.players.length !== builtFor) {
+      throw new Error(
+        `This game state holds ${this.players.length} players, but this game was built for ${builtFor}. ` +
+          `The state is truncated, or belongs to a game with a different player count.\n` +
+          `  Fix: restore it into a game constructed with the options it was created with ` +
+          `(a snapshot carries them as gameOptions), or start the game again if the state is damaged.`
+      );
+    }
     this._ctx._elementsById.clear();
     for (const root of [this, this.pile]) {
       forEachInSubtree(root, (element) => this._ctx._elementsById.set(element._t.id, element));
