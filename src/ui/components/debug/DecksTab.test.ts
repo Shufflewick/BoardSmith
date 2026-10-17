@@ -48,7 +48,7 @@ interface Vm {
 function mountDecks(handler?: Op) {
   const platformRequest = vi.fn<Op>(handler ?? (async () => ({ success: true })));
   const wrapper = mount(DecksTab, {
-    props: { view: VIEW, copy: async () => {} },
+    props: { view: VIEW, copy: async () => {}, isViewingHistory: false },
     global: { provide: { [GAME_CONTEXT_KEYS.platformRequest as symbol]: platformRequest } },
     attachTo: document.body,
   });
@@ -287,7 +287,7 @@ describe('DecksTab search and copy', () => {
     const copied: unknown[] = [];
     const platformRequest = vi.fn<Op>(async () => ({ success: true }));
     const wrapper = mount(DecksTab, {
-      props: { view: VIEW, copy: (value: unknown) => { copied.push(value); } },
+      props: { view: VIEW, copy: (value: unknown) => { copied.push(value); }, isViewingHistory: false },
       global: { provide: { [GAME_CONTEXT_KEYS.platformRequest as symbol]: platformRequest } },
     });
     track({ wrapper });
@@ -299,5 +299,21 @@ describe('DecksTab search and copy', () => {
     const written = copied.at(-1) as { id: number; cards: Array<{ id: number }> };
     expect(written.id).toBe(2);
     expect(written.cards.map((c: any) => c.id)).toEqual([10, 11]);
+  });
+});
+
+describe('DecksTab while viewing history (#899)', () => {
+  it('turns off every edit and the transfer dialog, and says why', async () => {
+    const { wrapper, vm } = track(mountDecks());
+    await wrapper.setProps({ isViewingHistory: true });
+    vm.toggleDeck(2);
+    vm.openTransferDialog(10, 2);
+    await nextTick();
+
+    const edits = wrapper.findAll('[aria-label="Shuffle deck"], .card-action-btn');
+    expect(edits).toHaveLength(9);
+    for (const edit of edits) expect(edit.attributes('disabled'), edit.attributes('aria-label')).toBeDefined();
+    expect(wrapper.find('.deck-history-notice').text()).toMatch(/viewing history/i);
+    expect(document.body.textContent).not.toContain('Transfer Card');
   });
 });

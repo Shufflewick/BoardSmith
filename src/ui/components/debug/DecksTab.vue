@@ -35,6 +35,8 @@ const props = defineProps<{
   view: unknown;
   /** The panel's copy-with-toast, so a copy here reads the same as anywhere else. */
   copy: (value: unknown) => void | Promise<void>;
+  /** True while time travelling: an edit would act on the live game, not the snapshot shown (#899). */
+  isViewingHistory: boolean;
 }>();
 
 const bridge = useDebugBridge();
@@ -103,6 +105,8 @@ const {
   closeTransferDialog,
   confirmTransfer,
 } = useDeckWorkbench({ bridge, cardContainers: discoveredCardContainers });
+
+const editsOff = computed(() => props.isViewingHistory || deckManipulationLoading.value);
 </script>
 
 <template>
@@ -119,6 +123,10 @@ const {
         placeholder="Search decks or cards..."
         aria-label="Search decks or cards"
       />
+    </div>
+
+    <div v-if="isViewingHistory" class="deck-history-notice" role="status">
+      Viewing history: deck edits are off, because they would change the live game. Go back to live to edit.
     </div>
 
     <!-- Error message -->
@@ -159,7 +167,7 @@ const {
             <span class="deck-name">{{ deck.name }}</span>
             <span class="deck-count">[{{ deck.cards.length }} cards]</span>
             <div class="deck-actions" @click.stop>
-              <DebugButton size="small" class="deck-action-btn" @click="shuffleDeck(deck.id)" :disabled="deckManipulationLoading" title="Shuffle deck" aria-label="Shuffle deck" >
+              <DebugButton size="small" class="deck-action-btn" @click="shuffleDeck(deck.id)" :disabled="editsOff" title="Shuffle deck" aria-label="Shuffle deck" >
                 <span aria-hidden="true">🔀</span>
               </DebugButton>
               <DebugButton size="small" class="deck-action-btn" @click="copyDeckToClipboard(deck)" title="Copy deck JSON" aria-label="Copy deck JSON" >
@@ -191,7 +199,7 @@ const {
                 <button
                   class="card-action-btn"
                   @click="moveCardToTop(card.id)"
-                  :disabled="index === 0 || deckManipulationLoading"
+                  :disabled="index === 0 || editsOff"
                   title="Move to top"
                   aria-label="Move to top"
                 >
@@ -200,7 +208,7 @@ const {
                 <button
                   class="card-action-btn"
                   @click="moveCardUp(deck, card.id)"
-                  :disabled="index === 0 || deckManipulationLoading"
+                  :disabled="index === 0 || editsOff"
                   title="Move up"
                   aria-label="Move up"
                 >
@@ -209,7 +217,7 @@ const {
                 <button
                   class="card-action-btn"
                   @click="moveCardDown(deck, card.id)"
-                  :disabled="index === deck.cards.length - 1 || deckManipulationLoading"
+                  :disabled="index === deck.cards.length - 1 || editsOff"
                   title="Move down"
                   aria-label="Move down"
                 >
@@ -218,7 +226,7 @@ const {
                 <button
                   class="card-action-btn"
                   @click="openTransferDialog(card.id, deck.id)"
-                  :disabled="discoveredCardContainers.length < 2 || deckManipulationLoading"
+                  :disabled="discoveredCardContainers.length < 2 || editsOff"
                   title="Transfer to another container"
                   aria-label="Transfer to another container"
                 >
@@ -253,7 +261,7 @@ const {
 
     <!-- Transfer Dialog -->
     <DebugDialog
-      v-if="transferDialogOpen"
+      v-if="transferDialogOpen && !isViewingHistory"
       title="Transfer Card"
       close-label="Close transfer dialog"
       @close="closeTransferDialog"
@@ -335,6 +343,14 @@ const {
   border-radius: 3px;
   color: var(--bsg-accent-2);
   font-size: 10px;
+}
+.deck-history-notice {
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--bsg-warn) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--bsg-warn) 40%, transparent);
+  border-radius: 6px;
+  color: var(--bsg-ink);
+  font-size: 12px;
 }
 /* Decks split view */
 .decks-split-view {
