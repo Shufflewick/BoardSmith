@@ -781,6 +781,53 @@ it('a fee exists', () => { expect(typeof fee).toBe('function'); });
     await expect(fs.readdir(join(project, '.boardsmith'))).resolves.toEqual([]);
   }, 60_000);
 
+  // #937: a Vitest workspace project builds its own Vite server from its own config, so the
+  // mutant must reach each one, or the run must refuse rather than test the original code.
+  describe('a project with Vitest workspace projects (#937)', () => {
+    const PROJECT_CONFIG = `import { defineConfig } from 'vitest/config';
+export default defineConfig({ test: { include: ['tests/**/*.test.ts'], environment: 'node' } });
+`;
+    const BID_TEST = `import { it, expect } from 'vitest';
+import { bid } from '../src/rules';
+it('a higher offer wins', () => { expect(bid(3, 4)).toBe(true); });
+it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
+`;
+    const workspace = (entry: string) =>
+      `import { defineWorkspace } from 'vitest/config';\nexport default defineWorkspace([${entry}]);\n`;
+    const INLINE = "{ extends: './project.config.mts', test: { name: 'separate-project' } }";
+
+    async function diffCheck(files: Record<string, string>) {
+      const project = await makeProject({ 'src/rules.ts': RULES, 'project.config.mts': PROJECT_CONFIG, 'tests/bid.test.ts': BID_TEST, ...files });
+      return runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), cache: memoryCache(), log: () => {} });
+    }
+
+    it('runs each mutant in an inline project the config names', async () => {
+      const result = await diffCheck({
+        'vitest.config.ts': "import { defineConfig } from 'vitest/config';\nexport default defineConfig({ test: { workspace: './projects.mts' } });\n",
+        'projects.mts': workspace(INLINE),
+      });
+      expect(result.survivors).toEqual([]);
+      expect(result.summary.killed).toBe(result.summary.mutants);
+      expect(result.summary.mutants).toBeGreaterThan(0);
+    }, 120_000);
+
+    it("finds the game's own vitest.workspace file and runs each mutant in its projects", async () => {
+      const result = await diffCheck({
+        'vitest.config.ts': "import { defineConfig } from 'vitest/config';\nexport default defineConfig({ test: { include: ['none/**'] } });\n",
+        'vitest.workspace.mts': workspace(INLINE),
+      });
+      expect(result.notGreen).toBeUndefined();
+      expect(result.survivors).toEqual([]);
+      expect(result.summary.killed).toBe(result.summary.mutants);
+    }, 120_000);
+
+    it('refuses a project named by its config file path, which the mutant cannot reach', async () => {
+      await expect(diffCheck({ 'vitest.workspace.mts': workspace("'./project.config.mts'") })).rejects.toThrow(
+        /Vitest project ".+" \(project\.config\.mts\) does not load the mutation check's mutant, so its tests would run against the original code\. Name it in the workspace as an inline project, \{ extends: '\.\/project\.config\.mts' \}, and run the check again\./,
+      );
+    }, 120_000);
+  });
+
   it('runs nothing when no changed line can be mutated', async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
     const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(3)]]), cache: memoryCache(), log: () => {} });
