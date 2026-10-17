@@ -58,7 +58,7 @@
       "content": "30138a2100b37a20",
       "lines": 11,
       "files": [
-        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
+        "src/ui/components/auto-ui/renderers/CardBack.vue",
         "src/ui/components/auto-ui/renderers/HandRenderer.vue"
       ]
     },
