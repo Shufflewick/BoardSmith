@@ -1896,7 +1896,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * Begin wizard mode for an action (fetches the first selection's choices).
    *
    * The returned ControllerActionResult reflects ONLY start()'s synchronous pre-checks
-   * (action availability, action metadata presence, a list for a single-element pick) — a `{ success: true }` result
+   * (not viewing history, action not disabled, action availability, action metadata presence,
+   * a list for a single-element pick): a `{ success: true }` result
    * means wizard mode began, NOT that the action has been (or ever will be)
    * executed on the server. The eventual server outcome arrives later via the
    * auto-execute watcher / executeCurrentAction(), which callers can observe via
