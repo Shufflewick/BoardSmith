@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import { join, posix, relative, resolve, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawn } from 'node:child_process';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import {
   CONSTRAINTS_MD,
   DESIGN_DIR,
@@ -512,13 +512,13 @@ function report(result: ConstraintCheckResult, slug: string | undefined, json: b
     return;
   }
   if (!ok) {
-    console.error(chalk.red(`${result.refusals.length} constraint problem(s):`));
+    console.error(styleText('red', `${result.refusals.length} constraint problem(s):`));
     for (const refusal of result.refusals) console.error(`  • ${refusal}`);
     return;
   }
   const tests = result.tests.length ? `; ${result.tests.length} measurement test file(s) passed.` : '.';
   console.log(
-    chalk.green(`✓ ${result.constraints.length} hard constraint(s) and ${result.structures.length} growing structure(s) hold${tests}`),
+    styleText('green', `✓ ${result.constraints.length} hard constraint(s) and ${result.structures.length} growing structure(s) hold${tests}`),
   );
 }
 
@@ -533,7 +533,7 @@ export async function constraintCheckCommand(
 ): Promise<void> {
   const problem = slugProblem(slug);
   if (problem !== undefined) {
-    console.error(chalk.red(problem));
+    console.error(styleText('red', problem));
     process.exitCode = 1;
     return;
   }

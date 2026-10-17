@@ -6,9 +6,10 @@
  *
  * ```ts
  * import { defineGameUIs, defaultUI, devUI } from 'boardsmith/ui';
+ * import HeirloomTable from './heirloom/HeirloomTable.vue';
  *
  * export default defineGameUIs({
- *   Heirloom: defaultUI(() => import('./heirloom/HeirloomTable.vue')),
+ *   Heirloom: defaultUI(HeirloomTable),
  *   Classic:  devUI(() => import('./components/CribbageBoard.vue')),
  * });
  * ```
@@ -62,6 +63,14 @@ export interface DefaultGameUIEntry extends GameUIEntry {
 }
 
 type GameUILoader = () => Promise<{ default: Component }>;
+
+/**
+ * `C` unless it is a function. A loader is a valid Vue component type (a
+ * functional component), so only this check stops `defaultUI(() => import(...))`.
+ */
+type NotAFunction<C> = C extends (...args: never[]) => unknown
+  ? 'ERROR: defaultUI() takes the board component itself; import it statically'
+  : C;
 
 /** Keys of `T` whose entry is the default. A union — 0, 1, or many members. */
 type DefaultKeys<T> = { [K in keyof T]: T[K] extends DefaultGameUIEntry ? K : never }[keyof T];
@@ -117,8 +126,19 @@ export interface GameUIRegistry {
  * `devUI()` is lazy because it must be: the dynamic import inside a folded
  * branch is what makes elimination possible, and a dev-only chunk failing is a
  * problem the author sees instantly.
+ *
+ * So a function is refused: at compile time by `NotAFunction`, and here for
+ * untyped JS or a cast. That also refuses a bare functional component; wrap one
+ * in `defineComponent`.
  */
-export function defaultUI(component: Component): DefaultGameUIEntry {
+export function defaultUI<C extends Component>(component: C & NotAFunction<C>): DefaultGameUIEntry {
+  if (typeof component === 'function') {
+    throw new Error(
+      'defaultUI() takes the board component itself, not a function. '
+      + 'Import the board statically (`import Board from \'./Board.vue\'`) and pass `defaultUI(Board)`; '
+      + 'a lazy default board can fail to load and leave players with no game.',
+    );
+  }
   return { component, devOnly: false } as DefaultGameUIEntry;
 }
 
@@ -203,10 +223,8 @@ export function withDevAutoUI(registry: GameUIRegistry): GameUIRegistry {
  *
  * In a production build every non-default entry has a `null` component, so
  * listing only the resolvable ones keeps the switcher honest if it is ever
- * shown outside dev.
- *
- * Read by BOTH shells since #170: a world project has a registry now, so the
- * dev UI switcher works for a world, which it could not before.
+ * shown outside dev. Only the table shell has a switcher; a world renders its
+ * default UI (#896).
  */
 export function devUiNames(registry: GameUIRegistry): string[] {
   return registry.names.filter(
@@ -219,7 +237,7 @@ export function devUiNames(registry: GameUIRegistry): string[] {
  * registry's default.
  *
  * `null` only when the default entry resolved to no component — a broken
- * `uis.ts`. Both shells name that fix rather than rendering blank.
+ * `uis.ts`. The table shell names that fix rather than rendering blank.
  */
 export function resolveUiComponent(
   registry: GameUIRegistry,

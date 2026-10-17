@@ -1,7 +1,7 @@
 import { designRulebookDir } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
 import { join, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 
 /**
  * Which documents a project's rules come from, and which one each slice was transcribed from.
@@ -244,8 +244,8 @@ export async function ingestSliceSourceCommand(
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
   } else {
-    console.log(chalk.green(`✓ ${written.length} slice${written.length === 1 ? ' now names' : 's now name'} ${document}`));
-    if (unchanged.length > 0) console.log(chalk.gray(`  already recorded: ${unchanged.join(', ')}`));
+    console.log(styleText('green', `✓ ${written.length} slice${written.length === 1 ? ' now names' : 's now name'} ${document}`));
+    if (unchanged.length > 0) console.log(styleText('gray', `  already recorded: ${unchanged.join(', ')}`));
   }
   return result;
 }

@@ -49,7 +49,7 @@ log.mockRestore();
 error.mockRestore();
 process.env.NODE_ENV = vitestNodeEnv;
 
-// chalk colours the verdict, so the line is matched without its escape codes.
+// styleText colours the verdict, so the line is matched without its escape codes.
 const coverageLine = printed.map(stripVTControlCharacters).find((line) => line.includes('Test Type Coverage'));
 
 describe("build and validate inside verify's process (#532)", () => {

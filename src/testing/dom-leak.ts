@@ -26,7 +26,8 @@ import type { Component } from 'vue';
 import type { VueWrapper } from '@vue/test-utils';
 import type { default as AutoUIComponent } from '../ui/components/auto-ui/AutoUI.vue';
 import type { GameRootView } from '../ui/types.js';
-import type { ElementJSON, SeatViewJSON } from '../engine/index.js';
+import { isEngineRootField, type AnimationEvent, type ElementJSON, type SeatViewJSON } from '../engine/index.js';
+import { PERSIST_KEY } from '../persistence/persistence.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE, isHiddenPlaceholder } from '../engine/element/hidden-placeholder.js';
 import type { BoardInteraction } from '../ui/composables/useBoardInteraction.js';
 import type { TableSeat } from '../ui/composables/useTableSeat.js';
@@ -1286,6 +1287,49 @@ function collectSurvivingValues(node: ElementJSON): Set<string> {
   return values;
 }
 
+/**
+ * A root attribute the seat view drops on purpose without it being a game secret
+ * (#908): an engine root field, whose audience the engine settles (another seat's
+ * `tutorialProgress`), or the public persistence record (#527). The sealed
+ * `persistPrivate` half is a host-only secret, so it stays a marker.
+ */
+function isRootBookkeeping(key: string): boolean {
+  return isEngineRootField(key) || key === PERSIST_KEY;
+}
+
+/** The fields a seat's view carries on its root beside the element's own. */
+type SeatRootField = Exclude<keyof SeatViewJSON, keyof ElementJSON>;
+
+// `satisfies Record`, so a field added to or dropped from the seat view fails the type check here.
+const SEAT_ROOT_FIELDS = Object.keys({
+  phase: true,
+  isFinished: true,
+  settings: true,
+  animationEvents: true,
+} satisfies Record<SeatRootField, true>) as SeatRootField[];
+
+/** A root field's value with the engine's event numbering left out: it counts events, it is not one (#489). */
+function comparableRootField(root: SeatViewJSON, field: SeatRootField): unknown {
+  if (field !== 'animationEvents') return root[field];
+  return root.animationEvents?.map(({ id: _id, seatIds: _seatIds, ...event }: AnimationEvent) => event);
+}
+
+/**
+ * Each value the root holds in a field `Game.toJSON()` writes beside its
+ * attributes (`settings` and the rest) that the seat is not sent anywhere in its
+ * view (#1064): another seat's `actionTempState`, a key the game's `playerView`
+ * withholds, another seat's private animation event. A value the view carries
+ * elsewhere, such as the id of an element the seat can see, is no secret.
+ */
+function rootFieldCandidates(root: SeatViewJSON, seatView: SeatViewJSON): Array<{ attribute: string; value: string }> {
+  const sent = new Set(identityStringsIn(seatView));
+  return SEAT_ROOT_FIELDS.flatMap((field) =>
+    identityStringsIn(comparableRootField(root, field))
+      .filter((value) => !sent.has(value))
+      .map((value) => ({ attribute: field, value })),
+  );
+}
+
 /** Result of {@link deriveLeakDetectionData}: forbidden markers plus, for every
  * VISIBLE element, the set of values that are that element's OWN legitimate
  * rendered identity (name/attributes it is actually allowed to show). */
@@ -1309,7 +1353,7 @@ interface LeakDetectionData {
  */
 function deriveLeakDetectionData(
   unredacted: readonly ElementJSON[],
-  finalTree: ElementJSON,
+  finalTree: SeatViewJSON,
 ): LeakDetectionData {
   const nodesById = new Map<number, ElementJSON>();
   indexNodesById(finalTree, nodesById);
@@ -1318,10 +1362,18 @@ function deriveLeakDetectionData(
   const ownValuesById = new Map<number, Set<string>>();
 
   for (const unfiltered of unredacted) {
-    const candidates = extractIdentityCandidates(unfiltered);
+    const isRoot = unfiltered.id === finalTree.id;
+    const candidates = extractIdentityCandidates(unfiltered).filter(
+      (c) => !(isRoot && c.attribute !== undefined && isRootBookkeeping(c.attribute)),
+    );
+    const elementLabel = `${unfiltered.className}#${unfiltered.id}`;
+    if (isRoot) {
+      for (const c of rootFieldCandidates(unfiltered as SeatViewJSON, finalTree)) {
+        markers.push({ ...c, elementId: unfiltered.id, elementLabel });
+      }
+    }
     if (candidates.length === 0) continue;
 
-    const elementLabel = `${unfiltered.className}#${unfiltered.id}`;
     const node = nodesById.get(unfiltered.id);
     const elementHidden = !node || isHiddenPlaceholder(node);
 
