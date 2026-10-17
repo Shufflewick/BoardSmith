@@ -1229,6 +1229,13 @@ export interface ChunkProvenanceStatusResult {
   projectProvenanceState: 'pre-provenance' | 'partial' | 'complete' | 'empty';
 }
 
+// A Record over every `how`, so a new kind of cover fails typecheck until it has a label.
+const SHARED_EDIT_LABEL: Record<SharedEdit['how'], string> = {
+  'signed-off': 'signed off with',
+  'being-built': 'being built by',
+  merged: 'vouched for by the merge of',
+};
+
 /**
  * `boardsmith chunk-provenance-status [--json]` — enumerates `chunks/*␣/CHUNK.md`, parses each
  * one's `## Verified Against` block, and reports the three-state classification, edition/
@@ -1239,13 +1246,6 @@ export interface ChunkProvenanceStatusResult {
  * appears anywhere in this function's body — the read-only property is pinned directly by a
  * before/after whole-project byte-hash test (T-171-19).
  */
-// A Record over every `how`, so a new kind of cover fails typecheck until it has a label.
-const SHARED_EDIT_LABEL: Record<SharedEdit['how'], string> = {
-  'signed-off': 'signed off with',
-  'being-built': 'being built by',
-  merged: 'vouched for by the merge of',
-};
-
 export async function chunkProvenanceStatusCommand(
   options: { project?: string; json?: boolean; quiet?: boolean } = {},
 ): Promise<ChunkProvenanceStatusResult> {
