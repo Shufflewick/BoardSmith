@@ -437,9 +437,10 @@ export const botStrategy: BotStrategy = {
 > A sampler may write ONLY attributes the sandbox was never told.
 
 Everything the seat legitimately knows must survive the sample unchanged, and
-removing an element the seat can see is the same violation. The engine checks
-this on every sample and throws `DeterminizationError`, naming the element and
-the attribute, when a sampler breaks it.
+removing an element the seat can see, or moving it to another container, is the
+same violation. The engine checks this on every sample and throws
+`DeterminizationError`, naming the element and the attribute or containers,
+when a sampler breaks it.
 
 That check is the feature, not a guard rail bolted onto it. Fabricating hidden
 state is what `NotSimulableError` exists to prevent; determinization is
@@ -493,6 +494,12 @@ each one:
   it supposes any other withheld value. What the placeholder genuinely carries
   (its type, its face-down artwork, which hand it sits in) is information the
   seat holds, and the contract still refuses a sampler that rewrites it.
+  The children of a hidden zone reach the seat as anonymous placeholders with
+  fresh negative ids, so the seat cannot tell them apart: a sampler may swap
+  them between containers, as long as each container ends up holding as many
+  of each class as it did. Every other element the seat can see must stay in
+  the container it was in (#871). The order of a container's children is not
+  checked, so shuffling or reordering is always allowed.
 - **Game ROOT fields** withheld by `static visibleAttributes` on the `Game`
   subclass, for the shared secret that belongs to no element: a map seed, a
   hidden objective deck order.

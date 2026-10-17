@@ -41,8 +41,20 @@ export class DeterminizationError extends Error {
   }
 }
 
-/** Every attribute of every element the sandbox currently claims to know. */
-type KnownWorld = Map<number, { className: string; attributes: Map<string, string> }>;
+/** Every attribute, and the container, of every element the sandbox currently claims to know. */
+type KnownWorld = Map<number, {
+  className: string;
+  label: string;
+  attributes: Map<string, string>;
+  parent: GameElement | undefined;
+}>;
+
+/** `HandCard#12 "card-11"`: how a refusal names an element. */
+function nameOf(element: GameElement | undefined): string {
+  if (!element) return 'no container';
+  const name = element.name ? ` "${element.name}"` : '';
+  return `${element.constructor.name}#${element._t.id}${name}`;
+}
 
 /** Nesting depth past which a fingerprint stops descending. */
 const MAX_FINGERPRINT_DEPTH = 12;
@@ -94,7 +106,12 @@ function recordKnownWorld(game: Game): KnownWorld {
       if (key.startsWith('_') || unserializable.has(key)) continue;
       attributes.set(key, fingerprintValue((element as unknown as Record<string, unknown>)[key]));
     }
-    world.set(element._t.id, { className: element.constructor.name, attributes });
+    world.set(element._t.id, {
+      className: element.constructor.name,
+      label: nameOf(element),
+      attributes,
+      parent: element._t.parent as GameElement | undefined,
+    });
     for (const child of element._t.children) visit(child as GameElement);
   };
 
@@ -102,8 +119,69 @@ function recordKnownWorld(game: Game): KnownWorld {
   return world;
 }
 
+/**
+ * How many anonymous placeholders of each class each container holds.
+ *
+ * A hidden zone's children reach a seat with fresh negative ids precisely so
+ * the seat cannot tell them apart, so which placeholder sits where is not
+ * known; how many each container holds is.
+ */
+function placeholderCounts(world: KnownWorld): Map<string, { parent: string; className: string; count: number }> {
+  const counts = new Map<string, { parent: string; className: string; count: number }>();
+  for (const [id, entry] of world) {
+    if (id >= 0) continue;
+    const key = `${entry.parent?._t.id}:${entry.className}`;
+    const prior = counts.get(key);
+    if (prior) prior.count++;
+    else counts.set(key, { parent: nameOf(entry.parent), className: entry.className, count: 1 });
+  }
+  return counts;
+}
+
+/** A container whose count of face-down placeholders the sample changed, or `null`. */
+function placeholderCountChange(before: KnownWorld, after: KnownWorld): string | null {
+  const afterCounts = placeholderCounts(after);
+  for (const [key, prior] of placeholderCounts(before)) {
+    const now = afterCounts.get(key)?.count ?? 0;
+    if (now !== prior.count) {
+      return (
+        `${prior.parent} held ${prior.count} face-down ${prior.className} placeholders and now ` +
+        `holds ${now}. The seat can count them. A sampler may swap face-down placeholders between ` +
+        `containers or reorder them, but it may not change how many each container holds.`
+      );
+    }
+  }
+  return null;
+}
+
+type KnownElement = KnownWorld extends Map<number, infer E> ? E : never;
+
+/** The first attribute of one element the sample deleted or changed, or `null`. */
+function attributeChange(id: number, prior: KnownElement, now: KnownElement): string | null {
+  for (const [key, value] of prior.attributes) {
+    if (!now.attributes.has(key)) {
+      return (
+        `it deleted ${prior.className}#${id}.${key}, which this seat was told. ` +
+        `A sampler may add what was withheld; it may not take away what was given.`
+      );
+    }
+    const nowValue = now.attributes.get(key)!;
+    if (nowValue !== value) {
+      return (
+        `it changed ${prior.className}#${id}.${key} from ${value} to ${nowValue}. ` +
+        `That attribute is not redacted in this sandbox, so the seat already knows it — ` +
+        `overwriting it invents a world the seat can see is wrong.`
+      );
+    }
+  }
+  return null;
+}
+
 /** The first way `after` contradicts `before`, or `null` if it does not. */
 function findContradiction(before: KnownWorld, after: KnownWorld): string | null {
+  const countChange = placeholderCountChange(before, after);
+  if (countChange) return countChange;
+
   for (const [id, prior] of before) {
     const now = after.get(id);
     if (!now) {
@@ -112,22 +190,16 @@ function findContradiction(before: KnownWorld, after: KnownWorld): string | null
         `so a world without it is not a world the seat could be in.`
       );
     }
-    for (const [key, value] of prior.attributes) {
-      if (!now.attributes.has(key)) {
-        return (
-          `it deleted ${prior.className}#${id}.${key}, which this seat was told. ` +
-          `A sampler may add what was withheld; it may not take away what was given.`
-        );
-      }
-      const nowValue = now.attributes.get(key)!;
-      if (nowValue !== value) {
-        return (
-          `it changed ${prior.className}#${id}.${key} from ${value} to ${nowValue}. ` +
-          `That attribute is not redacted in this sandbox, so the seat already knows it — ` +
-          `overwriting it invents a world the seat can see is wrong.`
-        );
-      }
+    if (id >= 0 && now.parent !== prior.parent) {
+      return (
+        `it moved ${prior.label} from ${nameOf(prior.parent)} to ${nameOf(now.parent)}. ` +
+        `The seat can see where that element is. A sampler may reorder the children of a container ` +
+        `and may fill in what a face-down element is, but it may not move an element the seat can see ` +
+        `into a different container.`
+      );
     }
+    const change = attributeChange(id, prior, now);
+    if (change) return change;
   }
   return null;
 }
