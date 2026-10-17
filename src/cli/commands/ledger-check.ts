@@ -653,7 +653,7 @@ async function runLogFiles(projectDir: string): Promise<string[]> {
 // Git: the commit time of each line of a run log
 // ---------------------------------------------------------------------------------------------
 
-const UNCOMMITTED = /^0{40}$/;
+const UNCOMMITTED = /^0+$/;
 
 function isGitRepo(projectDir: string): Promise<boolean> {
   return gitSucceeds(projectDir, ['rev-parse', '--show-toplevel']);
@@ -693,7 +693,7 @@ async function lineCommits(projectDir: string, relPath: string): Promise<Array<L
   let finalLine = 0;
   let time = 0;
   for (const line of porcelain.split('\n')) {
-    const header = /^([0-9a-f]{40}) \d+ (\d+)/.exec(line);
+    const header = /^([0-9a-f]{40}|[0-9a-f]{64}) \d+ (\d+)/.exec(line);
     if (header) {
       sha = header[1];
       finalLine = Number(header[2]);
