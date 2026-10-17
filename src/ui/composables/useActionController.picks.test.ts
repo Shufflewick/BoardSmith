@@ -1550,13 +1550,13 @@ describe('useActionController picks', () => {
     // (completed/cancelled/replaced), the resolved result must be DISCARDED —
     // not written to the snapshot of any later action.
     //
-    // Fix: a monotonic `choiceFetchGen` counter is bumped by clearAdvancedState().
-    // Each fetchChoicesForPick call captures the counter before the await and
-    // checks it after. If they differ the result is silently dropped.
+    // Fix: each fetchChoicesForPick call reads actionStartTick before the await
+    // and asks actionMovedOn() after. If the action was cancelled, finished or
+    // replaced meanwhile, the result is silently dropped.
     //
-    // These tests FAIL without the generation guard and PASS with it.
+    // These tests FAIL without that check and PASS with it.
 
-    it('discards in-flight fetch result after cancel() bumps the generation (R-06)', async () => {
+    it('discards in-flight fetch result once cancel() has moved the action on (R-06)', async () => {
       // Deferred fetch: we control when it resolves.
       let resolveOldFetch!: (result: PickChoicesResult) => void;
       const oldFetchPromise = new Promise<PickChoicesResult>((resolve) => {
@@ -1591,7 +1591,7 @@ describe('useActionController picks', () => {
       // Start the action — fetchChoicesForPick('destination') suspends on oldFetchPromise.
       const startPromise = controller.start('move');
 
-      // Cancel while the fetch is still in-flight: this bumps choiceFetchGen.
+      // Cancel while the fetch is still in-flight: the action has moved on.
       controller.cancel();
 
       // Resolve the old fetch with stale choices — the action is already gone.
