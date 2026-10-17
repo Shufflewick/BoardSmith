@@ -1,6 +1,6 @@
 # Migration Guide
 
-## The `scoreboard` key is removed from boardsmith.json (#930)
+## boardsmith.json has no `scoreboard` key any more (#930)
 
 Nothing ever read `scoreboard`; only `boardsmith new` wrote it. `boardsmith
 validate` now refuses it as an unknown key. Delete it from your
