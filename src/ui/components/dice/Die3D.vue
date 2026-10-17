@@ -9,8 +9,9 @@ import { ref, computed, watch, onMounted, onUnmounted, inject, type PropType } f
 import * as THREE from 'three';
 import {
   pendingRenders,
-  isRenderingGlobally,
-  setIsRenderingGlobally,
+  liveDieContexts,
+  countDieContext,
+  MAX_LIVE_DIE_CONTEXTS,
   getNextComponentId,
   DIE_ANIMATION_CONTEXT_KEY,
   createDieAnimationContext,
@@ -143,29 +144,21 @@ function cancelComponentRenders(componentId: number) {
   }
 }
 
+let drainingQueue = false;
+
+/** Start queued renders while fewer than MAX_LIVE_DIE_CONTEXTS dice hold a WebGL context. */
 function processRenderQueue() {
-  if (isRenderingGlobally || pendingRenders.length === 0) return;
-
-  // Skip cancelled renders
-  while (pendingRenders.length > 0 && pendingRenders[0].cancelled) {
-    pendingRenders.shift();
+  // A render that rebuilds its scene releases a context mid-call; the outer loop recounts.
+  if (drainingQueue) return;
+  drainingQueue = true;
+  try {
+    while (liveDieContexts < MAX_LIVE_DIE_CONTEXTS && pendingRenders.length > 0) {
+      const queuedRender = pendingRenders.shift()!;
+      if (!queuedRender.cancelled) queuedRender.fn();
+    }
+  } finally {
+    drainingQueue = false;
   }
-
-  if (pendingRenders.length === 0) return;
-
-  setIsRenderingGlobally(true);
-  const queuedRender = pendingRenders.shift()!;
-
-  // Execute the render function if not cancelled
-  if (!queuedRender.cancelled) {
-    queuedRender.fn();
-  }
-
-  // Wait for render to complete and context to be disposed by browser GC
-  setTimeout(() => {
-    setIsRenderingGlobally(false);
-    processRenderQueue();
-  }, 300);
 }
 
 /**
@@ -606,6 +599,7 @@ function initScene() {
   camera.position.z = 5;
 
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  countDieContext(1);
   renderer.setSize(props.size, props.size);
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setClearColor(0x000000, 0);
@@ -735,6 +729,7 @@ function disposeWebGL() {
       containerRef.value.removeChild(renderer.domElement);
     }
     renderer = null;
+    countDieContext(-1);
   }
 
   if (mesh) {
@@ -750,6 +745,7 @@ function disposeWebGL() {
   scene = null;
   camera = null;
   webglDisposed = true;
+  processRenderQueue();
 }
 
 /**

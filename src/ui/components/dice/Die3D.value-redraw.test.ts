@@ -9,7 +9,9 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils';
 import { defineComponent, h, reactive } from 'vue';
 
-declare global { var __scenesBuilt: number | undefined }
+declare global { var __scenesBuilt: number | undefined; var __liveContexts: number; var __mostLiveContexts: number }
+globalThis.__liveContexts = 0;
+globalThis.__mostLiveContexts = 0;
 interface DrawnScene { children: { type: string; rotation: { x: number; y: number; z: number } }[] }
 
 vi.mock('three', async (importOriginal) => ({
@@ -17,6 +19,7 @@ vi.mock('three', async (importOriginal) => ({
   WebGLRenderer: class {
     constructor() {
       globalThis.__scenesBuilt = (globalThis.__scenesBuilt ?? 0) + 1;
+      globalThis.__mostLiveContexts = Math.max(globalThis.__mostLiveContexts, ++globalThis.__liveContexts);
       this.domElement.toDataURL = () => `data:${this.drawn}`;
     }
     domElement = document.createElement('canvas');
@@ -29,7 +32,7 @@ vi.mock('three', async (importOriginal) => ({
       this.drawn = [x, y, z].map((n) => n.toFixed(4)).join(',');
     }
     dispose() {}
-    forceContextLoss() {}
+    forceContextLoss() { globalThis.__liveContexts--; }
   },
 }));
 
@@ -40,6 +43,7 @@ vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
 );
 
 const { Die3D } = await import('./index.js');
+const { MAX_LIVE_DIE_CONTEXTS } = await import('./die3d-state.js');
 // Die3D is an async component; load it here so the mount below renders it at once.
 await (Die3D as unknown as { __asyncLoader: () => Promise<unknown> }).__asyncLoader();
 
@@ -51,7 +55,7 @@ afterEach(() => {
 
 /** Mount a die and let every queued render and snapshot finish. */
 async function settle(wrapper?: VueWrapper) {
-  // The render queue spaces renders 300ms apart; a few seconds drains it.
+  // A few seconds covers every queued render, scene init and roll.
   await vi.advanceTimersByTimeAsync(5000);
   await flushPromises();
   return wrapper?.find('img.die-snapshot').attributes('src');
@@ -63,6 +67,11 @@ function mountDie(value: number, dieId: string | number) {
   const wrapper = mount(defineComponent({ setup: () => () => h(Die3D, props) }));
   mounted.push(wrapper);
   return { wrapper, props };
+}
+
+/** Mount enough dice that their first renders take every WebGL slot, so the next render waits. */
+function holdQueue(prefix: string) {
+  for (let i = 0; i < MAX_LIVE_DIE_CONTEXTS; i++) mountDie(3, `${prefix}-${i}`);
 }
 
 async function stillOf(value: number) {
@@ -87,7 +96,7 @@ describe('Die3D redraws its still image when its value changes (#892)', () => {
   async function queuedRoll(dieId: string) {
     const { wrapper, props } = mountDie(2, dieId);
     await settle();
-    mountDie(3, `${dieId}-busy`); // its first render holds the queue, so the roll waits behind it
+    holdQueue(`${dieId}-busy`); // the roll waits behind their first renders
     await flushPromises();
     const scenesBefore = globalThis.__scenesBuilt!;
     props.rollCount = 1;
@@ -112,7 +121,7 @@ describe('Die3D redraws its still image when its value changes (#892)', () => {
     vi.useFakeTimers();
     const faceOne = await stillOf(1);
     const { wrapper, props, scenesBuilt } = await queuedRoll('spinning');
-    // The roll starts 300ms (queue) + 50ms (scene init) from now and spins for 800ms.
+    // The roll starts after the holders' snapshots and its own scene init (50ms each), and spins for 800ms.
     await vi.advanceTimersByTimeAsync(600);
 
     props.value = 1;
@@ -127,7 +136,7 @@ describe('Die3D redraws its still image when its value changes (#892)', () => {
     const faceFour = await stillOf(4);
     const { wrapper, props } = mountDie(2, 'busy-redraw');
     await settle();
-    mountDie(5, 'busy-redraw-holder'); // holds the queue so both changes wait
+    holdQueue('busy-redraw-holder'); // both changes wait behind their first renders
     await flushPromises();
     const scenesBefore = globalThis.__scenesBuilt!;
 
@@ -165,5 +174,26 @@ describe('Die3D rolls a die whose id is 0 (#897)', () => {
     await settle();
 
     expect(globalThis.__scenesBuilt! - scenesBefore).toBe(1);
+  });
+});
+
+describe('Die3D draws several dice at once, within the WebGL context limit (#897)', () => {
+  it('builds as many scenes as the cap allows, then one more for each context released', async () => {
+    vi.useFakeTimers();
+    await settle();
+    const scenesBefore = globalThis.__scenesBuilt!;
+    globalThis.__mostLiveContexts = 0;
+    const scenesBuilt = () => globalThis.__scenesBuilt! - scenesBefore;
+
+    for (let i = 0; i < 20; i++) mountDie((i % 6) + 1, `many-${i}`);
+    await flushPromises();
+    expect(scenesBuilt()).toBe(MAX_LIVE_DIE_CONTEXTS);
+
+    await vi.runOnlyPendingTimersAsync(); // each drawn die snapshots and releases its context
+    expect(scenesBuilt()).toBe(2 * MAX_LIVE_DIE_CONTEXTS);
+
+    await settle();
+    expect(scenesBuilt()).toBe(20);
+    expect(globalThis.__mostLiveContexts).toBe(MAX_LIVE_DIE_CONTEXTS);
   });
 });

@@ -21,19 +21,22 @@ export function createDieAnimationContext(): DieAnimationContext {
   };
 }
 
-// Global queue to serialize WebGL context creation
+// Browsers cap live WebGL contexts (Chrome at 16) and the page may hold its own; dice draw at most this many at once.
+export const MAX_LIVE_DIE_CONTEXTS = 4;
+
+// Global queue of dice waiting for a WebGL context
 export interface QueuedRender {
   fn: () => void;
   cancelled: boolean;
   componentId: number;
 }
 export const pendingRenders: QueuedRender[] = [];
-export let isRenderingGlobally = false;
+export let liveDieContexts = 0;
 export let nextComponentId = 0;
 
 // Setter functions for mutable module-level variables
-export function setIsRenderingGlobally(value: boolean) {
-  isRenderingGlobally = value;
+export function countDieContext(change: 1 | -1) {
+  liveDieContexts += change;
 }
 
 export function getNextComponentId(): number {
