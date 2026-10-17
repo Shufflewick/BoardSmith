@@ -3,6 +3,7 @@ import {
 } from '../lib/project-paths.js';
 import { randomBytes } from 'node:crypto';
 import { sha256Hex } from '../lib/hash.js';
+import { withLedgerLock } from '../lib/ledger-lock.js';
 import { promises as fs } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
@@ -1089,19 +1090,32 @@ async function recordRangeMarker(
  * directly against the ledger.
  */
 export async function verifyRunRecordCommand(
-  options: VerifyRunOptions & {
-    runId?: string;
-    unit?: string;
-    slice?: string;
-    range?: string;
-    completeRange?: string;
-    resetRange?: string;
-  } = {},
+  options: VerifyRunRecordOptions = {},
 ): Promise<VerifyRunRecordResult | VerifyRunRangeActionResult> {
   const { runId } = options;
   if (!runId) throw new Error('verify-run-record requires --run-id <id>.');
   assertValidRunId(runId);
+  const projectDir = resolve(options.project ?? process.cwd());
+  const ledgerFile = ledgerFilePath(projectDir, runId);
+  // The lock file sits beside the ledger, so a run that was never initialised is refused first.
+  await readLedgerOrThrow(ledgerFile, runId, projectDir);
+  return withLedgerLock(ledgerFile, () => recordInRun(options, runId));
+}
 
+interface VerifyRunRecordOptions extends VerifyRunOptions {
+  runId?: string;
+  unit?: string;
+  slice?: string;
+  range?: string;
+  completeRange?: string;
+  resetRange?: string;
+}
+
+/** `verifyRunRecordCommand`'s work, run while it holds the ledger's lock (#831). */
+async function recordInRun(
+  options: VerifyRunRecordOptions,
+  runId: string,
+): Promise<VerifyRunRecordResult | VerifyRunRangeActionResult> {
   const modeCount = [options.unit, options.completeRange, options.resetRange].filter(
     (v) => v !== undefined,
   ).length;

@@ -204,10 +204,6 @@ const { flyingElements } = useFlyingElements({
 - `themeCSS` - The Slate token stylesheet as a string constant (not a function)
 - `SEAT_PALETTE` - Seat color values backing `--bsg-seat-1` … `--bsg-seat-6`
 
-### Player Colors
-
-- `STANDARD_PLAYER_COLORS` - Standard color palette (8 colors)
-
 ### Types
 
 - `TableBoardProps` - What `GameShell` gives a table's board; declare `defineProps<TableBoardProps>()`

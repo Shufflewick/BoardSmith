@@ -333,7 +333,9 @@ carrying its test, and every record keeps the text of the slice line it cites.
 A slice whose extraction returned `{ "examples": [] }` is recorded the same way, with `{}` as its
 translations file: the ledger records it as having no worked examples (`noWorkedExamples:
 "recorded"`), and it stays checked until the lines the extractor reads change (`"slice-changed"`,
-pending again). A slice reported `notDispatchable` has nothing to extract and is not pending.
+pending again). A slice recorded with examples works the same way (`examples: "recorded"` or
+`"slice-changed"`), so an example added to it later is extracted too; record it again the same way.
+A slice reported `notDispatchable` has nothing to extract and is not pending.
 
 A slice is also reported pending when one of its recorded examples' text is no longer in it
 (`unanchored[]`, reason `text-gone` or `text-ambiguous`): record it again the same way. An example
