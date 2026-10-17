@@ -25,17 +25,6 @@ function gaussian(rng: () => number): number {
   return Math.sqrt(-2 * Math.log(u1 || 0.0001)) * Math.cos(2 * Math.PI * u2);
 }
 
-/**
- * Clamp a value to bounds.
- */
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
-
-/** Weight bounds for clamping */
-const WEIGHT_MIN = -20;
-const WEIGHT_MAX = 20;
-
 /** Probability to flip sign during mutation */
 const SIGN_FLIP_PROBABILITY = 0.1;
 
@@ -68,9 +57,6 @@ export function mutateWeights(
       }
     }
 
-    // Clamp to bounds
-    newWeight = clamp(newWeight, WEIGHT_MIN, WEIGHT_MAX);
-
     return {
       ...obj,
       weight: newWeight,
@@ -79,13 +65,12 @@ export function mutateWeights(
 }
 
 /**
- * Crossover two parent objective sets.
- *
- * For features in both parents: randomly pick weight from one
- * For features in only one parent: include with 50% probability
+ * Crossover two parent objective sets: each objective's weight comes from one
+ * parent at random. Both parents must hold the same ids, as every set descended
+ * from one objective set does (mutation keeps every id); other parents throw.
  *
  * @param parent1 - First parent objectives
- * @param parent2 - Second parent objectives
+ * @param parent2 - Second parent objectives, with the same ids as parent1
  * @param rng - Seeded random function
  * @returns Child objective set
  */
@@ -94,37 +79,19 @@ export function crossoverWeights(
   parent2: ObjectiveWeight[],
   rng: () => number
 ): ObjectiveWeight[] {
-  // Build maps for efficient lookup
-  const map1 = new Map(parent1.map(o => [o.id, o]));
-  const map2 = new Map(parent2.map(o => [o.id, o]));
-
-  // Get all unique feature IDs
-  const allIds = new Set([...map1.keys(), ...map2.keys()]);
-
-  const child: ObjectiveWeight[] = [];
-
-  for (const id of allIds) {
-    const obj1 = map1.get(id);
-    const obj2 = map2.get(id);
-
-    if (obj1 && obj2) {
-      // Feature in both parents: randomly pick one
-      const selected = rng() < 0.5 ? obj1 : obj2;
-      child.push({ ...selected });
-    } else if (obj1) {
-      // Only in parent1: include with 50% probability
-      if (rng() < 0.5) {
-        child.push({ ...obj1 });
-      }
-    } else if (obj2) {
-      // Only in parent2: include with 50% probability
-      if (rng() < 0.5) {
-        child.push({ ...obj2 });
-      }
-    }
+  const byId = new Map(parent2.map(o => [o.id, o]));
+  const ids1 = new Set(parent1.map(o => o.id));
+  const unmatched = [
+    ...parent1.filter(o => !byId.has(o.id)),
+    ...parent2.filter(o => !ids1.has(o.id)),
+  ].map(o => o.id);
+  if (unmatched.length > 0) {
+    throw new Error(
+      `Cannot cross over two objective sets that hold different objectives. Only one parent has: ${unmatched.join(', ')}. `
+      + 'Both parents must descend from the same objective set.',
+    );
   }
-
-  return child;
+  return parent1.map(o => ({ ...(rng() < 0.5 ? o : byId.get(o.id)!) }));
 }
 
 /**

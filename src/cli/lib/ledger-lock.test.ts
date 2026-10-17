@@ -4,9 +4,14 @@ import { join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { withLedgerLock } from './ledger-lock.js';
 
+function ledgerInTempTree(): string {
+  const tree = tempTree('bs-ledger-lock-');
+  return join(tree, 'LEDGER.md');
+}
+
 describe('withLedgerLock (#831)', () => {
   it('runs parallel read-modify-writes one at a time, so none is lost', async () => {
-    const ledger = join(tempTree('bs-ledger-lock-'), 'LEDGER.md');
+    const ledger = ledgerInTempTree();
     await fs.writeFile(ledger, '');
     await Promise.all(
       ['a', 'b', 'c', 'd', 'e', 'f'].map((line) =>
@@ -22,14 +27,14 @@ describe('withLedgerLock (#831)', () => {
   });
 
   it('releases the lock when the work throws', async () => {
-    const ledger = join(tempTree('bs-ledger-lock-'), 'LEDGER.md');
+    const ledger = ledgerInTempTree();
     await expect(withLedgerLock(ledger, async () => Promise.reject(new Error('boom')))).rejects.toThrow('boom');
     await expect(fs.access(`${ledger}.lock`)).rejects.toThrow();
     expect(await withLedgerLock(ledger, async () => 'again')).toBe('again');
   });
 
   it('gives up after its tries on a lock left behind, naming the file and how to clear it', async () => {
-    const ledger = join(tempTree('bs-ledger-lock-'), 'LEDGER.md');
+    const ledger = ledgerInTempTree();
     await fs.writeFile(`${ledger}.lock`, '');
     let ran = false;
     const attempt = withLedgerLock(ledger, async () => (ran = true), 2);

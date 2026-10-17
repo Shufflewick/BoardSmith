@@ -537,7 +537,7 @@ describe('WorldShell — recovering an order left over from the last page (#195)
   function leaveUnanswered(action: string, args: Record<string, unknown>): void {
     localStorage.setItem(
       orderBookKey(location.pathname),
-      JSON.stringify([{ id: 'o-left-over', at: 1, action, args }]),
+      JSON.stringify([{ id: 'o-left-over', seat: 4, at: 1, action, args }]),
     );
   }
 

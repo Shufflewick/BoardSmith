@@ -15,10 +15,10 @@ import {
   tableUiFiles,
   generateA11yExampleTestTs,
   generateTsConfig,
-  getDependencyPaths,
-  getMonorepoRoot,
+  boardsmithDependencySpec,
   type ProjectConfig,
 } from './project-scaffold.js';
+import { boardsmithPackageRoot } from './boardsmith-version.js';
 import {
   generateGameTs,
   generateElementsTs,
@@ -155,34 +155,30 @@ describe('generateBoardsmithJson', () => {
   });
 });
 
-describe('getDependencyPaths — local-dev boardsmith link (issue 142)', () => {
-  // This suite runs FROM the monorepo, so the local-dev branch is the one under test.
-  const monorepoRoot = getMonorepoRoot();
-  // The checkout's directory name, not the literal string "BoardSmith". A git
-  // worktree is a checkout under a different name, and hardcoding the name made
-  // these two cases fail in every worktree while saying nothing about the code.
-  const rootName = monorepoRoot === null ? 'BoardSmith' : basename(monorepoRoot);
+describe('boardsmithDependencySpec from a checkout (issue 142)', () => {
+  // This suite runs FROM a checkout, which is the package root the link points at.
+  const root = boardsmithPackageRoot();
+  // The checkout's directory name, not the literal string "BoardSmith": a git
+  // worktree is a checkout under a different name.
+  const rootName = basename(root);
 
   it('emits a path relative to the project, never one carrying a home directory', () => {
-    expect(monorepoRoot).not.toBeNull();
-    const projectPath = join(monorepoRoot as string, '..', 'BoardSmithGames', 'my-game');
-    const deps = getDependencyPaths(projectPath);
+    const projectPath = join(root, '..', 'BoardSmithGames', 'my-game');
+    const spec = boardsmithDependencySpec(projectPath);
 
-    expect(deps.isLocalDev).toBe(true);
-    const linked = deps.boardsmith.replace(/^file:/, '');
+    const linked = spec.replace(/^file:/, '');
     expect(isAbsolute(linked)).toBe(false);
-    expect(deps.boardsmith).toBe(`file:../../${rootName}`);
+    expect(spec).toBe(`file:../../${rootName}`);
   });
 
-  it('resolves from the project directory back to the monorepo root', () => {
-    const projectPath = join(monorepoRoot as string, '..', 'elsewhere', 'nested', 'game');
-    const deps = getDependencyPaths(projectPath);
-    const linked = deps.boardsmith.replace(/^file:/, '');
-    expect(resolve(projectPath, linked)).toBe(resolve(monorepoRoot as string));
+  it('resolves from the project directory back to the package root', () => {
+    const projectPath = join(root, '..', 'elsewhere', 'nested', 'game');
+    const linked = boardsmithDependencySpec(projectPath).replace(/^file:/, '');
+    expect(resolve(projectPath, linked)).toBe(resolve(root));
   });
 
   it('puts the same relative path into the scaffolded package.json', () => {
-    const projectPath = join(monorepoRoot as string, '..', 'BoardSmithGames', 'my-game');
+    const projectPath = join(root, '..', 'BoardSmithGames', 'my-game');
     const pkg = JSON.parse(generatePackageJson(config, projectPath));
     expect(pkg.dependencies.boardsmith).toBe(`file:../../${rootName}`);
   });

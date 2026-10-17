@@ -6,6 +6,13 @@ Nothing ever read `scoreboard`; only `boardsmith new` wrote it. `boardsmith
 validate` now refuses it as an unknown key. Delete it from your
 `boardsmith.json`.
 
+## The game-over card has no New Game or Rematch button (#902)
+
+GameShell's game-over card and controls menu no longer offer New Game or
+Rematch, and the `#game-over` slot no longer passes `rematch` or `newGame`.
+Starting another game belongs to the host that started this one. A game whose
+`#game-over` slot used either prop must drop the button that called it.
+
 ## Chunk work runs `boardsmith verify --chunk <slug>`, with no selection (#985)
 
 `boardsmith verify --selection <path>` is removed, and so is the `focused`
