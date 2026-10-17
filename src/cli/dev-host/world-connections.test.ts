@@ -248,7 +248,7 @@ describe('#1099: a reply to a page that reloaded', () => {
   });
 
   it('forgets a request still unanswered when a rules reload forgets its page', async () => {
-    const { port, connections, held, release } = await serveHeld();
+    const { host, port, connections, held, release } = await serveHeld();
     const before = await open(port, 'p1', 'load-1');
     await held(() => before.send(act('wc-0', 'o1', 'stoke')));
     connections.forgetAll({ type: 'world_reload' });
@@ -260,5 +260,7 @@ describe('#1099: a reply to a page that reloaded', () => {
     const answered = after.next((frame) => frame.type === 'world_response');
     after.send(act('wc-1', 'o2', 'stoke'));
     expect(await answered).toMatchObject({ requestId: 'wc-1', ok: true });
+    await host.settled();
+    expect(after.frames.filter((frame) => frame.type === 'world_response')).toHaveLength(1);
   });
 });
