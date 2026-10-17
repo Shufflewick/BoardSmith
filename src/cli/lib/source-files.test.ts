@@ -4,7 +4,7 @@
  * could silently miss part of a game.
  */
 import { describe, it, expect } from 'vitest';
-import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { collectSourceFiles, listFiles } from './source-files.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
@@ -42,13 +42,40 @@ describe('listFiles', () => {
     expect(listFiles(join(tempTree('bs-list-files-'), 'missing'), { sourceTree: false })).toEqual([]);
   });
 
-  it('counts a link to a file as that file, and never follows a link to a folder, so a loop cannot trap it', () => {
+  it('counts a link to a file as that file, and in a source tree skips a link to a folder, so a loop cannot trap it', () => {
     const dir = tree(['real/a.ts', 'outside/b.ts']);
     symlinkSync(join(dir, 'real', 'a.ts'), join(dir, 'real', 'linked.ts'));
     symlinkSync(join(dir, 'outside'), join(dir, 'real', 'folder-link'));
     symlinkSync(dir, join(dir, 'real', 'loop'));
     symlinkSync(join(dir, 'gone.ts'), join(dir, 'real', 'dangling.ts'));
-    expect(rel(dir, listFiles(join(dir, 'real'), { sourceTree: false }))).toEqual(['real/a.ts', 'real/linked.ts']);
+    expect(rel(dir, listFiles(join(dir, 'real'), { sourceTree: true }))).toEqual(['real/a.ts', 'real/linked.ts']);
+  });
+
+  // Outside a source tree every file is wanted, so a link the walk cannot follow would silently drop files (#1048).
+  it.each([
+    ['a folder', (dir: string) => join(dir, 'outside')],
+    ['nothing', (dir: string) => join(dir, 'gone')],
+  ])('outside a source tree, stops on a link to %s, naming it, even when its name has no wanted suffix', (what, target) => {
+    const dir = tree(['real/a.js', 'outside/b.png']);
+    symlinkSync(target(dir), join(dir, 'real', 'cards'));
+    expect(() => listFiles(join(dir, 'real'), { sourceTree: false, suffixes: ['.js'] })).toThrow(
+      `${join(dir, 'real', 'cards')} is a link to ${what}`,
+    );
+  });
+
+  it('names a path that is a file, not a folder', () => {
+    const dir = tree(['tests']);
+    expect(() => listFiles(join(dir, 'tests'), { sourceTree: true })).toThrow(`${join(dir, 'tests')} is a file, not a folder.`);
+  });
+
+  it('names a folder it has no permission to read', () => {
+    const dir = tree(['locked/a.ts']);
+    chmodSync(join(dir, 'locked'), 0o000);
+    try {
+      expect(() => listFiles(dir, { sourceTree: true })).toThrow(`${join(dir, 'locked')} cannot be read: permission denied.`);
+    } finally {
+      chmodSync(join(dir, 'locked'), 0o755);
+    }
   });
 });
 

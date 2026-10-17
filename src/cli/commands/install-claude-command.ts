@@ -11,7 +11,7 @@
  * (`src/cli/slash-command/agents/`); a project maps a role to another agent in boardsmith.json.
  */
 
-import { promises as fs, readdirSync, statSync } from 'node:fs';
+import { promises as fs, statSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { homedir } from 'node:os';
 import { execSync } from 'node:child_process';
@@ -19,6 +19,7 @@ import chalk from 'chalk';
 import { ROLES, defaultAgentType } from '../lib/agent-roles.js';
 import { boardsmithPackageRoot } from '../lib/boardsmith-version.js';
 import { filesContentHash } from '../lib/hash.js';
+import { listFiles } from '../lib/source-files.js';
 
 interface InstallOptions {
   force?: boolean;
@@ -216,13 +217,9 @@ function skillSources(slashCommandDir: string): string[] {
 }
 
 /** Every file the copy reads, relative to `slashCommandDir`. */
-function skillSourceFiles(slashCommandDir: string): string[] {
+export function skillSourceFiles(slashCommandDir: string): string[] {
   return skillSources(slashCommandDir).flatMap((path) =>
-    statSync(path).isDirectory()
-      ? readdirSync(path, { recursive: true, encoding: 'utf-8' })
-          .map((entry) => join(path, entry))
-          .filter((file) => statSync(file).isFile() && excludeTestFiles(file))
-      : [path],
+    statSync(path).isDirectory() ? listFiles(path, { sourceTree: false }).filter(excludeTestFiles) : [path],
   ).map((file) => relative(slashCommandDir, file));
 }
 

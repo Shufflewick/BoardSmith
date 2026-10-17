@@ -534,4 +534,12 @@ describe('trace-check test discovery skips what the other source walks skip (#10
     const unassociated = result.findings.filter((f) => f.kind === 'unassociated-test').map((f) => f.subject);
     expect(unassociated).toEqual(['tests/kept.test.ts']);
   });
+
+  it('names a tests path that is a file instead of failing with a bare system error', async () => {
+    const project = await makeProject();
+    await makeChunk(project, 'jab', { claims: [1], manifestRows: [] });
+    await writeTestFile(project, 'tests', 'not a folder\n');
+
+    await expect(traceCheckCommand({ project })).rejects.toThrow(`${join(project, 'tests')} is a file, not a folder.`);
+  });
 });

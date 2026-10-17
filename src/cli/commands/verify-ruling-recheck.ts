@@ -8,6 +8,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import { parseRulings } from './build-manifest.js';
 import { allocatedNumber } from '../lib/ledger-entries.js';
+import { listFiles } from '../lib/source-files.js';
 import { readFencedJsonLedger } from '../lib/fenced-json-ledger.js';
 import { withLedgerLock } from '../lib/ledger-lock.js';
 import {
@@ -255,7 +256,8 @@ export async function resolveFreshTranscription(
   const stagingDir = stagingSlicesDir(projectDir, resolvedRunId);
   let entryNames: string[];
   try {
-    entryNames = await fs.readdir(stagingDir, { recursive: true });
+    await fs.readdir(stagingDir); // listFiles reads a missing folder as empty; here that has its own message
+    entryNames = listFiles(stagingDir, { sourceTree: false, suffixes: ['.md'] }).map((path) => relative(stagingDir, path));
   } catch (err) {
     const missingPath = relative(projectDir, stagingDir);
     // A real run with no usable slices folder is not a missing run, and must never be called one (#1002).
@@ -273,7 +275,6 @@ export async function resolveFreshTranscription(
   // Filtered on path segments, not a substring match, so a real slice legitimately named e.g.
   // `01-superseded-cards.md` (no `superseded/` directory component) is never excluded.
   const slicePaths = entryNames
-    .filter((n) => n.endsWith('.md'))
     .filter((n) => !n.split(/[\\/]/).includes('superseded'))
     .sort();
 
@@ -309,7 +310,8 @@ function slicesUnusableMessage(runId: string, slicesPath: string, err: unknown):
   if (code === 'ENOTDIR') {
     return `${run}'s staged transcription is missing: ${slicesPath} is a file, not a folder. Move that file aside. ${remedies}`;
   }
-  return `${run}'s staged transcription at ${slicesPath} could not be read (${code ?? String(err)}). Check its permissions.`;
+  if (code === undefined) return `${run}'s staged transcription at ${slicesPath} could not be read: ${(err as Error).message}`;
+  return `${run}'s staged transcription at ${slicesPath} could not be read (${code}). Check its permissions.`;
 }
 
 // -------------------------------------------------------------------------------------------

@@ -11,7 +11,7 @@
  * point of the check. These tests hold that BOTH backends can be packaged and
  * that each is still refused for the thing it actually lacks.
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { readDistDir } from './zip.js';
@@ -82,5 +82,14 @@ describe('readDistDir packages the whole build, dot folders included (#1048)', (
     const files = readDistDir(root);
     expect(files.has('.vite/manifest.json')).toBe(true);
     expect(files.has('cards/node_modules/ace.png')).toBe(true);
+  });
+
+  // `boardsmith build` copies public/ with its links kept, so a linked art folder reaches dist as a link.
+  it('refuses a dist with a link to a folder, naming it, rather than leaving its files out', () => {
+    const root = dist(TABLE, 'index.html');
+    mkdirSync(join(root, '..', 'shared-art'), { recursive: true });
+    writeFileSync(join(root, '..', 'shared-art', 'ace.png'), 'png');
+    symlinkSync(join(root, '..', 'shared-art'), join(root, 'cards'));
+    expect(() => readDistDir(root)).toThrow(`${join(root, 'cards')} is a link to a folder`);
   });
 });

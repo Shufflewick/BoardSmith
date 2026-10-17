@@ -1,6 +1,6 @@
 import { deflateRawSync } from 'node:zlib';
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { readFileSync, existsSync } from 'node:fs';
+import { join, relative, sep } from 'node:path';
 import { listFiles } from './source-files.js';
 
 /**
@@ -99,17 +99,12 @@ export function readDistDir(distDir: string): Map<string, Uint8Array> {
   // All files under ui/ -> strip ui/ prefix
   collectFiles(join(distDir, 'ui'), fileMap);
 
-  // Public assets at dist root (equipment/, dictators/, etc.)
-  // Skip known build subdirectories and manifest.json
-  const skipRootEntries = new Set(['rules', 'ui', 'manifest.json']);
-  for (const entry of readdirSync(distDir, { withFileTypes: true })) {
-    if (skipRootEntries.has(entry.name)) continue;
-    const fullPath = join(distDir, entry.name);
-    if (entry.isDirectory()) {
-      collectFiles(fullPath, fileMap, undefined, entry.name);
-    } else if (!fileMap.has(entry.name)) {
-      fileMap.set(entry.name, readFileSync(fullPath));
-    }
+  // Public assets at dist root (equipment/, dictators/, etc.), keeping their paths;
+  // the known build subdirectories and manifest.json were taken above
+  for (const absPath of listFiles(distDir, { sourceTree: false })) {
+    const relPath = relative(distDir, absPath);
+    if (relPath === 'manifest.json' || ['rules', 'ui'].includes(relPath.split(sep)[0]!)) continue;
+    if (!fileMap.has(relPath)) fileMap.set(relPath, readFileSync(absPath));
   }
 
   return fileMap;
@@ -119,14 +114,12 @@ function collectFiles(
   dir: string,
   fileMap: Map<string, Uint8Array>,
   skipRelPath?: string,
-  prefix?: string,
 ): void {
   for (const absPath of listFiles(dir, { sourceTree: false })) {
     const relPath = relative(dir, absPath);
     if (relPath === skipRelPath) continue;
-    const zipPath = prefix ? `${prefix}/${relPath}` : relPath;
-    if (!fileMap.has(zipPath)) {
-      fileMap.set(zipPath, readFileSync(absPath));
+    if (!fileMap.has(relPath)) {
+      fileMap.set(relPath, readFileSync(absPath));
     }
   }
 }
