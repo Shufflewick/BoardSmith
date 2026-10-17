@@ -19,6 +19,7 @@
  * @param flyApi          - The fly function from useFlyingElements() for flying-element animations.
  */
 
+import { onScopeDispose } from 'vue';
 import type { UseAnimationEventsReturn } from '../../composables/useAnimationEvents.js';
 import type { FlyConfig } from '../../composables/useFlyingElements.js';
 
@@ -51,7 +52,7 @@ export function useAutoRendererAnimations(
   //   destinationRect: DOMRect-like (destination position)
   //   elementData:     FlyingCardData partial (rank, suit, faceUp, etc.)
   // -------------------------------------------------------------------
-  animationEvents.registerHandler(
+  const unregisters = [animationEvents.registerHandler(
     'deal',
     async (event, { signal }) => {
       if (signal.aborted) return;
@@ -80,7 +81,7 @@ export function useAutoRendererAnimations(
       });
     },
     { skip: 'drop' },
-  );
+  )];
 
   // -------------------------------------------------------------------
   // 'flip' handler — skip: 'run'
@@ -88,7 +89,7 @@ export function useAutoRendererAnimations(
   // event.data shape (optional):
   //   elementId: number — the element to flip in the DOM (future: CSS flip-by-id)
   // -------------------------------------------------------------------
-  animationEvents.registerHandler(
+  unregisters.push(animationEvents.registerHandler(
     'flip',
     async (_event, { signal }) => {
       if (signal.aborted) return;
@@ -96,14 +97,14 @@ export function useAutoRendererAnimations(
       // For now: handler is registered (RENDER-05 proof) — no DOM available at this layer.
     },
     { skip: 'run' },
-  );
+  ));
 
   // -------------------------------------------------------------------
   // 'reveal' handler — skip: 'drop'
   // Combination of fly + flip when a hidden card is revealed to the player.
   // event.data shape: same as 'deal' plus optional faceUp field.
   // -------------------------------------------------------------------
-  animationEvents.registerHandler(
+  unregisters.push(animationEvents.registerHandler(
     'reveal',
     async (event, { signal }) => {
       if (signal.aborted) return;
@@ -129,5 +130,8 @@ export function useAutoRendererAnimations(
       });
     },
     { skip: 'drop' },
-  );
+  ));
+
+  // A dev UI switch unmounts this renderer; its handlers must not fly on the dead overlay.
+  onScopeDispose(() => unregisters.forEach((unregister) => unregister()));
 }
