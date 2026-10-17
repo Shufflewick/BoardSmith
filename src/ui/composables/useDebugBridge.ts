@@ -153,6 +153,8 @@ export interface DebugBridge {
   transferCard(cardId: number, targetDeckId: number, position: TransferPosition): Promise<void>;
   /** Shuffle one deck in place. */
   shuffleDeck(deckId: number): Promise<void>;
+  /** The live table with nothing hidden, face-down cards included, by their real ids (#898). */
+  deckView(): Promise<Record<string, unknown>>;
 }
 
 /**
@@ -259,6 +261,12 @@ export function createDebugBridge(platformRequest: PlatformRequest | null): Debu
 
     async shuffleDeck(deckId) {
       await send('debug:shuffle-deck', { deckId }, 'Failed to shuffle deck');
+    },
+
+    async deckView() {
+      const data = await send('debug:deck-view', {}, 'Failed to fetch the decks');
+      if (!isRecord(data.view)) throw new Error('The host answered debug:deck-view without the table.');
+      return data.view;
     },
   };
 }

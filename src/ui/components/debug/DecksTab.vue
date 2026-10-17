@@ -11,10 +11,14 @@
  * only what it cannot know: the view it is rendering, and how the panel copies
  * to the clipboard (which drives a panel-level toast).
  *
+ * Live, it lists the host's unfiltered table (`debug:deck-view`, #898) rather
+ * than the seat's view: a seat sees a face-down deck as stand-ins whose ids no
+ * edit can name. Time travel shows the seat's snapshot, with edits off (#899).
+ *
  * `useDebugBridge()` resolves through injection, so the tab reaches the host
  * without the panel threading a transport down to it.
  */
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import {
   discoverDecks,
   discoverCardContainers,
@@ -45,8 +49,29 @@ const deckSearchQuery = ref('');
 const expandedDecks = ref<Set<number>>(new Set());
 const selectedDeckCard = ref<{ deckId: number; cardId: number } | null>(null);
 
-const discoveredDecks = computed(() => discoverDecks(props.view));
-const discoveredCardContainers = computed(() => discoverCardContainers(props.view));
+/** The host's last unfiltered table, and why the last request for it failed. */
+const liveTable = ref<unknown>(undefined);
+const liveTableError = ref<string | null>(null);
+let liveTableRequest = 0;
+
+// A new view is a new live state, so ask again; the newest request wins.
+watch(() => [props.view, props.isViewingHistory] as const, async ([view, viewingHistory]) => {
+  if (view === undefined || viewingHistory) return;
+  const request = ++liveTableRequest;
+  try {
+    const table = await bridge.deckView();
+    if (request !== liveTableRequest) return;
+    liveTable.value = table;
+    liveTableError.value = null;
+  } catch (err) {
+    if (request === liveTableRequest) liveTableError.value = err instanceof Error ? err.message : String(err);
+  }
+}, { immediate: true });
+
+const shownView = computed(() => (props.isViewingHistory ? props.view : liveTable.value));
+
+const discoveredDecks = computed(() => discoverDecks(shownView.value));
+const discoveredCardContainers = computed(() => discoverCardContainers(shownView.value));
 
 const filteredDecks = computed(() => filterDecks(discoveredDecks.value, deckSearchQuery.value));
 
@@ -125,8 +150,11 @@ const editsOff = computed(() => props.isViewingHistory || deckManipulationLoadin
       />
     </div>
 
-    <div v-if="isViewingHistory" class="deck-history-notice" role="status">
+    <div v-if="isViewingHistory" class="deck-notice deck-history-notice" role="status">
       Viewing history: deck edits are off, because they would change the live game. Go back to live to edit.
+    </div>
+    <div v-else class="deck-notice deck-unfiltered-notice" role="status">
+      Showing every card, face-down cards included. Debug only: no player sees this view.
     </div>
 
     <!-- Error message -->
@@ -135,8 +163,16 @@ const editsOff = computed(() => props.isViewingHistory || deckManipulationLoadin
       <DebugButton size="small" @click="deckManipulationError = null">Dismiss</DebugButton>
     </div>
 
+    <div v-if="!isViewingHistory && liveTableError" class="deck-error">
+      Could not load the decks: {{ liveTableError }}
+    </div>
+
+    <div v-else-if="shownView === undefined" class="no-decks">
+      Loading decks...
+    </div>
+
     <!-- No decks found -->
-    <div v-if="filteredDecks.length === 0" class="no-decks">
+    <div v-else-if="filteredDecks.length === 0" class="no-decks">
       <template v-if="discoveredDecks.length === 0">
         No deck elements found in game state.
         <div class="deck-hint">
@@ -344,13 +380,19 @@ const editsOff = computed(() => props.isViewingHistory || deckManipulationLoadin
   color: var(--bsg-accent-2);
   font-size: 10px;
 }
-.deck-history-notice {
+.deck-notice {
   padding: 8px 12px;
-  background: color-mix(in srgb, var(--bsg-warn) 15%, transparent);
-  border: 1px solid color-mix(in srgb, var(--bsg-warn) 40%, transparent);
+  background: color-mix(in srgb, var(--deck-notice) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--deck-notice) 40%, transparent);
   border-radius: 6px;
   color: var(--bsg-ink);
   font-size: 12px;
+}
+.deck-unfiltered-notice {
+  --deck-notice: var(--bsg-accent-2);
+}
+.deck-history-notice {
+  --deck-notice: var(--bsg-warn);
 }
 /* Decks split view */
 .decks-split-view {
