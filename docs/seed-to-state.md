@@ -34,7 +34,7 @@ The fields that carry the actual game state are:
 - the full element tree, typed as `ReturnType<Game['toJSON']>` (exactly
   `game.toJSON()`'s output shape). It is stored once: as the newest entry of
   `actionCheckpoints` when the snapshot has checkpoints, otherwise as
-  `state`. Read it with `snapshotTree(snapshot)` (#804).
+  `state`. Read it with `snapshotTree(snapshot)`, from `boardsmith/session` (#804).
 - `flowState` — the flow engine's current position (which step/action a
   player is awaiting).
 - `sequence` — the element-id sequence counter, restored after the tree
