@@ -1,4 +1,4 @@
-import { beforeEach, describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect, vi, type MockInstance } from 'vitest';
 import { Game, Player, Action, actionStep, loop, eachPlayer, type GameOptions } from '../../engine/index.js';
 import { executeOp, type GameDefinitionLike } from '../../session/index.js';
 import { MultiplayerHost, type HostOutbound, type MultiplayerHostOptions } from './multiplayer-host.js';
@@ -53,8 +53,16 @@ const altDef = {
   maxPlayers: 2,
 } satisfies GameDefinitionLike;
 
+// A game whose setup crashes, the way a bug in a game's constructor does.
+class BrokenSetupGame extends AlternateGame {
+  constructor(options: GameOptions) {
+    super(options);
+    throw new TypeError('The deck is missing.');
+  }
+}
+
 function makeAltHost(
-  opts: { debug?: boolean; playerCount?: number; failStart?: () => boolean; refuseStart?: () => boolean } = {},
+  opts: { debug?: boolean; playerCount?: number; failStart?: () => boolean; brokenSetup?: () => boolean } = {},
 ) {
   const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
   const playerCount = opts.playerCount ?? 2;
@@ -66,10 +74,8 @@ function makeAltHost(
     debug: opts.debug,
     executeOp: (gameOptions, snap, pend, op, hostOptions) => {
       if (op.type === 'start' && opts.failStart?.()) throw new Error('The deck is missing.');
-      if (op.type === 'start' && opts.refuseStart?.()) {
-        return Promise.resolve({ success: false as const, error: 'The deck is missing.', category: 'bundle' as const });
-      }
-      return executeOp({ ...altDef, maxPlayers: playerCount }, gameOptions, snap, pend, op, hostOptions);
+      const gameClass = op.type === 'start' && opts.brokenSetup?.() ? BrokenSetupGame : AlternateGame;
+      return executeOp({ ...altDef, gameClass, maxPlayers: playerCount }, gameOptions, snap, pend, op, hostOptions);
     },
     send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
   });
@@ -396,17 +402,15 @@ describe('MultiplayerHost — a restart that fails (#880)', () => {
 });
 
 describe('MultiplayerHost — New game after a failed start (#1039)', () => {
-  let logged: unknown[][] = [];
-  const realError = console.error;
+  let printed: MockInstance<typeof console.error>;
   beforeEach(() => {
-    logged = [];
-    console.error = (...args: unknown[]) => { logged.push(args); };
-    return () => { console.error = realError; };
+    printed = vi.spyOn(console, 'error').mockImplementation(() => {});
+    return () => printed.mockRestore();
   });
 
   it('starts a game when the first start failed', async () => {
     let failStart = true;
-    const { host, lastOfType } = makeAltHost({ refuseStart: () => failStart });
+    const { host, lastOfType } = makeAltHost({ brokenSetup: () => failStart });
     await host.handleMessage('A', { type: 'hello' }); // A = seat 1; its start fails
     failStart = false;
     await host.handleMessage('A', { type: 'restart' });
@@ -429,19 +433,31 @@ describe('MultiplayerHost — New game after a failed start (#1039)', () => {
     expect(lastOfType('A', 'init').seat).toBe(1);
   });
 
-  it('prints a refused start in the terminal as one readable line', async () => {
-    const { host } = makeAltHost({ refuseStart: () => true });
+  it('refuses New game from a page with no seat after a failed start', async () => {
+    let failStart = true;
+    const { host, lastOfType } = makeAltHost({ brokenSetup: () => failStart });
+    await host.handleMessage('A', { type: 'hello' }); // A = seat 1; its start fails
+    await host.handleMessage('B', { type: 'hello' }); // seated at seat 2; its start fails too
+    await host.handleMessage('C', { type: 'hello' }); // no seat left: the seat-picker
+    failStart = false;
+    await host.handleMessage('C', { type: 'restart' });
+    expect(lastOfType('C', 'error').message).toBe('No game in progress to restart.');
+    expect(lastOfType('C', 'init')).toBeUndefined();
+  });
+
+  it("prints a crash in the game's setup in the terminal as one line, without a stack", async () => {
+    const { host } = makeAltHost({ brokenSetup: () => true });
     await host.handleMessage('A', { type: 'hello' });
-    expect(logged).toEqual([
+    expect(printed.mock.calls).toEqual([
       ['[boardsmith dev] The game could not start (The deck is missing.). Fix the problem, then press "New game" or reload this page.'],
     ]);
   });
 
-  it('prints a start that crashed in the terminal with its stack', async () => {
+  it('prints a throw from the host itself in the terminal with its stack', async () => {
     const { host } = makeAltHost({ failStart: () => true });
     await host.handleMessage('A', { type: 'hello' });
-    expect(logged).toHaveLength(1);
-    expect(logged[0]).toEqual([
+    expect(printed).toHaveBeenCalledTimes(1);
+    expect(printed.mock.calls[0]).toEqual([
       '[boardsmith dev] The game could not start (The deck is missing.). Fix the problem, then press "New game" or reload this page.',
       expect.stringMatching(/^Error: The deck is missing\.\n\s+at /),
     ]);

@@ -706,16 +706,11 @@ export class MultiplayerHost {
   }
 
   private async handleRestart(clientId: string, seed: string | undefined): Promise<void> {
-    // Defensive hardening only (T-157-06) — NOT the D11 fix. A FINISHED game
-    // already passes here: LobbyPhase has no 'complete' value, so completion
-    // never flips `phase` off 'playing'. The `|| !this.session` clause guards
-    // the genuinely no-game/mid-setup case (phase somehow 'playing' with no
-    // live session), which the bare phase check alone would not catch.
     if (this.starting) {
       this.send(clientId, { type: 'error', message: STARTING });
       return;
     }
-    // A seated client in the lobby is one whose start failed (#1039): New game retries it.
+    // With no game, only a seated client may start one: it holds a seat because its start failed (#1039).
     if (!this.session && !this.clientSeat.has(clientId)) {
       this.send(clientId, { type: 'error', message: 'No game in progress to restart.' });
       return;
@@ -1388,7 +1383,7 @@ export class MultiplayerHost {
       this.phase = 'lobby';
       const reason = err instanceof Error ? err.message : String(err);
       const message = `The game could not start (${reason}). Fix the problem, then press "New game" or reload this page.`;
-      // A refused start is the game's own error; anything thrown is a crash, so it keeps its stack.
+      // A start-op failure, a crash in the game's setup included, arrives as a message only; a throw from the host keeps its stack.
       if (startRefused || !(err instanceof Error)) console.error(`[boardsmith dev] ${message}`);
       else console.error(`[boardsmith dev] ${message}`, err.stack);
       for (const clientId of this.connected) this.send(clientId, { type: 'error', message });
