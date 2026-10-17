@@ -16,6 +16,7 @@ import {
   verifyExampleRecordCommand,
   verifyExampleTranslateCommand,
   reanchorExampleLedger,
+  findUnanchoredExamples,
   readSlicesWithoutExamples,
   type ExampleReplayRecord,
 } from './verify-example-replay.js';
@@ -1299,6 +1300,49 @@ describe('worked examples stay anchored to their slice line (#350)', () => {
       { exampleId: `${SLICE}:4`, slicePath: SLICE, lineText: READY_LINE, reason: 'text-ambiguous' },
     ]);
     expect(result.moved.map((m) => m.from)).toEqual([`${SLICE}:5`]);
+  });
+
+  it('a record whose text moved onto the line of a record that stays put is reported lost, never given its id (#836)', async () => {
+    const project = await makeProject({ [SLICE]: SLICE_TEXT });
+    await recordBoth(project);
+    const before = await readExampleReplayVerdicts(project);
+    await fs.writeFile(slicePathOnDisk(project), `# Punch\n\np.2, Punch Examples:\n${TIRED_LINE}\n`);
+
+    const result = await reanchorExampleLedger(project);
+
+    expect(result.moved).toEqual([]);
+    expect(result.lost).toEqual([
+      { exampleId: `${SLICE}:4`, slicePath: SLICE, lineText: READY_LINE, reason: 'text-gone' },
+      { exampleId: `${SLICE}:5`, slicePath: SLICE, lineText: TIRED_LINE, reason: 'text-ambiguous' },
+    ]);
+    expect(await readExampleReplayVerdicts(project)).toEqual(before);
+  });
+
+  it('two records whose texts both lose their lines to the same one are both reported lost (#836)', () => {
+    const slice = { path: SLICE, text: `# Punch\n\np.2, Punch Examples:\n\n\n${READY_LINE}\n` };
+    const records = [
+      recordFor(SLICE, 4, { lineText: READY_LINE }),
+      recordFor(SLICE, 5, { lineText: READY_LINE }),
+    ];
+
+    expect(findUnanchoredExamples(records, [slice]).map((u) => [u.exampleId, u.reason])).toEqual([
+      [`${SLICE}:4`, 'text-ambiguous'],
+      [`${SLICE}:5`, 'text-ambiguous'],
+    ]);
+  });
+
+  it('two records whose lines swapped both move, each to the other\'s line (#836)', async () => {
+    const project = await makeProject({ [SLICE]: SLICE_TEXT });
+    await recordBoth(project);
+    await fs.writeFile(slicePathOnDisk(project), `# Punch\n\np.2, Punch Examples:\n${TIRED_LINE}\n${READY_LINE}\n`);
+
+    const result = await reanchorExampleLedger(project);
+
+    expect(result.lost).toEqual([]);
+    expect(result.moved.map((m) => [m.from, m.to])).toEqual([
+      [`${SLICE}:4`, `${SLICE}:5`],
+      [`${SLICE}:5`, `${SLICE}:4`],
+    ]);
   });
 
   it('verify-example-replay reports unanchored examples and sends a slice with a lost one back to pending', async () => {

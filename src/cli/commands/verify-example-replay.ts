@@ -726,9 +726,9 @@ function readLedgerTranslation(raw: unknown): ExampleTranslation | undefined {
 
 /**
  * A recorded example whose slice line no longer holds its `lineText`. `moved`: the text is now on
- * exactly one other line, `movedTo`, that no other record holds. `text-gone`: the slice no longer
- * contains it. `text-ambiguous`: it is on several other lines, or on one another record already
- * holds, so which one the example is cannot be told from the text.
+ * exactly one other line, `movedTo`, whose id no other record keeps or moves to. `text-gone`: the
+ * slice no longer contains it. `text-ambiguous`: it is on several other lines, or on one whose id
+ * another record keeps or also moves to, so which one the example is cannot be told from the text.
  */
 interface UnanchoredExample {
   exampleId: string;
@@ -753,25 +753,32 @@ export function findUnanchoredExamples(
   slices: readonly { path: string; text: string }[],
 ): UnanchoredExample[] {
   const linesBySlice = new Map(slices.map((s) => [s.path, s.text.split('\n').map((l) => l.trim())]));
-  const anchored = (r: ExampleReplayRecord) =>
-    linesBySlice.get(r.slicePath)?.[r.lineNumber - 1] === r.lineText;
-  const held = new Set(records.filter(anchored).map((r) => r.exampleId));
-
-  const unanchored: UnanchoredExample[] = [];
+  const foundAt = new Map<ExampleReplayRecord, number[]>();
   for (const r of records) {
     const lines = linesBySlice.get(r.slicePath);
-    if (lines === undefined || anchored(r)) continue;
-    const at = lines.flatMap((line, i) => (line === r.lineText ? [i + 1] : []));
-    const base = { exampleId: r.exampleId, slicePath: r.slicePath, lineText: r.lineText };
-    if (at.length === 0) {
-      unanchored.push({ ...base, reason: 'text-gone' });
-    } else if (at.length > 1 || held.has(workedExampleId({ slicePath: r.slicePath, lineNumber: at[0] }))) {
-      unanchored.push({ ...base, reason: 'text-ambiguous' });
-    } else {
-      unanchored.push({ ...base, reason: 'moved', movedTo: at[0] });
-    }
+    if (lines === undefined || lines[r.lineNumber - 1] === r.lineText) continue;
+    foundAt.set(r, lines.flatMap((line, i) => (line === r.lineText ? [i + 1] : [])));
   }
-  return unanchored;
+  // A move onto an id another record keeps, or another move also takes, would give two records one id (#836).
+  let movers = [...foundAt].flatMap(([r, at]) =>
+    at.length === 1 ? [{ r, to: workedExampleId({ slicePath: r.slicePath, lineNumber: at[0] }) }] : [],
+  );
+  for (;;) {
+    const moving = new Set(movers.map((m) => m.r));
+    const held = new Set(records.filter((r) => !moving.has(r)).map((r) => r.exampleId));
+    const targets = movers.map((m) => m.to);
+    const safe = movers.filter((m) => !held.has(m.to) && targets.indexOf(m.to) === targets.lastIndexOf(m.to));
+    if (safe.length === movers.length) break;
+    movers = safe;
+  }
+
+  const moving = new Set(movers.map((m) => m.r));
+  return [...foundAt].map(([r, at]): UnanchoredExample => {
+    const base = { exampleId: r.exampleId, slicePath: r.slicePath, lineText: r.lineText };
+    if (at.length === 0) return { ...base, reason: 'text-gone' };
+    if (!moving.has(r)) return { ...base, reason: 'text-ambiguous' };
+    return { ...base, reason: 'moved', movedTo: at[0] };
+  });
 }
 
 function isLost(u: UnanchoredExample): u is LostExample {
