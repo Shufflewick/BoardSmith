@@ -1884,7 +1884,7 @@ export async function computePayloadHash(): Promise<string> {
   const { buildPlayerState } = await import('../session/utils.js');
   const {
     Game, Space, Piece, Player, Deck, Hand, Action,
-    actionStep, simultaneousActionStep, sequence, eachPlayer,
+    actionStep, simultaneousActionStep, sequence, eachPlayer, setVar,
   } = engine;
 
   // A player that keeps one game field to itself (#448). The other seat's view
@@ -1924,13 +1924,12 @@ export async function computePayloadHash(): Promise<string> {
       // blank-action-bar bug on this platform — a game's opening simultaneous
       // step reported zero available actions — so leaving it out of the
       // fingerprint would omit the single most expensive skew we have had.
-      // The second step is an `eachPlayer` whose body carries a `player:`
-      // override, because that combination is the only one that puts a live
-      // `GameElement` into BOTH halves of a serialized flow position:
-      //   - `eachPlayer` binds the current Player into `position.variables`;
-      //   - the `player:` override makes the engine save the PREVIOUS current
-      //     player into that action step's `frame.data`, which lands in
-      //     `position.frameData`.
+      // Then a live `GameElement` goes into BOTH halves of a serialized flow
+      // position:
+      //   - `setVar` binds a Player into `position.variables`;
+      //   - an `eachPlayer` whose body carries a `player:` override makes the
+      //     engine save the PREVIOUS current player into that action step's
+      //     `frame.data`, which lands in `position.frameData`.
       // Both are serialized by `encodeFlowValue` (BSMITH-04). If either
       // side regresses to a raw spread, the marker disappears from the
       // fingerprinted position and `payloadHash` moves — which is the whole
@@ -1943,6 +1942,7 @@ export async function computePayloadHash(): Promise<string> {
             actions: ['bid'],
             playerDone: (_ctx: unknown, p: any) => p.hasBid,
           }),
+          setVar('dealer', (ctx: any) => ctx.game.getPlayer(1)),
           eachPlayer({
             do: actionStep({
               actions: ['draw'],
