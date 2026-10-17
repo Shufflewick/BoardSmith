@@ -6,7 +6,7 @@
  * checkout it is run in; `src/cli/lib/catalogue-check.ts` says how, without touching the games'
  * shared checkouts. `.agent-policy.json` runs it in every verify and thread merge.
  */
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { gitOutput as git } from '../lib/git-output.js';
 import { DEFAULT_CATALOGUE_ROOT, DEFAULT_GAME_TIME_LIMIT_MS, checkCatalogue, type CatalogueRun } from '../lib/catalogue-check.js';
 
@@ -63,10 +63,10 @@ export async function catalogueCommand(options: { catalogue?: string; skip?: str
     });
     const report = catalogueReport(run);
     console.log(report.text);
-    if (report.ok) console.log(chalk.green(`\nEvery catalogue game validates against this tree.`));
+    if (report.ok) console.log(styleText('green', `\nEvery catalogue game validates against this tree.`));
     else process.exitCode = 1;
   } catch (error) {
-    console.error(chalk.red(error instanceof Error ? error.message : String(error)));
+    console.error(styleText('red', error instanceof Error ? error.message : String(error)));
     process.exitCode = 1;
   }
 }

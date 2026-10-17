@@ -2,7 +2,7 @@ import { sha256Hex } from '../lib/hash.js';
 import { isSameOrInside } from '../lib/path-inside.js';
 import { promises as fs } from 'node:fs';
 import { posix, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import {
   GATE_TRANSITION_MD,
   SKETCH_MD,
@@ -180,7 +180,7 @@ export function designerNameProblem(by: string, flag: string): string | undefine
 // ---------------------------------------------------------------------------------------------
 
 export function readStatus(chunkText: string): string | undefined {
-  return /^Status:\s*(.*)$/m.exec(chunkText)?.[1].trim();
+  return /^Status:[ \t]*(.*)$/m.exec(chunkText)?.[1].trim();
 }
 
 /** The number of real items in `## Verified Checklist` (template placeholders excluded). */
@@ -1143,17 +1143,17 @@ export async function chunkSignoffCommand(
   options: Omit<SignoffOptions, 'now'>,
 ): Promise<void> {
   const record = await recordSignoff(slug, options);
-  console.log(chalk.green(`✓ ${slug} signed off (${record.basis}); Status: ${derivedStatus(record)}`));
+  console.log(styleText('green', `✓ ${slug} signed off (${record.basis}); Status: ${derivedStatus(record)}`));
 }
 
 /** `boardsmith chunk-reopen <slug>`. Throws (clean one-line message via cli.ts) on refusal. */
 export async function chunkReopenCommand(slug: string, options: Omit<ReopenOptions, 'now'>): Promise<void> {
   await recordReopen(slug, options);
-  console.log(chalk.green(`✓ ${slug} reopened; its sign-off is void and Status: built`));
+  console.log(styleText('green', `✓ ${slug} reopened; its sign-off is void and Status: built`));
 }
 
 /** `boardsmith chunk-waiver`. Prints the new waiver's id. */
 export async function chunkWaiverCommand(options: Omit<WaiverOptions, 'now'>): Promise<void> {
   const id = await recordWaiver(options);
-  console.log(chalk.green(`✓ Waiver ${id} recorded for ${options.chunks}, until ${options.expires}`));
+  console.log(styleText('green', `✓ Waiver ${id} recorded for ${options.chunks}, until ${options.expires}`));
 }

@@ -42,6 +42,7 @@ import {
   actWithinPageTime,
   clocks,
   DEV_HOST_ALIVE_PATH,
+  lastErrorsLand,
   PageClock,
   PageFrozen,
   ranOut,
@@ -1916,7 +1917,7 @@ async function walkTheGame(plays: readonly SeatPlay[], walk: SmokeWalk, memory: 
     await noteErrorToasts(frame, walk, memory);
   }
   // Errors the last press raised reach the page's listeners a moment after it; let them land.
-  await plays[0].page.waitForTimeout(250);
+  await lastErrorsLand(plays.map((play) => play.page));
 }
 
 /**

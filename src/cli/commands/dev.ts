@@ -3,7 +3,7 @@ import { join, resolve, relative, dirname } from 'node:path';
 import type { Plugin as VitePlugin } from 'vite';
 import { fileURLToPath } from 'node:url';
 import { WebSocket } from 'ws';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import open from 'open';
 
 import { createColorOption, type ColorChoice, type ColorOptionDefinition, type GameDefinition } from '../../session/index.js';
@@ -68,7 +68,7 @@ interface DevOptions {
 }
 
 /** Thrown by the pure dev.ts flag/host validators below; `devCommand` catches
- * it, prints an actionable `chalk.red` error, and exits non-zero. Kept as a
+ * it, prints an actionable `styleText` error, and exits non-zero. Kept as a
  * distinct class (not a bare Error) so devCommand's catch can distinguish an
  * intentional validation failure from an unexpected bug. */
 export class DevFlagError extends Error {}
@@ -339,7 +339,7 @@ function normalizeColorPalette(
     const hex = (entry.value ?? entry.hex ?? entry.color) as string | undefined;
     if (hex === undefined) {
       console.warn(
-        chalk.yellow(
+        styleText('yellow',
           `  Warning: colorPalette entry ${JSON.stringify(entry)} is missing "value"/"hex"/"color" — skipped (not rendered as a swatch).`,
         ),
       );
@@ -627,19 +627,19 @@ export async function devCommand(options: DevOptions): Promise<void> {
   // still bundling or Vite is still starting releases exactly what exists by
   // then, and one after "Ready!" releases all of it.
   const holdings = hostHoldings();
-  onShutdown(holdings, { say: (line) => console.log(chalk.dim(line)) });
+  onShutdown(holdings, { say: (line) => console.log(styleText('dim', line)) });
   try {
     await startDev(options, holdings);
   } catch (error) {
     // A START THAT FAILS RELEASES WHAT IT HELD, TOO (#543): the build directory
     // this run made, and anything opened after it. Without this every failed
     // start left one more `dev-tmp-*` directory behind.
-    await holdings.run().catch((stopError: Error) => console.error(chalk.red(stopError.message)));
+    await holdings.run().catch((stopError: Error) => console.error(styleText('red', stopError.message)));
     // A flag or host setting the game refuses is the author's to fix: say what
     // is wrong and exit non-zero. Anything else is rethrown for `cli.ts` to
     // render as one line.
     if (error instanceof DevFlagError || error instanceof GameOptionSelectionError) {
-      console.error(chalk.red(error.message));
+      console.error(styleText('red', error.message));
       process.exit(1);
     }
     throw error;
@@ -667,8 +667,8 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   const cwd = process.cwd();
 
   if (UNSAFE_PORTS.has(port)) {
-    console.error(chalk.red(`Error: Port ${port} is blocked by browsers for security reasons.`));
-    console.error(chalk.dim('Try a different port like 5173, 3000, 8080, or any port above 1024 that isn\'t restricted.'));
+    console.error(styleText('red', `Error: Port ${port} is blocked by browsers for security reasons.`));
+    console.error(styleText('dim', 'Try a different port like 5173, 3000, 8080, or any port above 1024 that isn\'t restricted.'));
     process.exit(1);
   }
 
@@ -704,12 +704,12 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   const configPath = requireGameProject(cwd);
   const config: BoardSmithConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
   requireTableUi(cwd, config);
-  console.log(chalk.cyan(`\nStarting development server for ${config.displayName || config.name}...`));
+  console.log(styleText('cyan', `\nStarting development server for ${config.displayName || config.name}...`));
 
   // CLIX-02: loud (non-exiting) warning on unknown top-level boardsmith.json
   // keys — dev warns, `boardsmith validate` is the hard gate.
   for (const warning of formatUnknownKeyWarnings(config as unknown as Record<string, unknown>)) {
-    console.warn(chalk.yellow(`  ${warning}`));
+    console.warn(styleText('yellow', `  ${warning}`));
   }
 
   // #158: the manifest's `world` block is the whole declaration -- no flag.
@@ -729,26 +729,26 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   // it, so it lands here in one piece.
   if (options.reset === true) {
     assertWorldProjectForReset(worldMode);
-    console.log(chalk.dim(`  ${worldResetNotice(resetWorldStore(cwd), worldStoreDir(cwd))}`));
+    console.log(styleText('dim', `  ${worldResetNotice(resetWorldStore(cwd), worldStoreDir(cwd))}`));
   }
 
   // CLIX-04 (T-135-12): loud, unmissable banner whenever the effective bind
   // host is non-localhost — exposure to the LAN must never be silent.
   if (isNonLocal) {
-    console.log(chalk.yellow(`  ⚠ Serving to your whole network (binding ${host}) — anyone on your LAN can join and browse project source.`));
-    console.log(chalk.yellow(`    Pass --host 127.0.0.1 for local-only.`));
+    console.log(styleText('yellow', `  ⚠ Serving to your whole network (binding ${host}) — anyone on your LAN can join and browse project source.`));
+    console.log(styleText('yellow', `    Pass --host 127.0.0.1 for local-only.`));
   }
 
   const context = getProjectContext(cwd);
   if (context === 'monorepo') {
-    console.log(chalk.dim('  Running in monorepo context (using source resolution)'));
+    console.log(styleText('dim', '  Running in monorepo context (using source resolution)'));
   }
 
   const uiPath = config.paths?.ui ? resolveUserPath(cwd, config.paths.ui) : cwd;
   const rulesPath = resolveRulesDir(cwd, config);
 
   if (!existsSync(uiPath)) {
-    console.error(chalk.red(`Error: UI path not found: ${uiPath}`));
+    console.error(styleText('red', `Error: UI path not found: ${uiPath}`));
     process.exit(1);
   }
 
@@ -760,7 +760,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   const tempDir = makeCommandBuildDir(cwd, 'dev');
   holdings.hold([{ name: `the build directory (${tempDir})`, close: () => rmSync(tempDir, { recursive: true, force: true }) }]);
 
-  console.log(chalk.dim(`  Loading game rules from ${rulesPath}...`));
+  console.log(styleText('dim', `  Loading game rules from ${rulesPath}...`));
 
   // THROWN, NOT PRINTED (#240). Handing the error object to `console.error`
   // printed Node's own formatting of it -- every stack frame, and the absolute
@@ -872,7 +872,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
       ...(playerOptions && { playerOptions }),
     };
 
-    console.log(chalk.dim(`  Loaded game: ${gameDefinition.displayName || gameDefinition.gameType}`));
+    console.log(styleText('dim', `  Loaded game: ${gameDefinition.displayName || gameDefinition.gameType}`));
   } catch (error) {
     throw new Error(
       `Failed to open a table for this game: ${error instanceof Error ? error.message : String(error)}`,
@@ -919,7 +919,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   // Clear Vite cache to prevent stale file references when switching games
   const viteCacheDir = join(uiPath, 'node_modules', '.vite');
   if (existsSync(viteCacheDir)) {
-    console.log(chalk.dim('  Clearing Vite cache...'));
+    console.log(styleText('dim', '  Clearing Vite cache...'));
     try {
       rmSync(viteCacheDir, { recursive: true, force: true });
     } catch {
@@ -1026,7 +1026,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
         // The message, not the error: a running dev server has nothing to
         // throw to, and a stack trace in its log is the same leak (#240).
         console.error(
-          chalk.red(
+          styleText('red',
             `[boardsmith dev] message '${msgType}' failed: ${err instanceof Error ? err.message : String(err)}`,
           ),
         ),
@@ -1074,38 +1074,38 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
       join: 'others can join',
       networkUrls: served.networkUrls,
       say: (line) => console.log(line),
-      green: chalk.green,
-      cyan: chalk.cyan,
+      green: (text: string) => styleText('green', text),
+      cyan: (text: string) => styleText('cyan', text),
     });
 
-    console.log(chalk.dim(`  ${multiplayerBannerLine(isNonLocal)}`));
-    console.log(chalk.cyan(`  Seats: ${effectivePlayerCount} (open seats play as bot${botPlayers.length ? `; --bot ${botPlayers.join(',')} pre-marked` : ''}, level ${botLevel}).`));
+    console.log(styleText('dim', `  ${multiplayerBannerLine(isNonLocal)}`));
+    console.log(styleText('cyan', `  Seats: ${effectivePlayerCount} (open seats play as bot${botPlayers.length ? `; --bot ${botPlayers.join(',')} pre-marked` : ''}, level ${botLevel}).`));
     if (teachingDisabled) {
-      console.log(chalk.yellow(`  Teaching lockout active (--lock-teaching): hint, heatmap, demo, and tutorial are disabled.`));
+      console.log(styleText('yellow', `  Teaching lockout active (--lock-teaching): hint, heatmap, demo, and tutorial are disabled.`));
     }
     console.log(
       options.debug === true
-        ? chalk.yellow('  Debugging forced on (--debug): everyone seated can read every seat\'s moves, rewind and edit decks.')
-        : chalk.dim('  Debugging is on while one person holds every human seat, and off once a second person sits down (--debug keeps it on).'),
+        ? styleText('yellow', '  Debugging forced on (--debug): everyone seated can read every seat\'s moves, rewind and edit decks.')
+        : styleText('dim', '  Debugging is on while one person holds every human seat, and off once a second person sits down (--debug keeps it on).'),
     );
     if (seedSnapshot) {
-      console.log(chalk.cyan(`  Seeded start (--seed ${options.seed}): initial state loaded from the recorded snapshot instead of a fresh start.`));
+      console.log(styleText('cyan', `  Seeded start (--seed ${options.seed}): initial state loaded from the recorded snapshot instead of a fresh start.`));
     }
 
     // #41 item 2. The cross-session store is live before any client connects,
     // so a game that declares `persistence: true` is exercised against a real
     // store from the first move rather than only after it is published.
     if (devStore !== null) {
-      console.log(chalk.cyan(`  Cross-session store: ${storeFile}.`));
+      console.log(styleText('cyan', `  Cross-session store: ${storeFile}.`));
     }
 
     if (shouldOpenBrowser(options)) {
       await open(hostUrl);
     } else {
-      console.log(chalk.dim('  Skipping auto-open (--no-open): connect a client to claim seat 1 yourself.'));
+      console.log(styleText('dim', '  Skipping auto-open (--no-open): connect a client to claim seat 1 yourself.'));
     }
 
-    console.log(chalk.green('\n  Ready! Press Ctrl+C to stop.\n'));
+    console.log(styleText('green', '\n  Ready! Press Ctrl+C to stop.\n'));
   } catch (error) {
     throw new Error(
       `Failed to start the Vite dev server: ${error instanceof Error ? error.message : String(error)}`,

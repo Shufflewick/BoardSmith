@@ -330,11 +330,14 @@ const AUCTION_CHUNK = (rows: string) =>
 describe('checkTestStep (static checks)', () => {
   let project: string;
 
-  beforeEach(async () => {
+  beforeEach(() => startProject());
+
+  /** A project with one earlier chunk's commit, in a repository of the given object format. */
+  async function startProject(objectFormat = 'sha1'): Promise<void> {
     const tree = tempTree('bs-test-step-');
     project = join(tree, 'project');
     await fs.mkdir(project, { recursive: true });
-    git(project, 'init', '-q');
+    git(project, 'init', '-q', `--object-format=${objectFormat}`);
     git(project, 'config', 'user.email', 't@example.com');
     git(project, 'config', 'user.name', 'T');
     await write(project, {
@@ -345,7 +348,7 @@ describe('checkTestStep (static checks)', () => {
     await write(project, { 'design/chunks/auction/CHUNK.md': AUCTION_CHUNK('') });
     git(project, 'add', '-A');
     git(project, 'commit', '-q', '-m', 'chunk-auction/step-ask');
-  });
+  }
 
   async function build(files: Record<string, string>, rows: string): Promise<void> {
     await write(project, { ...files, 'design/chunks/auction/CHUNK.md': AUCTION_CHUNK(rows) });
@@ -401,6 +404,19 @@ it('claim 2 — pass', () => { passTurn(game); });
     const result = await checkTestStep(project, 'auction');
     expect(result.findings.map((f) => [f.kind, f.subject])).toEqual([['verb-not-dispatched', 'pass']]);
     expect(result.findings[0].detail).toMatch(/doAction/);
+  });
+
+  it('still finds the lines the chunk wrote in a SHA-256 repository, whose hashes are 64 characters (#829)', async () => {
+    await startProject('sha256');
+    await build(
+      {
+        'src/rules/auction.ts': RULES,
+        'tests/auction.test.ts': `import { it } from 'vitest';\nit('claim 1 and 2', () => { testGame.doAction(1, 'bid'); });\n`,
+      },
+      '| tests/auction.test.ts | 1, 2 | yes |\n',
+    );
+    const result = await checkTestStep(project, 'auction');
+    expect(result.findings.map((f) => [f.kind, f.subject])).toEqual([['verb-not-dispatched', 'pass']]);
   });
 
   it('follows a world game\'s verb wrapper and its test harness, and still catches the verb it never runs (sotf#36)', async () => {

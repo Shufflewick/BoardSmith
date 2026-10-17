@@ -2,7 +2,7 @@ import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync, rmSync,
 import { homedir } from 'node:os';
 import { join, relative } from 'node:path';
 import { build as viteBuild } from 'vite';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import ora from 'ora';
 import { ENGINE_REVISION } from '../../contract/index.js';
 import { getProjectContext, loadGameDefinition, rulesEntrySource } from './game-runtime.js';
@@ -281,7 +281,7 @@ export function deriveManifest(
  * (`WORKER_ENTRIES`) are the only compiled artifacts the library produces.
  */
 async function buildLibrary(repoRoot: string): Promise<void> {
-  console.log(chalk.cyan('\nBuilding BoardSmith CLI...\n'));
+  console.log(styleText('cyan', '\nBuilding BoardSmith CLI...\n'));
   const spinner = ora(`Bundling ${CLI_ENTRY}...`).start();
 
   try {
@@ -296,8 +296,8 @@ async function buildLibrary(repoRoot: string): Promise<void> {
   }
 
   spinner.succeed(`CLI built (${CLI_OUTFILE})`);
-  console.log(chalk.dim('\n  Installed copies of BoardSmith run this bundle.'));
-  console.log(chalk.dim('  Inside this repo the CLI always runs from source, so you rarely need it.\n'));
+  console.log(styleText('dim', '\n  Installed copies of BoardSmith run this bundle.'));
+  console.log(styleText('dim', '  Inside this repo the CLI always runs from source, so you rarely need it.\n'));
 }
 
 
@@ -340,7 +340,7 @@ async function writeWorldEntryIfMissing(
   const { created } = await ensureWorldEntry(cwd, String(config.displayName || config.name));
   for (const file of created) {
     console.log(
-      chalk.dim(`  Wrote ${file} - a world project needs an entry, and this one had none.`),
+      styleText('dim', `  Wrote ${file} - a world project needs an entry, and this one had none.`),
     );
   }
 }
@@ -463,7 +463,7 @@ async function buildProjectIn(projectDir: string, options: BuildOptions): Promis
   requireTableUi(cwd, config);
   emptyBuildOutputDir(cwd, outDir);
 
-  console.log(chalk.cyan(`\nBuilding ${config.displayName || config.name}...\n`));
+  console.log(styleText('cyan', `\nBuilding ${config.displayName || config.name}...\n`));
 
   const spinner = ora('Building game rules...').start();
 
@@ -575,21 +575,21 @@ async function buildProjectIn(projectDir: string, options: BuildOptions): Promis
     spinner.succeed('Manifest generated');
 
     // Report build sizes
-    console.log(chalk.green('\nBuild complete!\n'));
-    console.log(chalk.dim(`  Output: ${outDir}/`));
-    console.log(chalk.dim(`    rules/  - Game logic bundle`));
-    console.log(chalk.dim(`    ui/     - User interface bundle`));
+    console.log(styleText('green', '\nBuild complete!\n'));
+    console.log(styleText('dim', `  Output: ${outDir}/`));
+    console.log(styleText('dim', `    rules/  - Game logic bundle`));
+    console.log(styleText('dim', `    ui/     - User interface bundle`));
     if (hasWorldUi) {
       if (tableUi) {
-        console.log(chalk.dim(`      index.html - the table surface (GameShell)`));
+        console.log(styleText('dim', `      index.html - the table surface (GameShell)`));
       }
-      console.log(chalk.dim(`      world.html - the resident-world surface (WorldShell)`));
+      console.log(styleText('dim', `      world.html - the resident-world surface (WorldShell)`));
     }
-    console.log(chalk.dim(`    manifest.json - Game metadata\n`));
+    console.log(styleText('dim', `    manifest.json - Game metadata\n`));
 
-    console.log(chalk.cyan('Next steps:'));
-    console.log(chalk.dim('  boardsmith validate  - Run pre-publish checks'));
-    console.log(chalk.dim('  boardsmith publish   - Publish to boardsmith.io\n'));
+    console.log(styleText('cyan', 'Next steps:'));
+    console.log(styleText('dim', '  boardsmith validate  - Run pre-publish checks'));
+    console.log(styleText('dim', '  boardsmith publish   - Publish to boardsmith.io\n'));
 
   } catch (error) {
     spinner.fail('Build failed');

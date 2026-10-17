@@ -1183,6 +1183,8 @@ interface DiffMutationInput {
   /** Outcomes of earlier runs, reused where nothing the mutant depends on changed (`lib/mutant-cache.ts`). */
   cache: MutantCache;
   log: (line: string) => void;
+  /** What changed in the execution context since the run began, checked before each mutant runs, so a mixed run stops early (#932). */
+  contextChange?: () => Promise<string | undefined>;
 }
 
 interface DiffMutationResult {
@@ -1305,7 +1307,7 @@ async function tallyMutants(
     const stored = known[i];
     const label = `mutant ${i + 1}/${mutants.length}: ${mutant.file}:${mutant.line} ${mutant.description}`;
     input.log(stored === undefined ? label : `${label} (reused: ${stored})`);
-    const outcome = stored ?? (await runMutant(run!, mutant));
+    const outcome = stored ?? (await runUnlessContextChanged(input, run!, mutant, i));
     if (stored === undefined && outcome !== 'timed-out') input.cache.set(mutant, outcome);
     summary.mutants++;
     summary[COUNTED[outcome]]++;
@@ -1313,6 +1315,13 @@ async function tallyMutants(
   }
   if (result.equivalents.length > 0 && review) result.equivalence = { ...review.basis, ids: result.equivalents.map((m) => m.id) };
   return result;
+}
+
+/** Runs `mutant`, unless what the tests run with changed since the run began: then the run is mixed and stops here (#932). */
+async function runUnlessContextChanged(input: DiffMutationInput, run: GreenRunner, mutant: LocatedMutant, done: number): Promise<DiffOutcome> {
+  const change = await input.contextChange?.();
+  if (change !== undefined) throw new Error(`what the tests run with changed after ${done} mutants had run or been reused: ${change}`);
+  return runMutant(run, mutant);
 }
 
 /** A signed proof can classify only the exact generated change that actually survived. */
