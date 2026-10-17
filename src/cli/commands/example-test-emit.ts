@@ -3,7 +3,7 @@ import {
 } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { parse as parseTypeScript } from '@typescript-eslint/parser';
 import { atomicWriteFile } from './verify-run.js';
 import { readLiveSlices } from './verify-derive-check.js';
@@ -572,7 +572,7 @@ export async function verifyExampleEmitCommand(
   }
 
   console.log(
-    chalk.green(
+    styleText('green',
       `✓ Emitted ${result.relTestFilePath} — ${result.testBlockCount} test(s), ` +
         `${result.exemptCount} exempt example(s)${result.chunkExempt ? ' (chunk-wide exemption)' : ''}.`,
     ),

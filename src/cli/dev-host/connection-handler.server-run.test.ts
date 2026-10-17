@@ -167,3 +167,12 @@ describe('#416: a reconnect within the same run keeps its seat (#412)', () => {
     expect(run.graces.armed()).toEqual([]);
   });
 });
+
+describe('#879: a frame that is not a message', () => {
+  it('is dropped, and the page is still served', async () => {
+    const { page } = await seatedPage(await startRun(), 'A');
+    for (const junk of ['null', '42', '"x"', '[]', '{}', 'not json']) page.socket.send(junk);
+
+    expect((await seatsSeenBy(page)).find((s) => s.seat === 1)).toMatchObject({ mine: true, connected: true });
+  });
+});

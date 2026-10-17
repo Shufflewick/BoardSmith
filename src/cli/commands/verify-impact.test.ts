@@ -42,6 +42,7 @@ import {
 import {
   verifyRunInitCommand,
   verifyRunRecordCommand,
+  stagingSlicesDir,
   parseLedgerBody,
   resolveLedgerState,
   type ClassificationRecord,
@@ -146,10 +147,11 @@ describe('marker — renderRulesStaleness', () => {
     expect(body).toContain('| rulebook/03-scoring.md |');
   });
 
-  it('renders RULES_STALENESS_EMPTY when Attributed slices is empty', () => {
-    const record = baseRecord({ attributedSlices: [] });
+  it('says no slices are attributed, not that the chunk is not stale, when Attributed slices is empty (#998)', () => {
+    const record = baseRecord({ marker: RULES_STALE_MARKER, attributedSlices: [] });
     const body = renderRulesStaleness(record);
-    expect(body).toContain(RULES_STALENESS_EMPTY);
+    expect(body).toContain('_No slices attributed._');
+    expect(body).not.toContain(RULES_STALENESS_EMPTY);
   });
 
   it('omits Prior reading:/Changed reading: when absent', () => {
@@ -237,6 +239,14 @@ describe('marker — parseRulesStaleness (strict)', () => {
       'rulebook/02-play.md',
       'rulebook/03-scoring.md',
     ]);
+  });
+
+  it('round-trips a real rendered section: state rules-stale, with no attributed slices (#998)', () => {
+    const record = baseRecord({ marker: RULES_STALE_MARKER, attributedSlices: [] });
+    const text = `# Chunk: test\n\nStatus: verified\n\n${renderRulesStalenessSection(record)}`;
+    const parsed = parseRulesStaleness(text);
+    expect(parsed.state).toBe('rules-stale');
+    expect(parsed.record?.attributedSlices).toEqual([]);
   });
 
   it('round-trips prior/changed readings verbatim', () => {
@@ -1022,6 +1032,16 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
       (l) => l.type === 'adjudication' && l.record.pairId === pairId,
     );
     expect(adjudicationLines.length).toBe(2);
+  });
+
+  it('asks for the pair to be classified again when its staged slices changed after it was classified (#837)', async () => {
+    const { project, runId, pairId } = await contradictoryProjectWithRulings();
+    await fs.writeFile(join(stagingSlicesDir(project, runId), 'ua2.md'), 'p.1, A:\n"A later staged line."\n');
+    await verifyRunRecordCommand({ project, runId, unit: 'ua2', slice: 'ua2.md', json: true });
+
+    await expect(
+      verifyImpactAdjudicateCommand({ project, runId, pairId, outcome: 'UNADJUDICATED', json: true }),
+    ).rejects.toThrow(/out of date.*verify-classify-record/s);
   });
 
   it('no-bypass: verifyImpactAdjudicateCommand rejects an --outcome value other than "resolved"/"UNADJUDICATED"', async () => {

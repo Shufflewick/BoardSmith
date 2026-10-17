@@ -9,7 +9,7 @@ import {
 } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { findHeadingIndex, parseRulings } from './build-manifest.js';
 import { allocatedNumber } from '../lib/ledger-entries.js';
 import {
@@ -84,6 +84,9 @@ export const RULES_STALENESS_END = '<!-- boardsmith:rules-staleness:end -->';
  */
 export const RULES_STALENESS_EMPTY = '_Not rules-stale._';
 
+/** An empty `Attributed slices:` list. Not `RULES_STALENESS_EMPTY`: a stale marker must not say it is not stale (#998). */
+const NO_ATTRIBUTED_SLICES = '_No slices attributed._';
+
 /**
  * The two values this marker can carry — frozen array + derived type, never a hand-written
  * union (the established enumerated-set pattern: `FINDING_KINDS`, `RULE_DELTA_KINDS`,
@@ -150,7 +153,7 @@ export interface RulesStalenessRecord {
 /**
  * Pure — returns only the body that lives BETWEEN the fences, mirroring
  * `renderVerifiedAgainst`'s shape exactly. `Attributed slices:` renders as a `| slice |`
- * markdown table when non-empty and as `RULES_STALENESS_EMPTY` when empty (mirroring
+ * markdown table when non-empty and as `NO_ATTRIBUTED_SLICES` when empty (mirroring
  * `renderVerifiedAgainst`'s `Cited slices:` handling). `Prior reading:`/`Changed reading:` are
  * rendered verbatim and OMITTED when absent (mirroring how `renderVerifiedAgainst` omits
  * `Reason:` on `full` scope).
@@ -167,7 +170,7 @@ export function renderRulesStaleness(record: RulesStalenessRecord): string {
     lines.push('|---|');
     for (const s of record.attributedSlices) lines.push(`| ${s} |`);
   } else {
-    lines.push(RULES_STALENESS_EMPTY);
+    lines.push(NO_ATTRIBUTED_SLICES);
   }
   if (record.priorReading !== undefined) {
     lines.push('');
@@ -677,12 +680,12 @@ export async function verifyImpactGateCommand(
   }
 
   if (contradictions.length === 0) {
-    console.log(chalk.green(`✓ No contradictory findings pending adjudication — run ${runId}`));
+    console.log(styleText('green', `✓ No contradictory findings pending adjudication — run ${runId}`));
     return result;
   }
 
   console.log(
-    chalk.yellow(
+    styleText('yellow',
       `⚠ ${pending.length} of ${contradictions.length} contradictory finding(s) pending adjudication — run ${runId}`,
     ),
   );
@@ -853,6 +856,13 @@ export async function verifyImpactAdjudicateCommand(options: {
   const classifyStatus = await readClassifyStatus(projectDir, options.runId);
   const runId = classifyStatus.runId;
 
+  if (classifyStatus.outOfDatePairs.includes(pairId)) {
+    throw new Error(
+      `Pair "${pairId}"'s classification in run ${runId} is out of date: its staged slices changed after ` +
+        `it was classified.\nClassify it again with \`boardsmith verify-classify-record --run-id ${runId} ` +
+        `--pair-id ${pairId}\`, then adjudicate it.`,
+    );
+  }
   const classification = classifyStatus.classified.find((c) => c.pairId === pairId);
   if (!classification || classification.ruleDelta !== 'contradictory') {
     throw new Error(
@@ -918,11 +928,11 @@ export async function verifyImpactAdjudicateCommand(options: {
 
   if (outcome === 'resolved') {
     console.log(
-      chalk.green(`✓ Recorded Ruling ${rulingNumber} for pair ${pairId} (run ${runId})`),
+      styleText('green', `✓ Recorded Ruling ${rulingNumber} for pair ${pairId} (run ${runId})`),
     );
   } else {
     console.log(
-      chalk.yellow(`⚠ Pair ${pairId} deferred as UNADJUDICATED — remains pending (run ${runId})`),
+      styleText('yellow', `⚠ Pair ${pairId} deferred as UNADJUDICATED — remains pending (run ${runId})`),
     );
   }
   return result;
@@ -1109,15 +1119,15 @@ function emptyDispositionCounts(): Record<RepairGateDisposition, number> {
 function printImpactHumanReport(result: VerifyImpactStatusResult): void {
   const { staleFraction, staleSlugs, dispositionCounts, contradictionsPending, entries } = result;
 
-  console.log(chalk.green(`✓ Verify-impact status — run ${result.runId}`));
-  console.log(`  ${chalk.gray('rules-stale:')} ${staleFraction.stale} of ${staleFraction.total} chunks rules-stale`);
+  console.log(styleText('green', `✓ Verify-impact status — run ${result.runId}`));
+  console.log(`  ${styleText('gray', 'rules-stale:')} ${staleFraction.stale} of ${staleFraction.total} chunks rules-stale`);
   if (staleSlugs.length > 0) {
     // Decision 15: EVERY stale slug, no cap, no "and N more".
-    console.log(`  ${chalk.yellow('stale chunks:')} ${staleSlugs.join(', ')}`);
+    console.log(`  ${styleText('yellow', 'stale chunks:')} ${staleSlugs.join(', ')}`);
   }
   if (contradictionsPending.length > 0) {
     console.log(
-      `  ${chalk.yellow('contradictions pending adjudication:')} ${contradictionsPending.join(', ')}`,
+      `  ${styleText('yellow', 'contradictions pending adjudication:')} ${contradictionsPending.join(', ')}`,
     );
   }
 
@@ -1252,7 +1262,7 @@ function refuseApply(
     return result;
   }
   console.log(
-    chalk.yellow(
+    styleText('yellow',
       `⚠ ${pendingPairs.length} ${reason}.\n` +
         pendingPairs
           .map((p) => `    boardsmith ${command} --run-id ${runId} --pair-id ${p} ${flag} ...`)
@@ -1426,9 +1436,9 @@ export async function verifyImpactApplyCommand(
     return result;
   }
 
-  console.log(chalk.green(`✓ Marked ${marked.length} chunk(s) rules-stale — run ${runId}`));
+  console.log(styleText('green', `✓ Marked ${marked.length} chunk(s) rules-stale — run ${runId}`));
   if (skippedTailEntries.length > 0) {
-    console.log(`  ${chalk.yellow('skipped (sketch-level tail entries):')} ${skippedTailEntries.join(', ')}`);
+    console.log(`  ${styleText('yellow', 'skipped (sketch-level tail entries):')} ${skippedTailEntries.join(', ')}`);
   }
   return result;
 }

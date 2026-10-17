@@ -350,7 +350,16 @@ skipped.
 Commit first: a tree with uncommitted changes is refused before any check runs.
 The result is written to `.boardsmith/verify/<commit>.json`, tied to that one
 commit, to the base it measured from, and to whether the tree stayed clean while
-the checks ran. `boardsmith verify --check` exits 0 only when the current commit,
+the checks ran. The BoardSmith commit it names is the one the run started with.
+What the tests run with must also hold still for the whole run: the BoardSmith
+the command runs and the game loads (its commit and uncommitted changes), the
+installed packages, and the packages linked from outside the repository. If any
+of these changes, for example a linked BoardSmith checkout moves to a new
+commit, the run stops before its next mutant and ends with an error naming what
+changed. It records no result and keeps no mutant outcome, since checks after
+the change ran against different code. Run it again in a checkout nothing else
+edits while it runs, such as a separate BoardSmith worktree.
+`boardsmith verify --check` exits 0 only when the current commit,
 on a clean tree, has a passing full result, and otherwise says what to run.
 
 For a chunk the `bs-` skills build, `boardsmith verify --chunk <slug>` runs only
@@ -441,7 +450,9 @@ boardsmith review-gate deal             # may a model review of chunk deal start
 `boardsmith verify --chunk <slug>`, and otherwise prints the verify result every
 review prompt carries: that only the chunk's tests and typecheck ran, and that
 the full suite, build, validate, the smoke test and the mutation check run at
-publish, so no reviewer spends its time running checks. A
+publish, so no reviewer spends its time running checks. It reads what is under
+review from the chunk's run log: the change since the last review round, sized
+as mechanical only when every dispatch logged since was. A
 step that fails its verify, whose work a check such as `claim-quote-check`
 refuses, or whose reviewer asks for changes, is retried once at the same role
 with the failure output. A second failure at that role moves it one role up
@@ -510,8 +521,7 @@ publish to it again with `--publisher <slug>`; the other block is untouched.
   "tags": ["card-game"],
   "playtime": { "min": 15, "max": 30 },
   "cooperative": false,
-  "complexity": 2,
-  "scoreboard": { "stats": ["score"] }
+  "complexity": 2
 }
 ```
 
