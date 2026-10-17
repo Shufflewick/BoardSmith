@@ -20,8 +20,9 @@ describe('restoring a state whose players do not match the player count (#959)',
     const live = new GameRunner({ GameClass: SeatGame, gameType: 'seats', gameOptions: { playerCount: 3, seed: 'seats' } });
     live.start();
     const snapshot = live.getSnapshot();
-    const lastPlayer = snapshot.state.children!.findLastIndex(isPlayerJson);
-    snapshot.state.children!.splice(lastPlayer, 1);
+    const aPlayer = snapshot.state.children!.findIndex(isPlayerJson);
+    expect(aPlayer).toBeGreaterThanOrEqual(0);
+    snapshot.state.children!.splice(aPlayer, 1);
 
     expect(() => GameRunner.fromSnapshot(snapshot, SeatGame)).toThrow(
       /holds 2 players, but this game was built for 3/,
