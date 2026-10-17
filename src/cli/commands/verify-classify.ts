@@ -691,6 +691,7 @@ async function computeRunPairs(
   pairs: SlicePair[];
   provenance: Record<string, ProvenanceResult>;
   classifications: ClassificationRecord[];
+  recordedSinceClassified: Set<string>;
   warnings: string[];
 }> {
   const warnings: string[] = [];
@@ -726,7 +727,7 @@ async function computeRunPairs(
   );
 
   const stagingDir = stagingSlicesDir(projectDir, runId);
-  const { recorded, classifications } = await readRunLedgerState(projectDir, runId);
+  const { recorded, classifications, recordedSinceClassified } = await readRunLedgerState(projectDir, runId);
   const { intact, missing, warnings: sliceWarnings } = await checkRecordedSlices(stagingDir, recorded);
   warnings.push(...sliceWarnings);
 
@@ -755,7 +756,7 @@ async function computeRunPairs(
   );
   const provenance: Record<string, ProvenanceResult> = Object.fromEntries(provenanceEntries);
 
-  return { pairs, provenance, classifications, warnings };
+  return { pairs, provenance, classifications, recordedSinceClassified, warnings };
 }
 
 export interface VerifyClassifyPairsResult {
@@ -1465,9 +1466,36 @@ function sameList(a: readonly string[], b: readonly string[]): boolean {
   return a.length === b.length && a.every((v, i) => v === b[i]);
 }
 
+/**
+ * A verdict counts only for the staged content it was made on: once its pair's units or staged
+ * slices change, or one of its units is recorded again, the pair must be classified again (#837).
+ * A verdict whose pair no longer exists is in neither list.
+ */
+function splitCurrentClassifications(
+  recorded: ClassificationRecord[],
+  pairsById: Map<string, SlicePair>,
+  recordedSinceClassified: Set<string>,
+): { classifications: ClassificationRecord[]; outOfDatePairs: string[] } {
+  const classifications: ClassificationRecord[] = [];
+  const outOfDatePairs: string[] = [];
+  for (const c of recorded) {
+    const pair = pairsById.get(c.pairId);
+    if (pair === undefined) continue;
+    const current =
+      !recordedSinceClassified.has(c.pairId) &&
+      sameList(c.units, pair.stagedUnits) &&
+      sameList(c.stagedSlices, pair.stagedSlices);
+    if (current) classifications.push(c);
+    else outOfDatePairs.push(c.pairId);
+  }
+  return { classifications, outOfDatePairs };
+}
+
 export interface VerifyClassifyStatusResult {
   runId: string;
   pendingPairs: string[];
+  /** Pairs whose recorded classification no longer matches their staged content — classify them again. */
+  outOfDatePairs: string[];
   classified: ClassificationRecord[];
   warnings: string[];
   summary: {
@@ -1502,20 +1530,19 @@ export async function verifyClassifyStatusCommand(
 ): Promise<VerifyClassifyStatusResult> {
   const projectDir = resolve(options.project ?? process.cwd());
   const runId = await resolveRunId(projectDir, options.runId);
-  const { pairs, classifications: recordedClassifications, warnings: pairingWarnings } =
-    await computeRunPairs(projectDir, runId);
+  const {
+    pairs,
+    classifications: recordedClassifications,
+    recordedSinceClassified,
+    warnings: pairingWarnings,
+  } = await computeRunPairs(projectDir, runId);
 
   const pairsById = new Map(pairs.map((p) => [p.pairId, p]));
-  // A verdict counts only for the staged content it was made on: once the pair's units or staged
-  // slices change, it must be classified again (#837).
-  const classifications = recordedClassifications.filter((c) => {
-    const pair = pairsById.get(c.pairId);
-    return (
-      pair !== undefined &&
-      sameList(c.units, pair.stagedUnits) &&
-      sameList(c.stagedSlices, pair.stagedSlices)
-    );
-  });
+  const { classifications, outOfDatePairs } = splitCurrentClassifications(
+    recordedClassifications,
+    pairsById,
+    recordedSinceClassified,
+  );
   const classifiedByPairId = new Map(classifications.map((c) => [c.pairId, c]));
 
   const pairedPairs = pairs.filter((p) => p.kind === 'paired');
@@ -1564,6 +1591,7 @@ export async function verifyClassifyStatusCommand(
   const result: VerifyClassifyStatusResult = {
     runId,
     pendingPairs,
+    outOfDatePairs,
     classified: classifications,
     warnings,
     summary,

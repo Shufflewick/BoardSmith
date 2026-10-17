@@ -847,6 +847,13 @@ export async function verifyImpactAdjudicateCommand(options: {
   });
   const runId = classifyStatus.runId;
 
+  if (classifyStatus.outOfDatePairs.includes(pairId)) {
+    throw new Error(
+      `Pair "${pairId}"'s classification in run ${runId} is out of date: its staged slices changed after ` +
+        `it was classified.\nClassify it again with \`boardsmith verify-classify-record --run-id ${runId} ` +
+        `--pair-id ${pairId}\`, then adjudicate it.`,
+    );
+  }
   const classification = classifyStatus.classified.find((c) => c.pairId === pairId);
   if (!classification || classification.ruleDelta !== 'contradictory') {
     throw new Error(

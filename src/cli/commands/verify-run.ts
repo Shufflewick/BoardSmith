@@ -775,6 +775,8 @@ export function resolveLedgerState(lines: ParsedLine[]): {
   recorded: LedgerRecord[];
   completeRanges: Set<string>;
   classifications: ClassificationRecord[];
+  /** Pairs whose classification predates a later record of one of its units (#837). */
+  recordedSinceClassified: Set<string>;
   impacts: ImpactRecord[];
   adjudications: AdjudicationRecord[];
 } {
@@ -809,10 +811,20 @@ export function resolveLedgerState(lines: ParsedLine[]): {
   // Last-write-wins per pairId — a later classification line for the same pair supersedes an
   // earlier one. File order (`index`) is the ledger's own append order, so the later `Map.set`
   // for a repeated `pairId` always wins.
-  const classificationsByPairId = new Map<string, ClassificationRecord>();
+  const classificationsByPairId = new Map<string, ParsedClassificationLine>();
   for (const line of lines) {
     if (line.type !== 'classification') continue;
-    classificationsByPairId.set(line.record.pairId, line.record);
+    classificationsByPairId.set(line.record.pairId, line);
+  }
+
+  // Ledger order, not recordedAt: two records can share a millisecond, file order cannot.
+  const lastUnitIndex = new Map<string, number>();
+  for (const line of lines) {
+    if (line.type === 'unit') lastUnitIndex.set(line.record.unitId, line.index);
+  }
+  const recordedSinceClassified = new Set<string>();
+  for (const { record, index } of classificationsByPairId.values()) {
+    if (record.units.some((u) => (lastUnitIndex.get(u) ?? -1) > index)) recordedSinceClassified.add(record.pairId);
   }
 
   // Last-write-wins per slug — same file-order rationale as classifications above.
@@ -832,7 +844,8 @@ export function resolveLedgerState(lines: ParsedLine[]): {
   return {
     recorded,
     completeRanges,
-    classifications: [...classificationsByPairId.values()],
+    classifications: [...classificationsByPairId.values()].map((l) => l.record),
+    recordedSinceClassified,
     impacts: [...impactsBySlug.values()],
     adjudications: [...adjudicationsByPairId.values()],
   };
@@ -880,7 +893,8 @@ export async function checkRecordedSlices(
     if (sha256Hex(bytes) !== record.sha256) {
       warnings.push(
         `unit "${record.unitId}"'s recorded sha256 no longer matches ${record.slicePath} on disk — ` +
-          `treating as NOT recorded (hand-edit or tamper detected)`,
+          `treating as NOT recorded (hand-edit or tamper detected). Restore the slice's recorded text, ` +
+          `or reset its range with \`verify-run-record --reset-range\` and record it again.`,
       );
       continue;
     }

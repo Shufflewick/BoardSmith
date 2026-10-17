@@ -42,6 +42,7 @@ import {
 import {
   verifyRunInitCommand,
   verifyRunRecordCommand,
+  stagingSlicesDir,
   parseLedgerBody,
   resolveLedgerState,
   type ClassificationRecord,
@@ -993,6 +994,16 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
       (l) => l.type === 'adjudication' && l.record.pairId === pairId,
     );
     expect(adjudicationLines.length).toBe(2);
+  });
+
+  it('asks for the pair to be classified again when its staged slices changed after it was classified (#837)', async () => {
+    const { project, runId, pairId } = await contradictoryProjectWithRulings();
+    await fs.writeFile(join(stagingSlicesDir(project, runId), 'ua2.md'), 'p.1, A:\n"A later staged line."\n');
+    await verifyRunRecordCommand({ project, runId, unit: 'ua2', slice: 'ua2.md', json: true });
+
+    await expect(
+      verifyImpactAdjudicateCommand({ project, runId, pairId, outcome: 'UNADJUDICATED', json: true }),
+    ).rejects.toThrow(/out of date.*verify-classify-record/s);
   });
 
   it('no-bypass: verifyImpactAdjudicateCommand rejects an --outcome value other than "resolved"/"UNADJUDICATED"', async () => {
