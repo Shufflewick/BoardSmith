@@ -84,6 +84,9 @@ export const RULES_STALENESS_END = '<!-- boardsmith:rules-staleness:end -->';
  */
 export const RULES_STALENESS_EMPTY = '_Not rules-stale._';
 
+/** An empty `Attributed slices:` list. Not `RULES_STALENESS_EMPTY`: a stale marker must not say it is not stale (#998). */
+const NO_ATTRIBUTED_SLICES = '_No slices attributed._';
+
 /**
  * The two values this marker can carry — frozen array + derived type, never a hand-written
  * union (the established enumerated-set pattern: `FINDING_KINDS`, `RULE_DELTA_KINDS`,
@@ -150,7 +153,7 @@ export interface RulesStalenessRecord {
 /**
  * Pure — returns only the body that lives BETWEEN the fences, mirroring
  * `renderVerifiedAgainst`'s shape exactly. `Attributed slices:` renders as a `| slice |`
- * markdown table when non-empty and as `RULES_STALENESS_EMPTY` when empty (mirroring
+ * markdown table when non-empty and as `NO_ATTRIBUTED_SLICES` when empty (mirroring
  * `renderVerifiedAgainst`'s `Cited slices:` handling). `Prior reading:`/`Changed reading:` are
  * rendered verbatim and OMITTED when absent (mirroring how `renderVerifiedAgainst` omits
  * `Reason:` on `full` scope).
@@ -167,7 +170,7 @@ export function renderRulesStaleness(record: RulesStalenessRecord): string {
     lines.push('|---|');
     for (const s of record.attributedSlices) lines.push(`| ${s} |`);
   } else {
-    lines.push(RULES_STALENESS_EMPTY);
+    lines.push(NO_ATTRIBUTED_SLICES);
   }
   if (record.priorReading !== undefined) {
     lines.push('');

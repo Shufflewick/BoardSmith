@@ -105,19 +105,13 @@ describe('resolvePieceVisual', () => {
 // resolveGridSize
 // ---------------------------------------------------------------------------
 describe('resolveGridSize', () => {
-  it('returns {ok:true, rows, cols} from explicit $rowCoord/$colCoord', () => {
-    const board = buildBoard(
-      { $rowCoord: 'row', $colCoord: 'col' },
-      [
-        buildCell(0, 0),
-        buildCell(2, 3),
-      ],
-    );
+  it('sizes from the minimum to the maximum declared coordinate (#891)', () => {
+    const board = buildBoard({ $rowCoord: 'row', $colCoord: 'col' }, [buildCell(1, 1), buildCell(3, 4)]);
     const result = resolveGridSize(board);
-    expect(result.ok).toBe(true);
-    const g = result as { ok: true; rows: number; cols: number };
-    expect(g.rows).toBe(3); // max row=2, so 2+1
-    expect(g.cols).toBe(4); // max col=3, so 3+1
+    if (!result.ok) throw new Error(result.error);
+    expect([result.rows, result.cols]).toEqual([3, 4]);
+    expect(result.position(board.children![0])).toEqual({ row: 0, col: 0 });
+    expect(result.position(board.children![1])).toEqual({ row: 2, col: 3 });
   });
 
   it('returns {ok:true, rows:0, cols:0} for an explicitly-declared but empty grid', () => {
@@ -129,19 +123,18 @@ describe('resolveGridSize', () => {
     expect(g.cols).toBe(0);
   });
 
-  it('returns {ok:true, rows, cols} from inferred numeric child coordinates when no explicit coords', () => {
-    // Children have numeric attributes: 'r' and 'c' (first two non-underscore numerics)
-    const children = [
-      buildCell(0, 0, 'r', 'c'),
-      buildCell(1, 2, 'r', 'c'),
-      buildCell(3, 1, 'r', 'c'),
-    ];
-    const board = buildBoard({}, children); // no $rowCoord/$colCoord
-    const result = resolveGridSize(board);
-    expect(result.ok).toBe(true);
-    const g = result as { ok: true; rows: number; cols: number };
-    expect(g.rows).toBe(4); // max r=3, so 3+1
-    expect(g.cols).toBe(3); // max c=2, so 2+1
+  it('does not guess coordinates from numeric cell attributes when the board declares none (#891)', () => {
+    const board = buildBoard({}, [buildCell(0, 0, 'r', 'c'), buildCell(1, 2, 'r', 'c')]);
+    expect(resolveGridSize(board).ok).toBe(false);
+  });
+
+  it('refuses a cell without a numeric coordinate, naming it (#891)', () => {
+    const cell: GameElement = { id: 7, name: 'a1', className: 'Cell', attributes: { row: 0 }, children: [] };
+    const result = resolveGridSize(buildBoard({ $rowCoord: 'row', $colCoord: 'col' }, [cell]));
+    expect(result).toEqual({
+      ok: false,
+      error: `Grid "board" can't render: cell "a1" has no numeric "col"; give every cell numeric row and col values`,
+    });
   });
 
   it('returns {ok:false, error} when children are present but no resolvable coord system', () => {

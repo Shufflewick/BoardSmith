@@ -67,67 +67,71 @@ export enum Code { INVALID = 'INVALID', LATE = 'LATE' }
 export const LIST = [1, 2];
 `;
 
-// Every surface is read here, at the top, where no test timeout applies: each
-// one builds a TypeScript program, which a loaded machine can stretch past 5s (#1127).
-const SURFACE = {
-  base: await surfaceOf(BASE),
-  hashPrivateRenamed: await surfaceOf(BASE.replaceAll('#hidden', '#concealed')),
-  privateRenamed: await surfaceOf(BASE.replace('private secret = 0;', 'private kept = 0;')),
-  symbolRemoved: await surfaceOf(BASE.replace('*[Symbol.iterator](): Iterator<number> { yield this.#hidden; }', '')),
-  objectKeyRemoved: await surfaceOf(BASE.replace('DEFAULT: 1,', '')),
-  enumKeyRemoved: await surfaceOf(BASE.replace(", LATE = 'LATE'", '')),
-  objectValueChanged: await surfaceOf(BASE.replace('DEFAULT: 1,', 'DEFAULT: 2,')),
-  staticRemoved: await surfaceOf(BASE.replace("static unserializableAttributes = ['a'];", '')),
-  staticAdded: await surfaceOf(BASE.replace('move(): void {}', 'move(): void {}\n  static restore(): void {}')),
-  staticMethodToField: await surfaceOf(
-    BASE.replace('static make(): Base { return new Base(); }', 'static make = (): Base => new Base();'),
-  ),
-  inheritedStaticRemoved: await surfaceOf(BASE.replace('static make(): Base { return new Base(); }', '')),
-  fieldRemoved: await surfaceOf(BASE.replace('owner: string | null = null;', '')),
-  fieldAdded: await surfaceOf(BASE.replace('move(): void {}', 'move(): void {}\n  score = 0;')),
-  parameterPropertyRemoved: await surfaceOf(BASE.replace('public readonly seat: number', 'seat: number')),
-  classExpression: await surfaceOf('export const Token = class { held = true; };\n'),
-  fieldToGetter: await surfaceOf(
-    BASE.replace('owner: string | null = null;', 'get owner(): string | null { return null; }'),
-  ),
-  fieldToStatic: await surfaceOf(BASE.replace('owner: string | null = null;', 'static owner: string | null = null;')),
-  implementationsChanged: await surfaceOf(
-    BASE
-      .replace('return new Base();', 'const made = new Base(); return made;')
-      .replace('LIMIT: number = 3', 'LIMIT: number = 4')
-      .replace("unserializableAttributes = ['a']", "unserializableAttributes = ['a', 'b']")
-      .replace('owner: string | null = null;', "owner: string | null = 'nobody';")
-      .replace("return 'p';", "return 'piece';"),
-  ),
+// Variants of BASE, by the edit each test makes.
+const VARIANTS = {
+  hiddenRenamed: BASE.replaceAll('#hidden', '#concealed'),
+  privateRenamed: BASE.replace('private secret = 0;', 'private kept = 0;'),
+  symbolRemoved: BASE.replace('*[Symbol.iterator](): Iterator<number> { yield this.#hidden; }', ''),
+  objectKeyRemoved: BASE.replace('DEFAULT: 1,', ''),
+  enumKeyRemoved: BASE.replace(", LATE = 'LATE'", ''),
+  objectValueChanged: BASE.replace('DEFAULT: 1,', 'DEFAULT: 2,'),
+  staticRemoved: BASE.replace("static unserializableAttributes = ['a'];", ''),
+  staticAdded: BASE.replace('move(): void {}', 'move(): void {}\n  static restore(): void {}'),
+  staticMethodToField: BASE.replace('static make(): Base { return new Base(); }', 'static make = (): Base => new Base();'),
+  inheritedStaticRemoved: BASE.replace('static make(): Base { return new Base(); }', ''),
+  fieldRemoved: BASE.replace('owner: string | null = null;', ''),
+  fieldAdded: BASE.replace('move(): void {}', 'move(): void {}\n  score = 0;'),
+  parameterPropertyRemoved: BASE.replace('public readonly seat: number', 'seat: number'),
+  fieldToGetter: BASE.replace('owner: string | null = null;', 'get owner(): string | null { return null; }'),
+  fieldToStatic: BASE.replace('owner: string | null = null;', 'static owner: string | null = null;'),
+  implementationsChanged: BASE
+    .replace('return new Base();', 'const made = new Base(); return made;')
+    .replace('LIMIT: number = 3', 'LIMIT: number = 4')
+    .replace("unserializableAttributes = ['a']", "unserializableAttributes = ['a', 'b']")
+    .replace('owner: string | null = null;', "owner: string | null = 'nobody';")
+    .replace("return 'p';", "return 'piece';"),
   // Types are erased from rules.js, so no compiled bundle can depend on one.
   // Covering them would strand live worlds on older runners for edits that
   // change nothing a world can run.
-  typesChanged: await surfaceOf(`${BASE.replace('owner: string | null = null;', 'owner: string | number | null = null;')}
+  typesChanged: `${BASE.replace('owner: string | null = null;', 'owner: string | number | null = null;')}
 export type PieceKind = 'a' | 'b';
 export interface PieceView { id: number }
 class Internal { hidden = 1; }
-`),
-  memberMovedToBase: await surfaceOf(
-    BASE
-      .replace('move(): void {}', '')
-      .replace('baseMethod(): number { return 1; }', 'baseMethod(): number { return 1; }\n  move(): void {}'),
-  ),
+`,
+  memberMovedToBase: BASE
+    .replace('move(): void {}', '')
+    .replace('baseMethod(): number { return 1; }', 'baseMethod(): number { return 1; }\n  move(): void {}'),
+  classExpression: 'export const Token = class { held = true; };\n',
 };
+type Variant = keyof typeof VARIANTS;
 
-/** Whether the surface of the changed entrypoint differs from BASE's. */
-function moves(changed: keyof typeof SURFACE): boolean {
-  return SURFACE.base.join('\n') !== SURFACE[changed].join('\n');
-}
+/** The error a promise rejected with, or undefined when it resolved. */
+const thrown = (pending: Promise<unknown>): Promise<unknown> => pending.then(() => undefined, (error: unknown) => error);
 
-const unfoundFile = join(dir, `entry-${written++}.ts`);
-writeFileSync(unfoundFile, 'export class Shown { field = 1; }\n');
-const unfoundRefusal = await describeSurface([
-  { specifier: 'fixture', source: unfoundFile, module: async () => ({ Shown: class {}, Extra: class {} }) },
-]).then(() => undefined, (error: unknown) => error);
+// #1010: each surface compiles its fixture with the TypeScript compiler, slow on
+// a busy machine, so every one is computed here, while the file is collected and
+// no test timeout applies, and the tests only compare the results.
+const [base, variants, unfound] = await Promise.all([
+  surfaceOf(BASE),
+  Promise.all(Object.entries(VARIANTS).map(async ([name, source]) => [name, await surfaceOf(source)] as const))
+    .then((entries) => Object.fromEntries(entries) as Record<Variant, string[]>),
+  (async () => {
+    const file = join(dir, `entry-${written++}.ts`);
+    writeFileSync(file, 'export class Shown { field = 1; }\n');
+    return thrown(
+      describeSurface([
+        { specifier: 'fixture', source: file, module: async () => ({ Shown: class {}, Extra: class {} }) },
+      ]),
+    );
+  })(),
+]);
+
+/** Whether the surface of a variant differs from BASE's. */
+const moves = (variant: Variant): boolean => variants[variant].join('\n') !== base.join('\n');
 
 describe('surfaceHash covers what a compiled rules.js can reach (#575)', () => {
   it('names statics, instance fields and prototype members with their kinds', () => {
-    const [line] = SURFACE.base;
+    const [line] = base;
     for (const member of [
       'static method make',
       'static field LIMIT',
@@ -148,9 +152,9 @@ describe('surfaceHash covers what a compiled rules.js can reach (#575)', () => {
   });
 
   it('records no #private member', () => {
-    const [line] = SURFACE.base;
+    const [line] = base;
     expect(line).not.toContain('#hidden');
-    expect(moves('hashPrivateRenamed')).toBe(false);
+    expect(moves('hiddenRenamed')).toBe(false);
   });
 
   it('moves when a TypeScript private field is renamed', () => {
@@ -158,7 +162,7 @@ describe('surfaceHash covers what a compiled rules.js can reach (#575)', () => {
   });
 
   it('records no member of the language on an Error subclass or an async or generator function', () => {
-    const [line] = SURFACE.base;
+    const [line] = base;
     expect(line).toContain('Refused{field code}');
     expect(line).toMatch(/,settle,/);
     expect(line).toMatch(/,stream,/);
@@ -170,7 +174,7 @@ describe('surfaceHash covers what a compiled rules.js can reach (#575)', () => {
   });
 
   it('names the keys of a plain object export with their kinds, and of an enum', () => {
-    const [line] = SURFACE.base;
+    const [line] = base;
     expect(line).toContain('Order{field DEFAULT,field skipIf,get current}');
     expect(line).toContain('Code{field INVALID,field LATE}');
     expect(line).toMatch(/,LIST,/);
@@ -200,7 +204,7 @@ describe('surfaceHash covers what a compiled rules.js can reach (#575)', () => {
   it('moves when an inherited static is removed from an exported subclass', () => {
     // `Piece.make()` is how a game calls it, so Piece's own line carries it.
     const piece = (lines: string[]) => lines[0]!.split('Piece{')[1];
-    expect(piece(SURFACE.inheritedStaticRemoved)).not.toBe(piece(SURFACE.base));
+    expect(piece(variants.inheritedStaticRemoved)).not.toBe(piece(base));
   });
 
   it('moves when an instance field is removed', () => {
@@ -216,8 +220,7 @@ describe('surfaceHash covers what a compiled rules.js can reach (#575)', () => {
   });
 
   it('reads the instance fields of a class exported as an expression', () => {
-    const [line] = SURFACE.classExpression;
-    expect(line).toBe('fixture: Token{field held}');
+    expect(variants.classExpression[0]).toBe('fixture: Token{field held}');
   });
 
   it('moves when an instance field becomes a getter', () => {
@@ -240,11 +243,11 @@ describe('surfaceHash covers what a compiled rules.js can reach (#575)', () => {
     // What a game can call on Piece is unchanged. The whole hash still moves,
     // because Base's own line gains the member; this checks Piece's line only.
     const piece = (lines: string[]) => lines[0]!.split('Piece{')[1]!.split('}')[0];
-    expect(piece(SURFACE.memberMovedToBase)).toBe(piece(SURFACE.base));
+    expect(piece(variants.memberMovedToBase)).toBe(piece(base));
   });
 
   it('refuses a runtime export it cannot find in the source', () => {
-    expect(unfoundRefusal).toBeInstanceOf(Error);
-    expect((unfoundRefusal as Error).message).toMatch(/Extra/);
+    expect(unfound).toBeInstanceOf(Error);
+    expect((unfound as Error).message).toMatch(/Extra/);
   });
 });

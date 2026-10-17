@@ -258,4 +258,10 @@ describe('HexBoardRenderer keyboard activation follows focus (#190)', () => {
     expect(cells[5].attributes('tabindex')).toBe('0');
     expect(document.activeElement).toBe(cells[5].element);
   });
+
+  it('refuses a board whose coordinate system is not axial, rather than drawing it as axial', () => {
+    const board = buildHexElement(3);
+    board.attributes = { ...board.attributes, $coordSystem: 'cube' };
+    expect(() => mountBoard(board)).toThrow(/\$coordSystem 'cube'.*only 'axial'/s);
+  });
 });
