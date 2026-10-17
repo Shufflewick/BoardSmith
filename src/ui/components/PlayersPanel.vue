@@ -13,7 +13,6 @@
  */
 import { computed, ref, watch } from 'vue';
 import PlayerToken from './PlayerToken.vue';
-import { seatDisplayName } from '../../engine/element/seat-defaults.js';
 import { YOUR_MOVE, describePlaying } from '../composables/liveRegionAnnouncer.js';
 
 export interface Player {
@@ -115,9 +114,6 @@ function isPlayerActive(seat: number): boolean {
   return props.dueSeats?.includes(seat) ?? false;
 }
 
-// Every row names its seat the way the rest of the library does, even when the player has no name.
-const players = computed<Player[]>(() => props.players.map((p) => ({ ...p, name: seatDisplayName(p.seat, p.name) })));
-
 /**
  * Natural turn-status sentence for an acting player.
  * The local player gets an affirmative ("Your move"); any other acting player
@@ -145,7 +141,7 @@ const STRIP_TOKEN_ACTING = 34;
 const STRIP_TOKEN_IDLE = 28;
 
 const stripStatus = computed(() => {
-  const acting = players.value.filter(p => isPlayerActive(p.seat));
+  const acting = props.players.filter(p => isPlayerActive(p.seat));
   const youAct = acting.some(p => p.seat === props.playerSeat);
   const others = describePlaying(acting.filter(p => p.seat !== props.playerSeat).map(p => p.name));
   return [youAct ? YOUR_MOVE : '', others].filter(Boolean).join(' · ');
@@ -178,24 +174,24 @@ function isSeatPresent(player: Player): boolean | undefined {
  * capping would be answering a question nobody asked.
  */
 const visiblePlayers = computed<Player[]>(() => {
-  if (players.value.length <= props.maxRows) return [...players.value];
+  if (props.players.length <= props.maxRows) return [...props.players];
 
-  const index = new Map(players.value.map((p, i) => [p.seat, i]));
+  const index = new Map(props.players.map((p, i) => [p.seat, i]));
   const chosen = new Set<number>();
   const take = (p: Player) => { if (chosen.size < props.maxRows) chosen.add(p.seat); };
 
-  for (const p of players.value) if (p.seat === props.playerSeat) take(p);
-  for (const p of players.value) if (isPlayerActive(p.seat)) take(p);
-  for (const p of players.value) if (isSeatPresent(p) === true) take(p);
-  for (const p of players.value) take(p);
+  for (const p of props.players) if (p.seat === props.playerSeat) take(p);
+  for (const p of props.players) if (isPlayerActive(p.seat)) take(p);
+  for (const p of props.players) if (isSeatPresent(p) === true) take(p);
+  for (const p of props.players) take(p);
 
-  return players.value
+  return props.players
     .filter(p => chosen.has(p.seat))
     .sort((a, b) => (index.get(a.seat) ?? 0) - (index.get(b.seat) ?? 0));
 });
 
 /** How many seats the cap left out. Zero when nothing was cut. */
-const hiddenCount = computed(() => players.value.length - visiblePlayers.value.length);
+const hiddenCount = computed(() => props.players.length - visiblePlayers.value.length);
 
 defineSlots<{
   /** Custom stats for each player — rendered at the end of the info column. */

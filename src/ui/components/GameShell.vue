@@ -44,6 +44,7 @@ import type { GameRootView } from '../types.js';
 import turnNotificationSound from '../assets/turn-notification.mp3';
 import { hostRefusal, usePlatformTransport } from '../composables/usePlatformTransport.js';
 import { seatDisplay } from '../seat-display.js';
+import { seatDisplayName } from '../../engine/element/seat-defaults.js';
 
 // Get or set the global "Show action help" preference.
 // Key: boardsmith_action_help; default ON (true) when absent.
@@ -630,7 +631,8 @@ watch(
  * and a connection state to show.
  */
 const panelPlayers = computed(() => {
-  const all = players.value;
+  // A table names every seat; a world's names are its host's alone, so PlayersPanel adds none (#1044).
+  const all = players.value.map((p) => ({ ...p, name: seatDisplayName(p.seat, p.name) }));
   if (props.playerOrder === 'seat' || all.length < 2) return all;
 
   const sequence = Array.isArray(props.playerOrder)

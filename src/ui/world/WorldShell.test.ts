@@ -370,6 +370,16 @@ describe('WorldShell — the shared chrome (#170)', () => {
     named.unmount();
   });
 
+  it('never invents "Player N" for a seat whose host sent an empty name (#1044)', async () => {
+    const wrapper = mountShell();
+    tell(wrapper, stateFrame({ players: [{ seat: 4, name: '' }, { seat: 2, name: 'Rook' }] } as never));
+    await nextTick();
+    const seats = wrapper.find('[data-testid="bs-seats"]').text();
+    expect(seats).toContain('Rook');
+    expect(seats).not.toContain('Player 4');
+    wrapper.unmount();
+  });
+
   it('marks who is here on the seat rows rather than in a list of its own', async () => {
     const wrapper = mountShell();
     tell(wrapper, stateFrame({ players: [{ seat: 2, name: 'Rook' }, { seat: 4, name: 'Ivy' }] } as never));
