@@ -157,7 +157,12 @@ function withEvolutionMetadata(source: string, stats: NonNullable<UpdateWeightsO
   ].join('\n');
 
   const importIndex = source.indexOf('import ');
-  if (importIndex <= 0) return source;
+  if (importIndex < 0) {
+    throw new Error(
+      'bot.ts has no import statement, so evolve-bot-weights cannot place its run record above the imports. ' +
+        "Add the bot's imports (such as `import type { Game } from 'boardsmith';`) and run it again.",
+    );
+  }
   const beforeImport = source.slice(0, importIndex);
   const afterImport = source.slice(importIndex);
   if (beforeImport.includes('Weight Evolution')) {

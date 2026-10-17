@@ -161,6 +161,30 @@ describe('updateBotWeights', () => {
       expect(twice).toContain('Generations: 9');
     });
 
+    it('records the run in a bot.ts whose first line is an import (#875)', () => {
+      const startsWithImport = BOT_FILE.slice(BOT_FILE.indexOf('import '));
+      const updated = updateBotWeights(startsWithImport, [], { addMetadata: true, evolutionStats: stats });
+      expect(updated.indexOf('Weight Evolution')).toBeGreaterThanOrEqual(0);
+      expect(updated.indexOf('Weight Evolution')).toBeLessThan(updated.indexOf('import '));
+    });
+
+    it('replaces the block in a bot.ts whose first line was an import', () => {
+      const startsWithImport = BOT_FILE.slice(BOT_FILE.indexOf('import '));
+      const once = updateBotWeights(startsWithImport, [], { addMetadata: true, evolutionStats: stats });
+      const twice = updateBotWeights(once, [], {
+        addMetadata: true,
+        evolutionStats: { ...stats, generations: 9 },
+      });
+      expect(twice.match(/Weight Evolution/g)).toHaveLength(1);
+      expect(twice).toContain('Generations: 9');
+    });
+
+    it('refuses a bot.ts with no import rather than silently leaving the run unrecorded', () => {
+      const noImport = BOT_FILE.replace("import type { Game } from 'boardsmith';\n", '');
+      expect(() => updateBotWeights(noImport, [], { addMetadata: true, evolutionStats: stats }))
+        .toThrow(/no import/);
+    });
+
     it('does nothing when the flag is set but no stats are given', () => {
       const updated = updateBotWeights(BOT_FILE, [objective('centre-control', 1)], {
         addMetadata: true,
