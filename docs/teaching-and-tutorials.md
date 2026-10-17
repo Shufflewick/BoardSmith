@@ -284,7 +284,7 @@ expect(result.stepsVisited).toContain('step-1-id');
 expect(result.stepsVisited).toContain('step-2-id');
 ```
 
-`simulateTutorial` runs the tutorial for its `learnerSeat`: each scripted move is made by that seat unless the move names its own `seat`. It runs the scripted scenario through the engine's own `autoAdvanceTutorial` pump and `getDisabledActions` gate — no second evaluator. Three drift dimensions are detected:
+`simulateTutorial` runs the tutorial for its `learnerSeat`: each scripted move is made by that seat unless the move names its own `seat`. It starts the tutorial exactly as the server's `startTutorial` op does (the same function): it applies `setup`, restarts the flow with the learner to move, and gives only the learner a tutorial, so another seat's moves are never gated and a move's `expectStep` names the learner's step (#914). It runs the scripted scenario through the engine's own `autoAdvanceTutorial` pump and `getDisabledActions` gate — no second evaluator. Three drift dimensions are detected:
 
 1. **Gate drift** — a scripted action excluded by the active step's gate throws with the step id and gate reason.
 2. **Predicate drift** — a move with `expectStep` set throws `"Tutorial drift (predicate): ..."` if `advanceWhen` did not advance to that step.
