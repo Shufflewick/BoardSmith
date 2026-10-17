@@ -22,12 +22,14 @@ import { describe, expect, it } from "vitest";
 import { Game, Piece, Player, Space } from "../engine/index.js";
 import type { GameElement } from "../engine/index.js";
 import { PlayerFacingError } from "../engine/errors.js";
+import { rulesErrorSentence } from "../engine/action/rules-error.js";
 import type { ActionDefinition, ElementJSON, GameOptions } from "../engine/index.js";
 import { assertWorldEngineConformance } from "./engine-conformance.test-helper.js";
 import { BoardSmithWorldEngine } from "./engine.js";
 import { worldAction, worldClockAction } from "./action.js";
 import type { StoredPartition, WorldPartitionSource } from "./contract.js";
 import { worldBudgets } from "./budgets.js";
+import { WorldRefusal } from "./refusals.js";
 import {
   Holding,
   VillageFixture,
@@ -385,6 +387,18 @@ const refuseUnreadably = worldAction<WorldFixtureGame>("refuseUnreadably")
     throw new Error("The hearth is full: it holds 3 logs and you offered 14.");
   });
 
+/** A refusal whose words happen to be the engine's crash sentence: still a refusal (#847). */
+const refuseInCrashWords = worldAction<WorldFixtureGame>("refuseInCrashWords")
+  .needs(() => [ROOM_ONE])
+  .execute(() => {
+    throw new PlayerFacingError(rulesErrorSentence("refuseInCrashWords"));
+  });
+
+/** The same words returned as `{ success: false, error }`: also a refusal (#847). */
+const returnCrashWords = worldAction<WorldFixtureGame>("returnCrashWords")
+  .needs(() => [ROOM_ONE])
+  .execute(() => ({ success: false, error: rulesErrorSentence("returnCrashWords") }));
+
 /**
  * MUTATES, RETURNS, and fails the OTHER post-run check: it moves a token into a
  * partition root the engine never loaded and cannot name, so dirty-set
@@ -528,6 +542,8 @@ const ACTIONS: readonly ActionDefinition[] = [
   refuseInWords,
   refuseInWordsAfterWriting,
   refuseUnreadably,
+  refuseInCrashWords,
+  returnCrashWords,
 ];
 
 function newEngine(store: WorldPartitionSource = new CountingStore(genesis())) {
@@ -1787,6 +1803,21 @@ describe("#191 — a refusal written for a player reaches one", () => {
     // assertion holds either way.
     expect(refusal).not.toBe(SENTENCE);
     expect(refusal).toContain("error in the game's rules");
+  });
+
+  it("codes a crash in the rules rules-error and leaves a refusal uncoded, so a caller can tell them apart (#847)", async () => {
+    const engine = newEngine();
+    const thrown = (name: string) =>
+      engine.applyCommand("player-a", { name, args: {} }, STAMP).then(() => null, (error: unknown) => error);
+
+    const crash = await thrown("refuseUnreadably");
+    expect(crash).toBeInstanceOf(WorldRefusal);
+    expect(crash).toMatchObject({ code: "rules-error", owner: "game" });
+    expect((crash as Error).message).toContain("error in the game's rules");
+    expect(await thrown("refuseInWords")).not.toBeInstanceOf(WorldRefusal);
+    // Coded by what the engine knows happened, never by the words a refusal carries.
+    expect(await thrown("refuseInCrashWords")).not.toBeInstanceOf(WorldRefusal);
+    expect(await thrown("returnCrashWords")).not.toBeInstanceOf(WorldRefusal);
   });
 
   it("leaves the world unchanged either way, because a refusal is still a refusal", async () => {

@@ -32,14 +32,6 @@
       ]
     },
     {
-      "content": "1784dab72184ccca",
-      "lines": 37,
-      "files": [
-        "src/ui/composables/useFlyingElements.ts",
-        "src/ui/composables/usePlayerStatAnimation.ts"
-      ]
-    },
-    {
       "content": "223d5ca54c33f5ed",
       "lines": 30,
       "files": [
@@ -56,17 +48,10 @@
       ]
     },
     {
-      "content": "2375f84bcc213aab",
+      "content": "abe505cb0a457948",
       "lines": 8,
       "files": [
         "src/cli/commands/verify-classify.ts"
-      ]
-    },
-    {
-      "content": "273d391fe0d2d933",
-      "lines": 15,
-      "files": [
-        "src/cli/commands/verify-impact.ts"
       ]
     },
     {
@@ -90,14 +75,6 @@
       "lines": 15,
       "files": [
         "src/ui/composables/useFLIP.ts"
-      ]
-    },
-    {
-      "content": "3e4d54a26324100d",
-      "lines": 9,
-      "files": [
-        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
-        "src/ui/components/auto-ui/renderers/HandRenderer.vue"
       ]
     },
     {
@@ -125,20 +102,6 @@
       ]
     },
     {
-      "content": "548a205f2128e7b9",
-      "lines": 7,
-      "files": [
-        "src/cli/commands/verify-impact.ts"
-      ]
-    },
-    {
-      "content": "587c819dbf096ab7",
-      "lines": 12,
-      "files": [
-        "src/ui/composables/useGameGrid.ts"
-      ]
-    },
-    {
       "content": "64c9b55ecd6a877d",
       "lines": 21,
       "files": [
@@ -159,13 +122,6 @@
       "files": [
         "src/ui/components/helpers/HintOverlay.vue",
         "src/ui/components/helpers/TutorialOverlay.vue"
-      ]
-    },
-    {
-      "content": "7667c2ebaec2cb3b",
-      "lines": 13,
-      "files": [
-        "src/cli/commands/verify-impact.ts"
       ]
     },
     {
@@ -192,13 +148,6 @@
         "src/ui/components/auto-ui/renderers/CardRenderer.vue",
         "src/ui/components/auto-ui/renderers/DeckRenderer.vue",
         "src/ui/components/auto-ui/renderers/HandRenderer.vue"
-      ]
-    },
-    {
-      "content": "87a3bee4712f1041",
-      "lines": 31,
-      "files": [
-        "src/cli/commands/verify-impact.ts"
       ]
     },
     {
@@ -243,14 +192,6 @@
       ]
     },
     {
-      "content": "a021f38caf4b3cd5",
-      "lines": 7,
-      "files": [
-        "src/cli/commands/verify-classify.ts",
-        "src/cli/commands/verify-run.ts"
-      ]
-    },
-    {
       "content": "a65a466bf25aee08",
       "lines": 33,
       "files": [
@@ -287,14 +228,6 @@
         "src/ui/components/GameHistory.vue",
         "src/ui/components/auto-ui/ActionPanel.vue",
         "src/ui/components/auto-ui/AutoRenderer.vue"
-      ]
-    },
-    {
-      "content": "b1fb6874a2db7793",
-      "lines": 6,
-      "files": [
-        "src/cli/commands/verify-classify.ts",
-        "src/cli/commands/verify-repair.ts"
       ]
     },
     {
@@ -368,14 +301,6 @@
       ]
     },
     {
-      "content": "d046fe4d078dae95",
-      "lines": 28,
-      "files": [
-        "src/eslint-plugin/rules/no-element-array-state.ts",
-        "src/eslint-plugin/rules/no-element-identity-comparison.ts"
-      ]
-    },
-    {
       "content": "d4073999f27adcf2",
       "lines": 103,
       "files": [
@@ -388,14 +313,6 @@
       "lines": 5,
       "files": [
         "src/engine/element/game.ts"
-      ]
-    },
-    {
-      "content": "ec739362a9313d9d",
-      "lines": 52,
-      "files": [
-        "src/eslint-plugin/rules/no-element-array-state.ts",
-        "src/eslint-plugin/rules/no-element-identity-comparison.ts"
       ]
     },
     {
@@ -427,13 +344,6 @@
       "files": [
         "src/ui/components/helpers/HintOverlay.vue",
         "src/ui/components/helpers/TutorialOverlay.vue"
-      ]
-    },
-    {
-      "content": "fd6060434bc642e6",
-      "lines": 7,
-      "files": [
-        "src/cli/commands/verify-classify.ts"
       ]
     },
     {

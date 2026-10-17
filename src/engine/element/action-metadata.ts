@@ -140,7 +140,8 @@ function actionMetadataOf(
  */
 function describeTextPick(base: PickMetadata, selection: TextSelection): void {
   if (selection.pattern) {
-    base.pattern = { source: selection.pattern.regex.source, message: selection.pattern.message };
+    const { regex, message } = selection.pattern;
+    base.pattern = { source: regex.source, flags: regex.flags, message };
   }
   base.minLength = selection.minLength;
   base.maxLength = selection.maxLength;

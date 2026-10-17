@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cpus } from 'node:os';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import ora from 'ora';
 import type { ObjectiveWeight, TrainingProgress, WeightEvolutionResult } from '../../bot-trainer/index.js';
 import type { BotStrategy } from '../../bot/index.js';
@@ -36,26 +36,26 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
 
   // Require existing bot.ts
   if (!existsSync(botPath)) {
-    console.error(chalk.red('Error: bot.ts not found'));
-    console.error(chalk.dim(`Expected at: ${botPath}`));
+    console.error(styleText('red', 'Error: bot.ts not found'));
+    console.error(styleText('dim', `Expected at: ${botPath}`));
     console.error();
-    console.error(chalk.yellow('This command optimizes weights for an existing bot.'));
-    console.error(chalk.yellow('To create a new bot, use the /bs-build-bot skill in Claude Code:'));
-    console.error(chalk.dim('  boardsmith claude install'));
-    console.error(chalk.dim('  Then in Claude Code: /bs-build-bot'));
+    console.error(styleText('yellow', 'This command optimizes weights for an existing bot.'));
+    console.error(styleText('yellow', 'To create a new bot, use the /bs-build-bot skill in Claude Code:'));
+    console.error(styleText('dim', '  boardsmith claude install'));
+    console.error(styleText('dim', '  Then in Claude Code: /bs-build-bot'));
     process.exit(1);
   }
 
-  console.log(chalk.cyan(`\nOptimizing bot weights for ${gameName}...\n`));
+  console.log(styleText('cyan', `\nOptimizing bot weights for ${gameName}...\n`));
 
   const { workerCount, generations, population, mctsIterations } = evolutionSettings(options);
 
-  console.log(chalk.dim(`  bot file: ${botPath}`));
-  console.log(chalk.dim(`  Generations: ${generations}`));
-  console.log(chalk.dim(`  Population: ${population}`));
-  console.log(chalk.dim(`  MCTS iterations: ${mctsIterations}`));
-  console.log(chalk.cyan(`  Workers: ${workerCount}`));
-  if (options.seed !== undefined) console.log(chalk.dim(`  Seed: ${options.seed} (reproducible, no clock bound)`));
+  console.log(styleText('dim', `  bot file: ${botPath}`));
+  console.log(styleText('dim', `  Generations: ${generations}`));
+  console.log(styleText('dim', `  Population: ${population}`));
+  console.log(styleText('dim', `  MCTS iterations: ${mctsIterations}`));
+  console.log(styleText('cyan', `  Workers: ${workerCount}`));
+  if (options.seed !== undefined) console.log(styleText('dim', `  Seed: ${options.seed} (reproducible, no clock bound)`));
   console.log();
 
   const spinner = ora('Bundling the game rules...').start();
@@ -117,7 +117,7 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
         benchmarkMCTSIterations: mctsIterations,
         seed: options.seed,
         onProgress: (progress: TrainingProgress) => {
-          spinner.text = chalk.cyan(progress.message);
+          spinner.text = styleText('cyan', progress.message);
         },
       });
 
@@ -129,7 +129,7 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
       printEvolutionResult(result);
       const { confirmation } = result;
       if (!confirmation?.accepted) {
-        console.log(chalk.yellow(`\nNo improvement confirmed, so ${botPath} is unchanged.\n`));
+        console.log(styleText('yellow', `\nNo improvement confirmed, so ${botPath} is unchanged.\n`));
         return;
       }
 
@@ -189,18 +189,18 @@ function evolutionSettings(options: EvolveBotWeightsOptions) {
 
 /** `--verbose`: the first few objectives the evolution starts from. */
 function printExistingObjectives(objectives: readonly ObjectiveWeight[]): void {
-  console.log(chalk.dim('\nExisting objectives:'));
+  console.log(styleText('dim', '\nExisting objectives:'));
   for (const obj of objectives.slice(0, 5)) {
-    console.log(chalk.dim(`  ${obj.id}: weight=${obj.weight.toFixed(1)}`));
+    console.log(styleText('dim', `  ${obj.id}: weight=${obj.weight.toFixed(1)}`));
   }
   if (objectives.length > 5) {
-    console.log(chalk.dim(`  ... and ${objectives.length - 5} more`));
+    console.log(styleText('dim', `  ... and ${objectives.length - 5} more`));
   }
 }
 
 function printEvolutionResult(result: WeightEvolutionResult): void {
   const percent = (rate: number) => `${(rate * 100).toFixed(1)}%`;
-  console.log(chalk.green('\n=== Evolution Results ===\n'));
+  console.log(styleText('green', '\n=== Evolution Results ===\n'));
   console.log(`  Search: original ${percent(result.initialFitness)}, best candidate ${percent(result.bestFitness)}`);
   const { confirmation } = result;
   if (!confirmation) {
@@ -215,21 +215,21 @@ function printEvolutionResult(result: WeightEvolutionResult): void {
   console.log(`  Improvement: +${percent(confirmation.candidateWinRate - confirmation.originalWinRate)} (${rematch})`);
 
   if (result.objectives.length > 0) {
-    console.log(chalk.cyan('\nOptimized weights:'));
+    console.log(styleText('cyan', '\nOptimized weights:'));
     for (const obj of result.objectives.slice(0, 5)) {
       const sign = obj.weight > 0 ? '+' : '';
-      console.log(chalk.dim(`  ${obj.id}: ${sign}${obj.weight.toFixed(1)}`));
+      console.log(styleText('dim', `  ${obj.id}: ${sign}${obj.weight.toFixed(1)}`));
     }
   }
 }
 
 function printNextSteps(): void {
-  console.log(chalk.green('\n=== Done ===\n'));
-  console.log(chalk.dim('The bot.ts file has been updated with optimized weights.'));
-  console.log(chalk.dim('All code structure (checker functions, imports) is preserved.\n'));
+  console.log(styleText('green', '\n=== Done ===\n'));
+  console.log(styleText('dim', 'The bot.ts file has been updated with optimized weights.'));
+  console.log(styleText('dim', 'All code structure (checker functions, imports) is preserved.\n'));
 
-  console.log(chalk.cyan('Next steps:'));
-  console.log(chalk.dim('  1. Review the weight changes in bot.ts'));
-  console.log(chalk.dim('  2. Test with: boardsmith dev --bot 1'));
-  console.log(chalk.dim('  3. Run again with more generations for further optimization\n'));
+  console.log(styleText('cyan', 'Next steps:'));
+  console.log(styleText('dim', '  1. Review the weight changes in bot.ts'));
+  console.log(styleText('dim', '  2. Test with: boardsmith dev --bot 1'));
+  console.log(styleText('dim', '  3. Run again with more generations for further optimization\n'));
 }

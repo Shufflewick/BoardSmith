@@ -70,6 +70,11 @@ describe('getPlayerStatElement', () => {
     expect(getPlayerStatElement(9, 'score')).toBeNull();
   });
 
+  it('finds a stat whose name holds quotes and backslashes (#868)', () => {
+    const target = statTarget(1, 'the "big" \\ score');
+    expect(getPlayerStatElement(1, 'the "big" \\ score')).toBe(target);
+  });
+
   it('returns null on an empty document', () => {
     expect(getPlayerStatElement(1, 'score')).toBeNull();
   });

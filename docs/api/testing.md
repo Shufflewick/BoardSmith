@@ -556,7 +556,9 @@ filled, with the world's quote for the draft on `actionController.actionQuote`.
 
 `assertNoHiddenInfoLeak` derives forbidden markers by diffing each element's
 *unfiltered* `toJSON()` against its node in the final `toJSONForPlayer(seat)`
-tree, so it honors a game's `static playerView` hook automatically. Pass an
+tree, so it honors a game's `static playerView` hook automatically. The Game
+root is checked too, except its engine root fields (such as `tutorialProgress`)
+and the public `persist` record; a `persistPrivate` value is a marker. Pass an
 `allow` predicate to exclude known-safe, coincidentally-colliding substrings
 (the predicate is scoped **per elementId**, not global):
 

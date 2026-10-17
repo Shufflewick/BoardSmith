@@ -677,6 +677,7 @@ describe('the local world store', () => {
     it('keeps no row for an emptied box', async () => {
       await store.writeCheckpoint(cp({}), { notices: [{ seat: 3, box: boxOf('alarm') }] });
       await store.writeCheckpoint(cp({}), { notices: [{ seat: 3, box: { entries: [], dropped: 0 } }] });
+      store.close();
       expect(rawRows(worldStorePath(root), 'SELECT seat FROM notice_boxes')).toEqual([]);
     });
 

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 
 import { availableParallelism } from 'node:os';
 import { gameSeed, type SingleGameResult } from '../../sim/play-game.js';
@@ -405,7 +405,7 @@ export async function simulateCommand(options: SimulateOptions): Promise<void> {
   try {
     flags = parseRunFlags(options);
   } catch (error) {
-    console.error(chalk.red((error as Error).message));
+    console.error(styleText('red', (error as Error).message));
     process.exitCode = 1;
     return;
   }
@@ -419,7 +419,7 @@ export async function simulateCommand(options: SimulateOptions): Promise<void> {
     try {
       plan = await planRun(cwd, options, flags, base, bundle);
     } catch (error) {
-      console.error(chalk.red((error as Error).message));
+      console.error(styleText('red', (error as Error).message));
       return undefined;
     }
     const runs: VariantRun[] = [];
@@ -442,13 +442,13 @@ export async function simulateCommand(options: SimulateOptions): Promise<void> {
 
 /** Print a variant's games that did not finish, each with its replay command. */
 function printFailures(print: (line: string) => void, { variant, result }: VariantRun, compared: boolean): void {
-  if (compared && result.failing.length > 0) print(chalk.bold(`Variant ${variant.label}:`));
+  if (compared && result.failing.length > 0) print(styleText('bold', `Variant ${variant.label}:`));
   for (const g of result.failing) {
-    print(chalk.red(`Game ${g.index} ${g.status} (seed ${g.seed}) after ${g.turns} action(s).`));
-    if (g.error) print(chalk.dim(`  ${g.error}`));
+    print(styleText('red', `Game ${g.index} ${g.status} (seed ${g.seed}) after ${g.turns} action(s).`));
+    if (g.error) print(styleText('dim', `  ${g.error}`));
     if (g.productionOnly) continue;
     const replay = simulateReplayCommand({ seed: g.seed, playerCount: g.players }, variant.gameOptions, variant.policyFlags, variant.data);
-    print(chalk.dim(`  Replay: ${replay}`));
+    print(styleText('dim', `  Replay: ${replay}`));
   }
 }
 
@@ -465,7 +465,7 @@ function printResult(heading: string, runs: VariantRun[], compared: boolean, csv
   }
   const print = csv ? console.error : console.log;
   if (!csv) {
-    console.log(chalk.cyan(`\n${heading}\n`));
+    console.log(styleText('cyan', `\n${heading}\n`));
     if (runs.length > 1) {
       console.log('Variants (each difference is from variant 1):');
       runs.forEach(({ variant }, i) => console.log(`  ${i + 1}  ${variant.label}`));
@@ -475,7 +475,7 @@ function printResult(heading: string, runs: VariantRun[], compared: boolean, csv
   for (const run of runs) printFailures(print, run, compared);
   if (!finished) {
     const unfinished = runs.reduce((sum, { result }) => sum + result.failing.length, 0);
-    print(chalk.bold(`\n${unfinished} game(s) did not finish, so no statistics are reported.\n`));
+    print(styleText('bold', `\n${unfinished} game(s) did not finish, so no statistics are reported.\n`));
     return;
   }
   console.log(compared ? formatComparison(reports) : formatReport(reports[0].report));
