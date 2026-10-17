@@ -282,12 +282,15 @@ function trackCompact(event: MediaQueryListEvent | MediaQueryList): void {
  * document and the documented pattern works.
  */
 const boardHostReady = ref(false);
+const chromeDrawn = computed(() => host.view.value !== null && host.phase.value !== 'refused');
 watch(
-  () => host.view.value !== null && host.phase.value !== 'refused',
-  async (chromeDrawn) => {
-    if (!chromeDrawn) return;
+  chromeDrawn,
+  async (drawn) => {
+    // A refusal unmounts the chrome and its host, so the board waits for them again.
+    boardHostReady.value = false;
+    if (!drawn) return;
     await nextTick();
-    boardHostReady.value = true;
+    boardHostReady.value = chromeDrawn.value;
   },
   { immediate: true },
 );
