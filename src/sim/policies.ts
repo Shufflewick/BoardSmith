@@ -120,18 +120,9 @@ export function random(
         if (built.ok) moves.push({ action, args: built.args });
         else reasons.push(built.reason);
       }
-      // A held follow-up is not among the seat's actions; its bound args come from the follow-up itself.
-      const followUp = followUpForSeat(game.getFlowState(), seat);
-      const followUpDef = followUp && game.getAction(followUp.action);
-      if (followUp && !followUpDef) reasons.push(`follow-up '${followUp.action}' is not registered on the game`);
-      if (followUp && followUpDef) {
-        const sampled = enumerateActionMoves(game, followUpDef, player, {
-          followUp,
-          sampleAboveBudget: { count: 1, random: rng },
-        });
-        if (sampled.length > 0) moves.push({ action: followUp.action, args: rng.pick(sampled) });
-        else reasons.push(`follow-up '${followUp.action}' has no move the simulator can list: every pick is refused, or a number input lacks min, max and integer: true`);
-      }
+      const followUp = randomFollowUpMove(game, player, rng);
+      if (followUp && 'reason' in followUp) reasons.push(followUp.reason);
+      else if (followUp) moves.push(followUp);
       if (moves.length > 0) return rng.pick(moves);
       return {
         noMove:
@@ -143,6 +134,27 @@ export function random(
       };
     },
   };
+}
+
+/**
+ * One random move from the seat's held follow-up, why it has none, or
+ * `undefined` when it holds none. A follow-up is not among the seat's actions,
+ * and its bound args come from the follow-up itself (#911).
+ */
+function randomFollowUpMove(game: Game, player: Player, rng: SeededRandom): PolicyMove | { reason: string } | undefined {
+  const followUp = followUpForSeat(game.getFlowState(), player.seat);
+  if (!followUp) return undefined;
+  const actionDef = game.getAction(followUp.action);
+  if (!actionDef) return { reason: `follow-up '${followUp.action}' is not registered on the game` };
+  const moves = enumerateActionMoves(game, actionDef, player, { followUp, sampleAboveBudget: { count: 1, random: rng } });
+  if (moves.length === 0) {
+    return {
+      reason:
+        `follow-up '${followUp.action}' has no move the simulator can list: ` +
+        'every pick is refused, or a number input lacks min, max and integer: true',
+    };
+  }
+  return { action: followUp.action, args: rng.pick(moves) };
 }
 
 /**
