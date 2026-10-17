@@ -58,7 +58,10 @@ import { gitOutput as git } from './git-output.js';
  * tried no mutant leaves the file as it was. Two runs saving at the same moment can lose one run's
  * new outcomes, which costs only running those mutants again.
  * `boardsmith verify` saves only when the tree stayed clean for the whole run, since the key is
- * computed from the commit and would not describe files edited mid-run.
+ * computed from the commit and would not describe files edited mid-run. It also captures the
+ * execution context (`captureExecutionContext`) once when it starts, keys the cache by that
+ * capture, and refuses the whole run, saving nothing, when the context changed by its end or
+ * before a mutant runs (#932): outcomes from a mixed run would be stored under a key they do not fit.
  */
 
 const CACHE_FORMAT = 4;
@@ -154,13 +157,12 @@ export async function uncommittedContentHash(root: string): Promise<string> {
   return hash.digest('hex');
 }
 
-/** True when git ignores `path` (relative to `root`, the top of a checkout), whether or not it exists. */
-async function ignoredByGit(root: string, path: string): Promise<boolean> {
+/** Which of `paths` (relative to `root`, the top of a checkout) git ignores, whether or not they exist, in one git call. */
+async function ignoredByGit(root: string, paths: readonly string[]): Promise<Set<string>> {
   try {
-    await git(root, ['check-ignore', '-q', '--', path]);
-    return true;
+    return new Set((await git(root, ['check-ignore', '--', ...paths])).split('\n').filter(Boolean));
   } catch (error) {
-    if ((error as { code?: unknown }).code === 1) return false;
+    if ((error as { code?: unknown }).code === 1) return new Set();
     throw error;
   }
 }
@@ -189,14 +191,8 @@ function entryScope(root: string, target: string): { parts: string[]; star: bool
   return { parts: scope.split(sep), star: star !== -1 };
 }
 
-/** The outermost of the folders `parts` names, from the top down, that git ignores, if any. */
-async function outermostIgnored(root: string, parts: string[]): Promise<string | undefined> {
-  for (let n = 1; n <= parts.length; n++) {
-    const prefix = parts.slice(0, n).join('/');
-    if (await ignoredByGit(root, prefix)) return prefix;
-  }
-  return undefined;
-}
+/** Each folder `parts` names, from the top down. */
+const prefixes = (parts: string[]) => parts.map((_, n) => parts.slice(0, n + 1).join('/'));
 
 /** Every ignored file or folder under the folder `parts` names, except those inside `node_modules`. */
 async function ignoredUnder(root: string, parts: string[]): Promise<string[]> {
@@ -232,9 +228,10 @@ async function ignoredEntryPointsHash(root: string): Promise<string> {
     const stat = await fs.stat(full).catch(() => undefined);
     hashed.set(path, stat === undefined ? 'absent' : stat.isDirectory() ? await folderContentHash(full) : sha256Hex(await fs.readFile(full)));
   };
-  for (const target of targets) {
-    const { parts, star } = entryScope(root, target);
-    const ignored = await outermostIgnored(root, parts);
+  const scopes = targets.map((target) => entryScope(root, target));
+  const ignoredPaths = await ignoredByGit(root, [...new Set(scopes.flatMap(({ parts }) => prefixes(parts)))]);
+  for (const { parts, star } of scopes) {
+    const ignored = prefixes(parts).find((prefix) => ignoredPaths.has(prefix));
     if (ignored !== undefined) await hashPath(ignored);
     else if (star) for (const path of await ignoredUnder(root, parts)) await hashPath(path);
   }
@@ -462,33 +459,75 @@ export interface MutantCache extends MutationFingerprints {
   save(): Promise<void>;
 }
 
-async function mutationFingerprints(projectDir: string, treeRef: string): Promise<MutationFingerprints> {
+/**
+ * What the tests run with besides the repository's own files: the BoardSmith running this command
+ * and the one the game loads (`toolRevisions`), what is installed, and every package linked from
+ * outside the repository. Each is named in words, so `executionContextChange` can say which moved.
+ */
+export interface ExecutionContext {
+  readonly parts: Readonly<Record<'boardsmith' | 'installed' | 'linked', string>>;
+  /** Why no mutant outcome may be trusted or stored this run, when a linked package cannot be read. */
+  readonly unavailable?: string;
+}
+
+const PART_NAMES: Readonly<Record<keyof ExecutionContext['parts'], string>> = {
+  boardsmith: 'the BoardSmith this command runs and the game loads',
+  installed: "the installed packages (npm's install records)",
+  linked: 'the packages linked from outside the repository',
+};
+
+/** Reads the execution context of the game in `projectDir` as it stands now. */
+export async function captureExecutionContext(projectDir: string): Promise<ExecutionContext> {
   let linked: string;
+  let unavailable: string | undefined;
   try {
     linked = await linkedPackagesHash(projectDir);
   } catch (error) {
-    return uncached(`the mutant cache is off for this run: ${error instanceof Error ? error.message : String(error)}`);
+    const reason = error instanceof Error ? error.message : String(error);
+    linked = `unreadable: ${reason}`;
+    unavailable = `the mutant cache is off for this run: ${reason}`;
   }
-  const [prefix, tree, installed, tools] = await Promise.all([
-    git(projectDir, ['rev-parse', '--show-prefix']).then((p) => p.trim()),
-    repositoryTreeHash(projectDir, treeRef),
-    installedPackagesHash(projectDir),
-    toolRevisions(projectDir),
-  ]);
-  return { fingerprint: (m) => sha256Hex(JSON.stringify([CACHE_FORMAT, tools, process.version, tree, installed, linked, prefix, m.file, 'source' in m ? sha256Hex(m.source) : m.sourceHash])) };
+  const [installed, boardsmith] = await Promise.all([installedPackagesHash(projectDir), toolRevisions(projectDir)]);
+  return { parts: { boardsmith, installed, linked }, ...(unavailable === undefined ? {} : { unavailable }) };
 }
 
-/** The cache for the commit checked out in `projectDir`, as its tests run with what is installed now. */
-export async function openMutantCache(projectDir: string): Promise<MutantCache> {
-  const path = await mutantCachePath(projectDir);
-  const context = await mutationFingerprints(projectDir, 'HEAD');
+/**
+ * What changed in the execution context since `before` was captured, in words, or undefined when
+ * nothing did. The BoardSmith revisions are shown before and after, since a person can read them.
+ */
+export async function executionContextChange(projectDir: string, before: ExecutionContext): Promise<string | undefined> {
+  const now = await captureExecutionContext(projectDir);
+  const changed = (Object.keys(PART_NAMES) as (keyof ExecutionContext['parts'])[])
+    .filter((part) => now.parts[part] !== before.parts[part])
+    .map((part) => (part === 'boardsmith' ? `${PART_NAMES[part]} (was ${before.parts[part]}, now ${now.parts[part]})` : PART_NAMES[part]));
+  return changed.length === 0 ? undefined : changed.join('; ');
+}
+
+async function mutationFingerprints(projectDir: string, context: ExecutionContext): Promise<MutationFingerprints> {
   if (context.unavailable !== undefined) return uncached(context.unavailable);
+  const { boardsmith, installed, linked } = context.parts;
+  const [prefix, tree] = await Promise.all([
+    git(projectDir, ['rev-parse', '--show-prefix']).then((p) => p.trim()),
+    repositoryTreeHash(projectDir, 'HEAD'),
+  ]);
+  return { fingerprint: (m) => sha256Hex(JSON.stringify([CACHE_FORMAT, boardsmith, process.version, tree, installed, linked, prefix, m.file, 'source' in m ? sha256Hex(m.source) : m.sourceHash])) };
+}
+
+/**
+ * The cache for the commit checked out in `projectDir`, as its tests run in `context` (by default,
+ * what is installed now). `boardsmith verify` hands in the context it captured when it started, so
+ * the outcomes it stores are keyed by the context it checks again before saving them.
+ */
+export async function openMutantCache(projectDir: string, context?: ExecutionContext): Promise<MutantCache> {
+  const path = await mutantCachePath(projectDir);
+  const fingerprints = await mutationFingerprints(projectDir, context ?? (await captureExecutionContext(projectDir)));
+  if (fingerprints.unavailable !== undefined) return uncached(fingerprints.unavailable);
   const stored = await readEntries(path);
   const used = new Map<string, CachedOutcome>();
-  const keyOf = (m: MutantText) => context.fingerprint(m)!;
+  const keyOf = (m: MutantText) => fingerprints.fingerprint(m)!;
 
   return {
-    fingerprint: context.fingerprint,
+    fingerprint: fingerprints.fingerprint,
     get(mutant) {
       const key = keyOf(mutant);
       const outcome = stored.get(key);

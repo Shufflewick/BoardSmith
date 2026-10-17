@@ -385,9 +385,10 @@ describe('boardsmith verify: the smoke check', () => {
       );
       expect(steps).toContain('smoke step 4: entering "1" for "kindle"');
       // The game refuses one log with its own message, and the walk tries two: the refusal, and
-      // the error toast that says it, are the game working, not a problem. Later fires take two at once.
-      expect(steps.filter((line) => line.endsWith('entering "1" for "kindle"'))).toHaveLength(1);
-      expect(steps.filter((line) => line.endsWith('entering "2" for "kindle"')).length).toBeGreaterThan(0);
+      // the error toast that says it, are the game working, not a problem. A fire taken starts the
+      // next one from the field's least again (#923).
+      const entered = steps.flatMap((line) => line.match(/entering "(\d+)" for "kindle"$/)?.[1] ?? []);
+      expect(entered.slice(0, 3)).toEqual(['1', '2', '1']);
       expect(steps.filter((line) => line.endsWith('taking "code"'))).toHaveLength(1);
     },
   );

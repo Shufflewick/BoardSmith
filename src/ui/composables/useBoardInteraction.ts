@@ -304,31 +304,40 @@ export function createBoardInteraction(): BoardInteraction {
     return refs.some(ref => matchesRef(element, ref));
   }
 
-  // #313: a board asks about every element it draws -- is it a candidate, is it
-  // disabled, what is it called. Scanning validElements for each question is
-  // quadratic in the size of the pick: a 3,720-space pick took tens of seconds
-  // per render of the board. So the list is indexed once each time it changes,
-  // by boardRefKey -- the same key matchesRef matches by -- and each lookup is a
-  // few map reads.
-  const candidateIndex = computed(() => {
+  // #313, #858: a board asks about every element it draws -- is it a candidate,
+  // a drop target, disabled, what is it called. Scanning a list for each question
+  // is quadratic in its size: a 3,720-space pick took tens of seconds per render
+  // of the board. So each list is indexed once each time it changes, by
+  // boardRefKey -- the same key matchesRef matches by -- and each lookup is a few
+  // map reads.
+  function indexByRef(list: BoardTarget[]): { list: BoardTarget[]; byKey: Map<string, number> } {
     const byKey = new Map<string, number>();
-    const list = state.validElements;
-    list.forEach((ve, position) => {
-      const key = boardRefKey(ve.ref);
-      // The first candidate that matches an element is THE candidate, as it was
-      // when every lookup was a scan, so a later duplicate never replaces it.
+    list.forEach((target, position) => {
+      const key = boardRefKey(target.ref);
+      // The first target that matches an element is THE target, as it was when
+      // every lookup was a scan, so a later duplicate never replaces it.
       if (key !== undefined && !byKey.has(key.key)) byKey.set(key.key, position);
     });
     return { list, byKey };
-  });
+  }
 
-  /** The candidate of the current pick that `element` is, or undefined. */
-  function findCandidate(element: { id?: number; name?: string; notation?: string }): BoardTarget | undefined {
-    const { list, byKey } = candidateIndex.value;
+  /** The first target of an indexed list that `element` is, or undefined. */
+  function findIndexed(
+    { list, byKey }: ReturnType<typeof indexByRef>,
+    element: { id?: number; name?: string; notation?: string },
+  ): BoardTarget | undefined {
     const positions = elementKeys(element)
       .map(key => byKey.get(key))
       .filter((p): p is number => p !== undefined);
     return positions.length === 0 ? undefined : list[Math.min(...positions)];
+  }
+
+  const candidateIndex = computed(() => indexByRef(state.validElements));
+  const dropTargetIndex = computed(() => indexByRef(state.dropTargets));
+
+  /** The candidate of the current pick that `element` is, or undefined. */
+  function findCandidate(element: { id?: number; name?: string; notation?: string }): BoardTarget | undefined {
+    return findIndexed(candidateIndex.value, element);
   }
 
   const actions: BoardInteractionActions = {
@@ -428,7 +437,7 @@ export function createBoardInteraction(): BoardInteraction {
 
     isDropTarget(element) {
       if (!state.isDragging) return false;
-      return state.dropTargets.some(dt => matchesRef(element, dt.ref));
+      return findIndexed(dropTargetIndex.value, element) !== undefined;
     },
 
     isDraggedElement(element) {
@@ -438,7 +447,7 @@ export function createBoardInteraction(): BoardInteraction {
 
     triggerDrop(target) {
       // Find the matching drop target and trigger the callback
-      const dropTarget = state.dropTargets.find(dt => matchesRef(target, dt.ref));
+      const dropTarget = findIndexed(dropTargetIndex.value, target);
       if (dropTarget && onDropCallback) {
         // Store the dragged element's ID before ending drag (for animation skipping)
         const draggedId = state.draggedElement?.id;

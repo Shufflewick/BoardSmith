@@ -16,6 +16,7 @@ import {
   recordWaiver,
   recordReopen,
   parseSignoff,
+  readStatus,
 } from './chunk-signoff.js';
 import { chunkCheckCommand, chunkProvenanceStatusCommand } from './chunk-provenance.js';
 import {
@@ -181,6 +182,13 @@ describe('recordSignoff — a chunk does not reach verified while a constraint d
   });
 });
 
+describe('readStatus', () => {
+  it('reads an empty Status line as empty, never the line below it (#829)', () => {
+    expect(readStatus('Status:\nverified\n')).toBe('');
+    expect(readStatus('Status:  built  \n')).toBe('built');
+  });
+});
+
 describe('waivers — scoped to named chunks, and they expire', () => {
   it('a waiver naming one chunk verifies that chunk as verified (user-waived)', async () => {
     const project = await makeProject([{ slug: 'world-shell' }, { slug: 'combat' }]);
@@ -258,6 +266,17 @@ describe('waivers — scoped to named chunks, and they expire', () => {
     await expect(
       recordWaiver({ project, chunks: 'world-shell', by: 'orchestrator', expires: '2026-09-30', reason: 'x', now: NOW }),
     ).rejects.toThrow(/designer/i);
+  });
+
+  it('parallel waivers are all kept, each with its own id (#831)', async () => {
+    const slugs = ['a', 'b', 'c', 'd', 'e'];
+    const project = await makeProject(slugs.map((slug) => ({ slug })));
+    const ids = await Promise.all(
+      slugs.map((chunks) => recordWaiver({ project, chunks, by: 'Jane', expires: '2026-09-30', reason: 'x', now: NOW })),
+    );
+    expect([...ids].sort()).toEqual(['W1', 'W2', 'W3', 'W4', 'W5']);
+    const ledger = await fs.readFile(join(project, DESIGN_DIR, WAIVERS_MD), 'utf-8');
+    for (const slug of slugs) expect(ledger).toContain(`- Chunks: ${slug}\n`);
   });
 
   it('a second waiver gets the next id', async () => {

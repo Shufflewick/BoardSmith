@@ -49,14 +49,20 @@ reference game repo, but that repo is **read-only** for the entire run:
 # Run all three steps in order (the common case):
 npx boardsmith harness-ingest
 
-# Or invoke each step individually:
-npx boardsmith harness-ingest stage    # fresh throwaway project + current skill text install
-npx boardsmith harness-ingest drive    # real headless agent session against it
-npx boardsmith harness-ingest assert   # report the ten checks, exit 0 only if all pass
+# Or invoke each step individually. `stage` prints the folder it created; pass it to the others:
+npx boardsmith harness-ingest stage                        # fresh throwaway project + current skill text install
+npx boardsmith harness-ingest drive --work-dir <that dir>  # real headless agent session against it
+npx boardsmith harness-ingest assert --work-dir <that dir> # report the ten checks, exit 0 only if all pass and the session completed
 
 # Options (see --help for the full list and defaults):
 npx boardsmith harness-ingest --work-dir /tmp/my-harness-run --model sonnet
 ```
+
+Without `--work-dir`, `stage` creates a new folder under the system temp dir
+(`bs-ingest-harness-XXXXXX`), so two runs never share or delete each other's folder. With it,
+`stage` refuses a folder that already exists unless it holds a `.harness-stage-state.json` from an
+earlier `stage`, so it cannot delete a checkout or a home folder (#917). A `stage` that stopped
+partway leaves a folder `drive` and `assert` refuse; run `stage --work-dir <that dir>` again.
 
 `stage`, `drive`, and `assert` share state via `{workDir}/.harness-stage-state.json` — `drive` and
 `assert` read what `stage` recorded (the staged copy's path, the recorded source hash, the
@@ -64,7 +70,7 @@ reference repo's baseline HEAD) rather than re-deriving it.
 
 ### `stage`
 
-Recreates `{workDir}` from scratch, installs this repo's **current working tree's** skill text
+Creates `{workDir}` (recreating it only if an earlier `stage` made it), installs this repo's **current working tree's** skill text
 into it project-locally (`node bin/boardsmith.js claude --local --force`), verifies the install
 landed, asserts the operator's global `~/.claude/skills/` tree was untouched, verifies the
 reference repo's source hash and cleanliness, and copies the source rulebook into
@@ -85,7 +91,8 @@ is written.
 Locates the single project directory the run produced, calls `checkIngestArtifacts()` (the
 deterministic checker from `check.mjs`) for the nine produced-artifact checks, re-verifies the
 reference repo's git cleanliness/HEAD as gate item (g), prints a ten-row table, and exits 0 only
-when all ten pass.
+when all ten pass and `drive` recorded a completed session. A run that hit the turn cap or whose
+session exited non-zero prints `OVERALL: FAIL` and exits 1, whatever the checks say (#918).
 
 ## Acceptance bar
 

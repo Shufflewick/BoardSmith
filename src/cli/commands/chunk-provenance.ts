@@ -22,7 +22,7 @@ import {
 import { ENGINE_REVISION } from '../../contract/index.js';
 import { hashSkillsTree } from '../lib/skills-tree-hash.js';
 import { findHeadingIndex } from './build-manifest.js';
-import { type SharedEdit, assessSignoffs, checkSignoff } from './chunk-signoff.js';
+import { type SharedEdit, assessSignoffs, checkSignoff, readStatus } from './chunk-signoff.js';
 
 /**
  * `computeVerificationScope()` / `resolveCitedSlices()` — the two pure computations behind
@@ -1210,8 +1210,7 @@ export async function chunkProvenanceStatusCommand(
       continue; // a chunks/<slug> dir with no CHUNK.md is not this command's problem to report
     }
 
-    const statusMatch = /^Status:\s*(.*)$/m.exec(chunkText);
-    const status = statusMatch ? statusMatch[1].trim() : 'unknown';
+    const status = readStatus(chunkText) ?? 'unknown';
 
     const parsed = parseVerifiedAgainst(chunkText);
 

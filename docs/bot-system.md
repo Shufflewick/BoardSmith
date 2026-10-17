@@ -405,6 +405,13 @@ played through and the move was chosen at random, and points here. It changes no
 chosen, and production searches never warn. The bench's "scored" columns show
 the same count (see "Measuring bot speed").
 
+A move the game refuses cleanly, changing nothing (an `execute` that returns
+`success: false`), is not thrown away, so it never counts toward that warning.
+When the game refused every move the bot tried at the root that way, the bot
+chose its move at random, and in development mode it warns once per move with
+the first refusal and how to fix it: move the rule that refuses into the
+action's `validate` or its choices, so the move is never offered (#874).
+
 A bot that skips its unresolvable moves plays worse than one that could resolve
 them. Making it play WELL in a hidden-information game needs determinization,
 which is the next section.
@@ -437,9 +444,10 @@ export const botStrategy: BotStrategy = {
 > A sampler may write ONLY attributes the sandbox was never told.
 
 Everything the seat legitimately knows must survive the sample unchanged, and
-removing an element the seat can see is the same violation. The engine checks
-this on every sample and throws `DeterminizationError`, naming the element and
-the attribute, when a sampler breaks it.
+removing an element the seat can see, or moving it to another container, is the
+same violation. The engine checks this on every sample and throws
+`DeterminizationError`, naming the element and the attribute or containers,
+when a sampler breaks it.
 
 That check is the feature, not a guard rail bolted onto it. Fabricating hidden
 state is what `NotSimulableError` exists to prevent; determinization is
@@ -491,8 +499,17 @@ each one:
   seat). A face-down card is a placeholder holding no
   game attributes at all, so a sampler supposes its rank and suit the same way
   it supposes any other withheld value. What the placeholder genuinely carries
-  (its type, its face-down artwork, which hand it sits in) is information the
-  seat holds, and the contract still refuses a sampler that rewrites it.
+  (its type, its face-down artwork and the other attributes it was told, and
+  which container it sits in) is information the seat holds, and the contract
+  still refuses a sampler that rewrites it. For a face-down card on an open
+  table (`showOnlyTo` / `hideFrom`), which keeps its real id, that means it
+  must stay where it is. The children of a hidden zone instead reach the seat
+  as anonymous placeholders with fresh negative ids, so what the seat holds is
+  how many of each look each container has, not which one is where: a sampler
+  may swap them between containers, as long as each container ends up holding
+  as many of each class and back (each set of known attributes) as it did
+  (#871). The order of a container's children is not checked, so shuffling or
+  reordering is always allowed.
 - **Game ROOT fields** withheld by `static visibleAttributes` on the `Game`
   subclass, for the shared secret that belongs to no element: a map seed, a
   hidden objective deck order.

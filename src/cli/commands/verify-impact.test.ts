@@ -648,6 +648,17 @@ async function sha256OfDir(root: string): Promise<Record<string, string>> {
   return map;
 }
 
+/** Everything a run printed to stdout through console.log, joined as the terminal would see it. */
+async function captureStdout(run: () => Promise<unknown>): Promise<string> {
+  const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  try {
+    await run();
+    return logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+  } finally {
+    logSpy.mockRestore();
+  }
+}
+
 async function singleContradictoryPairProject(
   projectRoot: string,
 ): Promise<{ project: string; runId: string; pairId: string }> {
@@ -705,6 +716,14 @@ describe('contradictory — verifyImpactGateCommand: read-only, exit-0, no-bypas
     expect(process.exitCode === undefined || process.exitCode === 0).toBe(true);
 
     process.exitCode = previousExitCode;
+  });
+
+  it('--json: stdout is exactly one parseable JSON object, with no inner report printed ahead of it (#832)', async () => {
+    const { project, runId, pairId } = await singleContradictoryPairProject(gateDir);
+
+    const stdout = await captureStdout(() => verifyImpactGateCommand({ project, runId, json: true }));
+
+    expect(JSON.parse(stdout).pending).toContain(pairId);
   });
 
   it('contradictory: verifyImpactGateCommand is read-only — a whole-project sha256 map is byte-identical before and after', async () => {
@@ -899,6 +918,16 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
         json: true,
       }),
     ).rejects.toThrow(/decision/);
+  });
+
+  it('--json: stdout is exactly one parseable JSON object, with no inner report printed ahead of it (#832)', async () => {
+    const { project, runId, pairId } = await contradictoryProjectWithRulings();
+
+    const stdout = await captureStdout(() =>
+      verifyImpactAdjudicateCommand({ project, runId, pairId, outcome: 'UNADJUDICATED', json: true }),
+    );
+
+    expect(JSON.parse(stdout).outcome).toBe('UNADJUDICATED');
   });
 
   it('unadjudicated: outcome "UNADJUDICATED" writes NO RULINGS.md entry (sha256 unchanged) and records an AdjudicationRecord with that outcome', async () => {
@@ -1142,7 +1171,7 @@ const IMPACT_QUOTED_PASS1 = 'The lower timing on their card resolves first.';
 
 async function buildImpactTestProject(
   root: string,
-  opts: { ruleDelta?: 'sharper' | 'contradictory'; drift?: 'clean' | 'drifted' } = {},
+  opts: { ruleDelta?: 'sharper' | 'contradictory'; drift?: 'clean' | 'drifted'; leaveXUnclassified?: boolean } = {},
 ): Promise<{ project: string; runId: string; pairId: string; firstSha: string }> {
   const project = join(root, `impact-project-${Math.random().toString(36).slice(2)}`);
   const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
@@ -1222,15 +1251,17 @@ async function buildImpactTestProject(
     throw new Error('fixture bug: expected one pair each for x.md and y.md');
   }
 
-  await verifyClassifyRecordCommand({
-    project,
-    runId,
-    pairId: xPair.pairId,
-    label: opts.ruleDelta ?? 'sharper',
-    quotedPass1: IMPACT_QUOTED_PASS1,
-    quotedPass2: changedLine,
-    json: true,
-  });
+  if (!opts.leaveXUnclassified) {
+    await verifyClassifyRecordCommand({
+      project,
+      runId,
+      pairId: xPair.pairId,
+      label: opts.ruleDelta ?? 'sharper',
+      quotedPass1: IMPACT_QUOTED_PASS1,
+      quotedPass2: changedLine,
+      json: true,
+    });
+  }
   await verifyClassifyRecordCommand({
     project,
     runId,
@@ -1437,6 +1468,54 @@ describe('contradictory / marker — verifyImpactApplyCommand', () => {
     const parsed = parseRulesStaleness(chunkText);
     expect(parsed.state).toBe('rules-stale');
     expect(parsed.record?.adjudication).toBe('UNADJUDICATED');
+  });
+
+  it('--json: stdout is exactly one parseable JSON object, with no inner report printed ahead of it (#832)', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+
+    const stdout = await captureStdout(() => verifyImpactApplyCommand({ project, runId, json: true }));
+
+    expect(JSON.parse(stdout).marked.some((m: { slug: string }) => m.slug === 'movement')).toBe(true);
+  });
+
+  it('--json: a refusal for an unclassified pair is exactly one parseable JSON object too (#832, #830)', async () => {
+    const { project, runId, pairId } = await buildImpactTestProject(root, { drift: 'clean', leaveXUnclassified: true });
+
+    const stdout = await captureStdout(() => verifyImpactApplyCommand({ project, runId, json: true }));
+
+    const parsed = JSON.parse(stdout);
+    expect(parsed.blocked).toBe(true);
+    expect(parsed.pendingPairs).toEqual([pairId]);
+  });
+
+  it('unclassified: a pair still pending classification blocks the write entirely, naming the pair and verify-classify-record (#830)', async () => {
+    const { project, runId, pairId } = await buildImpactTestProject(root, { drift: 'clean', leaveXUnclassified: true });
+    const before = await sha256OfProject(project);
+
+    const result = await verifyImpactApplyCommand({ project, runId, json: true });
+    expect(result.blocked).toBe(true);
+    expect(result.pendingPairs).toEqual([pairId]);
+    expect(result.marked).toEqual([]);
+    expect(await sha256OfProject(project)).toEqual(before);
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await verifyImpactApplyCommand({ project, runId });
+    const printed = logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+    logSpy.mockRestore();
+    expect(printed).toContain(`boardsmith verify-classify-record --run-id ${runId} --pair-id ${pairId}`);
+  });
+
+  it('unclassified: resuming an interrupted classification as cosmetic leaves no stale marker (#830)', async () => {
+    const { project, runId, pairId } = await buildImpactTestProject(root, { drift: 'clean', leaveXUnclassified: true });
+    expect((await verifyImpactApplyCommand({ project, runId, json: true })).blocked).toBe(true);
+
+    await verifyClassifyRecordCommand({ project, runId, pairId, label: 'cosmetic', json: true });
+    const result = await verifyImpactApplyCommand({ project, runId, json: true });
+    expect(result.blocked).toBe(false);
+    expect(result.marked).toEqual([]);
+
+    const chunkText = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'movement', 'CHUNK.md'), 'utf-8');
+    expect(parseRulesStaleness(chunkText).state).not.toBe('rules-stale');
   });
 
   it('marker: a chunk whose ChunkVerdict.stale is false is left byte-identical after the run', async () => {

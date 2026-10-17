@@ -32,6 +32,16 @@ export interface TextPattern {
   message: string;
 }
 
+/**
+ * A pattern as the wire carries it, compiled back into the one the game declared.
+ *
+ * With its flags: without them `\p{L}` is not a letter class and `i` is not
+ * caseless, so a client refuses text the server accepts (#890).
+ */
+export function wirePattern(pattern: { source: string; flags: string; message: string }): TextPattern {
+  return { regex: new RegExp(pattern.source, pattern.flags), message: pattern.message };
+}
+
 /** The rules a text value is judged by: the declaration's, as a client receives them. */
 interface TextRules {
   minLength?: number;

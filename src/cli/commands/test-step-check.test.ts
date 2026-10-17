@@ -329,11 +329,14 @@ const AUCTION_CHUNK = (rows: string) =>
 describe('checkTestStep (static checks)', () => {
   let project: string;
 
-  beforeEach(async () => {
+  beforeEach(() => startProject());
+
+  /** A project with one earlier chunk's commit, in a repository of the given object format. */
+  async function startProject(objectFormat = 'sha1'): Promise<void> {
     const tree = tempTree('bs-test-step-');
     project = join(tree, 'project');
     await fs.mkdir(project, { recursive: true });
-    git(project, 'init', '-q');
+    git(project, 'init', '-q', `--object-format=${objectFormat}`);
     git(project, 'config', 'user.email', 't@example.com');
     git(project, 'config', 'user.name', 'T');
     await write(project, {
@@ -344,7 +347,7 @@ describe('checkTestStep (static checks)', () => {
     await write(project, { 'design/chunks/auction/CHUNK.md': AUCTION_CHUNK('') });
     git(project, 'add', '-A');
     git(project, 'commit', '-q', '-m', 'chunk-auction/step-ask');
-  });
+  }
 
   async function build(files: Record<string, string>, rows: string): Promise<void> {
     await write(project, { ...files, 'design/chunks/auction/CHUNK.md': AUCTION_CHUNK(rows) });
@@ -400,6 +403,19 @@ it('claim 2 — pass', () => { passTurn(game); });
     const result = await checkTestStep(project, 'auction');
     expect(result.findings.map((f) => [f.kind, f.subject])).toEqual([['verb-not-dispatched', 'pass']]);
     expect(result.findings[0].detail).toMatch(/doAction/);
+  });
+
+  it('still finds the lines the chunk wrote in a SHA-256 repository, whose hashes are 64 characters (#829)', async () => {
+    await startProject('sha256');
+    await build(
+      {
+        'src/rules/auction.ts': RULES,
+        'tests/auction.test.ts': `import { it } from 'vitest';\nit('claim 1 and 2', () => { testGame.doAction(1, 'bid'); });\n`,
+      },
+      '| tests/auction.test.ts | 1, 2 | yes |\n',
+    );
+    const result = await checkTestStep(project, 'auction');
+    expect(result.findings.map((f) => [f.kind, f.subject])).toEqual([['verb-not-dispatched', 'pass']]);
   });
 
   it('follows a world game\'s verb wrapper and its test harness, and still catches the verb it never runs (sotf#36)', async () => {
@@ -589,6 +605,30 @@ export function hexToRgb(hex: string): number[] { return [parseInt(hex.slice(1, 
     ['automocks a game module with vi.mock and no factory', `import { vi } from 'vitest';\nvi.mock('../../src/rules/auction');\n`, 2, 'src/rules/auction.ts'],
     ['spies on a game module with vi.mock and an options object', `import { vi } from 'vitest';\nvi.mock('../../src/rules/auction', { spy: true });\n`, 2, 'src/rules/auction.ts'],
     ['loads a game module by a computed path', "const name = 'auction';\nawait import(`../../src/rules/${name}`);\n", 2, 'src/rules/'],
+    ['loads every rules module with an eager import.meta.glob (#841)', `const rules = import.meta.glob('../../src/rules/*.ts', { eager: true });\nvoid rules;\n`, 1, 'src/rules/*.ts'],
+    ['makes importers with a lazy import.meta.glob (#841)', `const rules = import.meta.glob(['../../src/rules/*.ts', '!../../src/rules/x.ts']);\nvoid rules;\n`, 1, 'src/rules/*.ts'],
+    ['globs the game with options this check cannot read (#841)', `const OPTS = { query: '?raw' };\nconst rules = import.meta.glob('../../src/rules/*.ts', OPTS);\nvoid rules;\n`, 2, 'options this check cannot read'],
+    ['globs from the tests folder with a wildcard (#841)', `const g = import.meta.glob("../**/*.ts", { eager: true });\nvoid g;\n`, 1, '../**/*.ts'],
+    ['globs src and tests with a brace set (#841)', `const g = import.meta.glob("../../{src,tests}/**/*.ts", { eager: true });\nvoid g;\n`, 1, '../../{src,tests}/**/*.ts'],
+    ['globs with a wildcard folder before rules (#841)', `const g = import.meta.glob("../../*/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '../../*/rules/*.ts'],
+    ['globs the whole project from its root (#841)', `const g = import.meta.glob("/**/*.ts", { eager: true });\nvoid g;\n`, 1, '/**/*.ts'],
+    ['globs relative to a base option (#841)', `const g = import.meta.glob("./rules/*.ts", { base: "../../src", eager: true });\nvoid g;\n`, 1, 'without `base`'],
+    ['globs support files under tests (#841)', `const g = import.meta.glob("../support/*.ts", { eager: true });\nvoid g;\n`, 1, '../support/*.ts'],
+    ['globs with a query that is not only raw (#841)', `const g = import.meta.glob("../../src/rules/*.ts", { query: "?raw&x", eager: true });\nvoid g;\n`, 1, 'src/rules/*.ts'],
+    ['globs with a url query (#841)', `const g = import.meta.glob("../../src/rules/*.ts", { query: "?url", eager: true });\nvoid g;\n`, 1, 'src/rules/*.ts'],
+    ['globs with a raw query a later duplicate key overrides (#841)', `const g = import.meta.glob("../../src/rules/*.ts", { 'query': '?raw', query: '?url' });\nvoid g;\n`, 1, 'src/rules/*.ts'],
+    ['globs with a computed option key (#841)', `const g = import.meta.glob("../../src/rules/*.ts", { ['query']: '?raw' });\nvoid g;\n`, 1, 'options this check cannot read'],
+    ['globs through a wildcard folder and back up into src/ (#841)', `const g = import.meta.glob("../../docs/*/../../src/x.ts", { eager: true });\nvoid g;\n`, 1, '../../docs/*/../../src/x.ts'],
+    ['globs through ** and back up into src/ (#841)', `const g = import.meta.glob("../../docs/**/../../src/a.ts", { eager: true });\nvoid g;\n`, 1, '../../docs/**/../../src/a.ts'],
+    ['globs with a brace set that climbs into src/ (#841)', `const g = import.meta.glob("../../docs/{../src,x}/*.ts", { eager: true });\nvoid g;\n`, 1, '../../docs/{../src,x}/*.ts'],
+    ['globs with an extglob that climbs into src/ (#841)', `const g = import.meta.glob("../../docs/@(x|../src)/*.ts", { eager: true });\nvoid g;\n`, 1, '../../docs/@(x|../src)/*.ts'],
+    ['globs from above the project back into it (#841)', `const g = import.meta.glob("../../../*/src/x.ts", { eager: true });\nvoid g;\n`, 1, '../../../*/src/x.ts'],
+    ['globs src/ from the root with a doubled slash (#841)', `const g = import.meta.glob("//src/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '//src/rules/*.ts'],
+    ['globs src/ from the root with a tripled slash (#841)', `const g = import.meta.glob("///src/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '///src/rules/*.ts'],
+    ['globs with a brace set holding a ) that climbs into src/ (#841)', `const g = import.meta.glob("../../docs/{x),../src}/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '../../docs/{x),../src}/rules/*.ts'],
+    ['globs src/ spelled in upper case, which a case-insensitive disk matches (#841)', `const g = import.meta.glob("../../SRC/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '../../SRC/rules/*.ts'],
+    ['globs src/ spelled with a long s, which a case-insensitive disk folds to s (#841)', `const g = import.meta.glob("../../ſrc/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '../../ſrc/rules/*.ts'],
+    ['globs with a pattern this check cannot read (#841)', `const PATTERN = '../../src/rules/*.ts';\nconst rules = import.meta.glob(PATTERN, { eager: true });\nvoid rules;\n`, 2, 'a pattern this check cannot read'],
   ])('reports a guard that %s from the game\'s src/ (#485)', async (_what, guard, line, module) => {
     const findings = await findingsFor({
       'src/rules/auction.ts': RULES,
@@ -598,6 +638,26 @@ export function hexToRgb(hex: string): number[] { return [parseInt(hex.slice(1, 
     });
     expect(findings.map((f) => [f.kind, f.subject])).toEqual([['guard-runs-code', `tests/guards/a11y-floor.test.ts:${line}`]]);
     expect(findings[0].detail).toContain(module);
+  });
+
+  it('accepts a guard that globs the game as raw text with import.meta.glob (#841)', async () => {
+    const findings = await findingsFor({
+      'src/rules/auction.ts': RULES,
+      'tests/guards/a11y-floor.test.ts': `const a = import.meta.glob('../../src/ui/**/*.vue', { query: '?raw', import: 'default', eager: true });
+const b = import.meta.glob(['../../src/rules/*.ts'], { as: 'raw', eager: true });
+const c = import.meta.glob('../../src/rules/*.ts', { 'query': '?raw', eager: true });
+void a; void b; void c;
+`,
+    });
+    expect(findings).toEqual([]);
+  });
+
+  it('accepts a glob whose only pattern reaching src/ is a ! exclusion (#841)', async () => {
+    const findings = await findingsFor({
+      'src/rules/auction.ts': RULES,
+      'tests/guards/a11y-floor.test.ts': `const g = import.meta.glob(['../../docs/*.md', '!../../src/**/*.ts'], { eager: true });\nvoid g;\n`,
+    });
+    expect(findings).toEqual([]);
   });
 
   it('accepts a guard that mocks a game module with a factory, which never loads the real one (#485)', async () => {
@@ -886,6 +946,34 @@ it('claim 1 and 2', () => { testGame.doAction(1, 'bid'); });
   it('refuses a chunk with no step commit, saying how to commit one', async () => {
     await write(project, { 'design/chunks/other/CHUNK.md': AUCTION_CHUNK('') });
     await expect(checkTestStep(project, 'other')).rejects.toThrow(/chunk-other\/step-/);
+  });
+});
+
+describe('checkTestStep in a game nested inside a larger repository (#846)', () => {
+  it('reads the chunk\'s files by game-relative path, the same as a game at the repo root', async () => {
+    const repo = join(tempTree('bs-test-step-nested-'), 'repo');
+    const project = join(repo, 'games', 'auction-game');
+    await fs.mkdir(project, { recursive: true });
+    git(repo, 'init', '-q');
+    git(repo, 'config', 'user.email', 't@example.com');
+    git(repo, 'config', 'user.name', 'T');
+    await write(project, { 'src/rules/game.ts': "export const start = Action.create('start');\n" });
+    git(repo, 'add', '-A');
+    git(repo, 'commit', '-q', '-m', 'chunk-setup/step-close');
+    await write(project, {
+      'src/rules/auction.ts': "export const bid = Action.create('bid');\nexport const pass = Action.create('pass');\n",
+      'tests/auction.test.ts': `import { it } from 'vitest';
+it('claim 1 and 2', () => { testGame.doAction(1, 'bid'); testGame.doAction(1, 'pass'); });
+`,
+      'design/chunks/auction/CHUNK.md': AUCTION_CHUNK('| tests/auction.test.ts | 1, 2 | yes |\n'),
+    });
+    git(repo, 'add', '-A');
+    git(repo, 'commit', '-q', '-m', 'chunk-auction/step-build');
+
+    const result = await checkTestStep(project, 'auction');
+    expect([...result.added.keys()]).toEqual(['src/rules/auction.ts']);
+    expect(result.verbs).toEqual(['bid', 'pass']);
+    expect(result.findings).toEqual([]);
   });
 });
 

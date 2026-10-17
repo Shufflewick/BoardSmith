@@ -4775,9 +4775,7 @@ export class Game<
    * a time. That hook is author code handed the filtered tree and free to
    * rewrite it in place, and a batch shares every attribute bag it had no
    * reason to redact -- so one seat's rewrite would reach the next seat's view.
-   * Nothing the engine can read decides whether a hook writes, which is the
-   * same reason `testing/visibility.ts` gates its own fast paths on the hook's
-   * absence.
+   * Nothing the engine can read decides whether a hook writes.
    */
   toJSONForPlayers(players: readonly (P | number | null)[]): SeatViewJSON[] {
     const GameClass = this.constructor as typeof Game;
