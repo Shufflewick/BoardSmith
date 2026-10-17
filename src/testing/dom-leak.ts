@@ -26,7 +26,7 @@ import type { Component } from 'vue';
 import type { VueWrapper } from '@vue/test-utils';
 import type { default as AutoUIComponent } from '../ui/components/auto-ui/AutoUI.vue';
 import type { GameRootView } from '../ui/types.js';
-import { isEngineRootField, type ElementJSON, type SeatViewJSON } from '../engine/index.js';
+import { isEngineRootField, SEAT_ROOT_FIELDS, type ElementJSON, type SeatViewJSON } from '../engine/index.js';
 import { PERSIST_KEY } from '../persistence/persistence.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE, isHiddenPlaceholder } from '../engine/element/hidden-placeholder.js';
 import type { BoardInteraction } from '../ui/composables/useBoardInteraction.js';
@@ -1297,6 +1297,21 @@ function isRootBookkeeping(key: string): boolean {
   return isEngineRootField(key) || key === PERSIST_KEY;
 }
 
+/**
+ * Each value the root holds in a field `Game.toJSON()` writes beside its
+ * attributes (`settings` and the rest) that the seat view's same field does not
+ * carry (#1064): another seat's `actionTempState`, or a key the game's
+ * `playerView` withholds.
+ */
+function rootFieldCandidates(root: ElementJSON, seatView: ElementJSON): Array<{ attribute: string; value: string }> {
+  return SEAT_ROOT_FIELDS.flatMap((field) => {
+    const sent = new Set(identityStringsIn((seatView as Record<string, unknown>)[field]));
+    return identityStringsIn((root as Record<string, unknown>)[field])
+      .filter((value) => !sent.has(value))
+      .map((value) => ({ attribute: field, value }));
+  });
+}
+
 /** Result of {@link deriveLeakDetectionData}: forbidden markers plus, for every
  * VISIBLE element, the set of values that are that element's OWN legitimate
  * rendered identity (name/attributes it is actually allowed to show). */
@@ -1333,9 +1348,14 @@ function deriveLeakDetectionData(
     const candidates = extractIdentityCandidates(unfiltered).filter(
       (c) => !(isRoot && c.attribute !== undefined && isRootBookkeeping(c.attribute)),
     );
+    const elementLabel = `${unfiltered.className}#${unfiltered.id}`;
+    if (isRoot) {
+      for (const c of rootFieldCandidates(unfiltered, finalTree)) {
+        markers.push({ ...c, elementId: unfiltered.id, elementLabel });
+      }
+    }
     if (candidates.length === 0) continue;
 
-    const elementLabel = `${unfiltered.className}#${unfiltered.id}`;
     const node = nodesById.get(unfiltered.id);
     const elementHidden = !node || isHiddenPlaceholder(node);
 

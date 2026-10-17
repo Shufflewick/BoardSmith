@@ -21,6 +21,7 @@ export {
   GAME_ROOT_FIELD_AUDIENCE,
   GAME_SELF_SERIALIZED_FIELDS,
   isEngineRootField,
+  SEAT_ROOT_FIELDS,
   engineRootFieldAudience,
   // Every GameOptions field, so a host can keep a player's selection off them.
   ENGINE_OWNED_GAME_OPTION_KEYS,
