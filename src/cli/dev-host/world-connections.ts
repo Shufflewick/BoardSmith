@@ -152,7 +152,8 @@ export function createWorldConnections(
                   },
                 }),
           })
-          .catch((error: unknown) =>
+          .catch((error: unknown) => {
+            if (hostRequestId !== null) requestOrigin.delete(hostRequestId);
             // The message, not the error object, exactly as `reloadWorld` in
             // `dev-world.ts` does it (#240).
             console.error(
@@ -160,8 +161,8 @@ export function createWorldConnections(
                 `[boardsmith dev] world message '${String(message.type)}' failed: ` +
                   `${error instanceof Error ? error.message : String(error)}`,
               ),
-            ),
-          );
+            );
+          });
       });
       socket.on('close', () => {
         // Only tear down if THIS socket still owns the id: a reload's new socket
@@ -189,6 +190,7 @@ export function createWorldConnections(
         clients.delete(clientId);
         pageLoad.delete(clientId);
       }
+      requestOrigin.clear();
     },
   };
 }

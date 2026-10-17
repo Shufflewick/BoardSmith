@@ -78,7 +78,7 @@ afterEach(async () => {
 
 async function serve(
   queue: Parameters<typeof createWorldConnections>[1] = { admit: (message) => message.run() },
-): Promise<{ host: LocalWorldHost; port: number }> {
+): Promise<{ host: LocalWorldHost; port: number; connections: ReturnType<typeof createWorldConnections> }> {
   const budgets = worldBudgets();
   const dir = tempTree('bs-world-connections-');
   const store = openWorldStore(worldStorePath(dir), budgets);
@@ -103,7 +103,7 @@ async function serve(
     await new Promise<void>((resolve) => wss.close(() => resolve()));
     await host.close();
   });
-  return { host, port: (wss.address() as { port: number }).port };
+  return { host, port: (wss.address() as { port: number }).port, connections };
 }
 
 async function open(port: number, clientId: string, loadId?: string) {
@@ -186,45 +186,79 @@ describe('#879: a frame that is not a message', () => {
   });
 });
 
-describe('#1099: a reply to a page that reloaded', () => {
-  it('never answers the new page load\'s request that reused the same id', async () => {
-    // Messages wait while `holding`, as a saved rules edit holds them (#379),
-    // and run in order once released.
-    let holding = false;
-    const held: Array<() => Promise<void>> = [];
-    let arrived: () => void = () => {};
-    const { host, port } = await serve({
-      admit: (message) => {
-        if (!holding) return message.run();
-        held.push(message.run);
-        arrived();
-        return Promise.resolve();
-      },
-    });
-    const waitForHeld = () => new Promise<void>((resolve) => (arrived = resolve));
-
-    const before = await open(port, 'p1', 'load-1');
+/**
+ * A world whose messages can be held, as a saved rules edit holds them (#379):
+ * `held` sends while holding and resolves once the queue has taken it;
+ * `release` runs everything held, in order.
+ */
+async function serveHeld() {
+  let holding = false;
+  let arrived: () => void = () => {};
+  const queued: Array<() => Promise<void>> = [];
+  const served = await serve({
+    admit: (message) => {
+      if (!holding) return message.run();
+      queued.push(message.run);
+      arrived();
+      return Promise.resolve();
+    },
+  });
+  const held = async (send: () => void) => {
     holding = true;
-    let heldNow = waitForHeld();
+    const taken = new Promise<void>((resolve) => (arrived = resolve));
+    send();
+    await taken;
+    holding = false;
+  };
+  const release = async () => {
+    for (const run of queued.splice(0)) await run();
+  };
+  return { ...served, held, release };
+}
+
+const act = (requestId: string, order: string, action: string) => ({
+  type: 'action',
+  requestId,
+  order: { id: order, at: Date.now() },
+  action,
+  args: {},
+});
+
+describe('#1099: a reply to a page that reloaded', () => {
+  it.each([
+    ['a page load that names itself', 'load-1', 'load-2'],
+    ['a client that names no page load', undefined, undefined],
+  ])('never answers the new socket\'s request that reused the same id: %s', async (_case, oldLoad, newLoad) => {
+    const { host, port, held, release } = await serveHeld();
+    const before = await open(port, 'p1', oldLoad);
     // The old page's wc-0 is refused, so its answer is told from the new one's.
-    before.send({ type: 'action', requestId: 'wc-0', order: { id: 'o1', at: Date.now() }, action: 'nope', args: {} });
-    await heldNow;
+    await held(() => before.send(act('wc-0', 'o1', 'nope')));
 
     // THE RELOAD: the new page greets before the old socket closes, and
     // numbers its requests from wc-0 again.
-    holding = false;
-    const after = await open(port, 'p1', 'load-2');
+    const after = await open(port, 'p1', newLoad);
     before.socket.terminate();
-    holding = true;
-    heldNow = waitForHeld();
     const answered = after.next((frame) => frame.type === 'world_response' && frame.requestId === 'wc-0');
-    after.send({ type: 'action', requestId: 'wc-0', order: { id: 'o2', at: Date.now() }, action: 'stoke', args: {} });
-    await heldNow;
-    holding = false;
-    for (const run of held.splice(0)) await run();
+    await held(() => after.send(act('wc-0', 'o2', 'stoke')));
+    await release();
 
     expect(await answered).toMatchObject({ ok: true });
     await host.settled();
     expect(after.frames.filter((frame) => frame.type === 'world_response')).toHaveLength(1);
+  });
+
+  it('forgets a request still unanswered when a rules reload forgets its page', async () => {
+    const { port, connections, held, release } = await serveHeld();
+    const before = await open(port, 'p1', 'load-1');
+    await held(() => before.send(act('wc-0', 'o1', 'stoke')));
+    connections.forgetAll({ type: 'world_reload' });
+
+    // Even a socket of the same page load greeting again is not that page.
+    const after = await open(port, 'p1', 'load-1');
+    await release();
+    // Answered after anything the released request sent, on the same socket.
+    const answered = after.next((frame) => frame.type === 'world_response');
+    after.send(act('wc-1', 'o2', 'stoke'));
+    expect(await answered).toMatchObject({ requestId: 'wc-1', ok: true });
   });
 });
