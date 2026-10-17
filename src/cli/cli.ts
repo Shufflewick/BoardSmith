@@ -390,10 +390,6 @@ export function createProgram(): Command {
     .command('chunk-check <slug>')
     .description("Record or repair a chunk's Verified Against provenance block, and exit non-zero if it was stale")
     .option('--project <dir>', 'Project directory (defaults to cwd)')
-    .option(
-      '--reverified-no-code-change <range>',
-      'Record a re-verification that found no code change (e.g. <verified-hash>..<head> — 0 manifest files changed)',
-    )
     .option('--json', 'Emit JSON instead of human-readable output')
     .action(chunkCheckCommand);
 
