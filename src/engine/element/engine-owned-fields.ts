@@ -52,6 +52,7 @@ export const ENGINE_OWNED_GAME_FIELDS = {
   _t: 'fixed',
   _visibility: 'engine-set',
   _redactedAttributes: 'engine-set',
+  _viewChildCount: 'engine-set',
   _eventHandlers: 'engine-set',
   _zoneVisibility: 'engine-set',
 

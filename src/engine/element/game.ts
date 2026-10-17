@@ -4863,6 +4863,8 @@ export class Game<
           id: json.id,
           attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(json.attributes ?? {}) },
           childCount: element._t.children.length,
+          // What this seat was shown, no roster (#411), so a restore knows it cannot see in (#1108).
+          visibility: { mode: 'count-only', explicit: true },
         };
       }
 
@@ -4903,6 +4905,7 @@ export class Game<
           // branches below. redactHiddenElementAttrs drops $image and narrows
           // $images to { back } only, so $images.face still never leaks.
           attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(json.attributes ?? {}) },
+          visibility: { mode: 'hidden', explicit: true },
         };
       }
 
