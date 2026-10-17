@@ -16,7 +16,7 @@
 import { ref, computed, watch, inject, nextTick, useId, onMounted, onBeforeUnmount } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
-import { formatActionName, getDisplayFromValue, labelOfPick, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
+import { choiceBoardTarget, formatActionName, getDisplayFromValue, labelOfPick, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
 import { createActionMutators } from '../../composables/actionMutators.js';
 import type {
   UseActionControllerReturn,
@@ -1195,7 +1195,8 @@ function restoreFocusAfterRemoval(index: number): void {
 
 /** What a choice's control reads out: its display, plus its board square when it has one (#934). */
 function choiceSpokenName(choice: ChoiceWithRefs): string {
-  const notation = choice.refs?.find(r => r.ref.notation)?.ref.notation;
+  // The square the board picks, not the source every destination of one piece shares (#1084).
+  const notation = choiceBoardTarget(choice)?.notation;
   return notation ? `${choice.display} (${notation})` : choice.display;
 }
 
