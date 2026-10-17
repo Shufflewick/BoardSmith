@@ -35,10 +35,19 @@ function hasReason(sourceFile, statement) {
   );
 }
 
-/** The statement holding `node`, and the statements before it in the same block. */
+/**
+ * The statement holding `node`, and the statements before it in the same block.
+ * Climbing out of a function with no block body (a braceless arrow) gives only
+ * the statement holding that function, so an earlier reason outside it cannot cover it (#921).
+ */
 function statementAndPredecessors(node) {
   let statement = node;
-  while (statement.parent && !('statements' in statement.parent)) statement = statement.parent;
+  let leftFunction = false;
+  while (statement.parent && !('statements' in statement.parent)) {
+    leftFunction ||= ts.isFunctionLike(statement.parent);
+    statement = statement.parent;
+  }
+  if (leftFunction) return [statement];
   const siblings = statement.parent.statements;
   return siblings.slice(0, siblings.indexOf(statement) + 1);
 }
@@ -114,6 +123,24 @@ describe('unexplainedDynamicImports', () => {
       '});',
     ].join('\n');
     expect(unexplainedDynamicImports('a.test.ts', source)).toEqual([{ line: 6, text: "await import('./b.js');" }]);
+  });
+
+  it('does not let an earlier top-level reason cover an import in a braceless arrow (#921)', () => {
+    const source = [
+      '// Dynamic import: after the stub above, so it loads the stub.',
+      "const early = await import('./early.js');",
+      "it('one', () => import('./heavy.js'));",
+    ].join('\n');
+    expect(unexplainedDynamicImports('a.test.ts', source)).toEqual([
+      { line: 3, text: "it('one', () => import('./heavy.js'));" },
+    ]);
+  });
+
+  it('accepts a reason directly above the statement holding a braceless arrow import (#921)', () => {
+    const source = ['// Dynamic import: the import is what is under test.', "it('one', () => import('./heavy.js'));"].join(
+      '\n',
+    );
+    expect(unexplainedDynamicImports('a.test.ts', source)).toEqual([]);
   });
 
   it('does not count a comment that gives no reason', () => {
