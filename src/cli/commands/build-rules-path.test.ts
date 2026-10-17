@@ -11,11 +11,11 @@
  * because each runs Vite twice and bundles the rules (#363). The tests assert
  * what the builds left behind.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
-import { buildCommand, buildProject } from './build.js';
+import { buildCommand, buildProject, outDirRefusal } from './build.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /** A real game class, so the build can load the rules it compiled. */
@@ -134,6 +134,35 @@ describe('boardsmith build empties its output folder, and only a build output fo
     const dir = customRulesProject(false);
     await expect(buildProject(dir, { outDir: join(dir, '..') })).rejects.toThrow(/project folder/);
     expect(existsSync(join(dir, 'custom', 'rules', 'index.ts'))).toBe(true);
+  });
+
+  it('refuses a symlink as --out-dir, here to the project, and deletes nothing', async () => {
+    const dir = customRulesProject(false);
+    const link = join(dir, '..', 'link-to-game');
+    symlinkSync(dir, link);
+    await expect(buildProject(dir, { outDir: link })).rejects.toThrow(/symlink/);
+    expect(existsSync(link)).toBe(true);
+    expect(existsSync(join(dir, 'custom', 'rules', 'index.ts'))).toBe(true);
+  });
+
+  // macOS's default disk ignores letter case; elsewhere the upper-cased path is another folder.
+  const caseProject = customRulesProject(false);
+  it.skipIf(!existsSync(caseProject.toUpperCase()))('refuses the project folder named in other letter case', async () => {
+    await expect(buildProject(caseProject, { outDir: caseProject.toUpperCase() })).rejects.toThrow(/project folder/);
+    expect(existsSync(join(caseProject, 'custom', 'rules', 'index.ts'))).toBe(true);
+  });
+
+  it('refuses the filesystem root as holding the project', () => {
+    // The pure check only: a build is never run against `/`.
+    expect(outDirRefusal(customRulesProject(false), '/')).toMatch(/project folder or a folder holding it/);
+  });
+
+  it('refuses a file as --out-dir and leaves it', async () => {
+    const dir = customRulesProject(false);
+    const out = join(dir, 'out.txt');
+    writeFileSync(out, 'keep me');
+    await expect(buildProject(dir, { outDir: out })).rejects.toThrow(/is a file, not a folder/);
+    expect(readFileSync(out, 'utf-8')).toBe('keep me');
   });
 
   it('refuses a folder that is not an earlier build output and deletes nothing', async () => {

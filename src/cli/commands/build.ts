@@ -1,6 +1,6 @@
-import { existsSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync, mkdirSync, cpSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync, mkdirSync, cpSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, sep } from 'node:path';
+import { isAbsolute, join, relative, sep } from 'node:path';
 import { build as viteBuild } from 'vite';
 import chalk from 'chalk';
 import ora from 'ora';
@@ -375,24 +375,41 @@ export function buildOutputDir(cwd: string, outDir: string | undefined): string 
 }
 
 /**
- * Deletes `outDir`, so no file an earlier build wrote ships in this one (#842). Refuses, deleting
- * nothing, unless the folder is missing, empty, or holds `rules/rules.js`, which only a build writes;
- * the project folder, anything holding it and the home folder are refused even then.
+ * Why build must not empty `outDir`, or undefined when it may (#842). It may only when the folder
+ * is missing, empty, or holds `rules/rules.js`, which only a build writes, and is not a symlink, the
+ * project, a folder holding it or the home folder. Native realpath, because on macOS the plain one
+ * keeps the letter case typed and `/USERS/me` would not match `/Users/me`.
  */
+export function outDirRefusal(projectDir: string, outDir: string): string | undefined {
+  if (!existsSync(outDir)) return undefined;
+  if (lstatSync(outDir).isSymbolicLink()) {
+    return 'it is a symlink, and emptying it would remove only the link and send the build somewhere new.';
+  }
+  const real = realpathSync.native(outDir);
+  if (isSameOrInside(realpathSync.native(projectDir), real)) return 'it is the project folder or a folder holding it.';
+  if (real === realpathSync.native(homedir())) return 'it is your home folder.';
+  if (!statSync(real).isDirectory()) return 'it is a file, not a folder.';
+  if (readdirSync(real).length > 0 && !existsSync(join(real, 'rules', 'rules.js'))) {
+    return 'it is not empty and has no rules/rules.js, so it does not look like an earlier build output.';
+  }
+  return undefined;
+}
+
+function isSameOrInside(path: string, folder: string): boolean {
+  const fromFolder = relative(folder, path);
+  return !isAbsolute(fromFolder) && fromFolder !== '..' && !fromFolder.startsWith(`..${sep}`);
+}
+
+/** Deletes `outDir`, so no file an earlier build wrote ships in this one (#842), or throws why not. */
 function emptyBuildOutputDir(projectDir: string, outDir: string): void {
-  if (!existsSync(outDir)) return;
-  const real = realpathSync(outDir);
-  const refuse = (why: string) => new Error(
-    `Refusing to empty the build output folder ${outDir}: ${why} ` +
-    `Build deletes everything in its output folder first, so pass --out-dir a folder used only for build output, such as ${join(projectDir, 'dist')}.`,
-  );
-  if (real === projectDir || projectDir.startsWith(real + sep) || real === realpathSync(homedir())) {
-    throw refuse('it is the project folder, a folder holding it, or your home folder.');
+  const refusal = outDirRefusal(projectDir, outDir);
+  if (refusal !== undefined) {
+    throw new Error(
+      `Refusing to empty the build output folder ${outDir}: ${refusal} ` +
+      `Build deletes everything in its output folder first, so pass --out-dir a folder used only for build output, such as ${join(projectDir, 'dist')}.`,
+    );
   }
-  if (!statSync(real).isDirectory() || (readdirSync(real).length > 0 && !existsSync(join(real, 'rules', 'rules.js')))) {
-    throw refuse('it is not empty and has no rules/rules.js, so it does not look like an earlier build output.');
-  }
-  rmSync(outDir, { recursive: true });
+  if (existsSync(outDir)) rmSync(outDir, { recursive: true });
 }
 
 /** `boardsmith build`, in the current directory. */
