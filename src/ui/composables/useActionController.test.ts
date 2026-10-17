@@ -581,48 +581,77 @@ describe('useActionController', () => {
       expect(calls).toEqual(['hook:forcedPlay', 'send:forcedPlay']);
     });
 
-    describe('a hook that returns a listener is told how the action ended (#861)', () => {
-      function autoExecuteForcedPlay(hook: Parameters<ReturnType<typeof useActionController>['onBeforeAutoExecute']>[0]) {
+    describe('onAfterAutoExecute is told how each auto-executed action ended (#861)', () => {
+      function autoExecuteForcedPlay() {
         const controller = useActionController({
           sendAction, availableActions, actionMetadata, isMyTurn, autoFill: true, autoExecute: true,
         });
-        controller.onBeforeAutoExecute(hook);
-        return controller;
+        const outcomes: unknown[] = [];
+        controller.onAfterAutoExecute((result) => { outcomes.push(result); });
+        return { controller, outcomes };
       }
 
-      it('passes the server result on success', async () => {
-        const outcomes: unknown[] = [];
-        const controller = autoExecuteForcedPlay(() => (result) => { outcomes.push(result); });
+      /** Let the auto-execute watcher, the send and the listener calls all finish. */
+      async function settle(): Promise<void> {
+        for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 0));
+      }
+
+      it('passes the server result on success, once', async () => {
+        const { controller, outcomes } = autoExecuteForcedPlay();
 
         await controller.start('forcedPlay');
-        await vi.waitFor(() => expect(outcomes).toHaveLength(1));
+        await settle();
 
+        expect(outcomes).toHaveLength(1);
         expect(outcomes[0]).toMatchObject({ success: true });
       });
 
       it('passes the refusal when the server rejects the action', async () => {
         sendAction.mockResolvedValue({ success: false, error: 'Not allowed' });
-        const outcomes: unknown[] = [];
-        const controller = autoExecuteForcedPlay(() => (result) => { outcomes.push(result); });
+        const { controller, outcomes } = autoExecuteForcedPlay();
 
         await controller.start('forcedPlay');
-        await vi.waitFor(() => expect(outcomes).toHaveLength(1));
+        await settle();
 
-        expect(outcomes[0]).toEqual({ success: false, error: 'Not allowed' });
+        expect(outcomes).toEqual([{ success: false, error: 'Not allowed' }]);
       });
 
-      it('passes a failure when the action is cancelled before it is sent', async () => {
-        const outcomes: Array<{ success: boolean }> = [];
-        const controller = autoExecuteForcedPlay(() => {
-          controller.cancel();
-          return (result) => { outcomes.push(result); };
-        });
+      it('passes a failure when the transport throws', async () => {
+        sendAction.mockRejectedValue(new Error('Connection lost'));
+        const { controller, outcomes } = autoExecuteForcedPlay();
 
         await controller.start('forcedPlay');
-        await vi.waitFor(() => expect(outcomes).toHaveLength(1));
+        await settle();
 
-        expect(outcomes[0].success).toBe(false);
+        expect(outcomes).toEqual([{ success: false, error: 'Connection lost' }]);
+      });
+
+      it('passes a failure when the action is cancelled during the hooks, and sends nothing', async () => {
+        const { controller, outcomes } = autoExecuteForcedPlay();
+        controller.onBeforeAutoExecute(() => { controller.cancel(); });
+
+        await controller.start('forcedPlay');
+        await settle();
+
+        expect(outcomes).toEqual([{ success: false, error: 'Action was cancelled' }]);
         expect(sendAction).not.toHaveBeenCalled();
+      });
+
+      it('a listener that throws does not stop the others', async () => {
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const controller = useActionController({
+          sendAction, availableActions, actionMetadata, isMyTurn, autoFill: true, autoExecute: true,
+        });
+        const outcomes: unknown[] = [];
+        controller.onAfterAutoExecute(() => { throw new Error('broken listener'); });
+        controller.onAfterAutoExecute((result) => { outcomes.push(result); });
+
+        await controller.start('forcedPlay');
+        await settle();
+
+        expect(outcomes).toHaveLength(1);
+        expect(consoleErrorSpy).toHaveBeenCalledWith('[ActionController] afterAutoExecute listener failed:', expect.any(Error));
+        consoleErrorSpy.mockRestore();
       });
     });
 

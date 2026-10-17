@@ -70,17 +70,11 @@ export interface ControllerActionResult {
   followUp?: FollowUpOffer<EnrichedValidElement>;
 }
 
-/** Told how an auto-executed action ended: the server's result, or why it was never sent. */
-export type ActionOutcomeListener = (result: ControllerActionResult) => void;
+/** Runs just before an action is auto-executed. */
+export type BeforeAutoExecuteHook = (actionName: string, args: Record<string, unknown>) => void | Promise<void>;
 
-/**
- * Runs just before an action is auto-executed. It may return a listener, which
- * is called once with how that action ended (#861).
- */
-export type BeforeAutoExecuteHook = (
-  actionName: string,
-  args: Record<string, unknown>
-) => void | ActionOutcomeListener | Promise<void | ActionOutcomeListener>;
+/** Told how an auto-executed action ended: the server's result, or why it was never sent (#861). */
+export type AfterAutoExecuteListener = (result: ControllerActionResult) => void | Promise<void>;
 
 /** Whether a value filled into a pick was accepted, and why not when it was not. */
 export interface PickValidationResult {
@@ -311,8 +305,7 @@ export interface UseActionControllerOptions {
    * explicit `execute()`, or while viewing history.
    * Use this to capture element positions for animations before the DOM updates.
    * Return a Promise to delay execution until animation prep is complete.
-   * Return (or resolve to) a listener to be told how the action ended, so
-   * anything the hook changed can be undone when it fails or is cancelled.
+   * `onAfterAutoExecute` tells you how the action then ended.
    *
    * @example
    * ```typescript
@@ -661,13 +654,14 @@ export interface UseActionControllerReturn {
    * ```typescript
    * // In the board component's <script setup>
    * const props = defineProps<{ actionController: UseActionControllerReturn; gameView: GameViewElement | null }>();
-   * const { onBeforeAutoExecute } = useActionAnimations({ gameView, animations: [...] });
+   * const { onBeforeAutoExecute } = useActionAnimations({
+   *   gameView, actionController: props.actionController, animations: [...],
+   * });
    *
    * props.actionController.onBeforeAutoExecute(onBeforeAutoExecute);
    * ```
    *
-   * A hook may return a listener; it is called once with the action's result,
-   * or with the failure that stopped it being sent (a cancel during the hooks).
+   * `onAfterAutoExecute` is told how each such action ended.
    *
    * Each call adds a hook; it never replaces an earlier one. Hooks run in
    * registration order, and an awaited hook finishes before the next starts.
@@ -686,6 +680,16 @@ export interface UseActionControllerReturn {
    * returned function is called.
    */
   onBeforeAutoExecute: (hook: BeforeAutoExecuteHook) => () => void;
+
+  /**
+   * Add a listener told how each auto-executed action ended, once per action,
+   * after its `onBeforeAutoExecute` hooks: the server's result, or a failure
+   * when the action was never sent (cancelled or replaced during the hooks).
+   * Use it to undo whatever a before-hook changed when the action fails.
+   * Same lifetime rules as `onBeforeAutoExecute`; call the returned function to
+   * unregister. A listener that throws or rejects is logged, never fatal.
+   */
+  onAfterAutoExecute: (listener: AfterAutoExecuteListener) => () => void;
 
   // === Animation Gating ===
   /**

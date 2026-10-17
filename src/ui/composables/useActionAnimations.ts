@@ -39,8 +39,13 @@
  * // Create a ref that we'll sync with the gameView prop
  * const gameViewRef = ref(null);
  *
+ * // GameShell passes `actionController` and `gameView` to the board component
+ * // as props; register the hook once, here in the board's own setup.
+ * const props = defineProps<{ actionController: any; gameView: any }>();
+ *
  * const actionAnimations = useActionAnimations({
  *   gameView: gameViewRef,
+ *   actionController: props.actionController,
  *   animations: [
  *     // Movement animation (element moves to a different destination)
  *     {
@@ -62,9 +67,6 @@
  *   ],
  * });
  *
- * // GameShell passes `actionController` and `gameView` to the board component
- * // as props; register the hook once, here in the board's own setup.
- * const props = defineProps<{ actionController: any; gameView: any }>();
  * watchEffect(() => { gameViewRef.value = props.gameView; });
  * props.actionController.onBeforeAutoExecute(actionAnimations.onBeforeAutoExecute);
  * </script>
@@ -79,14 +81,9 @@
  *
  * ## Usage with Custom useActionController
  *
- * When creating your own action controller, pass the hook directly:
+ * Create the controller first, since the composable listens to it:
  *
  * ```typescript
- * const { flyingElements, onBeforeAutoExecute } = useActionAnimations({
- *   gameView,
- *   animations: [...],
- * });
- *
  * const actionController = useActionController({
  *   sendAction,
  *   availableActions,
@@ -94,8 +91,14 @@
  *   isMyTurn,
  *   gameView,
  *   playerSeat,
- *   onBeforeAutoExecute,  // Pass directly at creation
  * });
+ *
+ * const { flyingElements, onBeforeAutoExecute } = useActionAnimations({
+ *   gameView,
+ *   actionController,
+ *   animations: [...],
+ * });
+ * actionController.onBeforeAutoExecute(onBeforeAutoExecute);
  * ```
  */
 
@@ -104,7 +107,7 @@ import { useFlyingElements, type FlyingCardData, type FlyingCard } from './useFl
 import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
 import { isDevThrowEnabled } from '../../utils/dev.js';
 import type { GameViewElement } from '../types.js';
-import type { ActionOutcomeListener } from './useActionControllerTypes.js';
+import type { UseActionControllerReturn } from './useActionControllerTypes.js';
 
 /**
  * Data extracted from an element for rendering during animation.
@@ -325,6 +328,14 @@ export interface UseActionAnimationsOptions {
    * Animation configurations for different actions.
    */
   animations: ActionAnimationConfig[];
+
+  /**
+   * The action controller whose actions are animated. The composable listens to
+   * it for how each action ended, so a refused or cancelled action puts its
+   * element back and plays no flight. Registering `onBeforeAutoExecute` on it
+   * is still the caller's job (a game may wrap the hook).
+   */
+  actionController: Pick<UseActionControllerReturn, 'onAfterAutoExecute'>;
 }
 
 /**
@@ -339,10 +350,9 @@ export interface UseActionAnimationsReturn {
 
   /**
    * Hook to pass to useActionController's onBeforeAutoExecute option.
-   * Captures element positions before the action executes, and returns the
-   * listener the controller tells how the action ended.
+   * Captures element positions before the action executes.
    */
-  onBeforeAutoExecute: (actionName: string, args: Record<string, unknown>) => Promise<ActionOutcomeListener | undefined>;
+  onBeforeAutoExecute: (actionName: string, args: Record<string, unknown>) => Promise<void>;
 
   /**
    * Cancel all active animations.
@@ -394,7 +404,7 @@ let animationCounter = 0;
  * @returns Composable with flyingElements, onBeforeAutoExecute hook, and cancelAll
  */
 export function useActionAnimations(options: UseActionAnimationsOptions): UseActionAnimationsReturn {
-  const { gameView, animations } = options;
+  const { gameView, animations, actionController } = options;
 
   // Use the flying elements system for rendering
   const { flyingElements, fly, cancelAll } = useFlyingElements();
@@ -417,13 +427,13 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
   async function onBeforeAutoExecute(
     actionName: string,
     args: Record<string, unknown>
-  ): Promise<ActionOutcomeListener | undefined> {
+  ): Promise<void> {
     abandonPending();
 
     // Find matching animation config
     const config = animations.find((a) => a.action === actionName);
     if (!config) {
-      return undefined;
+      return;
     }
 
     // Detect flip-in-place animation (same source and destination selector)
@@ -446,7 +456,7 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
       } else {
         console.error(msg);
       }
-      return undefined;
+      return;
     }
 
     // Capture the element's position and data
@@ -490,7 +500,7 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
     }
 
     // Played once the action is accepted AND the state it produced has rendered
-    const captured: CapturedAnimationState = {
+    pendingAnimation = {
       config,
       startRect,
       elementData,
@@ -502,19 +512,20 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
       stateChanged: false,
       accepted: false,
     };
-    pendingAnimation = captured;
-
-    return (result) => {
-      if (pendingAnimation !== captured) return;
-      if (!result.success) {
-        abandonPending();
-        return;
-      }
-      captured.accepted = true;
-      // The host sends an action's state before its result, so the DOM may already show it
-      if (captured.stateChanged) void play(captured);
-    };
   }
+
+  // Each auto-executed action ends here once, right after its own before-hooks ran
+  actionController.onAfterAutoExecute((result) => {
+    const captured = pendingAnimation;
+    if (!captured || captured.accepted) return;
+    if (!result.success) {
+      abandonPending();
+      return;
+    }
+    captured.accepted = true;
+    // The host sends an action's state before its result, so the DOM may already show it
+    if (captured.stateChanged) return play(captured);
+  });
 
   onScopeDispose(abandonPending);
 
@@ -559,6 +570,7 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
     // before this check ever ran — defeating the fail-loud guarantee for
     // the exact scenario it targets.
     if (!destinationElement) {
+      restoreHidden(animation.hidden);
       const selectorDesc =
         typeof config.destinationSelector === 'function'
           ? '(custom function)'
