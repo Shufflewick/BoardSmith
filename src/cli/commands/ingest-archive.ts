@@ -11,6 +11,7 @@ import {
   ADDITIONAL_SOURCES_BEGIN,
   ADDITIONAL_SOURCES_END,
   ADDITIONAL_SOURCES_HEADING,
+  ARCHIVE_PREFIX,
   type AdditionalSourceRecord,
   parseAdditionalSources,
 } from './rulebook-sources.js';
@@ -151,7 +152,7 @@ function isoDate(now: Date): string {
 
 /** Renders the `## Additional Sources` section body (between the fences), one row per record. */
 function renderAdditionalSourcesSection(records: AdditionalSourceRecord[]): string {
-  const rows = records.map((r) => `| ${r.path} | ${r.sourceHash} |`).join('\n');
+  const rows = records.map((r) => `| ${r.path.replaceAll('|', '\\|')} | ${r.sourceHash} |`).join('\n');
   return `${ADDITIONAL_SOURCES_HEADING}
 
 <!-- MACHINE-OWNED. Do not write between the fences below, and do not move or delete them.
@@ -562,7 +563,7 @@ async function readSourceToArchive(
     sourcePath,
     bytes,
     archivePath: archivePathFor(projectDir, userPath),
-    relArchivePath: `rulebook/source/${basename(sourcePath)}`,
+    relArchivePath: `${ARCHIVE_PREFIX}${basename(sourcePath)}`,
   };
 }
 
@@ -792,6 +793,23 @@ function findLabelLine(
 }
 
 /**
+ * Whether a `Source:` line is a bare path (replaceable in place) rather than the first line of
+ * wrapped prose. An archived path is always bare, even when its file name has a space (#823).
+ */
+function isBarePathSource(text: string, sourceLine: { end: number; value: string }): boolean {
+  if (sourceLine.value.startsWith(ARCHIVE_PREFIX)) return true;
+  const lineEnd = text.indexOf('\n', sourceLine.end);
+  const nextLine = lineEnd === -1 ? undefined : text.slice(lineEnd + 1).split('\n')[0];
+  return (
+    !/\s/.test(sourceLine.value) &&
+    (nextLine === undefined ||
+      nextLine.trim() === '' ||
+      nextLine.startsWith('## ') ||
+      HEADER_LABELS.some((label) => nextLine.startsWith(label)))
+  );
+}
+
+/**
  * Reads the PRIMARY `Source:`/`Source hash:` pair ONLY when it is already fully canonical — a
  * bare path (never wrapped prose) with a `Source hash:` line present too. Returns `undefined`
  * for every other shape (no `Source:` line at all, a `Source hash:` line missing, or the
@@ -800,28 +818,15 @@ function findLabelLine(
  * (`ingestArchiveCommand`, deciding whether the CURRENT archive call names a genuinely DIFFERENT
  * primary source) only acts on this when the comparison is actually meaningful.
  *
- * Mirrors the `isBarePath` classification inside `repairExistingIndex`'s own `Source:` branch —
- * duplicated rather than extracted, matching this file's own established precedent for a single
- * small predicate two call sites both need at slightly different points in the file's control
- * flow. (The `ANY_ANNOTATION_LINE_RE`/filter duplication this comment used to point at as
- * precedent was itself consolidated away in 177.1-01 — `verify-enumerate.ts` and
- * `verify-derive-check.ts` now both import `ANNOTATION_CITATION_RE` from
- * `derived-line-pattern.ts` rather than re-spelling it.)
+ * Shares `isBarePathSource` with `repairExistingIndex`'s own `Source:` branch, so the two can
+ * never disagree about which shape a `Source:` line has.
  */
 function readCanonicalPrimarySource(text: string): { path: string; hash: string } | undefined {
   const sourceLine = findLabelLine(text, 'Source:');
   const hashLine = findLabelLine(text, 'Source hash:');
   if (!sourceLine || !hashLine) return undefined;
 
-  const lineEnd = text.indexOf('\n', sourceLine.end);
-  const nextLine = lineEnd === -1 ? undefined : text.slice(lineEnd + 1).split('\n')[0];
-  const isBarePath =
-    !/\s/.test(sourceLine.value) &&
-    (nextLine === undefined ||
-      nextLine.trim() === '' ||
-      nextLine.startsWith('## ') ||
-      HEADER_LABELS.some((label) => nextLine.startsWith(label)));
-  if (!isBarePath) return undefined;
+  if (!isBarePathSource(text, sourceLine)) return undefined;
 
   return { path: sourceLine.value, hash: hashLine.value };
 }
@@ -923,14 +928,7 @@ async function repairExistingIndex(
     // continuation line, which is non-blank and would otherwise look like wrapped prose again.
   } else {
     const lineEnd = text.indexOf('\n', sourceLine.end);
-    const nextLine = lineEnd === -1 ? undefined : text.slice(lineEnd + 1).split('\n')[0];
-    const isBarePath =
-      !/\s/.test(sourceLine.value) &&
-      (nextLine === undefined ||
-        nextLine.trim() === '' ||
-        nextLine.startsWith('## ') ||
-        HEADER_LABELS.some((label) => nextLine.startsWith(label)));
-    if (isBarePath) {
+    if (isBarePathSource(text, sourceLine)) {
       // bare path (today's shape) — replace the line in place.
       text = text.slice(0, sourceLine.start) + `Source: ${relArchivePath}` + text.slice(sourceLine.end);
     } else {
