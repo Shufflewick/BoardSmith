@@ -79,7 +79,7 @@ const emit = defineEmits<{
 
         <!-- Timeline slider -->
         <div v-if="actionHistory.length > 0" class="timeline-controls">
-          <DebugButton size="small" :disabled="selectedActionIndex === null || selectedActionIndex <= 0" @click="emit('select-action', (selectedActionIndex ?? actionHistory.length) - 1)" >
+          <DebugButton size="small" :disabled="selectedActionIndex !== null && selectedActionIndex <= 0" @click="emit('select-action', (selectedActionIndex ?? actionHistory.length) - 1)" >
             &lt;
           </DebugButton>
           <input

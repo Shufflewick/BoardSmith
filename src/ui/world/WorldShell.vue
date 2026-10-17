@@ -112,7 +112,7 @@ import { provideWorldSeat, useWorldSeat } from './useWorldSeat.js';
 import PlayShell, { type PlayConnection } from '../components/PlayShell.vue';
 import Toast from '../components/Toast.vue';
 import DisabledReasonTooltip from '../components/helpers/DisabledReasonTooltip.vue';
-import { resolveUiComponent, type GameUIRegistry } from '../game-uis.js';
+import type { GameUIRegistry } from '../game-uis.js';
 import { worldBoardProps } from '../board-props.js';
 import { createBoardInteraction } from '../composables/useBoardInteraction.js';
 import { useToast } from '../composables/useToast.js';
@@ -146,10 +146,9 @@ const props = defineProps<{
    *
    * A world had no registry because (said `validate.ts`) it had "no turn, no
    * flow position and no action table to switch boards over". #169 gave it an
-   * action table, so the reason expired: the dev UI switcher works for a world
-   * now, and `devUI(() => import('boardsmith/ui/auto-ui'))` makes AutoUI a
-   * world's default board with no new renderer at all -- a world's view IS the
-   * serialized element tree a table's is.
+   * action table, so the reason expired. A world renders the registry's
+   * `defaultUI()` entry and nothing else: it has no dev UI switcher, so its
+   * `devUI()` entries never show (#896).
    */
   uis: GameUIRegistry;
   /** What to call this game before the host has said what this world is called. */
@@ -190,11 +189,7 @@ const boardProps = computed(() => worldBoardProps(seat, host));
  *  two worlds of the same game have different names and only one is this one. */
 const worldTitle = computed(() => host.worldName.value ?? props.displayName);
 
-const isDevBuild = import.meta.env.DEV;
-const selectedUiName = ref('');
-const boardComponent = computed(() =>
-  resolveUiComponent(props.uis, selectedUiName.value, isDevBuild),
-);
+const boardComponent = computed(() => props.uis.entries[props.uis.defaultName]?.component ?? null);
 
 /**
  * THE OTHER HALF OF #169: A REFUSAL THE PANEL EARNED.
