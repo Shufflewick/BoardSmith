@@ -589,6 +589,10 @@ export function hexToRgb(hex: string): number[] { return [parseInt(hex.slice(1, 
     ['automocks a game module with vi.mock and no factory', `import { vi } from 'vitest';\nvi.mock('../../src/rules/auction');\n`, 2, 'src/rules/auction.ts'],
     ['spies on a game module with vi.mock and an options object', `import { vi } from 'vitest';\nvi.mock('../../src/rules/auction', { spy: true });\n`, 2, 'src/rules/auction.ts'],
     ['loads a game module by a computed path', "const name = 'auction';\nawait import(`../../src/rules/${name}`);\n", 2, 'src/rules/'],
+    ['loads every rules module with an eager import.meta.glob (#841)', `const rules = import.meta.glob('../../src/rules/*.ts', { eager: true });\nvoid rules;\n`, 1, 'src/rules/*.ts'],
+    ['makes importers with a lazy import.meta.glob (#841)', `const rules = import.meta.glob(['../../src/rules/*.ts', '!../../src/rules/x.ts']);\nvoid rules;\n`, 1, 'src/rules/*.ts'],
+    ['globs the game with options this check cannot read (#841)', `const OPTS = { query: '?raw' };\nconst rules = import.meta.glob('../../src/rules/*.ts', OPTS);\nvoid rules;\n`, 2, 'options this check cannot read'],
+    ['globs with a pattern this check cannot read (#841)', `const PATTERN = '../../src/rules/*.ts';\nconst rules = import.meta.glob(PATTERN, { eager: true });\nvoid rules;\n`, 2, 'a pattern this check cannot read'],
   ])('reports a guard that %s from the game\'s src/ (#485)', async (_what, guard, line, module) => {
     const findings = await findingsFor({
       'src/rules/auction.ts': RULES,
@@ -598,6 +602,17 @@ export function hexToRgb(hex: string): number[] { return [parseInt(hex.slice(1, 
     });
     expect(findings.map((f) => [f.kind, f.subject])).toEqual([['guard-runs-code', `tests/guards/a11y-floor.test.ts:${line}`]]);
     expect(findings[0].detail).toContain(module);
+  });
+
+  it('accepts a guard that globs the game as raw text with import.meta.glob (#841)', async () => {
+    const findings = await findingsFor({
+      'src/rules/auction.ts': RULES,
+      'tests/guards/a11y-floor.test.ts': `const a = import.meta.glob('../../src/ui/**/*.vue', { query: '?raw', import: 'default', eager: true });
+const b = import.meta.glob(['../../src/rules/*.ts'], { as: 'raw', eager: true });
+void a; void b;
+`,
+    });
+    expect(findings).toEqual([]);
   });
 
   it('accepts a guard that mocks a game module with a factory, which never loads the real one (#485)', async () => {

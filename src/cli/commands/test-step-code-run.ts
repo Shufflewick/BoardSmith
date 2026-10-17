@@ -14,7 +14,8 @@
  * under `tests/`. Loading counts in every form: `import`, `import(...)` with a string or template
  * path, a re-export, `require(...)`, `vi.importActual(...)`, `vi.importMock(...)`, and `vi.mock(...)`
  * without a factory written inline (no second argument, or an options object such as `{ spy: true }`),
- * which loads the real module to mock it. Reading source with `readFileSync` or a `?raw` import is a scan.
+ * which loads the real module to mock it, and `import.meta.glob(...)` of the game's `src/` or `tests/`
+ * unless it asks for raw text (#841). Reading source with `readFileSync` or a `?raw` import is a scan.
  *
  * The one game module a scan may import as code is literal constants under `src/ui/`: a contrast
  * check needs the theme's colours, and a TypeScript palette (one a WebGL scene reads, which cannot
@@ -99,6 +100,56 @@ function loadedModule(node: AstNode): string | undefined {
   if (isLoadingCall(node)) return specifierText((node.arguments as AstNode[])[0]);
   const loads = ['ImportDeclaration', 'ImportExpression', 'ExportNamedDeclaration', 'ExportAllDeclaration'];
   return loads.includes(node.type) ? specifierText(node.source as AstNode | undefined) : undefined;
+}
+
+/** Whether a node is `import.meta.glob(...)`. */
+function isImportGlob(node: AstNode): boolean {
+  if (node.type !== 'CallExpression') return false;
+  const callee = node.callee as AstNode;
+  const object = callee.object as AstNode | undefined;
+  return callee.type === 'MemberExpression' && object?.type === 'MetaProperty' &&
+    (object.meta as AstNode).name === 'import' && (callee.property as AstNode).name === 'glob';
+}
+
+/** Glob options as written, by key; undefined when they are not an object literal this can read. */
+function globOptions(node: AstNode | undefined): Map<string, AstNode> | undefined {
+  if (!node) return new Map();
+  if (node.type !== 'ObjectExpression') return undefined;
+  const options = new Map<string, AstNode>();
+  for (const property of node.properties as AstNode[]) {
+    const key = property.key as AstNode | undefined;
+    if (property.type !== 'Property' || property.computed || key?.type !== 'Identifier') return undefined;
+    options.set(key.name as string, property.value as AstNode);
+  }
+  return options;
+}
+
+/** Whether an option is the string literal `value`. */
+const optionIs = (options: Map<string, AstNode>, key: string, value: string): boolean =>
+  options.get(key)?.type === 'Literal' && options.get(key)?.value === value;
+
+/**
+ * Why an `import.meta.glob(pattern, options)` call runs the game's code, or undefined. It loads
+ * every file its pattern matches (lazily, through importers, when not eager) unless the options ask
+ * for raw text (`query: '?raw'`, or the older `as: 'raw'`). A pattern counts when it reaches the
+ * game's `src/` or `tests/`, or names a path this cannot resolve (an alias); a `!` pattern only
+ * excludes. Options or a pattern that are not literals are code, since this cannot read them.
+ */
+function globCodeRun(node: AstNode, file: string): string | undefined {
+  const [patternNode, optionsNode] = node.arguments as AstNode[];
+  const options = globOptions(optionsNode);
+  if (options && (optionIs(options, 'query', '?raw') || optionIs(options, 'as', 'raw'))) return undefined;
+  const elements = patternNode?.type === 'ArrayExpression' ? (patternNode.elements as AstNode[]) : [patternNode];
+  const patterns = elements.map(specifierText);
+  if (patterns.some((p) => p === undefined)) return 'calls import.meta.glob with a pattern this check cannot read';
+  const reached = (patterns as string[]).find((p) => {
+    if (p.startsWith('!')) return false;
+    if (!p.startsWith('/') && !p.startsWith('.')) return true; // an alias, which this cannot resolve
+    const path = p.startsWith('/') ? p.slice(1) : posix.normalize(posix.join(posix.dirname(file), p));
+    return path.startsWith('src/') || path.startsWith('tests/');
+  });
+  if (reached === undefined) return undefined;
+  return options ? `loads ${reached} with import.meta.glob` : `loads ${reached} with import.meta.glob and options this check cannot read`;
 }
 
 /** The project script a relative module path names, trying TypeScript's extension rules. */
@@ -294,6 +345,8 @@ function codeRunIn(source: string, file: string, context: CodeRunContext, visite
     const specifier = loadedModule(node);
     const what = specifier === undefined ? undefined : codeRunByImport(node, specifier, file, context, visited);
     if (what !== undefined) found.push({ line: node.loc.start.line, what });
+    const glob = isImportGlob(node) ? globCodeRun(node, file) : undefined;
+    if (glob !== undefined) found.push({ line: node.loc.start.line, what: glob });
     if (node.type === 'Identifier' && MOUNTING_HELPERS.has(node.name as string)) {
       found.push({ line: node.loc.start.line, what: `uses ${node.name as string}` });
     }
