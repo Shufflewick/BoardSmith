@@ -636,7 +636,8 @@ function guardRunsCodeFindings(scope: ChunkTestScope): TestStepFinding[] {
           subject: `${path}:${run.line}`,
           detail:
             `Line ${run.line} of ${path} ${run.what}. A file under ${GUARD_TEST_DIR} holds scans only (tests that read ` +
-            'source as text, with `readFileSync` or an import ending `?raw`): it is never mutation-tested, so a test ' +
+            "source as text, with `readFileSync`, an import ending `?raw`, or `import.meta.glob` with `query: '?raw'`): " +
+            'it is never mutation-tested, so a test ' +
             'there that runs the game could pass whatever the code does. The one game module a scan may import is ' +
             'literal constants under src/ui/, such as the theme colours a contrast check needs. Move this test to ' +
             "the chunk's own test file and list that file in the Spec Manifest " +

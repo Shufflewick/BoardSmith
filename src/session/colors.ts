@@ -1,38 +1,24 @@
 /**
- * Standard player colors for BoardSmith games
- *
- * These colors are designed to:
- * - Work well on dark backgrounds
- * - Have consistent luminance across all colors
- * - Be visually distinct from each other
+ * Player colour option for BoardSmith games. The default list is the engine's
+ * `DEFAULT_COLOR_PALETTE` with its names, the one player-colour palette.
  *
  * @example
- * ```typescript
- * import { STANDARD_PLAYER_COLORS, createColorOption } from 'boardsmith/session';
- *
- * export const gameDefinition = {
- *   // ...
- *   playerOptions: {
- *     color: createColorOption(), // Uses standard colors
- *   },
- * };
- * ```
- *
- * @example Custom colors
  * ```typescript
  * import { createColorOption } from 'boardsmith/session';
  *
  * export const gameDefinition = {
  *   // ...
  *   playerOptions: {
- *     color: createColorOption([
- *       { value: '#ff0000', label: 'Red' },
- *       { value: '#00ff00', label: 'Green' },
- *     ]),
+ *     color: createColorOption(), // The engine palette
  *   },
  * };
  * ```
+ *
+ * Custom colours belong in boardsmith.json's `colorPalette`: that is the list the
+ * live lobby uses, and `boardsmith dev` refuses a code-declared list that differs (#814).
  */
+
+import { DEFAULT_COLOR_PALETTE, DEFAULT_COLOR_LABELS } from '../engine/element/game.js';
 
 /**
  * Color choice for player options
@@ -41,20 +27,6 @@ export interface ColorChoice {
   value: string;
   label: string;
 }
-
-/**
- * Standard player colors - a cohesive palette with consistent luminance
- */
-export const STANDARD_PLAYER_COLORS: readonly ColorChoice[] = [
-  { value: '#e74c3c', label: 'Red' },
-  { value: '#3498db', label: 'Blue' },
-  { value: '#27ae60', label: 'Green' },
-  { value: '#e67e22', label: 'Orange' },
-  { value: '#9b59b6', label: 'Purple' },
-  { value: '#f1c40f', label: 'Yellow' },
-  { value: '#95a5a6', label: 'Black' },
-  { value: '#ecf0f1', label: 'White' },
-] as const;
 
 /**
  * Player option definition for color picker
@@ -66,28 +38,21 @@ export interface ColorOptionDefinition {
 }
 
 /**
- * Create a color player option with standard or custom colors
+ * Create a color player option with the engine palette or custom colors
  *
- * @param colors - Custom color choices (optional, defaults to STANDARD_PLAYER_COLORS)
+ * @param colors - Custom color choices (optional, defaults to the engine's DEFAULT_COLOR_PALETTE, named)
  * @param label - Label for the option (optional, defaults to 'Color')
  * @returns A player option definition for use in gameDefinition.playerOptions
  *
  * @example
  * ```typescript
  * playerOptions: {
- *   color: createColorOption(), // Standard colors
+ *   color: createColorOption(), // The engine palette
  * }
  * ```
  *
- * @example Custom colors
- * ```typescript
- * playerOptions: {
- *   color: createColorOption([
- *     { value: '#ff0000', label: 'Fire' },
- *     { value: '#0000ff', label: 'Ice' },
- *   ], 'Team Color'),
- * }
- * ```
+ * A custom `colors` list must equal boardsmith.json's `colorPalette`, the list the
+ * live lobby uses; `boardsmith dev` refuses one that differs (#814).
  */
 export function createColorOption(
   colors?: readonly ColorChoice[],
@@ -96,6 +61,8 @@ export function createColorOption(
   return {
     type: 'color' as const,
     label,
-    choices: [...(colors ?? STANDARD_PLAYER_COLORS)],
+    choices: colors
+      ? [...colors]
+      : DEFAULT_COLOR_PALETTE.map((value) => ({ value, label: DEFAULT_COLOR_LABELS[value]! })),
   };
 }

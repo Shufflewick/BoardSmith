@@ -96,6 +96,44 @@ describe('changedSince: the files and code lines a change touched', () => {
     expect([...changed.code.keys()]).toEqual(['src/new.ts', 'src/rules.ts']);
     expect([...changed.code.get('src/rules.ts')!]).toEqual([1]);
   });
+
+  // git ends a name with a space with a tab and C-quotes one with a quote or non-ASCII letter (#834).
+  const ODD_NAMES = ['src/a b.ts', 'src/say"hi".ts', 'src/café.ts'];
+
+  it('keeps committed changes to files whose names git would quote', async () => {
+    const dir = await repo(Object.fromEntries(ODD_NAMES.map((name) => [name, 'export const a = 1;\nexport const b = 2;\n'])));
+    const base = git(dir, 'rev-parse', 'HEAD').trim();
+    await write(dir, Object.fromEntries(ODD_NAMES.map((name) => [name, 'export const a = 1;\nexport const b = 3;\n'])));
+    commitAll(dir, 'change b');
+
+    const changed = await changedSince(dir, base);
+    const sorted = [...ODD_NAMES].sort();
+    expect(changed.files).toEqual(sorted);
+    expect([...changed.code.keys()]).toEqual([...ODD_NAMES].sort((a, b) => a.localeCompare(b)));
+    for (const name of ODD_NAMES) expect([...changed.code.get(name)!]).toEqual([2]);
+  });
+
+  it('counts only the edited lines of a renamed file', async () => {
+    const dir = await repo({ 'src/old.ts': 'export const a = 1;\nexport const b = 2;\nexport const c = 3;\n' });
+    const base = git(dir, 'rev-parse', 'HEAD').trim();
+    git(dir, 'mv', 'src/old.ts', 'src/new name.ts');
+    await write(dir, { 'src/new name.ts': 'export const a = 1;\nexport const b = 20;\nexport const c = 3;\n' });
+    commitAll(dir, 'rename and edit');
+
+    const changed = await changedSince(dir, base);
+    expect(changed.files).toEqual(['src/new name.ts']);
+    expect([...changed.code.get('src/new name.ts')!]).toEqual([2]);
+  });
+
+  it('keeps untracked files whose names git would quote', async () => {
+    const dir = await repo({ 'src/rules.ts': 'export const a = 1;\n' });
+    const base = git(dir, 'rev-parse', 'HEAD').trim();
+    await write(dir, Object.fromEntries(ODD_NAMES.map((name) => [name, 'export const n = 1;\n'])));
+
+    const changed = await changedSince(dir, base);
+    expect(changed.files).toEqual([...ODD_NAMES].sort());
+    for (const name of ODD_NAMES) expect([...changed.code.get(name)!]).toEqual([1]);
+  });
 });
 
 // -------------------------------------------------------------------------------------------

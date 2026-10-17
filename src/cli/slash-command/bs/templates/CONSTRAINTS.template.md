@@ -16,14 +16,15 @@
 ## Hard Constraints
 
 <!-- One "### C<n>" entry per hard constraint. Every bullet in the project CLAUDE.md's
-     "## Hard constraints" (or "## Hard Rules") section must be quoted by an entry.
-     - Quote: exact text from the source file (whitespace and ** / ` markup are ignored).
+     "## Hard constraints" (or "## Hard Rules") section must be quoted whole by an entry.
+     - Quote: exact text from the source file, at least 3 words (whitespace and ** / ` markup
+       are ignored).
      - Source: the file it is quoted from, relative to the project root (usually CLAUDE.md).
      - Kind: measured (a test proves it) or reviewed (the constraints lens judges it).
      - Test: for measured, the test file that proves it, relative to the project root.
 
      ### C1
-     - Quote: A partition is refused past 512 KiB
+     - Quote: A partition is refused past 512 KiB, in UTF-8 bytes, at genesis and at every checkpoint.
      - Source: CLAUDE.md
      - Kind: measured
      - Test: tests/world-budget.test.ts

@@ -589,6 +589,30 @@ export function hexToRgb(hex: string): number[] { return [parseInt(hex.slice(1, 
     ['automocks a game module with vi.mock and no factory', `import { vi } from 'vitest';\nvi.mock('../../src/rules/auction');\n`, 2, 'src/rules/auction.ts'],
     ['spies on a game module with vi.mock and an options object', `import { vi } from 'vitest';\nvi.mock('../../src/rules/auction', { spy: true });\n`, 2, 'src/rules/auction.ts'],
     ['loads a game module by a computed path', "const name = 'auction';\nawait import(`../../src/rules/${name}`);\n", 2, 'src/rules/'],
+    ['loads every rules module with an eager import.meta.glob (#841)', `const rules = import.meta.glob('../../src/rules/*.ts', { eager: true });\nvoid rules;\n`, 1, 'src/rules/*.ts'],
+    ['makes importers with a lazy import.meta.glob (#841)', `const rules = import.meta.glob(['../../src/rules/*.ts', '!../../src/rules/x.ts']);\nvoid rules;\n`, 1, 'src/rules/*.ts'],
+    ['globs the game with options this check cannot read (#841)', `const OPTS = { query: '?raw' };\nconst rules = import.meta.glob('../../src/rules/*.ts', OPTS);\nvoid rules;\n`, 2, 'options this check cannot read'],
+    ['globs from the tests folder with a wildcard (#841)', `const g = import.meta.glob("../**/*.ts", { eager: true });\nvoid g;\n`, 1, '../**/*.ts'],
+    ['globs src and tests with a brace set (#841)', `const g = import.meta.glob("../../{src,tests}/**/*.ts", { eager: true });\nvoid g;\n`, 1, '../../{src,tests}/**/*.ts'],
+    ['globs with a wildcard folder before rules (#841)', `const g = import.meta.glob("../../*/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '../../*/rules/*.ts'],
+    ['globs the whole project from its root (#841)', `const g = import.meta.glob("/**/*.ts", { eager: true });\nvoid g;\n`, 1, '/**/*.ts'],
+    ['globs relative to a base option (#841)', `const g = import.meta.glob("./rules/*.ts", { base: "../../src", eager: true });\nvoid g;\n`, 1, 'without `base`'],
+    ['globs support files under tests (#841)', `const g = import.meta.glob("../support/*.ts", { eager: true });\nvoid g;\n`, 1, '../support/*.ts'],
+    ['globs with a query that is not only raw (#841)', `const g = import.meta.glob("../../src/rules/*.ts", { query: "?raw&x", eager: true });\nvoid g;\n`, 1, 'src/rules/*.ts'],
+    ['globs with a url query (#841)', `const g = import.meta.glob("../../src/rules/*.ts", { query: "?url", eager: true });\nvoid g;\n`, 1, 'src/rules/*.ts'],
+    ['globs with a raw query a later duplicate key overrides (#841)', `const g = import.meta.glob("../../src/rules/*.ts", { 'query': '?raw', query: '?url' });\nvoid g;\n`, 1, 'src/rules/*.ts'],
+    ['globs with a computed option key (#841)', `const g = import.meta.glob("../../src/rules/*.ts", { ['query']: '?raw' });\nvoid g;\n`, 1, 'options this check cannot read'],
+    ['globs through a wildcard folder and back up into src/ (#841)', `const g = import.meta.glob("../../docs/*/../../src/x.ts", { eager: true });\nvoid g;\n`, 1, '../../docs/*/../../src/x.ts'],
+    ['globs through ** and back up into src/ (#841)', `const g = import.meta.glob("../../docs/**/../../src/a.ts", { eager: true });\nvoid g;\n`, 1, '../../docs/**/../../src/a.ts'],
+    ['globs with a brace set that climbs into src/ (#841)', `const g = import.meta.glob("../../docs/{../src,x}/*.ts", { eager: true });\nvoid g;\n`, 1, '../../docs/{../src,x}/*.ts'],
+    ['globs with an extglob that climbs into src/ (#841)', `const g = import.meta.glob("../../docs/@(x|../src)/*.ts", { eager: true });\nvoid g;\n`, 1, '../../docs/@(x|../src)/*.ts'],
+    ['globs from above the project back into it (#841)', `const g = import.meta.glob("../../../*/src/x.ts", { eager: true });\nvoid g;\n`, 1, '../../../*/src/x.ts'],
+    ['globs src/ from the root with a doubled slash (#841)', `const g = import.meta.glob("//src/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '//src/rules/*.ts'],
+    ['globs src/ from the root with a tripled slash (#841)', `const g = import.meta.glob("///src/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '///src/rules/*.ts'],
+    ['globs with a brace set holding a ) that climbs into src/ (#841)', `const g = import.meta.glob("../../docs/{x),../src}/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '../../docs/{x),../src}/rules/*.ts'],
+    ['globs src/ spelled in upper case, which a case-insensitive disk matches (#841)', `const g = import.meta.glob("../../SRC/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '../../SRC/rules/*.ts'],
+    ['globs src/ spelled with a long s, which a case-insensitive disk folds to s (#841)', `const g = import.meta.glob("../../ſrc/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '../../ſrc/rules/*.ts'],
+    ['globs with a pattern this check cannot read (#841)', `const PATTERN = '../../src/rules/*.ts';\nconst rules = import.meta.glob(PATTERN, { eager: true });\nvoid rules;\n`, 2, 'a pattern this check cannot read'],
   ])('reports a guard that %s from the game\'s src/ (#485)', async (_what, guard, line, module) => {
     const findings = await findingsFor({
       'src/rules/auction.ts': RULES,
@@ -598,6 +622,26 @@ export function hexToRgb(hex: string): number[] { return [parseInt(hex.slice(1, 
     });
     expect(findings.map((f) => [f.kind, f.subject])).toEqual([['guard-runs-code', `tests/guards/a11y-floor.test.ts:${line}`]]);
     expect(findings[0].detail).toContain(module);
+  });
+
+  it('accepts a guard that globs the game as raw text with import.meta.glob (#841)', async () => {
+    const findings = await findingsFor({
+      'src/rules/auction.ts': RULES,
+      'tests/guards/a11y-floor.test.ts': `const a = import.meta.glob('../../src/ui/**/*.vue', { query: '?raw', import: 'default', eager: true });
+const b = import.meta.glob(['../../src/rules/*.ts'], { as: 'raw', eager: true });
+const c = import.meta.glob('../../src/rules/*.ts', { 'query': '?raw', eager: true });
+void a; void b; void c;
+`,
+    });
+    expect(findings).toEqual([]);
+  });
+
+  it('accepts a glob whose only pattern reaching src/ is a ! exclusion (#841)', async () => {
+    const findings = await findingsFor({
+      'src/rules/auction.ts': RULES,
+      'tests/guards/a11y-floor.test.ts': `const g = import.meta.glob(['../../docs/*.md', '!../../src/**/*.ts'], { eager: true });\nvoid g;\n`,
+    });
+    expect(findings).toEqual([]);
   });
 
   it('accepts a guard that mocks a game module with a factory, which never loads the real one (#485)', async () => {

@@ -571,6 +571,14 @@ describe('replaceDeriveCheckVerdicts / recordDeriveCheckVerdicts / readDeriveChe
     expect(read.some((r) => r.verdict === 'contradicted')).toBe(true);
   });
 
+  it('recordDeriveCheckVerdicts keeps every record when several calls run in parallel (#831)', async () => {
+    const lines = [1, 2, 3, 4, 5, 6];
+    await Promise.all(
+      lines.map((lineNumber) => recordDeriveCheckVerdicts(dir, [{ ...sampleUncorroboratedRecord(), lineNumber }])),
+    );
+    expect((await readDeriveCheckVerdicts(dir)).map((r) => r.lineNumber).sort()).toEqual(lines);
+  });
+
   it('recordDeriveCheckVerdicts called twice for the SAME slicePath:lineNumber upserts — exactly one record survives, carrying the second call content', async () => {
     const first = sampleUncorroboratedRecord();
     const second = createDeriveCheckRecord({

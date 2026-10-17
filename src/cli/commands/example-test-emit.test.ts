@@ -269,6 +269,10 @@ describe('verifyExampleEmitCommand', () => {
     expect(bytes).toContain('a READY guard becomes EXHAUSTED when punched');
     // Its test sits in a describe() named for the example, which is how a result names it.
     expect(bytes).toContain("  describe('rulebook/02-punch.md:2', () => {");
+    // A test that asserts nothing fails, so it can never be recorded as agreeing (#826).
+    expect(bytes).toContain(
+      "  describe('rulebook/02-punch.md:2', () => {\n    beforeEach(() => {\n      expect.hasAssertions();\n    });\n",
+    );
   });
 
   it.each(['not-run', 'agrees', 'disagrees'])(
@@ -304,7 +308,7 @@ describe('verifyExampleEmitCommand', () => {
     });
     await recordExampleReplayVerdicts(project, [
       translatedRecord(2, {
-        testCode: "it('asserts strictly using the shared import', () => {\n  strictEqual(1 + 1, 2);\n});",
+        testCode: "it('asserts strictly using the shared import', () => {\n  expect(strictEqual(1 + 1, 2)).toBeUndefined();\n});",
         imports: ["import { strictEqual } from 'node:assert';"],
       }),
       translatedRecord(
@@ -312,7 +316,7 @@ describe('verifyExampleEmitCommand', () => {
         {
           sourceText: 'A second example, also about Guards.',
           testCode:
-            "it('uses a second, distinct import', () => {\n  strictEqual(basename('/a/b.ts'), 'b.ts');\n});",
+            "it('uses a second, distinct import', () => {\n  expect(strictEqual(basename('/a/b.ts'), 'b.ts')).toBeUndefined();\n});",
           imports: [
             "import { strictEqual } from 'node:assert';", // duplicate of example 1's import
             "import { basename } from 'node:path';",
