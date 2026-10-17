@@ -15,7 +15,7 @@
  * it is the one case the old code got right.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ref } from 'vue';
 import { useActionController, type EnrichedActionMetadata } from './useActionController.js';
 import { createMockSendAction } from './useActionController.test-helper.js';
@@ -334,5 +334,118 @@ describe('the draft and prefills judge a pick value by the same rule as fill (#8
     await controller.execute('assignSpy', { spy: 'Agent Vex', task: 'propaganda' });
 
     expect(sendAction).toHaveBeenCalledWith('assignSpy', { spy: OPERATIVES[1], task: 'propaganda' });
+  });
+});
+
+describe('every call that takes a pick value resolves it by the same rule (#857)', () => {
+  const FRUIT = [{ id: 'a', name: 'Apple' }, { id: 'b', name: 'Banana' }];
+  const fruitChoices = FRUIT.map((f) => ({ value: f, display: f.name }));
+
+  function fruitController(selection: Partial<EnrichedActionMetadata['selections'][number]>) {
+    const pickStep = vi.fn().mockResolvedValue({ success: true, done: false });
+    const controller = useActionController({
+      sendAction: createMockSendAction(),
+      availableActions: ref(['eat']),
+      actionMetadata: ref<Record<string, EnrichedActionMetadata>>({
+        eat: {
+          name: 'eat',
+          prompt: 'Eat',
+          selections: [
+            { name: 'fruit', type: 'choice', prompt: 'Which fruit?', choices: fruitChoices, ...selection },
+            { name: 'note', type: 'text', prompt: 'Note' },
+          ],
+        },
+      }),
+      isMyTurn: ref(true),
+      autoFill: false,
+      autoExecute: false,
+      pickStep,
+    });
+    return { controller, pickStep };
+  }
+
+  it('sends a repeat pick the offered value and labels it as its button', async () => {
+    const { controller, pickStep } = fruitController({ repeat: { hasOnEach: false } });
+    pickStep.mockResolvedValueOnce({ success: true, done: false }).mockResolvedValueOnce({ success: true, done: true });
+
+    await controller.start('eat');
+    await controller.fill('fruit', 'a');
+    await controller.fill('fruit', 'Banana');
+
+    expect(pickStep.mock.calls.map((c) => c[2])).toEqual([FRUIT[0], FRUIT[1]]);
+    expect(controller.getCollectedPick('fruit')).toEqual({ value: FRUIT, display: 'Apple, Banana', skipped: false });
+  });
+
+  it('sends an onSelect pick the offered value and labels it as its button', async () => {
+    const { controller, pickStep } = fruitController({ hasOnSelect: true });
+
+    await controller.start('eat');
+    await controller.fill('fruit', 'b');
+
+    expect(pickStep.mock.calls[0][2]).toEqual(FRUIT[1]);
+    expect(controller.getCollectedPick('fruit')).toEqual({ value: FRUIT[1], display: 'Banana', skipped: false });
+  });
+
+  it('starts an action holding the offered value for an arg named by shorthand', async () => {
+    const { controller } = fruitController({});
+
+    await controller.start('eat', { args: { fruit: 'a' } });
+
+    expect(controller.currentArgs.value.fruit).toEqual(FRUIT[0]);
+    expect(controller.getCollectedPick('fruit')?.display).toBe('Apple');
+  });
+
+  it('refuses to start an action with an arg fill would refuse, and says why', async () => {
+    const { controller } = fruitController({ choices: [{ ...fruitChoices[0], disabled: 'Too ripe' }, fruitChoices[1]] });
+
+    const result = await controller.start('eat', { args: { fruit: 'Apple' } });
+
+    expect(result).toEqual({ success: false, error: 'Selection disabled: Too ripe' });
+    expect(controller.lastError.value).toBe('Selection disabled: Too ripe');
+    expect(controller.currentAction.value).toBe(null);
+  });
+});
+
+describe('execute() resolves against the choices of the action it runs (#857)', () => {
+  const SCOUT_IN_A = { id: 'scout', name: 'Scout', onlyInA: true };
+  const SCOUT_IN_B = { id: 'scout', name: 'Scout' };
+
+  function twoActionTable() {
+    const sendAction = createMockSendAction();
+    const target = (choices?: Array<{ value: unknown; display: string }>) =>
+      [{ name: 'target', type: 'choice' as const, prompt: 'Which?', ...(choices && { choices }) }];
+    const controller = useActionController({
+      sendAction,
+      availableActions: ref(['scoutA', 'scoutB', 'scoutC']),
+      actionMetadata: ref<Record<string, EnrichedActionMetadata>>({
+        scoutA: { name: 'scoutA', prompt: 'A', selections: target() },
+        scoutB: { name: 'scoutB', prompt: 'B', selections: target([{ value: SCOUT_IN_B, display: 'Scout' }]) },
+        scoutC: { name: 'scoutC', prompt: 'C', selections: target() },
+      }),
+      fetchPickChoices: vi.fn(async () => ({ success: true, choices: [{ value: SCOUT_IN_A, display: 'Scout' }] })),
+      isMyTurn: ref(true),
+      autoFill: false,
+      autoExecute: false,
+    });
+    return { controller, sendAction };
+  }
+
+  it("sends the executed action's own choice, not the open action's", async () => {
+    const { controller, sendAction } = twoActionTable();
+    await controller.start('scoutA');
+    expect(controller.currentChoices.value[0]?.value).toEqual(SCOUT_IN_A);
+
+    await controller.execute('scoutB', { target: 'Scout' });
+
+    expect(sendAction).toHaveBeenCalledWith('scoutB', { target: SCOUT_IN_B });
+  });
+
+  it('leaves the value for the server when the executed action offers nothing here', async () => {
+    const { controller, sendAction } = twoActionTable();
+    await controller.start('scoutA');
+
+    await controller.execute('scoutC', { target: 'Scout' });
+
+    expect(sendAction).toHaveBeenCalledWith('scoutC', { target: 'Scout' });
   });
 });

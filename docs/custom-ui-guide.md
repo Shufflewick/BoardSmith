@@ -440,7 +440,7 @@ one thing to avoid.
 
 **Note:** `fill()` takes `choice.value`, never the `{ value, display }` choice object. A choice object is refused like any other value that is not on offer.
 
-Every controller call that takes a pick value (`fill()`, `execute()`, a `prefill`, `toggleMultiSelect()`, `isMultiSelectSelected()`, `appendListEntry()`) names a choice by the same rule as the server: the offered value, a copy of it, or a shorthand (its `id`, its display text, or an object with only its identifying fields). The controller then holds the offered value, so `toggleMultiSelect('squad', 'Agent Vex')` followed by `isMultiSelectSelected('squad', vex.id)` is `true`, and toggling it again by either name removes it. Adding a disabled choice is refused with its reason; removing a draft entry never is.
+Every controller call that takes a pick value (`fill()`, `execute()`, `start()`'s `args` and `prefill`, `toggleMultiSelect()`, `isMultiSelectSelected()`, `appendListEntry()`) names a choice by the same rule as the server: the offered value, a copy of it, or a shorthand (its `id`, its display text, or an object with only its identifying fields). The controller then holds the offered value, so `toggleMultiSelect('squad', 'Agent Vex')` followed by `isMultiSelectSelected('squad', vex.id)` is `true`, and toggling it again by either name removes it. Adding a disabled choice is refused with its reason; removing a draft entry never is.
 
 ### multiSelect Selections: `fill()` Requires an Array
 
