@@ -119,6 +119,7 @@ import type {
   ChoiceWithRefs,
   EnrichedValidElement,
   EnrichedPickMetadata,
+  PickStepResponse,
   ActionQuoteResult,
   PickSnapshot,
   CollectedPick,
@@ -269,6 +270,59 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   //   one flush, and a watch on the name alone sees no change (#384).
   const actionStartTick = ref(0);
 
+  /**
+   * True once the action that was current when `seq` (an `actionStartTick`
+   * reading) was taken has been cancelled, finished or replaced. Every await in
+   * this controller that goes on to continue an action reads the tick first and
+   * asks this after, so a late reply is dropped instead of landing on whatever
+   * action is current now (#854, #856).
+   */
+  function actionMovedOn(seq: number): boolean {
+    return actionStartTick.value !== seq || currentAction.value === null;
+  }
+
+  // The actionStartTick of the action whose pick step is awaiting the server, if any.
+  let stepSeq: number | null = null;
+  const stepOutstanding = (): boolean => stepSeq !== null && !actionMovedOn(stepSeq);
+  const STEP_OUTSTANDING = 'Still waiting for the server to answer your last pick.';
+  // Not set as lastError: the player moved on themselves, so there is nothing to report.
+  const MOVED_ON: PickValidationResult = { valid: false, error: 'The action changed before the server answered this pick.' };
+
+  /** Publish the action a pick step completed, with the result its response carries. */
+  function resolveStep(actionName: string, player: number, result: PickStepResponse): void {
+    resolveAction(actionName, player, { success: true, data: result.data, message: result.message, followUp: result.followUp });
+  }
+
+  /**
+   * Send one pick step of the current action. Resolves null when the action
+   * moved on before the reply, which then touches nothing current. A step that
+   * completed its action still reached the server first, so that action really
+   * committed and its result is published under its own name (as sendAndResolve
+   * does); its followUp is left to the server, which holds it for the seat.
+   */
+  async function sendStep(
+    stepFn: NonNullable<typeof options.pickStep>,
+    selectionName: string,
+    value: unknown,
+  ): Promise<PickStepResponse | null> {
+    const seq = actionStartTick.value;
+    const actionName = currentAction.value as string;
+    const player = playerSeat?.value ?? 0;
+    stepSeq = seq;
+    try {
+      const result = await stepFn(player, selectionName, value, actionName, buildServerArgs());
+      if (!actionMovedOn(seq)) return result;
+      if (result.success && result.actionComplete) resolveStep(actionName, player, result);
+      return null;
+    } catch (err) {
+      // A failed step of an abandoned action is nothing the player needs told.
+      if (actionMovedOn(seq)) return null;
+      throw err;
+    } finally {
+      if (stepSeq === seq) stepSeq = null;
+    }
+  }
+
   // Monotonic counter pulsed when an action FULLY completes via the selection-step
   // transport (handleOnSelectFill) with no further followUp in the chain. The
   // execute() path signals "an action just finished" by toggling isExecuting (which
@@ -290,13 +344,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // the type, so a board reading `data.myPayload` would be fighting DeepReadonly on
   // a value the game itself authored. A ComputedRef is read-only by construction.
   const exposedLastActionResult = computed(() => lastActionResult.value);
-
-  // Monotonic counter bumped in clearAdvancedState (every action tear-down).
-  // Captured at the start of each fetchChoicesForPick call; compared after the
-  // await resolves. If they differ the action was cleared/replaced while the
-  // fetch was in-flight (R-06: post-multijump stale-choice race) — the result
-  // is discarded rather than written to the new action's snapshot.
-  let choiceFetchGen = 0;
 
   // Args storage for the in-progress action.
   // Use fill/start/clear to keep collectedPicks snapshot and args in sync.
@@ -436,11 +483,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     repeatingState.value = null;
     actionSnapshot.value = null;
     pendingOnServer.value = false;
-    // Bump the fetch-generation counter so any in-flight fetchChoicesForPick
-    // calls that resolve after this point discard their results instead of
-    // writing them to the next action's snapshot (R-06 stale-choice race fix).
-    // Those calls no longer end the loading state either (#663), so it ends here.
-    choiceFetchGen++;
+    // A fetch still in flight for the torn-down action no longer ends the
+    // loading state (#663), so it ends here.
     isLoadingChoices.value = false;
   }
 
@@ -899,7 +943,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return;
     }
 
+    const seq = actionStartTick.value;
     await fetchChoicesForPick(selection.name);
+    if (actionMovedOn(seq)) return;
 
     if (tryAutoFillSelection(selection)) {
       // Recursively handle next selection
@@ -970,11 +1016,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     const player = playerSeat?.value ?? 0;
 
-    // Capture the generation before the await. clearAdvancedState() (called
-    // on action completion/cancel/start) bumps this counter. If it differs
-    // after the round-trip the action is gone/replaced — discard the result,
-    // success or failure, rather than applying it to the new action (R-06, #663).
-    const capturedFetchGen = choiceFetchGen;
+    // If the action is gone or replaced after the round trip, discard the
+    // result, success or failure, rather than apply it to the new action (R-06, #663).
+    const seq = actionStartTick.value;
 
     isLoadingChoices.value = true;
     const fetchStartTime = Date.now();
@@ -988,9 +1032,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         buildServerArgs()
       );
 
-      // Discard stale result: the action was completed/cancelled/replaced while
-      // this fetch was in-flight (R-06: post-multijump stale-choice race).
-      if (choiceFetchGen !== capturedFetchGen) return;
+      if (actionMovedOn(seq)) return;
 
       const fetchDuration = Date.now() - fetchStartTime;
 
@@ -1018,7 +1060,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         setError(result.error ?? describeUndescribablePick(selection));
       }
     } catch (err) {
-      if (choiceFetchGen !== capturedFetchGen) return;
+      if (actionMovedOn(seq)) return;
       const fetchDuration = Date.now() - fetchStartTime;
       console.error(
         `[BoardSmith] Error fetching pick choices for '${selectionName}' after ${fetchDuration}ms:`,
@@ -1027,7 +1069,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       setError(describeUndescribablePick(selection));
     } finally {
       // Only a request of the current action ends its loading state (#663).
-      if (choiceFetchGen === capturedFetchGen) isLoadingChoices.value = false;
+      if (!actionMovedOn(seq)) isLoadingChoices.value = false;
     }
   }
 
@@ -1349,6 +1391,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // Also applies prefills when a pick becomes active
   watch(currentPick, async (sel) => {
     if (!sel || isExecuting.value) return;
+    const seq = actionStartTick.value;
 
     // Nothing below may run against a half-loaded choice list: a prefill judged
     // against an empty snapshot is discarded, and an auto-fill judged against
@@ -1368,7 +1411,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     // The action can be cancelled, replaced or advanced while choices load.
     // The watcher refires for whatever pick is current now, so drop this run.
-    if (isExecuting.value || currentPick.value?.name !== sel.name) return;
+    if (isExecuting.value || actionMovedOn(seq) || currentPick.value?.name !== sel.name) return;
 
     // A prefill takes priority over auto-fill, and settles the pick either way.
     if (consumePrefill(sel)) return;
@@ -1384,25 +1427,32 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   watch(isReady, async (ready) => {
     if (ready && getAutoExecute() && currentAction.value && !isExecuting.value && !pendingOnServer.value
         && !isViewingHistoryValue()) {
-      // Call hooks before executing - allows capturing element positions for animations.
-      // Sequential await (not Promise.all) so ordering is deterministic across hooks.
-      // WR-02: each hook is isolated — with accumulation semantics, one consumer's
-      // buggy hook must not take down every other consumer, and execution must
-      // ALWAYS proceed (a throw here would leave isReady true with the watcher
-      // never re-firing: the action would be permanently wedged, with no toast).
-      // WR-03: iterate a SNAPSHOT — a one-shot hook that unregisters itself (or
-      // another hook) splices the live array mid-for...of and would silently
-      // skip the hook registered after it.
-      for (const hook of [...beforeAutoExecuteHooks.value]) {
-        try {
-          await hook(currentAction.value, buildServerArgs());
-        } catch (err) {
-          console.error('[ActionController] beforeAutoExecute hook failed:', err);
-        }
-      }
-      executeCurrentAction();
+      const seq = actionStartTick.value;
+      await runBeforeAutoExecuteHooks(currentAction.value);
+      if (!actionMovedOn(seq)) executeCurrentAction();
     }
   });
+
+  /**
+   * Call hooks before executing - allows capturing element positions for animations.
+   * Sequential await (not Promise.all) so ordering is deterministic across hooks.
+   * WR-02: each hook is isolated — with accumulation semantics, one consumer's
+   * buggy hook must not take down every other consumer, and execution must
+   * ALWAYS proceed (a throw here would leave isReady true with the watcher
+   * never re-firing: the action would be permanently wedged, with no toast).
+   * WR-03: iterate a SNAPSHOT — a one-shot hook that unregisters itself (or
+   * another hook) splices the live array mid-for...of and would silently
+   * skip the hook registered after it.
+   */
+  async function runBeforeAutoExecuteHooks(actionName: string): Promise<void> {
+    for (const hook of [...beforeAutoExecuteHooks.value]) {
+      try {
+        await hook(actionName, buildServerArgs());
+      } catch (err) {
+        console.error('[ActionController] beforeAutoExecute hook failed:', err);
+      }
+    }
+  }
 
   // === Tutorial-step suppression lift watch (R-04 timing fix) ===
   //
@@ -1579,7 +1629,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       }
       resolveAction(actionName, playerSeat?.value ?? 0, result);
 
-      if (actionStartTick.value === seq) {
+      if (!actionMovedOn(seq)) {
         currentAction.value = null;
         clearArgs();
         clearAdvancedState();
@@ -1601,6 +1651,14 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   async function execute(actionName: string, args: Record<string, unknown> = {}): Promise<ControllerActionResult> {
+    if (isExecuting.value) {
+      return { success: false, error: 'Action already executing' };
+    }
+
+    if (isViewingHistoryValue()) {
+      return { success: false, error: 'Cannot execute an action while viewing historical state.' };
+    }
+
     if (!isMyTurn.value) {
       return { success: false, error: 'Not your turn' };
     }
@@ -1772,7 +1830,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       }
 
       if (selectionToFetch) {
+        const seq = actionStartTick.value;
         await fetchAndAutoFill(selectionToFetch);
+        if (actionMovedOn(seq)) return;
 
         // R-04: If fetchAndAutoFill auto-filled ALL remaining selections (isReady),
         // the auto-execute watcher is permanently blocked by pendingOnServer = true.
@@ -1944,6 +2004,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return { valid: false, error };
     }
 
+    if (stepOutstanding()) {
+      setError(STEP_OUTSTANDING);
+      return { valid: false, error: STEP_OUTSTANDING };
+    }
+
     const selection = currentActionMeta.value.selections.find(s => s.name === selectionName);
     if (!selection) {
       const error = `Unknown selection: "${selectionName}"`;
@@ -2004,17 +2069,14 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         });
       }
 
-      // Always fetch choices for the next selection (unless it's number/text)
-      const nextSel = getNextSelection(selectionName);
-      if (nextSel && (nextSel.type === 'choice' || nextSel.type === 'element' || nextSel.type === 'elements')) {
-        await fetchChoicesForPick(nextSel.name);
-
-        // After fetch, check for auto-fill on the next selection (the watch may have
-        // fired before the cache was populated). This goes through the one auto-fill
-        // chokepoint so every suppressor applies here too: the `autoFill` knob,
-        // `.manual()` (AUTOEXEC-01), tutorial suppression, and optional picks.
-        tryAutoFillSelection(nextSel);
-      }
+      const fetching = fetchNextPick(selectionName);
+      const nextSel = fetching && await fetching;
+      if (nextSel === false) return MOVED_ON;
+      // After fetch, check for auto-fill on the next selection (the watch may have
+      // fired before the cache was populated). This goes through the one auto-fill
+      // chokepoint so every suppressor applies here too: the `autoFill` knob,
+      // `.manual()` (AUTOEXEC-01), tutorial suppression, and optional picks.
+      if (nextSel) tryAutoFillSelection(nextSel);
     } else {
       setError(validation.error || 'Validation failed');
     }
@@ -2050,19 +2112,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     repeatingState.value.awaitingServer = true;
 
     try {
-      const result = await stepFn(
-        player,
-        selection.name,
-        value,
-        currentAction.value,
-        buildServerArgs()
-      );
-
-      // Guard: repeatingState may have been cleared by startFollowUp during the await
-      if (!repeatingState.value) {
-        // State was cleared (e.g., by followUp) - just return success
-        return { valid: true };
-      }
+      const result = await sendStep(stepFn, selection.name, value);
+      if (!result || !repeatingState.value) return MOVED_ON;
 
       if (!result.success) {
         // Remove from accumulated on error
@@ -2091,12 +2142,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         // The server ran execute() on THIS step, so its return value rides this
         // response (BUG-017/BUG-012). Publishing it here is what makes a repeating
         // action's `data` reach the board on the same terms as a single-step one's.
-        resolveAction(completedActionName ?? '', player, {
-          success: true,
-          data: result.data,
-          message: result.message,
-          followUp: result.followUp,
-        });
+        resolveStep(completedActionName ?? '', player, result);
 
         // Handle followUp: chain to next action (same pattern as executeCurrentAction)
         if (result.followUp) {
@@ -2146,17 +2192,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     const player = playerSeat?.value ?? 0;
 
-    // Build initialArgs from all previously collected args
-    const initialArgs = buildServerArgs();
-
     try {
-      const result = await stepFn(
-        player,
-        selection.name,
-        value,
-        currentAction.value,
-        initialArgs
-      );
+      const result = await sendStep(stepFn, selection.name, value);
+      if (!result) return MOVED_ON;
       if (!result.success) {
         const error = result.error || 'Selection step failed';
         setError(error);
@@ -2184,12 +2222,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         // The server ran execute() on THIS step, so its return value rides this
         // response (BUG-017/BUG-012) — without carrying it here, every onSelect-routed
         // action would still hand the board `undefined`.
-        resolveAction(completedActionName ?? '', player, {
-          success: true,
-          data: result.data,
-          message: result.message,
-          followUp: result.followUp,
-        });
+        resolveStep(completedActionName ?? '', player, result);
 
         // Handle followUp: chain to next action (same pattern as executeCurrentAction)
         if (result.followUp) {
@@ -2218,19 +2251,16 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         });
       }
 
-      // Fetch choices for the next selection
-      const nextSel = getNextSelection(selection.name);
-      if (nextSel && (nextSel.type === 'choice' || nextSel.type === 'element' || nextSel.type === 'elements')) {
-        await fetchChoicesForPick(nextSel.name);
-
-        // Auto-fill through the one chokepoint, so `.manual()` (AUTOEXEC-01) and
-        // tutorial suppression hold on this path too; the resolved value then goes
-        // back through the onSelect transport.
-        if (tryAutoFillSelection(nextSel)) {
-          const autoFilledValue = currentArgs.value[nextSel.name];
-          if (autoFilledValue !== undefined) {
-            return await handleOnSelectFill(nextSel, autoFilledValue);
-          }
+      const fetching = fetchNextPick(selection.name);
+      const nextSel = fetching && await fetching;
+      if (nextSel === false) return MOVED_ON;
+      // Auto-fill through the one chokepoint, so `.manual()` (AUTOEXEC-01) and
+      // tutorial suppression hold on this path too; the resolved value then goes
+      // back through the onSelect transport.
+      if (nextSel && tryAutoFillSelection(nextSel)) {
+        const autoFilledValue = currentArgs.value[nextSel.name];
+        if (autoFilledValue !== undefined) {
+          return await handleOnSelectFill(nextSel, autoFilledValue);
         }
       }
 
@@ -2240,6 +2270,18 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       setError(error);
       return { valid: false, error };
     }
+  }
+
+  /**
+   * Fetch choices for the pick after `afterName`, resolving that pick, or
+   * false when the action moved on meanwhile. Null, without waiting, when
+   * there is no next pick with choices to fetch.
+   */
+  function fetchNextPick(afterName: string): Promise<EnrichedPickMetadata | false> | null {
+    const nextSel = getNextSelection(afterName);
+    if (!nextSel || (nextSel.type !== 'choice' && nextSel.type !== 'element' && nextSel.type !== 'elements')) return null;
+    const seq = actionStartTick.value;
+    return fetchChoicesForPick(nextSel.name).then(() => (!actionMovedOn(seq) && nextSel));
   }
 
   /** Get the next selection after the given one */
@@ -2265,6 +2307,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     const selection = currentActionMeta.value.selections.find(s => s.name === selectionName);
     if (!selection?.optional) return;
+
+    if (stepOutstanding()) {
+      setError(STEP_OUTSTANDING);
+      return;
+    }
 
     // When the action is server-pending (e.g. a followUp), the auto-execute watch
     // is disabled, so skipping must actively submit. A step-wise controller
@@ -2338,8 +2385,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   function cancel(): void {
-    // If action is pending on server, cancel it there too
-    if (pendingOnServer.value && options.cancelPendingAction) {
+    // The server holds the action once a step reaches it, so a step still out counts too
+    if ((pendingOnServer.value || stepOutstanding()) && options.cancelPendingAction) {
       const player = playerSeat?.value ?? 0;
       options.cancelPendingAction(player).catch(err => {
         console.error('[ActionController] Failed to cancel pending action on server:', err);

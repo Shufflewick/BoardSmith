@@ -40,13 +40,6 @@
       ]
     },
     {
-      "content": "1d9b4d4490603442",
-      "lines": 26,
-      "files": [
-        "src/ui/composables/useActionController.ts"
-      ]
-    },
-    {
       "content": "223d5ca54c33f5ed",
       "lines": 30,
       "files": [
@@ -60,13 +53,6 @@
       "files": [
         "src/ui/components/auto-ui/renderers/HandRenderer.vue",
         "src/ui/components/auto-ui/renderers/SpaceRenderer.vue"
-      ]
-    },
-    {
-      "content": "234f79452343bbf1",
-      "lines": 12,
-      "files": [
-        "src/ui/composables/useActionController.ts"
       ]
     },
     {
