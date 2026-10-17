@@ -346,6 +346,11 @@ export interface PlayerGameState {
   /** Formatted game messages visible to this player */
   messages?: Array<{ text: string }>;
   /**
+   * This player's line number of `messages[0]`: how many of the lines it could
+   * see the game has pruned from the front of the log (#903). Absent while zero.
+   */
+  messageOffset?: number;
+  /**
    * How many checkpoint RESTORES (undo / rewind / host-driven restore) this
    * game's timeline has undergone (`runner.restoreEpoch`).
    *
