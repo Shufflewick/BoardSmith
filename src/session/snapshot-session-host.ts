@@ -1068,11 +1068,13 @@ export class SnapshotSessionHost {
     const debugRefused = debugOpRefusal(op, this.adapters.debug === true);
     if (debugRefused) return debugRefused;
     // #738: picks are kept under `seat`, so an op acting as another player would mix two seats.
-    if ('player' in op && op.player !== seat) {
+    // #950: hint, heatmapToggle and convertSeatToBot name theirs as `seat`.
+    const named = 'player' in op ? op.player : 'seat' in op ? op.seat : seat;
+    if (named !== seat) {
       return {
         success: false,
         error:
-          `Seat ${seat} sent '${op.type}' as seat ${op.player}, and was refused. ` +
+          `Seat ${seat} sent '${op.type}' as seat ${named}, and was refused. ` +
           'A seat can act and see only as itself; switch to that seat to do this.',
         category: 'protocol',
       };
