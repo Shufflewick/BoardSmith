@@ -166,6 +166,17 @@ describe('GameHistory', () => {
 
       expect(wrapper.findAll('.message .text').map((line) => line.text())).toEqual(['b', 'x']);
     });
+
+    it('shows only the new window when a trim passed every line already drawn', async () => {
+      // A backgrounded tab catching up after several trims.
+      const wrapper = mount(GameHistory, { props: { messages: ['a', 'b', 'c'], messageOffset: 0 } });
+      await nextTick();
+
+      await wrapper.setProps({ messages: ['x', 'y', 'z'], messageOffset: 40 });
+      await nextTick();
+
+      expect(wrapper.findAll('.message .text').map((line) => line.text())).toEqual(['x', 'y', 'z']);
+    });
   });
 
   // -------------------------------------------------------------------------
