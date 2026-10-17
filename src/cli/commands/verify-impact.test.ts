@@ -146,10 +146,11 @@ describe('marker — renderRulesStaleness', () => {
     expect(body).toContain('| rulebook/03-scoring.md |');
   });
 
-  it('renders RULES_STALENESS_EMPTY when Attributed slices is empty', () => {
-    const record = baseRecord({ attributedSlices: [] });
+  it('says no slices are attributed, not that the chunk is not stale, when Attributed slices is empty (#998)', () => {
+    const record = baseRecord({ marker: RULES_STALE_MARKER, ruleDelta: 'unclassified', attributedSlices: [] });
     const body = renderRulesStaleness(record);
-    expect(body).toContain(RULES_STALENESS_EMPTY);
+    expect(body).toContain('_No slices attributed._');
+    expect(body).not.toContain(RULES_STALENESS_EMPTY);
   });
 
   it('omits Prior reading:/Changed reading: when absent', () => {
