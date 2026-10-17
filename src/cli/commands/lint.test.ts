@@ -13,7 +13,11 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { lintCommand, lintFile } from './lint.js';
+import { runTool } from '../lib/run-tool.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+
+// The config tests only need to see which tool lint hands off to, not run a real linter.
+vi.mock('../lib/run-tool.js', () => ({ runTool: vi.fn(async () => 0) }));
 
 const rulesFor = (code: string): string[] =>
   lintFile('game.ts', code).map((issue) => issue.rule);
@@ -94,5 +98,18 @@ describe('a selected check with no config fails instead of passing (#846)', () =
     expect(errors.join('\n')).toContain('.stylelintrc.cjs');
     // Without postcss-html Stylelint cannot read the <style> blocks of the .vue files it is pointed at.
     expect(errors.join('\n')).toContain('postcss-html');
+  });
+
+  it('lint --css accepts a stylelint key in package.json, which Stylelint reads as its config (#1014)', async () => {
+    const dir = tempTree('boardsmith-lint-pkg-stylelint-');
+    writeFileSync(join(dir, 'boardsmith.json'), '{}');
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ stylelint: { customSyntax: 'postcss-html' } }));
+    process.chdir(dir);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(process, 'exit').mockImplementation((code) => { throw new Error(`exit ${code}`); });
+
+    await lintCommand({ css: true });
+    expect(vi.mocked(runTool)).toHaveBeenCalledWith('stylelint', ['src/**/*.vue'], { cwd: process.cwd() });
   });
 });

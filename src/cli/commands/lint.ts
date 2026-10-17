@@ -419,18 +419,21 @@ const ESLINT_CONFIGS = [
   '.eslintrc.json',
 ];
 
+// Stylelint 17's own search list (`stylelint --help`), minus the parent-folder walk.
 const STYLELINT_CONFIGS = [
-  '.stylelintrc.cjs',
-  '.stylelintrc.js',
-  '.stylelintrc.json',
   '.stylelintrc',
-  'stylelint.config.js',
-  'stylelint.config.cjs',
-  'stylelint.config.mjs',
+  ...['cjs', 'mjs', 'js', 'ts', 'json', 'yaml', 'yml'].map((ext) => `.stylelintrc.${ext}`),
+  ...['cjs', 'mjs', 'js', 'ts'].map((ext) => `stylelint.config.${ext}`),
 ];
 
 function hasAnyConfig(cwd: string, candidates: string[]): boolean {
   return candidates.some((name) => existsSync(join(cwd, name)));
+}
+
+function hasStylelintConfig(cwd: string): boolean {
+  if (hasAnyConfig(cwd, STYLELINT_CONFIGS)) return true;
+  const pkgPath = join(cwd, 'package.json');
+  return existsSync(pkgPath) && 'stylelint' in JSON.parse(readFileSync(pkgPath, 'utf-8'));
 }
 
 /**
@@ -461,9 +464,10 @@ export async function lintCommand(options: LintOptions): Promise<void> {
     process.exit(1);
   }
 
-  if (options.css && !hasAnyConfig(cwd, STYLELINT_CONFIGS)) {
+  if (options.css && !hasStylelintConfig(cwd)) {
     console.error(chalk.red('\nlint --css: this project has no Stylelint config, so Stylelint cannot run.'));
-    console.error(chalk.dim("Add a .stylelintrc.cjs to the project root with customSyntax: 'postcss-html' (so it reads the <style> blocks in .vue files), or drop --css.\n"));
+    console.error(chalk.dim("Add a .stylelintrc.cjs to the project root with customSyntax: 'postcss-html' (so it reads the <style> blocks in .vue files), or drop --css."));
+    console.error(chalk.dim('The game also needs both packages installed: npm install -D stylelint postcss-html\n'));
     process.exit(1);
   }
 
@@ -473,7 +477,7 @@ export async function lintCommand(options: LintOptions): Promise<void> {
     checks.push({ name: 'ESLint', run: () => runTool('eslint', args, { cwd }) });
   }
 
-  if (wants('css') && hasAnyConfig(cwd, STYLELINT_CONFIGS)) {
+  if (wants('css') && hasStylelintConfig(cwd)) {
     const args = ['src/**/*.vue'];
     if (options.fix) args.push('--fix');
     checks.push({ name: 'Stylelint', run: () => runTool('stylelint', args, { cwd }) });
