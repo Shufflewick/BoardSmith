@@ -144,6 +144,22 @@ describe('a dev host socket answers only pages it served (#719)', () => {
     expect(await connect(port, { Host: named, Origin: `http://${named}` })).toBe('ours');
   }, 30000);
 
+  // Vite also allows a string server.host, server.hmr.host, preview.host and server.origin's hostname (#941).
+  it.each([
+    ['server.host', { host: 'den.table.example' }],
+    ['server.origin', { origin: 'http://den.table.example:9999' }],
+  ] as const)('accepts the host name the project names in %s', async (_option, server) => {
+    const { port } = await serveEmpty((socket) => socket.send('ours'), server);
+    const named = `den.table.example:${port}`;
+    expect(await connect(port, { Host: named, Origin: `http://${named}` })).toBe('ours');
+  }, 30000);
+
+  it('still refuses a host the project names nowhere, beside one it does name (#941)', async () => {
+    const { port } = await serveEmpty((socket) => socket.send('ours'), { host: 'den.table.example' });
+    const other = `sub.den.table.example:${port}`;
+    await expect(connect(port, { Host: other, Origin: `http://${other}` })).rejects.toThrow(/socket hang up/);
+  }, 30000);
+
   it('accepts a page whose origin is the host it connected to, as a --lan browser\'s is', async () => {
     const { port } = await serveEmpty((socket) => socket.send('ours'));
     expect(await connect(port, { Origin: `http://127.0.0.1:${port}` })).toBe('ours');
