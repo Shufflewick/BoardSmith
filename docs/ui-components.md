@@ -533,7 +533,9 @@ To let players choose colors when they set up a game, define `colorPalette` in `
 }
 ```
 
-If `colorPalette` is omitted, the standard 8-color palette is used. Plain hex strings are also accepted (e.g., `["#ff0000", "#0000ff"]`).
+If `colorPalette` is omitted, the engine's 16 named colours (`DEFAULT_COLOR_PALETTE`: Red, Blue, Green, Yellow, ...) are used. Plain hex strings are also accepted (e.g., `["#ff0000", "#0000ff"]`).
+
+A colour list declared in code (a `color` player option such as `createColorOption()`, or `gameDefinition.colorPalette`) is never published, so `boardsmith dev` refuses to start unless it matches exactly what the lobby will offer; declare custom colours in `boardsmith.json`'s `colorPalette` instead.
 
 ## Helper Components
 
