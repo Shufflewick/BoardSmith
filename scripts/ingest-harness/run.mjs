@@ -164,35 +164,47 @@ function readStageState(subcommand, workDir) {
 // stage
 // ---------------------------------------------------------------------------
 
+// Why a folder must never be deleted whatever it holds, or undefined.
+function protectedFolderReason(real) {
+  const home = realpathSync.native(os.homedir());
+  const checkout = realpathSync.native(REPO_ROOT);
+  const holds = (dir) => dir.startsWith(real + path.sep);
+  if (real === home) return 'is your home folder';
+  if (holds(home)) return 'holds your home folder';
+  if (real === checkout) return 'is the BoardSmith checkout';
+  if (holds(checkout)) return 'holds the BoardSmith checkout';
+  if (existsSync(path.join(real, '.git'))) return 'has a .git at its top, so it is a repository, not a folder stage made';
+  return undefined;
+}
+
+// Why the folder's state file does not prove a stage wrote it there, or undefined.
+function stateFileReason(real) {
+  if (!existsSync(stateFilePath(real))) return 'already exists and has no .harness-stage-state.json, so this harness did not stage it';
+  let state = null;
+  try {
+    state = JSON.parse(readFileSync(stateFilePath(real), 'utf8'));
+  } catch {
+    // Unreadable JSON names no folder; the check below refuses it.
+  }
+  const stagedFor = state?.workDir;
+  if (typeof stagedFor !== 'string') {
+    return 'has a .harness-stage-state.json that does not name the folder it was written for, so this harness did not write it';
+  }
+  if (stagedFor !== real) return `has a .harness-stage-state.json that was written for ${stagedFor}, not this folder`;
+  return undefined;
+}
+
 // Deletes nothing it cannot prove an earlier stage made: a state file alone can be copied (#1065).
 function refuseUnlessStagedHere(workDir) {
   // .native gives the on-disk case, so a recased path on a case-insensitive disk still matches.
   const real = realpathSync.native(workDir);
-  const refuse = (why) =>
+  const why = protectedFolderReason(real) ?? stateFileReason(real);
+  if (why) {
     fail(
       `--work-dir ${workDir} ${why}. Refusing to delete it. Pass a folder that does not exist yet, or leave ` +
         `out --work-dir to stage into a fresh temp folder.`,
     );
-  const isOrHolds = (dir) => dir === real || dir.startsWith(real + path.sep);
-  const home = realpathSync.native(os.homedir());
-  const checkout = realpathSync.native(REPO_ROOT);
-  if (real === home) refuse('is your home folder');
-  if (isOrHolds(home)) refuse('holds your home folder');
-  if (real === checkout) refuse('is the BoardSmith checkout');
-  if (isOrHolds(checkout)) refuse('holds the BoardSmith checkout');
-  if (existsSync(path.join(real, '.git'))) refuse('has a .git at its top, so it is a repository, not a folder stage made');
-  if (!existsSync(stateFilePath(real))) refuse('already exists and has no .harness-stage-state.json, so this harness did not stage it');
-  let state;
-  try {
-    state = JSON.parse(readFileSync(stateFilePath(real), 'utf8'));
-  } catch {
-    state = null;
   }
-  const stagedFor = state?.workDir;
-  if (typeof stagedFor !== 'string') {
-    refuse('has a .harness-stage-state.json that does not name the folder it was written for, so this harness did not write it');
-  }
-  if (stagedFor !== real) refuse(`has a .harness-stage-state.json that was written for ${stagedFor}, not this folder`);
 }
 
 function prepareWorkDir(workDir) {
