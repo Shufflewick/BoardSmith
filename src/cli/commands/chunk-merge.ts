@@ -75,7 +75,7 @@ import {
 } from '../lib/ledger-allocation.js';
 import { describeFinding, ledgerCheck } from './ledger-check.js';
 import { type TestRunner, checkConstraints, runVitest } from './constraint-check.js';
-import { VERIFIED, assessSignoffs, checkSignoff, chunkCodeFiles, unaccountedEdits } from './chunk-signoff.js';
+import { VERIFIED, assessSignoffs, checkSignoff, chunkCodeFiles, readStatus, unaccountedEdits } from './chunk-signoff.js';
 import { verifiedAgainstIsCurrent } from './chunk-provenance.js';
 import { checkClaimQuotes } from './claim-quotes.js';
 import { parseSpecManifest } from './test-step-check.js';
@@ -374,7 +374,7 @@ async function changedBy(ctx: MergeContext, commit: string): Promise<string[]> {
 
 /** A CHUNK.md's Status, or `missing` when it has none (or there is no CHUNK.md). */
 function statusOf(chunkText: string): string {
-  return /^Status:\s*(.*)$/m.exec(chunkText)?.[1].trim() ?? 'missing';
+  return readStatus(chunkText) ?? 'missing';
 }
 
 async function verifiedProblem(ctx: MergeContext): Promise<string[]> {
