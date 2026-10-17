@@ -1720,7 +1720,7 @@ async function runOp(
       case 'expireSeat':
         return handleExpireSeat(def, gameOptions, snap, op);
       case 'selectionStep':
-        return handleSelectionStep(def, gameOptions, snap, pendingState, op);
+        return await handleSelectionStep(def, gameOptions, snap, pendingState, op);
       case 'resolveChoices':
         return handleResolveChoices(def, gameOptions, snap, pendingState, op);
       case 'cancelAction':
@@ -1762,9 +1762,9 @@ async function runOp(
           spaceId: op.deckId,
         });
       case 'hint':
-        return handleHint(def, gameOptions, snap, op, teachingDisabled);
+        return await handleHint(def, gameOptions, snap, op, teachingDisabled);
       case 'heatmapToggle':
-        return handleHeatmapToggle(def, gameOptions, snap, op, teachingDisabled);
+        return await handleHeatmapToggle(def, gameOptions, snap, op, teachingDisabled);
       case 'botSuggest':
         // Refused up front, not left to throw from inside the search: an MCTS
         // playout draws thousands of times, and an order-entry session has no
@@ -1776,7 +1776,7 @@ async function runOp(
             'protocol',
           );
         }
-        return handleBotSuggest(def, snap, op);
+        return await handleBotSuggest(def, snap, op);
       case 'startTutorial':
         return handleStartTutorial(def, gameOptions, snap, op, teachingDisabled);
       case 'exitTutorial': {

@@ -2167,7 +2167,13 @@ actionStep({
   otherwise, naming the step. A bot is not an alternative: a timed-out seat is
   never handed to a bot.
 - `boardsmith build` stamps `capabilities.timedSteps: true` into the manifest
-  when any step of the compiled flow declares a limit.
+  when any step of the compiled flow declares a limit. A flow can depend on
+  the seat count and the game options, so build and validate construct the
+  game at every seat count with every combination of its boolean and select
+  options (number and designer-only options at their defaults), defaults
+  first, and stop at the first timed step; the `idleAction` refusal names the
+  seat count and options that produced it. Past 256 constructions they refuse
+  the game rather than sample it, unless the defaults already time a step.
 - `boardsmith dev` enforces the window locally, the same way the platform
   does. The dev host starts one timer when the step opens, sends the deadline
   on every `game_state` frame (so `turnDeadline` and the Action Panel count

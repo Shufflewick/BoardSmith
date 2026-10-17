@@ -114,6 +114,11 @@ type MutatingOp = Exclude<ExecutableOp, { type: ReadOnlyOpType | 'hint' | 'heatm
  */
 const PERSISTENCE_UNHEALTHY_THRESHOLD = 3;
 
+/** What follows from a failure of the work a move started: the move itself stands. */
+const AFTER_MOVE_FAILURE =
+  'That move was made and published. The bots and heatmaps are brought up to date again on the ' +
+  'next move, roster change or resume.';
+
 /** A single captured persistence failure. Never carries a stack trace or file paths (T-126-05). */
 export interface PersistenceErrorEntry {
   message: string;
@@ -1076,7 +1081,11 @@ export class SnapshotSessionHost {
         this.demoStepConsume = false;
         this.demoRewound = false;
         this.demoHistory = [];
-        void this.runDemoLoop(allSeats); // fire-and-forget
+        // Fire-and-forget; its finally stops the demo and tells clients, this reports why (#809).
+        const demo = this.runDemoLoop(allSeats);
+        demo.catch((error: unknown) =>
+          this.reportBackgroundFailure(demo, 'the demo', error, 'The demo has stopped; start it again to watch more.'),
+        );
       }
       // Clients read demo state from the broadcasts (RESEARCH Pitfall 7).
       return { success: true };
@@ -1188,7 +1197,7 @@ export class SnapshotSessionHost {
     try {
       await run.done;
     } catch (error) {
-      if (!run.awaited) this.reportBackgroundFailure(run, `the bot run after ${what}`, error);
+      if (!run.awaited) this.reportBackgroundFailure(run, `the bot run after ${what}`, error, AFTER_MOVE_FAILURE);
       return;
     }
     if (!refreshHeatmaps) return;
@@ -1200,18 +1209,16 @@ export class SnapshotSessionHost {
     try {
       await refresh;
     } catch (error) {
-      this.reportBackgroundFailure(refresh, `the heatmap refresh after ${what}`, error);
+      this.reportBackgroundFailure(refresh, `the heatmap refresh after ${what}`, error, AFTER_MOVE_FAILURE);
     }
   }
 
-  /** Log the failure of `run`, and hand it to `onBackgroundError`, once per run however many moves joined it. */
-  private reportBackgroundFailure(run: object, what: string, error: unknown): void {
+  /** Log the failure of `run` and what follows from it, and hand it to `onBackgroundError`, once per run however many moves joined it. */
+  private reportBackgroundFailure(run: object, what: string, error: unknown, consequence: string): void {
     if (this.reportedRuns.has(run)) return;
     this.reportedRuns.add(run);
     console.error(
-      `[SnapshotSessionHost] ${what} failed: ${error instanceof Error ? error.message : String(error)}. ` +
-        `That move was made and published. The bots and heatmaps are brought up to date again on the ` +
-        `next move, roster change or resume.`,
+      `[SnapshotSessionHost] ${what} failed: ${error instanceof Error ? error.message : String(error)}. ${consequence}`,
     );
     try {
       this.adapters.onBackgroundError?.(error);
@@ -1266,17 +1273,7 @@ export class SnapshotSessionHost {
       }
     }
 
-    // Clear ALL transient state on undo/rewind: it describes a position that is gone.
-    if (op.type === 'undo' || op.type === 'debugRewind') {
-      this.transientTeachingState.clear();
-      this.narrationText = null;
-      // Pending selections belong to that list: they hold element ids from the
-      // replaced runner, exactly like the hint/heatmap above, so every seat's
-      // goes. `apply` below only ever drops the ACTING seat's, so a simultaneous
-      // step would leave another seat mid-chain against a game tree that no
-      // longer exists. Clients are told the same fact by `restoreEpoch`.
-      this.pendingStates.clear();
-    }
+    if (op.type === 'undo' || op.type === 'debugRewind') this.#forgetReplacedTree();
 
     await this.apply(res, seat, pending);
     return res;
@@ -1306,6 +1303,20 @@ export class SnapshotSessionHost {
     this.storeTeaching(res);
     this.broadcastCurrent();
     return res;
+  }
+
+  /**
+   * Drop what every seat holds against a runner that was just replaced (undo,
+   * rewind, a demo's step back, a rules reload): hints, heatmaps, narration and
+   * half-made selections, which hold element ids from the old game tree. `apply`
+   * drops only the acting seat's selection, so another seat would otherwise stay
+   * mid-chain against a tree that no longer exists. A rules reload that restored
+   * the saved tree keeps the selections: the tree they point into is unchanged.
+   */
+  #forgetReplacedTree({ keepPendingSelections = false } = {}): void {
+    this.transientTeachingState.clear();
+    this.narrationText = null;
+    if (!keepPendingSelections) this.pendingStates.clear();
   }
 
   /** Store a hint or heatmap result as the seat's transient teaching state. */
@@ -1413,10 +1424,8 @@ export class SnapshotSessionHost {
         this.stopDemo();
         return outcome;
       }
-      this.transientTeachingState.clear();
-      this.narrationText = null;
+      this.#forgetReplacedTree({ keepPendingSelections: outcome.kind === 'restored' });
       this.demoHistory = [];
-      if (outcome.kind === 'replayed') this.pendingStates.clear();
       await this.apply(outcome.result);
       return outcome;
     });
@@ -1733,18 +1742,18 @@ export class SnapshotSessionHost {
    * iteration AND immediately after the delay (RESEARCH Pitfall 1). A `finally`
    * block guarantees cleanup on every exit path (stop, game-over, error, cap).
    *
-   * Fire-and-forget: called via `void this.runDemoLoop(...)` from handleOp so
-   * the demoStart response returns immediately while the loop runs asynchronously.
+   * Fire-and-forget: handleOp starts it without awaiting, so the demoStart
+   * response returns immediately, and hands any failure to `onBackgroundError`.
    */
   private async runDemoLoop(
     allSeats: Array<{ seat: number; level?: string }>,
   ): Promise<void> {
     this.demoRunning = true;
     this.demoAbort = false;
-    this.broadcastCurrent(); // clients see isDemoRunning=true before first move
 
     let moves = 0;
     try {
+      this.broadcastCurrent(); // clients see isDemoRunning=true before first move
       while (!this.demoAbort && !this.isComplete && moves < this.MAX_DEMO_MOVES) {
         // Capture the snapshot fresh EACH iteration so a 'back' rewind (which restores
         // this.snapshot) is reflected — the re-suggest then runs from the restored
@@ -1933,7 +1942,7 @@ export class SnapshotSessionHost {
       this.demoHistory.push(prev);
       throw new Error(`The demo could not step back a move: ${res.error}`);
     }
-    this.narrationText = null;
+    this.#forgetReplacedTree();
     this.demoPaused = true;
     this.demoStepConsume = false;
     this.demoRewound = true;
