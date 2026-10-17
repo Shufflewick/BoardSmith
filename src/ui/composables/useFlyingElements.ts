@@ -1079,6 +1079,9 @@ export function useFlyingElements(
           // into the next update.
           if (newContainer) {
             elementLocations.set(id, newContainer);
+          } else {
+            // In an untracked container: forget the old one so a later move does not fly from it (#867).
+            elementLocations.delete(id);
           }
           elementDataCache.set(id, { element, wasHidden: isHidden });
         }

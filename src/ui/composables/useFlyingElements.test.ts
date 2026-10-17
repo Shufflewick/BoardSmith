@@ -186,6 +186,57 @@ describe('useFlyingElements', () => {
         expect.objectContaining({ kind: 'fly', element: '42', from: 'opponentHand', to: 'myHand' })
       );
     });
+
+    it('does not fly from a stale container after the element passed through an untracked one (#867)', async () => {
+      const handEl = makeContainer();
+      const cribEl = makeContainer();
+      vi.spyOn(handEl, 'getBoundingClientRect').mockReturnValue(makeRect({ width: 60, height: 84 }));
+      vi.spyOn(cribEl, 'getBoundingClientRect').mockReturnValue(makeRect({ left: 300, width: 60, height: 84 }));
+      const card: AutoWatchGameElement = { id: 42, name: 'card' };
+      const handGameEl: AutoWatchGameElement = { id: 1, children: [card] };
+      const tableGameEl: AutoWatchGameElement = { id: 3, children: [] };
+      const cribGameEl: AutoWatchGameElement = { id: 2, children: [] };
+      const gameViewRef = ref<AutoWatchGameElement | null>(null);
+      const view = () => ({ id: 0, children: [{ ...handGameEl }, { ...tableGameEl }, { ...cribGameEl }] });
+
+      useFlyingElements({
+        autoWatch: {
+          gameView: () => gameViewRef.value,
+          containers: [
+            { ref: ref(handEl), name: 'hand', element: () => handGameEl },
+            { ref: ref(cribEl), name: 'crib', element: () => cribGameEl },
+          ],
+          getElementData: () => ({}),
+        },
+      });
+      enableAnimationTestMode();
+
+      gameViewRef.value = view();
+      await nextTick();
+
+      // hand -> untracked table
+      handGameEl.children = [];
+      tableGameEl.children = [card];
+      gameViewRef.value = view();
+      await nextTick();
+
+      // table -> crib: no known source, so no flight from the hand
+      tableGameEl.children = [];
+      cribGameEl.children = [card];
+      gameViewRef.value = view();
+      await nextTick();
+
+      // crib -> hand: a real tracked move, so the watcher has demonstrably run
+      cribGameEl.children = [];
+      handGameEl.children = [card];
+      gameViewRef.value = view();
+      await nextTick();
+      await waitFor(() => getAnimationTrace().length > 0);
+
+      expect(getAnimationTrace()).toEqual([
+        expect.objectContaining({ kind: 'fly', element: '42', from: 'crib', to: 'hand' }),
+      ]);
+    });
   });
 
   describe('test mode - manual fly()', () => {
