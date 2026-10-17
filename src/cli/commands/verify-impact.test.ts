@@ -1443,17 +1443,34 @@ describe('contradictory / marker — verifyImpactApplyCommand', () => {
     expect(parsed.record?.adjudication).toBe('UNADJUDICATED');
   });
 
-  it('marker: a chunk citing a pair still pending classification is marked stale as unclassified, never left clean (#830)', async () => {
-    const { project, runId } = await buildImpactTestProject(root, { drift: 'clean', leaveXUnclassified: true });
+  it('unclassified: a pair still pending classification blocks the write entirely, naming the pair and verify-classify-record (#830)', async () => {
+    const { project, runId, pairId } = await buildImpactTestProject(root, { drift: 'clean', leaveXUnclassified: true });
+    const before = await sha256OfProject(project);
 
     const result = await verifyImpactApplyCommand({ project, runId, json: true });
+    expect(result.blocked).toBe(true);
+    expect(result.pendingPairs).toEqual([pairId]);
+    expect(result.marked).toEqual([]);
+    expect(await sha256OfProject(project)).toEqual(before);
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await verifyImpactApplyCommand({ project, runId });
+    const printed = logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+    logSpy.mockRestore();
+    expect(printed).toContain(`boardsmith verify-classify-record --run-id ${runId} --pair-id ${pairId}`);
+  });
+
+  it('unclassified: resuming an interrupted classification as cosmetic leaves no stale marker (#830)', async () => {
+    const { project, runId, pairId } = await buildImpactTestProject(root, { drift: 'clean', leaveXUnclassified: true });
+    expect((await verifyImpactApplyCommand({ project, runId, json: true })).blocked).toBe(true);
+
+    await verifyClassifyRecordCommand({ project, runId, pairId, label: 'cosmetic', json: true });
+    const result = await verifyImpactApplyCommand({ project, runId, json: true });
     expect(result.blocked).toBe(false);
-    expect(result.marked.map((m) => m.slug)).toEqual(['movement']);
+    expect(result.marked).toEqual([]);
 
     const chunkText = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'movement', 'CHUNK.md'), 'utf-8');
-    const parsed = parseRulesStaleness(chunkText);
-    expect(parsed.state).toBe('rules-stale');
-    expect(parsed.record?.ruleDelta).toBe('unclassified');
+    expect(parseRulesStaleness(chunkText).state).not.toBe('rules-stale');
   });
 
   it('marker: a chunk whose ChunkVerdict.stale is false is left byte-identical after the run', async () => {

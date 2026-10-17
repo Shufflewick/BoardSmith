@@ -1266,10 +1266,9 @@ export function resolveCitationAttribution(input: {
  * subagent never quoted anything for — cannot be narrowed, so conservatively every one of the
  * pair's live slices the chunk cites is treated as affected (decision 8: never silently clean
  * where the tool is blind). An `unpaired-slice` group (nothing was ever compared for it), or a
- * paired group still in pendingPairs (not compared yet), always
- * contributes `unclassified` to any chunk citing its live slice(s); `presentation-only` groups
- * contribute nothing, matching decision 17's treatment of presentation content as outside the
- * rule-bearing comparison entirely.
+ * paired group still in pendingPairs (not compared yet), always contributes `unclassified` to any
+ * chunk citing its live slice(s); `presentation-only` groups contribute nothing, matching decision
+ * 17's treatment of presentation content as outside the rule-bearing comparison entirely.
  *
  * **Corrective follow-up (174-04 FALSE-CLEAN fix), and why it OUTRANKS decision 19's ladder:**
  * narrowing to "does this chunk's OWN cited live slice contain the quote" is only correct once you
