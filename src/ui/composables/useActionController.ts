@@ -2185,7 +2185,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       // Check if this repeating selection is done but action continues
       if (result.done) {
         // Move accumulated values to args (server expects raw values, not {value, display} objects)
-        currentArgs.value[selection.name] = repeatingState.value.accumulated.map(a => a.value);
+        const { accumulated } = repeatingState.value;
+        currentArgs.value[selection.name] = accumulated.map(a => a.value);
+        actionSnapshot.value?.collectedPicks.set(selection.name, {
+          value: currentArgs.value[selection.name],
+          display: accumulated.map(a => a.display).join(', '),
+          skipped: false,
+        });
         repeatingState.value = null;
         return { valid: true };
       }
