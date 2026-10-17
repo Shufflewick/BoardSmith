@@ -83,9 +83,11 @@ const isCompound = (kind) => kind >= ts.SyntaxKind.FirstCompoundAssignment && ki
 
 const EXPECTS = ['expect', 'expect.soft', 'vi.expect', 'vi.expect.soft'];
 /** Every `expect(...)` in a source whose subject measures a clock difference, with any matcher. */
-function wallClockBudgets(source, fileName = 'scanned.ts') {
+const wallClockBudgets = (source, fileName) => scanForBudgets(source, fileName).budgets;
+/** The budgets in a source, and the most name and property reads any one question needed, so a test can bound the work. */
+function scanForBudgets(source, fileName = 'scanned.ts') {
   // Every finding needs a clock read written out, and most files have none: skip building a checker for them.
-  if (!CLOCKS.some((clock) => source.includes(clock))) return [];
+  if (!CLOCKS.some((clock) => source.includes(clock))) return { budgets: [], mostReads: 0 };
   const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
   const checker = checkerFor(sourceFile);
 
@@ -187,6 +189,8 @@ function wallClockBudgets(source, fileName = 'scanned.ts') {
   }
   /** For each name, the properties already read through it while answering one question. */
   const reading = new Map();
+  let reads = 0;
+  let mostReads = 0;
   /**
    * Whether `access` reads a duration. A property the file declares holds its own value, whatever else the object
    * holds (`h.n` beside `h.took()`); one it does not, read from a name, is judged over each value given that name,
@@ -201,6 +205,7 @@ function wallClockBudgets(source, fileName = 'scanned.ts') {
     const key = access.name.text;
     const bindings = bindingsAt(base).filter((binding) => !reading.get(binding)?.has(key));
     bindings.forEach((binding) => reading.set(binding, (reading.get(binding) ?? new Set()).add(key)));
+    reads += bindings.length;
     const values = bindings.flatMap((binding) => valuesOf.get(binding) ?? []);
     return memberOf(values, key).some(measures);
   };
@@ -224,7 +229,10 @@ function wallClockBudgets(source, fileName = 'scanned.ts') {
   /** Whether `node` measures a duration, as one question with nothing yet read. */
   const answers = (node) => {
     reading.clear();
-    return measures(node);
+    reads = 0;
+    const found = measures(node);
+    mostReads = Math.max(mostReads, reads);
+    return found;
   };
   // Until nothing changes, so a duration handed from name to name is followed to the end.
   for (let size = -1; size !== durations.size;) {
@@ -233,12 +241,13 @@ function wallClockBudgets(source, fileName = 'scanned.ts') {
   }
 
   const lines = source.split('\n');
-  return expects
+  const budgets = expects
     .filter((call) => answers(call.arguments[0]))
     .map((call) => {
       const line = sourceFile.getLineAndCharacterOfPosition(call.getStart()).line;
       return { line: line + 1, text: lines[line].trim() };
     });
+  return { budgets, mostReads };
 }
 
 describe('wallClockBudgets', () => {
@@ -562,7 +571,10 @@ describe('wallClockBudgets', () => {
   it('searches a name fed back its own many properties once per name and property, not once per path (#1104)', () => {
     const children = Array.from({ length: 12 }, (_, at) => `walk(node.p${at});`).join(' ');
     const walk = `const s = Date.now();\nfunction walk(node) { expect(node.ms).toBeLessThan(5); ${children} }`;
-    expect(wallClockBudgets(`${walk}\nwalk({ ms: 3 });`, 'x.test.mjs')).toEqual([]);
+    const scan = scanForBudgets(`${walk}\nwalk({ ms: 3 });`, 'x.test.mjs');
+    expect(scan.budgets).toEqual([]);
+    // One name, `node`, read through 13 properties (ms, p0 to p11): no question can need more than 13 reads.
+    expect(scan.mostReads).toBeLessThanOrEqual(13);
     expect(wallClockBudgets(`${walk}\nwalk({ p11: { ms: Date.now() - s } });`, 'x.test.mjs')).toHaveLength(1);
   });
 
