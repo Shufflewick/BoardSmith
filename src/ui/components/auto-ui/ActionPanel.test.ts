@@ -946,6 +946,18 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
     const buttons = wrapper.findAll('.anchored-choice-btn');
     expect(buttons.map(b => b.attributes('aria-label'))).toEqual(['Move (a5)', 'Move (c5)']);
   });
+
+  it('never names the source square when the target has no square name', () => {
+    const toPile: ChoiceWithRefs = {
+      value: 'pile',
+      display: 'Discard pile',
+      refs: [{ ref: { notation: 'b6' }, role: 'source' }, { ref: { id: 42 }, role: 'target' }],
+    };
+    const wrapper = mountSpacePick([toPile, { value: 'pass', display: 'Pass' }], { multiSelect: { min: 1, max: 2 } });
+
+    const boxes = wrapper.findAll('.multi-select-choice input');
+    expect(boxes.map(b => b.attributes('aria-label'))).toEqual(['Discard pile', 'Pass']);
+  });
 });
 
 // ---------------------------------------------------------------------------
