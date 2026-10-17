@@ -1311,25 +1311,29 @@ describe('executeOp', () => {
       expect(res.suggestedAction).toBe('move');
     });
 
-    it('botSuggest asks the due bot seat that can move, not one offered only disabled actions (#1133)', async () => {
-      class SitOutGame extends Game<SitOutGame, Player> {
-        picked: number[] = [];
-        constructor(options: GameOptions) {
-          super(options);
-          this.registerAction(
-            Action.create<SitOutGame>('pick')
-              .disabled((ctx) => (ctx.player.seat === 1 ? 'Seat 1 sits this round out.' : false))
-              .chooseFrom('card', { choices: ['ace', 'king'] })
-              .execute((_a, ctx) => { (ctx.game as SitOutGame).picked.push(ctx.player.seat); }),
-          );
-          this.setFlow({
-            root: simultaneousActionStep({
-              actions: ['pick'],
-              playerDone: (ctx, player) => (ctx.game as SitOutGame).picked.includes(player.seat),
-            }),
-          });
-        }
+    /** Seats in `sittingOut` are offered `pick` greyed out by its own `.disabled()` reason (#1133). */
+    class SitOutGame extends Game<SitOutGame, Player> {
+      static sittingOut: number[] = [1];
+      picked: number[] = [];
+      constructor(options: GameOptions) {
+        super(options);
+        this.registerAction(
+          Action.create<SitOutGame>('pick')
+            .disabled((ctx) => (SitOutGame.sittingOut.includes(ctx.player.seat) ? `Seat ${ctx.player.seat} sits this round out.` : false))
+            .chooseFrom('card', { choices: ['ace', 'king'] })
+            .execute((_a, ctx) => { (ctx.game as SitOutGame).picked.push(ctx.player.seat); }),
+        );
+        this.setFlow({
+          root: simultaneousActionStep({
+            actions: ['pick'],
+            playerDone: (ctx, player) => (ctx.game as SitOutGame).picked.includes(player.seat),
+          }),
+        });
       }
+    }
+
+    it('botSuggest asks the due bot seat that can move, not one offered only disabled actions (#1133)', async () => {
+      SitOutGame.sittingOut = [1];
       const def: GameDefinitionLike = { gameClass: SitOutGame, gameType: 'sit-out', minPlayers: 2, maxPlayers: 2 };
       const opts = { playerCount: 2, seed: 'sit-out' };
       const started = succeeded(await executeOp(def, opts, null, null, { type: 'start' }));
@@ -1341,6 +1345,25 @@ describe('executeOp', () => {
       expect(res.botStalled).toBeUndefined();
       expect(res.botPlayer).toBe(2);
       expect(res.suggestedAction).toBe('pick');
+    });
+
+    it('botSuggest reports the first due bot seat stalled, quoting the reasons, when no due seat can move (#1133)', async () => {
+      SitOutGame.sittingOut = [1, 2];
+      const def: GameDefinitionLike = { gameClass: SitOutGame, gameType: 'sit-out', minPlayers: 2, maxPlayers: 2 };
+      const opts = { playerCount: 2, seed: 'sit-out' };
+      const started = succeeded(await executeOp(def, opts, null, null, { type: 'start' }));
+      const res = succeeded(await executeOp(def, opts, started.snapshot, null, {
+        type: 'botSuggest',
+        seats: [{ seat: 2 }],
+      }));
+
+      expect(res.botPlayer).toBeUndefined();
+      expect(res.botStalled).toEqual({
+        seat: 2,
+        reason:
+          'No seat the game is waiting on can move: none has an enabled action or a follow-up. ' +
+          "Refused: player 1's 'pick' (Seat 1 sits this round out); player 2's 'pick' (Seat 2 sits this round out).",
+      });
     });
 
     it('botSuggest reports the due seat as stalled, with why, when the bot fails while choosing (#29)', async () => {

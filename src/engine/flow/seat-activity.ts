@@ -178,18 +178,39 @@ export function followUpForSeat(
   return flowState.followUps?.find((f) => f.seat === seat);
 }
 
+/** What one due seat is offered, split into what it may take and what is refused. */
+export interface DueSeatOffer {
+  seat: number;
+  /** Offered actions no `.disabled()` rule or tutorial gate refuses. */
+  enabled: string[];
+  /** Offered actions that are refused, each with its reason. */
+  refused: Record<string, string>;
+  /** Whether the seat has a move: an enabled action or a held follow-up. */
+  canMove: boolean;
+}
+
 /**
- * The due seats that can move: each has an offered action that no `.disabled()`
- * rule or tutorial gate refuses, or holds a follow-up. A seat offered only
- * greyed-out actions is due but has nothing it may do (#1133).
+ * Every due seat with what it is offered. The one rule for "which due seats
+ * can move": a seat offered only greyed-out actions is due but has nothing it
+ * may do (#1133). The simulator, the bot pump and the benchmark all read it,
+ * so they agree on whether a game is stuck.
  */
-export function enabledDueSeats(
+export function dueSeatOffers(
   flowState: SeatActivityState | undefined | null,
   game: { getDisabledActions(seat: number): Record<string, string> },
-): number[] {
-  return dueSeats(flowState).filter((seat) => {
+): DueSeatOffer[] {
+  return dueSeats(flowState).map((seat) => {
     const disabled = game.getDisabledActions(seat);
-    return availableActionsForSeat(flowState, seat).some((name) => !(name in disabled))
-      || followUpForSeat(flowState, seat) !== undefined;
+    const offered = availableActionsForSeat(flowState, seat);
+    const enabled = offered.filter((name) => !(name in disabled));
+    const refused = Object.fromEntries(offered.filter((name) => name in disabled).map((name) => [name, disabled[name]]));
+    return { seat, enabled, refused, canMove: enabled.length > 0 || followUpForSeat(flowState, seat) !== undefined };
   });
+}
+
+/** Each refused action in `offers`, as `player 1's 'pick' (reason)`. */
+export function describeRefused(offers: DueSeatOffer[]): string[] {
+  return offers.flatMap(({ seat, refused }) =>
+    Object.entries(refused).map(([name, reason]) => `player ${seat}'s '${name}' (${reason.replace(/\.$/, '')})`),
+  );
 }
