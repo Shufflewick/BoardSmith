@@ -402,8 +402,9 @@ export async function playGame<G extends Game>(
       recorder.discard();
       stuck = true;
       stuckReason =
-        `Action '${choice.action}' rejected the move ${JSON.stringify(encodeValue(choice.args, testGame.game._ctx, `action '${choice.action}'`, 'args'))} that the engine offered as enabled: ` +
-        `${result.error ?? 'no reason given'}. Make the action's choices offer only values its validation accepts.`;
+        `Action '${choice.action}' rejected the move ${JSON.stringify(encodeValue(choice.args, testGame.game._ctx, `action '${choice.action}'`, 'args'))} ` +
+        `that policy '${policy.name}' chose: ${result.error ?? 'unknown error'}. A simulated game fails on its first rejected move: ` +
+        'an action must accept every move its enabled choices offer, and a policy must choose only from them.';
       break;
     }
 
