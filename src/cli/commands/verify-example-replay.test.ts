@@ -10,7 +10,6 @@ import {
   EXAMPLE_REPLAY_LEDGER_END,
   createExampleReplayRecord,
   exampleReplayLedgerPath,
-  replaceExampleReplayVerdicts,
   recordExampleReplayVerdicts,
   readExampleReplayVerdicts,
   verifyExampleReplayCommand,
@@ -344,7 +343,7 @@ function recordFor(
   });
 }
 
-describe('exampleReplayLedgerPath / replaceExampleReplayVerdicts / recordExampleReplayVerdicts / readExampleReplayVerdicts — ledger', () => {
+describe('exampleReplayLedgerPath / recordExampleReplayVerdicts / readExampleReplayVerdicts — ledger', () => {
   let dir: string;
 
   beforeEach(async () => {
@@ -354,6 +353,14 @@ describe('exampleReplayLedgerPath / replaceExampleReplayVerdicts / recordExample
   it('exampleReplayLedgerPath resolves to rulebook/.example-replay/EXAMPLE-VERDICTS.md', () => {
     expect(exampleReplayLedgerPath('/project')).toBe(
       join('/project', DESIGN_DIR, 'rulebook', '.example-replay', 'EXAMPLE-VERDICTS.md'),
+    );
+  });
+
+  it('keeps every record when several record calls run in parallel (#831)', async () => {
+    const records = [1, 2, 3, 4, 5, 6].map((n) => recordFor(`rulebook/0${n}-x.md`, n));
+    await Promise.all(records.map((r) => recordExampleReplayVerdicts(dir, [r])));
+    expect((await readExampleReplayVerdicts(dir)).map((r) => r.exampleId).sort()).toEqual(
+      records.map((r) => r.exampleId).sort(),
     );
   });
 
@@ -393,7 +400,7 @@ describe('exampleReplayLedgerPath / replaceExampleReplayVerdicts / recordExample
 
   it('a hand-corrupted ledger entry (verdict outside the set) makes the read THROW, naming the offending exampleId', async () => {
     const good = recordFor('rulebook/01-a.md', 1);
-    await replaceExampleReplayVerdicts(dir, [good]);
+    await recordExampleReplayVerdicts(dir, [good]);
     const ledgerPath = exampleReplayLedgerPath(dir);
     const original = await fs.readFile(ledgerPath, 'utf-8');
     const corrupted = original.replace('"agrees"', '"banana"');
@@ -410,7 +417,7 @@ describe('exampleReplayLedgerPath / replaceExampleReplayVerdicts / recordExample
       expected: 'Guard becomes READY',
       observed: 'Guard remained EXHAUSTED',
     });
-    await replaceExampleReplayVerdicts(dir, [good]);
+    await recordExampleReplayVerdicts(dir, [good]);
     const ledgerPath = exampleReplayLedgerPath(dir);
     const original = await fs.readFile(ledgerPath, 'utf-8');
     const corrupted = original.replace('"Guard becomes READY"', '""');
@@ -423,7 +430,7 @@ describe('exampleReplayLedgerPath / replaceExampleReplayVerdicts / recordExample
 
   it('a ledger file whose closing fence is truncated makes the read throw, never returns []', async () => {
     const good = recordFor('rulebook/01-a.md', 1);
-    await replaceExampleReplayVerdicts(dir, [good]);
+    await recordExampleReplayVerdicts(dir, [good]);
     const ledgerPath = exampleReplayLedgerPath(dir);
     const original = await fs.readFile(ledgerPath, 'utf-8');
     const truncated = original.replace('<!-- boardsmith:example-replay-verdicts:end -->', '');
@@ -437,7 +444,7 @@ describe('exampleReplayLedgerPath / replaceExampleReplayVerdicts / recordExample
   // than throw the "malformed ledger" error this function's doc comment promises.
   it('a ledger with the end fence appearing before the begin fence throws, never silently returns an empty/wrong body', async () => {
     const good = recordFor('rulebook/01-a.md', 1);
-    await replaceExampleReplayVerdicts(dir, [good]);
+    await recordExampleReplayVerdicts(dir, [good]);
     const ledgerPath = exampleReplayLedgerPath(dir);
     const original = await fs.readFile(ledgerPath, 'utf-8');
 
@@ -1248,6 +1255,19 @@ describe('worked examples stay anchored to their slice line (#350)', () => {
 
     // Once anchored again, there is nothing left to move.
     expect(await reanchorExampleLedger(project)).toEqual({ moved: [], lost: [] });
+  });
+
+  it('reanchoring alongside a record call keeps the record (#831)', async () => {
+    const project = await makeProject({ [SLICE]: SLICE_TEXT });
+    await recordBoth(project);
+    await insertSourceLine(project);
+    const added = recordFor('rulebook/09-z.md', 3);
+
+    await Promise.all([reanchorExampleLedger(project), recordExampleReplayVerdicts(project, [added])]);
+
+    expect((await readExampleReplayVerdicts(project)).map((r) => r.exampleId).sort()).toEqual(
+      [`${SLICE}:6`, `${SLICE}:7`, added.exampleId].sort(),
+    );
   });
 
   it('a record whose text is no longer in its slice is reported lost and left as it was', async () => {
