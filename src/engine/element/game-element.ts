@@ -759,6 +759,8 @@ export class GameElement<G extends Game = any, P extends Player = any> {
           Object.assign(element, { [key]: value });
         }
       } catch (error) {
+        // Construction filed it in the id index; a refused create must not leave it there (#963).
+        this._ctx._elementsById.delete(element._t.id);
         // A reserved-key rejection already says exactly what is wrong and how
         // to fix it; wrapping it would bury that behind a generic heading.
         if (error instanceof ReservedAttributeError) throw error;
