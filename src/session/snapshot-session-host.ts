@@ -1265,17 +1265,7 @@ export class SnapshotSessionHost {
       }
     }
 
-    // Clear ALL transient state on undo/rewind: it describes a position that is gone.
-    if (op.type === 'undo' || op.type === 'debugRewind') {
-      this.transientTeachingState.clear();
-      this.narrationText = null;
-      // Pending selections belong to that list: they hold element ids from the
-      // replaced runner, exactly like the hint/heatmap above, so every seat's
-      // goes. `apply` below only ever drops the ACTING seat's, so a simultaneous
-      // step would leave another seat mid-chain against a game tree that no
-      // longer exists. Clients are told the same fact by `restoreEpoch`.
-      this.pendingStates.clear();
-    }
+    if (op.type === 'undo' || op.type === 'debugRewind') this.#forgetReplacedTree();
 
     await this.apply(res, seat, pending);
     return res;
@@ -1305,6 +1295,20 @@ export class SnapshotSessionHost {
     this.storeTeaching(res);
     this.broadcastCurrent();
     return res;
+  }
+
+  /**
+   * Drop what every seat holds against a runner that was just replaced (undo,
+   * rewind, a demo's step back, a rules reload): hints, heatmaps, narration and
+   * half-made selections, which hold element ids from the old game tree. `apply`
+   * drops only the acting seat's selection, so another seat would otherwise stay
+   * mid-chain against a tree that no longer exists. A rules reload that restored
+   * the saved tree keeps the selections: the tree they point into is unchanged.
+   */
+  #forgetReplacedTree({ keepPendingSelections = false } = {}): void {
+    this.transientTeachingState.clear();
+    this.narrationText = null;
+    if (!keepPendingSelections) this.pendingStates.clear();
   }
 
   /** Store a hint or heatmap result as the seat's transient teaching state. */
@@ -1412,10 +1416,8 @@ export class SnapshotSessionHost {
         this.stopDemo();
         return outcome;
       }
-      this.transientTeachingState.clear();
-      this.narrationText = null;
+      this.#forgetReplacedTree({ keepPendingSelections: outcome.kind === 'restored' });
       this.demoHistory = [];
-      if (outcome.kind === 'replayed') this.pendingStates.clear();
       await this.apply(outcome.result);
       return outcome;
     });
@@ -1929,7 +1931,7 @@ export class SnapshotSessionHost {
       this.demoHistory.push(prev);
       throw new Error(`The demo could not step back a move: ${res.error}`);
     }
-    this.narrationText = null;
+    this.#forgetReplacedTree();
     this.demoPaused = true;
     this.demoStepConsume = false;
     this.demoRewound = true;
