@@ -26,7 +26,15 @@ export type { Op, OpResult } from './stateless-ops.js';
 // The adapter's half of #487: every host that pushes these views keeps one.
 export { StatePushGate, type StatePushGateOptions } from './state-push-gate.js';
 
-const MAX_BOT_MOVES = 500;
+/** Bot moves a run makes before it yields to the event loop, so a long all-bot game never starves the host's I/O and timers (#815). */
+const BOT_MOVES_PER_STRETCH = 500;
+
+/**
+ * Bot moves one run may make before it is stopped as a runaway (#815): a run
+ * lasts until no bot is due, so on an all-bot table it is the whole game, and
+ * this bounds a game whose bots never end it.
+ */
+const MAX_BOT_MOVES_PER_RUN = 20_000;
 
 /**
  * Bot searches thrown away as stale in a row before the bot's moves are made
@@ -1640,9 +1648,11 @@ export class SnapshotSessionHost {
           this.hostWork.hold(() => this.runBotTurns());
           break;
         }
-        if (moves >= MAX_BOT_MOVES) {
-          console.error('[SnapshotSessionHost] bot pump hit MAX_BOT_MOVES cap (500); stopping to avoid runaway.');
-          break;
+        if (moves >= MAX_BOT_MOVES_PER_RUN) {
+          throw new Error(
+            `The bots made ${MAX_BOT_MOVES_PER_RUN} moves in a row without the game ending or a human's turn coming up, ` +
+              `so they were stopped. A game whose bots never finish it has a bug in its rules or bot hooks.`,
+          );
         }
         const wakes = this.botWakes;
         const step = await this.botStep(staleInARow >= MAX_STALE_BOT_SEARCHES);
@@ -1651,8 +1661,9 @@ export class SnapshotSessionHost {
           continue;
         }
         staleInARow = 0;
-        if (step === 'moved') moves++;
-        else if (step === 'done' && this.botWakes === wakes) break;
+        if (step === 'moved') {
+          if (++moves % BOT_MOVES_PER_STRETCH === 0) await new Promise((resolve) => setTimeout(resolve, 0));
+        } else if (step === 'done' && this.botWakes === wakes) break;
       }
     } finally {
       this.botPumpRunning = false;
