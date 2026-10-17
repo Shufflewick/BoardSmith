@@ -89,12 +89,14 @@ async function runValidation(
   const configPath = requireGameProject(cwd);
   const results: ValidationResult[] = [];
 
+  const config = JSON.parse(readFileSync(configPath, 'utf-8')) as {
+    backend?: unknown;
+    paths?: { rules?: string };
+  };
   // Which BACKEND this game declares, read once. `backend` is the single
   // declaration (#171), and what it changes below is which entry point the
   // project must have.
-  const worldMode = resolveWorldMode(
-    JSON.parse(readFileSync(configPath, 'utf-8')) as { backend?: unknown },
-  );
+  const worldMode = resolveWorldMode(config);
 
   // 1. Check metadata completeness
   results.push(await validateMetadata(cwd));
@@ -116,7 +118,7 @@ async function runValidation(
   results.push(await validateBundleSize(cwd, worldMode));
 
   // 6. Required files check
-  results.push(await validateRequiredFiles(cwd, worldMode));
+  results.push(await validateRequiredFiles(cwd, worldMode, config));
 
   // 7. Choice cardinality — the panel offers hierarchy, never free text (#172).
   results.push(await validateChoiceCardinality(cwd, worldMode));
@@ -1151,16 +1153,21 @@ function assetPathMessage(
  * with no UI yet. A table that has any UI file has a UI, so it needs all three.
  */
 function uiFilesRequired(cwd: string, isWorld: boolean): string[] {
-  if (isWorld) return ['src/ui/uis.ts', 'world.html', 'src/world-main.ts', 'src/rules/world.ts'];
+  if (isWorld) return ['src/ui/uis.ts', 'world.html', 'src/world-main.ts'];
   return tableUiState(cwd).state === 'none' ? [] : [TABLE_UI_ENTRY, 'src/ui/uis.ts', 'src/ui/App.vue'];
 }
 
-export async function validateRequiredFiles(cwd: string, isWorld: boolean): Promise<ValidationResult> {
+export async function validateRequiredFiles(
+  cwd: string,
+  isWorld: boolean,
+  config: { paths?: { rules?: string } },
+): Promise<ValidationResult> {
+  const rulesDir = resolveRulesDir(cwd, config);
+  const rulesFiles = ['index.ts', 'game.ts', ...(isWorld ? ['world.ts'] : [])];
   const required = [
     'boardsmith.json',
     'package.json',
-    'src/rules/index.ts',
-    'src/rules/game.ts',
+    ...rulesFiles.map((file) => relative(cwd, join(rulesDir, file))),
     // A WORLD AND A TABLE HAVE DIFFERENT ENTRY POINTS, and requiring both would
     // require every world to carry a table half it does not have. A table
     // mounts GameShell from index.html; a world mounts WorldShell from

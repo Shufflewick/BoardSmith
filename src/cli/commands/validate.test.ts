@@ -980,17 +980,17 @@ describe('validateRequiredFiles — a world has a different entry point (#168)',
 
   it('passes a table game with the table entry point', async () => {
     writeTableUi();
-    expect((await validateRequiredFiles(dir, false)).passed).toBe(true);
+    expect((await validateRequiredFiles(dir, false, {})).passed).toBe(true);
   });
 
   it('passes a world with the world entry point and no table half', async () => {
     writeWorldUi();
-    expect((await validateRequiredFiles(dir, true)).passed).toBe(true);
+    expect((await validateRequiredFiles(dir, true, {})).passed).toBe(true);
   });
 
   it('fails a world that declares one and has no world surface', async () => {
     writeTableUi();
-    const result = await validateRequiredFiles(dir, true);
+    const result = await validateRequiredFiles(dir, true, {});
     expect(result.passed).toBe(false);
     expect(result.details).toContain('world.html');
     expect(result.details).toContain('src/rules/world.ts');
@@ -998,22 +998,37 @@ describe('validateRequiredFiles — a world has a different entry point (#168)',
 
   it('still fails a table game missing its UI registry', async () => {
     writeFileSync(join(dir, 'index.html'), '');
-    const result = await validateRequiredFiles(dir, false);
+    const result = await validateRequiredFiles(dir, false, {});
     expect(result.passed).toBe(false);
     expect(result.details).toEqual(['src/ui/uis.ts', 'src/ui/App.vue']);
   });
 
   it('asks a table that lost index.html but kept other UI files for its page and shell (#556)', async () => {
     writeFileSync(join(dir, 'src', 'ui', 'uis.ts'), '');
-    const result = await validateRequiredFiles(dir, false);
+    const result = await validateRequiredFiles(dir, false, {});
     expect(result.passed).toBe(false);
     expect(result.details).toEqual(['index.html', 'src/ui/App.vue']);
   });
 
   it('asks a table with no UI yet (no index.html, #556) only for its rules', async () => {
-    expect(await validateRequiredFiles(dir, false)).toMatchObject({ passed: true, details: [] });
+    expect(await validateRequiredFiles(dir, false, {})).toMatchObject({ passed: true, details: [] });
     rmSync(join(dir, 'src', 'rules', 'game.ts'));
-    expect((await validateRequiredFiles(dir, false)).details).toEqual(['src/rules/game.ts']);
+    expect((await validateRequiredFiles(dir, false, {})).details).toEqual(['src/rules/game.ts']);
+  });
+
+  it('reads the rules from paths.rules, as build does, and names the resolved paths when missing (#843)', async () => {
+    const config = { paths: { rules: 'rules' } };
+    rmSync(join(dir, 'src', 'rules'), { recursive: true });
+    expect((await validateRequiredFiles(dir, false, config)).details).toEqual(['rules/index.ts', 'rules/game.ts']);
+    mkdirSync(join(dir, 'rules'));
+    for (const file of ['index.ts', 'game.ts']) writeFileSync(join(dir, 'rules', file), '');
+    expect(await validateRequiredFiles(dir, false, config)).toMatchObject({ passed: true, details: [] });
+  });
+
+  it("looks for a world's world.ts in paths.rules too (#843)", async () => {
+    writeWorldUi();
+    const result = await validateRequiredFiles(dir, true, { paths: { rules: 'rules' } });
+    expect(result.details).toEqual(['rules/index.ts', 'rules/game.ts', 'rules/world.ts']);
   });
 });
 
