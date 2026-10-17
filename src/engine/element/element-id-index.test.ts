@@ -16,11 +16,26 @@ import { TEST_WORLD_ELEMENT_ID_KEY } from './world-element-id-key.test-helper.js
 class IndexGame extends Game<IndexGame, Player> {
   constructor(options: GameOptions) {
     super(options);
-    this.registerElements([Card, Zone]);
+    this.registerElements([Card, Zone, Table, Room]);
   }
 }
 class Card extends Piece<IndexGame> {}
 class Zone extends Space<IndexGame> {}
+/** A zone whose constructor creates children, one of them with its own child. */
+class Table extends Zone {
+  constructor(ctx: ConstructorParameters<typeof Zone>[0]) {
+    super(ctx);
+    this.create(Card, 'leg');
+    this.create(Zone, 'drawer').create(Card, 'key');
+  }
+}
+/** A zone whose constructor creates a Table, so creates nest two deep. */
+class Room extends Zone {
+  constructor(ctx: ConstructorParameters<typeof Zone>[0]) {
+    super(ctx);
+    this.create(Table, 'table');
+  }
+}
 
 /** The answer a walk gives: the first element in tree order with this id, as `atId` always answered. */
 function walk(from: GameElement, id: number): GameElement | undefined {
@@ -163,21 +178,7 @@ describe('the id index holds every element in the game tree and the pile', () =>
   });
 
   it('after a create whose constructor creates children, nested (#1107)', () => {
-    class Table extends Zone {
-      constructor(ctx: ConstructorParameters<typeof Zone>[0]) {
-        super(ctx);
-        this.create(Card, 'leg');
-        this.create(Zone, 'drawer').create(Card, 'key');
-      }
-    }
-    class Room extends Zone {
-      constructor(ctx: ConstructorParameters<typeof Zone>[0]) {
-        super(ctx);
-        this.create(Table, 'table');
-      }
-    }
     const { game, hand } = table();
-    game.registerElements([Table, Room]);
     hand.create(Room, 'room');
     expect(unindexed(game)).toEqual([]);
   });
