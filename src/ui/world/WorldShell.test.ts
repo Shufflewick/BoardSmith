@@ -8,6 +8,7 @@ import { WORLD_HOST_SOURCE, WORLD_UI_SOURCE } from './worldProtocol.js';
 import { orderBookKey } from './orderBook.js';
 import { defineGameUIs, defaultUI } from '../game-uis.js';
 import { useToast } from '../composables/useToast.js';
+import { useDebugBridge, type DebugBridge } from '../composables/useDebugBridge.js';
 import { countPageSingletons, unresolvedComponents } from '../components/page-singletons.test-helper.js';
 
 /**
@@ -267,6 +268,23 @@ describe('WorldShell', () => {
       },
     });
     expect(() => mount(Loose)).toThrow(/outside a WorldShell/);
+  });
+
+  it('refuses a host request rather than answering it with nothing, since a world has no host ops (#897)', async () => {
+    let bridge!: DebugBridge;
+    const Asker = defineComponent({
+      setup() {
+        bridge = useDebugBridge();
+        return () => h('div');
+      },
+    });
+    const wrapper = mount(WorldShell, {
+      props: { uis: defineGameUIs({ Asker: defaultUI(Asker) }), displayName: 'Gloamhall' },
+    });
+    await drawn(wrapper, stateFrame());
+
+    await expect(bridge.customDebug()).rejects.toThrow(/requires a host bridge/);
+    wrapper.unmount();
   });
 });
 
