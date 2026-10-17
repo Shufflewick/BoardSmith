@@ -4,11 +4,14 @@
  * that hardcoded `src/rules` either failed on a project laid out another way or,
  * worse, shipped an old `src/rules` left beside the real one.
  *
+ * It also empties its output folder first, so a file an earlier build left there cannot ship
+ * (#842), and refuses an output folder that holds the project or is not a build output.
+ *
  * Both builds run while the file is collected, where no test timeout applies,
  * because each runs Vite twice and bundles the rules (#363). The tests assert
  * what the builds left behind.
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
@@ -29,7 +32,9 @@ function rulesSource(maxPlayers: number): string {
 
 /** A table project whose real rules live in `custom/rules`, optionally with a decoy `src/rules`. */
 function customRulesProject(decoy: boolean): string {
-  const dir = tempTree('boardsmith-build-rules-path-');
+  // One level down, so a test can hand build a folder holding the project that is still its own.
+  const dir = join(tempTree('boardsmith-build-rules-path-'), 'game');
+  mkdirSync(dir);
   writeFileSync(
     join(dir, 'boardsmith.json'),
     JSON.stringify({ name: 'fixture', displayName: 'Fixture', backend: 'table', paths: { rules: 'custom/rules' } }),
@@ -72,6 +77,13 @@ function builtRules(dir: string): string {
 const onlyCustom = customRulesProject(false);
 const onlyCustomError = await buildIn(onlyCustom);
 
+// An earlier build's output, plus an asset since deleted from public/.
+const withStale = customRulesProject(false);
+mkdirSync(join(withStale, 'dist', 'rules'), { recursive: true });
+writeFileSync(join(withStale, 'dist', 'rules', 'rules.js'), '');
+writeFileSync(join(withStale, 'dist', 'removed-from-public.png'), '');
+const withStaleError = await buildIn(withStale);
+
 const withDecoy = customRulesProject(true);
 const withDecoyError = await buildIn(withDecoy);
 
@@ -102,5 +114,34 @@ describe('boardsmith build stops by throwing, so a command running it stops too 
       JSON.stringify({ name: 'fixture', backend: 'table', paths: { rules: 'missing/rules' } }),
     );
     await expect(buildProject(dir, {})).rejects.toThrow(join(dir, 'missing', 'rules', 'index.ts'));
+  });
+});
+
+describe('boardsmith build empties its output folder, and only a build output folder (#842)', () => {
+  it('leaves no file from an earlier build in the output', () => {
+    expect(withStaleError).toBeUndefined();
+    expect(existsSync(join(withStale, 'dist', 'removed-from-public.png'))).toBe(false);
+    expect(builtManifest(withStale).playerCount).toEqual({ min: 3, max: 5 });
+  });
+
+  it('refuses the project folder as --out-dir and deletes nothing', async () => {
+    const dir = customRulesProject(false);
+    await expect(buildProject(dir, { outDir: dir })).rejects.toThrow(/project folder/);
+    expect(existsSync(join(dir, 'custom', 'rules', 'index.ts'))).toBe(true);
+  });
+
+  it('refuses a folder holding the project as --out-dir and deletes nothing', async () => {
+    const dir = customRulesProject(false);
+    await expect(buildProject(dir, { outDir: join(dir, '..') })).rejects.toThrow(/project folder/);
+    expect(existsSync(join(dir, 'custom', 'rules', 'index.ts'))).toBe(true);
+  });
+
+  it('refuses a folder that is not an earlier build output and deletes nothing', async () => {
+    const dir = customRulesProject(false);
+    const out = join(dir, 'notes');
+    mkdirSync(out);
+    writeFileSync(join(out, 'todo.txt'), 'keep me');
+    await expect(buildProject(dir, { outDir: out })).rejects.toThrow(/rules\/rules\.js/);
+    expect(readFileSync(join(out, 'todo.txt'), 'utf-8')).toBe('keep me');
   });
 });

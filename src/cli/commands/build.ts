@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, realpathSync, writeFileSync, mkdirSync, cpSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync, mkdirSync, cpSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join, sep } from 'node:path';
 import { build as viteBuild } from 'vite';
 import chalk from 'chalk';
 import ora from 'ora';
@@ -373,6 +374,27 @@ export function buildOutputDir(cwd: string, outDir: string | undefined): string 
   return resolveUserPath(cwd, outDir ?? DEFAULT_OUT_DIR);
 }
 
+/**
+ * Deletes `outDir`, so no file an earlier build wrote ships in this one (#842). Refuses, deleting
+ * nothing, unless the folder is missing, empty, or holds `rules/rules.js`, which only a build writes;
+ * the project folder, anything holding it and the home folder are refused even then.
+ */
+function emptyBuildOutputDir(projectDir: string, outDir: string): void {
+  if (!existsSync(outDir)) return;
+  const real = realpathSync(outDir);
+  const refuse = (why: string) => new Error(
+    `Refusing to empty the build output folder ${outDir}: ${why} ` +
+    `Build deletes everything in its output folder first, so pass --out-dir a folder used only for build output, such as ${join(projectDir, 'dist')}.`,
+  );
+  if (real === projectDir || projectDir.startsWith(real + sep) || real === realpathSync(homedir())) {
+    throw refuse('it is the project folder, a folder holding it, or your home folder.');
+  }
+  if (!statSync(real).isDirectory() || (readdirSync(real).length > 0 && !existsSync(join(real, 'rules', 'rules.js')))) {
+    throw refuse('it is not empty and has no rules/rules.js, so it does not look like an earlier build output.');
+  }
+  rmSync(outDir, { recursive: true });
+}
+
 /** `boardsmith build`, in the current directory. */
 export async function buildCommand(options: BuildOptions): Promise<void> {
   await buildProject(process.cwd(), options);
@@ -426,6 +448,7 @@ async function buildProjectIn(projectDir: string, options: BuildOptions): Promis
   const rulesPath = resolveRulesDir(cwd, config);
   const rulesIndexPath = requireRulesIndex(rulesPath);
   requireTableUi(cwd, config);
+  emptyBuildOutputDir(cwd, outDir);
 
   console.log(chalk.cyan(`\nBuilding ${config.displayName || config.name}...\n`));
 
