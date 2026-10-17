@@ -2,7 +2,8 @@ import type { Rule } from 'eslint';
 
 /**
  * Visitors that hand every module a file loads by a fixed name (`import x from`,
- * `import('x')`, `require('x')`) to `check`, without the `node:` prefix.
+ * `export … from 'x'`, `import x = require('x')`, `import('x')`, `require('x')`)
+ * to `check`, without the `node:` prefix.
  * `onComputed` gets an `import()` whose module name is computed at run time.
  */
 export function moduleImportVisitors(
@@ -13,6 +14,21 @@ export function moduleImportVisitors(
   return {
     ImportDeclaration(node) {
       if (typeof node.source.value === 'string') checkName(node.source.value, node);
+    },
+
+    ExportNamedDeclaration(node) {
+      if (typeof node.source?.value === 'string') checkName(node.source.value, node);
+    },
+
+    ExportAllDeclaration(node) {
+      if (typeof node.source.value === 'string') checkName(node.source.value, node);
+    },
+
+    // TypeScript's `import x = require('x')`; ESLint's own types do not list TS nodes.
+    TSExternalModuleReference(node: Rule.Node & { expression: { type: string; value?: unknown } }) {
+      if (node.expression.type === 'Literal' && typeof node.expression.value === 'string') {
+        checkName(node.expression.value, node);
+      }
     },
 
     CallExpression(node) {

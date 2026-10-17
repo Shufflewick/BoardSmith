@@ -9,11 +9,8 @@ import { DESIGN_DIR, SCRATCH_DIR } from './project-paths.js';
 import { GAME_VITE_CONFIG, GAME_VITE_CONFIG_FILE } from './test-run-scope.js';
 import { TABLE_UI_ENTRY, TABLE_UI_PATHS } from './game-project.js';
 import { SMOKE_SPEC_PATH } from '../../testing/browser-smoke-verdict.js';
-import { existsSync } from 'node:fs';
-import { join, dirname, relative, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import { boardsmithPackageRoot } from './boardsmith-version.js';
+import { relative, resolve } from 'node:path';
 
 import type { GameBackend } from '../../session/index.js';
 
@@ -66,58 +63,21 @@ export interface GeneratedFile {
 }
 
 /**
- * Check if running from local dev environment
- */
-export function getMonorepoRoot(): string | null {
-  // Try multiple possible paths depending on how CLI is built/bundled:
-  // - Unbundled: dist/cli/lib/project-scaffold.js -> go up 3 levels
-  // - Bundled:   dist/cli/cli.mjs -> go up 2 levels
-  // - Source:    src/cli/lib/project-scaffold.ts -> go up 3 levels
-  const candidates = [
-    join(__dirname, '..', '..', '..'),  // lib -> cli -> dist -> BoardSmith
-    join(__dirname, '..', '..'),        // cli -> dist -> BoardSmith (bundled)
-  ];
-
-  for (const candidate of candidates) {
-    const enginePath = join(candidate, 'src', 'engine');
-    const uiPath = join(candidate, 'src', 'ui');
-    if (existsSync(enginePath) && existsSync(uiPath)) {
-      return candidate;
-    }
-  }
-  return null;
-}
-
-/**
- * Get the `boardsmith` dependency spec for a project being scaffolded at
- * `projectPath` — a local `file:` link when the CLI can see the monorepo,
- * the published version otherwise.
+ * The `boardsmith` dependency spec for a project being scaffolded at
+ * `projectPath`: a `file:` link to the BoardSmith package that is running
+ * init, a checkout or an installed copy alike, so the project symlinks to it
+ * the way the example games link to the checkout. Never a registry spec: the
+ * npm name `boardsmith` is not ours (#849).
  *
- * The local link is RELATIVE to `projectPath`. An absolute `file:` path bakes
+ * The link is RELATIVE to `projectPath`. An absolute `file:` path bakes
  * the scaffolding developer's home directory into the new game's
  * package.json, so `npm install` fails on every other machine and in CI — the
  * defect issue 142 was filed for, after it reached five games.
  */
-export function getDependencyPaths(projectPath: string): {
-  boardsmith: string;
-  isLocalDev: boolean;
-} {
-  const monorepoRoot = getMonorepoRoot();
-
-  if (monorepoRoot !== null) {
-    // `relative` between two absolute paths; `resolve` first so a caller's
-    // relative projectPath still produces a link that resolves correctly.
-    const link = relative(resolve(projectPath), resolve(monorepoRoot));
-    return {
-      boardsmith: `file:${toPosixPath(link)}`,
-      isLocalDev: true,
-    };
-  }
-
-  return {
-    boardsmith: '^0.0.1',
-    isLocalDev: false,
-  };
+export function boardsmithDependencySpec(projectPath: string): string {
+  // `resolve` first so a caller's relative projectPath still produces a link that resolves correctly.
+  const link = relative(resolve(projectPath), boardsmithPackageRoot());
+  return `file:${toPosixPath(link)}`;
 }
 
 /**
@@ -189,8 +149,6 @@ export function generateBoardsmithJson(config: ProjectConfig): string {
  * Generate package.json
  */
 export function generatePackageJson(config: ProjectConfig, projectPath: string): string {
-  const deps = getDependencyPaths(projectPath);
-
   // No `scripts` block, deliberately. The BoardSmith CLI is the one way to
   // build, test, lint, and validate a game — `npx boardsmith test`, not
   // `npm test`. Script aliases would fork that into two commands that drift
@@ -202,7 +160,7 @@ export function generatePackageJson(config: ProjectConfig, projectPath: string):
     version: '0.0.1',
     type: 'module',
     dependencies: {
-      boardsmith: deps.boardsmith,
+      boardsmith: boardsmithDependencySpec(projectPath),
       vue: '^3.4.0',
     },
     devDependencies: {

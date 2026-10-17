@@ -7,6 +7,7 @@ import type { ObjectiveWeight, TrainingProgress } from '../../bot-trainer/index.
 import type { BotStrategy } from '../../bot/index.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
+import { parsePositiveWholeNumber } from '../lib/positive-whole-number.js';
 import { packageSourceFile, getProjectContext, importRuntimeBundle, runtimeBundlePath, toPosix } from './game-runtime.js';
 
 interface EvolveBotWeightsOptions {
@@ -175,10 +176,10 @@ function requireBotObjectives(bot: BotStrategy | undefined): void {
 /** The run's settings, from the flags or their defaults. */
 function evolutionSettings(options: EvolveBotWeightsOptions) {
   return {
-    workerCount: options.workers ? parseInt(options.workers, 10) : Math.max(1, cpus().length - 1),
-    generations: options.generations ? parseInt(options.generations, 10) : 5,
-    population: options.population ? parseInt(options.population, 10) : 20,
-    mctsIterations: options.mcts ? parseInt(options.mcts, 10) : 100,
+    workerCount: options.workers === undefined ? Math.max(1, cpus().length - 1) : parsePositiveWholeNumber('workers', options.workers),
+    generations: options.generations === undefined ? 5 : parsePositiveWholeNumber('generations', options.generations),
+    population: options.population === undefined ? 20 : parsePositiveWholeNumber('population', options.population),
+    mctsIterations: options.mcts === undefined ? 100 : parsePositiveWholeNumber('mcts', options.mcts),
   };
 }
 

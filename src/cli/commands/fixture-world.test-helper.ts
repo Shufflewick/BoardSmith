@@ -126,6 +126,7 @@ async function startWorldHost(fixture: string, displayName: string) {
   const host = await startWorldDevServer({
     cwd: fixture,
     uiPath: fixture,
+    rulesDir: rulesPath,
     runtime: await loadWorldRuntime(rulesPath, tempDir, 'standalone'),
     displayName,
     context: 'standalone',

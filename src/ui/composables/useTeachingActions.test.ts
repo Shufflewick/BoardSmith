@@ -12,7 +12,7 @@ import { ref } from 'vue';
 import { useTeachingActions, type TeachingActionsOptions } from './useTeachingActions.js';
 
 function harness(overrides: Partial<TeachingActionsOptions> = {}) {
-  const platformRequest = vi.fn().mockResolvedValue({});
+  const platformRequest = vi.fn().mockResolvedValue({ success: true });
   const errors: string[] = [];
   const shown: string[] = [];
   const removed: number[] = [];
@@ -55,7 +55,7 @@ describe('hint', () => {
   });
 
   it('clears the thinking toast even when the host refuses', async () => {
-    const h = harness({ platformRequest: vi.fn().mockRejectedValue(new Error('no')) });
+    const h = harness({ platformRequest: vi.fn().mockResolvedValue({ success: false }) });
     await h.handleTeachingAction('hint');
     expect(h.removed).toEqual([1]);
     expect(h.errors[0]).toMatch(/hint unavailable/i);
@@ -78,7 +78,7 @@ describe('demo toggle', () => {
   it('says which direction failed', async () => {
     const h = harness({
       isDemoRunning: ref(true),
-      platformRequest: vi.fn().mockRejectedValue(new Error('no')),
+      platformRequest: vi.fn().mockResolvedValue({ success: false }),
     });
     await h.handleTeachingAction('demo-toggle');
     expect(h.errors[0]).toMatch(/stop demo/i);
@@ -99,7 +99,7 @@ describe('heatmap toggle', () => {
       heatmapPending,
       platformRequest: vi.fn().mockImplementation(async () => {
         pendingDuringRequest = heatmapPending.value;
-        return {};
+        return { success: true };
       }),
     });
 
@@ -122,7 +122,7 @@ describe('heatmap toggle', () => {
     const h = harness({
       heatmapToggling,
       heatmapPending,
-      platformRequest: vi.fn().mockRejectedValue(new Error('no')),
+      platformRequest: vi.fn().mockResolvedValue({ success: false }),
     });
     await h.handleTeachingAction('heatmap-toggle');
     expect(heatmapToggling.value).toBe(false);
@@ -160,7 +160,7 @@ describe('tutorial', () => {
     await ok.handleTeachingAction(action);
     expect(ok.platformRequest).toHaveBeenCalledWith(op, { seat: 2 });
 
-    const bad = harness({ platformRequest: vi.fn().mockRejectedValue(new Error('no')) });
+    const bad = harness({ platformRequest: vi.fn().mockResolvedValue({ success: false }) });
     await bad.handleTeachingAction(action);
     expect(bad.errors[0]).toMatch(failure);
   });
@@ -170,7 +170,39 @@ describe('every control', () => {
   it.each([
     'hint', 'demo-toggle', 'heatmap-toggle', 'help-toggle', 'start-tutorial', 'exit-tutorial',
   ] as const)('%s never throws, whatever the host does', async (action) => {
-    const h = harness({ platformRequest: vi.fn().mockRejectedValue(new Error('host is down')) });
+    const h = harness({ platformRequest: vi.fn().mockResolvedValue({ success: false, error: 'The table did not answer in time. Try again.' }) });
     await expect(h.handleTeachingAction(action)).resolves.toBeUndefined();
+  });
+});
+
+describe('a refusal the host resolves (#859)', () => {
+  // The transport never rejects: a refused op RESOLVES `{ success: false, error }`.
+  it('shows the host\'s own reason', async () => {
+    const h = harness({
+      platformRequest: vi.fn().mockResolvedValue({ success: false, error: 'Cannot hint: seat 2 is not awaiting input' }),
+    });
+    await h.handleTeachingAction('hint');
+    expect(h.errors).toEqual(['Cannot hint: seat 2 is not awaiting input']);
+    expect(h.removed).toEqual([1]);
+  });
+
+  it.each([
+    ['hint', 'This table does not support hints.'],
+    ['demo-toggle', 'This table does not support the bot demo.'],
+    ['heatmap-toggle', 'This table does not support the move quality display.'],
+    ['start-tutorial', 'This table does not support tutorials.'],
+    ['exit-tutorial', 'This table does not support tutorials.'],
+  ] as const)('%s on a host without the op says the table does not support it', async (action, text) => {
+    const h = harness({
+      platformRequest: vi.fn().mockImplementation(async (op: string) => ({ success: false, error: `Unknown server op: '${op}'` })),
+    });
+    await h.handleTeachingAction(action);
+    expect(h.errors).toEqual([text]);
+  });
+
+  it('says nothing when the host accepts', async () => {
+    const h = harness();
+    await h.handleTeachingAction('start-tutorial');
+    expect(h.errors).toEqual([]);
   });
 });
