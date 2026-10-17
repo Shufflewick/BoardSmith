@@ -487,7 +487,9 @@ describe('#147/#73: a card game can determinize a hidden hand', () => {
 // #871: the contract checks which container each known element sits in, not
 // the order of a container's children. Seat 1 sees its own two cards; the other
 // hands reach it as anonymous placeholders, whose identity means nothing but
-// whose COUNT per hand the seat does know.
+// whose COUNT per hand, by back, the seat does know. Each hand holds one red-
+// and one blue-backed card. A face-down card on the open table keeps its real
+// id, so where it sits is known too.
 // ============================================================================
 
 class TrickGame extends Game<TrickGame, Player> {
@@ -498,15 +500,20 @@ class TrickGame extends Game<TrickGame, Player> {
       const hand = this.create(Space<TrickGame>, `hand-${player.seat}`);
       hand.player = player;
       hand.contentsVisibleToOwner();
-      for (const rank of [player.seat * 10 + 1, player.seat * 10 + 2]) {
-        hand.create(HandCard, `card-${rank}`, { rank });
+      for (const [rank, back] of [[player.seat * 10 + 1, 'red'], [player.seat * 10 + 2, 'blue']] as const) {
+        hand.create(HandCard, `card-${rank}`, { rank, $images: { face: `${rank}.svg`, back } });
       }
     }
+    this.create(Space<TrickGame>, 'table').create(HandCard, 'face-down', { rank: 99 }).showOnlyTo(2);
     this.setFlow({ root: actionStep({ actions: [], player: (ctx) => ctx.game.getPlayer(1)! }) });
   }
 
   hand(seat: number): Space<TrickGame> {
     return this.first(Space<TrickGame>, `hand-${seat}`)!;
+  }
+
+  get table(): Space<TrickGame> {
+    return this.first(Space<TrickGame>, 'table')!;
   }
 }
 
@@ -572,7 +579,30 @@ describe('#871 determinization: which container an element sits in is known', ()
     expect(() => applyDeterminization(sandbox, 1, () => {
       placeholder.putInto(sandbox.hand(3));
     }, () => 0.5)).toThrow(
-      new RegExp(`Space#${sandbox.hand(2).id} "hand-2" held 2 face-down HandCard placeholders and now holds 1`),
+      new RegExp(`Space#${sandbox.hand(2).id} "hand-2" held 1 face-down HandCard \\(.*back=string:red.*\\) placeholders and now holds 0`),
+    );
+  });
+
+  it('refuses a sampler that swaps placeholders with different backs between hidden hands', () => {
+    const sandbox = trickSandboxForSeat1();
+    const red = sandbox.hand(2).first(HandCard)!;
+    const blue = sandbox.hand(3).last(HandCard)!;
+
+    expect(() => applyDeterminization(sandbox, 1, () => {
+      red.putInto(sandbox.hand(3));
+      blue.putInto(sandbox.hand(2));
+    }, () => 0.5)).toThrow(/"hand-2" held 1 face-down HandCard \(.*back=string:red.*\) placeholders and now holds 0/);
+  });
+
+  it('refuses a sampler that moves a face-down card off the open table', () => {
+    const sandbox = trickSandboxForSeat1();
+    const faceDown = sandbox.table.first(HandCard)!;
+    expect(faceDown.isAttributeRedacted('rank')).toBe(true);
+
+    expect(() => applyDeterminization(sandbox, 1, () => {
+      faceDown.putInto(sandbox.hand(2));
+    }, () => 0.5)).toThrow(
+      new RegExp(`moved HandCard#${faceDown.id} from Space#${sandbox.table.id} "table" to Space#${sandbox.hand(2).id} "hand-2"`),
     );
   });
 });

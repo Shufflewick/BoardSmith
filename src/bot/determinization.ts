@@ -41,13 +41,16 @@ export class DeterminizationError extends Error {
   }
 }
 
-/** Every attribute, and the container, of every element the sandbox currently claims to know. */
-type KnownWorld = Map<number, {
+/** Every attribute, and the container, of one element the sandbox claims to know. */
+interface KnownElement {
+  element: GameElement;
   className: string;
-  label: string;
   attributes: Map<string, string>;
   parent: GameElement | undefined;
-}>;
+}
+
+/** Every element the sandbox currently claims to know, by id. */
+type KnownWorld = Map<number, KnownElement>;
 
 /** `HandCard#12 "card-11"`: how a refusal names an element. */
 function nameOf(element: GameElement | undefined): string {
@@ -107,8 +110,8 @@ function recordKnownWorld(game: Game): KnownWorld {
       attributes.set(key, fingerprintValue((element as unknown as Record<string, unknown>)[key]));
     }
     world.set(element._t.id, {
+      element,
       className: element.constructor.name,
-      label: nameOf(element),
       attributes,
       parent: element._t.parent as GameElement | undefined,
     });
@@ -119,42 +122,67 @@ function recordKnownWorld(game: Game): KnownWorld {
   return world;
 }
 
+/** One container's face-down placeholders of one look: class plus every attribute the seat holds. */
+interface PlaceholderGroup {
+  parent: GameElement | undefined;
+  look: string;
+  count: number;
+}
+
 /**
- * How many anonymous placeholders of each class each container holds.
+ * What the seat can see of each anonymous placeholder: its class and every
+ * attribute it was told, such as its card back. Taken before sampling, so the
+ * values a sampler fills in do not change a placeholder's look.
+ */
+function placeholderLooks(world: KnownWorld): Map<number, string> {
+  const looks = new Map<number, string>();
+  for (const [id, entry] of world) {
+    if (id >= 0) continue;
+    const known = [...entry.attributes]
+      .filter(([, value]) => value !== 'undefined')
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, value]) => `${key}=${value}`);
+    looks.set(id, known.length ? `${entry.className} (${known.join(', ')})` : entry.className);
+  }
+  return looks;
+}
+
+/**
+ * How many anonymous placeholders of each look each container holds.
  *
  * A hidden zone's children reach a seat with fresh negative ids precisely so
  * the seat cannot tell them apart, so which placeholder sits where is not
- * known; how many each container holds is.
+ * known; how many of each look each container holds is.
  */
-function placeholderCounts(world: KnownWorld): Map<string, { parent: string; className: string; count: number }> {
-  const counts = new Map<string, { parent: string; className: string; count: number }>();
-  for (const [id, entry] of world) {
-    if (id >= 0) continue;
-    const key = `${entry.parent?._t.id}:${entry.className}`;
+function placeholderCounts(world: KnownWorld, looks: Map<number, string>): Map<string, PlaceholderGroup> {
+  const counts = new Map<string, PlaceholderGroup>();
+  for (const [id, look] of looks) {
+    const parent = world.get(id)?.parent;
+    const key = `${parent?._t.id}:${look}`;
     const prior = counts.get(key);
     if (prior) prior.count++;
-    else counts.set(key, { parent: nameOf(entry.parent), className: entry.className, count: 1 });
+    else counts.set(key, { parent, look, count: 1 });
   }
   return counts;
 }
 
-/** A container whose count of face-down placeholders the sample changed, or `null`. */
+/** A container whose count of face-down placeholders of one look the sample changed, or `null`. */
 function placeholderCountChange(before: KnownWorld, after: KnownWorld): string | null {
-  const afterCounts = placeholderCounts(after);
-  for (const [key, prior] of placeholderCounts(before)) {
+  const looks = placeholderLooks(before);
+  const afterCounts = placeholderCounts(after, looks);
+  for (const [key, prior] of placeholderCounts(before, looks)) {
     const now = afterCounts.get(key)?.count ?? 0;
     if (now !== prior.count) {
       return (
-        `${prior.parent} held ${prior.count} face-down ${prior.className} placeholders and now ` +
-        `holds ${now}. The seat can count them. A sampler may swap face-down placeholders between ` +
-        `containers or reorder them, but it may not change how many each container holds.`
+        `${nameOf(prior.parent)} held ${prior.count} face-down ${prior.look} placeholders and now ` +
+        `holds ${now}. The seat can count them and see their class and back. A sampler may swap ` +
+        `face-down placeholders that look alike between containers, or reorder them, but it may not ` +
+        `change how many of each look a container holds.`
       );
     }
   }
   return null;
 }
-
-type KnownElement = KnownWorld extends Map<number, infer E> ? E : never;
 
 /** The first attribute of one element the sample deleted or changed, or `null`. */
 function attributeChange(id: number, prior: KnownElement, now: KnownElement): string | null {
@@ -190,9 +218,9 @@ function findContradiction(before: KnownWorld, after: KnownWorld): string | null
         `so a world without it is not a world the seat could be in.`
       );
     }
-    if (id >= 0 && now.parent !== prior.parent) {
+    if (id >= 0 && now.parent?._t.id !== prior.parent?._t.id) {
       return (
-        `it moved ${prior.label} from ${nameOf(prior.parent)} to ${nameOf(now.parent)}. ` +
+        `it moved ${nameOf(now.element)} from ${nameOf(prior.parent)} to ${nameOf(now.parent)}. ` +
         `The seat can see where that element is. A sampler may reorder the children of a container ` +
         `and may fill in what a face-down element is, but it may not move an element the seat can see ` +
         `into a different container.`
