@@ -192,6 +192,34 @@ describe('updateBotWeights', () => {
       expect(twice).toContain('Generations: 9');
     });
 
+    it('places the record at the real import, not at the word import in a doc comment above it', () => {
+      const source = `/**\n * We import the game type below.\n */\nimport type { Game } from 'boardsmith';\nexport const bot = {};\n`;
+      const updated = updateBotWeights(source, [], { addMetadata: true, evolutionStats: stats });
+      expect(updated).toContain(' * We import the game type below.\n */\n//\n// Weight Evolution');
+      expect(updated.indexOf('Weight Evolution')).toBeLessThan(updated.indexOf("import type { Game }"));
+    });
+
+    it('leaves the word import inside a string alone in a file with no import declaration', () => {
+      const source = `export const note = 'import helper';\nexport const bot = {};\n`;
+      const updated = updateBotWeights(source, [], { addMetadata: true, evolutionStats: stats });
+      expect(updated).toContain(`export const note = 'import helper';`);
+      expect(updated.indexOf('Weight Evolution')).toBeLessThan(updated.indexOf('export const note'));
+    });
+
+    it("keeps an author's own Weight Evolution notes after the imports", () => {
+      const source = `import x from 'y';\n//\n// Weight Evolution notes by author\nconst a = 1;\nconst b = 2;\n//\nexport const bot = {};\n`;
+      const updated = updateBotWeights(source, [], { addMetadata: true, evolutionStats: stats });
+      expect(updated).toContain(source.slice(source.indexOf('//\n// Weight Evolution notes')));
+      expect(updated).toContain('Generations: 5');
+    });
+
+    it('keeps the shebang first in a file with no import', () => {
+      const source = `#!/usr/bin/env node\nexport const bot = {};\n`;
+      const updated = updateBotWeights(source, [], { addMetadata: true, evolutionStats: stats });
+      expect(updated.startsWith('#!/usr/bin/env node\n')).toBe(true);
+      expect(updated).toContain('Generations: 5');
+    });
+
     it('does nothing when the flag is set but no stats are given', () => {
       const updated = updateBotWeights(BOT_FILE, [objective('centre-control', 1)], {
         addMetadata: true,

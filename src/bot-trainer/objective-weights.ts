@@ -143,7 +143,7 @@ function numberLiteral(expression: ts.Expression): number | undefined {
   return undefined;
 }
 
-/** `source` with its weight-evolution comment replaced, or added before the imports (or at the top when there are none). */
+/** `source` with its weight-evolution comment replaced, or added before the imports (or the first statement when there are none). */
 function withEvolutionMetadata(source: string, stats: NonNullable<UpdateWeightsOptions['evolutionStats']>): string {
   const metadataComment = [
     `//`,
@@ -156,9 +156,12 @@ function withEvolutionMetadata(source: string, stats: NonNullable<UpdateWeightsO
     `//`,
   ].join('\n');
 
-  const previousBlock = /\/\/\s*\n\/\/ Weight Evolution[^]*?\/\/\s*\n/;
+  // Only the exact block this function writes, so an author's own notes are never touched.
+  const previousBlock = /^\/\/\n\/\/ Weight Evolution \(\d{4}-\d{2}-\d{2}\):\n(?:\/\/ .*\n)*\/\/\n/m;
   if (previousBlock.test(source)) return source.replace(previousBlock, metadataComment + '\n');
-  // A bot.ts with no import is valid: the record then goes at the top.
-  const at = Math.max(source.indexOf('import '), 0);
+  const file = ts.createSourceFile('bot.ts', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  // A bot.ts with no import is valid: the record then goes before its first statement.
+  const anchor = file.statements.find(ts.isImportDeclaration) ?? file.statements[0];
+  const at = anchor ? anchor.getStart(file) : file.end;
   return source.slice(0, at) + metadataComment + '\n' + source.slice(at);
 }
