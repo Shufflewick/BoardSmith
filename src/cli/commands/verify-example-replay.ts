@@ -182,6 +182,12 @@ export interface ExampleReplayRecord {
   readonly testFilePath?: string;
   /** Present exactly when `verdict` is `not-run`, `agrees` or `disagrees`. */
   readonly translation?: ExampleTranslation;
+  /**
+   * `sliceExtractionHash` of the slice when it was extracted (#835). When it no longer matches,
+   * the slice may have gained an example, and `verify-example-replay` reports it pending. A record
+   * written before records carried it has none, and its slice is pending until recorded again.
+   */
+  readonly extractionHash?: string;
 }
 
 /**
@@ -225,6 +231,7 @@ export function createExampleReplayRecord(input: {
   recordedAt?: string;
   testFilePath?: string;
   translation?: ExampleTranslation;
+  extractionHash?: string;
 }): ExampleReplayRecord {
   const location = `${input.slicePath}:${input.lineNumber}`;
 
@@ -247,6 +254,7 @@ export function createExampleReplayRecord(input: {
     );
   }
   assertReasonAndLineText(location, input.reason, input.lineText);
+  const extractionHash = optionalExtractionHash(location, input.extractionHash);
 
   const expected = input.expected ?? '';
   const observed = input.observed ?? '';
@@ -327,7 +335,20 @@ export function createExampleReplayRecord(input: {
     recordedAt: input.recordedAt ?? new Date().toISOString(),
     ...(input.testFilePath ? { testFilePath: input.testFilePath } : {}),
     ...(translation ? { translation: frozenTranslation(translation) } : {}),
+    ...extractionHash,
   });
+}
+
+/** `{ extractionHash }` when the record has one (#835), refusing one that is not a SHA-256 digest. */
+function optionalExtractionHash(location: string, hash: string | undefined): { extractionHash?: string } {
+  if (hash === undefined) return {};
+  if (!SHA256_HEX_RE.test(hash)) {
+    throw new Error(
+      `${location}'s extractionHash is not a SHA-256 hex digest.\n` +
+        `Record the slice again with verify-example-record, which computes it.`,
+    );
+  }
+  return { extractionHash: hash };
 }
 
 /** Every record says why it has its verdict, and which slice text it cites (#350). */
@@ -693,6 +714,7 @@ function readExampleRecordLine(r: Record<string, unknown>): ExampleReplayRecord 
     recordedAt: r.recordedAt !== undefined ? String(r.recordedAt) : undefined,
     testFilePath: r.testFilePath !== undefined ? String(r.testFilePath) : undefined,
     translation: readLedgerTranslation(r.translation),
+    extractionHash: r.extractionHash !== undefined ? String(r.extractionHash) : undefined,
   });
 }
 
@@ -885,6 +907,17 @@ function printSlicesWithoutExamples(slices: readonly VerifyExampleReplaySlice[])
     );
     for (const s of changed) console.log(`    ${s.slicePath}`);
   }
+  const examplesChanged = slices.filter((s) => s.examples === 'slice-changed');
+  if (examplesChanged.length > 0) {
+    console.log(
+      chalk.yellow(
+        `  ⚠ ${examplesChanged.length} slice(s) with recorded worked examples have changed since they ` +
+          `were extracted, or were recorded before the ledger kept a fingerprint of the slice, so they ` +
+          `may hold examples nobody has tested: extract and record each once more.`,
+      ),
+    );
+    for (const s of examplesChanged) console.log(`    ${s.slicePath}`);
+  }
 }
 
 // -------------------------------------------------------------------------------------------
@@ -930,8 +963,14 @@ export interface VerifyExampleReplaySlice {
    */
   noWorkedExamples?: 'recorded' | 'slice-changed';
   /**
-   * `true` when the slice has something for the extractor to read and the ledger records neither
-   * an example of it nor, for its current text, that it has none; or when one of its recorded
+   * Set when the ledger records worked examples for this slice (#835): `recorded` while the lines
+   * the extractor reads are unchanged since, `slice-changed` once they have changed or a record
+   * carries no `extractionHash` (the slice is then pending, since it may have gained an example).
+   */
+  examples?: 'recorded' | 'slice-changed';
+  /**
+   * `true` when the slice has something for the extractor to read and the ledger records, for its
+   * current text, neither its examples (#835) nor that it has none; or when one of its recorded
    * examples' text is no longer in it (`unanchored`, #350). A slice with nothing to extract
    * (`notDispatchable`) is pending only in that last case.
    */
@@ -1041,7 +1080,8 @@ export async function verifyExampleReplayCommand(
   const slices: VerifyExampleReplaySlice[] = liveSlices
     .map((s): VerifyExampleReplaySlice => {
       const lost = slicesWithLostExamples.has(s.path);
-      const hasExamples = verdicts.some((v) => v.slicePath === s.path);
+      const sliceRecords = verdicts.filter((v) => v.slicePath === s.path);
+      const hasExamples = sliceRecords.length > 0;
       let extraction: ExampleExtractionPayload;
       try {
         extraction = buildExampleExtractionPayload({ path: s.path, text: s.text });
@@ -1054,11 +1094,21 @@ export async function verifyExampleReplayCommand(
       if (extraction.lines.length === 0) {
         return { slicePath: s.path, notDispatchable: 'no-extractable-content', pending: lost };
       }
+      const hash = sliceExtractionHash({ path: s.path, text: s.text });
+      if (hasExamples) {
+        const current = sliceRecords.every((r) => r.extractionHash === hash);
+        return {
+          slicePath: s.path,
+          extractionPayload: extraction.payload,
+          examples: current ? 'recorded' : 'slice-changed',
+          pending: lost || !current,
+        };
+      }
       const none = withoutExamples.get(s.path);
       if (none === undefined) {
-        return { slicePath: s.path, extractionPayload: extraction.payload, pending: lost || !hasExamples };
+        return { slicePath: s.path, extractionPayload: extraction.payload, pending: true };
       }
-      const current = none.extractionHash === sliceExtractionHash({ path: s.path, text: s.text });
+      const current = none.extractionHash === hash;
       return {
         slicePath: s.path,
         extractionPayload: extraction.payload,
@@ -1560,6 +1610,7 @@ export async function verifyExampleRecordCommand(
     buildExampleExtractionPayload({ path: slicePath, text: sliceText }).lines.map((l) => [l.lineNumber, l.text]),
   );
   const lineText = (lineNumber: number): string => lineTextAt.get(lineNumber) ?? '';
+  const extractionHash = sliceExtractionHash({ path: slicePath, text: sliceText });
 
   const translatedRecords: ExampleReplayRecord[] = [...specsById.values()].map((spec) => {
     const outcome = readTranslatorOutcome(spec.id, translations.byId.get(spec.id));
@@ -1571,6 +1622,7 @@ export async function verifyExampleRecordCommand(
       kind: spec.kind,
       supportingQuoteLines: [...spec.supportingQuoteLines],
       provenance,
+      extractionHash,
     };
     if (outcome.kind === 'unexecutable') {
       return createExampleReplayRecord({ ...common, verdict: 'unexecutable', reason: outcome.reason });
@@ -1604,6 +1656,7 @@ export async function verifyExampleRecordCommand(
       contradictionB: entry.supportingQuoteLines[1] ?? '',
       supportingQuoteLines: entry.supportingQuoteLines,
       provenance,
+      extractionHash,
     }),
   );
 
@@ -1621,7 +1674,7 @@ export async function verifyExampleRecordCommand(
       : {
           noExamples: createSliceWithoutExamplesRecord({
             slicePath,
-            extractionHash: sliceExtractionHash({ path: slicePath, text: sliceText }),
+            extractionHash,
           }),
         },
   );
