@@ -44,6 +44,12 @@ describe('scanAssetReachability', () => {
     expect(violations).toEqual([]);
   });
 
+  // The scan reads every extension game code can live in (#848).
+  it.each(['mts', 'cts', 'mjs', 'cjs'])('flags a bare <img> in a .%s file', (ext) => {
+    const violations = scanWith({ [`src/ui/card.${ext}`]: 'export const html = `<img src="/a.svg">`;\n' });
+    expect(violations.map((v) => v.file)).toEqual([`src/ui/card.${ext}`]);
+  });
+
   // WR-02 — regex robustness
   it('flags an uppercase <IMG> tag (HTML tag names are case-insensitive)', () => {
     const violations = scanWith({

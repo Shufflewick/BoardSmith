@@ -22,33 +22,15 @@
  * importers — neither is caught by this package's own type-check.
  */
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { collectSourceFiles } from './source-files.js';
 
 export interface AssetViolation {
   /** Path relative to the project root. */
   file: string;
   line: number;
   message: string;
-}
-
-function collectSourceFiles(dir: string, files: string[] = []): string[] {
-  if (!existsSync(dir)) return files;
-
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
-
-    const fullPath = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      collectSourceFiles(fullPath, files);
-      continue;
-    }
-    if (/\.(vue|ts|tsx|js|jsx)$/.test(entry.name)) {
-      files.push(fullPath);
-    }
-  }
-
-  return files;
 }
 
 // A real <img> tag: `<img` followed by whitespace, `/`, or `>` — case-insensitive
