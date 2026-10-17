@@ -113,6 +113,20 @@ describe('initialArgs are checked as picks (#658)', () => {
     expect(manager.getPendingAction(1)).toBeUndefined();
   });
 
+  it('refuses a step naming a pick the action does not have (#776)', async () => {
+    const { manager, game } = shop();
+
+    const step = await manager.processSelectionStep(1, 'size', 'large', 'buy', {});
+
+    expect(step).toMatchObject({
+      success: false,
+      error: "'buy' has no pick named 'size'. It takes: color, gem, wrap, pay.",
+      errorCode: ErrorCode.INVALID_PICK,
+    });
+    expect(game.purchases).toEqual([]);
+    expect(manager.getPendingAction(1)).toBeUndefined();
+  });
+
   it('refuses an initial choice the game never offered', async () => {
     const { manager, game, gemId } = shop();
 

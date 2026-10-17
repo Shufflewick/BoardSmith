@@ -670,7 +670,18 @@ function actionSizeRefusal(action: string): WorldRefusal | null {
 
 /** A key a host can both encode (#604) and store (#602). */
 function keyRefusal(key: string): WorldRefusal | null {
-  return keyFormRefusal(key) ?? keySizeRefusal(key);
+  return keyEmptyRefusal(key) ?? keyFormRefusal(key) ?? keySizeRefusal(key);
+}
+
+/** A cancel refuses an empty key, so a timer armed under one could never be taken back (#790). */
+function keyEmptyRefusal(key: string): WorldRefusal | null {
+  if (key !== "") return null;
+  return worldRefusal(
+    "schedule-key-empty",
+    "A schedule key cannot be empty: a timer armed under \"\" could never be cancelled, because a " +
+      "cancel must name a key. Give the timer a name, such as key: \"raid\", or leave key out " +
+      "for a timer you never need to cancel.",
+  );
 }
 
 /**

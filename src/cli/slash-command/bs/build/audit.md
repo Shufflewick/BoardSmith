@@ -2,8 +2,8 @@
 
 Referenced by `build-chunk.md` Step 3 (`audit`, first of the `{audit, repair}` session step
 group — see `state-machine.md` "Session Handoff Seams"). `build/test.md`'s automated sequence
-already proved this chunk compiles, lints clean, passes its own and the accumulated suite, and
-survives a random-sim playthrough — none of that catches a rulebook-fidelity defect (the code
+has passed under the selected verification policy. Its recorded checks and random-sim
+playthrough do not catch every rulebook-fidelity defect (the code
 runs, but implements the wrong rule) or a hidden-information leak (the code runs, but a seat sees
 something it should not) because neither is a type error or a crash. `audit` is the first point
 in the pipeline where a lifecycle agent can fail a chunk for exactly those two classes of defect.
@@ -73,7 +73,8 @@ Ledger` as the four lenses above, through the orchestrator, never a separate tra
 
 ## Gate Before Dispatch: No Review Until Verify Passes
 
-No audit round starts until `boardsmith verify` has passed for the commit under review
+No audit round starts until the chunk's fast checks, `boardsmith verify --chunk <slug>`, have
+passed for the commit under review
 (`routing.md` "No Review Before Verify"). Before each round, the orchestrator commits what is
 uncommitted (the Step Checklist check-off included), runs `npx boardsmith verify --chunk <slug>`,
 then:
@@ -106,8 +107,8 @@ names it, the agents) in the chunk's run log before the lenses are dispatched.
 ```
 Work package: {slug}
 
-You are auditing built code for {gameName}, chunk "{slug}", for RULES FIDELITY. The mechanical
-checks are done. This is what `boardsmith verify` found for the commit under review:
+You are auditing built code for {gameName}, chunk "{slug}", for RULES FIDELITY. The fast
+checks are done. This is what `boardsmith verify --chunk` found for the commit under review:
 
 {verifyResult}
 
@@ -157,7 +158,7 @@ then does `repair` act on it.
 Work package: {slug}
 
 You are auditing built code for {gameName}, chunk "{slug}", for HIDDEN-INFORMATION LEAKS. The
-mechanical checks are done. This is what `boardsmith verify` found for the commit under review:
+fast checks are done. This is what `boardsmith verify --chunk` found for the commit under review:
 
 {verifyResult}
 
@@ -195,8 +196,8 @@ one entry per leak found (empty array if none).
 ```
 Work package: {slug}
 
-You are auditing built code for {gameName}, chunk "{slug}", for UNDO SANITY. The mechanical
-checks are done. This is what `boardsmith verify` found for the commit under review:
+You are auditing built code for {gameName}, chunk "{slug}", for UNDO SANITY. The fast
+checks are done. This is what `boardsmith verify --chunk` found for the commit under review:
 
 {verifyResult}
 
@@ -217,7 +218,7 @@ entry per defect found (empty array if none).
 Work package: {slug}
 
 You are auditing built code for {gameName}, chunk "{slug}", against THE PROJECT'S OWN HARD
-CONSTRAINTS. The mechanical checks are done. This is what `boardsmith verify` found for the
+CONSTRAINTS. The fast checks are done. This is what `boardsmith verify --chunk` found for the
 commit under review:
 
 {verifyResult}
@@ -267,7 +268,8 @@ orchestrator, before `repair` starts:
    every growing structure the lens reported, with the cap or ruling it has (or neither).
 2. Writes this chunk's `## Constraints Review` in CHUNK.md: one line per constraint,
    `- C1: held. <citation>` (or `not applicable` or `violated`), exactly as the lens gave it.
-3. Runs `boardsmith constraint-check {slug}`. It refuses a growing structure with no cap
+3. Runs `boardsmith constraint-check {slug}`. The command refuses a
+   growing structure with no cap
    enforced in code and no RULINGS.md ruling, a cap whose measurement test never uses it, a
    hard constraint the ledger leaves out, a missing or `violated` verdict, and a failing
    measurement test. Every refusal, and every `violated` lens entry, becomes a finding in this
@@ -280,9 +282,10 @@ putting it to the designer the way `build/ask.md` puts an open question. Their a
 growing structure through: `boardsmith chunk-signoff` runs the same check and refuses to sign
 the chunk off while it fails, so an uncapped structure cannot reach `verified`.
 
-The measurement test is mutation-tested like the chunk's other tests, so it lives in the Spec
-Manifest. Write it before the cap and run it red (the structure overruns the budget), then add the
-cap. In a new test file it is a new Spec Manifest row, its Claims Covered `none (budget)` and its RED
+The measurement test lives in the Spec Manifest and is
+mutation-tested like the chunk's other tests. Write it before the cap and run it red (the
+structure overruns the budget), then add the cap. In a new test file it is a new Spec Manifest
+row, its Claims Covered `none (budget)` and its RED
 Observed `yes` once seen failing; a measurement test for a cap already in the code, which you cannot
 see fail, is appended to one of the chunk's existing Spec Manifest files instead. Then run
 `npx boardsmith test-step-check <slug>`, which reports a new test file outside the manifest
@@ -290,8 +293,8 @@ see fail, is appended to one of the chunk's existing Spec Manifest files instead
 
 The rules are the same for a project built from a rulebook or from existing code: the check
 reads CLAUDE.md, the ledger and the code, never the rulebook. With no slug,
-`boardsmith constraint-check` checks the whole tree and runs every measurement test, which is
-what a merge re-runs on the combined result when chunks were built on separate branches
+`boardsmith constraint-check` checks the whole tree and runs
+every measurement test, which is what a merge re-runs on the combined result when chunks were built on separate branches
 (`boardsmith chunk-merge` does exactly that).
 
 ## The Cross-Chunk Lens — After a Merge of Chunks Built at the Same Time
@@ -316,7 +319,7 @@ files and names):
 Work package: {slug}
 
 Chunks {slug} and {alongside} of {gameName} were built at the same time without seeing each other,
-and have just been merged. The mechanical checks are done. This is what `boardsmith verify` found
+and have just been merged. The fast checks are done. This is what `boardsmith verify --chunk` found
 for the merged commit:
 
 {verifyResult}

@@ -77,6 +77,15 @@ describe('orderedList — an ordered, repeatable list of choices (#249)', () => 
     expect(result.errors.join(' ')).toContain('at most 3');
   });
 
+  it('refuses an over-long list on its length alone, matching none of its entries (#776)', () => {
+    const { result, log } = withDevLog(() =>
+      check(repairs().selections[0], Array.from({ length: 1000 }, () => 'observatory')),
+    );
+
+    expect(result.errors).toEqual(['Selection "buildings" requires at most 3 choices, got 1000']);
+    expect(log).not.toContain('observatory');
+  });
+
   it('counts ENTRIES against min, so repeats DO satisfy a lower bound', () => {
     const action = Action.create<TestGame>('repair')
       .chooseFrom('buildings', {
@@ -188,14 +197,14 @@ describe('orderedList — an ordered, repeatable list of choices (#249)', () => 
   });
 
   it('puts the bounds on the pick metadata a host serializes, max omitted when unbounded', () => {
-    const bounded = buildPickMetadata(game, game.getPlayer(1)!, repairs().selections[0]);
+    const bounded = buildPickMetadata(game, game.getPlayer(1)!, 'repair', repairs().selections[0]);
     expect(bounded.orderedList).toEqual({ min: 0, max: 3 });
     expect(bounded.multiSelect).toBeUndefined();
 
     const unbounded = Action.create<TestGame>('repair')
       .chooseFrom('buildings', { choices: ['university'], orderedList: { min: 1 } })
       .execute(() => {});
-    const pick = buildPickMetadata(game, game.getPlayer(1)!, unbounded.selections[0]);
+    const pick = buildPickMetadata(game, game.getPlayer(1)!, 'repair', unbounded.selections[0]);
 
     // `Infinity` is not JSON — it serializes as `null`, which the panel read as
     // a cap of nothing (ShufflewickPub #378). An unbounded list OMITS max.

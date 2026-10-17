@@ -13,6 +13,7 @@ import { WorldRefusal } from "./refusals.js";
 import {
   MAX_ORDER_ID_LENGTH,
   assertWorldOrder,
+  receiptAt,
   receiptFloor,
   resolveOrder,
   type WorldReceipt,
@@ -127,5 +128,23 @@ describe("the receipt floor", () => {
 
   it("is zero for a world younger than its retention window", () => {
     expect(receiptFloor(1_000, BUDGETS, 0)).toBe(0);
+  });
+});
+
+describe("the instant a receipt is swept by (#793)", () => {
+  const window = BUDGETS.receiptRetentionMs;
+  const now = 10 * window;
+
+  it("is the order's own mint instant, which is what a repeat is judged by", () => {
+    expect(receiptAt({ id: "o", at: now + 500 }, now, BUDGETS)).toBe(now + 500);
+    expect(receiptAt({ id: "o", at: now - 500 }, now, BUDGETS)).toBe(now - 500);
+  });
+
+  it("is capped one window ahead of the host, so a lying clock cannot pin it", () => {
+    expect(receiptAt({ id: "o", at: now + 100 * window }, now, BUDGETS)).toBe(now + window);
+  });
+
+  it("is raised to the floor this write moves to, so an old order keeps its receipt", () => {
+    expect(receiptAt({ id: "o", at: 0 }, now, BUDGETS)).toBe(receiptFloor(now, BUDGETS, 0));
   });
 });

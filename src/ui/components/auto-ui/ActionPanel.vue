@@ -16,7 +16,7 @@
 import { ref, computed, watch, inject, nextTick, useId, onMounted, onBeforeUnmount } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
-import { getDisplayFromValue, labelOfPick, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
+import { formatActionName, getDisplayFromValue, labelOfPick, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
 import { createActionMutators } from '../../composables/actionMutators.js';
 import type {
   UseActionControllerReturn,
@@ -896,7 +896,7 @@ const isDependentChoicePick = computed(() =>
   !!(currentPick.value?.filterBy || currentPick.value?.dependsOn));
 
 // Notation-anchored choices: rendered as a secondary focusable list of buttons
-// whose activation calls triggerElementSelect — parity with clicking the board element.
+// whose activation calls executeChoice — parity with clicking the board element.
 const anchoredChoices = computed(() => _splitChoices.value.anchored);
 
 /**
@@ -1126,14 +1126,6 @@ function clearSelection(selectionName: string) {
 // Auto-start, stale-action cleanup, and execution-complete retry now live in
 // useBoardActionBridge (GameShell), the single always-on controller→board source.
 // ActionPanel is purely presentational and no longer drives these reactively.
-
-
-function formatActionName(name: string): string {
-  return name
-    .replace(/([A-Z])/g, ' $1')
-    .replace(/^./, str => str.toUpperCase())
-    .trim();
-}
 
 /**
  * Check if a pick is repeating

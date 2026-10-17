@@ -85,14 +85,13 @@ recorded disposition is done and is not redone or clobbered by a resuming sessio
 ## A Fix Is Not Done Until `boardsmith verify` Passes
 
 A finding recorded `fixed` changed code, and code that changed is re-checked by the same gate the
-test step ends with, never by re-running only the tests near the fix. Commit the round's fixes,
-then run `npx boardsmith verify --chunk <slug>` (`state-machine.md` "Git Protocol" says what it
-measures from): the full suite, typecheck, build, validate, the smoke test and a mutation check of the changed
-lines, recorded for that commit. A round is not done, and the next audit round is not dispatched,
+test step ends with. Commit the round's fixes, then run `npx boardsmith verify --chunk <slug>`
+(`state-machine.md` "Git Protocol" says what it measures from): the chunk's fast checks, its tests
+and typecheck, recorded for that commit. A round is not done, and the next audit round is not dispatched,
 until it exits zero on a clean tree. When it fails, the failed check says what to fix and what to
 run next; that is more repair work in this round, not a new finding. Never say a fix is done or the
-suite is green on anything else: `chunk-signoff` refuses a commit with no passing result covering
-the chunk's change, and a later step asks `npx boardsmith verify --check --chunk <slug>`. A failing
+suite is green on anything else: `chunk-signoff` refuses a commit with no passing `verify --chunk
+<slug>` result, and a later step asks `npx boardsmith verify --check --chunk <slug>`. A failing
 verify is a failure of this repair at its role, handled by the ladder in "Repair Loop Bound" above.
 
 A round that adds a new test file that runs the game's code (a measurement test, a regression test

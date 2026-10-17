@@ -528,7 +528,7 @@ export class MyPlayer extends Player<MyGame, MyPlayer> {
 }
 ```
 
-> **Note**: Simple properties (numbers, strings, plain objects) are auto-serialized. Only override `toJSON()` when using classes with their own `toJSON()` methods (like `AbilityManager`).
+> **Note**: Simple properties (numbers, strings, arrays, plain objects, `Map`, `Set`) are auto-serialized. A `Date` or class instance in a public property makes saving throw, because it would be restored as a plain object without its methods. Store a Date's `getTime()` number, and keep player state as plain data, as the [dice tracks and abilities](./dice-and-scoring.md#ability-system) do.
 
 ### 3. Win Condition Checking
 

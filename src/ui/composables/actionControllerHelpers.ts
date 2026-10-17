@@ -162,6 +162,14 @@ export function labelOfPick(
   return choice ? choice.display : getDisplayFromValue(value);
 }
 
+/** An action's name as a fallback prompt: `playCard` reads as `Play Card`. */
+export function formatActionName(name: string): string {
+  return name
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, str => str.toUpperCase())
+    .trim();
+}
+
 // ============================================
 // Action Analysis (Pit of Success)
 // ============================================
