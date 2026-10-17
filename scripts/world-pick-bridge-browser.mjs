@@ -34,6 +34,7 @@
 import {
   assert,
   check,
+  recordWorldFrames,
   runBrowserRegression,
   summarise,
   surfaceOf,
@@ -247,19 +248,9 @@ async function driveThrough({ launch, hostUrl }) {
     {
       const context = await browser.newContext();
       const page = await context.newPage();
-      const asked = [];
-      const answered = [];
-      page.on('websocket', (ws) => {
-        if (!ws.url().includes('/__boardsmith/world')) return;
-        ws.on('framesent', ({ payload }) => {
-          const frame = JSON.parse(String(payload));
-          if (frame.type === 'pick') asked.push(frame);
-        });
-        ws.on('framereceived', ({ payload }) => {
-          const frame = JSON.parse(String(payload));
-          if (frame.type === 'world_pick_result') answered.push(frame);
-        });
-      });
+      const { sent, received } = recordWorldFrames(page);
+      const asked = () => sent.filter((frame) => frame.type === 'pick');
+      const answered = () => received.filter((frame) => frame.type === 'world_pick_result');
       await page.goto(hostUrl);
       await waitForAction(page, 'deploy');
       await panelDeploy(page, 'dory');
@@ -269,8 +260,8 @@ async function driveThrough({ launch, hostUrl }) {
       });
 
       await check('the re-ask crosses the socket with its id, action, selection and bound args', () => {
-        assert(asked.length >= 1, 'no pick request reached the world host at all');
-        const [first] = asked;
+        assert(asked().length >= 1, 'no pick request reached the world host at all');
+        const [first] = asked();
         assert(first.action === 'deploy', `the request named "${first.action}"`);
         assert(first.selection === 'crew', `the request re-asked "${first.selection}"`);
         assert(
@@ -281,8 +272,8 @@ async function driveThrough({ launch, hostUrl }) {
       });
 
       await check('the reply comes back on the same socket, under the same id', () => {
-        assert(answered.length >= 1, 'the received frames contain no pick reply');
-        const reply = answered.find((frame) => frame.requestId === asked[0].requestId);
+        assert(answered().length >= 1, 'the received frames contain no pick reply');
+        const reply = answered().find((frame) => frame.requestId === asked()[0].requestId);
         assert(reply !== undefined, "no reply carried the request's own id");
         assert(reply.ok === true, `the world refused: ${reply.message}`);
         assert(
