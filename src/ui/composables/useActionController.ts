@@ -131,6 +131,8 @@ import type {
   UseActionControllerOptions,
   RepeatingState,
   UseActionControllerReturn,
+  AfterAutoExecuteListener,
+  BeforeAutoExecuteHook,
 } from './useActionControllerTypes.js';
 
 /**
@@ -220,10 +222,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // independently-registered consumers (e.g. a board component and a player-stats
   // panel) can each register a hook without clobbering the others; the watcher
   // awaits them sequentially in registration order.
-  type BeforeAutoExecuteHook = (actionName: string, args: Record<string, unknown>) => void | Promise<void>;
   const beforeAutoExecuteHooks = ref<BeforeAutoExecuteHook[]>(
     initialBeforeAutoExecute ? [initialBeforeAutoExecute] : []
   );
+  const afterAutoExecuteListeners = ref<AfterAutoExecuteListener[]>([]);
 
   // Helper to get current value of potentially reactive options
   const getAutoFill = (): boolean => {
@@ -1429,7 +1431,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         && !isViewingHistoryValue()) {
       const seq = actionStartTick.value;
       await runBeforeAutoExecuteHooks(currentAction.value);
-      if (!actionMovedOn(seq)) executeCurrentAction();
+      const result: ControllerActionResult = actionMovedOn(seq)
+        ? { success: false, error: 'Action was cancelled' }
+        : await executeCurrentAction();
+      notifyAfterAutoExecute(result);
     }
   });
 
@@ -1451,6 +1456,15 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       } catch (err) {
         console.error('[ActionController] beforeAutoExecute hook failed:', err);
       }
+    }
+  }
+
+  /** Tell every after-auto-execute listener how the action ended; one failing listener never stops the rest. */
+  function notifyAfterAutoExecute(result: ControllerActionResult): void {
+    for (const listener of [...afterAutoExecuteListeners.value]) {
+      Promise.resolve()
+        .then(() => listener(result))
+        .catch((err) => console.error('[ActionController] afterAutoExecute listener failed:', err));
     }
   }
 
@@ -1519,7 +1533,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * ```typescript
    * // In the board component's <script setup>
    * const props = defineProps<{ actionController: UseActionControllerReturn; gameView: GameViewElement | null }>();
-   * const { onBeforeAutoExecute } = useActionAnimations({ gameView, animations: [...] });
+   * const { onBeforeAutoExecute } = useActionAnimations({
+   *   gameView, actionController: props.actionController, animations: [...],
+   * });
    *
    * props.actionController.onBeforeAutoExecute(onBeforeAutoExecute);
    * ```
@@ -1541,11 +1557,21 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * returned function is called.
    */
   function onBeforeAutoExecute(hook: BeforeAutoExecuteHook): () => void {
-    beforeAutoExecuteHooks.value.push(hook);
+    return addScoped(beforeAutoExecuteHooks.value, hook);
+  }
+
+  /** Add a listener told how each auto-executed action ended (#861); see the return type. */
+  function onAfterAutoExecute(listener: AfterAutoExecuteListener): () => void {
+    return addScoped(afterAutoExecuteListeners.value, listener);
+  }
+
+  /** Add to a list until the returned function is called or the current scope disposes. */
+  function addScoped<T>(list: T[], item: T): () => void {
+    list.push(item);
     const unregister = (): void => {
-      const idx = beforeAutoExecuteHooks.value.indexOf(hook);
+      const idx = list.indexOf(item);
       if (idx !== -1) {
-        beforeAutoExecuteHooks.value.splice(idx, 1);
+        list.splice(idx, 1);
       }
     };
     if (getCurrentScope()) {
@@ -2734,6 +2760,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     // Hook registration (for GameShell users who can't pass options at creation)
     onBeforeAutoExecute,
+    onAfterAutoExecute,
 
     // Animation gating (soft continuation pattern)
     animationsPending,       // True when animations are playing

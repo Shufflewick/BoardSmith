@@ -3,7 +3,8 @@
  *
  * This composable enables smooth animations during action execution by:
  * 1. Capturing element positions BEFORE the action executes (via onBeforeAutoExecute hook)
- * 2. Watching for DOM updates after the action completes
+ * 2. Waiting for the server to accept the action and its state to render
+ *    (a refused or cancelled action puts the element back as it was)
  * 3. Animating elements from their old position to their new position
  *
  * ## Problem This Solves
@@ -38,8 +39,13 @@
  * // Create a ref that we'll sync with the gameView prop
  * const gameViewRef = ref(null);
  *
+ * // GameShell passes `actionController` and `gameView` to the board component
+ * // as props; register the hook once, here in the board's own setup.
+ * const props = defineProps<{ actionController: any; gameView: any }>();
+ *
  * const actionAnimations = useActionAnimations({
  *   gameView: gameViewRef,
+ *   actionController: props.actionController,
  *   animations: [
  *     // Movement animation (element moves to a different destination)
  *     {
@@ -61,9 +67,6 @@
  *   ],
  * });
  *
- * // GameShell passes `actionController` and `gameView` to the board component
- * // as props; register the hook once, here in the board's own setup.
- * const props = defineProps<{ actionController: any; gameView: any }>();
  * watchEffect(() => { gameViewRef.value = props.gameView; });
  * props.actionController.onBeforeAutoExecute(actionAnimations.onBeforeAutoExecute);
  * </script>
@@ -78,14 +81,9 @@
  *
  * ## Usage with Custom useActionController
  *
- * When creating your own action controller, pass the hook directly:
+ * Create the controller first, since the composable listens to it:
  *
  * ```typescript
- * const { flyingElements, onBeforeAutoExecute } = useActionAnimations({
- *   gameView,
- *   animations: [...],
- * });
- *
  * const actionController = useActionController({
  *   sendAction,
  *   availableActions,
@@ -93,8 +91,14 @@
  *   isMyTurn,
  *   gameView,
  *   playerSeat,
- *   onBeforeAutoExecute,  // Pass directly at creation
  * });
+ *
+ * const { flyingElements, onBeforeAutoExecute } = useActionAnimations({
+ *   gameView,
+ *   actionController,
+ *   animations: [...],
+ * });
+ * actionController.onBeforeAutoExecute(onBeforeAutoExecute);
  * ```
  */
 
@@ -103,6 +107,7 @@ import { useFlyingElements, type FlyingCardData, type FlyingCard } from './useFl
 import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
 import { isDevThrowEnabled } from '../../utils/dev.js';
 import type { GameViewElement } from '../types.js';
+import type { UseActionControllerReturn } from './useActionControllerTypes.js';
 
 /**
  * Data extracted from an element for rendering during animation.
@@ -262,6 +267,51 @@ interface CapturedAnimationState {
   mutationObserver?: MutationObserver;
   /** Whether this is a flip-in-place animation (auto-detected) */
   isFlipInPlace: boolean;
+  /** Each element hidden for this action, with how it looked before */
+  hidden: Map<HTMLElement, HiddenLook>;
+  /** The state changed since the action was sent */
+  stateChanged: boolean;
+  /** The server accepted the action */
+  accepted: boolean;
+}
+
+/** An element's own hiding-related attribute and inline styles, as they were before hiding. */
+interface HiddenLook {
+  attribute: string | null;
+  styles: Array<{ property: string; value: string; priority: string }>;
+}
+
+const HIDING_STYLES = ['transition', 'opacity', 'pointer-events'];
+
+/** Hide an element instantly, first noting how it looked if `saved` does not have it yet. */
+function hideElement(el: HTMLElement, saved?: Map<HTMLElement, HiddenLook>): void {
+  if (saved && !saved.has(el)) {
+    saved.set(el, {
+      attribute: el.getAttribute('data-action-animating'),
+      styles: HIDING_STYLES.map((property) => ({
+        property,
+        value: el.style.getPropertyValue(property),
+        priority: el.style.getPropertyPriority(property),
+      })),
+    });
+  }
+  // opacity with !important (visibility can be overridden by other CSS); no transition so it is instant
+  el.setAttribute('data-action-animating', 'true');
+  el.style.setProperty('transition', 'none', 'important');
+  el.style.setProperty('opacity', '0', 'important');
+  el.style.pointerEvents = 'none';
+}
+
+/** Put every hidden element back exactly as it was. */
+function restoreHidden(saved: Map<HTMLElement, HiddenLook>): void {
+  for (const [el, look] of saved) {
+    if (look.attribute === null) el.removeAttribute('data-action-animating');
+    else el.setAttribute('data-action-animating', look.attribute);
+    for (const { property, value, priority } of look.styles) {
+      if (value) el.style.setProperty(property, value, priority);
+      else el.style.removeProperty(property);
+    }
+  }
 }
 
 /**
@@ -278,6 +328,14 @@ export interface UseActionAnimationsOptions {
    * Animation configurations for different actions.
    */
   animations: ActionAnimationConfig[];
+
+  /**
+   * The action controller whose actions are animated. The composable listens to
+   * it for how each action ended, so a refused or cancelled action puts its
+   * element back and plays no flight. Registering `onBeforeAutoExecute` on it
+   * is still the caller's job (a game may wrap the hook).
+   */
+  actionController: Pick<UseActionControllerReturn, 'onAfterAutoExecute'>;
 }
 
 /**
@@ -346,13 +404,21 @@ let animationCounter = 0;
  * @returns Composable with flyingElements, onBeforeAutoExecute hook, and cancelAll
  */
 export function useActionAnimations(options: UseActionAnimationsOptions): UseActionAnimationsReturn {
-  const { gameView, animations } = options;
+  const { gameView, animations, actionController } = options;
 
   // Use the flying elements system for rendering
   const { flyingElements, fly, cancelAll } = useFlyingElements();
 
   // State captured before action execution
   let pendingAnimation: CapturedAnimationState | null = null;
+
+  /** Drop the pending animation and undo everything it did to the page. */
+  function abandonPending(): void {
+    if (!pendingAnimation) return;
+    pendingAnimation.mutationObserver?.disconnect();
+    restoreHidden(pendingAnimation.hidden);
+    pendingAnimation = null;
+  }
 
   /**
    * Hook called before auto-execute.
@@ -362,9 +428,7 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
     actionName: string,
     args: Record<string, unknown>
   ): Promise<void> {
-    // Clear any previous pending animation (a refused action never consumed it)
-    pendingAnimation?.mutationObserver?.disconnect();
-    pendingAnimation = null;
+    abandonPending();
 
     // Find matching animation config
     const config = animations.find((a) => a.action === actionName);
@@ -401,14 +465,9 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
     const elementData = getElementData(sourceElement, args);
 
     // Hide the source element BEFORE the action executes if needed
-    // Use opacity: 0 with !important (visibility can be overridden by other CSS)
-    // Disable transitions to make hiding instant
-    const htmlElement = sourceElement as HTMLElement;
+    const hidden = new Map<HTMLElement, HiddenLook>();
     if (shouldHideDestination) {
-      htmlElement.setAttribute('data-action-animating', 'true');
-      htmlElement.style.setProperty('transition', 'none', 'important');
-      htmlElement.style.setProperty('opacity', '0', 'important');
-      htmlElement.style.pointerEvents = 'none';
+      hideElement(sourceElement as HTMLElement, hidden);
     }
 
     // Set up MutationObserver to keep the element hidden during Vue's update cycle.
@@ -426,12 +485,8 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
           if (!destEl) return;
 
           // Re-apply hiding if Vue reset the opacity
-          const currentOpacity = getComputedStyle(destEl).opacity;
-          if (currentOpacity !== '0') {
-            destEl.setAttribute('data-action-animating', 'true');
-            destEl.style.setProperty('transition', 'none', 'important');
-            destEl.style.setProperty('opacity', '0', 'important');
-            destEl.style.pointerEvents = 'none';
+          if (getComputedStyle(destEl).opacity !== '0') {
+            hideElement(destEl, hidden);
           }
         });
 
@@ -444,7 +499,7 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
       }
     }
 
-    // Store for use after gameView updates
+    // Played once the action is accepted AND the state it produced has rendered
     pendingAnimation = {
       config,
       startRect,
@@ -453,141 +508,159 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
       animationId: `action-anim-${++animationCounter}`,
       mutationObserver,
       isFlipInPlace,
+      hidden,
+      stateChanged: false,
+      accepted: false,
     };
   }
 
-  onScopeDispose(() => pendingAnimation?.mutationObserver?.disconnect());
+  // Each auto-executed action ends here once, right after its own before-hooks ran
+  actionController.onAfterAutoExecute((result) => {
+    const captured = pendingAnimation;
+    if (!captured || captured.accepted) return;
+    if (!result.success) {
+      abandonPending();
+      return;
+    }
+    captured.accepted = true;
+    // The host sends an action's state before its result, so the DOM may already show it
+    if (captured.stateChanged) return play(captured);
+  });
 
-  // Watch gameView for changes - this indicates the DOM has updated after action execution
+  onScopeDispose(abandonPending);
+
+  // A state change before the result may be another seat's move, so it only marks
+  // the DOM as changed; once the action is accepted, a change means its state rendered.
   watch(
     gameView,
-    async () => {
-      if (!pendingAnimation) {
-        return;
-      }
-
-      // Capture pending animation and clear it immediately to prevent re-triggering
-      const { config, startRect, elementData, args, animationId, mutationObserver, isFlipInPlace } = pendingAnimation;
-      pendingAnimation = null;
-
-      // Disconnect the MutationObserver
-      mutationObserver?.disconnect();
-
-      // Find the destination element
-      let destinationElement: Element | null = null;
-      let destSelectorStr: string | undefined;
-
-      if (typeof config.destinationSelector === 'function') {
-        destinationElement = config.destinationSelector(args);
-      } else {
-        destSelectorStr = interpolateSelector(config.destinationSelector, args);
-        destinationElement = document.querySelector(destSelectorStr);
-      }
-
-      // Fail-loud destination check MUST run before the test-mode branch
-      // below: a typo'd/misconfigured destinationSelector is the canonical
-      // authoring bug ANIM-03 exists to catch, and a game's animation test
-      // suite (precisely where enableAnimationTestMode() is used) must not
-      // let it pass silently as a "successful" trace. Checking test mode
-      // first would record {kind:'action', to: <bad selector>} and return
-      // before this check ever ran — defeating the fail-loud guarantee for
-      // the exact scenario it targets.
-      if (!destinationElement) {
-        const selectorDesc =
-          typeof config.destinationSelector === 'function'
-            ? '(custom function)'
-            : config.destinationSelector;
-        const msg =
-          `[useActionAnimations] Could not find destination element. ` +
-          `Selector: ${selectorDesc}, Args: ${JSON.stringify(args)}`;
-        if (isDevThrowEnabled()) {
-          throw new Error(msg);
-        } else {
-          console.error(msg);
-        }
-        return;
-      }
-
-      // Test mode: record one {kind:'action'} trace using our OWN
-      // interpolated from/to selector strings and return WITHOUT delegating
-      // to fly() - useFlyingElements has its own independent 'fly' trace
-      // branch (used only for direct manual/autoWatch fly() calls), so
-      // delegating here would double-record the same animation.
-      if (isAnimationTestModeEnabled()) {
-        const elementSelectorStr = interpolateSelector(config.elementSelector, args);
-        const elementValue = args[config.elementSelection];
-        recordTrace({
-          kind: 'action',
-          element: elementValue !== undefined ? String(elementValue) : null,
-          from: elementSelectorStr,
-          to: destSelectorStr,
-          meta: { action: config.action, args },
-        });
-        return;
-      }
-
-      // Resolve effective settings (with flip-in-place auto-detection)
-      const shouldHideDestination = config.hideDestination ?? isFlipInPlace;
-      const shouldFlip = config.flip ?? isFlipInPlace;
-      const crossfadeDuration = shouldHideDestination ? (config.crossfadeDuration ?? 150) : 0;
-
-      // Ensure the destination element is hidden
-      const destHtmlElement = destinationElement as HTMLElement;
-      if (shouldHideDestination) {
-        destHtmlElement.setAttribute('data-action-animating', 'true');
-        destHtmlElement.style.setProperty('transition', 'none', 'important');
-        destHtmlElement.style.setProperty('opacity', '0', 'important');
-        destHtmlElement.style.pointerEvents = 'none';
-      }
-
-      try {
-        // Trigger the flying animation
-        await fly({
-          id: animationId,
-          startRect,
-          endRect: () => destinationElement!.getBoundingClientRect(),
-          elementData,
-          duration: config.duration ?? 400,
-          elementSize: config.elementSize,
-          flip: shouldFlip,
-          zIndex: config.zIndex ?? 1000,
-          holdDuration: crossfadeDuration,
-          // For flip animations, skip fade-out because opacity < 1 breaks backface-visibility
-          // (3D CSS transforms rely on backface-visibility: hidden, which breaks when parent has opacity < 1)
-          skipFadeOut: shouldFlip,
-          onPositionComplete: shouldHideDestination ? () => {
-            if (shouldFlip) {
-              // For flip animations: instant reveal (no fade) since flying card disappears instantly
-              // This prevents the "flash" artifact from mismatched opacity timing
-              destHtmlElement.style.setProperty('transition', 'none', 'important');
-              destHtmlElement.style.setProperty('opacity', '1', 'important');
-              destHtmlElement.removeAttribute('data-action-animating');
-            } else {
-              // For non-flip: crossfade (flying card fades out while destination fades in)
-              destHtmlElement.style.setProperty('transition', `opacity ${crossfadeDuration}ms ease-out`, 'important');
-              destHtmlElement.removeAttribute('data-action-animating');
-              void destHtmlElement.offsetHeight; // Force reflow before starting transition
-              destHtmlElement.style.setProperty('opacity', '1', 'important');
-            }
-          } : undefined,
-        });
-      } finally {
-        // Clean up inline styles after animation completes
-        if (shouldHideDestination) {
-          // Wait for any CSS transition to complete
-          const waitTime = shouldFlip ? 50 : crossfadeDuration + 50;
-          await new Promise((resolve) => setTimeout(resolve, waitTime));
-
-          // Clear inline styles and data attribute
-          destHtmlElement.removeAttribute('data-action-animating');
-          destHtmlElement.style.removeProperty('opacity');
-          destHtmlElement.style.removeProperty('transition');
-          destHtmlElement.style.pointerEvents = '';
-        }
-      }
+    () => {
+      if (!pendingAnimation) return;
+      if (pendingAnimation.accepted) return play(pendingAnimation);
+      pendingAnimation.stateChanged = true;
     },
     { deep: false, flush: 'post' }  // flush: 'post' runs after Vue's DOM updates
   );
+
+  /** Fly the pending animation from where its element was to where it is now. */
+  async function play(animation: CapturedAnimationState): Promise<void> {
+    // Clear it immediately to prevent re-triggering
+    const { config, startRect, elementData, args, animationId, mutationObserver, isFlipInPlace } = animation;
+    pendingAnimation = null;
+
+    // Disconnect the MutationObserver
+    mutationObserver?.disconnect();
+
+    // Find the destination element
+    let destinationElement: Element | null = null;
+    let destSelectorStr: string | undefined;
+
+    if (typeof config.destinationSelector === 'function') {
+      destinationElement = config.destinationSelector(args);
+    } else {
+      destSelectorStr = interpolateSelector(config.destinationSelector, args);
+      destinationElement = document.querySelector(destSelectorStr);
+    }
+
+    // Fail-loud destination check MUST run before the test-mode branch
+    // below: a typo'd/misconfigured destinationSelector is the canonical
+    // authoring bug ANIM-03 exists to catch, and a game's animation test
+    // suite (precisely where enableAnimationTestMode() is used) must not
+    // let it pass silently as a "successful" trace. Checking test mode
+    // first would record {kind:'action', to: <bad selector>} and return
+    // before this check ever ran — defeating the fail-loud guarantee for
+    // the exact scenario it targets.
+    if (!destinationElement) {
+      restoreHidden(animation.hidden);
+      const selectorDesc =
+        typeof config.destinationSelector === 'function'
+          ? '(custom function)'
+          : config.destinationSelector;
+      const msg =
+        `[useActionAnimations] Could not find destination element. ` +
+        `Selector: ${selectorDesc}, Args: ${JSON.stringify(args)}`;
+      if (isDevThrowEnabled()) {
+        throw new Error(msg);
+      } else {
+        console.error(msg);
+      }
+      return;
+    }
+
+    // Test mode: record one {kind:'action'} trace using our OWN
+    // interpolated from/to selector strings and return WITHOUT delegating
+    // to fly() - useFlyingElements has its own independent 'fly' trace
+    // branch (used only for direct manual/autoWatch fly() calls), so
+    // delegating here would double-record the same animation.
+    if (isAnimationTestModeEnabled()) {
+      const elementSelectorStr = interpolateSelector(config.elementSelector, args);
+      const elementValue = args[config.elementSelection];
+      recordTrace({
+        kind: 'action',
+        element: elementValue !== undefined ? String(elementValue) : null,
+        from: elementSelectorStr,
+        to: destSelectorStr,
+        meta: { action: config.action, args },
+      });
+      return;
+    }
+
+    // Resolve effective settings (with flip-in-place auto-detection)
+    const shouldHideDestination = config.hideDestination ?? isFlipInPlace;
+    const shouldFlip = config.flip ?? isFlipInPlace;
+    const crossfadeDuration = shouldHideDestination ? (config.crossfadeDuration ?? 150) : 0;
+
+    // Ensure the destination element is hidden
+    const destHtmlElement = destinationElement as HTMLElement;
+    if (shouldHideDestination) {
+      hideElement(destHtmlElement);
+    }
+
+    try {
+      // Trigger the flying animation
+      await fly({
+        id: animationId,
+        startRect,
+        endRect: () => destinationElement!.getBoundingClientRect(),
+        elementData,
+        duration: config.duration ?? 400,
+        elementSize: config.elementSize,
+        flip: shouldFlip,
+        zIndex: config.zIndex ?? 1000,
+        holdDuration: crossfadeDuration,
+        // For flip animations, skip fade-out because opacity < 1 breaks backface-visibility
+        // (3D CSS transforms rely on backface-visibility: hidden, which breaks when parent has opacity < 1)
+        skipFadeOut: shouldFlip,
+        onPositionComplete: shouldHideDestination ? () => {
+          if (shouldFlip) {
+            // For flip animations: instant reveal (no fade) since flying card disappears instantly
+            // This prevents the "flash" artifact from mismatched opacity timing
+            destHtmlElement.style.setProperty('transition', 'none', 'important');
+            destHtmlElement.style.setProperty('opacity', '1', 'important');
+            destHtmlElement.removeAttribute('data-action-animating');
+          } else {
+            // For non-flip: crossfade (flying card fades out while destination fades in)
+            destHtmlElement.style.setProperty('transition', `opacity ${crossfadeDuration}ms ease-out`, 'important');
+            destHtmlElement.removeAttribute('data-action-animating');
+            void destHtmlElement.offsetHeight; // Force reflow before starting transition
+            destHtmlElement.style.setProperty('opacity', '1', 'important');
+          }
+        } : undefined,
+      });
+    } finally {
+      // Clean up inline styles after animation completes
+      if (shouldHideDestination) {
+        // Wait for any CSS transition to complete
+        const waitTime = shouldFlip ? 50 : crossfadeDuration + 50;
+        await new Promise((resolve) => setTimeout(resolve, waitTime));
+
+        // Clear inline styles and data attribute
+        destHtmlElement.removeAttribute('data-action-animating');
+        destHtmlElement.style.removeProperty('opacity');
+        destHtmlElement.style.removeProperty('transition');
+        destHtmlElement.style.pointerEvents = '';
+      }
+    }
+  }
 
   return {
     flyingElements,
