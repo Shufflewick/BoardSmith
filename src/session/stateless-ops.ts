@@ -173,7 +173,8 @@ export type DevOp =
    * snapshot, and a restore in every sense a client sees
    * (`restoreEarlierSnapshot`): the restore epoch advances, so seats drop stale
    * element ids and reset their animation watermark. Only the host composes it
-   * (`SnapshotSessionHost`'s demo); no client message maps to it.
+   * (`SnapshotSessionHost`'s demo, and the headless session's `arrange`); no
+   * client message maps to it.
    */
   | { type: 'restoreEarlier'; snapshot: unknown }
   | { type: 'startTutorial'; player: number }
