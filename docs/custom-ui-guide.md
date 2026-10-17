@@ -617,6 +617,48 @@ pick and leaves with it. Without it your board renders the element's internal
 name and nothing outside the app can tell which of your nodes answers the open
 selection.
 
+### Keyboard Navigation for a Grid: `useSelectableGrid()`
+
+`useSelectableGrid(cells, position, getIdentity, boardInteraction, onActivate, elementType?, isCandidate?)`
+gives a board of cells one tab stop and arrow-key movement. `position(cell)`
+returns the cell's `{ row, col }`. An arrow key moves to the nearest cell in the
+same row or column, and Home/End go to the ends of the row. So the order of
+`cells` and any gaps in the board do not matter (#891).
+
+```vue
+<script setup lang="ts">
+import { computed } from 'vue';
+import { useBoardInteraction, useSelectableGrid } from 'boardsmith/ui';
+
+const props = defineProps<{ squares: { id: number; rank: number; file: number }[] }>();
+const board = useBoardInteraction();
+const squares = computed(() => props.squares);
+
+const { currentIdx, handleGridKeydown, handleGridFocusIn, registerCell, cellAttrs } = useSelectableGrid(
+  squares,
+  (square) => ({ row: 8 - square.rank, col: square.file - 1 }),
+  (square) => ({ id: square.id }),
+  board,
+  (square) => board.triggerElementSelect({ id: square.id }),
+  'square',
+);
+</script>
+
+<template>
+  <div role="grid" @keydown="handleGridKeydown" @focusin="handleGridFocusIn">
+    <div
+      v-for="(square, idx) in squares"
+      :key="square.id"
+      :ref="(el) => registerCell(el as Element | null, idx)"
+      v-bind="cellAttrs(square)"
+      role="gridcell"
+      :tabindex="idx === currentIdx ? 0 : -1"
+      :style="{ gridRow: 9 - square.rank, gridColumn: square.file }"
+    />
+  </div>
+</template>
+```
+
 ## Step 6: Handling Dependent Selections
 
 When selection B depends on selection A (e.g., "select merc, then select their equipment"):

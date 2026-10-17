@@ -578,7 +578,7 @@ describe('boardsmith simulate --jobs (#556)', () => {
   it("reports a failing game's real message, replayed in dev mode, and a replay command carrying its variant", () => {
     expect(failingInWorker.exitCode).toBe(1);
     // The game's own line, not the engine's log: a worker's production mode leaves the throw's text out of it.
-    expect(failingInWorker.output).toMatch(/^Game 0 stuck \(seed w-2-0\).*\n {2}.*failed with: .*\(a score of \d+ is over the limit of 4\)/m);
+    expect(failingInWorker.output).toMatch(/^Game 0 stuck \(seed w-2-0\).*\n {2}Action 'add' rejected the move .*, chosen by policy 'random': .*\(a score of \d+ is over the limit of 4\)/m);
     expect(failingInWorker.output).toContain('Replay: boardsmith simulate --replay w-2-0 --players 2 --game-option limit=4');
     expect(failingInWorker.output).not.toMatch(/Replay: .*limit=100/);
     // Two variants, each on two workers playing one game.
