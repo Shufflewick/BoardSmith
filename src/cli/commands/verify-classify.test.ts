@@ -1416,9 +1416,10 @@ describe('a staged slice edited after its pair was classified (#837)', () => {
 
     const pairs = await verifyClassifyPairsCommand({ project, runId, json: true });
     expect(pairs.pairs.flatMap((p) => p.stagedUnits)).not.toContain('ua2');
-    expect(
-      pairs.warnings.some((w) => w.includes('"ua2"') && w.includes('sha256') && w.includes('--reset-range')),
-    ).toBe(true);
+    const ua2Warning = pairs.warnings.find((w) => w.includes('"ua2"') && w.includes('sha256'));
+    expect(ua2Warning).toBeDefined();
+    // ua2 was recorded without a range, so there is no range to reset.
+    expect(ua2Warning).not.toContain('--reset-range');
     const pairA = pairs.pairs.find((p) => p.pairId === pairIdA)!;
     expect(pairA.kind).toBe('paired');
     expect(pairA.stagedUnits).toEqual(['ua']);
@@ -1436,8 +1437,13 @@ describe('a staged slice edited after its pair was classified (#837)', () => {
     await verifyRunRecordCommand({ project, runId, unit: 'ua2', slice: 'ua2.md', range: 'r2', json: true });
     await verifyClassifyRecordCommand({ project, runId, pairId: pairIdA, label: 'cosmetic', json: true });
 
-    await verifyRunRecordCommand({ project, runId, resetRange: 'r2', json: true });
     await fs.writeFile(join(stagingDirAbs, 'ua2.md'), 'p.1, A:\n"Rule A transcribed again."\n');
+    const editedWarnings = (await verifyClassifyPairsCommand({ project, runId, json: true })).warnings;
+    expect(
+      editedWarnings.some((w) => w.includes('"ua2"') && w.includes('sha256') && w.includes('--reset-range r2')),
+    ).toBe(true);
+
+    await verifyRunRecordCommand({ project, runId, resetRange: 'r2', json: true });
     await verifyRunRecordCommand({ project, runId, unit: 'ua2', slice: 'ua2.md', range: 'r2', json: true });
 
     const pairA = (await verifyClassifyPairsCommand({ project, runId, json: true })).pairs.find(
@@ -1446,7 +1452,32 @@ describe('a staged slice edited after its pair was classified (#837)', () => {
     expect(pairA.stagedUnits).toEqual(['ua', 'ua2']);
     const status = await verifyClassifyStatusCommand({ project, runId, json: true });
     expect(status.pendingPairs).toContain(pairIdA);
+    expect(status.outOfDatePairs).toEqual([pairIdA]);
     expect(status.classified.map((c) => c.pairId)).not.toContain(pairIdA);
+
+    await verifyClassifyRecordCommand({ project, runId, pairId: pairIdA, label: 'cosmetic', json: true });
+    const reclassified = await verifyClassifyStatusCommand({ project, runId, json: true });
+    expect(reclassified.pendingPairs).not.toContain(pairIdA);
+    expect(reclassified.classified.map((c) => c.pairId)).toContain(pairIdA);
+    expect(reclassified.outOfDatePairs).toEqual([]);
+  });
+
+  it('lists an out-of-date classification only while its pair is still paired, as pendingPairs does', async () => {
+    const { project, runId, pairIdA } = await threeGroupProject();
+    await verifyClassifyRecordCommand({ project, runId, pairId: pairIdA, label: 'cosmetic', json: true });
+
+    await fs.rm(join(project, DESIGN_DIR, 'rulebook', 'a.md'));
+    const stagingDirAbs = stagingSlicesDir(project, runId);
+    await fs.writeFile(join(stagingDirAbs, 'ua2.md'), 'p.1, A:\n"Rule A second staged text."\n');
+    await verifyRunRecordCommand({ project, runId, unit: 'ua2', slice: 'ua2.md', json: true });
+
+    const pairA = (await verifyClassifyPairsCommand({ project, runId, json: true })).pairs.find(
+      (p) => p.pairId === pairIdA,
+    )!;
+    expect(pairA.kind).toBe('unpaired-slice');
+    const status = await verifyClassifyStatusCommand({ project, runId, json: true });
+    expect(status.pendingPairs).not.toContain(pairIdA);
+    expect(status.outOfDatePairs).not.toContain(pairIdA);
   });
 
   it('leaves out a classification whose pair no longer exists', async () => {

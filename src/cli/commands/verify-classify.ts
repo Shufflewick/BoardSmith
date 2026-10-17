@@ -1469,7 +1469,8 @@ function sameList(a: readonly string[], b: readonly string[]): boolean {
 /**
  * A verdict counts only for the staged content it was made on: once its pair's units or staged
  * slices change, or one of its units is recorded again, the pair must be classified again (#837).
- * A verdict whose pair no longer exists is in neither list.
+ * A verdict whose pair no longer exists is in neither list, and only a `paired` pair is out of
+ * date, so `outOfDatePairs` is always a subset of `pendingPairs`.
  */
 function splitCurrentClassifications(
   recorded: ClassificationRecord[],
@@ -1486,7 +1487,7 @@ function splitCurrentClassifications(
       sameList(c.units, pair.stagedUnits) &&
       sameList(c.stagedSlices, pair.stagedSlices);
     if (current) classifications.push(c);
-    else outOfDatePairs.push(c.pairId);
+    else if (pair.kind === 'paired') outOfDatePairs.push(c.pairId);
   }
   return { classifications, outOfDatePairs };
 }
