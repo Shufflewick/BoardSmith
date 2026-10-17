@@ -1193,11 +1193,17 @@ function restoreFocusAfterRemoval(index: number): void {
   )?.focus();
 }
 
-/** What a choice's control reads out: its display, plus its board square when it has one (#934). */
+/**
+ * What a choice's control reads out: its display, plus its board square when it has one (#934)
+ * and the display does not already name that square as a whole word (#1105).
+ */
 function choiceSpokenName(choice: ChoiceWithRefs): string {
   // The square the board picks, not the source every destination of one piece shares (#1084).
   const notation = choiceBoardTarget(choice)?.notation;
-  return notation ? `${choice.display} (${notation})` : choice.display;
+  if (!notation) return choice.display;
+  const escaped = notation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const named = new RegExp(`(?<!\\w)${escaped}(?!\\w)`).test(choice.display);
+  return named ? choice.display : `${choice.display} (${notation})`;
 }
 
 /** What one built entry reads as: the label of the button that adds it. */
