@@ -35,6 +35,8 @@ async function mkProject(dir: string): Promise<string> {
   return project;
 }
 
+const EXTRACTION_HASH = 'a'.repeat(64);
+
 /** A not-run record, as verify-example-record writes one, whose stored test is `testCode`. */
 function notRunRecord(lineNumber: number, testCode: string, provenance = 'quote-verified') {
   return createExampleReplayRecord({
@@ -48,6 +50,7 @@ function notRunRecord(lineNumber: number, testCode: string, provenance = 'quote-
     expected: 'The Guard ends EXHAUSTED.',
     supportingQuoteLines: ['"If you are punched while READY, you become EXHAUSTED."'],
     provenance,
+    extractionHash: EXTRACTION_HASH,
     translation: {
       pageCitation: 'p.2, Punch Examples',
       sourceText: 'If you are punched while READY, you become EXHAUSTED.',
@@ -105,6 +108,7 @@ describe('verifyExampleRunCommand', () => {
     expect(disagrees.provenance).toBe('quote-unverified');
     expect(disagrees.translation?.testCode).toBe(FAILING);
     expect(disagrees.testFilePath).toBe('tests/examples/punch.examples.test.ts');
+    expect(disagrees.extractionHash).toBe(EXTRACTION_HASH);
     expect(byLine.get(2)!.provenance).toBe('quote-verified');
 
     // The file emit writes from the ledger is unchanged by the run, so a re-run needs no re-emit.
@@ -133,6 +137,31 @@ describe('verifyExampleRunCommand', () => {
     await verifyExampleEmitCommand({ project, chunk: 'punch' });
 
     await expectRunRefused(project, /rulebook\/02-punch\.md:3 was skipped/);
+  }, 60_000);
+
+  it('a translated test that makes no assertions is refused, not recorded as agrees (#826)', async () => {
+    await recordExampleReplayVerdicts(project, [
+      notRunRecord(2, PASSING),
+      notRunRecord(3, "it('ends EXHAUSTED', () => {});"),
+    ]);
+    await verifyExampleEmitCommand({ project, chunk: 'punch' });
+
+    await expectRunRefused(
+      project,
+      /test "ends EXHAUSTED" for the worked example at rulebook\/02-punch\.md:3 makes no assertions.*expect\(/s,
+    );
+  }, 60_000);
+
+  it('a test that throws before asserting anything still failed against the game: disagrees, not refused (#826)', async () => {
+    await recordExampleReplayVerdicts(project, [
+      notRunRecord(2, "it('ends EXHAUSTED', () => {\n  throw new Error('punch is not modelled');\n});"),
+    ]);
+    await verifyExampleEmitCommand({ project, chunk: 'punch' });
+
+    const result = await verifyExampleRunCommand({ project, chunk: 'punch' });
+    expect(result.records.map((r) => [r.verdict, r.observed])).toEqual([
+      ['disagrees', 'Error: punch is not modelled'],
+    ]);
   }, 60_000);
 
   it('a file that fails to load is refused with what vitest said, and nothing is recorded', async () => {

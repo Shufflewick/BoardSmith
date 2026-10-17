@@ -6,7 +6,7 @@ import ora from 'ora';
 import {
   generateScaffoldFiles,
   getRequiredDirectories,
-  getDependencyPaths,
+  boardsmithDependencySpec,
   toPascalCase,
   toDisplayName,
   type GeneratedFile,
@@ -456,11 +456,7 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
       await writeFile(path, file.content);
     }
 
-    // Log if using local dev
-    const deps = getDependencyPaths(projectPath);
-    if (deps.isLocalDev) {
-      console.log(chalk.dim(`  Using local BoardSmith from monorepo`));
-    }
+    console.log(chalk.dim(`  boardsmith: ${boardsmithDependencySpec(projectPath)}`));
 
     // An existing repository already has its history, so it gets no `git init` and no scaffold
     // commit: the designer reviews the scaffold beside their own work and commits it.

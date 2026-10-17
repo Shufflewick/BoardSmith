@@ -65,6 +65,7 @@ import {
 } from '../lib/project-paths.js';
 import { type ChunkCommit, type PinnedCommit, chunkHistory, chunkPins, commitName, fileAtCommit } from '../lib/chunk-commits.js';
 import { readGateTransition } from '../lib/gate-transition.js';
+import { shortQuoteProblem } from '../lib/quote-length.js';
 import { markdownHeading } from '../lib/slice-sections.js';
 import { LINE_LOCATION_HINT, type LineRange, fileLines, lineRangeProblem, splitLineLocation } from '../lib/line-location.js';
 
@@ -508,6 +509,14 @@ async function checkPassage(
   passage: QuotedPassage,
   refusals: string[],
 ): Promise<CheckedQuote> {
+  const short = shortQuoteProblem(passage.quote);
+  if (short !== undefined) {
+    refusals.push(
+      `Claim ${claimNumber}: the quote "${passage.quote}" above Source: ${passage.source} ${short}. ` +
+        'Copy the whole sentence or line the claim rests on.',
+    );
+    return { ...passage, found: false };
+  }
   const located = await locate(chunk, passage.source);
   if (!located.ok) {
     refusals.push(`Claim ${claimNumber}: ${located.problem}`);
