@@ -19,7 +19,7 @@
  */
 import { randomUUID } from 'node:crypto';
 
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { WebSocket } from 'ws';
 
 import type { RulesReloadQueue } from './rules-reload-queue.js';
@@ -157,7 +157,7 @@ export function createWorldConnections(
             // The message, not the error object, exactly as `reloadWorld` in
             // `dev-world.ts` does it (#240).
             console.error(
-              chalk.red(
+              styleText('red',
                 `[boardsmith dev] world message '${String(message.type)}' failed: ` +
                   `${error instanceof Error ? error.message : String(error)}`,
               ),
@@ -177,7 +177,7 @@ export function createWorldConnections(
           // did (#387): it can start a departure's clock command.
           queue
             .admit({ run: () => host().disconnect(gone) })
-            .catch((error: unknown) => console.error(chalk.red(`[boardsmith dev] a page leaving the world failed: ${error instanceof Error ? error.message : String(error)}`)));
+            .catch((error: unknown) => console.error(styleText('red', `[boardsmith dev] a page leaving the world failed: ${error instanceof Error ? error.message : String(error)}`)));
         }
       });
     },
