@@ -13,8 +13,9 @@
  * by what it returned. This scan reads the syntax tree and fails on any
  * `expect(...)` whose subject subtracts a clock read, or a variable assigned
  * one, directly or through a variable holding that difference, whatever the
- * matcher (#919). A variable counts only in the function it was declared in
- * and the functions inside it that do not declare the same name again.
+ * matcher (#919). A variable counts only where its declaration is visible: a
+ * `let`, `const` or catch binding in its block, a `var` or parameter in its
+ * function, minus any inner block or function that declares the same name again.
  *
  * It does not flag a timestamp checked against the clock
  * (`expect(entry.timestamp).toBeLessThanOrEqual(Date.now())`), which is a
@@ -33,16 +34,26 @@ const isClockRead = (node) => {
   const callee = ts.isCallExpression(node) && node.expression.getText();
   return Boolean(callee) && CLOCKS.some((clock) => callee === clock || callee.endsWith(`.${clock}`));
 };
-/** The function (or file) whose body `node` is in, which is where a name declared there is visible. */
-const scopeOf = (node) => {
+const isBlockScope = (node) =>
+  ts.isBlock(node) || ts.isCatchClause(node) || ts.isForStatement(node) || ts.isForInStatement(node)
+  || ts.isForOfStatement(node);
+/** The nearest node around `node` (a block, loop, catch, function or the file) that matches `isScope`. */
+const enclosing = (node, isScope) => {
   let scope = node.parent;
-  while (scope.parent && !ts.isFunctionLike(scope)) scope = scope.parent;
+  while (scope.parent && !ts.isFunctionLike(scope) && !isScope(scope)) scope = scope.parent;
   return scope;
 };
+/** The block, loop, catch, function or file `node` is in: where a `let` or `const` declared there is visible. */
+const scopeOf = (node) => enclosing(node, isBlockScope);
+/** Where declaration `node` is visible: its function for a `var` or parameter, its block otherwise. */
+const declarationScope = (node) =>
+  ts.isParameter(node) || (ts.isVariableDeclarationList(node.parent) && !(node.parent.flags & ts.NodeFlags.BlockScoped))
+    ? enclosing(node, () => false)
+    : scopeOf(node);
 
-/** The name `node` assigns and the value it assigns, when it is `const x = v` or `x = v`. */
+/** The name `node` assigns and the value it assigns, when it is `const x = v`, `(x = v) =>` or `x = v`. */
 function assignmentAt(node) {
-  if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.initializer) {
+  if ((ts.isVariableDeclaration(node) || ts.isParameter(node)) && ts.isIdentifier(node.name) && node.initializer) {
     return { name: node.name.text, value: bare(node.initializer) };
   }
   const assigns = ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken;
@@ -57,7 +68,7 @@ function wallClockBudgets(source) {
   const declared = new Map();
   const visit = (node) => {
     if ((ts.isVariableDeclaration(node) || ts.isParameter(node)) && ts.isIdentifier(node.name)) {
-      const scope = scopeOf(node);
+      const scope = declarationScope(node);
       declared.set(scope, (declared.get(scope) ?? new Set()).add(node.name.text));
     }
     const assignment = assignmentAt(node);
@@ -69,7 +80,7 @@ function wallClockBudgets(source) {
   };
   visit(sourceFile);
 
-  /** The function that declares `name` as seen from `node`; an undeclared name belongs to the file. */
+  /** The block or function that declares `name` as seen from `node`; an undeclared name belongs to the file. */
   const declaringScope = (name, node) => {
     for (let scope = scopeOf(node); scope; scope = scope.parent && scopeOf(scope)) {
       if (declared.get(scope)?.has(name)) return scope;
@@ -209,6 +220,29 @@ describe('wallClockBudgets', () => {
     const parameter = [outer, "it.each([3])('x', (delta) => { expect(delta).toBe(3); });"].join('\n');
     expect(wallClockBudgets(redeclared)).toEqual([]);
     expect(wallClockBudgets(parameter)).toEqual([]);
+  });
+
+  it('does not let a same-named name in an inner block, catch or later block hide an outer duration (#919)', () => {
+    const inIf = [
+      'const elapsed = Date.now() - s;',
+      "it('x', () => { if (a) { const elapsed = 3; } expect(elapsed).toBeLessThan(5); });",
+    ].join('\n');
+    const inCatch = [
+      'let elapsed = Date.now() - s;',
+      "it('x', () => { try {} catch (elapsed) {} expect(elapsed).toBeLessThan(5); });",
+    ].join('\n');
+    const laterBlock = [
+      'let d;',
+      'beforeAll(() => { d = Date.now() - s; });',
+      "it('x', () => { expect(d).toBeLessThan(5); { let d = 1; } });",
+    ].join('\n');
+    expect(wallClockBudgets(inIf)).toHaveLength(1);
+    expect(wallClockBudgets(inCatch)).toHaveLength(1);
+    expect(wallClockBudgets(laterBlock)).toHaveLength(1);
+  });
+
+  it('finds a duration held in a default parameter value (#919)', () => {
+    expect(wallClockBudgets('const check = (d = Date.now() - s) => { expect(d).toBeLessThan(5); };')).toHaveLength(1);
   });
 
   it('leaves a timestamp checked against the clock alone', () => {
