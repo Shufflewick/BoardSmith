@@ -44,11 +44,11 @@ export function walk(node: unknown, visit: (n: Record<string, unknown>) => void)
 }
 
 /**
- * The engine's element class names plus every class declared in `program` that extends one of
- * them, transitively and in any declaration order.
+ * `roots` plus every class declared in `program` that extends one of them, transitively and in
+ * any declaration order.
  */
-export function collectElementTypeNames(program: unknown): Set<string> {
-  const elementTypeNames = new Set<string>(ENGINE_ELEMENT_CLASS_NAMES);
+export function collectSubclassNames(program: unknown, roots: readonly string[]): Set<string> {
+  const names = new Set<string>(roots);
   const classDecls: { name: string; superName: string | undefined }[] = [];
   walk(program, (node) => {
     if (node.type === 'ClassDeclaration') {
@@ -67,11 +67,11 @@ export function collectElementTypeNames(program: unknown): Set<string> {
   while (changed) {
     changed = false;
     for (const decl of classDecls) {
-      if (decl.superName && elementTypeNames.has(decl.superName) && !elementTypeNames.has(decl.name)) {
-        elementTypeNames.add(decl.name);
+      if (decl.superName && names.has(decl.superName) && !names.has(decl.name)) {
+        names.add(decl.name);
         changed = true;
       }
     }
   }
-  return elementTypeNames;
+  return names;
 }

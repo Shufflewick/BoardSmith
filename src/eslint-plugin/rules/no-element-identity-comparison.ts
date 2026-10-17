@@ -1,5 +1,5 @@
 import type { Rule } from 'eslint';
-import { COLLECTION_CALL_NAMES, collectElementTypeNames, typeReferenceName, walk } from './element-types.js';
+import { COLLECTION_CALL_NAMES, ENGINE_ELEMENT_CLASS_NAMES, collectSubclassNames, typeReferenceName, walk } from './element-types.js';
 
 /**
  * Disallows `===`/`!==` identity comparison between GameElement instances,
@@ -135,7 +135,7 @@ const rule: Rule.RuleModule = {
 
     return {
       Program(program) {
-        elementTypeNames = collectElementTypeNames(program);
+        elementTypeNames = collectSubclassNames(program, ENGINE_ELEMENT_CLASS_NAMES);
 
         // Pass 2: collect declaration nodes (params/variable-declarator ids)
         // with a resolved GameElement(-ish) type annotation, and variables

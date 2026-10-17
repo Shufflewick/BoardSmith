@@ -1,5 +1,5 @@
 import type { Rule } from 'eslint';
-import { COLLECTION_CALL_NAMES, collectElementTypeNames, typeReferenceName } from './element-types.js';
+import { COLLECTION_CALL_NAMES, ENGINE_ELEMENT_CLASS_NAMES, collectSubclassNames, typeReferenceName } from './element-types.js';
 
 /**
  * Disallows storing arrays of GameElement instances as persistent class
@@ -24,9 +24,12 @@ import { COLLECTION_CALL_NAMES, collectElementTypeNames, typeReferenceName } fro
  *   (a) A `class X extends Y` declaration in the same file, where `Y` is
  *       an engine element class (ENGINE_ELEMENT_CLASS_NAMES in
  *       ./element-types.ts) or another known subclass (resolved transitively) --
- *       used to determine whether a class is itself an element (in which
- *       case a typed child array, check (b), is the intended, correct pattern
- *       and is NOT flagged; check (c) still applies to it).
+ *       used to determine which type names are elements. A class whose chain
+ *       reaches GameElement itself through same-file classes owns its children:
+ *       a typed child array, check (b), is NOT flagged on it (check (c) still
+ *       applies). Subclasses of the other engine classes get no such exemption:
+ *       Game and Player subclasses are where games keep state, and whether
+ *       Space/Piece subclasses should be exempt is undecided (#1035).
  *   (b) A `PropertyDefinition` (class field) whose type annotation is an
  *       array of a same-file-known GameElement/subclass type, declared in
  *       a class that does NOT itself extend GameElement/subclass -- flagged
@@ -116,16 +119,18 @@ const rule: Rule.RuleModule = {
 
   create(context) {
     let elementTypeNames = new Set<string>();
+    let childOwnerNames = new Set<string>();
 
     return {
       Program(program) {
-        elementTypeNames = collectElementTypeNames(program);
+        elementTypeNames = collectSubclassNames(program, ENGINE_ELEMENT_CLASS_NAMES);
+        childOwnerNames = collectSubclassNames(program, ['GameElement']);
       },
 
       ClassDeclaration(classNode) {
         const superClass = classNode.superClass as { type?: string; name?: string } | null | undefined;
-        const isElementClass =
-          superClass?.type === 'Identifier' && !!superClass.name && elementTypeNames.has(superClass.name);
+        const ownsChildren =
+          superClass?.type === 'Identifier' && !!superClass.name && childOwnerNames.has(superClass.name);
 
         const body = (classNode.body as { body?: unknown[] }).body ?? [];
         for (const member of body) {
@@ -134,7 +139,7 @@ const rule: Rule.RuleModule = {
 
           // (b) GameElement[]-typed field. An element class owns its children, so it may.
           const typeName = resolveArrayElementTypeName((propDef as { typeAnnotation?: unknown }).typeAnnotation);
-          if (!isElementClass && typeName && elementTypeNames.has(typeName)) {
+          if (!ownsChildren && typeName && elementTypeNames.has(typeName)) {
             context.report({
               node: propDef as unknown as Rule.Node,
               messageId: 'elementArrayField',

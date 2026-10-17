@@ -145,5 +145,33 @@ ruleTester.run('no-element-array-state', rule, {
         errors: [{ messageId: 'elementArrayAssignment' as const }],
       },
     ]),
+    // Game and Player subclasses are where games keep state, so they get no child-array exemption.
+    {
+      code: `
+        class Card extends Piece<MyGame> {}
+        class MyGame extends Game { discard: Card[] = []; }
+      `,
+      errors: [{ messageId: 'elementArrayField' as const }],
+    },
+    {
+      code: `class MyGame extends Game { pool: GameElement[] = []; }`,
+      errors: [{ messageId: 'elementArrayField' as const }],
+    },
+    // The docs/common-pitfalls.md "Player Data Serialization" example.
+    ...['GameElement', 'Piece'].map((base) => ({
+      code: `
+        class Squad extends ${base} {}
+        class MyPlayer extends Player { squadRefs: Squad[] = []; }
+      `,
+      errors: [{ messageId: 'elementArrayField' as const }],
+    })),
+    {
+      code: `
+        class BaseGame extends Game {}
+        class MyGame extends BaseGame { discard: Card[] = []; }
+        class Card extends Piece {}
+      `,
+      errors: [{ messageId: 'elementArrayField' as const }],
+    },
   ],
 });
