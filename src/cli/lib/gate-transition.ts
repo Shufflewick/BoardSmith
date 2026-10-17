@@ -9,11 +9,15 @@ import { GATE_TRANSITION_MD, designPath } from './project-paths.js';
  * accepted while its text is unchanged).
  */
 
-/** A chunk given a `transition` sign-off: the verified Status it keeps, and why it had no valid one. */
+/**
+ * A chunk given a `transition` sign-off: the verified Status it keeps, why it had no valid one, and
+ * the content of each code file it vouched for, so a rerun can only restore that sign-off as issued.
+ */
 export interface TransitionedSignoff {
   slug: string;
   status: string;
   reason: string;
+  code: Record<string, string>;
 }
 
 /** A sign-off in the old whole-file form whose code still matched, rewritten file by file. */
@@ -64,6 +68,15 @@ function entries(text: string, heading: string): Array<{ slug: string; body: str
   return found;
 }
 
+function parseCode(body: string): Record<string, string> {
+  return Object.fromEntries([...body.matchAll(/^- Code:[ \t]*(\S+)[ \t]+(\S+)[ \t]*$/gm)].map((m) => [m[1], m[2]]));
+}
+
+function renderCode(code: Record<string, string>): string {
+  const paths = Object.keys(code).sort();
+  return paths.length ? paths.map((p) => `- Code: ${p} ${code[p]}`).join('\n') : '- Code: none';
+}
+
 function parseClaims(body: string): Record<number, string> {
   const claims: Record<number, string> = {};
   for (const m of body.matchAll(/^- Claim (\d+):[ \t]*([0-9a-f]{64})[ \t]*$/gm)) claims[Number(m[1])] = m[2];
@@ -87,6 +100,7 @@ function parseGateTransition(text: string): GateTransition {
       slug: e.slug,
       status: field(e.body, 'Status'),
       reason: field(e.body, 'Reason'),
+      code: parseCode(e.body),
     })),
     kept: entries(text, KEPT).map((e) => ({ slug: e.slug, basis: field(e.body, 'Basis') })),
     claims: Object.fromEntries(entries(text, CLAIMS).map((e) => [e.slug, parseClaims(e.body)])),
@@ -108,7 +122,7 @@ export function renderGateTransition(t: GateTransition): string {
     '',
     ...section(
       SIGNOFFS,
-      t.signoffs.map((s) => `### ${s.slug}\n- Status: ${s.status}\n- Reason: ${s.reason}\n`),
+      t.signoffs.map((s) => `### ${s.slug}\n- Status: ${s.status}\n- Reason: ${s.reason}\n${renderCode(s.code)}\n`),
     ),
     ...section(KEPT, t.kept.map((k) => `### ${k.slug}\n- Basis: ${k.basis}\n`)),
     ...section(

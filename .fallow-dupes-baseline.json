@@ -19,7 +19,7 @@
     "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:111-125|src/ui/composables/useHexGrid.ts:275-290",
     "src/ui/components/GameHistory.vue:389-404|src/ui/components/auto-ui/ActionPanel.vue:2282-2301|src/ui/components/auto-ui/ActionPanel.vue:2635-2650|src/ui/components/auto-ui/AutoRenderer.vue:286-302",
     "src/ui/components/auto-ui/renderers/CardRenderer.vue:219-227|src/ui/components/auto-ui/renderers/HandRenderer.vue:147-155",
-    "src/cli/commands/ingest-archive.ts:816-824|src/cli/commands/ingest-archive.ts:925-946",
+    "src/cli/commands/ingest-archive.ts:818-826|src/cli/commands/ingest-archive.ts:927-948",
     "src/ui/components/helpers/HintOverlay.vue:121-139|src/ui/components/helpers/TutorialOverlay.vue:167-190",
     "src/ui/components/auto-ui/renderers/CardRenderer.vue:294-307|src/ui/components/auto-ui/renderers/HandRenderer.vue:229-239|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:76-86",
     "src/ui/components/helpers/HintOverlay.vue:330-355|src/ui/components/helpers/TutorialOverlay.vue:436-461",

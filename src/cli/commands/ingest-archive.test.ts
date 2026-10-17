@@ -685,6 +685,17 @@ describe('v4.9 — machine-owned gaps section and ingest-check (170-PROOF-RUN-2)
     );
   });
 
+  it('leaves INDEX.md untouched when the gaps section is already current (#829)', async () => {
+    const project = await withSlices(['Named-but-undefined (p.1): x']);
+    await ingestGapsCommand({ project, quiet: true });
+    const indexPath = join(project, DESIGN_DIR, 'rulebook', 'INDEX.md');
+    const past = new Date('2020-01-01T00:00:00Z');
+    await fs.utimes(indexPath, past, past);
+    const result = await ingestGapsCommand({ project, quiet: true });
+    expect(result.changed).toBe(false);
+    expect((await fs.stat(indexPath)).mtime.getTime()).toBe(past.getTime());
+  });
+
   describe('ingest-check', () => {
     let exitCode: typeof process.exitCode;
     beforeEach(() => {

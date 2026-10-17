@@ -619,7 +619,7 @@ export async function checkClaimQuotes(projectDir: string, slug: string): Promis
   const transition = await readGateTransition(projectDir);
   const preGate: PreGateClaims = {
     recorded: transition?.claims[slug] ?? {},
-    offer: transition === undefined && /^Status:\s*verified/m.test(chunkText),
+    offer: transition === undefined && /^Status:[ \t]*verified/m.test(chunkText),
   };
   const superseded = new Set(parseSupersededClaims(chunkText));
   const refusals: string[] = [];

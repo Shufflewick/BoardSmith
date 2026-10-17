@@ -33,3 +33,14 @@ export function gitSucceeds(dir: string, args: string[]): Promise<boolean> {
     () => false,
   );
 }
+
+/**
+ * A `git blame --porcelain` (or `--line-porcelain`) header line: the commit and the line's number in
+ * the file as it is now; undefined for any other line. A hash is 40 characters in a SHA-1
+ * repository and 64 in a SHA-256 one, and a line not committed yet has an all-zero hash.
+ */
+export function blameHeader(line: string): { commit: string | null; line: number } | undefined {
+  const header = /^([0-9a-f]{40}|[0-9a-f]{64}) \d+ (\d+)/.exec(line);
+  if (!header) return undefined;
+  return { commit: /^0+$/.test(header[1]) ? null : header[1], line: Number(header[2]) };
+}
