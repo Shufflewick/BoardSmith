@@ -16,7 +16,7 @@
  * restart or leave the game — the caller (GameShell) hides the card and
  * returns focus to the board.
  */
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import { seatInk } from '../utils/color-contrast';
 
@@ -58,13 +58,12 @@ function winnerInk(color?: string): string {
   return seatInk(color, 'GameOverCard').ink;
 }
 
-const { open: openTrap, close: closeTrap, handleKeydown } = useFocusTrap(cardRef, {
+const { open: openTrap, handleKeydown } = useFocusTrap(cardRef, {
   escapeToClose: true,
   onClose: () => emit('dismiss'),
 });
 
 onMounted(() => openTrap());
-onBeforeUnmount(() => closeTrap());
 
 // ---------------------------------------------------------------------------
 // Shape set (mirrors PlayersPanel.vue, IA-06): seat index → shape class.

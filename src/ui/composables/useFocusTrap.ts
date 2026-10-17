@@ -15,11 +15,14 @@
  * `inert` on background siblings is the only mechanism that prevents Tab from
  * escaping the dialog for keyboard-only users.
  *
+ * The trap closes itself when its owning scope (the component) is disposed,
+ * so callers need no unmount cleanup.
+ *
  * GameOverCard usage (D10):
  *   useFocusTrap(dialogRef, { escapeToClose: true, onClose: () => emit('dismiss') })
  *   → Tab stays trapped; Escape dismisses the card (same as the close button).
  */
-import { nextTick, type Ref } from 'vue';
+import { nextTick, onScopeDispose, type Ref } from 'vue';
 
 export interface FocusTrapOptions {
   /** Whether pressing Escape calls onClose. Defaults to true. */
@@ -87,6 +90,11 @@ export function useFocusTrap(
     removeSiblingInert();
     previouslyFocused?.focus();
   }
+
+  // An owner that unmounts while open (ControlsMenu, #862) must not leave the app inert.
+  onScopeDispose(() => {
+    if (_inertRoot) close();
+  });
 
   // --------------------------------------------------------------------------
   // handleKeydown() — Tab trap + Escape gate

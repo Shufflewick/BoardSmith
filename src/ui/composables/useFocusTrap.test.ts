@@ -12,7 +12,7 @@
  *   - open() applies inert to sibling elements; close() removes it
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { ref, nextTick } from 'vue';
+import { ref, nextTick, effectScope } from 'vue';
 import { useFocusTrap } from './useFocusTrap.js';
 
 function makeKeyEvent(key: string, shiftKey = false): KeyboardEvent {
@@ -265,5 +265,20 @@ describe('useFocusTrap', () => {
     close();
     // Cleanup must use _inertRoot (not dialogRef) so inert is removed even with null ref
     expect(sibling.hasAttribute('inert')).toBe(false);
+  });
+
+  it('disposing the owning scope while open removes inert (#862)', () => {
+    const app = document.createElement('div');
+    app.id = 'app';
+    document.body.appendChild(app);
+    const dialog = appendDialog('<button>OK</button>');
+
+    const scope = effectScope();
+    const trap = scope.run(() => useFocusTrap(ref(dialog), { onClose: vi.fn() }))!;
+    trap.open();
+    expect(app.hasAttribute('inert')).toBe(true);
+
+    scope.stop();
+    expect(app.hasAttribute('inert')).toBe(false);
   });
 });
