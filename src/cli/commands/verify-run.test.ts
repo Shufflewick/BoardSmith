@@ -374,10 +374,13 @@ describe('verifyRunRecordCommand / verifyRunStatusCommand — ledger', () => {
   });
 
   it('L9: the repair the fences error advises restores a working run (#1006)', async () => {
-    const { project, runId } = await initAndStage();
+    const { project, runId, stagingAbs } = await initAndStage();
+    await verifyRunRecordCommand({ project, runId, unit: '03-setup', slice: '03-setup.md', json: true });
     execSync('git init', { cwd: project, stdio: 'ignore' });
     execSync('git add -A', { cwd: project, stdio: 'ignore' });
     execSync('git -c user.email=t@t -c user.name=t commit -m run', { cwd: project, stdio: 'ignore' });
+    await fs.writeFile(join(stagingAbs, '07-turn.md'), 'staged turn content\n');
+    await verifyRunRecordCommand({ project, runId, unit: '07-turn', slice: '07-turn.md', json: true });
     const ledgerAbs = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'RUN.md');
     await fs.writeFile(ledgerAbs, '# Verify Run Ledger\n\nno fences here\n');
 
@@ -388,10 +391,12 @@ describe('verifyRunRecordCommand / verifyRunStatusCommand — ledger', () => {
     expect(message).not.toMatch(/verify-run-init --run-id/);
     const advised = message.match(/`(git restore [^`]+)`/)?.[1];
     expect(advised).toBeDefined();
+    expect(message).toMatch(/drops every slice recorded since that commit/);
     execSync(advised!, { cwd: project, stdio: 'ignore' });
 
+    // The committed record comes back; the one made after the commit is gone, as the message says.
     const status = await verifyRunStatusCommand({ project, runId, json: true });
-    expect(status.count).toBe(0);
+    expect(status.recorded).toEqual(['03-setup']);
   });
 });
 

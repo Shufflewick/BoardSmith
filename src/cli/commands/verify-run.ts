@@ -409,8 +409,11 @@ export function locateFences(
         `This file is written by \`boardsmith verify-run-init\`/\`verify-run-record\`, never by\n` +
         `hand, and re-running verify-run-init with this run's id leaves it as it is.\n` +
         `From the project directory, restore the committed copy with \`git restore ${relLedgerPath}\`,\n` +
-        `then re-run this command. If it was never committed, start a new run with\n` +
-        `\`boardsmith verify-run-init\` (no --run-id) and stage its slices again.`,
+        `then re-run this command. The restore drops every slice recorded since that commit:\n` +
+        `\`boardsmith verify-run-status\` no longer lists those units as recorded, and lists any range\n` +
+        `completed since then as pending, so record them again with \`boardsmith verify-run-record\`.\n` +
+        `If it was never committed, start a new run with \`boardsmith verify-run-init\` (no --run-id)\n` +
+        `and stage its slices again.`,
     );
   }
   return { beginIdx, endIdx };
