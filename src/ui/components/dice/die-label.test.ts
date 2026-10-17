@@ -29,4 +29,9 @@ describe('dieAriaLabel', () => {
     expect(dieAriaLabel(10, 10, undefined, true)).toBe('d10 showing 9');
     expect(dieAriaLabel(10, 10)).toBe('d10 showing 10');
   });
+
+  it('says a never-rolled die (value 0) has no face yet (#892)', () => {
+    expect(dieAriaLabel(6, 0)).toBe('d6 not rolled yet');
+    expect(dieAriaLabel(6, 0, ['ash', 'bone'])).toBe('d6 not rolled yet');
+  });
 });

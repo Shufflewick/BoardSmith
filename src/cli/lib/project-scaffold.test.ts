@@ -15,10 +15,10 @@ import {
   tableUiFiles,
   generateA11yExampleTestTs,
   generateTsConfig,
-  getDependencyPaths,
-  getMonorepoRoot,
+  boardsmithDependencySpec,
   type ProjectConfig,
 } from './project-scaffold.js';
+import { boardsmithPackageRoot } from './boardsmith-version.js';
 import {
   generateGameTs,
   generateElementsTs,
@@ -70,19 +70,11 @@ describe('generateAppVue', () => {
 
 describe('generateUisTs — the single source of truth for a game\'s UIs', () => {
   it('auto default: auto-UI ships, the custom stub is dev-only', () => {
-    const out = generateUisTs(config);
+    const out = generateUisTs();
     expect(out).toContain("import { defineGameUIs, defaultUI, devUI } from 'boardsmith/ui'");
     expect(out).toContain('Auto: defaultUI(AutoUI)');
     expect(out).toContain("import AutoUI from 'boardsmith/ui/auto-ui'");
     expect(out).toContain("Custom: devUI(() => import('./components/GameTable.vue'))");
-  });
-
-  it('custom ui path: the custom board ships, and the auto-UI is not listed (GameShell adds it in dev)', () => {
-    const out = generateUisTs({ ...config, ui: './ui/components/GameTable.vue' });
-    expect(out).toContain('GameTable: defaultUI(GameTable)');
-    expect(out).toContain("import GameTable from './ui/components/GameTable.vue'");
-    expect(out).not.toContain('auto-ui');
-    expect(out).not.toMatch(/\bAuto\b:/);
   });
 
   // AutoUI must come from the `boardsmith/ui/auto-ui` subpath, never the main
@@ -91,18 +83,16 @@ describe('generateUisTs — the single source of truth for a game\'s UIs', () =>
   // survives JS tree-shaking — which shipped the auto-UI stylesheet to every
   // custom-UI game (SHIP-02).
   it('reaches AutoUI through the auto-ui subpath, never the main barrel', () => {
-    const out = generateUisTs(config);
+    const out = generateUisTs();
     expect(out).toContain("'boardsmith/ui/auto-ui'");
     expect(out).not.toMatch(/AutoUI[^']*from 'boardsmith\/ui'/);
   });
 
-  it('marks exactly one UI as defaultUI in every generated variant', () => {
-    for (const out of [generateUisTs(config), generateUisTs({ ...config, ui: './x/Y.vue' })]) {
-      // Match the call site, not the prose in the file's doc comment. The
-      // shipped board is passed as a component (eager), never as a loader.
-      expect(out.match(/defaultUI\([A-Za-z]/g)).toHaveLength(1);
-      expect(out).not.toMatch(/defaultUI\(\(\) =>/);
-    }
+  it('marks exactly one UI as defaultUI, passed an eager component, not a loader', () => {
+    const out = generateUisTs();
+    // Match the call site, not the prose in the file's doc comment.
+    expect(out.match(/defaultUI\([A-Za-z]/g)).toHaveLength(1);
+    expect(out).not.toMatch(/defaultUI\(\(\) =>/);
   });
 });
 
@@ -149,34 +139,30 @@ describe('generateBoardsmithJson', () => {
   });
 });
 
-describe('getDependencyPaths — local-dev boardsmith link (issue 142)', () => {
-  // This suite runs FROM the monorepo, so the local-dev branch is the one under test.
-  const monorepoRoot = getMonorepoRoot();
-  // The checkout's directory name, not the literal string "BoardSmith". A git
-  // worktree is a checkout under a different name, and hardcoding the name made
-  // these two cases fail in every worktree while saying nothing about the code.
-  const rootName = monorepoRoot === null ? 'BoardSmith' : basename(monorepoRoot);
+describe('boardsmithDependencySpec from a checkout (issue 142)', () => {
+  // This suite runs FROM a checkout, which is the package root the link points at.
+  const root = boardsmithPackageRoot();
+  // The checkout's directory name, not the literal string "BoardSmith": a git
+  // worktree is a checkout under a different name.
+  const rootName = basename(root);
 
   it('emits a path relative to the project, never one carrying a home directory', () => {
-    expect(monorepoRoot).not.toBeNull();
-    const projectPath = join(monorepoRoot as string, '..', 'BoardSmithGames', 'my-game');
-    const deps = getDependencyPaths(projectPath);
+    const projectPath = join(root, '..', 'BoardSmithGames', 'my-game');
+    const spec = boardsmithDependencySpec(projectPath);
 
-    expect(deps.isLocalDev).toBe(true);
-    const linked = deps.boardsmith.replace(/^file:/, '');
+    const linked = spec.replace(/^file:/, '');
     expect(isAbsolute(linked)).toBe(false);
-    expect(deps.boardsmith).toBe(`file:../../${rootName}`);
+    expect(spec).toBe(`file:../../${rootName}`);
   });
 
-  it('resolves from the project directory back to the monorepo root', () => {
-    const projectPath = join(monorepoRoot as string, '..', 'elsewhere', 'nested', 'game');
-    const deps = getDependencyPaths(projectPath);
-    const linked = deps.boardsmith.replace(/^file:/, '');
-    expect(resolve(projectPath, linked)).toBe(resolve(monorepoRoot as string));
+  it('resolves from the project directory back to the package root', () => {
+    const projectPath = join(root, '..', 'elsewhere', 'nested', 'game');
+    const linked = boardsmithDependencySpec(projectPath).replace(/^file:/, '');
+    expect(resolve(projectPath, linked)).toBe(resolve(root));
   });
 
   it('puts the same relative path into the scaffolded package.json', () => {
-    const projectPath = join(monorepoRoot as string, '..', 'BoardSmithGames', 'my-game');
+    const projectPath = join(root, '..', 'BoardSmithGames', 'my-game');
     const pkg = JSON.parse(generatePackageJson(config, projectPath));
     expect(pkg.dependencies.boardsmith).toBe(`file:../../${rootName}`);
   });
@@ -417,6 +403,18 @@ describe('generateGameTableVue', () => {
   it('has "start here" guidance for custom UI authors', () => {
     const out = generateGameTableVue();
     expect(out.toLowerCase()).toContain('start here');
+  });
+
+  // validate refuses a boardsmith.json "ui" key; the UI registry is the one place (#850).
+  it('tells authors to move defaultUI() in src/ui/uis.ts, not to add a boardsmith.json "ui" key', () => {
+    const out = generateGameTableVue();
+    expect(out).toContain('src/ui/uis.ts');
+    expect(out).toContain('defaultUI()');
+    expect(out).not.toContain('boardsmith.json');
+    expect(out).not.toMatch(/"ui":/);
+    // The swap leaves AutoUI and devUI unused; a complete instruction says to drop them.
+    expect(out).toMatch(/import AutoUI/);
+    expect(out).toMatch(/devUI/);
   });
 });
 

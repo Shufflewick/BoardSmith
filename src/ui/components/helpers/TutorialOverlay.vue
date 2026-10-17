@@ -27,7 +27,7 @@
  *
  * Security:
  *  - T-105-05: annotation text rendered via Vue text interpolation only (never raw HTML).
- *  - T-105-06: attribute selectors built via CSS.escape(); queries scoped to document.
+ *  - T-105-06: attribute selectors built via escapeCssString (buildSelector); queries scoped to document.
  *  - T-105-07: ring is pointer-events:none — decorative, never intercepts input.
  *
  * Accessibility (UI-SPEC §4):

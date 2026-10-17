@@ -27,7 +27,6 @@ import { mount } from '@vue/test-utils';
 import ActionPanel from './ActionPanel.vue';
 import { splitAnchoredChoices } from './action-panel-helpers.js';
 import type { ChoiceWithRefs } from '../../composables/useActionControllerTypes.js';
-import { DISABLED_TOOLTIP_ID } from '../../composables/useDisabledReasonTooltip.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 import { stubActionController } from './action-panel-controller.test-helper.js';
 import {
@@ -463,8 +462,9 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
     const btn = wrapper.find('[data-bs-action="build"]');
     expect(btn.attributes('aria-disabled')).toBe('true');
     expect(btn.attributes('data-bs-disabled-reason')).toBe('You need 3 wood; you have 1.');
-    // Points at the shared tooltip, so a screen reader reads the reason on focus.
-    expect(btn.attributes('aria-describedby')).toBe(DISABLED_TOOLTIP_ID);
+    // Described by a node holding the reason, there whether or not the tooltip shows (#865).
+    const describedById = btn.attributes('aria-describedby')!;
+    expect(document.getElementById(describedById)?.textContent).toBe('You need 3 wood; you have 1.');
     // Never the native attribute: that would drop the button out of the tab
     // order and take the reason with it.
     expect(btn.attributes('disabled')).toBeUndefined();
@@ -910,6 +910,28 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
     await adds[2]!.trigger('click');
     expect(appendListEntry).toHaveBeenCalledWith('space', 's2');
     expect(fill).not.toHaveBeenCalled();
+  });
+
+  // #934: a screen reader hears the square as well as the display text.
+  const moveHere: ChoiceWithRefs[] = [
+    { value: 'e4', display: 'Move here', refs: [{ ref: { notation: 'e4' }, role: 'target' }] },
+    { value: 'pass', display: 'Pass' },
+  ];
+
+  it('names the square in a multi-select checkbox label', () => {
+    const wrapper = mountSpacePick(moveHere, { multiSelect: { min: 1, max: 2 } });
+
+    const boxes = wrapper.findAll('.multi-select-choice input');
+    expect(boxes.map(b => b.attributes('aria-label'))).toEqual(['Move here (e4)', 'Pass']);
+    expect(wrapper.findAll('.multi-select-choice').map(o => o.text())).toEqual(['Move here', 'Pass']);
+  });
+
+  it('names the square in an ordered-list Add label', () => {
+    const wrapper = mountSpacePick(moveHere, { orderedList: { min: 1, max: 2 } });
+
+    const adds = wrapper.findAll('.ordered-list-add');
+    expect(adds.map(b => b.attributes('aria-label'))).toEqual(['Add Move here (e4)', 'Add Pass']);
+    expect(adds.map(b => b.text())).toEqual(['Move here', 'Pass']);
   });
 });
 

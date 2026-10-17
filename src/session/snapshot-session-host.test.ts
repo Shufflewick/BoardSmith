@@ -338,7 +338,7 @@ describe('SnapshotSessionHost', () => {
       expect(calls[0]).toMatch(/will not try again until the game changes/);
     });
 
-    it.each(['undo', 'debugRewind'] as const)(
+    it.each(['undo', 'debugRewind', 'restoreEarlier'] as const)(
       'pumps the bot after a %s, so a restore landing on a bot seat does not stall the table',
       async (opType) => {
         // A restore can put the game on a bot seat's turn. Nothing else wakes
@@ -371,7 +371,7 @@ describe('SnapshotSessionHost', () => {
         await host.start();
         botCallCount = 0; // start() pumps once on its own — measure only the restore.
 
-        await host.handleOp(1, { type: opType, player: 1, actionIndex: 0 } as Op);
+        await host.handleOp(1, { type: opType, player: 1, actionIndex: 0, snapshot: {} } as Op);
         await host.settled();
 
         expect(botCallCount).toBeGreaterThan(0);

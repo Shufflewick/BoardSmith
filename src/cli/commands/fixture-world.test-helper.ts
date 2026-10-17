@@ -126,6 +126,7 @@ async function startWorldHost(fixture: string, displayName: string, holdings: Ho
   await startWorldDevServer({
     cwd: fixture,
     uiPath: fixture,
+    rulesDir: rulesPath,
     runtime: await holdings.acquire(() => loadWorldRuntime(rulesPath, tempDir, 'standalone'), () => []),
     displayName,
     context: 'standalone',

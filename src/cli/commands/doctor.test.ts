@@ -315,6 +315,18 @@ describe('boardsmith doctor', () => {
     expect(process.exitCode).toBeUndefined();
   });
 
+  it.each(['.boardsmith', '/.boardsmith/', '/.boardsmith'])(
+    'accepts %s, which git applies the same as .boardsmith/ (#846)',
+    async (line) => {
+      const projectDir = await project({ '.gitignore': `node_modules/\n${line}\n` });
+
+      const result = await doctorCommand({ project: projectDir });
+
+      expect(result.findings).toEqual([]);
+      expect(process.exitCode).toBeUndefined();
+    },
+  );
+
   it('--json emits the machine-readable result and no human report', async () => {
     const projectDir = await project({ 'SKETCH.md': '# sketch\n' });
 

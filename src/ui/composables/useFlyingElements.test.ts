@@ -186,6 +186,87 @@ describe('useFlyingElements', () => {
         expect.objectContaining({ kind: 'fly', element: '42', from: 'opponentHand', to: 'myHand' })
       );
     });
+
+    it('does not fly from a stale container after the element passed through an untracked one (#867)', async () => {
+      const handEl = makeContainer();
+      const cribEl = makeContainer();
+      vi.spyOn(handEl, 'getBoundingClientRect').mockReturnValue(makeRect({ width: 60, height: 84 }));
+      vi.spyOn(cribEl, 'getBoundingClientRect').mockReturnValue(makeRect({ left: 300, width: 60, height: 84 }));
+      const card: AutoWatchGameElement = { id: 42, name: 'card' };
+      const handGameEl: AutoWatchGameElement = { id: 1, children: [card] };
+      const tableGameEl: AutoWatchGameElement = { id: 3, children: [] };
+      const cribGameEl: AutoWatchGameElement = { id: 2, children: [] };
+      const gameViewRef = ref<AutoWatchGameElement | null>(null);
+      const view = () => ({ id: 0, children: [{ ...handGameEl }, { ...tableGameEl }, { ...cribGameEl }] });
+
+      useFlyingElements({
+        autoWatch: {
+          gameView: () => gameViewRef.value,
+          containers: [
+            { ref: ref(handEl), name: 'hand', element: () => handGameEl },
+            { ref: ref(cribEl), name: 'crib', element: () => cribGameEl },
+          ],
+          getElementData: () => ({}),
+        },
+      });
+      enableAnimationTestMode();
+
+      gameViewRef.value = view();
+      await nextTick();
+
+      // hand -> untracked table
+      handGameEl.children = [];
+      tableGameEl.children = [card];
+      gameViewRef.value = view();
+      await nextTick();
+
+      // table -> crib: no known source, so no flight from the hand
+      tableGameEl.children = [];
+      cribGameEl.children = [card];
+      gameViewRef.value = view();
+      await nextTick();
+
+      // crib -> hand: a real tracked move, so the watcher has demonstrably run
+      cribGameEl.children = [];
+      handGameEl.children = [card];
+      gameViewRef.value = view();
+      await nextTick();
+      await waitFor(() => getAnimationTrace().length > 0);
+
+      expect(getAnimationTrace()).toEqual([
+        expect.objectContaining({ kind: 'fly', element: '42', from: 'crib', to: 'hand' }),
+      ]);
+    });
+  });
+
+  describe('autoWatch work per update (#868)', () => {
+    /** Reads of the hand container's children during one gameView update with `cardCount` cards in it. */
+    async function handChildReadsPerUpdate(cardCount: number): Promise<number> {
+      const cards: AutoWatchGameElement[] = Array.from({ length: cardCount }, (_, i) => ({ id: 100 + i }));
+      let reads = 0;
+      const handGameEl = { id: 1 } as AutoWatchGameElement;
+      Object.defineProperty(handGameEl, 'children', { get: () => { reads++; return cards; } });
+      const gameViewRef = ref<AutoWatchGameElement | null>(null);
+      useFlyingElements({
+        autoWatch: {
+          gameView: () => gameViewRef.value,
+          containers: [{ ref: ref(makeContainer()), name: 'hand', element: () => handGameEl }],
+          getElementData: () => ({}),
+        },
+      });
+      gameViewRef.value = { id: 0, children: [handGameEl] };
+      await nextTick();
+      reads = 0;
+      gameViewRef.value = { id: 0, children: [handGameEl] };
+      await nextTick();
+      return reads;
+    }
+
+    it('reads a container a fixed number of times per update, however many elements it holds', async () => {
+      const small = await handChildReadsPerUpdate(1);
+      expect(small).toBeGreaterThan(0);
+      expect(await handChildReadsPerUpdate(50)).toBe(small);
+    });
   });
 
   describe('test mode - manual fly()', () => {
@@ -335,6 +416,34 @@ describe('useFlyingElements', () => {
       expect(getAnimationTrace()).toHaveLength(0);
 
       prefersReducedMotion.value = false;
+    });
+  });
+
+  describe('flyOnAppear ids (#868)', () => {
+    it('two flights started in the same millisecond keep separate ghosts', async () => {
+      const rafQueue: FrameRequestCallback[] = [];
+      vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => rafQueue.push(cb));
+      vi.stubGlobal('cancelAnimationFrame', vi.fn());
+      vi.spyOn(Date, 'now').mockReturnValue(1_000);
+      const sourceEl = makeContainer();
+      const targetEl = makeContainer();
+      vi.spyOn(sourceEl, 'getBoundingClientRect').mockReturnValue(makeRect({ width: 60, height: 84 }));
+      vi.spyOn(targetEl, 'getBoundingClientRect').mockReturnValue(makeRect({ left: 200, width: 60, height: 84 }));
+
+      const { flyOnAppear, flyingElements } = useFlyingElements({ duration: 50, holdDuration: 0 });
+      const first = ref<{ rank: string } | null>(null);
+      const second = ref<{ rank: string } | null>(null);
+      for (const element of [first, second]) {
+        flyOnAppear({ element, sourceRef: ref(sourceEl), targetRef: ref(targetEl), getElementData: (el) => ({ rank: el.rank }) });
+      }
+      first.value = { rank: 'A' };
+      second.value = { rank: 'K' };
+      await nextTick();
+      expect(flyingElements.value).toHaveLength(2);
+
+      // Finish only the first flight; the second ghost must stay.
+      rafQueue[0](performance.now() + 10_000);
+      expect(flyingElements.value).toHaveLength(1);
     });
   });
 

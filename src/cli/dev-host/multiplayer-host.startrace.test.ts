@@ -169,8 +169,7 @@ describe('MultiplayerHost — D15 disconnect-mid-startGame-await race (DEVHOST-0
 
   it('NEGATIVE CONTROL: the FOLLOWER disconnecting is NOT bot-covered — follow-mode persists across reloads and keeps bot paused', async () => {
     const { host, graces } = makeRaceHost(null);
-    await host.handleMessage('A', { type: 'hello' }); // A -> seat 1
-    await host.handleMessage('B', { type: 'join', seat: 2, name: 'B' }); // B -> seat 2 (human)
+    await host.handleMessage('A', { type: 'hello' }); // A -> seat 1, alone at the table (#877)
     await host.handleMessage('A', { type: 'follow', enabled: true });
 
     // A page reload / HMR drops the follower's socket. Follow-mode deliberately

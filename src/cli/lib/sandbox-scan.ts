@@ -10,13 +10,14 @@
  * exactly one implementation of these guardrails — no duplicated regex scanners.
  */
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { Linter } from 'eslint';
 // Namespace import: @typescript-eslint/parser has no default export under
 // native ESM, so `import parser from ...` resolves to undefined.
 import * as tsParser from '@typescript-eslint/parser';
 import plugin from '../../eslint-plugin/index.js';
+import { SOURCE_EXTENSIONS, collectSourceFiles } from './source-files.js';
 
 export interface SandboxViolation {
   /** Path relative to the project root. */
@@ -35,7 +36,7 @@ export interface SandboxViolation {
  */
 export const SANDBOX_LINT_CONFIG: Linter.Config[] = [
   {
-    files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '**/*.vue'],
+    files: SOURCE_EXTENSIONS.map((ext) => `**/*.${ext}`),
     languageOptions: {
       // The parser object is passed directly, so ESLint never has to load the
       // TypeScript plugin from disk — it works whether the CLI runs from source
@@ -71,26 +72,6 @@ function extractVueScript(content: string): string {
   }
 
   return out.join('\n');
-}
-
-function collectSourceFiles(dir: string, files: string[] = []): string[] {
-  if (!existsSync(dir)) return files;
-
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
-
-    const fullPath = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      collectSourceFiles(fullPath, files);
-      continue;
-    }
-    if (entry.name.endsWith('.d.ts')) continue;
-    if (/\.(ts|tsx|js|jsx|vue)$/.test(entry.name)) {
-      files.push(fullPath);
-    }
-  }
-
-  return files;
 }
 
 /**
