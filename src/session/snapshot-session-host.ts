@@ -88,6 +88,16 @@ function botMoveOp(
   return { type: 'action', actionName, player, args, boundaryKey };
 }
 
+/** The longest pause between demo moves; past an hour a learner wants pause, not a slower speed. */
+const MAX_DEMO_DELAY_MS = 3_600_000;
+
+/** Why a client's demo `delay` cannot pace the demo, or `null` when it can. */
+function demoDelayRefusal(delay: unknown): string | null {
+  if (Number.isInteger(delay) && (delay as number) >= 0 && (delay as number) <= MAX_DEMO_DELAY_MS) return null;
+  const shown = typeof delay === 'number' ? String(delay) : JSON.stringify(delay);
+  return `The demo delay must be a whole number of milliseconds from 0 to ${MAX_DEMO_DELAY_MS}, but it is ${shown}.`;
+}
+
 /** Whether `op`, which `res` answered with success, ended the acting seat's move. */
 function completesAction(op: Op, res: OpResult): boolean {
   return closesSeat(op) || ('actionComplete' in res && res.actionComplete === true);
@@ -572,6 +582,9 @@ export class SnapshotSessionHost {
   //   promise synchronously — guarantees no timer survives after demoStop (CLAUDE.md).
   private demoAbort = false;
   private readonly MAX_DEMO_MOVES = 200;
+  // Step back reviews the last few moves, and each entry is a whole snapshot, so
+  // holding all 200 moves' worth would keep ten times the memory for no use.
+  private readonly MAX_DEMO_HISTORY = 20;
 
   // ── Live demo playback controls (issue R-09) ───────────────────────────────
   // demoDelay: inter-move pacing in ms (speed control; mutable mid-run).
@@ -579,7 +592,8 @@ export class SnapshotSessionHost {
   // demoStepConsume: one-shot — released the gate for a single move; re-pauses after.
   // demoRewound: set by 'back' — tells the loop to re-suggest from the restored
   //   snapshot instead of executing the now-stale narrated move.
-  // demoHistory: pre-move snapshots so 'back' can rewind one move at a time.
+  // demoHistory: pre-move snapshots so 'back' can rewind one move at a time,
+  //   the last MAX_DEMO_HISTORY only (each is a whole game).
   // _demoWake: resolves the current pace-gate wait (woken by any control op / stop).
   private demoDelay = 1200;
   private demoPaused = false;
@@ -1050,6 +1064,10 @@ export class SnapshotSessionHost {
     // because they need the broadcast adapter and a cancellable async lifetime.
     // demoStart: fire-and-forget runDemoLoop; return minimal envelope immediately.
     // demoStop: set demoAbort flag; the loop's finally block broadcasts cleanup.
+    if ((op.type === 'demoStart' || op.type === 'demoControl') && op.delay !== undefined) {
+      const refusal = demoDelayRefusal(op.delay);
+      if (refusal !== null) return { success: false, error: refusal, category: 'protocol' };
+    }
     if (op.type === 'demoStart') {
       // Fail-loud: teaching features locked out by the host.
       if (this.adapters.teachingDisabled) {
@@ -1063,7 +1081,7 @@ export class SnapshotSessionHost {
           level: this.botSeats[0]?.level,
         }));
         // Reset playback controls for a fresh run.
-        this.demoDelay = typeof op.delay === 'number' ? op.delay : 1200;
+        this.demoDelay = op.delay ?? 1200;
         this.demoPaused = false;
         this.demoStepConsume = false;
         this.demoRewound = false;
@@ -1083,7 +1101,7 @@ export class SnapshotSessionHost {
     if (op.type === 'demoControl') {
       // No-op if no demo is running (the control bar only renders while running).
       if (this.demoRunning) {
-        if (typeof op.delay === 'number') this.demoDelay = op.delay;
+        if (op.delay !== undefined) this.demoDelay = op.delay;
         switch (op.control) {
           case 'pause':
             this.demoPaused = true;
@@ -1867,6 +1885,7 @@ export class SnapshotSessionHost {
       this.demoHistory.pop(); // fail-clean: undo the history push
       return 'failed';
     }
+    if (this.demoHistory.length > this.MAX_DEMO_HISTORY) this.demoHistory.shift();
     return 'moved';
   }
 
