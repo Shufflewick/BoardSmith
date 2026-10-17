@@ -136,6 +136,9 @@ export interface WorldSeatView {
   readonly presence: readonly number[];
 }
 
+/** Drain batches one `advanceClock` may fire before it calls the world stuck rather than behind. */
+const ADVANCE_CLOCK_MAX_ROUNDS = 1_000;
+
 /**
  * A clock a test moves by hand.
  *
@@ -410,9 +413,24 @@ export class TestWorld {
       );
     }
     this.#clock.set(this.#clock.now() + byMs);
-    const armed = this.#clock.armedAt;
-    if (armed !== null && armed <= this.#clock.now()) await this.#clock.fireArmed();
+    // One fire is one drain batch; a world still behind re-arms for now, so fire until it is not.
+    for (let round = 0; this.#isArmedAndDue(); round++) {
+      if (round === ADVANCE_CLOCK_MAX_ROUNDS) {
+        throw new Error(
+          `Events are still due after ${ADVANCE_CLOCK_MAX_ROUNDS} rounds of draining, so advanceClock stopped ` +
+            'rather than spin. A handler is probably scheduling another event at zero delay every time it ' +
+            'runs; give that schedule a delay, or stop it rescheduling itself.',
+        );
+      }
+      await this.#clock.fireArmed();
+      await this.#world.settled();
+    }
     await this.#world.settled();
+  }
+
+  #isArmedAndDue(): boolean {
+    const armed = this.#clock.armedAt;
+    return armed !== null && armed <= this.#clock.now();
   }
 
   /**
