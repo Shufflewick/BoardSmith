@@ -309,11 +309,19 @@ async function runWalk(
   const walk = started.spawn([join(playwrightTestDir(), 'cli.js'), 'test', '--config', configPath], copy, env);
   walk.child.stdout?.on('data', (chunk: Buffer) => chunk.toString().split('\n').filter(Boolean).forEach(log));
   const [code] = (await once(walk.child, 'exit')) as [number | null];
-  const report = await fs
-    .readFile(join(work, 'report.json'), 'utf-8')
-    .then((text) => JSON.parse(text) as PlaywrightReport)
-    .catch(() => undefined);
-  return verdict(report, code, walk.output());
+  return verdict(await readPlaywrightReport(join(work, 'report.json')), code, walk.output());
+}
+
+/** The report a walk wrote at `path`, or undefined when it wrote none or only part of one. */
+export async function readPlaywrightReport(path: string): Promise<PlaywrightReport | undefined> {
+  const text = await readIfExists(path, (file) => fs.readFile(file, 'utf-8'));
+  if (text === undefined) return undefined;
+  try {
+    return JSON.parse(text) as PlaywrightReport;
+  } catch {
+    // A walk cut short can leave its report half-written; the run's own output then says what happened.
+    return undefined;
+  }
 }
 
 /** Why the project has no smoke test to run, or undefined when it has one. */

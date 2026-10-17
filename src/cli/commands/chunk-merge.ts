@@ -83,7 +83,7 @@ import { besideAnyProblems, pairProblems, readSketchChunks } from './parallel-ch
 import { appendCrossChunkEntry, changedSide, crossReferences } from './cross-chunk.js';
 import { takeOsLock } from '../lib/os-lock.js';
 import { onlyTestCollectionChanged } from '../lib/test-config-edit.js';
-import { readIfExists } from '../lib/read-if-exists.js';
+import { readIfExists, readListedText } from '../lib/read-if-exists.js';
 
 interface ChunkMergeOptions {
   /** The chunk's branch. Defaults to `chunk/<slug>`, the branch the dispatch contract names. */
@@ -234,13 +234,6 @@ async function keepMainLock(ctx: MergeContext): Promise<void> {
 // Allocation: provisional ids become real numbers on the combined tree
 // ---------------------------------------------------------------------------------------------
 
-async function readText(path: string): Promise<string | undefined> {
-  // A folder git lists (a submodule, a link to a folder) holds no text of its own.
-  const buffer = await readIfExists(path, async (file) => ((await fs.stat(file)).isFile() ? fs.readFile(file) : undefined));
-  if (buffer === undefined || buffer.includes(0)) return undefined;
-  return buffer.toString('utf-8');
-}
-
 /** Why a provisional id cited in file `name` after allocation stops the merge, and the fix. */
 function citationRefusal(name: string, id: string): string {
   const orExample = name.endsWith('.md') ? `, or, if it is an example rather than a citation, put it in a code span.` : '.';
@@ -287,7 +280,7 @@ async function allocate(
   const ledgers = NUMBERED_LEDGER_SPECS.map((spec) => ({ spec, path: `${ctx.prefix}${DESIGN_DIR}/${spec.file}` }));
   const files: Record<string, string> = {};
   for (const name of new Set([...ctx.changed, ...ledgers.map((l) => l.path)])) {
-    const text = await readText(join(top, name));
+    const text = await readListedText(join(top, name));
     if (text !== undefined) files[name] = text;
   }
   const { files: rewritten, mapping, problems } = allocateProvisional(files, ledgers);
