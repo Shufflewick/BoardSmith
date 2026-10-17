@@ -569,7 +569,7 @@ describe('chunkMerge: a design file one side deleted and the other edited (#825)
     const before = head();
     const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
     expect(result.merged).toBe(false);
-    expect(result.refusals).toEqual([expect.stringMatching(/conflicts in design\/rulebook\/05-market\.md/)]);
+    expect(result.refusals).toEqual([expect.stringMatching(/conflicts in .*design\/rulebook\/05-market\.md/)]);
     expect([head(), status()]).toEqual([before, '']);
   }
 
@@ -588,6 +588,15 @@ describe('chunkMerge: a design file one side deleted and the other edited (#825)
     git(worktree, 'commit', '-q', '-am', 'chunk-trading/edit market');
     git(main, 'rm', '-q', 'design/rulebook/05-market.md');
     git(main, 'commit', '-q', '-m', 'drop market');
+    await expectRefused();
+  });
+
+  it('refuses, rather than failing to read it, when both renamed it differently and git left no file there', async () => {
+    const worktree = await buildOnBranch('trading', 100);
+    git(worktree, 'mv', 'design/rulebook/05-market.md', 'design/rulebook/05-bazaar.md');
+    git(worktree, 'commit', '-q', '-m', 'chunk-trading/rename market');
+    git(main, 'mv', 'design/rulebook/05-market.md', 'design/rulebook/05-shops.md');
+    git(main, 'commit', '-q', '-m', 'rename market');
     await expectRefused();
   });
 });

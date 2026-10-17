@@ -203,7 +203,8 @@ async function resolveConflicts(ctx: MergeContext): Promise<string[]> {
   for (const name of conflicted) {
     const inDesign = name.startsWith(`${ctx.prefix}${DESIGN_DIR}/`) && name.endsWith('.md');
     const path = join(top, name);
-    const text = inDesign ? await fs.readFile(path, 'utf-8') : undefined;
+    // A rename/rename conflict leaves no file at the old path; like any conflict here, a person settles it.
+    const text = inDesign ? await fs.readFile(path, 'utf-8').catch(() => undefined) : undefined;
     const outcome = text === undefined ? undefined : resolveDesignConflicts(text);
     // Unchanged text had no markers to resolve: a modify/delete conflict, which a person must settle.
     if (!outcome || outcome.unresolved > 0 || outcome.text === text) {
