@@ -6,9 +6,10 @@
 import { cpSync, existsSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { cliSourceFile, importRuntimeBundle, toPosix } from './game-runtime.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import type { executeOp } from '../../session/index.js';
 
 const REPO = realpathSync(resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..'));
 
@@ -82,5 +83,46 @@ describe('importRuntimeBundle: one boardsmith per bundle (#696)', () => {
   it('still loads rules alone from another install, since nothing of the CLI is in that bundle', async () => {
     const module = await bundle(linkedToOtherInstall, []);
     expect(module.gameDefinition.gameType).toBe('one-engine');
+  });
+});
+
+// A game whose setup crashes on line 6 of its own rules file.
+const crashingGame = game(() => {});
+writeFileSync(
+  join(crashingGame, 'src', 'rules', 'index.ts'),
+  [
+    `import { Game } from 'boardsmith';`,
+    `class CrashGame extends Game {`,
+    `  constructor(options: any) {`,
+    `    super(options);`,
+    `    const deck: any = undefined;`,
+    `    deck.cards.length;`,
+    `  }`,
+    `}`,
+    `export const gameDefinition = { gameClass: CrashGame, gameType: 'crash', displayName: 'Crash', minPlayers: 2, maxPlayers: 2 };`,
+  ].join('\n'),
+);
+// Bundled once here, at the top, where no test timeout applies.
+const crashingRuntime = await importRuntimeBundle({
+  rulesPath: join(crashingGame, 'src', 'rules'),
+  tempDir: tempTree('boardsmith-crash-build-'),
+  name: 'crash',
+  context: 'monorepo',
+  gameOptions: undefined,
+  exports: [`export { executeOp } from 'boardsmith/session';`],
+});
+
+describe('importRuntimeBundle: a crash names the line in the game it came from (#1103)', () => {
+  it("logs the crash's stack at the game's own source line, not the bundle's", async () => {
+    const printed = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const run = crashingRuntime.executeOp as typeof executeOp;
+      const result = await run(crashingRuntime.gameDefinition, { playerCount: 2 }, null, null, { type: 'start' });
+      expect(result.success).toBe(false);
+      const crash = printed.mock.calls.flat().find((arg): arg is Error => arg instanceof Error);
+      expect(crash?.stack).toContain(`${join(realpathSync(crashingGame), 'src', 'rules', 'index.ts')}:6:`);
+    } finally {
+      printed.mockRestore();
+    }
   });
 });

@@ -350,7 +350,8 @@ export async function importRuntimeBundle(args: {
       '\n',
     ),
   );
-  const bundlePath = runtimeBundlePath(args.tempDir, args.name);
+  // The real path, so Node resolves the map's relative sources from where esbuild wrote them (macOS links /tmp and /var).
+  const bundlePath = runtimeBundlePath(realpathSync(args.tempDir), args.name);
   const redirects = args.redirects ?? new Map<string, string>();
   const redirected = new Set<string>();
 
@@ -361,6 +362,7 @@ export async function importRuntimeBundle(args: {
     format: 'esm',
     platform: 'node',
     outfile: bundlePath,
+    sourcemap: 'inline',
     logLevel: 'silent',
     plugins: [
       ...(redirects.size > 0 ? [redirectPlugin(redirects, redirected)] : []),
@@ -375,6 +377,8 @@ export async function importRuntimeBundle(args: {
     requireOneBoardsmith(args.rulesPath, Object.keys(metafile.inputs).map((input) => resolve(input)));
   }
 
+  // With the inline map, a crash in the game names its line in the game's own source, not the bundle's (#1103).
+  process.setSourceMapsEnabled(true);
   const moduleUrl = pathToFileURL(bundlePath).href;
   // The cache-bust is `load`, not `t`: Vite strips a `t=` query as its own HMR
   // timestamp, so under any Vite-based module runner (the test suite's) a `t`

@@ -1341,7 +1341,8 @@ export class MultiplayerHost {
       seedSnapshot: this.opts.seedSnapshot,
       fullHistory: true,
     };
-    let startRefused = false;
+    // Set inside the adapter, which TypeScript cannot follow, so the null is widened here.
+    let startFailure = null as OpFailure | null;
     const executeOp: ExecuteOpAdapter = async (snapshot, pendingState, op) => {
       const raw = await this.executeOp(
         op.type === 'start' ? startGameOptions : baseOptions,
@@ -1353,7 +1354,7 @@ export class MultiplayerHost {
         // by `debugOn()`, the same answer the session gets below.
         { ...hostOptions, debug: this.debugOn() },
       );
-      if (op.type === 'start' && !raw.success) startRefused = true;
+      if (op.type === 'start' && !raw.success) startFailure = raw;
       return this.commitAtGameOver(raw);
     };
 
@@ -1382,9 +1383,13 @@ export class MultiplayerHost {
       this.starting = false;
       this.phase = 'lobby';
       const reason = err instanceof Error ? err.message : String(err);
-      const message = `The game could not start (${reason}). Fix the problem, then press "New game" or reload this page.`;
-      // A start-op failure, a crash in the game's setup included, arrives as a message only; a throw from the host keeps its stack.
-      if (startRefused || !(err instanceof Error)) console.error(`[boardsmith dev] ${message}`);
+      // A crash in the game's setup was printed with its stack by executeOp, just above this line (#1103).
+      const why = startFailure?.errorCode === ErrorCode.ENGINE_ERROR
+        ? " because of an error in the game's rules. The terminal running boardsmith dev shows where."
+        : ` (${reason}).`;
+      const message = `The game could not start${why} Fix the problem, then press "New game" or reload this page.`;
+      // A refused start op carries a message only; a throw from the host keeps its stack.
+      if (startFailure !== null || !(err instanceof Error)) console.error(`[boardsmith dev] ${message}`);
       else console.error(`[boardsmith dev] ${message}`, err.stack);
       for (const clientId of this.connected) this.send(clientId, { type: 'error', message });
       return;
