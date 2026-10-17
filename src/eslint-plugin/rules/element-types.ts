@@ -44,14 +44,21 @@ export function walk(node: unknown, visit: (n: Record<string, unknown>) => void)
 }
 
 /**
- * `roots` plus every class declared in `program` that extends one of them, transitively and in
- * any declaration order.
+ * `roots`, the local name of each root imported from boardsmith under another name
+ * (`import { Card as BaseCard } from 'boardsmith'`, #1036), and every class declared in `program`
+ * that extends one of them, transitively and in any declaration order.
  */
 export function collectSubclassNames(program: unknown, roots: readonly string[]): Set<string> {
   const names = new Set<string>(roots);
   const classDecls: { name: string; superName: string | undefined }[] = [];
   walk(program, (node) => {
-    if (node.type === 'ClassDeclaration') {
+    if (node.type === 'ImportDeclaration') {
+      const source = (node.source as { value?: unknown }).value;
+      if (source !== 'boardsmith' && !(typeof source === 'string' && source.startsWith('boardsmith/'))) return;
+      for (const spec of node.specifiers as { type: string; imported?: { name?: string }; local: { name: string } }[]) {
+        if (spec.type === 'ImportSpecifier' && roots.includes(spec.imported?.name ?? '')) names.add(spec.local.name);
+      }
+    } else if (node.type === 'ClassDeclaration') {
       const id = node.id as { name?: string } | null | undefined;
       const superClass = node.superClass as { type?: string; name?: string } | null | undefined;
       if (id?.name) {
