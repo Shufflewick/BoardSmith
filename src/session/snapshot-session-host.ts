@@ -88,6 +88,13 @@ function botMoveOp(
   return { type: 'action', actionName, player, args, boundaryKey };
 }
 
+/**
+ * The most moves a demo can step back through. Step back reviews the last few
+ * moves, and each entry is a whole snapshot, so holding all 200 moves' worth
+ * would keep ten times the memory for no use.
+ */
+const MAX_DEMO_HISTORY = 20;
+
 /** The longest pause between demo moves; past an hour a learner wants pause, not a slower speed. */
 const MAX_DEMO_DELAY_MS = 3_600_000;
 
@@ -582,9 +589,6 @@ export class SnapshotSessionHost {
   //   promise synchronously — guarantees no timer survives after demoStop (CLAUDE.md).
   private demoAbort = false;
   private readonly MAX_DEMO_MOVES = 200;
-  // Step back reviews the last few moves, and each entry is a whole snapshot, so
-  // holding all 200 moves' worth would keep ten times the memory for no use.
-  private readonly MAX_DEMO_HISTORY = 20;
 
   // ── Live demo playback controls (issue R-09) ───────────────────────────────
   // demoDelay: inter-move pacing in ms (speed control; mutable mid-run).
@@ -1885,7 +1889,7 @@ export class SnapshotSessionHost {
       this.demoHistory.pop(); // fail-clean: undo the history push
       return 'failed';
     }
-    if (this.demoHistory.length > this.MAX_DEMO_HISTORY) this.demoHistory.shift();
+    if (this.demoHistory.length > MAX_DEMO_HISTORY) this.demoHistory.shift();
     return 'moved';
   }
 
