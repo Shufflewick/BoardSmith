@@ -6,6 +6,7 @@ import {
   loop,
   eachPlayer,
   actionStep,
+  simultaneousActionStep,
   type GameOptions,
 } from '../engine/index.js';
 import { playGame } from './play-game.js';
@@ -74,6 +75,26 @@ class OpenThenBidGame extends BidGame {
         maxIterations: 10,
         do: eachPlayer({ do: actionStep({ actions: ['open'] }) }),
       }),
+    });
+  }
+}
+
+/**
+ * OpenThenBidGame in one simultaneous step: a seat that has opened is offered
+ * no action, so its held follow-up 'bid' is all it has left to take.
+ */
+class SimultaneousOpenThenBidGame extends OpenThenBidGame {
+  constructor(options: GameOptions & { amount?: number; maxBid?: number }) {
+    super(options);
+    const opened = new Set<number>();
+    this.registerAction(
+      Action.create<SimultaneousOpenThenBidGame>('open').execute((_args, ctx) => {
+        opened.add(ctx.player.seat);
+        return { success: true, followUp: { action: 'bid', args: {} } };
+      }),
+    );
+    this.setFlow({
+      root: simultaneousActionStep({ actions: (_ctx, player) => (opened.has(player.seat) ? [] : ['open']) }),
     });
   }
 }
@@ -240,6 +261,26 @@ describe('playGame with policies (#556)', () => {
     );
     expect(result.completed).toBe(false);
     expect(result.error).toMatch(/greedy cannot play action 'bid': its number input 'amount' cannot be listed: it needs min, max and integer: true/);
+  });
+
+  // #911: the random policy read only the seat's actions, so it never played a held follow-up.
+  it('random plays a held follow-up', async () => {
+    const result = await playGame(
+      { gameClass: OpenThenBidGame },
+      { playerCount: 2, seed: 'open-random-bid', gameOptions: { maxBid: 3 }, policies: [random(), random()], maxActions: 10 },
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.exceededMaxActions).toBe(false);
+    expect(result.completed).toBe(true);
+  });
+
+  it('random plays a held follow-up that is the only move its seat has left', async () => {
+    const result = await playGame(
+      { gameClass: SimultaneousOpenThenBidGame },
+      { playerCount: 2, seed: 'sim-open-bid', gameOptions: { maxBid: 3 }, policies: [random(), random()], maxActions: 10 },
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.completed).toBe(true);
   });
 
   it("greedy plays a held follow-up whose args already answer its number input", async () => {
