@@ -29,7 +29,6 @@
 import { promises as fs } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import chalk from 'chalk';
-import { type WorkRole } from '../lib/agent-roles.js';
 import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { RUN_LOG_DIR, designPath } from '../lib/project-paths.js';
 import { reviewScope } from '../lib/run-log-roles.js';
@@ -50,10 +49,14 @@ export const LIGHT_REVIEW_LINES = 200;
 
 type ReviewLevel = 'none' | 'light' | 'full';
 
-/** How much review a change needs, from the role that made it and its size in changed lines. */
-export function reviewLevel(workRole: WorkRole, changedLines: number): { level: ReviewLevel; reason: string } {
-  if (workRole !== 'mechanical') {
-    return { level: 'full', reason: `work by the ${workRole} role is always reviewed in full` };
+/** How much review a change needs, from the roles of the dispatches that made it and its size in changed lines. */
+export function reviewLevel(roles: string[], changedLines: number): { level: ReviewLevel; reason: string } {
+  if (roles.length === 0) {
+    return { level: 'full', reason: 'the run log records no dispatch since the last review round, so who did the work is unknown' };
+  }
+  const others = [...new Set(roles.filter((role) => role !== 'mechanical'))];
+  if (others.length) {
+    return { level: 'full', reason: `work by the ${others.join(' and ')} role${others.length > 1 ? 's' : ''} is always reviewed in full` };
   }
   const size = Number.isFinite(changedLines) ? `${changedLines} changed lines` : 'a changed binary file';
   if (changedLines <= SMALL_CHANGE_LINES) {
@@ -149,10 +152,10 @@ export async function reviewGate(options: { projectDir: string; slug: string }):
   if (result === undefined || result === 'unreadable') {
     throw new Error('The verify result for the current commit could not be read. Run `boardsmith verify` again.');
   }
-  const scope = reviewScope(await readRunLog(options.projectDir, options.slug));
+  const scope = reviewScope(await readRunLog(options.projectDir, options.slug), `design/${RUN_LOG_DIR}/${options.slug}.md`);
   const from = scope.since === undefined ? result.base.commit : await sinceCommit(options.projectDir, options.slug, scope.since, result.commit);
   const changedLines = await changedLinesBetween(options.projectDir, from, result.commit);
-  const { level, reason } = reviewLevel(scope.workRole, changedLines);
+  const { level, reason } = reviewLevel(scope.roles, changedLines);
   return { open: true, level, reason, changedLines, brief: reviewBrief(options.projectDir, options.slug, result, from) };
 }
 

@@ -85,7 +85,9 @@ npx boardsmith review-gate <slug>
 
 It reads what is under review from the chunk's run log: every round after the first covers only
 the change since the commit round N-1 reviewed, and the change counts as mechanical only when
-every dispatch logged since was. A refusal means no lens is dispatched: a failing verify goes back to the step
+every dispatch logged since was. The latest finished round of any step sets that scope, not only
+an audit round, so the first audit round covers only the change since the commit the redteam
+round reviewed. A refusal means no lens is dispatched: a failing verify goes back to the step
 that made the change, with verify's own output (`routing.md` "When a Step Fails"), never to a
 reviewer. Open, the
 command prints the review level and the brief that fills `{verifyResult}` in every template

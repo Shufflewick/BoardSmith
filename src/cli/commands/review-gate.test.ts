@@ -152,6 +152,16 @@ describe('an open gate hands the reviewer the verify result', () => {
     expect(gate.open && gate.brief).toContain(`git diff ${reviewed.slice(0, 12)}..${again.slice(0, 12)}`);
   });
 
+  it('refuses a run log whose round has no readable Verify line, naming the run log (#829)', async () => {
+    await writeFiles(project, { 'src/rules.ts': code(3, 'a') });
+    await runLog(round(1, 'abcdef123456').replace('- Verify: abcdef123456 passed', '- Verify: soon'));
+    await recordPassingVerify(project, { chunk: 'deal' });
+
+    await expect(reviewGate({ projectDir: project, slug: 'deal' })).rejects.toThrow(
+      /^design\/run-log\/deal\.md: Review Round 1 has no "- Verify: <commit> passed" line/,
+    );
+  });
+
   it('refuses a run log whose last round names a commit that is not before the one under review (#829)', async () => {
     await writeFiles(project, { 'src/rules.ts': code(3, 'a') });
     await runLog(round(1, 'abcdef123456'));
@@ -165,15 +175,22 @@ describe('an open gate hands the reviewer the verify result', () => {
 
 describe('the size rule: only a small mechanical change may skip or lighten review', () => {
   it('reviews in full whatever a role other than mechanical wrote, however small', () => {
-    expect(reviewLevel('bounded', 1).level).toBe('full');
-    expect(reviewLevel('judgement', 1).level).toBe('full');
+    expect(reviewLevel(['bounded'], 1)).toEqual({ level: 'full', reason: 'work by the bounded role is always reviewed in full' });
+    expect(reviewLevel(['judgement'], 1).level).toBe('full');
+    expect(reviewLevel(['mechanical', 'second-opinion', 'bounded'], 1).reason).toBe(
+      'work by the second-opinion and bounded roles is always reviewed in full',
+    );
+    expect(reviewLevel([], 1)).toEqual({
+      level: 'full',
+      reason: 'the run log records no dispatch since the last review round, so who did the work is unknown',
+    });
   });
 
   it('skips review of a mechanical change of at most SMALL_CHANGE_LINES, and lightens one of at most LIGHT_REVIEW_LINES', () => {
-    expect(reviewLevel('mechanical', SMALL_CHANGE_LINES).level).toBe('none');
-    expect(reviewLevel('mechanical', SMALL_CHANGE_LINES + 1).level).toBe('light');
-    expect(reviewLevel('mechanical', LIGHT_REVIEW_LINES).level).toBe('light');
-    expect(reviewLevel('mechanical', LIGHT_REVIEW_LINES + 1).level).toBe('full');
+    expect(reviewLevel(['mechanical'], SMALL_CHANGE_LINES).level).toBe('none');
+    expect(reviewLevel(['mechanical'], SMALL_CHANGE_LINES + 1).level).toBe('light');
+    expect(reviewLevel(['mechanical'], LIGHT_REVIEW_LINES).level).toBe('light');
+    expect(reviewLevel(['mechanical'], LIGHT_REVIEW_LINES + 1).level).toBe('full');
   });
 
   it('sizes the change since the last round as mechanical when the run log says every dispatch since was mechanical (#829)', async () => {
@@ -198,6 +215,7 @@ describe('the size rule: only a small mechanical change may skip or lighten revi
     await recordPassingVerify(project, { chunk: 'deal', message: 'chunk-deal/rename' });
     const gate = await reviewGate({ projectDir: project, slug: 'deal' });
     expect(gate.open && gate.level).toBe('full');
+    expect(gate.open && gate.reason).toBe('work by the second-opinion role is always reviewed in full');
 
     await runLog(round(1, before));
     await recordPassingVerify(project, { chunk: 'deal', message: 'chunk-deal/log' });
