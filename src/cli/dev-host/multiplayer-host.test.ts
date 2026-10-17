@@ -53,13 +53,14 @@ const altDef = {
   maxPlayers: 2,
 } satisfies GameDefinitionLike;
 
-function makeAltHost() {
+function makeAltHost(opts: { debug?: boolean } = {}) {
   const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
   const host = new MultiplayerHost({
     playerCount: 2,
     minPlayers: 2,
     maxPlayers: altDef.maxPlayers,
     makeSeed: () => 'alt',
+    debug: opts.debug,
     executeOp: (gameOptions, snap, pend, op, hostOptions) => executeOp(altDef, gameOptions, snap, pend, op, hostOptions),
     send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
   });
@@ -451,6 +452,20 @@ describe('MultiplayerHost — follow active seat', () => {
     expect(has('A', 'follow')).toBe(false);
     await pass('A', 'r1'); // seat 2 (B) is due now; A must not be handed it
     expect(has('A', 'init')).toBe(false);
+  });
+
+  it('#884: under --debug, a seat its player leaves while someone follows is not handed to a bot', async () => {
+    const { host, lastOfType, pass } = makeAltHost({ debug: true });
+    await host.handleMessage('A', { type: 'hello' }); // A = seat 1
+    await host.handleMessage('B', { type: 'hello' });
+    await host.handleMessage('B', { type: 'join', seat: 2 }); // B = seat 2
+    await host.handleMessage('A', { type: 'follow', enabled: true }); // --debug keeps follow open to A
+    await pass('A', 'r1'); // seat 2 is due now
+    await host.handleMessage('B', { type: 'leave' });
+    await host.settled();
+    // The follower drives seat 2 now; a bot passing it would have ended the game.
+    expect(lastOfType('A', 'game_state').isComplete).toBe(false);
+    expectFollowingSeatTwo(lastOfType);
   });
 
   it('#877: a second person sitting down ends follow-mode and tells the follower why', async () => {

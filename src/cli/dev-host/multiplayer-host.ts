@@ -922,7 +922,8 @@ export class MultiplayerHost {
     const seat = this.clientSeat.get(clientId);
     this.releaseSeat(clientId);
     if (seat !== undefined && this.phase === 'playing') {
-      this.addBotSeat(seat);
+      // A follower drives every seat, so while one follows no bot plays (#884).
+      if (this.followerClientId === null) this.addBotSeat(seat);
       this.broadcastLobby();
       this.send(clientId, this.lobbyMessage(clientId));
       this.announceRoster();
