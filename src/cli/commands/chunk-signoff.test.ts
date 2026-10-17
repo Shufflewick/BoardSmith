@@ -418,6 +418,15 @@ describe('a sign-off counts only for the chunk as it was signed (#295)', () => {
     expect((await checkSignoff(project, 'deal')).length).toBeGreaterThan(0);
   });
 
+  it('records a path with non-ASCII letters whole and reports a later change to it (#1113)', async () => {
+    const project = await makeProject([{ slug: 'deal', manifest: { 'règles/a.ts': 'v1' } }]);
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    expect(Object.keys(parseSignoff(await readChunk(project, 'deal')).record!.code)).toEqual(['règles/a.ts']);
+    await setStatusByHand(project, 'deal', 'built');
+    await fs.writeFile(join(project, 'règles/a.ts'), 'v2');
+    expect(await verifiedByHandProblems(project, 'deal')).toMatch(/règles\/a\.ts changed after it/);
+  });
+
   it('a design ledger in the manifest changing at close does not void the sign-off', async () => {
     const project = await makeProject([
       { slug: 'deal', manifest: { 'src/deal.ts': 'v1', 'DECISIONS.md': '# Decisions\n' } },
