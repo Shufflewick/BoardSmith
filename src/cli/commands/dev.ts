@@ -973,9 +973,9 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
         ? {
             persistence: {
               store: devStore.store,
-              // One dev run is one session, and the key has to be unique per
-              // session: it is what a game uses to name an APPEND without
-              // colliding with another sitting's row.
+              // The run's id: each game started in the run is handed its own
+              // session key from it, `<runKey>-<n>`, which a game uses to name
+              // an APPEND without colliding with another game's row (#883).
               runKey: `dev-${Date.now()}`,
               // Never a plausible-looking version number. A game migrating on
               // `gameVersion` must be able to tell a row a local run wrote from

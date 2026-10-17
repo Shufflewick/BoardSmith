@@ -959,7 +959,17 @@ export class MultiplayerHost {
     if (seat === undefined) return;
     const hostRequestId = String(this.nextRequest++);
     this.requestOrigin.set(hostRequestId, { clientId, requestId: msg.requestId });
-    await this.session.handleServerRequest(seat, hostRequestId, msg.op, msg.payload);
+    try {
+      await this.session.handleServerRequest(seat, hostRequestId, msg.op, msg.payload);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      this.deliverServerResponse(hostRequestId, {
+        success: false,
+        error: `The host could not run '${msg.op}' (${reason}). Check what the page sent with it.`,
+      });
+    } finally {
+      this.requestOrigin.delete(hostRequestId);
+    }
   }
 
   /**
@@ -1334,7 +1344,7 @@ export class MultiplayerHost {
       this.session = null;
       this.phase = 'lobby';
       const reason = err instanceof Error ? err.message : String(err);
-      const message = `The game could not start: ${reason} Fix the problem, then reload this page to start a game.`;
+      const message = `The game could not start (${reason}). Fix the problem, then reload this page to start a game.`;
       for (const clientId of this.connected) this.send(clientId, { type: 'error', message });
       return;
     }

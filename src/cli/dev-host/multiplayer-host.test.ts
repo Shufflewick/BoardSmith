@@ -53,15 +53,19 @@ const altDef = {
   maxPlayers: 2,
 } satisfies GameDefinitionLike;
 
-function makeAltHost(opts: { debug?: boolean } = {}) {
+function makeAltHost(opts: { debug?: boolean; playerCount?: number; failStart?: () => boolean } = {}) {
   const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
+  const playerCount = opts.playerCount ?? 2;
   const host = new MultiplayerHost({
-    playerCount: 2,
+    playerCount,
     minPlayers: 2,
-    maxPlayers: altDef.maxPlayers,
+    maxPlayers: playerCount,
     makeSeed: () => 'alt',
     debug: opts.debug,
-    executeOp: (gameOptions, snap, pend, op, hostOptions) => executeOp(altDef, gameOptions, snap, pend, op, hostOptions),
+    executeOp: (gameOptions, snap, pend, op, hostOptions) => {
+      if (op.type === 'start' && opts.failStart?.()) throw new Error('The deck is missing.');
+      return executeOp({ ...altDef, maxPlayers: playerCount }, gameOptions, snap, pend, op, hostOptions);
+    },
     send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
   });
   const to = (clientId: string) => sent.filter((e) => e.clientId === clientId).map((e) => e.msg);
@@ -172,6 +176,17 @@ describe('MultiplayerHost (always-live)', () => {
       to(clientId).filter((m) => m.type === 'server_response').map((m) => (m as any).result.success);
     expect(answers('A')).toEqual([true]);
     expect(answers('B')).toEqual([false]);
+  });
+
+  it('#878: a request the host cannot run is answered with an error and leaves nothing in flight', async () => {
+    const { host, to } = makeHost();
+    await host.handleMessage('A', { type: 'hello' });
+    // No payload: reading the action name from it throws.
+    await host.handleMessage('A', { type: 'server_request', requestId: 'r9', op: 'action', payload: undefined as any });
+    const answer = to('A').find((m) => m.type === 'server_response') as any;
+    expect(answer).toMatchObject({ requestId: 'r9', result: { success: false } });
+    expect(answer.result.error).toMatch(/could not run.*action/i);
+    expect((host as any).requestOrigin.size).toBe(0);
   });
 
   it('re-inits a seat on reconnect (same clientId) mid-game', async () => {
@@ -343,7 +358,7 @@ describe('MultiplayerHost — a restart that fails (#880)', () => {
       maxPlayers: def.maxPlayers,
       makeSeed: () => 'mp',
       executeOp: (gameOptions, snap, pend, op, hostOptions) => {
-        if (op.type === 'start' && failStart) throw new Error('setup() read an undefined deck.');
+        if (op.type === 'start' && failStart) throw new TypeError("Cannot read properties of undefined (reading 'cards')");
         return executeOp(altDef, gameOptions, snap, pend, op, hostOptions);
       },
       send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
@@ -364,7 +379,10 @@ describe('MultiplayerHost — a restart that fails (#880)', () => {
     });
     expect(to('A').some((m) => m.type === 'server_response')).toBe(false);
     expect(lastOfType('A', 'error')).toMatchObject({ message: expect.stringMatching(/no game is running.*reload/i), requestId: 'r1' });
-    expect(told.message).toMatch(/could not start.*undefined deck.*reload/i);
+    expect(told.message).toBe(
+      "The game could not start (Cannot read properties of undefined (reading 'cards')). " +
+        'Fix the problem, then reload this page to start a game.',
+    );
 
     failStart = false;
     await host.handleMessage('A', { type: 'hello' }); // the reload the message asks for
@@ -550,6 +568,36 @@ describe('MultiplayerHost — follow active seat', () => {
     // The follower drives seat 2 now; a bot passing it would have ended the game.
     expect(lastOfType('A', 'game_state').isComplete).toBe(false);
     expectFollowingSeatTwo(lastOfType);
+  });
+
+  it('#877: when a second person ends follow, the bots resume the seats the follower was covering', async () => {
+    const { host, lastOfType, pass } = makeAltHost({ playerCount: 3 });
+    await host.handleMessage('A', { type: 'hello' }); // A = seat 1; seats 2 and 3 are bots
+    await host.handleMessage('A', { type: 'follow', enabled: true });
+    await pass('A', 'r1'); // as seat 1
+    await pass('A', 'r2'); // as seat 2; seat 3 is due and its bot is paused
+    expect(lastOfType('A', 'game_state').isComplete).toBe(false);
+    await host.handleMessage('B', { type: 'hello' });
+    await host.handleMessage('B', { type: 'join', seat: 2 });
+    await host.settled();
+    expect(lastOfType('A', 'follow')).toMatchObject({ enabled: false });
+    // Seat 3's bot took its turn, the last one in the game.
+    expect(lastOfType('A', 'game_state').isComplete).toBe(true);
+  });
+
+  it('#877: a second person arriving at a table whose start failed ends follow before the next start', async () => {
+    let failStart = false;
+    const { host, lastOfType } = makeAltHost({ failStart: () => failStart });
+    await host.handleMessage('A', { type: 'hello' }); // A = seat 1
+    await host.handleMessage('A', { type: 'follow', enabled: true });
+    failStart = true;
+    await host.handleMessage('A', { type: 'restart' }); // fails: back to the lobby, A still follows
+    failStart = false;
+    await host.handleMessage('B', { type: 'hello' }); // first arrival in the lobby: seated, and the game starts
+    expect(lastOfType('A', 'follow')).toMatchObject({ enabled: false });
+    expect(lastOfType('A', 'error').message).toMatch(/follow active seat ended/i);
+    expect(lastOfType('A', 'init').seat).toBe(1);
+    expect(lastOfType('B', 'init').seat).toBe(2);
   });
 
   it('#877: a second person sitting down ends follow-mode and tells the follower why', async () => {
