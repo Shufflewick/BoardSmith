@@ -16,6 +16,7 @@
  * in what Vite does to itself.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import { EventEmitter } from 'node:events';
 import { mkdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -340,4 +341,30 @@ describe('a rules edit reloads the rules on the server (#201, #343)', () => {
     expect(events).toEqual(['start 1', 'end 1', 'start 2', 'end 2']);
     vi.restoreAllMocks();
   }, 30000);
+});
+
+describe('only a change inside the rules folder reloads the rules (#1053)', () => {
+  /** The files `reloadOnRulesEdit` hands the queue, for each change the watcher reports. */
+  function savedFor(rulesDir: string, changes: string[]): string[] {
+    const watcher = Object.assign(new EventEmitter(), { add: () => watcher });
+    const saved: string[] = [];
+    reloadOnRulesEdit({
+      vite: { watcher } as unknown as Pick<ViteDevServer, 'watcher'>,
+      rulesDir,
+      cwd: '/game',
+      queue: { saved: async (file) => void saved.push(file) },
+    });
+    for (const change of changes) watcher.emit('change', change);
+    return saved;
+  }
+
+  it('ignores a sibling folder whose name starts with the rules folder\'s', () => {
+    expect(savedFor('/game/src/rules', ['/game/src/rules-old/index.ts', '/game/src/rules/index.ts'])).toEqual([
+      join('src', 'rules', 'index.ts'),
+    ]);
+  });
+
+  it('reloads on a change reported in other letter case, which a case-insensitive disk opens as the same file', () => {
+    expect(savedFor('/game/src/rules', ['/game/SRC/Rules/index.ts'])).toEqual([join('SRC', 'Rules', 'index.ts')]);
+  });
 });

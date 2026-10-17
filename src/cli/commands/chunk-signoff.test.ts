@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { promises as fs } from 'node:fs';
+import { existsSync, promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { DESIGN_DIR, MERGE_SIGNOFFS_MD, WAIVERS_MD } from '../lib/project-paths.js';
@@ -548,11 +548,13 @@ describe('an edit to a shared file is accounted for by the chunk that made it (#
     expect((await checkSignoff(project, 'deal')).join('\n')).toContain('src/rules.ts');
   });
 
-  it('a design file named with its design/ prefix (a ledger close writes) is not code', async () => {
+  // A case-insensitive disk (macOS, Windows) opens `Design/` as `design/` (#1053).
+  const caseInsensitive = existsSync(process.cwd().toUpperCase());
+  it.each(['design/ASSETS.md', ...(caseInsensitive ? ['Design/ASSETS.md'] : [])])('a design file named with its design/ prefix (a ledger close writes), as %s, is not code', async (named) => {
     const project = await makeProject([{ slug: 'deal', manifest: { 'src/deal.ts': 'v1' } }]);
     await fs.writeFile(join(project, DESIGN_DIR, 'ASSETS.md'), '# Assets\n');
     const text = await readChunk(project, 'deal');
-    await fs.writeFile(chunkPath(project, 'deal'), text.replace('| src/deal.ts | written |', '| src/deal.ts | written |\n| design/ASSETS.md | written |'));
+    await fs.writeFile(chunkPath(project, 'deal'), text.replace('| src/deal.ts | written |', `| src/deal.ts | written |\n| ${named} | written |`));
     await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
     await fs.writeFile(join(project, DESIGN_DIR, 'ASSETS.md'), '# Assets\n- a row close added\n');
     expect(await checkSignoff(project, 'deal')).toEqual([]);

@@ -67,6 +67,7 @@ import { findChunkCommits } from '../lib/chunk-commits.js';
 import { gitOutput as git } from '../lib/git-output.js';
 import { chunkMdPath, relChunkMdPath } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
+import { isSameOrInside } from '../lib/path-inside.js';
 
 const TEST_STEP_FINDING_KINDS = Object.freeze([
   'spec-manifest-empty',
@@ -373,7 +374,7 @@ const GUARD_TEST_DIR = 'tests/guards/';
 /** Whether a manifest path names a file under `GUARD_TEST_DIR`. */
 function isGuardFile(projectDir: string, testFile: string): boolean {
   const absPath = resolveManifestPath(projectDir, testFile);
-  return absPath !== 'escapes' && absPath.startsWith(join(projectDir, GUARD_TEST_DIR));
+  return absPath !== 'escapes' && isSameOrInside(join(projectDir, GUARD_TEST_DIR), absPath);
 }
 
 /** The RED Observed finding for a row, if it has one; an exempt chunk's `none (regression)` row reads `n/a`. */

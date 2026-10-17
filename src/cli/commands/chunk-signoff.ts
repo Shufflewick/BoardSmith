@@ -1,6 +1,7 @@
 import { sha256Hex } from '../lib/hash.js';
+import { isSameOrInside } from '../lib/path-inside.js';
 import { promises as fs } from 'node:fs';
-import { isAbsolute, posix, relative, resolve, sep } from 'node:path';
+import { posix, resolve } from 'node:path';
 import chalk from 'chalk';
 import {
   GATE_TRANSITION_MD,
@@ -252,11 +253,6 @@ async function needsDesignerPlaytest(projectDir: string, slug: string, chunkText
 const MISSING = 'missing';
 const OUTSIDE_PROJECT = 'outside-project';
 
-function isInside(dir: string, path: string): boolean {
-  const rel = relative(dir, path);
-  return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
-}
-
 /**
  * The chunk's code as a sign-off sees it: every source file its `## Build Manifest` names, each
  * with its own content hash. Anything under `design/` is left out however the manifest writes it
@@ -273,7 +269,7 @@ export async function chunkCodeFiles(projectDir: string, chunkText: string): Pro
       files[path] = OUTSIDE_PROJECT;
       continue;
     }
-    if (isInside(design, abs)) continue;
+    if (isSameOrInside(design, abs)) continue;
     const content = await fs.readFile(abs).catch(() => undefined);
     files[path] = content ? sha256Hex(content) : MISSING;
   }

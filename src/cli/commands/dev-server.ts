@@ -43,10 +43,11 @@ import { createServer as createHttpServer, type IncomingMessage } from 'node:htt
 import { isIP } from 'node:net';
 import { networkInterfaces } from 'node:os';
 import { join, relative, resolve } from 'node:path';
+import { isSameOrInside } from '../lib/path-inside.js';
 
 import type { Duplex } from 'node:stream';
 
-import { createServer as createViteServer, normalizePath, type Connect, type InlineConfig, type Plugin as VitePlugin, type ViteDevServer } from 'vite';
+import { createServer as createViteServer, type Connect, type InlineConfig, type Plugin as VitePlugin, type ViteDevServer } from 'vite';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import type { RulesReloadQueue } from '../dev-host/rules-reload-queue.js';
@@ -300,7 +301,7 @@ export function reloadOnRulesEdit(args: {
 }): void {
   args.vite.watcher.add(args.rulesDir);
   args.vite.watcher.on('change', (changed: string) => {
-    if (!changed.startsWith(args.rulesDir)) return;
+    if (!isSameOrInside(args.rulesDir, changed)) return;
     void args.queue.saved(relative(args.cwd, changed));
   });
 }
@@ -413,13 +414,13 @@ function networkUrls(host: string, port: number): string[] {
  * with nothing left for it to wait on.
  */
 async function closeViteServer(vite: ViteDevServer): Promise<void> {
-  const depsDir = `${normalizePath(resolve(vite.config.cacheDir, 'deps'))}/`;
+  const depsDir = resolve(vite.config.cacheDir, 'deps');
   const waited = new Set<string>();
   for (;;) {
     const inFlight = [...vite.moduleGraph.urlToModuleMap.values()].filter(
       (module) =>
         module.file !== null &&
-        module.file.startsWith(depsDir) &&
+        isSameOrInside(depsDir, module.file) &&
         module.transformResult === null &&
         !waited.has(module.url),
     );
