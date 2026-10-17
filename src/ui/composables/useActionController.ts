@@ -604,17 +604,21 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /**
-   * Message for a prefill that no available choice matches. Names the pick and
-   * the rejected value so the caller can correct it, and lists what would have
-   * been accepted (capped, because an element pick can offer hundreds).
+   * Message for a prefill the pick refuses. Names the pick and the rejected
+   * value so the caller can correct it, and gives the reason a disabled choice
+   * carries or lists what would have been accepted (capped, because an element
+   * pick can offer hundreds).
    */
   function describeRejectedPrefill(
     selection: EnrichedPickMetadata,
     value: unknown,
-    choices: Array<{ value: unknown; display: string; disabled?: string }>
+    choices: Array<{ value: unknown; display: string; disabled?: string }>,
+    disabledReason?: string,
   ): string {
     const label = selection.prompt || selection.name;
     const shown = getDisplayFromValue(value);
+
+    if (disabledReason) return `Cannot prefill "${label}" with "${shown}": ${disabledReason}.`;
 
     if (choices.length === 0) {
       return `Cannot prefill "${label}" with "${shown}": it has no available choices.`;
@@ -861,19 +865,20 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (prefillValue === undefined) return false;
 
     const choices = getChoices(selection);
-    const validChoice = findMatchingChoice(prefillValue, choices);
+    const matched = findMatchingChoice(prefillValue, choices);
+    const validation = validateSelection(selection, prefillValue);
 
     actionSnapshot.value?.prefills.delete(selection.name);
 
-    if (!validChoice) {
-      setError(describeRejectedPrefill(selection, prefillValue, choices));
+    if (!matched || !validation.valid) {
+      setError(describeRejectedPrefill(selection, prefillValue, choices, matched?.disabled));
       return true;
     }
 
-    currentArgs.value[selection.name] = validChoice.value;
+    currentArgs.value[selection.name] = matched.value;
     actionSnapshot.value?.collectedPicks.set(selection.name, {
-      value: validChoice.value,
-      display: validChoice.display,
+      value: matched.value,
+      display: matched.display,
       skipped: false,
     });
     return true;
@@ -2569,18 +2574,27 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         ? multiSelectDraft.value.values
         : [];
 
-    const index = current.findIndex(v => valuesEqual(v, value));
+    // The draft holds only the offered value, so a shorthand toggle reads back
+    // as the choice it named. With no offered list, the server judges it, as for fill.
+    const matched = findMatchingChoice(value, getChoices(selection));
+    const offered = matched ? matched.value : value;
+    const index = current.findIndex(v => valuesEqual(v, offered));
     let newValues: unknown[];
     if (index >= 0) {
       // Already selected - remove it
       newValues = current.filter((_, i) => i !== index);
     } else {
+      const validation = validateSelection(selection, value);
+      if (!validation.valid) {
+        setError(validation.error || 'Validation failed');
+        return;
+      }
       // Not selected - add it (respecting max)
       if (cfg.max !== undefined && current.length >= cfg.max) {
         // At max capacity - ignore the add
         return;
       }
-      newValues = [...current, value];
+      newValues = [...current, offered];
 
       // Auto-confirm when exact count required (min === max) and reached.
       if (cfg.min === cfg.max && newValues.length === cfg.min) {

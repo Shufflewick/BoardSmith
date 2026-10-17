@@ -186,7 +186,7 @@ describe('the draft and prefills judge a pick value by the same rule as fill (#8
     sendAction = createMockSendAction();
     controller = useActionController({
       sendAction,
-      availableActions: ref(['assignSpy', 'assignSquad']),
+      availableActions: ref(['assignSpy', 'assignSquad', 'guardedAssign']),
       actionMetadata: ref(assignSpyMetadata()),
       isMyTurn: ref(true),
       autoFill: false,
@@ -215,5 +215,29 @@ describe('the draft and prefills judge a pick value by the same rule as fill (#8
     expect(controller.lastError.value).toBe(null);
     expect(controller.currentArgs.value.spy).toEqual(OPERATIVES[1]);
     expect(controller.currentPick.value?.name).toBe('task');
+  });
+
+  it('refuses a prefill naming a disabled choice by shorthand, and says why', async () => {
+    await controller.start('guardedAssign', { prefill: { spy: 'operative:1:1' } });
+
+    expect(controller.lastError.value).toBe('Cannot prefill "Which operative?" with "operative:1:1": Already deployed.');
+    expect(controller.currentArgs.value.spy).toBeUndefined();
+    expect(controller.currentPick.value?.name).toBe('spy');
+  });
+
+  it('holds the offered value when a toggle names a choice by shorthand', async () => {
+    await controller.start('assignSquad');
+    await controller.toggleMultiSelect('squad', 'Agent Vex');
+
+    expect(controller.multiSelectDraft.value?.values).toEqual([OPERATIVES[1]]);
+    expect(controller.isMultiSelectSelected('squad', OPERATIVES[1])).toBe(true);
+  });
+
+  it('refuses a toggle that names no offered choice, as fill does', async () => {
+    await controller.start('assignSquad');
+    await controller.toggleMultiSelect('squad', 'Agent Nobody');
+
+    expect(controller.multiSelectDraft.value).toBe(null);
+    expect(controller.lastError.value).toBe('Invalid selection for "squad"');
   });
 });
