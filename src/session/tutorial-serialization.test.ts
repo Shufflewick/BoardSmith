@@ -39,7 +39,8 @@ import {
   actionStep,
   type GameOptions,
 } from '../engine/index.js';
-import { GameRunner, snapshotTree } from '../runtime/index.js';
+import { GameRunner } from '../runtime/index.js';
+import { snapshotTree } from '../engine/utils/index.js';
 import type { TutorialDefinition, TutorialProgress } from '../engine/tutorial/types.js';
 
 // ---------------------------------------------------------------------------

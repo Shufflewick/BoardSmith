@@ -104,7 +104,7 @@ export { buildSingleActionMetadata } from './utils.js';
 
 // The one reader of a snapshot's element tree (#804): hosts that inspect a
 // stored snapshot read the tree through it, never `snapshot.state`.
-export { snapshotTree } from '../runtime/index.js';
+export { snapshotTree } from '../engine/utils/index.js';
 
 // Pure stateless op executor — single source of truth for per-op game execution.
 export * from './stateless-ops.js';

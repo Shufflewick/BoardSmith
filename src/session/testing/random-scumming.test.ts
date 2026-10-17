@@ -31,7 +31,7 @@ import { describe, it, expect } from 'vitest';
 import { executeOp, SUBMISSION_OP_TYPES, type GameDefinitionLike, type ExecutableOp, type OpResult } from '../stateless-ops.js';
 import type { HeadlessOp } from '../../testing/headless-session.js';
 import { boundaryKeyOf } from './boundary-stamp.js';
-import { snapshotTree, type GameStateSnapshot } from '../../runtime/index.js';
+import { snapshotTree, type GameStateSnapshot } from '../../engine/utils/index.js';
 import {
   fencedScumDefinition,
   unfencedScumDefinition,

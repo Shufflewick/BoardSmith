@@ -21,13 +21,13 @@ import {
   GameRunner,
   restoreEarlierSnapshot,
   describeCheckpointAbsence,
-  snapshotTree,
   type GameStateSnapshot,
   type CheckpointPolicy,
   type RunnerCheckpointPolicy,
   type UndoPolicy,
   type RandomnessPolicy,
 } from '../runtime/index.js';
+import { snapshotTree } from '../engine/utils/index.js';
 import { createBot, parseBotLevel } from '../bot/index.js';
 import type { BotMove } from '../bot/types.js';
 import { describeMoveForHint } from './move-summary.js';

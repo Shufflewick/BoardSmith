@@ -1,6 +1,6 @@
 {
-  "revision": 217,
-  "surfaceHash": "e031520954ec82d0",
+  "revision": 218,
+  "surfaceHash": "c4b5b497360a7654",
   "payloadHash": "d98d9c3e91308953",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1679,6 +1679,14 @@
       "payloadHash": "d98d9c3e91308953",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "ErrorCode drops eight values nothing produced: SEAT_ALREADY_CLAIMED, INVALID_SEAT, NOT_AUTHORIZED, GAME_ALREADY_STARTED, LOBBY_NOT_READY, COLOR_ALREADY_TAKEN, INTERNAL_ERROR and REPLAY_FAILED (#807)."
+    },
+    {
+      "revision": 218,
+      "date": "2026-10-17",
+      "surfaceHash": "c4b5b497360a7654",
+      "payloadHash": "d98d9c3e91308953",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A table snapshot from this engine stores the element tree once: when it carries checkpoints the tree is the newest checkpoint and snapshot.state is absent, otherwise it is snapshot.state and there is no window; tables below r218 still carry both state and the window, so a platform reader that spans revisions must tell the two shapes apart (state when present, otherwise the newest entry of actionCheckpoints) or call snapshotTree (boardsmith/session) only inside an r218+ runner, and this engine refuses with a readable error any snapshot an earlier engine wrote, so in-progress tables must keep running on the revision that wrote them."
     }
   ]
 }
