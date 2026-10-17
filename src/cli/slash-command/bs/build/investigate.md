@@ -96,7 +96,7 @@ WRITE directly into this chunk's CHUNK.md — do not return this content, write 
 
      A claim is any line that starts with its number (`3. `); bold is optional, and every such
      line is a claim that owes its quote. Copy the quote character for character from the file you have open — never from memory,
-     never paraphrased. A `Source:` path that names a design record (`rulebook/...`, `RULINGS.md`,
+     never paraphrased, and at least 3 words. A `Source:` path that names a design record (`rulebook/...`, `RULINGS.md`,
      `chunks/...`) or climbs out of design/ (`../src/...`) is read from design/; any other path
      (`src/...`, `tests/...`, `design/NOTES.md` for a design file of your own) is read from the
      project root, the same way `ledger-check` reads it. Cite a Markdown source (a

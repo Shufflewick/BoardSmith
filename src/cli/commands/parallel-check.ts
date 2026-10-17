@@ -23,8 +23,9 @@
  *
  * The core-loop and final-acceptance chunks always run alone. Whatever cannot be shown to be
  * independent is refused: building in order is always correct, so the safe answer is "no".
- * `boardsmith chunk-merge` re-applies the same pair rule to the chunks that really were built
- * alongside each other, so skipping this check does not get a branch merged.
+ * `boardsmith chunk-merge` re-applies the pair rule, the run-alone rule and the citation and sketch
+ * entry checks to the chunks that really were built alongside each other, so skipping this check
+ * does not get a branch merged.
  */
 import { promises as fs } from 'node:fs';
 import { resolve } from 'node:path';
@@ -153,7 +154,7 @@ function citedSections(
  * What a chunk cites: its sketch line plus what its CHUNK.md interpreted (the claims in force) and
  * discovered, each citation resolved to the sections of a slice it claims.
  */
-export async function chunkCitations(projectDir: string, chunk: SketchChunk): Promise<ChunkCitations> {
+async function chunkCitations(projectDir: string, chunk: SketchChunk): Promise<ChunkCitations> {
   const text = await citingText(projectDir, chunk);
   const filenames = await sliceFilenames(projectDir);
   const result: ChunkCitations = { slug: chunk.slug, slices: new Map(), unreadable: [] };
@@ -278,8 +279,6 @@ function lifecycleProblems(chunk: SketchChunk): string[] {
   const status = chunk.status ?? '';
   if (status.startsWith('verified')) problems.push(`${chunk.slug} is already verified; there is nothing to build.`);
   if (status.startsWith('stale')) problems.push(`${chunk.slug} is stale and must be re-derived before it is built.`);
-  const alone = ALONE[chunk.milestone ?? ''];
-  if (alone) problems.push(`${chunk.slug} ${alone}, so it is always built on its own.`);
   return problems;
 }
 
@@ -299,6 +298,25 @@ function dependencyLineProblems(chunk: SketchChunk, bySlug: Map<string, SketchCh
     if ((depChunk.status ?? '').startsWith('verified')) return [];
     return [`${chunk.slug} depends on ${dep}, which is not verified yet, so ${chunk.slug} must wait for it.`];
   });
+}
+
+/**
+ * Why chunk `slug` cannot be built beside any other, whatever the other is: it is not in the sketch,
+ * it always runs alone, or its citations cannot rule out an overlap. Its citations come back too,
+ * for the pair rule. `boardsmith chunk-merge` applies it to the chunks that really were built together.
+ */
+export async function besideAnyProblems(
+  projectDir: string,
+  bySlug: Map<string, SketchChunk>,
+  slug: string,
+): Promise<{ problems: string[]; citations?: ChunkCitations }> {
+  const chunk = bySlug.get(slug);
+  if (!chunk) return { problems: [`There is no chunk "${slug}" in ${SKETCH_MD}'s Ordered Chunk List.`] };
+  const problems: string[] = [];
+  const alone = ALONE[chunk.milestone ?? ''];
+  if (alone) problems.push(`${slug} ${alone}, so it is always built on its own.`);
+  const citations = await chunkCitations(projectDir, chunk);
+  return { problems: [...problems, ...citationProblems(citations)], citations };
 }
 
 function citationProblems(c: ChunkCitations): string[] {
@@ -326,14 +344,10 @@ export async function checkParallel(projectDir: string, slugs: readonly string[]
   const cited: ChunkCitations[] = [];
   for (const slug of unique) {
     const chunk = bySlug.get(slug);
-    if (!chunk) {
-      refusals.push(`There is no chunk "${slug}" in ${SKETCH_MD}'s Ordered Chunk List.`);
-      continue;
-    }
-    refusals.push(...lifecycleProblems(chunk), ...dependencyLineProblems(chunk, bySlug));
-    const citations = await chunkCitations(dir, chunk);
-    refusals.push(...citationProblems(citations));
-    cited.push(citations);
+    if (chunk) refusals.push(...lifecycleProblems(chunk), ...dependencyLineProblems(chunk, bySlug));
+    const { problems, citations } = await besideAnyProblems(dir, bySlug, slug);
+    refusals.push(...problems);
+    if (citations) cited.push(citations);
   }
   for (let i = 0; i < cited.length; i++) {
     for (let j = i + 1; j < cited.length; j++) {

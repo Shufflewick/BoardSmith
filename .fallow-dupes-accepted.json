@@ -312,13 +312,6 @@
       ]
     },
     {
-      "content": "b4e62e419abed712",
-      "lines": 22,
-      "files": [
-        "src/cli/commands/ingest-archive.ts"
-      ]
-    },
-    {
       "content": "b550bc3bb27ef530",
       "lines": 15,
       "files": [
