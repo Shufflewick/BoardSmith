@@ -1169,6 +1169,13 @@ export interface ChunkProvenanceStatusResult {
   projectProvenanceState: 'pre-provenance' | 'partial' | 'complete' | 'empty';
 }
 
+// A Record over every `how`, so a new kind of cover fails typecheck until it has a label.
+const SHARED_EDIT_LABEL: Record<SharedEdit['how'], string> = {
+  'signed-off': 'signed off with',
+  'being-built': 'being built by',
+  merged: 'vouched for by the merge of',
+};
+
 /**
  * `boardsmith chunk-provenance-status [--json]` — enumerates `chunks/*␣/CHUNK.md`, parses each
  * one's `## Verified Against` block, and reports the three-state classification, edition/
@@ -1354,11 +1361,11 @@ export async function chunkProvenanceStatusCommand(
     console.log('');
     console.log(
       `Shared files edited since sign-off (for information; each sign-off still stands, because ` +
-        `the chunk named signed off the edit or is building it):`,
+        `the chunk named signed off the edit or is building it, or the merge named vouched for it):`,
     );
     for (const { slug, edits } of signoffSharedEdits) {
       const described = edits.map((e) =>
-        `${e.path} (${e.how === 'signed-off' ? 'signed off with' : 'being built by'} ${e.coveredBy})`,
+        `${e.path} (${SHARED_EDIT_LABEL[e.how]} ${e.coveredBy})`,
       );
       console.log(`  • ${slug}: ${described.join(', ')}`);
     }

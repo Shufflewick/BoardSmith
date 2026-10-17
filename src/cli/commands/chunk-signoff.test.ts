@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -495,6 +495,15 @@ describe('an edit to a shared file is accounted for by the chunk that made it (#
     expect((await assessSignoffs(project)).get('shop')!.sharedEdits).toEqual([
       { path: 'src/rules.ts', coveredBy: 'deal, shop', how: 'merged' },
     ]);
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await chunkProvenanceStatusCommand({ project });
+      const out = log.mock.calls.map((c) => c.join(' ')).join('\n');
+      expect(out).toContain('src/rules.ts (vouched for by the merge of deal, shop)');
+      expect(out).toContain('or is building it, or the merge named vouched for it):');
+    } finally {
+      log.mockRestore();
+    }
 
     await fs.writeFile(ledger, record(createHash('sha256').update('rules v2').digest('hex'), new Date('2026-09-26T00:00:00Z')));
     expect((await checkSignoff(project, 'deal')).join('\n')).toContain('src/rules.ts');
