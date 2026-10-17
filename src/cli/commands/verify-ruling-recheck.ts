@@ -255,10 +255,15 @@ export async function resolveFreshTranscription(
   try {
     entryNames = await fs.readdir(stagingDir, { recursive: true });
   } catch {
-    // No slices folder: the run itself is missing or not a run, not an empty transcription (#1002).
+    // A real run with no readable slices folder is not a missing run, and must never be called one (#1002).
+    const isRun = await fs.access(ledgerFilePath(projectDir, resolvedRunId)).then(() => true, () => false);
     return {
       scopeLimited: true,
-      reason: await missingRunMessage(projectDir, resolvedRunId),
+      reason: isRun
+        ? `Verify run "${resolvedRunId}" has no slices folder at ${relative(projectDir, stagingDir)} ` +
+          `(it is missing or is not a folder). \`boardsmith verify-run-init --run-id ${resolvedRunId}\` ` +
+          `creates it and keeps RUN.md; move aside any file in its place first.`
+        : await missingRunMessage(projectDir, resolvedRunId),
       missingPath: relative(projectDir, stagingDir),
     };
   }

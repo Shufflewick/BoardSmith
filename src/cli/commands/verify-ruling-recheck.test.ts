@@ -206,6 +206,27 @@ describe('resolveFreshTranscription', () => {
     }
   });
 
+  it.each([
+    ['missing', async (_slices: string) => {}],
+    ['a file', async (slices: string) => fs.writeFile(slices, 'not a folder')],
+  ])('a real run whose slices folder is %s is named as such, never as a run to remove (#1002)', async (_label, makeSlices) => {
+    const project = join(dir, 'game');
+    const runId = '2026-07-30T10-00-00Z';
+    const runDir = join(project, DESIGN_DIR, 'rulebook', '.verify', runId);
+    await fs.mkdir(runDir, { recursive: true });
+    await fs.writeFile(join(runDir, 'RUN.md'), '# Verify Run\n');
+    await makeSlices(join(runDir, 'slices'));
+    const result = await resolveFreshTranscription(project, runId);
+    expect(result.scopeLimited).toBe(true);
+    if (result.scopeLimited) {
+      expect(result.reason).toContain(`Verify run "${runId}"`);
+      expect(result.reason).toContain(`${DESIGN_DIR}/rulebook/.verify/${runId}/slices`);
+      expect(result.reason).toContain('verify-run-init');
+      expect(result.reason).not.toMatch(/has no RUN\.md/);
+      expect(result.reason).not.toMatch(/Remove that folder/);
+    }
+  });
+
   it('returns scopeLimited for a malformed --run-id, never throwing', async () => {
     const project = join(dir, 'game');
     await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });

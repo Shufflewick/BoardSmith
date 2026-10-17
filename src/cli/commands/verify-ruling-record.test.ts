@@ -356,6 +356,25 @@ describe('verifyRulingRecordCommand — the CLI write surface', () => {
     expect(message).not.toMatch(/Runs that do exist/);
   });
 
+  it('a run whose RUN.md exists but cannot be read is never named as a folder to remove', async () => {
+    const project = await makeProject(3);
+    const odd = '2099-01-01T00-00-00Z';
+    await fs.mkdir(ledgerFilePath(project, odd), { recursive: true });
+    const err = await verifyRulingRecordCommand({
+      project,
+      runId: odd,
+      number: 1,
+      verdict: 'still-needed',
+      reasoning: 'x',
+      json: true,
+    }).catch((e: Error) => e);
+
+    const message = (err as Error).message;
+    expect(message).toContain(`${DESIGN_DIR}/rulebook/.verify/${odd}/RUN.md could not be read`);
+    expect(message).not.toMatch(/has no RUN\.md/);
+    expect(message).not.toMatch(/Remove that folder/);
+  });
+
   it('with no runs at all, says so and points at verify-run-init without the mistyped id', async () => {
     const project = join(dir, 'empty');
     await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });

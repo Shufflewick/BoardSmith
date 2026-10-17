@@ -957,6 +957,10 @@ export interface VerifyRunRangeActionResult {
  * command gives. Never suggests init with this id: a mistyped id would become a real, latest run (#833).
  */
 export async function missingRunMessage(projectDir: string, runId: string): Promise<string> {
+  const ledgerFile = ledgerFilePath(projectDir, runId);
+  if (await exists(ledgerFile)) {
+    return `${relative(projectDir, ledgerFile)} could not be read. Check that it is a readable file.`;
+  }
   const runDir = runRootDir(projectDir, runId);
   if (await exists(runDir)) {
     return (
