@@ -2098,6 +2098,21 @@ describe('useActionController', () => {
       expect(controller.currentArgs.value.by).toBe(1);
     });
 
+    it('resumeFollowUp starts nothing while the player is viewing history (#860)', async () => {
+      const heldFollowUp = ref<typeof held | undefined>(held);
+      const isViewingHistory = ref(false);
+      const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn, heldFollowUp, isViewingHistory });
+      await settle();
+      controller.cancel();
+      isViewingHistory.value = true;
+      await settle();
+
+      await controller.resumeFollowUp();
+
+      expect(controller.currentAction.value).toBe(null);
+      expect(controller.pendingOnServer.value).toBe(false);
+    });
+
     it('starts the held follow-up of the seat the page switches to, even one it cancelled for the last seat', async () => {
       const heldFollowUp = ref<typeof held | undefined>(held);
       const playerSeat = ref(1);

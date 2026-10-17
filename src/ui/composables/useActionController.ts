@@ -544,11 +544,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * started and cancelled before. A seat holding a follow-up keeps its turn
    * until it takes it or takes another offered action, so the player must
    * always be able to start it again. Does nothing while another action is in
-   * progress or when no follow-up is held.
+   * progress, while the player views history, or when no follow-up is held.
    */
   async function resumeFollowUp(): Promise<void> {
     const offer = heldFollowUpOffer.value;
-    if (!offer || currentAction.value || isExecuting.value) return;
+    if (!offer || currentAction.value || isExecuting.value || isViewingHistoryValue()) return;
     lastFollowUpKey = followUpKey(offer);
     await startFollowUp(offer.action, offer.args ?? {}, offer.metadata, offer.display);
   }
