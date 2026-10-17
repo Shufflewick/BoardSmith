@@ -8,7 +8,7 @@
  * `fixtureSandbox` (`src/testing/fixture-sandbox.test-helper.ts`) runs such a
  * program where it can write only inside its own temp tree. This scan fails on
  * a test file that writes a program which both writes files and reads a path
- * from outside itself (`process.argv`, `process.env`, a quoted shell `"$1"`),
+ * from outside itself (`process.argv`, `process.env`, a shell `"$1"`, or unquoted `$1`, `$@`, `${x}`, `$OUT`),
  * unless the file uses `fixtureSandbox`.
  *
  * It reads the strings a test spells a program in (parsed, so a quote or a
@@ -21,8 +21,9 @@ import { describe, it, expect } from 'vitest';
 import ts from 'typescript';
 import { trackedTestFiles } from './tracked-tests.test-helper.mjs';
 
-const WRITES = /\b(?:writeFileSync|appendFileSync|writeFile|appendFile|createWriteStream)\(|(?<![=-])>>?\s*"\$/;
-const HANDED = /process\.(?:argv|env)\b|"\$\{?[\w@*]/;
+const WRITES = /\b(?:writeFileSync|appendFileSync|writeFile|appendFile|createWriteStream)\(|(?<![=-])>>?\s*"?\$/;
+// Unquoted, only shell parameters and uppercase env names count, so `$roll1 > $roll2` in Perl text does not (#920).
+const HANDED = /process\.(?:argv|env)\b|"\$\{?[\w@*]|\$(?:[1-9@*{]|[A-Z][A-Z0-9_]*\b)/;
 
 /** The parts `node` joins into one string, each read by `stringText`, or undefined when it joins none. */
 function joinedParts(node) {
@@ -78,6 +79,18 @@ describe('unsandboxedWritingFixture', () => {
 
   it('finds a shell stub that writes to its first argument', () => {
     expect(unsandboxedWritingFixture("writeLocalBin('tool', 'echo done > \"$1\"');")).toBe(true);
+  });
+
+  it('finds a shell stub that writes to its unquoted first argument (#920)', () => {
+    expect(unsandboxedWritingFixture("writeLocalBin('tool', 'echo planted > $1');")).toBe(true);
+  });
+
+  it('finds a shell stub that writes to an unquoted environment variable (#920)', () => {
+    expect(unsandboxedWritingFixture("writeLocalBin('tool', 'echo planted > $OUT');")).toBe(true);
+  });
+
+  it('leaves alone non-shell text whose comparison and lowercase variables look like a redirect (#920)', () => {
+    expect(unsandboxedWritingFixture("const perl = '  if ($roll1 > $roll2) {';")).toBe(false);
   });
 
   it('accepts the same program run in a fixture sandbox', () => {
