@@ -11,9 +11,10 @@ only the tool output the commands themselves produce.
 
 Run the following as ONE numbered sequence immediately after `build` completes. Do not skip
 steps, do not reorder them, and do not treat an earlier step's pass as license to skip a later
-one. The type check, the whole suite, the build, `boardsmith validate` and the in-browser smoke test
-are not steps of their own: they are part of the last step, `boardsmith verify`, which runs them
-together and records the result. A failure at any step STOPS the sequence with an actionable message (what failed, the exact
+one. The type check is not a step of its own: it is part of the last step, `boardsmith verify
+--chunk <slug>`, which runs it with the chunk's tests and records the result. The whole suite, the
+build, `boardsmith validate`, the in-browser smoke test and `boardsmith verify`'s mutation check
+run once, at publish, not per chunk. A failure at any step STOPS the sequence with an actionable message (what failed, the exact
 error, what to fix) — never proceed past a failing step assuming a later step will "catch it
 anyway." A failing step routes this chunk to `repair`; it does not get silently worked around
 here.
@@ -43,8 +44,8 @@ here.
    existed, and `build` wrote the code that makes them pass. A row can also come later: a regression
    test `build` wrote and saw fail before its fix, or a measurement test `repair` wrote and saw fail
    before its cap (`build/spec.md` "Persistence"). This step re-runs them and requires them all
-   GREEN. Run them with `boardsmith test <pattern>`, naming
-   this chunk's test files. Generated projects carry no npm scripts on purpose: `boardsmith test`
+   GREEN. Run them with `boardsmith test <pattern>`, naming this chunk's test files.
+   Generated projects carry no npm scripts on purpose: `boardsmith test`
    is the one way to run a game's tests, so `npm test` will fail with "Missing script".
 
    Two failure modes here are NOT ordinary red-routes-to-`repair` and must be surfaced instead of
@@ -348,21 +349,24 @@ here.
 
 7. **The done gate: `boardsmith verify`**. Commit the chunk's work (`chunk-<slug>/step-test`,
    `state-machine.md` "Git Protocol"), then run `npx boardsmith verify --chunk <slug>`
-   (`state-machine.md` "Git Protocol" says what it measures from). It runs, in order and
-   without stopping at the first failure, the full suite, typecheck, build, validate, the smoke
-   test and a mutation check of the code changed since the chunk began, and writes the result for
-   this commit to `.boardsmith/verify/<commit>.json`. The smoke test is the game's
-   `tests/browser/smoke.spec.ts` (a required output of any chunk that adds an action or a UI
-   control, `build/spec.md`), run in Chromium against `boardsmith dev` served from a fresh copy
-   of the project; `npx boardsmith smoke` runs it alone while you work, and a machine without the
-   browser gets a failed check telling it to run `npx boardsmith install-browser` once. The full suite is the regression check: a chunk
-   that passes its own tests but breaks an earlier chunk's is not done, and this is what catches
-   it. The mutation check breaks each changed line one small change at a time and reports, by
-   file and line, every change no test noticed. This step is not done until it exits zero on a
+   (`state-machine.md` "Git Protocol" says what it measures from). It runs the chunk's fast
+   checks: the test files the chunk added or changed since it began, and typecheck, without
+   stopping at the first failure, and writes the result for this commit to
+   `.boardsmith/verify/<commit>.json`. A chunk that added or changed no test file fails it,
+   unless its Spec Manifest marks it exempt (`build/spec.md` "Exemptions"), which passes on
+   typecheck alone. The
+   full suite, build, validate, the smoke test and a mutation check run once, at publish, as
+   `boardsmith verify`; the full suite is the regression check that a chunk did not break an
+   earlier chunk's tests, and `boardsmith chunk-merge` runs it on the combined tree too. The smoke
+   test is the game's `tests/browser/smoke.spec.ts` (a required output of any chunk that adds an
+   action or a UI control, `build/spec.md`), run in Chromium against `boardsmith dev` served from
+   a fresh copy of the project; `npx boardsmith smoke` runs it alone while you work, and a machine
+   without the browser gets a failed check telling it to run `npx boardsmith install-browser`
+   once. This step is not done until it exits zero on a
    clean tree; a failure routes the chunk back per "Failures Loop Back to `build`",
    using what each failed check names, and the gate runs again on the new commit. Never report
    this step, the chunk, or the suite as done or green without it: `chunk-signoff` refuses a chunk
-   whose commit has no passing result covering the chunk's change, and any later step asks
+   whose commit has no passing `verify --chunk <slug>` result, and any later step asks
    `npx boardsmith verify --check --chunk <slug>`.
 
 ## The A11y Floor — All Five Items (UIQ-03)
@@ -377,7 +381,8 @@ grep and contrast assertion, and the asset-reachability scan, sequence item 5 ab
 text, so no change to the code can make them fail, and in a manifest file the mutation check reports
 every one. They live in one guard file for the whole game, `tests/guards/a11y-floor.test.ts`: the
 first UI chunk writes it, a later chunk extends it when it adds a token pair, and never list it in
-the Spec Manifest. The full suite and `boardsmith verify` still run it on every chunk. A guard holds
+the Spec Manifest. A chunk's fast checks run it when the chunk added or changed it; the full suite,
+at every `chunk-merge` and at publish, runs it always. A guard holds
 scans only; a test that mounts a component or cites a claim belongs in the chunk's test file. A guard
 reads the game's source with `readFileSync` or an import ending `?raw`; the one game module it may
 import is literal constants under `src/ui/`, such as the palette a contrast check reads (rule list

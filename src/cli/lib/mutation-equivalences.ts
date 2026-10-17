@@ -1,6 +1,5 @@
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
-import { isDeepStrictEqual } from 'node:util';
 import { gitOutput as git } from './git-output.js';
 import { sha256Hex } from './hash.js';
 import type { MutationFingerprints } from './mutant-cache.js';
@@ -133,32 +132,6 @@ function completeBasis(basis: EquivalenceBasis): boolean {
 
 function matchesBasis(review: EquivalenceReview, basis: EquivalenceBasis): boolean {
   return Object.entries(review.basis).every(([key, value]) => basis[key as keyof EquivalenceBasis] === value);
-}
-
-async function pinnedReview(projectDir: string, basis: EquivalenceBasis): Promise<EquivalenceReview> {
-  requireReviewCommit(basis.reviewCommit);
-  const text = await ledgerBlob(projectDir, basis.reviewCommit);
-  return { records: parseEquivalences(text), basis: await verifyLedgerSignature(projectDir, text, basis.reviewCommit) };
-}
-
-/** Closed chunks retain what was reviewed then; later work is covered by the normal code sign-offs. */
-export async function historicalEquivalenceProblem(projectDir: string, basis: EquivalenceBasis): Promise<string | undefined> {
-  if (!completeBasis(basis)) return INCOMPLETE;
-  try {
-    const reviewed = await pinnedReview(projectDir, basis);
-    const current = await readLedger(projectDir);
-    if (!matchesBasis(reviewed, basis) || !current) return `The equivalent-mutant review used by this sign-off changed. ${AGAIN}`;
-    await requireLedgerBlob(projectDir, current.text, ['']);
-    for (const id of basis.ids) {
-      const record = reviewed.records.find((entry) => entry.id === id);
-      if (!record || !isDeepStrictEqual(record, current.records.find((entry) => entry.id === id))) {
-        return `A selected equivalent-mutant review was removed or changed after sign-off. ${AGAIN}`;
-      }
-    }
-  } catch (error) {
-    return (error as Error).message;
-  }
-  return undefined;
 }
 
 /** Recheck a saved done claim after the ledger, installed code, tool or signer trust changes. */

@@ -80,7 +80,7 @@ describe('enterText({ multiline })', () => {
         multiline: true,
       })
       .execute(() => ({ success: true }));
-    const pick = buildPickMetadata(game as any, player as any, textSelectionOf(action));
+    const pick = buildPickMetadata(game as any, player as any, 'setDescription', textSelectionOf(action));
     expect(pick).toMatchObject({
       name: 'description',
       type: 'text',
@@ -99,7 +99,7 @@ describe('enterText({ multiline })', () => {
     const action = Action.create<any>('setNickname')
       .enterText('nickname', { maxLength: 20 })
       .execute(() => ({ success: true }));
-    const pick = buildPickMetadata(game as any, player as any, textSelectionOf(action));
+    const pick = buildPickMetadata(game as any, player as any, 'setNickname', textSelectionOf(action));
     expect('multiline' in pick).toBe(false);
   });
 

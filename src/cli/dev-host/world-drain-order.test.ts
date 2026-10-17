@@ -181,9 +181,17 @@ async function opened(budgets: WorldBudgets = worldBudgets()): Promise<{
   world: ResidentWorld;
   clock: ReturnType<typeof frozenClock>;
   marks: () => Promise<string>;
+  queueReads: () => number;
 }> {
   const clock = frozenClock(OPENED);
   const store = openWorldStore(worldStorePath(dir), budgets);
+  // COUNTED, because in SQLite every read decodes the whole queue (#746).
+  let queueReads = 0;
+  const readQueue = store.pendingEvents.bind(store);
+  store.pendingEvents = () => {
+    queueReads += 1;
+    return readQueue();
+  };
   let minted = 0;
   const world = new ResidentWorld({
     definition: bundle(),
@@ -203,6 +211,7 @@ async function opened(budgets: WorldBudgets = worldBudgets()): Promise<{
       const attributes = (stored?.json as { attributes?: Record<string, string> }).attributes ?? {};
       return attributes.marks ?? '';
     },
+    queueReads: () => queueReads,
   };
 }
 
@@ -210,15 +219,21 @@ async function opened(budgets: WorldBudgets = worldBudgets()): Promise<{
 async function drained(
   mode: string,
   options: { budgets?: WorldBudgets; count?: number } = {},
-): Promise<{ world: ResidentWorld; marks: string; jumpMs: number | null }> {
-  const { world, clock, marks } = await opened(options.budgets ?? worldBudgets());
+): Promise<{ world: ResidentWorld; marks: string; jumpMs: number | null; queueReads: number }> {
+  const { world, clock, marks, queueReads } = await opened(options.budgets ?? worldBudgets());
   await world.clockCommand('arm', {
     mode,
     ...(options.count === undefined ? {} : { count: options.count }),
   });
   clock.set(OPENED + LEAD + LATE + FROZEN);
+  const before = queueReads();
   const fired = await world.fireDue();
-  return { world, marks: await marks(), jumpMs: fired?.jumpMs ?? null };
+  return {
+    world,
+    marks: await marks(),
+    jumpMs: fired?.jumpMs ?? null,
+    queueReads: queueReads() - before,
+  };
 }
 
 describe('#280: a chronological drain reads the queue between its own checkpoints', () => {
@@ -265,6 +280,17 @@ describe('#280: a chronological drain reads the queue between its own checkpoint
     });
 
     expect(marks).toBe('m0,m1');
+    await world.close();
+  });
+
+  it('reads the queue once per drained event, not once per question about it (#746)', async () => {
+    const { world, marks, queueReads } = await drained('crowd', { count: 5 });
+
+    expect(marks).toBe('m0,m1,m2,m3,m4');
+    // One read per event, which picks it and is what its own dispatch's
+    // allowance and planning judge against; then `fireDue`'s own read, the
+    // read that finds nothing left due, and the re-arm's.
+    expect(queueReads).toBe(5 + 3);
     await world.close();
   });
 });

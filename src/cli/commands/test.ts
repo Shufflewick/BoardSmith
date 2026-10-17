@@ -6,6 +6,7 @@ import { discardRecord, runVitestRecorded, testRunVerdict } from '../lib/vitest-
 import { requireGameProject } from '../lib/game-project.js';
 import { gameTestRunProblem } from '../lib/test-run-scope.js';
 import { runTypecheck } from './typecheck.js';
+import { runAuthoredTests } from '../lib/authored-tests.js';
 
 /**
  * The vitest config of BoardSmith's browser regressions (`scripts/*-browser.mjs`), which
@@ -20,6 +21,7 @@ interface TestOptions {
   coverage?: boolean;
   /** A file to write the verdict of a failed run into, for a script to repeat (such as a merge gate). */
   verdictFile?: string;
+  selection?: string;
 }
 
 /**
@@ -50,6 +52,9 @@ interface TestOptions {
 export async function testCommand(patterns: string[], options: TestOptions): Promise<void> {
   const cwd = process.cwd();
   const context = getProjectContext(cwd);
+  if (options.selection !== undefined && (patterns.length > 0 || options.watch || options.browser || options.coverage)) {
+    throw new Error('Use --selection by itself, without filename filters, --watch, --browser or --coverage.');
+  }
 
   if (context === 'standalone') {
     await refuseGameProjectThatCannotRun(cwd, options);
@@ -59,6 +64,16 @@ export async function testCommand(patterns: string[], options: TestOptions): Pro
 
   const label = context === 'monorepo' ? 'BoardSmith' : 'game';
   console.log(chalk.cyan(`\nRunning ${label} tests...\n`));
+
+  if (options.selection !== undefined) {
+    try {
+      const result = await runAuthoredTests(cwd, options.selection);
+      console.log(chalk.green(`\n${result.counts.passed} authored tests passed in ${result.counts.files} files.\n`));
+    } catch (error) {
+      fail((error as Error).message, 1, options);
+    }
+    return;
+  }
 
   const args = vitestArgs(patterns, options);
 

@@ -482,7 +482,7 @@ export class FlowEngine<G extends Game = Game> {
   private resetToRoot(variables: Record<string, unknown>): void {
     this.stack = [{ node: this.definition.root, index: 0, completed: false }];
     this.variables = { ...variables };
-    this.currentPlayer = this.game.currentPlayer;
+    this.currentPlayer = this.game.firstPlayer;
     this.awaitingInput = false;
     this.availableActions = [];
     this.awaitingPlayers = [];
@@ -936,9 +936,15 @@ export class FlowEngine<G extends Game = Game> {
    *
    * No-op when no simultaneous step is open: there is no stale list to correct.
    *
+   * Called from outside game code, it then ends the step when `allDone` holds,
+   * as settling an action does; a seat made done outside an action otherwise
+   * left the step open with nobody able to act (#783). Inside game code the
+   * running action's settling makes that check, so the flow runs on once.
+   *
    * @param seat - Refresh only this seat. Omit to refresh every seat.
+   * @returns The flow's state when the refresh ended the step and ran the flow on.
    */
-  refreshAwaitingActions(seat?: number): void {
+  refreshAwaitingActions(seat?: number): FlowState | undefined {
     // A complete flow prompts no seat, so there is nothing to admit.
     if (this.complete) return;
     const frame = this.stack[this.stack.length - 1];
@@ -991,6 +997,20 @@ export class FlowEngine<G extends Game = Game> {
         });
       }
     }
+
+    // Inside game code (an action, a pick's onEach) the action's settling re-checks allDone and runs the flow once.
+    if (this.game._ctx._changingDepth > 0) return;
+    const allDone = config.allDone
+      ? config.allDone(context)
+      : this.awaitingPlayers.every((p) => p.completed);
+    if (!allDone) {
+      this.warnIfDeadlockedSimultaneousStep(config);
+      return;
+    }
+    this.awaitingInput = false;
+    this.awaitingPlayers = [];
+    frame.completed = true;
+    return this.run();
   }
 
   /**
@@ -1180,6 +1200,19 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   /**
+   * The player whose turn it is: the seat the flow is running for (an
+   * `eachPlayer` seat, an action step's player). None while a simultaneous
+   * step is open (from the moment its conditions are first checked), since
+   * every seat acts there, and none once the flow is complete.
+   */
+  getCurrentPlayer(): PlayerOf<G> | undefined {
+    flowStateRead(this.game._ctx);
+    const top = this.stack[this.stack.length - 1];
+    const inSimultaneous = top?.node.type === 'simultaneous-action-step' && !top.completed;
+    return inSimultaneous || this.complete ? undefined : this.currentPlayer;
+  }
+
+  /**
    * Get the current flow state
    */
   getState(): FlowState {
@@ -1306,7 +1339,7 @@ export class FlowEngine<G extends Game = Game> {
    * @throws When an element the position holds no longer resolves, naming the
    *   flow variable or step data that holds it.
    */
-  restore(position: FlowPosition, idRemap?: Map<number, number>): void {
+  private restore(position: FlowPosition, idRemap?: Map<number, number>): void {
     // Relink serialized element-valued flow variables back to live elements of
     // this game (inverse of getPosition's encodeFlowValue). Doing it here
     // means every restore path — runner.fromSnapshot, MCTS clone, and a rules
@@ -1386,7 +1419,7 @@ export class FlowEngine<G extends Game = Game> {
    * @param idRemap - See {@link restore}.
    * @returns Success or failure with the last valid path
    */
-  tryRestore(position: FlowPosition, idRemap?: Map<number, number>): { success: true } | { success: false; error: string; validPath: number[] } {
+  private tryRestore(position: FlowPosition, idRemap?: Map<number, number>): { success: true } | { success: false; error: string; validPath: number[] } {
     // Validate path before attempting restore
     const validationResult = this.validatePath(position.path, position.frameData);
 
@@ -1465,35 +1498,28 @@ export class FlowEngine<G extends Game = Game> {
 
     for (let i = 0; i < path.length; i++) {
       const index = path[i];
-      const nodeType = currentNode.type;
-      const frameDataAtDepth = frameData?.[`__frame_${i}`];
-
-      // For loop/each-player/for-each/phase nodes, index represents iteration count,
-      // not child position. These can have any non-negative index value.
-      // For leaf nodes (action-step, execute, etc.), they have no children so skip bounds check.
-      // For sequences, index represents child position and must be validated.
-      const isIteratingNode = nodeType === 'loop' || nodeType === 'repeat' || nodeType === 'each-player' ||
-                              nodeType === 'for-each' || nodeType === 'phase';
-      const isLeafNode = nodeType === 'action-step' || nodeType === 'simultaneous-action-step' ||
-                         nodeType === 'execute';
-
-      if (!isIteratingNode && !isLeafNode) {
+      const child = resolveFlowChild(currentNode, index, frameData?.[`__frame_${i}`]);
+      if (!child) {
         const childCount = flowChildCount(currentNode);
-        // For sequences: index can equal childCount (next step position after pushing child)
-        if (index > childCount) {
-          const nodeName = currentNode.config?.name ?? currentNode.type;
+        const nodeName = currentNode.config?.name ?? currentNode.type;
+        // A sequence frame's index may equal its child count: it is one past the step in progress.
+        if (childCount > 0 && index > childCount) {
           return {
             valid: false,
             error: `Path index ${index} out of bounds at depth ${i} (node "${nodeName}" has ${childCount} children)`,
             validPath,
           };
         }
+        if (i < path.length - 1) {
+          return {
+            valid: false,
+            error: `the save is inside a branch of ${currentNode.type} "${nodeName}" that the current rules no longer have. ` +
+              'Restore it under the rules it was saved with, or start a new game',
+            validPath,
+          };
+        }
       }
-
       validPath.push(index);
-
-      // Navigate to the child node for next iteration
-      const child = resolveFlowChild(currentNode, index, frameDataAtDepth);
       if (child) {
         currentNode = child;
       }
@@ -1573,7 +1599,7 @@ export class FlowEngine<G extends Game = Game> {
       iterations,
       frameData: Object.keys(frameData).length > 0 ? frameData : undefined,
       playerIndex: this.currentPlayer?.seat,
-      // Serialize element-valued flow variables (e.g. eachPlayer's currentPlayer)
+      // Serialize element-valued flow variables (e.g. a forEach item)
       // so the position is structured-cloneable across the broadcast/RPC boundary.
       variables: encodeFlowValue({ ...this.variables }) as Record<string, unknown>,
       // Plain seat number and count, so it needs no relinking on the way back.
@@ -1868,7 +1894,6 @@ export class FlowEngine<G extends Game = Game> {
       }
 
       this.currentPlayer = player;
-      this.variables[config.name ?? 'currentPlayer'] = this.currentPlayer;
 
       this.stack.push({ node: config.do, index: 0, completed: false });
       frame.data = { ...frame.data, nextIndex };
@@ -2094,6 +2119,8 @@ export class FlowEngine<G extends Game = Game> {
       throw new Error('ActionStep requires a player');
     }
 
+    // Current while its conditions are checked, so `ctx.player.isCurrent()` holds for it.
+    this.currentPlayer = player;
     const available = this.offeredSequentialActions(config, context, player);
 
     // If no available actions and minMoves met, complete
@@ -2117,7 +2144,6 @@ export class FlowEngine<G extends Game = Game> {
     this.moveCount = moveCount;
 
     // Prompt for input
-    this.currentPlayer = player;
     this.availableActions = available;
 
     // Don't mark completed yet - we'll continue after input
@@ -2139,13 +2165,13 @@ export class FlowEngine<G extends Game = Game> {
     if (!player) {
       throw new Error(`Action step holds a follow-up for seat ${seat}, but this game has no seat ${seat}.`);
     }
+    this.currentPlayer = player;
     const available = this.offeredSequentialActions(config, context, player);
 
     this.warnIfFollowUpStalls(config.name ?? 'action-step', seat, this.heldFollowUp(frame, seat)!);
     this.openStepWindow(frame, config, context, 'action-step');
     this.currentActionConfig = config;
     this.moveCount = frame.data?.moveCount as number;
-    this.currentPlayer = player;
     this.availableActions = available;
     return { awaitingInput: true };
   }

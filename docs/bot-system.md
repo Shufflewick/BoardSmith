@@ -487,7 +487,8 @@ each one:
 
 - **Withheld attributes** on a visible element (`static visibleAttributes`).
 - **Hidden ELEMENTS** (`showOnlyTo` / `hideFrom`, or any child of a hidden,
-  count-only or owner-only zone). A face-down card is a placeholder holding no
+  count-only or owner-only zone, unless its own visibility shows it to that
+  seat). A face-down card is a placeholder holding no
   game attributes at all, so a sampler supposes its rank and suit the same way
   it supposes any other withheld value. What the placeholder genuinely carries
   (its type, its face-down artwork, which hand it sits in) is information the

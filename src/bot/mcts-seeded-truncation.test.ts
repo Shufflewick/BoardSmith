@@ -213,7 +213,7 @@ function newParityGame(): ParityGame {
   return game;
 }
 
-const PARITY_SEEDS = Array.from({ length: 12 }, (_, i) => `parity-${i}`);
+const PARITY_SEEDS = Array.from({ length: 20 }, (_, i) => `parity-${i}`);
 const parityConfig = {
   ...DIFFICULTY_PRESETS.hard,
   iterations: DIFFICULTY_PRESETS.hard.parallel! * ITERATIONS_PER_SUB_SEARCH,

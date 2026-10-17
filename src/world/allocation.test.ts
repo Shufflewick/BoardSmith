@@ -178,6 +178,17 @@ describe("#377 — a world's id allocation is durable, not derived from what is 
     expect(idOf(again!.partition)).not.toBe(idOf(first!.partition));
   });
 
+  it("answers a second ask for a resident created root from residency, minting nothing (#218)", async () => {
+    const genesis = await storedWorld();
+    const host = createWorld(options({ nextElementId: genesis.nextElementId })).runner;
+    const first = await host.createPartition("dynamic");
+
+    const again = await host.createPartition("dynamic");
+
+    expect(idOf(again!.partition)).toBe(idOf(first!.partition));
+    expect(again!.nextElementId).toBe(first!.nextElementId);
+  });
+
   it("REFUSES a cold mint from a host that declared no stamp at all", async () => {
     // The wrong path, made loud rather than made silent. A host that never
     // persisted the allocation cannot mint safely, and the old behaviour was to
@@ -245,6 +256,22 @@ describe("#377 — a world's id allocation is durable, not derived from what is 
     ).rejects.toBe(proof);
     await expect(stale.viewsFor(["p1"])).rejects.toBe(proof);
     await expect(stale.serialize(["a"])).rejects.toBe(proof);
+  });
+
+  it("does not call an id clash a stale stamp because of what the room is named (#793)", async () => {
+    // The stale-stamp throw used to be recognised by its sentence, so any other
+    // adoption failure whose text happened to hold the phrase was coded as one.
+    const genesis = await storedWorld();
+    const host = await hostHoldingA(genesis);
+    const a = genesis.partitions.a!;
+    const twin = { ...a, json: { ...(a.json as object), name: "id allocation stamp" } };
+
+    const refusal = await host
+      .declare(READ_A, "p1", { c: twin }, arrival(1_000), { declaredActivity: [], declaredNotices: [] })
+      .catch((error: unknown) => error);
+
+    expect((refusal as Error).message).toMatch(/already resident/);
+    expect(refusal).not.toBeInstanceOf(WorldRefusal);
   });
 
   it("derives the stamp a world's stored bytes call for", async () => {

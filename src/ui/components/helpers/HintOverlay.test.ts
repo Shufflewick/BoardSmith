@@ -268,3 +268,20 @@ describe('HintOverlay', () => {
     }
   });
 });
+
+describe('HintOverlay unmount (#749)', () => {
+  it('removes the scroll listener from the region it added it to, even when that region no longer matches', async () => {
+    const { wrapper, fixture } = mountOverlay(
+      { text: 'Suggested move', target: { kind: 'element', ref: { id: 7 } } },
+      '<div data-bs-el-id="7"></div>',
+    );
+    await nextTick();
+    await nextTick();
+    const removeSpy = vi.spyOn(fixture, 'removeEventListener');
+    // The region stops matching `.boardregion` before unmount, so a re-query cannot find it.
+    fixture.classList.remove('boardregion');
+    wrapper.unmount();
+    expect(removeSpy).toHaveBeenCalledWith('scroll', expect.any(Function));
+    fixture.remove();
+  });
+});

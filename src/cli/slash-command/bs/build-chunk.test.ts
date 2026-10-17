@@ -2118,6 +2118,9 @@ describe('#452: the done gate is `boardsmith verify`', () => {
   it("state-machine.md's Git Protocol defines the chunk's verify base once, as what `--chunk` measures from, with no shell to compute it", () => {
     const protocol = flatRead('state-machine.md').split('## Git Protocol')[1].split(' ## ')[0];
     expect(protocol).toContain(CHUNK_COMMAND);
+    // #985: `--chunk` is the chunk's fast checks, the only verify chunk work runs.
+    expect(protocol).toMatch(/fast checks, and the only verify chunk work runs: the test files the chunk added or changed since its verify base.{0,80}and typecheck/);
+    expect(protocol).toMatch(/full checks.{0,120}mutation check\) run once, before the game is published/);
     expect(protocol).toMatch(/verify base.{0,200}commit before the chunk's first `chunk-<slug>\/` commit/);
     expect(protocol).toMatch(/main branch.{0,300}merge base is the current commit/);
     expect(protocol).toMatch(/--base HEAD.{0,400}no chunk/);
@@ -2141,7 +2144,9 @@ describe('#452: the done gate is `boardsmith verify`', () => {
 
   it('test.md runs it as the last step, and never lists vue-tsc or the whole suite as steps of their own', () => {
     const test = flatRead('build/test.md');
-    expect(test).toMatch(/npx boardsmith verify --chunk <slug>`.{0,160} It runs.{0,80}full suite, typecheck, build, validate/);
+    // #985: the chunk's gate is its fast checks; the full checks run at publish.
+    expect(test).toMatch(/npx boardsmith verify --chunk <slug>`.{0,160} It runs the chunk's fast checks: the test files the chunk added or changed since it began, and typecheck/);
+    expect(test).toMatch(/full suite, build, validate, the smoke test and a mutation check run once, at publish/);
     expect(test).toMatch(/not done until it exits zero/);
     expect(test).not.toContain('npx vue-tsc --noEmit');
   });
@@ -2168,6 +2173,9 @@ describe('#452: the done gate is `boardsmith verify`', () => {
     expect(body).not.toMatch(/verify --check(?! --chunk)/);
     expect(body).toMatch(/last command close runs.{0,200}nothing is written or committed after it/);
     expect(body).toMatch(/outcome: closed/);
+    // #985: close runs the chunk's fast checks, and their result is enough to close and merge.
+    expect(body).toMatch(/fast checks again for this commit: its tests and typecheck/);
+    expect(body).toMatch(/enough for the orchestrator to accept the chunk as closed and merge it/);
   });
 
   it('close.md says why `## Verified Commit Hash` is not the commit the done gate checks', () => {
@@ -2188,6 +2196,7 @@ describe('#452: the done gate is `boardsmith verify`', () => {
   it('chunk-dispatch.md: a `closed` return is the commit `verify --check --chunk <slug>` accepted, and the orchestrator checks it before writing anything', () => {
     const dispatch = flatRead('orchestrate/chunk-dispatch.md');
     expect(dispatch).toMatch(/`closed`.{0,400}boardsmith verify --check --chunk <slug>/);
+    expect(dispatch).toMatch(/fast checks.{0,200}enough to accept the chunk as closed and merge it/);
     expect(dispatch).toMatch(/clean tree/);
     expect(dispatch).not.toMatch(/verify --check(?! --chunk)/);
     const after = dispatch.split('## After the Return')[1];
@@ -2215,6 +2224,24 @@ describe('#452: the done gate is `boardsmith verify`', () => {
     const playtest = flatRead('build/playtest.md');
     expect(playtest).toMatch(/chunk-signoff.{0,300}boardsmith verify/);
   });
+
+  // #985 ruling: a chunk with no test of its own passes its fast checks only when its Spec Manifest marks it exempt.
+  it('says an exempt chunk passes its fast checks on typecheck alone, and any other chunk must add or change a test', () => {
+    const protocol = flatRead('state-machine.md').split('## Git Protocol')[1].split(' ## ')[0];
+    expect(protocol).toMatch(/no test file fails it, unless its Spec Manifest marks it exempt.{0,80}passes on typecheck alone/);
+    expect(flatRead('state-machine.md')).toMatch(/light chunk that writes no test.{0,120}`\| exempt \| <reason> \| n\/a \|` row/);
+    expect(flatRead('build/test.md')).toMatch(/no test file fails it, unless its Spec Manifest marks it exempt/);
+    expect(flatRead('build/spec.md')).toMatch(/exempt chunk that adds or changes no test file passes its fast checks on typecheck alone/);
+    expect(flatRead('build/final-acceptance.md')).toMatch(/no test file, its `## Spec Manifest` carries the one `\| exempt/);
+  });
+
+  // #985: chunk work has one verify, the fast checks; the opt-in authored-test selection is gone.
+  it('no chunk step names the removed focused selection path', () => {
+    for (const file of ['state-machine.md', 'routing.md', 'build-chunk.md', 'build-game.md', 'build/test.md', 'build/repair.md',
+      'build/playtest.md', 'build/redteam.md', 'build/audit.md', 'build/final-acceptance.md', 'build/close.md', 'orchestrate/chunk-dispatch.md']) {
+      expect({ file, focused: /Focused Verification Policy|--selection/.test(read(file)) }).toEqual({ file, focused: false });
+    }
+  });
 });
 
 describe('#453: the in-browser smoke test is a chunk output, and part of the done gate', () => {
@@ -2241,9 +2268,10 @@ describe('#453: the in-browser smoke test is a chunk output, and part of the don
     expect(spec).toMatch(/`seed: \['smoke', '17'\]`/);
   });
 
-  it("puts the smoke test in the done gate's list of checks, with the commands to run it alone and to install its browser", () => {
+  it("puts the smoke test in the full verify's list of checks, with the commands to run it alone and to install its browser", () => {
     const gate = flatRead('build/test.md').split('The done gate: `boardsmith verify`')[1].split('## The A11y Floor')[0];
-    expect(gate).toMatch(/full suite, typecheck, build, validate, the smoke test and a mutation check/);
+    // #985: the smoke test is part of the full verify, which runs at publish, not per chunk.
+    expect(gate).toMatch(/full suite, build, validate, the smoke test and a mutation check run once, at publish, as `boardsmith verify`/);
     expect(gate).toContain('`npx boardsmith smoke`');
     expect(gate).toContain('`npx boardsmith install-browser`');
     expect(cliSource).toContain(".command('smoke')");

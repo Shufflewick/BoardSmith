@@ -1,5 +1,51 @@
 # Migration Guide
 
+## Chunk work runs `boardsmith verify --chunk <slug>`, with no selection (#985)
+
+`boardsmith verify --selection <path>` is removed, and so is the `focused`
+block a game's `.agent-policy.json` used to opt into it. A chunk's gates
+(`chunk-signoff`, `review-gate`, `verify --check --chunk`) take only the
+result of `boardsmith verify --chunk <slug>`, which picks the chunk's own tests
+itself: the test files it added or changed since it began, plus typecheck. It
+needs no selection manifest. The full `boardsmith verify` runs once, before
+`boardsmith publish`.
+
+In a game that still uses either:
+
+- Delete the `focused` block from `.agent-policy.json`, and delete its selection
+  manifest (such as `.agent-policy-tests.json`).
+- Replace `boardsmith verify --chunk <slug> --selection <path>` (or
+  `boardsmith verify --selection <path>`) with `boardsmith verify --chunk <slug>`.
+- A chunk that adds no test of its own must mark itself exempt in its Spec
+  Manifest with the row `| exempt | <reason> | n/a |`, or `verify --chunk`
+  refuses it.
+
+A run log's `Scope:` field and a MERGE-SIGNOFFS.md entry's `Scope:` and
+`Selection:` lines are no longer written or read. Leave old ones in place.
+Sign-offs no longer record an `Equivalence:` line, and chunk merges no longer
+check one: mutant equivalences are proven and checked at publish.
+
+## `game.currentPlayer` comes from the flow (#780)
+
+`game.currentPlayer` and `player.isCurrent()` now read the seat the flow is
+running for: the `eachPlayer` seat, or the player an `actionStep` names.
+`game.setCurrentPlayer()` and `player.setCurrent()` are removed, so a game that
+called them stops type-checking. `game.currentPlayer` is `undefined` before the
+flow starts, once it is complete, and while a simultaneous step is open (its
+conditions included), since every seat acts there.
+
+Replace a hand-set current player with the flow node that names the seat:
+
+```diff
+-  game.setCurrentPlayer(game.getPlayer(2)!);
+-  // ...
+-  actionStep({ actions: ['bid'] }),
++  actionStep({ player: (ctx) => ctx.game.getPlayer(2)!, actions: ['bid'] }),
+```
+
+For a turn per seat, use `eachPlayer({ do: ... })` (with `TurnOrder.CONTINUE`
+to start from the seat the flow last ran for).
+
 ## Historical run logs keep their unrecorded routing facts (#710)
 
 The run-log template before #454 requested `Pipeline`, dispatch and finish times,
@@ -23,6 +69,14 @@ and entries with any current routing fields are checked under the current rules.
 Historical entries supply no role or retry count to the current routing ladder.
 A new retry or review cannot name one as its routing source; record the current
 work in a new dispatch under the current rules before retrying or reviewing it.
+
+## `boardsmith publish` requires a full `boardsmith verify` (#984)
+
+`boardsmith publish` now refuses unless a full `boardsmith verify` passed for
+the commit being published, on a clean tree, with its mutation check measured
+from the last published commit (the repository's first commit before any
+publish). Commit your work and run the `boardsmith verify --base <sha>` the
+refusal names, then publish again. There is no skip flag.
 
 ## `boardsmith publish` keeps ids per platform (#704)
 

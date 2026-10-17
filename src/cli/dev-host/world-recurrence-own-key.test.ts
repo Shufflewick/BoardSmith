@@ -182,6 +182,15 @@ describe("#583: a recurrence's handler decides what happens to its own key", () 
     expect(await wake()).toEqual({ marks: '1m', queued: ['world:other@11m', 'world:tick@2m/1m'] });
     await world.close();
   });
+
+  it('each caught-up occurrence replaces the DIFFERENT key the one before it wrote (#746)', async () => {
+    // Occurrence 2 must plan against the queue occurrence 1 committed, or its
+    // upsert of `other` finds nothing to replace and queues a second one.
+    mode = 'other-key';
+    const { world, wake } = await behindBy(3);
+    expect(await wake()).toEqual({ marks: '1m,2m,3m', queued: ['world:other@13m', 'world:tick@4m/1m'] });
+    await world.close();
+  });
 });
 
 describe('#583: a recurrence a SEAT armed is not its handler\'s own key', () => {

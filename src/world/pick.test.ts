@@ -95,12 +95,14 @@ function newGame(): FleetGame {
   return new FleetGame({ playerCount: 2, seed: "fleet", worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
 }
 
-/** A dock holding two ships of different hold and two operatives. */
-function genesis(): Map<string, StoredPartition> {
+/** A dock holding two ships of different hold and two operatives; `doryOwner`
+ *  gives the dory to that seat. */
+function genesis(doryOwner?: number): Map<string, StoredPartition> {
   const game = newGame();
   const dock = game.create(Dock, "dock");
   const dory = dock.create(Ship, "dory");
   dory.hold = 700;
+  if (doryOwner !== undefined) dory.player = game.players[doryOwner - 1];
   const skiff = dock.create(Ship, "skiff");
   skiff.hold = 350;
   dock.create(Operative, "ash");
@@ -123,11 +125,11 @@ function newEngine(): BoardSmithWorldEngine {
 }
 
 /** An engine running one action, with the fleet resident. */
-async function engineFor(action: ActionDefinition) {
+async function engineFor(action: ActionDefinition, doryOwner?: number) {
   const engine = new BoardSmithWorldEngine({
     game: newGame(),
     seats: new Map([["player-a", 1]]),
-    store: new MapStore(genesis()),
+    store: new MapStore(genesis(doryOwner)),
     actions: [action],
     view: () => [FLEET],
   });
@@ -343,6 +345,112 @@ describe("#384 — an offer cannot write to the world it is describing", () => {
     );
   });
 
+  /** #794: `ctx.player.game` is a third door into the same tree. */
+  const viaPlayer = (player: Player) => (player.game as FleetGame).ship("dory");
+
+  const meddlingCondition = worldAction<FleetGame>("meddlingCondition")
+    .needs(() => [FLEET])
+    .condition({
+      "may meddle": ({ player }) => {
+        viaPlayer(player).hold = 1;
+        return true;
+      },
+    })
+    .execute(() => {});
+
+  const meddlingPick = worldAction<FleetGame>("meddlingPick")
+    .needs(() => [FLEET])
+    .chooseFrom("ship", {
+      choices: ({ player }) => {
+        viaPlayer(player).hold = 1;
+        return ["dory"];
+      },
+    })
+    .execute(() => {});
+
+  const meddlingQuote = worldAction<FleetGame>("meddlingQuote")
+    .needs(() => [FLEET])
+    .chooseFrom("ship", { choices: () => ["dory"] })
+    .quote((_args, { player }) => {
+      viaPlayer(player).hold = 1;
+      return null;
+    })
+    .execute(() => {});
+
+  it("REFUSES a write through ctx.player.game from a condition (#794)", async () => {
+    const engine = await engineFor(meddlingCondition);
+
+    await expect(engine.offersFor("player-a", STAMP)).rejects.toThrow(
+      /A read-only view of this world tried to write/,
+    );
+    expect(await engine.serializePartitions([FLEET])).toMatchObject({
+      [FLEET]: expect.stringContaining('"hold":700') as unknown as string,
+    });
+  });
+
+  it("REFUSES a write through ctx.player.game from a pick's choices (#794)", async () => {
+    const engine = await engineFor(meddlingPick);
+
+    await expect(engine.offersFor("player-a", STAMP)).rejects.toThrow(
+      /A read-only view of this world tried to write/,
+    );
+    await expect(
+      engine.resolvePick("player-a", "meddlingPick", "ship", {}, STAMP),
+    ).rejects.toThrow(/A read-only view of this world tried to write/);
+  });
+
+  it("REFUSES a write through ctx.player.game from a quote (#794)", async () => {
+    const engine = await engineFor(meddlingQuote);
+
+    await expect(
+      engine.resolveQuote("player-a", "meddlingQuote", { ship: "dory" }, STAMP),
+    ).rejects.toThrow(/A read-only view of this world tried to write/);
+    expect(await engine.serializePartitions([FLEET])).toMatchObject({
+      [FLEET]: expect.stringContaining('"hold":700') as unknown as string,
+    });
+  });
+
+  /** Every way a callback asks "is this mine", against a seat that owns the dory:
+   *  the projected player must still be the player the projected tree names. */
+  const ownedBy = (game: FleetGame, player: Player): string[] => {
+    const dory = game.first(Ship, "dory")!;
+    if (dory.player !== player) throw new Error("the dory's player is not ctx.player");
+    if (player.my(Ship) !== dory) throw new Error("player.my(Ship) is not the dory");
+    const mine = player.allMy(Ship).map((ship) => ship.name!);
+    const byFinder = game.all(Ship, { player }).map((ship) => ship.name!);
+    const byPredicate = game.all(Ship, (ship) => ship.player === player).map((ship) => ship.name!);
+    if (byFinder.join() !== mine.join() || byPredicate.join() !== mine.join()) {
+      throw new Error(`owner reads disagree: ${mine.join()} / ${byFinder.join()} / ${byPredicate.join()}`);
+    }
+    return mine;
+  };
+
+  const sailMine = worldAction<FleetGame>("sailMine")
+    .needs(() => [FLEET])
+    .condition({ "owns a ship": ({ game, player }) => ownedBy(game, player).length > 0 })
+    .chooseFrom("ship", { choices: ({ game, player }) => ownedBy(game, player) })
+    .quote((_args, { game, player }) => [`You own ${ownedBy(game, player).join()}.`])
+    .execute(() => {});
+
+  it("still matches an owned element to ctx.player in an offer (#794)", async () => {
+    const engine = await engineFor(sailMine, 1);
+
+    const [offer] = await engine.offersFor("player-a", STAMP);
+
+    expect(offer!.name).toBe("sailMine");
+    expect(offer!.selections[0]!.choices?.map((choice) => choice.value)).toEqual(["dory"]);
+  });
+
+  it("still matches an owned element to ctx.player in a pick and a quote (#794)", async () => {
+    const engine = await engineFor(sailMine, 1);
+
+    const pick = await engine.resolvePick("player-a", "sailMine", "ship", {}, STAMP);
+    const quote = await engine.resolveQuote("player-a", "sailMine", { ship: "dory" }, STAMP);
+
+    expect(pick.choices?.map((choice) => choice.value)).toEqual(["dory"]);
+    expect(quote).toEqual(["You own dory."]);
+  });
+
   it("still lets an offer READ everything its declaration named", async () => {
     // The half that must not break: an offer's whole job is to read the
     // resident tree, and a projection that refused reads would refuse offers.
@@ -394,5 +502,89 @@ describe("#393 — a submitted choice that is no longer listed", () => {
     await expect(
       engine.applyCommand("player-a", { name: "board", args: { ship: "galleon" } }, COMMAND_STAMP),
     ).rejects.toThrow(/^The galleon has left dock before seat 1 could board\. Pick another ship\.$/);
+  });
+});
+
+/**
+ * #798: A PICK OR A QUOTE ANSWERS ONLY FOR AN ACTION THE SEAT IS OFFERED.
+ *
+ * `offersFor` drops an action whose condition is false; a re-asked pick or a
+ * quote used to answer for it anyway, so a seat could read candidates the
+ * offer never showed it. A disabled action is still offered (greyed, with its
+ * picks), so its reads still answer, exactly as the offer does.
+ */
+describe("#798 — a read answers only for an offered action", () => {
+  const hidden = worldAction<FleetGame>("hidden")
+    .needs(() => [FLEET])
+    .condition({ "never offered": () => false })
+    .chooseFrom("ship", { choices: ({ game }) => game.all(Ship).map((ship) => ship.name!) })
+    .quote(() => ["secret price"])
+    .execute(() => {});
+
+  const greyed = worldAction<FleetGame>("greyed")
+    .needs(() => [FLEET])
+    .disabled(() => "The dock is closed.")
+    .chooseFrom("ship", { choices: ({ game }) => game.all(Ship).map((ship) => ship.name!) })
+    .quote(() => ["closed price"])
+    .execute(() => {});
+
+  const notOffered = { code: "unknown-command", message: expect.stringContaining('"hidden"') as unknown };
+
+  it("REFUSES a pick and a quote on an action whose condition is false", async () => {
+    const engine = await engineFor(hidden);
+
+    expect(await engine.offersFor("player-a", STAMP)).toEqual([]);
+    await expect(
+      engine.resolvePick("player-a", "hidden", "ship", {}, STAMP),
+    ).rejects.toMatchObject(notOffered);
+    await expect(
+      engine.resolveQuote("player-a", "hidden", { ship: "dory" }, STAMP),
+    ).rejects.toMatchObject(notOffered);
+  });
+
+  /** Offered only to seat 1, and only once round zero has loaded a ship. */
+  const captains = worldAction<FleetGame>("captains")
+    .needs(() => [FLEET])
+    .condition({ "seat 1 with a ship": ({ game, player }) => player.seat === 1 && game.all(Ship).length > 0 })
+    .chooseFrom("ship", { choices: ({ game }) => game.all(Ship).map((ship) => ship.name!) })
+    .quote(() => ["captain's price"])
+    .execute(() => {});
+
+  it("decides by the asking seat, against what round zero loaded", async () => {
+    // COLD, so the fleet arrives only through the read's own round zero.
+    const engine = new BoardSmithWorldEngine({
+      game: newGame(),
+      seats: new Map([["player-a", 1], ["player-b", 2]]),
+      store: new MapStore(genesis()),
+      actions: [captains],
+      view: () => [FLEET],
+    });
+    const refused = { code: "unknown-command", message: expect.stringContaining('"captains"') as unknown };
+
+    const pick = await engine.resolvePick("player-a", "captains", "ship", {}, STAMP);
+    const quote = await engine.resolveQuote("player-a", "captains", { ship: "dory" }, STAMP);
+
+    expect(pick.choices?.map((choice) => choice.value)).toEqual(["dory", "skiff"]);
+    expect(quote).toEqual(["captain's price"]);
+    await expect(
+      engine.resolvePick("player-b", "captains", "ship", {}, STAMP),
+    ).rejects.toMatchObject(refused);
+    await expect(
+      engine.resolveQuote("player-b", "captains", { ship: "dory" }, STAMP),
+    ).rejects.toMatchObject(refused);
+  });
+
+  it("still answers a disabled action, which the offer shows greyed with its picks", async () => {
+    const engine = await engineFor(greyed);
+
+    const [offer] = await engine.offersFor("player-a", STAMP);
+    const pick = await engine.resolvePick("player-a", "greyed", "ship", {}, STAMP);
+    const quote = await engine.resolveQuote("player-a", "greyed", { ship: "dory" }, STAMP);
+
+    expect(offer!.disabled).toBe("The dock is closed.");
+    expect(pick.choices?.map((choice) => choice.value)).toEqual(
+      offer!.selections[0]!.choices?.map((choice) => choice.value),
+    );
+    expect(quote).toEqual(["closed price"]);
   });
 });

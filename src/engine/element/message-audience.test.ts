@@ -52,7 +52,7 @@ function newGame(playerCount = 3): LogGame {
  * withheld" from "I am reading nothing at all" is not a guard.
  */
 const payloadMessages = (game: LogGame, seat: number | null): string[] => {
-  const snapshot = createSnapshot(game, 'LogGame', [], undefined, { forSeat: seat });
+  const snapshot = createSnapshot(game, 'LogGame', [], undefined, { forSeat: seat, reseed: 'sandbox' });
   if (snapshot.messageLog === undefined) {
     throw new Error(
       'createSnapshot produced no messageLog. The audience gate has moved off this ' +

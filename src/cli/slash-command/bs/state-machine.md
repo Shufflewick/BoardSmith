@@ -141,7 +141,9 @@ only be proposed as `light` if it introduces **no new game behavior** — no new
 no change to how an existing rule resolves. Asset swaps, restyles, and copy changes qualify; a
 chunk with a rules claim to pin does not, and runs the full ceremony so its claims get tests before
 code. If a `light` chunk turns out mid-build to need new behavior, that is a re-proposal (full
-ceremony), not something `build` absorbs.
+ceremony), not something `build` absorbs. A light chunk that writes no test names that in its
+`## Spec Manifest` as the one `| exempt | <reason> | n/a |` row (`build/spec.md` "Exemptions"),
+written by `build`: that row is what lets its fast checks (`Git Protocol`) pass on typecheck alone.
 
 Light-path status transitions: the light path has no `ask` step, so `approved` is unreachable
 for light chunks. A light chunk moves `proposed → built` directly when the user accepts the
@@ -361,21 +363,27 @@ shorthand that names no id it can map: a dash then a plain number after a provis
 - **The chunk's verify base** is the commit before the chunk's first `chunk-<slug>/` commit: where
   this chunk's work started. Every `boardsmith verify` run for chunk work (`build/test.md`,
   `build/repair.md`, `build/playtest.md`, `build/close.md`) names the chunk, and the command finds
-  that commit itself, so its mutation check covers exactly the code changed since then. Run from
-  the chunk's checkout:
+  that commit itself. Run from the chunk's checkout:
 
   ```bash
   npx boardsmith verify --chunk <slug>
   ```
 
-  Never run a bare `boardsmith verify` for chunk work. Its default base is the merge base with
-  the main branch, and a chunk built in the main checkout is on the main branch, where that merge
-  base is the current commit: no change is measured, and `boardsmith verify` fails the mutation
-  check and says to pass a base. When `--chunk <slug>` says the chunk has no commit yet, commit
-  its work under the `chunk-<slug>/step-<name>` convention first. A result measured from anywhere
-  else is not the chunk's: `chunk-signoff <slug>` and `verify --check --chunk <slug>` accept a
-  result only when its base is the chunk's verify base or a commit before it, so a
-  `npx boardsmith verify --base HEAD` run (which mutates nothing) satisfies no chunk's sign-off.
+  That is the chunk's fast checks, and the only verify chunk work runs: the test files the chunk
+  added or changed since its verify base, picked by the command itself, and typecheck. A chunk
+  that added or changed no test file fails it, unless its Spec Manifest marks it exempt
+  (`build/spec.md` "Exemptions"): an exempt chunk passes on typecheck alone. The full checks (the whole suite, build, validate,
+  the smoke test and the mutation check) run once, before the game is published
+  (`boardsmith publish` refuses without a full `boardsmith verify` for the commit), not per chunk.
+
+  Never run a bare `boardsmith verify` for chunk work. It runs the full checks, and its default
+  base is the merge base with the main branch: a chunk built in the main checkout is on the main
+  branch, where that merge base is the current commit, so no change is measured and the mutation
+  check fails. When `--chunk <slug>` says the chunk has no commit yet, commit its work under the
+  `chunk-<slug>/step-<name>` convention first. `chunk-signoff <slug>`, `review-gate <slug>` and
+  `verify --check --chunk <slug>` accept only the result `verify --chunk <slug>` made for that
+  chunk, so a full result, such as a `npx boardsmith verify --base HEAD` run, satisfies no chunk's
+  sign-off. Mutant equivalences belong to the full verify, and are proven and checked at publish.
 
 ## Repair Loop Bound
 

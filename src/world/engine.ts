@@ -133,6 +133,7 @@ import { readOnlyProjection } from "./readonly.js";
 import { assertAnsweredAllocations, assertCreatedRoots } from "./migration.js";
 import { worldBudgets, type WorldBudgets } from "./budgets.js";
 import { assertMintedUnderThisKey } from "./key-check.js";
+import { StaleAllocationStampError } from "../engine/errors.js";
 
 
 /**
@@ -634,6 +635,19 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * wake with nothing raised anywhere.
    */
   registerResident(name: string, root: GameElement): void {
+    const taken = this.residentNames.get(root.id);
+    if (root.parent !== this.game || taken !== undefined) {
+      throw worldRefusal(
+        "invalid-partition-root",
+        taken === undefined
+          ? `Partition "${name}" is not a direct child of the game: it sits inside another ` +
+              `element, so it would be stored twice and the world could not load again. ` +
+              `Create it with \`game.create(...)\`, or leave it out of the answer and let it ` +
+              `travel inside the partition that holds it.`
+          : `Partition "${name}" is the same element as partition "${taken}". One element can ` +
+              `be one partition only; answer it under one name.`,
+      );
+    }
     this.game.definePartition(root.id);
     this.residentIds.set(name, root.id);
     this.residentNames.set(root.id, name);
@@ -863,26 +877,6 @@ export class BoardSmithWorldEngine implements WorldEngine {
   }
 
   /**
-   * BUILD A PARTITION ROOT THE STORE HAS NEVER HELD (#218).
-   *
-   * Genesis runs once. Every root a world would ever need therefore had to
-   * exist from its first instant, which is why a 500-seat world paid for 500
-   * empires on the day it opened and a world whose rooms are discovered could
-   * not be written at all. This is the other door: a host that looks for a
-   * declared partition and finds no row asks here, and the bundle answers
-   * either an element -- which becomes that partition -- or nothing, in which
-   * case the name is the typo the refusal has always said it was.
-   *
-   * IDEMPOTENT BY CONSTRUCTION. It is reached only when the store holds no row
-   * for the name, and a name already resident is answered from residency
-   * without building anything, so a second reach finds the first one's work
-   * rather than replacing it.
-   *
-   * The host owns the WRITE, as it owns every other write: this answers the
-   * bytes and the parent, and a partition that was built and not yet stored is
-   * simply a partition the next checkpoint writes.
-   */
-  /**
    * THE COUNTER VALUE THIS WORLD MINTS FROM NEXT, for the host to persist
    * (#377). Never an id: an id is this value run through the world's keyed
    * cipher (#482).
@@ -908,6 +902,26 @@ export class BoardSmithWorldEngine implements WorldEngine {
     this.allocationDeclared = true;
   }
 
+  /**
+   * BUILD A PARTITION ROOT THE STORE HAS NEVER HELD (#218).
+   *
+   * Genesis runs once. Every root a world would ever need therefore had to
+   * exist from its first instant, which is why a 500-seat world paid for 500
+   * empires on the day it opened and a world whose rooms are discovered could
+   * not be written at all. This is the other door: a host that looks for a
+   * declared partition and finds no row asks here, and the bundle answers
+   * either an element -- which becomes that partition -- or nothing, in which
+   * case the name is the typo the refusal has always said it was.
+   *
+   * IDEMPOTENT BY CONSTRUCTION. It is reached only when the store holds no row
+   * for the name, and a name already resident is answered from residency
+   * without building anything, so a second reach finds the first one's work
+   * rather than replacing it.
+   *
+   * The host owns the WRITE, as it owns every other write: this answers the
+   * bytes and the parent, and a partition that was built and not yet stored is
+   * simply a partition the next checkpoint writes.
+   */
   createPartition(name: string): StoredPartition | undefined {
     if (!this.allocationDeclared) {
       throw worldRefusal(
@@ -1121,7 +1135,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
    */
   async offersFor(player: string, stamp: WorldOfferStamp): Promise<readonly WorldActionOffer[]> {
     const seat = this.seatFor(player);
-    const acting = this.playerFor(seat);
+    const acting = readOnlyProjection(this.playerFor(seat));
     const offers: WorldActionOffer[] = [];
 
     for (const definition of this.actions.values()) {
@@ -1228,24 +1242,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // whose condition is false is not offered and no further round runs, so a
       // verb that is irrelevant here costs one predicate and no hydration past
       // round one.
-      if (
-        definition.condition &&
-        // PROJECTED, AND WITH REACH-MARKING OFF (ShufflewickPub #384/#295): a
-        // condition decides whether an action is OFFERED, and an offer changes
-        // nothing -- so a condition that wrote would be writing on the one path
-        // with nowhere to put it. `readingOnly` is not optional beside the
-        // projection: a finder reached through a projected game marks what it
-        // touched, and marking is a write these traps refuse.
-        !this.game.readingOnly(() =>
-          evaluateCondition(
-            definition.condition!,
-            { game: readOnlyProjection(this.game), player: acting, args: {} },
-            `action '${definition.name}'`,
-          ),
-        )
-      ) {
-        return null;
-      }
+      if (!this.conditionHolds(definition, acting)) return null;
 
       // ONE ROUND, THEN ONE SELECTION, IN THE AUTHOR'S ORDER.
       //
@@ -1294,6 +1291,23 @@ export class BoardSmithWorldEngine implements WorldEngine {
     } finally {
       bindWorldFacilities(this.game, null);
     }
+  }
+
+  /** Whether the action's condition offers it to this seat, with empty args as
+   *  a table evaluates availability. PROJECTED, AND WITH REACH-MARKING OFF
+   *  (ShufflewickPub #384/#295): a finder reached through a projected game marks
+   *  what it touched, and marking is a write these traps refuse. */
+  private conditionHolds(definition: ActionDefinition, acting: Player): boolean {
+    return (
+      !definition.condition ||
+      this.game.readingOnly(() =>
+        evaluateCondition(
+          definition.condition!,
+          { game: readOnlyProjection(this.game), player: acting, args: {} },
+          `action '${definition.name}'`,
+        ),
+      )
+    );
   }
 
   /**
@@ -1362,7 +1376,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
   ): Promise<T> {
     this.refuseUndeclaredArgs(definition, args);
     const seat = this.seatFor(player);
-    const acting = this.playerFor(seat);
+    const acting = readOnlyProjection(this.playerFor(seat));
     const named: string[] = [];
     // As `offerOf`: this is a seat's own read, and a seat's verb declares no chair.
     const namedSeats: number[] = [];
@@ -1370,6 +1384,14 @@ export class BoardSmithWorldEngine implements WorldEngine {
     try {
       for (let step = 0; step <= through; step++) {
         await this.hydrateRounds(definition, step, seat, args, named, namedSeats, null, arrivalAt(stamp.now));
+        // AFTER ROUND ZERO, as offerOf: a read answers only what the offer shows (#798).
+        if (step === 0 && !this.conditionHolds(definition, acting)) {
+          throw worldRefusal(
+            "unknown-command",
+            `"${definition.name}" is not offered to this seat right now, so there is nothing to ` +
+              "pick or price for it. Refresh the offer and choose an action it lists.",
+          );
+        }
       }
       return answer(acting, named, this.resolveDraft(definition, args, acting, named));
     } finally {
@@ -1654,7 +1676,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // that wrote would reach every watcher's frame and be reverted at the next
     // hibernation with nobody told.
     const reading = readOnlyProjection(this.game);
-    const pick = buildPickMetadata(reading, acting, selection, { ...args });
+    const pick = buildPickMetadata(reading, acting, definition.name, selection, { ...args });
     if (selection.type === "number" || selection.type === "text") return pick;
 
     const candidates = this.game
@@ -1831,15 +1853,20 @@ export class BoardSmithWorldEngine implements WorldEngine {
       }),
     );
     if (box === null) return null;
-    if (!Number.isInteger(box) || box < 1 || box > this.game.players.length) {
+    return this.declaredSeat(box, "declared the notice box of", "`.noticeBox()`", action);
+  }
+
+  /** A declared seat is a whole number from 1 to this world's seat count, or a refusal. */
+  private declaredSeat(seat: number, said: string, round: string, action: string): number {
+    if (!Number.isInteger(seat) || seat < 1 || seat > this.game.players.length) {
       throw worldRefusal(
         "invalid-seat-declaration",
-        `Action "${action}" declared the notice box of "${String(box)}", which is not a seat in ` +
-          `this world. A \`.noticeBox()\` round names one seat from 1 to ` +
-          `${this.game.players.length}, or \`null\` for nobody.`,
+        `Action "${action}" ${said} "${String(seat)}", which is not a seat in this world. ` +
+          `A ${round} round names one seat from 1 to ${this.game.players.length}, or \`null\` ` +
+          "for nobody.",
       );
     }
-    return box;
+    return seat;
   }
 
   /**
@@ -1886,7 +1913,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * before the host has decided what this dispatch may change, and what it
    * merely LOOKED at must not enter the next dispatch's dirty comparison.
    *
-   * A SEAT IS A WHOLE POSITIVE NUMBER OR IT IS NOTHING. The refusal is here
+   * A SEAT IS A WHOLE NUMBER INSIDE THIS WORLD OR IT IS NOTHING. The refusal is here
    * rather than at the host because the host would have to answer a point read
    * for `1.5` to find out, and what it would answer is an empty row -- which
    * reads, to the phase that asked, exactly like a chair nobody is sitting in.
@@ -1906,15 +1933,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       }),
     );
     if (about === null) return null;
-    if (!Number.isInteger(about) || about < 1) {
-      throw worldRefusal(
-        "invalid-seat-declaration",
-        `Action "${action}" says it is about "${String(about)}", which is not a whole seat ` +
-          "number. A declared activity read names one chair -- a positive integer -- or `null` " +
-          "for a phase with nobody to ask about.",
-      );
-    }
-    return about;
+    return this.declaredSeat(about, "says it is about", "`.about()`", action);
   }
 
   /**
@@ -2555,11 +2574,6 @@ export class BoardSmithWorldEngine implements WorldEngine {
         // throw is what triggers the rollback that makes "refused" mean the
         // world is unchanged.
         //
-        // A PLAIN ERROR AND NOT A `worldRefusal`, deliberately. Under the flat
-        // table a refusing handler threw the game's own exception and it
-        // travelled unclassified, which is how a host tells "the rules said no"
-        // from "the platform's bookkeeping broke". Giving it a code here would
-        // relabel every bug in a game's rules as one of the platform's words.
         // THE CLASSIFIED ONE IF THERE WAS ONE, and the game's own sentence
         // otherwise. A plain `Error` is deliberate for the second case: under
         // the flat table a refusing handler threw the game's own exception and
@@ -3347,13 +3361,13 @@ export class BoardSmithWorldEngine implements WorldEngine {
       root = this.game.adoptSubtree(stored.parentId, stored.json as ElementJSON);
     } catch (error) {
       // A STALE STAMP IS THE PLATFORM'S FAULT, AND MUST SAY SO (#224).
-      // `adoptSubtree` proves it from the bytes and throws a bare Error, and an
+      // `adoptSubtree` proves it from the bytes and throws its own class, and an
       // uncoded throw is charged to the GAME -- so a world whose host lost the
       // stamp its own command minted under refused every room-touching verb
       // while the park ladder sat still and the publisher's health score paid
       // for it. Coded here, at the seam that knows the throw is about
       // allocation rather than about the game's rules.
-      if (error instanceof Error && /id allocation stamp/.test(error.message)) {
+      if (error instanceof StaleAllocationStampError) {
         throw worldRefusal("allocation-stale", error.message);
       }
       throw error;
@@ -3401,7 +3415,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * is what a reconnect looks like from here and must be free; moving a seated
    * player to another seat is not a reconnect, and silently accepting it would
    * hand one person another person's holdings. A player who has genuinely left
-   * is retired with `unseat` first, and may then be seated anywhere.
+   * is retired with `unseat` first, and may then be seated anywhere. A seat
+   * another player holds is refused the same way, until that holder is unseated.
    */
   seat(player: string, seat: number): void {
     const held = this.seats.get(player);
@@ -3413,6 +3428,14 @@ export class BoardSmithWorldEngine implements WorldEngine {
         `"${player}" already plays seat ${held} in this world and cannot be moved to seat ` +
           `${seat}. A seat is where a player's holdings are; moving one would hand them ` +
           `somebody else's.`,
+      );
+    }
+    const holder = this.holderOf(seat);
+    if (holder !== null && holder !== player) {
+      throw worldRefusal(
+        "seat-conflict",
+        `"${player}" cannot take seat ${seat}: "${holder}" holds seat ${seat} in this world. ` +
+          `Two holders would both command its holdings; unseat "${holder}" first.`,
       );
     }
     this.seats.set(player, seat);
@@ -3462,11 +3485,10 @@ export class BoardSmithWorldEngine implements WorldEngine {
   private seatFor(player: string): number {
     const seat = this.seats.get(player);
     if (seat === undefined) {
-      const known = [...this.seats.keys()];
+      // Never list the roster: the message reaches the caller, who may be anyone (#797).
       throw worldRefusal(
         "unknown-player",
-        `"${player}" is not in this world: it seats ` +
-          `${known.length > 0 ? known.join(", ") : "nobody"}.`,
+        `"${player}" is not in this world. Seat the player before sending their commands.`,
       );
     }
     return seat;

@@ -18,7 +18,7 @@ async function requireUnchangedContext(projectDir: string, commit: string, mutan
 
 /** Prepares evidence for a reviewer's signed commit; it grants no approval itself. */
 export async function mutationEquivalenceCommand(id: string, options: {
-  project?: string; base?: string; chunk?: string; contract: string; proof: string;
+  project?: string; base?: string; contract: string; proof: string;
 }): Promise<void> {
   const projectDir = resolve(options.project ?? process.cwd());
   requireGameProject(projectDir);
@@ -29,7 +29,7 @@ export async function mutationEquivalenceCommand(id: string, options: {
   const base = await runBase(projectDir, options);
   const mutants = await collectMutants(projectDir, (await changedSince(projectDir, base.commit)).code);
   const matches = mutants.filter((mutant) => cache.fingerprint(mutant) === id);
-  if (matches.length !== 1) throw new Error('That mutant ID does not identify one current mutation. Run `boardsmith verify` again and use its ID with the same --base or --chunk.');
+  if (matches.length !== 1) throw new Error('That mutant ID does not identify one current mutation. Run `boardsmith verify` again and use its ID with the same --base.');
   const mutant = matches[0];
   const outcome = await observeMutant(projectDir, mutant);
   if (outcome !== 'survived') throw new Error(`The selected mutant ${outcome === 'killed' ? 'was killed by the suite' : 'timed out'}. Only a normally completed survivor can receive an equivalence review.`);
@@ -49,5 +49,5 @@ export async function mutationEquivalenceCommand(id: string, options: {
   await fs.writeFile(path, `${JSON.stringify({ format: 1, entries: [...entries.filter((entry) => entry.id !== id), record] }, null, 2)}\n`);
   console.log(`Prepared ${MUTATION_EQUIVALENCES} for ${mutant.file}:${mutant.line}: ${mutant.description}.`);
   console.log(`At source offset ${mutant.change.offset}: ${JSON.stringify(mutant.change.before)} -> ${JSON.stringify(mutant.change.after)}.`);
-  console.log('A reviewer must inspect the exact mutation, valid-input contract and proof, then commit the ledger with `git commit -S`. Run `boardsmith verify` again with the same --base or --chunk.');
+  console.log('A reviewer must inspect the exact mutation, valid-input contract and proof, then commit the ledger with `git commit -S`. Run `boardsmith verify` again with the same --base.');
 }

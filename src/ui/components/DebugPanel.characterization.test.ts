@@ -138,6 +138,7 @@ interface Vm {
   copyDeckToClipboard: (d: unknown) => Promise<void>;
   copyElementToClipboard: (e: unknown) => Promise<void>;
   formattedState: string;
+  showRawState: boolean;
   panelExpanded: boolean;
   togglePanel: () => void;
 }
@@ -741,11 +742,13 @@ describe('DebugPanel clipboard and download', () => {
     const cyclic: Record<string, unknown> = {};
     cyclic.self = cyclic;
     const { vm } = track(mountPanel(undefined, { state: cyclic }));
+    vm.showRawState = true;
     expect(vm.formattedState).toBe('Error formatting state');
   });
 
   it('says so when there is no state at all', async () => {
     const { vm } = track(mountPanel(undefined, { state: null }));
+    vm.showRawState = true;
     expect(vm.formattedState).toBe('No state available');
   });
 

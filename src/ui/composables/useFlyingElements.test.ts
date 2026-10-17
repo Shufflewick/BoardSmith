@@ -16,7 +16,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ref, nextTick } from 'vue';
+import { ref, nextTick, defineComponent, h } from 'vue';
+import { mount } from '@vue/test-utils';
 
 // jsdom lacks matchMedia; modules that read it at import time would throw.
 vi.stubGlobal(
@@ -378,6 +379,34 @@ describe('useFlyingElements', () => {
       expect(flyingElements.value).toHaveLength(0);
       // Not in test mode: no trace should have been recorded.
       expect(getAnimationTrace()).toHaveLength(0);
+    });
+  });
+
+  describe('unmount (#749)', () => {
+    it('cancels running animation frames on unmount without autoWatch', async () => {
+      const cancelFrame = vi.fn();
+      vi.stubGlobal('requestAnimationFrame', () => 42);
+      vi.stubGlobal('cancelAnimationFrame', cancelFrame);
+
+      let flying!: ReturnType<typeof useFlyingElements>;
+      const wrapper = mount(defineComponent({
+        setup() {
+          flying = useFlyingElements({ duration: 50, holdDuration: 0 });
+          return () => h('div');
+        },
+      }));
+      const flight = flying.fly({
+        id: 'unmount-fly',
+        startRect: makeRect({ width: 60, height: 84 }),
+        endRect: makeRect({ left: 200, top: 200, width: 60, height: 84 }),
+        elementData: { faceUp: true },
+      });
+
+      wrapper.unmount();
+
+      expect(cancelFrame).toHaveBeenCalledWith(42);
+      expect(flying.flyingElements.value).toHaveLength(0);
+      await flight;
     });
   });
 

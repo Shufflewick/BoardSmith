@@ -313,12 +313,12 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * has already been observed.
    *
    * Called from `captureCheckpoint()` rather than directly from
-   * `performAction`/`recordSerializedAction`: an execute() node immediately
+   * `performAction`/`executeCollectedAction`: an execute() node immediately
    * following an action-step frequently runs INSIDE the completion of the
    * NEXT flow step, which for the multi-step / repeating-selection funnel
    * (`completePendingAction` here, `PendingActionManager` on the session
    * layer) happens via `continueFlowAfterPendingAction` -- called AFTER
-   * `recordSerializedAction` already pushed to history. `captureCheckpoint()`
+   * `executeCollectedAction` already pushed to history. `captureCheckpoint()`
    * is the one chokepoint the executor already calls, via `getSnapshot()`,
    * once the WHOLE op (including any such trailing flow advance) has settled,
    * so it is also the correct place to
@@ -688,16 +688,15 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * being passed through as raw numbers. This is the single place the
    * `actionHistory` entry shape is produced, shared by:
    *   - `performAction` (single-step actions), and
-   *   - the pending-action completion funnel (multi-step / repeating-selection
-   *     actions, via `PendingActionManager`).
+   *   - `executeCollectedAction` (multi-step / repeating-selection actions).
    * Keeping both paths on this one helper guarantees every `actionHistory` entry
    * is identical in shape regardless of how the action was driven, so replay,
    * undo, and bot history treat them the same.
    *
    * Does NOT push to history — callers decide when to record (e.g. only after a
-   * successful execute). Use `recordSerializedAction` to append.
+   * successful execute).
    */
-  serializeForHistory(
+  private serializeForHistory(
     actionName: string,
     player: Player,
     args: Record<string, unknown>
@@ -723,16 +722,29 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   }
 
   /**
-   * Append an already-serialized action to history.
-   *
-   * Used by the multi-step pending-action completion path, which serializes the
-   * collected args BEFORE executing (so recorded element refs are replay-safe)
-   * but must defer the actual history append until execution succeeds. Single
-   * source of truth: `performAction` and this method are the only writers of
-   * `actionHistory` entries during normal play.
+   * Execute a fully-collected pending action, the one completion step shared by
+   * this runner's `completePendingAction` and `PendingActionManager`'s: record
+   * it and advance the flow when it succeeds, and roll the game back when it
+   * failed after changing something, as `performAction` does (#44, #801).
    */
-  recordSerializedAction(serializedAction: SerializedAction): void {
-    this.actionHistory.push(serializedAction);
+  executeCollectedAction(
+    executor: ActionExecutor,
+    action: ActionDefinition,
+    player: Player,
+    pendingState: PendingActionState,
+    playerPosition: number
+  ): ActionResult {
+    // Serialized before executing, so the recorded refs are the positions the action acts on.
+    const serializedAction = this.serializeForHistory(action.name, player, pendingState.collectedArgs);
+    const actionResult = executor.executePendingAction(action, player, pendingState);
+
+    if (actionResult.success) {
+      this.actionHistory.push(serializedAction);
+      this.game.continueFlowAfterPendingAction(actionResult, playerPosition);
+      return actionResult;
+    }
+    const rollback = actionResult.partiallyApplied ? this.rollbackToPreActionState() : undefined;
+    return rollback === undefined ? actionResult : { ...actionResult, error: `${actionResult.error} ${rollback}` };
   }
 
   /**
@@ -819,8 +831,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * now, or `undefined` when it may. `pending` is the seat's open pending state,
    * or `undefined` when the pick about to be processed starts the action. Every
    * pending-action path (`processSelectionStep` here, and
-   * `PendingActionManager` for the `selectionStep` op) asks this before any pick is processed, and calls `notePickTaken`
-   * after each pick that leaves the action open.
+   * `PendingActionManager` for the `selectionStep` op) asks this before any pick is processed, then calls `markStalePicks`,
+   * and calls `notePickTaken` after each pick that leaves the action open.
    *
    * First, the flow must offer the action to the seat (`refusalToAct`). Then
    * its `condition`, evaluated as hosts evaluate it to show the action (with
@@ -884,6 +896,40 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   notePickTaken(pending: PendingActionState, seat: number): void {
     pending.conditionHeld = this.failedConditionLabels(pending.actionName, seat).length === 0;
+    pending.picksOnOffer = this.picksOnOffer(pending, seat);
+  }
+
+  /**
+   * Before `seat`'s next pick of `pending`, mark each of its own picks that was
+   * on offer right after its latest pick and is not now, for
+   * `executePendingAction` to re-check (#767). Only another action can have
+   * taken it in between, so a pick the action's own `onSelect` took off the
+   * offer is never marked.
+   */
+  markStalePicks(pending: PendingActionState, seat: number): void {
+    if (!pending.picksOnOffer) return;
+    const onOffer = this.picksOnOffer(pending, seat);
+    const taken = pending.picksOnOffer.filter((name) => !onOffer.includes(name));
+    if (taken.length > 0) pending.stalePicks = [...new Set([...(pending.stalePicks ?? []), ...taken])];
+  }
+
+  /**
+   * The seat's own non-repeating picks of `pending` that a whole submission
+   * would take now. A pick a held follow-up answered is the engine's and is
+   * left out.
+   */
+  private picksOnOffer(pending: PendingActionState, seat: number): string[] {
+    const action = this.game.getAction(pending.actionName)!;
+    const executor = this.game.getActionExecutor();
+    const player = this.game.getPlayer(seat)!;
+    const bound = this.followUpArgsFor(pending.actionName, seat);
+    const args = executor.resolveArgs(action, pending.collectedArgs, player);
+    return action.selections
+      .filter((selection) => args[selection.name] !== undefined
+        && !Object.hasOwn(bound, selection.name)
+        && !executor.isRepeatingSelection(selection)
+        && executor.validateSelection(selection, args[selection.name], player, args, action.name).valid)
+      .map((selection) => selection.name);
   }
 
   /**
@@ -958,8 +1004,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * (started via `startPendingAction`). Session-free mirror of
    * `PendingActionManager.processSelectionStep` — handles both regular and
    * repeating selections, and auto-completes + executes the action (recording
-   * it in `actionHistory` via the same `serializeForHistory`/
-   * `recordSerializedAction` funnel `performAction` uses) once every selection
+   * it in `actionHistory` via `executeCollectedAction`) once every selection
    * has been supplied.
    *
    * Clears the tracked pending state once the action completes, whether it
@@ -977,6 +1022,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
 
     const refusal = this.refusalToPick(pendingState.actionName, playerPosition, pendingState);
     if (refusal) return { success: false, error: refusal.error };
+    this.markStalePicks(pendingState, playerPosition);
 
     const action = this.game.getAction(pendingState.actionName);
     if (!action) {
@@ -1040,14 +1086,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     pendingState: PendingActionState,
     playerPosition: number
   ): PendingStepResult & { actionComplete: true } {
-    const serializedAction = this.serializeForHistory(action.name, player, pendingState.collectedArgs);
-    const actionResult = executor.executePendingAction(action, player, pendingState);
+    const actionResult = this.executeCollectedAction(executor, action, player, pendingState, playerPosition);
     this.pendingActions.delete(playerPosition);
-
-    if (actionResult.success) {
-      this.recordSerializedAction(serializedAction);
-      this.game.continueFlowAfterPendingAction(actionResult, playerPosition);
-    }
 
     return {
       success: actionResult.success,
@@ -1294,8 +1334,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     if (snapshot.gameInstanceId !== undefined) runner.gameInstanceId = snapshot.gameInstanceId;
 
     // Adopt the authoritative element tree. loadSerializedState fully clears and
-    // rebuilds the tree from snapshot.state on its own (see Game.loadSerializedState
-    // / Game.restoreGame), so it stands alone with no prior replay.
+    // rebuilds the tree from snapshot.state on its own (see Game.loadSerializedState),
+    // so it stands alone with no prior replay.
     //
     // `animationFloor` (UNDO-04): absent for a normal full restore (adopt
     // the persisted animation-event seq, today's behavior); supplied only by
@@ -1332,8 +1372,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // just loaded). restoreFlowState builds a fresh FlowEngine from the saved
     // position, so it does not require a prior start().
     //
-    // Element-valued flow variables (e.g. eachPlayer's currentPlayer, an
-    // executeForEach `as` binding) were serialized to element markers by
+    // Element-valued flow variables (e.g. a setVar value or a
+    // forEach `as` binding) were serialized to element markers by
     // getPosition; restoreFlowState relinks them to the loaded tree internally.
     if (snapshot.flowState) {
       runner.game.restoreFlowState(snapshot.flowState);
