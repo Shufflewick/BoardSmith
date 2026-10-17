@@ -9,6 +9,7 @@ import {
 import { promises as fs } from 'node:fs';
 import { basename, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
+import { withLedgerLock } from '../lib/ledger-lock.js';
 import {
   type VerificationScope,
   computeVerificationScope,
@@ -951,9 +952,10 @@ export async function verifyClassifyRecordCommand(
 
   const ledgerFile = ledgerFilePath(projectDir, runId);
   const relLedgerPath = relative(projectDir, ledgerFile);
-  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
-  const newText = appendLedgerLine(ledgerText, relLedgerPath, JSON.stringify(record));
-  await atomicWriteFile(ledgerFile, newText);
+  await withLedgerLock(ledgerFile, async () => {
+    const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
+    await atomicWriteFile(ledgerFile, appendLedgerLine(ledgerText, relLedgerPath, JSON.stringify(record)));
+  });
 
   const result: VerifyClassifyRecordResult = { runId, record, warnings };
   if (options.json) {

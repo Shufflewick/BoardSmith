@@ -260,6 +260,17 @@ describe('waivers — scoped to named chunks, and they expire', () => {
     ).rejects.toThrow(/designer/i);
   });
 
+  it('parallel waivers are all kept, each with its own id (#831)', async () => {
+    const slugs = ['a', 'b', 'c', 'd', 'e'];
+    const project = await makeProject(slugs.map((slug) => ({ slug })));
+    const ids = await Promise.all(
+      slugs.map((chunks) => recordWaiver({ project, chunks, by: 'Jane', expires: '2026-09-30', reason: 'x', now: NOW })),
+    );
+    expect([...ids].sort()).toEqual(['W1', 'W2', 'W3', 'W4', 'W5']);
+    const ledger = await fs.readFile(join(project, DESIGN_DIR, WAIVERS_MD), 'utf-8');
+    for (const slug of slugs) expect(ledger).toContain(`- Chunks: ${slug}\n`);
+  });
+
   it('a second waiver gets the next id', async () => {
     const project = await makeProject([{ slug: 'a' }, { slug: 'b' }]);
     const first = await recordWaiver({ project, chunks: 'a', by: 'Jane', expires: '2026-09-30', reason: 'x', now: NOW });
