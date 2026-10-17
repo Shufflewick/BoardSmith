@@ -195,7 +195,7 @@ const displayLabel = computed(
 // ── A11Y-01: useSelectableGrid — roving tabindex for hex grid navigation ────
 //
 // hexCells: flat array of all hex cells (children of the board element)
-// hexCols: width of the hex grid in cells (q-range + 1) for ArrowUp/Down row math
+// hexCellAxes: a cell's r as its row and q as its column, for arrow-key moves
 // The SVG root receives @keydown; each <g> receives :tabindex from currentIdx.
 //
 // NOTE (research Open Q3): tabindex on SVG <g> is spec-valid but Safari/VoiceOver
@@ -203,8 +203,7 @@ const displayLabel = computed(
 // If manual VoiceOver/Safari testing fails, escalate to overlay <button> approach.
 const hexCells = computed(() => props.element.children ?? []);
 
-// Compute grid width as the q-coordinate range + 1 for roving-tabindex row math
-// and for aria-colcount on the role="grid" SVG root (WR-02).
+// Grid width as the q-coordinate range + 1, for aria-colcount on the role="grid" SVG root (WR-02).
 const hexCols = computed(() => {
   const cells = hexCells.value;
   if (!cells.length) return 1;
@@ -232,6 +231,11 @@ const hexRows = computed(() => {
   return maxR - minR + 1;
 });
 
+function hexCellAxes(cell: GameElement) {
+  const attrs = cell.attributes ?? {};
+  return { row: (attrs[rCoordName.value] as number) ?? 0, col: (attrs[qCoordName.value] as number) ?? 0 };
+}
+
 // Hex cell activation: selectable AND passive selectElement branches.
 // Called from both click and keyboard (Enter/Space) for consistent behavior.
 function handleHexActivate(cell: GameElement) {
@@ -254,7 +258,7 @@ const {
   focusFirstCandidate,
 } = useSelectableGrid(
   hexCells,
-  hexCols,
+  hexCellAxes,
   cellIdentity,
   boardInteraction,
   handleHexActivate,
