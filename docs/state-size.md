@@ -208,8 +208,8 @@ it('fits the host state budget for a full game', () => {
   const game = createTestGame(MyGame, { playerCount: 8 });
 
   // Play a representative game to its end: full board, hands dealt, log
-  // populated. Snapshot after EVERY action, as a host does, and check each one:
-  // the largest saved state is usually mid-turn, not at the end.
+  // populated. Check after every action, as a host snapshots: the largest
+  // saved state is usually mid-turn, not at the end.
   while (!game.isComplete()) {
     game.doAction(seat, 'play', args);
     assertStateBudget(measureSnapshotSize(game.runner.getSnapshot()), hostBudgetBytes);
@@ -230,18 +230,17 @@ keeps); pass `{ maxCheckpoints }` with your longest turn plus one, or your
 
 ### Why the snapshot call belongs inside the loop
 
-Checkpoints are captured through the SNAPSHOT funnel, not by `performAction`.
-`GameRunner.getSnapshot()` calls `captureCheckpoint()`, and `executeOp` calls
-it after every op it runs (every op answers with a fresh snapshot) — which is
-why a host has a checkpoint per action. A driver that performs a whole turn of
-actions and snapshots once at the end leaves every slot between them
-uncaptured. They still count toward the window's length, so
+Each action captures the state it starts from (#802), and `getSnapshot()`
+captures the current one. A seat expiry (`closeExpiredHeldSeat`) records no
+checkpoint of its own; a host never notices, because it snapshots after every
+op. A driver that expires a seat between actions and snapshots once at the end
+leaves that slot uncaptured. It still counts toward the window's length, so
 `bytesPerCheckpoint` comes out too small and the budget assertion passes green
 while measuring nothing.
 
 `measureSnapshotSize` refuses such a snapshot rather than reporting the wrong
-number, naming the uncaptured count and the fix. If you see that error, move
-`getSnapshot()` inside the loop.
+number, naming the uncaptured count and the fix. If you see that error, call
+`getSnapshot()` after every action and seat expiry.
 
 ## What happens if you ignore all this
 

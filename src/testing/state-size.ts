@@ -18,8 +18,8 @@
  *
  * it('fits the host state budget for a full game', () => {
  *   const game = createTestGame(MyGame, { playerCount: 8 });
- *   // Snapshot after EVERY action — that is what captures the checkpoints,
- *   // and what a host does.
+ *   // Check after every action, as a host snapshots: the largest saved
+ *   // state is usually mid-turn.
  *   while (!game.isComplete()) {
  *     game.doAction(seat, 'play', args);
  *     assertStateBudget(measureSnapshotSize(game.runner.getSnapshot()), hostBudgetBytes);
@@ -28,9 +28,9 @@
  * ```
  *
  * `hostBudgetBytes` is the host's published budget, read from where the host
- * publishes it. Snapshotting only at the end of a turn leaves the checkpoint
- * window sparse, which understates the multiplier. `measureSnapshotSize`
- * refuses such a snapshot rather than reporting the wrong number.
+ * publishes it. A window with uncaptured slots understates the multiplier, so
+ * `measureSnapshotSize` refuses such a snapshot rather than reporting the
+ * wrong number.
  *
  * The two costs that dominate in practice, and that neither shows up until
  * measured:
@@ -113,15 +113,14 @@ function capturedCheckpointCount(snapshot: GameStateSnapshot): number {
  * Refuse to measure a snapshot whose retained checkpoint window has slots that
  * were never captured.
  *
- * Checkpoints are captured through the SNAPSHOT funnel, not by
- * `performAction`: `GameRunner.getSnapshot()` calls `captureCheckpoint()`, as
- * the executor does once per op. A driver that
- * performs many actions and snapshots once at the end therefore leaves every
- * slot between them empty. Those slots serialize as `null` but still count
- * toward the window's length, so `checkpointBytes / length` comes out one to
- * two orders of magnitude below the real multiplier — measured at 17x to 219x
- * too small across six games, small enough that a budget assertion written
- * that way passes green while measuring nothing.
+ * An action captures the state before it runs (#802), but a seat expiry
+ * (`closeExpiredHeldSeat`) appends to the history without one. A host
+ * snapshots after every op, so it never leaves a hole; a driver that expires a
+ * seat between actions and snapshots once at the end leaves the slot before
+ * the expiry empty. Empty slots serialize as `null` but still count toward the
+ * window's length, so `checkpointBytes / length` comes out below the real
+ * multiplier, small enough that a budget assertion written that way can pass
+ * green while measuring nothing.
  *
  * A confidently wrong number is worse than no number, so this throws instead
  * of reporting one.
@@ -134,8 +133,8 @@ function assertWindowIsDense(snapshot: GameStateSnapshot, length: number): void 
       `slots were never captured, so the per-checkpoint multiplier would come out ` +
       `${(length / Math.max(1, captured)).toFixed(0)}x too small and the budget assertion ` +
       `would pass while measuring nothing.\n` +
-      `Checkpoints are captured through the snapshot funnel, not by performAction. ` +
-      `Call runner.getSnapshot() after EVERY action, the way a host does:\n` +
+      `A seat expiry records no checkpoint of its own. Call runner.getSnapshot() ` +
+      `after every action and seat expiry, the way a host does:\n` +
       `  for (...) { runner.performAction(...); runner.getSnapshot(); }\n` +
       `then measure the final snapshot.`,
   );
