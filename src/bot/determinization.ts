@@ -64,7 +64,8 @@ function nameOf(element: GameElement | undefined): string {
 const MAX_FINGERPRINT_DEPTH = 12;
 
 /**
- * A stable, cycle-safe string for one attribute value.
+ * A stable, cycle-safe string for one attribute value, written the way a game
+ * author writes it (`"red"`, `3`, `{back: "red"}`), so refusals can quote it.
  *
  * Elements collapse to their id: two samples that leave an attribute pointing
  * at the same element agree, whatever that element's own attributes did.
@@ -73,22 +74,27 @@ function fingerprintValue(value: unknown, depth = 0): string {
   if (value === null) return 'null';
   if (value === undefined) return 'undefined';
   const type = typeof value;
-  if (type === 'string' || type === 'number' || type === 'boolean' || type === 'bigint') {
-    return `${type}:${String(value)}`;
-  }
+  if (type === 'string') return JSON.stringify(value);
+  if (type === 'bigint') return `${String(value)}n`;
+  if (type === 'number' || type === 'boolean') return String(value);
   if (type === 'function') return 'function';
   if (depth >= MAX_FINGERPRINT_DEPTH) return 'depth-limit';
 
-  const asElement = value as { _t?: { id?: unknown } };
-  if (asElement._t && typeof asElement._t.id === 'number') return `@${asElement._t.id}`;
+  const asElement = value as { constructor?: { name: string }; _t?: { id?: unknown } };
+  if (asElement._t && typeof asElement._t.id === 'number') return `${asElement.constructor?.name ?? ''}#${asElement._t.id}`;
 
   if (Array.isArray(value)) {
-    return `[${value.map((v) => fingerprintValue(v, depth + 1)).join(',')}]`;
+    return `[${value.map((v) => fingerprintValue(v, depth + 1)).join(', ')}]`;
   }
   const entries = Object.keys(value as object)
     .sort()
-    .map((k) => `${k}=${fingerprintValue((value as Record<string, unknown>)[k], depth + 1)}`);
-  return `{${entries.join(',')}}`;
+    .map((k) => `${keyOf(k)}: ${fingerprintValue((value as Record<string, unknown>)[k], depth + 1)}`);
+  return `{${entries.join(', ')}}`;
+}
+
+/** An object key as an author writes it: bare when it can be, quoted otherwise. */
+function keyOf(key: string): string {
+  return /^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key);
 }
 
 /**
@@ -142,8 +148,8 @@ function placeholderLooks(world: KnownWorld): Map<number, string> {
     const known = [...entry.attributes]
       .filter(([, value]) => value !== 'undefined')
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, value]) => `${key}=${value}`);
-    looks.set(id, known.length ? `${entry.className} (${known.join(', ')})` : entry.className);
+      .map(([key, value]) => `${key}: ${value}`);
+    looks.set(id, known.length ? `${entry.className} with ${known.join(', ')}` : entry.className);
   }
   return looks;
 }
@@ -175,7 +181,8 @@ function placeholderCountChange(before: KnownWorld, after: KnownWorld): string |
     const now = afterCounts.get(key)?.count ?? 0;
     if (now !== prior.count) {
       return (
-        `${nameOf(prior.parent)} held ${prior.count} face-down ${prior.look} placeholders and now ` +
+        `${nameOf(prior.parent)} held ${prior.count} face-down ${prior.look} ` +
+        `placeholder${prior.count === 1 ? '' : 's'} and now ` +
         `holds ${now}. The seat can count them and see their class and back. A sampler may swap ` +
         `face-down placeholders that look alike between containers, or reorder them, but it may not ` +
         `change how many of each look a container holds.`
@@ -210,10 +217,12 @@ function attributeChange(id: number, prior: KnownElement, now: KnownElement): st
 function visibleNewElement(before: KnownWorld, after: KnownWorld, seat: number): string | null {
   for (const [id, now] of after) {
     if (before.has(id)) continue;
-    if (outermostConcealer(now.element, seat) && !now.element.isVisibleTo(seat)) continue;
+    const concealed = outermostConcealer(now.element, seat);
+    if (concealed && !now.element.isVisibleTo(seat)) continue;
+    const seen = concealed ? 'that element itself' : 'what that container holds';
     return (
-      `it added ${nameOf(now.element)} to ${nameOf(now.parent)}. The seat can see what that ` +
-      `container holds, or can see the element itself, so it knows that element was not there. ` +
+      `it added ${nameOf(now.element)} to ${nameOf(now.parent)}. The seat can see ${seen}, ` +
+      `so it knows that element was not there. ` +
       `A sampler may create elements only where the seat cannot see them, such as a hidden deck.`
     );
   }
@@ -289,8 +298,9 @@ export function applyDeterminization(
     throw new DeterminizationError(
       `The determinize sampler for seat ${seat} produced a world that contradicts what the ` +
       `seat can see: ${contradiction}\n\n` +
-      `  A sampler may write ONLY attributes this sandbox was never told — the ones ` +
-      `element.isAttributeRedacted(key) reports true for. Everything else is information the ` +
+      `  A sampler may write only attributes this sandbox was never told (the ones ` +
+      `element.isAttributeRedacted(key) reports true for) and create elements only where the ` +
+      `seat cannot see them. Everything else is information the ` +
       `seat already holds, and a search over a world that disagrees with it scores moves that ` +
       `do not exist.`,
     );

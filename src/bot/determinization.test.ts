@@ -584,7 +584,7 @@ describe('#871 determinization: which container an element sits in is known', ()
     expect(() => applyDeterminization(sandbox, 1, () => {
       placeholder.putInto(sandbox.hand(3));
     }, () => 0.5)).toThrow(
-      new RegExp(`Space#${sandbox.hand(2).id} "hand-2" held 1 face-down HandCard \\(.*back=string:red.*\\) placeholders and now holds 0`),
+      `Space#${sandbox.hand(2).id} "hand-2" held 1 face-down HandCard with $images: {back: "red"} placeholder and now holds 0.`,
     );
   });
 
@@ -596,7 +596,56 @@ describe('#871 determinization: which container an element sits in is known', ()
     expect(() => applyDeterminization(sandbox, 1, () => {
       red.putInto(sandbox.hand(3));
       blue.putInto(sandbox.hand(2));
-    }, () => 0.5)).toThrow(/"hand-2" held 1 face-down HandCard \(.*back=string:red.*\) placeholders and now holds 0/);
+    }, () => 0.5)).toThrow('"hand-2" held 1 face-down HandCard with $images: {back: "red"} placeholder and now holds 0.');
+  });
+
+  it('shows a changed attribute\'s values as the game author wrote them', () => {
+    const sandbox = trickSandboxForSeat1();
+    const card = sandbox.hand(1).first(HandCard)!;
+
+    expect(() => applyDeterminization(sandbox, 1, () => {
+      card.$images = { face: '11.svg', back: 'green' };
+    }, () => 0.5)).toThrow(
+      `it changed HandCard#${card.id}.$images from {back: "red", face: "11.svg"} to {back: "green", face: "11.svg"}.`,
+    );
+  });
+
+  it('refuses a change of type alone, quoting both values', () => {
+    const sandbox = trickSandboxForSeat1();
+    const card = sandbox.hand(1).first(HandCard)!;
+    card.rank = 5;
+
+    expect(() => applyDeterminization(sandbox, 1, () => {
+      (card as unknown as { rank: unknown }).rank = '5';
+    }, () => 0.5)).toThrow(`it changed HandCard#${card.id}.rank from 5 to "5".`);
+  });
+
+  it('refuses a change from null to undefined', () => {
+    const sandbox = trickSandboxForSeat1();
+    const card = sandbox.hand(1).first(HandCard)!;
+    (card as unknown as { rank: unknown }).rank = null;
+
+    expect(() => applyDeterminization(sandbox, 1, () => {
+      (card as unknown as { rank: unknown }).rank = undefined;
+    }, () => 0.5)).toThrow(`it changed HandCard#${card.id}.rank from null to undefined.`);
+  });
+
+  it('accepts an attribute holding an id-bearing object with no prototype', () => {
+    const sandbox = trickSandboxForSeat1();
+    (sandbox.hand(1).first(HandCard)! as unknown as { ref: unknown }).ref =
+      Object.assign(Object.create(null) as object, { _t: { id: 7 } });
+
+    applyDeterminization(sandbox, 1, () => {}, () => 0.5);
+  });
+
+  it('counts placeholders in the plural when a hand held more than one', () => {
+    const sandbox = trickSandboxForSeat1();
+    sandbox.hand(3).first(HandCard)!.putInto(sandbox.hand(2));
+    const red = sandbox.hand(2).first(HandCard)!;
+
+    expect(() => applyDeterminization(sandbox, 1, () => {
+      red.putInto(sandbox.hand(3));
+    }, () => 0.5)).toThrow('"hand-2" held 2 face-down HandCard with $images: {back: "red"} placeholders and now holds 1.');
   });
 
   it('refuses a sampler that moves a face-down card off the open table', () => {
@@ -626,12 +675,24 @@ describe('#1032 determinization: a new element may appear only where the seat ca
     );
   });
 
+  it('says a sampler may create elements where the seat cannot see, not only write redacted attributes', () => {
+    const sandbox = trickSandboxForSeat1();
+
+    expect(() => applyDeterminization(sandbox, 1, () => {
+      sandbox.hand(1).create(HandCard, 'extra', { rank: 5 });
+    }, () => 0.5)).toThrow(
+      'A sampler may write only attributes this sandbox was never told (the ones ' +
+      'element.isAttributeRedacted(key) reports true for) and create elements only where the seat cannot see them.',
+    );
+  });
+
   it('refuses a sampler that adds a face-down card to the open table', () => {
     const sandbox = trickSandboxForSeat1();
 
     expect(() => applyDeterminization(sandbox, 1, () => {
       sandbox.table.create(HandCard, 'extra', { rank: 5 }).showOnlyTo(2);
-    }, () => 0.5)).toThrow(new RegExp(`added HandCard#\\d+ "extra" to Space#${sandbox.table.id} "table"`));
+    }, () => 0.5)).toThrow(new RegExp(`added HandCard#\\d+ "extra" to Space#${sandbox.table.id} "table"\\. ` +
+      `The seat can see what that container holds, so it knows that element was not there\\.`));
   });
 
   it('refuses a sampler that adds a face-up card to a hidden pond', () => {
@@ -639,7 +700,8 @@ describe('#1032 determinization: a new element may appear only where the seat ca
 
     expect(() => applyDeterminization(sandbox, 1, () => {
       sandbox.pond.create(HandCard, 'extra', { rank: 5 }).showToAll();
-    }, () => 0.5)).toThrow(new RegExp(`added HandCard#\\d+ "extra" to Space#${sandbox.pond.id} "pond"`));
+    }, () => 0.5)).toThrow(new RegExp(`added HandCard#\\d+ "extra" to Space#${sandbox.pond.id} "pond"\\. ` +
+      `The seat can see that element itself, so it knows that element was not there\\.`));
   });
 
   it('accepts a sampler that rebuilds a hidden pond', () => {
