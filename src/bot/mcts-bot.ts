@@ -623,9 +623,8 @@ export class MCTSBot<G extends Game = Game> {
     if (node.parent === null) return canSeatAct(live, node.currentPlayer);
     // A world held open with no seat to move matches only a node held open the same way,
     // which is a node grown with no moves: `node.flowState` is not loaded, so it cannot be enumerated.
-    const liveSeat = this.seatToMove(live)?.seat;
-    const nodeSeat = node.allMoves.length > 0 ? node.currentPlayer : undefined;
-    return liveSeat === nodeSeat;
+    const next = this.seatToMove(live);
+    return next.seat === node.currentPlayer && (next.moves.length > 0) === (node.allMoves.length > 0);
   }
 
   /**
@@ -869,11 +868,11 @@ export class MCTSBot<G extends Game = Game> {
 
     // The moves of the seat that moves next, which is the seat the child records.
     // A finished game, or a step held open with no seat to move, has none.
-    const next = flowState.complete ? undefined : this.seatToMove(flowState);
+    const next = this.seatToMove(flowState);
 
     // Create child node (no snapshot needed: every step restores the search
     // game whole, from the root or a saved copy, before it walks the tree)
-    const child = this.createNode(flowState, node, move, next?.moves ?? [], next?.seat ?? this.playerIndex);
+    const child = this.createNode(flowState, node, move, next.moves, next.seat);
     node.children.push(child);
 
     return child;
@@ -911,11 +910,10 @@ export class MCTSBot<G extends Game = Game> {
 
       // One seat lists the moves and makes the one chosen (#522). With no seat
       // to move, the step is held open from outside: score the position as it stands.
-      const next = this.seatToMove(flowState);
-      if (next === undefined) {
+      const { seat: currentPlayer, moves } = this.seatToMove(flowState);
+      if (moves.length === 0) {
         break;
       }
-      const { seat: currentPlayer, moves } = next;
 
       // Select move: use playoutPolicy if available, otherwise random
       let move: BotMove;
@@ -1200,22 +1198,23 @@ export class MCTSBot<G extends Game = Game> {
    * has no move, so it is skipped for the next due seat (#1133).
    *
    * Only for the flow state of the world loaded into `searchGame`, which is
-   * what the moves are enumerated against, and only when it is not complete.
-   * The root's seat is always the bot's own, whatever order the step lists
-   * its seats in.
+   * what the moves are enumerated against. The root's seat is always the
+   * bot's own, whatever order the step lists its seats in.
    *
-   * `undefined` when no due seat has a move: a simultaneous step whose seats
-   * are all done (or offered only disabled actions) but whose `allDone` is
-   * still false waits for something outside the step to close it (the
-   * engine's external-gate pattern). The search has no move to make there,
-   * so such a node is a leaf, scored as it stands.
+   * No moves, with the bot's seat standing in, when the game is over or no
+   * due seat has a move: a simultaneous step whose seats are all done (or
+   * offered only disabled actions) but whose `allDone` is still false waits
+   * for something outside the step to close it (the engine's external-gate
+   * pattern). The search has no move to make there, so such a node is a
+   * leaf, scored as it stands.
    */
-  private seatToMove(flowState: FlowState): { seat: number; moves: BotMove[] } | undefined {
-    for (const seat of dueSeats(flowState)) {
+  private seatToMove(flowState: FlowState): { seat: number; moves: BotMove[] } {
+    const due = flowState.complete ? [] : dueSeats(flowState);
+    for (const seat of due) {
       const moves = this.movesFor(this.searchGame!, flowState, seat, { sample: true });
       if (moves.length > 0) return { seat, moves };
     }
-    return undefined;
+    return { seat: this.playerIndex, moves: [] };
   }
 
   /**
