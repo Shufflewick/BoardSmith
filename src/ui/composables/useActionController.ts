@@ -269,6 +269,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   //   one flush, and a watch on the name alone sees no change (#384).
   const actionStartTick = ref(0);
 
+  /**
+   * True once the action that was current when `seq` (an `actionStartTick`
+   * reading) was taken has been cancelled, finished or replaced. Every await in
+   * this controller that goes on to continue an action reads the tick first and
+   * asks this after, so a late reply is dropped instead of landing on whatever
+   * action is current now (#854, #856).
+   */
+  function actionMovedOn(seq: number): boolean {
+    return actionStartTick.value !== seq || currentAction.value === null;
+  }
+
   // Monotonic counter pulsed when an action FULLY completes via the selection-step
   // transport (handleOnSelectFill) with no further followUp in the chain. The
   // execute() path signals "an action just finished" by toggling isExecuting (which
@@ -290,13 +301,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // the type, so a board reading `data.myPayload` would be fighting DeepReadonly on
   // a value the game itself authored. A ComputedRef is read-only by construction.
   const exposedLastActionResult = computed(() => lastActionResult.value);
-
-  // Monotonic counter bumped in clearAdvancedState (every action tear-down).
-  // Captured at the start of each fetchChoicesForPick call; compared after the
-  // await resolves. If they differ the action was cleared/replaced while the
-  // fetch was in-flight (R-06: post-multijump stale-choice race) — the result
-  // is discarded rather than written to the new action's snapshot.
-  let choiceFetchGen = 0;
 
   // Args storage for the in-progress action.
   // Use fill/start/clear to keep collectedPicks snapshot and args in sync.
@@ -436,11 +440,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     repeatingState.value = null;
     actionSnapshot.value = null;
     pendingOnServer.value = false;
-    // Bump the fetch-generation counter so any in-flight fetchChoicesForPick
-    // calls that resolve after this point discard their results instead of
-    // writing them to the next action's snapshot (R-06 stale-choice race fix).
-    // Those calls no longer end the loading state either (#663), so it ends here.
-    choiceFetchGen++;
+    // A fetch still in flight for the torn-down action no longer ends the
+    // loading state (#663), so it ends here.
     isLoadingChoices.value = false;
   }
 
@@ -899,7 +900,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return;
     }
 
+    const seq = actionStartTick.value;
     await fetchChoicesForPick(selection.name);
+    if (actionMovedOn(seq)) return;
 
     if (tryAutoFillSelection(selection)) {
       // Recursively handle next selection
@@ -970,11 +973,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     const player = playerSeat?.value ?? 0;
 
-    // Capture the generation before the await. clearAdvancedState() (called
-    // on action completion/cancel/start) bumps this counter. If it differs
-    // after the round-trip the action is gone/replaced — discard the result,
-    // success or failure, rather than applying it to the new action (R-06, #663).
-    const capturedFetchGen = choiceFetchGen;
+    // If the action is gone or replaced after the round trip, discard the
+    // result, success or failure, rather than apply it to the new action (R-06, #663).
+    const seq = actionStartTick.value;
 
     isLoadingChoices.value = true;
     const fetchStartTime = Date.now();
@@ -988,9 +989,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         buildServerArgs()
       );
 
-      // Discard stale result: the action was completed/cancelled/replaced while
-      // this fetch was in-flight (R-06: post-multijump stale-choice race).
-      if (choiceFetchGen !== capturedFetchGen) return;
+      if (actionMovedOn(seq)) return;
 
       const fetchDuration = Date.now() - fetchStartTime;
 
@@ -1018,7 +1017,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         setError(result.error ?? describeUndescribablePick(selection));
       }
     } catch (err) {
-      if (choiceFetchGen !== capturedFetchGen) return;
+      if (actionMovedOn(seq)) return;
       const fetchDuration = Date.now() - fetchStartTime;
       console.error(
         `[BoardSmith] Error fetching pick choices for '${selectionName}' after ${fetchDuration}ms:`,
@@ -1027,7 +1026,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       setError(describeUndescribablePick(selection));
     } finally {
       // Only a request of the current action ends its loading state (#663).
-      if (choiceFetchGen === capturedFetchGen) isLoadingChoices.value = false;
+      if (!actionMovedOn(seq)) isLoadingChoices.value = false;
     }
   }
 
@@ -1349,6 +1348,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // Also applies prefills when a pick becomes active
   watch(currentPick, async (sel) => {
     if (!sel || isExecuting.value) return;
+    const seq = actionStartTick.value;
 
     // Nothing below may run against a half-loaded choice list: a prefill judged
     // against an empty snapshot is discarded, and an auto-fill judged against
@@ -1368,7 +1368,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     // The action can be cancelled, replaced or advanced while choices load.
     // The watcher refires for whatever pick is current now, so drop this run.
-    if (isExecuting.value || currentPick.value?.name !== sel.name) return;
+    if (isExecuting.value || actionMovedOn(seq) || currentPick.value?.name !== sel.name) return;
 
     // A prefill takes priority over auto-fill, and settles the pick either way.
     if (consumePrefill(sel)) return;
@@ -1393,6 +1393,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       // WR-03: iterate a SNAPSHOT — a one-shot hook that unregisters itself (or
       // another hook) splices the live array mid-for...of and would silently
       // skip the hook registered after it.
+      const seq = actionStartTick.value;
       for (const hook of [...beforeAutoExecuteHooks.value]) {
         try {
           await hook(currentAction.value, buildServerArgs());
@@ -1400,7 +1401,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
           console.error('[ActionController] beforeAutoExecute hook failed:', err);
         }
       }
-      executeCurrentAction();
+      if (!actionMovedOn(seq)) executeCurrentAction();
     }
   });
 
@@ -1579,7 +1580,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       }
       resolveAction(actionName, playerSeat?.value ?? 0, result);
 
-      if (actionStartTick.value === seq) {
+      if (!actionMovedOn(seq)) {
         currentAction.value = null;
         clearArgs();
         clearAdvancedState();
@@ -1780,7 +1781,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       }
 
       if (selectionToFetch) {
+        const seq = actionStartTick.value;
         await fetchAndAutoFill(selectionToFetch);
+        if (actionMovedOn(seq)) return;
 
         // R-04: If fetchAndAutoFill auto-filled ALL remaining selections (isReady),
         // the auto-execute watcher is permanently blocked by pendingOnServer = true.
@@ -2015,7 +2018,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       // Always fetch choices for the next selection (unless it's number/text)
       const nextSel = getNextSelection(selectionName);
       if (nextSel && (nextSel.type === 'choice' || nextSel.type === 'element' || nextSel.type === 'elements')) {
+        const seq = actionStartTick.value;
         await fetchChoicesForPick(nextSel.name);
+        if (actionMovedOn(seq)) return validation;
 
         // After fetch, check for auto-fill on the next selection (the watch may have
         // fired before the cache was populated). This goes through the one auto-fill
