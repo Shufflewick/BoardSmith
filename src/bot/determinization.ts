@@ -26,6 +26,8 @@ import type { GameElement } from '../engine/index.js';
 import type { DeterminizeSampler } from './types.js';
 import { changing } from '../engine/element/state-version.js';
 import { outermostConcealer } from '../engine/element/concealed-refs.js';
+import { hasZoneVisibility } from '../engine/element/game-element.js';
+import { canPlayerSee } from '../engine/element/visibility.js';
 
 /**
  * A game's determinization sampler broke the one contract it has (#73).
@@ -229,6 +231,41 @@ function visibleNewElement(before: KnownWorld, after: KnownWorld, seat: number):
   return null;
 }
 
+/**
+ * Whether the seat's view says how many children this container holds, as
+ * `redactTreeForSeat` decides: not inside something concealed, not itself
+ * hidden, and not a zone whose 'hidden' mode keeps its size secret.
+ */
+function countVisibleTo(container: GameElement, seat: number): boolean {
+  if (outermostConcealer(container, seat) || !container.isVisibleTo(seat)) return false;
+  const zone = hasZoneVisibility(container) ? container.getZoneVisibility() : undefined;
+  return zone?.mode !== 'hidden' || canPlayerSee(zone, seat, container.getEffectiveOwner()?.seat);
+}
+
+/** How many children each element of a world holds. */
+function childCounts(world: KnownWorld): Map<GameElement | undefined, number> {
+  const counts = new Map<GameElement | undefined, number>();
+  for (const { parent } of world.values()) counts.set(parent, (counts.get(parent) ?? 0) + 1);
+  return counts;
+}
+
+/** The first container the seat can count whose number of children the sample changed, or `null`. */
+function childCountChange(before: KnownWorld, after: KnownWorld, seat: number): string | null {
+  const priorCounts = childCounts(before);
+  const nowCounts = childCounts(after);
+  for (const { element } of before.values()) {
+    const prior = priorCounts.get(element) ?? 0;
+    const now = nowCounts.get(element) ?? 0;
+    if (now === prior || !countVisibleTo(element, seat)) continue;
+    return (
+      `${nameOf(element)} held ${prior} element${prior === 1 ? '' : 's'} and now holds ${now}. ` +
+      `The seat can count what that container holds even where it cannot see them, ` +
+      `so a sampler may not change how many it holds.`
+    );
+  }
+  return null;
+}
+
 /** The first way `after` contradicts `before`, or `null` if it does not. */
 function findContradiction(before: KnownWorld, after: KnownWorld, seat: number): string | null {
   const countChange = placeholderCountChange(before, after);
@@ -253,7 +290,7 @@ function findContradiction(before: KnownWorld, after: KnownWorld, seat: number):
     const change = attributeChange(id, prior, now);
     if (change) return change;
   }
-  return visibleNewElement(before, after, seat);
+  return visibleNewElement(before, after, seat) ?? childCountChange(before, after, seat);
 }
 
 /**
