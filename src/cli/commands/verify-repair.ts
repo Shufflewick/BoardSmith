@@ -3,7 +3,7 @@ import {
 } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
 import { join, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import {
   atomicWriteFile,
   readRunLedgerState,
@@ -420,10 +420,10 @@ export async function verifyRepairStatusCommand(
     return result;
   }
 
-  console.log(chalk.green(`✓ Repair status — ${rows.length} stale chunk(s)`));
+  console.log(styleText('green', `✓ Repair status — ${rows.length} stale chunk(s)`));
   for (const row of rows) {
     if (row.scopeLimited) {
-      console.log(chalk.yellow(`  ${row.slug}: scope-limited — ${row.scopeLimitedReason}`));
+      console.log(styleText('yellow', `  ${row.slug}: scope-limited — ${row.scopeLimitedReason}`));
     } else if (row.roundPlan.disposition === 'triage') {
       console.log(`  ${row.slug}: round budget exhausted — ${row.roundPlan.reason}`);
     } else {
@@ -431,7 +431,7 @@ export async function verifyRepairStatusCommand(
     }
   }
   for (const warning of warnings) {
-    console.log(chalk.yellow(`⚠ ${warning}`));
+    console.log(styleText('yellow', `⚠ ${warning}`));
   }
   return result;
 }

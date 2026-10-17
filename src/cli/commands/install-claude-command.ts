@@ -15,7 +15,7 @@ import { promises as fs, readdirSync, statSync } from 'node:fs';
 import { join, dirname, relative } from 'node:path';
 import { homedir } from 'node:os';
 import { execSync } from 'node:child_process';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { ROLES, defaultAgentType } from '../lib/agent-roles.js';
 import { boardsmithPackageRoot } from '../lib/boardsmith-version.js';
 import { filesContentHash } from '../lib/hash.js';
@@ -321,8 +321,8 @@ export async function installClaudeCommand(options: InstallOptions = {}): Promis
   const installed = await copySkillTree(boardsmithRoot, targetDir, force);
 
   if (!installed) {
-    console.log(chalk.yellow('BoardSmith skills already installed at:'));
-    console.log(chalk.gray(`  ${targetDir}`));
+    console.log(styleText('yellow', 'BoardSmith skills already installed at:'));
+    console.log(styleText('gray', `  ${targetDir}`));
     console.log('');
     console.log('Use --force to overwrite.');
     return;
@@ -330,10 +330,10 @@ export async function installClaudeCommand(options: InstallOptions = {}): Promis
 
   // Link BoardSmith globally so `npx boardsmith` works anywhere
   if (!options.skipLink) {
-    console.log(chalk.gray('Linking BoardSmith globally...'));
+    console.log(styleText('gray', 'Linking BoardSmith globally...'));
     try {
       execSync('npm link --force', { cwd: boardsmithRoot, stdio: 'pipe' });
-      console.log(chalk.green('✓ BoardSmith linked globally'));
+      console.log(styleText('green', '✓ BoardSmith linked globally'));
     } catch (err) {
       // Check if it's ALREADY linked globally without touching the network. A bare
       // `npx boardsmith --version` would DOWNLOAD and execute a registry package named
@@ -342,58 +342,58 @@ export async function installClaudeCommand(options: InstallOptions = {}): Promis
       // `npm ls -g` only inspects already-installed global packages and never fetches.
       try {
         execSync('npm ls -g --depth=0 boardsmith', { stdio: 'pipe' });
-        console.log(chalk.green('✓ BoardSmith already linked globally'));
+        console.log(styleText('green', '✓ BoardSmith already linked globally'));
       } catch {
         // `npm ls -g` also exits non-zero for UNRELATED global-tree problems (extraneous or
         // invalid deps elsewhere), so a failure here does not prove boardsmith is unlinked —
         // it only means we could not confirm the link. Soften the wording accordingly.
-        console.error(chalk.yellow('Warning: Could not confirm BoardSmith is linked globally.'));
-        console.error(chalk.gray('If `npx boardsmith` is not found, run with sudo or fix npm permissions.'));
-        console.error(chalk.gray(`Manual fix: cd ${boardsmithRoot} && npm link`));
+        console.error(styleText('yellow', 'Warning: Could not confirm BoardSmith is linked globally.'));
+        console.error(styleText('gray', 'If `npx boardsmith` is not found, run with sudo or fix npm permissions.'));
+        console.error(styleText('gray', `Manual fix: cd ${boardsmithRoot} && npm link`));
       }
     }
   }
 
-  console.log(chalk.green('✓ Installed BoardSmith skills for Claude Code'));
+  console.log(styleText('green', '✓ Installed BoardSmith skills for Claude Code'));
   console.log('');
-  console.log(chalk.gray(`  Location: ${targetDir}`));
-  console.log(chalk.gray(`  BoardSmith: ${boardsmithRoot}`));
+  console.log(styleText('gray', `  Location: ${targetDir}`));
+  console.log(styleText('gray', `  BoardSmith: ${boardsmithRoot}`));
   console.log('');
   console.log('Skills:');
-  console.log(chalk.cyan('  bs-create-game') + chalk.gray('   - Start a new game — from an idea or a rulebook (start here)'));
-  console.log(chalk.cyan('  bs-ingest-rules') + chalk.gray('  - Ingest a rulebook and produce the initial sketch/chunk plan'));
-  console.log(chalk.cyan('  bs-build-game') + chalk.gray('    - Build the whole game: chunk by chunk (independent ones side by side), resumable, questions filed'));
-  console.log(chalk.cyan('  bs-build-chunk') + chalk.gray('   - Build, test, audit, and playtest one chunk at a time'));
-  console.log(chalk.cyan('  bs-check-status') + chalk.gray('  - Report sketch/chunk progress and next steps'));
-  console.log(chalk.cyan('  bs-insert-chunk') + chalk.gray('  - Insert a new chunk into an existing sketch'));
-  console.log(chalk.cyan('  bs-build-bot') + chalk.gray('      - Generate a computer opponent for the finished game'));
-  console.log(chalk.cyan('  bs-verify-game') + chalk.gray('   - Re-verify an existing game against its archived rulebook source'));
+  console.log(styleText('cyan', '  bs-create-game') + styleText('gray', '   - Start a new game — from an idea or a rulebook (start here)'));
+  console.log(styleText('cyan', '  bs-ingest-rules') + styleText('gray', '  - Ingest a rulebook and produce the initial sketch/chunk plan'));
+  console.log(styleText('cyan', '  bs-build-game') + styleText('gray', '    - Build the whole game: chunk by chunk (independent ones side by side), resumable, questions filed'));
+  console.log(styleText('cyan', '  bs-build-chunk') + styleText('gray', '   - Build, test, audit, and playtest one chunk at a time'));
+  console.log(styleText('cyan', '  bs-check-status') + styleText('gray', '  - Report sketch/chunk progress and next steps'));
+  console.log(styleText('cyan', '  bs-insert-chunk') + styleText('gray', '  - Insert a new chunk into an existing sketch'));
+  console.log(styleText('cyan', '  bs-build-bot') + styleText('gray', '      - Generate a computer opponent for the finished game'));
+  console.log(styleText('cyan', '  bs-verify-game') + styleText('gray', '   - Re-verify an existing game against its archived rulebook source'));
   console.log('');
-  console.log(chalk.gray('Each skill reads from a shared reference tree (build/, ingest/,'));
+  console.log(styleText('gray', 'Each skill reads from a shared reference tree (build/, ingest/,'));
   console.log(
-    chalk.gray(
+    styleText('gray',
       'orchestrate/, templates/, aspects/, state-machine.md, reporting.md, routing.md) installed under bs-shared/.'
     )
   );
   console.log('');
   console.log('Role agents (the skills dispatch work by role, never by model):');
-  console.log(chalk.cyan('  bs-mechanical') + chalk.gray('    - Bulk edits, searches and summaries'));
-  console.log(chalk.cyan('  bs-bounded') + chalk.gray('       - Implementation where failing tests say what done is'));
-  console.log(chalk.cyan('  bs-judgement') + chalk.gray('     - Spec, investigate, red team, fidelity, anything touching a ruling'));
-  console.log(chalk.cyan('  bs-review') + chalk.gray('        - Review, once `boardsmith verify` has passed'));
-  console.log(chalk.cyan('  bs-second-opinion') + chalk.gray(' - An independent second reading, on a different model from bs-judgement'));
-  console.log(chalk.gray(`  Location: ${agentsDirFor(targetDir)}`));
-  console.log(chalk.gray('  To use other agents, map roles in boardsmith.json, e.g. "agents": { "judgement": "senior" }.'));
-  console.log(chalk.gray('Projects built with an older BoardSmith skill are auto-detected'));
-  console.log(chalk.gray('and offered a one-time conversion by bs-ingest-rules.'));
+  console.log(styleText('cyan', '  bs-mechanical') + styleText('gray', '    - Bulk edits, searches and summaries'));
+  console.log(styleText('cyan', '  bs-bounded') + styleText('gray', '       - Implementation where failing tests say what done is'));
+  console.log(styleText('cyan', '  bs-judgement') + styleText('gray', '     - Spec, investigate, red team, fidelity, anything touching a ruling'));
+  console.log(styleText('cyan', '  bs-review') + styleText('gray', '        - Review, once `boardsmith verify` has passed'));
+  console.log(styleText('cyan', '  bs-second-opinion') + styleText('gray', ' - An independent second reading, on a different model from bs-judgement'));
+  console.log(styleText('gray', `  Location: ${agentsDirFor(targetDir)}`));
+  console.log(styleText('gray', '  To use other agents, map roles in boardsmith.json, e.g. "agents": { "judgement": "senior" }.'));
+  console.log(styleText('gray', 'Projects built with an older BoardSmith skill are auto-detected'));
+  console.log(styleText('gray', 'and offered a one-time conversion by bs-ingest-rules.'));
   console.log('');
-  console.log(chalk.bold('Next step: ') + 'open Claude Code and type ' + chalk.bold.cyan('/bs-create-game'));
-  console.log(chalk.gray('to start designing your first game. (Restart Claude Code first if it'));
-  console.log(chalk.gray("was already running, so it picks up the newly installed skills.)"));
+  console.log(styleText('bold', 'Next step: ') + 'open Claude Code and type ' + styleText(['bold', 'cyan'], '/bs-create-game'));
+  console.log(styleText('gray', 'to start designing your first game. (Restart Claude Code first if it'));
+  console.log(styleText('gray', "was already running, so it picks up the newly installed skills.)"));
   console.log('');
 
   if (options.local) {
-    console.log(chalk.yellow('Note: Installed locally to this project.'));
+    console.log(styleText('yellow', 'Note: Installed locally to this project.'));
     console.log('Run without --local to install globally.');
   }
 }
@@ -415,13 +415,13 @@ export async function uninstallClaudeCommand(options: { local?: boolean } = {}):
       continue; // Doesn't exist, skip
     }
     await fs.rm(itemPath, { recursive: true, force: true });
-    console.log(chalk.gray(`  Removed: ${itemPath}`));
+    console.log(styleText('gray', `  Removed: ${itemPath}`));
     removedAny = true;
   }
 
   if (removedAny) {
-    console.log(chalk.green('✓ Uninstalled BoardSmith skills'));
+    console.log(styleText('green', '✓ Uninstalled BoardSmith skills'));
   } else {
-    console.log(chalk.yellow('No BoardSmith skills found.'));
+    console.log(styleText('yellow', 'No BoardSmith skills found.'));
   }
 }

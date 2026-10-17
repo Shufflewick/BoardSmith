@@ -28,7 +28,7 @@
  */
 import { promises as fs } from 'node:fs';
 import { relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { RUN_LOG_DIR, designPath } from '../lib/project-paths.js';
 import { reviewScope } from '../lib/run-log-roles.js';
@@ -162,7 +162,7 @@ export async function reviewGate(options: { projectDir: string; slug: string }):
 export async function reviewGateCommand(slug: string, options: { project?: string }): Promise<void> {
   const gate = await reviewGate({ projectDir: resolve(options.project ?? process.cwd()), slug });
   if (!gate.open) {
-    console.error(chalk.red(gate.refusal));
+    console.error(styleText('red', gate.refusal));
     process.exitCode = 1;
     return;
   }
