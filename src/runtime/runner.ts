@@ -637,7 +637,13 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     }
 
     // Serialize the action before executing (captures current element refs)
-    const serializedAction = this.serializeForHistory(actionName, playerObj, args);
+    let serializedAction: SerializedAction;
+    try {
+      serializedAction = this.serializeForHistory(actionName, playerObj, args);
+    } catch (error) {
+      if (!(error instanceof PlayerFacingError)) throw error;
+      return { success: false, error: error.message, errorCode: ErrorCode.INVALID_PICK };
+    }
 
     this.ensureHeadCheckpoint();
 
@@ -734,13 +740,12 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       argsToSerialize = executor.resolveArgs(actionDef, executor.picksOf(actionDef, args), player);
     }
 
-    return serializeAction(
-      actionName,
-      player,
-      argsToSerialize,
-      this.game,
-      isUndoable
-    );
+    try {
+      return serializeAction(actionName, player, argsToSerialize, this.game, isUndoable);
+    } catch (error) {
+      // The picks are the caller's input, so one that cannot be encoded is a refused move, not a game fault (#1070).
+      throw new PlayerFacingError(error instanceof Error ? error.message : String(error));
+    }
   }
 
   /**
