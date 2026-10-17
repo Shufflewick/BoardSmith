@@ -1126,11 +1126,11 @@ export function useFlyingElements(
         // Check for elements that appeared (hidden → visible or new)
         const flightsBetween = (from: string | null, to: string | null) =>
           flyConfigs.filter((c) => (from === null || c.from === from) && (to === null || c.to === to)).length;
-        const lost = (name: string) => (containerCounts.get(name) ?? 0) - (currentCounts.get(name) ?? 0);
+        const gained = (name: string) => (currentCounts.get(name) ?? 0) - (containerCounts.get(name) ?? 0);
         for (const { id, element, container } of appeared) {
           // One flight per card gained, each from a source that lost a card not yet flown (#1027).
-          if (flightsBetween(null, container) >= -lost(container)) continue;
-          const route = countBasedRoutes.find((r) => r.to === container && lost(r.from) > flightsBetween(r.from, null));
+          if (flightsBetween(null, container) >= gained(container)) continue;
+          const route = countBasedRoutes.find((r) => r.to === container && -gained(r.from) > flightsBetween(r.from, null));
           const fromContainerConfig = route && getContainers().find((c) => c.name === route.from);
           const toContainerConfig = getContainers().find((c) => c.name === container);
           if (!route || !fromContainerConfig?.ref.value || !toContainerConfig?.ref.value) continue;

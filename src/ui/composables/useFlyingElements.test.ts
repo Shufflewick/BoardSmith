@@ -240,54 +240,131 @@ describe('useFlyingElements', () => {
   });
 
   describe('autoWatch count-based routes (#1027)', () => {
-    /** Runs one update where the hand gains card 7 and the source pile loses one, under a pond -> hand route. */
-    async function drawIntoHand(pond: AutoWatchGameElement, drawn: () => void): Promise<void> {
-      const pondEl = makeContainer();
-      const handEl = makeContainer();
-      vi.spyOn(pondEl, 'getBoundingClientRect').mockReturnValue(makeRect({ width: 60, height: 84 }));
-      vi.spyOn(handEl, 'getBoundingClientRect').mockReturnValue(makeRect({ left: 300, width: 60, height: 84 }));
-      const handGameEl: AutoWatchGameElement = { id: 2, children: [] };
+    type Route = { from: string; to: string };
+    const hidden = (id: number): AutoWatchGameElement => ({ id, attributes: { __hidden: true } });
+    const card = (id: number): AutoWatchGameElement => ({ id, name: 'card' });
+    const sizedContainer = () => {
+      const el = makeContainer();
+      vi.spyOn(el, 'getBoundingClientRect').mockReturnValue(makeRect({ width: 60, height: 84 }));
+      return el;
+    };
+
+    /**
+     * Tracks `piles` under `routes` and runs one update made by `change`. A probe card moves between two
+     * extra containers in the same update, so its flight proves the watcher ran; the flights returned leave it out.
+     */
+    async function flightsAfter(
+      piles: Record<string, AutoWatchGameElement>,
+      routes: Route[],
+      change: () => void,
+    ): Promise<{ element?: string; from?: string; to?: string }[]> {
+      const probe = card(999);
+      const all: Record<string, AutoWatchGameElement> = {
+        ...piles,
+        probeA: { id: 900, children: [probe] },
+        probeB: { id: 901, children: [] },
+      };
       const gameViewRef = ref<AutoWatchGameElement | null>(null);
-      const view = () => ({ id: 0, children: [{ ...pond }, { ...handGameEl }] });
+      const view = () => ({ id: 0, children: Object.values(all).map((pile) => ({ ...pile })) });
       useFlyingElements({
         autoWatch: {
           gameView: () => gameViewRef.value,
-          containers: [
-            { ref: ref(pondEl), name: 'pond', element: () => pond },
-            { ref: ref(handEl), name: 'hand', element: () => handGameEl },
-          ],
+          containers: Object.entries(all).map(([name, pile]) => ({ ref: ref(sizedContainer()), name, element: () => pile })),
           getElementData: () => ({}),
-          countBasedRoutes: [{ from: 'pond', to: 'hand' }],
+          countBasedRoutes: routes,
         },
       });
       enableAnimationTestMode();
       gameViewRef.value = view();
       await nextTick();
 
-      drawn();
-      handGameEl.children = [{ id: 7, name: 'card' }];
+      change();
+      all.probeA.children = [];
+      all.probeB.children = [probe];
       gameViewRef.value = view();
       await nextTick();
-      await waitFor(() => getAnimationTrace().length > 0);
+      await waitFor(() => getAnimationTrace().some((t) => t.element === '999'));
+      expect(getAnimationTrace()).toContainEqual(expect.objectContaining({ element: '999' }));
+      return getAnimationTrace()
+        .filter((t) => t.element !== '999')
+        .map(({ element, from, to }) => ({ element, from, to }));
     }
 
     it('flies a card that appears in the hand from a pile that only reports its count', async () => {
       const pond: AutoWatchGameElement = { id: 1, childCount: 3 };
-      await drawIntoHand(pond, () => { pond.childCount = 2; });
+      const hand: AutoWatchGameElement = { id: 2, children: [] };
+      const flights = await flightsAfter({ pond, hand }, [{ from: 'pond', to: 'hand' }], () => {
+        pond.childCount = 2;
+        hand.children = [card(7)];
+      });
 
-      expect(getAnimationTrace()).toEqual([
-        expect.objectContaining({ kind: 'fly', element: '7', from: 'pond', to: 'hand' }),
-      ]);
+      expect(flights).toEqual([{ element: '7', from: 'pond', to: 'hand' }]);
     });
 
     it('flies a drawn card once when the pile shows hidden placeholders', async () => {
-      const hidden = (id: number): AutoWatchGameElement => ({ id, attributes: { __hidden: true } });
       const pond: AutoWatchGameElement = { id: 1, children: [hidden(-1), hidden(-2)] };
-      await drawIntoHand(pond, () => { pond.children = [hidden(-1)]; });
+      const hand: AutoWatchGameElement = { id: 2, children: [] };
+      const flights = await flightsAfter({ pond, hand }, [{ from: 'pond', to: 'hand' }], () => {
+        pond.children = [hidden(-1)];
+        hand.children = [card(7)];
+      });
 
-      expect(getAnimationTrace()).toEqual([
-        expect.objectContaining({ kind: 'fly', from: 'pond', to: 'hand' }),
+      expect(flights).toEqual([{ element: '-2', from: 'pond', to: 'hand' }]);
+    });
+
+    it('does not fly a card that appears when no source lost one', async () => {
+      const pond: AutoWatchGameElement = { id: 1, childCount: 3 };
+      const hand: AutoWatchGameElement = { id: 2, children: [] };
+      const flights = await flightsAfter({ pond, hand }, [{ from: 'pond', to: 'hand' }], () => {
+        hand.children = [card(7)];
+      });
+
+      expect(flights).toEqual([]);
+    });
+
+    it('flies one card to each destination when one source loses two', async () => {
+      const pond: AutoWatchGameElement = { id: 1, childCount: 3 };
+      const hand: AutoWatchGameElement = { id: 2, children: [] };
+      const table: AutoWatchGameElement = { id: 3, children: [] };
+      const routes = [{ from: 'pond', to: 'hand' }, { from: 'pond', to: 'table' }];
+      const flights = await flightsAfter({ pond, hand, table }, routes, () => {
+        pond.childCount = 1;
+        hand.children = [card(7)];
+        table.children = [card(8)];
+      });
+
+      expect(flights).toEqual([
+        { element: '7', from: 'pond', to: 'hand' },
+        { element: '8', from: 'pond', to: 'table' },
       ]);
+    });
+
+    it('flies one card when a source loses one and cards appear in two containers', async () => {
+      const pond: AutoWatchGameElement = { id: 1, childCount: 3 };
+      const hand: AutoWatchGameElement = { id: 2, children: [] };
+      const table: AutoWatchGameElement = { id: 3, children: [] };
+      const routes = [{ from: 'pond', to: 'hand' }, { from: 'pond', to: 'table' }];
+      const flights = await flightsAfter({ pond, hand, table }, routes, () => {
+        pond.childCount = 2;
+        hand.children = [card(7)];
+        table.children = [card(8)];
+      });
+
+      expect(flights).toEqual([{ element: '7', from: 'pond', to: 'hand' }]);
+    });
+
+    it('does not fly again into a hand whose gain another flight already covers', async () => {
+      const opponent: AutoWatchGameElement = { id: 1, children: [hidden(-1), hidden(-2)] };
+      const pond: AutoWatchGameElement = { id: 2, childCount: 3 };
+      const hand: AutoWatchGameElement = { id: 3, children: [] };
+      const routes = [{ from: 'opponent', to: 'hand' }, { from: 'pond', to: 'hand' }];
+      const flights = await flightsAfter({ opponent, pond, hand }, routes, () => {
+        opponent.children = [hidden(-1)];
+        pond.childCount = 2;
+        hand.children = [card(7)];
+      });
+
+      expect(flights).toEqual([{ element: '-2', from: 'opponent', to: 'hand' }]);
     });
   });
 
