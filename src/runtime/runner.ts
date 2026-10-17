@@ -552,8 +552,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
 
   /**
    * Capture the head checkpoint unless one already exists, so a failed action
-   * has a state to roll back to even when no snapshot was taken since the last
-   * action (#802). Hosts snapshot after every action, so there it costs nothing.
+   * has a state to roll back to, and the window has no gap, even when no
+   * snapshot was taken since the last history entry (#802). Hosts snapshot
+   * after every op, so there it costs nothing.
    */
   private ensureHeadCheckpoint(): void {
     if (this.checkpointPolicy_.enabled && !this.actionCheckpoints[this.headOffset]) {
@@ -999,6 +1000,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * one fails loudly.
    */
   private expireHeldSeat(seat: number): FlowState {
+    this.ensureHeadCheckpoint();
     const state = this.game.expireHeldSeat(seat);
     this.actionHistory.push({ kind: 'seatExpiry', player: seat, undoable: false });
     return state;

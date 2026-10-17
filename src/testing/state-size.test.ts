@@ -50,7 +50,6 @@ function play(actions: number, checkpoints?: { max?: number }) {
   runner.start();
   for (let i = 0; i < actions; i++) {
     runner.performAction('pass', (i % 2) + 1, {});
-    runner.captureCheckpoint();
   }
   return runner.getSnapshot();
 }
@@ -100,14 +99,8 @@ class HeldSeatGame extends Game<HeldSeatGame, Player> {
   }
 }
 
-describe('measureSnapshotSize — sparse checkpoint windows (issue 143)', () => {
-  /**
-   * An action captures the state before it runs (#802), but a seat expiry
-   * appends to the history without a capture. A host never sees the hole (its
-   * previous op's snapshot captured that slot); a driver that expires a seat
-   * between actions and snapshots once at the end leaves one.
-   */
-  function expireASeatSnapshottingOnlyAtTheEnd() {
+describe('measureSnapshotSize — one snapshot after many actions (#802)', () => {
+  it('captures every slot when a seat expires between actions', () => {
     const runner = new GameRunner({
       GameClass: HeldSeatGame,
       gameType: 'held-seat-game',
@@ -118,29 +111,13 @@ describe('measureSnapshotSize — sparse checkpoint windows (issue 143)', () => 
     expect(runner.performAction('scout', 1, {}).success).toBe(true);
     expect(runner.closeExpiredHeldSeat(1, 'pass')).toBeDefined();
     expect(runner.performAction('scout', 2, {}).success).toBe(true);
-    return runner.getSnapshot();
-  }
-
-  it('refuses to average over uncaptured slots instead of reporting a wrong multiplier', () => {
-    expect(() => measureSnapshotSize(expireASeatSnapshottingOnlyAtTheEnd())).toThrow(/never captured/);
+    const snapshot = runner.getSnapshot();
+    expect(snapshot.actionCheckpoints?.entries).toHaveLength(4);
+    expect(snapshot.actionCheckpoints?.entries.every((entry) => entry != null)).toBe(true);
   });
 
-  it('names the counts and the fix in the error', () => {
-    expect(() => measureSnapshotSize(expireASeatSnapshottingOnlyAtTheEnd())).toThrow(
-      /1 of 4 retained checkpoint slots[\s\S]*getSnapshot\(\)/,
-    );
-  });
-
-  it('measures a driver that never snapshots between actions (#802)', () => {
-    const runner = new GameRunner({
-      GameClass: BudgetGame,
-      gameType: 'budget-game',
-      gameOptions: { playerCount: 2, seed: 'budget' },
-      checkpoints: { history: 'full' },
-    });
-    runner.start();
-    for (let i = 0; i < 20; i++) runner.performAction('pass', (i % 2) + 1, {});
-    const size = measureSnapshotSize(runner.getSnapshot());
+  it('measures one snapshot taken after many actions', () => {
+    const size = measureSnapshotSize(play(20));
     expect(size.checkpointCount).toBe(21);
     expect(size.bytesPerCheckpoint).toBeGreaterThan(size.treeBytes * 0.9);
   });

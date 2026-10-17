@@ -28,9 +28,7 @@
  * ```
  *
  * `hostBudgetBytes` is the host's published budget, read from where the host
- * publishes it. A window with uncaptured slots understates the multiplier, so
- * `measureSnapshotSize` refuses such a snapshot rather than reporting the
- * wrong number.
+ * publishes it.
  *
  * The two costs that dominate in practice, and that neither shows up until
  * measured:
@@ -91,64 +89,9 @@ export interface SnapshotSizeMeasurement {
   bytesPerCheckpoint: number;
 }
 
-/**
- * How many of a window's slots actually hold a checkpoint.
- *
- * `checkpointCount` reports the window's LENGTH, which includes slots that
- * were never captured (they serialize as `null`). Averaging the window's bytes
- * over its length rather than over its captured slots is what understates the
- * multiplier — see {@link assertWindowIsDense}.
- */
-function capturedCheckpointCount(snapshot: GameStateSnapshot): number {
-  const entries = snapshot.actionCheckpoints?.entries;
-  if (!entries) return 0;
-  let captured = 0;
-  for (let i = 0; i < entries.length; i++) {
-    if (entries[i] !== undefined && entries[i] !== null) captured++;
-  }
-  return captured;
-}
-
-/**
- * Refuse to measure a snapshot whose retained checkpoint window has slots that
- * were never captured.
- *
- * An action captures the state before it runs (#802), but a seat expiry
- * (`closeExpiredHeldSeat`) appends to the history without one. A host
- * snapshots after every op, so it never leaves a hole; a driver that expires a
- * seat between actions and snapshots once at the end leaves the slot before
- * the expiry empty. Empty slots serialize as `null` but still count toward the
- * window's length, so `checkpointBytes / length` comes out below the real
- * multiplier, small enough that a budget assertion written that way can pass
- * green while measuring nothing.
- *
- * A confidently wrong number is worse than no number, so this throws instead
- * of reporting one.
- */
-function assertWindowIsDense(snapshot: GameStateSnapshot, length: number): void {
-  const captured = capturedCheckpointCount(snapshot);
-  if (captured === length) return;
-  throw new Error(
-    `Cannot measure this snapshot: ${length - captured} of ${length} retained checkpoint ` +
-      `slots were never captured, so the per-checkpoint multiplier would come out ` +
-      `${(length / Math.max(1, captured)).toFixed(0)}x too small and the budget assertion ` +
-      `would pass while measuring nothing.\n` +
-      `A seat expiry records no checkpoint of its own. Call runner.getSnapshot() ` +
-      `after every action and seat expiry, the way a host does:\n` +
-      `  for (...) { runner.performAction(...); runner.getSnapshot(); }\n` +
-      `then measure the final snapshot.`,
-  );
-}
-
-/**
- * Measure where a snapshot's bytes actually are.
- *
- * Throws when the snapshot's retained checkpoint window has uncaptured slots —
- * see {@link assertWindowIsDense}.
- */
+/** Measure where a snapshot's bytes actually are. */
 export function measureSnapshotSize(snapshot: GameStateSnapshot): SnapshotSizeMeasurement {
   const count = checkpointCount(snapshot.actionCheckpoints);
-  assertWindowIsDense(snapshot, count);
   const checkpointBytes = jsonByteLength(snapshot.actionCheckpoints);
   return {
     totalBytes: jsonByteLength(snapshot),

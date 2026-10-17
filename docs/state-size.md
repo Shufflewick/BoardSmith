@@ -228,20 +228,6 @@ any point. With no options it projects full history (what `boardsmith dev`
 keeps); pass `{ maxCheckpoints }` with your longest turn plus one, or your
 `max`, to project what a hosted table keeps.
 
-### Why the snapshot call belongs inside the loop
-
-Each action captures the state it starts from (#802), and `getSnapshot()`
-captures the current one. A seat expiry (`closeExpiredHeldSeat`) records no
-checkpoint of its own; a host never notices, because it snapshots after every
-op. A driver that expires a seat between actions and snapshots once at the end
-leaves that slot uncaptured. It still counts toward the window's length, so
-`bytesPerCheckpoint` comes out too small and the budget assertion passes green
-while measuring nothing.
-
-`measureSnapshotSize` refuses such a snapshot rather than reporting the wrong
-number, naming the uncaptured count and the fix. If you see that error, call
-`getSnapshot()` after every action and seat expiry.
-
 ## What happens if you ignore all this
 
 On ShufflewickPub, the move that would cross the budget is refused before it is
