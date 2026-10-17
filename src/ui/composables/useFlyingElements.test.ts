@@ -389,6 +389,34 @@ describe('useFlyingElements', () => {
     });
   });
 
+  describe('flyOnAppear ids (#868)', () => {
+    it('two flights started in the same millisecond keep separate ghosts', async () => {
+      const rafQueue: FrameRequestCallback[] = [];
+      vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => rafQueue.push(cb));
+      vi.stubGlobal('cancelAnimationFrame', vi.fn());
+      vi.spyOn(Date, 'now').mockReturnValue(1_000);
+      const sourceEl = makeContainer();
+      const targetEl = makeContainer();
+      vi.spyOn(sourceEl, 'getBoundingClientRect').mockReturnValue(makeRect({ width: 60, height: 84 }));
+      vi.spyOn(targetEl, 'getBoundingClientRect').mockReturnValue(makeRect({ left: 200, width: 60, height: 84 }));
+
+      const { flyOnAppear, flyingElements } = useFlyingElements({ duration: 50, holdDuration: 0 });
+      const first = ref<{ rank: string } | null>(null);
+      const second = ref<{ rank: string } | null>(null);
+      for (const element of [first, second]) {
+        flyOnAppear({ element, sourceRef: ref(sourceEl), targetRef: ref(targetEl), getElementData: (el) => ({ rank: el.rank }) });
+      }
+      first.value = { rank: 'A' };
+      second.value = { rank: 'K' };
+      await nextTick();
+      expect(flyingElements.value).toHaveLength(2);
+
+      // Finish only the first flight; the second ghost must stay.
+      rafQueue[0](performance.now() + 10_000);
+      expect(flyingElements.value).toHaveLength(1);
+    });
+  });
+
   describe('real path (mocked RAF)', () => {
     it('drives the RAF chain to completion and resolves the fly promise', async () => {
       const rafQueue: FrameRequestCallback[] = [];

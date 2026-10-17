@@ -797,6 +797,9 @@ export function useFlyingElements(
     await Promise.all(promises);
   }
 
+  // A counter, not a timestamp: two flights in one millisecond would share an id and remove each other's ghost.
+  let appearFlightCount = 0;
+
   /**
    * Declarative "fly when element appears" helper.
    * Sets up a watcher and triggers animation when element becomes truthy.
@@ -841,7 +844,7 @@ export function useFlyingElements(
         onStart?.();
 
         await fly({
-          id: `fly-appear-${Date.now()}`,
+          id: `fly-appear-${++appearFlightCount}`,
           startRect: sourceRect,
           endRect: () => targetRef.value?.getBoundingClientRect() ?? targetRect,
           elementData,
