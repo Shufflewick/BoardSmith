@@ -949,7 +949,7 @@ export class MultiplayerHost {
     msg: Extract<ClientInbound, { type: 'server_request' }>,
   ): Promise<void> {
     if (this.phase !== 'playing' || !this.session) {
-      this.send(clientId, { type: 'error', message: this.starting ? STARTING : NO_GAME, requestId: msg.requestId ?? null });
+      this.send(clientId, { type: 'error', message: this.noGame(), requestId: msg.requestId ?? null });
       return;
     }
     if (this.stranded !== null) {
@@ -971,6 +971,11 @@ export class MultiplayerHost {
     } finally {
       this.requestOrigin.delete(hostRequestId);
     }
+  }
+
+  /** Why there is no game to act in: one is starting, or none is running. */
+  private noGame(): string {
+    return this.starting ? STARTING : NO_GAME;
   }
 
   /**
@@ -1001,7 +1006,7 @@ export class MultiplayerHost {
     msg: Extract<ClientInbound, { type: 'getState' }>,
   ): void {
     if (this.phase !== 'playing' || !this.session) {
-      this.send(clientId, { type: 'error', message: this.starting ? STARTING : NO_GAME, requestId: msg.requestId ?? null });
+      this.send(clientId, { type: 'error', message: this.noGame(), requestId: msg.requestId ?? null });
       return;
     }
     const seat = this.seatOf(clientId, msg.requestId);
