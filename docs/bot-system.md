@@ -405,6 +405,13 @@ played through and the move was chosen at random, and points here. It changes no
 chosen, and production searches never warn. The bench's "scored" columns show
 the same count (see "Measuring bot speed").
 
+A move the game refuses cleanly, changing nothing (an `execute` that returns
+`success: false`), is not thrown away, so it never counts toward that warning.
+When the game refused every move the bot tried at the root that way, the bot
+chose its move at random, and in development mode it warns once per move with
+the first refusal and how to fix it: move the rule that refuses into the
+action's `validate` or its choices, so the move is never offered (#874).
+
 A bot that skips its unresolvable moves plays worse than one that could resolve
 them. Making it play WELL in a hidden-information game needs determinization,
 which is the next section.
