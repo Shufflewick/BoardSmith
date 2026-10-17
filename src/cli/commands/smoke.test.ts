@@ -412,7 +412,7 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.passed).toBe(false);
     expect(outcome.summary).toContain(
       '- The panel offered "kindle", and taking it failed: The "kindle" action could not be completed because of an error in ' +
-        "the game's rules. Nothing was changed. (the hearth cracked)",
+        "the game's rules. (the hearth cracked) Nothing was changed.",
     );
     expect(outcome.summary).toMatch(/- The game showed an error: The "kindle" action could not be completed/);
     expect(steps.some((line) => line.endsWith('entering "2" for "kindle"'))).toBe(false);
