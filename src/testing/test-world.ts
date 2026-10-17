@@ -404,7 +404,8 @@ export class TestWorld {
    * The same path the armed timer takes on a laptop: `now` moves, the arm that
    * was waiting fires, and the drain runs each event at its OWN due rather than
    * at the instant the clock arrived -- so the state a test sees is the state
-   * waiting would have produced.
+   * waiting would have produced. Throws after 1,000 drain rounds, which means a
+   * handler keeps re-arming at zero delay.
    */
   async advanceClock(byMs: number): Promise<void> {
     if (!Number.isFinite(byMs) || byMs < 0) {
