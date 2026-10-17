@@ -884,26 +884,6 @@ describe('chunk-check', () => {
     errSpy.mockRestore();
   });
 
-  it('writes the Re-verified (no code change): stamp when --reverified-no-code-change is supplied, and writes nothing without it (175-02)', async () => {
-    const { project } = await makeCheckProject();
-    await makeChunk(project, 'jab', JAB_CITES);
-
-    await chunkCheckCommand('jab', { project, json: true });
-    const withoutFlag = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
-    expect(withoutFlag).not.toContain('Re-verified');
-
-    process.exitCode = undefined;
-    await chunkCheckCommand('jab', {
-      project,
-      json: true,
-      reverifiedNoCodeChange: 'aaa111..bbb222 — 0 manifest files changed',
-    });
-    const withFlag = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
-    expect(withFlag).toContain(
-      'Re-verified (no code change): aaa111..bbb222 — 0 manifest files changed',
-    );
-  });
-
   /**
    * `<slug>` is an IDENTITY: it is recorded into the block this command writes, and it addresses
    * `design/chunks/<slug>/CHUNK.md`. #240's shape, found in `init`, is one argument being both
@@ -1479,58 +1459,19 @@ describe('projectProvenanceState', () => {
   });
 });
 
-/**
- * 175-CONTEXT.md decision 11 — the `Re-verified (no code change):` label, APPENDED as the ninth
- * `VERIFIED_AGAINST_LABELS` member. It is a genuinely NEW concept, never a reuse of
- * `SCOPE_REASONS` (which encodes why a verification's scope was reduced, not whether code moved).
- */
-describe('VERIFIED_AGAINST_LABELS — Re-verified (no code change) append (175-02)', () => {
-  const PRE_CHANGE_EIGHT_LABELS = [
-    'Scope:',
-    'Reason:',
-    'Rulebook edition:',
-    'Rulebook source hash:',
-    'Engine revision:', // #440: replaced 'BoardSmith version:', package.json's never-changing 0.0.1
-    'Skills tree hash:',
-    'Cited slices:',
-    'Unresolved citations:',
-  ] as const;
+describe('## Verified Against — render and parse shape', () => {
+  const record: VerifiedAgainstRecord = {
+    scope: SCOPE_FULL,
+    edition: 'First Printing 2020',
+    sourceHash: 'deadbeef',
+    engineRevision: 47,
+    skillsTreeHash: 'cafef00d',
+    citedSlices: [],
+    unresolved: [],
+  };
 
-  function baseRecord(overrides: Partial<VerifiedAgainstRecord> = {}): VerifiedAgainstRecord {
-    return {
-      scope: SCOPE_FULL,
-      edition: 'First Printing 2020',
-      sourceHash: 'deadbeef',
-      engineRevision: 47,
-      skillsTreeHash: 'cafef00d',
-      citedSlices: [],
-      unresolved: [],
-      ...overrides,
-    };
-  }
-
-  it('has exactly ten members: Re-verified appended ninth, Additional source hash tenth (#305)', () => {
-    expect(VERIFIED_AGAINST_LABELS).toHaveLength(10);
-    expect(VERIFIED_AGAINST_LABELS[8]).toBe('Re-verified (no code change):');
-    expect(VERIFIED_AGAINST_LABELS[9]).toBe('Additional source hash:');
-  });
-
-  it('the first eight members deep-equal the pre-change label set, byte-for-byte', () => {
-    expect(VERIFIED_AGAINST_LABELS.slice(0, 8)).toEqual(PRE_CHANGE_EIGHT_LABELS);
-  });
-
-  it('SCOPE_REASONS holds its 8 members, none mentioning "code change"', () => {
-    expect(SCOPE_REASONS).toHaveLength(8);
-    expect(SCOPE_REASONS.some((r) => r.includes('code change'))).toBe(false);
-  });
-
-  it('renderVerifiedAgainst omits the new label entirely for a record without reverifiedNoCodeChange — byte-identical to the pre-change shape', () => {
-    const record = baseRecord();
-    const rendered = renderVerifiedAgainst(record);
-    expect(rendered).not.toContain('Re-verified');
-    // Hard-coded expected block, pinned so a future change cannot silently start emitting the
-    // new label for a record that never asked for it.
-    expect(rendered).toBe(
+  it('renderVerifiedAgainst writes exactly the labels the record carries, in order', () => {
+    expect(renderVerifiedAgainst(record)).toBe(
       '\nScope: full\n' +
         'Rulebook edition: First Printing 2020\n' +
         'Rulebook source hash: deadbeef\n' +
@@ -1543,41 +1484,13 @@ describe('VERIFIED_AGAINST_LABELS — Re-verified (no code change) append (175-0
     );
   });
 
-  it('renders the label with its evidence string when the field is present, positioned before Cited slices:', () => {
-    const record = baseRecord({
-      reverifiedNoCodeChange: 'abc123..def456 — 0 manifest files changed',
-    });
-    const rendered = renderVerifiedAgainst(record);
-    expect(rendered).toContain(
-      'Re-verified (no code change): abc123..def456 — 0 manifest files changed',
-    );
-    expect(rendered.indexOf('Re-verified')).toBeLessThan(rendered.indexOf('Cited slices:'));
-  });
-
-  it('round-trips reverifiedNoCodeChange through parseVerifiedAgainst', () => {
-    const record = baseRecord({
-      reverifiedNoCodeChange: 'abc123..def456 — 0 manifest files changed',
-    });
-    const rendered = renderVerifiedAgainst(record);
+  it('a rendered block parses back as valid, not malformed', () => {
     const chunkText =
       `# Chunk: x\n\n${VERIFIED_AGAINST_HEADING}\n\n${VERIFIED_AGAINST_BEGIN}` +
-      `${rendered}${VERIFIED_AGAINST_END}\n`;
-    const parsed = parseVerifiedAgainst(chunkText);
-    expect(parsed.blockMalformed).toBe(false);
-    expect(parsed.reverifiedNoCodeChange).toBe('abc123..def456 — 0 manifest files changed');
-  });
-
-  it('an existing eight-label block (no Re-verified line) still parses as valid, not malformed', () => {
-    const record = baseRecord();
-    const rendered = renderVerifiedAgainst(record);
-    expect(rendered).not.toContain('Re-verified');
-    const chunkText =
-      `# Chunk: x\n\n${VERIFIED_AGAINST_HEADING}\n\n${VERIFIED_AGAINST_BEGIN}` +
-      `${rendered}${VERIFIED_AGAINST_END}\n`;
+      `${renderVerifiedAgainst(record)}${VERIFIED_AGAINST_END}\n`;
     const parsed = parseVerifiedAgainst(chunkText);
     expect(parsed.blockMalformed).toBe(false);
     expect(parsed.state).toBe(SCOPE_FULL);
-    expect(parsed.reverifiedNoCodeChange).toBeUndefined();
   });
 });
 

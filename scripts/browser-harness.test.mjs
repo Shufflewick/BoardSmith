@@ -161,8 +161,16 @@ describe('#358: a browser regression finds the packages where Node does', () => 
 describe('#533: every browser regression runs automatically', () => {
   const policy = JSON.parse(readFileSync(join(REPO, '.agent-policy.json'), 'utf8'));
 
-  it('runs the browser suite as its own verify check', () => {
-    expect(policy.verify).toContainEqual({ name: 'browser', run: 'node bin/boardsmith.js test --browser' });
+  it('runs the browser suite at merge when UI, dev host, world or browser script files change', () => {
+    const step = policy.thread.extraMergeSteps.find((s) => s.name === 'browser');
+    expect(step).toMatchObject({ run: 'node bin/boardsmith.js test --browser' });
+    const runsFor = (path) => new RegExp(step.whenChanged).test(path);
+    for (const path of ['src/ui/components/GameShell.vue', 'src/cli/dev-host/bridge.ts', 'src/world/engine.ts', 'scripts/ordered-list-browser.mjs']) {
+      expect(runsFor(path), path).toBe(true);
+    }
+    for (const path of ['src/bot/mcts-bot.ts', 'src/cli/commands/verify.ts', 'docs/browser-testing.md']) {
+      expect(runsFor(path), path).toBe(false);
+    }
   });
 
   it('lists the browser suite without an error', () => {
