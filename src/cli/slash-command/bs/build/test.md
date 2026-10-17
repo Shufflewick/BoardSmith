@@ -384,7 +384,8 @@ first UI chunk writes it, a later chunk extends it when it adds a token pair, an
 the Spec Manifest. A chunk's fast checks run it when the chunk added or changed it; the full suite,
 at every `chunk-merge` and at publish, runs it always. A guard holds
 scans only; a test that mounts a component or cites a claim belongs in the chunk's test file. A guard
-reads the game's source with `readFileSync` or an import ending `?raw`; the one game module it may
+reads the game's source with `readFileSync`, an import ending `?raw`, or `import.meta.glob` with
+`query: '?raw'`; the one game module it may
 import is literal constants under `src/ui/`, such as the palette a contrast check reads (rule list
 above).
 
