@@ -933,6 +933,19 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
     expect(adds.map(b => b.attributes('aria-label'))).toEqual(['Add Move here (e4)', 'Add Pass']);
     expect(adds.map(b => b.text())).toEqual(['Move here', 'Pass']);
   });
+
+  // #1084: every destination of one piece shares its source ref, so the name comes from the target.
+  it('names each destination by its target square, not the shared source', () => {
+    const fromB6 = (to: string): ChoiceWithRefs => ({
+      value: to,
+      display: 'Move',
+      refs: [{ ref: { notation: 'b6' }, role: 'source' }, { ref: { notation: to }, role: 'target' }],
+    });
+    const wrapper = mountSpacePick([fromB6('a5'), fromB6('c5')]);
+
+    const buttons = wrapper.findAll('.anchored-choice-btn');
+    expect(buttons.map(b => b.attributes('aria-label'))).toEqual(['Move (a5)', 'Move (c5)']);
+  });
 });
 
 // ---------------------------------------------------------------------------

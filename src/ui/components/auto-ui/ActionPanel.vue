@@ -1195,7 +1195,9 @@ function restoreFocusAfterRemoval(index: number): void {
 
 /** What a choice's control reads out: its display, plus its board square when it has one (#934). */
 function choiceSpokenName(choice: ChoiceWithRefs): string {
-  const notation = choice.refs?.find(r => r.ref.notation)?.ref.notation;
+  // The target square, since every destination of one piece shares its source square (#1084).
+  const squares = choice.refs?.filter(r => r.ref.notation) ?? [];
+  const notation = (squares.find(r => r.role === 'target') ?? squares[0])?.ref.notation;
   return notation ? `${choice.display} (${notation})` : choice.display;
 }
 
