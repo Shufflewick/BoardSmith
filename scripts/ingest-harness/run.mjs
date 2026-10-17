@@ -40,7 +40,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync, readdirSync, statSync, copyFileSync, appendFileSync, writeFileSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, readdirSync, statSync, copyFileSync, appendFileSync, writeFileSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -52,7 +52,6 @@ const __dirname = path.dirname(__filename);
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 
 const DEFAULTS = {
-  workDir: '/tmp/bs-ingest-harness',
   source: path.join(os.homedir(), 'BoardSmithGames', 'seven', 'rules.pdf'),
   expectHash: '5138858e789452d6d366e3ba3a898b5d5417a3561ee23bd53123fd98fe337880',
   referenceRepo: path.join(os.homedir(), 'BoardSmithGames', 'seven'),
@@ -61,7 +60,7 @@ const DEFAULTS = {
 
 function parseArgs(argv) {
   const opts = {
-    workDir: DEFAULTS.workDir,
+    workDir: undefined,
     source: DEFAULTS.source,
     expectHash: DEFAULTS.expectHash,
     referenceRepo: DEFAULTS.referenceRepo,
@@ -91,7 +90,8 @@ function parseArgs(argv) {
   }
   // Expand ~ if a caller passes it literally (os.homedir() defaults never need this).
   for (const key of ['workDir', 'source', 'referenceRepo']) {
-    if (opts[key] && opts[key].startsWith('~')) {
+    if (opts[key] === undefined) continue;
+    if (opts[key].startsWith('~')) {
       opts[key] = path.join(os.homedir(), opts[key].slice(1));
     }
     opts[key] = path.resolve(opts[key]);
@@ -118,7 +118,9 @@ Subcommands:
            turn-count diagnostic, exit 0 only if all ten pass.
 
 Options:
-  --work-dir <dir>         Throwaway project root (default: ${DEFAULTS.workDir})
+  --work-dir <dir>         Throwaway project root. 'stage' refuses an existing folder it did not
+                           stage itself; without it, 'stage' creates a fresh folder under the
+                           system temp dir and prints it. 'drive' and 'assert' require it.
   --source <path>          Rulebook PDF to ingest (default: ${DEFAULTS.source})
   --expect-hash <sha256>   Expected SHA-256 of --source (default: ${DEFAULTS.expectHash})
   --reference-repo <dir>   Git repo containing --source, asserted clean before/after
@@ -148,16 +150,46 @@ function stateFilePath(workDir) {
   return path.join(workDir, '.harness-stage-state.json');
 }
 
+function readStageState(subcommand, workDir) {
+  if (workDir === undefined) fail(`'${subcommand}' needs --work-dir <dir>: pass the folder 'stage' printed.`);
+  const statePath = stateFilePath(workDir);
+  if (!existsSync(statePath)) fail(`no stage state found at ${statePath} — run 'stage' first`);
+  const state = JSON.parse(readFileSync(statePath, 'utf8'));
+  if (!state.stagedAt) fail(`the last 'stage' into ${workDir} did not finish; run 'stage --work-dir ${workDir}' again`);
+  return state;
+}
+
 // ---------------------------------------------------------------------------
 // stage
 // ---------------------------------------------------------------------------
 
-function stage(opts) {
-  const { workDir, source, expectHash, referenceRepo } = opts;
-
-  console.log(`[stage] recreating throwaway dir: ${workDir}`);
-  rmSync(workDir, { recursive: true, force: true });
+function prepareWorkDir(workDir) {
+  if (workDir === undefined) {
+    const created = mkdtempSync(path.join(os.tmpdir(), 'bs-ingest-harness-'));
+    console.log(`[stage] created throwaway dir: ${created}`);
+    console.log(`[stage] pass --work-dir ${created} to 'drive' and 'assert'`);
+    return created;
+  }
+  if (existsSync(workDir)) {
+    if (!existsSync(stateFilePath(workDir))) {
+      fail(
+        `--work-dir ${workDir} already exists and has no .harness-stage-state.json, so this harness did not ` +
+          `stage it. Refusing to delete it. Pass a folder that does not exist yet, or leave out --work-dir ` +
+          `to stage into a fresh temp folder.`,
+      );
+    }
+    rmSync(workDir, { recursive: true, force: true });
+  }
   mkdirSync(workDir, { recursive: true });
+  console.log(`[stage] created throwaway dir: ${workDir}`);
+  return workDir;
+}
+
+function stage(opts) {
+  const { source, expectHash, referenceRepo } = opts;
+  const workDir = prepareWorkDir(opts.workDir);
+  // Marks the folder as ours at once, so a stage that fails partway can still be re-staged.
+  writeFileSync(stateFilePath(workDir), '{}');
 
   console.log(`[stage] installing current working tree's skill text into ${workDir} (--local --force)`);
   execFileSync('node', [path.join(REPO_ROOT, 'bin', 'boardsmith.js'), 'claude', '--local', '--force'], {
@@ -355,9 +387,7 @@ function turnDiagnosticLine(state) {
 
 function assertCmd(opts) {
   const { workDir, referenceRepo } = opts;
-  const statePath = stateFilePath(workDir);
-  if (!existsSync(statePath)) fail(`no stage state found at ${statePath} — run 'stage' (and 'drive') first`);
-  const state = JSON.parse(readFileSync(statePath, 'utf8'));
+  const state = readStageState('assert', workDir);
 
   if (opts.turnsOnly) {
     console.log('');
@@ -427,6 +457,12 @@ function assertCmd(opts) {
   // Phase B2 — the pre-commit hook is the backstop for every later commit. Prove it still works
   // and is idempotent: after ingest-check has already repaired everything, a commit must not
   // change the artifacts again.
+  if (!existsSync(path.join(projectDir, '.git'))) {
+    fail(
+      `the project ${projectDir} has no .git of its own, so a commit there would land in whatever repository ` +
+        `encloses it. The driven session should have run git init in the project; refusing to commit.`,
+    );
+  }
   try {
     execFileSync('git', ['-C', projectDir, 'add', '-A'], { stdio: 'ignore' });
     execFileSync(
@@ -539,9 +575,9 @@ async function main() {
     return;
   }
   if (!opts.subcommand) {
-    stage(opts);
-    await driveAsync(opts);
-    assertCmd(opts);
+    const { workDir } = stage(opts);
+    await driveAsync({ ...opts, workDir });
+    assertCmd({ ...opts, workDir });
     return;
   }
   fail(`unknown subcommand: ${opts.subcommand}. Use stage, drive, assert, or no subcommand to run all three.`);
@@ -549,9 +585,7 @@ async function main() {
 
 async function driveAsync(opts) {
   const { workDir, model, maxTurns } = opts;
-  const statePath = stateFilePath(workDir);
-  if (!existsSync(statePath)) fail(`no stage state found at ${statePath} — run 'stage' first`);
-  const state = JSON.parse(readFileSync(statePath, 'utf8'));
+  const state = readStageState('drive', workDir);
 
   const initialPrompt = buildInitialPrompt(state);
   if (!initialPrompt.includes(state.stagedCopyPath)) fail('constructed prompt does not name the staged copy path');
@@ -646,7 +680,7 @@ async function driveAsync(opts) {
     hitTurnCap: stoppedReason === 'turn-cap',
     drivenAt: new Date().toISOString(),
   };
-  writeFileSync(statePath, JSON.stringify(driveState, null, 2));
+  writeFileSync(stateFilePath(workDir), JSON.stringify(driveState, null, 2));
 
   if (opts.turnsOnly) {
     console.log(
