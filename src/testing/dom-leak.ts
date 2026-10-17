@@ -26,7 +26,8 @@ import type { Component } from 'vue';
 import type { VueWrapper } from '@vue/test-utils';
 import type { default as AutoUIComponent } from '../ui/components/auto-ui/AutoUI.vue';
 import type { GameRootView } from '../ui/types.js';
-import type { ElementJSON, SeatViewJSON } from '../engine/index.js';
+import { isEngineRootField, type ElementJSON, type SeatViewJSON } from '../engine/index.js';
+import { PERSIST_KEY, PERSIST_PRIVATE_KEY } from '../persistence/persistence.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE, isHiddenPlaceholder } from '../engine/element/hidden-placeholder.js';
 import type { BoardInteraction } from '../ui/composables/useBoardInteraction.js';
 import type { TableSeat } from '../ui/composables/useTableSeat.js';
@@ -1286,6 +1287,15 @@ function collectSurvivingValues(node: ElementJSON): Set<string> {
   return values;
 }
 
+/**
+ * A root attribute the seat view drops on purpose without it being a game secret
+ * (#908): an engine root field, whose audience the engine settles (another seat's
+ * `tutorialProgress`), or the host-only persistence channel (#527).
+ */
+function isRootBookkeeping(key: string): boolean {
+  return isEngineRootField(key) || key === PERSIST_KEY || key === PERSIST_PRIVATE_KEY;
+}
+
 /** Result of {@link deriveLeakDetectionData}: forbidden markers plus, for every
  * VISIBLE element, the set of values that are that element's OWN legitimate
  * rendered identity (name/attributes it is actually allowed to show). */
@@ -1318,7 +1328,10 @@ function deriveLeakDetectionData(
   const ownValuesById = new Map<number, Set<string>>();
 
   for (const unfiltered of unredacted) {
-    const candidates = extractIdentityCandidates(unfiltered);
+    const isRoot = unfiltered.id === finalTree.id;
+    const candidates = extractIdentityCandidates(unfiltered).filter(
+      (c) => !(isRoot && c.attribute !== undefined && isRootBookkeeping(c.attribute)),
+    );
     if (candidates.length === 0) continue;
 
     const elementLabel = `${unfiltered.className}#${unfiltered.id}`;
