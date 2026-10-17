@@ -1,3 +1,4 @@
+import { secureRandomHex } from '../utils/secure-random.js';
 import { rulesErrorSentence } from '../engine/action/rules-error.js';
 import { ActionExecutor, evaluateConditionWithTrace } from '../engine/action/action.js';
 import {
@@ -85,18 +86,6 @@ export interface RunnerCheckpointPolicy extends CheckpointPolicy {
  * inference source: the game class is the one declaration of what this game
  * accepts, and the literal is checked against it rather than widening it.
  */
-/**
- * A new game's `gameInstanceId`: 128 random bits, as hex.
- *
- * `getRandomValues` rather than `randomUUID`, because a browser offers
- * `randomUUID` only on a secure page and `boardsmith dev --lan` serves plain
- * http. It never touches the game's seeded RNG, so minting an id moves no draw.
- */
-function mintGameInstanceId(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-}
-
 export interface GameRunnerOptions<G extends Game, O extends GameOptions = GameOptions> {
   /** Game class constructor */
   GameClass: new (options: O) => G;
@@ -189,27 +178,33 @@ export interface PendingStepResult {
  * and provides serialization utilities for client-server sync
  */
 /**
- * The log as it stood at a checkpoint boundary (#25).
+ * A checkpoint's tree paired with the live log as it stood at that boundary (#25).
  *
  * The watermark is ABSOLUTE — entries ever written — so a log a game has pruned
  * still restores exactly the lines that existed at the boundary and survive:
  * front eviction shifts every position by a known amount, and that amount is
  * what `evicted` carries.
  *
+ * The restored tree takes the LIVE eviction count, not the checkpoint's own:
+ * the log handed back is a slice of the live log, so its first entry sits at
+ * the live offset. Keeping the checkpoint's older count would make the next
+ * restore from this one slice the wrong boundary (#803).
+ *
  * A checkpoint with no recorded watermark restores the whole log, which is the
  * honest reading of no recorded boundary.
  */
-function messagesUpTo(
+function checkpointWithLiveLog(
+  checkpoint: ActionCheckpoint,
   log: MessageEntry[],
-  watermark: number | undefined,
   evicted: number,
-): MessageEntry[] {
-  if (watermark === undefined) return log;
+): { state: ActionCheckpoint['state']; messageLog: MessageEntry[] } {
+  const state = { ...checkpoint.state, messagesEvicted: evicted };
+  if (checkpoint.messageCount === undefined) return { state, messageLog: log };
   // The watermark counts entries EVER WRITTEN; `evicted` says how many of those
   // are no longer in the log. The difference is the boundary's position in the
   // log as it stands now — negative when every line from that boundary has
   // since been evicted, which honestly restores nothing rather than guessing.
-  return log.slice(0, Math.max(0, watermark - evicted));
+  return { state, messageLog: log.slice(0, Math.max(0, checkpoint.messageCount - evicted)) };
 }
 
 export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptions> {
@@ -281,7 +276,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   restoreEpoch = 0;
 
   /**
-   * WHICH GAME THIS IS (#356). Minted when a runner begins a new game, adopted
+   * WHICH GAME THIS IS (#356). Minted the first time it is read, adopted
    * from the snapshot by `fromSnapshot`, and carried by `fromCheckpoint` — an
    * undo is the same game, and `restoreEpoch` is what says it moved.
    *
@@ -290,7 +285,17 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * new game starts at epoch 0 like the one it replaced, so without this a
    * client could not tell "New game" from an ordinary re-broadcast.
    */
-  gameInstanceId = mintGameInstanceId();
+  get gameInstanceId(): string {
+    // Minted on first read, so a restore that adopts the snapshot's id draws nothing (#806).
+    this.#gameInstanceId ??= secureRandomHex(16, "name a new game's instance", 'restore the game from a snapshot that carries its gameInstanceId');
+    return this.#gameInstanceId;
+  }
+
+  set gameInstanceId(id: string) {
+    this.#gameInstanceId = id;
+  }
+
+  #gameInstanceId: string | undefined;
 
   /**
    * Last-observed value of `game.getIrreversibleCommitCount()` (the live
@@ -539,6 +544,23 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     return { baseIndex: this.checkpointBaseIndex, entries: [...this.actionCheckpoints] };
   }
 
+  /** Index in `actionCheckpoints` of the checkpoint for the current action count. */
+  private get headOffset(): number {
+    return this.actionHistory.length - this.checkpointBaseIndex;
+  }
+
+  /**
+   * Capture the head checkpoint unless one already exists, so a failed action
+   * has a state to roll back to, and the window has no gap, even when no
+   * snapshot was taken since the last history entry (#802). Hosts snapshot
+   * after every op, so there it costs nothing.
+   */
+  private ensureHeadCheckpoint(): void {
+    if (this.checkpointPolicy_.enabled && !this.actionCheckpoints[this.headOffset]) {
+      this.captureCheckpoint();
+    }
+  }
+
   /**
    * Restore the game to the state it was in before the current action ran.
    *
@@ -556,16 +578,14 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    *   when something did.
    */
   private rollbackToPreActionState(): string | undefined {
-    const headOffset = this.actionHistory.length - this.checkpointBaseIndex;
-    const checkpoint = this.actionCheckpoints[headOffset];
+    const checkpoint = this.actionCheckpoints[this.headOffset];
     if (!checkpoint) {
       return 'The game could not be rolled back, so its state may be inconsistent — ' +
         'per-action checkpoints are disabled for this session.';
     }
 
-    this.game.loadSerializedState(checkpoint.state, {
-      messageLog: messagesUpTo(this.game.messages ?? [], checkpoint.messageCount, this.game.messagesEvicted),
-    });
+    const { state, messageLog } = checkpointWithLiveLog(checkpoint, this.game.messages ?? [], this.game.messagesEvicted);
+    this.game.loadSerializedState(state, { messageLog });
     this.game.relinkFlowElements();
     if (checkpoint.sequence !== undefined) {
       this.game._ctx.sequence = checkpoint.sequence;
@@ -618,6 +638,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
 
     // Serialize the action before executing (captures current element refs)
     const serializedAction = this.serializeForHistory(actionName, playerObj, args);
+
+    this.ensureHeadCheckpoint();
 
     // Execute through flow (pass player index for simultaneous actions)
     let flowState: FlowState;
@@ -734,6 +756,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     pendingState: PendingActionState,
     playerPosition: number
   ): ActionResult {
+    this.ensureHeadCheckpoint();
     // Serialized before executing, so the recorded refs are the positions the action acts on.
     const serializedAction = this.serializeForHistory(action.name, player, pendingState.collectedArgs);
     const actionResult = executor.executePendingAction(action, player, pendingState);
@@ -783,6 +806,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // A held follow-up's published args are the engine's, bound before any
     // client pick, so every pick's callbacks see them.
     this.bindFollowUpArgs(pendingState, playerPosition);
+    // Before any pick runs, so a failure also undoes what the picks changed.
+    this.ensureHeadCheckpoint();
     this.pendingActions.set(playerPosition, pendingState);
     return pendingState;
   }
@@ -974,6 +999,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * one fails loudly.
    */
   private expireHeldSeat(seat: number): FlowState {
+    this.ensureHeadCheckpoint();
     const state = this.game.expireHeldSeat(seat);
     this.actionHistory.push({ kind: 'seatExpiry', player: seat, undoable: false });
     return state;
@@ -1457,13 +1483,13 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // `messagesEvicted` rides in the snapshot's own state, which is where the
     // log's position bookkeeping lives.
     const evicted = (snapshot.state as { messagesEvicted?: number }).messagesEvicted ?? 0;
-    const messageLog = messagesUpTo(fullLog, checkpoint.messageCount, evicted);
+    const { state, messageLog } = checkpointWithLiveLog(checkpoint, fullLog, evicted);
 
     return GameRunner.fromSnapshot<G>(
       {
         version: snapshot.version,
         gameType: snapshot.gameType,
-        state: checkpoint.state,
+        state,
         messageLog,
         flowState: checkpoint.flowState,
         winners: checkpoint.winners,

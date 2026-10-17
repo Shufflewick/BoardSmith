@@ -67,7 +67,6 @@ export {
 // ============================================
 
 export {
-  STANDARD_PLAYER_COLORS,
   createColorOption,
   type ColorChoice,
   type ColorOptionDefinition,
