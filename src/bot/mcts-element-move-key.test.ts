@@ -23,15 +23,45 @@ class HandGame extends Game<HandGame, Player> {
       hand.create(Card, `card-${player.seat}`, { rank: player.seat });
     }
 
+    const finish = (ctx: { player: Player }) => {
+      this.finish([ctx.player]);
+      return { success: true };
+    };
     this.registerAction(
       Action.create('pick')
         .chooseFrom('hand', { choices: () => [...this.all(Space)] })
-        .execute((_args, ctx) => {
-          this.finish([ctx.player]);
-          return { success: true };
-        }),
+        .execute((_args, ctx) => finish(ctx)),
     );
-    this.setFlow({ root: actionStep({ actions: ['pick'], player: () => this.getPlayer(1)! }) });
+    this.registerAction(
+      Action.create('pickMany')
+        .chooseFrom('hands', { choices: () => [...this.all(Space)], multiSelect: { min: 1, max: 2 } })
+        .execute((_args, ctx) => finish(ctx)),
+    );
+    this.registerAction(
+      Action.create('pickWrapped')
+        .chooseFrom('choice', { choices: () => [...this.all(Space)].map((hand) => ({ name: hand.name, hand })) })
+        .execute((_args, ctx) => finish(ctx)),
+    );
+    this.setFlow({ root: actionStep({ actions: [this.offered()], player: () => this.getPlayer(1)! }) });
+  }
+
+  /** The one action the flow offers; each subclass below offers another shape of element arg. */
+  offered(): string {
+    return 'pick';
+  }
+}
+
+/** Picks a set of hands: an array of elements. */
+class ManyGame extends HandGame {
+  override offered(): string {
+    return 'pickMany';
+  }
+}
+
+/** Picks a plain choice object that holds an element. */
+class WrappedGame extends HandGame {
+  override offered(): string {
+    return 'pickWrapped';
   }
 }
 
@@ -43,17 +73,21 @@ const sampler: DeterminizeSampler = (sandbox, _seat, rng) => {
 };
 
 describe('MCTSBot: element moves keep one key across worlds (#876)', () => {
-  it('lists each root move once however many worlds the search samples', async () => {
-    const game = new HandGame({ playerCount: 2, seed: 'bs876' });
+  it.each([
+    { arg: 'an element', GameClass: HandGame, moves: 2 },
+    { arg: 'an array of elements', GameClass: ManyGame, moves: 3 },
+    { arg: 'a plain object holding an element', GameClass: WrappedGame, moves: 2 },
+  ])('lists each root move once however many worlds are sampled, for $arg', async ({ GameClass, moves }) => {
+    const game = new GameClass({ playerCount: 2, seed: 'bs876' });
     game.startFlow();
     const bot = new MCTSBot(
-      game, HandGame, 'hand', 1, [],
+      game, GameClass, 'hand', 1, [],
       { iterations: 60, playoutDepth: 1, seed: 'bs876', async: false, timeout: Infinity, usePNS: false },
       { determinize: sampler },
     ) as unknown as { runSearch(): Promise<{ root: MCTSNode }> };
 
     const { root } = await bot.runSearch();
 
-    expect(root.allMoves).toHaveLength(2);
+    expect(root.allMoves).toHaveLength(moves);
   });
 });

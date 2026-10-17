@@ -1168,16 +1168,20 @@ export class MCTSBot<G extends Game = Game> {
   // ============================================================================
 
   /**
-   * Generate a unique key for a move (used for RAVE table lookup). An element
-   * arg is keyed by its id, not its subtree, so the move keeps one key in every
-   * sampled world (#876).
+   * Generate a unique key for a move (used for RAVE table lookup). An element,
+   * wherever it sits in the args, is keyed by its id, not its subtree, so the
+   * move keeps one key in every sampled world (#876).
    */
   private getMoveKey(move: BotMove): string {
-    const keyOne = (v: unknown): unknown => (isElement(v) ? { elementId: v.id } : v);
-    const args = Object.fromEntries(
-      Object.entries(move.args).map(([k, v]) => [k, Array.isArray(v) ? v.map(keyOne) : keyOne(v)]),
-    );
-    return `${move.action}:${JSON.stringify(args)}`;
+    const keyOf = (v: unknown): unknown => {
+      if (isElement(v)) return { elementId: v.id };
+      if (Array.isArray(v)) return v.map(keyOf);
+      if (typeof v === 'object' && v !== null && Object.getPrototypeOf(v) === Object.prototype) {
+        return Object.fromEntries(Object.entries(v as object).map(([k, x]) => [k, keyOf(x)]));
+      }
+      return v;
+    };
+    return `${move.action}:${JSON.stringify(keyOf(move.args))}`;
   }
 
   /**
