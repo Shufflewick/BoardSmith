@@ -127,6 +127,30 @@ describe('useActionController picks', () => {
       ]);
     });
 
+    it('records a finished repeat as a collected pick, so its breadcrumb reads its labels (#860)', async () => {
+      const pickStep = vi.fn()
+        .mockResolvedValueOnce({ success: true, done: false })
+        .mockResolvedValueOnce({ success: true, done: true });
+      actionMetadata.value = {
+        repeatAction: {
+          name: 'repeatAction',
+          prompt: 'Select multiple',
+          selections: [
+            { name: 'items', type: 'choice', prompt: 'Select items', repeat: { hasOnEach: false }, choices: [{ value: 1, display: 'One' }, { value: 2, display: 'Two' }] },
+            { name: 'note', type: 'text', prompt: 'Note' },
+          ],
+        },
+      };
+      availableActions.value = ['repeatAction'];
+      const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn, autoExecute: false, pickStep });
+
+      await controller.start('repeatAction');
+      await controller.fill('items', 1);
+      await controller.fill('items', 2);
+
+      expect(controller.getCollectedPick('items')).toEqual({ value: [1, 2], display: 'One, Two', skipped: false });
+    });
+
     it('should clear action when actionComplete is true', async () => {
       const pickStep = vi.fn()
         .mockResolvedValueOnce({ success: true, done: false })
