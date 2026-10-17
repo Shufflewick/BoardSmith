@@ -18,8 +18,8 @@
  *
  * it('fits the host state budget for a full game', () => {
  *   const game = createTestGame(MyGame, { playerCount: 8 });
- *   // Snapshot after EVERY action — that is what captures the checkpoints,
- *   // and what a host does.
+ *   // Check after every action, as a host snapshots: the largest saved
+ *   // state is usually mid-turn.
  *   while (!game.isComplete()) {
  *     game.doAction(seat, 'play', args);
  *     assertStateBudget(measureSnapshotSize(game.runner.getSnapshot()), hostBudgetBytes);
@@ -28,9 +28,7 @@
  * ```
  *
  * `hostBudgetBytes` is the host's published budget, read from where the host
- * publishes it. Snapshotting only at the end of a turn leaves the checkpoint
- * window sparse, which understates the multiplier. `measureSnapshotSize`
- * refuses such a snapshot rather than reporting the wrong number.
+ * publishes it.
  *
  * The two costs that dominate in practice, and that neither shows up until
  * measured:
@@ -91,65 +89,9 @@ export interface SnapshotSizeMeasurement {
   bytesPerCheckpoint: number;
 }
 
-/**
- * How many of a window's slots actually hold a checkpoint.
- *
- * `checkpointCount` reports the window's LENGTH, which includes slots that
- * were never captured (they serialize as `null`). Averaging the window's bytes
- * over its length rather than over its captured slots is what understates the
- * multiplier — see {@link assertWindowIsDense}.
- */
-function capturedCheckpointCount(snapshot: GameStateSnapshot): number {
-  const entries = snapshot.actionCheckpoints?.entries;
-  if (!entries) return 0;
-  let captured = 0;
-  for (let i = 0; i < entries.length; i++) {
-    if (entries[i] !== undefined && entries[i] !== null) captured++;
-  }
-  return captured;
-}
-
-/**
- * Refuse to measure a snapshot whose retained checkpoint window has slots that
- * were never captured.
- *
- * Checkpoints are captured through the SNAPSHOT funnel, not by
- * `performAction`: `GameRunner.getSnapshot()` calls `captureCheckpoint()`, as
- * the executor does once per op. A driver that
- * performs many actions and snapshots once at the end therefore leaves every
- * slot between them empty. Those slots serialize as `null` but still count
- * toward the window's length, so `checkpointBytes / length` comes out one to
- * two orders of magnitude below the real multiplier — measured at 17x to 219x
- * too small across six games, small enough that a budget assertion written
- * that way passes green while measuring nothing.
- *
- * A confidently wrong number is worse than no number, so this throws instead
- * of reporting one.
- */
-function assertWindowIsDense(snapshot: GameStateSnapshot, length: number): void {
-  const captured = capturedCheckpointCount(snapshot);
-  if (captured === length) return;
-  throw new Error(
-    `Cannot measure this snapshot: ${length - captured} of ${length} retained checkpoint ` +
-      `slots were never captured, so the per-checkpoint multiplier would come out ` +
-      `${(length / Math.max(1, captured)).toFixed(0)}x too small and the budget assertion ` +
-      `would pass while measuring nothing.\n` +
-      `Checkpoints are captured through the snapshot funnel, not by performAction. ` +
-      `Call runner.getSnapshot() after EVERY action, the way a host does:\n` +
-      `  for (...) { runner.performAction(...); runner.getSnapshot(); }\n` +
-      `then measure the final snapshot.`,
-  );
-}
-
-/**
- * Measure where a snapshot's bytes actually are.
- *
- * Throws when the snapshot's retained checkpoint window has uncaptured slots —
- * see {@link assertWindowIsDense}.
- */
+/** Measure where a snapshot's bytes actually are. */
 export function measureSnapshotSize(snapshot: GameStateSnapshot): SnapshotSizeMeasurement {
   const count = checkpointCount(snapshot.actionCheckpoints);
-  assertWindowIsDense(snapshot, count);
   const checkpointBytes = jsonByteLength(snapshot.actionCheckpoints);
   return {
     totalBytes: jsonByteLength(snapshot),

@@ -24,7 +24,7 @@ import { suggestedMoveOp } from '../../session/op-result.test-helper.js';
  *
  * `getPosition()` serializes `variables` with the general recursive
  * `encodeFlowValue`, so a live `GameElement`/`Player` bound by
- * `eachPlayer`/`forEach` survives the structured-clone boundary (postMessage in
+ * `setVar`/`forEach` survives the structured-clone boundary (postMessage in
  * the iframe host, the executor RPC, the DO's storage envelope). This file
  * asserts the SAME property for the whole `FlowState` — including
  * `position.frameData`, which used to be spread raw with a single hand-written
@@ -67,8 +67,8 @@ FIXTURES.sort((a, b) => a.exportName.localeCompare(b.exportName));
  *  otherwise the glob silently covers less than the directory holds. */
 const FIXTURE_FILES = new Set(Object.keys(fixtureModules).map((f) => f.split('/').pop()!));
 
-/** How many steps to drive each fixture. Enough for `eachPlayer`/`forEach` to
- *  bind their loop variable and for a sequence to advance past its first child. */
+/** How many steps to drive each fixture. Enough for an `eachPlayer` round to
+ *  rotate seats and for a sequence to advance past its first child. */
 const STEPS = 8;
 
 /** A serialized element marker, as `encodeFlowValue` writes it. */
