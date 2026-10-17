@@ -400,6 +400,14 @@ describe('extractVerifiedCommitHash', () => {
     expect(extractVerifiedCommitHash(hashChunk('Not recorded; build ran 20251015.'))).toBeUndefined();
   });
 
+  it('takes a bare hash at the start of a line that prose follows (#846)', () => {
+    expect(extractVerifiedCommitHash(hashChunk('d34714c — the build stamp; later `abc1234` noted'))).toBe('d34714c');
+  });
+
+  it("takes the hash written into the template's comment slot (#846)", () => {
+    expect(extractVerifiedCommitHash(hashChunk('<!-- d505944c -->'))).toBe('d505944c');
+  });
+
   it('skips prose hex runs and takes the hash written in backticks after them (#846)', () => {
     expect(extractVerifiedCommitHash(hashChunk('Ran on 20251015, verified `abc1234`.'))).toBe('abc1234');
   });

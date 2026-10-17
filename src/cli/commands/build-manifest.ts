@@ -361,8 +361,8 @@ export function claimsInForce(chunkText: string): number[] {
 // extractVerifiedCommitHash
 // ---------------------------------------------------------------------------------------------
 
-/** A hash in backticks anywhere, or alone on its line; a bare hex run in prose (a date) is not one. */
-const HASH_TOKEN = /`([0-9a-f]{7,40})`|^[ \t]*([0-9a-f]{7,40})[ \t]*$/m;
+/** A hash in backticks, or leading its line (bare or in the template's `<!-- -->` slot); a hex run mid-prose (a date) is not one. */
+const HASH_TOKEN = /`([0-9a-f]{7,40})`|^[ \t]*(?:<!--[ \t]*)?([0-9a-f]{7,40})\b/m;
 
 /**
  * Extracts the `## Verified Commit Hash` section's hash, per RESEARCH.md's five measured real
