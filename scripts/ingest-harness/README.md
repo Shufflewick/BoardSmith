@@ -60,8 +60,9 @@ npx boardsmith harness-ingest --work-dir /tmp/my-harness-run --model sonnet
 
 Without `--work-dir`, `stage` creates a new folder under the system temp dir
 (`bs-ingest-harness-XXXXXX`), so two runs never share or delete each other's folder. With it,
-`stage` refuses a folder that already exists unless it holds a `.harness-stage-state.json` from an
-earlier `stage`, so it cannot delete a checkout or a home folder (#917). A `stage` that stopped
+`stage` refuses a folder that already exists unless it holds a `.harness-stage-state.json` that an
+earlier `stage` wrote for that same folder (#917). It always refuses your home folder, the BoardSmith
+checkout, any folder that holds either, and any folder with a `.git` at its top, so a copied state file cannot get one deleted (#1065). A `stage` that stopped
 partway leaves a folder `drive` and `assert` refuse; run `stage --work-dir <that dir>` again.
 
 `stage`, `drive`, and `assert` share state via `{workDir}/.harness-stage-state.json` — `drive` and

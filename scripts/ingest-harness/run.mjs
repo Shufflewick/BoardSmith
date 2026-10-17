@@ -40,7 +40,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, readdirSync, statSync, copyFileSync, appendFileSync, writeFileSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, readdirSync, statSync, copyFileSync, appendFileSync, writeFileSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -164,6 +164,56 @@ function readStageState(subcommand, workDir) {
 // stage
 // ---------------------------------------------------------------------------
 
+// Why a folder must never be deleted whatever it holds, or undefined.
+function protectedFolderReason(real) {
+  const home = realpathSync.native(os.homedir());
+  const checkout = realpathSync.native(REPO_ROOT);
+  // path.join keeps the root as '/' rather than '//'.
+  const holds = (dir) => dir.startsWith(path.join(real, path.sep));
+  if (real === home) return 'is your home folder';
+  if (holds(home)) return 'holds your home folder';
+  if (real === checkout) return 'is the BoardSmith checkout';
+  if (holds(checkout)) return 'holds the BoardSmith checkout';
+  if (existsSync(path.join(real, '.git'))) return 'has a .git at its top, so it is a repository, not a folder stage made';
+  return undefined;
+}
+
+// Why the folder's state file does not prove a stage wrote it there, or undefined.
+function stateFileReason(real) {
+  if (!existsSync(stateFilePath(real))) return 'already exists and has no .harness-stage-state.json, so this harness did not stage it';
+  let text;
+  try {
+    text = readFileSync(stateFilePath(real), 'utf8');
+  } catch {
+    return 'has a .harness-stage-state.json that could not be read, so this harness cannot tell it wrote it';
+  }
+  let state;
+  try {
+    state = JSON.parse(text);
+  } catch {
+    return 'has a .harness-stage-state.json that is not valid JSON, so this harness did not write it';
+  }
+  const stagedFor = state?.workDir;
+  if (typeof stagedFor !== 'string') {
+    return 'has a .harness-stage-state.json that does not name the folder it was written for, so this harness did not write it';
+  }
+  if (stagedFor !== real) return `has a .harness-stage-state.json that was written for ${stagedFor}, not this folder`;
+  return undefined;
+}
+
+// Deletes nothing it cannot prove an earlier stage made: a state file alone can be copied (#1065).
+function refuseUnlessStagedHere(workDir) {
+  // .native gives the on-disk case, so a recased path on a case-insensitive disk still matches.
+  const real = realpathSync.native(workDir);
+  const why = protectedFolderReason(real) ?? stateFileReason(real);
+  if (why) {
+    fail(
+      `--work-dir ${workDir} ${why}. Refusing to delete it. Pass a folder that does not exist yet, or leave ` +
+        `out --work-dir to stage into a fresh temp folder.`,
+    );
+  }
+}
+
 function prepareWorkDir(workDir) {
   if (workDir === undefined) {
     const created = mkdtempSync(path.join(os.tmpdir(), 'bs-ingest-harness-'));
@@ -172,13 +222,7 @@ function prepareWorkDir(workDir) {
     return created;
   }
   if (existsSync(workDir)) {
-    if (!existsSync(stateFilePath(workDir))) {
-      fail(
-        `--work-dir ${workDir} already exists and has no .harness-stage-state.json, so this harness did not ` +
-          `stage it. Refusing to delete it. Pass a folder that does not exist yet, or leave out --work-dir ` +
-          `to stage into a fresh temp folder.`,
-      );
-    }
+    refuseUnlessStagedHere(workDir);
     rmSync(workDir, { recursive: true, force: true });
   }
   mkdirSync(workDir, { recursive: true });
@@ -190,7 +234,7 @@ function stage(opts) {
   const { source, expectHash, referenceRepo } = opts;
   const workDir = prepareWorkDir(opts.workDir);
   // Marks the folder as ours at once, so a stage that fails partway can still be re-staged.
-  writeFileSync(stateFilePath(workDir), '{}');
+  writeFileSync(stateFilePath(workDir), JSON.stringify({ workDir: realpathSync.native(workDir) }));
 
   console.log(`[stage] installing current working tree's skill text into ${workDir} (--local --force)`);
   execFileSync('node', [path.join(REPO_ROOT, 'bin', 'boardsmith.js'), 'claude', '--local', '--force'], {
@@ -272,7 +316,7 @@ function stage(opts) {
   console.log(`[stage] sandboxed copy verified: ${stagedCopyPath} matches --expect-hash`);
 
   const state = {
-    workDir,
+    workDir: realpathSync.native(workDir),
     source,
     sourceFileName,
     stagedCopyPath,
