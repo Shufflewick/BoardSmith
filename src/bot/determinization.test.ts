@@ -610,6 +610,44 @@ describe('#871 determinization: which container an element sits in is known', ()
     );
   });
 
+  it('refuses a change of type alone, quoting both values', () => {
+    const sandbox = trickSandboxForSeat1();
+    const card = sandbox.hand(1).first(HandCard)!;
+    card.rank = 5;
+
+    expect(() => applyDeterminization(sandbox, 1, () => {
+      (card as unknown as { rank: unknown }).rank = '5';
+    }, () => 0.5)).toThrow(`it changed HandCard#${card.id}.rank from 5 to "5".`);
+  });
+
+  it('refuses a change from null to undefined', () => {
+    const sandbox = trickSandboxForSeat1();
+    const card = sandbox.hand(1).first(HandCard)!;
+    (card as unknown as { rank: unknown }).rank = null;
+
+    expect(() => applyDeterminization(sandbox, 1, () => {
+      (card as unknown as { rank: unknown }).rank = undefined;
+    }, () => 0.5)).toThrow(`it changed HandCard#${card.id}.rank from null to undefined.`);
+  });
+
+  it('accepts an attribute holding an id-bearing object with no prototype', () => {
+    const sandbox = trickSandboxForSeat1();
+    (sandbox.hand(1).first(HandCard)! as unknown as { ref: unknown }).ref =
+      Object.assign(Object.create(null) as object, { _t: { id: 7 } });
+
+    applyDeterminization(sandbox, 1, () => {}, () => 0.5);
+  });
+
+  it('counts placeholders in the plural when a hand held more than one', () => {
+    const sandbox = trickSandboxForSeat1();
+    sandbox.hand(3).first(HandCard)!.putInto(sandbox.hand(2));
+    const red = sandbox.hand(2).first(HandCard)!;
+
+    expect(() => applyDeterminization(sandbox, 1, () => {
+      red.putInto(sandbox.hand(3));
+    }, () => 0.5)).toThrow('"hand-2" held 2 face-down HandCard with $images: {back: "red"} placeholders and now holds 1.');
+  });
+
   it('refuses a sampler that moves a face-down card off the open table', () => {
     const sandbox = trickSandboxForSeat1();
     const faceDown = sandbox.table.first(HandCard)!;

@@ -80,8 +80,8 @@ function fingerprintValue(value: unknown, depth = 0): string {
   if (type === 'function') return 'function';
   if (depth >= MAX_FINGERPRINT_DEPTH) return 'depth-limit';
 
-  const asElement = value as { constructor: { name: string }; _t?: { id?: unknown } };
-  if (asElement._t && typeof asElement._t.id === 'number') return `${asElement.constructor.name}#${asElement._t.id}`;
+  const asElement = value as { constructor?: { name: string }; _t?: { id?: unknown } };
+  if (asElement._t && typeof asElement._t.id === 'number') return `${asElement.constructor?.name ?? ''}#${asElement._t.id}`;
 
   if (Array.isArray(value)) {
     return `[${value.map((v) => fingerprintValue(v, depth + 1)).join(', ')}]`;
