@@ -96,7 +96,7 @@ and typecheck, `state-machine.md` "Git Protocol"), have passed for the commit un
 holds this line, not prose: before dispatching any reviewer, the session runs
 
 ```bash
-npx boardsmith review-gate <slug> [--work-role <role>] [--since <commit>]
+npx boardsmith review-gate <slug>
 ```
 
 in the chunk's checkout (the main checkout, for the cross-chunk lens). It exits non-zero unless
@@ -114,16 +114,22 @@ is cheap.
   run at publish, and not to run any of them. Every review prompt carries that brief verbatim in its
   `{verifyResult}` slot, and lists only judgement checks.
 
+**What is under review** is the command's too: review-gate reads what is under review from the chunk's run log
+(`design/run-log/<slug>.md`, "The Run Log" below), never from the session. The change is everything
+since the commit the latest finished review round names in `Verify:` (before any round, the chunk's
+verify base), and the work's role is that of every dispatch logged since that round. So the run log
+must be current before the gate runs: each dispatch, with its Role, and each review round.
+
 **The size rule** is the command's, not a judgement made here. Work by the `bounded` or
-`judgement` role is always reviewed in full. A `mechanical` change (pass `--work-role mechanical
---since <the commit before it began>`) is sized in changed lines: a small one needs no review
+`judgement` role is always reviewed in full. A `mechanical` change (every dispatch since the last
+round has `Role: mechanical`) is sized in changed lines: a small one needs no review
 (`none`: its fast checks are its whole gate, and no review round is recorded), a middling one gets a light
 review, and a large one a full review. A **light** review is one agent of the step's review role,
 given the brief and the step's whole judgement checklist, reviewing only the change the brief
 names, in place of the step's full fan-out.
 
-**A re-review** after a repair passes `--since <the commit the last round reviewed>`, so only the
-changed parts go back to the reviewer.
+**A re-review** after a repair covers only the change since the commit the last round reviewed,
+so only the changed parts go back to the reviewer.
 
 ## When a Step Fails: Once More at the Same Role, Then One Role Up
 

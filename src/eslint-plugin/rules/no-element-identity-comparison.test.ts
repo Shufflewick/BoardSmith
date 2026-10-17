@@ -64,6 +64,18 @@ ruleTester.run('no-element-identity-comparison', rule, {
     },
   ],
   invalid: [
+    // An engine class imported under another name is still an element class (#1036).
+    {
+      code: `
+        import { Card as BaseCard } from 'boardsmith';
+        function f(a: BaseCard, b: BaseCard) { return a === b; }
+      `,
+      output: `
+        import { Card as BaseCard } from 'boardsmith';
+        function f(a: BaseCard, b: BaseCard) { return a.id === b.id; }
+      `,
+      errors: [{ messageId: 'identityComparison' }],
+    },
     // Simple binary identity comparison between same-file-typed GameElement
     // subclass operands -- auto-fixable to `.id` comparison.
     {

@@ -195,6 +195,22 @@ describe('recordGateTransition — the one-time transition', () => {
     expect(parseSignoff(await readChunk(project, 'shop')).record).toMatchObject({ when: NOW.toISOString() });
   });
 
+  it('a rerun after the Sign-off section is deleted restores the sign-off as issued, never one for code changed since (#829)', async () => {
+    const project = await makeProject([
+      { slug: 'deal', status: 'verified', preGate: true, manifest: { 'src/deal.ts': 'v1' } },
+    ]);
+    await transition({ project, by: 'Jane Designer', now: NOW });
+    const issued = parseSignoff(await readChunk(project, 'deal')).record;
+    await fs.writeFile(join(project, 'src/deal.ts'), 'v2, reworked without a reopen');
+    expect(await checkSignoff(project, 'deal')).not.toEqual([]);
+
+    const deal = await readChunk(project, 'deal');
+    await fs.writeFile(chunkPath(project, 'deal'), deal.replace(/^## Sign-off\n[\s\S]*?(?=^## )/m, ''));
+    await transition({ project, by: 'Jane Designer', now: new Date('2026-09-27T00:00:00Z') });
+    expect(parseSignoff(await readChunk(project, 'deal')).record).toEqual(issued);
+    expect(await checkSignoff(project, 'deal')).not.toEqual([]);
+  });
+
   it('refuses a transition recorded by the run itself', async () => {
     const project = await makeProject([{ slug: 'deal', status: 'verified', preGate: true }]);
     await expect(transition({ project, by: 'orchestrator', now: NOW })).rejects.toThrow(/designer/i);

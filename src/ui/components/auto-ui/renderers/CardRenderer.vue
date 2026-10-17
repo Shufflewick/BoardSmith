@@ -25,7 +25,7 @@ import { resolvePresentation } from '../presentation.js';
 import { isHiddenPlaceholder } from '../../../../engine/element/hidden-placeholder.js';
 import type { PresentationOverlay } from '../presentation.js';
 import { GAME_CONTEXT_KEYS, injectPlayerSeat } from '../../../composables/useGameContext.js';
-import { getSpriteStyle, type ImageInfo } from '../../../utils/image.js';
+import { getSpriteStyle, parseImageInfo, type ImageInfo } from '../../../utils/image.js';
 
 // ---------------------------------------------------------------------------
 // Local GameElement interface — dependency-free, mirrors auto-ui-helpers.ts
@@ -187,7 +187,7 @@ const { attrs: selectableAttrs, onActivate, onKeydown: onSelectKey } =
 const cardImages = computed(() => {
   const attrs = props.element.attributes;
   if (!attrs?.$images) return null;
-  const images = attrs.$images as Record<string, string | { sprite: string; x: number; y: number; width?: number; height?: number }>;
+  const images = attrs.$images as Record<string, unknown>;
   return { face: images.face, back: images.back };
 });
 
@@ -195,38 +195,15 @@ const currentCardImage = computed((): ImageInfo | null => {
   if (!cardImages.value) return null;
 
   // CRITICAL: hidden cards always show back, never face (T-93-04)
-  const image = isHidden.value ? cardImages.value.back : cardImages.value.face;
-
-  if (!image) return null;
-
-  if (typeof image === 'string') {
-    return { type: 'url' as const, src: image };
-  }
-
-  if (typeof image === 'object' && 'sprite' in image && 'x' in image && 'y' in image) {
-    const s = image as { sprite: string; x: number; y: number; width: number; height: number };
-    return { type: 'sprite' as const, sprite: s.sprite, x: s.x, y: s.y, width: s.width, height: s.height };
-  }
-
-  return null;
+  return parseImageInfo(isHidden.value ? cardImages.value.back : cardImages.value.face);
 });
 
 // Back image for hidden cards when no $images.back is present
 const backImageFallback = computed((): ImageInfo | null => {
   // Check element's own $images.back first
   const ownImages = props.element.attributes?.$images as Record<string, unknown> | undefined;
-  if (ownImages?.back) {
-    const back = ownImages.back;
-    if (typeof back === 'string') return { type: 'url', src: back };
-    if (typeof back === 'object' && back !== null) {
-      const s = back as { sprite?: string; x?: number; y?: number; width?: number; height?: number };
-      if (s.sprite && typeof s.x === 'number' && typeof s.y === 'number') {
-        return { type: 'sprite', sprite: s.sprite, x: s.x, y: s.y, width: s.width ?? 238, height: s.height ?? 333 };
-      }
-    }
-  }
   // Fall back to default back image from game view
-  return defaultBackImage.value;
+  return parseImageInfo(ownImages?.back) ?? defaultBackImage.value;
 });
 
 // Convenience computed for the display label — overlay wins, then engine fallback

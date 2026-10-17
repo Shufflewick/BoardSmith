@@ -206,10 +206,10 @@ const transferDialogShown = computed(() => transferDialogOpen.value && !props.is
             <span class="deck-count">[{{ deck.cards.length }} cards]</span>
             <div class="deck-actions" @click.stop>
               <DebugButton size="small" class="deck-action-btn" @click="shuffleDeck(deck.id)" :disabled="editsOff" title="Shuffle deck" aria-label="Shuffle deck" >
-                <span aria-hidden="true">🔀</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
               </DebugButton>
               <DebugButton size="small" class="deck-action-btn" @click="copyDeckToClipboard(deck)" title="Copy deck JSON" aria-label="Copy deck JSON" >
-                <span aria-hidden="true">📋</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
               </DebugButton>
             </div>
           </div>
@@ -241,7 +241,7 @@ const transferDialogShown = computed(() => transferDialogOpen.value && !props.is
                   title="Move to top"
                   aria-label="Move to top"
                 >
-                  <span aria-hidden="true">⬆️</span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h14M12 20V9M6 14l6-6 6 6"/></svg>
                 </button>
                 <button
                   class="card-action-btn"
@@ -250,7 +250,7 @@ const transferDialogShown = computed(() => transferDialogOpen.value && !props.is
                   title="Move up"
                   aria-label="Move up"
                 >
-                  <span aria-hidden="true">↑</span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
                 </button>
                 <button
                   class="card-action-btn"
@@ -259,7 +259,7 @@ const transferDialogShown = computed(() => transferDialogOpen.value && !props.is
                   title="Move down"
                   aria-label="Move down"
                 >
-                  <span aria-hidden="true">↓</span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
                 </button>
                 <button
                   class="card-action-btn"
@@ -268,7 +268,7 @@ const transferDialogShown = computed(() => transferDialogOpen.value && !props.is
                   title="Transfer to another container"
                   aria-label="Transfer to another container"
                 >
-                  <span aria-hidden="true">➡️</span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                 </button>
               </div>
             </div>
@@ -470,8 +470,6 @@ const transferDialogShown = computed(() => transferDialogOpen.value && !props.is
   background: var(--bsg-disabled-surface);
   color: var(--bsg-disabled-ink);
   cursor: not-allowed;
-  /* The icons are emoji, which ignore the text colour. */
-  opacity: 0.4;
 }
 /* Deck cards list */
 .deck-cards {
@@ -574,7 +572,6 @@ const transferDialogShown = computed(() => transferDialogOpen.value && !props.is
   border-color: var(--bsg-line);
   color: var(--bsg-disabled-ink);
   cursor: not-allowed;
-  opacity: 0.4;
 }
 /* Deck loading indicator */
 .deck-loading {

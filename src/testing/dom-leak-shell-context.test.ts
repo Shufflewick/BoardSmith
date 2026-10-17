@@ -13,7 +13,7 @@
  * `renderAsSeat` is not given.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { defineComponent, h, nextTick, ref, type Component, type PropType } from 'vue';
+import { defineComponent, h, nextTick, ref, type PropType } from 'vue';
 import { mount } from '@vue/test-utils';
 import { MoveGame } from '../session/move-game.test-helper.js';
 import { buildPlayerState } from '../session/utils.js';
@@ -27,6 +27,7 @@ import {
   enterIframe,
   leaveIframe,
   mountPlatformShell,
+  type BoardComponent,
 } from '../ui/components/GameShell.platform-mount.test-helper.js';
 import { TestGame } from './test-game.js';
 import { preloadSeatRenderer, renderAsSeat, shellProvidedKeys, tableShellContext } from './dom-leak.js';
@@ -189,7 +190,7 @@ describe('renderAsSeat provides the animation events GameShell provides (#406)',
  * Mount the real GameShell as `seat`, with `board` as its one UI, and post it
  * the frame a session publishes for that seat.
  */
-async function renderInsideGameShell(game: TestGame<MoveGame>, seat: number, board: Component) {
+async function renderInsideGameShell(game: TestGame<MoveGame>, seat: number, board: BoardComponent) {
   enterIframe();
   const shell = mountPlatformShell({ board });
   mounted.push(shell);

@@ -724,6 +724,10 @@ Action.create('setHandle')
   })
 ```
 
+Any flag but `g` and `y` reaches the Action Panel and the server alike.
+`enterText` refuses those two: a pattern checks the whole text, and with them
+the regex remembers where it stopped, so every other valid entry is refused.
+
 **`multiline: true` for prose.** The Action Panel draws a text pick as a
 single-line field, which is right for a name and wrong for a description: a
 thousand characters shown a hundred and twenty pixels at a time cannot be read
