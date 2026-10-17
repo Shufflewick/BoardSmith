@@ -649,7 +649,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     }
 
     // Serialize the action before executing (captures current element refs)
-    const serializedAction = this.serializeForHistory(actionName, playerObj, args);
+    const serializedAction = this.serializeOrRefuse(actionName, playerObj, args);
+    if ('success' in serializedAction) return serializedAction;
 
     this.ensureHeadCheckpoint();
 
@@ -713,6 +714,34 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       data: actionResult?.data,
       message: actionResult?.message,
     };
+  }
+
+  /**
+   * {@link serializeForHistory}'s entry, or the move's refusal when it cannot
+   * be encoded and is not a move the game offers: that is the caller's bad
+   * input. An offered move that cannot be encoded is the game's fault, and
+   * still throws (#1070).
+   */
+  private serializeOrRefuse(
+    actionName: string,
+    player: Player,
+    args: Record<string, unknown>
+  ): SerializedAction | ActionExecutionResult {
+    try {
+      return this.serializeForHistory(actionName, player, args);
+    } catch (error) {
+      if (!(error instanceof Error) || this.offersMove(actionName, player, args)) throw error;
+      return { success: false, error: error.message, errorCode: ErrorCode.INVALID_PICK };
+    }
+  }
+
+  /** Whether the game would accept `args` for `actionName` from `player` now, as a held follow-up when it is one. */
+  private offersMove(actionName: string, player: Player, args: Record<string, unknown>): boolean {
+    const action = this.game.getAction(actionName);
+    if (!action) return false;
+    const followUp = followUpForSeat(this.getFlowState(), player.seat);
+    const options = followUp?.action === actionName ? { followUp } : undefined;
+    return new ActionExecutor(this.game).validateAction(action, player, args, options).valid;
   }
 
   /**
