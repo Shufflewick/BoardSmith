@@ -79,7 +79,7 @@ import { VERIFIED, assessSignoffs, checkSignoff, chunkCodeFiles, unaccountedEdit
 import { verifiedAgainstIsCurrent } from './chunk-provenance.js';
 import { checkClaimQuotes } from './claim-quotes.js';
 import { parseSpecManifest } from './test-step-check.js';
-import { chunkCitations, pairProblems, readSketchChunks } from './parallel-check.js';
+import { besideAnyProblems, pairProblems, readSketchChunks } from './parallel-check.js';
 import { appendCrossChunkEntry, changedSide, crossReferences } from './cross-chunk.js';
 import { takeOsLock } from '../lib/os-lock.js';
 import { onlyTestCollectionChanged } from '../lib/test-config-edit.js';
@@ -390,13 +390,12 @@ async function concurrencyProblems(ctx: MergeContext, alongside: string[]): Prom
   if (alongside.length === 0) return [];
   const chunks = await readSketchChunks(ctx.projectDir);
   const bySlug = new Map(chunks.map((c) => [c.slug, c]));
-  const self = bySlug.get(ctx.slug);
-  if (!self) return [`${SKETCH_MD} has no entry for ${ctx.slug}.`];
-  const mine = await chunkCitations(ctx.projectDir, self);
-  const problems: string[] = [];
+  const mine = await besideAnyProblems(ctx.projectDir, bySlug, ctx.slug);
+  const problems = [...mine.problems];
   for (const other of alongside) {
-    const chunk = bySlug.get(other);
-    if (chunk) problems.push(...pairProblems(chunks, mine, await chunkCitations(ctx.projectDir, chunk)));
+    const theirs = await besideAnyProblems(ctx.projectDir, bySlug, other);
+    problems.push(...theirs.problems);
+    if (mine.citations && theirs.citations) problems.push(...pairProblems(chunks, mine.citations, theirs.citations));
   }
   return problems;
 }
