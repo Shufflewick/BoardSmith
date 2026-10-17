@@ -35,6 +35,10 @@ for (const [path, code] of gameBlockFiles(blocks)) {
   writeFileSync(file, code);
 }
 writeFileSync(join(root, 'game.tsconfig.json'), gameTsConfig(['docs/**/*.ts', 'src/cli/slash-command/aspects/**/*.ts']));
+// Loaded here, where no test timeout applies: it transforms the sandbox's whole boardsmith install (#1127).
+const { MyGame } = (await import(join(root, 'docs/getting-started/src/rules/game.ts'))) as {
+  MyGame: new (options: GameOptions) => Game & { deck: { count(): number } };
+};
 
 describe('the game code the docs teach (#511)', () => {
   it('marks the getting-started rules for compiling', () => {
@@ -63,11 +67,7 @@ describe('the game code the docs teach (#511)', () => {
     );
   }, 180_000);
 
-  it('plays the getting-started game to the end it declares, before the loop\'s tripwire', async () => {
-    // Dynamic import: the module is the doc's block, which this file wrote into the sandbox above.
-    const { MyGame } = (await import(join(root, 'docs/getting-started/src/rules/game.ts'))) as {
-      MyGame: new (options: GameOptions) => Game & { deck: { count(): number } };
-    };
+  it('plays the getting-started game to the end it declares, before the loop\'s tripwire', () => {
     const game = TestGame.create(MyGame, { playerCount: 2, seed: 'getting-started' });
 
     // 52 cards, 5 dealt to each of 2 players: 42 draws empty the deck, 21 rounds of the 100 allowed.

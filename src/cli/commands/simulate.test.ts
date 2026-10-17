@@ -214,6 +214,14 @@ describe('resolveSimulationGameOptions (issue 141)', () => {
   });
 });
 
+// --players is checked against the game's declared range, so after the rules are bundled. That
+// run happens here, where no test timeout applies (#1127).
+const playersProject = tempTree('boardsmith-simulate-players-');
+writeFileSync(join(playersProject, 'boardsmith.json'), JSON.stringify({ name: 'fixture' }));
+mkdirSync(join(playersProject, 'src', 'rules'), { recursive: true });
+writeFileSync(join(playersProject, 'src', 'rules', 'index.ts'), 'export const gameDefinition = {};\n');
+const nonPositivePlayers = await simulateOutput(playersProject, { games: '1', players: '0', seed: undefined });
+
 describe('simulateCommand', () => {
   let projectDir: string;
   let originalCwd: string;
@@ -223,8 +231,8 @@ describe('simulateCommand', () => {
     originalCwd = process.cwd();
     originalExitCode = process.exitCode;
     // A minimal fixture project: valid boardsmith.json + a stub rules/index.ts.
-    // simulateCommand's --games/--players validation runs (and returns) before
-    // it ever bundles rulesIndexPath, so the stub file's contents don't matter.
+    // simulateCommand's --games validation runs (and returns) before it ever
+    // bundles rulesIndexPath, so the stub file's contents don't matter.
     projectDir = tempTree('boardsmith-simulate-cli-');
     writeFileSync(join(projectDir, 'boardsmith.json'), JSON.stringify({ name: 'fixture' }));
     mkdirSync(join(projectDir, 'src', 'rules'), { recursive: true });
@@ -243,10 +251,8 @@ describe('simulateCommand', () => {
     expect(process.exitCode).toBe(1);
   });
 
-  it('IN-01: exits non-zero with an actionable message on a non-positive --players flag', async () => {
-    process.exitCode = 0;
-    await simulateCommand({ games: '1', players: '0', seed: undefined });
-    expect(process.exitCode).toBe(1);
+  it('IN-01: exits non-zero with an actionable message on a non-positive --players flag', () => {
+    expect(nonPositivePlayers.exitCode).toBe(1);
   });
 });
 
