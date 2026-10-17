@@ -25,17 +25,6 @@ function gaussian(rng: () => number): number {
   return Math.sqrt(-2 * Math.log(u1 || 0.0001)) * Math.cos(2 * Math.PI * u2);
 }
 
-/**
- * Clamp a value to bounds.
- */
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
-
-/** Weight bounds for clamping */
-const WEIGHT_MIN = -20;
-const WEIGHT_MAX = 20;
-
 /** Probability to flip sign during mutation */
 const SIGN_FLIP_PROBABILITY = 0.1;
 
@@ -67,9 +56,6 @@ export function mutateWeights(
         newWeight = -newWeight;
       }
     }
-
-    // Clamp to bounds
-    newWeight = clamp(newWeight, WEIGHT_MIN, WEIGHT_MAX);
 
     return {
       ...obj,
