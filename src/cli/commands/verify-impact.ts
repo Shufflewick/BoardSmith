@@ -30,7 +30,7 @@ import {
   type AdjudicationRecord,
   type ImpactRecord,
 } from './verify-run.js';
-import { escapeRegExp } from '../lib/regexp.js';
+import { escapeRegExp } from '../../utils/regexp.js';
 
 /**
  * `verify-impact.ts` — Phase 175's impact-map / repair-gating surface: VERIFY-05's

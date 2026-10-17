@@ -960,6 +960,10 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
       to('Move', 'e3'),
       to('a50', 'a5'),
       to('Area g7x', 'g7'),
+      to('(0,-1)', '(0,-1)'),
+      to('Move', '-1'),
+      to('112', '1.2'),
+      to('-1,2', '1,2'),
     ]);
 
     const buttons = wrapper.findAll('.anchored-choice-btn');
@@ -969,6 +973,10 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
       'Move (e3)',
       'a50 (a5)',
       'Area g7x (g7)',
+      '(0,-1)',
+      'Move (-1)',
+      '112 (1.2)',
+      '-1,2 (1,2)',
     ]);
   });
 

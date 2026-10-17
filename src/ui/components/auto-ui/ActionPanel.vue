@@ -18,6 +18,7 @@ import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
 import { choiceBoardTarget, formatActionName, getDisplayFromValue, labelOfPick, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
 import { createActionMutators } from '../../composables/actionMutators.js';
+import { escapeRegExp } from '../../../utils/regexp.js';
 import type {
   UseActionControllerReturn,
   EnrichedPickMetadata,
@@ -1201,8 +1202,8 @@ function choiceSpokenName(choice: ChoiceWithRefs): string {
   // The square the board picks, not the source every destination of one piece shares (#1084).
   const notation = choiceBoardTarget(choice)?.notation;
   if (!notation) return choice.display;
-  const escaped = notation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const named = new RegExp(`(?<!\\w)${escaped}(?!\\w)`).test(choice.display);
+  // A leading '-' is part of a coordinate, so "1,2" is not named by "-1,2".
+  const named = new RegExp(`(?<![\\w-])${escapeRegExp(notation)}(?!\\w)`).test(choice.display);
   return named ? choice.display : `${choice.display} (${notation})`;
 }
 
