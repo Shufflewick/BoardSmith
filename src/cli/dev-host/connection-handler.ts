@@ -3,7 +3,7 @@ import type { WebSocket } from 'ws';
 import { claimWebSocketPath } from '../commands/dev-server.js';
 import type { ClientInbound, HostOutbound, MultiplayerHost } from './multiplayer-host.js';
 import type { RulesReloadQueue } from './rules-reload-queue.js';
-import { parseSocketMessage } from './socket-message.js';
+import { pageText, parseSocketMessage } from './socket-message.js';
 import { DEV_HOST_WS_PATH } from './socket-path.js';
 
 /**
@@ -23,7 +23,7 @@ interface DevHostConnectionOptions {
   mpHost: Pick<MultiplayerHost, 'handleMessage' | 'disconnect'>;
   clients: Map<string, WebSocket>;
   queue: Pick<RulesReloadQueue, 'admit'>;
-  /** Called when an async message dispatch rejects; receives the failing message type. */
+  /** Called when an async message dispatch rejects; receives the failing message type, escaped and capped for a log (#1089). */
   onError: (err: unknown, msgType: string) => void;
 }
 
@@ -95,7 +95,7 @@ export function createDevHostConnectionHandler(opts: DevHostConnectionOptions): 
           run: () => mpHost.handleMessage(clientId, msg),
           ...(RUNS_THE_RULES.has(msg.type) ? { refuse: (message: string) => send(refusal(message)) } : {}),
         })
-        .catch((err: unknown) => onError(err, msg.type));
+        .catch((err: unknown) => onError(err, pageText(msg.type)));
     };
 
     let clientId: string | null = null;
