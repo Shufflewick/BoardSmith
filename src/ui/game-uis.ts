@@ -6,9 +6,10 @@
  *
  * ```ts
  * import { defineGameUIs, defaultUI, devUI } from 'boardsmith/ui';
+ * import HeirloomTable from './heirloom/HeirloomTable.vue';
  *
  * export default defineGameUIs({
- *   Heirloom: defaultUI(HeirloomTable), // import HeirloomTable from './heirloom/HeirloomTable.vue'
+ *   Heirloom: defaultUI(HeirloomTable),
  *   Classic:  devUI(() => import('./components/CribbageBoard.vue')),
  * });
  * ```
@@ -68,7 +69,7 @@ type GameUILoader = () => Promise<{ default: Component }>;
  * functional component), so only this check stops `defaultUI(() => import(...))`.
  */
 type NotAFunction<C> = C extends (...args: never[]) => unknown
-  ? 'ERROR: defaultUI() takes the board component itself — import it statically'
+  ? 'ERROR: defaultUI() takes the board component itself; import it statically'
   : C;
 
 /** Keys of `T` whose entry is the default. A union — 0, 1, or many members. */
