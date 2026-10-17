@@ -840,7 +840,7 @@ export class MultiplayerHost {
     }
     // Enable.
     if (this.phase !== 'playing' || !this.session) {
-      this.send(clientId, { type: 'error', message: 'Start a game before enabling follow-active-seat.' });
+      this.send(clientId, { type: 'error', message: this.starting ? STARTING : 'Start a game before enabling follow-active-seat.' });
       return;
     }
     if (!this.clientSeat.has(clientId)) {
