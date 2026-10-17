@@ -567,7 +567,7 @@ function handleRestartClick() {
           v-show="activeTab === 'decks'"
           :view="viewFor('decks')"
           :copy="copyNodeToClipboard"
-          :is-viewing-history="isViewingHistory"
+          :history-index="selectedActionIndex"
         />
 
         <!-- Actions Tab -->

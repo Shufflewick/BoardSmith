@@ -1049,6 +1049,7 @@ describe('MultiplayerHost debugging follows who holds the seats (#481)', () => {
       ['debug:shuffle-deck', { deckId: 1 }],
       ['debug:state-at', { actionIndex: 0 }],
       ['debug:deck-view', {}],
+      ['debug:deck-view-at', { actionIndex: 0 }],
     ] as const) {
       for (const who of ['A', 'B']) {
         const result = await ask(t, who, op, { ...payload });
