@@ -406,6 +406,15 @@ describe('every call that takes a pick value resolves it by the same rule (#857)
     expect(controller.lastError.value).toBe(error);
     expect(controller.currentAction.value).toBe(null);
   });
+
+  it("starts an action with a list for a repeating element pick, which is that pick's shape", async () => {
+    const { controller } = fruitController({ type: 'element', repeat: { hasOnEach: false } });
+
+    const result = await controller.start('eat', { args: { fruit: [1, 2] } });
+
+    expect(result).toEqual({ success: true });
+    expect(controller.currentArgs.value.fruit).toEqual([1, 2]);
+  });
 });
 
 describe('execute() resolves against the choices of the action it runs (#857)', () => {

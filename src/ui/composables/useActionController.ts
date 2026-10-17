@@ -1877,15 +1877,16 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   /**
    * The refusal for a start() arg the controller can see is malformed: a list
-   * for a pick that takes one element. Every other arg is held as given and
-   * judged by the server, since the run has fetched no choices to name it by;
-   * `prefill` is the way to have the controller resolve a value against the
-   * pick's choices once they arrive.
+   * for a pick that takes one element (a repeating one takes its picks as a
+   * list, #325). Every other arg is held as given and judged by the server,
+   * since the run has fetched no choices to name it by; `prefill` is the way
+   * to have the controller resolve a value against the pick's choices once
+   * they arrive.
    */
   function startArgsRefusal(meta: EnrichedActionMetadata, initialArgs: Record<string, unknown>): string | undefined {
     for (const [name, value] of Object.entries(initialArgs)) {
       const selection = meta.selections.find((s) => s.name === name);
-      const refusal = selection?.type === 'element' ? oneElementListRefusal(name, value) : undefined;
+      const refusal = selection?.type === 'element' && !selection.repeat ? oneElementListRefusal(name, value) : undefined;
       if (refusal) return refusal;
     }
     return undefined;
