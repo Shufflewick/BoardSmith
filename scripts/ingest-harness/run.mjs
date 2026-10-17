@@ -150,6 +150,13 @@ function stateFilePath(workDir) {
   return path.join(workDir, '.harness-stage-state.json');
 }
 
+function readStageState(subcommand, workDir) {
+  if (workDir === undefined) fail(`'${subcommand}' needs --work-dir <dir>: pass the folder 'stage' printed.`);
+  const statePath = stateFilePath(workDir);
+  if (!existsSync(statePath)) fail(`no stage state found at ${statePath} — run 'stage' first`);
+  return JSON.parse(readFileSync(statePath, 'utf8'));
+}
+
 // ---------------------------------------------------------------------------
 // stage
 // ---------------------------------------------------------------------------
@@ -376,9 +383,7 @@ function turnDiagnosticLine(state) {
 
 function assertCmd(opts) {
   const { workDir, referenceRepo } = opts;
-  const statePath = stateFilePath(workDir);
-  if (!existsSync(statePath)) fail(`no stage state found at ${statePath} — run 'stage' (and 'drive') first`);
-  const state = JSON.parse(readFileSync(statePath, 'utf8'));
+  const state = readStageState('assert', workDir);
 
   if (opts.turnsOnly) {
     console.log('');
@@ -553,9 +558,6 @@ async function main() {
     process.exit(0);
   }
 
-  if ((opts.subcommand === 'drive' || opts.subcommand === 'assert') && opts.workDir === undefined) {
-    fail(`'${opts.subcommand}' needs --work-dir <dir>: pass the folder 'stage' printed.`);
-  }
   if (opts.subcommand === 'stage') {
     stage(opts);
     return;
@@ -579,9 +581,7 @@ async function main() {
 
 async function driveAsync(opts) {
   const { workDir, model, maxTurns } = opts;
-  const statePath = stateFilePath(workDir);
-  if (!existsSync(statePath)) fail(`no stage state found at ${statePath} — run 'stage' first`);
-  const state = JSON.parse(readFileSync(statePath, 'utf8'));
+  const state = readStageState('drive', workDir);
 
   const initialPrompt = buildInitialPrompt(state);
   if (!initialPrompt.includes(state.stagedCopyPath)) fail('constructed prompt does not name the staged copy path');
@@ -676,7 +676,7 @@ async function driveAsync(opts) {
     hitTurnCap: stoppedReason === 'turn-cap',
     drivenAt: new Date().toISOString(),
   };
-  writeFileSync(statePath, JSON.stringify(driveState, null, 2));
+  writeFileSync(stateFilePath(workDir), JSON.stringify(driveState, null, 2));
 
   if (opts.turnsOnly) {
     console.log(
