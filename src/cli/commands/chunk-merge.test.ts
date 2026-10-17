@@ -548,6 +548,19 @@ describe('chunkMerge: preconditions', () => {
     expect(refusals).toEqual([expect.stringMatching(/has no vite\.config\.ts[\s\S]*boardsmith doctor --fix/)]);
     expect([head(), status()]).toEqual([before, '']);
   });
+
+  it('refuses with git\'s own reason when git will not start the merge, leaving the index untouched (#824)', async () => {
+    await buildOnBranch('trading', 100);
+    // An untracked file where the branch adds one: git refuses before writing anything, so no MERGE_HEAD.
+    await fs.writeFile(join(main, 'src/trading.ts'), '// mine\n');
+    const before = head();
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([expect.stringMatching(/untracked working tree files would be overwritten[\s\S]*src\/trading\.ts/)]);
+    expect(result.refusals.join('\n')).not.toMatch(/not verified/);
+    expect([head(), git(main, 'status', '--porcelain')]).toEqual([before, '?? src/trading.ts\n']);
+    expect(await read(main, 'src/trading.ts')).toBe('// mine\n');
+  });
 });
 
 describe('chunkMerge: a source file two chunks built together both edited (#403)', () => {

@@ -725,10 +725,19 @@ async function readContext(projectDir: string, slug: string, branch: string): Pr
   };
 }
 
-/** Starts the merge without committing it; returns the files whose conflicts remain. */
-async function startMerge(ctx: MergeContext): Promise<string[]> {
-  const merged = await gitSucceeds(ctx.top, ['-c', 'merge.conflictStyle=diff3', 'merge', '--no-ff', '--no-commit', ctx.branchCommit]);
-  const left = merged ? [] : await resolveConflicts(ctx);
+/**
+ * Starts the merge without committing it; returns the files whose conflicts remain, or, when git
+ * refused to start the merge at all (no MERGE_HEAD, e.g. an untracked file in the way), why.
+ */
+async function startMerge(ctx: MergeContext): Promise<string[] | string> {
+  const failure = await git(ctx.top, ['-c', 'merge.conflictStyle=diff3', 'merge', '--no-ff', '--no-commit', ctx.branchCommit]).then(
+    () => undefined,
+    (error: Error) => error.message,
+  );
+  if (failure !== undefined && !(await gitSucceeds(ctx.top, ['rev-parse', '--verify', '--quiet', 'MERGE_HEAD']))) {
+    return `Git would not start merging ${ctx.branch}; fix what it reports. ${failure}`;
+  }
+  const left = failure === undefined ? [] : await resolveConflicts(ctx);
   if (left.length === 0) await keepMainLock(ctx);
   return left;
 }
@@ -755,7 +764,9 @@ async function mergeLocked(ctx: MergeContext, runTests: TestRunner): Promise<Chu
   if (before.length) return refused(before);
 
   try {
-    return await checkStartedMerge(ctx, await startMerge(ctx), runTests);
+    const left = await startMerge(ctx);
+    if (typeof left === 'string') return refused([left]);
+    return await checkStartedMerge(ctx, left, runTests);
   } catch (error) {
     // A step that throws must not leave the main checkout mid-merge.
     await gitSucceeds(ctx.top, ['merge', '--abort']);
