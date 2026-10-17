@@ -19,7 +19,7 @@ const RUNS_THE_RULES: ReadonlySet<ClientInbound['type']> = new Set([
 ]);
 
 interface DevHostConnectionOptions {
-  mpHost: Pick<MultiplayerHost, 'handleMessage' | 'disconnect' | 'bindPageLoad'>;
+  mpHost: Pick<MultiplayerHost, 'handleMessage' | 'disconnect' | 'bindPageLoad' | 'forgetPageLoad'>;
   clients: Map<string, WebSocket>;
   queue: Pick<RulesReloadQueue, 'admit'>;
   /** Called when an async message dispatch rejects; receives the failing message type. */
@@ -143,6 +143,7 @@ export function createDevHostConnectionHandler(opts: DevHostConnectionOptions): 
       if (clientId && clients.get(clientId) === socket) {
         const gone = clientId;
         clients.delete(gone);
+        mpHost.forgetPageLoad(gone);
         queue.admit({ run: async () => mpHost.disconnect(gone) }).catch((err: unknown) => onError(err, 'disconnect'));
       }
     });

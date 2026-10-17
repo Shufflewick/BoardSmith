@@ -84,7 +84,7 @@ async function startHost(opts: { reloading?: boolean } = {}) {
     hold = { reached, release: new Promise<void>((resolve) => (release = resolve)) };
     return { atHold, release };
   };
-  return { port: server.port, server, holdNextAction, drain };
+  return { port: server.port, server, mpHost, holdNextAction, drain };
 }
 
 const inGame = (f: { type: string }) => f.type === 'init';
@@ -144,6 +144,26 @@ describe('#1041: a request id belongs to one page load', () => {
     const { atHold, release } = host.holdNextAction();
     sendMove(first, 'req-3');
     await atHold;
+
+    const back = await openSocketPage(host.port, 'A', inGame, { loadId: 'load-1' });
+    const answer = back.next((f) => f.type === 'server_response' && f.requestId === 'req-3');
+    release();
+    await answer;
+    expect(answersTo(back, 'req-3')).toHaveLength(1);
+  });
+
+  it("forgets a closed socket's page load, and a reconnect of that load is answered again", async () => {
+    const host = await startHost();
+    const first = await openSocketPage(host.port, 'A', inGame, { loadId: 'load-1' });
+    const { atHold, release } = host.holdNextAction();
+    sendMove(first, 'req-3');
+    await atHold;
+
+    const gone = host.server.closed();
+    first.socket.close();
+    await gone;
+    // Scripted clients get a new id per socket, so a kept entry would grow forever.
+    expect((host.mpHost as any).pageLoad.has('A')).toBe(false);
 
     const back = await openSocketPage(host.port, 'A', inGame, { loadId: 'load-1' });
     const answer = back.next((f) => f.type === 'server_response' && f.requestId === 'req-3');

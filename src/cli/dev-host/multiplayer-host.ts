@@ -528,12 +528,6 @@ export class MultiplayerHost {
   // ── Connection lifecycle ──────────────────────────────────────────────────
 
   /**
-   * A client connection identified itself. The game is always live: the FIRST
-   * client to connect auto-takes a seat and the game starts immediately (the dev
-   * lands straight in — open seats are bot). Later clients land in the seat-picker
-   * to take over a bot/open seat; a reconnecting client resumes its seat.
-   */
-  /**
    * The client's socket now belongs to page load `loadId`. Called the moment
    * the connection handler routes the client to a new socket, not through the
    * rules reload queue, so it is never behind a reply the queue still holds.
@@ -543,6 +537,22 @@ export class MultiplayerHost {
     this.pageLoad.set(clientId, loadId);
   }
 
+  /**
+   * The client's socket closed and no newer socket holds it: its page load is
+   * gone. Called by the connection handler outside the rules reload queue, for
+   * the same reason as `bindPageLoad`.
+   */
+  // fallow-ignore-next-line unused-class-member
+  forgetPageLoad(clientId: string): void {
+    this.pageLoad.delete(clientId);
+  }
+
+  /**
+   * A client connection identified itself. The game is always live: the FIRST
+   * client to connect auto-takes a seat and the game starts immediately (the dev
+   * lands straight in — open seats are bot). Later clients land in the seat-picker
+   * to take over a bot/open seat; a reconnecting client resumes its seat.
+   */
   async hello(clientId: string): Promise<void> {
     this.connected.add(clientId);
 
