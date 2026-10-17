@@ -395,6 +395,14 @@ describe('extractVerifiedCommitHash', () => {
   it('returns undefined when the section has no hex token', () => {
     expect(extractVerifiedCommitHash(hashChunk('not recorded yet'))).toBeUndefined();
   });
+
+  it('does not take a hex run in prose, such as a date, for the hash (#846)', () => {
+    expect(extractVerifiedCommitHash(hashChunk('Not recorded; build ran 20251015.'))).toBeUndefined();
+  });
+
+  it('skips prose hex runs and takes the hash written in backticks after them (#846)', () => {
+    expect(extractVerifiedCommitHash(hashChunk('Ran on 20251015, verified `abc1234`.'))).toBe('abc1234');
+  });
 });
 
 describe('parseRulings', () => {
