@@ -843,6 +843,51 @@ it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
       );
     }, 120_000);
 
+    it("resolves a workspace file's root against the project, as the installed Vitest 2 does", async () => {
+      const result = await diffCheck({
+        'vitest.config.ts': "import { defineConfig } from 'vitest/config';\nexport default defineConfig({ test: { workspace: './config/projects.mts' } });\n",
+        'config/projects.mts': "export default [{ extends: '../project.config.mts', root: '.', test: { name: 'nested' } }];\n",
+      });
+      expect(result.notGreen).toBeUndefined();
+      expect(result.survivors).toEqual([]);
+      expect(result.summary.killed).toBe(result.summary.mutants);
+      expect(result.summary.mutants).toBeGreaterThan(0);
+    }, 120_000);
+
+    /** A project installed the way pnpm installs one: `node_modules/.bin/vitest` is a script, not a link. */
+    async function pnpmProject(vitest: 'installed' | { version: string } | 'missing') {
+      const tree = tempTree('bs-mutation-');
+      const project = await designProjectFixtures(() => tree).makeProject({
+        'src/rules.ts': RULES, 'vitest.config.ts': PROJECT_CONFIG, 'tests/bid.test.ts': BID_TEST,
+      });
+      const modules = join(project, 'node_modules');
+      await fs.mkdir(join(modules, '.bin'), { recursive: true });
+      await fs.writeFile(join(modules, '.bin', 'vitest'), '#!/bin/sh\nexec node "$(dirname "$0")/../vitest/vitest.mjs" "$@"\n', { mode: 0o755 });
+      if (vitest === 'installed') await fs.symlink(join(INSTALLED_MODULES, 'vitest'), join(modules, 'vitest'), 'dir');
+      else if (vitest !== 'missing') {
+        await fs.mkdir(join(modules, 'vitest'));
+        await fs.writeFile(join(modules, 'vitest', 'package.json'), JSON.stringify({ name: 'vitest', version: vitest.version }));
+      }
+      return runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), cache: memoryCache(), log: () => {} });
+    }
+
+    it('runs under a pnpm install, whose node_modules/.bin/vitest is a script', async () => {
+      const result = await pnpmProject('installed');
+      expect(result.notGreen).toBeUndefined();
+      expect(result.summary.killed).toBe(result.summary.mutants);
+      expect(result.summary.mutants).toBeGreaterThan(0);
+    }, 120_000);
+
+    it.each([
+      ['has no vitest package', 'missing' as const],
+      ['has a vitest package with no release version', { version: 'next' }],
+    ])('refuses a project that %s, saying how to fix it', async (_, vitest) => {
+      await expect(pnpmProject(vitest)).rejects.toThrow(
+        "Could not read the installed Vitest version from node_modules/vitest/package.json, so the mutation check cannot tell how Vitest will read the project's config.\n" +
+          'Reinstall the project\'s dependencies with: npm install',
+      );
+    });
+
     // No Vitest 3 is installed here, so these read the generated config the way Vitest 3 would.
     describe('the generated config, as Vitest 3 reads it', () => {
       const HOOK = 'boardsmith-mutant';

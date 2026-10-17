@@ -32,7 +32,7 @@
  */
 import { spawn } from 'node:child_process';
 import { existsSync, promises as fs, realpathSync } from 'node:fs';
-import { dirname, join, relative, sep } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import {
   parseSource,
@@ -361,11 +361,11 @@ export default hookProjects(entries, dirname(path), ${vitestMajor >= 3 ? 'dirnam
 
 /**
  * The project's own vitest config, extended with `overlayModule`, its inline projects with
- * `hookProjects`, its workspace file replaced by `workspaceModule`, and the reporter that writes `REPORT_NAME` (replacing the project's reporters,
- * whose output goes nowhere here). The reporter refuses a run with a project whose Vite server lacks
- * the mutant loader, since its tests would run the original code. It records each test's name the
- * way vitest's JSON reporter does (its describe titles and its own, joined by spaces), since
- * `testKeyOf` matches that name to the coverage run's.
+ * `hookProjects`, its workspace file replaced by `workspaceModule`, and the reporter that writes
+ * `REPORT_NAME` (replacing the project's reporters, whose output goes nowhere here). The reporter
+ * refuses a run with a project whose Vite server lacks the mutant loader, since its tests would run
+ * the original code. It records each test's name the way vitest's JSON reporter does (its describe
+ * titles and its own, joined by spaces), since `testKeyOf` matches that name to the coverage run's.
  */
 function wrapperConfig(workDir: string, projectDir: string, projectConfig: string | undefined): string {
   const importBase = projectConfig
@@ -655,6 +655,28 @@ export async function writeRunConfig(projectDir: string, workDir: string, vitest
 }
 
 /**
+ * The major version of the vitest that `node_modules/.bin/vitest` runs. npm, pnpm and yarn all link
+ * a project's bin to the package at `node_modules/<name>`, and pnpm's bin is a script, not a link.
+ */
+async function installedVitestMajor(projectDir: string): Promise<number> {
+  const manifest = join('node_modules', 'vitest', 'package.json');
+  let version: unknown;
+  try {
+    version = JSON.parse(await fs.readFile(join(projectDir, manifest), 'utf-8')).version;
+  } catch {
+    // A missing or unparsable manifest gets the same answer as a bad version: reinstall.
+  }
+  const major = typeof version === 'string' ? /^(\d+)\./.exec(version)?.[1] : undefined;
+  if (major === undefined) {
+    throw new Error(
+      `Could not read the installed Vitest version from ${manifest}, so the mutation check cannot tell how Vitest will read the project's config.\n`
+      + "Reinstall the project's dependencies with: npm install",
+    );
+  }
+  return Number(major);
+}
+
+/**
  * `testFiles` names the chunk's test files by their manifest paths; a file outside them is named by
  * its path in the project. `workDir` is the directory this run of the check made for its generated
  * files (`withCommandBuildDir`), so two checks in one project never share one, and it removes it.
@@ -664,9 +686,7 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
   const { command: vitestBin } = toolCommand('vitest', [], projectDir);
   const mutantPath = join(workDir, 'mutant.json');
   const reportPath = join(workDir, REPORT_NAME);
-  const vitestManifest = join(dirname(realpathSync(vitestBin)), 'package.json');
-  const vitestMajor = Number(JSON.parse(await fs.readFile(vitestManifest, 'utf-8')).version.split('.')[0]);
-  const configPath = await writeRunConfig(projectDir, workDir, vitestMajor);
+  const configPath = await writeRunConfig(projectDir, workDir, await installedVitestMajor(projectDir));
   await fs.writeFile(join(workDir, COVERAGE_SETUP_NAME), COVERAGE_SETUP);
 
   const byRealPath = new Map(testFiles.map((f) => [realpathSync(f.absPath), f.path]));
