@@ -2,14 +2,11 @@ import {
   chunkMdPath,
 } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
-import { join, relative, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { styleText } from 'node:util';
 import {
   atomicWriteFile,
-  ledgerFilePath,
-  parseLedgerBody,
-  readLedgerOrThrow,
-  resolveLedgerState,
+  readRunLedgerState,
   stagingSlicesDir,
   type ClassificationRecord,
 } from './verify-run.js';
@@ -385,11 +382,7 @@ export async function verifyRepairStatusCommand(
   const rows: RepairStatusRow[] = [];
 
   if (staleEntries.length > 0 && runId !== undefined) {
-    const ledgerFile = ledgerFilePath(projectDir, runId);
-    const relLedgerPath = relative(projectDir, ledgerFile);
-    const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
-    const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
-    const { classifications } = resolveLedgerState(lines);
+    const { classifications } = await readRunLedgerState(projectDir, runId);
     const stagedDir = stagingSlicesDir(projectDir, runId);
 
     for (const entry of staleEntries) {

@@ -1,7 +1,7 @@
 {
-  "revision": 222,
-  "surfaceHash": "2c198f7c5caf50ba",
-  "payloadHash": "2d1f6110b53a0159",
+  "revision": 223,
+  "surfaceHash": "d4ad4460664564c4",
+  "payloadHash": "42faf88ae9f4cb97",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
@@ -1719,6 +1719,14 @@
       "payloadHash": "2d1f6110b53a0159",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "ActionResult gains rulesError, set by the engine when execute() or onSelect threw something that is not a PlayerFacingError; a seated world action whose result carries it now throws a WorldRefusal with the new game-owned code rules-error (same message as before), while the rules saying no still travels as a plain Error and a clock action's crash is not coded yet (#847)."
+    },
+    {
+      "revision": 223,
+      "date": "2026-10-17",
+      "surfaceHash": "d4ad4460664564c4",
+      "payloadHash": "42faf88ae9f4cb97",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Each seat's player view carries messageOffset, how many of its own log lines the game has pruned, so the log and unread badge count by line number at a cap; the engine counts pruned lines by audience in two new restore-only root fields so no seat learns how many private lines another got (#903)."
     }
   ]
 }

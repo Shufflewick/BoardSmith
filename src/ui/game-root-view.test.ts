@@ -83,7 +83,7 @@ describe('GameRootView and Game.toJSON (#615)', () => {
 describe("a seat's view and the root (#671)", () => {
   it('names the restore-only fields redaction removes', () => {
     // Redacting another root field changes RestoreOnlyRootField, and this list with it.
-    expectTypeOf<RestoreOnlyRootField>().toEqualTypeOf<'animationEventSeq' | 'animationSeqBySeat' | 'messagesEvicted' | 'pile'>();
+    expectTypeOf<RestoreOnlyRootField>().toEqualTypeOf<'animationEventSeq' | 'animationSeqBySeat' | 'messagesEvicted' | 'messagesEvictedPublic' | 'messagesEvictedTo' | 'pile'>();
   });
 
   it('is the root less exactly the restore-only fields', () => {
@@ -93,6 +93,8 @@ describe("a seat's view and the root (#671)", () => {
 
   it('has no restore-only field to read', () => {
     expectTypeOf<SeatViewJSON>().not.toHaveProperty('messagesEvicted');
+    expectTypeOf<SeatViewJSON>().not.toHaveProperty('messagesEvictedPublic');
+    expectTypeOf<SeatViewJSON>().not.toHaveProperty('messagesEvictedTo');
     expectTypeOf<SeatViewJSON>().not.toHaveProperty('animationEventSeq');
     expectTypeOf<SeatViewJSON>().not.toHaveProperty('animationSeqBySeat');
     expectTypeOf<SeatViewJSON>().not.toHaveProperty('pile');
