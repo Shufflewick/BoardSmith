@@ -69,6 +69,12 @@ watch(() => [props.view, props.isViewingHistory] as const, async ([view, viewing
 }, { immediate: true });
 
 const shownView = computed(() => (props.isViewingHistory ? props.view : liveTable.value));
+const loadError = computed(() => (props.isViewingHistory ? null : liveTableError.value));
+
+/** What the tab is showing, said above the list: the snapshot, or every card. */
+const notice = computed(() => (props.isViewingHistory
+  ? { kind: 'deck-history-notice', text: 'Viewing history: deck edits are off, because they would change the live game. Go back to live to edit.' }
+  : { kind: 'deck-unfiltered-notice', text: 'Showing every card, face-down cards included. Debug only: no player sees this view.' }));
 
 const discoveredDecks = computed(() => discoverDecks(shownView.value));
 const discoveredCardContainers = computed(() => discoverCardContainers(shownView.value));
@@ -132,6 +138,7 @@ const {
 } = useDeckWorkbench({ bridge, cardContainers: discoveredCardContainers });
 
 const editsOff = computed(() => props.isViewingHistory || deckManipulationLoading.value);
+const transferDialogShown = computed(() => transferDialogOpen.value && !props.isViewingHistory);
 </script>
 
 <template>
@@ -150,12 +157,7 @@ const editsOff = computed(() => props.isViewingHistory || deckManipulationLoadin
       />
     </div>
 
-    <div v-if="isViewingHistory" class="deck-notice deck-history-notice" role="status">
-      Viewing history: deck edits are off, because they would change the live game. Go back to live to edit.
-    </div>
-    <div v-else class="deck-notice deck-unfiltered-notice" role="status">
-      Showing every card, face-down cards included. Debug only: no player sees this view.
-    </div>
+    <div class="deck-notice" :class="notice.kind" role="status">{{ notice.text }}</div>
 
     <!-- Error message -->
     <div v-if="deckManipulationError" class="deck-error">
@@ -163,8 +165,8 @@ const editsOff = computed(() => props.isViewingHistory || deckManipulationLoadin
       <DebugButton size="small" @click="deckManipulationError = null">Dismiss</DebugButton>
     </div>
 
-    <div v-if="!isViewingHistory && liveTableError" class="deck-error">
-      Could not load the decks: {{ liveTableError }}
+    <div v-if="loadError" class="deck-error">
+      Could not load the decks: {{ loadError }}
     </div>
 
     <div v-else-if="shownView === undefined" class="no-decks">
@@ -297,7 +299,7 @@ const editsOff = computed(() => props.isViewingHistory || deckManipulationLoadin
 
     <!-- Transfer Dialog -->
     <DebugDialog
-      v-if="transferDialogOpen && !isViewingHistory"
+      v-if="transferDialogShown"
       title="Transfer Card"
       close-label="Close transfer dialog"
       @close="closeTransferDialog"
