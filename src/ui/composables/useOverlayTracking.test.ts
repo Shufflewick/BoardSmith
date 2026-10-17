@@ -26,7 +26,8 @@ function mountTracked(targets: AnnotationTarget[]) {
     setup() {
       const root = ref<HTMLElement | null>(null);
       useOverlayTracking({ root, content, targetOf: (t) => t, measure });
-      return () => h('div', { ref: root });
+      // Like the overlays: the root exists only while there is content.
+      return () => (content.value.length > 0 ? h('div', { ref: root }) : null);
     },
   });
   const wrapper = mount(Host, { attachTo: region });
@@ -70,5 +71,20 @@ describe('useOverlayTracking', () => {
     region.dispatchEvent(new Event('scroll'));
     await nextTick();
     expect(measure).not.toHaveBeenCalled();
+  });
+
+  it('when the content clears, disconnects the observer and removes the scroll listener', async () => {
+    const { wrapper, region, measure, content } = mountTracked([{ kind: 'element', ref: { id: 1 } }]);
+    await nextTick();
+    content.value = [];
+    await nextTick();
+    await nextTick();
+    for (const o of observers) expect(o.disconnect).toHaveBeenCalled();
+
+    measure.mockClear();
+    region.dispatchEvent(new Event('scroll'));
+    await nextTick();
+    expect(measure).not.toHaveBeenCalled();
+    wrapper.unmount();
   });
 });

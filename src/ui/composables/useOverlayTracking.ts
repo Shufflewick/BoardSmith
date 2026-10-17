@@ -46,8 +46,8 @@ export function useOverlayTracking<T>(options: {
   }
 
   function rebuildObservers() {
-    if (!root.value) return;
     stop();
+    if (!root.value) return;
     const region = boardRegion();
     if (!region) return;
 
