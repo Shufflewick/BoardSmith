@@ -42,6 +42,7 @@ import {
 import {
   verifyRunInitCommand,
   verifyRunRecordCommand,
+  stagingSlicesDir,
   parseLedgerBody,
   resolveLedgerState,
   type ClassificationRecord,
@@ -648,6 +649,17 @@ async function sha256OfDir(root: string): Promise<Record<string, string>> {
   return map;
 }
 
+/** Everything a run printed to stdout through console.log, joined as the terminal would see it. */
+async function captureStdout(run: () => Promise<unknown>): Promise<string> {
+  const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  try {
+    await run();
+    return logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+  } finally {
+    logSpy.mockRestore();
+  }
+}
+
 async function singleContradictoryPairProject(
   projectRoot: string,
 ): Promise<{ project: string; runId: string; pairId: string }> {
@@ -705,6 +717,14 @@ describe('contradictory — verifyImpactGateCommand: read-only, exit-0, no-bypas
     expect(process.exitCode === undefined || process.exitCode === 0).toBe(true);
 
     process.exitCode = previousExitCode;
+  });
+
+  it('--json: stdout is exactly one parseable JSON object, with no inner report printed ahead of it (#832)', async () => {
+    const { project, runId, pairId } = await singleContradictoryPairProject(gateDir);
+
+    const stdout = await captureStdout(() => verifyImpactGateCommand({ project, runId, json: true }));
+
+    expect(JSON.parse(stdout).pending).toContain(pairId);
   });
 
   it('contradictory: verifyImpactGateCommand is read-only — a whole-project sha256 map is byte-identical before and after', async () => {
@@ -901,6 +921,16 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
     ).rejects.toThrow(/decision/);
   });
 
+  it('--json: stdout is exactly one parseable JSON object, with no inner report printed ahead of it (#832)', async () => {
+    const { project, runId, pairId } = await contradictoryProjectWithRulings();
+
+    const stdout = await captureStdout(() =>
+      verifyImpactAdjudicateCommand({ project, runId, pairId, outcome: 'UNADJUDICATED', json: true }),
+    );
+
+    expect(JSON.parse(stdout).outcome).toBe('UNADJUDICATED');
+  });
+
   it('unadjudicated: outcome "UNADJUDICATED" writes NO RULINGS.md entry (sha256 unchanged) and records an AdjudicationRecord with that outcome', async () => {
     const { project, runId, pairId } = await contradictoryProjectWithRulings();
     const before = await fs.readFile(join(project, DESIGN_DIR, 'RULINGS.md'));
@@ -993,6 +1023,16 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
       (l) => l.type === 'adjudication' && l.record.pairId === pairId,
     );
     expect(adjudicationLines.length).toBe(2);
+  });
+
+  it('asks for the pair to be classified again when its staged slices changed after it was classified (#837)', async () => {
+    const { project, runId, pairId } = await contradictoryProjectWithRulings();
+    await fs.writeFile(join(stagingSlicesDir(project, runId), 'ua2.md'), 'p.1, A:\n"A later staged line."\n');
+    await verifyRunRecordCommand({ project, runId, unit: 'ua2', slice: 'ua2.md', json: true });
+
+    await expect(
+      verifyImpactAdjudicateCommand({ project, runId, pairId, outcome: 'UNADJUDICATED', json: true }),
+    ).rejects.toThrow(/out of date.*verify-classify-record/s);
   });
 
   it('no-bypass: verifyImpactAdjudicateCommand rejects an --outcome value other than "resolved"/"UNADJUDICATED"', async () => {
@@ -1439,6 +1479,24 @@ describe('contradictory / marker — verifyImpactApplyCommand', () => {
     const parsed = parseRulesStaleness(chunkText);
     expect(parsed.state).toBe('rules-stale');
     expect(parsed.record?.adjudication).toBe('UNADJUDICATED');
+  });
+
+  it('--json: stdout is exactly one parseable JSON object, with no inner report printed ahead of it (#832)', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+
+    const stdout = await captureStdout(() => verifyImpactApplyCommand({ project, runId, json: true }));
+
+    expect(JSON.parse(stdout).marked.some((m: { slug: string }) => m.slug === 'movement')).toBe(true);
+  });
+
+  it('--json: a refusal for an unclassified pair is exactly one parseable JSON object too (#832, #830)', async () => {
+    const { project, runId, pairId } = await buildImpactTestProject(root, { drift: 'clean', leaveXUnclassified: true });
+
+    const stdout = await captureStdout(() => verifyImpactApplyCommand({ project, runId, json: true }));
+
+    const parsed = JSON.parse(stdout);
+    expect(parsed.blocked).toBe(true);
+    expect(parsed.pendingPairs).toEqual([pairId]);
   });
 
   it('unclassified: a pair still pending classification blocks the write entirely, naming the pair and verify-classify-record (#830)', async () => {

@@ -173,7 +173,8 @@ changes nothing at the table.
 
 To set up a position between moves, use `arrange`. It edits a copy and then
 restores that copy as a debug restore does, so every seat is published the new
-position and the next move plays from it.
+position and the next move plays from it. When that position is a bot seat's
+turn, the bot has moved before `arrange` resolves, as with `send`.
 
 ```typescript
 // `round` stands for any property your game class declares; the copy is typed

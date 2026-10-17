@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { getApiKey, saveApiKey } from './config.js';
-import { mkdirSync, writeFileSync, readFileSync, existsSync, statSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync, statSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
@@ -85,5 +85,12 @@ describe('writeGlobalConfig permissions', () => {
     saveApiKey('dev', 'spk_dev_key');
     expect(statSync(configFile()).mode & 0o777).toBe(0o600);
     expect(statSync(join(home, '.boardsmith')).mode & 0o777).toBe(0o700);
+  });
+
+  it('tightens an existing world-readable config file to owner-only when saving a key', () => {
+    writeConfigFile({});
+    chmodSync(configFile(), 0o644);
+    saveApiKey('dev', 'spk_dev_key');
+    expect(statSync(configFile()).mode & 0o777).toBe(0o600);
   });
 });
