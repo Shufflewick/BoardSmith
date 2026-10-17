@@ -239,6 +239,58 @@ describe('useFlyingElements', () => {
     });
   });
 
+  describe('autoWatch count-based routes (#1027)', () => {
+    /** Runs one update where the hand gains card 7 and the source pile loses one, under a pond -> hand route. */
+    async function drawIntoHand(pond: AutoWatchGameElement, drawn: () => void): Promise<void> {
+      const pondEl = makeContainer();
+      const handEl = makeContainer();
+      vi.spyOn(pondEl, 'getBoundingClientRect').mockReturnValue(makeRect({ width: 60, height: 84 }));
+      vi.spyOn(handEl, 'getBoundingClientRect').mockReturnValue(makeRect({ left: 300, width: 60, height: 84 }));
+      const handGameEl: AutoWatchGameElement = { id: 2, children: [] };
+      const gameViewRef = ref<AutoWatchGameElement | null>(null);
+      const view = () => ({ id: 0, children: [{ ...pond }, { ...handGameEl }] });
+      useFlyingElements({
+        autoWatch: {
+          gameView: () => gameViewRef.value,
+          containers: [
+            { ref: ref(pondEl), name: 'pond', element: () => pond },
+            { ref: ref(handEl), name: 'hand', element: () => handGameEl },
+          ],
+          getElementData: () => ({}),
+          countBasedRoutes: [{ from: 'pond', to: 'hand' }],
+        },
+      });
+      enableAnimationTestMode();
+      gameViewRef.value = view();
+      await nextTick();
+
+      drawn();
+      handGameEl.children = [{ id: 7, name: 'card' }];
+      gameViewRef.value = view();
+      await nextTick();
+      await waitFor(() => getAnimationTrace().length > 0);
+    }
+
+    it('flies a card that appears in the hand from a pile that only reports its count', async () => {
+      const pond: AutoWatchGameElement = { id: 1, childCount: 3 };
+      await drawIntoHand(pond, () => { pond.childCount = 2; });
+
+      expect(getAnimationTrace()).toEqual([
+        expect.objectContaining({ kind: 'fly', element: '7', from: 'pond', to: 'hand' }),
+      ]);
+    });
+
+    it('flies a drawn card once when the pile shows hidden placeholders', async () => {
+      const hidden = (id: number): AutoWatchGameElement => ({ id, attributes: { __hidden: true } });
+      const pond: AutoWatchGameElement = { id: 1, children: [hidden(-1), hidden(-2)] };
+      await drawIntoHand(pond, () => { pond.children = [hidden(-1)]; });
+
+      expect(getAnimationTrace()).toEqual([
+        expect.objectContaining({ kind: 'fly', from: 'pond', to: 'hand' }),
+      ]);
+    });
+  });
+
   describe('autoWatch work per update (#868)', () => {
     /** Reads of the hand container's children during one gameView update with `cardCount` cards in it. */
     async function handChildReadsPerUpdate(cardCount: number): Promise<number> {
