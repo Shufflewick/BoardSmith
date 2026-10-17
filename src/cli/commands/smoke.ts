@@ -27,7 +27,7 @@ import { existsSync, promises as fs, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve as pathResolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { build } from 'esbuild';
 import { boardsmithPackageRoot } from '../lib/boardsmith-version.js';
 import { Started, startDev, tail } from '../lib/started-processes.js';
@@ -100,7 +100,7 @@ export async function installBrowserCommand(): Promise<void> {
         `fix that (usually the network), then run ${INSTALL_BROWSER} again.`,
     );
   }
-  console.log(chalk.green('Chromium is installed. `boardsmith verify` can run the smoke test now.'));
+  console.log(styleText('green', 'Chromium is installed. `boardsmith verify` can run the smoke test now.'));
 }
 
 // -------------------------------------------------------------------------------------------
@@ -370,12 +370,12 @@ export async function smokeCommand(options: { project?: string; seed?: string[] 
     throw new Error(`boardsmith smoke runs a game project, and ${projectDir} has no boardsmith.json. Run it in the game's directory, or pass --project <dir>.`);
   }
   requireTableUi(projectDir, JSON.parse(readFileSync(configPath, 'utf-8')));
-  const { outcome } = await runSmoke({ projectDir, log: (line) => console.error(chalk.dim(line)), seeds: options.seed });
+  const { outcome } = await runSmoke({ projectDir, log: (line) => console.error(styleText('dim', line)), seeds: options.seed });
   if (outcome.passed) {
-    console.log(chalk.green(outcome.summary));
+    console.log(styleText('green', outcome.summary));
     return;
   }
-  console.error(chalk.red(outcome.summary));
+  console.error(styleText('red', outcome.summary));
   if (outcome.next) console.error(outcome.next);
   process.exitCode = 1;
 }

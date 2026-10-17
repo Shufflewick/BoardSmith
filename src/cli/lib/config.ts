@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import type { PlatformTarget } from './publish-api.js';
@@ -36,7 +36,10 @@ export function readGlobalConfig(): GlobalConfig {
 export function writeGlobalConfig(config: GlobalConfig): void {
   // Owner-only: the file holds publish API keys.
   mkdirSync(configDir(), { recursive: true, mode: 0o700 });
-  writeFileSync(configFile(), JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });
+  const file = configFile();
+  // `mode` applies only on create; tighten an older file before the key goes in.
+  if (existsSync(file)) chmodSync(file, 0o600);
+  writeFileSync(file, JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });
 }
 
 export function getApiKey(target: PlatformTarget): string | undefined {

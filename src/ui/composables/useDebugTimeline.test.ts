@@ -35,6 +35,7 @@ function stubBridge(over: Partial<DebugBridge> = {}): DebugBridge {
     reorderCard: vi.fn(async () => {}),
     transferCard: vi.fn(async () => {}),
     shuffleDeck: vi.fn(async () => {}),
+    deckView: vi.fn(async () => ({})),
     ...over,
   };
 }

@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { existsSync, rmSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import ora from 'ora';
 import {
   generateScaffoldFiles,
@@ -145,21 +145,21 @@ const TABLE_SCAFFOLD: ProjectScaffold = {
 
   printNextSteps: (firstSteps) => {
     console.log(`
-${chalk.cyan('Next steps:')}
+${styleText('cyan', 'Next steps:')}
 
 ${firstSteps.map((step) => `  ${step}`).join('\n')}
   boardsmith dev
 
-${chalk.dim('This will start the development server and open player tabs in your browser.')}
+${styleText('dim', 'This will start the development server and open player tabs in your browser.')}
 
-${chalk.cyan('Everything else runs through the same CLI:')}
+${styleText('cyan', 'Everything else runs through the same CLI:')}
 
-  ${chalk.dim('boardsmith test')}      ${chalk.dim("- run your game's tests")}
-  ${chalk.dim('boardsmith simulate')}  ${chalk.dim('- play seeded games headlessly and report their balance')}
-  ${chalk.dim('boardsmith lint')}      ${chalk.dim('- check for BoardSmith pitfalls')}
-  ${chalk.dim('boardsmith build')}     ${chalk.dim('- build the publishable bundle')}
-  ${chalk.dim('boardsmith validate')}  ${chalk.dim('- run pre-publish checks')}
-  ${chalk.dim('boardsmith --help')}    ${chalk.dim('- see every command')}
+  ${styleText('dim', 'boardsmith test')}      ${styleText('dim', "- run your game's tests")}
+  ${styleText('dim', 'boardsmith simulate')}  ${styleText('dim', '- play seeded games headlessly and report their balance')}
+  ${styleText('dim', 'boardsmith lint')}      ${styleText('dim', '- check for BoardSmith pitfalls')}
+  ${styleText('dim', 'boardsmith build')}     ${styleText('dim', '- build the publishable bundle')}
+  ${styleText('dim', 'boardsmith validate')}  ${styleText('dim', '- run pre-publish checks')}
+  ${styleText('dim', 'boardsmith --help')}    ${styleText('dim', '- see every command')}
 `);
   },
 };
@@ -186,19 +186,19 @@ const SIM_SCAFFOLD: ProjectScaffold = {
   sources: tableRulesFiles,
   printNextSteps: (firstSteps) => {
     console.log(`
-${chalk.cyan('Next steps:')}
+${styleText('cyan', 'Next steps:')}
 
 ${firstSteps.map((step) => `  ${step}`).join('\n')}
   boardsmith simulate --policy greedy
 
-${chalk.dim('This plays seeded games of your rules and reports their balance. The game has no UI yet.')}
+${styleText('dim', 'This plays seeded games of your rules and reports their balance. The game has no UI yet.')}
 
-${chalk.cyan('Everything else runs through the same CLI:')}
+${styleText('cyan', 'Everything else runs through the same CLI:')}
 
-  ${chalk.dim('boardsmith test')}      ${chalk.dim("- run your game's tests")}
-  ${chalk.dim('boardsmith lint')}      ${chalk.dim('- check for BoardSmith pitfalls')}
-  ${chalk.dim('boardsmith add-ui')}    ${chalk.dim('- add the UI, to play the game in a browser')}
-  ${chalk.dim('boardsmith --help')}    ${chalk.dim('- see every command')}
+  ${styleText('dim', 'boardsmith test')}      ${styleText('dim', "- run your game's tests")}
+  ${styleText('dim', 'boardsmith lint')}      ${styleText('dim', '- check for BoardSmith pitfalls')}
+  ${styleText('dim', 'boardsmith add-ui')}    ${styleText('dim', '- add the UI, to play the game in a browser')}
+  ${styleText('dim', 'boardsmith --help')}    ${styleText('dim', '- see every command')}
 `);
   },
 };
@@ -245,16 +245,16 @@ const WORLD_SCAFFOLD: ProjectScaffold = {
   // scrolls away.
   printNextSteps: (firstSteps) => {
     console.log(`
-${chalk.cyan('Next steps:')}
+${styleText('cyan', 'Next steps:')}
 
 ${firstSteps.map((step) => `  ${step}`).join('\n')}
   boardsmith dev
 
 ${worldScaffoldStatus()
-  .map((line) => chalk.dim(line))
+  .map((line) => styleText('dim', line))
   .join('\n')}
 
-  ${chalk.dim('boardsmith --help')}    ${chalk.dim('- see every command')}
+  ${styleText('dim', 'boardsmith --help')}    ${styleText('dim', '- see every command')}
 `);
   },
 };
@@ -281,7 +281,7 @@ async function initVersionControl(projectPath: string): Promise<void> {
     await gitOutput(projectPath, ['add', '-A']);
   } catch {
     console.log(
-      chalk.dim('  (skipped git init — git not available; run `git init` manually if you want version control)')
+      styleText('dim', '  (skipped git init — git not available; run `git init` manually if you want version control)')
     );
     return;
   }
@@ -290,7 +290,7 @@ async function initVersionControl(projectPath: string): Promise<void> {
     await gitOutput(projectPath, ['commit', '-m', 'chore: scaffold project via boardsmith init']);
   } catch {
     console.log(
-      chalk.dim('  (git repo created but initial commit skipped — set `git config user.name` / `user.email`, then run `git commit`)')
+      styleText('dim', '  (git repo created but initial commit skipped — set `git config user.name` / `user.email`, then run `git commit`)')
     );
   }
 }
@@ -306,11 +306,11 @@ async function installHookAndReport(projectPath: string): Promise<void> {
   const result = await installIngestHook(projectPath);
   if (result === 'skipped-existing') {
     console.log(
-      chalk.dim('  (left your existing .git/hooks/pre-commit alone — run `boardsmith ingest-gaps` manually after transcription)'),
+      styleText('dim', '  (left your existing .git/hooks/pre-commit alone — run `boardsmith ingest-gaps` manually after transcription)'),
     );
   } else if (result === 'skipped-no-git') {
     console.log(
-      chalk.yellow('  Could not install the ingest pre-commit hook into .git/hooks — run `boardsmith ingest-gaps` manually after transcription.'),
+      styleText('yellow', '  Could not install the ingest pre-commit hook into .git/hooks — run `boardsmith ingest-gaps` manually after transcription.'),
     );
   }
 }
@@ -456,7 +456,7 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
       await writeFile(path, file.content);
     }
 
-    console.log(chalk.dim(`  boardsmith: ${boardsmithDependencySpec(projectPath)}`));
+    console.log(styleText('dim', `  boardsmith: ${boardsmithDependencySpec(projectPath)}`));
 
     // An existing repository already has its history, so it gets no `git init` and no scaffold
     // commit: the designer reviews the scaffold beside their own work and commits it.
@@ -486,10 +486,10 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
     // Last, so a failed init never leaves a hook behind in a repository it did not create.
     await installHookAndReport(projectPath);
 
-    spinner.succeed(chalk.green(`Created ${name} successfully!`));
+    spinner.succeed(styleText('green', `Created ${name} successfully!`));
 
     if (options.intoExisting) {
-      console.log(chalk.dim('  The scaffold is not committed: review it beside your own files, then commit it.'));
+      console.log(styleText('dim', '  The scaffold is not committed: review it beside your own files, then commit it.'));
     }
     scaffold.printNextSteps(options.intoExisting ? ['npm install'] : [`cd ${name}`, 'npm install']);
   } catch (error) {
@@ -498,7 +498,7 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
     // absolute path of the CLI's own installation -- which CLAUDE.md forbids
     // outright, and then exited before `cli.ts`'s top-level handler could
     // render it as the one clean line every other command's failures get.
-    spinner.fail(chalk.red('Failed to create project'));
+    spinner.fail(styleText('red', 'Failed to create project'));
 
     // A half-scaffolded project is worse than no project (#242). The archive is
     // the last step, so an unreadable `--rulebook` left a complete tree whose

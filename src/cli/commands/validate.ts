@@ -1,7 +1,7 @@
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative, sep, resolve as resolvePath } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import ora from 'ora';
 import { scanSandboxViolations } from '../lib/sandbox-scan.js';
 import {
@@ -135,7 +135,7 @@ async function runValidation(
  * (`publish`, `verify`) stops there, and the CLI exits non-zero with the message.
  */
 export async function validateProject(cwd: string, options: { typeCheck?: TypeCheckRun } = {}): Promise<void> {
-  console.log(chalk.cyan('\nValidating game...\n'));
+  console.log(styleText('cyan', '\nValidating game...\n'));
   const { results, worldMode } = await runValidation(cwd, options);
   printResults(results);
   if (hasBlockingFailure(results)) {
@@ -152,25 +152,25 @@ export async function validateCommand(): Promise<void> {
 
 /** One check's icon and status word: pass, advisory warning, or failure. */
 function verdictLabel(result: ValidationResult): { icon: string; status: string } {
-  if (result.passed) return { icon: chalk.green('✓'), status: chalk.green('PASS') };
+  if (result.passed) return { icon: styleText('green', '✓'), status: styleText('green', 'PASS') };
   if (result.severity === 'warning') {
-    return { icon: chalk.yellow('⚠'), status: chalk.yellow('WARN') };
+    return { icon: styleText('yellow', '⚠'), status: styleText('yellow', 'WARN') };
   }
-  return { icon: chalk.red('✗'), status: chalk.red('FAIL') };
+  return { icon: styleText('red', '✗'), status: styleText('red', 'FAIL') };
 }
 
 /** Prints every check's verdict and its failure detail. */
 function printResults(results: ValidationResult[]): void {
-  console.log(chalk.cyan('\nValidation Results:\n'));
+  console.log(styleText('cyan', '\nValidation Results:\n'));
 
   for (const result of results) {
     const { icon, status } = verdictLabel(result);
     console.log(`  ${icon} ${result.name}: ${status}`);
     if (result.passed) continue;
 
-    console.log(chalk.dim(`    ${result.message}`));
+    console.log(styleText('dim', `    ${result.message}`));
     for (const detail of result.details ?? []) {
-      console.log(chalk.dim(`      - ${detail}`));
+      console.log(styleText('dim', `      - ${detail}`));
     }
   }
 
@@ -197,40 +197,40 @@ function printResults(results: ValidationResult[]): void {
 export function successGuidance(isWorld: boolean, warnings: number): string[] {
   const lines = [
     warnings === 0
-      ? chalk.green('All validation checks passed!\n')
-      : chalk.yellow(
+      ? styleText('green', 'All validation checks passed!\n')
+      : styleText('yellow',
           `Validation passed with ${warnings} warning(s). They do not block publishing, but read them above: ` +
             'a warning is either something to fix or a check that could not run.\n',
         ),
-    chalk.cyan('Next steps:'),
+    styleText('cyan', 'Next steps:'),
   ];
   if (isWorld) {
     lines.push(
-      chalk.dim('  boardsmith dev      - Run this world: genesis, its durable store, and its seats'),
-      chalk.dim('  boardsmith build    - Build for production'),
-      chalk.dim('  boardsmith publish  - Publish to boardsmith.io\n'),
-      chalk.yellow('World:') +
-        chalk.dim(
+      styleText('dim', '  boardsmith dev      - Run this world: genesis, its durable store, and its seats'),
+      styleText('dim', '  boardsmith build    - Build for production'),
+      styleText('dim', '  boardsmith publish  - Publish to boardsmith.io\n'),
+      styleText('yellow', 'World:') +
+        styleText('dim',
           ' this game declares a persistent world, and `boardsmith dev` runs it: the\n' +
             '       project\'s durable local store, genesis once, a seat per browser, and scheduled\n' +
             '       events firing on their due time. `boardsmith dev --reset` deletes the world and\n' +
             `       runs genesis again. BoardSmith ${WORLD_AUTHORING_DOC} is the authoring guide.\n`,
         ),
-      chalk.yellow('Tip:') + chalk.dim(' Run `boardsmith dev`, take a seat, and issue your world\'s commands.'),
-      chalk.dim('     The host says every refusal out loud, including:'),
-      chalk.dim('     - A handler reading a partition its partitions() did not declare'),
-      chalk.dim('     - A schedule past this world\'s caps, or at an invalid delay\n'),
+      styleText('yellow', 'Tip:') + styleText('dim', ' Run `boardsmith dev`, take a seat, and issue your world\'s commands.'),
+      styleText('dim', '     The host says every refusal out loud, including:'),
+      styleText('dim', '     - A handler reading a partition its partitions() did not declare'),
+      styleText('dim', '     - A schedule past this world\'s caps, or at an invalid delay\n'),
     );
     return lines;
   }
   lines.push(
-    chalk.dim('  boardsmith dev      - Test gameplay and check for runtime warnings'),
-    chalk.dim('  boardsmith build    - Build for production'),
-    chalk.dim('  boardsmith publish  - Publish to boardsmith.io\n'),
-    chalk.yellow('Tip:') + chalk.dim(' Run `boardsmith dev` and play through your game.'),
-    chalk.dim('     The engine will warn about issues like:'),
-    chalk.dim('     - Flow steps referencing non-existent actions'),
-    chalk.dim('     - Element reference comparisons instead of ID comparisons\n'),
+    styleText('dim', '  boardsmith dev      - Test gameplay and check for runtime warnings'),
+    styleText('dim', '  boardsmith build    - Build for production'),
+    styleText('dim', '  boardsmith publish  - Publish to boardsmith.io\n'),
+    styleText('yellow', 'Tip:') + styleText('dim', ' Run `boardsmith dev` and play through your game.'),
+    styleText('dim', '     The engine will warn about issues like:'),
+    styleText('dim', '     - Flow steps referencing non-existent actions'),
+    styleText('dim', '     - Element reference comparisons instead of ID comparisons\n'),
   );
   return lines;
 }
