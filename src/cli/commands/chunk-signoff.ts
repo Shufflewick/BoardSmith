@@ -363,7 +363,7 @@ function readCode(body: string): CodeFiles | 'whole-file' | undefined {
   if (values.length === 0) return undefined;
   const code: CodeFiles = {};
   for (const value of values) {
-    const match = /^(\S+)[ \t]+(\S+)$/.exec(value);
+    const match = /^(.+)[ \t]+(\S+)$/.exec(value);
     if (!match) return undefined;
     code[match[1]] = match[2];
   }

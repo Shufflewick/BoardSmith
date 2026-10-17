@@ -135,6 +135,39 @@ describe('parseBuildManifest', () => {
     expect(parseBuildManifest(chunk).entries.map((e) => e.path)).toEqual(['règles/a.ts', 're\u0300gles/b.ts']);
   });
 
+  it('reads a backticked path whole, spaces and symbols included (#1116)', () => {
+    const chunk = tableChunk('| `my file.ts`, `@scope/x.ts` (edit), `~x.ts` | written |');
+    expect(parseBuildManifest(chunk).entries.map((e) => e.path)).toEqual(['my file.ts', '@scope/x.ts', '~x.ts']);
+  });
+
+  it('leaves prose about a path as it was: annotations are not checked, and a backticked `.name` is not a path', () => {
+    // Real cell shapes from the reference games' manifests.
+    const chunk = tableChunk(
+      [
+        '| src/rules/elements.ts (Sector.gossip, Almanac.gossipVenues/gossipUses) | written |',
+        '| `src/rules/hunt.ts` — `.narration` on each result | written |',
+      ].join('\n'),
+    );
+    expect(parseBuildManifest(chunk).entries.map((e) => e.path)).toEqual([
+      'src/rules/elements.ts',
+      'Sector.gossip',
+      'Almanac.gossipVenues',
+      'src/rules/hunt.ts',
+    ]);
+  });
+
+  it.each([
+    ['my file.ts', 'my file.ts'],
+    ['src/a.ts (edit), b.ts:12', 'b.ts:12'],
+    ['@scope/x.ts', '@scope/x.ts'],
+    ['src/a.ts, ~x.ts (edit)', '~x.ts'],
+  ])('refuses the unbackticked cell "%s" rather than read part of a path (#1116)', (cell, fragment) => {
+    const chunk = tableChunk(`| ${cell} | written |`);
+    expect(() => parseBuildManifest(chunk)).toThrow(
+      `Build Manifest row 1: the File cell "${cell}" has "${fragment}", which cannot be read as a path. Wrap the path in backticks: \`${fragment}\`.`,
+    );
+  });
+
   it('records a zero-path row in pathlessRowIndexes and produces no entry', () => {
     const chunk = tableChunk('| (no files) | n/a |');
     const parsed = parseBuildManifest(chunk);

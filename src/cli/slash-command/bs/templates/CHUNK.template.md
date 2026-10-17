@@ -205,7 +205,9 @@ full
 ## Build Manifest
 <!-- Per-file build manifest for build-step crash/resume — file-by-file, not step-by-step, so a
      session that crashes mid-build knows exactly which files were already written vs. still
-     pending, without re-deriving that from git status alone. -->
+     pending, without re-deriving that from git status alone. Write each path in backticks
+     (`src/rules/game.ts`): a backticked path is read whole, so a path with a space or a symbol
+     needs them, and a bare path that cannot be read whole is refused. -->
 
 | File | Status |
 |------|--------|

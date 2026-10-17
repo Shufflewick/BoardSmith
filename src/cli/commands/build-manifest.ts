@@ -114,6 +114,52 @@ export interface ParsedManifest {
  */
 const PATH_TOKEN = /[\p{L}\p{M}\p{N}_./-]+\.[\p{L}\p{M}\p{N}]+/gu;
 
+/** A backticked span ending in `name.ext` is a path, read exactly as written (#1116). */
+const ENDS_IN_EXTENSION = /[^/.]\.[\p{L}\p{M}\p{N}]+$/u;
+
+/** Where the prose about a path begins: an opening bracket, a dash, `+` or `;`. */
+const ANNOTATION_START = /[(—–+;]| - /;
+
+/** A word with its surrounding punctuation and emphasis removed. */
+function bareWord(word: string): string {
+  return word.replace(/^[([{"'*_]+/, '').replace(/[)\]}"'*_,;:.!?]+$/, '');
+}
+
+/**
+ * The first fragment of unbackticked cell text that PATH_TOKEN would read only part of: a word
+ * holding a path beside characters the rule drops (`@scope/x.ts`, `~x.ts`), or an item that opens
+ * with a plain word before a path (`my file.ts`). Only the path list is checked, never the
+ * bracketed or dashed prose about it, which real manifests fill with code names.
+ */
+function unreadablePath(text: string): string | undefined {
+  const isPath = (word: string) => bareWord(word).match(PATH_TOKEN) !== null;
+  const pathList = text.replace(/\([^)]*\)/g, ' ').split(ANNOTATION_START, 1)[0] ?? '';
+  for (const item of pathList.split(',')) {
+    const words = item.trim().split(/\s+/);
+    for (const word of words) {
+      const bare = bareWord(word);
+      const found = bare.match(PATH_TOKEN);
+      if (found && (found.length > 1 || found[0] !== bare)) return bare;
+    }
+    if (words.length > 1 && !isPath(words[0]!) && words.some(isPath)) return words.join(' ');
+  }
+  return undefined;
+}
+
+/** A File cell's paths, in order: backticked paths whole, the rest by PATH_TOKEN. */
+function cellPaths(cell: string, row: number): string[] {
+  return cell.split(/`([^`]*)`/).flatMap((part, i) => {
+    if (i % 2 === 1 && ENDS_IN_EXTENSION.test(part)) return [part];
+    const fragment = unreadablePath(part);
+    if (fragment !== undefined) {
+      throw new Error(
+        `Build Manifest row ${row}: the File cell "${cell.trim()}" has "${fragment}", which cannot be read as a path. Wrap the path in backticks: \`${fragment}\`.`,
+      );
+    }
+    return [...part.matchAll(PATH_TOKEN)].map((m) => m[0]);
+  });
+}
+
 /**
  * Resolves a manifest-supplied relative path against `projectDir`, rejecting any escape.
  *
@@ -223,7 +269,7 @@ export function parseBuildManifest(chunkText: string): ParsedManifest {
     const firstCell = cells[1] ?? '';
     const statusCell = cells[2] ?? '';
 
-    const paths = [...firstCell.matchAll(PATH_TOKEN)].map((m) => m[0]);
+    const paths = cellPaths(firstCell, i + 1);
     if (paths.length === 0) {
       pathlessRowIndexes.push(i + 1);
       return;

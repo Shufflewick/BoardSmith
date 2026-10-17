@@ -427,6 +427,17 @@ describe('a sign-off counts only for the chunk as it was signed (#295)', () => {
     expect(await verifiedByHandProblems(project, 'deal')).toMatch(/règles\/a\.ts changed after it/);
   });
 
+  it('refuses a bare path with a space, and records it whole once backticked (#1116)', async () => {
+    const project = await makeProject([{ slug: 'deal', manifest: { 'my file.ts': 'v1' } }]);
+    await expect(signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW })).rejects.toThrow(
+      'Wrap the path in backticks: `my file.ts`',
+    );
+    const text = await readChunk(project, 'deal');
+    await fs.writeFile(chunkPath(project, 'deal'), text.replace('| my file.ts |', '| `my file.ts` |'));
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    expect(Object.keys(parseSignoff(await readChunk(project, 'deal')).record!.code)).toEqual(['my file.ts']);
+  });
+
   it('a design ledger in the manifest changing at close does not void the sign-off', async () => {
     const project = await makeProject([
       { slug: 'deal', manifest: { 'src/deal.ts': 'v1', 'DECISIONS.md': '# Decisions\n' } },
