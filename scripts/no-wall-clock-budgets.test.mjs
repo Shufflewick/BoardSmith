@@ -185,13 +185,14 @@ function wallClockBudgets(source, fileName = 'scanned.ts') {
   for (const { target, value } of assignments) {
     for (const binding of bindingsAt(target)) valuesOf.set(binding, [...valuesOf.get(binding) ?? [], value]);
   }
-  /** For each name, the properties being read through it right now. */
+  /** For each name, the properties already read through it while answering one question. */
   const reading = new Map();
   /**
    * Whether `access` reads a duration. A property the file declares holds its own value, whatever else the object
    * holds (`h.n` beside `h.took()`); one it does not, read from a name, is judged over each value given that name,
-   * property by property. A name and property already being read are skipped, so names given each other's
-   * properties do not loop, while another property of the same name (`walk(node.child)`) is still read.
+   * property by property. A name and property already read in this question are skipped, since only whether some
+   * path reaches a duration matters: names given each other's properties neither loop nor are searched once per path,
+   * while another property of the same name (`walk(node.child)`) is still read.
    */
   const readsDuration = (access) => {
     if (checker.getSymbolAtLocation(access.name)) return holds(durations, access.name);
@@ -201,9 +202,7 @@ function wallClockBudgets(source, fileName = 'scanned.ts') {
     const bindings = bindingsAt(base).filter((binding) => !reading.get(binding)?.has(key));
     bindings.forEach((binding) => reading.set(binding, (reading.get(binding) ?? new Set()).add(key)));
     const values = bindings.flatMap((binding) => valuesOf.get(binding) ?? []);
-    const found = memberOf(values, key).some(measures);
-    bindings.forEach((binding) => reading.get(binding).delete(key));
-    return found;
+    return memberOf(values, key).some(measures);
   };
 
   const clockVars = bindingsOf(assignments.filter(({ value }) => isClockRead(value)));
@@ -222,15 +221,20 @@ function wallClockBudgets(source, fileName = 'scanned.ts') {
     if (ts.isPropertyAccessExpression(node)) return readsDuration(node);
     return subtractsClock(node) || holds(durations, node) || ts.forEachChild(node, measures) === true;
   };
+  /** Whether `node` measures a duration, as one question with nothing yet read. */
+  const answers = (node) => {
+    reading.clear();
+    return measures(node);
+  };
   // Until nothing changes, so a duration handed from name to name is followed to the end.
   for (let size = -1; size !== durations.size;) {
     size = durations.size;
-    durations = bindingsOf(assignments.filter(({ value }) => measures(value)));
+    durations = bindingsOf(assignments.filter(({ value }) => answers(value)));
   }
 
   const lines = source.split('\n');
   return expects
-    .filter((call) => measures(call.arguments[0]))
+    .filter((call) => answers(call.arguments[0]))
     .map((call) => {
       const line = sourceFile.getLineAndCharacterOfPosition(call.getStart()).line;
       return { line: line + 1, text: lines[line].trim() };
@@ -553,6 +557,13 @@ describe('wallClockBudgets', () => {
     }
     const swap = 'function f(a, c) { expect(a.x).toBeLessThan(5); f(c.y, a.z); }\nf({ z: Date.now() - s }, 0);';
     expect(wallClockBudgets(swap, 'x.test.mjs')).toHaveLength(1);
+  });
+
+  it('searches a name fed back its own many properties once per name and property, not once per path (#1104)', () => {
+    const children = Array.from({ length: 12 }, (_, at) => `walk(node.p${at});`).join(' ');
+    const walk = `const s = Date.now();\nfunction walk(node) { expect(node.ms).toBeLessThan(5); ${children} }`;
+    expect(wallClockBudgets(`${walk}\nwalk({ ms: 3 });`, 'x.test.mjs')).toEqual([]);
+    expect(wallClockBudgets(`${walk}\nwalk({ p11: { ms: Date.now() - s } });`, 'x.test.mjs')).toHaveLength(1);
   });
 
   it('takes an array held in a variable whole, since its positions are unknown (#1104)', () => {
