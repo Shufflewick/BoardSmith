@@ -1,4 +1,4 @@
-import { beforeEach, describe, it, expect } from 'vitest';
+import { beforeEach, describe, it, expect, vi, type MockInstance } from 'vitest';
 import { Game, Player, Action, actionStep, loop, eachPlayer, type GameOptions } from '../../engine/index.js';
 import { executeOp, type GameDefinitionLike } from '../../session/index.js';
 import { MultiplayerHost, type HostOutbound, type MultiplayerHostOptions } from './multiplayer-host.js';
@@ -53,7 +53,17 @@ const altDef = {
   maxPlayers: 2,
 } satisfies GameDefinitionLike;
 
-function makeAltHost(opts: { debug?: boolean; playerCount?: number; failStart?: () => boolean } = {}) {
+// A game whose setup crashes, the way a bug in a game's constructor does.
+class BrokenSetupGame extends AlternateGame {
+  constructor(options: GameOptions) {
+    super(options);
+    throw new TypeError('The deck is missing.');
+  }
+}
+
+function makeAltHost(
+  opts: { debug?: boolean; playerCount?: number; failStart?: () => boolean; brokenSetup?: () => boolean } = {},
+) {
   const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
   const playerCount = opts.playerCount ?? 2;
   const host = new MultiplayerHost({
@@ -64,7 +74,8 @@ function makeAltHost(opts: { debug?: boolean; playerCount?: number; failStart?: 
     debug: opts.debug,
     executeOp: (gameOptions, snap, pend, op, hostOptions) => {
       if (op.type === 'start' && opts.failStart?.()) throw new Error('The deck is missing.');
-      return executeOp({ ...altDef, maxPlayers: playerCount }, gameOptions, snap, pend, op, hostOptions);
+      const gameClass = op.type === 'start' && opts.brokenSetup?.() ? BrokenSetupGame : AlternateGame;
+      return executeOp({ ...altDef, gameClass, maxPlayers: playerCount }, gameOptions, snap, pend, op, hostOptions);
     },
     send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
   });
@@ -381,12 +392,127 @@ describe('MultiplayerHost — a restart that fails (#880)', () => {
     expect(lastOfType('A', 'error')).toMatchObject({ message: expect.stringMatching(/no game is running.*reload/i), requestId: 'r1' });
     expect(told.message).toBe(
       "The game could not start (Cannot read properties of undefined (reading 'cards')). " +
-        'Fix the problem, then reload this page to start a game.',
+        'Fix the problem, then press "New game" or reload this page.',
     );
 
     failStart = false;
     await host.handleMessage('A', { type: 'hello' }); // the reload the message asks for
     expect(lastOfType('A', 'init').seat).toBe(1);
+  });
+});
+
+describe('MultiplayerHost — New game after a failed start (#1039)', () => {
+  let printed: MockInstance<typeof console.error>;
+  beforeEach(() => {
+    printed = vi.spyOn(console, 'error').mockImplementation(() => {});
+    return () => printed.mockRestore();
+  });
+
+  it('starts a game when the first start failed', async () => {
+    let failStart = true;
+    const { host, lastOfType } = makeAltHost({ brokenSetup: () => failStart });
+    await host.handleMessage('A', { type: 'hello' }); // A = seat 1; its start fails
+    failStart = false;
+    await host.handleMessage('A', { type: 'restart' });
+    expect(lastOfType('A', 'init').seat).toBe(1);
+    expect(lastOfType('A', 'error').message).toBe(
+      'The game could not start (The deck is missing.). Fix the problem, then press "New game" or reload this page.',
+    );
+  });
+
+  it('starts a game when a restart failed', async () => {
+    let failStart = false;
+    const { host, lastOfType, clear } = makeAltHost({ failStart: () => failStart });
+    await host.handleMessage('A', { type: 'hello' });
+    failStart = true;
+    await host.handleMessage('A', { type: 'restart' });
+    failStart = false;
+    clear();
+    await host.handleMessage('A', { type: 'restart' });
+    expect(lastOfType('A', 'error')).toBeUndefined();
+    expect(lastOfType('A', 'init').seat).toBe(1);
+  });
+
+  it('refuses New game from a page with no seat after a failed start', async () => {
+    let failStart = true;
+    const { host, lastOfType } = makeAltHost({ brokenSetup: () => failStart });
+    await host.handleMessage('A', { type: 'hello' }); // A = seat 1; its start fails
+    await host.handleMessage('B', { type: 'hello' }); // seated at seat 2; its start fails too
+    await host.handleMessage('C', { type: 'hello' }); // no seat left: the seat-picker
+    failStart = false;
+    await host.handleMessage('C', { type: 'restart' });
+    expect(lastOfType('C', 'error').message).toBe('No game in progress to restart.');
+    expect(lastOfType('C', 'init')).toBeUndefined();
+  });
+
+  it("prints a crash in the game's setup in the terminal as one line, without a stack", async () => {
+    const { host } = makeAltHost({ brokenSetup: () => true });
+    await host.handleMessage('A', { type: 'hello' });
+    expect(printed.mock.calls).toEqual([
+      ['[boardsmith dev] The game could not start (The deck is missing.). Fix the problem, then press "New game" or reload this page.'],
+    ]);
+  });
+
+  it('prints a throw from the host itself in the terminal with its stack', async () => {
+    const { host } = makeAltHost({ failStart: () => true });
+    await host.handleMessage('A', { type: 'hello' });
+    expect(printed).toHaveBeenCalledTimes(1);
+    expect(printed.mock.calls[0]).toEqual([
+      '[boardsmith dev] The game could not start (The deck is missing.). Fix the problem, then press "New game" or reload this page.',
+      expect.stringMatching(/^Error: The deck is missing\.\n\s+at /),
+    ]);
+  });
+});
+
+describe('MultiplayerHost — a move while a restart is starting (#1042)', () => {
+  it('is refused with the reason, not answered success with no new state', async () => {
+    let release: (() => void) | null = null;
+    let starts = 0;
+    const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
+    const host = new MultiplayerHost({
+      playerCount: 2,
+      minPlayers: 2,
+      maxPlayers: def.maxPlayers,
+      makeSeed: () => 'mp',
+      executeOp: async (gameOptions, snap, pend, op, hostOptions) => {
+        if (op.type === 'start' && ++starts === 2) {
+          await new Promise<void>((resolve) => { release = resolve; });
+        }
+        return executeOp(altDef, gameOptions, snap, pend, op, hostOptions);
+      },
+      send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
+    });
+    const to = (clientId: string) => sent.filter((e) => e.clientId === clientId).map((e) => e.msg);
+    await host.handleMessage('A', { type: 'hello' }); // A = seat 1; the first start is not held
+    const key = clientKey('A');
+    const restarting = host.handleMessage('A', { type: 'restart' }); // held inside its start op
+    sent.length = 0;
+    await host.handleMessage('A', {
+      type: 'server_request',
+      requestId: 'r1',
+      op: 'action',
+      payload: { actionName: 'pass', args: {}, boundaryKey: key },
+    });
+    await host.handleMessage('A', { type: 'getState', requestId: 'r2' });
+    await host.handleMessage('A', { type: 'restart' });
+    await host.handleMessage('A', { type: 'follow', enabled: true });
+    host.disconnect('A'); // the page reloads while the new game starts
+    await host.handleMessage('A', { type: 'hello' });
+    const during = to('A');
+    sent.length = 0;
+    release!();
+    await restarting;
+    expect(during.some((m) => m.type === 'server_response' || m.type === 'game_state')).toBe(false);
+    expect(during.some((m) => m.type === 'init')).toBe(true);
+    const after = to('A').filter((m) => m.type === 'init' || m.type === 'game_state').map((m) => m.type);
+    expect(after.slice(-2)).toEqual(['init', 'game_state']); // startGame's reinit, after any state the new game broadcast
+    const errors = during.filter((m) => m.type === 'error');
+    expect(errors).toEqual([
+      { type: 'error', message: expect.stringMatching(/game is starting.*try again/i), requestId: 'r1' },
+      { type: 'error', message: expect.stringMatching(/game is starting.*try again/i), requestId: 'r2' },
+      { type: 'error', message: expect.stringMatching(/game is starting.*try again/i) },
+      { type: 'error', message: expect.stringMatching(/game is starting.*try again/i) },
+    ]);
   });
 });
 
