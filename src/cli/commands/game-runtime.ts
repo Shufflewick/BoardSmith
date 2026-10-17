@@ -221,10 +221,6 @@ export async function loadGameDefinition(
   return module.gameDefinition;
 }
 
-/** Where {@link importRuntimeBundle} writes the bundle it names `name` in `tempDir`. */
-export function runtimeBundlePath(tempDir: string, name: string): string {
-  return join(tempDir, `${name}-bundle.mjs`);
-}
 
 /**
  * The package's own `src/`. The package ships it, and this module runs either
@@ -336,7 +332,7 @@ export async function importRuntimeBundle(args: {
    * the rules never import is refused, since replacing it would change nothing.
    */
   redirects?: ReadonlyMap<string, string>;
-}): Promise<{ gameDefinition: GameDefinition } & Record<string, unknown>> {
+}): Promise<{ gameDefinition: GameDefinition; bundlePath: string } & Record<string, unknown>> {
   const rulesIndexPath = join(args.rulesPath, 'index.ts');
   const entryPath = join(args.tempDir, `${args.name}-entry.ts`);
   writeFileSync(
@@ -351,7 +347,7 @@ export async function importRuntimeBundle(args: {
     ),
   );
   // The real path, so Node resolves the map's relative sources from where esbuild wrote them (macOS links /tmp and /var).
-  const bundlePath = runtimeBundlePath(realpathSync(args.tempDir), args.name);
+  const bundlePath = join(realpathSync(args.tempDir), `${args.name}-bundle.mjs`);
   const redirects = args.redirects ?? new Map<string, string>();
   const redirected = new Set<string>();
 
@@ -363,6 +359,8 @@ export async function importRuntimeBundle(args: {
     platform: 'node',
     outfile: bundlePath,
     sourcemap: 'inline',
+    // Node needs only the mappings to rewrite a stack; each rules save's bundle stays loaded.
+    sourcesContent: false,
     logLevel: 'silent',
     plugins: [
       ...(redirects.size > 0 ? [redirectPlugin(redirects, redirected)] : []),
@@ -394,5 +392,7 @@ export async function importRuntimeBundle(args: {
   return {
     ...module,
     gameDefinition: withDeclaredGameOptions(module.gameDefinition as GameDefinition, args.gameOptions),
+    // Where the bundle was written, for a worker that imports it again.
+    bundlePath,
   };
 }

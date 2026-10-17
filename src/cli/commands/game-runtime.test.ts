@@ -3,7 +3,7 @@
  * table-reload hook) into the rules bundle. That is one engine only when the CLI and the
  * game's `boardsmith` are the same install (#696).
  */
-import { cpSync, existsSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
@@ -124,5 +124,15 @@ describe('importRuntimeBundle: a crash names the line in the game it came from (
     } finally {
       printed.mockRestore();
     }
+  });
+
+  it("keeps the map to its line mappings, without a copy of every source file's text", () => {
+    // `boardsmith dev` imports a new bundle on every rules save and Node never unloads the old ones.
+    const bundled = readFileSync(crashingRuntime.bundlePath, 'utf8');
+    const inline = /\/\/# sourceMappingURL=data:application\/json;base64,(\S+)\s*$/.exec(bundled);
+    expect(inline).not.toBeNull();
+    const map = JSON.parse(Buffer.from(inline![1], 'base64').toString('utf8'));
+    expect(map.mappings.length).toBeGreaterThan(0);
+    expect(map.sourcesContent).toBeUndefined();
   });
 });

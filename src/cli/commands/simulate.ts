@@ -6,7 +6,7 @@ import { availableParallelism } from 'node:os';
 import { gameSeed, type SingleGameResult } from '../../sim/play-game.js';
 import type { SimulatedGame } from '../../sim/policies.js';
 import { buildReport, formatReport, formatComparison, reportCsv, type PlayerCountReport } from '../../sim/report.js';
-import { cliSourceFile, getProjectContext, importRuntimeBundle, runtimeBundlePath, toPosix, UnimportedRedirectError } from './game-runtime.js';
+import { cliSourceFile, getProjectContext, importRuntimeBundle, toPosix, UnimportedRedirectError } from './game-runtime.js';
 import { seatPolicies, type ShardRequest, type SimulationBundle } from '../lib/sim-shard.js';
 import { playOnWorkers } from '../lib/sim-workers.js';
 import { buildVariants, parseCompare, type CompareDimension, type Variant } from '../lib/sim-variants.js';
@@ -252,7 +252,7 @@ export async function loadSimulation(
       ],
       redirects,
     });
-    return { ...(module as unknown as LoadedSimulation), bundlePath: runtimeBundlePath(tempDir, name) };
+    return module as unknown as LoadedSimulation;
   } catch (error) {
     if (error instanceof UnimportedRedirectError) {
       const files = error.files.map((file) => toPosix(relative(cwd, file))).join(' and ');
