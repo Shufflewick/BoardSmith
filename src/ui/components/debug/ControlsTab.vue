@@ -42,7 +42,7 @@ const emit = defineEmits<{
         <div class="action-group">
           <h4>Player Perspective</h4>
           <div class="player-buttons">
-            <DebugButton v-for="seat in seats" :key="seat" @click="emit('switch-player', seat)" :class="{ active: playerSeat === seat }" >
+            <DebugButton v-for="seat in seats" :key="seat" @click="emit('switch-player', seat)" :active="playerSeat === seat" >
               Player {{ seat }}
             </DebugButton>
           </div>

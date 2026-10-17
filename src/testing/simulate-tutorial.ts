@@ -12,6 +12,7 @@
 import type { Game } from '../engine/index.js';
 import type { TutorialDefinition } from '../engine/tutorial/types.js';
 import { autoAdvanceTutorial, initialProgress, validateTutorialDefinition } from '../engine/tutorial/progress.js';
+import { startTutorial } from '../engine/tutorial/start.js';
 import { getActiveStep } from '../engine/tutorial/gate.js';
 import type { TestGame } from './test-game.js';
 
@@ -39,8 +40,9 @@ export interface TutorialScenarioMove {
   /**
    * Expected step id AFTER this move completes and auto-advance runs.
    *
-   * When set, `simulateTutorial` asserts that the tutorial for the move's seat
-   * has advanced to this step. If the `advanceWhen` predicate did not fire,
+   * When set, `simulateTutorial` asserts that the learner's tutorial has
+   * advanced to this step, whichever seat made the move: only the learner
+   * has a tutorial (#914). If the `advanceWhen` predicate did not fire,
    * the call throws:
    * `"Tutorial drift (predicate): expected advance to '<x>' did not fire."`
    *
@@ -57,9 +59,13 @@ export interface TutorialScenarioMove {
 /**
  * Options for `simulateTutorial`.
  */
-export interface SimulateTutorialOptions {
-  /** Ordered list of scripted moves. */
-  scenario: TutorialScenarioMove[];
+export interface SimulateTutorialOptions<G extends Game> {
+  /**
+   * Builds the ordered list of scripted moves from the game. It is called once,
+   * after the tutorial has started and its `setup` has run, so the moves can
+   * name the elements `setup` created (#1079).
+   */
+  scenario: (game: G) => TutorialScenarioMove[];
 
   /**
    * Declared expectation of the seed governing this run.
@@ -143,9 +149,12 @@ export interface SimulateTutorialResult {
  * different seed than the one you named.
  *
  * @param testGame - A started `TestGame` instance. The tutorial definition will
- *   be attached to `testGame.game` and tutorial progress initialized for its `learnerSeat`.
+ *   be attached to `testGame.game` and the tutorial started for its `learnerSeat`
+ *   exactly as the server starts it: setup applied, the flow restarted with the
+ *   learner to move, and progress for the learner alone (#914).
  * @param tutorialDef - The tutorial definition to run.
- * @param options - Scenario moves and optional declared seed.
+ * @param options - A function that builds the scenario moves from the started
+ *   game, and an optional declared seed.
  * @returns `{ completed, finalStepId, stepsVisited, seed }` after the scenario.
  *
  * @throws {Error} on gate drift, predicate drift, action failure, or a
@@ -155,9 +164,10 @@ export interface SimulateTutorialResult {
  * ```typescript
  * const testGame = TestGame.create(CheckersGame, { playerCount: 2, seed: 'pinned' });
  * const result = simulateTutorial(testGame, TUTORIAL_DEF, {
- *   scenario: [
- *     { action: 'move', args: { from: 'c3', to: 'd4' }, expectStep: 'capture-intro' },
- *     { action: 'move', args: { from: 'd4', to: 'f6' } },
+ *   // Called after the tutorial's setup, so it names the pieces setup placed.
+ *   scenario: (game) => [
+ *     { action: 'move', args: { piece: game.first(Checker, 'red-1')!, to: 'd4' }, expectStep: 'capture-intro' },
+ *     { action: 'move', args: { piece: game.first(Checker, 'red-1')!, to: 'f6' } },
  *   ],
  * });
  * assertTutorialCompletes(result);
@@ -166,10 +176,8 @@ export interface SimulateTutorialResult {
 export function simulateTutorial<G extends Game>(
   testGame: TestGame<G>,
   tutorialDef: TutorialDefinition,
-  options: SimulateTutorialOptions,
+  options: SimulateTutorialOptions<G>,
 ): SimulateTutorialResult {
-  const { scenario } = options;
-
   // 0. Seed-expectation check (fail-loud): an already-started game cannot be
   //    reseeded, so a mismatched options.seed means the run would NOT be
   //    governed by the seed the caller named. Throw before touching the game.
@@ -188,43 +196,26 @@ export function simulateTutorial<G extends Game>(
   // 2. Attach the tutorial definition to the game instance.
   testGame.game.tutorialDefinition = tutorialDef;
 
-  // 3. Set initial progress for all seats referenced in the scenario so gate-drift
-  //    detection works correctly for non-primary seats (WR-02). Without this,
-  //    getDisabledActions() returns {} for uninitialized seats, causing the
-  //    gate-legality check to silently pass even when a gate should block the action.
-  const scenarioSeats = new Set<number>([seat, ...scenario.map(m => m.seat).filter((s): s is number => s !== undefined)]);
-  for (const s of scenarioSeats) {
-    if (!testGame.game.tutorialProgress.has(s)) {
-      testGame.game.tutorialProgress.set(s, initialProgress(tutorialDef));
-    }
-  }
-
-  // 4. Track steps visited (deduplicated, visit order).
+  // 3. Track steps visited (deduplicated, visit order). The first step is
+  //    visited even when the start's auto-advance pump moves straight past it.
   const stepsVisited: string[] = [];
   let lastRecordedStep: string | null = null;
 
-  const recordCurrentStep = () => {
-    const progress = testGame.game.tutorialProgress.get(seat);
-    if (!progress?.stepId) return;
-    if (progress.stepId !== lastRecordedStep) {
-      lastRecordedStep = progress.stepId;
-      stepsVisited.push(progress.stepId);
-    }
+  const recordStep = (stepId: string | null | undefined) => {
+    if (!stepId || stepId === lastRecordedStep) return;
+    lastRecordedStep = stepId;
+    stepsVisited.push(stepId);
   };
+  const recordCurrentStep = () => recordStep(testGame.game.tutorialProgress.get(seat)?.stepId);
+  recordStep(initialProgress(tutorialDef).stepId);
 
-  // Record the initial step before any auto-advance.
+  // 4. Start the tutorial exactly as the server's startTutorial op does (#914).
+  const refusal = startTutorial(testGame.game, tutorialDef, seat);
+  if (refusal) throw new Error(`simulateTutorial: ${refusal}`);
   recordCurrentStep();
 
-  // 5. Run auto-advance once at start — mirrors the server's FIRST post-action pump.
-  //    In production, capture-tip.advanceWhen fires on the learner's first action,
-  //    not at tutorial start. Running it here before the first scripted move ensures
-  //    steps with immediate advanceWhen predicates (like capture-tip) are counted
-  //    as visited in stepsVisited, matching the effect of the first real action.
-  autoAdvanceTutorial(testGame.game, seat);
-  recordCurrentStep();
-
-  // 6. Execute each scripted move.
-  for (const move of scenario) {
+  // 5. Execute each scripted move, built from the board setup left.
+  for (const move of options.scenario(testGame.game)) {
     const moveSeat = move.seat ?? seat;
 
     // Step A: gate-legality check.
@@ -244,7 +235,7 @@ export function simulateTutorial<G extends Game>(
     // below (which names the active step id) replaces the generic throw.
     const result = testGame.tryAction(moveSeat, move.action, move.args ?? {});
     if (!result.success) {
-      const activeStep = getActiveStep(testGame.game, moveSeat);
+      const activeStep = getActiveStep(testGame.game, seat);
       throw new Error(
         `Tutorial scenario: action '${move.action}' by seat ${moveSeat} on step '${activeStep?.id ?? 'unknown'}' failed. ` +
         `Error: ${result.error ?? 'unknown error'}`,
@@ -267,20 +258,20 @@ export function simulateTutorial<G extends Game>(
     if (move.expectStep !== undefined) {
       // Use the raw progress stepId so we also catch the completed state where
       // getActiveStep returns null (completed tutorials still have a stepId).
-      const currentProgress = testGame.game.tutorialProgress.get(moveSeat);
+      const currentProgress = testGame.game.tutorialProgress.get(seat);
       const actualStepId = currentProgress?.stepId ?? null;
 
       if (actualStepId !== move.expectStep) {
         throw new Error(
           `Tutorial drift (predicate): expected advance to '${move.expectStep}' did not fire. ` +
-          `Tutorial for seat ${moveSeat} is on step '${actualStepId ?? 'none'}'. ` +
+          `Tutorial for seat ${seat} is on step '${actualStepId ?? 'none'}'. ` +
           `Check the advanceWhen predicate for step '${move.expectStep}'.`,
         );
       }
     }
   }
 
-  // 7. Build and return the result.
+  // 6. Build and return the result.
   const finalProgress = testGame.game.tutorialProgress.get(seat);
   const completed = finalProgress?.status === 'completed';
   const finalStepId = finalProgress?.stepId ?? null;

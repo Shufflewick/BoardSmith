@@ -524,7 +524,7 @@ export class TestGame<G extends Game = Game> {
    * element, and what counts as identity is decided by the gate.
    */
   unredactedElements(): readonly ElementJSON[] {
-    return this.game.all(GameElement).map((element) => element.toJSON());
+    return [this.game, ...this.game.all(GameElement)].map((element) => element.toJSON());
   }
 
   /**

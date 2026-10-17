@@ -69,6 +69,7 @@ export type WireOp =
   | 'debug:reorder-card'
   | 'debug:transfer-card'
   | 'debug:shuffle-deck'
+  | 'debug:deck-view'
   // debug:logs (ERR-04): pulls the dev-host's captured server-side
   // errors/warnings ring buffer (log-capture.ts). Host-lifecycle op — like
   // demoStart/demoStop, it is resolved directly by the bridge and MUST NEVER
@@ -277,6 +278,8 @@ export function translateOp(
       };
     case 'debug:shuffle-deck':
       return { type: 'debugShuffle', deckId: payload.deckId as number };
+    case 'debug:deck-view':
+      return { type: 'debugDeckView' };
     case 'debug:logs':
       // Host-lifecycle marker (ERR-04) — resolved directly in
       // handleServerRequest by reading the ring buffer; never delegated to
@@ -377,6 +380,7 @@ const SHAPERS: { [T in Op['type']]: (result: OpResultFor<T>) => Reply } = {
   debugReorder: outcomeOnly,
   debugTransfer: outcomeOnly,
   debugShuffle: outcomeOnly,
+  debugDeckView: (r) => (r.success ? { success: true, view: r.view } : refusal(r)),
 };
 
 /** Shape a `type` op's result into the reply its seat is sent. */

@@ -1,4 +1,4 @@
-import { rulesErrorSentence } from './rules-error.js';
+import { NOTHING_CHANGED, rulesErrorSentence } from './rules-error.js';
 import type { GameElement } from '../element/game-element.js';
 import { isElement } from '../element/game-element.js';
 import type { Player } from '../player/player.js';
@@ -94,17 +94,16 @@ function failedExecute(actionName: string, error: unknown): ActionResult {
   // An engine policy refusal was written to be read — its message IS the
   // actionable next step. Anything else is an arbitrary runtime error, and
   // goes no further than this log.
-  const generic = `${rulesErrorSentence(actionName)} Nothing was changed.`;
+  const generic = `${rulesErrorSentence(actionName)} ${NOTHING_CHANGED}`;
   // A PlayerFacingError's text was written to be read, so it always travels.
   // Anything else travels only in a positively-labelled dev/test environment,
   // where the reader is the author who needs it and there is no player to leak
   // to. In production it goes no further than the log above.
-  const message = error instanceof PlayerFacingError
-    ? error.message
-    : isDevThrowEnabled()
-      ? `${generic} (${error instanceof Error ? error.message : String(error)})`
-      : generic;
-  return { success: false, error: message, partiallyApplied: true };
+  if (error instanceof PlayerFacingError) return { success: false, error: error.message, partiallyApplied: true };
+  const message = isDevThrowEnabled()
+    ? `${generic} (${error instanceof Error ? error.message : String(error)})`
+    : generic;
+  return { success: false, error: message, partiallyApplied: true, rulesError: true };
 }
 
 /**
@@ -1320,6 +1319,7 @@ export class ActionExecutor {
           return {
             success: false,
             error: `onSelect for selection '${selection.name}' in action '${action.name}' threw: ${message}`,
+            rulesError: true,
           };
         }
       }

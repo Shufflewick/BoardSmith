@@ -52,7 +52,7 @@
 import { promises as fs } from 'node:fs';
 import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { join, posix, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { sha256Hex } from '../lib/hash.js';
 import {
   CROSS_CHUNK_MD,
@@ -75,7 +75,7 @@ import {
 } from '../lib/ledger-allocation.js';
 import { describeFinding, ledgerCheck } from './ledger-check.js';
 import { type TestRunner, checkConstraints, runVitest, unranTestsProblem } from './constraint-check.js';
-import { VERIFIED, assessSignoffs, checkSignoff, chunkCodeFiles, unaccountedEdits } from './chunk-signoff.js';
+import { VERIFIED, assessSignoffs, checkSignoff, chunkCodeFiles, readStatus, unaccountedEdits } from './chunk-signoff.js';
 import { verifiedAgainstIsCurrent } from './chunk-provenance.js';
 import { checkClaimQuotes } from './claim-quotes.js';
 import { parseSpecManifest } from './test-step-check.js';
@@ -377,7 +377,7 @@ async function changedBy(ctx: MergeContext, commit: string): Promise<string[]> {
 
 /** A CHUNK.md's Status, or `missing` when it has none (or there is no CHUNK.md). */
 function statusOf(chunkText: string): string {
-  return /^Status:\s*(.*)$/m.exec(chunkText)?.[1].trim() ?? 'missing';
+  return readStatus(chunkText) ?? 'missing';
 }
 
 async function verifiedProblem(ctx: MergeContext): Promise<string[]> {
@@ -819,11 +819,11 @@ export async function chunkMerge(projectDir: string, slug: string, options: Chun
 
 function report(slug: string, result: ChunkMergeResult): void {
   if (!result.merged) {
-    console.error(chalk.red(`${slug} was not merged. The main line is unchanged. Fix each of these, then run chunk-merge again:`));
+    console.error(styleText('red', `${slug} was not merged. The main line is unchanged. Fix each of these, then run chunk-merge again:`));
     for (const refusal of result.refusals) console.error(`  • ${refusal}`);
     return;
   }
-  console.log(chalk.green(`✓ ${slug} merged; every tree-wide check passed on the combined tree.`));
+  console.log(styleText('green', `✓ ${slug} merged; every tree-wide check passed on the combined tree.`));
   for (const [from, to] of Object.entries(result.allocated)) console.log(`  ${from} is now ${to}.`);
   for (const { path, chunks, why } of result.vouched) {
     const changed = {
@@ -852,7 +852,7 @@ export async function chunkMergeCommand(
   try {
     assertBareName('<slug>', slug, "Pass the slug of the chunk whose branch to merge, as SKETCH.md's Ordered Chunk List names it.");
   } catch (error) {
-    console.error(chalk.red((error as Error).message));
+    console.error(styleText('red', (error as Error).message));
     process.exitCode = 1;
     return;
   }

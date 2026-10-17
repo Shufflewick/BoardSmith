@@ -135,6 +135,23 @@ const [afterUncommittedChange, afterCommit, afterCommitAgain] = await (async () 
   return [uncommitted, committed, statusOf(await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue }))];
 })();
 
+// #1088: three catalogue runs of two games each spawn dozens of processes, seconds on a busy
+// machine, so they run here, while the file is collected and no test timeout applies.
+const [afterLinkedGameMoves, afterTreeInstallChanges] = await (async () => {
+  const fx = fixture();
+  await makeTree(fx.tree);
+  const legacy = await makeGame(fx, 'legacy');
+  await makeGame(fx, 'legacy-world', { links: ['legacy'] });
+  await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue });
+
+  await writeFiles(legacy, { 'src/rules.ts': 'export {};' });
+  commitAll(legacy, 'legacy moves');
+  const moved = statusOf(await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue }));
+
+  await writeFiles(fx.tree, { 'node_modules/.package-lock.json': '{"packages":{"vue":{}}}' });
+  return [moved, statusOf(await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue }))];
+})();
+
 describe('the cache of passing games (#591)', () => {
   it('keeps passes in the git common directory of the tree', async () => {
     const fx = fixture();
@@ -180,22 +197,13 @@ describe('the cache of passing games (#591)', () => {
     expect(statusOf(await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue }))).toEqual({ hex: 'cached' });
   });
 
-  it("runs a game again when a catalogue game it links to moves, and when the tree's install changes", async () => {
-    const fx = fixture();
-    await makeTree(fx.tree);
-    const legacy = await makeGame(fx, 'legacy');
-    await makeGame(fx, 'legacy-world', { links: ['legacy'] });
-    await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue });
-
-    await writeFiles(legacy, { 'src/rules.ts': 'export {};' });
-    commitAll(legacy, 'legacy moves');
-    expect(statusOf(await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue }))).toEqual({
+  it("runs a game again when a catalogue game it links to moves, and when the tree's install changes", () => {
+    expect(afterLinkedGameMoves).toEqual({
       legacy: 'passed',
       'legacy-world': 'passed',
     });
 
-    await writeFiles(fx.tree, { 'node_modules/.package-lock.json': '{"packages":{"vue":{}}}' });
-    expect(statusOf(await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue }))).toEqual({
+    expect(afterTreeInstallChanges).toEqual({
       legacy: 'passed',
       'legacy-world': 'passed',
     });

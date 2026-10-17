@@ -1,7 +1,7 @@
 import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
 import { resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import {
   GATE_TRANSITION_MD,
   chunkMdPath,
@@ -122,6 +122,7 @@ async function decideChunk(
       slug,
       status,
       reason: 'verified before sign-offs were recorded: its CHUNK.md has no "## Sign-off" section',
+      code: await chunkCodeFiles(dir, text),
     };
   }
   if (!parsed.wholeFile) return undefined;
@@ -133,6 +134,7 @@ async function decideChunk(
     reason:
       `its sign-off of ${basis.when} (basis ${basis.basis}) recorded one hash over all its ` +
       `files, and that code has changed since`,
+    code: await chunkCodeFiles(dir, text),
   };
 }
 
@@ -194,12 +196,12 @@ async function recordFor(
 ): Promise<SignoffRecord | undefined> {
   const parsed = parseSignoff(text);
   const entry = ledger.signoffs.find((s) => s.slug === slug);
-  const code = await chunkCodeFiles(dir, text);
   if (entry) {
     if (parsed.state !== 'absent' && !parsed.wholeFile) return undefined;
-    return { basis: 'transition', by: ledger.by, when: ledger.recorded, status: entry.status, code };
+    return { basis: 'transition', by: ledger.by, when: ledger.recorded, status: entry.status, code: entry.code };
   }
   if (!parsed.wholeFile) return undefined;
+  const code = await chunkCodeFiles(dir, text);
   if ((await wholeFileHash(dir, text)) !== parsed.wholeFile.hash) {
     throw new Error(
       `${relChunkMdPath(slug)}'s sign-off was recorded in design/${GATE_TRANSITION_MD} as kept, but ` +
@@ -281,11 +283,11 @@ export async function chunkGateTransitionCommand(options: {
   const claimCount = Object.values(result.claims).reduce((n, c) => n + c.length, 0);
   if (!result.transitioned.length && !result.kept.length) {
     console.log(
-      chalk.green('✓ No chunk needs the gate transition: every verified chunk has a current sign-off. Nothing was written.'),
+      styleText('green', '✓ No chunk needs the gate transition: every verified chunk has a current sign-off. Nothing was written.'),
     );
     return;
   }
-  console.log(chalk.green(`✓ Gate transition recorded in design/${GATE_TRANSITION_MD}`));
+  console.log(styleText('green', `✓ Gate transition recorded in design/${GATE_TRANSITION_MD}`));
   if (result.transitioned.length) {
     console.log(`  Transition sign-offs (${result.transitioned.length}): ${result.transitioned.map((t) => t.slug).join(', ')}`);
   }
