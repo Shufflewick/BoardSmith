@@ -439,6 +439,31 @@ function assertSourceBytes(
 }
 
 /**
+ * THE ORIGINALS A CALL'S JOIN READS. A page carries them as `sources`; a
+ * whole-world call already holds every one it could declare among its own
+ * roots, so they are taken from there (#787). Either way they are checked.
+ */
+function joinSources(
+  declared: ReadonlyMap<string, readonly string[]> | undefined,
+  sent: Readonly<Record<string, StoredPartition>> | undefined,
+  whole: Readonly<Record<string, StoredPartition>> | undefined,
+): Readonly<Record<string, StoredPartition>> {
+  if (declared === undefined) return {};
+  const wanted = sourceUnion(declared);
+  if (sent !== undefined || whole === undefined) return assertSourceBytes(sent, wanted);
+  const absent = wanted.filter((name) => !(name in whole));
+  if (absent.length > 0) {
+    throw worldRefusal(
+      "world-migration-unavailable",
+      `This migration's \`join.sources\` names ${absent.length === 1 ? "a root" : "roots"} this ` +
+        `world does not hold: ${absent.join(", ")}. Change \`join.sources\` to name only roots ` +
+        "the world holds when the migration begins. The world was not changed.",
+    );
+  }
+  return Object.fromEntries(wanted.map((name) => [name, whole[name]!]));
+}
+
+/**
  * ONE ROOT'S READER, HELD TO ONE ROOT'S DECLARATION (#275).
  *
  * The page's originals are hydrated once and shared, and what differs per root
@@ -711,7 +736,8 @@ export interface WorldMigrateContext {
    * a page whose result depends on which host ran it.
    *
    * Meaningless on a survey pass, which reads every root anyway, and on a
-   * migration that declares no `join`.
+   * migration that declares no `join`. An unpaged call may omit it: its
+   * originals are taken from the roots the call was handed (#787).
    */
   readonly sources?: Readonly<Record<string, StoredPartition>>;
 }
@@ -1296,8 +1322,7 @@ export function createWorldRunner(
       // anything runs, and read through a second game that dies with this call.
       const join = migrationHooks.join;
       const declared = join === undefined ? undefined : declaredPerRoot(join, page, digest);
-      const supplied =
-        declared === undefined ? {} : assertSourceBytes(ctx.sources, sourceUnion(declared));
+      const supplied = joinSources(declared, ctx.sources, paged ? undefined : stored);
       const derived = engine.migrateSources(supplied, (read) => {
         const sourceFor = (root: string) => {
           if (declared === undefined) {

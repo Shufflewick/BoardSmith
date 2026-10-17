@@ -38,6 +38,7 @@ import {
 } from '../world/index.js';
 import {
   secondEndingRefused,
+  rewrittenPartitionRows,
   storablePartitionRows,
   type WorldCheckpointExtras,
   type WorldSeatRecord,
@@ -87,25 +88,7 @@ export function createMemoryWorldStore(
   let endedAt: number | undefined;
 
   const receiptKey = (player: string, orderId: string): string => `${player}\u0000${orderId}`;
-
-  /** The rows a write is about, checked BEFORE any of them lands. A partition
-   *  this store has never held has no parent to hang a subtree from, and
-   *  writing it under a guessed one would graft it into the wrong place. */
-  function rowsFor(written: Record<string, string>): Array<{ name: string; json: string }> {
-    return Object.entries(written).map(([name, json]) => {
-      assertStorablePartitionName(name);
-      assertPartitionWithinBudget(name, json, budgets);
-      if (!partitions.has(name)) {
-        throw new Error(
-          `This world's store was asked to write partition "${name}", which it has never ` +
-            'read or created. A partition is written under the parent it was created with, so ' +
-            'there is nowhere to put this one. Create it through genesis or through ' +
-            "`world.createPartition` before a command writes it.",
-        );
-      }
-      return { name, json };
-    });
-  }
+  const parentOf = (name: string): number | undefined => partitions.get(name)?.parentId;
 
   function writePartitions(rows: readonly { name: string; json: string }[]): void {
     for (const row of rows) {
@@ -205,7 +188,7 @@ export function createMemoryWorldStore(
       extras: WorldCheckpointExtras = {},
     ): Promise<void> {
       if (extras.endedAt !== undefined && endedAt !== undefined) throw secondEndingRefused(endedAt);
-      const rows = rowsFor(checkpoint.partitions);
+      const rows = rewrittenPartitionRows(checkpoint.partitions, parentOf, budgets);
       writePartitions(rows);
       // THE STAMP LANDS WITH THE BYTES IT MINTED (#224).
       allocation = checkpoint.nextElementId;
@@ -307,7 +290,7 @@ export function createMemoryWorldStore(
     nextElementId: () => allocation,
 
     migrate({ partitions: written, created, events: planned, toStateVersion }): void {
-      const rows = rowsFor(written);
+      const rows = rewrittenPartitionRows(written, parentOf, budgets);
       // NEW ROOTS CARRY THEIR OWN PARENT, because there is no row to read one
       // from -- checked here, before anything lands, because a migration
       // refused halfway is the one failure this method exists to prevent.
