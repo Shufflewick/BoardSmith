@@ -124,11 +124,20 @@ describe('ingest harness work dir', () => {
     expect(res.stderr).toContain('holds the BoardSmith checkout');
   });
 
+  it('refuses the root folder, since it holds the home folder', () => {
+    const sandbox = fixtureSandbox('bs-harness-root-');
+
+    const res = runHarness(sandbox, ['stage', '--work-dir', '/']);
+
+    expect(res.status).toBe(1);
+    expect(res.stderr).toContain('holds your home folder');
+  });
+
   it.each([
-    ['an early marker with no folder', '{}'],
-    ['JSON null', 'null'],
-    ['invalid JSON', '{not json'],
-  ])('refuses a folder whose state file is %s, and leaves it untouched', (_label, contents) => {
+    ['an early marker with no folder', '{}', 'does not name the folder it was written for'],
+    ['JSON null', 'null', 'does not name the folder it was written for'],
+    ['invalid JSON', '{not json', 'is not valid JSON'],
+  ])('refuses a folder whose state file is %s, and leaves it untouched', (_label, contents, reason) => {
     const sandbox = fixtureSandbox('bs-harness-badstate-');
     const victim = path.join(sandbox.root, 'victim');
     mkdirSync(victim);
@@ -139,7 +148,20 @@ describe('ingest harness work dir', () => {
 
     expect(existsSync(path.join(victim, 'keep.txt'))).toBe(true);
     expect(res.status).toBe(1);
-    expect(res.stderr).toContain('does not name the folder it was written for');
+    expect(res.stderr).toContain(reason);
+  });
+
+  it('refuses a folder whose state file cannot be read, and leaves it untouched', () => {
+    const sandbox = fixtureSandbox('bs-harness-unreadable-');
+    const victim = path.join(sandbox.root, 'victim');
+    mkdirSync(path.join(victim, '.harness-stage-state.json'), { recursive: true });
+    writeFileSync(path.join(victim, 'keep.txt'), 'mine');
+
+    const res = runHarness(sandbox, ['stage', '--work-dir', victim]);
+
+    expect(existsSync(path.join(victim, 'keep.txt'))).toBe(true);
+    expect(res.status).toBe(1);
+    expect(res.stderr).toContain('has a .harness-stage-state.json that could not be read');
   });
 
   it('refuses a folder with a .git at its top even when it holds a state file naming itself', () => {

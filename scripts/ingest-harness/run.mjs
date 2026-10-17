@@ -168,7 +168,8 @@ function readStageState(subcommand, workDir) {
 function protectedFolderReason(real) {
   const home = realpathSync.native(os.homedir());
   const checkout = realpathSync.native(REPO_ROOT);
-  const holds = (dir) => dir.startsWith(real + path.sep);
+  // path.join keeps the root as '/' rather than '//'.
+  const holds = (dir) => dir.startsWith(path.join(real, path.sep));
   if (real === home) return 'is your home folder';
   if (holds(home)) return 'holds your home folder';
   if (real === checkout) return 'is the BoardSmith checkout';
@@ -180,11 +181,17 @@ function protectedFolderReason(real) {
 // Why the folder's state file does not prove a stage wrote it there, or undefined.
 function stateFileReason(real) {
   if (!existsSync(stateFilePath(real))) return 'already exists and has no .harness-stage-state.json, so this harness did not stage it';
-  let state = null;
+  let text;
   try {
-    state = JSON.parse(readFileSync(stateFilePath(real), 'utf8'));
+    text = readFileSync(stateFilePath(real), 'utf8');
   } catch {
-    // Unreadable JSON names no folder; the check below refuses it.
+    return 'has a .harness-stage-state.json that could not be read, so this harness cannot tell it wrote it';
+  }
+  let state;
+  try {
+    state = JSON.parse(text);
+  } catch {
+    return 'has a .harness-stage-state.json that is not valid JSON, so this harness did not write it';
   }
   const stagedFor = state?.workDir;
   if (typeof stagedFor !== 'string') {
