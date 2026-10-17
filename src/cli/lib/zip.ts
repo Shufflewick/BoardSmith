@@ -1,6 +1,7 @@
 import { deflateRawSync } from 'node:zlib';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { listFiles } from './source-files.js';
 
 /**
  * Read a boardsmith build dist/ directory and produce a zip-ready file map.
@@ -120,9 +121,7 @@ function collectFiles(
   skipRelPath?: string,
   prefix?: string,
 ): void {
-  if (!existsSync(dir)) return;
-
-  for (const absPath of readdirRecursive(dir)) {
+  for (const absPath of listFiles(dir, { sourceTree: false })) {
     const relPath = relative(dir, absPath);
     if (relPath === skipRelPath) continue;
     const zipPath = prefix ? `${prefix}/${relPath}` : relPath;
@@ -130,19 +129,6 @@ function collectFiles(
       fileMap.set(zipPath, readFileSync(absPath));
     }
   }
-}
-
-function readdirRecursive(dir: string): string[] {
-  const results: string[] = [];
-  function walk(current: string): void {
-    for (const entry of readdirSync(current, { withFileTypes: true })) {
-      const fullPath = join(current, entry.name);
-      if (entry.isDirectory()) walk(fullPath);
-      else results.push(fullPath);
-    }
-  }
-  walk(dir);
-  return results;
 }
 
 // -- Minimal zip builder (binary-safe) --

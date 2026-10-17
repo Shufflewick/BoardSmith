@@ -71,3 +71,16 @@ describe('readDistDir — the entry and seat count each backend actually has', (
     );
   });
 });
+
+describe('readDistDir packages the whole build, dot folders included (#1048)', () => {
+  it('keeps files in nested and dot folders, since a build output has nothing to skip', () => {
+    const root = dist(TABLE, 'index.html');
+    mkdirSync(join(root, 'ui', '.vite'), { recursive: true });
+    writeFileSync(join(root, 'ui', '.vite', 'manifest.json'), '{}');
+    mkdirSync(join(root, 'cards', 'node_modules'), { recursive: true });
+    writeFileSync(join(root, 'cards', 'node_modules', 'ace.png'), 'png');
+    const files = readDistDir(root);
+    expect(files.has('.vite/manifest.json')).toBe(true);
+    expect(files.has('cards/node_modules/ace.png')).toBe(true);
+  });
+});

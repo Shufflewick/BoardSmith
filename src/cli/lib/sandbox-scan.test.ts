@@ -41,6 +41,12 @@ describe('scanSandboxViolations', () => {
     expect(scanSandboxViolations(dir)).toEqual([]);
   });
 
+  it('skips node_modules and dot folders under src', () => {
+    write('src/node_modules/pkg/x.ts', 'export const x = Math.random();\n');
+    write('src/.cache/y.ts', 'export const y = Math.random();\n');
+    expect(scanSandboxViolations(dir)).toEqual([]);
+  });
+
   // Security rules (network/filesystem/eval) are enforced everywhere, including
   // UI helpers outside src/rules.
   it('flags security violations in UI helpers outside src/rules', () => {
