@@ -1,6 +1,6 @@
 {
-  "revision": 223,
-  "surfaceHash": "d4ad4460664564c4",
+  "revision": 224,
+  "surfaceHash": "ad9a951933d096b7",
   "payloadHash": "42faf88ae9f4cb97",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1727,6 +1727,14 @@
       "payloadHash": "42faf88ae9f4cb97",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "Each seat's player view carries messageOffset, how many of its own log lines the game has pruned, so the log and unread badge count by line number at a cap; the engine counts pruned lines by audience in two new restore-only root fields so no seat learns how many private lines another got (#903)."
+    },
+    {
+      "revision": 224,
+      "date": "2026-10-17",
+      "surfaceHash": "ad9a951933d096b7",
+      "payloadHash": "42faf88ae9f4cb97",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "An event's scope is held to the command's declaration: emitting in a partition the action did not declare is refused with undeclared-partition whether or not it is resident, and the unknown-scope refusal is removed (#933)."
     }
   ]
 }
