@@ -104,34 +104,35 @@ export function createDevHostConnectionHandler(opts: DevHostConnectionOptions): 
     };
 
     let clientId: string | null = null;
-    let loadId: string | null = null;
+    let loadId = '';
+
+    type Inbound = { type?: string; clientId?: unknown; [key: string]: unknown };
+    const identify = (msg: Inbound) => {
+      if (msg.runId !== undefined && msg.runId !== runId) {
+        send({ type: 'stale_run' });
+        return;
+      }
+      send({ type: 'welcome', runId });
+      clientId = typeof msg.clientId === 'string' ? msg.clientId : `anon-${Math.random().toString(36).slice(2)}`;
+      clients.set(clientId, socket);
+      // A caller that names no page load (a scripted client) is one per socket.
+      loadId = typeof msg.loadId === 'string' ? msg.loadId : randomUUID();
+      mpHost.bindPageLoad(clientId, loadId);
+      dispatch(clientId, { type: 'hello' });
+    };
 
     socket.on('message', (raw) => {
-      let msg: { type?: string; clientId?: unknown; [key: string]: unknown };
+      let msg: Inbound;
       try {
         msg = JSON.parse(raw.toString());
       } catch {
         return;
       }
-      if (msg.type === 'hello') {
-        if (msg.runId !== undefined && msg.runId !== runId) {
-          send({ type: 'stale_run' });
-          return;
-        }
-        send({ type: 'welcome', runId });
-        clientId =
-          typeof msg.clientId === 'string' ? msg.clientId : `anon-${Math.random().toString(36).slice(2)}`;
-        // A caller that names no page load (a scripted client) is one per socket.
-        loadId = typeof msg.loadId === 'string' ? msg.loadId : randomUUID();
-        clients.set(clientId, socket);
-        mpHost.bindPageLoad(clientId, loadId);
-        dispatch(clientId, { type: 'hello' });
-        return;
-      }
+      if (msg.type === 'hello') return identify(msg);
       // A client must identify itself via `hello` first; a tab from an earlier
       // run never does (#416).
-      if (!clientId || !loadId) return;
-      dispatch(clientId, msg.type === 'server_request' ? ({ ...msg, loadId } as ClientInbound) : (msg as ClientInbound));
+      if (!clientId) return;
+      dispatch(clientId, (msg.type === 'server_request' ? { ...msg, loadId } : msg) as ClientInbound);
     });
 
     socket.on('close', () => {

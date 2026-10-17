@@ -538,6 +538,7 @@ export class MultiplayerHost {
    * the connection handler routes the client to a new socket, not through the
    * rules reload queue, so it is never behind a reply the queue still holds.
    */
+  // fallow-ignore-next-line unused-class-member
   bindPageLoad(clientId: string, loadId: string): void {
     this.pageLoad.set(clientId, loadId);
   }
