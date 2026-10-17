@@ -10,16 +10,15 @@
  * heuristic locked in 152-CONTEXT.md. `AssetImage` lives in `boardsmith/ui`
  * (issue #81), so no path inside a game is exempt: routing art through
  * `<AssetImage>` is the one sanctioned path, and anything else is a FAIL regardless
- * of what `src` resolves to. Today the `bs-build-chunk` skill's `test` step is the
- * caller (see build/test.md); any future CLI wiring (`boardsmith build`/`lint`)
+ * of what `src` resolves to. Today the `/bs:build-chunk` `test` step is the
+ * caller (see `src/cli/slash-command/bs/build/test.md`); any future CLI wiring
  * should delegate here too rather than growing a second, subtly different regex
  * scanner — the single-source-of-truth pattern `sandbox-scan.ts` established.
  *
- * WR-02: this module is re-exported from `boardsmith/testing`
- * (`src/testing/index.ts`) so games can call the gate directly. It is ALSO
- * imported by a hardcoded relative path from the `bs-build-chunk` skill's
- * `build/test.md`. If you move or rename this file, update BOTH of those
- * importers — neither is caught by this package's own type-check.
+ * Games import it from its own subpath, `boardsmith/asset-scan` (the `exports`
+ * entry in package.json), not from `boardsmith/testing`, so the testing barrel
+ * stays free of Node types (see `src/testing/index.ts`). If you move or rename
+ * this file, update that `exports` entry.
  */
 
 import { existsSync, readFileSync } from 'node:fs';
@@ -69,7 +68,7 @@ interface StripCommentsResult {
   unterminated?: { line: number; kind: 'block' | 'html' };
 }
 
-function stripComments(lines: string[]): StripCommentsResult {
+function stripComments(lines: string[], isVue: boolean): StripCommentsResult {
   const stripped: string[] = [];
   // Which multi-line comment kind (if any) is open going INTO this line.
   let openKind: 'block' | 'html' | null = null;
@@ -83,8 +82,9 @@ function stripComments(lines: string[]): StripCommentsResult {
   // false FAILs (an apostrophe phantom-quoted a following `<!-- <img> -->`).
   // Track the region so each grammar applies only where it is valid. The region
   // persists across lines (script/style blocks span lines); the file is scanned
-  // fresh per call so no cross-file leakage.
-  let region: 'template' | 'script' | 'style' = 'template';
+  // fresh per call so no cross-file leakage. Only a `.vue` file opens in template;
+  // every other source file is script throughout (#852).
+  let region: 'template' | 'script' | 'style' = isVue ? 'template' : 'script';
 
   for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
     const line = lines[lineIdx];
@@ -179,7 +179,7 @@ export function scanAssetReachability(cwd: string): AssetViolation[] {
 
     const content = readFileSync(filePath, 'utf-8');
     const lines = content.split('\n');
-    const { lines: scanLines, unterminated } = stripComments(lines);
+    const { lines: scanLines, unterminated } = stripComments(lines, filePath.endsWith('.vue'));
     for (let i = 0; i < lines.length; i++) {
       if (BARE_IMG_TAG.test(scanLines[i])) {
         violations.push({

@@ -209,6 +209,24 @@ describe('scanAssetReachability', () => {
     expect(violations[0].line).toBe(2);
   });
 
+  // #852: a script file has no template region, so `//` and `/* */` are comments
+  // from line 1. Starting it in template mode reported the mentions below.
+  it.each(['src/ui/helpers.ts', 'src/ui/helpers.mts'])('does NOT flag <img> mentioned only in comments of %s', (file) => {
+    const violations = scanWith({
+      [file]: '// Never render a bare <img> here\n/* nor <img src="x"> */\n/*\n * <IMG/>\n */\nexport const x = 1;\n',
+    });
+    expect(violations).toEqual([]);
+  });
+
+  // #852: the comment fix must not blind the gate to live markup in script files.
+  it('still flags a live <img> in a .ts template string and in .tsx JSX', () => {
+    const violations = scanWith({
+      'src/ui/render.ts': '// <img> in a comment\nexport const html = `<img src="/x.png">`;\n',
+      'src/ui/Card.tsx': 'export const Card = () => <img src="/x.png" />; // <img>\n',
+    });
+    expect(violations.map((v) => `${v.file}:${v.line}`).sort()).toEqual(['src/ui/Card.tsx:1', 'src/ui/render.ts:2']);
+  });
+
   // F-11 (v4.8): an apostrophe in TEMPLATE text ("Player's hand") must NOT open
   // JS string-quote state. Pre-fix it did, so a following genuine
   // `<!-- <img> -->` HTML comment on the same line was not recognized and its
