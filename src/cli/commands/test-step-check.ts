@@ -208,8 +208,9 @@ async function addedImplementationLines(
   chunkCommits: ReadonlySet<string>,
 ): Promise<Map<string, Set<number>>> {
   const touched = new Set<string>();
-  const committed = await git(projectDir, ['log', '--no-walk', '--format=', '--name-only', ...chunkCommits]);
-  const uncommitted = await git(projectDir, ['diff', 'HEAD', '--name-only', '--', 'src']);
+  // `--relative`: log and diff name files from the repo root, ls-files from the project; a nested game needs one base.
+  const committed = await git(projectDir, ['log', '--no-walk', '--format=', '--name-only', '--relative', ...chunkCommits]);
+  const uncommitted = await git(projectDir, ['diff', 'HEAD', '--name-only', '--relative', '--', 'src']);
   for (const path of [...committed.split('\n'), ...uncommitted.split('\n')]) {
     if (isChunkCode(path)) touched.add(path);
   }
@@ -583,9 +584,9 @@ async function chunkTestScope(
   testFiles: ChunkTestFile[],
 ): Promise<ChunkTestScope> {
   const log = async (...filter: string[]) =>
-    lines(await git(projectDir, ['log', '--no-walk', '--no-renames', '--format=', '--name-only', ...filter, ...chunkCommits]));
+    lines(await git(projectDir, ['log', '--no-walk', '--no-renames', '--format=', '--name-only', '--relative', ...filter, ...chunkCommits]));
   const diff = async (...filter: string[]) =>
-    lines(await git(projectDir, ['diff', 'HEAD', '--no-renames', '--name-only', ...filter]));
+    lines(await git(projectDir, ['diff', 'HEAD', '--no-renames', '--name-only', '--relative', ...filter]));
   const untracked = lines(await git(projectDir, ['ls-files', '--others', '--exclude-standard']));
   const touched = new Set([...(await log()), ...(await diff()), ...untracked]);
   const created = new Set([...(await log('--diff-filter=A')), ...(await diff('--diff-filter=A')), ...untracked]);

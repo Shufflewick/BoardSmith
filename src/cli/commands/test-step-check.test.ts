@@ -933,6 +933,34 @@ it('claim 1 and 2', () => { testGame.doAction(1, 'bid'); });
   });
 });
 
+describe('checkTestStep in a game nested inside a larger repository (#846)', () => {
+  it('reads the chunk\'s files by game-relative path, the same as a game at the repo root', async () => {
+    const repo = join(tempTree('bs-test-step-nested-'), 'repo');
+    const project = join(repo, 'games', 'auction-game');
+    await fs.mkdir(project, { recursive: true });
+    git(repo, 'init', '-q');
+    git(repo, 'config', 'user.email', 't@example.com');
+    git(repo, 'config', 'user.name', 'T');
+    await write(project, { 'src/rules/game.ts': "export const start = Action.create('start');\n" });
+    git(repo, 'add', '-A');
+    git(repo, 'commit', '-q', '-m', 'chunk-setup/step-close');
+    await write(project, {
+      'src/rules/auction.ts': "export const bid = Action.create('bid');\nexport const pass = Action.create('pass');\n",
+      'tests/auction.test.ts': `import { it } from 'vitest';
+it('claim 1 and 2', () => { testGame.doAction(1, 'bid'); testGame.doAction(1, 'pass'); });
+`,
+      'design/chunks/auction/CHUNK.md': AUCTION_CHUNK('| tests/auction.test.ts | 1, 2 | yes |\n'),
+    });
+    git(repo, 'add', '-A');
+    git(repo, 'commit', '-q', '-m', 'chunk-auction/step-build');
+
+    const result = await checkTestStep(project, 'auction');
+    expect([...result.added.keys()]).toEqual(['src/rules/auction.ts']);
+    expect(result.verbs).toEqual(['bid', 'pass']);
+    expect(result.findings).toEqual([]);
+  });
+});
+
 // -------------------------------------------------------------------------------------------
 // testStepCheckCommand — static checks, then mutation, one exit code
 // -------------------------------------------------------------------------------------------
