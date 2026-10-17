@@ -1144,7 +1144,7 @@ const IMPACT_QUOTED_PASS1 = 'The lower timing on their card resolves first.';
 
 async function buildImpactTestProject(
   root: string,
-  opts: { ruleDelta?: 'sharper' | 'contradictory'; drift?: 'clean' | 'drifted' } = {},
+  opts: { ruleDelta?: 'sharper' | 'contradictory'; drift?: 'clean' | 'drifted'; leaveXUnclassified?: boolean } = {},
 ): Promise<{ project: string; runId: string; pairId: string; firstSha: string }> {
   const project = join(root, `impact-project-${Math.random().toString(36).slice(2)}`);
   const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
@@ -1224,15 +1224,17 @@ async function buildImpactTestProject(
     throw new Error('fixture bug: expected one pair each for x.md and y.md');
   }
 
-  await verifyClassifyRecordCommand({
-    project,
-    runId,
-    pairId: xPair.pairId,
-    label: opts.ruleDelta ?? 'sharper',
-    quotedPass1: IMPACT_QUOTED_PASS1,
-    quotedPass2: changedLine,
-    json: true,
-  });
+  if (!opts.leaveXUnclassified) {
+    await verifyClassifyRecordCommand({
+      project,
+      runId,
+      pairId: xPair.pairId,
+      label: opts.ruleDelta ?? 'sharper',
+      quotedPass1: IMPACT_QUOTED_PASS1,
+      quotedPass2: changedLine,
+      json: true,
+    });
+  }
   await verifyClassifyRecordCommand({
     project,
     runId,
@@ -1439,6 +1441,19 @@ describe('contradictory / marker — verifyImpactApplyCommand', () => {
     const parsed = parseRulesStaleness(chunkText);
     expect(parsed.state).toBe('rules-stale');
     expect(parsed.record?.adjudication).toBe('UNADJUDICATED');
+  });
+
+  it('marker: a chunk citing a pair still pending classification is marked stale as unclassified, never left clean (#830)', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { drift: 'clean', leaveXUnclassified: true });
+
+    const result = await verifyImpactApplyCommand({ project, runId, json: true });
+    expect(result.blocked).toBe(false);
+    expect(result.marked.map((m) => m.slug)).toEqual(['movement']);
+
+    const chunkText = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'movement', 'CHUNK.md'), 'utf-8');
+    const parsed = parseRulesStaleness(chunkText);
+    expect(parsed.state).toBe('rules-stale');
+    expect(parsed.record?.ruleDelta).toBe('unclassified');
   });
 
   it('marker: a chunk whose ChunkVerdict.stale is false is left byte-identical after the run', async () => {

@@ -1265,7 +1265,8 @@ export function resolveCitationAttribution(input: {
  * `unclassified` verdict demoted for a missing quote, or a malformed-label `unclassified` the
  * subagent never quoted anything for — cannot be narrowed, so conservatively every one of the
  * pair's live slices the chunk cites is treated as affected (decision 8: never silently clean
- * where the tool is blind). An `unpaired-slice` group (nothing was ever compared for it) always
+ * where the tool is blind). An `unpaired-slice` group (nothing was ever compared for it), or a
+ * paired group still in pendingPairs (not compared yet), always
  * contributes `unclassified` to any chunk citing its live slice(s); `presentation-only` groups
  * contribute nothing, matching decision 17's treatment of presentation content as outside the
  * rule-bearing comparison entirely.
@@ -1337,17 +1338,15 @@ async function computeChunkVerdicts(
 
       if (pair.kind === 'presentation-only') continue; // decision 17: never a stale contribution
 
-      if (pair.kind === 'unpaired-slice') {
-        // Nothing was ever compared for this content — never silently clean (decision 8).
+      const record = classificationsByPairId.get(pair.pairId);
+      if (pair.kind === 'unpaired-slice' || !record) {
+        // Nothing was ever compared (unpaired), or not yet (pendingPairs) — never silently clean (decision 8, #830).
         pairIds.add(pair.pairId);
         if (RULE_DELTA_SEVERITY.unclassified > RULE_DELTA_SEVERITY[ruleDelta]) {
           ruleDelta = 'unclassified';
         }
         continue;
       }
-
-      const record = classificationsByPairId.get(pair.pairId);
-      if (!record) continue; // not yet classified — pendingPairs, not this chunk's problem yet
 
       if (record.ruleDelta === 'cosmetic') {
         // Cosmetic carries no quote to narrow by — it is reported as "nothing changed here" for
