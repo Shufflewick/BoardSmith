@@ -855,6 +855,13 @@ export interface ActionResult {
    * failure; nothing is logged, and no hidden value is invented.
    */
   notSimulable?: boolean;
+  /**
+   * Set when the failure was a crash in the rules: `execute()` or an
+   * `onSelect` threw something that is not a {@link PlayerFacingError} (#847).
+   * A refusal never carries it, whatever its words, so a caller can tell the
+   * rules saying no from the rules breaking. Never set by game code.
+   */
+  rulesError?: boolean;
   /** Additional data to return */
   data?: Record<string, unknown>;
   /** Message to log */

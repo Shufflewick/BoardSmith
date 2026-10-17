@@ -15,7 +15,6 @@ import { vDisabledReason, isDisabled } from './vDisabledReason.js';
 import {
   useDisabledReasonTooltip,
   hideDisabledReason,
-  DISABLED_TOOLTIP_ID,
 } from '../composables/useDisabledReasonTooltip.js';
 
 /** A button whose reason is reactive, so `updated`/`unmounted` are exercised too. */
@@ -46,6 +45,12 @@ function tabTo(el: HTMLElement): void {
 
 const tooltip = useDisabledReasonTooltip();
 
+/** The element a control's `aria-describedby` names, or null. */
+function describedBy(el: Element): HTMLElement | null {
+  const id = el.getAttribute('aria-describedby');
+  return id ? el.ownerDocument.getElementById(id) : null;
+}
+
 describe('vDisabledReason', () => {
   beforeEach(() => {
     hideDisabledReason();
@@ -65,11 +70,11 @@ describe('vDisabledReason', () => {
   });
 
   describe('attributes', () => {
-    it('marks the control aria-disabled and points it at the shared tooltip', () => {
+    it('marks the control aria-disabled and describes it with the reason', () => {
       const { btn, wrapper } = mountButton('A sheer cliff blocks your way.');
 
       expect(btn.attributes('aria-disabled')).toBe('true');
-      expect(btn.attributes('aria-describedby')).toBe(DISABLED_TOOLTIP_ID);
+      expect(describedBy(btn.element)?.textContent).toBe('A sheer cliff blocks your way.');
       expect(btn.attributes('data-bs-disabled-reason')).toBe('A sheer cliff blocks your way.');
       wrapper.unmount();
     });
@@ -110,6 +115,57 @@ describe('vDisabledReason', () => {
       await nextTick();
 
       expect(btn.attributes('data-bs-disabled-reason')).toBe('You need 3 wood; you have 2.');
+      expect(describedBy(btn.element)?.textContent).toBe('You need 3 wood; you have 2.');
+      wrapper.unmount();
+    });
+  });
+
+  // The tooltip exists only while it shows, so a screen reader in browse mode,
+  // or VoiceOver on iOS where a tap never opens it on focus, heard "dimmed" with
+  // no reason when the control pointed at the tooltip (#865).
+  describe('the reason for assistive tech', () => {
+    it('is in the document while the tooltip is closed', () => {
+      const { btn, wrapper } = mountButton('A sheer cliff blocks your way.');
+
+      expect(tooltip.text.value).toBeNull();
+      expect(describedBy(btn.element)?.textContent).toBe('A sheer cliff blocks your way.');
+      wrapper.unmount();
+    });
+
+    it('is removed when the control unmounts or the reason clears', async () => {
+      const first = mountButton('Blocked.');
+      const id = first.btn.attributes('aria-describedby')!;
+      first.wrapper.unmount();
+      expect(document.getElementById(id)).toBeNull();
+
+      const second = mountButton('Blocked.');
+      const id2 = second.btn.attributes('aria-describedby')!;
+      second.reason.value = false;
+      await nextTick();
+      expect(document.getElementById(id2)).toBeNull();
+      second.wrapper.unmount();
+    });
+
+    it('gives every control its own id', () => {
+      const mounted = Array.from({ length: 20 }, (_, i) => mountButton(`Reason ${i}.`));
+      const ids = mounted.map((m) => m.btn.attributes('aria-describedby'));
+
+      expect(new Set(ids).size).toBe(20);
+      mounted.forEach((m, i) => {
+        expect(document.querySelectorAll(`[id="${ids[i]}"]`)).toHaveLength(1);
+        expect(describedBy(m.btn.element)?.textContent).toBe(`Reason ${i}.`);
+      });
+      mounted.forEach((m) => m.wrapper.unmount());
+    });
+
+    it('updates the open tooltip when the reason changes while it shows', async () => {
+      const { btn, reason, wrapper } = mountButton('You need 3 wood; you have 1.');
+      await btn.trigger('mouseenter');
+
+      reason.value = 'You need 3 wood; you have 2.';
+      await nextTick();
+
+      expect(tooltip.text.value).toBe('You need 3 wood; you have 2.');
       wrapper.unmount();
     });
   });

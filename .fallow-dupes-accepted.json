@@ -9,33 +9,10 @@
       ]
     },
     {
-      "content": "09c9b40c0db05b9c",
-      "lines": 14,
-      "files": [
-        "src/cli/lib/asset-scan.ts",
-        "src/cli/lib/sandbox-scan.ts"
-      ]
-    },
-    {
       "content": "1207ddfa1fa44b57",
       "lines": 8,
       "files": [
         "src/cli/commands/verify-enumerate.ts"
-      ]
-    },
-    {
-      "content": "1784dab72184ccca",
-      "lines": 37,
-      "files": [
-        "src/ui/composables/useFlyingElements.ts",
-        "src/ui/composables/usePlayerStatAnimation.ts"
-      ]
-    },
-    {
-      "content": "1d9b4d4490603442",
-      "lines": 26,
-      "files": [
-        "src/ui/composables/useActionController.ts"
       ]
     },
     {
@@ -44,27 +21,6 @@
       "files": [
         "src/ui/components/auto-ui/renderers/HandRenderer.vue",
         "src/ui/components/auto-ui/renderers/SpaceRenderer.vue"
-      ]
-    },
-    {
-      "content": "234f79452343bbf1",
-      "lines": 12,
-      "files": [
-        "src/ui/composables/useActionController.ts"
-      ]
-    },
-    {
-      "content": "2375f84bcc213aab",
-      "lines": 8,
-      "files": [
-        "src/cli/commands/verify-classify.ts"
-      ]
-    },
-    {
-      "content": "273d391fe0d2d933",
-      "lines": 15,
-      "files": [
-        "src/cli/commands/verify-impact.ts"
       ]
     },
     {
@@ -91,32 +47,10 @@
       ]
     },
     {
-      "content": "3e4d54a26324100d",
-      "lines": 9,
-      "files": [
-        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
-        "src/ui/components/auto-ui/renderers/HandRenderer.vue"
-      ]
-    },
-    {
       "content": "4f375ef9f1a0f0a1",
       "lines": 7,
       "files": [
         "src/engine/element/game.ts"
-      ]
-    },
-    {
-      "content": "548a205f2128e7b9",
-      "lines": 7,
-      "files": [
-        "src/cli/commands/verify-impact.ts"
-      ]
-    },
-    {
-      "content": "587c819dbf096ab7",
-      "lines": 12,
-      "files": [
-        "src/ui/composables/useGameGrid.ts"
       ]
     },
     {
@@ -132,13 +66,6 @@
       "lines": 13,
       "files": [
         "src/ui/components/PlayShell.vue"
-      ]
-    },
-    {
-      "content": "7667c2ebaec2cb3b",
-      "lines": 13,
-      "files": [
-        "src/cli/commands/verify-impact.ts"
       ]
     },
     {
@@ -165,13 +92,6 @@
         "src/ui/components/auto-ui/renderers/CardRenderer.vue",
         "src/ui/components/auto-ui/renderers/DeckRenderer.vue",
         "src/ui/components/auto-ui/renderers/HandRenderer.vue"
-      ]
-    },
-    {
-      "content": "87a3bee4712f1041",
-      "lines": 31,
-      "files": [
-        "src/cli/commands/verify-impact.ts"
       ]
     },
     {
@@ -216,14 +136,6 @@
       ]
     },
     {
-      "content": "a021f38caf4b3cd5",
-      "lines": 7,
-      "files": [
-        "src/cli/commands/verify-classify.ts",
-        "src/cli/commands/verify-run.ts"
-      ]
-    },
-    {
       "content": "a65a466bf25aee08",
       "lines": 33,
       "files": [
@@ -246,6 +158,13 @@
       ]
     },
     {
+      "content": "abe505cb0a457948",
+      "lines": 8,
+      "files": [
+        "src/cli/commands/verify-classify.ts"
+      ]
+    },
+    {
       "content": "acb2e8b5b4423ed8",
       "lines": 26,
       "files": [
@@ -260,14 +179,6 @@
         "src/ui/components/GameHistory.vue",
         "src/ui/components/auto-ui/ActionPanel.vue",
         "src/ui/components/auto-ui/AutoRenderer.vue"
-      ]
-    },
-    {
-      "content": "b1fb6874a2db7793",
-      "lines": 6,
-      "files": [
-        "src/cli/commands/verify-classify.ts",
-        "src/cli/commands/verify-repair.ts"
       ]
     },
     {
@@ -325,26 +236,10 @@
       ]
     },
     {
-      "content": "d046fe4d078dae95",
-      "lines": 28,
-      "files": [
-        "src/eslint-plugin/rules/no-element-array-state.ts",
-        "src/eslint-plugin/rules/no-element-identity-comparison.ts"
-      ]
-    },
-    {
       "content": "db1eb8419dc57e42",
       "lines": 5,
       "files": [
         "src/engine/element/game.ts"
-      ]
-    },
-    {
-      "content": "ec739362a9313d9d",
-      "lines": 52,
-      "files": [
-        "src/eslint-plugin/rules/no-element-array-state.ts",
-        "src/eslint-plugin/rules/no-element-identity-comparison.ts"
       ]
     },
     {
@@ -368,13 +263,6 @@
       "lines": 9,
       "files": [
         "src/ui/composables/useFLIP.ts"
-      ]
-    },
-    {
-      "content": "fd6060434bc642e6",
-      "lines": 7,
-      "files": [
-        "src/cli/commands/verify-classify.ts"
       ]
     },
     {

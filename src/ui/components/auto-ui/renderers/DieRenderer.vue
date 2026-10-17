@@ -21,6 +21,7 @@ let warnedNoDiceSupport = false;
 
 import { computed } from 'vue';
 import { ADD_DICE_SUPPORT_ADVICE, getDiePreviewComponent } from '../../dice/die-preview-registry.js';
+import { dieAriaLabel } from '../../dice/die-label.js';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
 
@@ -101,7 +102,7 @@ const dieProps = computed(() => {
   const attrs = props.element.attributes ?? {};
   return {
     sides: ((attrs.sides as number) ?? 6) as 4 | 6 | 8 | 10 | 12 | 20,
-    value: (attrs.value as number) ?? 1,
+    value: (attrs.value as number) ?? 0,
     color: attrs.color as string | undefined,
     rolling: (attrs.rolling as boolean) ?? false,
     rollCount: (attrs.rollCount as number) ?? 0,
@@ -114,10 +115,8 @@ const displayLabel = computed(() => props.element.name || props.element.classNam
 
 // ARIA label: die name + current face value + state
 const ariaLabel = computed(() => {
-  const name = displayLabel.value;
-  const value = (props.element.attributes?.value as number | undefined) ?? 1;
-  const sides = (props.element.attributes?.sides as number | undefined) ?? 6;
-  const base = `${name}, showing ${value} on a d${sides}`;
+  const { sides, value, faceLabels } = dieProps.value;
+  const base = `${displayLabel.value}, ${dieAriaLabel(sides, value, faceLabels)}`;
   if (isDisabled.value) return `${base}, unavailable`;
   if (isBoardSelected.value) return `${base}, selected`;
   if (isActionSelectable.value) return `${base}, selectable`;

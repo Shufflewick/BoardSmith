@@ -6,7 +6,7 @@ import { sha256Hex } from '../lib/hash.js';
 import { withLedgerLock } from '../lib/ledger-lock.js';
 import { promises as fs } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { parseSliceSource, readRecordedSourcePaths, sliceDocuments } from './rulebook-sources.js';
 
 /**
@@ -311,6 +311,15 @@ export async function listRunIds(projectDir: string): Promise<string[]> {
  */
 export function stagingSlicesDir(projectDir: string, runId: string): string {
   return resolve(runRootDir(projectDir, runId), 'slices');
+}
+
+/**
+ * This run's own ledger path — `rulebook/.verify/<runId>/RULING-VERDICTS.md`. Run-scoped, unlike
+ * CHECK-04's and CHECK-06's project-level ledgers: a ruling's verdict is a judgment against ONE
+ * run's fresh transcription, so it cannot outlive the run that produced it.
+ */
+export function rulingVerdictsLedgerPath(projectDir: string, runId: string): string {
+  return join(runRootDir(projectDir, runId), 'RULING-VERDICTS.md');
 }
 
 /**
@@ -775,6 +784,8 @@ export function resolveLedgerState(lines: ParsedLine[]): {
   recorded: LedgerRecord[];
   completeRanges: Set<string>;
   classifications: ClassificationRecord[];
+  /** Pairs whose classification predates a later record of one of its units (#837). */
+  recordedSinceClassified: Set<string>;
   impacts: ImpactRecord[];
   adjudications: AdjudicationRecord[];
 } {
@@ -809,10 +820,20 @@ export function resolveLedgerState(lines: ParsedLine[]): {
   // Last-write-wins per pairId — a later classification line for the same pair supersedes an
   // earlier one. File order (`index`) is the ledger's own append order, so the later `Map.set`
   // for a repeated `pairId` always wins.
-  const classificationsByPairId = new Map<string, ClassificationRecord>();
+  const classificationsByPairId = new Map<string, ParsedClassificationLine>();
   for (const line of lines) {
     if (line.type !== 'classification') continue;
-    classificationsByPairId.set(line.record.pairId, line.record);
+    classificationsByPairId.set(line.record.pairId, line);
+  }
+
+  // Ledger order, not recordedAt: two records can share a millisecond, file order cannot.
+  const lastUnitIndex = new Map<string, number>();
+  for (const line of lines) {
+    if (line.type === 'unit') lastUnitIndex.set(line.record.unitId, line.index);
+  }
+  const recordedSinceClassified = new Set<string>();
+  for (const { record, index } of classificationsByPairId.values()) {
+    if (record.units.some((u) => (lastUnitIndex.get(u) ?? -1) > index)) recordedSinceClassified.add(record.pairId);
   }
 
   // Last-write-wins per slug — same file-order rationale as classifications above.
@@ -832,10 +853,78 @@ export function resolveLedgerState(lines: ParsedLine[]): {
   return {
     recorded,
     completeRanges,
-    classifications: [...classificationsByPairId.values()],
+    classifications: [...classificationsByPairId.values()].map((l) => l.record),
+    recordedSinceClassified,
     impacts: [...impactsBySlug.values()],
     adjudications: [...adjudicationsByPairId.values()],
   };
+}
+
+/** Reads a run's ledger and resolves its current state — the read every ledger consumer starts with. */
+export async function readRunLedgerState(
+  projectDir: string,
+  runId: string,
+): Promise<ReturnType<typeof resolveLedgerState>> {
+  const ledgerFile = ledgerFilePath(projectDir, runId);
+  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
+  return resolveLedgerState(parseLedgerBody(ledgerText, relative(projectDir, ledgerFile)).lines);
+}
+
+/** The advice for an edited slice: reset its range, unless that range is complete or absent. */
+function sliceMismatchWarning(record: LedgerRecord, completeRanges: Set<string>): string {
+  const mismatch = `unit "${record.unitId}"'s recorded sha256 no longer matches ${record.slicePath} on disk (hand-edit or tamper detected)`;
+  if (record.rangeId && !completeRanges.has(record.rangeId)) {
+    return (
+      `${mismatch} — treating as NOT recorded. Restore the slice's recorded text, or reset its range ` +
+      `with \`verify-run-record --reset-range ${record.rangeId}\` and record it again.`
+    );
+  }
+  // A complete range cannot be reset, so its unit is as final as one recorded without a range.
+  const final = record.rangeId ? `Its range "${record.rangeId}" is complete` : 'It was recorded without a range';
+  return (
+    `${mismatch} — leaving its slice out. ${final}, so it cannot be recorded ` +
+    `again in this run. Restore the slice's recorded text, or, if that text is lost, start a new run ` +
+    `with \`boardsmith verify-run-init\` (no \`--run-id\`).`
+  );
+}
+
+/**
+ * Re-hashes each recorded slice against the file on disk (L8/T-173-12) — the one check every
+ * reader of recorded units shares (#837). A slice whose path escapes the staging dir or whose
+ * sha256 no longer matches is left out with a warning naming the unit. A slice missing from disk
+ * is returned in `missing`, for the caller to report in its own terms.
+ */
+export async function checkRecordedSlices(
+  stagingDir: string,
+  records: LedgerRecord[],
+  completeRanges: Set<string>,
+): Promise<{ intact: { record: LedgerRecord; bytes: Buffer }[]; missing: LedgerRecord[]; warnings: string[] }> {
+  const intact: { record: LedgerRecord; bytes: Buffer }[] = [];
+  const missing: LedgerRecord[] = [];
+  const warnings: string[] = [];
+  for (const record of records) {
+    const sliceAbs = resolve(stagingDir, record.slicePath);
+    const relToStaging = relative(stagingDir, sliceAbs);
+    if (relToStaging === '' || relToStaging.startsWith('..') || isAbsolute(relToStaging)) {
+      warnings.push(
+        `unit "${record.unitId}"'s recorded slice path escapes the staging dir — treating as NOT recorded`,
+      );
+      continue;
+    }
+    let bytes: Buffer;
+    try {
+      bytes = await fs.readFile(sliceAbs);
+    } catch {
+      missing.push(record);
+      continue;
+    }
+    if (sha256Hex(bytes) !== record.sha256) {
+      warnings.push(sliceMismatchWarning(record, completeRanges));
+      continue;
+    }
+    intact.push({ record, bytes });
+  }
+  return { intact, missing, warnings };
 }
 
 // -------------------------------------------------------------------------------------------
@@ -922,12 +1011,12 @@ export async function verifyRunInitCommand(
     return result;
   }
 
-  console.log(chalk.green(created ? '✓ Allocated verify run' : '✓ Resuming existing verify run'));
-  console.log(`  ${chalk.gray('run-id:')} ${runId}`);
-  console.log(`  ${chalk.gray('staging:')} ${result.stagingDir}`);
-  console.log(`  ${chalk.gray('ledger:')} ${result.ledgerPath}`);
+  console.log(styleText('green', created ? '✓ Allocated verify run' : '✓ Resuming existing verify run'));
+  console.log(`  ${styleText('gray', 'run-id:')} ${runId}`);
+  console.log(`  ${styleText('gray', 'staging:')} ${result.stagingDir}`);
+  console.log(`  ${styleText('gray', 'ledger:')} ${result.ledgerPath}`);
   for (const r of ranges) {
-    console.log(`  ${chalk.gray('range:')} ${r.rangeId} — pages ${r.pages} of ${r.source}`);
+    console.log(`  ${styleText('gray', 'range:')} ${r.rangeId} — pages ${r.pages} of ${r.source}`);
   }
   return result;
 }
@@ -953,10 +1042,50 @@ export interface VerifyRunRangeActionResult {
 }
 
 /**
- * Reads the ledger file or throws the actionable "no verify run found" error. Exported (174-02) —
- * `verify-classify.ts` is the second caller of this read helper, sharing the same error message
- * and the same "run must be initialized first" contract.
+ * Why `runId` names no usable run, and what to do about it: the one message every `--run-id`
+ * command gives. Never suggests init with this id: a mistyped id would become a real, latest run (#833).
  */
+export async function missingRunMessage(projectDir: string, runId: string): Promise<string> {
+  const ledgerFile = ledgerFilePath(projectDir, runId);
+  if (await exists(ledgerFile)) {
+    return `${relative(projectDir, ledgerFile)} could not be read. Check that it is a readable file.`;
+  }
+  const runDir = runRootDir(projectDir, runId);
+  if (await exists(runDir)) {
+    const noRun = `${relative(projectDir, runDir)}/ has no RUN.md, so verify-run-init did not make it.\n`;
+    const verdicts = rulingVerdictsLedgerPath(projectDir, runId);
+    if (await exists(verdicts)) {
+      return (
+        noRun +
+        `It holds ${relative(projectDir, verdicts)}: verdicts recorded under the mistyped id "${runId}". ` +
+        `Use \`boardsmith verify-ruling-record --run-id <right run>\` to re-record them against the right run ` +
+        `before removing the folder.`
+      );
+    }
+    return noRun + `Remove that folder; it is not a verify run.`;
+  }
+  const existing: string[] = [];
+  for (const id of await listRunIds(projectDir)) {
+    if (await exists(ledgerFilePath(projectDir, id))) existing.push(id);
+  }
+  return (
+    `No verify run "${runId}" found in ${projectDir}.\n` +
+    (existing.length > 0
+      ? `Runs that do exist: ${existing.join(', ')}.`
+      : `No verify runs exist yet. Run \`boardsmith verify-run-init\` first.`)
+  );
+}
+
+export async function exists(path: string): Promise<boolean> {
+  try {
+    await fs.access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Reads the run's RUN.md, or throws `missingRunMessage` when the run does not exist. */
 export async function readLedgerOrThrow(
   ledgerFile: string,
   runId: string,
@@ -965,10 +1094,7 @@ export async function readLedgerOrThrow(
   try {
     return await fs.readFile(ledgerFile, 'utf-8');
   } catch {
-    throw new Error(
-      `No verify run "${runId}" found in ${projectDir}.\n` +
-        `Run \`boardsmith verify-run-init --run-id ${runId}\` first.`,
-    );
+    throw new Error(await missingRunMessage(projectDir, runId));
   }
 }
 
@@ -1036,7 +1162,7 @@ async function recordRangeMarker(
     if (completeRanges.has(rangeId)) {
       const result: VerifyRunRangeActionResult = { runId, rangeId, action: kind, alreadyRecorded: true };
       if (options.json) console.log(JSON.stringify(result, null, 2));
-      else console.log(chalk.gray(`= range "${rangeId}" was already complete for run ${runId} — no-op`));
+      else console.log(styleText('gray', `= range "${rangeId}" was already complete for run ${runId} — no-op`));
       return result;
     }
   } else {
@@ -1061,9 +1187,9 @@ async function recordRangeMarker(
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
   } else if (kind === 'range-complete') {
-    console.log(chalk.green(`✓ Range "${rangeId}" marked complete`));
+    console.log(styleText('green', `✓ Range "${rangeId}" marked complete`));
   } else {
-    console.log(chalk.yellow(`↺ Range "${rangeId}" reset — its prior units will read as NOT recorded`));
+    console.log(styleText('yellow', `↺ Range "${rangeId}" reset — its prior units will read as NOT recorded`));
   }
   return result;
 }
@@ -1180,7 +1306,7 @@ async function recordInRun(
     if (options.json) {
       console.log(JSON.stringify(result, null, 2));
     } else {
-      console.log(chalk.gray(`= unit "${unit}" was already recorded for run ${runId} — no-op`));
+      console.log(styleText('gray', `= unit "${unit}" was already recorded for run ${runId} — no-op`));
     }
     return result;
   }
@@ -1239,9 +1365,9 @@ async function recordInRun(
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
   } else {
-    console.log(chalk.green(`✓ Recorded unit "${unit}"`));
-    console.log(`  ${chalk.gray('slice:')} ${relToStaging}`);
-    console.log(`  ${chalk.gray('sha256:')} ${hash}`);
+    console.log(styleText('green', `✓ Recorded unit "${unit}"`));
+    console.log(`  ${styleText('gray', 'slice:')} ${relToStaging}`);
+    console.log(`  ${styleText('gray', 'sha256:')} ${hash}`);
   }
   return result;
 }
@@ -1308,36 +1434,13 @@ export async function verifyRunStatusCommand(
   const { lines, malformedLines } = parseLedgerBody(ledgerText, relLedgerPath);
   const { recorded: activeRecords, completeRanges } = resolveLedgerState(lines);
 
-  const recorded: string[] = [];
-  const warnings: string[] = [];
-
-  for (const rec of activeRecords) {
-    const sliceAbs = resolve(stagingDir, rec.slicePath);
-    const relToStaging = relative(stagingDir, sliceAbs);
-    if (relToStaging === '' || relToStaging.startsWith('..') || isAbsolute(relToStaging)) {
-      warnings.push(
-        `unit "${rec.unitId}"'s recorded slice path escapes the staging dir — treating as NOT recorded`,
-      );
-      continue;
-    }
-    let bytes: Buffer;
-    try {
-      bytes = await fs.readFile(sliceAbs);
-    } catch {
-      warnings.push(
-        `unit "${rec.unitId}"'s recorded slice ${rec.slicePath} was not found on disk — treating as NOT recorded`,
-      );
-      continue;
-    }
-    if (sha256Hex(bytes) !== rec.sha256) {
-      warnings.push(
-        `unit "${rec.unitId}"'s recorded sha256 no longer matches ${rec.slicePath} on disk — ` +
-          `treating as NOT recorded (hand-edit or tamper detected)`,
-      );
-      continue;
-    }
-    recorded.push(rec.unitId);
+  const { intact, missing, warnings } = await checkRecordedSlices(stagingDir, activeRecords, completeRanges);
+  for (const rec of missing) {
+    warnings.push(
+      `unit "${rec.unitId}"'s recorded slice ${rec.slicePath} was not found on disk — treating as NOT recorded`,
+    );
   }
+  const recorded = intact.map(({ record }) => record.unitId);
 
   if (malformedLines.length > 0) {
     warnings.push(
@@ -1360,7 +1463,7 @@ export async function verifyRunStatusCommand(
   };
 
   for (const w of warnings) {
-    console.error(chalk.yellow(`⚠ ${w}`));
+    console.error(styleText('yellow', `⚠ ${w}`));
   }
 
   if (options.json) {
@@ -1368,14 +1471,14 @@ export async function verifyRunStatusCommand(
     return result;
   }
 
-  console.log(chalk.green(`✓ Verify run ${runId} — ${result.count} unit(s) recorded`));
-  console.log(`  ${chalk.gray('staging:')} ${result.stagingDir}`);
+  console.log(styleText('green', `✓ Verify run ${runId} — ${result.count} unit(s) recorded`));
+  console.log(`  ${styleText('gray', 'staging:')} ${result.stagingDir}`);
   for (const unitId of result.recorded) {
-    console.log(`  ${chalk.gray('-')} ${unitId}`);
+    console.log(`  ${styleText('gray', '-')} ${unitId}`);
   }
   if (manifestRanges.length > 0) {
-    console.log(`  ${chalk.gray('ranges recorded:')} ${rangesRecorded.join(', ') || '(none)'}`);
-    console.log(`  ${chalk.gray('ranges pending:')} ${rangesPending.join(', ') || '(none)'}`);
+    console.log(`  ${styleText('gray', 'ranges recorded:')} ${rangesRecorded.join(', ') || '(none)'}`);
+    console.log(`  ${styleText('gray', 'ranges pending:')} ${rangesPending.join(', ') || '(none)'}`);
   }
   return result;
 }

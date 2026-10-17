@@ -18,7 +18,9 @@
  * (see `src/ui/components/dice/die-preview-registry.fresh.test.ts`).
  *
  * The comment covers that statement and the later statements of the same
- * block, so a test that loads two modules after one reset needs it once. This
+ * block, so a test that loads two modules after one reset needs it once. An
+ * import in a function with no braces (`it('x', () => import('./a.js'))`) is
+ * covered only by a comment directly above the statement holding it (#921). This
  * scan reads the syntax tree, so an `import(` inside a string (an ESLint rule's
  * test case) is not a finding, and a `typeof import(...)` type is not a load.
  */
@@ -35,10 +37,19 @@ function hasReason(sourceFile, statement) {
   );
 }
 
-/** The statement holding `node`, and the statements before it in the same block. */
+/**
+ * The statement holding `node`, and the statements before it in the same block.
+ * Climbing out of a function with no block body (a braceless arrow) gives only
+ * the statement holding that function, so an earlier reason outside it cannot cover it (#921).
+ */
 function statementAndPredecessors(node) {
   let statement = node;
-  while (statement.parent && !('statements' in statement.parent)) statement = statement.parent;
+  let leftFunction = false;
+  while (statement.parent && !('statements' in statement.parent)) {
+    leftFunction ||= ts.isFunctionLike(statement.parent);
+    statement = statement.parent;
+  }
+  if (leftFunction) return [statement];
   const siblings = statement.parent.statements;
   return siblings.slice(0, siblings.indexOf(statement) + 1);
 }
@@ -114,6 +125,24 @@ describe('unexplainedDynamicImports', () => {
       '});',
     ].join('\n');
     expect(unexplainedDynamicImports('a.test.ts', source)).toEqual([{ line: 6, text: "await import('./b.js');" }]);
+  });
+
+  it('does not let an earlier top-level reason cover an import in a braceless arrow (#921)', () => {
+    const source = [
+      '// Dynamic import: after the stub above, so it loads the stub.',
+      "const early = await import('./early.js');",
+      "it('one', () => import('./heavy.js'));",
+    ].join('\n');
+    expect(unexplainedDynamicImports('a.test.ts', source)).toEqual([
+      { line: 3, text: "it('one', () => import('./heavy.js'));" },
+    ]);
+  });
+
+  it('accepts a reason directly above the statement holding a braceless arrow import (#921)', () => {
+    const source = ['// Dynamic import: the import is what is under test.', "it('one', () => import('./heavy.js'));"].join(
+      '\n',
+    );
+    expect(unexplainedDynamicImports('a.test.ts', source)).toEqual([]);
   });
 
   it('does not count a comment that gives no reason', () => {

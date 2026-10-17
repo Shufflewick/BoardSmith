@@ -4,9 +4,7 @@
  * Verifies that:
  * (1) `isElementVisible` correctly classifies owner-visible, owner-hidden,
  *     count-only, all-visible, and spectator (seat 0) elements.
- * (2) Fast-path parity: with no `static playerView`, `isElementVisible` result
- *     equals `element.isVisibleTo(seat)` exactly.
- * (3) Post-transform correctness: with a `static playerView` that strips an
+ * (2) Post-transform correctness: with a `static playerView` that strips an
  *     element from the final tree, `isElementVisible` reflects the strip
  *     (false) even though `element.isVisibleTo(seat)` is true.
  *
@@ -88,7 +86,7 @@ function makeNoPlayerViewGame(): TestGame<NoPlayerViewGame> {
   return TestGame.create(NoPlayerViewGame, { playerCount: 2, seed: 'vis-01-no-playerview' });
 }
 
-describe('isElementVisible — no static playerView (fast path)', () => {
+describe('isElementVisible — no static playerView', () => {
   it('owner sees their own hand card (owner-only zone)', () => {
     const tg = makeNoPlayerViewGame();
     const card = tg.game.first(FixtureCard, { name: 'hand-card-1' })!;
@@ -126,18 +124,6 @@ describe('isElementVisible — no static playerView (fast path)', () => {
     const tg = makeNoPlayerViewGame();
     const card = tg.game.first(FixtureCard, { name: 'vault-card-1' })!;
     expect(isElementVisible(card, 0)).toBe(false);
-  });
-
-  it('fast-path parity: isElementVisible(el, seat) === el.isVisibleTo(seat) for every element/seat pair', () => {
-    const tg = makeNoPlayerViewGame();
-    const allCards = tg.game.all(FixtureCard);
-    const seats = [0, 1, 2];
-
-    for (const card of allCards) {
-      for (const seat of seats) {
-        expect(isElementVisible(card, seat)).toBe(card.isVisibleTo(seat));
-      }
-    }
   });
 });
 

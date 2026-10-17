@@ -98,6 +98,7 @@ import { tryUseBoardInteraction } from './useBoardInteraction.js';
 import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
 import { isDevThrowEnabled } from '../../utils/dev.js';
 import { isHiddenPlaceholder } from '../../engine/element/hidden-placeholder.js';
+import type { SpriteData } from '../utils/image.js';
 
 /**
  * Game element type for auto-watch mode
@@ -124,9 +125,9 @@ export interface FlyingCardData {
   /** Custom back color/gradient (e.g., 'var(--bsg-surface-2)' or 'linear-gradient(...)') */
   backColor?: string;
   /** Face image - URL string or sprite object */
-  faceImage?: string | { sprite: string; x: number; y: number; width?: number; height?: number };
+  faceImage?: string | SpriteData;
   /** Back image - URL string or sprite object */
-  backImage?: string | { sprite: string; x: number; y: number; width?: number; height?: number };
+  backImage?: string | SpriteData;
   /** Player seat who owns this element (for piece rendering) */
   playerSeat?: number;
   /** Any additional data for custom rendering */
@@ -797,6 +798,9 @@ export function useFlyingElements(
     await Promise.all(promises);
   }
 
+  // A counter, not a timestamp: two flights in one millisecond would share an id and remove each other's ghost.
+  let appearFlightCount = 0;
+
   /**
    * Declarative "fly when element appears" helper.
    * Sets up a watcher and triggers animation when element becomes truthy.
@@ -841,7 +845,7 @@ export function useFlyingElements(
         onStart?.();
 
         await fly({
-          id: `fly-appear-${Date.now()}`,
+          id: `fly-appear-${++appearFlightCount}`,
           startRect: sourceRect,
           endRect: () => targetRef.value?.getBoundingClientRect() ?? targetRect,
           elementData,
@@ -906,31 +910,23 @@ export function useFlyingElements(
     const containerCounts = new Map<string, number>();
 
     /**
-     * Find which container an element belongs to in the game view tree
+     * Map every element id under a container to that container's name, in one
+     * walk per container. The first container listed wins for nested ones.
      */
-    function findElementContainer(
-      element: AutoWatchGameElement,
+    function mapElementContainers(
       containerElements: Map<string, AutoWatchGameElement | null>
-    ): string | null {
-      for (const [name, containerEl] of containerElements) {
-        if (containerEl && isDescendantOf(element, containerEl)) {
-          return name;
+    ): Map<number, string> {
+      const result = new Map<number, string>();
+      function visit(element: AutoWatchGameElement, name: string): void {
+        for (const child of element.children ?? []) {
+          if (!result.has(child.id)) result.set(child.id, name);
+          visit(child, name);
         }
       }
-      return null;
-    }
-
-    /**
-     * Check if an element is a descendant of a container element
-     */
-    function isDescendantOf(element: AutoWatchGameElement, container: AutoWatchGameElement): boolean {
-      if (!container.children) return false;
-
-      for (const child of container.children) {
-        if (child.id === element.id) return true;
-        if (isDescendantOf(element, child)) return true;
+      for (const [name, containerEl] of containerElements) {
+        if (containerEl) visit(containerEl, name);
       }
-      return false;
+      return result;
     }
 
     /**
@@ -938,21 +934,18 @@ export function useFlyingElements(
      */
     function collectElements(
       root: AutoWatchGameElement,
-      containerElements: Map<string, AutoWatchGameElement | null>,
+      elementContainers: Map<number, string>,
       result: Map<number, { element: AutoWatchGameElement; container: string | null; isHidden: boolean }>
     ): void {
-      const isHidden = isHiddenPlaceholder(root);
-      const container = findElementContainer(root, containerElements);
+      const container = elementContainers.get(root.id) ?? null;
 
       // Only track elements that are in tracked containers or have been tracked before
       if (container || elementLocations.has(root.id)) {
-        result.set(root.id, { element: root, container, isHidden });
+        result.set(root.id, { element: root, container, isHidden: isHiddenPlaceholder(root) });
       }
 
-      if (root.children) {
-        for (const child of root.children) {
-          collectElements(child, containerElements, result);
-        }
+      for (const child of root.children ?? []) {
+        collectElements(child, elementContainers, result);
       }
     }
 
@@ -1008,7 +1001,7 @@ export function useFlyingElements(
 
         // Collect current element states
         const currentElements = new Map<number, { element: AutoWatchGameElement; container: string | null; isHidden: boolean }>();
-        collectElements(newView, containerElements, currentElements);
+        collectElements(newView, mapElementContainers(containerElements), currentElements);
 
 
         // Collect current container counts
@@ -1079,8 +1072,12 @@ export function useFlyingElements(
           // into the next update.
           if (newContainer) {
             elementLocations.set(id, newContainer);
+            elementDataCache.set(id, { element, wasHidden: isHidden });
+          } else {
+            // In an untracked container: forget the old one so a later move does not fly from it (#867).
+            elementLocations.delete(id);
+            elementDataCache.delete(id);
           }
-          elementDataCache.set(id, { element, wasHidden: isHidden });
         }
 
         // Check for elements that disappeared (visible → hidden or removed)

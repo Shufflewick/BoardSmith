@@ -625,6 +625,7 @@ describe('dev host bridge', () => {
       ['debug:reorder-card', { cardId: 1, targetIndex: 0 }],
       ['debug:transfer-card', { cardId: 1, targetDeckId: 1 }],
       ['debug:shuffle-deck', { deckId: 1 }],
+      ['debug:deck-view', {}],
       ['debug:logs', {}],
     ] as const) {
       it(`refuses ${wireOp} when the session was created without debugging`, async () => {
@@ -647,6 +648,15 @@ describe('dev host bridge', () => {
       await session.start();
       await session.handleServerRequest(1, 'h', 'debug:history', {});
       expect(responses[responses.length - 1].result.success).toBe(true);
+    });
+
+    it('answers debug:deck-view with the unfiltered table and nothing else (#898)', async () => {
+      const { session, responses } = sessionWithDebug(true);
+      await session.start();
+      await session.handleServerRequest(1, 'v', 'debug:deck-view', {});
+      const { result } = responses[responses.length - 1];
+      expect(Object.keys(result).sort()).toEqual(['success', 'view']);
+      expect(result.view).toMatchObject({ className: expect.any(String), children: expect.any(Array) });
     });
   });
 
