@@ -951,7 +951,6 @@ export interface RepairGate {
   /** Present only for `reopen-playtest` / `close-without-replaytest`. */
   nextStatus?: string;
   clearMarker: boolean;
-  reverifyStamp: boolean;
   reason: string;
 }
 
@@ -980,8 +979,8 @@ export interface RepairGate {
  *      waive again, explicitly, as a fresh decision.
  *   5. `driftState === 'clean'` — the code did not move: `nextStatus` preserves `status`
  *      VERBATIM (including `verified (user-waived)` — decision 13's waiver is not upgraded to a
- *      bare `verified` just because a later pass re-confirmed no code changed), marker cleared,
- *      and a re-verification stamp with no code change is recorded (decision 11).
+ *      bare `verified` just because a later pass re-confirmed no code changed), and the
+ *      marker is cleared.
  */
 export function computeRepairGate(input: {
   status: string;
@@ -994,7 +993,6 @@ export function computeRepairGate(input: {
     return {
       disposition: 'unknown-drift',
       clearMarker: false,
-      reverifyStamp: false,
       reason:
         'drift-check could not determine whether this chunk\'s code moved (state: unknown) — ' +
         'the playtest-gate decision is deferred until code movement can be resolved. Never ' +
@@ -1006,7 +1004,6 @@ export function computeRepairGate(input: {
     return {
       disposition: 'not-applicable',
       clearMarker: false,
-      reverifyStamp: false,
       reason: 'This chunk was not flagged rules-stale — there is nothing to repair-gate.',
     };
   }
@@ -1015,7 +1012,6 @@ export function computeRepairGate(input: {
     return {
       disposition: 'not-applicable',
       clearMarker: false,
-      reverifyStamp: false,
       reason: `Status "${status}" has no playtest gate to re-open or close — this chunk was never verified.`,
     };
   }
@@ -1025,7 +1021,6 @@ export function computeRepairGate(input: {
       disposition: 'reopen-playtest',
       nextStatus: 'built',
       clearMarker: true,
-      reverifyStamp: false,
       reason:
         `This chunk's code changed since it was last verified (drift-check: drifted) — the ` +
         `playtest gate re-opens; status moves to "built" (the code exists and passes automated ` +
@@ -1039,11 +1034,9 @@ export function computeRepairGate(input: {
     disposition: 'close-without-replaytest',
     nextStatus: status,
     clearMarker: true,
-    reverifyStamp: true,
     reason:
       `This chunk's code did not change (drift-check: clean) — closes without re-playtesting; ` +
-      `status "${status}" is preserved verbatim (a waiver, if any, is not upgraded) and a ` +
-      `re-verification with no code change is stamped into "## Verified Against".`,
+      `status "${status}" is preserved verbatim (a waiver, if any, is not upgraded).`,
   };
 }
 
@@ -1236,6 +1229,39 @@ export interface VerifyImpactApplyResult {
   warnings: string[];
 }
 
+/** The blocked result `verify-impact-apply` returns, writing nothing, with the command to run per pair. */
+function refuseApply(
+  runId: string,
+  pendingPairs: string[],
+  warnings: string[],
+  json: boolean | undefined,
+  reason: string,
+  flag: string,
+  command: string,
+): VerifyImpactApplyResult {
+  const result: VerifyImpactApplyResult = {
+    runId,
+    blocked: true,
+    pendingPairs,
+    marked: [],
+    skippedTailEntries: [],
+    warnings,
+  };
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+  console.log(
+    chalk.yellow(
+      `⚠ ${pendingPairs.length} ${reason}.\n` +
+        pendingPairs
+          .map((p) => `    boardsmith ${command} --run-id ${runId} --pair-id ${p} ${flag} ...`)
+          .join('\n'),
+    ),
+  );
+  return result;
+}
+
 /**
  * `boardsmith verify-impact-apply` — VERIFY-05's write orchestration: the staleness write,
  * refusing structurally while any contradiction is un-adjudicated.
@@ -1245,6 +1271,8 @@ export interface VerifyImpactApplyResult {
  * gate to the write it guards).
  *
  * Sequence (`build/ask.md`'s Gate-Before-Write applied to a CLI):
+ *   0. Any pair still in `pendingPairs` blocks the ENTIRE write (#830): a pair classified later
+ *      could come back cosmetic, and nothing clears a marker from a chunk that is no longer stale.
  *   1. Resolve the run, compute `collectContradictions`. Any `adjudication === 'pending'` blocks
  *      the ENTIRE write — nothing is touched, and the result names every pending pair plus the
  *      exact next command (decision 6 — the gate fires BEFORE any staleness write).
@@ -1274,34 +1302,30 @@ export async function verifyImpactApplyCommand(
   );
   const pendingContradictions = contradictions.filter((c) => c.adjudication === 'pending');
 
-  if (pendingContradictions.length > 0) {
-    const pendingPairs = pendingContradictions.map((c) => c.pairId);
-    const result: VerifyImpactApplyResult = {
+  if (classifyStatus.pendingPairs.length > 0) {
+    return refuseApply(
       runId,
-      blocked: true,
-      pendingPairs,
-      marked: [],
-      skippedTailEntries: [],
-      warnings: classifyStatus.warnings,
-    };
-    if (options.json) {
-      console.log(JSON.stringify(result, null, 2));
-      return result;
-    }
-    console.log(
-      chalk.yellow(
-        `⚠ ${pendingPairs.length} contradictory finding(s) still pending adjudication — writes ` +
-          `nothing until every one is resolved.\n` +
-          pendingPairs
-            .map(
-              (p) =>
-                `    boardsmith verify-impact-adjudicate --run-id ${runId} --pair-id ${p} ` +
-                `--outcome resolved|UNADJUDICATED ...`,
-            )
-            .join('\n'),
-      ),
+      classifyStatus.pendingPairs,
+      classifyStatus.warnings,
+      options.json,
+      'pair(s) not yet classified — writes nothing until every pair has a verdict. Classify ' +
+        'each, then run verify-impact-apply again',
+      '--label cosmetic|sharper|contradictory',
+      'verify-classify-record',
     );
-    return result;
+  }
+
+  if (pendingContradictions.length > 0) {
+    return refuseApply(
+      runId,
+      pendingContradictions.map((c) => c.pairId),
+      classifyStatus.warnings,
+      options.json,
+      'contradictory finding(s) still pending adjudication — writes nothing until every one is ' +
+        'resolved',
+      '--outcome resolved|UNADJUDICATED',
+      'verify-impact-adjudicate',
+    );
   }
 
   const { driftBySlug, statusBySlug } = await readChunkState(projectDir);
