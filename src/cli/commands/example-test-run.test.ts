@@ -35,6 +35,8 @@ async function mkProject(dir: string): Promise<string> {
   return project;
 }
 
+const EXTRACTION_HASH = 'a'.repeat(64);
+
 /** A not-run record, as verify-example-record writes one, whose stored test is `testCode`. */
 function notRunRecord(lineNumber: number, testCode: string, provenance = 'quote-verified') {
   return createExampleReplayRecord({
@@ -48,6 +50,7 @@ function notRunRecord(lineNumber: number, testCode: string, provenance = 'quote-
     expected: 'The Guard ends EXHAUSTED.',
     supportingQuoteLines: ['"If you are punched while READY, you become EXHAUSTED."'],
     provenance,
+    extractionHash: EXTRACTION_HASH,
     translation: {
       pageCitation: 'p.2, Punch Examples',
       sourceText: 'If you are punched while READY, you become EXHAUSTED.',
@@ -105,6 +108,7 @@ describe('verifyExampleRunCommand', () => {
     expect(disagrees.provenance).toBe('quote-unverified');
     expect(disagrees.translation?.testCode).toBe(FAILING);
     expect(disagrees.testFilePath).toBe('tests/examples/punch.examples.test.ts');
+    expect(disagrees.extractionHash).toBe(EXTRACTION_HASH);
     expect(byLine.get(2)!.provenance).toBe('quote-verified');
 
     // The file emit writes from the ledger is unchanged by the run, so a re-run needs no re-emit.
