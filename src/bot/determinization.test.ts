@@ -505,6 +505,7 @@ class TrickGame extends Game<TrickGame, Player> {
       }
     }
     this.create(Space<TrickGame>, 'table').create(HandCard, 'face-down', { rank: 99 }).showOnlyTo(2);
+    this.create(Space<TrickGame>, 'pond').contentsHidden();
     this.setFlow({ root: actionStep({ actions: [], player: (ctx) => ctx.game.getPlayer(1)! }) });
   }
 
@@ -514,6 +515,10 @@ class TrickGame extends Game<TrickGame, Player> {
 
   get table(): Space<TrickGame> {
     return this.first(Space<TrickGame>, 'table')!;
+  }
+
+  get pond(): Space<TrickGame> {
+    return this.first(Space<TrickGame>, 'pond')!;
   }
 }
 
@@ -604,5 +609,46 @@ describe('#871 determinization: which container an element sits in is known', ()
     }, () => 0.5)).toThrow(
       new RegExp(`moved HandCard#${faceDown.id} from Space#${sandbox.table.id} "table" to Space#${sandbox.hand(2).id} "hand-2"`),
     );
+  });
+});
+
+// #1032: an element the sampler creates was never in the before-record, so its
+// container is checked instead. A container whose contents the seat can see
+// cannot gain a card; a hidden one (Go Fish's pond) can.
+describe('#1032 determinization: a new element may appear only where the seat cannot see', () => {
+  it('refuses a sampler that adds a card to the seat\'s own hand, naming the hand', () => {
+    const sandbox = trickSandboxForSeat1();
+
+    expect(() => applyDeterminization(sandbox, 1, () => {
+      sandbox.hand(1).create(HandCard, 'extra', { rank: 5 });
+    }, () => 0.5)).toThrow(
+      new RegExp(`added HandCard#\\d+ "extra" to Space#${sandbox.hand(1).id} "hand-1"`),
+    );
+  });
+
+  it('refuses a sampler that adds a face-down card to the open table', () => {
+    const sandbox = trickSandboxForSeat1();
+
+    expect(() => applyDeterminization(sandbox, 1, () => {
+      sandbox.table.create(HandCard, 'extra', { rank: 5 }).showOnlyTo(2);
+    }, () => 0.5)).toThrow(new RegExp(`added HandCard#\\d+ "extra" to Space#${sandbox.table.id} "table"`));
+  });
+
+  it('refuses a sampler that adds a face-up card to a hidden pond', () => {
+    const sandbox = trickSandboxForSeat1();
+
+    expect(() => applyDeterminization(sandbox, 1, () => {
+      sandbox.pond.create(HandCard, 'extra', { rank: 5 }).showToAll();
+    }, () => 0.5)).toThrow(new RegExp(`added HandCard#\\d+ "extra" to Space#${sandbox.pond.id} "pond"`));
+  });
+
+  it('accepts a sampler that rebuilds a hidden pond', () => {
+    const sandbox = trickSandboxForSeat1();
+
+    applyDeterminization(sandbox, 1, () => {
+      sandbox.pond.create(HandCard, 'supposed', { rank: 5 });
+    }, () => 0.5);
+
+    expect(sandbox.pond.count(HandCard)).toBe(1);
   });
 });
