@@ -19,12 +19,8 @@
       "run": "node bin/boardsmith.js audit --dupes-baseline --health-baseline --duplication"
     },
     {
-      "name": "browser",
-      "run": "node bin/boardsmith.js test --browser"
-    },
-    {
       "name": "catalogue",
-      "run": "node bin/boardsmith.js catalogue --skip 'WindupWarfare=validate does not finish (Shufflewick/WindupWarfare#100)' --skip 'hex=$coordSystem narrowed to axial by #866 (Shufflewick/hex#2)' --skip 'one-two-punch=it calls player.setCurrent(), which #780 removes (Shufflewick/one-two-punch#2)' --skip 'seven=its bot-search test calls createSnapshot without the reseed #776 requires (Shufflewick/seven#2)' --skip 'sotf=its harness follows #789 on a branch that waits on its quest-forgery question (Shufflewick/sotf#75)'"
+      "run": "node bin/boardsmith.js catalogue --skip 'WindupWarfare=validate does not finish (Shufflewick/WindupWarfare#100)' --skip 'one-two-punch=it calls player.setCurrent(), which #780 removes (Shufflewick/one-two-punch#2)' --skip 'seven=its bot-search test calls createSnapshot without the reseed #776 requires (Shufflewick/seven#2)' --skip 'sotf=its harness follows #789 on a branch that waits on its quest-forgery question (Shufflewick/sotf#75)' --skip 'cribbage=sprite data needs sheetWidth/sheetHeight after #864 (Shufflewick/cribbage#5)' --skip 'checkers=useSelectableGrid takes row and column after #891, and simulateTutorial runs setup first after #914 (Shufflewick/checkers#4, Shufflewick/checkers#5)' --skip 'doom-machine=its boardsmith.json still has the scoreboard key #930 removes (Shufflewick/doom-machine#6)' --skip 'go-fish=its tutorial tests pass a scenario object, which #914 makes a function called after setup (Shufflewick/go-fish#6)' --skip 'hex=$coordSystem is axial only after #866, and useSelectableGrid takes row and column after #891 (Shufflewick/hex#2, Shufflewick/hex#3)'"
     }
   ],
   "slice": {
@@ -60,6 +56,14 @@
       ".treeshake-test-fixtures/",
       "*.timestamp-*.mjs",
       "*.log"
+    ],
+    "extraMergeSteps": [
+      {
+        "name": "browser",
+        "run": "node bin/boardsmith.js test --browser",
+        "after": "audit",
+        "whenChanged": "^(src/ui/|src/cli/dev-host/|src/world/|scripts/[^/]*-browser\\.mjs$)"
+      }
     ]
   },
   "approval": {

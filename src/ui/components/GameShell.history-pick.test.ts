@@ -18,6 +18,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { defineComponent, h, nextTick, type Ref } from 'vue';
 import { flushPromises } from '@vue/test-utils';
 import { useBoardInteraction } from '../composables/useBoardInteraction.js';
+import { useToast } from '../composables/useToast.js';
 import ActionPanel from './auto-ui/ActionPanel.vue';
 import {
   DEBUG_TABLE_PLAYERS,
@@ -319,4 +320,18 @@ describe('GameShell defers a follow-up from an action reply that arrives while v
       wrapper.unmount();
     });
   }
+});
+
+describe('GameShell shows a cancel the host refuses (#859)', () => {
+  it('says why the server-held action could not be cancelled', async () => {
+    const { wrapper, posted } = await mountWithHeldFollowUp();
+    await wrapper.findComponent(ActionPanel).find('.cancel-btn').trigger('click');
+    const cancel = posted.find((message) => (message as { op?: string }).op === 'cancel_action') as { requestId: string };
+    fromHost({ type: 'server_response', requestId: cancel.requestId, result: { success: false, error: 'Nothing to cancel.' } });
+    await flushPromises();
+    const toast = useToast();
+    expect(toast.toasts.value.map((t) => [t.type, t.message])).toEqual([['error', 'Nothing to cancel.']]);
+    for (const t of [...toast.toasts.value]) toast.remove(t.id);
+    wrapper.unmount();
+  });
 });

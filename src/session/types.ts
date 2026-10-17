@@ -554,18 +554,6 @@ export interface SerializedFlowDebugInfo {
 export type { LobbyState, SlotStatus, LobbySlot, LobbyInfo };
 
 // ============================================
-// Session Types
-// ============================================
-
-// ============================================
-// Bot Types
-// ============================================
-
-// ============================================
-// Adapter Interfaces
-// ============================================
-
-// ============================================
 // Request/Response Types
 // ============================================
 
@@ -576,8 +564,3 @@ export type { WebSocketMessage };
 // The lobby request and response shapes are owned by ../types/protocol.js
 // (#375); the session serves them, so it hands out the protocol's own.
 export type { PlayerConfig, CreateGameRequest, ClaimSeatRequest, ClaimSeatResponse, JoinLobbyRequest, JoinLobbyResponse };
-
-// ============================================
-// Lobby Request/Response Types
-// ============================================
-
