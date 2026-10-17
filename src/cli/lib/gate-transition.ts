@@ -69,7 +69,7 @@ function entries(text: string, heading: string): Array<{ slug: string; body: str
 }
 
 function parseCode(body: string): Record<string, string> {
-  return Object.fromEntries([...body.matchAll(/^- Code:[ \t]*(\S+)[ \t]+(\S+)[ \t]*$/gm)].map((m) => [m[1], m[2]]));
+  return Object.fromEntries([...body.matchAll(/^- Code:[ \t]*(.+?)[ \t]+(\S+)[ \t]*$/gm)].map((m) => [m[1], m[2]]));
 }
 
 function renderCode(code: Record<string, string>): string {

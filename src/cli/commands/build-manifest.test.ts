@@ -140,7 +140,7 @@ describe('parseBuildManifest', () => {
     expect(parseBuildManifest(chunk).entries.map((e) => e.path)).toEqual(['my file.ts', '@scope/x.ts', '~x.ts']);
   });
 
-  it('leaves prose about a path as it was: annotations are not checked, and a backticked `.name` is not a path', () => {
+  it('does not refuse prose about a path: notes are not checked, and a backticked `.name` is not a path', () => {
     // Real cell shapes from the reference games' manifests.
     const chunk = tableChunk(
       [
@@ -148,23 +148,46 @@ describe('parseBuildManifest', () => {
         '| `src/rules/hunt.ts` — `.narration` on each result | written |',
       ].join('\n'),
     );
-    expect(parseBuildManifest(chunk).entries.map((e) => e.path)).toEqual([
-      'src/rules/elements.ts',
-      'Sector.gossip',
-      'Almanac.gossipVenues',
-      'src/rules/hunt.ts',
-    ]);
+    expect(() => parseBuildManifest(chunk)).not.toThrow();
   });
 
+  it('neither checks nor reads a note, backticks in it included (#1116)', () => {
+    const chunk = tableChunk(
+      [
+        '| `src/a.ts` (adds `Foo.bar` and a helper in utils.ts), `src/b.ts` | written |',
+        '| `src/c.ts` (see `b.ts`, then my notes.ts) — and `d.ts:12` | written |',
+      ].join('\n'),
+    );
+    expect(parseBuildManifest(chunk).entries.map((e) => e.path)).toEqual(['src/a.ts', 'src/b.ts', 'src/c.ts']);
+  });
+
+  it('trims a backticked path', () => {
+    const chunk = tableChunk('| ` my file.ts ` | written |');
+    expect(parseBuildManifest(chunk).entries.map((e) => e.path)).toEqual(['my file.ts']);
+  });
+
+  it.each(['b.ts:12', 'src/ui/**', 'docs/FR-013-...'])(
+    'refuses the backticked non-path `%s` without telling the author to add backticks (#1116)',
+    (span) => {
+      const chunk = tableChunk(`| \`${span}\` | written |`);
+      expect(() => parseBuildManifest(chunk)).toThrow(
+        span.includes('*')
+          ? `Build Manifest row 1: the File cell "\`${span}\`" has "${span}", a pattern. Patterns are not expanded: list each file in its own backticks.`
+          : `Build Manifest row 1: the File cell "\`${span}\`" has "${span}", which is not a file path (a path ends in a name and an extension, like \`src/rules/game.ts\`). Put notes about a file in brackets or after a dash.`,
+      );
+    },
+  );
+
   it.each([
-    ['my file.ts', 'my file.ts'],
-    ['src/a.ts (edit), b.ts:12', 'b.ts:12'],
-    ['@scope/x.ts', '@scope/x.ts'],
-    ['src/a.ts, ~x.ts (edit)', '~x.ts'],
-  ])('refuses the unbackticked cell "%s" rather than read part of a path (#1116)', (cell, fragment) => {
+    ['`tests/auctions-*.test.ts`', 'tests/auctions-*.test.ts'],
+    ['`src/[ab].ts`', 'src/[ab].ts'],
+    ['`src/a?.ts`', 'src/a?.ts'],
+    ['tests/auctions-*.test.ts', 'tests/auctions-*.test.ts'],
+    ['src/ui/{a.ts, b.vue}', 'src/ui/{a.ts'],
+  ])('refuses the pattern in "%s": patterns are not expanded (#1116)', (cell, fragment) => {
     const chunk = tableChunk(`| ${cell} | written |`);
     expect(() => parseBuildManifest(chunk)).toThrow(
-      `Build Manifest row 1: the File cell "${cell}" has "${fragment}", which cannot be read as a path. Wrap the path in backticks: \`${fragment}\`.`,
+      `Build Manifest row 1: the File cell "${cell}" has "${fragment}", a pattern. Patterns are not expanded: list each file in its own backticks.`,
     );
   });
 

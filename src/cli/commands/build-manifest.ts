@@ -117,49 +117,66 @@ const PATH_TOKEN = /[\p{L}\p{M}\p{N}_./-]+\.[\p{L}\p{M}\p{N}]+/gu;
 /** A backticked span ending in `name.ext` is a path, read exactly as written (#1116). */
 const ENDS_IN_EXTENSION = /[^/.]\.[\p{L}\p{M}\p{N}]+$/u;
 
-/** Where the prose about a path begins: an opening bracket, a dash, `+` or `;`. */
-const ANNOTATION_START = /[(—–+;]| - /;
+/** Characters that make a path a pattern, which nothing expands. */
+const PATTERN = /[*?[\]{}]/;
+
+/** Where a note about a path begins: an opening bracket, a dash, `+` or `;`. */
+const NOTE_START = /[(—–+;]| - /;
+
+/** Stands in for the backticked span numbered `n` while the cell's notes are cut away. */
+const SPAN_MARK = /\0(\d+)\0/g;
 
 /** A word with its surrounding punctuation and emphasis removed. */
 function bareWord(word: string): string {
   return word.replace(/^[([{"'*_]+/, '').replace(/[)\]}"'*_,;:.!?]+$/, '');
 }
 
-/**
- * The first fragment of unbackticked cell text that PATH_TOKEN would read only part of: a word
- * holding a path beside characters the rule drops (`@scope/x.ts`, `~x.ts`), or an item that opens
- * with a plain word before a path (`my file.ts`). Only the path list is checked, never the
- * bracketed or dashed prose about it, which real manifests fill with code names.
- */
-function unreadablePath(text: string): string | undefined {
-  const pathList = text.replace(/\([^)]*\)/g, ' ').split(ANNOTATION_START, 1)[0] ?? '';
-  for (const item of pathList.split(',')) {
-    const words = item.trim().split(/\s+/).map(bareWord);
-    const partlyRead = words.find((word) => {
-      const found = word.match(PATH_TOKEN);
-      return found !== null && (found.length > 1 || found[0] !== word);
-    });
-    if (partlyRead !== undefined) return partlyRead;
-    if (!isPath(words[0]!) && words.some(isPath)) return words.join(' ');
+type Refuse = (fragment: string, why: string) => Error;
+
+const WRAP = (fragment: string) => `which cannot be read as a path. Wrap the path in backticks: \`${fragment}\`.`;
+const NOT_A_PATH =
+  'which is not a file path (a path ends in a name and an extension, like `src/rules/game.ts`). ' +
+  'Put notes about a file in brackets or after a dash.';
+const A_PATTERN = 'a pattern. Patterns are not expanded: list each file in its own backticks.';
+
+/** One word of a cell's path list: the path it names, if any, or a refusal. */
+function wordPath(word: string, spans: string[], refuse: Refuse): string | undefined {
+  const mark = /^\0(\d+)\0$/.exec(word);
+  if (mark) {
+    const span = spans[Number(mark[1])]!;
+    if (PATTERN.test(span)) throw refuse(span, A_PATTERN);
+    if (!ENDS_IN_EXTENSION.test(span)) throw refuse(span, NOT_A_PATH);
+    return span;
   }
-  return undefined;
+  const bare = bareWord(word);
+  const found = bare.match(PATH_TOKEN);
+  if (found === null) return undefined;
+  if (PATTERN.test(bare)) throw refuse(bare, A_PATTERN);
+  if (found.length > 1 || found[0] !== bare) throw refuse(bare, WRAP(bare));
+  return bare;
 }
 
-function isPath(word: string): boolean {
-  return word.match(PATH_TOKEN) !== null;
-}
-
-/** A File cell's paths, in order: backticked paths whole, the rest by PATH_TOKEN. */
+/**
+ * A File cell's paths, in order. The notes about them (in brackets, or after a dash, `+` or `;`)
+ * are cut away first, backticks and all, so nothing in a note is checked or read. A backticked
+ * path is read whole; a bare one by PATH_TOKEN, and refused when that would read only part of it
+ * (`@scope/x.ts`, or `my file.ts` read as `file.ts`).
+ */
 function cellPaths(cell: string, row: number): string[] {
-  return cell.split(/`([^`]*)`/).flatMap((part, i) => {
-    if (i % 2 === 1 && ENDS_IN_EXTENSION.test(part)) return [part];
-    const fragment = unreadablePath(part);
-    if (fragment !== undefined) {
-      throw new Error(
-        `Build Manifest row ${row}: the File cell "${cell.trim()}" has "${fragment}", which cannot be read as a path. Wrap the path in backticks: \`${fragment}\`.`,
-      );
+  const spans: string[] = [];
+  const masked = cell.replace(/`([^`]*)`/g, (_, span: string) => `\0${spans.push(span.trim()) - 1}\0`);
+  const unmask = (text: string) => text.replace(SPAN_MARK, (_, n: string) => `\`${spans[Number(n)]}\``);
+  const refuse: Refuse = (fragment, why) =>
+    new Error(`Build Manifest row ${row}: the File cell "${cell.trim()}" has "${fragment}", ${why}`);
+  const pathList = masked.replace(/\([^)]*\)/g, ' ').split(NOTE_START, 1)[0] ?? '';
+  return pathList.split(',').flatMap((item) => {
+    const words = item.replace(SPAN_MARK, ' $& ').trim().split(/\s+/).filter(Boolean);
+    const paths = words.map((word) => wordPath(word, spans, refuse));
+    if (paths.length > 1 && paths[0] === undefined && paths.some(Boolean)) {
+      const fragment = unmask(words.join(' '));
+      throw refuse(fragment, WRAP(fragment));
     }
-    return [...part.matchAll(PATH_TOKEN)].map((m) => m[0]);
+    return paths.filter((path) => path !== undefined);
   });
 }
 
