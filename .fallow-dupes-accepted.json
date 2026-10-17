@@ -345,14 +345,6 @@
         "src/ui/components/helpers/HintOverlay.vue",
         "src/ui/components/helpers/TutorialOverlay.vue"
       ]
-    },
-    {
-      "content": "fd899edcd7857c9a",
-      "lines": 40,
-      "files": [
-        "src/ui/composables/useGameGrid.ts",
-        "src/ui/composables/useHexGrid.ts"
-      ]
     }
   ]
 }
