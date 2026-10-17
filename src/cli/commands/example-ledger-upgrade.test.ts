@@ -235,6 +235,23 @@ describe('example-ledger-upgrade (#371)', () => {
     ]);
   });
 
+  it('never moves an upgraded record onto the id of a kept record it does not move (#836)', async () => {
+    // The kept record's text has slid to line 6, but the upgrade moves only the records it upgrades.
+    const project = await makeProject({ [PUNCH]: `# Punch\n\np.2, Punch Examples:\n\n${READY_LINE}\n${TIRED_LINE}\n` });
+    await writeOldLedger(project, [
+      oldRecord(PUNCH, 4, 'If you are punched while READY, you become EXHAUSTED.'),
+      { ...oldRecord(PUNCH, 5, 'If you are punched while EXHAUSTED, you stay EXHAUSTED.'), lineText: TIRED_LINE },
+    ]);
+
+    const result = await upgrade(project);
+
+    expect(result.reanchored).toEqual([]);
+    expect(result.dropped).toEqual([
+      { exampleId: `${PUNCH}:4`, reason: 'quote-ambiguous' },
+      { exampleId: `${PUNCH}:5`, reason: 'slice-recorded-again' },
+    ]);
+  });
+
   it('prints what it upgraded, moved and dropped, why, and the slices to record again', async () => {
     const project = await makeProject({
       [PUNCH]: PUNCH_TEXT.replace('READY, you', 'READY, then you'),

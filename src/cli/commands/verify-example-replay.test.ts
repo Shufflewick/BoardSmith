@@ -16,6 +16,8 @@ import {
   verifyExampleRecordCommand,
   verifyExampleTranslateCommand,
   reanchorExampleLedger,
+  findUnanchoredExamples,
+  describeUnanchoredExamples,
   readSlicesWithoutExamples,
   type ExampleReplayRecord,
 } from './verify-example-replay.js';
@@ -1301,6 +1303,79 @@ describe('worked examples stay anchored to their slice line (#350)', () => {
       { exampleId: `${SLICE}:4`, slicePath: SLICE, lineText: READY_LINE, reason: 'text-ambiguous' },
     ]);
     expect(result.moved.map((m) => m.from)).toEqual([`${SLICE}:5`]);
+  });
+
+  it('a record whose text moved onto the line of a record that stays put is reported lost, never given its id (#836)', async () => {
+    const project = await makeProject({ [SLICE]: SLICE_TEXT });
+    await recordBoth(project);
+    const before = await readExampleReplayVerdicts(project);
+    await fs.writeFile(slicePathOnDisk(project), `# Punch\n\np.2, Punch Examples:\n${TIRED_LINE}\n`);
+
+    const result = await reanchorExampleLedger(project);
+
+    expect(result.moved).toEqual([]);
+    expect(result.lost).toEqual([
+      { exampleId: `${SLICE}:4`, slicePath: SLICE, lineText: READY_LINE, reason: 'text-gone' },
+      { exampleId: `${SLICE}:5`, slicePath: SLICE, lineText: TIRED_LINE, reason: 'text-ambiguous' },
+    ]);
+    expect(await readExampleReplayVerdicts(project)).toEqual(before);
+  });
+
+  it('two records whose texts both lose their lines to the same one are both reported lost (#836)', () => {
+    const slice = { path: SLICE, text: `# Punch\n\np.2, Punch Examples:\n\n\n${READY_LINE}\n` };
+    const records = [
+      recordFor(SLICE, 4, { lineText: READY_LINE }),
+      recordFor(SLICE, 5, { lineText: READY_LINE }),
+    ];
+
+    expect(findUnanchoredExamples(records, [slice]).map((u) => [u.exampleId, u.reason])).toEqual([
+      [`${SLICE}:4`, 'text-ambiguous'],
+      [`${SLICE}:5`, 'text-ambiguous'],
+    ]);
+  });
+
+  it('a move blocked only once another move is blocked is reported lost too (#836)', () => {
+    // A's text is now on B's line, B's text on D's line, and D stays put: B cannot move, so A cannot.
+    const slice = { path: SLICE, text: `# Punch\n\n${READY_LINE}\n${TIRED_LINE}\n` };
+    const records = [
+      recordFor(SLICE, 2, { lineText: READY_LINE }),
+      recordFor(SLICE, 3, { lineText: TIRED_LINE }),
+      recordFor(SLICE, 4, { lineText: TIRED_LINE }),
+    ];
+
+    const unanchored = findUnanchoredExamples(records, [slice]);
+
+    expect(unanchored.map((u) => [u.exampleId, u.reason])).toEqual([
+      [`${SLICE}:2`, 'text-ambiguous'],
+      [`${SLICE}:3`, 'text-ambiguous'],
+    ]);
+    expect(describeUnanchoredExamples(unanchored)[0]).toBe(
+      `  ${SLICE}:2: its line "${READY_LINE}" is on several other lines, or its new line is kept by, ` +
+        `or also wanted by, another example, so it cannot be placed.`,
+    );
+  });
+
+  it('a record that may not move keeps its id, so no other record moves onto it (#836)', () => {
+    const slice = { path: SLICE, text: `# Punch\n\n\n${READY_LINE}\n${TIRED_LINE}\n` };
+    const records = [recordFor(SLICE, 3, { lineText: READY_LINE }), recordFor(SLICE, 4, { lineText: TIRED_LINE })];
+
+    expect(findUnanchoredExamples(records, [slice], new Set([`${SLICE}:3`]))).toEqual([
+      { exampleId: `${SLICE}:3`, slicePath: SLICE, lineText: READY_LINE, reason: 'text-ambiguous' },
+    ]);
+  });
+
+  it('two records whose lines swapped both move, each to the other\'s line (#836)', async () => {
+    const project = await makeProject({ [SLICE]: SLICE_TEXT });
+    await recordBoth(project);
+    await fs.writeFile(slicePathOnDisk(project), `# Punch\n\np.2, Punch Examples:\n${TIRED_LINE}\n${READY_LINE}\n`);
+
+    const result = await reanchorExampleLedger(project);
+
+    expect(result.lost).toEqual([]);
+    expect(result.moved.map((m) => [m.from, m.to])).toEqual([
+      [`${SLICE}:4`, `${SLICE}:5`],
+      [`${SLICE}:5`, `${SLICE}:4`],
+    ]);
   });
 
   it('verify-example-replay reports unanchored examples and sends a slice with a lost one back to pending', async () => {
