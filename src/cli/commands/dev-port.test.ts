@@ -75,6 +75,7 @@ describe('boardsmith dev on a taken port (#345)', () => {
         startWorldDevServer({
           cwd,
           uiPath: cwd,
+          rulesDir: rulesPath,
           runtime,
           displayName: 'Port Game',
           context: 'standalone',

@@ -795,6 +795,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
     await startWorldDevServer({
       cwd,
       uiPath,
+      rulesDir: rulesPath,
       runtime,
       displayName: config.displayName || gameDefinition.displayName || gameDefinition.gameType,
       context,

@@ -216,6 +216,8 @@ export async function loadWorldRuntime(
 interface WorldDevServerOptions {
   readonly cwd: string;
   readonly uiPath: string;
+  /** The rules folder `runtime` was loaded from; a save under it reloads the world (#882). */
+  readonly rulesDir: string;
   /** The rules and the host that runs them, from one bundle (#283). */
   readonly runtime: WorldRuntime;
   readonly displayName: string;
@@ -545,7 +547,7 @@ export async function startWorldDevServer(
 
   // A RULE EDIT IS A COORDINATED WORLD RELOAD (#201), heard here and carried
   // out by the run's queue (see `openWorldRun`).
-  reloadOnRulesEdit({ vite, rulesDir: join(options.cwd, 'src', 'rules'), cwd: options.cwd, queue: run.queue });
+  reloadOnRulesEdit({ vite, rulesDir: options.rulesDir, cwd: options.cwd, queue: run.queue });
 
   const hostUrl = served.localUrl;
   announceHost({
