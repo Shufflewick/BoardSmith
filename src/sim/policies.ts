@@ -121,8 +121,8 @@ export function random(
         else reasons.push(built.reason);
       }
       const followUp = randomFollowUpMove(game, player, rng);
-      if (followUp && 'reason' in followUp) reasons.push(followUp.reason);
-      else if (followUp) moves.push(followUp);
+      moves.push(...followUp.moves);
+      reasons.push(...followUp.reasons);
       if (moves.length > 0) return rng.pick(moves);
       return {
         noMove:
@@ -137,24 +137,30 @@ export function random(
 }
 
 /**
- * One random move from the seat's held follow-up, why it has none, or
- * `undefined` when it holds none. A follow-up is not among the seat's actions,
- * and its bound args come from the follow-up itself (#911).
+ * One random move from the seat's held follow-up, or why it has none; neither
+ * when it holds none. A follow-up is not among the seat's actions, and its
+ * bound args come from the follow-up itself (#911).
  */
-function randomFollowUpMove(game: Game, player: Player, rng: SeededRandom): PolicyMove | { reason: string } | undefined {
+function randomFollowUpMove(
+  game: Game,
+  player: Player,
+  rng: SeededRandom,
+): { moves: PolicyMove[]; reasons: string[] } {
   const followUp = followUpForSeat(game.getFlowState(), player.seat);
-  if (!followUp) return undefined;
+  if (!followUp) return { moves: [], reasons: [] };
   const actionDef = game.getAction(followUp.action);
-  if (!actionDef) return { reason: `follow-up '${followUp.action}' is not registered on the game` };
+  if (!actionDef) return { moves: [], reasons: [`follow-up '${followUp.action}' is not registered on the game`] };
   const moves = enumerateActionMoves(game, actionDef, player, { followUp, sampleAboveBudget: { count: 1, random: rng } });
   if (moves.length === 0) {
     return {
-      reason:
+      moves: [],
+      reasons: [
         `follow-up '${followUp.action}' has no move the simulator can list: ` +
-        'every pick is refused, or a number input lacks min, max and integer: true',
+          'every pick is refused, or a number input lacks min, max and integer: true',
+      ],
     };
   }
-  return { action: followUp.action, args: rng.pick(moves) };
+  return { moves: [{ action: followUp.action, args: rng.pick(moves) }], reasons: [] };
 }
 
 /**
