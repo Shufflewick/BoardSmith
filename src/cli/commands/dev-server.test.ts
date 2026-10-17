@@ -63,13 +63,16 @@ function connect(port: number, headers?: Record<string, string>): Promise<string
 }
 
 /** Serve an empty project through `serveVite`, with one claimed socket path. */
-async function serveEmpty(onConnection: Parameters<typeof claimWebSocketPath>[1], server: InlineConfig['server'] = {}) {
+async function serveEmpty(
+  onConnection: Parameters<typeof claimWebSocketPath>[1],
+  config: Pick<InlineConfig, 'server' | 'preview' | 'plugins'> = {},
+) {
   dir = tempTree('bs-dev-server-');
   writeFileSync(join(dir, 'index.html'), '<!doctype html><title>t</title>');
   const claimed = claimWebSocketPath(TEST_WS_PATH, onConnection);
   const port = await freePort();
   const served = await serveVite({
-    config: { root: dir, configFile: false, logLevel: 'silent', server },
+    config: { root: dir, configFile: false, logLevel: 'silent', ...config },
     port,
     host: '127.0.0.1',
     sockets: [claimed],
@@ -139,23 +142,26 @@ describe('a dev host socket answers only pages it served (#719)', () => {
   }, 30000);
 
   it('accepts a host name the project lists in server.allowedHosts', async () => {
-    const { port } = await serveEmpty((socket) => socket.send('ours'), { allowedHosts: ['.table.example'] });
+    const { port } = await serveEmpty((socket) => socket.send('ours'), { server: { allowedHosts: ['.table.example'] } });
     const named = `den.table.example:${port}`;
     expect(await connect(port, { Host: named, Origin: `http://${named}` })).toBe('ours');
   }, 30000);
 
   // Vite also allows a string server.host, server.hmr.host, preview.host and server.origin's hostname (#941).
-  it.each([
-    ['server.host', { host: 'den.table.example' }],
-    ['server.origin', { origin: 'http://den.table.example:9999' }],
-  ] as const)('accepts the host name the project names in %s', async (_option, server) => {
-    const { port } = await serveEmpty((socket) => socket.send('ours'), server);
+  it.each<[string, Pick<InlineConfig, 'server' | 'preview' | 'plugins'>]>([
+    ['server.host', { server: { host: 'den.table.example' } }],
+    ['server.origin', { server: { origin: 'http://den.table.example:9999' } }],
+    ['preview.host', { preview: { host: 'den.table.example' } }],
+    // serveVite replaces the inline server.hmr, so a game's hmr.host arrives merged from its own config, as here.
+    ['server.hmr.host', { plugins: [{ name: 'game-config', config: () => ({ server: { hmr: { host: 'den.table.example' } } }) }] }],
+  ])('accepts the host name the project names in %s', async (_option, config) => {
+    const { port } = await serveEmpty((socket) => socket.send('ours'), config);
     const named = `den.table.example:${port}`;
     expect(await connect(port, { Host: named, Origin: `http://${named}` })).toBe('ours');
   }, 30000);
 
   it('still refuses a host the project names nowhere, beside one it does name (#941)', async () => {
-    const { port } = await serveEmpty((socket) => socket.send('ours'), { host: 'den.table.example' });
+    const { port } = await serveEmpty((socket) => socket.send('ours'), { server: { host: 'den.table.example' } });
     const other = `sub.den.table.example:${port}`;
     await expect(connect(port, { Host: other, Origin: `http://${other}` })).rejects.toThrow(/socket hang up/);
   }, 30000);
