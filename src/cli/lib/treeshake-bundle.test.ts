@@ -2,12 +2,12 @@
  * Tree-shaking bundle proof — SHIP-02
  *
  * Verifies empirically that a production Vite/Rollup build of a game project:
- *   NEGATIVE CASE: uses a custom UI → AutoRenderer/AutoUI are absent from the bundle
- *   POSITIVE CONTROL: uses "ui":"auto" → AutoRenderer IS present in the bundle
+ *   NEGATIVE CASE: uis.ts makes a custom UI the default → AutoRenderer/AutoUI are absent from the bundle
+ *   POSITIVE CONTROL: the scaffold's uis.ts imports AutoUI as the default UI → AutoRenderer IS present
  *
  * This is a REAL build (viteBuild) + REAL bundle grep, not a mock or code-review
- * claim. The tree-shaking guarantee comes from the single static import in the
- * generated App.vue (Plan 01 fix); this test guards against future regression.
+ * claim. The tree-shaking guarantee comes from uis.ts statically importing only
+ * the default UI; this test guards against future regression.
  *
  * Infrastructure deviations from the real `boardsmith build` pipeline (none affect
  * tree-shaking behavior, which is a Rollup analysis-time property):
@@ -372,7 +372,7 @@ import { Die3D } from 'boardsmith/ui/dice';
     'SHIP-02 positive control: auto-UI fixture bundle contains AutoRenderer',
     { timeout: 180_000 },
     async () => {
-      // Fixture with "ui":"auto": App.vue imports AutoUI which imports AutoRenderer.
+      // The scaffold's uis.ts imports AutoUI as the default UI, and AutoUI imports AutoRenderer.
       // Rollup must include AutoRenderer — this proves the negative case is a genuine
       // tree-shake drop, not a build that silently emits nothing.
       const fixId = `auto-${Date.now()}`;

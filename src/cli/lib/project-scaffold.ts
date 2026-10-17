@@ -398,8 +398,9 @@ import AutoUI from 'boardsmith/ui/auto-ui';
  *
  * devUI() entries exist only under \`boardsmith dev\`. They are stripped from
  * production builds entirely: JS, CSS, and assets. Building your own board?
- * Move defaultUI() onto it and delete the Auto line: GameShell offers the
- * auto-UI under \`boardsmith dev\` by itself.
+ * Move defaultUI() onto it and delete the Auto and Custom lines and the
+ * AutoUI and devUI imports: GameShell offers the auto-UI under
+ * \`boardsmith dev\` by itself.
  */
 export default defineGameUIs({
   Auto: defaultUI(AutoUI),
@@ -461,11 +462,17 @@ export function generateGameTableVue(): string {
  * The auto-UI (AutoUI) renders your game out of the box and can ship as-is
  * for simple games. Fill this component in when you want full control over
  * how the game looks, then move defaultUI() onto this component in
- * src/ui/uis.ts, replacing the Auto and Custom lines:
+ * src/ui/uis.ts, so the whole file reads:
  *
+ *   import { defineGameUIs, defaultUI } from 'boardsmith/ui';
  *   import GameTable from './components/GameTable.vue';
- *   ...
- *   GameTable: defaultUI(GameTable),
+ *
+ *   export default defineGameUIs({
+ *     GameTable: defaultUI(GameTable),
+ *   });
+ *
+ * That drops the Auto and Custom lines, \`import AutoUI\` and devUI: GameShell
+ * offers the auto-UI under \`boardsmith dev\` by itself.
  *
  * Pit of Success: the easy path (keeping the auto-UI as the default) is the
  * right path; switch here only when you're ready to invest in a custom interface.

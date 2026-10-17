@@ -87,6 +87,13 @@ describe('generateUisTs — the single source of truth for a game\'s UIs', () =>
     expect(out).toContain("'boardsmith/ui/auto-ui'");
     expect(out).not.toMatch(/AutoUI[^']*from 'boardsmith\/ui'/);
   });
+
+  it('marks exactly one UI as defaultUI, passed an eager component, not a loader', () => {
+    const out = generateUisTs();
+    // Match the call site, not the prose in the file's doc comment.
+    expect(out.match(/defaultUI\([A-Za-z]/g)).toHaveLength(1);
+    expect(out).not.toMatch(/defaultUI\(\(\) =>/);
+  });
 });
 
 describe('generateBoardsmithJson', () => {
@@ -409,6 +416,9 @@ describe('generateGameTableVue', () => {
     expect(out).toContain('defaultUI()');
     expect(out).not.toContain('boardsmith.json');
     expect(out).not.toMatch(/"ui":/);
+    // The swap leaves AutoUI and devUI unused; a complete instruction says to drop them.
+    expect(out).toMatch(/import AutoUI/);
+    expect(out).toMatch(/devUI/);
   });
 });
 
