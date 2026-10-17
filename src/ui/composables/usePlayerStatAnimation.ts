@@ -35,6 +35,7 @@
  */
 
 import type { FlyConfig } from './useFlyingElements.js';
+import type { SpriteData } from '../utils/image.js';
 import { escapeCssString } from '../utils/css-string.js';
 
 export interface CardForAnimation {
@@ -47,9 +48,9 @@ export interface CardForAnimation {
   /** Whether card is face up (default: true) */
   faceUp?: boolean;
   /** Face image - URL string or sprite object (optional) */
-  faceImage?: string | { sprite: string; x: number; y: number; width?: number; height?: number };
+  faceImage?: string | SpriteData;
   /** Back image - URL string or sprite object (optional) */
-  backImage?: string | { sprite: string; x: number; y: number; width?: number; height?: number };
+  backImage?: string | SpriteData;
   /** Player seat who owns this card/piece (for piece rendering) */
   playerSeat?: number;
   /** Allow additional custom properties */
