@@ -1347,6 +1347,20 @@ describe('executeOp', () => {
       expect(res.suggestedAction).toBe('pick');
     });
 
+    it('botSuggest waits quietly when its bot seat has only disabled actions but a human seat can still move (#1133)', async () => {
+      SitOutGame.sittingOut = [1];
+      const def: GameDefinitionLike = { gameClass: SitOutGame, gameType: 'sit-out', minPlayers: 2, maxPlayers: 2 };
+      const opts = { playerCount: 2, seed: 'sit-out' };
+      const started = succeeded(await executeOp(def, opts, null, null, { type: 'start' }));
+      const res = succeeded(await executeOp(def, opts, started.snapshot, null, {
+        type: 'botSuggest',
+        seats: [{ seat: 1 }],
+      }));
+
+      expect(res.botStalled).toBeUndefined();
+      expect(res.botPlayer).toBeUndefined();
+    });
+
     it('botSuggest reports the first due bot seat stalled, quoting the reasons, when no due seat can move (#1133)', async () => {
       SitOutGame.sittingOut = [1, 2];
       const def: GameDefinitionLike = { gameClass: SitOutGame, gameType: 'sit-out', minPlayers: 2, maxPlayers: 2 };
