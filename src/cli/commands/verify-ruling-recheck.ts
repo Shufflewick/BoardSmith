@@ -9,6 +9,7 @@ import chalk from 'chalk';
 import { parseRulings } from './build-manifest.js';
 import { allocatedNumber } from '../lib/ledger-entries.js';
 import { readFencedJsonLedger } from '../lib/fenced-json-ledger.js';
+import { withLedgerLock } from '../lib/ledger-lock.js';
 import { atomicWriteFile, listRunIds, RUN_ID_RE, runRootDir, stagingSlicesDir } from './verify-run.js';
 
 /**
@@ -449,10 +450,14 @@ export async function recordRulingVerdicts(
   runId: string,
   records: RulingVerdictRecord[],
 ): Promise<{ ledgerPath: string }> {
-  const existing = await readRulingVerdicts(projectDir, runId);
-  const incoming = new Set(records.map((r) => r.number));
-  const merged = [...existing.filter((r) => !incoming.has(r.number)), ...records];
-  return replaceRulingVerdicts(projectDir, runId, merged);
+  const ledgerPath = rulingVerdictsLedgerPath(projectDir, runId);
+  await fs.mkdir(dirname(ledgerPath), { recursive: true });
+  return withLedgerLock(ledgerPath, async () => {
+    const existing = await readRulingVerdicts(projectDir, runId);
+    const incoming = new Set(records.map((r) => r.number));
+    const merged = [...existing.filter((r) => !incoming.has(r.number)), ...records];
+    return replaceRulingVerdicts(projectDir, runId, merged);
+  });
 }
 
 /**

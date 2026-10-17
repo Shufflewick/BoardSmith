@@ -1407,8 +1407,9 @@ async function validateRulesAgreement(cwd: string): Promise<ValidationResult> {
   let result: ValidationResult;
   try {
     const gameDefinition = await loadProjectRules(cwd);
-    // Constructs the game at every seat count to read its flow, so a
-    // constructor that throws is reported here too.
+    // Constructs the game at every seat count with every combination of its
+    // boolean and select options to read its flow, so a constructor that
+    // throws for any of them is reported here too, naming the combination.
     result = checkRulesAgreement(config, gameDefinition);
   } catch (error) {
     spinner.fail('Rules could not be loaded');

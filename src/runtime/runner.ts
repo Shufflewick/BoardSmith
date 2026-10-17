@@ -544,6 +544,23 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     return { baseIndex: this.checkpointBaseIndex, entries: [...this.actionCheckpoints] };
   }
 
+  /** Index in `actionCheckpoints` of the checkpoint for the current action count. */
+  private get headOffset(): number {
+    return this.actionHistory.length - this.checkpointBaseIndex;
+  }
+
+  /**
+   * Capture the head checkpoint unless one already exists, so a failed action
+   * has a state to roll back to, and the window has no gap, even when no
+   * snapshot was taken since the last history entry (#802). Hosts snapshot
+   * after every op, so there it costs nothing.
+   */
+  private ensureHeadCheckpoint(): void {
+    if (this.checkpointPolicy_.enabled && !this.actionCheckpoints[this.headOffset]) {
+      this.captureCheckpoint();
+    }
+  }
+
   /**
    * Restore the game to the state it was in before the current action ran.
    *
@@ -561,8 +578,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    *   when something did.
    */
   private rollbackToPreActionState(): string | undefined {
-    const headOffset = this.actionHistory.length - this.checkpointBaseIndex;
-    const checkpoint = this.actionCheckpoints[headOffset];
+    const checkpoint = this.actionCheckpoints[this.headOffset];
     if (!checkpoint) {
       return 'The game could not be rolled back, so its state may be inconsistent — ' +
         'per-action checkpoints are disabled for this session.';
@@ -622,6 +638,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
 
     // Serialize the action before executing (captures current element refs)
     const serializedAction = this.serializeForHistory(actionName, playerObj, args);
+
+    this.ensureHeadCheckpoint();
 
     // Execute through flow (pass player index for simultaneous actions)
     let flowState: FlowState;
@@ -738,6 +756,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     pendingState: PendingActionState,
     playerPosition: number
   ): ActionResult {
+    this.ensureHeadCheckpoint();
     // Serialized before executing, so the recorded refs are the positions the action acts on.
     const serializedAction = this.serializeForHistory(action.name, player, pendingState.collectedArgs);
     const actionResult = executor.executePendingAction(action, player, pendingState);
@@ -787,6 +806,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // A held follow-up's published args are the engine's, bound before any
     // client pick, so every pick's callbacks see them.
     this.bindFollowUpArgs(pendingState, playerPosition);
+    // Before any pick runs, so a failure also undoes what the picks changed.
+    this.ensureHeadCheckpoint();
     this.pendingActions.set(playerPosition, pendingState);
     return pendingState;
   }
@@ -978,6 +999,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * one fails loudly.
    */
   private expireHeldSeat(seat: number): FlowState {
+    this.ensureHeadCheckpoint();
     const state = this.game.expireHeldSeat(seat);
     this.actionHistory.push({ kind: 'seatExpiry', player: seat, undoable: false });
     return state;

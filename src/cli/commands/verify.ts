@@ -142,19 +142,9 @@ function hunkLines(line: string): number[] | undefined {
   return Array.from({ length: count }, (_, i) => start + i);
 }
 
-/** The new-side line numbers of each hunk in a zero-context diff, by file. A deleted file has none. */
-function addedLinesByFile(diff: string): Map<string, Set<number>> {
-  const byFile = new Map<string, Set<number>>();
-  let current = new Set<number>();
-  for (const line of diff.split('\n')) {
-    if (line.startsWith('+++ ')) {
-      current = new Set();
-      if (line !== '+++ /dev/null') byFile.set(line.slice(4).replace(/^b\//, ''), current);
-      continue;
-    }
-    hunkLines(line)?.forEach((n) => current.add(n));
-  }
-  return byFile;
+/** The new-side line numbers of the hunks in one file's zero-context diff. A deleted file has none. */
+function addedLines(diff: string): Set<number> {
+  return new Set(diff.split('\n').flatMap((line) => hunkLines(line) ?? []));
 }
 
 /**
@@ -164,17 +154,29 @@ function addedLinesByFile(diff: string): Map<string, Set<number>> {
  * subfolder of its repository is measured the same as one at the top.
  */
 export async function changedSince(projectDir: string, baseCommit: string): Promise<ChangedSince> {
-  const prefixes = ['--relative', '--no-color', '--no-ext-diff', '--src-prefix=a/', '--dst-prefix=b/'];
-  const diff = await git(projectDir, ['diff', ...prefixes, '-U0', baseCommit, '--']);
-  const named = await git(projectDir, ['diff', '--relative', '--name-only', baseCommit, '--']);
-  const untracked = (await git(projectDir, ['ls-files', '--others', '--exclude-standard'])).split('\n').filter(Boolean);
+  // NUL-separated names are never quoted, so a name with a space, quote or backslash survives (#834).
+  const status = (await git(projectDir, ['diff', '--relative', '--name-status', '-z', baseCommit, '--'])).split('\0').filter(Boolean);
+  const untracked = (await git(projectDir, ['ls-files', '-z', '--others', '--exclude-standard'])).split('\0').filter(Boolean);
 
-  const added = addedLinesByFile(diff);
+  // Each entry is a status then its path, or, for a rename or copy, the old path and the new one.
+  const sources = new Map<string, string[]>();
+  for (let i = 0; i < status.length; ) {
+    const width = /^[RC]/.test(status[i]) ? 2 : 1;
+    const paths = status.slice(i + 1, i + 1 + width);
+    sources.set(paths[width - 1], paths);
+    i += 1 + width;
+  }
+  const added = new Map<string, Set<number>>();
+  for (const [path, paths] of sources) {
+    if (!isChunkCode(path)) continue;
+    const diff = await git(projectDir, ['--literal-pathspecs', 'diff', '--relative', '--no-color', '--no-ext-diff', '-U0', baseCommit, '--', ...paths]);
+    added.set(path, addedLines(diff));
+  }
   for (const path of untracked) {
     const text = await fs.readFile(join(projectDir, path), 'utf-8');
     added.set(path, new Set(text.replace(/\n$/, '').split('\n').map((_, i) => i + 1)));
   }
-  const files = [...new Set([...named.split('\n').filter(Boolean), ...untracked])].sort();
+  const files = [...new Set([...sources.keys(), ...untracked])].sort();
   const code = new Map(
     [...added]
       .filter(([path, lines]) => isChunkCode(path) && lines.size > 0)

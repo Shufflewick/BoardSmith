@@ -10,6 +10,7 @@ import {
   enumerateRulingsForRecheck,
   resolveFreshTranscription,
   recordRulingVerdicts,
+  readRulingVerdicts,
   verifyRulingRecheckCommand,
 } from './verify-ruling-recheck.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
@@ -313,6 +314,21 @@ describe('recordRulingVerdicts — the one atomic write path (176-CONTEXT.md dec
     expect(src).not.toMatch(/\bwriteFileSync\(/);
     expect(src).not.toMatch(/\bfsPromises\.writeFile\(/);
     expect(src).toMatch(/\batomicWriteFile\(/);
+  });
+
+  it('keeps every verdict when several record calls run in parallel (#831)', async () => {
+    const project = join(dir, 'game');
+    const runId = '2026-07-30T10-00-00Z';
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'slices'), { recursive: true });
+    const numbers = [1, 2, 3, 4, 5, 6];
+    await Promise.all(
+      numbers.map((number) =>
+        recordRulingVerdicts(project, runId, [
+          createRulingVerdictRecord({ number, verdict: 'still-needed', reasoning: 'Still missing.' }),
+        ]),
+      ),
+    );
+    expect((await readRulingVerdicts(project, runId)).map((r) => r.number).sort()).toEqual(numbers);
   });
 
   it('persists verdict records to the run-scoped ledger, never touching RULINGS.md', async () => {

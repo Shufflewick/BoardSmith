@@ -473,11 +473,11 @@ export interface OpSuccessFields {
 }
 
 /**
- * The ops whose success carries no {@link StateEnvelope}: a choices query and a
- * bot's search change nothing and answer one caller (#450, #675), and the
- * host's lifecycle ops publish through the host itself.
+ * The ops whose success carries no {@link StateEnvelope}: a choices query, a
+ * bot's search and a hint or heatmap change nothing and answer one caller
+ * (#450, #675, #816), and the host's lifecycle ops publish through the host itself.
  */
-type StatelessOpType = 'resolveChoices' | 'botSuggest' | HostOp['type'];
+type StatelessOpType = 'resolveChoices' | 'botSuggest' | 'hint' | 'heatmapToggle' | HostOp['type'];
 
 /**
  * What every success shares. `error` and `errorCode` are named only to say they
@@ -1082,7 +1082,6 @@ async function handleHint(
 
   return {
     success: true,
-    ...stateEnvelope(runner, gameOptions.playerCount),
     hintAnnotation: { seat: op.seat, annotation },
   };
 }
@@ -1117,7 +1116,6 @@ async function handleHeatmapToggle(
   if (!op.visible) {
     return {
       success: true,
-      ...stateEnvelope(runner, gameOptions.playerCount),
       heatmapUpdate: { seat: op.seat, visible: false, entries: [] },
     };
   }
@@ -1177,7 +1175,6 @@ async function handleHeatmapToggle(
 
   return {
     success: true,
-    ...stateEnvelope(runner, gameOptions.playerCount),
     heatmapUpdate: { seat: op.seat, visible: true, entries },
   };
 }
@@ -1720,7 +1717,7 @@ async function runOp(
       case 'expireSeat':
         return handleExpireSeat(def, gameOptions, snap, op);
       case 'selectionStep':
-        return handleSelectionStep(def, gameOptions, snap, pendingState, op);
+        return await handleSelectionStep(def, gameOptions, snap, pendingState, op);
       case 'resolveChoices':
         return handleResolveChoices(def, gameOptions, snap, pendingState, op);
       case 'cancelAction':
@@ -1762,9 +1759,9 @@ async function runOp(
           spaceId: op.deckId,
         });
       case 'hint':
-        return handleHint(def, gameOptions, snap, op, teachingDisabled);
+        return await handleHint(def, gameOptions, snap, op, teachingDisabled);
       case 'heatmapToggle':
-        return handleHeatmapToggle(def, gameOptions, snap, op, teachingDisabled);
+        return await handleHeatmapToggle(def, gameOptions, snap, op, teachingDisabled);
       case 'botSuggest':
         // Refused up front, not left to throw from inside the search: an MCTS
         // playout draws thousands of times, and an order-entry session has no
@@ -1776,7 +1773,7 @@ async function runOp(
             'protocol',
           );
         }
-        return handleBotSuggest(def, snap, op);
+        return await handleBotSuggest(def, snap, op);
       case 'startTutorial':
         return handleStartTutorial(def, gameOptions, snap, op, teachingDisabled);
       case 'exitTutorial': {

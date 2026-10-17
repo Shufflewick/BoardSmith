@@ -209,6 +209,17 @@ describe('verifyRunRecordCommand / verifyRunStatusCommand — ledger', () => {
     return { project, runId: init.runId, stagingAbs };
   }
 
+  it('keeps every record when several record calls run in parallel (#831)', async () => {
+    const { project, runId, stagingAbs } = await initAndStage();
+    const units = ['a', 'b', 'c', 'd', 'e', 'f'];
+    for (const unit of units) await fs.writeFile(join(stagingAbs, `${unit}.md`), `slice ${unit}\n`);
+    await Promise.all(
+      units.map((unit) => verifyRunRecordCommand({ project, runId, unit, slice: `${unit}.md`, json: true })),
+    );
+    const status = await verifyRunStatusCommand({ project, runId, json: true });
+    expect([...status.recorded].sort()).toEqual(units);
+  });
+
   it('L1: appends exactly one record strictly between the fences, leaving outside-fence content byte-identical', async () => {
     const { project, runId } = await initAndStage();
     const ledgerAbs = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'RUN.md');
