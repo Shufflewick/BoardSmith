@@ -42,7 +42,7 @@
  */
 
 import { promises as fs } from 'node:fs';
-import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
+import { blameHeader, gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { join as pathJoin, relative as pathRelative, resolve as pathResolve } from 'node:path';
 import {
   CROSS_CHUNK_MD,
@@ -653,8 +653,6 @@ async function runLogFiles(projectDir: string): Promise<string[]> {
 // Git: the commit time of each line of a run log
 // ---------------------------------------------------------------------------------------------
 
-const UNCOMMITTED = /^0+$/;
-
 function isGitRepo(projectDir: string): Promise<boolean> {
   return gitSucceeds(projectDir, ['rev-parse', '--show-toplevel']);
 }
@@ -689,18 +687,18 @@ interface LineCommit {
 async function lineCommits(projectDir: string, relPath: string): Promise<Array<LineCommit | null>> {
   const porcelain = await git(projectDir, ['blame', '--line-porcelain', '--', relPath]);
   const commits: Array<LineCommit | null> = [];
-  let sha = '';
+  let sha: string | null = null;
   let finalLine = 0;
   let time = 0;
   for (const line of porcelain.split('\n')) {
-    const header = /^([0-9a-f]{40}|[0-9a-f]{64}) \d+ (\d+)/.exec(line);
+    const header = blameHeader(line);
     if (header) {
-      sha = header[1];
-      finalLine = Number(header[2]);
+      sha = header.commit;
+      finalLine = header.line;
     } else if (line.startsWith('committer-time ')) {
       time = Number(line.slice('committer-time '.length));
     } else if (line.startsWith('\t')) {
-      commits[finalLine] = UNCOMMITTED.test(sha) ? null : { sha, time };
+      commits[finalLine] = sha === null ? null : { sha, time };
     }
   }
   return commits;

@@ -64,7 +64,7 @@ import { scriptRegions } from './test-step-sfc.js';
 import { findCodeRun, type CodeRunContext } from './test-step-code-run.js';
 import { findHandBuiltShellContext } from './test-step-shell-context.js';
 import { findChunkCommits } from '../lib/chunk-commits.js';
-import { gitOutput as git } from '../lib/git-output.js';
+import { blameHeader, gitOutput as git } from '../lib/git-output.js';
 import { chunkMdPath, relChunkMdPath } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
 
@@ -173,9 +173,6 @@ export function parseSpecManifest(chunkText: string): SpecManifest {
 // git: which lines this chunk wrote
 // -------------------------------------------------------------------------------------------
 
-/** The hash git blame gives a line that is not committed yet. */
-const UNCOMMITTED = '0'.repeat(40);
-
 const IMPLEMENTATION_FILE = /\.(ts|mts|cts|js|mjs)$/;
 /** A script file under `src/`: where verbs are defined. */
 const isImplementation = (path: string) =>
@@ -186,13 +183,13 @@ const isImplementation = (path: string) =>
  */
 export const isChunkCode = (path: string) => isImplementation(path) || (path.startsWith('src/') && path.endsWith('.vue'));
 
-/** Line numbers of `path` as it is now whose last change is one of `owners`. */
+/** Line numbers of `path` as it is now whose last change is one of `owners`, or not committed yet. */
 async function ownedLines(projectDir: string, path: string, owners: ReadonlySet<string>): Promise<Set<number>> {
   const lines = new Set<number>();
   const blame = await git(projectDir, ['blame', '--porcelain', '--', path]);
   for (const line of blame.split('\n')) {
-    const header = /^([0-9a-f]{40}) \d+ (\d+)/.exec(line);
-    if (header && owners.has(header[1])) lines.add(Number(header[2]));
+    const header = blameHeader(line);
+    if (header && (header.commit === null || owners.has(header.commit))) lines.add(header.line);
   }
   return lines;
 }
@@ -214,7 +211,6 @@ async function addedImplementationLines(
     if (isChunkCode(path)) touched.add(path);
   }
 
-  const owners = new Set([...chunkCommits, UNCOMMITTED]);
   const added = new Map<string, Set<number>>();
   for (const path of [...touched].sort()) {
     try {
@@ -222,7 +218,7 @@ async function addedImplementationLines(
     } catch {
       continue; // deleted since
     }
-    const lines = await ownedLines(projectDir, path, owners);
+    const lines = await ownedLines(projectDir, path, chunkCommits);
     if (lines.size > 0) added.set(path, lines);
   }
   const untracked = await git(projectDir, ['ls-files', '--others', '--exclude-standard', '--', 'src']);
