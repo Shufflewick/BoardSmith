@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import {
   AUDIT_ORDER,
   auditCommand,
+  auditVerdict,
   rekeyDupesBaseline,
   runChangedFilesAudit,
   runDupesBaselineCheck,
@@ -629,5 +630,17 @@ describe('a skipped baseline check is not reported as clean (#846)', () => {
     const out = lines.join('\n');
     expect(out).not.toContain('Audit clean');
     expect(out).toMatch(/Skipped: dupes baseline, health baseline/);
+  });
+});
+
+describe('auditVerdict (#846)', () => {
+  it('a run with one check passed and one skipped says passed and names the skip, never clean', () => {
+    const verdict = auditVerdict(['template duplication'], ['health baseline']);
+    expect(verdict.clean).toBe(false);
+    expect(verdict.line).toBe('Audit passed (template duplication). Skipped: health baseline (see above for why).');
+  });
+
+  it('a run with every check passed is clean', () => {
+    expect(auditVerdict(['dupes baseline'], [])).toEqual({ clean: true, line: 'Audit clean (dupes baseline)' });
   });
 });

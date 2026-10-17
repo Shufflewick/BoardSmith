@@ -807,16 +807,15 @@ export async function auditCommand(options: AuditOptions): Promise<void> {
     process.exit(1);
   }
 
-  const skips = skipped.length > 0 ? `Skipped: ${skipped.join(', ')} (see above for why).` : '';
-  // Never report a green tick for a run that looked at nothing.
-  if (checked.length === 0) {
-    console.log(chalk.yellow(`\nAudit checked nothing — no verdict to give. ${skips}\n`));
-    return;
-  }
-  if (skips) {
-    console.log(chalk.yellow(`\nAudit passed (${checked.join(', ')}). ${skips}\n`));
-    return;
-  }
+  const { clean, line } = auditVerdict(checked, skipped);
+  console.log((clean ? chalk.green : chalk.yellow)(`\n${line}\n`));
+}
 
-  console.log(chalk.green(`\nAudit clean (${checked.join(', ')})\n`));
+/** The closing line of a run with no failures. Only a run that checked something and skipped nothing is clean. */
+export function auditVerdict(checked: readonly string[], skipped: readonly string[]): { clean: boolean; line: string } {
+  const skips = skipped.length > 0 ? ` Skipped: ${skipped.join(', ')} (see above for why).` : '';
+  // Never report a green tick for a run that looked at nothing.
+  if (checked.length === 0) return { clean: false, line: `Audit checked nothing — no verdict to give.${skips}` };
+  if (skips) return { clean: false, line: `Audit passed (${checked.join(', ')}).${skips}` };
+  return { clean: true, line: `Audit clean (${checked.join(', ')})` };
 }
