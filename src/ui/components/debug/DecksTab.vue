@@ -54,9 +54,8 @@ const liveTable = ref<unknown>(undefined);
 const liveTableError = ref<string | null>(null);
 let liveTableRequest = 0;
 
-// A new view is a new live state, so ask again; the newest request wins.
-watch(() => [props.view, props.isViewingHistory] as const, async ([view, viewingHistory]) => {
-  if (view === undefined || viewingHistory) return;
+/** Ask the host for the live table; the newest request wins. */
+async function fetchLiveTable(): Promise<void> {
   const request = ++liveTableRequest;
   try {
     const table = await bridge.deckView();
@@ -66,6 +65,11 @@ watch(() => [props.view, props.isViewingHistory] as const, async ([view, viewing
   } catch (err) {
     if (request === liveTableRequest) liveTableError.value = err instanceof Error ? err.message : String(err);
   }
+}
+
+// A new view is a new live state, so ask again.
+watch(() => [props.view, props.isViewingHistory] as const, ([view, viewingHistory]) => {
+  if (view !== undefined && !viewingHistory) void fetchLiveTable();
 }, { immediate: true });
 
 const shownView = computed(() => (props.isViewingHistory ? props.view : liveTable.value));
@@ -73,7 +77,7 @@ const loadError = computed(() => (props.isViewingHistory ? null : liveTableError
 
 /** What the tab is showing, said above the list: the snapshot, or every card. */
 const notice = computed(() => (props.isViewingHistory
-  ? { kind: 'deck-history-notice', text: 'Viewing history: deck edits are off, because they would change the live game. Go back to live to edit.' }
+  ? { kind: 'deck-history-notice', text: "Viewing history: this is the seat's own view, so face-down cards are left out, and deck edits are off because they would change the live game. Go back to live to see every card and edit." }
   : { kind: 'deck-unfiltered-notice', text: 'Showing every card, face-down cards included. Debug only: no player sees this view.' }));
 
 const discoveredDecks = computed(() => discoverDecks(shownView.value));
@@ -131,7 +135,7 @@ const {
   openTransferDialog,
   closeTransferDialog,
   confirmTransfer,
-} = useDeckWorkbench({ bridge, cardContainers: discoveredCardContainers });
+} = useDeckWorkbench({ bridge, cardContainers: discoveredCardContainers, afterEdit: fetchLiveTable });
 
 const editsOff = computed(() => props.isViewingHistory || deckManipulationLoading.value);
 const transferDialogShown = computed(() => transferDialogOpen.value && !props.isViewingHistory);

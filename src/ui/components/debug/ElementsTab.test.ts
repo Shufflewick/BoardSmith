@@ -19,7 +19,7 @@ const VIEW = {
       id: 2,
       className: 'MainDeck',
       name: 'Draw',
-      $type: 'deck',
+      attributes: { $type: 'deck' },
       children: [
         { id: 10, className: 'Card', name: 'Ace', notation: 'AS' },
         { id: 11, className: 'Card', name: 'King' },

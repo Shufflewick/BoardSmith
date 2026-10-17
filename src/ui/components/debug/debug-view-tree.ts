@@ -100,14 +100,14 @@ export function groupElementsByClass(view: unknown): Record<string, GroupedEleme
 }
 
 /**
- * Every deck in the tree, with its cards. A node counts as a deck when the game
- * marked it `$type: 'deck'` or when its class name says so.
+ * Every deck in the tree, with its cards. A node counts as a deck when its
+ * attributes carry `$type: 'deck'` (every `Deck` does) or when its class name says so.
  */
 export function discoverDecks(view: unknown): DeckInfo[] {
   const decks: DeckInfo[] = [];
 
   walk(view, (obj) => {
-    const isDeck = obj.$type === 'deck'
+    const isDeck = asNode(obj.attributes)?.$type === 'deck'
       || (typeof obj.className === 'string' && obj.className.toLowerCase().includes('deck'));
     if (!isDeck || typeof obj.id !== 'number') return;
 

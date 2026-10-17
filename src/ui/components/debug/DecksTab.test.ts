@@ -25,7 +25,7 @@ const VIEW = {
       id: 2,
       className: 'MainDeck',
       name: 'Draw',
-      $type: 'deck',
+      attributes: { $type: 'deck' },
       children: [
         { id: 10, className: 'Card', name: 'Ace', notation: 'AS' },
         { id: 11, className: 'Card', name: 'King' },
@@ -53,7 +53,7 @@ const SEAT_VIEW = {
   id: 1,
   className: 'Board',
   children: [
-    { id: 2, className: 'MainDeck', name: 'Draw', $type: 'deck', children: [{ id: -1, className: 'Card' }, { id: -2, className: 'Card' }] },
+    { id: 2, className: 'MainDeck', name: 'Draw', attributes: { $type: 'deck' }, children: [{ id: -1, className: 'Card' }, { id: -2, className: 'Card' }] },
   ],
 };
 
@@ -262,7 +262,7 @@ describe('DecksTab derivations', () => {
         id: 90,
         className: 'Board',
         children: [
-          { id: 91, className: 'DiscardDeck', name: 'Discard', $type: 'deck', children: [{ id: 92, className: 'Card' }] },
+          { id: 91, className: 'DiscardDeck', name: 'Discard', attributes: { $type: 'deck' }, children: [{ id: 92, className: 'Card' }] },
         ],
       },
     });
@@ -312,7 +312,7 @@ describe('DecksTab while viewing history (#899)', () => {
     const edits = wrapper.findAll('[aria-label="Shuffle deck"], .card-action-btn');
     expect(edits).toHaveLength(9);
     for (const edit of edits) expect(edit.attributes('disabled'), edit.attributes('aria-label')).toBeDefined();
-    expect(wrapper.find('.deck-history-notice').text()).toMatch(/viewing history/i);
+    expect(wrapper.find('.deck-history-notice').text()).toMatch(/viewing history.*face-down cards are left out.*edits are off/i);
     expect(document.body.textContent).not.toContain('Transfer Card');
   });
 });
@@ -334,7 +334,7 @@ describe('DecksTab unfiltered view (#898)', () => {
     await wrapper.setProps({ view: { ...SEAT_VIEW } });
     expect(answers).toHaveLength(2);
 
-    answers[1]!({ id: 1, className: 'Board', children: [{ id: 5, className: 'Deck', $type: 'deck', children: [] }] });
+    answers[1]!({ id: 1, className: 'Board', children: [{ id: 5, className: 'Deck', attributes: { $type: 'deck' }, children: [] }] });
     await flushPromises();
     answers[0]!(VIEW);
     await flushPromises();
@@ -352,5 +352,23 @@ describe('DecksTab unfiltered view (#898)', () => {
     expect(callsFor(platformRequest, 'debug:deck-view')).toHaveLength(0);
     expect(vm.discoveredDecks[0].cards.map((c: { id: number }) => c.id)).toEqual([-1, -2]);
     expect(wrapper.find('.deck-unfiltered-notice').exists()).toBe(false);
+  });
+});
+
+describe('DecksTab after an edit (#898)', () => {
+  it('asks for the table again, because an edit inside a face-down deck changes no seat view and so pushes nothing', async () => {
+    const { platformRequest, vm } = track(await mountDecks());
+    expect(callsFor(platformRequest, 'debug:deck-view')).toHaveLength(1);
+    await vm.moveCardToTop(11);
+    await flushPromises();
+    expect(callsFor(platformRequest, 'debug:deck-view')).toHaveLength(2);
+  });
+
+  it('does not ask again after a refused edit, which changed nothing', async () => {
+    const handler: Op = async (op) => (op === 'debug:deck-view' ? { success: true, view: VIEW } : { success: false, error: 'no' });
+    const { platformRequest, vm } = track(await mountDecks(handler));
+    await vm.moveCardToTop(11);
+    await flushPromises();
+    expect(callsFor(platformRequest, 'debug:deck-view')).toHaveLength(1);
   });
 });
