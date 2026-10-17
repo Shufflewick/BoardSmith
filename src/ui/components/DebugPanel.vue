@@ -26,7 +26,7 @@ export interface DebugPanelProps {
  *  - `useDebugBridge` is the one place the `debug:*` wire protocol is spelled
  *    out. This file names no ops and builds no payloads.
  *  - `useDebugTimeline` owns the action history, time travel and rewind.
- *  - `useDeckWorkbench` owns the deck edits and the transfer dialog.
+ *  - the Decks tab's `useDeckWorkbench` owns the deck edits and the transfer dialog.
  *  - `useStateTree` owns which rows of the State tab are open.
  *  - `debug-view-tree` derives the Elements and Decks tabs from the view tree.
  *  - `debug-format` renders values, and is shared with `TreeNode`.
@@ -35,30 +35,9 @@ export interface DebugPanelProps {
  * pins the behaviour they add up to.
  */
 import { ref, computed, watch, onMounted, onBeforeUnmount, onUnmounted, nextTick } from 'vue';
-import { TreeNode } from './debug/TreeNode.js';
 import { searchStateTree } from './debug/state-tree-search.js';
-import {
-  formatState,
-  formatConditionValue,
-  formatActionName,
-  formatActionArgs,
-  formatTimestamp,
-} from './debug/debug-format.js';
-import {
-  groupElementsByClass,
-  discoverDecks,
-  discoverCardContainers,
-  filterElementGroups,
-  filterDecks,
-  decksExpandedBySearch,
-  cardMatchesSearch,
-  getElementDisplayName,
-  getCardDisplayName,
-  type GroupedElement,
-  type DeckInfo,
-} from './debug/debug-view-tree.js';
-import DebugButton from './debug/DebugButton.vue';
-import DebugDialog from './debug/DebugDialog.vue';
+import { formatState } from './debug/debug-format.js';
+import { discoverDecks } from './debug/debug-view-tree.js';
 import DecksTab from './debug/DecksTab.vue';
 import ElementsTab from './debug/ElementsTab.vue';
 import ActionsTab from './debug/ActionsTab.vue';
@@ -66,10 +45,8 @@ import HistoryTab from './debug/HistoryTab.vue';
 import LogsTab from './debug/LogsTab.vue';
 import ControlsTab from './debug/ControlsTab.vue';
 import StateTab from './debug/StateTab.vue';
-import DebugSearchInput from './debug/DebugSearchInput.vue';
 import { useDebugBridge, type ActionTrace, type FlowContext, type FlowStateInfo, type LogEntry, type ElementDiff } from '../composables/useDebugBridge.js';
 import { useDebugTimeline } from '../composables/useDebugTimeline.js';
-import { useDeckWorkbench } from '../composables/useDeckWorkbench.js';
 import { useStateTree } from '../composables/useStateTree.js';
 import type { PlayerState } from '../../client/types.js';
 
@@ -327,6 +304,18 @@ function downloadState() {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * A new state asks again even while an answer is on its way, so each fetch
+ * takes a ticket and applies its answer only if no later fetch started (#901).
+ */
+function newestWins(): () => () => boolean {
+  let latest = 0;
+  return () => {
+    const ticket = ++latest;
+    return () => ticket === latest;
+  };
+}
+
 // ── Actions tab ─────────────────────────────────────────────────────────────
 
 const actionTraces = ref<ActionTrace[]>([]);
@@ -336,20 +325,22 @@ const tracesLastFetched = ref(0);
 const flowContext = ref<FlowContext | null>(null);
 const flowStateInfo = ref<FlowStateInfo | null>(null);
 
-async function fetchActionTraces() {
-  if (tracesLoading.value) return;
+const tracesTicket = newestWins();
 
+async function fetchActionTraces() {
+  const isNewest = tracesTicket();
   tracesLoading.value = true;
   tracesError.value = null;
   try {
     const { traces, flowContext: context } = await bridge.actionTraces();
+    if (!isNewest()) return;
     actionTraces.value = traces;
     flowContext.value = context;
     tracesLastFetched.value = Date.now();
   } catch (e) {
-    tracesError.value = e instanceof Error ? e.message : 'Unknown error';
+    if (isNewest()) tracesError.value = e instanceof Error ? e.message : 'Unknown error';
   } finally {
-    tracesLoading.value = false;
+    if (isNewest()) tracesLoading.value = false;
   }
 }
 
@@ -404,18 +395,21 @@ const logsLoading = ref(false);
 const logsError = ref<string | null>(null);
 const logsLastFetched = ref(0);
 
-async function fetchLogs() {
-  if (logsLoading.value) return;
+const logsTicket = newestWins();
 
+async function fetchLogs() {
+  const isNewest = logsTicket();
   logsLoading.value = true;
   logsError.value = null;
   try {
-    logEntries.value = await bridge.logs();
+    const entries = await bridge.logs();
+    if (!isNewest()) return;
+    logEntries.value = entries;
     logsLastFetched.value = Date.now();
   } catch (e) {
-    logsError.value = e instanceof Error ? e.message : 'Unknown error';
+    if (isNewest()) logsError.value = e instanceof Error ? e.message : 'Unknown error';
   } finally {
-    logsLoading.value = false;
+    if (isNewest()) logsLoading.value = false;
   }
 }
 
@@ -996,138 +990,6 @@ function handleRestartClick() {
   from { opacity: 1; }
   to { opacity: 0.7; }
 }
-
-
-
-
-
-
-
-.history-loading,
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /* Copy toast */
 .copy-toast {

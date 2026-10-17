@@ -25,7 +25,7 @@ import {
   filterDecks,
   decksExpandedBySearch,
   cardMatchesSearch,
-  getCardDisplayName,
+  getElementDisplayName,
   type DeckInfo,
 } from './debug-view-tree.js';
 import { useDebugBridge } from '../../composables/useDebugBridge.js';
@@ -121,14 +121,10 @@ const {
   deckManipulationLoading,
   deckManipulationError,
   moveCardToTop,
-  reorderCard,
-  transferCard,
   shuffleDeck,
   moveCardUp,
   moveCardDown,
   transferDialogOpen,
-  transferDialogCardId,
-  transferDialogSourceDeckId,
   transferDialogTargetDeckId,
   transferDialogPosition,
   availableTargetContainers,
@@ -230,7 +226,7 @@ const transferDialogShown = computed(() => transferDialogOpen.value && !props.is
               @click="selectDeckCard(deck.id, card.id)"
             >
               <span class="card-position">{{ index }}</span>
-              <span class="card-name">{{ getCardDisplayName(card) }}</span>
+              <span class="card-name">{{ getElementDisplayName(card) }}</span>
               <span class="card-class">{{ card.className }}</span>
               <span class="card-id">#{{ card.id }}</span>
               <div class="card-actions" @click.stop>

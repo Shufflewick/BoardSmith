@@ -165,11 +165,6 @@ export function getElementDisplayName(element: Pick<GroupedElement, 'id' | 'name
   return element.notation || element.name || `#${element.id}`;
 }
 
-/** Same rule as `getElementDisplayName`, for a card inside a deck. */
-export function getCardDisplayName(card: Pick<DeckCard, 'id' | 'name' | 'notation'>): string {
-  return card.notation || card.name || `#${card.id}`;
-}
-
 /**
  * Does a card match the Decks search box? Unlike the State tab's search, an
  * empty query matches NOTHING here: this predicate only ever answers "should

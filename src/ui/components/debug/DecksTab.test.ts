@@ -92,22 +92,16 @@ describe('DecksTab edits', () => {
   it('sends each edit with its own op and payload', async () => {
     const { platformRequest, vm } = track(await mountDecks());
     await vm.moveCardToTop(10);
-    await vm.reorderCard(10, 2);
-    await vm.transferCard(10, 3, 'last');
     await vm.shuffleDeck(2);
     expect(callsFor(platformRequest, 'debug:move-to-top')[0][1]).toEqual({ cardId: 10 });
-    expect(callsFor(platformRequest, 'debug:reorder-card')[0][1]).toEqual({ cardId: 10, targetIndex: 2 });
-    expect(callsFor(platformRequest, 'debug:transfer-card')[0][1]).toEqual({
-      cardId: 10,
-      targetDeckId: 3,
-      position: 'last',
-    });
     expect(callsFor(platformRequest, 'debug:shuffle-deck')[0][1]).toEqual({ deckId: 2 });
   });
 
   it('defaults a transfer to the first position', async () => {
     const { platformRequest, vm } = track(await mountDecks());
-    await vm.transferCard(10, 3);
+    vm.openTransferDialog(10, 2);
+    vm.transferDialogTargetDeckId = 3;
+    await vm.confirmTransfer();
     expect(callsFor(platformRequest, 'debug:transfer-card')[0][1]).toMatchObject({ position: 'first' });
   });
 
@@ -121,7 +115,7 @@ describe('DecksTab edits', () => {
 
   it('prefers the host error string over the fallback', async () => {
     const { vm } = track(await mountDecks(async () => ({ success: false, error: 'card is face down' })));
-    await vm.reorderCard(10, 1);
+    await vm.moveCardToTop(10);
     expect(vm.deckManipulationError).toBe('card is face down');
   });
 
@@ -170,7 +164,6 @@ describe('DecksTab transfer dialog', () => {
     vm.transferDialogTargetDeckId = 99;
     vm.openTransferDialog(10, 2);
     expect(vm.transferDialogOpen).toBe(true);
-    expect(vm.transferDialogCardId).toBe(10);
     expect(vm.transferDialogTargetDeckId).toBeNull();
     expect(vm.transferDialogPosition).toBe('first');
   });
@@ -204,7 +197,6 @@ describe('DecksTab transfer dialog', () => {
       position: 'last',
     });
     expect(vm.transferDialogOpen).toBe(false);
-    expect(vm.transferDialogCardId).toBeNull();
   });
 });
 
@@ -258,12 +250,6 @@ describe('DecksTab transfer dialog', () => {
     expect(vm.selectedCard).toBeNull();
   });
 
-  it('prefers notation, then name, then id for a card label', async () => {
-    const { vm } = track(await mountDecks());
-    expect(vm.getCardDisplayName({ id: 10, notation: 'AS', name: 'Ace' })).toBe('AS');
-    expect(vm.getCardDisplayName({ id: 11, name: 'King' })).toBe('King');
-    expect(vm.getCardDisplayName({ id: 12 })).toBe('#12');
-  });
 
 
 describe('DecksTab derivations', () => {

@@ -4,7 +4,6 @@ import {
   discoverDecks,
   discoverCardContainers,
   getElementDisplayName,
-  getCardDisplayName,
   cardMatchesSearch,
   filterElementGroups,
   filterDecks,
@@ -131,9 +130,6 @@ describe('display names', () => {
     expect(getElementDisplayName({ id: 4, notation: 'a1', name: 'x' })).toBe('a1');
     expect(getElementDisplayName({ id: 4, name: 'x' })).toBe('x');
     expect(getElementDisplayName({ id: 4 })).toBe('#4');
-    expect(getCardDisplayName({ id: 10, notation: 'AS', name: 'Ace' })).toBe('AS');
-    expect(getCardDisplayName({ id: 11, name: 'King' })).toBe('King');
-    expect(getCardDisplayName({ id: 12 })).toBe('#12');
   });
 });
 
