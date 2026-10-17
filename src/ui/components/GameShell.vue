@@ -603,8 +603,9 @@ const logEnd = computed(() => messageOffset.value + gameMessages.value.length);
 /** How many entries had been written when the player last had the log open. */
 const logReadWatermark = ref(0);
 
+// Never more than the log holds: lines the game pruned unread are not behind the toggle.
 const unreadLogCount = computed(() =>
-  Math.max(0, logEnd.value - logReadWatermark.value)
+  Math.min(gameMessages.value.length, Math.max(0, logEnd.value - logReadWatermark.value))
 );
 
 /**

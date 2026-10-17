@@ -103,26 +103,38 @@ describe('unread count on the mounted shell (#903)', () => {
 
   const unread = (wrapper: Awaited<ReturnType<typeof mounted>>) => wrapper.findComponent(PlayShell).props('unreadLogCount');
 
+  async function readLog(wrapper: Awaited<ReturnType<typeof mounted>>): Promise<void> {
+    wrapper.findComponent(PlayShell).vm.$emit('update:mobileExpanded', true);
+    await nextTick();
+    wrapper.findComponent(PlayShell).vm.$emit('update:mobileExpanded', false);
+    await nextTick();
+  }
+
   it('counts new lines while the log sits at its cap', async () => {
     const wrapper = await mounted();
     await post(['a', 'b', 'c'], 0);
-    expect(unread(wrapper)).toBe(3);
+    await readLog(wrapper);
 
     await post(['b', 'c', 'd'], 1);
     await post(['c', 'd', 'e'], 2);
 
-    expect(unread(wrapper)).toBe(5);
+    expect(unread(wrapper)).toBe(2);
     expect(wrapper.findComponent(GameHistory).props('messageOffset')).toBe(2);
+    wrapper.unmount();
+  });
+
+  it('never counts more lines than the log still holds', async () => {
+    const wrapper = await mounted();
+    await post(['a', 'b', 'c'], 0);
+    await post(['x', 'y', 'z'], 40);
+    expect(unread(wrapper)).toBe(3);
     wrapper.unmount();
   });
 
   it("counts a restarted game's lines even when its log is shorter than the last game's", async () => {
     const wrapper = await mounted();
     await post(['a', 'b', 'c', 'd'], 0, 'game-1');
-    wrapper.findComponent(PlayShell).vm.$emit('update:mobileExpanded', true);
-    await nextTick();
-    wrapper.findComponent(PlayShell).vm.$emit('update:mobileExpanded', false);
-    await nextTick();
+    await readLog(wrapper);
     expect(unread(wrapper)).toBe(0);
 
     await post(['new game'], 0, 'game-2');
@@ -134,10 +146,7 @@ describe('unread count on the mounted shell (#903)', () => {
   it('counts a line that replaces one an undo took back', async () => {
     const wrapper = await mounted();
     await post(['a', 'b'], 0);
-    wrapper.findComponent(PlayShell).vm.$emit('update:mobileExpanded', true);
-    await nextTick();
-    wrapper.findComponent(PlayShell).vm.$emit('update:mobileExpanded', false);
-    await nextTick();
+    await readLog(wrapper);
 
     await post(['a'], 0);
     await post(['a', 'b again'], 0);
