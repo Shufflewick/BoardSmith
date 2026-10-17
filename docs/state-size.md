@@ -95,6 +95,26 @@ state a ceiling that had moved by a factor of four.
   the corruption this design exists to prevent. "The most recent N" and
   "everything before round K" are front evictions; "only the interesting lines"
   is not, and there is no way to ask for it.
+
+  **Each seat is told its own offset, never the game's (#903).** A seat
+  receives only the lines it may see, so `messagesEvicted` is not its offset:
+  it also counts other seats' `messageTo()` lines, and sending it would tell a
+  seat how many private lines the others got. Eviction therefore also counts
+  by audience, in two more root fields: `messagesEvictedPublic` (lines with no
+  audience) and `messagesEvictedTo` (each seat's evicted private lines, a set
+  per line so a seat named twice counts once). A seat's offset is the public
+  count plus its own entry, which is the same rule `messageTo()` filtering
+  uses; it reaches the client as `messageOffset` beside `messages`, absent
+  while zero, so `messages[i]` is that seat's line `messageOffset + i`. The
+  shell's log and its unread badge count by that line number, so a log at its
+  cap still shows and counts new lines (the badge never counts more lines than
+  the log still holds). Storage is one number plus one per seat
+  ever addressed privately, never one per line. All three counts are restore
+  only: no seat's view carries them. A checkpoint restore (undo, a failed
+  action's rollback) takes the live counts, as it takes `messagesEvicted`
+  (#803), because the restored log is a slice of the live one. An undo can
+  therefore reuse line numbers it took back, which the log treats as a
+  different log and the badge as unread.
 - **A removed element is still in the saved state.** `remove()` moves an element to
   `game.pile`, and the pile is saved with the game (#655) so a reference to a
   captured piece or a discarded card survives undo and reload. So every

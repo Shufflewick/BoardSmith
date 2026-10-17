@@ -568,6 +568,15 @@ export function canonicalize(value: unknown): string {
 function sortDeep(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortDeep);
   if (value === null || typeof value !== 'object') return value;
+  if (value instanceof Map || value instanceof Set) {
+    throw new Error(
+      `canonicalize was given a ${value.constructor.name}, which JSON renders as {} whatever it holds. ` +
+        'Convert it to a plain object or array before fingerprinting it.',
+    );
+  }
+  if (typeof (value as { toJSON?: unknown }).toJSON === 'function') {
+    return sortDeep((value as { toJSON(): unknown }).toJSON());
+  }
 
   const source = value as Record<string, unknown>;
   const sorted: Record<string, unknown> = {};

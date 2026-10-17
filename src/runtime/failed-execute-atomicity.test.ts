@@ -177,6 +177,42 @@ describe('an execute() that throws half-way through', () => {
   });
 });
 
+describe('an execute() that throws half-way with no checkpoint to roll back to (#808)', () => {
+  function runnerWithoutCheckpoints() {
+    const runner = new GameRunner({
+      GameClass: HalfwayGame,
+      gameType: 'halfway',
+      gameOptions: { playerCount: 2, playerNames: ['A', 'B'], seed: 'atomic' },
+      checkpoints: { enabled: false },
+    });
+    runner.start();
+    return runner;
+  }
+
+  function expectPartialChangesReported(error: string | undefined) {
+    expect(error).toContain('could not be completed');
+    expect(error).not.toContain('Nothing was changed');
+    expect(error).toMatch(/failed part way.*may still hold its partial changes.*checkpoints are turned off/);
+  }
+
+  it('says the game may hold the partial changes and what to do, never that nothing changed', () => {
+    const runner = runnerWithoutCheckpoints();
+    const result = runner.performAction('halfMove', 1, {});
+    expect(result.success).toBe(false);
+    expect(runner.game.target.all(Token)).toHaveLength(3);
+    expectPartialChangesReported(result.error);
+  });
+
+  it('says the same on the pick-by-pick path', () => {
+    const runner = runnerWithoutCheckpoints();
+    runner.startPendingAction('pickThenFail', 1);
+    const result = runner.processSelectionStep(1, 'how', 'all');
+    expect(result.success).toBe(false);
+    expect(runner.game.target.all(Token)).toHaveLength(3);
+    expectPartialChangesReported(result.error);
+  });
+});
+
 describe('an execute() that animates and then throws (#751)', () => {
   it('leaves no animation event in either seat\'s view or the saved snapshot', () => {
     const runner = makeRunner();
@@ -253,7 +289,7 @@ describe('an action that refuses without mutating', () => {
 // roll back to unless something called getSnapshot in between (#802).
 describe('a second action that throws half-way, with no snapshot taken between (#802)', () => {
   function expectAfterFirstAction(runner: GameRunner<HalfwayGame>, messagesBefore: number, error?: string) {
-    expect(error).not.toContain('disabled');
+    expect(error).not.toContain('checkpoints are turned off');
     expect(runner.game.source.all(Token)).toHaveLength(4);
     expect(runner.game.target.all(Token)).toHaveLength(1);
     expect(runner.game.messages.length).toBe(messagesBefore);
@@ -336,6 +372,6 @@ describe('a second action that throws half-way, with no snapshot taken between (
 
     const result = runner.performAction('halfMove', 2, {});
 
-    expect(result.error).toContain('per-action checkpoints are disabled');
+    expect(result.error).toContain('per-action checkpoints are turned off');
   });
 });

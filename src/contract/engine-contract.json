@@ -1,7 +1,7 @@
 {
-  "revision": 223,
-  "surfaceHash": "f5325441c236ee51",
-  "payloadHash": "2d1f6110b53a0159",
+  "revision": 224,
+  "surfaceHash": "266eec68f3109760",
+  "payloadHash": "42faf88ae9f4cb97",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
@@ -1723,10 +1723,18 @@
     {
       "revision": 223,
       "date": "2026-10-17",
-      "surfaceHash": "f5325441c236ee51",
-      "payloadHash": "2d1f6110b53a0159",
+      "surfaceHash": "d4ad4460664564c4",
+      "payloadHash": "42faf88ae9f4cb97",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "A table snapshot from this engine stores the element tree once: when it carries checkpoints the tree is the newest checkpoint and snapshot.state is absent, otherwise it is snapshot.state and there is no window; tables below r223 still carry both state and the window, so a platform reader that spans revisions must tell the two shapes apart (state when present, otherwise the newest entry of actionCheckpoints) or call snapshotTree (boardsmith/session) only inside an r223+ runner, and this engine refuses with a readable error any snapshot an earlier engine wrote, so in-progress tables must keep running on the revision that wrote them."
+      "summary": "Each seat's player view carries messageOffset, how many of its own log lines the game has pruned, so the log and unread badge count by line number at a cap; the engine counts pruned lines by audience in two new restore-only root fields so no seat learns how many private lines another got (#903)."
+    },
+    {
+      "revision": 224,
+      "date": "2026-10-17",
+      "surfaceHash": "266eec68f3109760",
+      "payloadHash": "42faf88ae9f4cb97",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A table snapshot from this engine stores the element tree once: when it carries checkpoints the tree is the newest checkpoint and snapshot.state is absent, otherwise it is snapshot.state and there is no window; tables below r224 still carry both state and the window, so a platform reader that spans revisions must tell the two shapes apart (state when present, otherwise the newest entry of actionCheckpoints) or call snapshotTree (boardsmith/session) only inside an r224+ runner, and this engine refuses with a readable error any snapshot an earlier engine wrote, so in-progress tables must keep running on the revision that wrote them."
     }
   ]
 }
