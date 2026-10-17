@@ -110,7 +110,7 @@ describe('MCTS undo restores flow-bookkeeping (v4.8-MCTS-UNDO)', () => {
 
     // First simulated branch: seat 1 picks 'x'. This completes seat 1 in the
     // flow engine's OWN (private) awaitingPlayers bookkeeping.
-    const child = bot.expandIncremental(root);
+    const child = bot.expandIncremental(root, true);
     expect((bot.searchGame as SimultaneousGame).picks[1]).toBe('x');
     const seat1AfterPick = child.flowState.awaitingPlayers.find((p: any) => p.playerIndex === 1);
     expect(seat1AfterPick.completed).toBe(true);
@@ -122,7 +122,7 @@ describe('MCTS undo restores flow-bookkeeping (v4.8-MCTS-UNDO)', () => {
     // Second simulated branch at the SAME root: seat 1 picks 'y' (the next
     // untried move). This must succeed exactly like the first branch did --
     // the searchGame is supposed to be back at the root's flow state.
-    const child2 = bot.expandIncremental(root);
+    const child2 = bot.expandIncremental(root, true);
 
     // Root cause proof: pre-fix, the flow engine's internal awaitingPlayers
     // bookkeeping still marks seat 1 "completed" from the undone branch, so
@@ -196,7 +196,7 @@ describe('MCTS undo restores flow-bookkeeping (v4.8-MCTS-UNDO)', () => {
     );
 
     // First simulated branch: seat 1 plays 'a', finishing the game.
-    const child = bot.expandIncremental(root);
+    const child = bot.expandIncremental(root, true);
     expect(child.flowState.complete).toBe(true);
     expect((bot.searchGame as FinishGame).isFinished()).toBe(true);
     expect((bot.searchGame as any).settings.winners).toEqual([1]);
@@ -215,7 +215,7 @@ describe('MCTS undo restores flow-bookkeeping (v4.8-MCTS-UNDO)', () => {
     // Second simulated branch at the SAME root must behave identically to
     // the first: it should also be able to finish the game (not silently
     // no-op because the searchGame thinks the game already ended).
-    const child2 = bot.expandIncremental(root);
+    const child2 = bot.expandIncremental(root, true);
     expect(child2.flowState.complete).toBe(true);
     expect((bot.searchGame as FinishGame).isFinished()).toBe(true);
   });

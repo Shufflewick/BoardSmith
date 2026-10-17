@@ -442,7 +442,7 @@ export class MCTSBot<G extends Game = Game> {
       const selection = this.selectWithPath(root);
 
       // EXPAND: Try one unexplored move, creating child
-      const child = selection.spoiled ? null : this.expandIncremental(selection.leaf);
+      const child = selection.spoiled ? null : this.expandIncremental(selection.leaf, selection.onTurn);
 
       // PLAYOUT: Random simulation from current state, collect playout moves for RAVE
       const playout = child ? this.playoutIncremental() : null;
@@ -566,11 +566,14 @@ export class MCTSBot<G extends Game = Game> {
    * (#421): below it, every child is a move for a seat that is not to move
    * here. `spoiled` means a refused move changed this world before it was
    * refused, so it matches no node and the iteration has to be dropped.
+   * `onTurn` says whether this world is on the leaf's turn, so expansion
+   * need not list the world's moves again to ask.
    */
   private selectWithPath(root: MCTSNode): {
     leaf: MCTSNode;
     treeMoves: TreeMove[];
     spoiled: boolean;
+    onTurn: boolean;
   } {
     const treeMoves: TreeMove[] = [];
     let node = root;
@@ -581,21 +584,23 @@ export class MCTSBot<G extends Game = Game> {
       this.resumeSearchGame(resumed.copy);
     }
 
-    while (this.turnMatchesWorld(node)) {
+    let onTurn = this.turnMatchesWorld(node);
+    while (onTurn) {
       this.saveCopyOf(node);
       const eligible = this.eligibleChildrenForWorld(node);
       if (node.untriedMoves.length > 0 || eligible.length === 0) break;
       const child = this.selectChild(node, eligible);
       // Apply the child's move to searchGame to descend
       const outcome = this.applyMoveToSearchGame(child);
-      if (outcome === 'refusedAfterChanges') return { leaf: node, treeMoves, spoiled: true };
+      if (outcome === 'refusedAfterChanges') return { leaf: node, treeMoves, spoiled: true, onTurn: false };
       // A clean refusal left the world at `node`, so the walk ends there.
       if (outcome === 'refused') break;
       // Track tree path move for RAVE (player is from parent node where move was made)
       treeMoves.push({ move: child.parentMove!, player: node.currentPlayer });
       node = child;
+      onTurn = this.turnMatchesWorld(node);
     }
-    return { leaf: node, treeMoves, spoiled: false };
+    return { leaf: node, treeMoves, spoiled: false, onTurn };
   }
 
   /**
@@ -841,12 +846,13 @@ export class MCTSBot<G extends Game = Game> {
   /**
    * EXPAND with incremental state: Apply one unexplored move to searchGame.
    * The searchGame is already positioned at the node's state from selection.
+   * `onTurn` is selection's answer to whether this world is on the node's turn.
    * Returns the new child node, the node itself when there is nothing to grow
    * here or the move was refused, or null when a refused move changed the
    * world first (the iteration is spoiled, #421).
    */
-  private expandIncremental(node: MCTSNode): MCTSNode | null {
-    if (node.untriedMoves.length === 0 || node.flowState.complete || !this.turnMatchesWorld(node)) {
+  private expandIncremental(node: MCTSNode, onTurn: boolean): MCTSNode | null {
+    if (node.untriedMoves.length === 0 || node.flowState.complete || !onTurn) {
       return node;
     }
 

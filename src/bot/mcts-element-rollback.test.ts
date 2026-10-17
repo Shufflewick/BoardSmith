@@ -81,8 +81,8 @@ describe('MCTS element-tree rollback (F-01)', () => {
     const root = b.createNode(flowState, null, null, moves, b.playerIndex);
 
     // One iteration: descend (root is leaf), expand one draw, backprop.
-    const { leaf } = b.selectWithPath(root);
-    const child = b.expandIncremental(leaf);
+    const { leaf, onTurn } = b.selectWithPath(root);
+    const child = b.expandIncremental(leaf, onTurn);
 
     // After EXPAND the move must have actually mutated the search tree.
     expect((b.searchGame as DrawGame).handA.all(Piece).length).toBe(1);
