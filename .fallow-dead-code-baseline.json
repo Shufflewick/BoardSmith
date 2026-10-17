@@ -40,7 +40,6 @@
     "src/engine/utils/index.ts:generateCombinations",
     "src/session/utils.ts:buildPickMetadata",
     "src/ui/components/dice/die3d-state.ts:nextComponentId",
-    "src/ui/components/helpers/overlay-utils.ts:cssEscape",
     "src/ui/composables/actionControllerHelpers.ts:isDevMode",
     "src/ui/composables/useActionController.ts:default",
     "src/ui/composables/useFLIP.ts:prefersReducedMotion"
