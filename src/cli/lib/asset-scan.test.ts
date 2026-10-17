@@ -276,6 +276,20 @@ describe('scanAssetReachability', () => {
     expect(violations[0].message).toMatch(/^src\/ui\/V\.vue could not be read as a Vue file: <style vars>/);
   });
 
+  it('names a .vue file by its project path in Vue\'s own error text, never the machine path', () => {
+    const root = tempTree('asset-scan-');
+    mkdirSync(join(root, 'src', 'ui'), { recursive: true });
+    writeFileSync(join(root, 'src', 'ui', 'S.vue'), '<style>\n.a { color: red; }\n</style>\n', 'utf-8');
+    const [violation] = scanAssetReachability(root);
+    expect(violation.message).toMatch(/At least one <template> or <script> is required in a single file component\. src\/ui\/S\.vue/);
+    expect(violation.message).not.toContain(root);
+  });
+
+  it('reports an unclosed /* in a script and an unclosed <!-- in the template once each, with no Vue errors', () => {
+    const violations = scanWith({ 'src/ui/V.vue': '<script setup lang="ts">\n/* open\n</script>\n<template>\n  <!-- open\n</template>\n' });
+    expect(violations.map((v) => [v.line, /unterminated (\/\* block|<!-- HTML)/.exec(v.message)?.[1]])).toEqual([[2, '/* block'], [5, '<!-- HTML']]);
+  });
+
   // Review of #1017: both script blocks of a file are scanned.
   it('flags a live <img> in either of a .vue file\'s two script blocks', () => {
     const content = '<script lang="ts">\nexport const a = \'<img src="x">\';\n</script>\n<script setup lang="ts">\nconst b = \'<img src="y">\';\n</script>\n';
