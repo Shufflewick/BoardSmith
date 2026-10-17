@@ -291,7 +291,7 @@ export async function verifySourceFreeCheckCommand(
 
   if (report.sourceFree) {
     console.log(
-      styleText('yellow', 
+      styleText('yellow',
         `⚠ Source-free mode — scope: ${report.scope}${
           report.reason ? ` (${report.reason})` : ''
         }`,

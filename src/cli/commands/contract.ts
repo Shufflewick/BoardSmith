@@ -238,7 +238,7 @@ export async function contractCommand(options: ContractOptions): Promise<void> {
   const changed = [
     diff.surfaceChanged && 'exported API surface',
     diff.payloadChanged && 'player-view payload',
-    diff.formatChanged && styleText('yellow', 
+    diff.formatChanged && styleText('yellow',
       'world serialization format (a live world may not cross this)',
     ),
     verdict.reason === 'adopt' && 'nothing a fingerprint can see — recorded so the platform can archive and run this build',

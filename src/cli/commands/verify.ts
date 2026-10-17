@@ -627,14 +627,14 @@ export async function runVerify(options: {
 function printVerdict(result: VerifyResult): void {
   if (!result.cleanTree) {
     console.error(
-      styleText('red', 
+      styleText('red',
         '\nThe working tree changed while the checks ran, so this run does not count for a done claim. ' +
           'Commit or remove the changes (`git status` lists them), then run `boardsmith verify` again.',
       ),
     );
   } else if (result.passed && result.chunk !== null) {
     console.log(
-      styleText('green', 
+      styleText('green',
         `\nFast checks passed for ${short(result.commit)}: chunk "${result.chunk}"'s tests and typecheck. ` +
           'The full suite, build, validate, smoke and mutation checks run at publish (`boardsmith verify`).',
       ),

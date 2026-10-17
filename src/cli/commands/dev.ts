@@ -339,7 +339,7 @@ function normalizeColorPalette(
     const hex = (entry.value ?? entry.hex ?? entry.color) as string | undefined;
     if (hex === undefined) {
       console.warn(
-        styleText('yellow', 
+        styleText('yellow',
           `  Warning: colorPalette entry ${JSON.stringify(entry)} is missing "value"/"hex"/"color" — skipped (not rendered as a swatch).`,
         ),
       );
@@ -1025,7 +1025,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
         // The message, not the error: a running dev server has nothing to
         // throw to, and a stack trace in its log is the same leak (#240).
         console.error(
-          styleText('red', 
+          styleText('red',
             `[boardsmith dev] message '${msgType}' failed: ${err instanceof Error ? err.message : String(err)}`,
           ),
         ),

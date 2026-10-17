@@ -76,11 +76,12 @@ const saveHealthBaselineWithFallow: SaveHealthBaseline = (path, cwd) =>
 export async function runHealthBaselineCheck(
   cwd: string,
   saveBaseline: SaveHealthBaseline = saveHealthBaselineWithFallow,
-): Promise<{ code: number; report: string }> {
+): Promise<{ code: number; report: string; skipped?: true }> {
   const committedPath = join(cwd, HEALTH_BASELINE_FILE);
   if (!existsSync(committedPath)) {
     return {
       code: 0,
+      skipped: true,
       report: `Skipped: this project keeps no ${HEALTH_BASELINE_FILE}, so there is nothing to drift.`,
     };
   }
@@ -214,11 +215,12 @@ function writeDerived(cwd: string, reading: DupesReading): void {
 export async function runDupesBaselineCheck(
   cwd: string,
   scan: ScanDupes = scanDupesWithFallow,
-): Promise<{ code: number; report: string }> {
+): Promise<{ code: number; report: string; skipped?: true }> {
   const acceptedPath = join(cwd, ACCEPTED_DUPES_FILE);
   if (!existsSync(acceptedPath)) {
     return {
       code: 0,
+      skipped: true,
       report: `Skipped: this project keeps no ${ACCEPTED_DUPES_FILE}, so there is nothing to drift.`,
     };
   }
@@ -470,7 +472,7 @@ export async function rekeyTemplateDupes(
  * clean report over zero files is not a pass, and printing it as one is how a
  * gate stops meaning anything (#176).
  */
-type AuditOutcome = 'pass' | 'fail' | 'nothing-to-check';
+type AuditOutcome = 'pass' | 'fail' | 'nothing-to-check' | 'skipped';
 
 /** The two ways `boardsmith audit` invokes `fallow audit`. Injected in tests. */
 interface FallowAuditRunner {
@@ -612,17 +614,17 @@ function buildAudits(
     healthBaseline: {
       name: 'health baseline',
       run: async (cwd) => {
-        const { code, report } = await runHealthBaselineCheck(cwd);
-        console.log(code === 0 ? styleText('dim', report) : styleText('yellow', report));
-        return outcomeOf(code);
+        const { code, report, skipped } = await runHealthBaselineCheck(cwd);
+        console.log(code === 0 && !skipped ? styleText('dim', report) : styleText('yellow', report));
+        return skipped ? 'skipped' : outcomeOf(code);
       },
     },
     dupesBaseline: {
       name: 'dupes baseline',
       run: async (cwd) => {
-        const { code, report } = await runDupesBaselineCheck(cwd);
-        console.log(code === 0 ? styleText('dim', report) : styleText('yellow', report));
-        return outcomeOf(code);
+        const { code, report, skipped } = await runDupesBaselineCheck(cwd);
+        console.log(code === 0 && !skipped ? styleText('dim', report) : styleText('yellow', report));
+        return skipped ? 'skipped' : outcomeOf(code);
       },
     },
   };
@@ -641,7 +643,7 @@ async function reportBacklog(cwd: string): Promise<void> {
   console.log(styleText('cyan', '\nWhole-repository dead-code backlog...\n'));
   await runTool('fallow', [], { cwd });
   console.log(
-    styleText('yellow', 
+    styleText('yellow',
       '\nThis is a report of the whole repository, baselines set aside — not a verdict on '
       + 'your change.\nThe gate is `boardsmith audit`; see docs/fallow-gate.md.\n',
     ),
@@ -751,16 +753,18 @@ function selectedAudits(options: AuditOptions): Audit[] {
 async function runAudits(
   cwd: string,
   audits: readonly Audit[],
-): Promise<{ failed: string[]; checked: string[] }> {
+): Promise<{ failed: string[]; checked: string[]; skipped: string[] }> {
   const failed: string[] = [];
   const checked: string[] = [];
+  const skipped: string[] = [];
   for (const audit of audits) {
     console.log(styleText('cyan', `\nAuditing ${audit.name}...\n`));
     const outcome = await audit.run(cwd);
     if (outcome === 'fail') failed.push(audit.name);
-    if (outcome !== 'nothing-to-check') checked.push(audit.name);
+    if (outcome === 'skipped') skipped.push(audit.name);
+    else if (outcome !== 'nothing-to-check') checked.push(audit.name);
   }
-  return { failed, checked };
+  return { failed, checked, skipped };
 }
 
 /**
@@ -796,18 +800,22 @@ export async function auditCommand(options: AuditOptions): Promise<void> {
   }
   if (options.rekeyDupes) return rekeyAction(cwd, selectors || Boolean(options.since));
 
-  const { failed, checked } = await runAudits(cwd, selectedAudits(options));
+  const { failed, checked, skipped } = await runAudits(cwd, selectedAudits(options));
 
   if (failed.length > 0) {
     console.error(styleText('red', `\nAudit reported findings: ${failed.join(', ')}\n`));
     process.exit(1);
   }
 
-  // Never report a green tick for a run that looked at nothing.
-  if (checked.length === 0) {
-    console.log(styleText('yellow', '\nAudit checked nothing — no verdict to give.\n'));
-    return;
-  }
+  const { clean, line } = auditVerdict(checked, skipped);
+  console.log(styleText(clean ? 'green' : 'yellow', `\n${line}\n`));
+}
 
-  console.log(styleText('green', `\nAudit clean (${checked.join(', ')})\n`));
+/** The closing line of a run with no failures. Only a run that checked something and skipped nothing is clean. */
+export function auditVerdict(checked: readonly string[], skipped: readonly string[]): { clean: boolean; line: string } {
+  const skips = skipped.length > 0 ? ` Skipped: ${skipped.join(', ')} (see above for why).` : '';
+  // Never report a green tick for a run that looked at nothing.
+  if (checked.length === 0) return { clean: false, line: `Audit checked nothing — no verdict to give.${skips}` };
+  if (skips) return { clean: false, line: `Audit passed (${checked.join(', ')}).${skips}` };
+  return { clean: true, line: `Audit clean (${checked.join(', ')})` };
 }

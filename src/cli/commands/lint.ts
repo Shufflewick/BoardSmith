@@ -454,6 +454,13 @@ export async function lintCommand(options: LintOptions): Promise<void> {
 
   const checks: LintCheck[] = [];
 
+  if (options.eslint && !hasAnyConfig(cwd, ESLINT_CONFIGS)) {
+    console.error(styleText('red', '\nlint --eslint: this project has no ESLint config, so ESLint cannot run.'));
+    console.error(styleText('dim', 'Add an eslint.config.mjs to the project root that uses boardsmith/eslint-plugin, or drop --eslint.'));
+    console.error(styleText('dim', 'How: https://github.com/Shufflewick/BoardSmith/blob/main/docs/api/eslint-plugin.md\n'));
+    process.exit(1);
+  }
+
   if (wants('eslint') && hasAnyConfig(cwd, ESLINT_CONFIGS)) {
     const args = ['src/'];
     if (options.fix) args.push('--fix');

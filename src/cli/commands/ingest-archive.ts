@@ -389,7 +389,7 @@ export async function ingestGapsCommand(
   }
   if (!options.quiet) {
     console.log(
-      styleText('green', 
+      styleText('green',
         `✓ Filled ${heading} — ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} from ${names.length} slice${names.length === 1 ? '' : 's'}`,
       ),
     );
@@ -516,7 +516,7 @@ export async function relabelDerivedLines(
     return result;
   }
   console.log(
-    styleText('green', 
+    styleText('green',
       `✓ Relabelled ${changed.length} line${changed.length === 1 ? '' : 's'} Derived → Visual`,
     ),
   );

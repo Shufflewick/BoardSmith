@@ -99,7 +99,7 @@ function reportIngestCheck(check: IngestCheck): void {
   if (!wasRepaired(check) && !leftUnrepaired(check)) {
     const n = check.gaps.gapsWritten;
     console.log(
-      styleText('green', 
+      styleText('green',
         `✓ Ingest synthesis up to date — ${n} open rules ${plural(n, 'gap', 'gaps')}, no Derived/Visual misfiling`,
       ),
     );

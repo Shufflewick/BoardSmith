@@ -11,13 +11,14 @@
  * (`src/cli/slash-command/agents/`); a project maps a role to another agent in boardsmith.json.
  */
 
-import { promises as fs } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { promises as fs, readdirSync, statSync } from 'node:fs';
+import { join, dirname, relative } from 'node:path';
 import { homedir } from 'node:os';
 import { execSync } from 'node:child_process';
 import { styleText } from 'node:util';
 import { ROLES, defaultAgentType } from '../lib/agent-roles.js';
 import { boardsmithPackageRoot } from '../lib/boardsmith-version.js';
+import { filesContentHash } from '../lib/hash.js';
 
 interface InstallOptions {
   force?: boolean;
@@ -83,6 +84,12 @@ const SHARED_DIRS = ['build', 'ingest', 'orchestrate', 'templates', 'aspects', '
  * `routing.md` (which role each piece of work is dispatched to, and when review may start).
  */
 const SHARED_FILES = ['state-machine.md', 'reporting.md', 'routing.md'];
+
+/**
+ * The content hash of the skill sources this install was copied from, written last so a partial
+ * copy carries none. Not the package version: a checkout keeps one version across every pull.
+ */
+const SOURCE_STAMP = join(SHARED_ROOT, 'SOURCE-HASH');
 
 /**
  * A known leaf file inside each shared dir (relative to `targetDir`). A COMPLETE install
@@ -163,18 +170,23 @@ function expectedInstallPaths(targetDir: string): string[] {
 }
 
 /**
- * True only when EVERY expected install path is present AND no retired skill directory survives
- * (a complete, current, non-partial install). A tree that still carries a retired directory is
+ * True only when EVERY expected install path is present, the stamp matches `sourceHash`, AND no retired skill directory survives (a complete, current, non-partial install). A tree that still carries a retired directory is
  * NOT complete: it must fall through to the pre-copy clean that removes it, or a designer who
  * installed an earlier version would keep the stale skill until they thought to pass `--force`.
  */
-async function isFullyInstalled(targetDir: string): Promise<boolean> {
+async function isFullyInstalled(targetDir: string, sourceHash: string): Promise<boolean> {
   for (const path of expectedInstallPaths(targetDir)) {
     try {
       await fs.access(path);
     } catch {
       return false; // Missing piece → partial/absent install
     }
+  }
+  try {
+    const stamped = await fs.readFile(join(targetDir, SOURCE_STAMP), 'utf-8');
+    if (stamped.trim() !== sourceHash) return false; // Copied from other skill sources
+  } catch {
+    return false; // No stamp → an unstamped or partial install
   }
   for (const skillName of RETIRED_SKILL_NAMES) {
     try {
@@ -201,6 +213,17 @@ function skillSources(slashCommandDir: string): string[] {
     ...SHARED_FILES.map((file) => join(bsDir, file)),
     ...AGENT_FILES.map((file) => join(slashCommandDir, 'agents', file)),
   ];
+}
+
+/** Every file the copy reads, relative to `slashCommandDir`. */
+function skillSourceFiles(slashCommandDir: string): string[] {
+  return skillSources(slashCommandDir).flatMap((path) =>
+    statSync(path).isDirectory()
+      ? readdirSync(path, { recursive: true, encoding: 'utf-8' })
+          .map((entry) => join(path, entry))
+          .filter((file) => statSync(file).isFile() && excludeTestFiles(file))
+      : [path],
+  ).map((file) => relative(slashCommandDir, file));
 }
 
 /** Throws, naming the first missing one, unless every skill source exists. */
@@ -234,12 +257,12 @@ async function copySkillTree(
   // "Already installed" must mean the FULL expected set is present, not a single sentinel.
   // A partial/interrupted install (e.g. first SKILL.md written but shared tree never copied)
   // must NOT short-circuit as complete — it falls through to a clean re-copy that finishes it.
-  if (!force && (await isFullyInstalled(targetDir))) {
-    return false; // Fully installed, not overwriting
-  }
-
   // The pre-clean below deletes the current install, so first prove there is something to replace it with.
   await assertSkillSourcesExist(slashCommandDir);
+  const sourceHash = filesContentHash(slashCommandDir, skillSourceFiles(slashCommandDir));
+  if (!force && (await isFullyInstalled(targetDir, sourceHash))) {
+    return false; // Fully installed, not overwriting
+  }
 
   // Pre-clean every installer-owned path before copying so the result is authoritative:
   // fs.cp merges into an existing tree and never deletes orphans (renamed/removed upstream
@@ -278,6 +301,7 @@ async function copySkillTree(
     await fs.copyFile(join(slashCommandDir, 'agents', file), join(agentsDir, file));
   }
 
+  await fs.writeFile(join(targetDir, SOURCE_STAMP), `${sourceHash}\n`);
   return true;
 }
 
@@ -347,7 +371,7 @@ export async function installClaudeCommand(options: InstallOptions = {}): Promis
   console.log('');
   console.log(styleText('gray', 'Each skill reads from a shared reference tree (build/, ingest/,'));
   console.log(
-    styleText('gray', 
+    styleText('gray',
       'orchestrate/, templates/, aspects/, state-machine.md, reporting.md, routing.md) installed under bs-shared/.'
     )
   );

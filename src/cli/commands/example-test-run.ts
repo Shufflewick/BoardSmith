@@ -188,7 +188,7 @@ function printRunResult(result: VerifyExampleRunResult): void {
   }
   const disagrees = result.records.filter((r) => r.verdict === 'disagrees');
   console.log(
-    styleText('green', 
+    styleText('green',
       `✓ Ran ${result.relTestFilePath}: ${result.records.length - disagrees.length} agree, ` +
         `${disagrees.length} disagree.`,
     ),

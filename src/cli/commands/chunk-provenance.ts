@@ -791,7 +791,7 @@ function reportUpToDate(
   engineRecorded: number | undefined,
 ): void {
   console.log(
-    styleText('green', 
+    styleText('green',
       `✓ ${relChunkMdPath(slug)} — Verified Against up to date (${record.scope}${record.reason ? `, ${record.reason}` : ''})`,
     ),
   );
@@ -1319,7 +1319,7 @@ export async function chunkProvenanceStatusCommand(
     // `chunk-check` — goes unread too.
     if (projectProvenanceState === 'pre-provenance') {
       console.log(
-        styleText('yellow', 
+        styleText('yellow',
           `NO RECORDED PROVENANCE YET — this project's verifications predate provenance ` +
             `recording, so all ${verifiedWithoutProvenance.length} verified chunk(s) lack a ` +
             `"${VERIFIED_AGAINST_HEADING}" block. This is expected for a project built before ` +
@@ -1329,7 +1329,7 @@ export async function chunkProvenanceStatusCommand(
       );
     } else {
       console.log(
-        styleText('red', 
+        styleText('red',
           `VERIFIED WITHOUT PROVENANCE — this project DOES record provenance elsewhere, yet ` +
             `these chunks' Status claims verification with no valid ` +
             `"${VERIFIED_AGAINST_HEADING}" block behind it. That is the signature of a skipped ` +
@@ -1345,7 +1345,7 @@ export async function chunkProvenanceStatusCommand(
   if (verifiedWithoutSignoff.length) {
     console.log('');
     console.log(
-      styleText('red', 
+      styleText('red',
         `VERIFIED WITHOUT SIGN-OFF: these chunks' Status claims verification that no valid ` +
           `designer sign-off backs. Set each back to built and have the designer sign it off ` +
           `with \`boardsmith chunk-signoff <slug>\`:`,

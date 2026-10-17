@@ -126,7 +126,7 @@ export function createWorldConnections(
             // The message, not the error object, exactly as `reloadWorld` in
             // `dev-world.ts` does it (#240).
             console.error(
-              styleText('red', 
+              styleText('red',
                 `[boardsmith dev] world message '${String(message.type)}' failed: ` +
                   `${error instanceof Error ? error.message : String(error)}`,
               ),

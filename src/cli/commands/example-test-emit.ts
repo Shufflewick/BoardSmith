@@ -572,7 +572,7 @@ export async function verifyExampleEmitCommand(
   }
 
   console.log(
-    styleText('green', 
+    styleText('green',
       `✓ Emitted ${result.relTestFilePath} — ${result.testBlockCount} test(s), ` +
         `${result.exemptCount} exempt example(s)${result.chunkExempt ? ' (chunk-wide exemption)' : ''}.`,
     ),

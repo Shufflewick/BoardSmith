@@ -826,7 +826,7 @@ export async function verifyDeriveCheckCommand(
   }
 
   console.log(
-    styleText('green', 
+    styleText('green',
       `✓ Derive check — ${candidates.length} rule-bearing candidate(s) across ${slices.length} ` +
         `slice(s), ${pendingCount} pending`,
     ),
@@ -843,7 +843,7 @@ export async function verifyDeriveCheckCommand(
       continue;
     }
     console.log(
-      styleText('yellow', 
+      styleText('yellow',
         `  ⚠ ${finding.verdict} (worth a human glance, never a verdict) — ` +
           `${finding.slicePath}:${finding.lineNumber}`,
       ),
@@ -1486,7 +1486,7 @@ export async function verifyDeriveRecordCommand(
     return result;
   }
   console.log(
-    styleText('green', 
+    styleText('green',
       `✓ Recorded ${records.length} derive-check verdict(s) for ${slicePath} ` +
         `(${grounding.rejected.length} grounding rejection(s)).`,
     ),

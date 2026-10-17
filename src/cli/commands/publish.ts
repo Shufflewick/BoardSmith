@@ -164,7 +164,7 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
     if (!apiKey) {
       console.error(styleText('red', `No API key configured for the ${target} platform.`));
       if (hasLegacyApiKeyField()) {
-        console.error(styleText('dim', 
+        console.error(styleText('dim',
           `${globalConfigPath()} still holds a single "apiKey" from before dev and prod had ` +
           `separate key stores. It is not read for any target — save the key against the one you want.`
         ));
@@ -300,7 +300,7 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
     }
     if (isPublishError(err) && err.kind === 'NO_ACCESS') {
       spinner.fail('Publish failed');
-      console.error(styleText('red', 
+      console.error(styleText('red',
         `You don't have develop access to this game under publisher \`${effectiveSlug}\`. `
         + 'Ask an owner or manager to grant you develop access, then try again.',
       ));
@@ -309,7 +309,7 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
     }
     if (isPublishError(err) && err.kind === 'SCOPE_VIOLATION') {
       spinner.fail('Publish failed');
-      console.error(styleText('red', 
+      console.error(styleText('red',
         `This API key is scoped to a different publisher and can't publish to \`${effectiveSlug}\`.`,
       ));
       process.exit(1);

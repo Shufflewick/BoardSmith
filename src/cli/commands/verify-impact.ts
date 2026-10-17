@@ -663,7 +663,7 @@ export async function verifyImpactGateCommand(
   }
 
   console.log(
-    styleText('yellow', 
+    styleText('yellow',
       `⚠ ${pending.length} of ${contradictions.length} contradictory finding(s) pending adjudication — run ${runId}`,
     ),
   );
@@ -1273,7 +1273,7 @@ function refuseApply(
     return result;
   }
   console.log(
-    styleText('yellow', 
+    styleText('yellow',
       `⚠ ${pendingPairs.length} ${reason}.\n` +
         pendingPairs
           .map((p) => `    boardsmith ${command} --run-id ${runId} --pair-id ${p} ${flag} ...`)

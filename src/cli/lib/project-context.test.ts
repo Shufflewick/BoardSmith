@@ -12,6 +12,7 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 describe('requireBoardsmithWorkspace', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   const workspaces: Array<[label: string, make: (dir: string) => void, context: string]> = [
@@ -45,6 +46,9 @@ describe('requireBoardsmithWorkspace', () => {
   });
 
   it('prints plain text, with no colour codes, when stdout is not a terminal (#931)', () => {
+    // The shell running the suite may force or forbid colour; this test is about the piped stdout alone.
+    vi.stubEnv('FORCE_COLOR', undefined);
+    vi.stubEnv('NO_COLOR', undefined);
     vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
     const errors: string[] = [];
     vi.spyOn(console, 'error').mockImplementation((message: unknown) => {

@@ -109,11 +109,17 @@ const NEEDS_A_PERSON: ReadonlySet<DoctorFindingKind> = new Set(['move-conflict',
 /** The design artifacts `design/` owns, in the order `doctor` reports them. */
 const DESIGN_ENTRIES: readonly string[] = [...DESIGN_LEDGERS, RULEBOOK_DIR, CHUNKS_DIR];
 
-/** True when `.gitignore` already keeps `.boardsmith/` out of commits. */
+/** The `.gitignore` lines git applies exactly as it does `.boardsmith/` at the project root. */
+const GITIGNORE_EQUIVALENTS: ReadonlySet<string> = new Set(['.boardsmith/', '.boardsmith', '/.boardsmith/', '/.boardsmith']);
+
+/**
+ * True when `.gitignore` already keeps `.boardsmith/` out of commits. Read as text, not through
+ * `git check-ignore`, because doctor also runs on projects that are not git repositories yet.
+ */
 async function gitignoreCovers(projectDir: string): Promise<boolean> {
   try {
     const text = await fs.readFile(join(projectDir, '.gitignore'), 'utf-8');
-    return text.split('\n').some((line) => line.trim() === GITIGNORE_ENTRY);
+    return text.split('\n').some((line) => GITIGNORE_EQUIVALENTS.has(line.trim()));
   } catch {
     return false;
   }

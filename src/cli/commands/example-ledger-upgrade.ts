@@ -232,7 +232,7 @@ async function printUpgrade(
   );
   if (result.upgraded.length === 0 && result.dropped.length === 0) {
     console.log(
-      styleText('green', 
+      styleText('green',
         exists
           ? `✓ Nothing to upgrade: every record in ${result.ledgerPath} already carries lineText.`
           : `✓ Nothing to upgrade: this project has no example-replay ledger.`,
@@ -241,7 +241,7 @@ async function printUpgrade(
     return;
   }
   console.log(
-    styleText('green', 
+    styleText('green',
       `✓ Upgraded ${result.upgraded.length} record(s) in ${result.ledgerPath}: each now carries the ` +
         `text of the slice line it cites, and keeps its verdict.`,
     ),

@@ -578,7 +578,7 @@ function reportMigration(started: { migrated?: WorldMigrationOutcome }): void {
   if (started.migrated === undefined) return;
   const { from, to, partitions, created, events } = started.migrated;
   console.log(
-    styleText('green', 
+    styleText('green',
       `  Migrated this world from state version ${from} to ${to}: ` +
         `${partitions} partition(s), ${created} new partition root(s) and ` +
         `${events} queued event(s), in one durable step.`,
