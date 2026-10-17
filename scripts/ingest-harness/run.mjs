@@ -6,7 +6,7 @@
  *
  * Stages a throwaway project with this repo's CURRENT WORKING TREE skill text installed
  * project-locally, drives a real headless `claude` session through `/bs-ingest-rules` against a
- * real rulebook PDF, and reports Plan 05's nine produced-artifact checks plus gate item (g)
+ * real rulebook PDF, and reports the ten produced-artifact checks from check.mjs plus gate item (g)
  * (the reference game's git-cleanliness invariant).
  *
  * This is an OPERATOR/AGENT-INVOKED tool, never CI. See README.md for the full determinism
@@ -114,8 +114,8 @@ Subcommands:
            pins a session id and invokes /bs-ingest-rules, then each subsequent turn resumes that
            same session with a scripted designer answer, reproducing accumulated interactive
            context instead of one single-shot auto-answer instruction.
-  assert   Report the nine produced-artifact checks plus gate item (g), print a summary and the
-           turn-count diagnostic, exit 0 only if all ten pass.
+  assert   Report the ten produced-artifact checks plus gate item (g), print a summary and the
+           turn-count diagnostic, exit 0 only if all eleven pass.
 
 Options:
   --work-dir <dir>         Throwaway project root. 'stage' refuses an existing folder it did not
@@ -130,7 +130,7 @@ Options:
                            without seeing HARNESS-STEP3-COMPLETE is a reported FAILURE, never a
                            silent pass.
   --turns-only             Diagnostic mode: print only how many turns the most recent 'drive' run
-                           took (and whether it hit the cap) and exit — skips the nine
+                           took (and whether it hit the cap) and exit — skips the ten
                            produced-artifact checks entirely. Exit 1 unless the session completed
                            (a turn-cap hit or a non-zero session exit fails).
   --json                   Emit assert's result as a single JSON object on stdout
@@ -399,7 +399,7 @@ function assertCmd(opts) {
     console.log(turnDiagnosticLine(state));
     console.log('');
     console.log(
-      '[assert] --turns-only: skipped the nine produced-artifact checks. A run that "completes"',
+      '[assert] --turns-only: skipped the ten produced-artifact checks. A run that "completes"',
     );
     console.log('in 1-2 turns has not reproduced interactive session shape at all.');
     process.exit(sessionCompleted(state) ? 0 : 1);
