@@ -25,6 +25,7 @@ import type { Game } from '../engine/index.js';
 import type { GameElement } from '../engine/index.js';
 import type { DeterminizeSampler } from './types.js';
 import { changing } from '../engine/element/state-version.js';
+import { outermostConcealer } from '../engine/element/concealed-refs.js';
 
 /**
  * A game's determinization sampler broke the one contract it has (#73).
@@ -205,8 +206,22 @@ function attributeChange(id: number, prior: KnownElement, now: KnownElement): st
   return null;
 }
 
+/** The first element the sample created where the seat would see it, or `null`. */
+function visibleNewElement(before: KnownWorld, after: KnownWorld, seat: number): string | null {
+  for (const [id, now] of after) {
+    if (before.has(id)) continue;
+    if (outermostConcealer(now.element, seat) && !now.element.isVisibleTo(seat)) continue;
+    return (
+      `it added ${nameOf(now.element)} to ${nameOf(now.parent)}. The seat can see what that ` +
+      `container holds, or can see the element itself, so it knows that element was not there. ` +
+      `A sampler may create elements only where the seat cannot see them, such as a hidden deck.`
+    );
+  }
+  return null;
+}
+
 /** The first way `after` contradicts `before`, or `null` if it does not. */
-function findContradiction(before: KnownWorld, after: KnownWorld): string | null {
+function findContradiction(before: KnownWorld, after: KnownWorld, seat: number): string | null {
   const countChange = placeholderCountChange(before, after);
   if (countChange) return countChange;
 
@@ -229,7 +244,7 @@ function findContradiction(before: KnownWorld, after: KnownWorld): string | null
     const change = attributeChange(id, prior, now);
     if (change) return change;
   }
-  return null;
+  return visibleNewElement(before, after, seat);
 }
 
 /**
@@ -269,7 +284,7 @@ export function applyDeterminization(
     );
   }
 
-  const contradiction = findContradiction(before, recordKnownWorld(sandbox));
+  const contradiction = findContradiction(before, recordKnownWorld(sandbox), seat);
   if (contradiction) {
     throw new DeterminizationError(
       `The determinize sampler for seat ${seat} produced a world that contradicts what the ` +
