@@ -145,6 +145,10 @@ describe('parseExecutorOp (#530)', () => {
       [{ type: 'botSuggest', seats: 'all' }, /"seats" must be a list of \{ seat, level\? \}/],
       [{ type: 'botSuggest', seats: [{ seat: 1, extra: true }] }, /"seats" must be a list of \{ seat, level\? \}/],
       [{ type: 'botSuggest', seats: [{ seat: 1, level: 3 }] }, /"seats" must be a list of \{ seat, level\? \}/],
+      // A level parseBotLevel refuses is refused here, not when the bot is built (#818).
+      [{ type: 'botSuggest', seats: [{ seat: 1, level: 'expert' }] }, /level a bot level: easy, medium, hard/],
+      [{ type: 'botSuggest', seats: [{ seat: 1, level: 'constructor' }] }, /level a bot level/],
+      [{ type: 'botSuggest', seats: [{ seat: 1, level: '100001' }] }, /level a bot level/],
     ];
     for (const [value, message] of cases) {
       const parsed = parseExecutorOp(value);
