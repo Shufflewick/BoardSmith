@@ -1071,11 +1071,12 @@ export function useFlyingElements(
           // into the next update.
           if (newContainer) {
             elementLocations.set(id, newContainer);
+            elementDataCache.set(id, { element, wasHidden: isHidden });
           } else {
             // In an untracked container: forget the old one so a later move does not fly from it (#867).
             elementLocations.delete(id);
+            elementDataCache.delete(id);
           }
-          elementDataCache.set(id, { element, wasHidden: isHidden });
         }
 
         // Check for elements that disappeared (visible → hidden or removed)
