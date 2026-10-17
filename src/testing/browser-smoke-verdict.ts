@@ -6,6 +6,7 @@
  */
 import { rulesErrorSentence } from '../engine/action/rules-error.js';
 import { PageFrozen } from './browser-smoke-clock.js';
+import { parsePositiveWholeNumber } from '../utils/positive-whole-number.js';
 
 /** Where a game keeps its smoke test. `boardsmith init` writes it and `boardsmith verify` runs it. */
 export const SMOKE_SPEC_PATH = 'tests/browser/smoke.spec.ts';
@@ -83,6 +84,11 @@ export function smokeWorldSeats(seats: number | readonly number[] | undefined): 
   const twice = seats.find((seat, i) => seats.indexOf(seat) !== i);
   if (twice !== undefined) throw new Error(`${from} lists seat ${twice} twice. List each seat once.`);
   return [...seats];
+}
+
+/** The spec's `steps`, once it is a positive whole number: with none, the walk takes no step and passes any game that loads (#924). */
+export function smokeSteps(steps: number): number {
+  return parsePositiveWholeNumber(`\`steps\` in ${SMOKE_SPEC_PATH}`, String(steps));
 }
 
 /** Where a walk stopped because no seat was offered anything for `seconds`. */

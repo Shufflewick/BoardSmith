@@ -22,6 +22,7 @@ import {
   smokeRecord,
   smokeSeeds,
   smokeSummary,
+  smokeSteps,
   smokeWorldSeats,
   type ResolvedMemory,
   type SmokeInputView,
@@ -105,6 +106,16 @@ describe('smokeWorldSeats: the seats a world walk plays (#471)', () => {
       `\`seats\` in ${SMOKE_SPEC_PATH} lists 0, which is not a seat. Seats are numbered from 1.`,
     );
     expect(() => smokeWorldSeats([4, 1, 4])).toThrow(`\`seats\` in ${SMOKE_SPEC_PATH} lists seat 4 twice. List each seat once.`);
+  });
+});
+
+describe('smokeSteps: how many actions a walk takes at most (#924)', () => {
+  it('takes a positive whole number', () => {
+    expect(smokeSteps(12)).toBe(12);
+  });
+
+  it.each([0, -1, Number.NaN, 0.5])('refuses %s, which would walk no step and pass any game that loads', (steps) => {
+    expect(() => smokeSteps(steps)).toThrow(`\`steps\` in ${SMOKE_SPEC_PATH} takes a positive whole number, got "${steps}".`);
   });
 });
 
