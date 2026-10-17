@@ -861,6 +861,24 @@ export async function readRunLedgerState(
   return resolveLedgerState(parseLedgerBody(ledgerText, relative(projectDir, ledgerFile)).lines);
 }
 
+/** The advice for an edited slice: reset its range, unless that range is complete or absent. */
+function sliceMismatchWarning(record: LedgerRecord, completeRanges: Set<string>): string {
+  const mismatch = `unit "${record.unitId}"'s recorded sha256 no longer matches ${record.slicePath} on disk (hand-edit or tamper detected)`;
+  if (record.rangeId && !completeRanges.has(record.rangeId)) {
+    return (
+      `${mismatch} — treating as NOT recorded. Restore the slice's recorded text, or reset its range ` +
+      `with \`verify-run-record --reset-range ${record.rangeId}\` and record it again.`
+    );
+  }
+  // A complete range cannot be reset, so its unit is as final as one recorded without a range.
+  const final = record.rangeId ? `Its range "${record.rangeId}" is complete` : 'It was recorded without a range';
+  return (
+    `${mismatch} — leaving its slice out. ${final}, so it cannot be recorded ` +
+    `again in this run. Restore the slice's recorded text, or, if that text is lost, start a new run ` +
+    `with \`boardsmith verify-run-init\` (no \`--run-id\`).`
+  );
+}
+
 /**
  * Re-hashes each recorded slice against the file on disk (L8/T-173-12) — the one check every
  * reader of recorded units shares (#837). A slice whose path escapes the staging dir or whose
@@ -892,21 +910,7 @@ export async function checkRecordedSlices(
       continue;
     }
     if (sha256Hex(bytes) !== record.sha256) {
-      const mismatch = `unit "${record.unitId}"'s recorded sha256 no longer matches ${record.slicePath} on disk (hand-edit or tamper detected)`;
-      // A complete range cannot be reset, so its unit is as final as one recorded without a range.
-      const final = !record.rangeId
-        ? 'It was recorded without a range'
-        : completeRanges.has(record.rangeId)
-          ? `Its range "${record.rangeId}" is complete`
-          : undefined;
-      warnings.push(
-        final
-          ? `${mismatch} — leaving its slice out. ${final}, so it cannot be recorded ` +
-              `again in this run. Restore the slice's recorded text, or, if that text is lost, start a new run ` +
-              `with \`boardsmith verify-run-init\` (no \`--run-id\`).`
-          : `${mismatch} — treating as NOT recorded. Restore the slice's recorded text, or reset its range ` +
-              `with \`verify-run-record --reset-range ${record.rangeId}\` and record it again.`,
-      );
+      warnings.push(sliceMismatchWarning(record, completeRanges));
       continue;
     }
     intact.push({ record, bytes });
