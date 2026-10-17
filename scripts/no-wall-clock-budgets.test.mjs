@@ -82,6 +82,8 @@ function propertyValue(literal, key) {
   return [ts.isShorthandPropertyAssignment(property) ? property.name : property.initializer].filter(Boolean);
 }
 
+/** What a function returns: an arrow's expression body, or each `return` not inside a nested function. */
+const returnsOf = (fn) => (!fn.body ? [] : ts.isBlock(fn.body) ? returned(fn.body) : [fn.body]);
 /** What `node` returns, leaving out the returns of functions nested in it. */
 function returned(node) {
   if (ts.isReturnStatement(node)) return node.expression ? [node.expression] : [];
@@ -100,7 +102,7 @@ function assignmentAt(node) {
   const value = HAS_VALUE.some((is) => is(node)) ? node.initializer : ts.isShorthandPropertyAssignment(node) && node.objectAssignmentInitializer;
   if (value) return { target: node.name, values: [value] };
   if (ts.isBindingElement(node)) return { target: node.name, values: destructured(node) };
-  if (ts.isFunctionDeclaration(node) && node.name && node.body) return { target: node.name, values: returned(node.body) };
+  if (ts.isFunctionDeclaration(node) && node.name && node.body) return { target: node.name, values: returnsOf(node) };
   return ts.isBinaryExpression(node) ? binaryAssignment(node) : undefined;
 }
 
@@ -149,13 +151,16 @@ function wallClockBudgets(source, fileName = 'scanned.ts') {
   const nameOf = (node) => (ts.isPropertyAccessExpression(node) ? node.name : node);
   const isClockTerm = (node) => isClockRead(node) || holds(clockVars, nameOf(bare(node)));
   let durations = new Set();
-  /** Whether `node` subtracts a clock read or a name holding one, or reads a name holding such a difference. */
-  const measures = (node) =>
-    (ts.isBinaryExpression(node)
-      && [ts.SyntaxKind.MinusToken, ts.SyntaxKind.MinusEqualsToken].includes(node.operatorToken.kind)
-      && (isClockTerm(node.left) || isClockTerm(node.right)))
-    || holds(durations, node)
-    || ts.forEachChild(node, measures) === true;
+  /**
+   * Whether `node` subtracts a clock read or a name holding one, or reads a name holding such a difference. A
+   * function counts by what it returns, so a clock used only as a timeout inside it does not.
+   */
+  const subtractsClock = (node) => ts.isBinaryExpression(node)
+    && [ts.SyntaxKind.MinusToken, ts.SyntaxKind.MinusEqualsToken].includes(node.operatorToken.kind)
+    && (isClockTerm(node.left) || isClockTerm(node.right));
+  const measures = (node) => (ts.isFunctionLike(node)
+    ? returnsOf(node).some(measures)
+    : subtractsClock(node) || holds(durations, node) || ts.forEachChild(node, measures) === true);
   // Until nothing changes, so a duration handed from name to name is followed to the end.
   for (let size = -1; size !== durations.size;) {
     size = durations.size;
@@ -398,6 +403,18 @@ describe('wallClockBudgets', () => {
   it('does not flag a function that times out on the clock but returns something else (#1083)', () => {
     const source = 'function waitFor() { const s = Date.now(); while (Date.now() - s < 5) {} return done; }';
     expect(wallClockBudgets(`${source}\nexpect(waitFor()).toBe(true);`)).toEqual([]);
+  });
+
+  it('judges arrows, function expressions and methods by what they return, not by their bodies (#1083)', () => {
+    const wait = '{ const s = Date.now(); while (Date.now() - s < 5) {} return done; }';
+    const awaited = `const waitFor = async () => ${wait};\nconst ok = await waitFor();\nexpect(ok).toBe(true);`;
+    const expression = `const waitFor = function () ${wait};\nexpect(waitFor()).toBe(true);`;
+    const method = `const h = { wait() ${wait}, n: 3 };\nconst n = h.n;\nexpect(n).toBe(3);`;
+    expect(wallClockBudgets(awaited)).toEqual([]);
+    expect(wallClockBudgets(expression)).toEqual([]);
+    expect(wallClockBudgets(method)).toEqual([]);
+    expect(wallClockBudgets('const took = () => Date.now() - s;\nexpect(took()).toBeLessThan(5);')).toHaveLength(1);
+    expect(wallClockBudgets('const took = () => { return Date.now() - s; };\nexpect(took()).toBeLessThan(5);')).toHaveLength(1);
   });
 
   it('finds a duration built by compound assignment (#1083)', () => {
