@@ -1669,3 +1669,52 @@ describe('executeOp', () => {
     });
   });
 });
+
+// #810: the async handlers' rejections must reach executeOp's catch, the same
+// as a sync handler's throw, so a caller gets a refusal and never a raw error.
+describe('executeOp refuses, never rejects, when an async handler fails', () => {
+  const botTwoStepDef: GameDefinitionLike & { bot: BotStrategy } = {
+    ...twoStepGameDef,
+    bot: { objectives: () => ({ any: { checker: () => 0, weight: 1 } }) },
+  };
+
+  async function brokenSnapshot() {
+    const { snapshot } = succeeded(await startGame(botTwoStepDef, twoStepGameOptions));
+    // Flow position intact (so the stale check passes), element tree gone.
+    return { ...snapshot, state: null } as unknown as typeof snapshot;
+  }
+
+  function expectReadableRefusal(result: Awaited<ReturnType<typeof executeOp>>) {
+    const failure = refused(result);
+    expect(failure.category).toBe('executor');
+    expect(failure.error).toEqual(expect.any(String));
+    expect(failure.error).not.toMatch(/\n\s+at |[\\/]src[\\/]/);
+  }
+
+  it('selectionStep', async () => {
+    const snapshot = await brokenSnapshot();
+    expectReadableRefusal(await executeOp(botTwoStepDef, twoStepGameOptions, snapshot, null, {
+      type: 'selectionStep', player: 1, selectionName: 'color', value: 'red', actionName: 'pick',
+      boundaryKey: boundaryKeyOf(snapshot),
+    }));
+  });
+
+  it('botSuggest', async () => {
+    const snapshot = await brokenSnapshot();
+    expectReadableRefusal(await executeOp(botTwoStepDef, twoStepGameOptions, snapshot, null, {
+      type: 'botSuggest', seats: [{ seat: 1 }],
+    }));
+  });
+
+  it('hint', async () => {
+    const snapshot = await brokenSnapshot();
+    expectReadableRefusal(await executeOp(botTwoStepDef, twoStepGameOptions, snapshot, null, { type: 'hint', seat: 1 }));
+  });
+
+  it('heatmapToggle', async () => {
+    const snapshot = await brokenSnapshot();
+    expectReadableRefusal(await executeOp(botTwoStepDef, twoStepGameOptions, snapshot, null, {
+      type: 'heatmapToggle', seat: 1, visible: true,
+    }));
+  });
+});
