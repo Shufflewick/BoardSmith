@@ -10,8 +10,9 @@
  * So the claim a budget stood for has to be stated as the work done: count the
  * reads, the calls or the timers scheduled (see the #313 test in
  * `src/ui/composables/useBoardInteraction.test.ts`), or prove the path taken
- * by what it returned. This scan fails on a test that compares a clock
- * difference, directly or through a variable, with `toBeLessThan`.
+ * by what it returned. This scan fails on any `expect(...)` whose subject
+ * subtracts a clock read, or a variable assigned one, directly or through a
+ * variable holding that difference, whatever the matcher (#919).
  *
  * It does not flag a timestamp checked against the clock
  * (`expect(entry.timestamp).toBeLessThanOrEqual(Date.now())`), which is a
@@ -22,23 +23,34 @@ import { trackedTestFiles } from './tracked-tests.test-helper.mjs';
 
 const CLOCK = String.raw`(?:Date\.now\(\)|performance\.now\(\)|process\.hrtime(?:\.bigint)?\(\))`;
 
-/** Every `expect(...)` a source compares with `toBeLessThan` that measures a clock difference. */
+/** The text between `source[open]`, an opening parenthesis, and its match. */
+function parenthesised(source, open) {
+  let depth = 0;
+  for (let at = open; at < source.length; at++) {
+    if (source[at] === '(') depth++;
+    else if (source[at] === ')' && --depth === 0) return source.slice(open + 1, at);
+  }
+  return source.slice(open + 1);
+}
+
+/** Every `expect(...)` in a source whose subject measures a clock difference, with any matcher. */
 function wallClockBudgets(source) {
-  const measured = new Set(
-    [...source.matchAll(new RegExp(String.raw`(?:const|let|var)\s+(\w+)\s*=\s*${CLOCK}\s*-`, 'g'))].map(
-      (match) => match[1],
-    ),
-  );
-  const findings = [];
-  source.split('\n').forEach((line, index) => {
-    const match = /expect\((.*?)\)\s*\.toBeLessThan(?:OrEqual)?\(/.exec(line);
-    if (!match) return;
-    const subject = match[1].trim();
-    if (new RegExp(`${CLOCK}\\s*-`).test(subject) || measured.has(subject)) {
-      findings.push({ line: index + 1, text: line.trim() });
-    }
-  });
-  return findings;
+  const assigned = (value) => [...source.matchAll(new RegExp(String.raw`(?<![.\w])(\w+)\s*=\s*(${value})`, 'g'))];
+  const clockVars = assigned(CLOCK).map((match) => match[1]);
+  const term = [CLOCK, ...clockVars.map((name) => String.raw`\b${name}\b`)].join('|');
+  const difference = new RegExp(String.raw`(?:${term})\s*-(?![-=])|(?<![-=])-\s*(?:${term})`);
+  const measured = assigned('[^;\n]*')
+    .filter((match) => difference.test(match[2]))
+    .map((match) => match[1]);
+  const measures = (subject) =>
+    difference.test(subject) || measured.some((name) => new RegExp(String.raw`\b${name}\b`).test(subject));
+  const lines = source.split('\n');
+  return [...source.matchAll(/\bexpect\(/g)]
+    .filter((match) => measures(parenthesised(source, match.index + match[0].length - 1)))
+    .map((match) => {
+      const line = source.slice(0, match.index).split('\n').length;
+      return { line, text: lines[line - 1].trim() };
+    });
 }
 
 describe('wallClockBudgets', () => {
@@ -54,6 +66,25 @@ describe('wallClockBudgets', () => {
 
   it('finds a budget on a clock difference written inline', () => {
     expect(wallClockBudgets('expect(Date.now() - start).toBeLessThan(500);')).toHaveLength(1);
+  });
+
+  it('finds a budget on the difference of two clock reads (#919)', () => {
+    const source = [
+      'const t0 = performance.now();',
+      'work();',
+      'const t1 = performance.now();',
+      'expect(t1 - t0).toBeLessThan(100);',
+    ].join('\n');
+    expect(wallClockBudgets(source)).toEqual([{ line: 4, text: 'expect(t1 - t0).toBeLessThan(100);' }]);
+  });
+
+  it('finds a budget compared inside the subject, whatever the matcher (#919)', () => {
+    expect(wallClockBudgets('expect(Date.now() - start < 500).toBe(true);')).toHaveLength(1);
+  });
+
+  it('finds a budget whose expect( spans lines (#919)', () => {
+    const source = ['const elapsed = Date.now() - started;', 'expect(', '  elapsed,', ').toBeLessThan(500);'].join('\n');
+    expect(wallClockBudgets(source)).toEqual([{ line: 2, text: 'expect(' }]);
   });
 
   it('leaves a timestamp checked against the clock alone', () => {
