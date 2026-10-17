@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Action, actionStep, loop, type GameOptions } from '../engine/index.js';
 import { executeOp, type GameDefinitionLike, type Op } from './stateless-ops.js';
+import { stubExecuteOp } from './op-result.test-helper.js';
 import { SnapshotSessionHost } from './snapshot-session-host.js';
 import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
 
@@ -89,15 +90,69 @@ describe('#950: an op naming another seat as `seat` is refused', () => {
   });
 });
 
-// #1100: botSuggest names no one seat, and answers with a bot seat's move and its args.
-describe('#1100: botSuggest through handleOp is refused', () => {
-  it("refuses a seat asking for another seat's bot move, without running it", async () => {
+// #1100, #1102: only the host itself sends these: it calls executeOp directly, never handleOp.
+describe('#1100, #1102: a host-only op sent through handleOp is refused', () => {
+  it('refuses start, restoreEarlier and botSuggest from a seat, without running them or changing the game', async () => {
     const { host, executed } = await startedHost();
     host.setBotSeats([{ seat: 2 }]);
-    const res = await host.handleOp(1, { type: 'botSuggest', seats: [{ seat: 2 }] });
-    expect(res.success).toBe(false);
-    expect(!res.success && res.error).toMatch(/botSuggest.*only the host/i);
-    expect(!res.success && res.category).toBe('protocol');
+    const earlier = host.snapshot;
+    await host.handleOp(2, { type: 'action', actionName: 'pass', player: 2, args: {}, boundaryKey: boundaryKeyOfHost(host) });
+    await host.settled();
+    executed.length = 0;
+    const now = host.snapshot;
+    const hostOnly: Op[] = [
+      { type: 'start' },
+      { type: 'restoreEarlier', snapshot: earlier },
+      { type: 'botSuggest', seats: [{ seat: 2 }] },
+    ];
+    for (const op of hostOnly) {
+      const res = await host.handleOp(1, op);
+      expect(res.success, op.type).toBe(false);
+      expect(!res.success && res.error, op.type).toBe(
+        `Seat 1 sent '${op.type}', and was refused: only the host itself sends it, ` +
+          'through host.start(), host.restoreEarlier(snapshot) or host.runBotTurns(), never through handleOp.',
+      );
+      expect(!res.success && res.category, op.type).toBe('protocol');
+    }
     expect(executed).toEqual([]);
+    expect(host.snapshot).toBe(now);
+  });
+
+  it('restores an earlier position through the host-only entry point', async () => {
+    const { host } = await startedHost();
+    const earlier = host.snapshot!;
+    await host.handleOp(2, { type: 'action', actionName: 'pass', player: 2, args: {}, boundaryKey: boundaryKeyOfHost(host) });
+    const res = await host.restoreEarlier(earlier);
+    expect(res.success, !res.success ? res.error : '').toBe(true);
+    expect(host.snapshot!.actionHistory).toEqual(earlier.actionHistory);
+  });
+
+  it("drops every seat's half-made picks and hints, as a rewind does", async () => {
+    let lastEnvelope: object = {};
+    // PassGame has no two-pick action or hint, so seat 2's pick and hint are stubbed.
+    const host = new SnapshotSessionHost({
+      playerCount: 2,
+      executeOp: stubExecuteOp(async (snap, pend, op) => {
+        if (op.type === 'hint') return { success: true, hintAnnotation: { seat: op.seat, annotation: { text: 'pass' } } };
+        if (op.type === 'selectionStep') return { ...lastEnvelope, actionComplete: false, pendingState: { first: 'a' } };
+        const res = await executeOp(passDef, { playerCount: 2, seed: 'bs1102' }, snap, pend, op);
+        if (res.success && 'snapshot' in res) lastEnvelope = res;
+        return res;
+      }),
+      record: () => {}, push: () => {},
+    });
+    await host.start();
+    const earlier = host.snapshot!;
+    expect((await host.handleOp(2, { type: 'hint', seat: 2 })).success).toBe(true);
+    expect((await host.handleOp(2, {
+      type: 'selectionStep', player: 2, selectionName: 'first', value: 'a', actionName: 'pass', boundaryKey: boundaryKeyOfHost(host),
+    })).success).toBe(true);
+    expect(host.durableState().pendingStates['2']).toEqual({ first: 'a' });
+    expect(host.transientTeachingState.get(2)?.hint).toBeDefined();
+
+    expect((await host.restoreEarlier(earlier)).success).toBe(true);
+
+    expect(host.durableState().pendingStates['2']).toBeUndefined();
+    expect(host.transientTeachingState.has(2)).toBe(false);
   });
 });

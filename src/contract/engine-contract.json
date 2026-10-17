@@ -1,6 +1,6 @@
 {
-  "revision": 225,
-  "surfaceHash": "e6b92806c0d586d0",
+  "revision": 226,
+  "surfaceHash": "78cc3a6fa6f722cc",
   "payloadHash": "42faf88ae9f4cb97",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1743,6 +1743,14 @@
       "payloadHash": "42faf88ae9f4cb97",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "HexCoordSystem is now only 'axial' and HexGrid no longer has $sCoord; a hex board whose $coordSystem is anything else is refused by AutoUI and useHexGrid, and useHexGrid reads cell coordinates from the board's $qCoord/$rCoord by default (#866)."
+    },
+    {
+      "revision": 226,
+      "date": "2026-10-17",
+      "surfaceHash": "78cc3a6fa6f722cc",
+      "payloadHash": "42faf88ae9f4cb97",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "SnapshotSessionHost.handleOp now refuses start, restoreEarlier and botSuggest from a seat with a protocol refusal, since only the host sends them; a host uses host.start(), the new host.restoreEarlier(snapshot) and host.runBotTurns(), and a restore drops every seat's half-made picks and hints (#1102)."
     }
   ]
 }
