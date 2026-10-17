@@ -1060,17 +1060,15 @@ describe('repair-gate — computeRepairGate (pure, total)', () => {
       disposition: 'reopen-playtest',
       nextStatus: 'built',
       clearMarker: true,
-      reverifyStamp: false,
     });
   });
 
-  it('no-code-change: verified + stale + clean -> close-without-replaytest, nextStatus verified, reverifyStamp true', () => {
+  it('no-code-change: verified + stale + clean -> close-without-replaytest, nextStatus verified', () => {
     const gate = computeRepairGate({ status: 'verified', stale: true, driftState: 'clean' });
     expect(gate).toMatchObject({
       disposition: 'close-without-replaytest',
       nextStatus: 'verified',
       clearMarker: true,
-      reverifyStamp: true,
     });
   });
 
@@ -1498,7 +1496,7 @@ describe('contradictory / marker — verifyImpactApplyCommand', () => {
  */
 
 describe('cli.ts — verify-impact-* registration', () => {
-  it('registers all four verify-impact-* commands, chunk-check gains --reverified-no-code-change, and no command declares a bypass option', async () => {
+  it('registers all four verify-impact-* commands, chunk-check takes no --reverified-no-code-change (#827), and no command declares a bypass option', async () => {
     const cliSource = await fs.readFile(join(__dirname, '..', 'cli.ts'), 'utf-8');
 
     for (const name of [
@@ -1511,7 +1509,7 @@ describe('cli.ts — verify-impact-* registration', () => {
     }
 
     expect((cliSource.match(/verify-impact-/g) ?? []).length).toBeGreaterThanOrEqual(4);
-    expect(cliSource).toContain('--reverified-no-code-change');
+    expect(cliSource).not.toContain('--reverified-no-code-change');
 
     // Scoped to the verify-impact-* registration block only — `--force` legitimately exists
     // elsewhere in cli.ts (the unrelated `claude` command's `--force` to overwrite skills).
