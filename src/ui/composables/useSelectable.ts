@@ -155,6 +155,8 @@ export function useSelectableGrid<T>(
   /** Bind as each cell's `:ref`. */
   function registerCell(el: Element | null, idx: number) {
     cellEls[idx] = el instanceof HTMLElement || el instanceof SVGElement ? el : null;
+    // Vue never nulls a replaced function ref, so a cell keyed to a lower index leaves its old slot behind.
+    cellEls.length = Math.min(cellEls.length, cells.value.length);
   }
 
   /**
