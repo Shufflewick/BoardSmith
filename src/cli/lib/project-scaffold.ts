@@ -32,7 +32,6 @@ interface ProjectConfigBase {
   description: string;
   audience?: string;
   tags?: string[];
-  ui?: string;
 }
 
 /**
@@ -389,10 +388,8 @@ export { App };
  * stub kept dev-only; when the author is ready they swap which one is wrapped
  * in `defaultUI()`. That swap is the whole migration.
  */
-export function generateUisTs(config: TableUiConfig): string {
-  const custom = config.ui && config.ui !== 'auto' ? config.ui : undefined;
-  if (!custom) {
-    return `import { defineGameUIs, defaultUI, devUI } from 'boardsmith/ui';
+export function generateUisTs(): string {
+  return `import { defineGameUIs, defaultUI, devUI } from 'boardsmith/ui';
 import AutoUI from 'boardsmith/ui/auto-ui';
 
 /**
@@ -407,25 +404,6 @@ import AutoUI from 'boardsmith/ui/auto-ui';
 export default defineGameUIs({
   Auto: defaultUI(AutoUI),
   Custom: devUI(() => import('./components/GameTable.vue')),
-});
-`;
-  }
-  const name = custom.split('/').pop()?.replace(/\.vue$/, '') || 'GameUI';
-  return `import { defineGameUIs, defaultUI } from 'boardsmith/ui';
-import ${name} from '${custom}';
-
-/**
- * Every UI this game has. Exactly one must be defaultUI() — that is what
- * players get; the compiler rejects zero or two.
- *
- * The shipped board is imported statically so it can never fail to arrive
- * separately from the app. Add other boards with devUI(() => import(...)):
- * they exist only under \`boardsmith dev\` and production strips them entirely,
- * JS, CSS, and assets. GameShell offers the auto-UI under \`boardsmith dev\`
- * by itself; it does not need listing here.
- */
-export default defineGameUIs({
-  ${name}: defaultUI(${name}),
 });
 `;
 }
@@ -473,7 +451,7 @@ import uis from './uis.js';
  *
  * Optional custom-UI stub — start here when you want a bespoke interface.
  * The auto-UI ships and handles everything until you're ready to fill this in.
- * To activate: set boardsmith.json "ui" to the path of this file.
+ * To activate: move defaultUI() onto it in src/ui/uis.ts.
  */
 export function generateGameTableVue(): string {
   return `<script setup lang="ts">
@@ -482,12 +460,15 @@ export function generateGameTableVue(): string {
  *
  * The auto-UI (AutoUI) renders your game out of the box and can ship as-is
  * for simple games. Fill this component in when you want full control over
- * how the game looks, then update boardsmith.json:
+ * how the game looks, then move defaultUI() onto this component in
+ * src/ui/uis.ts, replacing the Auto and Custom lines:
  *
- *   "ui": "./ui/components/GameTable.vue"
+ *   import GameTable from './components/GameTable.vue';
+ *   ...
+ *   GameTable: defaultUI(GameTable),
  *
- * Pit of Success: the easy path (keeping "ui": "auto") is the right path —
- * switch here only when you're ready to invest in a custom interface.
+ * Pit of Success: the easy path (keeping the auto-UI as the default) is the
+ * right path; switch here only when you're ready to invest in a custom interface.
  */
 import { computed } from 'vue';
 import type { TableBoardProps } from 'boardsmith/ui';
@@ -721,8 +702,8 @@ export function generateScaffoldFiles(config: ProjectConfig, projectPath: string
   return [...shared, { path: 'src/rules/index.ts', content: generateRulesIndexTs(config) }];
 }
 
-/** What a table's UI files read from the project: its display name and, optionally, its custom board. */
-type TableUiConfig = Pick<ProjectConfigBase, 'displayName' | 'ui'>;
+/** What a table's UI files read from the project: its display name. */
+type TableUiConfig = Pick<ProjectConfigBase, 'displayName'>;
 
 /**
  * A table's UI, one file for each of {@link TABLE_UI_PATHS}: the page and its entry point, the game
@@ -734,7 +715,7 @@ export function tableUiFiles(config: TableUiConfig, actions: readonly string[]):
     [TABLE_UI_ENTRY]: generateIndexHtml(config),
     'src/main.ts': generateMainTs(),
     'src/ui/index.ts': generateUiIndexTs(),
-    'src/ui/uis.ts': generateUisTs(config),
+    'src/ui/uis.ts': generateUisTs(),
     'src/ui/App.vue': generateAppVue(),
     'src/ui/components/GameTable.vue': generateGameTableVue(),
     'tests/a11y.example.test.ts': generateA11yExampleTestTs(),
