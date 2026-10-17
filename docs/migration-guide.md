@@ -1,5 +1,11 @@
 # Migration Guide
 
+## `toDebugString` drops the unused `showHidden` option (#913)
+
+`DebugStringOptions.showHidden` is removed; it was never read. Delete it from
+any `toDebugString(game, { ... })` call. The "Current Player" line now reads
+`(seat N)` instead of `(position undefined)`.
+
 ## The game-over card has no New Game or Rematch button (#902)
 
 GameShell's game-over card and controls menu no longer offer New Game or
