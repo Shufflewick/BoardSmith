@@ -314,6 +314,15 @@ export function stagingSlicesDir(projectDir: string, runId: string): string {
 }
 
 /**
+ * This run's own ledger path — `rulebook/.verify/<runId>/RULING-VERDICTS.md`. Run-scoped, unlike
+ * CHECK-04's and CHECK-06's project-level ledgers: a ruling's verdict is a judgment against ONE
+ * run's fresh transcription, so it cannot outlive the run that produced it.
+ */
+export function rulingVerdictsLedgerPath(projectDir: string, runId: string): string {
+  return join(runRootDir(projectDir, runId), 'RULING-VERDICTS.md');
+}
+
+/**
  * The single path-computation authority for a run's ledger file. Exported (174-02) so
  * `verify-classify.ts` — the second caller sharing this ledger — can locate the SAME `RUN.md`
  * `verify-run.ts` reads and writes, rather than re-deriving the path.
@@ -953,10 +962,50 @@ export interface VerifyRunRangeActionResult {
 }
 
 /**
- * Reads the ledger file or throws the actionable "no verify run found" error. Exported (174-02) —
- * `verify-classify.ts` is the second caller of this read helper, sharing the same error message
- * and the same "run must be initialized first" contract.
+ * Why `runId` names no usable run, and what to do about it: the one message every `--run-id`
+ * command gives. Never suggests init with this id: a mistyped id would become a real, latest run (#833).
  */
+export async function missingRunMessage(projectDir: string, runId: string): Promise<string> {
+  const ledgerFile = ledgerFilePath(projectDir, runId);
+  if (await exists(ledgerFile)) {
+    return `${relative(projectDir, ledgerFile)} could not be read. Check that it is a readable file.`;
+  }
+  const runDir = runRootDir(projectDir, runId);
+  if (await exists(runDir)) {
+    const noRun = `${relative(projectDir, runDir)}/ has no RUN.md, so verify-run-init did not make it.\n`;
+    const verdicts = rulingVerdictsLedgerPath(projectDir, runId);
+    if (await exists(verdicts)) {
+      return (
+        noRun +
+        `It holds ${relative(projectDir, verdicts)}: verdicts recorded under the mistyped id "${runId}". ` +
+        `Use \`boardsmith verify-ruling-record --run-id <right run>\` to re-record them against the right run ` +
+        `before removing the folder.`
+      );
+    }
+    return noRun + `Remove that folder; it is not a verify run.`;
+  }
+  const existing: string[] = [];
+  for (const id of await listRunIds(projectDir)) {
+    if (await exists(ledgerFilePath(projectDir, id))) existing.push(id);
+  }
+  return (
+    `No verify run "${runId}" found in ${projectDir}.\n` +
+    (existing.length > 0
+      ? `Runs that do exist: ${existing.join(', ')}.`
+      : `No verify runs exist yet. Run \`boardsmith verify-run-init\` first.`)
+  );
+}
+
+export async function exists(path: string): Promise<boolean> {
+  try {
+    await fs.access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Reads the run's RUN.md, or throws `missingRunMessage` when the run does not exist. */
 export async function readLedgerOrThrow(
   ledgerFile: string,
   runId: string,
@@ -965,10 +1014,7 @@ export async function readLedgerOrThrow(
   try {
     return await fs.readFile(ledgerFile, 'utf-8');
   } catch {
-    throw new Error(
-      `No verify run "${runId}" found in ${projectDir}.\n` +
-        `Run \`boardsmith verify-run-init --run-id ${runId}\` first.`,
-    );
+    throw new Error(await missingRunMessage(projectDir, runId));
   }
 }
 
