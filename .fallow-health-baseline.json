@@ -197,7 +197,7 @@
     },
     "src/cli/commands/verify-ruling-recheck.ts": {
       "complexity_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "src/cli/commands/verify-run.ts": {
