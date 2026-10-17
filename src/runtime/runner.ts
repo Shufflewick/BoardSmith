@@ -703,7 +703,12 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     };
   }
 
-  /** {@link serializeForHistory}'s entry, or the move's refusal when a pick cannot be encoded (#1070). */
+  /**
+   * {@link serializeForHistory}'s entry, or the move's refusal when it cannot
+   * be encoded and is not a move the game offers: that is the caller's bad
+   * input. An offered move that cannot be encoded is the game's fault, and
+   * still throws (#1070).
+   */
   private serializeOrRefuse(
     actionName: string,
     player: Player,
@@ -712,9 +717,18 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     try {
       return this.serializeForHistory(actionName, player, args);
     } catch (error) {
-      if (!(error instanceof PlayerFacingError)) throw error;
+      if (!(error instanceof Error) || this.offersMove(actionName, player, args)) throw error;
       return { success: false, error: error.message, errorCode: ErrorCode.INVALID_PICK };
     }
+  }
+
+  /** Whether the game would accept `args` for `actionName` from `player` now, as a held follow-up when it is one. */
+  private offersMove(actionName: string, player: Player, args: Record<string, unknown>): boolean {
+    const action = this.game.getAction(actionName);
+    if (!action) return false;
+    const followUp = followUpForSeat(this.getFlowState(), player.seat);
+    const options = followUp?.action === actionName ? { followUp } : undefined;
+    return new ActionExecutor(this.game).validateAction(action, player, args, options).valid;
   }
 
   /**
@@ -749,12 +763,13 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       argsToSerialize = executor.resolveArgs(actionDef, executor.picksOf(actionDef, args), player);
     }
 
-    try {
-      return serializeAction(actionName, player, argsToSerialize, this.game, isUndoable);
-    } catch (error) {
-      // The picks are the caller's input, so one that cannot be encoded is a refused move, not a game fault (#1070).
-      throw new PlayerFacingError(error instanceof Error ? error.message : String(error));
-    }
+    return serializeAction(
+      actionName,
+      player,
+      argsToSerialize,
+      this.game,
+      isUndoable
+    );
   }
 
   /**
