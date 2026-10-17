@@ -163,6 +163,21 @@ describe('Die3D redraws its still image when its value changes (#892)', () => {
   });
 });
 
+describe('Die3D rolls while its first still is still being drawn (#897)', () => {
+  it('ends on the rolled face, not the face its first still was taking', async () => {
+    vi.useFakeTimers();
+    const faceFive = await stillOf(5);
+    const { wrapper, props } = mountDie(2, 'rolled-mid-first-draw');
+    await flushPromises(); // its first scene is live, its still not yet taken
+    await vi.advanceTimersByTimeAsync(10);
+
+    props.value = 5;
+    props.rollCount = 1;
+
+    expect(await settle(wrapper)).toBe(faceFive);
+  });
+});
+
 describe('Die3D rolls a die whose id is 0 (#897)', () => {
   it('builds a scene to animate the roll of die 0', async () => {
     vi.useFakeTimers();

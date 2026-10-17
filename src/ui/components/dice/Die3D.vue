@@ -858,6 +858,8 @@ watch(() => props.rollCount, (newRollCount) => {
 
     // Queue the animation render
     queueRender(() => {
+      // A live scene may still have its first still pending; that still would dispose the scene under this roll.
+      clearTimeout(sceneInitTimer);
       // Restore WebGL if needed
       if (isShowingSnapshot.value || webglDisposed) {
         webglDisposed = false;
