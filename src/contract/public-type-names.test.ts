@@ -167,7 +167,6 @@ const SHARED_ACCEPTED: readonly string[] = [
   // The flow state a client renders.
   'src/engine/flow/public-flow-state.ts:PublicFlowState',
   // Player colours: the lobby (session) offers them and the UI paints them.
-  'src/session/colors.ts:STANDARD_PLAYER_COLORS',
   'src/session/colors.ts:ColorChoice',
   // boardsmith/ui/auto-ui is the auto UI on its own; boardsmith/ui carries it too.
   'src/ui/components/auto-ui/ActionPanel.vue:default',
