@@ -63,13 +63,6 @@
       ]
     },
     {
-      "content": "273d391fe0d2d933",
-      "lines": 15,
-      "files": [
-        "src/cli/commands/verify-impact.ts"
-      ]
-    },
-    {
       "content": "30138a2100b37a20",
       "lines": 11,
       "files": [
@@ -125,13 +118,6 @@
       ]
     },
     {
-      "content": "548a205f2128e7b9",
-      "lines": 7,
-      "files": [
-        "src/cli/commands/verify-impact.ts"
-      ]
-    },
-    {
       "content": "64c9b55ecd6a877d",
       "lines": 21,
       "files": [
@@ -152,13 +138,6 @@
       "files": [
         "src/ui/components/helpers/HintOverlay.vue",
         "src/ui/components/helpers/TutorialOverlay.vue"
-      ]
-    },
-    {
-      "content": "7667c2ebaec2cb3b",
-      "lines": 13,
-      "files": [
-        "src/cli/commands/verify-impact.ts"
       ]
     },
     {
@@ -185,13 +164,6 @@
         "src/ui/components/auto-ui/renderers/CardRenderer.vue",
         "src/ui/components/auto-ui/renderers/DeckRenderer.vue",
         "src/ui/components/auto-ui/renderers/HandRenderer.vue"
-      ]
-    },
-    {
-      "content": "87a3bee4712f1041",
-      "lines": 31,
-      "files": [
-        "src/cli/commands/verify-impact.ts"
       ]
     },
     {
