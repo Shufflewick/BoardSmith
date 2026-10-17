@@ -80,20 +80,32 @@ export function createBot<G extends Game>(
 }
 
 /**
+ * The most search iterations a numeric bot level may ask for. Each iteration
+ * adds up to one node to the search tree held in memory, and a seeded search
+ * (`boardsmith simulate`, `reproducible`) has no time limit, so the count is
+ * the only bound on its memory and time. 100,000 is 200 times the hard preset.
+ */
+export const MAX_BOT_ITERATIONS = 100_000;
+
+/**
  * Parse bot level from string (CLI argument).
  *
- * Accepts a preset name or a positive whole iteration count. Anything else
- * throws: a level nobody recognises is a typo, and quietly playing at medium
- * hides it for the whole session.
+ * Accepts a preset name or a whole iteration count from 1 to
+ * {@link MAX_BOT_ITERATIONS}. Anything else throws: a level nobody recognises
+ * is a typo, and quietly playing at medium hides it for the whole session.
  */
 export function parseBotLevel(level: string): DifficultyLevel | number {
-  // Check if it's a preset name
-  if (level in DIFFICULTY_PRESETS) {
+  if (Object.hasOwn(DIFFICULTY_PRESETS, level)) {
     return level as DifficultyLevel;
   }
 
-  // Try to parse as an explicit iteration count
   if (/^\d+$/.test(level) && Number(level) > 0) {
+    if (Number(level) > MAX_BOT_ITERATIONS) {
+      throw new Error(
+        `Bot level ${level} asks for more search iterations than the most a bot runs, ${MAX_BOT_ITERATIONS}. ` +
+          `Use a count from 1 to ${MAX_BOT_ITERATIONS}, or a preset such as hard.`,
+      );
+    }
     return Number(level);
   }
 

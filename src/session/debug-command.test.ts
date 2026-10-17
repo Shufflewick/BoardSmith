@@ -87,6 +87,15 @@ describe('executeDebugCommand', () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain('99999');
     });
+
+    it('refuses a piece, naming it, instead of failing inside the engine (#818)', () => {
+      const piece = board.create(TestPiece, 'card');
+      const result = executeDebugCommand(game, { type: 'SHUFFLE', spaceId: piece.id });
+      expect(result).toEqual({
+        success: false,
+        error: `Element ${piece.id} ("card") is not a space, so it has no children to shuffle. Shuffle the space that holds it.`,
+      });
+    });
   });
 
   describe('REORDER_CHILD', () => {
@@ -105,6 +114,18 @@ describe('executeDebugCommand', () => {
         expect(result.error).toContain('Invalid target index');
       }
       expect(board.all(TestPiece).map((p) => p.name)).toEqual(['a', 'b']);
+    });
+
+    it('refuses an index that is not a whole number without disturbing the order (#818)', () => {
+      const pieces = ['a', 'b', 'c'].map((n) => board.create(TestPiece, n));
+      for (const targetIndex of [Number.NaN, 1.5]) {
+        const result = executeDebugCommand(game, { type: 'REORDER_CHILD', elementId: pieces[2].id, targetIndex });
+        expect(result).toEqual({
+          success: false,
+          error: `Invalid target index: ${targetIndex}. Use a whole number from 0 to 2.`,
+        });
+      }
+      expect(board.all(TestPiece).map((p) => p.name)).toEqual(['a', 'b', 'c']);
     });
 
     it('fails for an element with no parent', () => {

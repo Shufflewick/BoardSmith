@@ -605,7 +605,7 @@ Returns the best move found after running MCTS iterations.
 function parseBotLevel(level: string): DifficultyLevel | number
 ```
 
-Parse a bot level string (e.g., from CLI arguments).
+Parse a bot level string (e.g., from CLI arguments): a preset name or an iteration count up to 100,000. Anything else is refused.
 
 ## Related Documentation
 
