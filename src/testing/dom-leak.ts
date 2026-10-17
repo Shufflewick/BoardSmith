@@ -27,7 +27,7 @@ import type { VueWrapper } from '@vue/test-utils';
 import type { default as AutoUIComponent } from '../ui/components/auto-ui/AutoUI.vue';
 import type { GameRootView } from '../ui/types.js';
 import { isEngineRootField, type ElementJSON, type SeatViewJSON } from '../engine/index.js';
-import { PERSIST_KEY, PERSIST_PRIVATE_KEY } from '../persistence/persistence.js';
+import { PERSIST_KEY } from '../persistence/persistence.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE, isHiddenPlaceholder } from '../engine/element/hidden-placeholder.js';
 import type { BoardInteraction } from '../ui/composables/useBoardInteraction.js';
 import type { TableSeat } from '../ui/composables/useTableSeat.js';
@@ -1290,10 +1290,11 @@ function collectSurvivingValues(node: ElementJSON): Set<string> {
 /**
  * A root attribute the seat view drops on purpose without it being a game secret
  * (#908): an engine root field, whose audience the engine settles (another seat's
- * `tutorialProgress`), or the host-only persistence channel (#527).
+ * `tutorialProgress`), or the public persistence record (#527). The sealed
+ * `persistPrivate` half is a host-only secret, so it stays a marker.
  */
 function isRootBookkeeping(key: string): boolean {
-  return isEngineRootField(key) || key === PERSIST_KEY || key === PERSIST_PRIVATE_KEY;
+  return isEngineRootField(key) || key === PERSIST_KEY;
 }
 
 /** Result of {@link deriveLeakDetectionData}: forbidden markers plus, for every

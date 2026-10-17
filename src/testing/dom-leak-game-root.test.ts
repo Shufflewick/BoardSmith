@@ -4,9 +4,10 @@
  *
  * The unredacted side of the diff was `game.all(GameElement)`, which leaves the
  * root out, so a Game attribute withheld from a seat never became a marker and
- * a board painting it passed. The root's engine bookkeeping that the seat view
- * drops on purpose (another seat's `tutorialProgress`, the host-only `persist`
- * channel) must not become markers in its place.
+ * a board painting it passed. The root's bookkeeping that the seat view drops
+ * on purpose (another seat's `tutorialProgress`, the public `persist` record)
+ * must not become markers in its place, while the sealed `persistPrivate` one,
+ * a host-only secret, must.
  */
 import { describe, it, expect } from 'vitest';
 import { defineComponent, h } from 'vue';
@@ -48,9 +49,18 @@ describe('assertNoHiddenInfoLeak — secrets on the Game root (#908)', () => {
     ).rejects.toThrow(/PINEAPPLEXYZ.*secretWord/);
   });
 
+  it('catches a sealed persistPrivate value rendered anyway', async () => {
+    const tg = makeGame();
+    expect(JSON.stringify(tg.getPlayerView(1).state)).not.toContain('PERSISTSEALEDXYZ');
+
+    await expect(
+      assertNoHiddenInfoLeak(tg, 1, { component: boardRendering('PERSISTSEALEDXYZ') }),
+    ).rejects.toThrow(/PERSISTSEALEDXYZ.*persistPrivate/);
+  });
+
   it('does not mark the root bookkeeping the seat view drops on purpose', async () => {
     const tg = makeGame();
-    for (const value of ['TUTORIALSTEPXYZ', 'completed', 'PERSISTPUBLICXYZ', 'PERSISTSEALEDXYZ']) {
+    for (const value of ['TUTORIALSTEPXYZ', 'completed', 'PERSISTPUBLICXYZ']) {
       expect(JSON.stringify(tg.getPlayerView(1).state)).not.toContain(value);
       await expect(
         assertNoHiddenInfoLeak(tg, 1, { component: boardRendering(value) }),
