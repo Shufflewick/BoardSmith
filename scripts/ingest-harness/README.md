@@ -52,7 +52,7 @@ npx boardsmith harness-ingest
 # Or invoke each step individually. `stage` prints the folder it created; pass it to the others:
 npx boardsmith harness-ingest stage                        # fresh throwaway project + current skill text install
 npx boardsmith harness-ingest drive --work-dir <that dir>  # real headless agent session against it
-npx boardsmith harness-ingest assert --work-dir <that dir> # report the ten checks, exit 0 only if all pass and the session completed
+npx boardsmith harness-ingest assert --work-dir <that dir> # report the eleven checks, exit 0 only if all pass and the session completed
 
 # Options (see --help for the full list and defaults):
 npx boardsmith harness-ingest --work-dir /tmp/my-harness-run --model sonnet
@@ -89,9 +89,9 @@ is written.
 ### `assert`
 
 Locates the single project directory the run produced, calls `checkIngestArtifacts()` (the
-deterministic checker from `check.mjs`) for the nine produced-artifact checks, re-verifies the
-reference repo's git cleanliness/HEAD as gate item (g), prints a ten-row table, and exits 0 only
-when all ten pass and `drive` recorded a completed session. A run that hit the turn cap or whose
+deterministic checker from `check.mjs`) for the ten produced-artifact checks, re-verifies the
+reference repo's git cleanliness/HEAD as gate item (g), prints an eleven-row table, and exits 0 only
+when all eleven pass and `drive` recorded a completed session. A run that hit the turn cap or whose
 session exited non-zero prints `OVERALL: FAIL` and exits 1, whatever the checks say (#918).
 
 ## Acceptance bar
