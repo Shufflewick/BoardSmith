@@ -138,7 +138,7 @@ export function stopwatch(page: object): (budgetMs: number) => boolean {
 }
 
 /** Whether `error` is a wait running out of time. */
-export const ranOut = (error: unknown) => error instanceof Error && error.name === 'TimeoutError';
+const ranOut = (error: unknown) => error instanceof Error && error.name === 'TimeoutError';
 
 /**
  * Waits for what `attempt` waits for, given `timeout` ms of the wall clock a try, until `budgetMs`
