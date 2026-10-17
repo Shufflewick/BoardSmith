@@ -947,6 +947,39 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
     expect(buttons.map(b => b.attributes('aria-label'))).toEqual(['Move (a5)', 'Move (c5)']);
   });
 
+  // #1105: a display that already says the square is not followed by it again.
+  it('does not repeat the square when the display already names it', () => {
+    const to = (display: string, square: string): ChoiceWithRefs => ({
+      value: display,
+      display,
+      refs: [{ ref: { notation: square }, role: 'target' }],
+    });
+    const wrapper = mountSpacePick([
+      to('a5', 'a5'),
+      to('Jump to c5', 'c5'),
+      to('Move', 'e3'),
+      to('a50', 'a5'),
+      to('Area g7x', 'g7'),
+      to('(0,-1)', '(0,-1)'),
+      to('Move', '-1'),
+      to('112', '1.2'),
+      to('-1,2', '1,2'),
+    ]);
+
+    const buttons = wrapper.findAll('.anchored-choice-btn');
+    expect(buttons.map(b => b.attributes('aria-label'))).toEqual([
+      'a5',
+      'Jump to c5',
+      'Move (e3)',
+      'a50 (a5)',
+      'Area g7x (g7)',
+      '(0,-1)',
+      'Move (-1)',
+      '112 (1.2)',
+      '-1,2 (1,2)',
+    ]);
+  });
+
   it('never names the source square when the target has no square name', () => {
     const toPile: ChoiceWithRefs = {
       value: 'pile',
