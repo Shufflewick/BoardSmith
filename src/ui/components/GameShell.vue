@@ -42,7 +42,7 @@ import type { PickChoicesResult, PickStepResponse } from '../composables/useActi
 import type { GameState, PlayerState } from '../../client/types.js';
 import type { GameRootView } from '../types.js';
 import turnNotificationSound from '../assets/turn-notification.mp3';
-import { usePlatformTransport } from '../composables/usePlatformTransport.js';
+import { hostRefusal, usePlatformTransport } from '../composables/usePlatformTransport.js';
 
 // Get or set the global "Show action help" preference.
 // Key: boardsmith_action_help; default ON (true) when absent.
@@ -494,6 +494,12 @@ function platformRequest(op: string, payload: Record<string, unknown>): Promise<
   return platformTransport.request(op, payload);
 }
 
+/** Show the player a host refusal; the transport resolves one rather than rejecting. */
+function toastRefusal(result: Record<string, unknown>, failed: string, unsupported?: string): void {
+  const refusal = hostRefusal(result, failed, unsupported);
+  if (refusal) toast.error(refusal);
+}
+
 // Board interaction state (shared between ActionPanel and game board)
 const boardInteraction = createBoardInteraction();
 
@@ -546,7 +552,7 @@ const tableSeat = useTableSeat({
     })),
   // Cancel pending action on server (for onSelect-routed actions)
   cancelPendingAction: async (player) => {
-    await platformRequest('cancel_action', { player });
+    toastRefusal(await platformRequest('cancel_action', { player }), 'Could not cancel the action.');
   },
   // Phase 3: Repeating selections - processed step by step on server
   pickStep: async (player, selectionName, value, actionName, initialArgs) =>
@@ -871,11 +877,8 @@ async function sendDemoControl(
   control: 'pause' | 'play' | 'step' | 'back',
   delay?: number
 ): Promise<void> {
-  try {
-    await platformRequest('demo-control', delay !== undefined ? { control, delay } : { control });
-  } catch {
-    toast.error('Demo control failed.');
-  }
+  const result = await platformRequest('demo-control', delay !== undefined ? { control, delay } : { control });
+  toastRefusal(result, 'Demo control failed.', 'This table does not support demo controls.');
 }
 
 function setDemoSpeed(delay: number): void {
@@ -1248,7 +1251,7 @@ watch(
       // now derived from broadcast state (WR-04), so we only fire the request;
       // the session broadcasts the updated state on its own.
       if (isDemoRunning.value) {
-        void platformRequest('demo-stop', {}).catch(() => {/* best-effort */});
+        void platformRequest('demo-stop', {}).then((result) => toastRefusal(result, 'Failed to stop demo.'));
       }
     }
   },

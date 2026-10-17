@@ -50,6 +50,20 @@ export interface PlatformTransport {
  * Callers branch on `success`, and a rejection would turn a refused op into an
  * unhandled promise rejection at every call site.
  */
+/**
+ * What to tell the player about a host op's response, or null when the host accepted it.
+ *
+ * The host's own reason is shown as written; a host with no handler for the op
+ * at all (a production table without teaching support) reads as `unsupported`.
+ */
+export function hostRefusal(result: Record<string, unknown>, failed: string, unsupported = failed): string | null {
+  if (result.success !== false) return null;
+  const error = typeof result.error === 'string' ? result.error : '';
+  // The dev bridge and ShufflewickPub's GameSession both answer an op they lack this way.
+  if (error.startsWith('Unknown server op')) return unsupported;
+  return error || failed;
+}
+
 export function usePlatformTransport(options: PlatformTransportOptions): PlatformTransport {
   const post = options.post ?? ((message: unknown) => window.parent.postMessage(message, '*'));
   const timeoutMs = options.timeoutMs ?? REQUEST_TIMEOUT_MS;
@@ -76,7 +90,7 @@ export function usePlatformTransport(options: PlatformTransportOptions): Platfor
       const requestId = `req-${sequence++}`;
       const timer = setTimeout(() => {
         if (pending.delete(requestId)) {
-          resolve({ success: false, error: `Timed out on '${op}'` });
+          resolve({ success: false, error: 'The table did not answer in time. Try again.' });
         }
       }, timeoutMs);
       pending.set(requestId, { resolve, timer });
