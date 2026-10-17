@@ -45,7 +45,7 @@ import {
 // rules the server applies, and a second copy of them is a second rule set
 // (#229 for text, #237 for number).
 import { numberRuleErrors } from '../../../engine/action/number-rules.js';
-import { textRuleErrors } from '../../../engine/action/text-rules.js';
+import { textRuleErrors, wirePattern } from '../../../engine/action/text-rules.js';
 import { choiceValueKey } from '../../../engine/action/choice-matching.js';
 import ActionHelpPopover from '../helpers/ActionHelpPopover.vue';
 // Type-only, so the log component's module (and its stylesheet) never enters
@@ -976,12 +976,7 @@ function editorValueRefusal(): string | null {
       maxLength: pick.maxLength,
       maxBytes: pick.maxBytes,
       multiline: pick.multiline,
-      // The wire carries a pattern as its source string with its sentence;
-      // compiling it here is the only form the rule can be applied in.
-      pattern:
-        pick.pattern === undefined
-          ? undefined
-          : { regex: new RegExp(pick.pattern.source), message: pick.pattern.message },
+      pattern: pick.pattern && wirePattern(pick.pattern),
     })[0] ?? null;
   }
   return null;
@@ -2032,6 +2027,8 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               :maxlength="currentPick.maxLength"
               rows="6"
             ></textarea>
+            <!-- No HTML `pattern`: the browser compiles it under `v` with no
+                 other flags, so it can refuse what the server accepts (#890). -->
             <input
               v-else
               v-bind="editorFieldAttrs"
@@ -2039,7 +2036,6 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               v-model="textInputValue"
               :minlength="currentPick.minLength"
               :maxlength="currentPick.maxLength"
-              :pattern="currentPick.pattern?.source"
               @keyup.enter="submitEditorValue"
             />
             <!-- Above the submit button, not below it: the bar caps its own

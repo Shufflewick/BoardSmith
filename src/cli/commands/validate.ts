@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, realpathSync, statSync, readdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, readdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, relative, sep, resolve as resolvePath } from 'node:path';
 import chalk from 'chalk';
 import ora from 'ora';
@@ -788,23 +789,28 @@ async function validateTestTypeCoverage(
   };
 }
 
-/** Ask vitest for the files it would run, without running them. */
-async function listVitestFiles(cwd: string): Promise<{ ok: boolean; files: string[]; refusal?: string }> {
-  // Not `runVitestRecorded`: that runs tests and records their progress, and this only lists them.
-  let listed: { code: number; stdout: string };
+/**
+ * Ask vitest for the files it would run, without running them. The list is read from the JSON
+ * file vitest writes, not its stdout, where anything a config or plugin prints would pass for a file.
+ */
+export async function listVitestFiles(cwd: string): Promise<{ ok: boolean; files: string[]; refusal?: string }> {
+  const scratch = mkdtempSync(join(tmpdir(), 'boardsmith-vitest-list-'));
+  const listPath = join(scratch, 'files.json');
   try {
-    listed = await runToolCapturingStdout('vitest', ['list', '--filesOnly'], { cwd });
-  } catch (error) {
-    // vitest is missing or would not start: say why, since nothing else will.
-    return { ok: false, files: [], refusal: (error as Error).message };
+    // Not `runVitestRecorded`: that runs tests and records their progress, and this only lists them.
+    let code: number;
+    try {
+      ({ code } = await runToolCapturingStdout('vitest', ['list', '--filesOnly', `--json=${listPath}`], { cwd }));
+    } catch (error) {
+      // vitest is missing or would not start: say why, since nothing else will.
+      return { ok: false, files: [], refusal: (error as Error).message };
+    }
+    if (code !== 0 || !existsSync(listPath)) return { ok: false, files: [] };
+    const listed = JSON.parse(readFileSync(listPath, 'utf-8')) as Array<{ file: string }>;
+    return { ok: true, files: listed.map((entry) => entry.file) };
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
   }
-  return {
-    ok: listed.code === 0,
-    files: listed.stdout
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0),
-  };
 }
 
 async function validateSecurity(cwd: string): Promise<ValidationResult> {
@@ -945,7 +951,7 @@ function findAbsolutePathIssues(cwd: string, files: string[], publicDirs: string
   const issues: string[] = [];
   for (const filePath of files) {
     const content = readFileSync(filePath, 'utf-8');
-    const offending = publicDirs.find((dir) => new RegExp(`["'\`]\\/${dir}\\/`).test(content));
+    const offending = publicDirs.find((dir) => ['"', "'", '`'].some((quote) => content.includes(`${quote}/${dir}/`)));
     if (offending) {
       issues.push(`${filePath.replace(cwd + '/', '')}: absolute path "/${offending}/..." found`);
     }

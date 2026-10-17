@@ -504,7 +504,9 @@ describe('command build directories (WR-02, #391)', () => {
     it(`${command} only removes its own build directory`, () => {
       const rmTargets = [...src.matchAll(/rmSync\(([^,)]+)/g)].map((m) => m[1].trim());
       // build also deletes its own output folder, behind emptyBuildOutputDir's guard (#842).
-      const own = command === 'build' ? ['tempDir', 'viteCacheDir', 'outDir'] : ['tempDir', 'viteCacheDir'];
+      // validate's test listing uses a scratch folder in the OS temp root, never under .boardsmith (#1091).
+      const extra: Record<string, string> = { build: 'outDir', validate: 'scratch' };
+      const own = ['tempDir', 'viteCacheDir', ...(extra[command] ? [extra[command]] : [])];
       expect(rmTargets.filter((target) => !own.includes(target))).toEqual([]);
     });
   }

@@ -89,6 +89,21 @@ describe('useAnimationEvents', () => {
       expect(handled).toEqual([1]); // Still only 1
     });
 
+    it('a stale unregister leaves the handler that replaced it in place (#868)', async () => {
+      const events = ref<AnimationEvent[]>([]);
+      const handled: string[] = [];
+      const instance = createAnimationEvents({ events: () => events.value, handlerWaitTimeout: 0 });
+
+      const unregisterFirst = instance.registerHandler('test', async () => { handled.push('first'); }, { skip: 'drop' });
+      instance.registerHandler('test', async () => { handled.push('second'); }, { skip: 'drop' });
+      unregisterFirst();
+
+      events.value = [createEvent(1, 'test')];
+      await nextTick();
+      await waitForIdle(instance);
+      expect(handled).toEqual(['second']);
+    });
+
     it('multiple handlers for different types work independently', async () => {
       const events = ref<AnimationEvent[]>([]);
       const handled: Array<{ type: string; id: number }> = [];
