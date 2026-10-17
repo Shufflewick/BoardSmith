@@ -49,14 +49,15 @@ export function parseAdditionalSources(indexText: string): AdditionalSourceRecor
   if (begin === -1 || end === -1 || end < begin) return [];
   const body = indexText.slice(begin + ADDITIONAL_SOURCES_BEGIN.length, end);
   const records: AdditionalSourceRecord[] = [];
-  for (const row of body.matchAll(/^\|\s*([^|]+?)\s*\|\s*([0-9a-f]{64})\s*\|\s*$/gm)) {
-    records.push({ path: row[1].trim(), sourceHash: row[2].trim() });
+  // A `|` in a file name is written as `\|` so it cannot end the cell (#823).
+  for (const row of body.matchAll(/^\|\s*((?:\\\||[^|])+?)\s*\|\s*([0-9a-f]{64})\s*\|\s*$/gm)) {
+    records.push({ path: row[1].trim().replaceAll('\\|', '|'), sourceHash: row[2].trim() });
   }
   return records;
 }
 
 /** Every archived document lives here, relative to the design directory. */
-const ARCHIVE_PREFIX = 'rulebook/source/';
+export const ARCHIVE_PREFIX = 'rulebook/source/';
 
 /**
  * Every archived document `INDEX.md` records: the primary `Source:` first, then each
