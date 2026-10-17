@@ -161,6 +161,19 @@ describe('MultiplayerHost (always-live)', () => {
     expect(resp.result.success).toBe(true);
   });
 
+  it('#878: two pages that send the same request id each get their own answer', async () => {
+    const { host, to, pass } = makeAltHost();
+    await host.handleMessage('A', { type: 'hello' }); // A = seat 1, due
+    await host.handleMessage('B', { type: 'hello' });
+    await host.handleMessage('B', { type: 'join', seat: 2 }); // B = seat 2, not due
+    // Every page numbers its requests from req-0, and the host runs them concurrently.
+    await Promise.all([pass('A', 'req-3'), pass('B', 'req-3')]);
+    const answers = (clientId: string) =>
+      to(clientId).filter((m) => m.type === 'server_response').map((m) => (m as any).result.success);
+    expect(answers('A')).toEqual([true]);
+    expect(answers('B')).toEqual([false]);
+  });
+
   it('re-inits a seat on reconnect (same clientId) mid-game', async () => {
     const { host, has, clear } = makeHost();
     await host.handleMessage('A', { type: 'hello' });

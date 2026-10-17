@@ -459,14 +459,15 @@ export class MultiplayerHost {
     perPushFields: ['serverNow'],
   });
   /**
-   * Maps an in-flight requestId to the client that issued it, so the matching
-   * `server_response` is routed back to the REQUESTING client — not the acting
-   * seat. A follower acts as a seat it does not occupy (the active seat), so
-   * routing the response by seat would post it to that seat's (empty) client and
-   * silently drop it (e.g. element-pick `resolve_choices`, leaving validElements
-   * empty). Keyed by requestId; cleared when the response is delivered.
+   * Each in-flight request by the id the host gave it, with the client that
+   * sent it and that client's own id for it, so the `server_response` goes back
+   * to the REQUESTING client, never by seat: a follower acts as a seat it does
+   * not occupy. The host mints the id because every page numbers its own
+   * requests from `req-0`, so two pages' ids collide (#878). Cleared when the
+   * response is delivered.
    */
-  private requestOrigin = new Map<string, string>();
+  private readonly requestOrigin = new Map<string, { clientId: string; requestId: string }>();
+  private nextRequest = 0;
   /**
    * D13/DEVHOST-01: the currently applied gameOption selection, seeded from
    * `opts.baseGameOptions` and replaced by each accepted `configure` message.
@@ -948,10 +949,9 @@ export class MultiplayerHost {
     }
     const seat = this.seatOf(clientId, msg.requestId);
     if (seat === undefined) return;
-    // Remember who asked so the response routes back to THIS client, even when a
-    // follower is acting as a seat it does not occupy.
-    if (msg.requestId) this.requestOrigin.set(msg.requestId, clientId);
-    await this.session.handleServerRequest(seat, msg.requestId, msg.op, msg.payload);
+    const hostRequestId = String(this.nextRequest++);
+    this.requestOrigin.set(hostRequestId, { clientId, requestId: msg.requestId });
+    await this.session.handleServerRequest(seat, hostRequestId, msg.op, msg.payload);
   }
 
   /**
@@ -1311,8 +1311,7 @@ export class MultiplayerHost {
         if (this.session === session) this.followActiveSeat(meta);
       },
       postGameState: (seat, view, meta) => this.deliverGameState(seat, view, meta),
-      postServerResponse: (seat, requestId, result) =>
-        this.deliverServerResponse(seat, requestId, result),
+      postServerResponse: (_seat, hostRequestId, result) => this.deliverServerResponse(hostRequestId, result),
     });
 
     // Only commit to 'playing' if the game actually starts — otherwise a failed
@@ -1531,30 +1530,14 @@ export class MultiplayerHost {
     }
   }
 
-  private sendToSeat(seat: number, message: HostOutbound): void {
-    const info = this.seats.get(seat);
-    if (info?.clientId && info.connected) this.send(info.clientId, message);
-  }
-
-  /**
-   * Route a `server_response` back to the client that issued the request (looked
-   * up by requestId), falling back to the acting seat's client. Without the
-   * requestId mapping, a follower's responses would be posted to the seat it is
-   * acting as — which it does not occupy — and dropped.
-   */
-  private deliverServerResponse(
-    seat: number,
-    requestId: string | null,
-    result: Record<string, unknown>,
-  ): void {
-    const message: HostOutbound = { type: 'server_response', requestId, result };
-    const origin = requestId ? this.requestOrigin.get(requestId) : undefined;
-    if (requestId) this.requestOrigin.delete(requestId);
-    if (origin && this.connected.has(origin)) {
-      this.send(origin, message);
-      return;
+  /** Answer the client that sent the request `hostRequestId` names, under its own id for it. */
+  private deliverServerResponse(hostRequestId: string | null, result: Record<string, unknown>): void {
+    if (hostRequestId === null) return;
+    const origin = this.requestOrigin.get(hostRequestId);
+    this.requestOrigin.delete(hostRequestId);
+    if (origin && this.connected.has(origin.clientId)) {
+      this.send(origin.clientId, { type: 'server_response', requestId: origin.requestId, result });
     }
-    this.sendToSeat(seat, message);
   }
 
   /**
