@@ -212,6 +212,26 @@ describe('useActionController', () => {
       expect(controller.lastError.value).toBe('Network error');
     });
 
+    it('closes an auto-executed action whose send throws, as a refusal does, so it can be retried (#860)', async () => {
+      sendAction.mockRejectedValueOnce(new Error('Network error'));
+      const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn, autoExecute: true });
+      const settle = async () => { for (let i = 0; i < 4; i++) await nextTick(); };
+
+      await controller.start('playCard');
+      await controller.fill('card', 2);
+      await settle();
+
+      expect(controller.lastError.value).toBe('Network error');
+      expect(controller.currentAction.value).toBe(null);
+      expect(controller.currentArgs.value).toEqual({});
+
+      await controller.start('playCard');
+      await controller.fill('card', 2);
+      await settle();
+      expect(sendAction).toHaveBeenCalledTimes(2);
+      expect(controller.lastError.value).toBe(null);
+    });
+
     it('should succeed for optional selections without value', async () => {
       const controller = useActionController({
         sendAction,

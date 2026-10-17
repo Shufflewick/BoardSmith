@@ -1617,7 +1617,14 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     lastError.value = null;
 
     try {
-      const result = await sendAction(actionName, args);
+      let result: ControllerActionResult;
+      try {
+        result = await sendAction(actionName, args);
+      } catch (err) {
+        // A send that throws is settled like a refusal, or the open action stays
+        // ready with nothing left to send it again (#860).
+        result = { success: false, error: err instanceof Error ? err.message : 'Action failed' };
+      }
       if (!result.success) {
         setError(result.error || 'Action failed');
       }
@@ -1634,11 +1641,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       }
 
       return result;
-    } catch (err) {
-      const error = err instanceof Error ? err.message : 'Action failed';
-      setError(error);
-      resolveAction(actionName, playerSeat?.value ?? 0, { success: false, error });
-      return { success: false, error };
     } finally {
       isExecuting.value = false;
     }
