@@ -151,6 +151,9 @@ function defaultLoopBound(bound: Partial<LoopBound>): LoopBound {
  * ```
  */
 export function repeat<G extends Game = Game>(times: number, body: FlowNode<G>): FlowNode<G> {
+  if (!Number.isInteger(times) || times < 0) {
+    throw new Error(`repeat() needs a whole number of times, 0 or more, but got ${times}.`);
+  }
   return {
     type: 'repeat',
     config: {

@@ -307,6 +307,57 @@ describe('chunkMerge: the combined tree is checked, not the branch alone', () =>
   });
 });
 
+describe("chunkMerge: parallel-check's refusals for chunks built together (#820)", () => {
+  /** Adds `entries` to the sketch on the main line, before any branch leaves it. */
+  async function addToSketch(...entries: string[]): Promise<void> {
+    const sketch = await read(main, 'design/SKETCH.md');
+    await write(main, { 'design/SKETCH.md': sketch.replace('## Ideas Backlog', `${entries.join('\n')}## Ideas Backlog`) });
+    git(main, 'commit', '-q', '-am', 'sketch entries');
+  }
+
+  /** Merges trading, then `slug` built beside it; returns the refusals of the second merge. */
+  async function refusalsBesideTrading(slug: string): Promise<string> {
+    await buildOnBranch('trading', 100);
+    await buildOnBranch(slug, 100);
+    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner })).refusals).toEqual([]);
+    const before = head();
+    const result = await chunkMerge(main, slug, { runTests: budgetRunner });
+    expect(result.merged).toBe(false);
+    expect(head()).toBe(before);
+    expect(status()).toBe('');
+    return result.refusals.join('\n');
+  }
+
+  it('refuses a chunk with no rulebook citations', async () => {
+    await addToSketch(sketchEntry('bare', 'none'));
+    expect(await refusalsBesideTrading('bare')).toMatch(/bare has no rulebook citations/);
+  });
+
+  it('refuses a citation that names no rulebook slice', async () => {
+    await addToSketch(sketchEntry('ghost', 'rulebook/09-missing.md'));
+    expect(await refusalsBesideTrading('ghost')).toMatch(/ghost cites rulebook\/09-missing\.md, which names no single file/);
+  });
+
+  it('refuses the final-acceptance chunk built beside another', async () => {
+    await addToSketch(sketchEntry('finale', 'rulebook/07-quests.md', 'final-acceptance'));
+    expect(await refusalsBesideTrading('finale')).toMatch(/finale is the final-acceptance chunk.*always built on its own/);
+  });
+
+  it('refuses a chunk built alongside that has no sketch entry', async () => {
+    await buildOnBranch('trading', 100);
+    await buildOnBranch('quests', 100);
+    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner })).refusals).toEqual([]);
+    // The main line drops trading's sketch entry after merging it, so quests' merge cannot read it.
+    const sketch = await read(main, 'design/SKETCH.md');
+    await write(main, { 'design/SKETCH.md': sketch.replace(/### trading\n[\s\S]*?\n\n/, '') });
+    git(main, 'commit', '-q', '-am', 'drop trading from the sketch');
+    const before = head();
+    const result = await chunkMerge(main, 'quests', { runTests: budgetRunner });
+    expect(result.refusals.join('\n')).toMatch(/There is no chunk "trading" in SKETCH\.md/);
+    expect(head()).toBe(before);
+  });
+});
+
 describe('chunkMerge: ledger numbers are allocated at merge, never on a branch', () => {
   it('turns each branch\'s provisional rulings into distinct real numbers and rewrites their citations', async () => {
     await buildOnBranch('trading', 100, {
@@ -547,6 +598,57 @@ describe('chunkMerge: preconditions', () => {
     const { refusals } = await chunkMerge(main, 'trading');
     expect(refusals).toEqual([expect.stringMatching(/has no vite\.config\.ts[\s\S]*boardsmith doctor --fix/)]);
     expect([head(), status()]).toEqual([before, '']);
+  });
+
+  it('refuses with git\'s own reason when git will not start the merge, leaving the index untouched (#824)', async () => {
+    await buildOnBranch('trading', 100);
+    // An untracked file where the branch adds one: git refuses before writing anything, so no MERGE_HEAD.
+    await fs.writeFile(join(main, 'src/trading.ts'), '// mine\n');
+    const before = head();
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([expect.stringMatching(/untracked working tree files would be overwritten[\s\S]*src\/trading\.ts/)]);
+    expect(result.refusals.join('\n')).not.toMatch(/not verified/);
+    expect([head(), git(main, 'status', '--porcelain')]).toEqual([before, '?? src/trading.ts\n']);
+    expect(await read(main, 'src/trading.ts')).toBe('// mine\n');
+  });
+});
+
+describe('chunkMerge: a design file one side deleted and the other edited (#825)', () => {
+  // git leaves a modify/delete conflict with no markers, so there is nothing a merge may resolve.
+  async function expectRefused(): Promise<void> {
+    const before = head();
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([expect.stringMatching(/conflicts in .*design\/rulebook\/05-market\.md/)]);
+    expect([head(), status()]).toEqual([before, '']);
+  }
+
+  it('refuses when the branch deleted it and the main line edited it', async () => {
+    const worktree = await buildOnBranch('trading', 100);
+    git(worktree, 'rm', '-q', 'design/rulebook/05-market.md');
+    git(worktree, 'commit', '-q', '-m', 'chunk-trading/drop market');
+    await fs.appendFile(join(main, 'design/rulebook/05-market.md'), 'Prices rise.\n');
+    git(main, 'commit', '-q', '-am', 'edit market');
+    await expectRefused();
+  });
+
+  it('refuses when the main line deleted it and the branch edited it', async () => {
+    const worktree = await buildOnBranch('trading', 100);
+    await fs.appendFile(join(worktree, 'design/rulebook/05-market.md'), 'Prices rise.\n');
+    git(worktree, 'commit', '-q', '-am', 'chunk-trading/edit market');
+    git(main, 'rm', '-q', 'design/rulebook/05-market.md');
+    git(main, 'commit', '-q', '-m', 'drop market');
+    await expectRefused();
+  });
+
+  it('refuses, rather than failing to read it, when both renamed it differently and git left no file there', async () => {
+    const worktree = await buildOnBranch('trading', 100);
+    git(worktree, 'mv', 'design/rulebook/05-market.md', 'design/rulebook/05-bazaar.md');
+    git(worktree, 'commit', '-q', '-m', 'chunk-trading/rename market');
+    git(main, 'mv', 'design/rulebook/05-market.md', 'design/rulebook/05-shops.md');
+    git(main, 'commit', '-q', '-m', 'rename market');
+    await expectRefused();
   });
 });
 

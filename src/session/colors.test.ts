@@ -1,48 +1,25 @@
 /**
- * The player-colour palette and the option factory games declare it with.
- * `color-contrast.test.ts` checks the palette's contrast — but against a
- * hardcoded COPY of the hex values, so it cannot notice the real palette
- * changing. These tests bind to the exported constant itself.
+ * The option factory games declare player colours with. Its default is the
+ * engine's own palette and names, so there is one player-colour list (#814).
  */
 import { describe, it, expect } from 'vitest';
-import { STANDARD_PLAYER_COLORS, createColorOption } from './colors.js';
-
-describe('STANDARD_PLAYER_COLORS', () => {
-  it('offers eight colours, enough for the largest supported table', () => {
-    expect(STANDARD_PLAYER_COLORS).toHaveLength(8);
-  });
-
-  it('gives every colour a hex value and a human-readable label', () => {
-    for (const colour of STANDARD_PLAYER_COLORS) {
-      expect(colour.value).toMatch(/^#[0-9a-f]{6}$/i);
-      expect(colour.label.length).toBeGreaterThan(0);
-    }
-  });
-
-  it('has no duplicate values or labels — two players must never look alike', () => {
-    expect(new Set(STANDARD_PLAYER_COLORS.map((c) => c.value)).size).toBe(8);
-    expect(new Set(STANDARD_PLAYER_COLORS.map((c) => c.label)).size).toBe(8);
-  });
-
-  it('leads with the seats a two-player game gets', () => {
-    expect(STANDARD_PLAYER_COLORS[0].label).toBe('Red');
-    expect(STANDARD_PLAYER_COLORS[1].label).toBe('Blue');
-  });
-
-  it('names every colour in a way a player could say out loud', () => {
-    expect(STANDARD_PLAYER_COLORS.map((c) => c.label)).toEqual([
-      'Red', 'Blue', 'Green', 'Orange', 'Purple', 'Yellow', 'Black', 'White',
-    ]);
-  });
-});
+import { createColorOption } from './colors.js';
+import { DEFAULT_COLOR_PALETTE } from '../engine/index.js';
 
 describe('createColorOption', () => {
   it('builds a colour-typed player option', () => {
     expect(createColorOption().type).toBe('color');
   });
 
-  it('defaults to the standard palette', () => {
-    expect(createColorOption().choices).toEqual([...STANDARD_PLAYER_COLORS]);
+  it('defaults to the engine palette, in its order', () => {
+    expect(createColorOption().choices.map((c) => c.value)).toEqual([...DEFAULT_COLOR_PALETTE]);
+  });
+
+  it('names each default colour as the engine does, so Black is the dark #2c3e50', () => {
+    const { choices } = createColorOption();
+    expect(choices.find((c) => c.label === 'Black')?.value).toBe('#2c3e50');
+    expect(choices.slice(0, 4).map((c) => c.label)).toEqual(['Red', 'Blue', 'Green', 'Yellow']);
+    expect(new Set(choices.map((c) => c.label)).size).toBe(DEFAULT_COLOR_PALETTE.length);
   });
 
   it('defaults its label to Color', () => {
@@ -61,13 +38,7 @@ describe('createColorOption', () => {
     expect(createColorOption(custom).choices).toEqual(custom);
   });
 
-  it('copies the palette, so a game cannot mutate the shared constant', () => {
-    const option = createColorOption();
-    option.choices.push({ value: '#000000', label: 'Void' });
-    expect(STANDARD_PLAYER_COLORS).toHaveLength(8);
-  });
-
-  it('copies a custom palette too', () => {
+  it('copies a custom palette, so a game cannot mutate the caller\'s list', () => {
     const custom = [{ value: '#ff0000', label: 'Fire' }];
     const option = createColorOption(custom);
     option.choices.push({ value: '#000000', label: 'Void' });

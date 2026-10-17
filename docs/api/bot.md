@@ -153,7 +153,8 @@ import { parseBotLevel } from 'boardsmith/bot';
 parseBotLevel('easy');    // 'easy'
 parseBotLevel('medium');  // 'medium'
 parseBotLevel('hard');    // 'hard'
-parseBotLevel('1000');    // 1000 (custom iteration ceiling)
+parseBotLevel('1000');    // 1000 (custom iteration ceiling, at most MAX_BOT_ITERATIONS: 100000)
+parseBotLevel('200000');  // throws: Bot level 200000 asks for more search iterations than the most a bot runs, 100000. ...
 parseBotLevel('invalid'); // throws: Unknown bot level "invalid". Use one of: easy, medium, hard, or a positive iteration count such as 750.
 ```
 

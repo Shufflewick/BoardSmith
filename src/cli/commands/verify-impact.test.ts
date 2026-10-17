@@ -1060,17 +1060,15 @@ describe('repair-gate — computeRepairGate (pure, total)', () => {
       disposition: 'reopen-playtest',
       nextStatus: 'built',
       clearMarker: true,
-      reverifyStamp: false,
     });
   });
 
-  it('no-code-change: verified + stale + clean -> close-without-replaytest, nextStatus verified, reverifyStamp true', () => {
+  it('no-code-change: verified + stale + clean -> close-without-replaytest, nextStatus verified', () => {
     const gate = computeRepairGate({ status: 'verified', stale: true, driftState: 'clean' });
     expect(gate).toMatchObject({
       disposition: 'close-without-replaytest',
       nextStatus: 'verified',
       clearMarker: true,
-      reverifyStamp: true,
     });
   });
 
@@ -1144,7 +1142,7 @@ const IMPACT_QUOTED_PASS1 = 'The lower timing on their card resolves first.';
 
 async function buildImpactTestProject(
   root: string,
-  opts: { ruleDelta?: 'sharper' | 'contradictory'; drift?: 'clean' | 'drifted' } = {},
+  opts: { ruleDelta?: 'sharper' | 'contradictory'; drift?: 'clean' | 'drifted'; leaveXUnclassified?: boolean } = {},
 ): Promise<{ project: string; runId: string; pairId: string; firstSha: string }> {
   const project = join(root, `impact-project-${Math.random().toString(36).slice(2)}`);
   const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
@@ -1224,15 +1222,17 @@ async function buildImpactTestProject(
     throw new Error('fixture bug: expected one pair each for x.md and y.md');
   }
 
-  await verifyClassifyRecordCommand({
-    project,
-    runId,
-    pairId: xPair.pairId,
-    label: opts.ruleDelta ?? 'sharper',
-    quotedPass1: IMPACT_QUOTED_PASS1,
-    quotedPass2: changedLine,
-    json: true,
-  });
+  if (!opts.leaveXUnclassified) {
+    await verifyClassifyRecordCommand({
+      project,
+      runId,
+      pairId: xPair.pairId,
+      label: opts.ruleDelta ?? 'sharper',
+      quotedPass1: IMPACT_QUOTED_PASS1,
+      quotedPass2: changedLine,
+      json: true,
+    });
+  }
   await verifyClassifyRecordCommand({
     project,
     runId,
@@ -1441,6 +1441,36 @@ describe('contradictory / marker — verifyImpactApplyCommand', () => {
     expect(parsed.record?.adjudication).toBe('UNADJUDICATED');
   });
 
+  it('unclassified: a pair still pending classification blocks the write entirely, naming the pair and verify-classify-record (#830)', async () => {
+    const { project, runId, pairId } = await buildImpactTestProject(root, { drift: 'clean', leaveXUnclassified: true });
+    const before = await sha256OfProject(project);
+
+    const result = await verifyImpactApplyCommand({ project, runId, json: true });
+    expect(result.blocked).toBe(true);
+    expect(result.pendingPairs).toEqual([pairId]);
+    expect(result.marked).toEqual([]);
+    expect(await sha256OfProject(project)).toEqual(before);
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await verifyImpactApplyCommand({ project, runId });
+    const printed = logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+    logSpy.mockRestore();
+    expect(printed).toContain(`boardsmith verify-classify-record --run-id ${runId} --pair-id ${pairId}`);
+  });
+
+  it('unclassified: resuming an interrupted classification as cosmetic leaves no stale marker (#830)', async () => {
+    const { project, runId, pairId } = await buildImpactTestProject(root, { drift: 'clean', leaveXUnclassified: true });
+    expect((await verifyImpactApplyCommand({ project, runId, json: true })).blocked).toBe(true);
+
+    await verifyClassifyRecordCommand({ project, runId, pairId, label: 'cosmetic', json: true });
+    const result = await verifyImpactApplyCommand({ project, runId, json: true });
+    expect(result.blocked).toBe(false);
+    expect(result.marked).toEqual([]);
+
+    const chunkText = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'movement', 'CHUNK.md'), 'utf-8');
+    expect(parseRulesStaleness(chunkText).state).not.toBe('rules-stale');
+  });
+
   it('marker: a chunk whose ChunkVerdict.stale is false is left byte-identical after the run', async () => {
     const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
     const before = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'scoring', 'CHUNK.md'));
@@ -1498,7 +1528,7 @@ describe('contradictory / marker — verifyImpactApplyCommand', () => {
  */
 
 describe('cli.ts — verify-impact-* registration', () => {
-  it('registers all four verify-impact-* commands, chunk-check gains --reverified-no-code-change, and no command declares a bypass option', async () => {
+  it('registers all four verify-impact-* commands, chunk-check takes no --reverified-no-code-change (#827), and no command declares a bypass option', async () => {
     const cliSource = await fs.readFile(join(__dirname, '..', 'cli.ts'), 'utf-8');
 
     for (const name of [
@@ -1511,7 +1541,7 @@ describe('cli.ts — verify-impact-* registration', () => {
     }
 
     expect((cliSource.match(/verify-impact-/g) ?? []).length).toBeGreaterThanOrEqual(4);
-    expect(cliSource).toContain('--reverified-no-code-change');
+    expect(cliSource).not.toContain('--reverified-no-code-change');
 
     // Scoped to the verify-impact-* registration block only — `--force` legitimately exists
     // elsewhere in cli.ts (the unrelated `claude` command's `--force` to overwrite skills).
