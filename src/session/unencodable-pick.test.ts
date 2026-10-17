@@ -42,7 +42,7 @@ class PickGame extends Game<PickGame, Player> {
     this.registerAction(
       Action.create<PickGame>('loot')
         .followUpArgs<{ chest: string }>()
-        .chooseFrom('item', { choices: (ctx) => (ctx.args.chest === 'tokens' ? [offeredToken] : [1]) })
+        .chooseFrom('item', { choices: (ctx): (Token | number)[] => (ctx.args.chest === 'tokens' ? [offeredToken] : [1]) })
         .execute(() => ({ success: true })),
     );
     this.setFlow({
