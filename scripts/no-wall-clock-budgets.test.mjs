@@ -13,9 +13,10 @@
  * by what it returned. This scan reads the syntax tree and fails on any
  * `expect(...)` whose subject subtracts a clock read, or a variable assigned
  * one, directly or through a variable holding that difference, whatever the
- * matcher (#919). A variable counts only where its declaration is visible: a
- * `let`, `const` or catch binding in its block, a `var` or parameter in its
- * function, minus any inner block or function that declares the same name again.
+ * matcher (#919). "A variable" is a declaration, parameter, destructuring
+ * default, class field or object property, and TypeScript's checker resolves
+ * each name to the declaration it refers to, so shadowing follows the
+ * language's own scope rules rather than a copy of them.
  *
  * It does not flag a timestamp checked against the clock
  * (`expect(entry.timestamp).toBeLessThanOrEqual(Date.now())`), which is a
@@ -34,45 +35,37 @@ const isClockRead = (node) => {
   const callee = ts.isCallExpression(node) && node.expression.getText();
   return Boolean(callee) && CLOCKS.some((clock) => callee === clock || callee.endsWith(`.${clock}`));
 };
-const isBlockScope = (node) =>
-  ts.isBlock(node) || ts.isCatchClause(node) || ts.isForStatement(node) || ts.isForInStatement(node)
-  || ts.isForOfStatement(node);
-/** The nearest node around `node` (a block, loop, catch, function or the file) that matches `isScope`. */
-const enclosing = (node, isScope) => {
-  let scope = node.parent;
-  while (scope.parent && !ts.isFunctionLike(scope) && !isScope(scope)) scope = scope.parent;
-  return scope;
-};
-/** The block, loop, catch, function or file `node` is in: where a `let` or `const` declared there is visible. */
-const scopeOf = (node) => enclosing(node, isBlockScope);
-/** Where declaration `node` is visible: its function for a `var` or parameter, its block otherwise. */
-const declarationScope = (node) =>
-  ts.isParameter(node) || (ts.isVariableDeclarationList(node.parent) && !(node.parent.flags & ts.NodeFlags.BlockScoped))
-    ? enclosing(node, () => false)
-    : scopeOf(node);
 
-/** The name `node` assigns and the value it assigns, when it is `const x = v`, `(x = v) =>` or `x = v`. */
+const OPTIONS = { noLib: true, noResolve: true, types: [] };
+/** A checker over `sourceFile` alone, used only to resolve each name to the declaration it refers to. */
+function checkerFor(sourceFile) {
+  const host = ts.createCompilerHost(OPTIONS);
+  host.getSourceFile = (fileName) => (fileName === sourceFile.fileName ? sourceFile : undefined);
+  return ts.createProgram([sourceFile.fileName], OPTIONS, host).getTypeChecker();
+}
+
+const HAS_VALUE = [ts.isVariableDeclaration, ts.isParameter, ts.isBindingElement, ts.isPropertyDeclaration, ts.isPropertyAssignment];
+/** The name `node` gives a value to, and that value: a declaration, parameter, field, property or default, or `x = v`. */
 function assignmentAt(node) {
-  if ((ts.isVariableDeclaration(node) || ts.isParameter(node)) && ts.isIdentifier(node.name) && node.initializer) {
-    return { name: node.name.text, value: bare(node.initializer) };
+  if (HAS_VALUE.some((is) => is(node)) && node.initializer) return { target: node.name, value: bare(node.initializer) };
+  if (ts.isShorthandPropertyAssignment(node) && node.objectAssignmentInitializer) {
+    return { target: node.name, value: bare(node.objectAssignmentInitializer) };
   }
-  const assigns = ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken;
-  return assigns && ts.isIdentifier(node.left) ? { name: node.left.text, value: bare(node.right) } : undefined;
+  if (!ts.isBinaryExpression(node) || node.operatorToken.kind !== ts.SyntaxKind.EqualsToken) return undefined;
+  return { target: ts.isPropertyAccessExpression(node.left) ? node.left.name : node.left, value: bare(node.right) };
 }
 
 /** Every `expect(...)` in a source whose subject measures a clock difference, with any matcher. */
 function wallClockBudgets(source) {
+  // Every finding needs a clock read written out, and most files have none: skip building a checker for them.
+  if (!CLOCKS.some((clock) => source.includes(clock))) return [];
   const sourceFile = ts.createSourceFile('scanned.ts', source, ts.ScriptTarget.Latest, true);
+  const checker = checkerFor(sourceFile);
   const assignments = [];
   const expects = [];
-  const declared = new Map();
   const visit = (node) => {
-    if ((ts.isVariableDeclaration(node) || ts.isParameter(node)) && ts.isIdentifier(node.name)) {
-      const scope = declarationScope(node);
-      declared.set(scope, (declared.get(scope) ?? new Set()).add(node.name.text));
-    }
     const assignment = assignmentAt(node);
-    if (assignment) assignments.push({ ...assignment, at: node });
+    if (assignment && ts.isMemberName(assignment.target)) assignments.push(assignment);
     else if (ts.isCallExpression(node) && node.expression.getText() === 'expect' && node.arguments.length > 0) {
       expects.push(node);
     }
@@ -80,31 +73,31 @@ function wallClockBudgets(source) {
   };
   visit(sourceFile);
 
-  /** The block or function that declares `name` as seen from `node`; an undeclared name belongs to the file. */
-  const declaringScope = (name, node) => {
-    for (let scope = scopeOf(node); scope; scope = scope.parent && scopeOf(scope)) {
-      if (declared.get(scope)?.has(name)) return scope;
-    }
-    return sourceFile;
+  /**
+   * The declarations name `name` refers to; a bare name declared nowhere is one global per spelling. Root
+   * symbols, because a field read through an instance resolves to a per-instance copy of the field's symbol.
+   */
+  const bindingsAt = (name) => {
+    const shorthand = ts.isShorthandPropertyAssignment(name.parent) && name.parent.name === name;
+    const symbol = shorthand ? checker.getShorthandAssignmentValueSymbol(name.parent) : checker.getSymbolAtLocation(name);
+    if (symbol) return checker.getRootSymbols(symbol);
+    return ts.isPropertyAccessExpression(name.parent) && name.parent.name === name ? [] : [name.text];
   };
-  /** Whether identifier `node` refers to the declaration of a name recorded in `names`. */
-  const tracked = (names, node) => names.get(node.text)?.has(declaringScope(node.text, node)) === true;
-  const record = (names, { name, at }) => names.set(name, (names.get(name) ?? new Set()).add(declaringScope(name, at)));
-  const isReference = (node) =>
-    ts.isIdentifier(node) && !(ts.isPropertyAccessExpression(node.parent) && node.parent.name === node);
+  const holds = (bindings, node) => ts.isMemberName(node) && bindingsAt(node).some((binding) => bindings.has(binding));
+  const bindingsOf = (entries) => new Set(entries.flatMap(({ target }) => bindingsAt(target)));
 
-  const clockVars = new Map();
-  assignments.filter(({ value }) => isClockRead(value)).forEach((entry) => record(clockVars, entry));
-  const isClockTerm = (node) => isClockRead(bare(node)) || (isReference(bare(node)) && tracked(clockVars, bare(node)));
-  const durations = new Map();
-  /** Whether `node` subtracts a clock read or a variable holding one, or reads a variable holding such a difference. */
+  const clockVars = bindingsOf(assignments.filter(({ value }) => isClockRead(value)));
+  const nameOf = (node) => (ts.isPropertyAccessExpression(node) ? node.name : node);
+  const isClockTerm = (node) => isClockRead(bare(node)) || holds(clockVars, nameOf(bare(node)));
+  let durations = new Set();
+  /** Whether `node` subtracts a clock read or a name holding one, or reads a name holding such a difference. */
   const measures = (node) =>
     (ts.isBinaryExpression(node)
       && node.operatorToken.kind === ts.SyntaxKind.MinusToken
       && (isClockTerm(node.left) || isClockTerm(node.right)))
-    || (isReference(node) && tracked(durations, node))
+    || holds(durations, node)
     || ts.forEachChild(node, measures) === true;
-  assignments.filter(({ value }) => measures(value)).forEach((entry) => record(durations, entry));
+  durations = bindingsOf(assignments.filter(({ value }) => measures(value)));
 
   const lines = source.split('\n');
   return expects
@@ -241,8 +234,40 @@ describe('wallClockBudgets', () => {
     expect(wallClockBudgets(laterBlock)).toHaveLength(1);
   });
 
-  it('finds a duration held in a default parameter value (#919)', () => {
+  it('does not let a same-named name under a switch case hide an outer duration (#919)', () => {
+    const source = [
+      'const elapsed = Date.now() - s;',
+      "it('x', () => { switch (k) { case 1: const elapsed = 3; } expect(elapsed).toBeLessThan(5); });",
+    ].join('\n');
+    expect(wallClockBudgets(source)).toHaveLength(1);
+  });
+
+  it('reads a var as belonging to its whole function, not the block it is written in (#919)', () => {
+    const source = 'function f() { if (a) { var e = Date.now() - s; } expect(e).toBeLessThan(5); }';
+    expect(wallClockBudgets(source)).toHaveLength(1);
+  });
+
+  it('keeps a name declared in a for header inside its loop (#919)', () => {
+    const source = [
+      'const d = Date.now() - s;',
+      'for (const d of [1]) { expect(d).toBe(1); }',
+      'expect(d).toBeLessThan(5);',
+    ].join('\n');
+    expect(wallClockBudgets(source)).toEqual([{ line: 3, text: 'expect(d).toBeLessThan(5);' }]);
+  });
+
+  it('finds a duration held in a default parameter or destructuring default (#919)', () => {
     expect(wallClockBudgets('const check = (d = Date.now() - s) => { expect(d).toBeLessThan(5); };')).toHaveLength(1);
+    expect(wallClockBudgets('const { d = Date.now() - s } = {};\nexpect(d).toBeLessThan(5);')).toHaveLength(1);
+    expect(wallClockBudgets('const check = ({ d = Date.now() - s }) => { expect(d).toBeLessThan(5); };')).toHaveLength(1);
+  });
+
+  it('finds a duration held in a class field, read through this or an instance (#919)', () => {
+    const throughThis = 'class C { e = Date.now() - s; check() { expect(this.e).toBeLessThan(5); } }';
+    const throughInstance = 'class C { e = Date.now() - s; }\nconst c = new C();\nexpect(c.e).toBeLessThan(5);';
+    expect(wallClockBudgets(throughThis)).toHaveLength(1);
+    expect(wallClockBudgets(throughInstance)).toHaveLength(1);
+    expect(wallClockBudgets('const e = Date.now() - s;\nexpect(other.e).toBe(1);')).toEqual([]);
   });
 
   it('leaves a timestamp checked against the clock alone', () => {
