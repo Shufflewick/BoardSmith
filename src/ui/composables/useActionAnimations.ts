@@ -102,6 +102,7 @@ import { watch, onScopeDispose, type Ref, type ComputedRef } from 'vue';
 import { useFlyingElements, type FlyingCardData, type FlyingCard } from './useFlyingElements.js';
 import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
 import { isDevThrowEnabled } from '../../utils/dev.js';
+import { escapeCssString } from '../utils/css-string.js';
 import type { GameViewElement } from '../types.js';
 
 /**
@@ -304,6 +305,7 @@ export interface UseActionAnimationsReturn {
 
 /**
  * Interpolate placeholders in a selector string with values from args.
+ * Values are escaped for a double-quoted attribute value, where placeholders belong.
  *
  * @example
  * interpolateSelector('[data-id="{id}"]', { id: 42 }) // '[data-id="42"]'
@@ -311,7 +313,7 @@ export interface UseActionAnimationsReturn {
 function interpolateSelector(selector: string, args: Record<string, unknown>): string {
   return selector.replace(/\{(\w+)\}/g, (match, key) => {
     const value = args[key];
-    return value !== undefined ? String(value) : match;
+    return value !== undefined ? escapeCssString(String(value)) : match;
   });
 }
 

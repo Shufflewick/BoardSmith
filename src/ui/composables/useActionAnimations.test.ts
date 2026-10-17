@@ -144,6 +144,24 @@ describe('useActionAnimations', () => {
     });
   });
 
+  describe('selector values (#868)', () => {
+    it('finds elements whose interpolated values hold quotes and backslashes', async () => {
+      const cardId = 'ace "high" \\ 1';
+      makeElement('data-card-id', cardId);
+      makeElement('data-zone', 'hand');
+      const gameViewRef = ref<GameElement | null>(null);
+      const { onBeforeAutoExecute } = useActionAnimations({ gameView: gameViewRef, animations: [moveConfig] });
+
+      await onBeforeAutoExecute('moveCard', { cardId, zone: 'hand' });
+
+      enableAnimationTestMode();
+      gameViewRef.value = fakeGameView();
+      await nextTick();
+      await waitFor(() => getAnimationTrace().length > 0);
+      expect(getAnimationTrace()).toEqual([expect.objectContaining({ kind: 'action', element: cardId })]);
+    });
+  });
+
   describe('real path (fake timers)', () => {
     it('drives the setTimeout-based lifecycle to completion with source+destination in the DOM', async () => {
       vi.useFakeTimers({
