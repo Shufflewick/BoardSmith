@@ -88,10 +88,12 @@ const childCount = computed(() => {
   return (props.element.children ?? []).length;
 });
 
-// Stack visual: up to 3 cards from children
-const stackCards = computed(() =>
-  (props.element.children ?? []).slice(0, 3).map((card, i) => ({ card, stackIndex: i })),
-);
+// Stack visual: up to 3 cards from children. children[0] is the top card (#893),
+// so it is raised highest while staying first in reading order.
+const stackCards = computed(() => {
+  const top = (props.element.children ?? []).slice(0, 3);
+  return top.map((card, i) => ({ card, stackIndex: top.length - 1 - i }));
+});
 
 const isEmpty = computed(() => childCount.value === 0);
 
@@ -147,7 +149,7 @@ const { attrs: selectableAttrs, onActivate, onKeydown } =
         :key="card.id"
         :element="card"
         class="deck-card"
-        :style="{ '--stack-index': stackIndex }"
+        :style="{ '--stack-index': stackIndex, zIndex: stackIndex }"
       />
     </div>
 
