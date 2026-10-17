@@ -142,11 +142,16 @@ export function tableRulesReloadQueue(args: {
         await runtime.close();
         throw new Error(refusal);
       }
-      // From here the host runs the edited rules, even when the game cannot be carried onto them.
-      const outcome = await args.host.reloadRules(runtime.rules);
-      const replaced = running;
-      running = runtime;
-      await replaced.close();
+      let outcome: RulesReload | null;
+      try {
+        outcome = await args.host.reloadRules(runtime.rules);
+      } finally {
+        // The host runs the edited rules from here, even when the game could not be
+        // carried onto them, or `carry` itself failed: it swaps `executeOp` first.
+        const replaced = running;
+        running = runtime;
+        await replaced.close();
+      }
       const said = describeTableReload(outcome);
       if (said !== null) console.log(chalk.green(`  ${said}\n`));
     },

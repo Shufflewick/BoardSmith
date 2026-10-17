@@ -305,10 +305,16 @@ in the old worker and opened in the new one, and reopened in the old one if
 the new rules refuse it (#381). Only then is the old worker stopped, after
 any call still running on it has answered.
 
-A worker that dies on its own (an error thrown from a rule's timer, say)
-rejects every call still waiting on it with the reason, and every later call
-says the rules stopped and that saving a rules file or restarting
-`boardsmith dev` starts them again.
+A worker that stops on its own (a rule calls `process.exit()`, or throws from
+a timer) is reported in the terminal, every call still waiting on it rejects
+with the reason, and every later call says the rules stopped and that saving a
+rules file or restarting `boardsmith dev` starts them again. The next save does
+start them again, on either road: a table carries the snapshot its host still
+holds onto the new worker, and a world, whose worker took its open world with
+it, is opened in the new worker from its last checkpoint. A world's frames for
+its pages cross as JSON, the form the wire takes, because a view can hold
+values the world's read-only projection answered, which structured clone
+refuses.
 
 The one-shot commands (`simulate`, `validate`, `build`, `add-ui`,
 `evolve-bot-weights`) still import their bundle once into their own process:

@@ -24,7 +24,7 @@ const MARK = 'bs885RulesEvaluatedHere';
 const markLine = `(globalThis as Record<string, unknown>).${MARK} = true;`;
 const evaluatedHere = () => (globalThis as Record<string, unknown>)[MARK];
 
-/** A one-seat counter whose `bump` adds `step`. */
+/** A one-seat counter whose `bump` adds `step`, and whose `quit` ends the thread it runs in. */
 function tableRules(step: number): string {
   return [
     "import { Action, Game, Player, actionStep, loop, sequence, type GameOptions } from 'boardsmith';",
@@ -34,7 +34,8 @@ function tableRules(step: number): string {
     '  constructor(options: GameOptions) {',
     '    super(options);',
     `    this.registerAction(Action.create('bump').execute(() => { this.count += ${step}; }));`,
-    "    this.setFlow({ root: sequence(loop({ name: 'rounds', maxIterations: 50, do: actionStep({ name: 'a', actions: ['bump'], turnScope: 'restart' }) })) });",
+    "    this.registerAction(Action.create('quit').execute(() => { process.exit(3); }));",
+    "    this.setFlow({ root: sequence(loop({ name: 'rounds', maxIterations: 50, do: actionStep({ name: 'a', actions: ['bump', 'quit'], turnScope: 'restart' }) })) });",
     '  }',
     '}',
     "export const gameDefinition = { gameClass: CounterGame, gameType: 'rules-worker-counter', minPlayers: 1, maxPlayers: 1 };",
@@ -44,7 +45,8 @@ function tableRules(step: number): string {
 /**
  * A one-fire world whose `stoke` adds `step` logs. `feed` chooses from the
  * fire's embers, read through the world's read-only projection, so the offers
- * a page is sent carry what that projection answered.
+ * a page is sent carry what that projection answered. `spark` throws from a
+ * timer once it has run.
  */
 function worldRules(step: number): string {
   return [
@@ -66,6 +68,8 @@ function worldRules(step: number): string {
     '    maxPlayers: 1,',
     "    actions: [worldAction('stoke').needs(() => ['fire'])",
     `      .execute((_args: unknown, ctx: { world: { partition(name: string): unknown } }) => { (ctx.world.partition('fire') as Fire).logs += ${step}; }),`,
+    "      worldAction('spark').needs(() => ['fire'])",
+    "      .execute(() => { setTimeout(() => { throw new Error('a spark from a timer'); }, 0); }),",
     "      worldAction('feed').needs(() => ['fire'])",
     "      .chooseFrom('ember', { choices: ({ game }: { game: Camp }) => game.all(Ember).map((ember) => ember.name!) })",
     '      .execute(() => {})],',
@@ -136,6 +140,49 @@ describe('#885: the table road', () => {
     expect(table.count()).toBe(2);
     expect(liveRulesWorkers() - before).toBe(1);
   }, 60_000);
+
+  it('says so when the rules end their own worker, refuses their calls, and comes back on the next save', async () => {
+    const before = liveRulesWorkers();
+    const table = await servedTable();
+    await table.bump();
+    const said = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    // The op that ends the worker is the call waiting on it.
+    expect(await table.act('quit')).toMatchObject({ success: false, error: expect.stringContaining('exited with code 3') });
+    expect(said.mock.calls.flat().join('\n')).toContain('Your rules stopped running: the rules worker exited with code 3');
+    expect(await table.bump()).toMatchObject({
+      success: false,
+      error: expect.stringContaining('Save a rules file, or restart boardsmith dev, to start them again'),
+    });
+    expect(liveRulesWorkers() - before).toBe(0);
+
+    table.save(tableRules(2));
+    await table.reload();
+    await table.bump();
+    // 1 before the worker ended, then 2 on the rules the save started.
+    expect(table.count()).toBe(3);
+    expect(liveRulesWorkers() - before).toBe(1);
+  }, 60_000);
+
+  it('stops the replaced worker when the game cannot even be carried onto the edit, and comes back on the next save', async () => {
+    const before = liveRulesWorkers();
+    const table = await servedTable();
+    await table.bump();
+    const said = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    // Loads, but ends its worker the moment the game is rebuilt on it: `carry` rejects.
+    table.save(tableRules(5).replace('super(options);', 'super(options); process.exit(4);'));
+    await table.reload();
+    expect(said.mock.calls.flat().join('\n')).toContain('exited with code 4');
+    // The host runs the edit's rules now, so the rules it had are stopped too.
+    expect(liveRulesWorkers() - before).toBe(0);
+
+    table.save(tableRules(2));
+    await table.reload();
+    await table.bump();
+    expect(table.count()).toBe(3);
+    expect(liveRulesWorkers() - before).toBe(1);
+  }, 60_000);
 });
 
 /** A world on `worldRules(1)` with one page seated, and the run's reload queue. */
@@ -156,12 +203,13 @@ async function servedWorld() {
   });
   const page = await openSocketPage(server.port, 'p1', (f) => f.type === 'world_offers');
   let request = 0;
-  const stoke = () => {
-    const requestId = `stoke-${++request}`;
+  const act = (action: string) => {
+    const requestId = `${action}-${++request}`;
     const answer = page.next((f) => f.type === 'world_response' && f.requestId === requestId);
-    page.send({ type: 'action', requestId, order: { id: `order-${request}`, at: Date.now() }, action: 'stoke', args: {} });
+    page.send({ type: 'action', requestId, order: { id: `order-${request}`, at: Date.now() }, action, args: {} });
     return answer;
   };
+  const stoke = () => act('stoke');
   const logs = () => {
     const view = JSON.stringify(page.frames.filter((f) => f.type === 'world_state').at(-1)?.view);
     return Number(/"logs":(\d+)/.exec(view)?.[1]);
@@ -172,7 +220,7 @@ async function servedWorld() {
     page.send({ type: 'hello', clientId: 'p1' });
     await greeted;
   };
-  return { run, save, reload: () => run.queue.saved(SAVED), stoke, logs, rejoin };
+  return { run, server, save, reload: () => run.queue.saved(SAVED), act, stoke, logs, rejoin };
 }
 
 describe('#885: the world road', () => {
@@ -209,6 +257,35 @@ describe('#885: the world road', () => {
     );
     expect(await world.stoke()).toMatchObject({ ok: true });
     await vi.waitFor(() => expect(world.logs()).toBe(2));
+    expect(liveRulesWorkers() - before).toBe(1);
+  }, 60_000);
+
+  it('says so when a rule throws from a timer, refuses the world its calls, and opens it again on the next save', async () => {
+    const before = liveRulesWorkers();
+    const world = await servedWorld();
+    expect(await world.stoke()).toMatchObject({ ok: true });
+    const said = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    expect(await world.act('spark')).toMatchObject({ ok: true });
+    await vi.waitFor(() =>
+      expect(said.mock.calls.flat().join('\n')).toContain('Your rules stopped running: a spark from a timer'),
+    );
+    expect(liveRulesWorkers() - before).toBe(0);
+    const refused = world.server.received((m) => m.type === 'action');
+    void world.stoke();
+    await refused;
+    await vi.waitFor(() =>
+      expect(said.mock.calls.flat().join('\n')).toContain(
+        "world message 'action' failed: Your rules stopped running (a spark from a timer). Save a rules file",
+      ),
+    );
+
+    world.save(worldRules(2));
+    await world.reload();
+    await world.rejoin();
+    expect(await world.stoke()).toMatchObject({ ok: true });
+    // 1 checkpointed before the worker stopped, then 2 on the rules the save started.
+    await vi.waitFor(() => expect(world.logs()).toBe(3));
     expect(liveRulesWorkers() - before).toBe(1);
   }, 60_000);
 });

@@ -10,7 +10,7 @@
  * already there before anybody opens a browser.
  *
  * WHAT IT SHARES WITH THE TABLE RUN, deliberately and by import rather than by
- * copy: the Vite server, `importRuntimeBundle`'s one-engine rules bundle, the
+ * copy: the Vite server, `buildRuntimeBundle`'s one-engine rules bundle, the
  * "no SPA fallback, a missing asset is a 404" rule (issue 134), the
  * `noServer` WebSocket upgrade that leaves Vite's HMR socket alone, and the
  * iframe shape -- the outer page is dev chrome and the game's
@@ -341,7 +341,7 @@ export async function openWorldRun(
     queue,
     (openPages) => {
       pages = openPages;
-      if (!running.worker.closed) call(running, 'pages', openPages).catch(reportWorldFailure);
+      if (running.worker.alive) call(running, 'pages', openPages).catch(reportWorldFailure);
     },
   );
 
@@ -353,8 +353,8 @@ export async function openWorldRun(
         connections.sendFrame(told.send.clientId, told.send.frame);
         return;
       }
-      // Work for a world whose worker has since been replaced is dropped: that world is closed.
-      queue.hold(() => (rules.worker.closed ? undefined : call(rules, 'runHeld', told.hold)));
+      // Work for a world whose worker was replaced or stopped is dropped: that world is closed.
+      queue.hold(() => (rules.worker.alive ? call(rules, 'runHeld', told.hold) : undefined));
     });
     const opened = await call<'open', OpenedWorld>(rules, 'open', {
       storePath,
@@ -373,6 +373,9 @@ export async function openWorldRun(
 
   //   1. STOP THE OLD WORLD. `close` checkpoints whatever the resident tree
   //      holds, so nothing a command left in memory is lost with the worker.
+  //      A worker that stopped on its own (a rule threw from a timer) took its
+  //      world with it: there is nothing to close, and the save is what opens
+  //      the world again, from its last checkpoint.
   //   2. OPEN THE SAME WORLD AGAIN, on the new rules, in their worker. Genesis
   //      does not re-run (`start` runs it only for a world that has never
   //      launched), and a `stateVersion` bump is migrated or refused there
@@ -387,21 +390,39 @@ export async function openWorldRun(
   //      refuses them with the reason, after step 3), and only then tells the
   //      pages to start again.
   async function reloadWorld(rules: WorldRuntime): Promise<void> {
-    const seated = await call<'attachments', Array<[string, number]>>(running, 'attachments', undefined);
-    await call(running, 'close', undefined);
+    let seated: Array<[string, number]> = [];
+    try {
+      if (running.worker.alive) {
+        seated = await call<'attachments', Array<[string, number]>>(running, 'attachments', undefined);
+        await call(running, 'close', undefined);
+      }
+    } catch (error) {
+      // The new rules never ran, so their worker goes with the failure.
+      await rules.worker.close();
+      throw error;
+    }
     let refusal: Error | null = null;
     try {
       await openIn(rules);
+    } catch (error) {
+      await rules.worker.close();
+      const reason = error instanceof Error ? error.message : String(error);
+      if (!running.worker.alive) {
+        throw new Error(
+          `Those rules cannot run this world, and the rules it had stopped running, so no world is open. ` +
+            `Nothing was changed on disk. Save a rules file to open it again: ${reason}`,
+        );
+      }
+      refusal = new Error(
+        'Those rules cannot run this world, so it is still running the ones it had, and nothing ' +
+          `was changed on disk: ${reason}`,
+      );
+      await openIn(running);
+    }
+    if (refusal === null) {
       const replaced = running;
       running = rules;
       await replaced.worker.close();
-    } catch (error) {
-      refusal = new Error(
-        'Those rules cannot run this world, so it is still running the ones it had, and nothing ' +
-          `was changed on disk: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      await rules.worker.close();
-      await openIn(running);
     }
     for (const [clientId, seat] of seated) {
       await call(running, 'message', { clientId, message: { type: 'attach', seat } });
@@ -418,8 +439,12 @@ export async function openWorldRun(
     // Closing twice is closing once, as `LocalWorldHost.close` is (#197).
     close: () =>
       (closed ??= (async () => {
-        await call(running, 'close', undefined);
-        await running.worker.close();
+        try {
+          // A worker that stopped on its own has no world left to close.
+          if (running.worker.alive) await call(running, 'close', undefined);
+        } finally {
+          await running.worker.close();
+        }
       })()),
   };
 }

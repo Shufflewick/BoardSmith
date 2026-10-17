@@ -89,8 +89,11 @@ export interface RulesWorker {
   call<T>(type: string, payload?: unknown): Promise<T>;
   /** Where the worker's unasked events go. One listener; a later call replaces it. */
   listen(listener: (event: unknown) => void): void;
-  /** Whether {@link RulesWorker.close} has been asked for. */
-  readonly closed: boolean;
+  /**
+   * False once {@link RulesWorker.close} has been asked for or the worker has
+   * stopped on its own; every call made then rejects.
+   */
+  readonly alive: boolean;
   /** Stop the worker, once every call already made on it has answered. */
   close(): Promise<void>;
 }
@@ -168,17 +171,18 @@ export async function startRulesWorker(bundlePath: string, data: unknown): Promi
           }
           if (closing !== null) return Promise.reject(new Error('These rules were replaced, so they take no more calls.'));
           const id = ++nextId;
-          worker.ref();
           return new Promise<T>((resolve, reject) => {
-            pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
+            // Posted first: a payload that cannot be sent rejects here and leaves nothing pending.
             worker.postMessage({ id, type, payload } satisfies Call);
+            pending.set(id, { resolve: resolve as (value: unknown) => void, reject });
+            worker.ref();
           });
         },
         listen(next) {
           listener = next;
         },
-        get closed() {
-          return closing !== null;
+        get alive() {
+          return closing === null && stopped === null;
         },
         close() {
           closing ??= (async () => {

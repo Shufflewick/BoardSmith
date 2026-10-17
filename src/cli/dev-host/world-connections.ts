@@ -7,9 +7,10 @@
  * regression test for #284 drives the literal code the server runs, over real
  * sockets, with no hand-mirrored copy to drift.
  *
- * ONE SOURCE OF TRUTH FOR "IS THIS PAGE STILL HERE". `send` and `isOpen` read
- * the same map and the same `readyState`, so the host can never believe in a
- * page its own frames are no longer reaching, or skip one they still reach.
+ * ONE SOURCE OF TRUTH FOR "IS THIS PAGE STILL HERE". The world runs in its
+ * rules' worker (#885) and answers `isOpen` from the pages this tells it are
+ * open, the same map `sendFrame` sends through, so the world can never believe
+ * in a page its frames are no longer reaching, or skip one they still reach.
  */
 import chalk from 'chalk';
 import { WebSocket } from 'ws';
@@ -40,14 +41,10 @@ function refusalOf(message: WorldDevRequest): ((text: string) => Record<string, 
 }
 
 interface WorldConnections {
-  /** One frame to one page, dropped when that page's socket is not open. */
-  send(clientId: string, message: unknown): void;
-  /** {@link WorldConnections.send} for a frame already encoded as JSON. */
+  /** One frame, already encoded as JSON, to one page; dropped when that page's socket is not open. */
   sendFrame(clientId: string, frame: string): void;
   /** One frame to every open page. */
   broadcast(message: unknown): void;
-  /** Whether this page's socket is open right now -- the host's `isOpen`. */
-  isOpen(clientId: string): boolean;
   /** Take one newly upgraded socket: its messages go to the current host, and
    *  its close is that page's departure. */
   accept(socket: WebSocket): void;
@@ -74,10 +71,10 @@ export function createWorldConnections(
   queue: Pick<RulesReloadQueue, 'admit'>,
   /**
    * Told which pages are open whenever that changes, before anything the change
-   * sends the host: a world run in its rules' worker answers `isOpen` from it
-   * (#885).
+   * sends the host: the world, in its rules' worker, answers `isOpen` from it
+   * (#284, #885).
    */
-  pagesChanged: (open: readonly string[]) => void = () => {},
+  pagesChanged: (open: readonly string[]) => void,
 ): WorldConnections {
   const clients = new Map<string, WebSocket>();
   const changed = (): void => pagesChanged([...clients.keys()]);
@@ -88,20 +85,12 @@ export function createWorldConnections(
   };
 
   return {
-    send(clientId, message) {
-      openSocket(clientId)?.send(JSON.stringify(message));
-    },
-
     sendFrame(clientId, frame) {
       openSocket(clientId)?.send(frame);
     },
 
     broadcast(message) {
       for (const clientId of clients.keys()) openSocket(clientId)?.send(JSON.stringify(message));
-    },
-
-    isOpen(clientId) {
-      return openSocket(clientId) !== undefined;
     },
 
     accept(socket) {
