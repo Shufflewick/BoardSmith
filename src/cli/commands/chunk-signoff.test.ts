@@ -16,6 +16,7 @@ import {
   recordWaiver,
   recordReopen,
   parseSignoff,
+  readStatus,
 } from './chunk-signoff.js';
 import { chunkCheckCommand, chunkProvenanceStatusCommand } from './chunk-provenance.js';
 import {
@@ -178,6 +179,13 @@ describe('recordSignoff — a chunk does not reach verified while a constraint d
     );
     await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
     expect(await readChunk(project, 'deal')).toMatch(/^Status: verified$/m);
+  });
+});
+
+describe('readStatus', () => {
+  it('reads an empty Status line as empty, never the line below it (#829)', () => {
+    expect(readStatus('Status:\nverified\n')).toBe('');
+    expect(readStatus('Status:  built  \n')).toBe('built');
   });
 });
 
