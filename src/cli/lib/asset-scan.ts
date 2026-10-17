@@ -30,7 +30,8 @@ import { collectSourceFiles } from './source-files.js';
 export interface AssetViolation {
   /** Path relative to the project root. */
   file: string;
-  line: number;
+  /** Absent when the problem has no line, such as a Vue parser error without a location. */
+  line?: number;
   message: string;
 }
 
@@ -50,7 +51,7 @@ interface StripCommentsResult {
    */
   unterminated?: { line: number; kind: 'block' | 'html' };
   /** #1096: what Vue's parser could not read in a `.vue` file, at 1-based lines. */
-  parseErrors?: { line: number; reason: string }[];
+  parseErrors?: { line?: number; reason: string }[];
 }
 
 const blank = (text: string): string => text.replace(/[^\r\n]/g, ' ');
@@ -107,7 +108,6 @@ function stripScriptComments(content: string, filePath: string): StripCommentsRe
  */
 function stripVueComments(content: string, filePath: string): StripCommentsResult {
   const { descriptor, errors } = parseSfc(content, { filename: filePath });
-  const parseErrors = errors.map((error) => ({ line: 'loc' in error && error.loc ? error.loc.start.line : 1, reason: error.message }));
   const blocks = [descriptor.script, descriptor.scriptSetup, ...descriptor.styles]
     .filter((block) => block !== null)
     .sort((a, b) => a.loc.start.offset - b.loc.start.offset);
@@ -131,15 +131,17 @@ function stripVueComments(content: string, filePath: string): StripCommentsResul
     cursor = end.offset;
   }
   out += template(content.slice(cursor), cursor);
+  // An unclosed template comment runs to the end of the file, so Vue's errors are that same cause, already reported.
+  const parseErrors = unterminated?.kind === 'html' ? [] : errors.map((error) => ({ line: 'loc' in error ? error.loc?.start.line : undefined, reason: error.message }));
   return { lines: out.split('\n'), unterminated, parseErrors };
 }
 
 /** The parts of a file the scan could not read, each as a violation: a false PASS otherwise. */
 function unscannedParts(relPath: string, { unterminated, parseErrors = [] }: StripCommentsResult): AssetViolation[] {
-  const violations = parseErrors.map(({ line, reason }) => ({
+  const violations: AssetViolation[] = parseErrors.map(({ line, reason }) => ({
     file: relPath,
     line,
-    message: `${relPath}:${line} could not be read as a Vue file: ${reason} Fix it so Vue can parse the file (close every tag you open, such as <template> or <script>); until then the file is not fully scanned for bare <img> tags.`,
+    message: `${relPath}${line === undefined ? '' : `:${line}`} could not be read as a Vue file: ${reason} Fix it so Vue can parse the file (close every tag you open, such as <template> or <script>); until then the file is not fully scanned for bare <img> tags.`,
   }));
   // WR-01: a comment that never closes silently blanks everything after it (including any real <img> tags).
   if (unterminated) {

@@ -259,19 +259,21 @@ describe('scanAssetReachability', () => {
     const violations = scanWith({ 'src/ui/W.vue': '<template>\n  <div />\n</template>\n<script setup lang="ts">\nconst a = 1;\n/* never closed\n<img src="y">\n</script>\n' });
     expect(violations.map((v) => [v.line, /unterminated/.test(v.message)])).toEqual([[6, true]]);
     const html = scanWith({ 'src/ui/X.vue': '<template>\n  <div />\n  <!-- never closed\n  <img src="y">\n</template>\n<script setup lang="ts">\nconst a = 1;\n</script>\n' });
-    // Vue reads the rest of the file as that comment, so it also reports the file as malformed (#1096).
-    expect(html.map((v) => [v.line, /unterminated <!-- HTML|could not be read as a Vue file/.exec(v.message)?.[0]])).toEqual([
-      [9, 'could not be read as a Vue file'],
-      [1, 'could not be read as a Vue file'],
-      [3, 'unterminated <!-- HTML'],
-    ]);
+    // Vue's own errors for it (EOF in comment, a missing end tag) are the same cause, so only this one is reported (#1096).
+    expect(html.map((v) => [v.line, /unterminated <!-- HTML/.test(v.message)])).toEqual([[3, true]]);
   });
 
   // #1096: Vue's parser reports a malformed file in a list rather than throwing; the scan says so.
-  it('reports a .vue file Vue cannot parse, at the line of the problem', () => {
-    const violations = scanWith({ 'src/ui/V.vue': '<template>\n  <div />\n</template>\n<script setup lang="ts">\nconst a = 1;\n' });
-    expect(violations.map((v) => [v.file, v.line])).toEqual([['src/ui/V.vue', 4]]);
-    expect(violations[0].message).toMatch(/^src\/ui\/V\.vue:4 could not be read as a Vue file: Element is missing end tag\..*close/);
+  it('reports a .vue file Vue cannot parse, at the line of the problem, alongside the <img> it still finds', () => {
+    const violations = scanWith({ 'src/ui/V.vue': '<template>\n  <div />\n</template>\n<script setup lang="ts">\nconst a = \'<img src="x">\';\n' });
+    expect(violations.map((v) => [v.file, v.line])).toEqual([['src/ui/V.vue', 5], ['src/ui/V.vue', 4]]);
+    expect(violations[1].message).toMatch(/^src\/ui\/V\.vue:4 could not be read as a Vue file: Element is missing end tag\..*close/);
+  });
+
+  it('reports a Vue parser error that has no location without a line', () => {
+    const violations = scanWith({ 'src/ui/V.vue': '<template>\n  <div />\n</template>\n<style vars="{ a }">\n.a { color: red; }\n</style>\n' });
+    expect(violations.map((v) => [v.file, v.line])).toEqual([['src/ui/V.vue', undefined]]);
+    expect(violations[0].message).toMatch(/^src\/ui\/V\.vue could not be read as a Vue file: <style vars>/);
   });
 
   // Review of #1017: both script blocks of a file are scanned.
