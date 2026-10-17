@@ -96,10 +96,9 @@ export async function exampleLedgerUpgradeCommand(
 
     const kept = decisions.flatMap((d) => (d.kind === 'dropped' ? [] : [d.line]));
     const keptRecords = kept.filter((l): l is ExampleReplayRecord => 'exampleId' in l);
-    const upgradedIds = new Set(upgraded);
     const { rewritten, moved } = moveUnanchoredExamples(
       keptRecords,
-      findUnanchoredExamples(keptRecords, liveSlices).filter((u) => upgradedIds.has(u.exampleId)),
+      findUnanchoredExamples(keptRecords, liveSlices, new Set(upgraded)),
     );
     if (upgraded.length > 0 || dropped.length > 0) {
       const withoutExamples = kept.filter((l) => !('exampleId' in l));
@@ -122,12 +121,14 @@ function isUnplaceable(reason: DropReason): boolean {
 
 /**
  * Drops each upgraded record the re-anchoring rule cannot place: its text is on several lines of
- * its slice, or on one another record already holds.
+ * its slice, or on one whose id another record keeps or also moves to. Only upgraded records move,
+ * so every other record keeps its id.
  */
 function dropUnplaceable(decisions: Decision[], liveSlices: { path: string; text: string }[]): Decision[] {
   const records = decisions.flatMap((d) => (d.kind === 'dropped' || !('exampleId' in d.line) ? [] : [d.line]));
+  const upgraded = new Set(decisions.flatMap((d) => (d.kind === 'upgraded' ? [d.line.exampleId] : [])));
   const unplaceable = new Set(
-    findUnanchoredExamples(records, liveSlices).flatMap((u) => (u.reason === 'moved' ? [] : [u.exampleId])),
+    findUnanchoredExamples(records, liveSlices, upgraded).flatMap((u) => (u.reason === 'moved' ? [] : [u.exampleId])),
   );
   return decisions.map((d) =>
     d.kind === 'upgraded' && unplaceable.has(d.line.exampleId) ? droppedLine(d.line, 'quote-ambiguous') : d,

@@ -746,17 +746,21 @@ type LostExample = Omit<UnanchoredExample, 'movedTo'> & {
 /**
  * Every record in `records` whose slice is among `slices` and whose line no longer reads its
  * `lineText`, in ledger order. A record whose slice is not among `slices` is not checked here.
- * Lines are compared trimmed, the way `buildExampleExtractionPayload` numbered them.
+ * When `movable` is given, only records with those ids are checked; every other record keeps its
+ * id, so none is moved onto it. Lines are compared trimmed, the way
+ * `buildExampleExtractionPayload` numbered them.
  */
 export function findUnanchoredExamples(
   records: readonly ExampleReplayRecord[],
   slices: readonly { path: string; text: string }[],
+  movable?: ReadonlySet<string>,
 ): UnanchoredExample[] {
   const linesBySlice = new Map(slices.map((s) => [s.path, s.text.split('\n').map((l) => l.trim())]));
   const foundAt = new Map<ExampleReplayRecord, number[]>();
   for (const r of records) {
     const lines = linesBySlice.get(r.slicePath);
     if (lines === undefined || lines[r.lineNumber - 1] === r.lineText) continue;
+    if (movable !== undefined && !movable.has(r.exampleId)) continue;
     foundAt.set(r, lines.flatMap((line, i) => (line === r.lineText ? [i + 1] : [])));
   }
   // A move onto an id another record keeps, or another move also takes, would give two records one id (#836).
@@ -850,7 +854,8 @@ export function describeUnanchoredExamples(unanchored: readonly UnanchoredExampl
     } else if (u.reason === 'text-gone') {
       lines.push(`  ${where}: its line "${u.lineText}" is no longer in the slice.`);
     } else {
-      lines.push(`  ${where}: its line "${u.lineText}" is on several other lines, so it cannot be placed.`);
+      lines.push(`  ${where}: its line "${u.lineText}" is on several other lines, or its new line is kept by, ` +
+          `or also wanted by, another example, so it cannot be placed.`);
     }
   }
   if (unanchored.some((u) => u.reason === 'moved')) {

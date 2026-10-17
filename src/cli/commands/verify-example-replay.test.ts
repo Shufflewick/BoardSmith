@@ -17,6 +17,7 @@ import {
   verifyExampleTranslateCommand,
   reanchorExampleLedger,
   findUnanchoredExamples,
+  describeUnanchoredExamples,
   readSlicesWithoutExamples,
   type ExampleReplayRecord,
 } from './verify-example-replay.js';
@@ -1328,6 +1329,36 @@ describe('worked examples stay anchored to their slice line (#350)', () => {
     expect(findUnanchoredExamples(records, [slice]).map((u) => [u.exampleId, u.reason])).toEqual([
       [`${SLICE}:4`, 'text-ambiguous'],
       [`${SLICE}:5`, 'text-ambiguous'],
+    ]);
+  });
+
+  it('a move blocked only once another move is blocked is reported lost too (#836)', () => {
+    // A's text is now on B's line, B's text on D's line, and D stays put: B cannot move, so A cannot.
+    const slice = { path: SLICE, text: `# Punch\n\n${READY_LINE}\n${TIRED_LINE}\n` };
+    const records = [
+      recordFor(SLICE, 2, { lineText: READY_LINE }),
+      recordFor(SLICE, 3, { lineText: TIRED_LINE }),
+      recordFor(SLICE, 4, { lineText: TIRED_LINE }),
+    ];
+
+    const unanchored = findUnanchoredExamples(records, [slice]);
+
+    expect(unanchored.map((u) => [u.exampleId, u.reason])).toEqual([
+      [`${SLICE}:2`, 'text-ambiguous'],
+      [`${SLICE}:3`, 'text-ambiguous'],
+    ]);
+    expect(describeUnanchoredExamples(unanchored)[0]).toBe(
+      `  ${SLICE}:2: its line "${READY_LINE}" is on several other lines, or its new line is kept by, ` +
+        `or also wanted by, another example, so it cannot be placed.`,
+    );
+  });
+
+  it('a record that may not move keeps its id, so no other record moves onto it (#836)', () => {
+    const slice = { path: SLICE, text: `# Punch\n\n\n${READY_LINE}\n${TIRED_LINE}\n` };
+    const records = [recordFor(SLICE, 3, { lineText: READY_LINE }), recordFor(SLICE, 4, { lineText: TIRED_LINE })];
+
+    expect(findUnanchoredExamples(records, [slice], new Set([`${SLICE}:3`]))).toEqual([
+      { exampleId: `${SLICE}:3`, slicePath: SLICE, lineText: READY_LINE, reason: 'text-ambiguous' },
     ]);
   });
 
