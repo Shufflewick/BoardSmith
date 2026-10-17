@@ -15,6 +15,9 @@
  * of Node and nothing else; `tsx` is loaded the same way `bin/boardsmith.js`
  * loads it, so the store runs from source with no build step.
  *
+ * `hold` mode is `world-store.lock.test.ts`'s other run: it opens the store,
+ * prints `holding`, and keeps it open until it is killed.
+ *
  * Usage: `node world-store-child.test-helper.mjs <mode> <storePath> <markerDir> [count] [bytes]`
  */
 
@@ -65,7 +68,10 @@ function armedEvents() {
   }));
 }
 
-if (mode === 'live') {
+if (mode === 'hold') {
+  process.stdout.write('holding\n');
+  setInterval(() => {}, 60_000);
+} else if (mode === 'live') {
   // A world played, checkpointed, and then killed with no clean shutdown --
   // exactly what closing a laptop lid on `boardsmith dev` looks like.
   await store.createAll({

@@ -17,7 +17,7 @@
  * the board. It offers no New Game or Rematch: a deployed host has no restart
  * op (#902).
  */
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import { seatInk } from '../utils/color-contrast';
 
@@ -57,13 +57,12 @@ function winnerInk(color?: string): string {
   return seatInk(color, 'GameOverCard').ink;
 }
 
-const { open: openTrap, close: closeTrap, handleKeydown } = useFocusTrap(cardRef, {
+const { open: openTrap, handleKeydown } = useFocusTrap(cardRef, {
   escapeToClose: true,
   onClose: () => emit('dismiss'),
 });
 
 onMounted(() => openTrap());
-onBeforeUnmount(() => closeTrap());
 
 // ---------------------------------------------------------------------------
 // Shape set (mirrors PlayersPanel.vue, IA-06): seat index → shape class.
