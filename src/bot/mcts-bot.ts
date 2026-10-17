@@ -205,9 +205,9 @@ export class MCTSBot<G extends Game = Game> {
    * is #19/#31, and this does not close it.
    */
   async play(): Promise<BotMove | null> {
-    if (this.config.parallel && this.config.parallel > 1) {
-      return this.playParallel();
-    }
+    // No more sub-searches than iterations, so each runs at least one (#876).
+    const subSearches = Math.min(this.config.parallel ?? 1, this.config.iterations);
+    if (subSearches > 1) return this.playParallel(subSearches);
     const { move } = await this.runSearch();
     this.warnIfStepsWereDropped(this.searchSteps);
     return move;
@@ -253,8 +253,7 @@ export class MCTSBot<G extends Game = Game> {
    * each gets an equal share of the time still left, so the whole move stays
    * within `timeout` (#634). An infinite timeout stays infinite for each.
    */
-  private async playParallel(): Promise<BotMove | null> {
-    const parallelCount = this.config.parallel!;
+  private async playParallel(parallelCount: number): Promise<BotMove | null> {
     const iterationsPerSearch = Math.floor(this.config.iterations / parallelCount);
     const deadline = Date.now() + (this.config.timeout ?? 2000);
 
@@ -1169,10 +1168,20 @@ export class MCTSBot<G extends Game = Game> {
   // ============================================================================
 
   /**
-   * Generate a unique key for a move (used for RAVE table lookup)
+   * Generate a unique key for a move (used for RAVE table lookup). An element,
+   * wherever it sits in the args, is keyed by its id, not its subtree, so the
+   * move keeps one key in every sampled world (#876).
    */
   private getMoveKey(move: BotMove): string {
-    return `${move.action}:${JSON.stringify(move.args)}`;
+    const keyOf = (v: unknown): unknown => {
+      if (isElement(v)) return { elementId: v.id };
+      if (Array.isArray(v)) return v.map(keyOf);
+      if (typeof v === 'object' && v !== null && Object.getPrototypeOf(v) === Object.prototype) {
+        return Object.fromEntries(Object.entries(v as object).map(([k, x]) => [k, keyOf(x)]));
+      }
+      return v;
+    };
+    return `${move.action}:${JSON.stringify(keyOf(move.args))}`;
   }
 
   /**
