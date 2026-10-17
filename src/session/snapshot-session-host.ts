@@ -1067,6 +1067,16 @@ export class SnapshotSessionHost {
     // #481: debug ops need debugging on.
     const debugRefused = debugOpRefusal(op, this.adapters.debug === true);
     if (debugRefused) return debugRefused;
+    // #1100: its answer is a bot seat's move with that move's args, which may be hidden from the caller.
+    if (op.type === 'botSuggest') {
+      return {
+        success: false,
+        error:
+          `Seat ${seat} sent 'botSuggest', and was refused: only the host itself searches for a bot's move. ` +
+          'Ask for a hint to see a suggested move for your own seat.',
+        category: 'protocol',
+      };
+    }
     // #738: picks are kept under `seat`, so an op acting as another player would mix two seats.
     // #950: hint, heatmapToggle and convertSeatToBot name theirs as `seat`.
     const named = 'player' in op ? op.player : 'seat' in op ? op.seat : seat;
