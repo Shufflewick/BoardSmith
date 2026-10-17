@@ -58,8 +58,6 @@ export { ErrorCode } from './types.js';
 // ============================================
 
 export {
-  generateGameId,
-  isPlayersTurn,
   buildActionMetadata,
   buildPlayerState,
 } from './utils.js';
@@ -69,7 +67,6 @@ export {
 // ============================================
 
 export {
-  STANDARD_PLAYER_COLORS,
   createColorOption,
   type ColorChoice,
   type ColorOptionDefinition,
