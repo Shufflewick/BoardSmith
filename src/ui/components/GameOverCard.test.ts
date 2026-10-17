@@ -6,8 +6,8 @@
  *   1. With winnerSeats=[1] and players=[{seat:0},{seat:1}], the card names
  *      the winner from seat 1.
  *   2. With winnerSeats=[] (dev-mode degrade), the card renders "Game Over"
- *      with no winner names but still shows the action buttons.
- *   3. Clicking "Rematch" emits 'rematch'; clicking "New Game" emits 'new-game'.
+ *      with no winner names.
+ *   3. The only control is Close (#902: no New Game or Rematch).
  */
 
 import { describe, it, expect } from 'vitest';
@@ -64,14 +64,11 @@ describe('GameOverCard — dev-mode graceful degrade (winnerSeats=[])', () => {
     expect(wrapper.find('.winners').exists()).toBe(false);
   });
 
-  it('still shows New Game and Rematch buttons when winnerSeats is empty', () => {
-    const wrapper = mount(GameOverCard, {
-      props: { winnerSeats: [], players: PLAYERS },
-    });
-
-    const buttons = wrapper.findAll('button');
-    const labels = buttons.map(b => b.text());
-    expect(labels).toEqual(expect.arrayContaining(['New Game', 'Rematch']));
+  it('offers only Close, with or without winners (#902)', () => {
+    for (const winnerSeats of [[], [0]]) {
+      const wrapper = mount(GameOverCard, { props: { winnerSeats, players: PLAYERS } });
+      expect(wrapper.findAll('button').map(b => b.attributes('aria-label'))).toEqual(['Close']);
+    }
   });
 });
 
@@ -92,32 +89,6 @@ describe('GameOverCard — winner glyph contrast ink (F-17 / LIBX-03)', () => {
     });
     const style = wrapper.find('.ini').attributes('style') ?? '';
     expect(style.replace(/\s/g, '')).toMatch(/color:(#000|#000000|rgb\(0,0,0\))/i);
-  });
-});
-
-describe('GameOverCard — emits on button clicks', () => {
-  it('emits "rematch" when Rematch is clicked', async () => {
-    const wrapper = mount(GameOverCard, {
-      props: { winnerSeats: [0], players: PLAYERS },
-    });
-
-    const rematchBtn = wrapper.findAll('button').find(b => b.text() === 'Rematch');
-    expect(rematchBtn).toBeDefined();
-    await rematchBtn!.trigger('click');
-
-    expect(wrapper.emitted('rematch')).toHaveLength(1);
-  });
-
-  it('emits "new-game" when New Game is clicked', async () => {
-    const wrapper = mount(GameOverCard, {
-      props: { winnerSeats: [1], players: PLAYERS },
-    });
-
-    const newGameBtn = wrapper.findAll('button').find(b => b.text() === 'New Game');
-    expect(newGameBtn).toBeDefined();
-    await newGameBtn!.trigger('click');
-
-    expect(wrapper.emitted('new-game')).toHaveLength(1);
   });
 });
 

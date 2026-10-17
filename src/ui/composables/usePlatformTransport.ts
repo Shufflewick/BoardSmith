@@ -76,7 +76,7 @@ export function usePlatformTransport(options: PlatformTransportOptions): Platfor
       const requestId = `req-${sequence++}`;
       const timer = setTimeout(() => {
         if (pending.delete(requestId)) {
-          resolve({ success: false, error: `Timed out on '${op}'` });
+          resolve({ success: false, error: 'The table did not answer in time. Try again.' });
         }
       }, timeoutMs);
       pending.set(requestId, { resolve, timer });
@@ -111,4 +111,18 @@ export function usePlatformTransport(options: PlatformTransportOptions): Platfor
   }
 
   return { request, handleResponse, rejectAll, pendingCount: () => pending.size };
+}
+
+/**
+ * What to tell the player about a host op's response, or null when the host accepted it.
+ *
+ * The host's own reason is shown as written; a host with no handler for the op
+ * at all (a production table without teaching support) reads as `unsupported`.
+ */
+export function hostRefusal(result: Record<string, unknown>, failed: string, unsupported = failed): string | null {
+  if (result.success !== false) return null;
+  const error = typeof result.error === 'string' ? result.error : '';
+  // The dev bridge and ShufflewickPub's GameSession both answer an op they lack this way.
+  if (error.startsWith('Unknown server op')) return unsupported;
+  return error || failed;
 }
