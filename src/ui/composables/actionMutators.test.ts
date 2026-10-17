@@ -356,6 +356,14 @@ describe('the mutators find an object choice from a copy of its value (#857)', (
     expect(t.board.selectedElement).toEqual({ id: 41 });
   });
 
+  it('marks the chosen element when the choice is named by shorthand', async () => {
+    const t = cellTable();
+    await t.mutators.startAction('mark');
+    expect(await t.mutators.setSelectionValue('cell', { row: 1 })).toBe(true);
+
+    expect(t.board.selectedElement).toEqual({ id: 41 });
+  });
+
   it('draws the multi-select draft on the board', async () => {
     const t = cellTable();
     await t.mutators.startAction('markMany');

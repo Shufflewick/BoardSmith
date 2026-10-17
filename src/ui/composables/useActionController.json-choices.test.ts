@@ -62,6 +62,35 @@ function assignSpyMetadata(): Record<string, EnrichedActionMetadata> {
         },
       ],
     },
+    guardedSquad: {
+      name: 'guardedSquad',
+      prompt: 'Assign operatives',
+      selections: [
+        {
+          name: 'squad',
+          type: 'choice',
+          prompt: 'Which operatives?',
+          multiSelect: { min: 1, max: 2 },
+          choices: [
+            { value: OPERATIVES[0], display: 'Agent Null', disabled: 'Already deployed' },
+            { value: OPERATIVES[1], display: 'Agent Vex' },
+          ],
+        },
+      ],
+    },
+    orderSquad: {
+      name: 'orderSquad',
+      prompt: 'Order operatives',
+      selections: [
+        {
+          name: 'order',
+          type: 'choice',
+          prompt: 'In what order?',
+          orderedList: { min: 1, max: 3 },
+          choices: OPERATIVES.map((spy) => ({ value: spy, display: spy.name })),
+        },
+      ],
+    },
     guardedAssign: {
       name: 'guardedAssign',
       prompt: 'Assign an operative',
@@ -93,7 +122,7 @@ describe('JSON-valued choices survive the wire (#219)', () => {
     sendAction = createMockSendAction();
     controller = useActionController({
       sendAction,
-      availableActions: ref(['assignSpy', 'assignSquad', 'guardedAssign']),
+      availableActions: ref(['assignSpy', 'assignSquad', 'guardedSquad', 'orderSquad', 'guardedAssign']),
       actionMetadata: ref(assignSpyMetadata()),
       isMyTurn: ref(true),
       autoFill: false,
@@ -186,7 +215,7 @@ describe('the draft and prefills judge a pick value by the same rule as fill (#8
     sendAction = createMockSendAction();
     controller = useActionController({
       sendAction,
-      availableActions: ref(['assignSpy', 'assignSquad', 'guardedAssign']),
+      availableActions: ref(['assignSpy', 'assignSquad', 'guardedSquad', 'orderSquad', 'guardedAssign']),
       actionMetadata: ref(assignSpyMetadata()),
       isMyTurn: ref(true),
       autoFill: false,
@@ -239,5 +268,71 @@ describe('the draft and prefills judge a pick value by the same rule as fill (#8
 
     expect(controller.multiSelectDraft.value).toBe(null);
     expect(controller.lastError.value).toBe('Invalid selection for "squad"');
+  });
+
+  it('reports a toggled item as selected by either shorthand', async () => {
+    await controller.start('assignSquad');
+    await controller.toggleMultiSelect('squad', 'Agent Vex');
+
+    expect(controller.isMultiSelectSelected('squad', 'Agent Vex')).toBe(true);
+    expect(controller.isMultiSelectSelected('squad', 'operative:1:2')).toBe(true);
+    expect(controller.isMultiSelectSelected('squad', 'Agent Null')).toBe(false);
+  });
+
+  it('removes an entry added as an object when toggled by its display text', async () => {
+    await controller.start('assignSquad');
+    await controller.toggleMultiSelect('squad', overTheWire(OPERATIVES[1]));
+    await controller.toggleMultiSelect('squad', 'Agent Vex');
+
+    expect(controller.multiSelectDraft.value?.values).toEqual([]);
+  });
+
+  it('removes an entry added by display text when toggled by its id', async () => {
+    await controller.start('assignSquad');
+    await controller.toggleMultiSelect('squad', 'Agent Vex');
+    await controller.toggleMultiSelect('squad', 'operative:1:2');
+
+    expect(controller.multiSelectDraft.value?.values).toEqual([]);
+  });
+
+  it('refuses a toggle naming a disabled choice, and says why', async () => {
+    await controller.start('guardedSquad');
+    await controller.toggleMultiSelect('squad', 'Agent Null');
+
+    expect(controller.multiSelectDraft.value).toBe(null);
+    expect(controller.lastError.value).toBe('Selection disabled: Already deployed');
+  });
+
+  it('never refuses removing an entry whose choice was disabled after it was added', async () => {
+    await controller.start('guardedSquad');
+    await controller.toggleMultiSelect('squad', 'Agent Vex');
+    const vex = controller.currentChoices.value.find((c) => c.display === 'Agent Vex')!;
+    vex.disabled = 'Called away';
+
+    await controller.toggleMultiSelect('squad', 'operative:1:2');
+
+    expect(controller.multiSelectDraft.value?.values).toEqual([]);
+    expect(controller.lastError.value).toBe(null);
+  });
+
+  it('holds the offered value when a list entry names a choice by shorthand', async () => {
+    await controller.start('orderSquad');
+    await controller.appendListEntry('order', 'operative:1:2');
+
+    expect(controller.multiSelectDraft.value?.values).toEqual([OPERATIVES[1]]);
+  });
+
+  it('holds and labels the offered value when fill names a choice by its id', async () => {
+    await controller.start('assignSpy');
+    await controller.fill('spy', 'operative:1:2');
+
+    expect(controller.currentArgs.value.spy).toEqual(OPERATIVES[1]);
+    expect(controller.getCollectedPick('spy')?.display).toBe('Agent Vex');
+  });
+
+  it('sends the offered value when execute() names a choice by shorthand', async () => {
+    await controller.execute('assignSpy', { spy: 'Agent Vex', task: 'propaganda' });
+
+    expect(sendAction).toHaveBeenCalledWith('assignSpy', { spy: OPERATIVES[1], task: 'propaganda' });
   });
 });

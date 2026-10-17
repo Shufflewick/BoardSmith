@@ -16,7 +16,7 @@
 import type { BoardInteraction } from './useBoardInteraction.js';
 import type { EnrichedActionMetadata, UseActionControllerReturn } from './useActionControllerTypes.js';
 import { choiceBoardTarget } from './actionControllerHelpers.js';
-import { valuesEqual } from '../../engine/action/choice-matching.js';
+import { findMatchingChoice, valuesEqual } from '../../engine/action/choice-matching.js';
 
 /** What a surface knows about whether the seat may act. Read on every call. */
 export interface ActionMutatorGuards {
@@ -137,8 +137,8 @@ export function createActionMutators(
     const result = await controller.fill(selectionName, value);
     // A refusal is already in the controller's `lastError`.
     if (!result.valid) return false;
-    // Keep the chosen board element marked.
-    const chosen = offered.find(c => valuesEqual(c.value, value));
+    // Keep the chosen board element marked: the choice fill's own rule names.
+    const chosen = findMatchingChoice(value, offered);
     const ref = chosen && choiceBoardTarget(chosen);
     if (ref) board?.selectElement(ref);
     return true;
