@@ -777,7 +777,9 @@ function rankPinSites(
     const runs = coverage.runs(path, site.line, site.column);
     if (!runs.ran) continue;
     const rank = changed.has(site.line) ? 0 : runs.tests.length > 0 ? runs.tests.length : coverage.tests.length + 1;
-    byRank.set(rank, [...(byRank.get(rank) ?? []), { path, text, site, tests: runs.tests }]);
+    const ranked = byRank.get(rank) ?? [];
+    ranked.push({ path, text, site, tests: runs.tests });
+    byRank.set(rank, ranked);
   }
   return byRank;
 }
