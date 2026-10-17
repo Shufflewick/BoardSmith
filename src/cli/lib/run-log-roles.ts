@@ -508,11 +508,40 @@ function verifyOnFileProblem(name: string, commit: string, found: VerifyOnFile):
   );
 }
 
+/** The commit a review round's "Verify: <commit> passed" names, or undefined when it names none. */
+const roundCommit = (e: LedgerEntry) => /^([0-9a-f]{7,64}) passed$/.exec(valueOf(e, 'Verify') ?? '')?.[1];
+
 /** The commit each review round's "Verify: <commit> passed" names, for looking up its result on file. */
 export function reviewRoundCommits(text: string): string[] {
   return runLogEntries(text)
     .filter((e) => e.kind === 'Review Round')
-    .flatMap((e) => /^([0-9a-f]{7,64}) passed$/.exec(valueOf(e, 'Verify') ?? '')?.[1] ?? []);
+    .flatMap((e) => roundCommit(e) ?? []);
+}
+
+/**
+ * What the next review covers, from the run log (#829): `since`, the commit the latest finished
+ * round reviewed (undefined before any), and the role of the work logged after that round:
+ * `mechanical` only when every dispatch since is mechanical, otherwise `judgement`. A round still
+ * `pending` is the one being opened again, so it scopes nothing.
+ */
+export function reviewScope(text: string): { since?: { round: string; commit: string }; workRole: WorkRole } {
+  const entries = runLogEntries(text);
+  let start = 0;
+  let since: { round: string; commit: string } | undefined;
+  entries.forEach((e, i) => {
+    if (e.kind !== 'Review Round') return;
+    const round = `Review Round ${e.id}`;
+    const commit = roundCommit(e);
+    if (commit === undefined) {
+      throw new Error(`${round} has no "- Verify: <commit> passed" line, so what it reviewed is unknown. Run \`boardsmith ledger-check\` and fix what it names.`);
+    }
+    if (valueOf(e, 'Outcome') === 'pending') return;
+    since = { round, commit };
+    start = i + 1;
+  });
+  const roles = entries.slice(start).filter((e) => e.kind === 'Dispatch').map((e) => valueOf(e, 'Role'));
+  const mechanical = roles.length > 0 && roles.every((role) => role === 'mechanical');
+  return { since, workRole: mechanical ? 'mechanical' : 'judgement' };
 }
 
 /** Every problem with the role, agent, retry and review-round records of one run log. */

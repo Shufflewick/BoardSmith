@@ -232,10 +232,8 @@ export function createProgram(): Command {
       "Refuse a model review of a chunk's work unless `boardsmith verify --chunk <slug>` passed for this commit; " +
         'when open, print the review level and the verify brief every review prompt carries',
     )
-    .option('--work-role <role>', 'The role that did the work under review (mechanical, bounded or judgement); only small mechanical changes skip or lighten review')
-    .option('--since <commit>', 'Review only the change since this commit: the one the last round reviewed, or where a mechanical change began')
     .option('--project <dir>', 'Project directory (defaults to cwd)')
-    .action((slug: string, options: { workRole?: string; since?: string; project?: string }) => reviewGateCommand(slug, options));
+    .action((slug: string, options: { project?: string }) => reviewGateCommand(slug, options));
 
   // The bs- skills name roles, never models (#454): which agent type each role is dispatched as.
   program
