@@ -113,7 +113,7 @@ export function gateOf(queue: () => RulesReloadQueue): HostWorkGate {
  * never runs. So a world closed while its alarm waited does not drain, and a
  * step that moved on while its deadline waited is not closed.
  */
-export function heldClock(clock: WorldHostClock, gate: HostWorkGate): WorldHostClock {
+export function heldClock(clock: WorldHostClock, gate: Pick<HostWorkGate, 'hold'>): WorldHostClock {
   let armed = 0;
   return {
     now: () => clock.now(),

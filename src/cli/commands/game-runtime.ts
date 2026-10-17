@@ -196,9 +196,9 @@ export function toPosix(p: string): string {
 /**
  * Bundle and load ONLY the author's `gameDefinition` (Node side), via a
  * synthetic esbuild live-bundle entry that re-exports it from the project's
- * rules index. Unlike `dev.ts`'s `loadGameRuntime`, this does NOT re-export
- * `executeOp` — callers needing full action execution (the dev multiplayer
- * host) must use `loadGameRuntime` instead; `simulate` only needs the bare
+ * rules index. Unlike `dev-table-runtime.ts`'s `loadTableRuntime`, this does
+ * NOT bundle `executeOp` — callers needing full action execution (the dev
+ * multiplayer host) must use `loadTableRuntime` instead; `simulate` only needs the bare
  * `gameClass` to hand to `simulateRandomGames`/`createTestGame`, which run the
  * engine directly without the stateless-ops executor.
  *
@@ -305,8 +305,25 @@ export function rulesEntrySource(rulesIndexPath: string, declarations: Record<st
   ].join('\n');
 }
 
+/** What {@link buildRuntimeBundle} bundles. */
+interface RuntimeBundleArgs {
+  rulesPath: string;
+  tempDir: string;
+  /** Names the entry and bundle files in `tempDir`, so loaders cannot collide. */
+  name: string;
+  context: 'monorepo' | 'standalone';
+  /** Extra lines for the entry, after the `gameDefinition` every bundle exports. */
+  exports: readonly string[];
+  /**
+   * Absolute path -> absolute path of the file to bundle in its place. A file
+   * the rules never import is refused, since replacing it would change nothing.
+   */
+  redirects?: ReadonlyMap<string, string>;
+}
+
 /**
- * BUNDLE THE PROJECT'S RULES, AND WHATEVER MUST SHARE THEIR ENGINE, AND LOAD IT.
+ * BUNDLE THE PROJECT'S RULES, AND WHATEVER MUST SHARE THEIR ENGINE; answers the
+ * bundle's path.
  *
  * ONE esbuild bundle, because a game's rules are built with the engine inlined:
  * anything that touches the elements they build -- `executeOp` for a table, the
@@ -316,33 +333,16 @@ export function rulesEntrySource(rulesIndexPath: string, declarations: Record<st
  * For the same reason a bundle that takes CLI source from one install and the
  * rules' `boardsmith` from another is refused, naming both.
  *
- * `exports` are extra `export ... from ...;` lines for the entry, beside the
- * `gameDefinition` every bundle exports, which is returned carrying
- * `gameOptions` (`withDeclaredGameOptions`, which refuses a definition that
- * declares its own). The import is cache-busted, so calling this again after an
- * edit is a genuine re-read of the author's source.
+ * `boardsmith dev` runs the bundle in a worker (`dev-host/rules-worker.ts`,
+ * #885); every other command imports it with {@link importRuntimeBundle}.
  */
-export async function importRuntimeBundle(args: {
-  rulesPath: string;
-  tempDir: string;
-  /** Names the entry and bundle files in `tempDir`, so loaders cannot collide. */
-  name: string;
-  context: 'monorepo' | 'standalone';
-  /** `boardsmith.json`'s `gameOptions` list, as read (absent when it declares none). */
-  gameOptions: unknown;
-  exports: readonly string[];
-  /**
-   * Absolute path -> absolute path of the file to bundle in its place. A file
-   * the rules never import is refused, since replacing it would change nothing.
-   */
-  redirects?: ReadonlyMap<string, string>;
-}): Promise<{ gameDefinition: GameDefinition } & Record<string, unknown>> {
+export async function buildRuntimeBundle(args: RuntimeBundleArgs): Promise<string> {
   const rulesIndexPath = join(args.rulesPath, 'index.ts');
   const entryPath = join(args.tempDir, `${args.name}-entry.ts`);
   writeFileSync(
     entryPath,
     [
-      // A namespace import, so rules with no gameDefinition reach the message below.
+      // A namespace import, so rules with no gameDefinition reach the loader's message.
       `import * as rules from ${JSON.stringify(toPosix(rulesIndexPath))};`,
       'export const gameDefinition = rules.gameDefinition;',
       ...args.exports,
@@ -374,8 +374,25 @@ export async function importRuntimeBundle(args: {
   if (args.context === 'standalone') {
     requireOneBoardsmith(args.rulesPath, Object.keys(metafile.inputs).map((input) => resolve(input)));
   }
+  return bundlePath;
+}
 
-  const moduleUrl = pathToFileURL(bundlePath).href;
+/**
+ * {@link buildRuntimeBundle}, then load the bundle into this process.
+ *
+ * Returns its `gameDefinition` carrying `gameOptions` (`withDeclaredGameOptions`,
+ * which refuses a definition that declares its own). The import is
+ * cache-busted, so calling this again after an edit is a genuine re-read of the
+ * author's source; Node never unloads the bundle it replaced, so this is for
+ * commands that load once (#885).
+ */
+export async function importRuntimeBundle(
+  args: RuntimeBundleArgs & {
+    /** `boardsmith.json`'s `gameOptions` list, as read (absent when it declares none). */
+    gameOptions: unknown;
+  },
+): Promise<{ gameDefinition: GameDefinition } & Record<string, unknown>> {
+  const moduleUrl = pathToFileURL(await buildRuntimeBundle(args)).href;
   // The cache-bust is `load`, not `t`: Vite strips a `t=` query as its own HMR
   // timestamp, so under any Vite-based module runner (the test suite's) a `t`
   // bust answered the first bundle again and a rules reload re-ran the old rules.

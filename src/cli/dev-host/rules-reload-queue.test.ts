@@ -243,7 +243,7 @@ describe('#387: heldClock', () => {
       },
     };
     const holding: Array<() => void | Promise<void>> = [];
-    const held = heldClock(clock, { reloadPending: true, hold: (work) => void holding.push(work) });
+    const held = heldClock(clock, { hold: (work) => void holding.push(work) });
     return { held, holding, goOff: () => fire?.() };
   }
 

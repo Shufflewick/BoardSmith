@@ -68,10 +68,17 @@ interface WorldConnections {
  * page's departure (#387).
  */
 export function createWorldConnections(
-  host: () => LocalWorldHost,
+  host: () => Pick<LocalWorldHost, 'handleMessage' | 'disconnect'>,
   queue: Pick<RulesReloadQueue, 'admit'>,
+  /**
+   * Told which pages are open whenever that changes, before anything the change
+   * sends the host: a world run in its rules' worker answers `isOpen` from it
+   * (#885).
+   */
+  pagesChanged: (open: readonly string[]) => void = () => {},
 ): WorldConnections {
   const clients = new Map<string, WebSocket>();
+  const changed = (): void => pagesChanged([...clients.keys()]);
 
   const openSocket = (clientId: string): WebSocket | undefined => {
     const socket = clients.get(clientId);
@@ -106,6 +113,7 @@ export function createWorldConnections(
               ? message.clientId
               : `anon-${Math.random().toString(36).slice(2)}`;
           clients.set(clientId, socket);
+          changed();
         }
         if (clientId === null) return; // a client identifies itself first
         const from = clientId;
@@ -140,6 +148,7 @@ export function createWorldConnections(
         if (clientId !== null && clients.get(clientId) === socket) {
           const gone = clientId;
           clients.delete(gone);
+          changed();
           // A departure waits for a pending reload like the page's messages
           // did (#387): it can start a departure's clock command.
           queue
@@ -156,6 +165,7 @@ export function createWorldConnections(
         }
         clients.delete(clientId);
       }
+      changed();
     },
   };
 }

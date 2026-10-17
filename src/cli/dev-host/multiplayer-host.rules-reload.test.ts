@@ -21,7 +21,7 @@ import { createDevHostConnectionHandler } from './connection-handler.js';
 import type { WorldHostClock } from './node-world-clock.js';
 import { MultiplayerHost, type HostOutbound } from './multiplayer-host.js';
 import { manualGraceTimer } from './reconnect-grace.test-helper.js';
-import { openTable, tableProject } from './table-host.test-helper.js';
+import { bundledTable, openTable, tableProject } from './table-host.test-helper.js';
 import { buildFailure } from './rules-project.test-helper.js';
 import { openSocketPage, serveSockets } from './socket-page.test-helper.js';
 import { createDevHostClientMemory } from './test-client-memory.js';
@@ -86,6 +86,14 @@ function counterProject(initial: Parameters<typeof rulesSource>[0]) {
     save: (rules: Parameters<typeof rulesSource>[0]) => project.save(rulesSource(rules)),
     load: project.load,
   };
+}
+
+/** Starts a fresh worker on one bundle of a counter's rules (see `bundledTable`). */
+type Rules = () => Promise<TableRuntime>;
+
+/** The counter's rules, bundled once. */
+function counterRules(rules: Parameters<typeof rulesSource>[0]): Promise<Rules> {
+  return bundledTable('bs-table-rules-reload-', rulesSource(rules));
 }
 
 const START = 1_700_000_000_000;
@@ -294,10 +302,8 @@ describe('#343: a table dev host reloads its rules on the server', () => {
  */
 // Bundling is the slow part, so it happens here, while the file is collected
 // and no test timeout applies (#363).
-const pendingProject = counterProject({ step: 1, flow: FLOWS.looped });
-const beforeEdit = await pendingProject.load();
-pendingProject.save({ step: 10, flow: FLOWS.looped });
-const afterEdit = await pendingProject.load();
+const beforeEdit = await counterRules({ step: 1, flow: FLOWS.looped });
+const afterEdit = await counterRules({ step: 10, flow: FLOWS.looped });
 const brokenEdit = await buildFailure(tableProject('bs-table-rules-broken-', 'export const gameDefinition = ;').load);
 
 const closing: Array<() => Promise<void>> = [];
@@ -311,13 +317,14 @@ afterEach(async () => {
  * with it). Each save says what the rebuild waits for, so what a test sends
  * "during the rebuild" has always reached the host before it finishes.
  */
-async function serveTable(edit: TableRuntime | Error, before: TableRuntime = beforeEdit, seats = 1) {
+async function serveTable(edit: Rules | Error, before: Rules = beforeEdit, seats = 1) {
   let rebuildWaitsFor: Promise<void> = Promise.resolve();
   const load = async () => {
     await rebuildWaitsFor;
     if (edit instanceof Error) throw edit;
-    return edit;
+    return edit();
   };
+  const running = await before();
   const sockets = new Map<string, WebSocket>();
   const graces = manualGraceTimer();
   const host = new MultiplayerHost({
@@ -327,14 +334,14 @@ async function serveTable(edit: TableRuntime | Error, before: TableRuntime = bef
     maxPlayers: seats,
     makeSeed: () => 'rules-reload',
     clock: fakeClock().clock,
-    executeOp: before.rules.executeOp,
+    executeOp: running.rules.executeOp,
     hostWork: gateOf(() => queue),
     send: (clientId, message) => {
       const socket = sockets.get(clientId);
       if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
     },
   });
-  const queue = tableRulesReloadQueue({ host, running: before.gameDefinition, load });
+  const queue = tableRulesReloadQueue({ host, running, load });
   const server = await serveSockets(
     createDevHostConnectionHandler({
       mpHost: host,
@@ -345,7 +352,7 @@ async function serveTable(edit: TableRuntime | Error, before: TableRuntime = bef
       },
     }),
   );
-  closing.push(server.close);
+  closing.push(server.close, queue.closeRules);
   const page = await openSocketPage(server.port, 'dev', (f) => f.type === 'game_state');
   let request = 0;
   /** Bump as the page, from the board it last drew; resolves with the host's answer. */
@@ -429,20 +436,17 @@ describe('#379: a move sent while the edited rules are still building', () => {
  * refused: on the edited rules once they are in place, and on the old ones only
  * when the edit does not build.
  */
-const timedProject = counterProject({ step: 1, flow: FLOWS.timed(10_000) });
-const timedBefore = await timedProject.load();
-timedProject.save({ step: 10, flow: FLOWS.timed(10_000) });
-const timedAfter = await timedProject.load();
+const timedBefore = await counterRules({ step: 1, flow: FLOWS.timed(10_000) });
+const timedAfter = await counterRules({ step: 10, flow: FLOWS.timed(10_000) });
 
-const turnsProject = counterProject({ step: 1, flow: FLOWS.turns, seats: 2 });
-const turnsBefore = await turnsProject.load();
-turnsProject.save({ step: 10, flow: FLOWS.turns, seats: 2 });
-const turnsAfter = await turnsProject.load();
+const turnsBefore = await counterRules({ step: 1, flow: FLOWS.turns, seats: 2 });
+const turnsAfter = await counterRules({ step: 10, flow: FLOWS.turns, seats: 2 });
 
 /** A timed one-seat table on `timedBefore`, whose next reload builds `edit` (or fails with it). */
-async function timedTable(edit: TableRuntime | Error) {
+async function timedTable(edit: Rules | Error) {
   const time = fakeClock();
-  const table = await openTable(timedBefore, clients, {
+  const running = await timedBefore();
+  const table = await openTable(running, clients, {
     makeSeed: () => 'rules-reload',
     clock: time.clock,
     idleAction: { name: 'bump' },
@@ -450,12 +454,13 @@ async function timedTable(edit: TableRuntime | Error) {
   });
   const queue = tableRulesReloadQueue({
     host: table.host,
-    running: timedBefore.gameDefinition,
+    running,
     load: async () => {
       if (edit instanceof Error) throw edit;
-      return edit;
+      return edit();
     },
   });
+  closing.push(queue.closeRules);
   return { ...table, bump: () => table.act('bump'), time, queue };
 }
 
@@ -526,10 +531,8 @@ describe('#387: a bot covering a seat whose page closes while the edited rules a
  * before the save. The session hands each demo move to the host's work gate
  * now, the rules reload queue in `boardsmith dev`.
  */
-const demoProject = counterProject({ step: 1, flow: FLOWS.looped, demo: true });
-const demoBefore = await demoProject.load();
-demoProject.save({ step: 10, flow: FLOWS.looped, demo: true });
-const demoAfter = await demoProject.load();
+const demoBefore = await counterRules({ step: 1, flow: FLOWS.looped, demo: true });
+const demoAfter = await counterRules({ step: 10, flow: FLOWS.looped, demo: true });
 
 describe('#388: a demo move that comes due while the edited rules are still building', () => {
   quietTerminal();
@@ -540,7 +543,8 @@ describe('#388: a demo move that comes due while the edited rules are still buil
   ])('runs on $on', async ({ edit, count }) => {
     let handedToGate: () => void = () => {};
     const handed = new Promise<void>((resolve) => (handedToGate = resolve));
-    const table = await openTable(demoBefore, clients, {
+    const running = await demoBefore();
+    const table = await openTable(running, clients, {
       makeSeed: () => 'rules-reload',
       clock: fakeClock().clock,
       hostWork: {
@@ -556,15 +560,16 @@ describe('#388: a demo move that comes due while the edited rules are still buil
     const moved = () => table.frames().some((frame) => shownCount([frame]) > 0);
     const queue = tableRulesReloadQueue({
       host: table.host,
-      running: demoBefore.gameDefinition,
+      running,
       // The rebuild finishes once the demo's move has come due: handed to the
       // gate, or made on the spot by a demo nothing holds.
       load: async () => {
         await Promise.race([handed, vi.waitFor(() => expect(moved()).toBe(true), { timeout: 10_000 })]);
         if (edit instanceof Error) throw edit;
-        return edit;
+        return edit();
       },
     });
+    closing.push(queue.closeRules);
 
     // The demo narrates its first move on the rules from before any edit, and
     // paces it for an hour.

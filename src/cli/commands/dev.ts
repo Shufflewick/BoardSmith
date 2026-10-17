@@ -8,7 +8,8 @@ import open from 'open';
 
 import { createColorOption, type ColorChoice, type ColorOptionDefinition, type GameDefinition } from '../../session/index.js';
 import type { GameStateSnapshot } from '../../engine/utils/index.js';
-import { MultiplayerHost, type TableRules } from '../dev-host/multiplayer-host.js';
+import { MultiplayerHost } from '../dev-host/multiplayer-host.js';
+import type { TableDefinition } from '../dev-host/table-rules-worker.js';
 import { claimDevHostSocket } from '../dev-host/connection-handler.js';
 import { devStorePath, loadDevStore } from '../dev-host/persistence-file-store.js';
 import { resetWorldStore, worldResetNotice, worldStoreDir } from '../dev-host/world-store.js';
@@ -16,7 +17,7 @@ import { announceHost, hostHoldings, onShutdown, type HostHoldings } from '../de
 import { requireFreePort } from '../dev-host/port.js';
 import type { PersistenceStore } from '../../persistence/index.js';
 import { getProjectContext, toPosix } from './game-runtime.js';
-import { loadTableRuntime, tableRulesReloadQueue } from './dev-table-runtime.js';
+import { loadTableRuntime, tableRulesReloadQueue, type TableRuntime } from './dev-table-runtime.js';
 import { gateOf } from '../dev-host/rules-reload-queue.js';
 import { findUnknownKeys } from '../lib/config-schema.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex, requireTableUi } from '../lib/game-project.js';
@@ -39,7 +40,6 @@ import type { DevHostConfig, DevOptionDef } from '../dev-host/config-types.js';
 import {
   GameOptionSelectionError,
   assertPresetsSelectable,
-  declaredGameOptionsOf,
   selectDesignerGameOptions,
 } from '../../session/game-option-selection.js';
 import type { GameOptionDefinition, GamePreset } from '../../session/types.js';
@@ -571,7 +571,7 @@ export function boardsmithDevHostPlugin(args: {
 
 /** Build the dev-host config the browser consumes from the resolved game definition. */
 function buildDevConfig(args: {
-  gameDefinition: GameDefinition;
+  gameDefinition: TableDefinition;
   gameOptions: Record<string, GameOptionDefinition> | undefined;
   minPlayers: number;
   maxPlayers: number;
@@ -581,7 +581,7 @@ function buildDevConfig(args: {
   colorPalette: Array<{ value: string; label: string }>;
   teachingDisabled: boolean;
 }): DevHostConfig {
-  const gd = args.gameDefinition as GameDefinition & {
+  const gd = args.gameDefinition as TableDefinition & {
     playerOptions?: Record<string, unknown>;
   };
   return {
@@ -612,7 +612,7 @@ function buildDevConfig(args: {
  * published one differ in nothing.
  */
 function openDevStore(
-  gameDefinition: GameDefinition,
+  gameDefinition: Pick<GameDefinition, 'persistence'>,
   storeFile: string,
 ): { store: PersistenceStore; save: () => void } | null {
   if (gameDefinition.persistence !== true) return null;
@@ -787,7 +787,11 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   if (worldMode) {
     let runtime: WorldRuntime;
     try {
-      runtime = await holdings.acquire(() => loadWorldRuntime(rulesPath, tempDir, context), () => []);
+      // The world's run stops the worker it runs in; this stops it if the run never opens.
+      runtime = await holdings.acquire(
+        () => loadWorldRuntime(rulesPath, tempDir, context),
+        (loaded) => [{ name: 'the rules worker', close: () => loaded.worker.close() }],
+      );
     } catch (error) {
       throw rulesFailed(error);
     }
@@ -803,25 +807,25 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
       holdings,
       openBrowser: shouldOpenBrowser(options),
       // HOW THE WORLD HOST GETS THE RULES AGAIN (#201). `loadWorldRuntime`
-      // cache-busts its own import, so re-running it is a genuine re-read of
-      // the author's edited source rather than the module this process loaded
-      // at startup.
+      // bundles the author's edited source into a new worker (#885).
       reloadRules: () => loadWorldRuntime(rulesPath, tempDir, context),
     });
     return;
   }
 
   // Load the game runtime (Node side): gameDefinition + the rules that run it, one engine.
-  let gameDefinition: GameDefinition;
-  let tableRules: TableRules;
+  let runtime: TableRuntime;
+  let gameDefinition: TableDefinition;
   let minPlayers: number;
   let gameOptions: Record<string, GameOptionDefinition> | undefined;
   let maxPlayers: number;
   let colorPalette: Array<{ value: string; label: string }> = [];
   try {
-    const runtime = await holdings.acquire(() => loadTableRuntime(rulesPath, tempDir, context, config.gameOptions), () => []);
+    runtime = await holdings.acquire(
+      () => loadTableRuntime(rulesPath, tempDir, context, config.gameOptions),
+      (loaded) => [{ name: 'the rules worker', close: () => loaded.close() }],
+    );
     gameDefinition = runtime.gameDefinition;
-    tableRules = runtime.rules;
   } catch (error) {
     throw rulesFailed(error);
   }
@@ -849,7 +853,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
 
     // boardsmith.json's gameOptions, the one declaration (#701), which the
     // rules bundle carries on the definition.
-    gameOptions = declaredGameOptionsOf(gameDefinition);
+    gameOptions = gameDefinition.declaredGameOptions;
     const presets: GamePreset[] = gameDefinition.presets ?? [];
     // A preset is a shortcut a player picks, so one naming a designer-only or
     // undeclared option is refused here, at load, rather than when picked.
@@ -985,7 +989,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
             },
           }
         : {}),
-      executeOp: tableRules.executeOp,
+      executeOp: runtime.rules.executeOp,
       // A step deadline, a demo move or a bot's next move that comes due while
       // an edited rules file rebuilds waits in the reload queue below with the
       // pages' messages (#387, #388).
@@ -1003,9 +1007,10 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
     // still building runs on it (#379).
     const rulesReload = tableRulesReloadQueue({
       host: mpHost,
-      running: gameDefinition,
+      running: runtime,
       load: () => loadTableRuntime(rulesPath, tempDir, context, config.gameOptions),
     });
+    holdings.hold([{ name: "the table's rules worker", close: () => rulesReload.closeRules() }]);
 
     // The `noServer` upgrade routing that leaves Vite's HMR socket alone lives
     // in `dev-server.ts`, shared with the world run: two copies of it is how

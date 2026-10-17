@@ -12,8 +12,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { buildFailure, rulesProject } from '../dev-host/rules-project.test-helper.js';
 import { openSocketPage, serveSockets } from '../dev-host/socket-page.test-helper.js';
-import type { WorldHostClock } from '../dev-host/node-world-clock.js';
-import { loadWorldRuntime, openWorldRun, type WorldRuntime } from './dev-world.js';
+import { bundleWorldRules, loadWorldRuntime, openWorldRun, startWorldRuntime, type WorldRuntime } from './dev-world.js';
 
 /**
  * A one-fire world whose `stoke` adds `step` logs, written the way an author
@@ -50,23 +49,29 @@ function rulesSource(step: number, stateVersion = 0): string {
   ].join('\n');
 }
 
-/** A world project's rules on disk, and a way to bundle what is saved there. */
-function worldRules(source: string) {
-  const { rulesPath, tempDir, save } = rulesProject('bs-world-rules-reload-', source);
-  return { save, load: () => loadWorldRuntime(rulesPath, tempDir, 'monorepo') };
+/** Starts a fresh worker on one bundle of a world's rules. */
+type Rules = () => Promise<WorldRuntime>;
+
+/**
+ * `source` bundled once, in a project of its own. Each start is a fresh worker
+ * on that bundle, as each world a test opens needs, since a reload stops the
+ * worker of the rules it replaces (#885).
+ */
+async function worldRules(source: string): Promise<Rules> {
+  const { rulesPath, tempDir } = rulesProject('bs-world-rules-reload-', source);
+  const bundlePath = await bundleWorldRules(rulesPath, tempDir, 'monorepo');
+  return () => startWorldRuntime(bundlePath);
 }
 
 // Bundling is the slow part, so it happens here, while the file is collected
 // and no test timeout applies (#363).
-const project = worldRules(rulesSource(1));
-const beforeEdit = await project.load();
-project.save(rulesSource(10));
-const afterEdit = await project.load();
+const beforeEdit = await worldRules(rulesSource(1));
+const afterEdit = await worldRules(rulesSource(10));
 // Builds, but cannot open a world written under stateVersion 0: it bumps the
 // version and declares no migration (#381).
-project.save(rulesSource(10, 1));
-const unopenableEdit = await project.load();
-const brokenEdit = await buildFailure(worldRules('export const gameDefinition = ;').load);
+const unopenableEdit = await worldRules(rulesSource(10, 1));
+const broken = rulesProject('bs-world-rules-reload-', 'export const gameDefinition = ;');
+const brokenEdit = await buildFailure(() => loadWorldRuntime(broken.rulesPath, broken.tempDir, 'monorepo'));
 
 const closing: Array<() => Promise<void>> = [];
 beforeEach(() => {
@@ -83,18 +88,17 @@ afterEach(async () => {
  * `edit` (or fails with it). The rebuild finishes only once a command has
  * reached the host, so a command sent during it is always held.
  */
-async function serveWorld(edit: WorldRuntime | Error, clock?: WorldHostClock) {
-  let commandArrived: Promise<void> = Promise.resolve();
+async function serveWorld(edit: Rules | Error) {
+  let rebuildWaitsFor: Promise<void> = Promise.resolve();
   const cwd = tempTree('bs-world-rules-reload-run-');
   const run = await openWorldRun({
     cwd,
     displayName: 'Camp',
-    runtime: beforeEdit,
-    ...(clock === undefined ? {} : { clock }),
+    runtime: await beforeEdit(),
     reloadRules: async () => {
-      await commandArrived;
+      await rebuildWaitsFor;
       if (edit instanceof Error) throw edit;
-      return edit;
+      return edit();
     },
   });
   const server = await serveSockets(run.connections.accept);
@@ -120,10 +124,14 @@ async function serveWorld(edit: WorldRuntime | Error, clock?: WorldHostClock) {
     const view = JSON.stringify(page.frames.filter((f) => f.type === 'world_state').at(-1)?.view);
     return Number(/"logs":(\d+)/.exec(view)?.[1]);
   };
+  /** Save an edit whose rebuild finishes once `until` has happened; resolves once the reload has settled. */
+  const saveHeldUntil = (until: Promise<void>) => {
+    rebuildWaitsFor = until;
+    return run.queue.saved('src/rules/index.ts');
+  };
   /** Save an edit and stoke while it builds; resolves with the answer once the reload has settled. */
   const stokeDuringRebuild = async () => {
-    commandArrived = server.received((m) => m.type === 'action');
-    const reloaded = run.queue.saved('src/rules/index.ts');
+    const reloaded = saveHeldUntil(server.received((m) => m.type === 'action'));
     const answer = stoke();
     await reloaded;
     return answer;
@@ -145,9 +153,7 @@ async function serveWorld(edit: WorldRuntime | Error, clock?: WorldHostClock) {
   // One command made on the rules from before any edit.
   expect(await stoke()).toMatchObject({ ok: true });
   await vi.waitFor(() => expect(logs()).toBe(1));
-  /** Save an edit; resolves once its reload has settled. */
-  const save = () => run.queue.saved('src/rules/index.ts');
-  return { page, act, save, stokeDuringRebuild, refusedDuringRebuild, logs };
+  return { run, server, page, act, saveHeldUntil, stokeDuringRebuild, refusedDuringRebuild, logs };
 }
 
 describe('#379: a world command sent while the edited rules are still building', () => {
@@ -205,49 +211,30 @@ describe('#381: an edit that builds but cannot open the world', () => {
  * #379 held the pages' commands while an edit rebuilt, but the world's own
  * alarm is not a page's command: an event that came due during the rebuild ran
  * on the rules from before the save. The alarm goes through the same queue now.
- * The world's clock is driven by hand, so "came due during the rebuild" is a
- * fact of the test.
+ *
+ * The world's clock is its worker's (#885), so the test does not drive it. It
+ * makes "came due during the rebuild" a fact by order instead: the save is
+ * heard in the same turn the `kindle` reaches the host, before the burn it
+ * schedules can even be armed, and the rebuild finishes only once the burn's
+ * alarm has been handed to the queue.
  */
-const START = 1_700_000_000_000;
-
-/** A hand-driven clock, shared by every world host the run opens, as the Node one would be. */
-function handClock() {
-  let now = START;
-  let due: (() => void) | null = null;
-  return {
-    clock: {
-      now: () => now,
-      yieldTurn: async () => {},
-      arm(delayMs: number | null, fire: () => void) {
-        due = delayMs === null ? null : fire;
-      },
-    } satisfies WorldHostClock,
-    advance(ms: number) {
-      now += ms;
-    },
-    /** The armed alarm goes off, as the Node clock's would once its delay had passed. */
-    fire() {
-      const fire = due;
-      due = null;
-      fire?.();
-    },
-  };
-}
-
-/**
- * A world on `beforeEdit` with a `burn` a second away on a clock the test
- * drives, whose next reload builds `edit` (or fails with it). The save makes
- * the reload pending at once, so the burn comes due during it.
- */
-async function burnDuringRebuild(edit: WorldRuntime | Error) {
-  const time = handClock();
-  const world = await serveWorld(edit, time.clock);
-  expect(await world.act('kindle')).toMatchObject({ ok: true });
-  const reloaded = world.save();
-  time.advance(1_000);
-  time.fire();
+async function burnDuringRebuild(edit: Rules | Error) {
+  const world = await serveWorld(edit);
+  const queue = world.run.queue;
+  const hold = queue.hold.bind(queue);
+  const alarmHeld = new Promise<void>((resolve) => {
+    vi.spyOn(queue, 'hold').mockImplementation((work) => {
+      resolve();
+      hold(work);
+    });
+  });
+  const kindled = world.server.received((m) => m.type === 'action' && m.action === 'kindle');
+  const answered = world.act('kindle');
+  await kindled;
+  const reloaded = world.saveHeldUntil(alarmHeld);
+  expect(await answered).toMatchObject({ ok: true });
   await reloaded;
-  return { ...world, time };
+  return world;
 }
 
 describe('#387: a scheduled event that comes due while the edited rules are still building', () => {
@@ -258,10 +245,8 @@ describe('#387: a scheduled event that comes due while the edited rules are stil
     const greeted = world.page.next((f) => f.type === 'world_offers');
     world.page.send({ type: 'hello', clientId: 'p1' });
     await greeted;
-    // The world reopened on the edited rules found the burn still due, and
-    // armed for it: it runs on them. 1 from the stoke before the save, 10
-    // from the burn.
-    world.time.fire();
+    // The world reopened on the edited rules found the burn due, and ran it on
+    // them. 1 from the stoke before the save, 10 from the burn.
     await vi.waitFor(() => expect(world.logs()).toBe(11));
   }, 30_000);
 

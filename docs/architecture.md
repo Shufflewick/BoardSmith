@@ -254,6 +254,66 @@ Runtime Isolation below).
    an executor     (e.g. KV)         WebSocket fan-out)
 ```
 
+### The `boardsmith dev` rules worker (#885)
+
+`boardsmith dev` bundles the author's rules with the engine, and bundles them
+again on every save. Node never unloads an ES module, so importing each new
+bundle into the CLI process kept every old one alive: about 2 MB per save on
+Hex, gigabytes over a long session. So the dev host never imports a rules
+bundle. Each bundle runs in its own `worker_threads` worker, and a reload
+throws the old worker away, which frees its whole heap.
+
+**A worker thread, not a child process.** The table host already calls its
+rules one op at a time, asynchronously, with the snapshot in and the result
+out: exactly the `executeOp` adapter above, which the platform also runs over
+a wire. A worker passes those snapshots by structured clone inside one
+process, with no serialising to a pipe, so a long game's snapshot (dev keeps
+every checkpoint) costs a copy, not an encode and a parse. Bots run inside
+`executeOp`, so MCTS runs in the worker too, off the thread that serves the
+pages. A worker starts in milliseconds, `terminate()` stops even a rule stuck
+in a loop, and a rule's `process.exit()` ends only its worker. A child process
+would add a Node start-up and an IPC encode per op, and isolate nothing a
+worker does not.
+
+**What crosses the boundary.** Only plain data, so nothing from the bundle
+ever enters the host's module graph:
+
+- **Table road** (`dev-table-runtime.ts`, `table-rules-worker.ts`): the worker
+  holds the `gameDefinition`, `executeOp` and the reload step
+  (`reloadTableRules`). It answers once with the definition's facts the host
+  reads (game type, display name, seat range, presets, player options, colour
+  palette, persistence, declared game options), then takes `executeOp` and
+  `carry` calls: the op, the snapshot and the pending selections in, the
+  op's result out. The session, the lobby, the sockets and the timers stay in
+  the host.
+- **World road** (`dev-world.ts`, `world-rules-worker.ts`): the worker holds
+  the whole world: the store, `LocalWorldHost`, its resident tree and its
+  clock. The host keeps the sockets and the reload queue. It sends each page's
+  message and departure, and which pages are open (the world host's
+  `isOpen`); the worker sends back the frames for each page, and hands the
+  work it starts itself (an alarm, a departure's grace) to the reload queue,
+  which tells it when to run that work (#387). Because the clock lives with
+  the world, `openWorldRun` takes no clock: a world's time is the worker's.
+
+**A reload, on either road:** bundle the edit, start a new worker on it and
+wait for it to load and check the rules (a rules module with no
+`gameDefinition`, or one that throws while loading, fails here). A failure
+stops the new worker and leaves the old one running, exactly as a bundle that
+does not build does. Then the state moves the way it always has: a table's
+snapshot is carried onto the new worker's rules (`carry`); a world is closed
+in the old worker and opened in the new one, and reopened in the old one if
+the new rules refuse it (#381). Only then is the old worker stopped, after
+any call still running on it has answered.
+
+A worker that dies on its own (an error thrown from a rule's timer, say)
+rejects every call still waiting on it with the reason, and every later call
+says the rules stopped and that saving a rules file or restarting
+`boardsmith dev` starts them again.
+
+The one-shot commands (`simulate`, `validate`, `build`, `add-ui`,
+`evolve-bot-weights`) still import their bundle once into their own process:
+they load it once and exit, so nothing builds up.
+
 ## Package Responsibilities
 
 | Package | Responsibility | Key Exports |
