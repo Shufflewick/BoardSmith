@@ -27,7 +27,9 @@ class DebugFixtureGame extends Game<DebugFixtureGame, Player> {
   constructor(options: GameOptions) {
     super(options);
     this.registerElements([Card]);
-    this.create(Space, 'deck').create(Card, 'ace-of-spades');
+    const deck = this.create(Space, 'deck');
+    deck.create(Card, 'ace-of-spades');
+    deck.create(Space, 'box').create(Card, 'two-of-hearts');
 
     this.registerAction(
       Action.create<DebugFixtureGame>('pass').execute(() => ({ success: true })),
@@ -75,6 +77,10 @@ describe('toDebugString — element tree and current player (#913)', () => {
     const lines = output().split('\n').filter(line => line.includes('ace-of-spades'));
     expect(lines).toHaveLength(1);
     expect(lines[0]).toMatch(/^    ace-of-spades /);
+  });
+
+  it('counts direct children, not every descendant (#1075)', () => {
+    expect(output()).toMatch(/^  deck \(id=\d+\): 2 children$/m);
   });
 
   it('names the current player by seat', () => {

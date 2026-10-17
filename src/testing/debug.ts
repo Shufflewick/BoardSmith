@@ -48,16 +48,16 @@ export interface DebugStringOptions {
  * ```typescript
  * console.log(toDebugString(game));
  * // Game: MyGame
- * // Phase: playing
  * // Current Player: Player 1 (seat 1)
+ * // Flow position: step *play*, waiting on seat 1
  * //
  * // Players:
- * //   [0] Player 1: hand(5 cards), score=10
- * //   [1] Player 2: hand(4 cards), score=15
+ * //   [1] Player 1: score=10, hand(5)
+ * //   [2] Player 2: score=15, hand(4)
  * //
- * // Board:
- * //   Deck (id=1): 32 cards
- * //   DiscardPile (id=2): 10 cards
+ * // Elements:
+ * //   deck (id=1): 32 children
+ * //   discard (id=2): 10 children
  * ```
  */
 export function toDebugString(game: Game, options: DebugStringOptions = {}): string {
@@ -127,7 +127,7 @@ function printElementTree(
   for (const child of element.children) {
     const idStr = showIds ? ` (id=${(child as any).id || (child as any)._t?.id || '?'})` : '';
     const name = (child as any).name || child.constructor.name;
-    const count = child.all?.().length || 0;
+    const count = child.children.length;
 
     let attrStr = '';
     if (showAttributes) {
