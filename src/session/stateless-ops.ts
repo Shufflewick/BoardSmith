@@ -16,7 +16,7 @@ import { dueSeats, canSeatAct, availableActionsForSeat, flowBoundaryKey, toPubli
 import type { BoundaryKeyState } from '../engine/index.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState, WarningEntry } from './types.js';
 import { validateTutorialDefinition, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
-import { startTutorial } from '../engine/tutorial/start.js';
+import { learnerSeatRefusal, startTutorial } from '../engine/tutorial/start.js';
 import { executeDebugCommand, type GameCommand } from './debug-command.js';
 import {
   GameRunner,
@@ -1200,6 +1200,8 @@ function handleStartTutorial(
   }
   // IN-01: validate definition BEFORE constructing the runner (fail-loud before expensive work).
   validateTutorialDefinition(def.tutorial);
+  const seatRefusal = learnerSeatRefusal(def.tutorial.learnerSeat, op.player, gameOptions.playerCount);
+  if (seatRefusal) return errorResult(seatRefusal, 'protocol');
   const runner = runnerFromSnapshot(snapshot, def);
   // A refusal discards this runner, so the caller's snapshot is untouched.
   const refusal = startTutorial(runner.game as Game, def.tutorial, op.player);

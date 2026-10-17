@@ -1,5 +1,22 @@
 # Migration Guide
 
+## `simulateTutorial` starts a tutorial as the server does (#914)
+
+`simulateTutorial` now starts a tutorial through the same function as the
+server's `startTutorial` op. It runs the tutorial's `setup` before the first
+scripted move, restarts the flow with the learner seat to move, and gives only
+the learner seat a tutorial. So:
+
+- `setup` replaces the board before the first scripted move, so an element
+  reference taken before the call can go stale. A `setup` that removes and
+  recreates elements makes a scenario move that names an old element fail with
+  "That choice is no longer available". A scenario cannot yet refer to the
+  elements `setup` creates (#1079).
+- Moves by other seats are no longer gated by the tutorial's steps.
+- A move's `expectStep` names the learner's step, whichever seat moves.
+- A `learnerSeat` other than the seat that opens the game now gets the opening
+  turn, as on the server: drop scripted moves for the seats before it.
+
 ## Chunk work runs `boardsmith verify --chunk <slug>`, with no selection (#985)
 
 `boardsmith verify --selection <path>` is removed, and so is the `focused`

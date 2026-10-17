@@ -14,6 +14,8 @@ import { describe, it, expect } from 'vitest';
 import {
   Game,
   Player,
+  Piece,
+  Space,
   Action,
   type FlowDefinition,
   loop,
@@ -67,6 +69,31 @@ class TutSimGame extends Game<TutSimGame, Player> {
       }),
     };
     this.setFlow(flow);
+  }
+}
+
+class Token extends Piece<TokenGame> {}
+class Bag extends Space<TokenGame> {}
+
+/** One `take` action that picks a token, and a preset that replaces every token. */
+class TokenGame extends Game<TokenGame, Player> {
+  bag!: Bag;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.bag = this.create(Bag, 'bag');
+    this.bag.create(Token, 'token');
+    this.registerAction(
+      Action.create<TokenGame>('take')
+        .chooseElement('token', { elementClass: Token, from: (ctx) => ctx.game.bag })
+        .execute(() => ({ success: true })),
+    );
+    this.setFlow({ root: loop({ while: () => true, maxIterations: 50, do: eachPlayer({ do: actionStep({ actions: ['take'] }) }) }) });
+  }
+
+  resetToPreset(): void {
+    for (const token of this.bag.all(Token)) token.remove();
+    this.bag.create(Token, 'token');
   }
 }
 
@@ -340,6 +367,19 @@ describe('simulateTutorial', () => {
       testGame.game.finish([]);
 
       expect(() => simulateTutorial(testGame, HAPPY_TUTORIAL, { scenario: [] })).toThrow(/game is over/);
+    });
+
+    it('refuses, by name, a scenario element that setup replaced before the first move', () => {
+      const testGame = TestGame.create(TokenGame, { playerCount: 1, seed: 'stale' });
+      const before = testGame.game.bag.first(Token)!;
+      const def: TutorialDefinition = {
+        learnerSeat: 1,
+        steps: [{ id: 'take-a-token', gate: { action: 'take' } }],
+        setup: (game) => (game as TokenGame).resetToPreset(),
+      };
+
+      expect(() => simulateTutorial(testGame, def, { scenario: [{ action: 'take', args: { token: before } }] }))
+        .toThrow(/action 'take' by seat 1 on step 'take-a-token' failed\. Error: That choice is no longer available/);
     });
   });
 });

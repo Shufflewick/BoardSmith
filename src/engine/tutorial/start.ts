@@ -5,6 +5,22 @@ import { dueSeats } from '../flow/seat-activity.js';
 import { autoAdvanceTutorial, initialProgress } from './progress.js';
 
 /**
+ * Why `player` cannot start a tutorial for `learnerSeat` on a table of
+ * `playerCount` seats, or `undefined` when it can. {@link startTutorial} checks
+ * this itself; the server also checks it first, before building a game.
+ */
+export function learnerSeatRefusal(learnerSeat: number, player: number, playerCount: number): string | undefined {
+  if (learnerSeat > playerCount) {
+    return `This tutorial is for seat ${learnerSeat}, but this table has ${playerCount} seats, so no one can start it. ` +
+      `Start it on a table of at least ${learnerSeat} players, or set the tutorial's learnerSeat to a seat this table has.`;
+  }
+  if (player !== learnerSeat) {
+    return `This tutorial is for seat ${learnerSeat}, so seat ${player} cannot start it. Start it from seat ${learnerSeat}.`;
+  }
+  return undefined;
+}
+
+/**
  * Start `tutorial` for `player` on a started `game`: apply the tutorial's
  * setup, put the flow back at its beginning with the learner seat to move
  * (#546, #552), activate the first step for the learner alone and run the
@@ -18,15 +34,8 @@ import { autoAdvanceTutorial, initialProgress } from './progress.js';
  * learner (a tutorial the learner cannot act in is a dead table).
  */
 export function startTutorial(game: Game, tutorial: TutorialDefinition, player: number): string | undefined {
-  const { learnerSeat } = tutorial;
-  const playerCount = game.players.length;
-  if (learnerSeat > playerCount) {
-    return `This tutorial is for seat ${learnerSeat}, but this table has ${playerCount} seats, so no one can start it. ` +
-      `Start it on a table of at least ${learnerSeat} players, or set the tutorial's learnerSeat to a seat this table has.`;
-  }
-  if (player !== learnerSeat) {
-    return `This tutorial is for seat ${learnerSeat}, so seat ${player} cannot start it. Start it from seat ${learnerSeat}.`;
-  }
+  const seatRefusal = learnerSeatRefusal(tutorial.learnerSeat, player, game.players.length);
+  if (seatRefusal) return seatRefusal;
   // #552: a finished game stays finished. The restart below could bring its
   // flow back to life while its phase still read 'finished'.
   if (game.phase === 'finished') {
@@ -36,7 +45,7 @@ export function startTutorial(game: Game, tutorial: TutorialDefinition, player: 
   const setup = tutorial.setup;
   if (setup) changing(game._ctx, () => setup(game));
   // This runs none of the game's opening again.
-  const due = dueSeats(game.restartFlowForTutorial(learnerSeat));
+  const due = dueSeats(game.restartFlowForTutorial(tutorial.learnerSeat));
   if (!due.includes(player)) {
     const toMove = due.length > 0 ? `seat ${due.join(', ')} is` : 'no seat is';
     return `The tutorial cannot start for seat ${player}: when the game restarts for the tutorial, ` +
