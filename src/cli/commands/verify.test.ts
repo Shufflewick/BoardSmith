@@ -639,10 +639,10 @@ describe('boardsmith verify: a run counts only when what the tests run with stay
     const lines: string[] = [];
     const log = (line: string) => {
       lines.push(line);
-      if (line.startsWith('mutant 1/')) writeFileSync(join(dep, 'index.js'), 'export const rate = 3;\n');
+      if (line.startsWith('mutant 2/')) writeFileSync(join(dep, 'index.js'), 'export const rate = 3;\n');
     };
     await expect(runVerify({ projectDir: dir, checks: CHECKS, log })).rejects.toThrow(/the packages linked from outside the repository/);
-    expect(lines.filter((l) => /^mutant \d+\/\d+: /.test(l))).toHaveLength(1);
+    expect(lines.filter((l) => /^mutant \d+\/\d+: /.test(l))).toHaveLength(2);
     expect(await readVerifyResult(dir, head)).toBeUndefined();
     expect(existsSync(await mutantCachePath(dir))).toBe(false);
   });
