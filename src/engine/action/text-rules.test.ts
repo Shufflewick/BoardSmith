@@ -109,3 +109,23 @@ describe('maxBytes is checked when it is declared (#394)', () => {
     expect((action.selections[0] as TextSelection).maxBytes).toBe(400);
   });
 });
+
+describe('a pattern gives the same entry the same answer every time (#1059)', () => {
+  // g and y make RegExp.test() carry lastIndex between calls, so a second identical entry was refused.
+  it.each(['g', 'y', 'giu'])('refuses a pattern declared with flags %s, saying why', (flags) => {
+    const regex = new RegExp('^[a-z]+$', flags);
+    expect(() => Action.create('rename').enterText('handle', { pattern: { regex, message: 'Lowercase only.' } })).toThrow(
+      `enterText('handle') was given the pattern /^[a-z]+$/${flags}. A pattern checks the whole text, ` +
+        'so the g and y flags mean nothing here and would refuse every other valid entry. Remove them.',
+    );
+  });
+
+  it('judges the same entry the same way twice with any other flag', () => {
+    const action = Action.create('rename')
+      .enterText('handle', { pattern: { regex: /^[a-z]+$/iu, message: 'Letters only.' } })
+      .execute(() => {});
+    const selection = action.selections[0] as TextSelection;
+    expect(textRuleErrors('handle', 'Abc', selection)).toEqual([]);
+    expect(textRuleErrors('handle', 'Abc', selection)).toEqual([]);
+  });
+});
