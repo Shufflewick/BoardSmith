@@ -12,6 +12,7 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 describe('requireBoardsmithWorkspace', () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllEnvs();
   });
 
   const workspaces: Array<[label: string, make: (dir: string) => void, context: string]> = [
@@ -42,5 +43,21 @@ describe('requireBoardsmithWorkspace', () => {
 
     expect(exit).toHaveBeenCalledWith(1);
     expect(errors.join('\n')).toContain('boardsmith.json');
+  });
+
+  it('prints plain text, with no colour codes, when stdout is not a terminal (#931)', () => {
+    // The shell running the suite may force or forbid colour; this test is about the piped stdout alone.
+    vi.stubEnv('FORCE_COLOR', undefined);
+    vi.stubEnv('NO_COLOR', undefined);
+    vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
+    const errors: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((message: unknown) => {
+      errors.push(String(message));
+    });
+
+    requireBoardsmithWorkspace(tempTree('bs-context-'));
+
+    // The test runner pipes stdout, so styleText must leave the message unstyled.
+    expect(errors[0]).toBe('Error: not a BoardSmith workspace');
   });
 });

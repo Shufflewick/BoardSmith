@@ -3,6 +3,7 @@ import type { WebSocket } from 'ws';
 import { claimWebSocketPath } from '../commands/dev-server.js';
 import type { ClientInbound, HostOutbound, MultiplayerHost } from './multiplayer-host.js';
 import type { RulesReloadQueue } from './rules-reload-queue.js';
+import { parseSocketMessage } from './socket-message.js';
 import { DEV_HOST_WS_PATH } from './socket-path.js';
 
 /**
@@ -122,12 +123,8 @@ export function createDevHostConnectionHandler(opts: DevHostConnectionOptions): 
     };
 
     socket.on('message', (raw) => {
-      let msg: Inbound;
-      try {
-        msg = JSON.parse(raw.toString());
-      } catch {
-        return;
-      }
+      const msg = parseSocketMessage(raw);
+      if (msg === null) return;
       if (msg.type === 'hello') return identify(msg);
       // A client must identify itself via `hello` first; a tab from an earlier
       // run never does (#416).
