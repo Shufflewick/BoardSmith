@@ -1387,7 +1387,7 @@ export class MultiplayerHost {
       this.starting = false;
       this.phase = 'lobby';
       const reason = err instanceof Error ? err.message : String(err);
-      const message = `The game could not start (${reason}). Fix the problem, then press "New game".`;
+      const message = `The game could not start (${reason}). Fix the problem, then press "New game" or reload this page.`;
       // A refused start is the game's own error; anything thrown is a crash, so it keeps its stack.
       if (startRefused || !(err instanceof Error)) console.error(`[boardsmith dev] ${message}`);
       else console.error(`[boardsmith dev] ${message}`, err.stack);

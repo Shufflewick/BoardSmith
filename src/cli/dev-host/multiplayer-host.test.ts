@@ -67,7 +67,7 @@ function makeAltHost(
     executeOp: (gameOptions, snap, pend, op, hostOptions) => {
       if (op.type === 'start' && opts.failStart?.()) throw new Error('The deck is missing.');
       if (op.type === 'start' && opts.refuseStart?.()) {
-        return { success: false, error: 'The deck is missing.', category: 'bundle' } as const;
+        return Promise.resolve({ success: false as const, error: 'The deck is missing.', category: 'bundle' as const });
       }
       return executeOp({ ...altDef, maxPlayers: playerCount }, gameOptions, snap, pend, op, hostOptions);
     },
@@ -386,7 +386,7 @@ describe('MultiplayerHost — a restart that fails (#880)', () => {
     expect(lastOfType('A', 'error')).toMatchObject({ message: expect.stringMatching(/no game is running.*reload/i), requestId: 'r1' });
     expect(told.message).toBe(
       "The game could not start (Cannot read properties of undefined (reading 'cards')). " +
-        'Fix the problem, then press "New game".',
+        'Fix the problem, then press "New game" or reload this page.',
     );
 
     failStart = false;
@@ -412,7 +412,7 @@ describe('MultiplayerHost — New game after a failed start (#1039)', () => {
     await host.handleMessage('A', { type: 'restart' });
     expect(lastOfType('A', 'init').seat).toBe(1);
     expect(lastOfType('A', 'error').message).toBe(
-      'The game could not start (The deck is missing.). Fix the problem, then press "New game".',
+      'The game could not start (The deck is missing.). Fix the problem, then press "New game" or reload this page.',
     );
   });
 
@@ -433,7 +433,7 @@ describe('MultiplayerHost — New game after a failed start (#1039)', () => {
     const { host } = makeAltHost({ refuseStart: () => true });
     await host.handleMessage('A', { type: 'hello' });
     expect(logged).toEqual([
-      ['[boardsmith dev] The game could not start (The deck is missing.). Fix the problem, then press "New game".'],
+      ['[boardsmith dev] The game could not start (The deck is missing.). Fix the problem, then press "New game" or reload this page.'],
     ]);
   });
 
@@ -442,7 +442,7 @@ describe('MultiplayerHost — New game after a failed start (#1039)', () => {
     await host.handleMessage('A', { type: 'hello' });
     expect(logged).toHaveLength(1);
     expect(logged[0]).toEqual([
-      '[boardsmith dev] The game could not start (The deck is missing.). Fix the problem, then press "New game".',
+      '[boardsmith dev] The game could not start (The deck is missing.). Fix the problem, then press "New game" or reload this page.',
       expect.stringMatching(/^Error: The deck is missing\.\n\s+at /),
     ]);
   });
