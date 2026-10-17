@@ -242,6 +242,26 @@ describe('scanAssetReachability', () => {
     expect(scanWith({ [file]: content }).map((v) => v.line)).toEqual([line]);
   });
 
+  // #1017: a .vue <script> block is read the same way as a script file, so the
+  // same comment-looking text cannot hide a live <img> there either.
+  it.each([
+    ['template literal //', '<script setup lang="ts">\nconst t = `\n  <p>a // b</p> <img src="y">\n`;\n</script>\n', 3],
+    ['template literal /* */', '<script setup lang="ts">\nconst t = `\n  /* x\n  <img src="y">\n  */\n`;\n</script>\n', 4],
+    ['regex \\/', "<script>\ns.replace(/\\//g, '-'); el.innerHTML = '<img src=\"y\">';\n</script>\n", 2],
+    ['JSX text //', '<script setup lang="tsx">\nconst D = () => <p>a // b <img src="y" /></p>;\n</script>\n', 2],
+  ])('flags a live <img> after a %s in a .vue script block', (_name, content, line) => {
+    expect(scanWith({ 'src/ui/V.vue': content }).map((v) => v.line)).toEqual([line]);
+  });
+
+  // #1017: a .vue script block's comments still blank, at their file lines.
+  it('does NOT flag <img> in .vue script comments, and reports an unterminated one at its file line', () => {
+    expect(scanWith({ 'src/ui/V.vue': '<template>\n  <div />\n</template>\n<script setup lang="ts">\n// <img>\n/* <img> */\n</script>\n' })).toEqual([]);
+    const violations = scanWith({ 'src/ui/W.vue': '<template>\n  <div />\n</template>\n<script setup lang="ts">\nconst a = 1;\n/* never closed\n<img src="y">\n</script>\n' });
+    expect(violations.map((v) => [v.line, /unterminated/.test(v.message)])).toEqual([[6, true]]);
+    const html = scanWith({ 'src/ui/X.vue': '<template>\n  <div />\n  <!-- never closed\n  <img src="y">\n</template>\n<script setup lang="ts">\nconst a = 1;\n</script>\n' });
+    expect(html.map((v) => [v.line, /unterminated <!-- HTML/.test(v.message)])).toEqual([[3, true]]);
+  });
+
   // Review of #852: a comment after code on the same line is still a comment.
   it.each([
     ['src/ui/f.ts', 'export const a = 1; // <img>\n'],

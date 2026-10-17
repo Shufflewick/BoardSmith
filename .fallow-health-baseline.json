@@ -234,11 +234,6 @@
         "count": 2
       }
     },
-    "src/cli/lib/asset-scan.ts": {
-      "complexity_critical": {
-        "count": 1
-      }
-    },
     "src/cli/lib/authored-tests.ts": {
       "complexity_moderate": {
         "count": 2
@@ -748,7 +743,6 @@
     "src/cli/commands/verify-enumerate.ts:complexity",
     "src/ui/components/PlayersPanel.vue:complexity",
     "src/ui/components/ControlsMenu.vue:complexity",
-    "src/cli/lib/asset-scan.ts:complexity",
     "src/ui/components/debug/DecksTab.vue:complexity",
     "src/ui/components/debug/ActionsTab.vue:complexity",
     "src/ui/components/dice/Die3D.vue:complexity"
