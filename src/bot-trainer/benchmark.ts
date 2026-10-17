@@ -1,4 +1,5 @@
-import { dueSeats, type Game } from '../engine/index.js';
+import type { Game } from '../engine/index.js';
+import { enabledDueSeats } from '../engine/flow/seat-activity.js';
 import { GameRunner } from '../runtime/index.js';
 import { createBot, type BotStrategy, type Objective } from '../bot/index.js';
 import type { GameClass, GameOptions } from '../engine/index.js';
@@ -271,12 +272,12 @@ async function runBenchmarkGame<G extends Game>(
         return incomplete('A game stopped awaiting input before it completed.');
       }
 
-      // The first seat that is due: the one seat of an action step, or the
-      // first co-decider still owing a move in a simultaneous step (#321).
+      // The first due seat that can move: the one seat of an action step, or the
+      // first co-decider with an enabled move in a simultaneous step (#321, #1133).
       // currentPlayer is a POSITION (1-indexed), trainedPlayerIndex is an INDEX (0-indexed)
-      const currentPlayer = dueSeats(flowState)[0];
+      const currentPlayer = enabledDueSeats(flowState, runner.game)[0];
       if (currentPlayer === undefined) {
-        return incomplete('A game was awaiting input with no seat able to act, and the game was not over.');
+        return incomplete('A game was awaiting input with no seat that could act (no due seat had an enabled action or a follow-up), and the game was not over.');
       }
 
       const isTrainedSeat = currentPlayer === trainedPlayerIndex + 1;

@@ -12,7 +12,8 @@
 import type { Game, GameClass, TutorialDefinition, Annotation, FlowState, FollowUpOffer } from '../engine/index.js';
 import type { HistoryEntry } from '../engine/action/types.js';
 import { ErrorCode, type ChoiceWithRefs, type ValidElement } from '../types/protocol.js';
-import { dueSeats, canSeatAct, availableActionsForSeat, flowBoundaryKey, toPublicFlowState } from '../engine/index.js';
+import { canSeatAct, availableActionsForSeat, flowBoundaryKey, toPublicFlowState } from '../engine/index.js';
+import { enabledDueSeats } from '../engine/flow/seat-activity.js';
 import type { BoundaryKeyState } from '../engine/index.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState, WarningEntry } from './types.js';
 import { validateTutorialDefinition, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
@@ -734,11 +735,13 @@ function refuseStaleSubmission(snapshot: GameStateSnapshot | null, op: Executabl
   return errorResult(STALE_SUBMISSION_MESSAGE, 'protocol', ErrorCode.STALE_SUBMISSION);
 }
 
+/** The first due bot seat that can move: a seat offered only disabled actions has nothing to search (#1133). */
 function selectDueBotSeat(
   flowState: BotFlowState,
+  game: Game,
   botSeats: Set<number>,
 ): number | undefined {
-  return dueSeats(flowState).find(seat => botSeats.has(seat));
+  return enabledDueSeats(flowState, game).find(seat => botSeats.has(seat));
 }
 
 // ---------------------------------------------------------------------------
@@ -1236,7 +1239,7 @@ async function handleBotSuggest(
   const runner = runnerFromSnapshot(snapshot, def);
   const flowState = runner.getFlowState() as BotFlowState | undefined;
   if (!flowState?.awaitingInput || flowState.complete) return { success: true };
-  const botPlayer = selectDueBotSeat(flowState, new Set(op.seats.map((s) => s.seat)));
+  const botPlayer = selectDueBotSeat(flowState, runner.game as Game, new Set(op.seats.map((s) => s.seat)));
   if (botPlayer === undefined) return { success: true };
 
   const seatLevel = op.seats.find((s) => s.seat === botPlayer)?.level;

@@ -177,3 +177,19 @@ export function followUpForSeat(
   if (!flowState?.awaitingInput) return undefined;
   return flowState.followUps?.find((f) => f.seat === seat);
 }
+
+/**
+ * The due seats that can move: each has an offered action that no `.disabled()`
+ * rule or tutorial gate refuses, or holds a follow-up. A seat offered only
+ * greyed-out actions is due but has nothing it may do (#1133).
+ */
+export function enabledDueSeats(
+  flowState: SeatActivityState | undefined | null,
+  game: { getDisabledActions(seat: number): Record<string, string> },
+): number[] {
+  return dueSeats(flowState).filter((seat) => {
+    const disabled = game.getDisabledActions(seat);
+    return availableActionsForSeat(flowState, seat).some((name) => !(name in disabled))
+      || followUpForSeat(flowState, seat) !== undefined;
+  });
+}
