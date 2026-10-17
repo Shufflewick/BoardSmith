@@ -141,7 +141,7 @@ describe('simulateTutorial', () => {
       // Single-player: tutorial seat always has the next turn.
       const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'happy-seed' });
       const result = simulateTutorial(testGame, HAPPY_TUTORIAL, {
-        scenario: [
+        scenario: () => [
           { action: 'move', expectStep: 'step-pass' },
           { action: 'pass' },
         ],
@@ -155,7 +155,7 @@ describe('simulateTutorial', () => {
     it("runs for the tutorial's learnerSeat (#552)", () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'happy-seed' });
 
-      const result = simulateTutorial(testGame, { ...HAPPY_TUTORIAL, learnerSeat: 2 }, { scenario: [] });
+      const result = simulateTutorial(testGame, { ...HAPPY_TUTORIAL, learnerSeat: 2 }, { scenario: () => [] });
 
       expect(testGame.game.tutorialProgress.get(2)).toEqual({ stepId: 'step-move', status: 'running' });
       expect(testGame.game.tutorialProgress.has(1)).toBe(false);
@@ -165,7 +165,7 @@ describe('simulateTutorial', () => {
     it('assertTutorialCompletes does not throw when tutorial completed', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'happy-seed' });
       const result = simulateTutorial(testGame, HAPPY_TUTORIAL, {
-        scenario: [
+        scenario: () => [
           { action: 'move' },
           { action: 'pass' },
         ],
@@ -177,7 +177,7 @@ describe('simulateTutorial', () => {
     it('records the effective game seed in the result (seed traceability)', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'happy-seed' });
       const result = simulateTutorial(testGame, HAPPY_TUTORIAL, {
-        scenario: [{ action: 'move' }, { action: 'pass' }],
+        scenario: () => [{ action: 'move' }, { action: 'pass' }],
       });
 
       expect(result.seed).toBe('happy-seed');
@@ -189,7 +189,7 @@ describe('simulateTutorial', () => {
 
       expect(() =>
         simulateTutorial(testGame, HAPPY_TUTORIAL, {
-          scenario: [{ action: 'move' }, { action: 'pass' }],
+          scenario: () => [{ action: 'move' }, { action: 'pass' }],
           seed: 'different-seed',
         }),
       ).toThrow(/does not match/);
@@ -199,7 +199,7 @@ describe('simulateTutorial', () => {
       const run1 = () => {
         const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'pinned' });
         return simulateTutorial(testGame, HAPPY_TUTORIAL, {
-          scenario: [{ action: 'move' }, { action: 'pass' }],
+          scenario: () => [{ action: 'move' }, { action: 'pass' }],
           seed: 'pinned',
         });
       };
@@ -207,7 +207,7 @@ describe('simulateTutorial', () => {
       const run2 = () => {
         const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'pinned' });
         return simulateTutorial(testGame, HAPPY_TUTORIAL, {
-          scenario: [{ action: 'move' }, { action: 'pass' }],
+          scenario: () => [{ action: 'move' }, { action: 'pass' }],
           seed: 'pinned',
         });
       };
@@ -232,7 +232,7 @@ describe('simulateTutorial', () => {
 
       expect(() =>
         simulateTutorial(testGame, def, {
-          scenario: [{ action: 'pass' }], // 'pass' is blocked on step-1
+          scenario: () => [{ action: 'pass' }], // 'pass' is blocked on step-1
         })
       ).toThrow(/gate|disabled|step-1|pass/i);
     });
@@ -249,7 +249,7 @@ describe('simulateTutorial', () => {
       let message = '';
       try {
         simulateTutorial(testGame, def, {
-          scenario: [{ action: 'pass' }],
+          scenario: () => [{ action: 'pass' }],
         });
       } catch (err) {
         message = (err as Error).message;
@@ -280,7 +280,7 @@ describe('simulateTutorial', () => {
 
       expect(() =>
         simulateTutorial(testGame, def, {
-          scenario: [
+          scenario: () => [
             { action: 'move', expectStep: 'step-2' }, // predicate won't fire after 1 move
           ],
         })
@@ -292,7 +292,7 @@ describe('simulateTutorial', () => {
     it('result.completed is false when scenario ends before last step', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'non-complete' });
       const result = simulateTutorial(testGame, NO_AUTO_ADVANCE_TUTORIAL, {
-        scenario: [
+        scenario: () => [
           { action: 'move' }, // gate on step-1 allows this, but no advanceWhen to move to step-2
         ],
       });
@@ -303,7 +303,7 @@ describe('simulateTutorial', () => {
     it('assertTutorialCompletes throws when tutorial is not complete', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'non-complete' });
       const result = simulateTutorial(testGame, NO_AUTO_ADVANCE_TUTORIAL, {
-        scenario: [
+        scenario: () => [
           { action: 'move' },
         ],
       });
@@ -319,7 +319,7 @@ describe('simulateTutorial', () => {
 
       expect(() =>
         simulateTutorial(testGame, emptyDef, {
-          scenario: [],
+          scenario: () => [],
         })
       ).toThrow(/no steps|empty/i);
     });
@@ -331,7 +331,7 @@ describe('simulateTutorial', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 2, seed: 'learner-2' });
 
       const result = simulateTutorial(testGame, { ...HAPPY_TUTORIAL, learnerSeat: 2 }, {
-        scenario: [{ action: 'move', expectStep: 'step-pass' }],
+        scenario: () => [{ action: 'move', expectStep: 'step-pass' }],
       });
 
       expect(result.finalStepId).toBe('step-pass');
@@ -342,7 +342,7 @@ describe('simulateTutorial', () => {
       const def: TutorialDefinition = { learnerSeat: 1, steps: [{ id: 'step-1', gate: { action: 'move' } }] };
 
       simulateTutorial(testGame, def, {
-        scenario: [
+        scenario: () => [
           { action: 'move' },
           { action: 'pass', seat: 2 }, // 'pass' is gated for the learner only
         ],
@@ -357,7 +357,7 @@ describe('simulateTutorial', () => {
       const result = simulateTutorial(testGame, {
         ...HAPPY_TUTORIAL,
         setup: (game) => { (game as TutSimGame).moveCount = 1; },
-      }, { scenario: [] });
+      }, { scenario: () => [] });
 
       expect(result.stepsVisited).toEqual(['step-move', 'step-pass']);
     });
@@ -366,20 +366,40 @@ describe('simulateTutorial', () => {
       const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'over' });
       testGame.game.finish([]);
 
-      expect(() => simulateTutorial(testGame, HAPPY_TUTORIAL, { scenario: [] })).toThrow(/game is over/);
+      expect(() => simulateTutorial(testGame, HAPPY_TUTORIAL, { scenario: () => [] })).toThrow(/game is over/);
     });
 
-    it('refuses, by name, a scenario element that setup replaced before the first move', () => {
-      const testGame = TestGame.create(TokenGame, { playerCount: 1, seed: 'stale' });
-      const before = testGame.game.bag.first(Token)!;
+    it('builds the scenario from the board setup left, so a setup that replaces elements still passes (#1079)', () => {
+      const testGame = TestGame.create(TokenGame, { playerCount: 1, seed: 'post-setup' });
       const def: TutorialDefinition = {
         learnerSeat: 1,
         steps: [{ id: 'take-a-token', gate: { action: 'take' } }],
         setup: (game) => (game as TokenGame).resetToPreset(),
       };
 
-      expect(() => simulateTutorial(testGame, def, { scenario: [{ action: 'take', args: { token: before } }] }))
-        .toThrow(/action 'take' by seat 1 on step 'take-a-token' failed\. Error: That choice is no longer available/);
+      const result = simulateTutorial(testGame, def, {
+        scenario: (game) => [{ action: 'take', args: { token: game.bag.first(Token)! } }],
+      });
+
+      expect(result.finalStepId).toBe('take-a-token');
+    });
+
+    it('calls the scenario once, after the tutorial has started with setup applied (#1079)', () => {
+      const testGame = TestGame.create(TutSimGame, { playerCount: 1, seed: 'scenario-once' });
+      const seen: Array<{ passCount: number; started: boolean }> = [];
+
+      simulateTutorial(testGame, {
+        ...HAPPY_TUTORIAL,
+        setup: (game) => { (game as TutSimGame).passCount = 7; },
+      }, {
+        scenario: (game) => {
+          seen.push({ passCount: game.passCount, started: game.tutorialProgress.has(1) });
+          return [{ action: 'move' }];
+        },
+      });
+
+      expect(seen).toEqual([{ passCount: 7, started: true }]);
+      expect(testGame.game.moveCount).toBe(1);
     });
   });
 });

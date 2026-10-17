@@ -7,11 +7,26 @@ server's `startTutorial` op. It runs the tutorial's `setup` before the first
 scripted move, restarts the flow with the learner seat to move, and gives only
 the learner seat a tutorial. So:
 
-- `setup` replaces the board before the first scripted move, so an element
-  reference taken before the call can go stale. A `setup` that removes and
-  recreates elements makes a scenario move that names an old element fail with
-  "That choice is no longer available". A scenario cannot yet refer to the
-  elements `setup` creates (#1079).
+- `scenario` is now a function of the game, called once after `setup` has run,
+  so its moves name the elements `setup` left on the board (#1079). A list is
+  no longer accepted. A list built before the call named elements a `setup`
+  that recreates them had already replaced, and the move failed with "That
+  choice is no longer available". Before:
+
+  ```typescript
+  const scenario = buildWalkthrough(testGame.game);
+  simulateTutorial(testGame, MY_TUTORIAL, { scenario });
+  ```
+
+  After:
+
+  ```typescript
+  simulateTutorial(testGame, MY_TUTORIAL, { scenario: (game) => buildWalkthrough(game) });
+  ```
+
+  A scenario that names no elements just wraps its list:
+  `scenario: () => [{ action: 'pass' }]`. Patch the game in the function, not
+  before the call, when the patch moves elements `setup` replaces.
 - Moves by other seats are no longer gated by the tutorial's steps.
 - A move's `expectStep` names the learner's step, whichever seat moves.
 - A `learnerSeat` other than the seat that opens the game now gets the opening

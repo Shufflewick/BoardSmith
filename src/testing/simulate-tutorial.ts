@@ -59,9 +59,13 @@ export interface TutorialScenarioMove {
 /**
  * Options for `simulateTutorial`.
  */
-export interface SimulateTutorialOptions {
-  /** Ordered list of scripted moves. */
-  scenario: TutorialScenarioMove[];
+export interface SimulateTutorialOptions<G extends Game> {
+  /**
+   * Builds the ordered list of scripted moves from the game. It is called once,
+   * after the tutorial has started and its `setup` has run, so the moves can
+   * name the elements `setup` created (#1079).
+   */
+  scenario: (game: G) => TutorialScenarioMove[];
 
   /**
    * Declared expectation of the seed governing this run.
@@ -149,7 +153,8 @@ export interface SimulateTutorialResult {
  *   exactly as the server starts it: setup applied, the flow restarted with the
  *   learner to move, and progress for the learner alone (#914).
  * @param tutorialDef - The tutorial definition to run.
- * @param options - Scenario moves and optional declared seed.
+ * @param options - A function that builds the scenario moves from the started
+ *   game, and an optional declared seed.
  * @returns `{ completed, finalStepId, stepsVisited, seed }` after the scenario.
  *
  * @throws {Error} on gate drift, predicate drift, action failure, or a
@@ -159,9 +164,10 @@ export interface SimulateTutorialResult {
  * ```typescript
  * const testGame = TestGame.create(CheckersGame, { playerCount: 2, seed: 'pinned' });
  * const result = simulateTutorial(testGame, TUTORIAL_DEF, {
- *   scenario: [
- *     { action: 'move', args: { from: 'c3', to: 'd4' }, expectStep: 'capture-intro' },
- *     { action: 'move', args: { from: 'd4', to: 'f6' } },
+ *   // Called after the tutorial's setup, so it names the pieces setup placed.
+ *   scenario: (game) => [
+ *     { action: 'move', args: { piece: game.first(Checker, 'red-1')!, to: 'd4' }, expectStep: 'capture-intro' },
+ *     { action: 'move', args: { piece: game.first(Checker, 'red-1')!, to: 'f6' } },
  *   ],
  * });
  * assertTutorialCompletes(result);
@@ -170,10 +176,8 @@ export interface SimulateTutorialResult {
 export function simulateTutorial<G extends Game>(
   testGame: TestGame<G>,
   tutorialDef: TutorialDefinition,
-  options: SimulateTutorialOptions,
+  options: SimulateTutorialOptions<G>,
 ): SimulateTutorialResult {
-  const { scenario } = options;
-
   // 0. Seed-expectation check (fail-loud): an already-started game cannot be
   //    reseeded, so a mismatched options.seed means the run would NOT be
   //    governed by the seed the caller named. Throw before touching the game.
@@ -210,8 +214,8 @@ export function simulateTutorial<G extends Game>(
   if (refusal) throw new Error(`simulateTutorial: ${refusal}`);
   recordCurrentStep();
 
-  // 5. Execute each scripted move.
-  for (const move of scenario) {
+  // 5. Execute each scripted move, built from the board setup left.
+  for (const move of options.scenario(testGame.game)) {
     const moveSeat = move.seat ?? seat;
 
     // Step A: gate-legality check.
