@@ -126,7 +126,7 @@ describe("#394 - a world's text argument is judged before it is stored", () => {
     const pick = (action: string) => offers.find((offer) => offer.name === action)!.selections[0]!;
     expect(pick('letter')).toMatchObject({ maxLength: 200, maxBytes: 300, multiline: true });
     expect(pick('handle')).toMatchObject({
-      pattern: { source: '^[a-z]+$', message: 'Use lowercase letters only.' },
+      pattern: { source: '^[a-z]+$', flags: '', message: 'Use lowercase letters only.' },
     });
     expect('maxBytes' in pick('post')).toBe(false);
     await world.close();

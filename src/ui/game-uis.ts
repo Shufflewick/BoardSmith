@@ -203,10 +203,8 @@ export function withDevAutoUI(registry: GameUIRegistry): GameUIRegistry {
  *
  * In a production build every non-default entry has a `null` component, so
  * listing only the resolvable ones keeps the switcher honest if it is ever
- * shown outside dev.
- *
- * Read by BOTH shells since #170: a world project has a registry now, so the
- * dev UI switcher works for a world, which it could not before.
+ * shown outside dev. Only the table shell has a switcher; a world renders its
+ * default UI (#896).
  */
 export function devUiNames(registry: GameUIRegistry): string[] {
   return registry.names.filter(
@@ -219,7 +217,7 @@ export function devUiNames(registry: GameUIRegistry): string[] {
  * registry's default.
  *
  * `null` only when the default entry resolved to no component — a broken
- * `uis.ts`. Both shells name that fix rather than rendering blank.
+ * `uis.ts`. The table shell names that fix rather than rendering blank.
  */
 export function resolveUiComponent(
   registry: GameUIRegistry,

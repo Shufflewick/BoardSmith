@@ -189,9 +189,13 @@ export const WORLD_REFUSALS = {
   },
 
   // ---- GAME: the bundle's own doing; dead-letters, never parks ----
+  "rules-error": {
+    owner: "game",
+    why: "#847: a SEATED action's `execute` or `onSelect` threw something that is not a `PlayerFacingError`, so the engine marked its result `rulesError` and the command was rolled back. A clock action's crash is not coded yet. Coded so a caller can tell a crash in the rules from the rules saying no, which still travels as a plain Error carrying the game's own sentence. GAME-owned, which is what an uncoded throw already was: the same bundle crashes the same way next time",
+  },
   "undeclared-partition": {
     owner: "game",
-    why: "a handler read a partition its partitions() did not declare -- a bundle bug, and the same bundle will do it again next time",
+    why: "a handler read, or emitted an event in, a partition its partitions() did not declare -- a bundle bug, and the same bundle will do it again next time",
   },
   "undeclared-activity": {
     owner: "game",
@@ -343,10 +347,6 @@ export const WORLD_REFUSALS = {
     owner: "game",
     why: "an action built with `worldAction()` reached `ctx.world` while no world was running it (#169) -- registered on a table, or reached after the dispatch that bound its facilities finished. The bundle's own doing, and the same bundle does it again",
   },
-  "unknown-scope": {
-    owner: "game",
-    why: "a handler addressed an event to a scope that is neither the reserved world scope nor a partition this world has loaded (#58). The platform routes on the scope, so an event nobody can be in reaches nobody -- refused rather than delivered silently to no one",
-  },
   "undecided-audience": {
     owner: "game",
     why: "#717: a seat the tree lets see an event's scope has a `world.view` that could only say whether it names that scope by reading a partition the command did not declare. Who hears is judged against what the command declared, so residency cannot decide it; the declaration is in the bundle's source, and the same command refuses the same way next time",
@@ -377,7 +377,7 @@ export const WORLD_REFUSALS = {
   },
   "partition-missing": {
     owner: "game",
-    why: "#134: a bundle named a partition this world's store does not have. Every one of its three raise sites addresses the game author -- \"Check the name, or create the partition before a command names it\" -- because the reachable producer is a `partitions()` or `world.view` declaration with a typo in it, the same species of bundle bug as `invalid-partition-name`, `undeclared-partition` and `unknown-scope`. It was PLATFORM-owned until #134, so two consecutive occurrences climbed the park ladder and ended a 500-player world's season over one misspelt room name. The platform's own bookkeeping breaking has its own codes -- `partition-not-resident`, `partition-vanished`, `checkpoint-unknown-partition` -- and those still park",
+    why: "#134: a bundle named a partition this world's store does not have. Every one of its three raise sites addresses the game author -- \"Check the name, or create the partition before a command names it\" -- because the reachable producer is a `partitions()` or `world.view` declaration with a typo in it, the same species of bundle bug as `invalid-partition-name` and `undeclared-partition`. It was PLATFORM-owned until #134, so two consecutive occurrences climbed the park ladder and ended a 500-player world's season over one misspelt room name. The platform's own bookkeeping breaking has its own codes -- `partition-not-resident`, `partition-vanished`, `checkpoint-unknown-partition` -- and those still park",
   },
 
   // ---- PLATFORM: a host's own bookkeeping broke; deterministic, so a host with a park ladder parks ----

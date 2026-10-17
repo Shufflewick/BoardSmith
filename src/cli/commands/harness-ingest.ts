@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawn } from 'node:child_process';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { getProjectContext } from '../lib/project-context.js';
 
 /** Harness driver script, relative to the BoardSmith repo root. */
@@ -18,15 +18,15 @@ export async function harnessIngestCommand(args: string[]): Promise<void> {
   const cwd = process.cwd();
 
   if (getProjectContext(cwd) !== 'monorepo') {
-    console.error(chalk.red('Error: boardsmith harness-ingest runs in the BoardSmith library repo'));
-    console.error(chalk.dim('It drives the repo\'s own bs- skill sources; there is nothing to harness in a game project.'));
+    console.error(styleText('red', 'Error: boardsmith harness-ingest runs in the BoardSmith library repo'));
+    console.error(styleText('dim', 'It drives the repo\'s own bs- skill sources; there is nothing to harness in a game project.'));
     process.exit(1);
   }
 
   const script = join(cwd, HARNESS_SCRIPT);
   if (!existsSync(script)) {
-    console.error(chalk.red(`Error: harness script not found at ${HARNESS_SCRIPT}`));
-    console.error(chalk.dim('Run this from the BoardSmith repo root.'));
+    console.error(styleText('red', `Error: harness script not found at ${HARNESS_SCRIPT}`));
+    console.error(styleText('dim', 'Run this from the BoardSmith repo root.'));
     process.exit(1);
   }
 
