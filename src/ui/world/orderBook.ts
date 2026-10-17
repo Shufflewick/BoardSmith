@@ -9,8 +9,8 @@
  * So an order is written down BEFORE the command is sent and struck out only
  * when an authoritative answer arrives. What is left in the book after a reload
  * is exactly the set of orders whose fate this page does not know, and each one
- * carries everything needed to ask again: its id, its mint instant, its action
- * and its arguments.
+ * carries everything needed to ask again: its id, its seat, its mint instant,
+ * its action and its arguments.
  *
  * ## Why the arguments are kept too
  *
@@ -32,6 +32,9 @@
 /** One order this page has sent and not yet heard an authoritative answer to. */
 export interface PendingOrder {
   readonly id: string;
+  /** The seat that sent it. The host keeps receipts per player, so only this
+   *  seat may ask about it again (#889). */
+  readonly seat: number;
   /** When this page minted it. The host reads it to tell an order that never
    *  committed from one whose receipt has been swept. */
   readonly at: number;
@@ -60,12 +63,12 @@ export interface OrderBook {
    *  storage, and the shell says so rather than promising recovery it cannot
    *  do. */
   readonly durable: boolean;
-  /** Mint and write down an order, before its command is sent. */
-  open(action: string, args: Record<string, unknown>): PendingOrder;
+  /** Mint and write down an order for a seat, before its command is sent. */
+  open(seat: number, action: string, args: Record<string, unknown>): PendingOrder;
   /** Strike one out: its fate is known. */
   settle(id: string): void;
-  /** Every order whose fate this page still does not know, oldest first. */
-  pending(): readonly PendingOrder[];
+  /** Every order of this seat's whose fate is still unknown, oldest first. */
+  pending(seat: number): readonly PendingOrder[];
 }
 
 /**
@@ -98,10 +101,12 @@ export function createOrderBook(options: OrderBookOptions = {}): OrderBook {
   const mintId = options.mintId ?? defaultMintId;
   const storage = usable(options.storage === undefined ? browserStorage() : options.storage, key);
 
-  let orders: PendingOrder[] = read();
+  // Only the book of a page without storage. With storage, every call re-reads
+  // it, because another tab on this world writes the same key (#889).
+  let unstored: PendingOrder[] = [];
 
   function read(): PendingOrder[] {
-    if (storage === null) return [];
+    if (storage === null) return unstored;
     try {
       const raw = storage.getItem(key);
       if (raw === null) return [];
@@ -116,8 +121,11 @@ export function createOrderBook(options: OrderBookOptions = {}): OrderBook {
     }
   }
 
-  function write(): void {
-    if (storage === null) return;
+  function write(orders: PendingOrder[]): void {
+    if (storage === null) {
+      unstored = orders;
+      return;
+    }
     try {
       storage.setItem(key, JSON.stringify(orders));
     } catch {
@@ -128,29 +136,28 @@ export function createOrderBook(options: OrderBookOptions = {}): OrderBook {
   return {
     durable: storage !== null,
 
-    open(action, args) {
+    open(seat, action, args) {
       const order: PendingOrder = {
         id: mintId(),
+        seat,
         at: now(),
         action,
         // The same round trip `act` does on the way to the wire: a Vue proxy
         // cannot be stored any more than it can be posted.
         args: JSON.parse(JSON.stringify(args ?? {})) as Record<string, unknown>,
       };
-      orders = [...orders, order].slice(-ORDERS_KEPT);
-      write();
+      write([...read(), order].slice(-ORDERS_KEPT));
       return order;
     },
 
     settle(id) {
+      const orders = read();
       const kept = orders.filter((order) => order.id !== id);
-      if (kept.length === orders.length) return;
-      orders = kept;
-      write();
+      if (kept.length !== orders.length) write(kept);
     },
 
-    pending() {
-      return orders;
+    pending(seat) {
+      return read().filter((order) => order.seat === seat);
     },
   };
 }
@@ -161,7 +168,7 @@ function isPendingOrder(value: unknown): value is PendingOrder {
   return (
     typeof order.id === 'string' &&
     order.id.length > 0 &&
-    typeof order.at === 'number' &&
+    Number.isInteger(order.seat) &&
     Number.isFinite(order.at) &&
     typeof order.action === 'string' &&
     typeof order.args === 'object' &&

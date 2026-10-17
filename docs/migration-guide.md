@@ -10,6 +10,19 @@ mechanical only when every dispatch logged since that round has
 `Role: mechanical`. Drop both flags from any script or skill that passes them,
 and keep the run log current before the gate runs.
 
+## `toDebugString` drops the unused `showHidden` option (#913)
+
+`DebugStringOptions.showHidden` is removed; it was never read. Delete it from
+any `toDebugString(game, { ... })` call. The "Current Player" line now reads
+`(seat N)` instead of `(position undefined)`.
+
+## The game-over card has no New Game or Rematch button (#902)
+
+GameShell's game-over card and controls menu no longer offer New Game or
+Rematch, and the `#game-over` slot no longer passes `rematch` or `newGame`.
+Starting another game belongs to the host that started this one. A game whose
+`#game-over` slot used either prop must drop the button that called it.
+
 ## Chunk work runs `boardsmith verify --chunk <slug>`, with no selection (#985)
 
 `boardsmith verify --selection <path>` is removed, and so is the `focused`

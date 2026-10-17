@@ -37,7 +37,7 @@ const handle: EnrichedActionMetadata = {
       type: 'text',
       prompt: 'Handle',
       maxLength: 20,
-      pattern: { source: '^[a-z]+$', message: 'Use lowercase letters only.' },
+      pattern: { source: '^[a-z]+$', flags: '', message: 'Use lowercase letters only.' },
     },
   ],
 };
