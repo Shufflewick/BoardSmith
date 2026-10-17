@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 /**
- * GameShell — forward-exit routing (D11 / ENDGAME-02), on the REAL shell.
+ * GameShell — the controls menu and a new game arriving, on the REAL shell.
  *
- * "New game" in the controls menu restarts through the SAME path as Rematch:
- * a `debug:restart` request to the host, which owns the session.
+ * The menu offers no "New game" (#902): a deployed host has no restart op, so
+ * the item could only fail. The dev host's own header starts new games.
  *
  * The menu offers no "Leave game" (#515). Leaving used to drop the iframe onto
  * a lobby screen that talked to a deleted HTTP server; the host page around
@@ -12,7 +12,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { defineComponent, h, nextTick } from 'vue';
 import { flushPromises } from '@vue/test-utils';
-import ControlsMenu from './ControlsMenu.vue';
 import DebugPanel from './DebugPanel.vue';
 import {
   DEBUG_TABLE_PLAYERS,
@@ -34,22 +33,8 @@ function requestsFor(posted: unknown[], op: string): unknown[] {
   });
 }
 
-describe('GameShell — "New game" routing (D11)', () => {
-  it('asks the host to restart through debug:restart', async () => {
-    const posted = enterIframe();
-    const wrapper = mountPlatformShell();
-    await nextTick();
-
-    wrapper.findComponent(ControlsMenu).vm.$emit('menu-item-click', 'new-game');
-    await nextTick();
-
-    expect(requestsFor(posted, 'debug:restart')).toHaveLength(1);
-    wrapper.unmount();
-  });
-});
-
-describe('the controls menu (#515)', () => {
-  it('offers no "Leave game" item', async () => {
+describe('the controls menu (#515, #902)', () => {
+  it('offers no "Leave game" or "New game" item', async () => {
     enterIframe();
     const wrapper = mountPlatformShell();
     await nextTick();
@@ -57,8 +42,10 @@ describe('the controls menu (#515)', () => {
     await wrapper.find('button[aria-label="Game controls"]').trigger('click');
     await nextTick();
 
-    expect(document.body.textContent).toContain('New game');
+    expect(document.body.textContent).toContain('Auto end turn');
     expect(document.body.textContent).not.toContain('Leave game');
+    expect(document.body.textContent).not.toContain('New game');
+    expect(document.body.textContent).not.toContain('Session');
     wrapper.unmount();
   });
 });
