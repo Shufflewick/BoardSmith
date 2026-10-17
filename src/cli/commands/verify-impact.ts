@@ -9,7 +9,7 @@ import {
 } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { findHeadingIndex, parseRulings } from './build-manifest.js';
 import { allocatedNumber } from '../lib/ledger-entries.js';
 import {
@@ -577,6 +577,51 @@ export function formatBothReadings(c: Contradiction): string {
   return lines.join('\n');
 }
 
+/**
+ * `verifyClassifyStatusCommand` is the single authority for the resolved run id and the
+ * per-chunk verdicts. Every command here composes it through this one call, quiet, so its own
+ * report never lands ahead of the caller's output and breaks a `--json` caller's parse (#832).
+ */
+function readClassifyStatus(projectDir: string, runId: string | undefined) {
+  return verifyClassifyStatusCommand({ project: projectDir, runId, json: false, quiet: true });
+}
+
+/** A run's ledger, as read text, and the adjudications it records. */
+async function readRunLedger(projectDir: string, runId: string) {
+  const ledgerFile = ledgerFilePath(projectDir, runId);
+  const relLedgerPath = relative(projectDir, ledgerFile);
+  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
+  const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
+  const { adjudications } = resolveLedgerState(lines);
+  return { ledgerFile, relLedgerPath, ledgerText, adjudications };
+}
+
+/** A run's classifications, recorded adjudications and the contradictions they leave. */
+async function readRunContradictions(projectDir: string, requestedRunId: string | undefined) {
+  const classifyStatus = await readClassifyStatus(projectDir, requestedRunId);
+  const runId = classifyStatus.runId;
+  const { ledgerFile, relLedgerPath, adjudications } = await readRunLedger(projectDir, runId);
+
+  const contradictions = collectContradictions({
+    classifications: classifyStatus.classified,
+    adjudications,
+    chunkVerdicts: classifyStatus.chunkVerdicts,
+  });
+  return { classifyStatus, runId, ledgerFile, relLedgerPath, adjudications, contradictions };
+}
+
+/** Each chunk's drift and provenance status, by slug, both read quietly for the same reason. */
+async function readChunkState(projectDir: string) {
+  const [driftResult, provenanceResult] = await Promise.all([
+    driftCheckCommand({ project: projectDir, json: false, quiet: true }),
+    chunkProvenanceStatusCommand({ project: projectDir, json: false, quiet: true }),
+  ]);
+  return {
+    driftBySlug: new Map(driftResult.chunks.map((c) => [c.chunk, c] as const)),
+    statusBySlug: new Map(provenanceResult.chunks.map((c) => [c.slug, c.status] as const)),
+  };
+}
+
 export interface VerifyImpactGateResult {
   runId: string;
   contradictions: Contradiction[];
@@ -608,33 +653,7 @@ export async function verifyImpactGateCommand(
 ): Promise<VerifyImpactGateResult> {
   const projectDir = resolve(options.project ?? process.cwd());
 
-  // `verifyClassifyStatusCommand` is the single existing authority for both the resolved runId
-  // (most-recent-run resolution) and the per-chunk verdict roll-up — never re-derived here.
-  const classifyStatus = await verifyClassifyStatusCommand({
-    project: projectDir,
-    runId: options.runId,
-    // json: false — this is an internal composition call. verifyClassifyStatusCommand's own
-    // json:true path prints its OWN JSON.stringify(result) to stdout as a side effect
-    // (verify-classify.ts's convention), independent of whatever this caller's own --json
-    // handling does below. Passing json:true here would print a second, unrelated top-level
-    // JSON object ahead of this command's own result on every invocation (found live while
-    // producing 175-PROOF.md's real verify-impact-gate --json output: stdout contained two
-    // concatenated JSON objects instead of one, breaking a real caller's JSON.parse(stdout)).
-    json: false,
-  });
-  const runId = classifyStatus.runId;
-
-  const ledgerFile = ledgerFilePath(projectDir, runId);
-  const relLedgerPath = relative(projectDir, ledgerFile);
-  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
-  const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
-  const { adjudications } = resolveLedgerState(lines);
-
-  const contradictions = collectContradictions({
-    classifications: classifyStatus.classified,
-    adjudications,
-    chunkVerdicts: classifyStatus.chunkVerdicts,
-  });
+  const { classifyStatus, runId, contradictions } = await readRunContradictions(projectDir, options.runId);
 
   const pending = contradictions.filter((c) => c.adjudication !== 'resolved').map((c) => c.pairId);
   const summary = {
@@ -658,12 +677,12 @@ export async function verifyImpactGateCommand(
   }
 
   if (contradictions.length === 0) {
-    console.log(chalk.green(`✓ No contradictory findings pending adjudication — run ${runId}`));
+    console.log(styleText('green', `✓ No contradictory findings pending adjudication — run ${runId}`));
     return result;
   }
 
   console.log(
-    chalk.yellow(
+    styleText('yellow',
       `⚠ ${pending.length} of ${contradictions.length} contradictory finding(s) pending adjudication — run ${runId}`,
     ),
   );
@@ -831,22 +850,16 @@ export async function verifyImpactAdjudicateCommand(options: {
     }
   }
 
-  // `verifyClassifyStatusCommand` is the single existing authority for both the resolved runId
-  // and the recorded classification verdicts — never re-derived here.
-  const classifyStatus = await verifyClassifyStatusCommand({
-    project: projectDir,
-    runId: options.runId,
-    // json: false — this is an internal composition call. verifyClassifyStatusCommand's own
-    // json:true path prints its OWN JSON.stringify(result) to stdout as a side effect
-    // (verify-classify.ts's convention), independent of whatever this caller's own --json
-    // handling does below. Passing json:true here would print a second, unrelated top-level
-    // JSON object ahead of this command's own result on every invocation (found live while
-    // producing 175-PROOF.md's real verify-impact-gate --json output: stdout contained two
-    // concatenated JSON objects instead of one, breaking a real caller's JSON.parse(stdout)).
-    json: false,
-  });
+  const classifyStatus = await readClassifyStatus(projectDir, options.runId);
   const runId = classifyStatus.runId;
 
+  if (classifyStatus.outOfDatePairs.includes(pairId)) {
+    throw new Error(
+      `Pair "${pairId}"'s classification in run ${runId} is out of date: its staged slices changed after ` +
+        `it was classified.\nClassify it again with \`boardsmith verify-classify-record --run-id ${runId} ` +
+        `--pair-id ${pairId}\`, then adjudicate it.`,
+    );
+  }
   const classification = classifyStatus.classified.find((c) => c.pairId === pairId);
   if (!classification || classification.ruleDelta !== 'contradictory') {
     throw new Error(
@@ -858,11 +871,7 @@ export async function verifyImpactAdjudicateCommand(options: {
   const quotedPass1 = classification.quotedPass1 ?? NO_VERBATIM_READING;
   const quotedPass2 = classification.quotedPass2 ?? NO_VERBATIM_READING;
 
-  const ledgerFile = ledgerFilePath(projectDir, runId);
-  const relLedgerPath = relative(projectDir, ledgerFile);
-  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
-  const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
-  const { adjudications } = resolveLedgerState(lines);
+  const { ledgerFile, relLedgerPath, ledgerText, adjudications } = await readRunLedger(projectDir, runId);
   const existing = adjudications.find((a) => a.pairId === pairId);
 
   let rulingNumber: number | undefined;
@@ -916,11 +925,11 @@ export async function verifyImpactAdjudicateCommand(options: {
 
   if (outcome === 'resolved') {
     console.log(
-      chalk.green(`✓ Recorded Ruling ${rulingNumber} for pair ${pairId} (run ${runId})`),
+      styleText('green', `✓ Recorded Ruling ${rulingNumber} for pair ${pairId} (run ${runId})`),
     );
   } else {
     console.log(
-      chalk.yellow(`⚠ Pair ${pairId} deferred as UNADJUDICATED — remains pending (run ${runId})`),
+      styleText('yellow', `⚠ Pair ${pairId} deferred as UNADJUDICATED — remains pending (run ${runId})`),
     );
   }
   return result;
@@ -1107,15 +1116,15 @@ function emptyDispositionCounts(): Record<RepairGateDisposition, number> {
 function printImpactHumanReport(result: VerifyImpactStatusResult): void {
   const { staleFraction, staleSlugs, dispositionCounts, contradictionsPending, entries } = result;
 
-  console.log(chalk.green(`✓ Verify-impact status — run ${result.runId}`));
-  console.log(`  ${chalk.gray('rules-stale:')} ${staleFraction.stale} of ${staleFraction.total} chunks rules-stale`);
+  console.log(styleText('green', `✓ Verify-impact status — run ${result.runId}`));
+  console.log(`  ${styleText('gray', 'rules-stale:')} ${staleFraction.stale} of ${staleFraction.total} chunks rules-stale`);
   if (staleSlugs.length > 0) {
     // Decision 15: EVERY stale slug, no cap, no "and N more".
-    console.log(`  ${chalk.yellow('stale chunks:')} ${staleSlugs.join(', ')}`);
+    console.log(`  ${styleText('yellow', 'stale chunks:')} ${staleSlugs.join(', ')}`);
   }
   if (contradictionsPending.length > 0) {
     console.log(
-      `  ${chalk.yellow('contradictions pending adjudication:')} ${contradictionsPending.join(', ')}`,
+      `  ${styleText('yellow', 'contradictions pending adjudication:')} ${contradictionsPending.join(', ')}`,
     );
   }
 
@@ -1152,21 +1161,8 @@ export async function verifyImpactStatusCommand(
 ): Promise<VerifyImpactStatusResult> {
   const projectDir = resolve(options.project ?? process.cwd());
 
-  const classifyStatus = await verifyClassifyStatusCommand({
-    project: projectDir,
-    runId: options.runId,
-    json: false,
-    quiet: true,
-  });
-  const runId = classifyStatus.runId;
-
-  const [driftResult, provenanceResult] = await Promise.all([
-    driftCheckCommand({ project: projectDir, json: false, quiet: true }),
-    chunkProvenanceStatusCommand({ project: projectDir, json: false, quiet: true }),
-  ]);
-
-  const driftBySlug = new Map(driftResult.chunks.map((c) => [c.chunk, c] as const));
-  const statusBySlug = new Map(provenanceResult.chunks.map((c) => [c.slug, c.status] as const));
+  const { classifyStatus, runId, contradictions } = await readRunContradictions(projectDir, options.runId);
+  const { driftBySlug, statusBySlug } = await readChunkState(projectDir);
 
   const warnings = [...classifyStatus.warnings];
   const entries: ImpactMapEntry[] = [];
@@ -1202,16 +1198,6 @@ export async function verifyImpactStatusCommand(
   const dispositionCounts = emptyDispositionCounts();
   for (const e of entries) dispositionCounts[e.gate.disposition]++;
 
-  const ledgerFile = ledgerFilePath(projectDir, runId);
-  const relLedgerPath = relative(projectDir, ledgerFile);
-  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
-  const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
-  const { adjudications } = resolveLedgerState(lines);
-  const contradictions = collectContradictions({
-    classifications: classifyStatus.classified,
-    adjudications,
-    chunkVerdicts: classifyStatus.chunkVerdicts,
-  });
   const contradictionsPending = contradictions
     .filter((c) => c.adjudication !== 'resolved')
     .map((c) => c.pairId);
@@ -1273,7 +1259,7 @@ function refuseApply(
     return result;
   }
   console.log(
-    chalk.yellow(
+    styleText('yellow',
       `⚠ ${pendingPairs.length} ${reason}.\n` +
         pendingPairs
           .map((p) => `    boardsmith ${command} --run-id ${runId} --pair-id ${p} ${flag} ...`)
@@ -1317,31 +1303,10 @@ export async function verifyImpactApplyCommand(
 ): Promise<VerifyImpactApplyResult> {
   const projectDir = resolve(options.project ?? process.cwd());
 
-  const classifyStatus = await verifyClassifyStatusCommand({
-    project: projectDir,
-    runId: options.runId,
-    // json: false — this is an internal composition call. verifyClassifyStatusCommand's own
-    // json:true path prints its OWN JSON.stringify(result) to stdout as a side effect
-    // (verify-classify.ts's convention), independent of whatever this caller's own --json
-    // handling does below. Passing json:true here would print a second, unrelated top-level
-    // JSON object ahead of this command's own result on every invocation (found live while
-    // producing 175-PROOF.md's real verify-impact-gate --json output: stdout contained two
-    // concatenated JSON objects instead of one, breaking a real caller's JSON.parse(stdout)).
-    json: false,
-  });
-  const runId = classifyStatus.runId;
-
-  const ledgerFile = ledgerFilePath(projectDir, runId);
-  const relLedgerPath = relative(projectDir, ledgerFile);
-  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
-  const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
-  const { adjudications } = resolveLedgerState(lines);
-
-  const contradictions = collectContradictions({
-    classifications: classifyStatus.classified,
-    adjudications,
-    chunkVerdicts: classifyStatus.chunkVerdicts,
-  });
+  const { classifyStatus, runId, ledgerFile, relLedgerPath, adjudications, contradictions } = await readRunContradictions(
+    projectDir,
+    options.runId,
+  );
   const pendingContradictions = contradictions.filter((c) => c.adjudication === 'pending');
 
   if (classifyStatus.pendingPairs.length > 0) {
@@ -1370,12 +1335,7 @@ export async function verifyImpactApplyCommand(
     );
   }
 
-  const [driftResult, provenanceResult] = await Promise.all([
-    driftCheckCommand({ project: projectDir, json: false }),
-    chunkProvenanceStatusCommand({ project: projectDir, json: false }),
-  ]);
-  const driftBySlug = new Map(driftResult.chunks.map((c) => [c.chunk, c] as const));
-  const statusBySlug = new Map(provenanceResult.chunks.map((c) => [c.slug, c.status] as const));
+  const { driftBySlug, statusBySlug } = await readChunkState(projectDir);
 
   const adjudicationByPairId = new Map(adjudications.map((a) => [a.pairId, a] as const));
   const classificationByPairId = new Map(classifyStatus.classified.map((c) => [c.pairId, c] as const));
@@ -1473,9 +1433,9 @@ export async function verifyImpactApplyCommand(
     return result;
   }
 
-  console.log(chalk.green(`✓ Marked ${marked.length} chunk(s) rules-stale — run ${runId}`));
+  console.log(styleText('green', `✓ Marked ${marked.length} chunk(s) rules-stale — run ${runId}`));
   if (skippedTailEntries.length > 0) {
-    console.log(`  ${chalk.yellow('skipped (sketch-level tail entries):')} ${skippedTailEntries.join(', ')}`);
+    console.log(`  ${styleText('yellow', 'skipped (sketch-level tail entries):')} ${skippedTailEntries.join(', ')}`);
   }
   return result;
 }

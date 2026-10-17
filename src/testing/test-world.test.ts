@@ -28,7 +28,7 @@ import {
   VaultWorld,
   type Vault,
 } from './test-world.test-helper.js';
-import { worldAction, worldClockAction, type WorldDefinition } from '../world/index.js';
+import { worldAction, worldBudgets, worldClockAction, type WorldDefinition } from '../world/index.js';
 
 const bundle = (world?: WorldDefinition) => ({ ...vaultBundle(), ...(world ? { world } : {}) });
 
@@ -160,6 +160,34 @@ describe('TestWorld: a resident world a test can construct', () => {
     await world.advanceClock(2_000);
     expect(ranAt).toEqual([1_000 + 5_000]);
 
+    await world.close();
+  });
+
+  it('runs every due event in one advance, however many drain batches that takes (#912)', async () => {
+    const ranAt: number[] = [];
+    const world = await createTestWorld({
+      definition: bundle(burstVaultWorld(ranAt)),
+      budgets: worldBudgets({ drainBatch: 1 }),
+      now: 0,
+    });
+
+    await world.take(1, 'burst');
+    await world.advanceClock(60_000);
+
+    expect(ranAt).toEqual([1_000, 2_000, 3_000]);
+    await world.close();
+  });
+
+  it('refuses to spin when a handler keeps re-arming the clock at zero delay (#912)', async () => {
+    const world = await createTestWorld({
+      definition: bundle(spinningVaultWorld()),
+      budgets: worldBudgets({ drainBatch: 1 }),
+      now: 0,
+    });
+
+    await world.take(1, 'spin');
+
+    await expect(world.advanceClock(1_000)).rejects.toThrow(/still due after .* rounds.*zero delay/is);
     await world.close();
   });
 
@@ -315,6 +343,42 @@ function timedVaultWorld(ranAt: () => number[]): WorldDefinition {
       ranAt().push(ctx.world.now);
     });
   return { ...base, actions: [...base.actions, arm, tick] } as WorldDefinition;
+}
+
+/** A world whose `burst` schedules three beats, one second apart. */
+function burstVaultWorld(ranAt: number[]): WorldDefinition {
+  const base = vaultWorldBlock();
+  const burst = worldAction<VaultWorld>('burst')
+    .prompt('Arm three beats')
+    .needs(() => ['commons'])
+    .execute((_args, ctx) => {
+      for (const delayMs of [1_000, 2_000, 3_000]) ctx.world.schedule({ delayMs, action: 'tick', args: {} });
+    });
+  const tick = worldClockAction<VaultWorld>('tick')
+    .prompt('The beat')
+    .needs(() => ['commons'])
+    .execute((_args, ctx) => {
+      ranAt.push(ctx.world.now);
+    });
+  return { ...base, actions: [...base.actions, burst, tick] } as WorldDefinition;
+}
+
+/** A world whose `whirl` schedules itself again at zero delay, forever. */
+function spinningVaultWorld(): WorldDefinition {
+  const base = vaultWorldBlock();
+  const spin = worldAction<VaultWorld>('spin')
+    .prompt('Start the whirl')
+    .needs(() => ['commons'])
+    .execute((_args, ctx) => {
+      ctx.world.schedule({ delayMs: 0, action: 'whirl', args: {} });
+    });
+  const whirl = worldClockAction<VaultWorld>('whirl')
+    .prompt('The whirl')
+    .needs(() => ['commons'])
+    .execute((_args, ctx) => {
+      ctx.world.schedule({ delayMs: 0, action: 'whirl', args: {} });
+    });
+  return { ...base, actions: [...base.actions, spin, whirl] } as WorldDefinition;
 }
 
 /** Named so the class import above is not type-only, which would make the

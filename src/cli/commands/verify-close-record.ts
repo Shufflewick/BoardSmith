@@ -1,4 +1,4 @@
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { relative, resolve } from 'node:path';
 import { driftCheckCommand } from './drift-check.js';
 import {
@@ -141,9 +141,9 @@ export async function verifyCloseRecordCommand(
   console.log(`${changedCount} written, ${currentCount} already current`);
 
   if (errors.length > 0) {
-    console.error(chalk.red(`${errors.length} chunk(s) could not be recorded:`));
+    console.error(styleText('red', `${errors.length} chunk(s) could not be recorded:`));
     for (const e of errors) {
-      console.error(chalk.red(`  ${e.slug}: ${e.message}`));
+      console.error(styleText('red', `  ${e.slug}: ${e.message}`));
     }
   }
 

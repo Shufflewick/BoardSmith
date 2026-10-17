@@ -66,6 +66,7 @@
  */
 import type {
   ActionContext,
+  ActionResult,
   ActionDefinition,
   ElementJSON,
   Game,
@@ -488,6 +489,16 @@ function creditsUnavailable(action: string): WorldRefusal {
       "surface exists so that a game has a boundary to call rather than a payment system to " +
       "write; when the platform can answer, this call is what will start working.",
   );
+}
+
+/**
+ * What a refused action result throws. A crash in the rules is coded
+ * `rules-error` (game-owned) so a caller can tell it from a refusal (#847); the
+ * rules saying no stays a plain `Error` carrying the game's own sentence.
+ */
+function failedResultError(action: string, result: ActionResult): Error {
+  const message = result.error ?? `The "${action}" action was refused and said nothing about why.`;
+  return result.rulesError === true ? worldRefusal("rules-error", message) : new Error(message);
 }
 
 /**
@@ -2574,18 +2585,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
         // throw is what triggers the rollback that makes "refused" mean the
         // world is unchanged.
         //
-        // THE CLASSIFIED ONE IF THERE WAS ONE, and the game's own sentence
-        // otherwise. A plain `Error` is deliberate for the second case: under
-        // the flat table a refusing handler threw the game's own exception and
-        // it travelled unclassified, which is how a host tells "the rules said
-        // no" from "the platform's bookkeeping broke". Giving that a code would
-        // relabel every bug in a game's rules as one of the platform's words.
-        throw (
-          ledger.refused ??
-          new Error(
-            result.error ?? `The "${command.name}" action was refused and said nothing about why.`,
-          )
-        );
+        // THE CLASSIFIED ONE IF THERE WAS ONE, and the result's own otherwise.
+        throw ledger.refused ?? failedResultError(command.name, result);
       }
       // A REFUSAL THE RULES CAUGHT STILL REFUSES (#288). Every facility refusal
       // is a hard constraint the platform enforces -- a partition the command

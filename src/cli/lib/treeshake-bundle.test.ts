@@ -2,12 +2,12 @@
  * Tree-shaking bundle proof — SHIP-02
  *
  * Verifies empirically that a production Vite/Rollup build of a game project:
- *   NEGATIVE CASE: uses a custom UI → AutoRenderer/AutoUI are absent from the bundle
- *   POSITIVE CONTROL: uses "ui":"auto" → AutoRenderer IS present in the bundle
+ *   NEGATIVE CASE: uis.ts makes a custom UI the default → AutoRenderer/AutoUI are absent from the bundle
+ *   POSITIVE CONTROL: the scaffold's uis.ts imports AutoUI as the default UI → AutoRenderer IS present
  *
  * This is a REAL build (viteBuild) + REAL bundle grep, not a mock or code-review
- * claim. The tree-shaking guarantee comes from the single static import in the
- * generated App.vue (Plan 01 fix); this test guards against future regression.
+ * claim. The tree-shaking guarantee comes from uis.ts statically importing only
+ * the default UI; this test guards against future regression.
  *
  * Infrastructure deviations from the real `boardsmith build` pipeline (none affect
  * tree-shaking behavior, which is a Rollup analysis-time property):
@@ -97,26 +97,36 @@ function readBundleFiles(dir: string, ext: string): string {
 /**
  * Write scaffold files for a fixture game to `dir`.
  *
- * @param ui  If undefined → "auto" (AutoUI imported in App.vue).
- *            If a relative path → custom component (no AutoUI import).
- *            Use './components/GameTable.vue' for the custom case — this path
- *            resolves correctly from App.vue (src/ui/App.vue) to the GameTable
- *            stub that tableUiFiles creates at src/ui/components/GameTable.vue.
+ * @param board  'auto' keeps the scaffold's uis.ts, where the auto-UI ships.
+ *               'custom' does what the GameTable.vue stub tells an author to:
+ *               moves defaultUI() onto GameTable in src/ui/uis.ts.
  */
-function writeFixtureFiles(dir: string, ui?: string): void {
+function writeFixtureFiles(dir: string, board: 'auto' | 'custom'): void {
   const config = {
     name: 'treeshake-test',
     backend: 'table' as const,
     displayName: 'TreeShake Test',
     description: 'Test fixture for tree-shaking verification',
     playerCount: { min: 2, max: 2 },
-    ui,
   };
   const files = [...generateScaffoldFiles(config, dir), ...tableUiFiles(config, ['draw', 'play'])];
   for (const { path: relPath, content } of files) {
     const fullPath = join(dir, relPath);
     mkdirSync(dirname(fullPath), { recursive: true });
     writeFileSync(fullPath, content, 'utf-8');
+  }
+  if (board === 'custom') {
+    writeFileSync(
+      join(dir, 'src/ui/uis.ts'),
+      `import { defineGameUIs, defaultUI } from 'boardsmith/ui';
+import GameTable from './components/GameTable.vue';
+
+export default defineGameUIs({
+  GameTable: defaultUI(GameTable),
+});
+`,
+      'utf-8',
+    );
   }
   // What `npm install` makes of the scaffold's `"boardsmith": "file:..."` dependency.
   mkdirSync(join(dir, 'node_modules'), { recursive: true });
@@ -218,19 +228,17 @@ describe('tree-shaking bundle proof (real Vite/Rollup build)', () => {
     'SHIP-02 negative case: custom-UI fixture bundle contains no AutoRenderer or AutoUI',
     { timeout: 180_000 },
     async () => {
-      // Fixture with a custom UI component: App.vue imports GameTable only,
+      // Fixture with a custom UI component: uis.ts imports GameTable only,
       // NOT AutoUI. Rollup tree-shaking should eliminate AutoRenderer entirely.
       const fixId = `custom-${Date.now()}`;
       fixtureDir = join(FIXTURE_PARENT, fixId);
       mkdirSync(fixtureDir, { recursive: true });
 
-      // './components/GameTable.vue' resolves from src/ui/App.vue to
-      // src/ui/components/GameTable.vue — the stub that tableUiFiles creates.
-      writeFixtureFiles(fixtureDir, './components/GameTable.vue');
+      writeFixtureFiles(fixtureDir, 'custom');
       const distUi = await buildFixtureUi(fixtureDir);
       const bundle = readBundleJs(distUi);
 
-      // AutoRenderer must be absent: the single static import of GameTable in App.vue
+      // AutoRenderer must be absent: the single static import of GameTable in uis.ts
       // causes Rollup to drop the entire auto-UI module chain. We assert AutoRenderer
       // specifically because:
       //   - AutoUI.vue imports AutoRenderer, so AutoRenderer absent ↔ AutoUI absent
@@ -266,7 +274,7 @@ describe('tree-shaking bundle proof (real Vite/Rollup build)', () => {
       const fixId = `registry-${Date.now()}`;
       fixtureDir = join(FIXTURE_PARENT, fixId);
       mkdirSync(fixtureDir, { recursive: true });
-      writeFixtureFiles(fixtureDir, './components/GameTable.vue');
+      writeFixtureFiles(fixtureDir, 'custom');
 
       // A second board with a scoped style whose class name cannot collide.
       writeFileSync(
@@ -321,7 +329,7 @@ export default defineGameUIs({
       const fixId = `nodice-${Date.now()}`;
       fixtureDir = join(FIXTURE_PARENT, fixId);
       mkdirSync(fixtureDir, { recursive: true });
-      writeFixtureFiles(fixtureDir, './components/GameTable.vue');
+      writeFixtureFiles(fixtureDir, 'custom');
 
       const distUi = await buildFixtureUi(fixtureDir);
       const names = (readdirSync(distUi, { recursive: true } as never) as unknown as string[]).map(String);
@@ -341,7 +349,7 @@ export default defineGameUIs({
       const diceId = `dice-${Date.now()}`;
       fixtureDir = join(FIXTURE_PARENT, diceId);
       mkdirSync(fixtureDir, { recursive: true });
-      writeFixtureFiles(fixtureDir, './components/GameTable.vue');
+      writeFixtureFiles(fixtureDir, 'custom');
       writeFileSync(
         join(fixtureDir, 'src/ui/components/GameTable.vue'),
         `<script setup lang="ts">
@@ -364,14 +372,14 @@ import { Die3D } from 'boardsmith/ui/dice';
     'SHIP-02 positive control: auto-UI fixture bundle contains AutoRenderer',
     { timeout: 180_000 },
     async () => {
-      // Fixture with "ui":"auto": App.vue imports AutoUI which imports AutoRenderer.
+      // The scaffold's uis.ts imports AutoUI as the default UI, and AutoUI imports AutoRenderer.
       // Rollup must include AutoRenderer — this proves the negative case is a genuine
       // tree-shake drop, not a build that silently emits nothing.
       const fixId = `auto-${Date.now()}`;
       fixtureDir = join(FIXTURE_PARENT, fixId);
       mkdirSync(fixtureDir, { recursive: true });
 
-      writeFixtureFiles(fixtureDir, undefined); // ui defaults to 'auto'
+      writeFixtureFiles(fixtureDir, 'auto');
       const distUi = await buildFixtureUi(fixtureDir);
       const bundle = readBundleJs(distUi);
 

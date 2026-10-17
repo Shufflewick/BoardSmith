@@ -1188,6 +1188,25 @@ describe('Action Executor', () => {
       expect(executor.executeAction(refused, game.getPlayer(1)!, {}).partiallyApplied).toBeUndefined();
     });
 
+    it('marks a crash in the rules, and only a crash, as rulesError (#847)', () => {
+      const player = game.getPlayer(1)!;
+      const threw = Action.create('threw').execute(() => {
+        throw new TypeError('boom');
+      });
+      const onSelectThrew = Action.create('onSelectThrew')
+        .chooseFrom('pick', { choices: ['a'], onSelect: () => { throw new TypeError('boom'); } })
+        .execute(() => {});
+      const playerFacing = Action.create('playerFacing').execute(() => {
+        throw new PlayerFacingError('Not today.');
+      });
+      const refused = Action.create('refused').execute(() => ({ success: false, error: 'no' }));
+
+      expect(executor.executeAction(threw, player, {}).rulesError).toBe(true);
+      expect(executor.executeAction(onSelectThrew, player, { pick: 'a' }).rulesError).toBe(true);
+      expect(executor.executeAction(playerFacing, player, {}).rulesError).toBeUndefined();
+      expect(executor.executeAction(refused, player, {}).rulesError).toBeUndefined();
+    });
+
     it('refuses a `{ success: false }` that named no error, and says which field to set (#90)', () => {
       // `message` is a log line and `error` is the refusal. Picking the wrong
       // one used to reach the player as a SUCCESS carrying a sentence, because
