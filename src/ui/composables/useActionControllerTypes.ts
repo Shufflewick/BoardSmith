@@ -70,6 +70,18 @@ export interface ControllerActionResult {
   followUp?: FollowUpOffer<EnrichedValidElement>;
 }
 
+/** Told how an auto-executed action ended: the server's result, or why it was never sent. */
+export type ActionOutcomeListener = (result: ControllerActionResult) => void;
+
+/**
+ * Runs just before an action is auto-executed. It may return a listener, which
+ * is called once with how that action ended (#861).
+ */
+export type BeforeAutoExecuteHook = (
+  actionName: string,
+  args: Record<string, unknown>
+) => void | ActionOutcomeListener | Promise<void | ActionOutcomeListener>;
+
 /** Whether a value filled into a pick was accepted, and why not when it was not. */
 export interface PickValidationResult {
   valid: boolean;
@@ -299,6 +311,8 @@ export interface UseActionControllerOptions {
    * explicit `execute()`, or while viewing history.
    * Use this to capture element positions for animations before the DOM updates.
    * Return a Promise to delay execution until animation prep is complete.
+   * Return (or resolve to) a listener to be told how the action ended, so
+   * anything the hook changed can be undone when it fails or is cancelled.
    *
    * @example
    * ```typescript
@@ -314,10 +328,7 @@ export interface UseActionControllerOptions {
    * });
    * ```
    */
-  onBeforeAutoExecute?: (
-    actionName: string,
-    args: Record<string, unknown>
-  ) => void | Promise<void>;
+  onBeforeAutoExecute?: BeforeAutoExecuteHook;
   /**
    * Function to cancel a pending action on the server.
    * Called when user cancels an action that has been partially submitted via pickStep.
@@ -655,6 +666,9 @@ export interface UseActionControllerReturn {
    * props.actionController.onBeforeAutoExecute(onBeforeAutoExecute);
    * ```
    *
+   * A hook may return a listener; it is called once with the action's result,
+   * or with the failure that stopped it being sent (a cancel during the hooks).
+   *
    * Each call adds a hook; it never replaces an earlier one. Hooks run in
    * registration order, and an awaited hook finishes before the next starts.
    * Call the returned function to unregister this hook.
@@ -671,9 +685,7 @@ export interface UseActionControllerReturn {
    * stale hooks. A registration made outside any scope stays until the
    * returned function is called.
    */
-  onBeforeAutoExecute: (
-    hook: (actionName: string, args: Record<string, unknown>) => void | Promise<void>
-  ) => () => void;
+  onBeforeAutoExecute: (hook: BeforeAutoExecuteHook) => () => void;
 
   // === Animation Gating ===
   /**

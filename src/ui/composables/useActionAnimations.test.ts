@@ -61,6 +61,9 @@ const { enableAnimationTestMode, disableAnimationTestMode, getAnimationTrace, cl
   await import('./useAnimationTestMode.js');
 type ActionAnimationConfig = import('./useActionAnimations.js').ActionAnimationConfig;
 type GameElement = import('../types.js').GameViewElement;
+type ActionOutcomeListener = import('./useActionControllerTypes.js').ActionOutcomeListener;
+const { useActionController } = await import('./useActionController.js');
+const { createMockSendAction, createTestMetadata } = await import('./useActionController.test-helper.js');
 
 function makeElement(attr: string, value: string): HTMLElement {
   const el = document.createElement('div');
@@ -76,6 +79,19 @@ function makeElement(attr: string, value: string): HTMLElement {
  */
 function fakeGameView(): GameElement {
   return {} as GameElement;
+}
+
+/**
+ * The server's reply to an action, in production order: the state broadcast,
+ * then the action's result (the dev bridge and platform both send them so).
+ */
+async function reply(
+  gameViewRef: { value: GameElement | null },
+  settle: ActionOutcomeListener | void,
+): Promise<void> {
+  gameViewRef.value = fakeGameView();
+  await nextTick();
+  settle!({ success: true });
 }
 
 /**
@@ -123,11 +139,10 @@ describe('useActionAnimations', () => {
         animations: [moveConfig],
       });
 
-      await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' });
+      const settle = await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' });
 
       enableAnimationTestMode();
-      gameViewRef.value = fakeGameView();
-      await nextTick();
+      await reply(gameViewRef, settle);
       await waitFor(() => getAnimationTrace().length > 0);
 
       expect(getAnimationTrace()).toHaveLength(1);
@@ -174,9 +189,9 @@ describe('useActionAnimations', () => {
           animations: [moveConfig],
         });
 
-        await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' });
+        const settle = await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' });
 
-        gameViewRef.value = fakeGameView();
+        await reply(gameViewRef, settle);
         await vi.advanceTimersByTimeAsync(0);
         // The flying element should now be in flight.
         expect(flyingElements.value.length).toBeGreaterThan(0);
@@ -221,11 +236,10 @@ describe('useActionAnimations', () => {
           animations: [moveConfig],
         });
 
-        await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' });
+        const settle = await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' });
 
         enableAnimationTestMode();
-        gameViewRef.value = fakeGameView();
-        await nextTick();
+        await reply(gameViewRef, settle);
         await waitFor(() => rejections.length > 0);
 
         expect(rejections).toHaveLength(1);
@@ -285,9 +299,8 @@ describe('useActionAnimations', () => {
         animations: [moveConfig],
       });
 
-      await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' });
-      gameViewRef.value = fakeGameView();
-      await nextTick();
+      const settle = await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' });
+      await reply(gameViewRef, settle);
       await waitFor(() => consoleErrorSpy.mock.calls.length > 0);
 
       expect(consoleErrorSpy).toHaveBeenCalled();
@@ -315,9 +328,8 @@ describe('useActionAnimations', () => {
           animations: [moveConfig],
         });
 
-        await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' });
-        gameViewRef.value = fakeGameView();
-        await nextTick();
+        const settle = await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' });
+        await reply(gameViewRef, settle);
         await waitFor(() => rejections.length > 0);
 
         expect(rejections).toHaveLength(1);
@@ -373,6 +385,122 @@ describe('useActionAnimations', () => {
       await revealAndMutate(card);
 
       expect(card.style.opacity).toBe('');
+    });
+  });
+
+  describe('an action that never happens leaves no trace (#861)', () => {
+    const flipConfig: ActionAnimationConfig = {
+      action: 'forcedPlay',
+      elementSelection: 'card',
+      elementSelector: '[data-card-id="{card}"]',
+      destinationSelector: '[data-card-id="{card}"]',
+      duration: 50,
+    };
+
+    /** A card with inline styles of its own, which the hook must put back exactly. */
+    function styledCard(): HTMLElement {
+      const card = makeElement('data-card-id', '42');
+      vi.spyOn(card, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 60, 84));
+      card.style.setProperty('opacity', '0.5');
+      card.style.setProperty('transition', 'transform 1s', 'important');
+      card.style.pointerEvents = 'auto';
+      return card;
+    }
+
+    function expectOriginalLook(card: HTMLElement): void {
+      expect(card.style.getPropertyValue('opacity')).toBe('0.5');
+      expect(card.style.getPropertyPriority('opacity')).toBe('');
+      expect(card.style.getPropertyValue('transition')).toBe('transform 1s');
+      expect(card.style.getPropertyPriority('transition')).toBe('important');
+      expect(card.style.pointerEvents).toBe('auto');
+      expect(card.hasAttribute('data-action-animating')).toBe(false);
+    }
+
+    /** The real controller auto-executing forcedPlay, with the server's answer held until `answer` is called. */
+    function playThroughController() {
+      let answer!: (result: { success: boolean; error?: string }) => void;
+      const sendAction = createMockSendAction().mockImplementation(
+        () => new Promise((resolve) => { answer = resolve; }),
+      );
+      const gameViewRef = ref<GameElement | null>(null);
+      const animations = useActionAnimations({ gameView: gameViewRef, animations: [flipConfig] });
+      const controller = useActionController({
+        sendAction,
+        availableActions: ref(['forcedPlay']),
+        actionMetadata: ref(createTestMetadata()),
+        isMyTurn: ref(true),
+        autoFill: true,
+        autoExecute: true,
+      });
+      controller.onBeforeAutoExecute(animations.onBeforeAutoExecute);
+      return { controller, animations, gameViewRef, sendAction, answer: (r: { success: boolean; error?: string }) => answer(r) };
+    }
+
+    it('restores the card when the server rejects the action, and a later update plays nothing', async () => {
+      const card = styledCard();
+      const { controller, animations, gameViewRef, sendAction, answer } = playThroughController();
+
+      await controller.start('forcedPlay');
+      await vi.waitFor(() => expect(sendAction).toHaveBeenCalled());
+      expect(card.style.opacity).toBe('0');
+
+      answer({ success: false, error: 'Not allowed' });
+      await vi.waitFor(() => expectOriginalLook(card));
+
+      gameViewRef.value = fakeGameView();
+      await nextTick();
+      expect(animations.flyingElements.value).toHaveLength(0);
+      expectOriginalLook(card);
+    });
+
+    it('restores the card when the action is cancelled before it is sent', async () => {
+      const card = styledCard();
+      const { controller, sendAction } = playThroughController();
+      controller.onBeforeAutoExecute(() => {
+        expect(card.style.opacity).toBe('0');
+        controller.cancel();
+      });
+
+      await controller.start('forcedPlay');
+      await vi.waitFor(() => expectOriginalLook(card));
+      expect(sendAction).not.toHaveBeenCalled();
+    });
+
+    it('an update that is not the reply does not play the flight; the reply does', async () => {
+      const card = styledCard();
+      const { controller, animations, gameViewRef, sendAction, answer } = playThroughController();
+
+      await controller.start('forcedPlay');
+      await vi.waitFor(() => expect(sendAction).toHaveBeenCalled());
+
+      // An opponent's move arrives while ours is still in flight.
+      gameViewRef.value = fakeGameView();
+      await nextTick();
+      expect(animations.flyingElements.value).toHaveLength(0);
+      expect(card.style.opacity).toBe('0');
+
+      // Our own reply: its state, then its result.
+      gameViewRef.value = fakeGameView();
+      await nextTick();
+      answer({ success: true });
+      await vi.waitFor(() => expect(animations.flyingElements.value).toHaveLength(1));
+      animations.cancelAll();
+    });
+
+    it('plays the flight when the result comes before the state', async () => {
+      styledCard();
+      const { controller, animations, gameViewRef, sendAction, answer } = playThroughController();
+
+      await controller.start('forcedPlay');
+      await vi.waitFor(() => expect(sendAction).toHaveBeenCalled());
+      answer({ success: true });
+      await nextTick();
+      await nextTick();
+      expect(animations.flyingElements.value).toHaveLength(0);
+
+      gameViewRef.value = fakeGameView();
+      await vi.waitFor(() => expect(animations.flyingElements.value).toHaveLength(1));
+      animations.cancelAll();
     });
   });
 });

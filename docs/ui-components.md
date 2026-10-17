@@ -1150,6 +1150,8 @@ When the composable detects a flip-in-place animation (`elementSelector === dest
 
 You don't need to set `hideDestination`, `flip`, or `crossfadeDuration` - they're configured automatically.
 
+**When it plays:** the hook returns a listener the controller calls with the action's result. The flight plays only once the server has accepted the action and the state it produced has rendered; a state update from another seat while the action is in flight does not play it. If the server refuses the action, or it is cancelled before it is sent, the hidden element gets back exactly the inline styles it had and no flight plays.
+
 **Animation Config Options:**
 
 | Option | Type | Default | Description |

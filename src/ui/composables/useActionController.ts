@@ -130,6 +130,8 @@ import type {
   UseActionControllerOptions,
   RepeatingState,
   UseActionControllerReturn,
+  ActionOutcomeListener,
+  BeforeAutoExecuteHook,
 } from './useActionControllerTypes.js';
 
 /**
@@ -219,7 +221,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // independently-registered consumers (e.g. a board component and a player-stats
   // panel) can each register a hook without clobbering the others; the watcher
   // awaits them sequentially in registration order.
-  type BeforeAutoExecuteHook = (actionName: string, args: Record<string, unknown>) => void | Promise<void>;
   const beforeAutoExecuteHooks = ref<BeforeAutoExecuteHook[]>(
     initialBeforeAutoExecute ? [initialBeforeAutoExecute] : []
   );
@@ -1393,16 +1394,31 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       // WR-03: iterate a SNAPSHOT — a one-shot hook that unregisters itself (or
       // another hook) splices the live array mid-for...of and would silently
       // skip the hook registered after it.
-      for (const hook of [...beforeAutoExecuteHooks.value]) {
+      const outcomeListeners = await runBeforeAutoExecuteHooks(currentAction.value);
+      const result = await executeCurrentAction();
+      for (const listener of outcomeListeners) {
         try {
-          await hook(currentAction.value, buildServerArgs());
+          listener(result);
         } catch (err) {
-          console.error('[ActionController] beforeAutoExecute hook failed:', err);
+          console.error('[ActionController] beforeAutoExecute outcome listener failed:', err);
         }
       }
-      executeCurrentAction();
     }
   });
+
+  /** Run every before-auto-execute hook, and collect the listeners they return. */
+  async function runBeforeAutoExecuteHooks(actionName: string): Promise<ActionOutcomeListener[]> {
+    const outcomeListeners: ActionOutcomeListener[] = [];
+    for (const hook of [...beforeAutoExecuteHooks.value]) {
+      try {
+        const listener = await hook(actionName, buildServerArgs());
+        if (listener) outcomeListeners.push(listener);
+      } catch (err) {
+        console.error('[ActionController] beforeAutoExecute hook failed:', err);
+      }
+    }
+    return outcomeListeners;
+  }
 
   // === Tutorial-step suppression lift watch (R-04 timing fix) ===
   //

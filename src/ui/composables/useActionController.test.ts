@@ -581,6 +581,51 @@ describe('useActionController', () => {
       expect(calls).toEqual(['hook:forcedPlay', 'send:forcedPlay']);
     });
 
+    describe('a hook that returns a listener is told how the action ended (#861)', () => {
+      function autoExecuteForcedPlay(hook: Parameters<ReturnType<typeof useActionController>['onBeforeAutoExecute']>[0]) {
+        const controller = useActionController({
+          sendAction, availableActions, actionMetadata, isMyTurn, autoFill: true, autoExecute: true,
+        });
+        controller.onBeforeAutoExecute(hook);
+        return controller;
+      }
+
+      it('passes the server result on success', async () => {
+        const outcomes: unknown[] = [];
+        const controller = autoExecuteForcedPlay(() => (result) => { outcomes.push(result); });
+
+        await controller.start('forcedPlay');
+        await vi.waitFor(() => expect(outcomes).toHaveLength(1));
+
+        expect(outcomes[0]).toMatchObject({ success: true });
+      });
+
+      it('passes the refusal when the server rejects the action', async () => {
+        sendAction.mockResolvedValue({ success: false, error: 'Not allowed' });
+        const outcomes: unknown[] = [];
+        const controller = autoExecuteForcedPlay(() => (result) => { outcomes.push(result); });
+
+        await controller.start('forcedPlay');
+        await vi.waitFor(() => expect(outcomes).toHaveLength(1));
+
+        expect(outcomes[0]).toEqual({ success: false, error: 'Not allowed' });
+      });
+
+      it('passes a failure when the action is cancelled before it is sent', async () => {
+        const outcomes: Array<{ success: boolean }> = [];
+        const controller = autoExecuteForcedPlay(() => {
+          controller.cancel();
+          return (result) => { outcomes.push(result); };
+        });
+
+        await controller.start('forcedPlay');
+        await vi.waitFor(() => expect(outcomes).toHaveLength(1));
+
+        expect(outcomes[0].success).toBe(false);
+        expect(sendAction).not.toHaveBeenCalled();
+      });
+    });
+
     it('onBeforeAutoExecute accumulates hooks and runs them in registration order (UIX-05, PROC-02 regression)', async () => {
       const calls: string[] = [];
       const controller = useActionController({
