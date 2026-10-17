@@ -78,7 +78,7 @@
       ]
     },
     {
-      "content": "2375f84bcc213aab",
+      "content": "abe505cb0a457948",
       "lines": 8,
       "files": [
         "src/cli/commands/verify-classify.ts"
