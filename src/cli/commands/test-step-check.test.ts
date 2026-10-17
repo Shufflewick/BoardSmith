@@ -592,6 +592,14 @@ export function hexToRgb(hex: string): number[] { return [parseInt(hex.slice(1, 
     ['loads every rules module with an eager import.meta.glob (#841)', `const rules = import.meta.glob('../../src/rules/*.ts', { eager: true });\nvoid rules;\n`, 1, 'src/rules/*.ts'],
     ['makes importers with a lazy import.meta.glob (#841)', `const rules = import.meta.glob(['../../src/rules/*.ts', '!../../src/rules/x.ts']);\nvoid rules;\n`, 1, 'src/rules/*.ts'],
     ['globs the game with options this check cannot read (#841)', `const OPTS = { query: '?raw' };\nconst rules = import.meta.glob('../../src/rules/*.ts', OPTS);\nvoid rules;\n`, 2, 'options this check cannot read'],
+    ['globs from the tests folder with a wildcard (#841)', `const g = import.meta.glob("../**/*.ts", { eager: true });\nvoid g;\n`, 1, '../**/*.ts'],
+    ['globs src and tests with a brace set (#841)', `const g = import.meta.glob("../../{src,tests}/**/*.ts", { eager: true });\nvoid g;\n`, 1, '../../{src,tests}/**/*.ts'],
+    ['globs with a wildcard folder before rules (#841)', `const g = import.meta.glob("../../*/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '../../*/rules/*.ts'],
+    ['globs the whole project from its root (#841)', `const g = import.meta.glob("/**/*.ts", { eager: true });\nvoid g;\n`, 1, '/**/*.ts'],
+    ['globs relative to a base option (#841)', `const g = import.meta.glob("./rules/*.ts", { base: "../../src", eager: true });\nvoid g;\n`, 1, 'without `base`'],
+    ['globs support files under tests (#841)', `const g = import.meta.glob("../support/*.ts", { eager: true });\nvoid g;\n`, 1, '../support/*.ts'],
+    ['globs with a query that is not only raw (#841)', `const g = import.meta.glob("../../src/rules/*.ts", { query: "?raw&x", eager: true });\nvoid g;\n`, 1, 'src/rules/*.ts'],
+    ['globs with a url query (#841)', `const g = import.meta.glob("../../src/rules/*.ts", { query: "?url", eager: true });\nvoid g;\n`, 1, 'src/rules/*.ts'],
     ['globs with a pattern this check cannot read (#841)', `const PATTERN = '../../src/rules/*.ts';\nconst rules = import.meta.glob(PATTERN, { eager: true });\nvoid rules;\n`, 2, 'a pattern this check cannot read'],
   ])('reports a guard that %s from the game\'s src/ (#485)', async (_what, guard, line, module) => {
     const findings = await findingsFor({
@@ -611,6 +619,14 @@ export function hexToRgb(hex: string): number[] { return [parseInt(hex.slice(1, 
 const b = import.meta.glob(['../../src/rules/*.ts'], { as: 'raw', eager: true });
 void a; void b;
 `,
+    });
+    expect(findings).toEqual([]);
+  });
+
+  it('accepts a glob whose only pattern reaching src/ is a ! exclusion (#841)', async () => {
+    const findings = await findingsFor({
+      'src/rules/auction.ts': RULES,
+      'tests/guards/a11y-floor.test.ts': `const g = import.meta.glob(['../../docs/*.md', '!../../src/**/*.ts'], { eager: true });\nvoid g;\n`,
     });
     expect(findings).toEqual([]);
   });

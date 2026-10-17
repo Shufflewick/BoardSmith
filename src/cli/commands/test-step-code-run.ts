@@ -128,28 +128,46 @@ function globOptions(node: AstNode | undefined): Map<string, AstNode> | undefine
 const optionIs = (options: Map<string, AstNode>, key: string, value: string): boolean =>
   options.get(key)?.type === 'Literal' && options.get(key)?.value === value;
 
+/** Where the game's code lives: a glob reaching either loads it. */
+const CODE_DIRS = ['src/', 'tests/'];
+
+/**
+ * Whether a glob pattern can match a file under the game's `src/` or `tests/`: the folder it names
+ * before its first glob character lies under one of them, or contains one (the project root, `../*`).
+ */
+function globReachesCode(pattern: string, file: string): boolean {
+  if (!pattern.startsWith('/') && !pattern.startsWith('.')) return true; // an alias, which this cannot resolve
+  const fixed = pattern.split(/[*?[{(]/)[0];
+  const folder = fixed.slice(0, fixed.lastIndexOf('/') + 1);
+  const resolved = folder.startsWith('/') ? folder.slice(1) : posix.join(posix.dirname(file), folder);
+  const normal = posix.normalize(resolved || '.').replace(/\/$/, '');
+  const dir = normal === '.' ? '' : `${normal}/`;
+  return CODE_DIRS.some((code) => dir.startsWith(code) || code.startsWith(dir));
+}
+
 /**
  * Why an `import.meta.glob(pattern, options)` call runs the game's code, or undefined. It loads
  * every file its pattern matches (lazily, through importers, when not eager) unless the options ask
- * for raw text (`query: '?raw'`, or the older `as: 'raw'`). A pattern counts when it reaches the
- * game's `src/` or `tests/`, or names a path this cannot resolve (an alias); a `!` pattern only
- * excludes. Options or a pattern that are not literals are code, since this cannot read them.
+ * for raw text (`query: '?raw'`, or the older `as: 'raw'`). A `!` pattern only excludes. Options or a
+ * pattern that are not literals, and a `base` option, are code, since this cannot follow them.
  */
 function globCodeRun(node: AstNode, file: string): string | undefined {
   const [patternNode, optionsNode] = node.arguments as AstNode[];
   const options = globOptions(optionsNode);
-  if (options && (optionIs(options, 'query', '?raw') || optionIs(options, 'as', 'raw'))) return undefined;
+  if (!options) {
+    return "calls import.meta.glob with options this check cannot read; write them inline, as `{ query: '?raw', import: 'default' }` for a scan";
+  }
+  if (optionIs(options, 'query', '?raw') || optionIs(options, 'as', 'raw')) return undefined;
+  if (options.has('base')) {
+    return 'calls import.meta.glob with a `base` option this check does not follow; write the pattern relative to this file without `base`';
+  }
   const elements = patternNode?.type === 'ArrayExpression' ? (patternNode.elements as AstNode[]) : [patternNode];
   const patterns = elements.map(specifierText);
-  if (patterns.some((p) => p === undefined)) return 'calls import.meta.glob with a pattern this check cannot read';
-  const reached = (patterns as string[]).find((p) => {
-    if (p.startsWith('!')) return false;
-    if (!p.startsWith('/') && !p.startsWith('.')) return true; // an alias, which this cannot resolve
-    const path = p.startsWith('/') ? p.slice(1) : posix.normalize(posix.join(posix.dirname(file), p));
-    return path.startsWith('src/') || path.startsWith('tests/');
-  });
-  if (reached === undefined) return undefined;
-  return options ? `loads ${reached} with import.meta.glob` : `loads ${reached} with import.meta.glob and options this check cannot read`;
+  if (patterns.some((p) => p === undefined)) {
+    return 'calls import.meta.glob with a pattern this check cannot read; write the pattern as a string literal';
+  }
+  const reached = (patterns as string[]).find((p) => !p.startsWith('!') && globReachesCode(p, file));
+  return reached && `loads ${reached} with import.meta.glob`;
 }
 
 /** The project script a relative module path names, trying TypeScript's extension rules. */
