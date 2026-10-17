@@ -16,6 +16,7 @@ import type { GameOptionDefinition } from '../../session/types.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { simulateReplayCommand } from '../lib/replay-command.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
+import { parsePositiveWholeNumber } from '../lib/positive-whole-number.js';
 
 interface SimulateOptions {
   /** Games per player count. */
@@ -311,9 +312,7 @@ async function planVariants(
 
 /** A positive whole number of worker threads, every core's worth when `--jobs` is not given. */
 function parseJobs(raw: string | undefined): number {
-  if (raw === undefined) return availableParallelism();
-  if (!/^\d+$/.test(raw) || Number(raw) < 1) throw new Error(`--jobs takes a positive whole number of worker threads, got "${raw}".`);
-  return Number(raw);
+  return raw === undefined ? availableParallelism() : parsePositiveWholeNumber('jobs', raw);
 }
 
 /** The flags read before the rules are loaded. */

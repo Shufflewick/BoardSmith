@@ -380,7 +380,8 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
    * Register a handler for an event type
    */
   function registerHandler(eventType: string, handler: AnimationHandler, handlerOptions: AnimationHandlerOptions): () => void {
-    handlers.set(eventType, { handler, skip: handlerOptions.skip });
+    const entry = { handler, skip: handlerOptions.skip };
+    handlers.set(eventType, entry);
 
     // If the queue is waiting for this type, resume processing immediately
     if (waitingForType === eventType && waitResolve) {
@@ -395,7 +396,8 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     }
 
     return () => {
-      handlers.delete(eventType);
+      // Another component may have replaced this handler since; leave theirs.
+      if (handlers.get(eventType) === entry) handlers.delete(eventType);
     };
   }
 

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, onTestFinished } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
@@ -8,6 +8,7 @@ import {
   runDiffMutationCheck,
   runMutationCheck,
   spreadOrder,
+  writeRunConfig,
 } from './test-step-mutation.js';
 import { parseSource } from './test-step-ast.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
@@ -253,6 +254,73 @@ it('claim 1 — red', () => { expect(1).toBe(2); });
     );
     expect(result.findings.map((f) => f.kind)).toEqual(['suite-not-green']);
     expect(result.summary.mutants).toBe(0);
+  }, 60_000);
+
+  // #840: a file that fails as a whole, or runs no test of a claim, must not read as a pass.
+  it('refuses a test file whose beforeAll throws, naming the file and the error', async () => {
+    const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
+    const result = await check(
+      project,
+      `import { it, expect, beforeAll } from 'vitest';
+import { bid } from '../src/rules';
+beforeAll(() => { throw new Error('the auction fixture is missing'); });
+it('claim 1 — a higher offer wins', () => { expect(bid(3, 4)).toBe(true); });
+`,
+      [1],
+    );
+    expect(result.findings.map((f) => `${f.kind} ${f.subject}`)).toEqual(['suite-not-green tests/auction.test.ts']);
+    expect(result.findings[0].detail).toContain('the auction fixture is missing');
+    expect(result.summary.mutants).toBe(0);
+  }, 60_000);
+
+  it('refuses a test file whose import fails, naming paths only within the project', async () => {
+    const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
+    const result = await check(
+      project,
+      `import { it, expect } from 'vitest';
+import { bid } from '../src/missing';
+it('claim 1 — a higher offer wins', () => { expect(bid(3, 4)).toBe(true); });
+`,
+      [1],
+    );
+    expect(result.findings.map((f) => `${f.kind} ${f.subject}`)).toEqual(['suite-not-green tests/auction.test.ts']);
+    expect(result.findings[0].detail).toContain('src/missing');
+    // project may be the unresolved /var/... form of vitest's /private/var/..., which contains it.
+    expect(result.findings[0].detail).not.toContain(project);
+    expect(result.summary.mutants).toBe(0);
+  }, 60_000);
+
+  it('refuses a test file whose only test is an empty it.each', async () => {
+    const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
+    const result = await check(
+      project,
+      `import { it, expect } from 'vitest';
+import { bid } from '../src/rules';
+it.each([] as number[])('claim 1 — offer %i wins', (offer) => { expect(bid(3, offer)).toBe(true); });
+`,
+      [1],
+    );
+    expect(result.findings.map((f) => `${f.kind} ${f.subject}`)).toEqual(['suite-not-green tests/auction.test.ts']);
+    expect(result.findings[0].detail).toContain('No test suite found in file tests/auction.test.ts');
+    expect(result.summary.mutants).toBe(0);
+  }, 60_000);
+
+  it('reports a claim whose only test a stray .only skipped', async () => {
+    // vitest refuses .only under CI, which the child run inherits; this case is about a run that allows it.
+    vi.stubEnv('CI', undefined);
+    onTestFinished(() => { vi.unstubAllEnvs(); });
+    const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
+    const result = await check(
+      project,
+      `import { it, expect } from 'vitest';
+import { bid } from '../src/rules';
+it('claim 1 — a higher offer wins', () => { expect(bid(3, 4)).toBe(true); });
+it.only('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
+`,
+      [1],
+    );
+    expect(result.findings.map((f) => `${f.kind} ${f.subject}`)).toEqual(['claim-survives-mutation claim 1']);
+    expect(result.findings[0].detail).toContain('No test citing claim 1 ran and passed');
   }, 60_000);
 
   it('mutates a component the chunk changed, so a mounted test of it is credited and a tautology is not (#425)', async () => {
@@ -713,6 +781,182 @@ it('a fee exists', () => { expect(typeof fee).toBe('function'); });
     expect(result.summary.mutants).toBe(0);
     await expect(fs.readdir(join(project, '.boardsmith'))).resolves.toEqual([]);
   }, 60_000);
+
+  // #937: a Vitest workspace project builds its own Vite server from its own config, so the
+  // mutant must reach each one, or the run must refuse rather than test the original code.
+  describe('a project with Vitest workspace projects (#937)', () => {
+    const PROJECT_CONFIG = `import { defineConfig } from 'vitest/config';
+export default defineConfig({ test: { include: ['tests/**/*.test.ts'], environment: 'node' } });
+`;
+    const BID_TEST = `import { it, expect } from 'vitest';
+import { bid } from '../src/rules';
+it('a higher offer wins', () => { expect(bid(3, 4)).toBe(true); });
+it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
+`;
+    const workspace = (entry: string) =>
+      `import { defineWorkspace } from 'vitest/config';\nexport default defineWorkspace([${entry}]);\n`;
+    const INLINE = "{ extends: './project.config.mts', test: { name: 'separate-project' } }";
+
+    async function diffCheck(files: Record<string, string>) {
+      const project = await makeProject({ 'src/rules.ts': RULES, 'project.config.mts': PROJECT_CONFIG, 'tests/bid.test.ts': BID_TEST, ...files });
+      return runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), cache: memoryCache(), log: () => {} });
+    }
+
+    it('runs each mutant in an inline project the config names', async () => {
+      const result = await diffCheck({
+        'vitest.config.ts': "import { defineConfig } from 'vitest/config';\nexport default defineConfig({ test: { workspace: './projects.mts' } });\n",
+        'projects.mts': workspace(INLINE),
+      });
+      expect(result.survivors).toEqual([]);
+      expect(result.summary.killed).toBe(result.summary.mutants);
+      expect(result.summary.mutants).toBeGreaterThan(0);
+    }, 120_000);
+
+    it("finds the game's own vitest.workspace file and runs each mutant in its projects", async () => {
+      const result = await diffCheck({
+        'vitest.config.ts': "import { defineConfig } from 'vitest/config';\nexport default defineConfig({ test: { include: ['none/**'] } });\n",
+        'vitest.workspace.mts': workspace(INLINE),
+      });
+      expect(result.notGreen).toBeUndefined();
+      expect(result.survivors).toEqual([]);
+      expect(result.summary.killed).toBe(result.summary.mutants);
+    }, 120_000);
+
+    it('refuses a project named by its config file path, which the mutant cannot reach', async () => {
+      await expect(diffCheck({ 'vitest.workspace.mts': workspace("'./project.config.mts'") })).rejects.toThrow(
+        /Vitest project ".+" \(project\.config\.mts\) does not load the mutation check's mutant, so its tests would run against the original code\. Name it in the workspace as an inline project, \{ extends: '\.\/project\.config\.mts' \}, and run the check again\./,
+      );
+    }, 120_000);
+
+    it('runs each mutant in a project the workspace defines by a function', async () => {
+      const result = await diffCheck({
+        'vitest.workspace.mts': workspace("async () => ({ extends: './project.config.mts', test: { name: 'from-a-function' } })"),
+      });
+      expect(result.survivors).toEqual([]);
+      expect(result.summary.killed).toBe(result.summary.mutants);
+      expect(result.summary.mutants).toBeGreaterThan(0);
+    }, 120_000);
+
+    it('refuses a workspace that names the root config itself, which the mutant cannot reach', async () => {
+      await expect(diffCheck({ 'vitest.config.mts': PROJECT_CONFIG, 'vitest.workspace.mts': workspace("'./vitest.config.mts'") })).rejects.toThrow(
+        /Vitest project ".+" \(vitest\.config\.mts\) does not load the mutation check's mutant[^]*\{ extends: '\.\/vitest\.config\.mts' \}/,
+      );
+    }, 120_000);
+
+    it("resolves a workspace file's root against the project, as the installed Vitest 2 does", async () => {
+      const result = await diffCheck({
+        'vitest.config.ts': "import { defineConfig } from 'vitest/config';\nexport default defineConfig({ test: { workspace: './config/projects.mts' } });\n",
+        'config/projects.mts': "export default [{ extends: '../project.config.mts', root: '.', test: { name: 'nested' } }];\n",
+      });
+      expect(result.notGreen).toBeUndefined();
+      expect(result.survivors).toEqual([]);
+      expect(result.summary.killed).toBe(result.summary.mutants);
+      expect(result.summary.mutants).toBeGreaterThan(0);
+    }, 120_000);
+
+    /** A project installed the way pnpm installs one: `node_modules/.bin/vitest` is a script, not a link. */
+    async function pnpmProject(vitest: 'installed' | { version: string } | 'missing') {
+      const tree = tempTree('bs-mutation-');
+      const project = await designProjectFixtures(() => tree).makeProject({
+        'src/rules.ts': RULES, 'vitest.config.ts': PROJECT_CONFIG, 'tests/bid.test.ts': BID_TEST,
+      });
+      const modules = join(project, 'node_modules');
+      await fs.mkdir(join(modules, '.bin'), { recursive: true });
+      await fs.writeFile(join(modules, '.bin', 'vitest'), '#!/bin/sh\nexec node "$(dirname "$0")/../vitest/vitest.mjs" "$@"\n', { mode: 0o755 });
+      if (vitest === 'installed') await fs.symlink(join(INSTALLED_MODULES, 'vitest'), join(modules, 'vitest'), 'dir');
+      else if (vitest !== 'missing') {
+        await fs.mkdir(join(modules, 'vitest'));
+        await fs.writeFile(join(modules, 'vitest', 'package.json'), JSON.stringify({ name: 'vitest', version: vitest.version }));
+      }
+      return runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), cache: memoryCache(), log: () => {} });
+    }
+
+    it('runs under a pnpm install, whose node_modules/.bin/vitest is a script', async () => {
+      const result = await pnpmProject('installed');
+      expect(result.notGreen).toBeUndefined();
+      expect(result.summary.killed).toBe(result.summary.mutants);
+      expect(result.summary.mutants).toBeGreaterThan(0);
+    }, 120_000);
+
+    it.each([
+      ['has no vitest package', 'missing' as const],
+      ['has a vitest package with no release version', { version: 'next' }],
+    ])('refuses a project that %s, saying how to fix it', async (_, vitest) => {
+      await expect(pnpmProject(vitest)).rejects.toThrow(
+        "Could not read the installed Vitest version from node_modules/vitest/package.json, so the mutation check cannot tell how Vitest will read the project's config.\n" +
+          'Reinstall the project\'s dependencies with: npm install',
+      );
+    });
+
+    // No Vitest 3 is installed here, so these read the generated config the way Vitest 3 would.
+    describe('the generated config, as Vitest 3 reads it', () => {
+      const HOOK = 'boardsmith-mutant';
+      const hasHook = (project: { plugins?: Array<{ name?: string }> }) => project.plugins?.some((p) => p.name === HOOK) ?? false;
+
+      async function generated(files: Record<string, string>, vitestMajor: number) {
+        const project = await makeProject({ 'src/rules.ts': RULES, ...files });
+        const workDir = join(project, '.boardsmith', 'run');
+        await fs.mkdir(workDir, { recursive: true });
+        const configPath = await writeRunConfig(project, workDir, vitestMajor);
+        vi.stubEnv('BOARDSMITH_WORKSPACE', undefined);
+        onTestFinished(() => { vi.unstubAllEnvs(); });
+        // Dynamic import: the config this test just generated.
+        const { default: config } = await import(configPath);
+        return { project, workDir, config: await config({ command: 'serve', mode: 'test' }) };
+      }
+
+      it('adds the mutant to each inline project of test.projects, resolving its paths against the root', async () => {
+        const { project, config } = await generated({
+          'vitest.config.ts': `import { defineConfig } from 'vitest/config';
+export default defineConfig({ test: { projects: [{ extends: './a.config.ts', root: './sub', test: { name: 'a' } }, './b.config.ts'] } });
+`,
+        }, 3);
+        const [inline, byPath] = config.test.projects;
+        const hooked = await inline;
+        expect(hasHook(hooked)).toBe(true);
+        expect(hooked.extends).toBe(join(project, 'a.config.ts'));
+        expect(hooked.root).toBe(join(project, 'sub'));
+        expect(hooked.test.name).toBe('a');
+        expect(byPath).toBe('./b.config.ts');
+        expect(config.test.workspace).toBeUndefined();
+      });
+
+      it('adds the mutant to each inline project of an array test.workspace', async () => {
+        const { config } = await generated({
+          'vitest.config.ts': `import { defineConfig } from 'vitest/config';
+export default defineConfig({ test: { workspace: [{ test: { name: 'a' } }] } });
+`,
+        }, 3);
+        expect(hasHook(await config.test.workspace[0])).toBe(true);
+      });
+
+      async function workspaceProject(vitestMajor: number) {
+        const { project, workDir, config } = await generated({
+          'vitest.config.ts': `import { defineConfig } from 'vitest/config';
+export default defineConfig({ test: { workspace: './config/projects.ts' } });
+`,
+          'config/projects.ts': "export default [{ extends: '../a.config.ts', root: '../sub' }];\n",
+        }, vitestMajor);
+        expect(config.test.workspace).toBe(join(workDir, 'workspace.mjs'));
+        // Dynamic import: the workspace module this test just generated.
+        const { default: entries } = await import(config.test.workspace);
+        return { project, hooked: await entries[0] };
+      }
+
+      it("resolves a workspace file's extends and root against that file under Vitest 3", async () => {
+        const { project, hooked } = await workspaceProject(3);
+        expect(hasHook(hooked)).toBe(true);
+        expect(hooked.extends).toBe(join(project, 'a.config.ts'));
+        expect(hooked.root).toBe(join(project, 'sub'));
+      });
+
+      it("resolves a workspace file's root against the project under Vitest 2, as Vitest 2 does", async () => {
+        const { project, hooked } = await workspaceProject(2);
+        expect(hooked.extends).toBe(join(project, 'a.config.ts'));
+        expect(hooked.root).toBe(join(dirname(project), 'sub'));
+      });
+    });
+  });
 
   it('runs nothing when no changed line can be mutated', async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });

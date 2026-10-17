@@ -197,7 +197,9 @@ boardsmith dev --lan               # shorthand for --host 0.0.0.0
 boardsmith dev --lock-teaching
 
 # Keep the Debug panel on with several people seated. Without it, debugging is
-# on only while one browser holds every human seat (solo or hot-seat play)
+# on only while one browser holds every human seat (solo or hot-seat play).
+# With it, every seated person's Decks tab shows every face-down card and
+# every other player's hand, so use it only at a table you trust.
 boardsmith dev --debug
 
 # Don't auto-launch a browser tab (for scripts/CI driving the dev host,
@@ -261,6 +263,20 @@ Before trying a fresh mutant, it completes the unmodified suite and requires
 it to pass. Once Vitest confirms that a mutant made a test fail, the mutation
 check stops that run's workers, including tests already running. A surviving
 mutant still runs the whole suite to completion.
+
+A game with Vitest projects (`test.projects` in its config, or a workspace:
+`test.workspace`, or `vitest.workspace.ts` beside its config) gets each mutant
+in every project defined inline, such as
+`{ extends: './vitest.browser.config.ts' }`. A project named only by a path or
+glob builds its own config, which the mutation check cannot change, so the
+check refuses to run, names the project, and says how to write it inline. That
+includes a workspace that names the root config itself:
+
+```
+Vitest project "my-game" (vitest.config.ts) does not load the mutation check's mutant, so its tests would run against the original code. Name it in the workspace as an inline project, { extends: './vitest.config.ts' }, and run the check again.
+```
+
+Vitest's browser mode is not yet tested with the mutation check.
 
 Stopping mutation verification with Ctrl+C or SIGTERM stops its Vitest process
 group and waits for it to close before removing that run's temporary files.

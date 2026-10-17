@@ -13,10 +13,11 @@
  *
  * Focus is trapped inside the card on mount (A11Y-07). The card is dismissable
  * (D10): a close button and Escape both emit 'dismiss'. Dismissing does not
- * restart or leave the game — the caller (GameShell) hides the card and
- * returns focus to the board.
+ * leave the game — the caller (GameShell) hides the card and returns focus to
+ * the board. It offers no New Game or Rematch: a deployed host has no restart
+ * op (#902).
  */
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import { seatInk } from '../utils/color-contrast';
 
@@ -43,9 +44,7 @@ const props = withDefaults(defineProps<{
 });
 
 const emit = defineEmits<{
-  rematch: [];
-  'new-game': [];
-  /** Card dismissed via close button or Escape. Does not restart or leave. */
+  /** Card dismissed via close button or Escape. Does not leave the game. */
   dismiss: [];
 }>();
 
@@ -58,13 +57,12 @@ function winnerInk(color?: string): string {
   return seatInk(color, 'GameOverCard').ink;
 }
 
-const { open: openTrap, close: closeTrap, handleKeydown } = useFocusTrap(cardRef, {
+const { open: openTrap, handleKeydown } = useFocusTrap(cardRef, {
   escapeToClose: true,
   onClose: () => emit('dismiss'),
 });
 
 onMounted(() => openTrap());
-onBeforeUnmount(() => closeTrap());
 
 // ---------------------------------------------------------------------------
 // Shape set (mirrors PlayersPanel.vue, IA-06): seat index → shape class.
@@ -148,11 +146,6 @@ const titleText = computed(() => {
           </span>
           <span class="winner-name">{{ player.name }}</span>
         </div>
-      </div>
-
-      <div class="game-over-actions">
-        <button class="goc-btn goc-btn--primary" @click="emit('new-game')">New Game</button>
-        <button class="goc-btn goc-btn--ghost" @click="emit('rematch')">Rematch</button>
       </div>
     </div>
   </div>
@@ -278,50 +271,4 @@ const titleText = computed(() => {
 .sh-pentagon .shape { clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%); }
 .sh-shield .shape { clip-path: polygon(50% 0%, 100% 25%, 100% 65%, 50% 100%, 0% 65%, 0% 25%); }
 .sh-plus .shape { clip-path: polygon(33% 0%, 67% 0%, 67% 33%, 100% 33%, 100% 67%, 67% 67%, 67% 100%, 33% 100%, 33% 67%, 0% 67%, 0% 33%, 33% 33%); }
-
-/* Action buttons */
-.game-over-actions {
-  display: flex;
-  gap: var(--bsg-s3);
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.goc-btn {
-  height: 46px;
-  padding: 0 var(--bsg-s5);
-  border-radius: var(--bsg-r-sm);
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 700;
-  font-family: inherit;
-  border: 1px solid transparent;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--bsg-s2);
-  transition: 0.13s ease;
-  white-space: nowrap;
-}
-
-.goc-btn--primary {
-  background: var(--bsg-accent);
-  color: var(--bsg-accent-ink);
-  border-color: color-mix(in srgb, var(--bsg-accent) 70%, black);
-}
-
-.goc-btn--primary:hover {
-  filter: brightness(1.06);
-  transform: translateY(-1px);
-}
-
-.goc-btn--ghost {
-  background: transparent;
-  color: var(--bsg-ink-2);
-  border-color: var(--bsg-line);
-}
-
-.goc-btn--ghost:hover {
-  color: var(--bsg-ink);
-  border-color: var(--bsg-line-2);
-}
 </style>

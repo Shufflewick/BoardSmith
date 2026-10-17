@@ -46,7 +46,8 @@ shares the game's engine. Its options are described in
 ## Exports
 
 - `random()` - Builds one random, valid move from each of the seat's enabled
-  actions, step by step from the engine's own choices, and plays one of them.
+  actions, step by step from the engine's own choices, and one from its held
+  follow-up (`followUpForSeat`), and plays one of them (#911).
   The policy `simulateRandomGames` plays every seat with.
 - `greedy(score)` - Scores every legal move of the seat
   (`enumerateLegalMoves`) with `score(game, move, seat)` and plays the highest,
@@ -82,12 +83,18 @@ shares the game's engine. Its options are described in
   (`{ action, args }`), or `{ noMove: reason }` when its seat has none it can
   play; it may return a promise.
 - `PolicyTurn` - What `choose` is handed: the live `game`, the `seat` to move,
-  its enabled `actions`, its own seeded `random` generator and the game
+  its enabled `actions` (a held follow-up is not among them: read it with
+  `followUpForSeat`), its own seeded `random` generator and the game
   `definition`.
 - `PolicyMove`, `PolicyChoice`, `SimulatedGame`, `PlayGameConfig` - The shapes above.
 
 ## Rules a policy plays by
 
+- **Return only moves the action accepts.** The first move the game rejects
+  ends that game as stuck, with an error that names the action, the move and
+  the policy, followed by the action's own reason. A rejected move is never
+  retried: either the action offers a choice its validation refuses, or the
+  policy built a move outside the choices it was offered.
 - **Read the game, never change it.** A policy is handed the real game. One
   whose work changes it in a way the engine tracks (creates, moves or removes
   an element, draws from `game.random`, or writes through `actionTempState`)

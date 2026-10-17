@@ -216,6 +216,8 @@ export async function loadWorldRuntime(
 interface WorldDevServerOptions {
   readonly cwd: string;
   readonly uiPath: string;
+  /** The rules folder `runtime` was loaded from; a save under it reloads the world (#882). */
+  readonly rulesDir: string;
   /** The rules and the host that runs them, from one bundle (#283). */
   readonly runtime: WorldRuntime;
   readonly displayName: string;
@@ -280,7 +282,7 @@ function closesWorld(run: WorldRun): HeldResource {
 
 /** Open the project's world on `runtime`, and reload it through `reloadRules` on every save. */
 export async function openWorldRun(
-  options: Pick<WorldDevServerOptions, 'cwd' | 'displayName' | 'runtime' | 'reloadRules'> & {
+  options: Pick<WorldDevServerOptions, 'cwd' | 'displayName' | 'runtime' | 'reloadRules' | 'port'> & {
     /**
      * The clock every world host this run opens reads and arms. The Node clock
      * unless given; a test passes one it drives by hand.
@@ -294,7 +296,7 @@ export async function openWorldRun(
   // from production makes a game's local behaviour a poor guide to its
   // published behaviour, which is the whole reason #165 made them parameters.
   const budgets = worldBudgets();
-  const store = options.runtime.openWorldStore(worldStorePath(options.cwd), budgets);
+  const store = options.runtime.openWorldStore(worldStorePath(options.cwd), budgets, { port: options.port });
   const launchedBefore = store.isLaunched();
 
   // A RULE EDIT IS A COORDINATED WORLD RELOAD (#201).
@@ -362,7 +364,7 @@ export async function openWorldRun(
 
   /** A host over this world on `rules`, started; nothing is left open when that fails. */
   async function openOn(rules: WorldRuntime): Promise<LocalWorldHost> {
-    const over = rules.openWorldStore(worldStorePath(options.cwd), budgets);
+    const over = rules.openWorldStore(worldStorePath(options.cwd), budgets, { port: options.port });
     let host: LocalWorldHost;
     try {
       host = hostOver(rules, over);
@@ -545,7 +547,7 @@ export async function startWorldDevServer(
 
   // A RULE EDIT IS A COORDINATED WORLD RELOAD (#201), heard here and carried
   // out by the run's queue (see `openWorldRun`).
-  reloadOnRulesEdit({ vite, rulesDir: join(options.cwd, 'src', 'rules'), cwd: options.cwd, queue: run.queue });
+  reloadOnRulesEdit({ vite, rulesDir: options.rulesDir, cwd: options.cwd, queue: run.queue });
 
   const hostUrl = served.localUrl;
   announceHost({

@@ -61,6 +61,10 @@ const { enableAnimationTestMode, disableAnimationTestMode, getAnimationTrace, cl
   await import('./useAnimationTestMode.js');
 type ActionAnimationConfig = import('./useActionAnimations.js').ActionAnimationConfig;
 type GameElement = import('../types.js').GameViewElement;
+type ControllerActionResult = import('./useActionControllerTypes.js').ControllerActionResult;
+type AfterAutoExecuteListener = import('./useActionControllerTypes.js').AfterAutoExecuteListener;
+const { useActionController } = await import('./useActionController.js');
+const { createMockSendAction, createTestMetadata } = await import('./useActionController.test-helper.js');
 
 function makeElement(attr: string, value: string): HTMLElement {
   const el = document.createElement('div');
@@ -78,15 +82,31 @@ function fakeGameView(): GameElement {
   return {} as GameElement;
 }
 
+/** Stands in for the controller's after-auto-execute channel, so a test can say how an action ended. */
+function fakeController() {
+  let listener: AfterAutoExecuteListener | undefined;
+  return {
+    actionController: {
+      onAfterAutoExecute(l: AfterAutoExecuteListener) {
+        listener = l;
+        return () => { listener = undefined; };
+      },
+    },
+    /** Tell the composable how the action ended; resolves when any flight it starts has finished. */
+    async settle(result: ControllerActionResult): Promise<void> {
+      await listener!(result);
+    },
+  };
+}
+
 /**
- * Poll until a predicate is true (or timeout).
+ * The server's reply to an action, in production order: the state broadcast,
+ * then the action's result (the dev bridge and platform both send them so).
  */
-async function waitFor(predicate: () => boolean, timeout = 500): Promise<void> {
-  const start = Date.now();
-  while (!predicate() && Date.now() - start < timeout) {
-    await nextTick();
-    await new Promise((r) => setTimeout(r, 5));
-  }
+async function reply(gameViewRef: { value: GameElement | null }, fake: ReturnType<typeof fakeController>): Promise<void> {
+  gameViewRef.value = fakeGameView();
+  await nextTick();
+  await fake.settle({ success: true });
 }
 
 const moveConfig: ActionAnimationConfig = {
@@ -97,11 +117,22 @@ const moveConfig: ActionAnimationConfig = {
   duration: 50,
 };
 
+const flipConfig: ActionAnimationConfig = {
+  action: 'forcedPlay',
+  elementSelection: 'card',
+  elementSelector: '[data-card-id="{card}"]',
+  destinationSelector: '[data-card-id="{card}"]',
+  duration: 50,
+};
+
 describe('useActionAnimations', () => {
+  let fake: ReturnType<typeof fakeController>;
+
   beforeEach(() => {
     disableAnimationTestMode();
     clearAnimationTrace();
     devModeState.override = null;
+    fake = fakeController();
   });
 
   afterEach(() => {
@@ -112,24 +143,28 @@ describe('useActionAnimations', () => {
     document.body.innerHTML = '';
   });
 
+  function animate(config: ActionAnimationConfig) {
+    const gameViewRef = ref<GameElement | null>(null);
+    const animations = useActionAnimations({
+      gameView: gameViewRef,
+      animations: [config],
+      actionController: fake.actionController,
+    });
+    return { gameViewRef, ...animations };
+  }
+
   describe('test mode', () => {
     it('records a {kind:"action"} trace from its own interpolated selector strings and skips fly()', async () => {
       makeElement('data-card-id', '42');
       makeElement('data-zone', 'hand');
-
-      const gameViewRef = ref<GameElement | null>(null);
-      const { onBeforeAutoExecute } = useActionAnimations({
-        gameView: gameViewRef,
-        animations: [moveConfig],
-      });
+      const { gameViewRef, onBeforeAutoExecute } = animate(moveConfig);
 
       await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' });
-
       enableAnimationTestMode();
-      gameViewRef.value = fakeGameView();
-      await nextTick();
-      await waitFor(() => getAnimationTrace().length > 0);
+      await reply(gameViewRef, fake);
 
+      // Exactly one trace, kind:'action': test mode never delegates to fly(),
+      // whose own 'fly' trace would make it two.
       expect(getAnimationTrace()).toHaveLength(1);
       expect(getAnimationTrace()[0]).toMatchObject({
         kind: 'action',
@@ -137,10 +172,46 @@ describe('useActionAnimations', () => {
         from: '[data-card-id="42"]',
         to: '[data-zone="hand"]',
       });
-      // useFlyingElements has its own independent 'fly' trace branch; test mode
-      // returning early here must never delegate to fly() (no double-record).
-      // Since only useActionAnimations' own trace was recorded (length 1,
-      // kind:'action'), no separate 'fly' entry was ever pushed.
+    });
+  });
+
+  describe('selector values (#868)', () => {
+    it('finds elements whose interpolated values hold quotes and backslashes', async () => {
+      const cardId = 'ace "high" \\ 1';
+      makeElement('data-card-id', cardId);
+      makeElement('data-zone', 'hand');
+      const { gameViewRef, onBeforeAutoExecute } = animate(moveConfig);
+
+      await onBeforeAutoExecute('moveCard', { cardId, zone: 'hand' });
+      enableAnimationTestMode();
+      await reply(gameViewRef, fake);
+
+      expect(getAnimationTrace()).toEqual([expect.objectContaining({ kind: 'action', element: cardId })]);
+    });
+  });
+
+  describe('selector templates (#868)', () => {
+    const setUp = (config: Partial<ActionAnimationConfig>) => animate({ ...moveConfig, ...config });
+
+    it.each([
+      ['an id selector', { elementSelector: '#card-{cardId}' }],
+      ['an unquoted attribute value', { elementSelector: '[data-card-id={cardId}]' }],
+      ['a single-quoted attribute value', { elementSelector: "[data-card-id='{cardId}']" }],
+      ['a single-quoted string that itself holds ="..."', { elementSelector: `[data-card-id='a="{cardId}"']` }],
+      ['a class name after a quoted value', { elementSelector: '[data-zone="hand"] .card-{cardId}' }],
+      ['the destination selector', { destinationSelector: '.zone-{zone}' }],
+    ])('refuses a placeholder in %s, naming the action and the fix', (_label, config) => {
+      expect(() => setUp(config)).toThrow(/"moveCard".*\{(cardId|zone)\}.*\[data-attribute="\{(cardId|zone)\}"\]/s);
+    });
+
+    it.each([
+      ["MERC's template", { elementSelector: '[data-combatant="{combatantName}"]', destinationSelector: () => null }],
+      ['several attributes and operators', { elementSelector: '.card[data-player="{player}"][data-piece^="{piece}"]' }],
+      ['an escaped quote inside the value', { elementSelector: '[data-card-id="a\\"{cardId}"]' }],
+      ['a :not(...) around the attribute', { elementSelector: '.card:not([data-card-id="{cardId}"])' }],
+      ["a single quote inside the double-quoted value", { elementSelector: `[data-card-id="it's {cardId}"]` }],
+    ])('accepts placeholders inside double-quoted attribute values: %s', (_label, config) => {
+      expect(() => setUp(config)).not.toThrow();
     });
   });
 
@@ -161,34 +232,24 @@ describe('useActionAnimations', () => {
       try {
         const sourceEl = makeElement('data-card-id', '42');
         const destEl = makeElement('data-zone', 'hand');
-        vi.spyOn(sourceEl, 'getBoundingClientRect').mockReturnValue(
-          new DOMRect(0, 0, 60, 84),
-        );
-        vi.spyOn(destEl, 'getBoundingClientRect').mockReturnValue(
-          new DOMRect(200, 200, 60, 84),
-        );
-
-        const gameViewRef = ref<GameElement | null>(null);
-        const { onBeforeAutoExecute, flyingElements } = useActionAnimations({
-          gameView: gameViewRef,
-          animations: [moveConfig],
-        });
+        vi.spyOn(sourceEl, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 60, 84));
+        vi.spyOn(destEl, 'getBoundingClientRect').mockReturnValue(new DOMRect(200, 200, 60, 84));
+        const { gameViewRef, onBeforeAutoExecute, flyingElements } = animate(moveConfig);
 
         await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' });
-
         gameViewRef.value = fakeGameView();
+        await nextTick();
+        const flight = fake.settle({ success: true });
         await vi.advanceTimersByTimeAsync(0);
-        // The flying element should now be in flight.
-        expect(flyingElements.value.length).toBeGreaterThan(0);
+        expect(flyingElements.value).toHaveLength(1);
 
-        // Advance well past the animation duration + cleanup wait so the RAF
-        // chain completes and the setTimeout-based cleanup wait resolves.
+        // Past the animation duration + cleanup wait: the RAF chain and the
+        // setTimeout-based cleanup both finish.
         await vi.advanceTimersByTimeAsync(1000);
+        await flight;
 
         expect(flyingElements.value).toHaveLength(0);
-        // Not in test mode: no trace should have been recorded.
         expect(getAnimationTrace()).toHaveLength(0);
-        // Source element's animating attribute/inline styles must be cleaned up.
         expect(destEl.hasAttribute('data-action-animating')).toBe(false);
       } finally {
         vi.useRealTimers();
@@ -197,57 +258,25 @@ describe('useActionAnimations', () => {
   });
 
   describe('test mode + missing destination (CR-03)', () => {
-    it('surfaces an error in dev mode for a typo\'d destination selector even when test mode is enabled', async () => {
+    it('throws in dev mode for a typo\'d destination selector even when test mode is enabled', async () => {
       devModeState.override = true;
+      // No element matching the destination selector: the authoring bug ANIM-03
+      // exists to catch. Test mode must not record it as a "successful" trace.
+      makeElement('data-card-id', '42');
+      const { gameViewRef, onBeforeAutoExecute } = animate(moveConfig);
 
-      // The throw happens inside Vue's async watch callback (same mechanism
-      // as the non-test-mode "surfaces an error in dev mode" test below) —
-      // capture it via unhandledRejection rather than an awaitable promise.
-      const rejections: unknown[] = [];
-      const onUnhandled = (reason: unknown) => rejections.push(reason);
-      process.on('unhandledRejection', onUnhandled);
+      await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' });
+      enableAnimationTestMode();
 
-      try {
-        makeElement('data-card-id', '42');
-        // No element matching the destination selector — a typo'd/misconfigured
-        // destinationSelector, the canonical authoring bug ANIM-03 exists to
-        // catch. Without CR-03's fix, enabling test mode would record a
-        // "successful" {kind:'action'} trace instead of ever reaching this
-        // fail-loud check.
-
-        const gameViewRef = ref<GameElement | null>(null);
-        const { onBeforeAutoExecute } = useActionAnimations({
-          gameView: gameViewRef,
-          animations: [moveConfig],
-        });
-
-        await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' });
-
-        enableAnimationTestMode();
-        gameViewRef.value = fakeGameView();
-        await nextTick();
-        await waitFor(() => rejections.length > 0);
-
-        expect(rejections).toHaveLength(1);
-        expect(String((rejections[0] as Error).message)).toMatch(/Could not find destination element/i);
-        // No trace should have been recorded — the fail-loud throw fired
-        // before the test-mode trace branch was ever reached.
-        expect(getAnimationTrace()).toHaveLength(0);
-      } finally {
-        process.off('unhandledRejection', onUnhandled);
-      }
+      await expect(reply(gameViewRef, fake)).rejects.toThrow(/Could not find destination element/i);
+      expect(getAnimationTrace()).toHaveLength(0);
     });
   });
 
   describe('fail-loud missing source/destination element', () => {
     it('throws in dev mode when the source element is missing', async () => {
       devModeState.override = true;
-
-      const gameViewRef = ref<GameElement | null>(null);
-      const { onBeforeAutoExecute } = useActionAnimations({
-        gameView: gameViewRef,
-        animations: [moveConfig],
-      });
+      const { onBeforeAutoExecute } = animate(moveConfig);
 
       await expect(
         onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' }),
@@ -257,12 +286,7 @@ describe('useActionAnimations', () => {
     it('console.errors (does not throw) in prod mode when the source element is missing', async () => {
       devModeState.override = false;
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-      const gameViewRef = ref<GameElement | null>(null);
-      const { onBeforeAutoExecute } = useActionAnimations({
-        gameView: gameViewRef,
-        animations: [moveConfig],
-      });
+      const { onBeforeAutoExecute } = animate(moveConfig);
 
       await expect(
         onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' }),
@@ -275,68 +299,32 @@ describe('useActionAnimations', () => {
     it('console.errors (does not throw) in prod mode when the destination element is missing', async () => {
       devModeState.override = false;
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
       makeElement('data-card-id', '42');
-      // No destination element created.
-
-      const gameViewRef = ref<GameElement | null>(null);
-      const { onBeforeAutoExecute } = useActionAnimations({
-        gameView: gameViewRef,
-        animations: [moveConfig],
-      });
+      const { gameViewRef, onBeforeAutoExecute } = animate(moveConfig);
 
       await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' });
-      gameViewRef.value = fakeGameView();
-      await nextTick();
-      await waitFor(() => consoleErrorSpy.mock.calls.length > 0);
+      await reply(gameViewRef, fake);
 
-      expect(consoleErrorSpy).toHaveBeenCalled();
+      expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
       expect(String(consoleErrorSpy.mock.calls[0]?.[0])).toMatch(/Could not find destination element/i);
     });
 
-    it('surfaces an error in dev mode when the destination element is missing', async () => {
+    it('throws in dev mode when the destination element is missing, and shows the hidden source again', async () => {
       devModeState.override = true;
+      const card = makeElement('data-card-id', '42');
+      const { gameViewRef, onBeforeAutoExecute } = animate({ ...moveConfig, hideDestination: true });
 
-      // The throw happens inside Vue's async watch callback, so it never
-      // reaches an awaitable promise on our side - it surfaces as an
-      // unhandled rejection (Vue logs+rethrows via its own error handling).
-      // Capture it directly to prove the throw actually fired.
-      const rejections: unknown[] = [];
-      const onUnhandled = (reason: unknown) => rejections.push(reason);
-      process.on('unhandledRejection', onUnhandled);
+      await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' });
+      expect(card.style.opacity).toBe('0');
 
-      try {
-        makeElement('data-card-id', '42');
-        // No destination element created.
-
-        const gameViewRef = ref<GameElement | null>(null);
-        const { onBeforeAutoExecute } = useActionAnimations({
-          gameView: gameViewRef,
-          animations: [moveConfig],
-        });
-
-        await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' });
-        gameViewRef.value = fakeGameView();
-        await nextTick();
-        await waitFor(() => rejections.length > 0);
-
-        expect(rejections).toHaveLength(1);
-        expect(String((rejections[0] as Error).message)).toMatch(/Could not find destination element/i);
-      } finally {
-        process.off('unhandledRejection', onUnhandled);
-      }
+      await expect(reply(gameViewRef, fake)).rejects.toThrow(/Could not find destination element/i);
+      expect(card.style.opacity).toBe('');
+      expect(card.style.pointerEvents).toBe('');
+      expect(card.hasAttribute('data-action-animating')).toBe(false);
     });
   });
 
   describe('hide observer lifetime (#731)', () => {
-    const flipConfig: ActionAnimationConfig = {
-      action: 'flipCard',
-      elementSelection: 'card',
-      elementSelector: '[data-card-id="{card}"]',
-      destinationSelector: '[data-card-id="{card}"]',
-      duration: 50,
-    };
-
     /** Show the card again, then make a DOM change a live observer would react to. */
     async function revealAndMutate(card: HTMLElement): Promise<void> {
       card.style.removeProperty('opacity');
@@ -345,16 +333,13 @@ describe('useActionAnimations', () => {
     }
 
     it('stops hiding the card once a refused action is followed by another action', async () => {
-      const card = makeElement('data-card-id', '7');
-      const { onBeforeAutoExecute } = useActionAnimations({
-        gameView: ref<GameElement | null>(null),
-        animations: [flipConfig],
-      });
+      const card = makeElement('data-card-id', '42');
+      const { onBeforeAutoExecute } = animate(flipConfig);
 
-      await onBeforeAutoExecute('flipCard', { card: '7' });
+      await onBeforeAutoExecute('forcedPlay', { card: '42' });
       expect(card.style.opacity).toBe('0');
 
-      // Server refused: gameView never changes, the player starts another action.
+      // The player starts another action before this one was settled.
       await onBeforeAutoExecute('pass', {});
       await revealAndMutate(card);
 
@@ -362,17 +347,178 @@ describe('useActionAnimations', () => {
     });
 
     it('stops hiding the card when unmounted mid-animation', async () => {
-      const card = makeElement('data-card-id', '7');
+      const card = makeElement('data-card-id', '42');
       const scope = effectScope();
-      const { onBeforeAutoExecute } = scope.run(() =>
-        useActionAnimations({ gameView: ref<GameElement | null>(null), animations: [flipConfig] }),
-      )!;
+      const { onBeforeAutoExecute } = scope.run(() => animate(flipConfig))!;
 
-      await onBeforeAutoExecute('flipCard', { card: '7' });
+      await onBeforeAutoExecute('forcedPlay', { card: '42' });
       scope.stop();
       await revealAndMutate(card);
 
       expect(card.style.opacity).toBe('');
+    });
+  });
+
+  describe('an action that never happens leaves no trace (#861)', () => {
+    /** A card with inline styles of its own, which the hook must put back exactly. */
+    function styledCard(): HTMLElement {
+      const card = makeElement('data-card-id', '42');
+      vi.spyOn(card, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 60, 84));
+      card.style.setProperty('opacity', '0.5');
+      card.style.setProperty('transition', 'transform 1s', 'important');
+      card.style.pointerEvents = 'auto';
+      return card;
+    }
+
+    function expectOriginalLook(card: HTMLElement): void {
+      expect(card.style.getPropertyValue('opacity')).toBe('0.5');
+      expect(card.style.getPropertyPriority('opacity')).toBe('');
+      expect(card.style.getPropertyValue('transition')).toBe('transform 1s');
+      expect(card.style.getPropertyPriority('transition')).toBe('important');
+      expect(card.style.pointerEvents).toBe('auto');
+      expect(card.hasAttribute('data-action-animating')).toBe(false);
+    }
+
+    /** Let the watcher, the send and the outcome listeners finish. */
+    async function settle(): Promise<void> {
+      for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 0));
+    }
+
+    /** The real controller auto-executing forcedPlay, with the server's answer held until `answer` is called. */
+    function playThroughController() {
+      let answer!: (result: ControllerActionResult) => void;
+      let fail!: (err: Error) => void;
+      const sendAction = createMockSendAction().mockImplementation(
+        () => new Promise((resolve, reject) => { answer = resolve; fail = reject; }),
+      );
+      const controller = useActionController({
+        sendAction,
+        availableActions: ref(['forcedPlay']),
+        actionMetadata: ref(createTestMetadata()),
+        isMyTurn: ref(true),
+        autoFill: true,
+        autoExecute: true,
+      });
+      const gameViewRef = ref<GameElement | null>(null);
+      // A flight that outlasts the test, so its count is read while it is still in the air.
+      const animations = useActionAnimations({
+        gameView: gameViewRef, animations: [{ ...flipConfig, duration: 60_000 }], actionController: controller,
+      });
+      controller.onBeforeAutoExecute(animations.onBeforeAutoExecute);
+      return {
+        controller, animations, gameViewRef, sendAction,
+        answer: (r: ControllerActionResult) => answer(r),
+        fail: (err: Error) => fail(err),
+      };
+    }
+
+    it('restores the card when the server rejects the action, and a later update plays nothing', async () => {
+      const card = styledCard();
+      const { controller, animations, gameViewRef, answer } = playThroughController();
+
+      await controller.start('forcedPlay');
+      await settle();
+      expect(card.style.opacity).toBe('0');
+
+      answer({ success: false, error: 'Not allowed' });
+      await settle();
+      expectOriginalLook(card);
+
+      gameViewRef.value = fakeGameView();
+      await settle();
+      expect(animations.flyingElements.value).toHaveLength(0);
+      expectOriginalLook(card);
+    });
+
+    it('restores the card when the transport fails', async () => {
+      const card = styledCard();
+      const { controller, animations, fail } = playThroughController();
+
+      await controller.start('forcedPlay');
+      await settle();
+      expect(card.style.opacity).toBe('0');
+
+      fail(new Error('Connection lost'));
+      await settle();
+      expectOriginalLook(card);
+      expect(animations.flyingElements.value).toHaveLength(0);
+    });
+
+    it('restores the card when the action is cancelled before it is sent', async () => {
+      const card = styledCard();
+      const { controller, sendAction } = playThroughController();
+      controller.onBeforeAutoExecute(() => {
+        expect(card.style.opacity).toBe('0');
+        controller.cancel();
+      });
+
+      await controller.start('forcedPlay');
+      await settle();
+      expectOriginalLook(card);
+      expect(sendAction).not.toHaveBeenCalled();
+    });
+
+    it('restores the card when a game wraps the hook and does not return its value', async () => {
+      const card = styledCard();
+      const sendAction = createMockSendAction().mockResolvedValue({ success: false, error: 'Not allowed' });
+      const controller = useActionController({
+        sendAction,
+        availableActions: ref(['forcedPlay']),
+        actionMetadata: ref(createTestMetadata()),
+        isMyTurn: ref(true),
+        autoFill: true,
+        autoExecute: true,
+      });
+      const animations = useActionAnimations({
+        gameView: ref<GameElement | null>(null), animations: [flipConfig], actionController: controller,
+      });
+      controller.onBeforeAutoExecute(async (name, args) => { await animations.onBeforeAutoExecute(name, args); });
+
+      await controller.start('forcedPlay');
+      await settle();
+      expectOriginalLook(card);
+    });
+
+    it('an update that is not the reply does not play the flight; the reply plays it exactly once', async () => {
+      const card = styledCard();
+      const { controller, animations, gameViewRef, answer } = playThroughController();
+
+      await controller.start('forcedPlay');
+      await settle();
+
+      // An opponent's move arrives while ours is still in flight.
+      gameViewRef.value = fakeGameView();
+      await settle();
+      expect(animations.flyingElements.value).toHaveLength(0);
+      expect(card.style.opacity).toBe('0');
+
+      // Our own reply: its state, then its result. A later update plays nothing more.
+      gameViewRef.value = fakeGameView();
+      await nextTick();
+      answer({ success: true });
+      await settle();
+      gameViewRef.value = fakeGameView();
+      await settle();
+      expect(animations.flyingElements.value).toHaveLength(1);
+      animations.cancelAll();
+    });
+
+    it('plays the flight exactly once when the result comes before the state', async () => {
+      styledCard();
+      const { controller, animations, gameViewRef, answer } = playThroughController();
+
+      await controller.start('forcedPlay');
+      await settle();
+      answer({ success: true });
+      await settle();
+      expect(animations.flyingElements.value).toHaveLength(0);
+
+      gameViewRef.value = fakeGameView();
+      await settle();
+      gameViewRef.value = fakeGameView();
+      await settle();
+      expect(animations.flyingElements.value).toHaveLength(1);
+      animations.cancelAll();
     });
   });
 });

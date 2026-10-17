@@ -35,6 +35,7 @@
  */
 
 import type { FlyConfig } from './useFlyingElements.js';
+import { escapeCssString } from '../utils/css-string.js';
 
 export interface CardForAnimation {
   /** Bounding rect of the card's original position */
@@ -83,7 +84,7 @@ export function getPlayerStatElement(
   statName: string
 ): HTMLElement | null {
   return document.querySelector(
-    `[data-player-stat="${statName}"][data-player-seat="${playerSeat}"]`
+    `[data-player-stat="${escapeCssString(statName)}"][data-player-seat="${playerSeat}"]`
   );
 }
 
