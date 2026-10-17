@@ -14,6 +14,7 @@ import {
   atomicWriteFile,
   ledgerFilePath,
   listRunIds,
+  missingRunMessage,
   readLedgerOrThrow,
   RUN_ID_RE,
   runRootDir,
@@ -254,7 +255,12 @@ export async function resolveFreshTranscription(
   try {
     entryNames = await fs.readdir(stagingDir, { recursive: true });
   } catch {
-    entryNames = [];
+    // No slices folder: the run itself is missing or not a run, not an empty transcription (#1002).
+    return {
+      scopeLimited: true,
+      reason: await missingRunMessage(projectDir, resolvedRunId),
+      missingPath: relative(projectDir, stagingDir),
+    };
   }
   // Exclude any path with a `superseded/` directory component (176-06 ADDED ITEM 1, promoted
   // from 176-05's reported finding). A staged tree MAY retain a `slices/superseded/` subfolder

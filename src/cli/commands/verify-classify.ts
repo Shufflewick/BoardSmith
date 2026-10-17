@@ -35,6 +35,7 @@ import {
   ledgerFilePath,
   listRunIds,
   parseLedgerBody,
+  missingRunMessage,
   readLedgerOrThrow,
   resolveLedgerState,
   stagingSlicesDir,
@@ -657,14 +658,7 @@ async function resolveRunId(projectDir: string, runId?: string): Promise<string>
       );
     }
     const existing = await listRunIds(projectDir);
-    if (!existing.includes(runId)) {
-      throw new Error(
-        `No verify run "${runId}" found in ${projectDir}.\n` +
-          (existing.length > 0
-            ? `Runs that do exist: ${existing.join(', ')}.`
-            : `No verify runs exist yet — run \`boardsmith verify-run-init\` first.`),
-      );
-    }
+    if (!existing.includes(runId)) throw new Error(await missingRunMessage(projectDir, runId));
     return runId;
   }
   const runIds = await listRunIds(projectDir);

@@ -953,10 +953,39 @@ export interface VerifyRunRangeActionResult {
 }
 
 /**
- * Reads the ledger file or throws the actionable "no verify run found" error. Exported (174-02) —
- * `verify-classify.ts` is the second caller of this read helper, sharing the same error message
- * and the same "run must be initialized first" contract.
+ * Why `runId` names no usable run, and what to do about it: the one message every `--run-id`
+ * command gives. Never suggests init with this id: a mistyped id would become a real, latest run (#833).
  */
+export async function missingRunMessage(projectDir: string, runId: string): Promise<string> {
+  const runDir = runRootDir(projectDir, runId);
+  if (await exists(runDir)) {
+    return (
+      `${relative(projectDir, runDir)}/ has no RUN.md, so verify-run-init did not make it.\n` +
+      `Remove that folder; it is not a verify run.`
+    );
+  }
+  const existing: string[] = [];
+  for (const id of await listRunIds(projectDir)) {
+    if (await exists(ledgerFilePath(projectDir, id))) existing.push(id);
+  }
+  return (
+    `No verify run "${runId}" found in ${projectDir}.\n` +
+    (existing.length > 0
+      ? `Runs that do exist: ${existing.join(', ')}.`
+      : `No verify runs exist yet. Run \`boardsmith verify-run-init\` first.`)
+  );
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await fs.access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Reads the run's RUN.md, or throws `missingRunMessage` when the run does not exist. */
 export async function readLedgerOrThrow(
   ledgerFile: string,
   runId: string,
@@ -965,14 +994,7 @@ export async function readLedgerOrThrow(
   try {
     return await fs.readFile(ledgerFile, 'utf-8');
   } catch {
-    // Never suggest init with this id: a mistyped id would then become a real, latest run (#833).
-    const existing = await listRunIds(projectDir);
-    throw new Error(
-      `No verify run "${runId}" found in ${projectDir}.\n` +
-        (existing.length > 0
-          ? `Runs that do exist: ${existing.join(', ')}.`
-          : `No verify runs exist yet — run \`boardsmith verify-run-init\` first.`),
-    );
+    throw new Error(await missingRunMessage(projectDir, runId));
   }
 }
 

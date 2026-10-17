@@ -190,6 +190,22 @@ describe('resolveFreshTranscription', () => {
     }
   });
 
+  it('a mistyped --run-id is reported as no such run, not as an empty slices folder (#1002)', async () => {
+    const project = join(dir, 'game');
+    const runId = '2026-07-30T10-00-00Z';
+    const slices = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'slices');
+    await fs.mkdir(slices, { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'RUN.md'), '# Verify Run\n');
+    await fs.writeFile(join(slices, '01-setup.md'), '# Setup\n');
+    const result = await resolveFreshTranscription(project, '2099-01-01T00-00-00Z');
+    expect(result.scopeLimited).toBe(true);
+    if (result.scopeLimited) {
+      expect(result.reason).toContain('No verify run "2099-01-01T00-00-00Z" found');
+      expect(result.reason).toContain(`Runs that do exist: ${runId}.`);
+      expect(result.reason).not.toMatch(/exists but contains no/);
+    }
+  });
+
   it('returns scopeLimited for a malformed --run-id, never throwing', async () => {
     const project = join(dir, 'game');
     await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
