@@ -46,7 +46,8 @@ shares the game's engine. Its options are described in
 ## Exports
 
 - `random()` - Builds one random, valid move from each of the seat's enabled
-  actions, step by step from the engine's own choices, and plays one of them.
+  actions, step by step from the engine's own choices, and one from its held
+  follow-up (`followUpForSeat`), and plays one of them (#911).
   The policy `simulateRandomGames` plays every seat with.
 - `greedy(score)` - Scores every legal move of the seat
   (`enumerateLegalMoves`) with `score(game, move, seat)` and plays the highest,
@@ -82,7 +83,8 @@ shares the game's engine. Its options are described in
   (`{ action, args }`), or `{ noMove: reason }` when its seat has none it can
   play; it may return a promise.
 - `PolicyTurn` - What `choose` is handed: the live `game`, the `seat` to move,
-  its enabled `actions`, its own seeded `random` generator and the game
+  its enabled `actions` (a held follow-up is not among them: read it with
+  `followUpForSeat`), its own seeded `random` generator and the game
   `definition`.
 - `PolicyMove`, `PolicyChoice`, `SimulatedGame`, `PlayGameConfig` - The shapes above.
 
