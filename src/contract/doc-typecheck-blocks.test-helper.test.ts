@@ -16,6 +16,13 @@ describe('the doc typecheck markers (#511)', () => {
     ]);
   });
 
+  it('reads a marked block from a doc saved with CRLF line endings (#808)', () => {
+    const text = block('<!-- typecheck: game src/a.ts -->').replaceAll('\n', '\r\n');
+    expect(parseMarkedBlocks('docs/a.md', text, 'game')).toEqual([
+      { doc: 'docs/a', path: 'src/a.ts', code: 'export {};\r\n' },
+    ]);
+  });
+
   it('refuses a kind no gate compiles, naming the doc and the known kinds', () => {
     expect(() => parseMarkedBlocks('docs/a.md', block('<!-- typecheck: gmae src/a.ts -->'), 'game')).toThrow(
       /docs\/a\.md marks a block "gmae".*"game", "board"/,

@@ -13,7 +13,7 @@
  * The import is cache-busted, so loading again after a save is a genuine
  * re-read of the author's edited source.
  */
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 
 import type { GameStateSnapshot } from '../../engine/utils/index.js';
 import type { executeOp as sessionExecuteOp, GameDefinition, RulesReload } from '../../session/index.js';
@@ -139,7 +139,7 @@ export function tableRulesReloadQueue(args: {
       const refusal = tableShapeChange(args.running, runtime.gameDefinition);
       if (refusal !== null) throw new Error(refusal);
       const said = describeTableReload(await args.host.reloadRules(runtime.rules));
-      if (said !== null) console.log(chalk.green(`  ${said}\n`));
+      if (said !== null) console.log(styleText('green', `  ${said}\n`));
     },
     tell: (notice) => args.host.tellRulesReload(notice),
   });

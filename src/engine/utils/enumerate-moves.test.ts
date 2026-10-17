@@ -261,6 +261,25 @@ describe('enumerateLegalMoves: duplicate-valued multiSelect choices', () => {
       ['gold', 'silver'],
     ]);
   });
+
+  it('applies the size limit to the distinct combinations (#967)', () => {
+    // 20 equal coins and one other, any 1 to 20 of them: over a million picks of coins, 40 distinct.
+    class PurseGame extends Game<PurseGame, Player> {
+      constructor(options: GameOptions) {
+        super(options);
+        this.registerAction(
+          Action.create<PurseGame>('spend')
+            .chooseFrom('coins', { choices: [...Array(20).fill('gold'), 'silver'], multiSelect: { min: 1, max: 20 } })
+            .execute(() => ({ success: true })),
+        );
+        this.setFlow({ root: actionStep({ actions: ['spend'] }) });
+      }
+    }
+    const game = new PurseGame({ playerCount: 1, playerNames: ['Alice'], seed: 'purse' });
+    game.startFlow();
+
+    expect(enumerateLegalMoves(game, 1)).toHaveLength(40);
+  });
 });
 
 // ============================================================================

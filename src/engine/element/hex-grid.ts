@@ -12,12 +12,10 @@ import { firstCell } from './cell-index.js';
 export type HexOrientation = 'flat' | 'pointy';
 
 /**
- * Hex coordinate systems
- * - offset: Uses col/row with offset for even/odd rows
- * - axial: Uses q/r coordinates (efficient for most operations)
- * - cube: Uses x/y/z coordinates where x + y + z = 0
+ * Hex coordinate system. Axial (q/r) is the only one BoardSmith draws; the UI
+ * refuses any other value a JavaScript game sets (#866).
  */
-export type HexCoordSystem = 'offset' | 'axial' | 'cube';
+export type HexCoordSystem = 'axial';
 
 /**
  * Hexagonal grid board container.
@@ -27,7 +25,7 @@ export type HexCoordSystem = 'offset' | 'axial' | 'cube';
  *
  * **Key features:**
  * - Flat-top or pointy-top orientation
- * - Axial or cube coordinate systems
+ * - Axial coordinates, in the cell attributes named by `$qCoord`/`$rCoord`
  * - Automatic hex layout rendering
  * - The cell at a coordinate, `board.first(Tile, { q, r })` with exactly the
  *   `$qCoord`/`$rCoord` attributes (default `q` and `r`), is a lookup, not a
@@ -94,22 +92,16 @@ export class HexGrid<G extends Game = any, P extends Player = any> extends Space
   $coordSystem: HexCoordSystem = 'axial';
 
   /**
-   * Name of the Q coordinate attribute on HexCell children (axial/cube)
+   * Name of the Q coordinate attribute on HexCell children
    * @default 'q'
    */
   $qCoord?: string;
 
   /**
-   * Name of the R coordinate attribute on HexCell children (axial/cube)
+   * Name of the R coordinate attribute on HexCell children
    * @default 'r'
    */
   $rCoord?: string;
-
-  /**
-   * Name of the S coordinate attribute on HexCell children (cube only)
-   * For cube coordinates, s = -q - r
-   */
-  $sCoord?: string;
 
   /**
    * Size of hexes in pixels (width for flat, height for pointy)
@@ -142,7 +134,7 @@ export class HexGrid<G extends Game = any, P extends Player = any> extends Space
  * Single cell within a hexagonal grid.
  *
  * HexCell represents one hexagonal position in a HexGrid. Extend this class
- * to add coordinate attributes (q/r for axial, q/r/s for cube) and any
+ * to add axial coordinate attributes (q/r) and any
  * game-specific properties.
  *
  * @example

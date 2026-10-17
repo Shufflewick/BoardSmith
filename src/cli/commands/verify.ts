@@ -36,6 +36,8 @@
  * The result goes to `.boardsmith/verify/<commit>.json` (`lib/verify-result.ts`), with whether the
  * tree stayed clean while the checks ran. The exit code is non-zero when any check failed, and also
  * when the tree changed during the run; such a run never replaces a clean passing result on file.
+ * When what the tests run with (BoardSmith, the installed or linked packages) changed during the run,
+ * nothing is recorded and no mutant outcome is kept: the run stops with an error naming what changed (#932).
  *
  * `--check` runs nothing. It exits 0 only when HEAD, on a clean tree, has a passing full result.
  * With `--chunk <slug>` it asks instead for that chunk's passing fast checks, the question
@@ -43,10 +45,10 @@
  */
 import { existsSync, promises as fs, readFileSync } from 'node:fs';
 import { join, relative, resolve as pathResolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { chunkVerifyBase } from '../lib/chunk-commits.js';
 import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
-import { type MutantCache, openMutantCache } from '../lib/mutant-cache.js';
+import { type MutantCache, captureExecutionContext, executionContextChange, openMutantCache } from '../lib/mutant-cache.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { projectUiProblem, requireGameProject } from '../lib/game-project.js';
 import { chunkMdPath } from '../lib/project-paths.js';
@@ -202,6 +204,8 @@ interface VerifyContext {
   changed: ChangedSince;
   /** Mutant outcomes of earlier runs, for this commit's code and tests (`lib/mutant-cache.ts`), opened on first ask. */
   mutantCache: () => Promise<MutantCache>;
+  /** What changed in the execution context since the run began, or undefined while nothing has (#932). */
+  contextChange: () => Promise<string | undefined>;
   earlier: ReadonlyMap<VerifyCheckName, VerifyCheckResult>;
   log: (line: string) => void;
   /**
@@ -362,7 +366,7 @@ async function buildCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
     await buildProject(ctx.projectDir, {});
     return { passed: true, summary: '`boardsmith build` passed.' };
   } catch (error) {
-    console.log(chalk.red((error as Error).message));
+    console.log(styleText('red', (error as Error).message));
     return { passed: false, summary: '`boardsmith build` failed.', next: 'Run `boardsmith build` to see why.' };
   }
 }
@@ -373,7 +377,7 @@ async function validateCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
     await validateProject(ctx.projectDir, { typeCheck: await ctx.typeCheck() });
     return { passed: true, summary: '`boardsmith validate` passed.' };
   } catch (error) {
-    console.log(chalk.red((error as Error).message));
+    console.log(styleText('red', (error as Error).message));
     return { passed: false, summary: '`boardsmith validate` failed.', next: 'Run `boardsmith validate` to see why.' };
   }
 }
@@ -457,6 +461,7 @@ async function mutationCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
     added: ctx.changed.code,
     cache: await ctx.mutantCache(),
     log: ctx.log,
+    contextChange: ctx.contextChange,
   });
   return mutationVerdict(since, run);
 }
@@ -557,7 +562,7 @@ async function runChecks(
 ): Promise<VerifyCheckResult[]> {
   const earlier = new Map<VerifyCheckName, VerifyCheckResult>();
   for (const name of names) {
-    console.log(chalk.cyan(`\nboardsmith verify: ${name}\n`));
+    console.log(styleText('cyan', `\nboardsmith verify: ${name}\n`));
     let outcome: VerifyCheckOutcome;
     try {
       outcome = await checks[name]({ ...ctx, earlier });
@@ -589,10 +594,14 @@ export async function runVerify(options: {
   const head = await verifiableCommit(projectDir);
   await requireResultIgnored(projectDir);
   const base = await runBase(projectDir, options);
-  const log = options.log ?? ((line: string) => console.error(chalk.dim(line)));
+  const log = options.log ?? ((line: string) => console.error(styleText('dim', line)));
+  // One capture for the whole run: the mutant cache keys by it, and it is checked again at the end.
+  const context = await captureExecutionContext(projectDir);
+  const contextChange = () => executionContextChange(projectDir, context);
+  const boardsmithCommit = await currentBoardsmithCommit();
   // Only the mutation check reads the cache, so a run without it (`--chunk`) never opens it.
   let mutantCache: Promise<MutantCache> | undefined;
-  const openCache = () => (mutantCache ??= openMutantCache(projectDir).then((cache) => {
+  const openCache = () => (mutantCache ??= openMutantCache(projectDir, context).then((cache) => {
     if (cache.unavailable !== undefined) log(`${cache.unavailable}; every mutant runs.`);
     return cache;
   }));
@@ -605,9 +614,18 @@ export async function runVerify(options: {
     chunk: options.chunk,
     changed: await changedSince(projectDir, base.commit),
     mutantCache: openCache,
+    contextChange,
     log,
   }, options.chunk === undefined ? VERIFY_CHECK_NAMES : CHUNK_VERIFY_CHECK_NAMES);
 
+  const change = await contextChange();
+  if (change !== undefined) {
+    throw new Error(
+      `What the tests run with changed while \`boardsmith verify\` ran: ${change}. Checks after the change ran against ` +
+        'different code, so no result was recorded and no mutant outcome was saved. Run `boardsmith verify` again in a ' +
+        'checkout whose BoardSmith and installed packages stay unchanged until it finishes, such as a separate BoardSmith worktree nothing else edits.',
+    );
+  }
   const after = await checkoutState(projectDir);
   const cleanTree = !('problem' in after) && after.clean && after.commit === head;
   // The cache keys outcomes by the commit's files; a run whose files changed under it keeps none.
@@ -618,7 +636,7 @@ export async function runVerify(options: {
     base: { ref: base.ref, commit: base.commit },
     chunk: options.chunk,
     checks,
-    boardsmithCommit: await currentBoardsmithCommit(),
+    boardsmithCommit,
   });
   return { result, path: await recordResult(projectDir, result) };
 }
@@ -627,30 +645,30 @@ export async function runVerify(options: {
 function printVerdict(result: VerifyResult): void {
   if (!result.cleanTree) {
     console.error(
-      chalk.red(
+      styleText('red',
         '\nThe working tree changed while the checks ran, so this run does not count for a done claim. ' +
           'Commit or remove the changes (`git status` lists them), then run `boardsmith verify` again.',
       ),
     );
   } else if (result.passed && result.chunk !== null) {
     console.log(
-      chalk.green(
+      styleText('green',
         `\nFast checks passed for ${short(result.commit)}: chunk "${result.chunk}"'s tests and typecheck. ` +
           'The full suite, build, validate, smoke and mutation checks run at publish (`boardsmith verify`).',
       ),
     );
   } else if (result.passed && skippedClause(result) !== '') {
-    console.log(chalk.yellow(`\nPassed for ${short(result.commit)}${skippedClause(result)}.`));
+    console.log(styleText('yellow', `\nPassed for ${short(result.commit)}${skippedClause(result)}.`));
   } else if (result.passed) {
-    console.log(chalk.green(`\nEvery check passed for ${short(result.commit)}.`));
+    console.log(styleText('green', `\nEvery check passed for ${short(result.commit)}.`));
   } else {
     const failed = result.checks.filter((c) => !c.passed).map((c) => c.name);
-    console.error(chalk.red(`\nFailed: ${failed.join(', ')}. Fix what each names above, commit, and run \`boardsmith verify\` again.`));
+    console.error(styleText('red', `\nFailed: ${failed.join(', ')}. Fix what each names above, commit, and run \`boardsmith verify\` again.`));
   }
 }
 
 function printCheck(check: VerifyCheckResult): void {
-  const mark = check.skipped ? chalk.yellow('skip') : check.passed ? chalk.green('pass') : chalk.red('FAIL');
+  const mark = check.skipped ? styleText('yellow', 'skip') : check.passed ? styleText('green', 'pass') : styleText('red', 'FAIL');
   console.log(`  ${mark}  ${check.name.padEnd(10)} ${check.summary}`);
   for (const f of check.findings ?? []) {
     console.log(`          ${f.file}:${f.line}  ${f.detail}`);
@@ -674,7 +692,7 @@ function printResult(result: VerifyResult, path: string | undefined, projectDir:
 async function checkVerified(projectDir: string, chunk: string | undefined): Promise<void> {
   const problem = await verifiedProblem(projectDir, chunk);
   if (problem !== undefined) {
-    console.error(chalk.red(problem));
+    console.error(styleText('red', problem));
     process.exitCode = 1;
     return;
   }
@@ -683,7 +701,7 @@ async function checkVerified(projectDir: string, chunk: string | undefined): Pro
   const onFile = 'commit' in state ? await readVerifyResult(projectDir, state.commit) : undefined;
   const skipped = onFile === undefined || onFile === 'unreadable' ? '' : skippedClause(onFile);
   const ran = chunk === undefined ? '`boardsmith verify`' : `\`boardsmith verify --chunk ${chunk}\` (the chunk's tests and typecheck)`;
-  console.log(chalk.green(`${head} passed ${ran} on a clean tree${skipped}.`));
+  console.log(styleText('green', `${head} passed ${ran} on a clean tree${skipped}.`));
 }
 
 /**

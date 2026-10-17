@@ -16,6 +16,7 @@
  */
 
 import type { CSSProperties } from 'vue';
+import type { ImageRef } from '../../engine/element/types.js';
 
 /**
  * Parsed image information.
@@ -23,27 +24,16 @@ import type { CSSProperties } from 'vue';
  */
 export type ImageInfo =
   | { type: 'url'; src: string }
-  | { type: 'sprite'; sprite: string; x: number; y: number; width: number; height: number };
+  | ({ type: 'sprite' } & SpriteData);
 
 /**
- * Sprite sheet object format.
+ * Sprite sheet object format: where one sprite sits on its sheet, the sprite's
+ * own `width` and `height`, and the whole sheet image's `sheetWidth` and
+ * `sheetHeight`, all in pixels.
  */
-export interface SpriteData {
-  /** Path to the sprite sheet image */
-  sprite: string;
-  /** X coordinate in the sprite sheet (pixels) */
-  x: number;
-  /** Y coordinate in the sprite sheet (pixels) */
-  y: number;
-  /** Width of this sprite (pixels) */
-  width?: number;
-  /** Height of this sprite (pixels) */
-  height?: number;
-}
+export type SpriteData = Exclude<ImageRef, string>;
 
-// Default card dimensions in sprite sheets (standard playing cards)
-const DEFAULT_CARD_WIDTH = 238;
-const DEFAULT_CARD_HEIGHT = 333;
+const SPRITE_SIZES = ['width', 'height', 'sheetWidth', 'sheetHeight'] as const;
 
 /**
  * Parse image data from cardData - handles both string URLs and sprite objects.
@@ -58,9 +48,11 @@ const DEFAULT_CARD_HEIGHT = 333;
  * // => { type: 'url', src: '/images/card.png' }
  *
  * // Sprite object
- * parseImageInfo({ sprite: '/cards.png', x: 0, y: 0, width: 238, height: 333 })
- * // => { type: 'sprite', sprite: '/cards.png', x: 0, y: 0, width: 238, height: 333 }
+ * parseImageInfo({ sprite: '/cards.png', x: 0, y: 0, width: 238, height: 333, sheetWidth: 3094, sheetHeight: 1665 })
+ * // => { type: 'sprite', sprite: '/cards.png', x: 0, y: 0, width: 238, height: 333, sheetWidth: 3094, sheetHeight: 1665 }
  * ```
+ *
+ * @throws if a sprite with coordinates lacks its width, height, sheetWidth or sheetHeight
  */
 export function parseImageInfo(image: unknown): ImageInfo | null {
   if (!image) return null;
@@ -76,14 +68,15 @@ export function parseImageInfo(image: unknown): ImageInfo | null {
 
     // Full sprite with coordinates
     if (spriteObj.sprite && typeof spriteObj.x === 'number' && typeof spriteObj.y === 'number') {
-      return {
-        type: 'sprite',
-        sprite: spriteObj.sprite,
-        x: spriteObj.x,
-        y: spriteObj.y,
-        width: spriteObj.width ?? DEFAULT_CARD_WIDTH,
-        height: spriteObj.height ?? DEFAULT_CARD_HEIGHT,
-      };
+      const missing = SPRITE_SIZES.filter((key) => typeof spriteObj[key] !== 'number');
+      if (missing.length > 0) {
+        throw new Error(
+          `Sprite image '${spriteObj.sprite}' at x ${spriteObj.x}, y ${spriteObj.y} is missing ${missing.join(', ')}. `
+          + 'Give each sprite its own width and height and the whole sheet image\'s sheetWidth and sheetHeight, in pixels.',
+        );
+      }
+      const { sprite, x, y, width, height, sheetWidth, sheetHeight } = spriteObj;
+      return { type: 'sprite', sprite, x, y, width, height, sheetWidth, sheetHeight };
     }
 
     // Just sprite path (no coordinates = use as URL)
@@ -121,7 +114,7 @@ export function getImageSrc(image: unknown): string {
 
 /**
  * Get CSS background styles for displaying a sprite at specified dimensions.
- * Handles proper scaling from native sprite dimensions. The element's own size is left to the caller's CSS.
+ * Scales by the sprite's own width and height, so the sprite fills the display size. The element's own size is left to the caller's CSS.
  *
  * @param image - Image data (should be sprite type)
  * @param displayWidth - Target display width (default: 60)
@@ -141,14 +134,13 @@ export function getSpriteStyle(
   const info = parseImageInfo(image);
 
   if (info?.type === 'sprite') {
-    // Scale based on standard card dimensions
-    const scaleX = displayWidth / DEFAULT_CARD_WIDTH;
-    const scaleY = displayHeight / DEFAULT_CARD_HEIGHT;
+    const scaleX = displayWidth / info.width;
+    const scaleY = displayHeight / info.height;
 
     return {
       backgroundImage: `url(${info.sprite})`,
       backgroundPosition: `${-info.x * scaleX}px ${-info.y * scaleY}px`,
-      backgroundSize: `${13 * DEFAULT_CARD_WIDTH * scaleX}px ${5 * DEFAULT_CARD_HEIGHT * scaleY}px`,
+      backgroundSize: `${info.sheetWidth * scaleX}px ${info.sheetHeight * scaleY}px`,
       backgroundRepeat: 'no-repeat',
     };
   }
