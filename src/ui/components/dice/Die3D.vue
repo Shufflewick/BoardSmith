@@ -782,8 +782,14 @@ function restoreWebGL() {
  * Creates WebGL context, renders, snapshots, then disposes immediately.
  * Queued to avoid creating too many WebGL contexts at once.
  */
+let rebuildQueued = false;
+
 function regenerateSnapshot() {
+  // The queued rebuild reads props when it runs, so one covers every change made while it waits.
+  if (rebuildQueued) return;
+  rebuildQueued = true;
   queueRender(() => {
+    rebuildQueued = false;
     // A roll started since this was queued: its live scene draws and snapshots the current props.
     if (!webglDisposed) return;
     // Temporarily restore WebGL

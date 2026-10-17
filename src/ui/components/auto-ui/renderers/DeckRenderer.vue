@@ -267,6 +267,7 @@ const { attrs: selectableAttrs, onActivate, onKeydown } =
 /* Stack visual: fluid card-w relative container for absolute-positioned cards (IA-05) */
 .deck-stack {
   position: relative;
+  isolation: isolate;
   width: var(--card-w);
   height: var(--card-h);
   align-self: flex-start;

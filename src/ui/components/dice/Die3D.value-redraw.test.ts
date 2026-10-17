@@ -83,26 +83,60 @@ describe('Die3D redraws its still image when its value changes (#892)', () => {
     expect(wrapper.find('[role=img]').attributes('aria-label')).toBe('d6 showing 5');
   });
 
-  it('ends on the latest value when it changes again while a roll is queued or spinning', async () => {
-    vi.useFakeTimers();
-    const faceSix = await stillOf(6);
-    const { wrapper, props } = mountDie(2, 'undone');
+  /** A rolled-to-4 die whose roll waits in the queue behind another die's first render. */
+  async function queuedRoll(dieId: string) {
+    const { wrapper, props } = mountDie(2, dieId);
     await settle();
-    mountDie(3, 'busy'); // its first render holds the queue, so the roll waits behind it
+    mountDie(3, `${dieId}-busy`); // its first render holds the queue, so the roll waits behind it
     await flushPromises();
     const scenesBefore = globalThis.__scenesBuilt!;
-
     props.rollCount = 1;
     props.value = 4;
     await flushPromises();
-    props.value = 6; // undo lands before the queued roll has started
-    await vi.advanceTimersByTimeAsync(400);
+    return { wrapper, props, scenesBuilt: () => globalThis.__scenesBuilt! - scenesBefore };
+  }
+
+  it('ends on a value set while its roll is still queued, in the one scene the roll builds', async () => {
+    vi.useFakeTimers();
+    const faceSix = await stillOf(6);
+    const { wrapper, props, scenesBuilt } = await queuedRoll('queued');
+
     props.value = 6;
-    props.value = 1;
-    props.value = 6; // and again while it spins
+    await flushPromises();
 
     expect(await settle(wrapper)).toBe(faceSix);
-    // One scene for the roll: the later values steer it rather than rebuild it mid-spin.
+    expect(scenesBuilt()).toBe(1);
+  });
+
+  it('ends on a value set while it spins, steering the roll rather than rebuilding it', async () => {
+    vi.useFakeTimers();
+    const faceOne = await stillOf(1);
+    const { wrapper, props, scenesBuilt } = await queuedRoll('spinning');
+    // The roll starts 300ms (queue) + 50ms (scene init) from now and spins for 800ms.
+    await vi.advanceTimersByTimeAsync(600);
+
+    props.value = 1;
+    await flushPromises();
+
+    expect(await settle(wrapper)).toBe(faceOne);
+    expect(scenesBuilt()).toBe(1);
+  });
+
+  it('queues one redraw for several value changes while the queue is busy', async () => {
+    vi.useFakeTimers();
+    const faceFour = await stillOf(4);
+    const { wrapper, props } = mountDie(2, 'busy-redraw');
+    await settle();
+    mountDie(5, 'busy-redraw-holder'); // holds the queue so both changes wait
+    await flushPromises();
+    const scenesBefore = globalThis.__scenesBuilt!;
+
+    props.value = 3;
+    await flushPromises();
+    props.value = 4;
+    await flushPromises();
+
+    expect(await settle(wrapper)).toBe(faceFour);
     expect(globalThis.__scenesBuilt! - scenesBefore).toBe(1);
   });
 
