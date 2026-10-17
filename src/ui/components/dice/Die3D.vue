@@ -172,7 +172,7 @@ function processRenderQueue() {
  * Check if this die needs animation (new roll that hasn't been animated yet)
  */
 function shouldAnimateDie(dieId: string | number | undefined, rollCount: number): boolean {
-  if (!dieId || rollCount <= 0) return false;
+  if (dieId === undefined || rollCount <= 0) return false;
   const lastAnimated = animatedRollCounts.get(dieId) ?? 0;
   const needsAnimation = rollCount > lastAnimated;
   return needsAnimation;
@@ -182,7 +182,7 @@ function shouldAnimateDie(dieId: string | number | undefined, rollCount: number)
  * Mark a die's rollCount as animated
  */
 function markAnimated(dieId: string | number | undefined, rollCount: number) {
-  if (dieId) {
+  if (dieId !== undefined) {
     animatedRollCounts.set(dieId, rollCount);
   }
 }
@@ -856,8 +856,6 @@ async function updateTextures() {
 
 // Watch for rollCount changes - trigger animation for new rolls
 watch(() => props.rollCount, (newRollCount) => {
-  if (!newRollCount || !props.dieId) return;
-
   // Check if this is a new roll that needs animation
   if (shouldAnimateDie(props.dieId, newRollCount)) {
     markAnimated(props.dieId, newRollCount);
@@ -931,7 +929,7 @@ onMounted(() => {
   // Check if this die needs animation (new roll that hasn't been animated yet)
   const needsAnimation = shouldAnimateDie(props.dieId, props.rollCount ?? 0);
 
-  if (needsAnimation && props.dieId) {
+  if (needsAnimation) {
     // Mark as animated before queuing
     markAnimated(props.dieId, props.rollCount ?? 0);
 

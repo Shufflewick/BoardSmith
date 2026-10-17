@@ -58,7 +58,7 @@ async function settle(wrapper?: VueWrapper) {
 }
 
 /** Die3D is an async component, so a host passes it props that can change. */
-function mountDie(value: number, dieId: string) {
+function mountDie(value: number, dieId: string | number) {
   const props = reactive({ sides: 6 as const, value, dieId, rollCount: 0 });
   const wrapper = mount(defineComponent({ setup: () => () => h(Die3D, props) }));
   mounted.push(wrapper);
@@ -151,5 +151,19 @@ describe('Die3D redraws its still image when its value changes (#892)', () => {
     props.value = 3;
     await settle();
     expect(die.classes()).not.toContain('die-unrolled');
+  });
+});
+
+describe('Die3D rolls a die whose id is 0 (#897)', () => {
+  it('builds a scene to animate the roll of die 0', async () => {
+    vi.useFakeTimers();
+    const { props } = mountDie(2, 0);
+    await settle();
+    const scenesBefore = globalThis.__scenesBuilt!;
+
+    props.rollCount = 1; // rolled the same face, so only the roll can build a scene
+    await settle();
+
+    expect(globalThis.__scenesBuilt! - scenesBefore).toBe(1);
   });
 });
