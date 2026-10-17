@@ -29,10 +29,22 @@ import { trackedTestFiles } from './tracked-tests.test-helper.mjs';
 
 const CLOCKS = ['Date.now', 'performance.now', 'process.hrtime', 'process.hrtime.bigint'];
 
-const bare = (node) => (ts.isParenthesizedExpression(node) ? bare(node.expression) : node);
-/** Whether `node` calls a clock, bare or through an object such as `globalThis` or `window`. */
+const WRAPPERS = [ts.isParenthesizedExpression, ts.isAsExpression, ts.isNonNullExpression, ts.isSatisfiesExpression,
+  ts.isTypeAssertionExpression];
+/** `node` without the parentheses and type assertions around it, which leave its value as it is. */
+const bare = (node) => (WRAPPERS.some((is) => is(node)) ? bare(node.expression) : node);
+const ARITHMETIC = [ts.SyntaxKind.PlusToken, ts.SyntaxKind.MinusToken, ts.SyntaxKind.AsteriskToken,
+  ts.SyntaxKind.SlashToken, ts.SyntaxKind.PercentToken];
+/**
+ * Whether `node` reads a clock, bare or through an object such as `globalThis` or `window`, or does
+ * arithmetic on such a read (`Date.now() + offset`), which still moves with the clock.
+ */
 const isClockRead = (node) => {
-  const callee = ts.isCallExpression(node) && node.expression.getText();
+  const value = bare(node);
+  if (ts.isBinaryExpression(value) && ARITHMETIC.includes(value.operatorToken.kind)) {
+    return isClockRead(value.left) || isClockRead(value.right);
+  }
+  const callee = ts.isCallExpression(value) && value.expression.getText();
   return Boolean(callee) && CLOCKS.some((clock) => callee === clock || callee.endsWith(`.${clock}`));
 };
 
@@ -47,12 +59,12 @@ function checkerFor(sourceFile) {
 const HAS_VALUE = [ts.isVariableDeclaration, ts.isParameter, ts.isBindingElement, ts.isPropertyDeclaration, ts.isPropertyAssignment];
 /** The name `node` gives a value to, and that value: a declaration, parameter, field, property or default, or `x = v`. */
 function assignmentAt(node) {
-  if (HAS_VALUE.some((is) => is(node)) && node.initializer) return { target: node.name, value: bare(node.initializer) };
+  if (HAS_VALUE.some((is) => is(node)) && node.initializer) return { target: node.name, value: node.initializer };
   if (ts.isShorthandPropertyAssignment(node) && node.objectAssignmentInitializer) {
-    return { target: node.name, value: bare(node.objectAssignmentInitializer) };
+    return { target: node.name, value: node.objectAssignmentInitializer };
   }
   if (!ts.isBinaryExpression(node) || node.operatorToken.kind !== ts.SyntaxKind.EqualsToken) return undefined;
-  return { target: ts.isPropertyAccessExpression(node.left) ? node.left.name : node.left, value: bare(node.right) };
+  return { target: ts.isPropertyAccessExpression(node.left) ? node.left.name : node.left, value: node.right };
 }
 
 /** Every `expect(...)` in a source whose subject measures a clock difference, with any matcher. */
@@ -88,7 +100,7 @@ function wallClockBudgets(source) {
 
   const clockVars = bindingsOf(assignments.filter(({ value }) => isClockRead(value)));
   const nameOf = (node) => (ts.isPropertyAccessExpression(node) ? node.name : node);
-  const isClockTerm = (node) => isClockRead(bare(node)) || holds(clockVars, nameOf(bare(node)));
+  const isClockTerm = (node) => isClockRead(node) || holds(clockVars, nameOf(bare(node)));
   let durations = new Set();
   /** Whether `node` subtracts a clock read or a name holding one, or reads a name holding such a difference. */
   const measures = (node) =>
@@ -268,6 +280,36 @@ describe('wallClockBudgets', () => {
     expect(wallClockBudgets(throughThis)).toHaveLength(1);
     expect(wallClockBudgets(throughInstance)).toHaveLength(1);
     expect(wallClockBudgets('const e = Date.now() - s;\nexpect(other.e).toBe(1);')).toEqual([]);
+  });
+
+  it('finds clock reads wrapped in a type assertion, a non-null mark or an offset (#919)', () => {
+    const wrapped = ['performance.now() as number', 'performance.now()!', '<number>performance.now()',
+      'performance.now() satisfies number', 'performance.now() + offset'];
+    for (const read of wrapped) {
+      const source = [`const t0 = ${read};`, `const t1 = ${read};`, 'expect(t1 - t0).toBeLessThan(5);'].join('\n');
+      expect(wallClockBudgets(source), read).toHaveLength(1);
+    }
+  });
+
+  it('finds a duration given by a default in a destructuring assignment (#919)', () => {
+    const source = ['let d;', '({ d = Date.now() - s } = {});', 'expect(d).toBeLessThan(5);'].join('\n');
+    expect(wallClockBudgets(source)).toHaveLength(1);
+  });
+
+  it('finds a duration written as a shorthand property in the subject (#919)', () => {
+    const source = ['const elapsed = Date.now() - s;', 'expect({ elapsed }).toEqual({ elapsed: 1 });'].join('\n');
+    expect(wallClockBudgets(source)).toHaveLength(1);
+  });
+
+  it('finds clock reads assigned to this in one method and subtracted in another (#919)', () => {
+    const source = [
+      'class C {',
+      '  t0 = 0; t1 = 0;',
+      '  a() { this.t0 = performance.now(); this.t1 = performance.now(); }',
+      '  b() { expect(this.t1 - this.t0).toBeLessThan(5); }',
+      '}',
+    ].join('\n');
+    expect(wallClockBudgets(source)).toHaveLength(1);
   });
 
   it('leaves a timestamp checked against the clock alone', () => {
