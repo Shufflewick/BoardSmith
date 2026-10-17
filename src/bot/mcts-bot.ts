@@ -8,7 +8,7 @@ import type {
 } from '../engine/index.js';
 import type { HistoryEntry } from '../engine/action/types.js';
 import type { GameStateSnapshot } from '../engine/utils/index.js';
-import { canSeatAct, dueSeats, availableActionsForSeat, followUpForSeat } from '../engine/index.js';
+import { canSeatAct, dueSeats, availableActionsForSeat, followUpForSeat, GameElement } from '../engine/index.js';
 import { createSnapshot } from '../engine/utils/index.js';
 import { enumerateActionMoves } from '../engine/utils/enumerate-moves.js';
 import { constructGame } from '../engine/element/game.js';
@@ -1134,17 +1134,15 @@ export class MCTSBot<G extends Game = Game> {
    * objects go stale. Feeding a stale (foreign-tree) element into
    * `continueFlow` -> `Piece.putInto` would splice a wrong-instance object into
    * the live tree and duplicate its id. Element ids are stable across restore,
-   * so we canonicalize by id here. Non-element args (scalars, `{value,label}`
-   * choices without a numeric `id`) pass through untouched; already-live
-   * objects resolve to themselves (no-op).
+   * so we canonicalize by id here. Non-element args (scalars, plain choice
+   * objects, even ones carrying an `id`, #873) pass through untouched;
+   * already-live elements resolve to themselves (no-op).
    */
   private rebindArgs(args: Record<string, unknown>): Record<string, unknown> {
     const game = this.searchGame;
     if (!game) return args;
     const rebindOne = (v: unknown): unknown => {
-      if (v && typeof v === 'object' && typeof (v as { id?: unknown }).id === 'number') {
-        return game.getElementById((v as { id: number }).id) ?? v;
-      }
+      if (v instanceof GameElement) return game.getElementById(v.id) ?? v;
       return v;
     };
     const out: Record<string, unknown> = {};
