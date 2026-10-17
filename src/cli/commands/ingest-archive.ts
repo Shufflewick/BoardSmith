@@ -377,10 +377,12 @@ export async function ingestGapsCommand(
     : `\n${GAPS_EMPTY}\n`;
   const changed = before !== body || relabelled > 0;
 
-  await fs.writeFile(
-    indexPath,
-    index.slice(0, begin + GAPS_BEGIN.length) + body + index.slice(end),
-  );
+  if (before !== body) {
+    await fs.writeFile(
+      indexPath,
+      index.slice(0, begin + GAPS_BEGIN.length) + body + index.slice(end),
+    );
+  }
 
   const result = { gapsWritten: entries.length, slicesScanned: names.length, changed };
   if (options.json) {

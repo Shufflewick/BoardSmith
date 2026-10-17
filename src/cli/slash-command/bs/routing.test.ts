@@ -222,7 +222,8 @@ describe('no model review before verify (#454)', () => {
 
   it('the size rule and the light review are review-gate\'s, and only a mechanical change may skip review', () => {
     const routing = flat(read('routing.md'));
-    expect(routing).toContain('--work-role mechanical --since <the commit before it began>');
+    expect(routing).toMatch(/review-gate reads what is under review from the chunk's run log/);
+    for (const file of allSkillFiles()) expect(read(file), file).not.toMatch(/--work-role|review-gate[^\n]*--since/);
     expect(routing).toMatch(/Work by the `bounded` or `judgement` role is always reviewed in full/);
     expect(routing).toMatch(/A \*\*light\*\* review is one agent of the step's review role/);
   });

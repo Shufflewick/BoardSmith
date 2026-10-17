@@ -1,5 +1,15 @@
 # Migration Guide
 
+## `review-gate` reads what is under review from the run log (#829)
+
+`boardsmith review-gate` no longer takes `--since` or `--work-role`. It reads
+the chunk's run log, `design/run-log/<slug>.md`: the change under review is
+everything since the commit the latest finished review round names in its
+`Verify:` line (the chunk's verify base before any round), and it counts as
+mechanical only when every dispatch logged since that round has
+`Role: mechanical`. Drop both flags from any script or skill that passes them,
+and keep the run log current before the gate runs.
+
 ## `toDebugString` drops the unused `showHidden` option (#913)
 
 `DebugStringOptions.showHidden` is removed; it was never read. Delete it from
