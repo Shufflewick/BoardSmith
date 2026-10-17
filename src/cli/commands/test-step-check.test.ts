@@ -600,6 +600,11 @@ export function hexToRgb(hex: string): number[] { return [parseInt(hex.slice(1, 
     ['globs support files under tests (#841)', `const g = import.meta.glob("../support/*.ts", { eager: true });\nvoid g;\n`, 1, '../support/*.ts'],
     ['globs with a query that is not only raw (#841)', `const g = import.meta.glob("../../src/rules/*.ts", { query: "?raw&x", eager: true });\nvoid g;\n`, 1, 'src/rules/*.ts'],
     ['globs with a url query (#841)', `const g = import.meta.glob("../../src/rules/*.ts", { query: "?url", eager: true });\nvoid g;\n`, 1, 'src/rules/*.ts'],
+    ['globs through a wildcard folder and back up into src/ (#841)', `const g = import.meta.glob("../../docs/*/../../src/x.ts", { eager: true });\nvoid g;\n`, 1, '../../docs/*/../../src/x.ts'],
+    ['globs through ** and back up into src/ (#841)', `const g = import.meta.glob("../../docs/**/../../src/a.ts", { eager: true });\nvoid g;\n`, 1, '../../docs/**/../../src/a.ts'],
+    ['globs with a brace set that climbs into src/ (#841)', `const g = import.meta.glob("../../docs/{../src,x}/*.ts", { eager: true });\nvoid g;\n`, 1, '../../docs/{../src,x}/*.ts'],
+    ['globs with an extglob that climbs into src/ (#841)', `const g = import.meta.glob("../../docs/@(x|../src)/*.ts", { eager: true });\nvoid g;\n`, 1, '../../docs/@(x|../src)/*.ts'],
+    ['globs from above the project back into it (#841)', `const g = import.meta.glob("../../../*/src/x.ts", { eager: true });\nvoid g;\n`, 1, '../../../*/src/x.ts'],
     ['globs with a pattern this check cannot read (#841)', `const PATTERN = '../../src/rules/*.ts';\nconst rules = import.meta.glob(PATTERN, { eager: true });\nvoid rules;\n`, 2, 'a pattern this check cannot read'],
   ])('reports a guard that %s from the game\'s src/ (#485)', async (_what, guard, line, module) => {
     const findings = await findingsFor({

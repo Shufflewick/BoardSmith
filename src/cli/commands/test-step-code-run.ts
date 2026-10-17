@@ -131,17 +131,22 @@ const optionIs = (options: Map<string, AstNode>, key: string, value: string): bo
 /** Where the game's code lives: a glob reaching either loads it. */
 const CODE_DIRS = ['src/', 'tests/'];
 
+/** A brace set, extglob or class whose alternatives cross folders, which no fixed folder bounds. */
+const FOLDER_CROSSING_GROUP = /[{([][^})\]]*(\/|\.\.)/;
+
 /**
- * Whether a glob pattern can match a file under the game's `src/` or `tests/`: the folder it names
- * before its first glob character lies under one of them, or contains one (the project root, `../*`).
+ * Whether a glob pattern can match a file under the game's `src/` or `tests/`. Like vite, it joins
+ * the whole pattern to the importer's folder first, wildcards as plain segments, so `docs/*\/../..`
+ * cancels out; then the folder before the first glob character must lie under, or contain, one of them.
  */
 function globReachesCode(pattern: string, file: string): boolean {
-  if (!pattern.startsWith('/') && !pattern.startsWith('.')) return true; // an alias, which this cannot resolve
-  const fixed = pattern.split(/[*?[{(]/)[0];
-  const folder = fixed.slice(0, fixed.lastIndexOf('/') + 1);
-  const resolved = folder.startsWith('/') ? folder.slice(1) : posix.join(posix.dirname(file), folder);
-  const normal = posix.normalize(resolved || '.').replace(/\/$/, '');
-  const dir = normal === '.' ? '' : `${normal}/`;
+  const relative = pattern.startsWith('./') || pattern.startsWith('../');
+  if (!relative && !pattern.startsWith('/')) return true; // an alias or a bare `**`, which reach from the root
+  if (FOLDER_CROSSING_GROUP.test(pattern)) return true;
+  const joined = relative ? posix.join(posix.dirname(file), pattern) : posix.normalize(pattern.slice(1));
+  if (joined === '..' || joined.startsWith('../')) return true; // above the project, from where a wildcard can reach back in
+  const fixed = joined.split(/[*?[{(]/)[0];
+  const dir = fixed.slice(0, fixed.lastIndexOf('/') + 1);
   return CODE_DIRS.some((code) => dir.startsWith(code) || code.startsWith(dir));
 }
 
