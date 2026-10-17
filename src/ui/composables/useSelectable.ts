@@ -93,7 +93,18 @@ export function useSelectable(
 
 /**
  * Manage roving-tabindex keyboard navigation for a 2D grid of board cells.
- * Mirrors the canonical implementation in planning/mockups/boardsmith-chrome.html:569-618.
+ *
+ * @example
+ * ```ts
+ * const { currentIdx, handleGridKeydown, handleGridFocusIn, registerCell, cellAttrs } = useSelectableGrid(
+ *   squares, // ComputedRef<Square[]>, in any order
+ *   (sq) => ({ row: 8 - sq.rank, col: sq.file - 1 }),
+ *   (sq) => ({ id: sq.id }),
+ *   board,
+ *   (sq) => board.triggerElementSelect({ id: sq.id }),
+ *   'square',
+ * );
+ * ```
  *
  * The grid container should receive:
  *   role="grid"  aria-label="Game board, N by M"
