@@ -22,6 +22,7 @@ class PondGame extends Game<PondGame, Player> {
       counted.create(Card, `c${i}`);
     }
     this.create(Deck, 'empty');
+    this.create(Deck, 'drained').contentsHidden();
   }
 }
 
@@ -30,13 +31,14 @@ const deckView = (name: string) => view.children!.find((c) => c.name === name)!;
 const mountDeck = (name: string) => mount(DeckRenderer, { props: { element: deckView(name) as never } });
 
 describe('DeckRenderer face-down decks (#1056)', () => {
-  it('shows a deck whose size is secret as a face-down stack, not Empty', () => {
-    const deck = mountDeck('pond');
+  // 'drained' is empty: a hidden deck must look the same either way, or its emptiness leaks.
+  it.each(['pond', 'drained'])('shows the %s deck, whose size is secret, as a face-down stack', (name) => {
+    const deck = mountDeck(name);
 
     expect(deck.find('.deck-empty').exists()).toBe(false);
-    expect(deck.findAll('.deck-stack .card-back').length).toBeGreaterThan(0);
+    expect(deck.findAll('.deck-stack .card-back')).toHaveLength(3);
     expect(deck.find('.deck-count').text()).toBe('Size hidden');
-    expect(deck.attributes('aria-label')).toBe('pond, size hidden');
+    expect(deck.attributes('aria-label')).toBe(`${name}, size hidden`);
   });
 
   it('shows a counted face-down deck as a stack with its count', () => {
