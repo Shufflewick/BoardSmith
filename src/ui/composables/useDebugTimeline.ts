@@ -96,6 +96,8 @@ export function useDebugTimeline(options: DebugTimelineOptions): DebugTimeline {
   const historyLoading = ref(false);
   const historyError = ref<string | null>(null);
   const historyLastFetched = ref(0);
+  /** Bumped by every history load, so only the newest answer is kept (#860). */
+  let historyGeneration = 0;
 
   const selectedActionIndex = ref<number | null>(null);
   const historicalState = ref<PlayerState | null>(null);
@@ -114,17 +116,19 @@ export function useDebugTimeline(options: DebugTimelineOptions): DebugTimeline {
   const pendingRewindIndex = ref<number | null>(null);
 
   async function fetchHistory(): Promise<void> {
-    if (historyLoading.value) return;
-
+    const generation = ++historyGeneration;
     historyLoading.value = true;
     historyError.value = null;
     try {
-      actionHistory.value = await bridge.history();
+      const history = await bridge.history();
+      if (generation !== historyGeneration) return;
+      actionHistory.value = history;
       historyLastFetched.value = Date.now();
     } catch (e) {
+      if (generation !== historyGeneration) return;
       historyError.value = e instanceof Error ? e.message : 'Unknown error';
     } finally {
-      historyLoading.value = false;
+      if (generation === historyGeneration) historyLoading.value = false;
     }
   }
 

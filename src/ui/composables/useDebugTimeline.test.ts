@@ -87,15 +87,36 @@ describe('history loading', () => {
     expect(timeline.historyError.value).toBeNull();
   });
 
-  it('ignores a second load while one is in flight', async () => {
-    let release: (v: SerializedAction[]) => void = () => {};
-    const history = vi.fn(() => new Promise<SerializedAction[]>((r) => { release = r; }));
+  it('loads again while one is in flight, and keeps the newer answer (#860)', async () => {
+    const releases: Array<(v: SerializedAction[]) => void> = [];
+    const history = vi.fn(() => new Promise<SerializedAction[]>((r) => { releases.push(r); }));
     const { timeline } = setup({ history });
-    const first = timeline.fetchHistory();
-    await timeline.fetchHistory();
-    expect(history).toHaveBeenCalledTimes(1);
-    release(HISTORY);
-    await first;
+    const older = timeline.fetchHistory();
+    const newer = timeline.fetchHistory();
+    expect(history).toHaveBeenCalledTimes(2);
+
+    releases[1](HISTORY);
+    await newer;
+    releases[0](HISTORY.slice(0, 1));
+    await older;
+
+    expect(timeline.actionHistory.value).toEqual(HISTORY);
+    expect(timeline.historyLoading.value).toBe(false);
+  });
+
+  it('stays loading until the newest load answers', async () => {
+    const releases: Array<(v: SerializedAction[]) => void> = [];
+    const history = vi.fn(() => new Promise<SerializedAction[]>((r) => { releases.push(r); }));
+    const { timeline } = setup({ history });
+    const older = timeline.fetchHistory();
+    const newer = timeline.fetchHistory();
+
+    releases[0](HISTORY.slice(0, 1));
+    await older;
+    expect(timeline.historyLoading.value).toBe(true);
+    releases[1](HISTORY);
+    await newer;
+    expect(timeline.historyLoading.value).toBe(false);
   });
 });
 
