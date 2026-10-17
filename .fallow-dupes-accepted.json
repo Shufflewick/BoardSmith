@@ -265,14 +265,6 @@
       ]
     },
     {
-      "content": "a021f38caf4b3cd5",
-      "lines": 7,
-      "files": [
-        "src/cli/commands/verify-classify.ts",
-        "src/cli/commands/verify-run.ts"
-      ]
-    },
-    {
       "content": "a65a466bf25aee08",
       "lines": 33,
       "files": [
@@ -309,14 +301,6 @@
         "src/ui/components/GameHistory.vue",
         "src/ui/components/auto-ui/ActionPanel.vue",
         "src/ui/components/auto-ui/AutoRenderer.vue"
-      ]
-    },
-    {
-      "content": "b1fb6874a2db7793",
-      "lines": 6,
-      "files": [
-        "src/cli/commands/verify-classify.ts",
-        "src/cli/commands/verify-repair.ts"
       ]
     },
     {
@@ -456,13 +440,6 @@
       "files": [
         "src/ui/components/helpers/HintOverlay.vue",
         "src/ui/components/helpers/TutorialOverlay.vue"
-      ]
-    },
-    {
-      "content": "fd6060434bc642e6",
-      "lines": 7,
-      "files": [
-        "src/cli/commands/verify-classify.ts"
       ]
     },
     {

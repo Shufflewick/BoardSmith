@@ -838,6 +838,57 @@ export function resolveLedgerState(lines: ParsedLine[]): {
   };
 }
 
+/** Reads a run's ledger and resolves its current state — the read every ledger consumer starts with. */
+export async function readRunLedgerState(
+  projectDir: string,
+  runId: string,
+): Promise<ReturnType<typeof resolveLedgerState>> {
+  const ledgerFile = ledgerFilePath(projectDir, runId);
+  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
+  return resolveLedgerState(parseLedgerBody(ledgerText, relative(projectDir, ledgerFile)).lines);
+}
+
+/**
+ * Re-hashes each recorded slice against the file on disk (L8/T-173-12) — the one check every
+ * reader of recorded units shares (#837). A slice whose path escapes the staging dir or whose
+ * sha256 no longer matches is left out with a warning naming the unit. A slice missing from disk
+ * is returned in `missing`, for the caller to report in its own terms.
+ */
+export async function checkRecordedSlices(
+  stagingDir: string,
+  records: LedgerRecord[],
+): Promise<{ intact: { record: LedgerRecord; bytes: Buffer }[]; missing: LedgerRecord[]; warnings: string[] }> {
+  const intact: { record: LedgerRecord; bytes: Buffer }[] = [];
+  const missing: LedgerRecord[] = [];
+  const warnings: string[] = [];
+  for (const record of records) {
+    const sliceAbs = resolve(stagingDir, record.slicePath);
+    const relToStaging = relative(stagingDir, sliceAbs);
+    if (relToStaging === '' || relToStaging.startsWith('..') || isAbsolute(relToStaging)) {
+      warnings.push(
+        `unit "${record.unitId}"'s recorded slice path escapes the staging dir — treating as NOT recorded`,
+      );
+      continue;
+    }
+    let bytes: Buffer;
+    try {
+      bytes = await fs.readFile(sliceAbs);
+    } catch {
+      missing.push(record);
+      continue;
+    }
+    if (sha256Hex(bytes) !== record.sha256) {
+      warnings.push(
+        `unit "${record.unitId}"'s recorded sha256 no longer matches ${record.slicePath} on disk — ` +
+          `treating as NOT recorded (hand-edit or tamper detected)`,
+      );
+      continue;
+    }
+    intact.push({ record, bytes });
+  }
+  return { intact, missing, warnings };
+}
+
 // -------------------------------------------------------------------------------------------
 // verifyRunInitCommand
 // -------------------------------------------------------------------------------------------
@@ -1308,36 +1359,13 @@ export async function verifyRunStatusCommand(
   const { lines, malformedLines } = parseLedgerBody(ledgerText, relLedgerPath);
   const { recorded: activeRecords, completeRanges } = resolveLedgerState(lines);
 
-  const recorded: string[] = [];
-  const warnings: string[] = [];
-
-  for (const rec of activeRecords) {
-    const sliceAbs = resolve(stagingDir, rec.slicePath);
-    const relToStaging = relative(stagingDir, sliceAbs);
-    if (relToStaging === '' || relToStaging.startsWith('..') || isAbsolute(relToStaging)) {
-      warnings.push(
-        `unit "${rec.unitId}"'s recorded slice path escapes the staging dir — treating as NOT recorded`,
-      );
-      continue;
-    }
-    let bytes: Buffer;
-    try {
-      bytes = await fs.readFile(sliceAbs);
-    } catch {
-      warnings.push(
-        `unit "${rec.unitId}"'s recorded slice ${rec.slicePath} was not found on disk — treating as NOT recorded`,
-      );
-      continue;
-    }
-    if (sha256Hex(bytes) !== rec.sha256) {
-      warnings.push(
-        `unit "${rec.unitId}"'s recorded sha256 no longer matches ${rec.slicePath} on disk — ` +
-          `treating as NOT recorded (hand-edit or tamper detected)`,
-      );
-      continue;
-    }
-    recorded.push(rec.unitId);
+  const { intact, missing, warnings } = await checkRecordedSlices(stagingDir, activeRecords);
+  for (const rec of missing) {
+    warnings.push(
+      `unit "${rec.unitId}"'s recorded slice ${rec.slicePath} was not found on disk — treating as NOT recorded`,
+    );
   }
+  const recorded = intact.map(({ record }) => record.unitId);
 
   if (malformedLines.length > 0) {
     warnings.push(

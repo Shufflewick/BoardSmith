@@ -34,9 +34,9 @@ import {
   atomicWriteFile,
   ledgerFilePath,
   listRunIds,
-  parseLedgerBody,
   readLedgerOrThrow,
-  resolveLedgerState,
+  readRunLedgerState,
+  checkRecordedSlices,
   stagingSlicesDir,
 } from './verify-run.js';
 
@@ -687,7 +687,12 @@ async function resolveRunId(projectDir: string, runId?: string): Promise<string>
 async function computeRunPairs(
   projectDir: string,
   runId: string,
-): Promise<{ pairs: SlicePair[]; provenance: Record<string, ProvenanceResult>; warnings: string[] }> {
+): Promise<{
+  pairs: SlicePair[];
+  provenance: Record<string, ProvenanceResult>;
+  classifications: ClassificationRecord[];
+  warnings: string[];
+}> {
   const warnings: string[] = [];
 
   const rulebookDir = designRulebookDir(projectDir);
@@ -721,35 +726,27 @@ async function computeRunPairs(
   );
 
   const stagingDir = stagingSlicesDir(projectDir, runId);
-  const ledgerFile = ledgerFilePath(projectDir, runId);
-  const relLedgerPath = relative(projectDir, ledgerFile);
-  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
-  const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
-  const { recorded } = resolveLedgerState(lines);
+  const { recorded, classifications } = await readRunLedgerState(projectDir, runId);
+  const { intact, missing, warnings: sliceWarnings } = await checkRecordedSlices(stagingDir, recorded);
+  warnings.push(...sliceWarnings);
 
-  const stagedUnits: { unit: string; slicePath: string; rangeId?: string; text: string }[] = [];
-  for (const rec of recorded) {
-    const abs = resolve(stagingDir, rec.slicePath);
-    let text: string;
-    try {
-      text = await fs.readFile(abs, 'utf-8');
-    } catch {
-      // Recorded in the ledger but missing on disk: reported, never silently dropped from the
-      // pair set (174-PLAN.md pairs-2). An empty text has no derivable p.N span, so pairSlices()
-      // reports it as its own unpaired-slice group rather than pretending it does not exist.
-      warnings.push(
-        `unit "${rec.unitId}"'s recorded slice ${rec.slicePath} was not found on disk — ` +
-          `reporting it as an unpaired finding rather than silently dropping it`,
-      );
-      text = '';
-    }
-    stagedUnits.push({
-      unit: rec.unitId,
-      slicePath: rec.slicePath,
-      ...(rec.rangeId ? { rangeId: rec.rangeId } : {}),
-      text,
-    });
+  for (const record of missing) {
+    warnings.push(
+      `unit "${record.unitId}"'s recorded slice ${record.slicePath} was not found on disk — ` +
+        `reporting it as an unpaired finding rather than silently dropping it`,
+    );
   }
+  // A missing slice stays in the pair set with empty text (174-PLAN.md pairs-2): it has no p.N
+  // span, so pairSlices() reports it as its own unpaired-slice group instead of dropping it.
+  const stagedUnits = [
+    ...intact.map(({ record, bytes }) => ({ record, text: bytes.toString('utf-8') })),
+    ...missing.map((record) => ({ record, text: '' })),
+  ].map(({ record, text }) => ({
+    unit: record.unitId,
+    slicePath: record.slicePath,
+    ...(record.rangeId ? { rangeId: record.rangeId } : {}),
+    text,
+  }));
 
   const pairs = pairSlices({ liveSlices, stagedUnits, sources: await readRecordedSourcePaths(projectDir) });
 
@@ -758,7 +755,7 @@ async function computeRunPairs(
   );
   const provenance: Record<string, ProvenanceResult> = Object.fromEntries(provenanceEntries);
 
-  return { pairs, provenance, warnings };
+  return { pairs, provenance, classifications, warnings };
 }
 
 export interface VerifyClassifyPairsResult {
@@ -1464,6 +1461,10 @@ async function computeChunkVerdicts(
   return { verdicts: results, warnings: [...warningSet] };
 }
 
+function sameList(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
 export interface VerifyClassifyStatusResult {
   runId: string;
   pendingPairs: string[];
@@ -1501,13 +1502,20 @@ export async function verifyClassifyStatusCommand(
 ): Promise<VerifyClassifyStatusResult> {
   const projectDir = resolve(options.project ?? process.cwd());
   const runId = await resolveRunId(projectDir, options.runId);
-  const { pairs, warnings: pairingWarnings } = await computeRunPairs(projectDir, runId);
+  const { pairs, classifications: recordedClassifications, warnings: pairingWarnings } =
+    await computeRunPairs(projectDir, runId);
 
-  const ledgerFile = ledgerFilePath(projectDir, runId);
-  const relLedgerPath = relative(projectDir, ledgerFile);
-  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
-  const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
-  const { classifications } = resolveLedgerState(lines);
+  const pairsById = new Map(pairs.map((p) => [p.pairId, p]));
+  // A verdict counts only for the staged content it was made on: once the pair's units or staged
+  // slices change, it must be classified again (#837).
+  const classifications = recordedClassifications.filter((c) => {
+    const pair = pairsById.get(c.pairId);
+    return (
+      pair !== undefined &&
+      sameList(c.units, pair.stagedUnits) &&
+      sameList(c.stagedSlices, pair.stagedSlices)
+    );
+  });
   const classifiedByPairId = new Map(classifications.map((c) => [c.pairId, c]));
 
   const pairedPairs = pairs.filter((p) => p.kind === 'paired');
@@ -1522,7 +1530,7 @@ export async function verifyClassifyStatusCommand(
   const stale = classifications.filter((c) => c.stale).length;
 
   const pairedRuleBearingClassified = classifications.filter(
-    (c) => pairs.find((p) => p.pairId === c.pairId)?.kind === 'paired',
+    (c) => pairsById.get(c.pairId)?.kind === 'paired',
   );
   const cosmeticOverRuleBearing = pairedRuleBearingClassified.filter(
     (c) => c.ruleDelta === 'cosmetic',

@@ -39,6 +39,8 @@ import {
 import {
   verifyRunInitCommand,
   verifyRunRecordCommand,
+  verifyRunStatusCommand,
+  stagingSlicesDir,
   ledgerFilePath,
   parseLedgerBody,
   resolveLedgerState,
@@ -1395,6 +1397,34 @@ describe('verifyClassifyStatusCommand — pending pairs, summary counts, resume-
     const first = await verifyClassifyStatusCommand({ project, runId, json: true });
     const second = await verifyClassifyStatusCommand({ project, runId, json: true });
     expect(second).toEqual(first);
+  });
+});
+
+describe('a staged slice edited after its pair was classified (#837)', () => {
+  it('drops the edited slice from classify-pairs as run-status does, and shows its pair pending again', async () => {
+    const { project, runId, pairIdA, pairIdB } = await threeGroupProject();
+    const stagingDirAbs = stagingSlicesDir(project, runId);
+    await fs.writeFile(join(stagingDirAbs, 'ua2.md'), 'p.1, A:\n"Rule A second staged text."\n');
+    await verifyRunRecordCommand({ project, runId, unit: 'ua2', slice: 'ua2.md', json: true });
+    await verifyClassifyRecordCommand({ project, runId, pairId: pairIdA, label: 'cosmetic', json: true });
+    await verifyClassifyRecordCommand({ project, runId, pairId: pairIdB, label: 'cosmetic', json: true });
+
+    await fs.writeFile(join(stagingDirAbs, 'ua2.md'), 'p.1, A:\n"Rule A edited after classifying."\n');
+
+    const runStatus = await verifyRunStatusCommand({ project, runId, json: true });
+    expect(runStatus.recorded).not.toContain('ua2');
+
+    const pairs = await verifyClassifyPairsCommand({ project, runId, json: true });
+    expect(pairs.pairs.flatMap((p) => p.stagedUnits)).not.toContain('ua2');
+    expect(pairs.warnings.some((w) => w.includes('"ua2"') && w.includes('sha256'))).toBe(true);
+    const pairA = pairs.pairs.find((p) => p.pairId === pairIdA)!;
+    expect(pairA.kind).toBe('paired');
+    expect(pairA.stagedUnits).toEqual(['ua']);
+
+    const status = await verifyClassifyStatusCommand({ project, runId, json: true });
+    expect(status.pendingPairs).toContain(pairIdA);
+    expect(status.classified.map((c) => c.pairId)).toEqual([pairIdB]);
+    expect(status.summary.classified).toBe(1);
   });
 });
 
