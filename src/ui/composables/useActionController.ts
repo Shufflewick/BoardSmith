@@ -92,7 +92,7 @@
 import { ref, readonly, computed, watch, nextTick, getCurrentScope, onScopeDispose } from 'vue';
 import { isDevMode, devWarn, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
-import { findMatchingChoice, oneChoiceListRefusal, oneElementListRefusal } from '../../engine/action/choice-matching.js';
+import { findMatchingChoice, oneChoiceListRefusal, oneElementListRefusal, valuesEqual } from '../../engine/action/choice-matching.js';
 
 // Re-export all types from the types module for consumers
 export type {
@@ -715,7 +715,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       if (filterValue !== undefined) {
         choices = choices.filter(choice => {
           const choiceValue = choice.value as Record<string, unknown>;
-          return choiceValue[selection.filterBy!.key] === filterValue;
+          return valuesEqual(choiceValue[selection.filterBy!.key], filterValue);
         });
       }
     }
@@ -861,13 +861,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (prefillValue === undefined) return false;
 
     const choices = getChoices(selection);
-    const validChoice = choices.find(c => {
-      if (c.value === prefillValue) return true;
-      if (typeof c.value === 'object' && c.value !== null) {
-        return (c.value as Record<string, unknown>).id === prefillValue;
-      }
-      return false;
-    });
+    const validChoice = findMatchingChoice(prefillValue, choices);
 
     actionSnapshot.value?.prefills.delete(selection.name);
 
@@ -2569,7 +2563,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         ? multiSelectDraft.value.values
         : [];
 
-    const index = current.findIndex(v => v === value);
+    const index = current.findIndex(v => valuesEqual(v, value));
     let newValues: unknown[];
     if (index >= 0) {
       // Already selected - remove it
@@ -2613,7 +2607,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   function isMultiSelectSelected(selectionName: string, value: unknown): boolean {
     const draft = multiSelectDraft.value;
     if (!draft || draft.selectionName !== selectionName) return false;
-    return draft.values.some(v => v === value);
+    return draft.values.some(v => valuesEqual(v, value));
   }
 
   // === Public API for Snapshot Access ===

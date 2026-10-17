@@ -177,3 +177,43 @@ describe('findMatchingChoice is the one matcher both sides use (#219)', () => {
     expect(findMatchingChoice({ id: 'operative:9:9' }, choices)).toBeUndefined();
   });
 });
+
+describe('the draft and prefills judge a pick value by the same rule as fill (#857)', () => {
+  let sendAction: ReturnType<typeof createMockSendAction>;
+  let controller: ReturnType<typeof useActionController>;
+
+  beforeEach(() => {
+    sendAction = createMockSendAction();
+    controller = useActionController({
+      sendAction,
+      availableActions: ref(['assignSpy', 'assignSquad']),
+      actionMetadata: ref(assignSpyMetadata()),
+      isMyTurn: ref(true),
+      autoFill: false,
+      autoExecute: false,
+    });
+  });
+
+  it('a second toggle of a copied object deselects it', async () => {
+    await controller.start('assignSquad');
+    await controller.toggleMultiSelect('squad', overTheWire(OPERATIVES[0]));
+    await controller.toggleMultiSelect('squad', overTheWire(OPERATIVES[0]));
+
+    expect(controller.multiSelectDraft.value?.values).toEqual([]);
+  });
+
+  it('reports a copied object as selected while the draft holds it', async () => {
+    await controller.start('assignSquad');
+    await controller.toggleMultiSelect('squad', overTheWire(OPERATIVES[1]));
+
+    expect(controller.isMultiSelectSelected('squad', overTheWire(OPERATIVES[1]))).toBe(true);
+  });
+
+  it('applies a prefill holding a copied object, as fill does', async () => {
+    await controller.start('assignSpy', { prefill: { spy: overTheWire(OPERATIVES[1]) } });
+
+    expect(controller.lastError.value).toBe(null);
+    expect(controller.currentArgs.value.spy).toEqual(OPERATIVES[1]);
+    expect(controller.currentPick.value?.name).toBe('task');
+  });
+});

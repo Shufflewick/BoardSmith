@@ -17,6 +17,7 @@ import { mount } from '@vue/test-utils';
 import { defineComponent, effectScope, h, provide, ref, watch, nextTick } from 'vue';
 import ActionPanel from '../components/auto-ui/ActionPanel.vue';
 import { useActionController } from './useActionController.js';
+import { createActionMutators } from './actionMutators.js';
 import { useBoardActionBridge } from './useBoardActionBridge.js';
 import { createBoardInteraction, provideBoardInteraction, type BoardInteraction } from './useBoardInteraction.js';
 import { GAME_CONTEXT_KEYS } from './useGameContext.js';
@@ -305,5 +306,61 @@ describe('a board click on a held follow-up action', () => {
 
     expect(stateOf(t)).toMatchObject({ action: 'scout', args: { unit: 5 }, pendingOnServer: true, sent: 0 });
     t.wrapper.unmount();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A custom UI holds a COPY of an object choice, never the offered object.
+// ---------------------------------------------------------------------------
+
+const CELL_A = { value: { row: 1, col: 1 }, display: 'A', refs: [{ ref: { id: 41 }, role: 'target' as const }] };
+const CELL_B = { value: { row: 2, col: 2 }, display: 'B' };
+const CELL_METADATA: Record<string, EnrichedActionMetadata> = {
+  mark: { name: 'mark', prompt: 'Mark', selections: [{ name: 'cell', type: 'choice', prompt: 'Which cell?', choices: [CELL_A] }] },
+  markMany: {
+    name: 'markMany',
+    prompt: 'Mark many',
+    selections: [{ name: 'cells', type: 'choice', prompt: 'Which cells?', multiSelect: { min: 1, max: 2 }, choices: [CELL_A, CELL_B] }],
+  },
+};
+
+/** The real controller and board, driven through the mutators alone. */
+function cellTable() {
+  const board = createBoardInteraction();
+  const controller = useActionController({
+    sendAction: vi.fn(async () => ({ success: true })),
+    availableActions: ref(['mark', 'markMany']),
+    actionMetadata: ref(CELL_METADATA),
+    isMyTurn: ref(true),
+    autoFill: false,
+    autoExecute: false,
+  });
+  const mutators = createActionMutators(controller, board, {
+    isViewingHistory: () => false,
+    isMyTurn: () => true,
+    isCompleted: () => false,
+    disabledReason: () => undefined,
+    actionMetadata: (name) => CELL_METADATA[name],
+  });
+  return { board, controller, mutators };
+}
+
+const copyOf = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+
+describe('the mutators find an object choice from a copy of its value (#857)', () => {
+  it('marks the chosen element on the board', async () => {
+    const t = cellTable();
+    await t.mutators.startAction('mark');
+    expect(await t.mutators.setSelectionValue('cell', copyOf(CELL_A.value))).toBe(true);
+
+    expect(t.board.selectedElement).toEqual({ id: 41 });
+  });
+
+  it('draws the multi-select draft on the board', async () => {
+    const t = cellTable();
+    await t.mutators.startAction('markMany');
+    await t.mutators.toggleMultiSelectValue('cells', copyOf(CELL_A.value));
+
+    expect(t.board.hoveredChoice?.targetRefs).toEqual([{ id: 41 }]);
   });
 });

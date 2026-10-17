@@ -16,6 +16,7 @@
 import type { BoardInteraction } from './useBoardInteraction.js';
 import type { EnrichedActionMetadata, UseActionControllerReturn } from './useActionControllerTypes.js';
 import { choiceBoardTarget } from './actionControllerHelpers.js';
+import { valuesEqual } from '../../engine/action/choice-matching.js';
 
 /** What a surface knows about whether the seat may act. Read on every call. */
 export interface ActionMutatorGuards {
@@ -137,7 +138,7 @@ export function createActionMutators(
     // A refusal is already in the controller's `lastError`.
     if (!result.valid) return false;
     // Keep the chosen board element marked.
-    const chosen = offered.find(c => c.value === value);
+    const chosen = offered.find(c => valuesEqual(c.value, value));
     const ref = chosen && choiceBoardTarget(chosen);
     if (ref) board?.selectElement(ref);
     return true;
@@ -167,7 +168,7 @@ export function createActionMutators(
       return;
     }
     const choices = controller.currentChoices.value;
-    const refs = selectedValues.flatMap(val => choices.find(c => c.value === val)?.refs ?? []);
+    const refs = selectedValues.flatMap(val => choices.find(c => valuesEqual(c.value, val))?.refs ?? []);
     if (refs.length === 0) return;
     board.setHoveredChoice({
       value: selectedValues,

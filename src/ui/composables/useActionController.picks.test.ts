@@ -576,6 +576,36 @@ describe('useActionController picks', () => {
       expect(choices.every(c => (c.value as any).color === 'red')).toBe(true);
     });
 
+    it('filters by an object-valued pick by its content, not its identity (#857)', async () => {
+      const filterMeta: Record<string, EnrichedActionMetadata> = {
+        filterAction: {
+          name: 'filterAction',
+          prompt: 'Select with filter',
+          selections: [
+            { name: 'suit', type: 'choice', prompt: 'Select suit', choices: [{ value: { s: 'H' }, display: 'Hearts' }] },
+            {
+              name: 'card',
+              type: 'choice',
+              prompt: 'Select card',
+              filterBy: { key: 'suit', selectionName: 'suit' },
+              choices: [
+                { value: { rank: 3, suit: { s: 'H' } }, display: '3H' },
+                { value: { rank: 4, suit: { s: 'S' } }, display: '4S' },
+              ],
+            },
+          ],
+        },
+      };
+      actionMetadata.value = filterMeta;
+      availableActions.value = ['filterAction'];
+      const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn, autoFill: false, autoExecute: false });
+
+      await controller.start('filterAction');
+      await controller.fill('suit', { s: 'H' });
+
+      expect(controller.getChoices(filterMeta.filterAction.selections[1]).map(c => c.display)).toEqual(['3H']);
+    });
+
     it('should return all choices when filter selection not made', () => {
       const filterMeta: Record<string, EnrichedActionMetadata> = {
         filterAction: {
