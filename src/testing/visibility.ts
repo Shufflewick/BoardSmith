@@ -32,9 +32,8 @@ function findNodeById(node: ElementJSON, id: number): ElementJSON | undefined {
  * output, not just the per-element visibility rule.
  *
  * **What NOT to do:** Do not call `element.isVisibleTo(seat)` directly in
- * test code to decide "is this safe to assert on" — it judges one element's
- * rule, not what is sent. A child of a hidden element is never sent even when
- * its own rule says visible (#909), and a game's `static playerView` hook can
+ * test code to decide "is this safe to assert on" — it judges the engine's
+ * visibility filter, not what is sent: a game's `static playerView` hook can
  * strip more after the filter. `isElementVisible` always derives its verdict
  * from `game.toJSONForPlayer(seat)` itself — the same bytes a real client
  * receives.
