@@ -696,6 +696,20 @@ describe('validate.ts validateAssetPaths — declared manifest assets must resol
     expect(result.passed).toBe(false);
     expect((result.details ?? []).join('\n')).toContain('/cards/');
   });
+
+  it('matches a public folder whose name has regex characters literally (#846)', async () => {
+    mkdirSync(join(projectDir, 'public', 'art (v2)'), { recursive: true });
+    mkdirSync(join(projectDir, 'public', 'a.b'), { recursive: true });
+    const result = await scanShippedFile(
+      join('data', 'cards.json'),
+      JSON.stringify([{ image: '/art (v2)/one.png', other: '/axb/two.png' }]),
+    );
+
+    expect(result.passed).toBe(false);
+    const details = (result.details ?? []).join('\n');
+    expect(details).toContain('"/art (v2)/..."');
+    expect(details).not.toContain('a.b');
+  });
 });
 
 /**

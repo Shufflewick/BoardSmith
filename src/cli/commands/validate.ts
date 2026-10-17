@@ -945,7 +945,7 @@ function findAbsolutePathIssues(cwd: string, files: string[], publicDirs: string
   const issues: string[] = [];
   for (const filePath of files) {
     const content = readFileSync(filePath, 'utf-8');
-    const offending = publicDirs.find((dir) => new RegExp(`["'\`]\\/${dir}\\/`).test(content));
+    const offending = publicDirs.find((dir) => ['"', "'", '`'].some((quote) => content.includes(`${quote}/${dir}/`)));
     if (offending) {
       issues.push(`${filePath.replace(cwd + '/', '')}: absolute path "/${offending}/..." found`);
     }
