@@ -19,7 +19,7 @@ const RUNS_THE_RULES: ReadonlySet<ClientInbound['type']> = new Set([
 ]);
 
 interface DevHostConnectionOptions {
-  mpHost: Pick<MultiplayerHost, 'handleMessage' | 'disconnect'>;
+  mpHost: Pick<MultiplayerHost, 'handleMessage' | 'disconnect' | 'bindPageLoad'>;
   clients: Map<string, WebSocket>;
   queue: Pick<RulesReloadQueue, 'admit'>;
   /** Called when an async message dispatch rejects; receives the failing message type. */
@@ -65,6 +65,12 @@ export function claimDevHostSocket(opts: DevHostConnectionOptions): ReturnType<t
  * cannot take over the routing of a page that shares its client id. A fresh
  * page load names no run and joins as the first arrival or a reconnect would.
  *
+ * Each `hello` also names the page load it comes from (#1041), and every
+ * `server_request` is stamped with this socket's load, so the host answers a
+ * request only while that load still holds the client's socket: a reloaded
+ * page reuses its client id and its request ids, and must not receive the
+ * answers meant for the page it replaced.
+ *
  * Every message is admitted through the rules reload queue (#379), so one that
  * arrives while a saved rules edit is still rebuilding waits for the new rules.
  * So is a page's departure (#387): a bot covering its seat is a move, and it
@@ -98,6 +104,7 @@ export function createDevHostConnectionHandler(opts: DevHostConnectionOptions): 
     };
 
     let clientId: string | null = null;
+    let loadId: string | null = null;
 
     socket.on('message', (raw) => {
       let msg: { type?: string; clientId?: unknown; [key: string]: unknown };
@@ -114,14 +121,17 @@ export function createDevHostConnectionHandler(opts: DevHostConnectionOptions): 
         send({ type: 'welcome', runId });
         clientId =
           typeof msg.clientId === 'string' ? msg.clientId : `anon-${Math.random().toString(36).slice(2)}`;
+        // A caller that names no page load (a scripted client) is one per socket.
+        loadId = typeof msg.loadId === 'string' ? msg.loadId : randomUUID();
         clients.set(clientId, socket);
+        mpHost.bindPageLoad(clientId, loadId);
         dispatch(clientId, { type: 'hello' });
         return;
       }
       // A client must identify itself via `hello` first; a tab from an earlier
       // run never does (#416).
-      if (!clientId) return;
-      dispatch(clientId, msg as ClientInbound);
+      if (!clientId || !loadId) return;
+      dispatch(clientId, msg.type === 'server_request' ? ({ ...msg, loadId } as ClientInbound) : (msg as ClientInbound));
     });
 
     socket.on('close', () => {

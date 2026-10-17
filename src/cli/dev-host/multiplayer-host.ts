@@ -167,7 +167,11 @@ export type ClientInbound =
   | { type: 'leave' }
   /** Start a new game, dealt from `seed` when it names one (#460), else from a fresh seed. */
   | { type: 'restart'; seed?: string }
-  | { type: 'server_request'; requestId: string; op: string; payload: Record<string, unknown> }
+  /**
+   * `loadId` is the page load whose socket sent it, stamped by the connection
+   * handler (#1041), never taken from the page's own message.
+   */
+  | { type: 'server_request'; requestId: string; op: string; payload: Record<string, unknown>; loadId?: string }
   | { type: 'follow'; enabled: boolean }
   | { type: 'getState'; requestId?: string }
   | { type: 'getLobby'; requestId?: string }
@@ -468,7 +472,13 @@ export class MultiplayerHost {
    * requests from `req-0`, so two pages' ids collide (#878). Cleared when the
    * response is delivered.
    */
-  private readonly requestOrigin = new Map<string, { clientId: string; requestId: string }>();
+  private readonly requestOrigin = new Map<string, { clientId: string; loadId?: string; requestId: string }>();
+  /**
+   * The page load each client's socket now belongs to (#1041). A reloaded page
+   * keeps its client id and numbers requests from `req-0` again, so a reply is
+   * delivered only while the load that asked still holds the socket.
+   */
+  private readonly pageLoad = new Map<string, string>();
   private nextRequest = 0;
   /**
    * D13/DEVHOST-01: the currently applied gameOption selection, seeded from
@@ -523,6 +533,15 @@ export class MultiplayerHost {
    * lands straight in — open seats are bot). Later clients land in the seat-picker
    * to take over a bot/open seat; a reconnecting client resumes its seat.
    */
+  /**
+   * The client's socket now belongs to page load `loadId`. Called the moment
+   * the connection handler routes the client to a new socket, not through the
+   * rules reload queue, so it is never behind a reply the queue still holds.
+   */
+  bindPageLoad(clientId: string, loadId: string): void {
+    this.pageLoad.set(clientId, loadId);
+  }
+
   async hello(clientId: string): Promise<void> {
     this.connected.add(clientId);
 
@@ -959,7 +978,7 @@ export class MultiplayerHost {
     const seat = this.seatOf(clientId, msg.requestId);
     if (seat === undefined) return;
     const hostRequestId = String(this.nextRequest++);
-    this.requestOrigin.set(hostRequestId, { clientId, requestId: msg.requestId });
+    this.requestOrigin.set(hostRequestId, { clientId, loadId: msg.loadId, requestId: msg.requestId });
     try {
       await this.session.handleServerRequest(seat, hostRequestId, msg.op, msg.payload);
     } catch (err) {
@@ -1564,7 +1583,7 @@ export class MultiplayerHost {
     if (hostRequestId === null) return;
     const origin = this.requestOrigin.get(hostRequestId);
     this.requestOrigin.delete(hostRequestId);
-    if (origin && this.connected.has(origin.clientId)) {
+    if (origin && this.connected.has(origin.clientId) && this.pageLoad.get(origin.clientId) === origin.loadId) {
       this.send(origin.clientId, { type: 'server_response', requestId: origin.requestId, result });
     }
   }
