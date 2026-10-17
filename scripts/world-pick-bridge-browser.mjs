@@ -303,9 +303,9 @@ async function driveThrough({ launch, hostUrl }) {
         await surface.locator('.selected-values .clear-selection-btn').first().click();
         await panelDeploy(page, 'skiff');
         await expectCrewCount(page, 'Selected: 0/2');
-        assert(asked.length >= 2, 'changing the ship asked the world nothing');
+        assert(asked().length >= 2, 'changing the ship asked the world nothing');
         assert(
-          asked.some((frame) => frame.args?.ship === 'skiff'),
+          asked().some((frame) => frame.args?.ship === 'skiff'),
           'no re-ask carried the newly chosen ship',
         );
       });
