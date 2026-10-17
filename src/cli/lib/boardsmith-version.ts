@@ -48,9 +48,8 @@ function findPackage(): { dir: string; version: string } {
     if (parent === dir || parse(dir).root === dir) {
       // Reached the filesystem root without finding boardsmith's own package.json.
       throw new Error(
-        `readBoardsmithVersion: could not locate the boardsmith package.json walking up from ` +
-          `${startDir}. No fallback version is used — a fabricated version stamped into a ` +
-          `provenance block would be worse than this loud failure.`
+        `Could not find BoardSmith's own package.json in any folder above ${startDir}, so this ` +
+          `copy of BoardSmith is incomplete. Reinstall BoardSmith and run the command again.`
       );
     }
     dir = parent;

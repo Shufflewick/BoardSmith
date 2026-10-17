@@ -275,29 +275,6 @@ describe('useBoardActionBridge isViewingHistory guard (LIBX-04, 164-04)', () => 
     expect(start).not.toHaveBeenCalled();
   });
 
-  it('executeAction is an inert no-op while isViewingHistory (no controller.execute call)', async () => {
-    const board = createBoardInteraction();
-    const { controller, execute } = makeController({ pick: null, action: null });
-    const isViewingHistory = ref(true);
-
-    useBoardActionBridge({
-      controller,
-      boardInteraction: board,
-      isMyTurn: ref(true),
-      autoEndTurn: ref(true),
-      actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [] } }),
-      availableActions: ref(['endTurn']),
-      disabledActions: ref(undefined),
-      isViewingHistory,
-    } as any);
-
-    await nextTick();
-    await nextTick();
-    await nextTick();
-
-    expect(execute).not.toHaveBeenCalled();
-  });
-
   it('setSelectionValue is an inert no-op while isViewingHistory: a click on a valid element does NOT call controller.fill', async () => {
     const board = createBoardInteraction();
     const validElements: EnrichedValidElement[] = [
@@ -428,13 +405,15 @@ describe('actionMutators.ts source: isViewingHistory guard wired at every mutati
     expect(mutatorsSource).toContain('isViewingHistory: () => boolean;');
   });
 
-  // FIVE: start, execute, set-selection, the multi-select toggle and the
-  // ordered-list append (#249). The count is the point of the assertion: a new
-  // mutating function added without the guard is exactly the regression this
-  // catches, so the number moves only alongside a function that carries one.
-  it('every mutating function guards with `if (guards.isViewingHistory())` (count == 5)', () => {
+  // FOUR: start, set-selection, the multi-select toggle and the ordered-list
+  // append (#249). Execute is not among them: controller.execute() refuses while
+  // viewing history itself, for every caller (#855). The count is the point of
+  // the assertion: a new mutating function added without the guard is exactly
+  // the regression this catches, so the number moves only alongside a function
+  // that carries one.
+  it('every mutating function guards with `if (guards.isViewingHistory())` (count == 4)', () => {
     const occurrences = (mutatorsSource.match(/if \(guards\.isViewingHistory\(\)\) return/g) ?? []).length;
-    expect(occurrences).toBe(5);
+    expect(occurrences).toBe(4);
   });
 });
 
