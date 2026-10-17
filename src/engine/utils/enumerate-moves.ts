@@ -343,7 +343,7 @@ interface EnumerationStep {
  */
 export function acceptsSubmission(game: Game, actionName: string, seat: number, args: Record<string, unknown>): boolean {
   const action = game.getAction(actionName);
-  if (!action) return false;
+  if (!action || game.getActionExecutor().undeclaredArgsRefusal(action, args)) return false;
   if (!game.getActionExecutor().hasRepeatingSelections(action)) {
     return game.getActionExecutor().validateAction(action, game.getPlayer(seat)!, args, heldFollowUp(game, actionName, seat)).valid;
   }
