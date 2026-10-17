@@ -85,7 +85,7 @@ describe('loadWorldRuntime (#283)', () => {
       const told = event as WorldEvent;
       if ('send' in told) frames.push({ clientId: told.send.clientId, message: JSON.parse(told.send.frame) });
     });
-    await runtime.worker.call('open', { storePath: storePath(), worldName: 'Yard', budgets: worldBudgets(), pages: ['page-1'] });
+    await runtime.worker.call('open', { storePath: storePath(), port: 5173, worldName: 'Yard', budgets: worldBudgets(), pages: ['page-1'] });
     closing.push(async () => {
       await runtime.worker.call('close');
       await runtime.worker.close();

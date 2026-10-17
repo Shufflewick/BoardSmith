@@ -92,6 +92,9 @@ function failureSummary(messages: readonly string[]): string {
   return summary.length > 0 ? summary : 'The test failed without a message.';
 }
 
+/** What vitest reports, stack aside, when a test ran with `expect.hasAssertions()` and made none. */
+const NO_ASSERTIONS_FAILURE = 'Error: expected any number of assertion, but got none';
+
 /** The emitted file's results, found by path (vitest reports the file's real path). */
 async function fileResultFor(
   report: VitestJsonReport,
@@ -142,6 +145,14 @@ function observeExample(
     );
   }
   const failed = results.filter((a) => a.status === 'failed');
+  const unasserted = failed.find((a) => failureSummary(a.failureMessages) === NO_ASSERTIONS_FAILURE);
+  if (unasserted) {
+    throw new Error(
+      `The test "${unasserted.title}" for the worked example at ${where} makes no assertions, so ` +
+        `it observed nothing.\nA worked-example test must check the outcome with expect(...). ` +
+        `Re-dispatch the translator and record its return again. Nothing was recorded.`,
+    );
+  }
   const observed = {
     exampleId: record.exampleId,
     slicePath: record.slicePath,
@@ -153,6 +164,7 @@ function observeExample(
     provenance: record.provenance,
     testFilePath: relTestFilePath,
     translation: record.translation,
+    extractionHash: record.extractionHash,
   };
   if (failed.length === 0) {
     return createExampleReplayRecord({

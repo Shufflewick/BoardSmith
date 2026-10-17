@@ -163,7 +163,10 @@ orchestrator files your return, unchanged, under the `exampleId` it dispatched y
   file whose assertions every one of them "passed". **An emission whose `testCode` declares no
   top-level `it(...)`/`test(...)` is REJECTED outright, naming your example's
   `slicePath:lineNumber`, and nothing is written** — the same treatment a malformed `imports`
-  entry gets. Follow the target project's own `it(...)` idiom as shown in the payload. Leave
+  entry gets. The test must check the outcome with vitest's `expect(...)`: the CLI adds
+  `expect.hasAssertions()` to every example, so a test that makes no `expect` assertion fails, and
+  `verify-example-run` refuses it rather than recording a verdict. Follow the target project's
+  own `it(...)` idiom as shown in the payload. Leave
   `testCode` `''` only when `verdictHint` is `"unexecutable"`.
 - `imports` are the import statements the code needs, kept separate from `testCode` so the emitter
   can compose them predictably rather than parsing them back out of a code string.

@@ -189,9 +189,11 @@ describe('#885: the table road', () => {
 async function servedWorld() {
   const { rulesPath, tempDir, save } = rulesProject('bs-rules-worker-world-', worldRules(1));
   const load = () => loadWorldRuntime(rulesPath, tempDir, 'monorepo');
+  const cwd = tempTree('bs-rules-worker-world-run-');
   const run = await openWorldRun({
-    cwd: tempTree('bs-rules-worker-world-run-'),
+    cwd,
     displayName: 'Camp',
+    port: 5173,
     runtime: await load(),
     reloadRules: load,
   });
@@ -220,10 +222,22 @@ async function servedWorld() {
     page.send({ type: 'hello', clientId: 'p1' });
     await greeted;
   };
-  return { run, server, save, reload: () => run.queue.saved(SAVED), act, stoke, logs, rejoin };
+  return { cwd, run, server, save, reload: () => run.queue.saved(SAVED), act, stoke, logs, rejoin };
 }
 
 describe('#885: the world road', () => {
+  it('refuses a second run on the same world from its worker, naming the first run (#881)', async () => {
+    const world = await servedWorld();
+    const { rulesPath, tempDir } = rulesProject('bs-rules-worker-second-', worldRules(1));
+    const load = () => loadWorldRuntime(rulesPath, tempDir, 'monorepo');
+    const runtime = await load();
+    closing.push(() => runtime.worker.close());
+
+    await expect(
+      openWorldRun({ cwd: world.cwd, displayName: 'Camp', port: 5174, runtime, reloadRules: load }),
+    ).rejects.toThrow(new RegExp(`already open in another \\\`boardsmith dev\\\` \\(pid ${process.pid}, port 5173\\)`));
+  }, 60_000);
+
   it('runs the world in one worker however often its rules reload, and never in this process', async () => {
     const before = liveRulesWorkers();
     const world = await servedWorld();

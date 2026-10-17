@@ -219,6 +219,8 @@ export async function loadWorldRuntime(
 interface WorldDevServerOptions {
   readonly cwd: string;
   readonly uiPath: string;
+  /** The rules folder `runtime` was loaded from; a save under it reloads the world (#882). */
+  readonly rulesDir: string;
   /** The rules and the host that runs them, from one bundle (#283). */
   readonly runtime: WorldRuntime;
   readonly displayName: string;
@@ -283,7 +285,7 @@ function closesWorld(run: WorldRun): HeldResource {
 
 /** Open the project's world on `runtime`, and reload it through `reloadRules` on every save. */
 export async function openWorldRun(
-  options: Pick<WorldDevServerOptions, 'cwd' | 'displayName' | 'runtime' | 'reloadRules'>,
+  options: Pick<WorldDevServerOptions, 'cwd' | 'displayName' | 'runtime' | 'reloadRules' | 'port'>,
 ): Promise<WorldRun> {
   // THE ONE PLACE THE BUDGETS ARE DECIDED, and they are the library's defaults
   // rather than numbers this file invents. A laptop running different ceilings
@@ -358,6 +360,7 @@ export async function openWorldRun(
     });
     const opened = await call<'open', OpenedWorld>(rules, 'open', {
       storePath,
+      port: options.port,
       worldName: options.displayName,
       budgets,
       pages,
@@ -579,7 +582,7 @@ export async function startWorldDevServer(
 
   // A RULE EDIT IS A COORDINATED WORLD RELOAD (#201), heard here and carried
   // out by the run's queue (see `openWorldRun`).
-  reloadOnRulesEdit({ vite, rulesDir: join(options.cwd, 'src', 'rules'), cwd: options.cwd, queue: run.queue });
+  reloadOnRulesEdit({ vite, rulesDir: options.rulesDir, cwd: options.cwd, queue: run.queue });
 
   const hostUrl = served.localUrl;
   announceHost({

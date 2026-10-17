@@ -500,7 +500,7 @@ describe("#717: an event in a partition only its own seat's view names", () => {
 
 describe('#167: a seat switcher, so one person can play several seats', () => {
   it('moves a client between seats and projects each seat its own view', async () => {
-    const { host, sent } = await attached({ dir });
+    const { host, sent, store } = await attached({ dir });
     expect(last(sent, 'c1', 'world_state')?.seat).toBe(1);
 
     await host.handleMessage('c1', { type: 'attach', seat: 3 });
@@ -508,7 +508,7 @@ describe('#167: a seat switcher, so one person can play several seats', () => {
 
     // The ROSTER is durable, and both seats are in it: a seat is where a
     // player's holdings are, so taking a second one never gives back the first.
-    const roster = openHost({ dir }).store.seats().map((s) => s.seat);
+    const roster = store.seats().map((s) => s.seat);
     expect(roster).toEqual([1, 3]);
     await host.close();
   });
@@ -1969,12 +1969,12 @@ describe('#218: adding durable partition roots to a world anybody is in', () => 
     expect(await again.host.start()).toEqual({
       migrated: { from: 1, to: 2, partitions: 3, created: 1, events: 1 },
     });
+    await again.host.close();
     const store = onDisk();
     expect([...store.partitionNames()].sort()).toEqual([
       HEARTH, 'region:1', 'region:2', 'region:3',
     ]);
     store.close();
-    await again.host.close();
   });
 
   it('refuses a root whose name the world already holds, and writes nothing', async () => {

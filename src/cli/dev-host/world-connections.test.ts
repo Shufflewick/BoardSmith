@@ -128,6 +128,7 @@ async function serve() {
   const run = await openWorldRun({
     cwd: tempTree('bs-world-connections-run-'),
     displayName: 'Camp',
+    port: 5173,
     runtime,
     reloadRules: () => Promise.reject(new Error('This test never reloads its rules.')),
   });

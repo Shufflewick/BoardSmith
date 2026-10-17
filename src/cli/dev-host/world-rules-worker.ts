@@ -22,7 +22,7 @@ export interface WorldFacts {
 /** The calls the host makes, by type, with what each carries. */
 export interface WorldCalls {
   /** Open the world at `storePath`; `pages` are the pages whose sockets are open. */
-  open: { storePath: string; worldName: string; budgets: WorldBudgets; pages: readonly string[] };
+  open: { storePath: string; port: number; worldName: string; budgets: WorldBudgets; pages: readonly string[] };
   close: undefined;
   message: { clientId: string; message: WorldDevRequest };
   disconnect: { clientId: string };
@@ -67,9 +67,9 @@ export function serveWorld(rules: GameDefinition | undefined): void {
     };
 
     const handlers: { [T in keyof WorldCalls]: (payload: WorldCalls[T]) => unknown } = {
-      async open({ storePath, worldName, budgets, pages }): Promise<OpenedWorld> {
+      async open({ storePath, port, worldName, budgets, pages }): Promise<OpenedWorld> {
         open = new Set(pages);
-        const store = openWorldStore(storePath, budgets);
+        const store = openWorldStore(storePath, budgets, { port });
         const launchedBefore = store.isLaunched();
         let opened: LocalWorldHost;
         try {

@@ -94,6 +94,7 @@ async function serveWorld(edit: Rules | Error) {
   const run = await openWorldRun({
     cwd,
     displayName: 'Camp',
+    port: 5173,
     runtime: await beforeEdit(),
     reloadRules: async () => {
       await rebuildWaitsFor;

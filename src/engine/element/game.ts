@@ -2427,9 +2427,6 @@ export class Game<
   }
 
   /**
-   * Get all registered action names
-   */
-  /**
    * Re-derive the awaiting set of the currently open `simultaneousActionStep`,
    * admitting seats that have become eligible since it opened (#28).
    *
@@ -2452,9 +2449,13 @@ export class Game<
    *
    * @example
    * ```typescript
-   * // In the round-boundary execute() that materialises pending arrivals:
-   * for (const seat of arriving) placeCharacter(game, seat);
-   * game.refreshAwaitingActions();
+   * // In an action's execute(), while the simultaneous step is open: the
+   * // arriving seat is admitted now, and if no seat is left to wait on, the
+   * // step ends once this action settles, not inside execute().
+   * Action.create('summon').execute(() => {
+   *   placeCharacter(game, arrivingSeat);
+   *   game.refreshAwaitingActions(arrivingSeat);
+   * });
    * ```
    */
   refreshAwaitingActions(seat?: number): void {
@@ -2462,6 +2463,9 @@ export class Game<
     if (state) this.#applyFlowCompletion(state);
   }
 
+  /**
+   * Get all registered action names
+   */
   getActionNames(): string[] {
     return [...this._actions.keys()];
   }
@@ -4709,9 +4713,7 @@ export class Game<
    * a time. That hook is author code handed the filtered tree and free to
    * rewrite it in place, and a batch shares every attribute bag it had no
    * reason to redact -- so one seat's rewrite would reach the next seat's view.
-   * Nothing the engine can read decides whether a hook writes, which is the
-   * same reason `testing/visibility.ts` gates its own fast paths on the hook's
-   * absence.
+   * Nothing the engine can read decides whether a hook writes.
    */
   toJSONForPlayers(players: readonly (P | number | null)[]): SeatViewJSON[] {
     const GameClass = this.constructor as typeof Game;

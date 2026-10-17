@@ -153,4 +153,15 @@ describe('useBoardSize', () => {
     window.dispatchEvent(new Event('resize'));
     expect(api.availWidth.value).toBe(640); // unchanged — listener is gone
   });
+
+  it('cancels the pending first-frame measure on unmount (#868)', async () => {
+    vi.stubGlobal('requestAnimationFrame', () => 7);
+    const cancelAnimationFrame = vi.fn();
+    vi.stubGlobal('cancelAnimationFrame', cancelAnimationFrame);
+    const { wrapper } = mountBoardSize(ref(boardInRegion(fakeRegion(800))));
+    await nextTick();
+
+    wrapper.unmount();
+    expect(cancelAnimationFrame).toHaveBeenCalledWith(7);
+  });
 });
