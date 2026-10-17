@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
@@ -16,6 +16,7 @@ import {
   recordWaiver,
   recordReopen,
   parseSignoff,
+  readStatus,
 } from './chunk-signoff.js';
 import { chunkCheckCommand, chunkProvenanceStatusCommand } from './chunk-provenance.js';
 import {
@@ -181,6 +182,13 @@ describe('recordSignoff — a chunk does not reach verified while a constraint d
   });
 });
 
+describe('readStatus', () => {
+  it('reads an empty Status line as empty, never the line below it (#829)', () => {
+    expect(readStatus('Status:\nverified\n')).toBe('');
+    expect(readStatus('Status:  built  \n')).toBe('built');
+  });
+});
+
 describe('waivers — scoped to named chunks, and they expire', () => {
   it('a waiver naming one chunk verifies that chunk as verified (user-waived)', async () => {
     const project = await makeProject([{ slug: 'world-shell' }, { slug: 'combat' }]);
@@ -258,6 +266,17 @@ describe('waivers — scoped to named chunks, and they expire', () => {
     await expect(
       recordWaiver({ project, chunks: 'world-shell', by: 'orchestrator', expires: '2026-09-30', reason: 'x', now: NOW }),
     ).rejects.toThrow(/designer/i);
+  });
+
+  it('parallel waivers are all kept, each with its own id (#831)', async () => {
+    const slugs = ['a', 'b', 'c', 'd', 'e'];
+    const project = await makeProject(slugs.map((slug) => ({ slug })));
+    const ids = await Promise.all(
+      slugs.map((chunks) => recordWaiver({ project, chunks, by: 'Jane', expires: '2026-09-30', reason: 'x', now: NOW })),
+    );
+    expect([...ids].sort()).toEqual(['W1', 'W2', 'W3', 'W4', 'W5']);
+    const ledger = await fs.readFile(join(project, DESIGN_DIR, WAIVERS_MD), 'utf-8');
+    for (const slug of slugs) expect(ledger).toContain(`- Chunks: ${slug}\n`);
   });
 
   it('a second waiver gets the next id', async () => {
@@ -495,6 +514,15 @@ describe('an edit to a shared file is accounted for by the chunk that made it (#
     expect((await assessSignoffs(project)).get('shop')!.sharedEdits).toEqual([
       { path: 'src/rules.ts', coveredBy: 'deal, shop', how: 'merged' },
     ]);
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await chunkProvenanceStatusCommand({ project });
+      const out = log.mock.calls.map((c) => c.join(' ')).join('\n');
+      expect(out).toContain('src/rules.ts (vouched for by the merge of deal, shop)');
+      expect(out).toContain('or is building it, or the merge named vouched for it):');
+    } finally {
+      log.mockRestore();
+    }
 
     await fs.writeFile(ledger, record(createHash('sha256').update('rules v2').digest('hex'), new Date('2026-09-26T00:00:00Z')));
     expect((await checkSignoff(project, 'deal')).join('\n')).toContain('src/rules.ts');

@@ -238,6 +238,52 @@ describe('driftCheckCommand', () => {
     expect(finding?.detail).toContain(firstSha);
   });
 
+  it.each(['./kept.txt', '../kept.txt'])(
+    'a manifest row written %s still detects the change git reports as kept.txt (#822)',
+    async (row) => {
+      const { repoDir, firstSha } = await twoCommitRepo();
+      await makeChunk(repoDir, 'dotted-chunk', { hash: firstSha, manifestRows: [{ files: row, status: 'NEW' }] });
+
+      const result = await driftCheckCommand({ project: repoDir });
+
+      const chunk = result.chunks.find((c) => c.chunk === 'dotted-chunk');
+      expect(chunk?.state).toBe('drifted');
+      expect(chunk?.changedFiles).toEqual([row]);
+    },
+  );
+
+  it('a game in a subdirectory of its git repo detects a changed manifest file, and ignores a same-named file outside it (#822)', async () => {
+    const repoDir = join(dir, 'repo');
+    const gameDir = join(repoDir, 'game');
+    await fs.mkdir(join(gameDir, 'src'), { recursive: true });
+    await fs.mkdir(join(repoDir, 'src'), { recursive: true });
+    execSync('git init', { cwd: repoDir, stdio: 'ignore' });
+    execSync('git config maintenance.auto false', { cwd: repoDir, stdio: 'ignore' });
+    await fs.writeFile(join(gameDir, 'src', 'a.ts'), 'v1\n');
+    await fs.writeFile(join(gameDir, 'src', 'b.ts'), 'v1\n');
+    await fs.writeFile(join(repoDir, 'src', 'b.ts'), 'v1\n');
+    execSync('git add -A', { cwd: repoDir, stdio: 'ignore' });
+    execSync('git -c user.email=t@t -c user.name=t commit -m first', { cwd: repoDir, stdio: 'ignore' });
+    const firstSha = execSync('git rev-parse HEAD', { cwd: repoDir }).toString().trim();
+    await fs.writeFile(join(gameDir, 'src', 'a.ts'), 'v2\n');
+    await fs.writeFile(join(repoDir, 'src', 'b.ts'), 'v2\n');
+    execSync('git add -A', { cwd: repoDir, stdio: 'ignore' });
+    execSync('git -c user.email=t@t -c user.name=t commit -m second', { cwd: repoDir, stdio: 'ignore' });
+    await makeChunk(gameDir, 'sub-chunk', {
+      hash: firstSha,
+      manifestRows: [
+        { files: 'src/a.ts', status: 'NEW' },
+        { files: 'src/b.ts', status: 'NEW' },
+      ],
+    });
+
+    const result = await driftCheckCommand({ project: gameDir });
+
+    const chunk = result.chunks.find((c) => c.chunk === 'sub-chunk');
+    expect(chunk?.state).toBe('drifted');
+    expect(chunk?.changedFiles).toEqual(['src/a.ts']);
+  });
+
   it('a chunk with no recorded hash reports drift-unknown — never drifted, never clean', async () => {
     const { repoDir } = await twoCommitRepo();
     await makeChunk(repoDir, 'no-hash-chunk', {

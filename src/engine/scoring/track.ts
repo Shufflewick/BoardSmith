@@ -59,6 +59,15 @@ export interface TrackConfig {
   allowSpecialEntries?: boolean;
 }
 
+/** `config.maxEntries`, refused unless it is a whole number of 1 or more: a track with no positions is complete while empty. */
+function trackSize(config: TrackConfig): number {
+  const { maxEntries } = config;
+  if (!Number.isInteger(maxEntries) || maxEntries < 1) {
+    throw new Error(`Track "${config.id}" needs maxEntries of 1 or more (a whole number), but got ${maxEntries}.`);
+  }
+  return maxEntries;
+}
+
 /**
  * Base class for scoring tracks
  */
@@ -75,7 +84,7 @@ export abstract class Track {
   constructor(config: TrackConfig) {
     this.id = config.id;
     this.name = config.name ?? config.id;
-    this.maxEntries = config.maxEntries;
+    this.maxEntries = trackSize(config);
     this.pointsPerEntry = config.pointsPerEntry ?? new Array(config.maxEntries).fill(0);
     this.completionBonus = config.completionBonus ?? 0;
     this.allowSpecialEntries = config.allowSpecialEntries ?? false;
@@ -349,7 +358,7 @@ export class CounterTrack extends Track {
     const pointsPerCount = config.pointsPerCount ?? 0;
     super({
       ...config,
-      pointsPerEntry: new Array(config.maxEntries).fill(pointsPerCount),
+      pointsPerEntry: new Array(trackSize(config)).fill(pointsPerCount),
     });
     this.pointsPerCount = pointsPerCount;
   }
@@ -418,7 +427,7 @@ function trackBase(config: TrackConfig): TrackStateBase {
   return {
     id: config.id,
     name: config.name ?? config.id,
-    maxEntries: config.maxEntries,
+    maxEntries: trackSize(config),
     pointsPerEntry: config.pointsPerEntry ?? new Array(config.maxEntries).fill(0),
     completionBonus: config.completionBonus ?? 0,
     allowSpecialEntries: config.allowSpecialEntries ?? false,

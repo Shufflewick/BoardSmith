@@ -22,6 +22,7 @@ import { resolvePresentation } from '../presentation.js';
 import type { PresentationOverlay } from '../presentation.js';
 import { GAME_CONTEXT_KEYS } from '../../../composables/useGameContext.js';
 import { boardCellStates } from './board-cell-states.js';
+import { toAlgebraicNotation } from '../../../composables/useGameGrid.js';
 
 // ---------------------------------------------------------------------------
 // Local GameElement interface — do NOT import from engine (module is dependency-free)
@@ -182,7 +183,7 @@ function cellAriaLabel(cell: GameElement, idx: number): string {
   const c = idx % cols;
   const r = Math.floor(idx / cols);
   // Use the cell's own name (notation) if available; fall back to computed coord
-  const coord = cell.name ?? (String.fromCharCode(97 + c) + (rows - r));
+  const coord = cell.name ?? toAlgebraicNotation(r, c, { rows });
   return `${coord}, ${cellStateLabel(cell)}`;
 }
 

@@ -9,6 +9,7 @@ import type {
 import type { HistoryEntry } from '../engine/action/types.js';
 import type { GameStateSnapshot } from '../engine/utils/index.js';
 import { canSeatAct, dueSeats, availableActionsForSeat, followUpForSeat } from '../engine/index.js';
+import { isElement } from '../engine/element/game-element.js';
 import { createSnapshot, snapshotTree } from '../engine/utils/index.js';
 import { enumerateActionMoves } from '../engine/utils/enumerate-moves.js';
 import { constructGame } from '../engine/element/game.js';
@@ -52,9 +53,19 @@ type SearchMoveOutcome = 'made' | 'refused' | 'refusedAfterChanges';
 /**
  * A search's steps (#669): how many it made, how many were scored (the rest
  * were thrown away), whether it chose at random because no root move could be
- * played through, and why the first thrown-away step failed.
+ * played through, why the first thrown-away step failed, and why the game
+ * first refused a move cleanly (#874).
  */
-type SearchSteps = { made: number; scored: number; choseAtRandom: boolean; firstFailure?: string };
+type SearchSteps = { made: number; scored: number; choseAtRandom: boolean; firstFailure?: string; firstRefusal?: string };
+
+/** Add a sub-search's steps into `total`: a parallel bot's move is one search, split. */
+function addSearchSteps(total: SearchSteps, sub: SearchSteps): void {
+  total.made += sub.made;
+  total.scored += sub.scored;
+  total.firstFailure ??= sub.firstFailure;
+  total.firstRefusal ??= sub.firstRefusal;
+  total.choseAtRandom &&= sub.choseAtRandom;
+}
 
 /**
  * MCTS (Monte-Carlo Tree Search) Bot
@@ -194,9 +205,9 @@ export class MCTSBot<G extends Game = Game> {
    * is #19/#31, and this does not close it.
    */
   async play(): Promise<BotMove | null> {
-    if (this.config.parallel && this.config.parallel > 1) {
-      return this.playParallel();
-    }
+    // No more sub-searches than iterations, so each runs at least one (#876).
+    const subSearches = Math.min(this.config.parallel ?? 1, this.config.iterations);
+    if (subSearches > 1) return this.playParallel(subSearches);
     const { move } = await this.runSearch();
     this.warnIfStepsWereDropped(this.searchSteps);
     return move;
@@ -242,8 +253,7 @@ export class MCTSBot<G extends Game = Game> {
    * each gets an equal share of the time still left, so the whole move stays
    * within `timeout` (#634). An infinite timeout stays infinite for each.
    */
-  private async playParallel(): Promise<BotMove | null> {
-    const parallelCount = this.config.parallel!;
+  private async playParallel(parallelCount: number): Promise<BotMove | null> {
     const iterationsPerSearch = Math.floor(this.config.iterations / parallelCount);
     const deadline = Date.now() + (this.config.timeout ?? 2000);
 
@@ -301,10 +311,7 @@ export class MCTSBot<G extends Game = Game> {
         return null;
       }
 
-      steps.made += subBot.searchSteps.made;
-      steps.scored += subBot.searchSteps.scored;
-      steps.firstFailure ??= subBot.searchSteps.firstFailure;
-      steps.choseAtRandom &&= subBot.searchSteps.choseAtRandom;
+      addSearchSteps(steps, subBot.searchSteps);
       entryFor(move).votes++;
       for (const child of root.children) entryFor(child.parentMove!).visits += child.visits;
     }
@@ -823,7 +830,10 @@ export class MCTSBot<G extends Game = Game> {
       return { outcome: 'refusedAfterChanges', flowState: this.worldFlowState() };
     }
     if (flowState.actionError === undefined) return { outcome: 'made', flowState };
-    if (!flowState.actionPartiallyApplied) return { outcome: 'refused', flowState };
+    if (!flowState.actionPartiallyApplied) {
+      this.searchSteps.firstRefusal ??= flowState.actionError;
+      return { outcome: 'refused', flowState };
+    }
     this.searchSteps.firstFailure ??= flowState.actionError;
     return { outcome: 'refusedAfterChanges', flowState };
   }
@@ -1134,17 +1144,15 @@ export class MCTSBot<G extends Game = Game> {
    * objects go stale. Feeding a stale (foreign-tree) element into
    * `continueFlow` -> `Piece.putInto` would splice a wrong-instance object into
    * the live tree and duplicate its id. Element ids are stable across restore,
-   * so we canonicalize by id here. Non-element args (scalars, `{value,label}`
-   * choices without a numeric `id`) pass through untouched; already-live
-   * objects resolve to themselves (no-op).
+   * so we canonicalize by id here. Non-element args (scalars, plain choice
+   * objects, even ones carrying an `id`, #873) pass through untouched;
+   * already-live elements resolve to themselves (no-op).
    */
   private rebindArgs(args: Record<string, unknown>): Record<string, unknown> {
     const game = this.searchGame;
     if (!game) return args;
     const rebindOne = (v: unknown): unknown => {
-      if (v && typeof v === 'object' && typeof (v as { id?: unknown }).id === 'number') {
-        return game.getElementById((v as { id: number }).id) ?? v;
-      }
+      if (isElement(v)) return game.getElementById(v.id) ?? v;
       return v;
     };
     const out: Record<string, unknown> = {};
@@ -1160,10 +1168,20 @@ export class MCTSBot<G extends Game = Game> {
   // ============================================================================
 
   /**
-   * Generate a unique key for a move (used for RAVE table lookup)
+   * Generate a unique key for a move (used for RAVE table lookup). An element,
+   * wherever it sits in the args, is keyed by its id, not its subtree, so the
+   * move keeps one key in every sampled world (#876).
    */
   private getMoveKey(move: BotMove): string {
-    return `${move.action}:${JSON.stringify(move.args)}`;
+    const keyOf = (v: unknown): unknown => {
+      if (isElement(v)) return { elementId: v.id };
+      if (Array.isArray(v)) return v.map(keyOf);
+      if (typeof v === 'object' && v !== null && Object.getPrototypeOf(v) === Object.prototype) {
+        return Object.fromEntries(Object.entries(v as object).map(([k, x]) => [k, keyOf(x)]));
+      }
+      return v;
+    };
+    return `${move.action}:${JSON.stringify(keyOf(move.args))}`;
   }
 
   /**
@@ -1630,10 +1648,27 @@ export class MCTSBot<G extends Game = Game> {
    * search then quietly rests its choice on a few steps, or on none. Once per
    * move: a parallel bot adds its sub-searches' steps up and warns once. The
    * warning changes nothing about which move is chosen.
+   *
+   * A clean refusal changes nothing, so it is scored, not thrown away; when the
+   * game refused every move at the root the search still chose at random, and
+   * that gets its own warning (#874).
    */
-  private warnIfStepsWereDropped({ made, scored, choseAtRandom, firstFailure }: SearchSteps): void {
+  private warnIfStepsWereDropped({ made, scored, choseAtRandom, firstFailure, firstRefusal }: SearchSteps): void {
     const dropped = made - scored;
-    if (!isDevMode() || made === 0 || dropped * 2 < made) return;
+    if (!isDevMode() || made === 0) return;
+    if (dropped * 2 < made) {
+      if (choseAtRandom && firstRefusal !== undefined) {
+        console.warn(
+          `[BoardSmith] MCTS bot for seat ${this.playerIndex}: the game refused every move the bot tried, `
+          + 'so the bot chose its move at random. The first refusal said:\n\n'
+          + `  ${firstRefusal}\n\n`
+          + 'The game offered these moves and then refused them when they were made. When an action\'s '
+          + '`execute` returns `success: false` for a choice it offers, move that rule into the action\'s '
+          + '`validate` or its choices, so the move is never offered.',
+        );
+      }
+      return;
+    }
     console.warn(
       `[BoardSmith] MCTS bot for seat ${this.playerIndex}: ${dropped} of ${made} search steps were thrown away, `
       + 'because a move changed the game and then failed. The first one failed with:\n\n'

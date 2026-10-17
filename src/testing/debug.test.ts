@@ -10,6 +10,8 @@ import { describe, it, expect } from 'vitest';
 import {
   Game,
   Player,
+  Space,
+  Card,
   Action,
   loop,
   eachPlayer,
@@ -17,13 +19,15 @@ import {
   type GameOptions,
 } from '../engine/index.js';
 import { TestGame } from './test-game.js';
-import { toDebugString } from './debug.js';
+import { toDebugString, diffSnapshots } from './debug.js';
 
 class DebugFixtureGame extends Game<DebugFixtureGame, Player> {
   score = 0;
 
   constructor(options: GameOptions) {
     super(options);
+    this.registerElements([Card]);
+    this.create(Space, 'deck').create(Card, 'ace-of-spades');
 
     this.registerAction(
       Action.create<DebugFixtureGame>('pass').execute(() => ({ success: true })),
@@ -60,5 +64,30 @@ describe('toDebugString — flow position (FLOW-01)', () => {
 
     expect(output).toContain('Flow position:');
     expect(output).toContain('no active flow');
+  });
+});
+
+describe('toDebugString — element tree and current player (#913)', () => {
+  const output = () =>
+    toDebugString(TestGame.create(DebugFixtureGame, { playerCount: 2, seed: 'debug-913' }).game);
+
+  it('prints each element once, under its parent', () => {
+    const lines = output().split('\n').filter(line => line.includes('ace-of-spades'));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toMatch(/^    ace-of-spades /);
+  });
+
+  it('names the current player by seat', () => {
+    expect(output()).toMatch(/Current Player: .+ \(seat 1\)/);
+  });
+});
+
+describe('diffSnapshots (#913)', () => {
+  it('reports a field that goes from an object to null', () => {
+    expect(diffSnapshots('{"a":{"b":1}}', '{"a":null}')).toBe('Changes:\n  a: {"b":1} → null');
+  });
+
+  it('reports a field that goes from null to an object', () => {
+    expect(diffSnapshots('{"a":null}', '{"a":{"b":1}}')).toBe('Changes:\n  a: null → {"b":1}');
   });
 });

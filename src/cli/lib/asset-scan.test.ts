@@ -44,6 +44,12 @@ describe('scanAssetReachability', () => {
     expect(violations).toEqual([]);
   });
 
+  // The scan reads every extension game code can live in (#848).
+  it.each(['mts', 'cts', 'mjs', 'cjs'])('flags a bare <img> in a .%s file', (ext) => {
+    const violations = scanWith({ [`src/ui/card.${ext}`]: 'export const html = `<img src="/a.svg">`;\n' });
+    expect(violations.map((v) => v.file)).toEqual([`src/ui/card.${ext}`]);
+  });
+
   // WR-02 — regex robustness
   it('flags an uppercase <IMG> tag (HTML tag names are case-insensitive)', () => {
     const violations = scanWith({
@@ -201,6 +207,60 @@ describe('scanAssetReachability', () => {
     });
     expect(violations.length).toBe(1);
     expect(violations[0].line).toBe(2);
+  });
+
+  // #852: a script file has no template region, so `//` and `/* */` are comments
+  // from line 1. Starting it in template mode reported the mentions below.
+  it.each(['src/ui/helpers.ts', 'src/ui/helpers.mts'])('does NOT flag <img> mentioned only in comments of %s', (file) => {
+    const violations = scanWith({
+      [file]: '// Never render a bare <img> here\n/* nor <img src="x"> */\n/*\n * <IMG/>\n */\nexport const x = 1;\n',
+    });
+    expect(violations).toEqual([]);
+  });
+
+  // #852: the comment fix must not blind the gate to live markup in script files.
+  it('still flags a live <img> in a .ts template string and in .tsx JSX', () => {
+    const violations = scanWith({
+      'src/ui/render.ts': '// <img> in a comment\nexport const html = `<img src="/x.png">`;\n',
+      'src/ui/Card.tsx': 'export const Card = () => <img src="/x.png" />; // <img>\n',
+    });
+    expect(violations.map((v) => `${v.file}:${v.line}`).sort()).toEqual(['src/ui/Card.tsx:1', 'src/ui/render.ts:2']);
+  });
+
+  // Review of #852: comment-looking text that is NOT a comment in a script file
+  // (inside a multi-line template literal, after a regex `\/`, in JSX text) must
+  // never hide a live <img>.
+  it.each([
+    ['src/ui/a.ts', 'export const t = `\n  <p>a // b</p> <img src="y">\n`;\n', 2],
+    ['src/ui/b.ts', 'export const t = `\n  /* x\n  <img src="y">\n  */\n`;\n', 3],
+    ['src/ui/c.ts', "s.replace(/\\//g, '-'); el.innerHTML = '<img src=\"y\">';\n", 1],
+    ['src/ui/d.tsx', 'export const D = () => <p>a // b <img src="y" /></p>;\n', 1],
+    ['src/ui/k.tsx', 'export const K = () => <p>// b <img src="y" /></p>;\n', 1],
+    ['src/ui/l.tsx', 'export const L = () => <p>{x}/* b */ <img src="y" /></p>;\n', 1],
+    ['src/ui/o.ts', '/** @see x // y */ export const h = \'<img src="y">\';\n', 1],
+  ])('flags a live <img> after comment-looking text that is not a comment in %s', (file, content, line) => {
+    expect(scanWith({ [file]: content }).map((v) => v.line)).toEqual([line]);
+  });
+
+  // Review of #852: a comment after code on the same line is still a comment.
+  it.each([
+    ['src/ui/f.ts', 'export const a = 1; // <img>\n'],
+    ['src/ui/g.ts', 'export const a = 1; /* <img src="y"> */ export const b = 2;\n'],
+    ['src/ui/h.tsx', 'export const H = () => <p>{/* <img /> */}</p>;\n'],
+    ['src/ui/i.ts', '#!/usr/bin/env node\n// <img>\nexport const a = 1;\n'],
+    ['src/ui/j.ts', 'export const a = 1;\n// <img>'],
+    ['src/ui/m.ts', 'export const a = 1;\n/** <img> */\n'],
+    ['src/ui/n.ts', 'export const a = 1;\n/** doc */\n// <img>\n'],
+  ])('does NOT flag <img> in a comment that follows code in %s', (file, content) => {
+    expect(scanWith({ [file]: content })).toEqual([]);
+  });
+
+  it.each([
+    ['src/ui/e.ts', 'export const x = 1;\n/* never closed\n<img src="y">\n'],
+    ['src/ui/p.ts', 'export const x = 1;\n/** never closed <img>\n<img src="y">\n'],
+  ])('surfaces an unterminated block comment in %s (WR-01)', (file, content) => {
+    const violations = scanWith({ [file]: content });
+    expect(violations.map((v) => [v.line, /unterminated/.test(v.message)])).toEqual([[2, true]]);
   });
 
   // F-11 (v4.8): an apostrophe in TEMPLATE text ("Player's hand") must NOT open

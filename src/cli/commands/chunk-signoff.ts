@@ -23,6 +23,7 @@ import {
   stripHtmlComments,
 } from './build-manifest.js';
 import { atomicWriteFile } from './verify-run.js';
+import { withLedgerLock } from '../lib/ledger-lock.js';
 import { checkConstraints } from './constraint-check.js';
 import { verifiedProblem } from '../lib/verify-result.js';
 import { escapeRegExp } from '../lib/regexp.js';
@@ -178,7 +179,7 @@ export function designerNameProblem(by: string, flag: string): string | undefine
 // ---------------------------------------------------------------------------------------------
 
 export function readStatus(chunkText: string): string | undefined {
-  return /^Status:\s*(.*)$/m.exec(chunkText)?.[1].trim();
+  return /^Status:[ \t]*(.*)$/m.exec(chunkText)?.[1].trim();
 }
 
 /** The number of real items in `## Verified Checklist` (template placeholders excluded). */
@@ -1118,20 +1119,22 @@ export async function recordWaiver(options: WaiverOptions): Promise<string> {
   const chunks = waiverChunks(options.chunks, await readSketch(dir));
 
   const ledgerPath = designPath(dir, WAIVERS_MD);
-  const existing = await fs.readFile(ledgerPath, 'utf-8').catch(() => WAIVERS_HEADER);
-  const next = parseWaivers(existing).reduce((max, w) => Math.max(max, Number(w.id.slice(1))), 0) + 1;
-  const id = `W${next}`;
-  const entry = [
-    `### Waiver ${id}`,
-    `- Granted by: ${options.by.trim()}`,
-    `- Granted: ${now.toISOString()}`,
-    `- Chunks: ${chunks.join(', ')}`,
-    `- Expires: ${options.expires}`,
-    `- Reason: ${options.reason.trim()}`,
-    '',
-  ].join('\n');
-  await atomicWriteFile(ledgerPath, `${existing.replace(/\n*$/, '\n\n')}${entry}`);
-  return id;
+  return withLedgerLock(ledgerPath, async () => {
+    const existing = await fs.readFile(ledgerPath, 'utf-8').catch(() => WAIVERS_HEADER);
+    const next = parseWaivers(existing).reduce((max, w) => Math.max(max, Number(w.id.slice(1))), 0) + 1;
+    const id = `W${next}`;
+    const entry = [
+      `### Waiver ${id}`,
+      `- Granted by: ${options.by.trim()}`,
+      `- Granted: ${now.toISOString()}`,
+      `- Chunks: ${chunks.join(', ')}`,
+      `- Expires: ${options.expires}`,
+      `- Reason: ${options.reason.trim()}`,
+      '',
+    ].join('\n');
+    await atomicWriteFile(ledgerPath, `${existing.replace(/\n*$/, '\n\n')}${entry}`);
+    return id;
+  });
 }
 
 // ---------------------------------------------------------------------------------------------

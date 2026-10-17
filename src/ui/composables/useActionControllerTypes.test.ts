@@ -23,7 +23,7 @@ describe('UseActionControllerReturn', () => {
       | 'appendListEntry' | 'removeListEntry'
       | 'getChoices' | 'getValidElements' | 'getActionMetadata'
       | 'actionSnapshot' | 'getCollectedPick'
-      | 'onBeforeAutoExecute' | 'animationsPending' | 'showActionPanel'
+      | 'onBeforeAutoExecute' | 'onAfterAutoExecute' | 'animationsPending' | 'showActionPanel'
     >();
   });
 });
