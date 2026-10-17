@@ -794,14 +794,13 @@ function findLabelLine(
 
 /**
  * Whether a `Source:` line is a bare path (replaceable in place) rather than the first line of
- * wrapped prose. An archived path is always bare, even when its file name has a space (#823).
+ * wrapped prose. A space is allowed only in an archived path, whose file name may have one (#823).
  */
 function isBarePathSource(text: string, sourceLine: { end: number; value: string }): boolean {
-  if (sourceLine.value.startsWith(ARCHIVE_PREFIX)) return true;
   const lineEnd = text.indexOf('\n', sourceLine.end);
   const nextLine = lineEnd === -1 ? undefined : text.slice(lineEnd + 1).split('\n')[0];
   return (
-    !/\s/.test(sourceLine.value) &&
+    (sourceLine.value.startsWith(ARCHIVE_PREFIX) || !/\s/.test(sourceLine.value)) &&
     (nextLine === undefined ||
       nextLine.trim() === '' ||
       nextLine.startsWith('## ') ||

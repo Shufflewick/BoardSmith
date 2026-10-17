@@ -1207,6 +1207,17 @@ describe('ingest-archive — existing INDEX.md adoption (decision 1b)', () => {
     expect(/^Source:\s*(.*)$/m.exec(index)![1].trim()).toBe('rulebook/source/rules.pdf');
   });
 
+  it('wrap-safe even when the wrapped prose starts with the archive path (#823)', async () => {
+    const prose = 'rulebook/source/rules.pdf (2 pages). This index is built from the';
+    const project = await writePreProvenanceIndex(dir, {
+      sourceLines: [`Source: ${prose}`, WRAPPED_SOURCE_LINE2],
+    });
+    await ingestArchiveCommand(rulesPdfPath, { project, json: true });
+    const index = await readIndex(project);
+    expect(/^Source:\s*(.*)$/m.exec(index)![1].trim()).toBe('rulebook/source/rules.pdf');
+    expect(index).toContain(`\n${prose}\n${WRAPPED_SOURCE_LINE2}\n`);
+  });
+
   it('B10 payoff check: computeVerificationScope reports full for the repaired fixture', async () => {
     const project = await writePreProvenanceIndex(dir);
     await ingestArchiveCommand(rulesPdfPath, { project, json: true });
