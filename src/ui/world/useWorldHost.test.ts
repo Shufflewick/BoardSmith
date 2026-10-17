@@ -361,7 +361,8 @@ describe('useWorldHost', () => {
   it('fails a command the host never answers, rather than spinning forever', async () => {
     const host = make();
     const answered = host.act('look', {});
-    vi.advanceTimersByTime(20_000);
+    // Two windows: the page asks once more with the same order before it gives up (#888).
+    vi.advanceTimersByTime(40_000);
     const outcome = await answered;
     expect(outcome.ok).toBe(false);
     expect(outcome.message).toMatch(/look/);
@@ -808,6 +809,75 @@ describe('useWorldHost — an order that outlives the page (#195)', () => {
     // AND THE PLAYER CHOSE NOTHING AGAIN: the arguments came out of the book.
     expect(retry.args).toEqual({ name: 'Ceres' });
     expect(reloaded.recovering.value).toBe(true);
+  });
+
+  it('asks once more with the SAME order when the world is silent, and takes that answer (#888)', async () => {
+    const host = page();
+    const pressed = host.act('found', { name: 'Ceres' });
+    vi.advanceTimersByTime(20_000);
+
+    const [first, again] = commands();
+    expect(commands()).toHaveLength(2);
+    expect(again.order).toEqual(first.order);
+    expect(again.requestId).not.toBe(first.requestId);
+    expect(host.acting.value).toBe(true);
+
+    answer(host, { replayed: true });
+    await expect(pressed).resolves.toEqual({ ok: true, replayed: true });
+    expect(JSON.parse(storage.getItem(BOOK_KEY) ?? '[]')).toEqual([]);
+  });
+
+  it('asks again only once, then says what is true: a reload finds out (#888)', async () => {
+    const host = page();
+    const pressed = host.act('found', {});
+    vi.advanceTimersByTime(40_000);
+    expect(commands()).toHaveLength(2);
+    const outcome = await pressed;
+    expect(outcome.ok).toBe(false);
+    expect(outcome.message).toMatch(/found/);
+    expect(outcome.message).toMatch(/reload/i);
+    expect(host.acting.value).toBe(false);
+    // The order stays written down, because its fate is still unknown.
+    expect(JSON.parse(storage.getItem(BOOK_KEY) ?? '[]')).toHaveLength(1);
+  });
+
+  it('takes a late answer to the first send while the second is still waiting (#888)', async () => {
+    const host = page();
+    const pressed = host.act('found', {});
+    vi.advanceTimersByTime(20_000);
+    const [first] = commands();
+    deliver(host, { source: WORLD_HOST_SOURCE, type: 'world_response', requestId: first.requestId, ok: true });
+
+    await expect(pressed).resolves.toEqual({ ok: true });
+    expect(host.acting.value).toBe(false);
+    expect(JSON.parse(storage.getItem(BOOK_KEY) ?? '[]')).toEqual([]);
+  });
+
+  it('does not promise a reload can check when this browser keeps no book (#888)', async () => {
+    const host = useWorldHost({ post: (message) => posted.push(message), orders: createOrderBook({ storage: null }) });
+    const pressed = host.act('found', {});
+    vi.advanceTimersByTime(40_000);
+    const { message } = await pressed;
+    expect(message).not.toMatch(/reload the page to check/i);
+    expect(message).toMatch(/look at the world before pressing again/i);
+  });
+
+  it('strikes the order out when a reply arrives after the page stopped waiting (#888)', async () => {
+    const host = page();
+    const pressed = host.act('found', {});
+    vi.advanceTimersByTime(40_000);
+    await pressed;
+
+    const [first] = commands();
+    deliver(host, { source: WORLD_HOST_SOURCE, type: 'world_response', requestId: first.requestId, ok: true });
+    expect(JSON.parse(storage.getItem(BOOK_KEY) ?? '[]')).toEqual([]);
+
+    // So a reload has nothing left to ask about.
+    const reloaded = page();
+    reloaded.start();
+    deliver(reloaded, stateFrame());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(commands()).toHaveLength(2);
   });
 
   /**
