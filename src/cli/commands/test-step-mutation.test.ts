@@ -854,7 +854,7 @@ it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
         await fs.mkdir(workDir, { recursive: true });
         const configPath = await writeRunConfig(project, workDir, vitestMajor);
         vi.stubEnv('BOARDSMITH_WORKSPACE', undefined);
-        onTestFinished(() => vi.unstubAllEnvs());
+        onTestFinished(() => { vi.unstubAllEnvs(); });
         // Dynamic import: the config this test just generated.
         const { default: config } = await import(configPath);
         return { project, workDir, config: await config({ command: 'serve', mode: 'test' }) };
