@@ -1025,6 +1025,22 @@ async function ledgerBody(project: string, runId: string): Promise<string> {
 }
 
 describe('verifyClassifyRecordCommand — one verdict, atomically appended, stale/provenance derived', () => {
+  it('keeps every classification when several record calls run in parallel (#831)', async () => {
+    const { project, runId, pairId } = await recordedSevenRunFirstPair();
+    const evidence = ['one', 'two', 'three', 'four', 'five'];
+
+    await Promise.all(
+      evidence.map((e) => verifyClassifyRecordCommand({ project, runId, pairId, label: 'cosmetic', evidence: e, json: true })),
+    );
+
+    const recorded = (await ledgerBody(project, runId))
+      .split('\n')
+      .filter((l) => l.trim().length > 0)
+      .map((l) => JSON.parse(l))
+      .filter((r) => r.kind === 'classification');
+    expect(recorded.map((r) => r.evidence).sort()).toEqual([...evidence].sort());
+  });
+
   it('ledger-1: recording cosmetic appends exactly one classification line inside the fences, stale:false, provenance derived', async () => {
     const { project, runId, pairId } = await recordedSevenRunFirstPair();
 
@@ -1430,7 +1446,8 @@ describe('per-chunk verdict roll-up (VERIFY-01) — decision 18: line-level attr
     const escalateAfterSharper = afterSharper.chunkVerdicts.find((c) => c.slug === 'escalate')!;
     expect(escalateAfterSharper.ruleDelta).toBe('sharper');
     expect(escalateAfterSharper.stale).toBe(true);
-    expect(new Set(escalateAfterSharper.pairIds)).toEqual(new Set([pairIdA, pairIdB]));
+    // C is still pending: it counts as unclassified (#830), outranked here by sharper.
+    expect(new Set(escalateAfterSharper.pairIds)).toEqual(new Set([pairIdA, pairIdB, pairIdC]));
 
     await verifyClassifyRecordCommand({
       project,
@@ -1479,6 +1496,17 @@ describe('per-chunk verdict roll-up (VERIFY-01) — decision 18: line-level attr
     expect(e.ruleDelta).toBe('unclassified');
     expect(e.stale).toBe(true);
     expect(e.pairIds).toContain(pairIdUnpaired);
+  });
+
+  it('chunk-2b: a chunk citing a paired group not yet classified (still in pendingPairs) is reported unclassified, never clean (#830)', async () => {
+    const { project, runId, pairIdA } = await threeGroupProject();
+    await writeChunkCiting(project, 'chunk-a', ['a.md']);
+    const result = await verifyClassifyStatusCommand({ project, runId, json: true });
+    expect(result.pendingPairs).toContain(pairIdA);
+    const a = result.chunkVerdicts.find((c) => c.slug === 'chunk-a')!;
+    expect(a.ruleDelta).toBe('unclassified');
+    expect(a.stale).toBe(true);
+    expect(a.pairIds).toContain(pairIdA);
   });
 
   it('chunk-3: no CHUNK.md/SKETCH.md file is written or modified by verify-classify-status or verify-classify-record', async () => {

@@ -36,6 +36,8 @@
  * The result goes to `.boardsmith/verify/<commit>.json` (`lib/verify-result.ts`), with whether the
  * tree stayed clean while the checks ran. The exit code is non-zero when any check failed, and also
  * when the tree changed during the run; such a run never replaces a clean passing result on file.
+ * When what the tests run with (BoardSmith, the installed or linked packages) changed during the run,
+ * nothing is recorded and no mutant outcome is kept: the run stops with an error naming what changed (#932).
  *
  * `--check` runs nothing. It exits 0 only when HEAD, on a clean tree, has a passing full result.
  * With `--chunk <slug>` it asks instead for that chunk's passing fast checks, the question
@@ -46,7 +48,7 @@ import { join, relative, resolve as pathResolve } from 'node:path';
 import chalk from 'chalk';
 import { chunkVerifyBase } from '../lib/chunk-commits.js';
 import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
-import { type MutantCache, openMutantCache } from '../lib/mutant-cache.js';
+import { type MutantCache, captureExecutionContext, executionContextChange, openMutantCache } from '../lib/mutant-cache.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { projectUiProblem, requireGameProject } from '../lib/game-project.js';
 import { chunkMdPath } from '../lib/project-paths.js';
@@ -142,19 +144,9 @@ function hunkLines(line: string): number[] | undefined {
   return Array.from({ length: count }, (_, i) => start + i);
 }
 
-/** The new-side line numbers of each hunk in a zero-context diff, by file. A deleted file has none. */
-function addedLinesByFile(diff: string): Map<string, Set<number>> {
-  const byFile = new Map<string, Set<number>>();
-  let current = new Set<number>();
-  for (const line of diff.split('\n')) {
-    if (line.startsWith('+++ ')) {
-      current = new Set();
-      if (line !== '+++ /dev/null') byFile.set(line.slice(4).replace(/^b\//, ''), current);
-      continue;
-    }
-    hunkLines(line)?.forEach((n) => current.add(n));
-  }
-  return byFile;
+/** The new-side line numbers of the hunks in one file's zero-context diff. A deleted file has none. */
+function addedLines(diff: string): Set<number> {
+  return new Set(diff.split('\n').flatMap((line) => hunkLines(line) ?? []));
 }
 
 /**
@@ -164,17 +156,29 @@ function addedLinesByFile(diff: string): Map<string, Set<number>> {
  * subfolder of its repository is measured the same as one at the top.
  */
 export async function changedSince(projectDir: string, baseCommit: string): Promise<ChangedSince> {
-  const prefixes = ['--relative', '--no-color', '--no-ext-diff', '--src-prefix=a/', '--dst-prefix=b/'];
-  const diff = await git(projectDir, ['diff', ...prefixes, '-U0', baseCommit, '--']);
-  const named = await git(projectDir, ['diff', '--relative', '--name-only', baseCommit, '--']);
-  const untracked = (await git(projectDir, ['ls-files', '--others', '--exclude-standard'])).split('\n').filter(Boolean);
+  // NUL-separated names are never quoted, so a name with a space, quote or backslash survives (#834).
+  const status = (await git(projectDir, ['diff', '--relative', '--name-status', '-z', baseCommit, '--'])).split('\0').filter(Boolean);
+  const untracked = (await git(projectDir, ['ls-files', '-z', '--others', '--exclude-standard'])).split('\0').filter(Boolean);
 
-  const added = addedLinesByFile(diff);
+  // Each entry is a status then its path, or, for a rename or copy, the old path and the new one.
+  const sources = new Map<string, string[]>();
+  for (let i = 0; i < status.length; ) {
+    const width = /^[RC]/.test(status[i]) ? 2 : 1;
+    const paths = status.slice(i + 1, i + 1 + width);
+    sources.set(paths[width - 1], paths);
+    i += 1 + width;
+  }
+  const added = new Map<string, Set<number>>();
+  for (const [path, paths] of sources) {
+    if (!isChunkCode(path)) continue;
+    const diff = await git(projectDir, ['--literal-pathspecs', 'diff', '--relative', '--no-color', '--no-ext-diff', '-U0', baseCommit, '--', ...paths]);
+    added.set(path, addedLines(diff));
+  }
   for (const path of untracked) {
     const text = await fs.readFile(join(projectDir, path), 'utf-8');
     added.set(path, new Set(text.replace(/\n$/, '').split('\n').map((_, i) => i + 1)));
   }
-  const files = [...new Set([...named.split('\n').filter(Boolean), ...untracked])].sort();
+  const files = [...new Set([...sources.keys(), ...untracked])].sort();
   const code = new Map(
     [...added]
       .filter(([path, lines]) => isChunkCode(path) && lines.size > 0)
@@ -200,6 +204,8 @@ interface VerifyContext {
   changed: ChangedSince;
   /** Mutant outcomes of earlier runs, for this commit's code and tests (`lib/mutant-cache.ts`), opened on first ask. */
   mutantCache: () => Promise<MutantCache>;
+  /** What changed in the execution context since the run began, or undefined while nothing has (#932). */
+  contextChange: () => Promise<string | undefined>;
   earlier: ReadonlyMap<VerifyCheckName, VerifyCheckResult>;
   log: (line: string) => void;
   /**
@@ -455,6 +461,7 @@ async function mutationCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
     added: ctx.changed.code,
     cache: await ctx.mutantCache(),
     log: ctx.log,
+    contextChange: ctx.contextChange,
   });
   return mutationVerdict(since, run);
 }
@@ -588,9 +595,13 @@ export async function runVerify(options: {
   await requireResultIgnored(projectDir);
   const base = await runBase(projectDir, options);
   const log = options.log ?? ((line: string) => console.error(chalk.dim(line)));
+  // One capture for the whole run: the mutant cache keys by it, and it is checked again at the end.
+  const context = await captureExecutionContext(projectDir);
+  const contextChange = () => executionContextChange(projectDir, context);
+  const boardsmithCommit = await currentBoardsmithCommit();
   // Only the mutation check reads the cache, so a run without it (`--chunk`) never opens it.
   let mutantCache: Promise<MutantCache> | undefined;
-  const openCache = () => (mutantCache ??= openMutantCache(projectDir).then((cache) => {
+  const openCache = () => (mutantCache ??= openMutantCache(projectDir, context).then((cache) => {
     if (cache.unavailable !== undefined) log(`${cache.unavailable}; every mutant runs.`);
     return cache;
   }));
@@ -603,9 +614,18 @@ export async function runVerify(options: {
     chunk: options.chunk,
     changed: await changedSince(projectDir, base.commit),
     mutantCache: openCache,
+    contextChange,
     log,
   }, options.chunk === undefined ? VERIFY_CHECK_NAMES : CHUNK_VERIFY_CHECK_NAMES);
 
+  const change = await contextChange();
+  if (change !== undefined) {
+    throw new Error(
+      `What the tests run with changed while \`boardsmith verify\` ran: ${change}. Checks after the change ran against ` +
+        'different code, so no result was recorded and no mutant outcome was saved. Run `boardsmith verify` again in a ' +
+        'checkout whose BoardSmith and installed packages stay unchanged until it finishes, such as a separate BoardSmith worktree nothing else edits.',
+    );
+  }
   const after = await checkoutState(projectDir);
   const cleanTree = !('problem' in after) && after.clean && after.commit === head;
   // The cache keys outcomes by the commit's files; a run whose files changed under it keeps none.
@@ -616,7 +636,7 @@ export async function runVerify(options: {
     base: { ref: base.ref, commit: base.commit },
     chunk: options.chunk,
     checks,
-    boardsmithCommit: await currentBoardsmithCommit(),
+    boardsmithCommit,
   });
   return { result, path: await recordResult(projectDir, result) };
 }

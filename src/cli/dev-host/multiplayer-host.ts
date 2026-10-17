@@ -357,11 +357,11 @@ interface StepWindow {
 interface DevPersistenceOptions {
   store: PersistenceStore;
   /**
-   * This session's own id. It is what a game uses to name an APPEND
-   * collision-free (`death:${sessionKey}`), so it must be stable for the life
-   * of the session and different from the next one's.
+   * This dev run's id. Each game started in the run is handed its own session
+   * key, `<runKey>-<n>` (#883): a game uses it to name an APPEND
+   * collision-free (`death:${sessionKey}`), so it must differ between games.
    */
-  sessionKey: string;
+  runKey: string;
   /**
    * The version stamped onto every row this session writes. `boardsmith dev`
    * has no published version, so the CLI passes a marker that says so rather
@@ -419,6 +419,10 @@ function refusedCommit(reason: string): OpFailure {
   );
 }
 
+const NO_GAME = 'No game is running. Reload this page to start one.';
+const FOLLOW_EXPOSES = 'Someone else holds a seat, and following would show you their hand and let you play for them.';
+const FOLLOW_SHARED = `Follow active seat ended. ${FOLLOW_EXPOSES}`;
+
 export class MultiplayerHost {
   private phase: LobbyPhase = 'lobby';
   private starting = false;
@@ -456,14 +460,15 @@ export class MultiplayerHost {
     perPushFields: ['serverNow'],
   });
   /**
-   * Maps an in-flight requestId to the client that issued it, so the matching
-   * `server_response` is routed back to the REQUESTING client — not the acting
-   * seat. A follower acts as a seat it does not occupy (the active seat), so
-   * routing the response by seat would post it to that seat's (empty) client and
-   * silently drop it (e.g. element-pick `resolve_choices`, leaving validElements
-   * empty). Keyed by requestId; cleared when the response is delivered.
+   * Each in-flight request by the id the host gave it, with the client that
+   * sent it and that client's own id for it, so the `server_response` goes back
+   * to the REQUESTING client, never by seat: a follower acts as a seat it does
+   * not occupy. The host mints the id because every page numbers its own
+   * requests from `req-0`, so two pages' ids collide (#878). Cleared when the
+   * response is delivered.
    */
-  private requestOrigin = new Map<string, string>();
+  private readonly requestOrigin = new Map<string, { clientId: string; requestId: string }>();
+  private nextRequest = 0;
   /**
    * D13/DEVHOST-01: the currently applied gameOption selection, seeded from
    * `opts.baseGameOptions` and replaced by each accepted `configure` message.
@@ -483,6 +488,8 @@ export class MultiplayerHost {
    * roster is fixed when the session starts.
    */
   private persistPlayers: PersistPlayer[] = [];
+  /** How many games this run has started, which numbers each game's session key. */
+  private gamesStarted = 0;
   private readonly clock: WorldHostClock;
   /** The open step's window, or null before the first broadcast of a session. */
   private window: StepWindow | null = null;
@@ -567,6 +574,7 @@ export class MultiplayerHost {
       const open = [...this.seats.values()].filter((s) => !s.clientId);
       const pick = open.find((s) => !this.opts.designatedBotSeats?.includes(s.seat)) ?? open[0];
       if (pick) this.assignSeat(clientId, pick.seat);
+      if (this.followShared()) await this.endFollow(FOLLOW_SHARED);
       await this.startGame();
       return;
     }
@@ -718,6 +726,11 @@ export class MultiplayerHost {
     clientId: string,
     msg: Extract<ClientInbound, { type: 'configure' }>,
   ): Promise<void> {
+    // The start in flight would ignore this one, so a change here would describe a game that never starts (#886).
+    if (this.starting) {
+      this.send(clientId, { type: 'error', message: 'A game is starting. Try again once it has started.' });
+      return;
+    }
     let bundle: Record<string, unknown> = {};
     let requestedPlayerCount: unknown;
     if (msg.preset !== undefined) {
@@ -821,15 +834,7 @@ export class MultiplayerHost {
   ): Promise<void> {
     if (!msg.enabled) {
       // Disable: only the current follower can turn it off.
-      if (this.followerClientId !== clientId) return;
-      this.followerClientId = null;
-      this.lastFollowerSeat = null;
-      this.rebuildBotSeats();
-      const own = this.clientSeat.get(clientId);
-      this.send(clientId, { type: 'follow', enabled: false, seat: own ?? 0 });
-      if (own !== undefined && this.phase === 'playing') this.reinitSeat(clientId, own);
-      this.announceRoster();
-      await this.session?.host.runBotTurns(); // resume bot for the seats it covered
+      if (this.followerClientId === clientId) await this.endFollow();
       return;
     }
     // Enable.
@@ -841,12 +846,42 @@ export class MultiplayerHost {
       this.send(clientId, { type: 'error', message: 'Take a seat before enabling follow-active-seat.' });
       return;
     }
+    if (!this.debugOn()) {
+      this.send(clientId, {
+        type: 'error',
+        message: 'Follow active seat works only when you are the only person at the table. ' + FOLLOW_EXPOSES,
+      });
+      return;
+    }
     this.followerClientId = clientId;
     this.botSeats.length = 0; // pause bot for every seat the follower now covers
     const active = this.effectiveActiveSeat();
     this.lastFollowerSeat = active;
     this.send(clientId, { type: 'follow', enabled: true, seat: active });
     this.reinitSeat(clientId, active);
+  }
+
+  /**
+   * End follow-mode, show the follower its own seat again (with `notice`, if
+   * given, after it), and let bots resume the seats it covered.
+   */
+  private async endFollow(notice?: string): Promise<void> {
+    const clientId = this.followerClientId;
+    if (clientId === null) return;
+    this.followerClientId = null;
+    this.lastFollowerSeat = null;
+    this.rebuildBotSeats();
+    const own = this.clientSeat.get(clientId);
+    this.send(clientId, { type: 'follow', enabled: false, seat: own ?? 0 });
+    if (own !== undefined && this.phase === 'playing') this.reinitSeat(clientId, own);
+    if (notice !== undefined) this.send(clientId, { type: 'error', message: notice });
+    this.announceRoster();
+    await this.session?.host.runBotTurns();
+  }
+
+  /** Follow is for a one-person table (#877), so a second person sitting down must end it. */
+  private followShared(): boolean {
+    return this.followerClientId !== null && !this.debugOn();
   }
 
   /**
@@ -868,7 +903,7 @@ export class MultiplayerHost {
   }
 
   /** Take over a seat (works mid-game: claim an open/bot seat → it stops being bot). */
-  private handleJoin(clientId: string, msg: Extract<ClientInbound, { type: 'join' }>): void {
+  private async handleJoin(clientId: string, msg: Extract<ClientInbound, { type: 'join' }>): Promise<void> {
     this.connected.add(clientId);
     const info = this.seats.get(msg.seat);
     if (!info) {
@@ -880,6 +915,7 @@ export class MultiplayerHost {
       return;
     }
     this.assignSeat(clientId, msg.seat, msg.name, msg.color);
+    if (this.followShared()) await this.endFollow(FOLLOW_SHARED);
     this.send(clientId, { type: 'joined', seat: msg.seat });
     if (this.phase === 'playing') this.reinitSeat(clientId, msg.seat);
     this.broadcastLobby();
@@ -895,7 +931,8 @@ export class MultiplayerHost {
     const seat = this.clientSeat.get(clientId);
     this.releaseSeat(clientId);
     if (seat !== undefined && this.phase === 'playing') {
-      this.addBotSeat(seat);
+      // A follower drives every seat, so while one follows no bot plays (#884).
+      if (this.followerClientId === null) this.addBotSeat(seat);
       this.broadcastLobby();
       this.send(clientId, this.lobbyMessage(clientId));
       this.announceRoster();
@@ -911,7 +948,7 @@ export class MultiplayerHost {
     msg: Extract<ClientInbound, { type: 'server_request' }>,
   ): Promise<void> {
     if (this.phase !== 'playing' || !this.session) {
-      this.send(clientId, { type: 'error', message: 'Game has not started.', requestId: msg.requestId ?? null });
+      this.send(clientId, { type: 'error', message: NO_GAME, requestId: msg.requestId ?? null });
       return;
     }
     if (this.stranded !== null) {
@@ -920,10 +957,19 @@ export class MultiplayerHost {
     }
     const seat = this.seatOf(clientId, msg.requestId);
     if (seat === undefined) return;
-    // Remember who asked so the response routes back to THIS client, even when a
-    // follower is acting as a seat it does not occupy.
-    if (msg.requestId) this.requestOrigin.set(msg.requestId, clientId);
-    await this.session.handleServerRequest(seat, msg.requestId, msg.op, msg.payload);
+    const hostRequestId = String(this.nextRequest++);
+    this.requestOrigin.set(hostRequestId, { clientId, requestId: msg.requestId });
+    try {
+      await this.session.handleServerRequest(seat, hostRequestId, msg.op, msg.payload);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      this.deliverServerResponse(hostRequestId, {
+        success: false,
+        error: `The host could not run '${msg.op}' (${reason}). Check what the page sent with it.`,
+      });
+    } finally {
+      this.requestOrigin.delete(hostRequestId);
+    }
   }
 
   /**
@@ -954,7 +1000,7 @@ export class MultiplayerHost {
     msg: Extract<ClientInbound, { type: 'getState' }>,
   ): void {
     if (this.phase !== 'playing' || !this.session) {
-      this.send(clientId, { type: 'error', message: 'Game has not started.', requestId: msg.requestId ?? null });
+      this.send(clientId, { type: 'error', message: NO_GAME, requestId: msg.requestId ?? null });
       return;
     }
     const seat = this.seatOf(clientId, msg.requestId);
@@ -1034,7 +1080,8 @@ export class MultiplayerHost {
   /**
    * The seat a follower acts as / sees right now: the first seat awaiting input,
    * falling back to the follower's own seat when nothing is due (execute blocks,
-   * game over). The follower steals every active seat unconditionally.
+   * game over). Follow runs only while debugging is on (#877): at a one-person
+   * table, or under `--debug`, so the seats it takes are its own or a bot's.
    */
   private effectiveActiveSeat(): number {
     const due = this.session
@@ -1131,7 +1178,8 @@ export class MultiplayerHost {
     }));
     const persistence = this.opts.persistence;
     if (!persistence) return;
-    const read = persistence.store.readForSession(persistence.sessionKey, this.persistPlayers);
+    const sessionKey = `${persistence.runKey}-${++this.gamesStarted}`;
+    const read = persistence.store.readForSession(sessionKey, this.persistPlayers);
     if (read === null) return;
     if (read.dropped.length > 0) {
       console.warn(
@@ -1282,8 +1330,7 @@ export class MultiplayerHost {
         if (this.session === session) this.followActiveSeat(meta);
       },
       postGameState: (seat, view, meta) => this.deliverGameState(seat, view, meta),
-      postServerResponse: (seat, requestId, result) =>
-        this.deliverServerResponse(seat, requestId, result),
+      postServerResponse: (_seat, hostRequestId, result) => this.deliverServerResponse(hostRequestId, result),
     });
 
     // Only commit to 'playing' if the game actually starts — otherwise a failed
@@ -1293,7 +1340,11 @@ export class MultiplayerHost {
       await session.start();
     } catch (err) {
       this.starting = false;
-      const message = err instanceof Error ? err.message : 'Failed to start the game.';
+      // A restart disposed the old session above, so nothing is left to play (#880).
+      this.session = null;
+      this.phase = 'lobby';
+      const reason = err instanceof Error ? err.message : String(err);
+      const message = `The game could not start (${reason}). Fix the problem, then reload this page to start a game.`;
       for (const clientId of this.connected) this.send(clientId, { type: 'error', message });
       return;
     }
@@ -1502,30 +1553,14 @@ export class MultiplayerHost {
     }
   }
 
-  private sendToSeat(seat: number, message: HostOutbound): void {
-    const info = this.seats.get(seat);
-    if (info?.clientId && info.connected) this.send(info.clientId, message);
-  }
-
-  /**
-   * Route a `server_response` back to the client that issued the request (looked
-   * up by requestId), falling back to the acting seat's client. Without the
-   * requestId mapping, a follower's responses would be posted to the seat it is
-   * acting as — which it does not occupy — and dropped.
-   */
-  private deliverServerResponse(
-    seat: number,
-    requestId: string | null,
-    result: Record<string, unknown>,
-  ): void {
-    const message: HostOutbound = { type: 'server_response', requestId, result };
-    const origin = requestId ? this.requestOrigin.get(requestId) : undefined;
-    if (requestId) this.requestOrigin.delete(requestId);
-    if (origin && this.connected.has(origin)) {
-      this.send(origin, message);
-      return;
+  /** Answer the client that sent the request `hostRequestId` names, under its own id for it. */
+  private deliverServerResponse(hostRequestId: string | null, result: Record<string, unknown>): void {
+    if (hostRequestId === null) return;
+    const origin = this.requestOrigin.get(hostRequestId);
+    this.requestOrigin.delete(hostRequestId);
+    if (origin && this.connected.has(origin.clientId)) {
+      this.send(origin.clientId, { type: 'server_response', requestId: origin.requestId, result });
     }
-    this.sendToSeat(seat, message);
   }
 
   /**

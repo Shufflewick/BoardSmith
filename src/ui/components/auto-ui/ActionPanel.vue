@@ -45,7 +45,7 @@ import {
 // rules the server applies, and a second copy of them is a second rule set
 // (#229 for text, #237 for number).
 import { numberRuleErrors } from '../../../engine/action/number-rules.js';
-import { textRuleErrors } from '../../../engine/action/text-rules.js';
+import { textRuleErrors, wirePattern } from '../../../engine/action/text-rules.js';
 import { choiceValueKey } from '../../../engine/action/choice-matching.js';
 import ActionHelpPopover from '../helpers/ActionHelpPopover.vue';
 // Type-only, so the log component's module (and its stylesheet) never enters
@@ -976,12 +976,7 @@ function editorValueRefusal(): string | null {
       maxLength: pick.maxLength,
       maxBytes: pick.maxBytes,
       multiline: pick.multiline,
-      // The wire carries a pattern as its source string with its sentence;
-      // compiling it here is the only form the rule can be applied in.
-      pattern:
-        pick.pattern === undefined
-          ? undefined
-          : { regex: new RegExp(pick.pattern.source), message: pick.pattern.message },
+      pattern: pick.pattern && wirePattern(pick.pattern),
     })[0] ?? null;
   }
   return null;
@@ -1196,6 +1191,12 @@ function restoreFocusAfterRemoval(index: number): void {
   firstOperableOf(
     orderedChoiceRow.value?.querySelectorAll<HTMLElement>('.ordered-list-add') ?? [],
   )?.focus();
+}
+
+/** What a choice's control reads out: its display, plus its board square when it has one (#934). */
+function choiceSpokenName(choice: ChoiceWithRefs): string {
+  const notation = choice.refs?.find(r => r.ref.notation)?.ref.notation;
+  return notation ? `${choice.display} (${notation})` : choice.display;
 }
 
 /** What one built entry reads as: the label of the button that adds it. */
@@ -1833,7 +1834,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               v-for="choice in filteredChoices"
               :key="choiceValueKey(choice.value)"
               class="choice-btn ordered-list-add"
-              :aria-label="`Add ${choice.display}`"
+              :aria-label="`Add ${choiceSpokenName(choice)}`"
               v-disabled-reason="orderedListAddDisabledReason(choice.disabled)"
               :aria-disabled="isDisabled(orderedListAddDisabledReason(choice.disabled)) || undefined"
               @click="addListEntry(currentPick.name, choice.value)"
@@ -1878,6 +1879,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               <input
                 type="checkbox"
                 :checked="isMultiSelectValueSelected(choice.value)"
+                :aria-label="choiceSpokenName(choice)"
                 :aria-disabled="isDisabled(multiSelectDisabledReason(choice.disabled, choice.value)) || undefined"
                 @click="toggleMultiSelectValue(currentPick.name, choice.value, choice.display)"
               />
@@ -2025,6 +2027,8 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               :maxlength="currentPick.maxLength"
               rows="6"
             ></textarea>
+            <!-- No HTML `pattern`: the browser compiles it under `v` with no
+                 other flags, so it can refuse what the server accepts (#890). -->
             <input
               v-else
               v-bind="editorFieldAttrs"
@@ -2032,7 +2036,6 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               v-model="textInputValue"
               :minlength="currentPick.minLength"
               :maxlength="currentPick.maxLength"
-              :pattern="currentPick.pattern?.source"
               @keyup.enter="submitEditorValue"
             />
             <!-- Above the submit button, not below it: the bar caps its own
@@ -2090,7 +2093,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             :key="choiceValueKey(choice.value)"
             class="choice-btn anchored-choice-btn"
             v-disabled-reason="choice.disabled"
-            :aria-label="`${choice.display}${choice.refs?.find(r => r.ref.notation)?.ref.notation ? ' (' + choice.refs.find(r => r.ref.notation)!.ref.notation + ')' : ''}`"
+            :aria-label="choiceSpokenName(choice)"
             @click="executeChoice(currentPick.name, choice)"
             @mouseenter="handleChoiceHover(choice)"
             @mouseleave="handleChoiceLeave"

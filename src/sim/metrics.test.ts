@@ -68,36 +68,36 @@ const race = { gameClass: RaceGame, gameType: 'race', minPlayers: 2, maxPlayers:
 
 const total = (result: SingleGameResult, metric: string) => result.metrics.totals[metric]?.[''];
 
-/** Tries 3 (refused) before every move it plays, then takes 1 or 2 from its own generator. */
-const triesThreeFirst = (): Policy => {
-  let tried = false;
-  return {
-    name: 'tries-three-first',
-    choose: (turn) => {
-      tried = !tried;
-      return { action: 'take', args: { value: tried ? 3 : 1 + turn.random.nextInt(2) } };
-    },
-  };
+/** Takes 1 or 2 from its own generator, never the refused 3. */
+const smallSteps: Policy = {
+  name: 'small-steps',
+  choose: (turn) => ({ action: 'take', args: { value: 1 + turn.random.nextInt(2) } }),
+};
+
+/** Shared by both seats: takes 1 twice, then 3, which is refused and fails the game (#910). */
+const threeOnThirdMove = (): Policy => {
+  let moves = 0;
+  return { name: 'three-on-third-move', choose: () => ({ action: 'take', args: { value: ++moves === 3 ? 3 : 1 } }) };
 };
 
 describe('author metrics in a simulated game (#556)', () => {
   it("keeps the constructor's records, an action's only when it commits, and every flow step's", async () => {
     const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const result = await playGame(race, {
-      playerCount: 2, seed: 'commit', policies: [triesThreeFirst(), triesThreeFirst()], maxActions: 100,
-    });
+    const policy = threeOnThirdMove();
+    const result = await playGame(race, { playerCount: 2, seed: 'commit', policies: [policy, policy], maxActions: 100 });
     quiet.mockRestore();
-    expect(result.error).toBeUndefined();
-    expect(result.completed).toBe(true);
-    // Half the attempts were refused after recording; only the committed ones count.
+    expect(result.stuck).toBe(true);
+    expect(result.error).toContain('Three is too many.');
+    // The third take recorded before it was refused; only the two committed ones count.
+    expect(result.actionCount).toBe(2);
     expect(total(result, 'dealt')).toBe(2);
-    expect(total(result, 'takes')).toBe(result.actionCount);
-    expect(total(result, 'rounds')).toBe(Math.ceil(result.actionCount / 2));
+    expect(total(result, 'takes')).toBe(2);
+    expect(total(result, 'rounds')).toBe(2);
   });
 
   it('keeps no records from the games an MCTS seat searches, which are dealt and played too', async () => {
     const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const result = await playGame(race, { playerCount: 2, seed: 'mcts', policies: [mcts(30), random()], maxActions: 100 });
+    const result = await playGame(race, { playerCount: 2, seed: 'mcts', policies: [mcts(30), smallSteps], maxActions: 100 });
     quiet.mockRestore();
     expect(result.error).toBeUndefined();
     expect(result.completed).toBe(true);
@@ -108,7 +108,7 @@ describe('author metrics in a simulated game (#556)', () => {
   it('reads segment and finalScore once per player when the game ends', async () => {
     const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
     const result = await playGame(race, {
-      playerCount: 3, seed: 'end', policies: [random(), random(), random()], maxActions: 100,
+      playerCount: 3, seed: 'end', policies: [smallSteps, smallSteps, smallSteps], maxActions: 100,
     });
     quiet.mockRestore();
     expect(result.completed).toBe(true);

@@ -1,10 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
-import { promises as fs } from 'node:fs';
+import { existsSync, promises as fs, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { linkGameModules } from '../../testing/installed-modules.test-helper.js';
 import { spawnCli } from '../spawn-cli.test-helper.js';
 import { GAME_VITE_CONFIG } from '../lib/test-run-scope.js';
+import { mutantCachePath } from '../lib/mutant-cache.js';
 import { readVerifyResult, verifiedProblem } from '../lib/verify-result.js';
 import { commitAll, git, initRepo, writeFiles as write } from '../lib/verify-result.test-helper.js';
 import { plantOtherRuns } from '../lib/command-build-dirs.test-helper.js';
@@ -95,6 +96,44 @@ describe('changedSince: the files and code lines a change touched', () => {
     expect(changed.files).toEqual(['src/new.ts', 'src/rules.ts', 'tests/new.test.ts']);
     expect([...changed.code.keys()]).toEqual(['src/new.ts', 'src/rules.ts']);
     expect([...changed.code.get('src/rules.ts')!]).toEqual([1]);
+  });
+
+  // git ends a name with a space with a tab and C-quotes one with a quote or non-ASCII letter (#834).
+  const ODD_NAMES = ['src/a b.ts', 'src/say"hi".ts', 'src/café.ts'];
+
+  it('keeps committed changes to files whose names git would quote', async () => {
+    const dir = await repo(Object.fromEntries(ODD_NAMES.map((name) => [name, 'export const a = 1;\nexport const b = 2;\n'])));
+    const base = git(dir, 'rev-parse', 'HEAD').trim();
+    await write(dir, Object.fromEntries(ODD_NAMES.map((name) => [name, 'export const a = 1;\nexport const b = 3;\n'])));
+    commitAll(dir, 'change b');
+
+    const changed = await changedSince(dir, base);
+    const sorted = [...ODD_NAMES].sort();
+    expect(changed.files).toEqual(sorted);
+    expect([...changed.code.keys()]).toEqual([...ODD_NAMES].sort((a, b) => a.localeCompare(b)));
+    for (const name of ODD_NAMES) expect([...changed.code.get(name)!]).toEqual([2]);
+  });
+
+  it('counts only the edited lines of a renamed file', async () => {
+    const dir = await repo({ 'src/old.ts': 'export const a = 1;\nexport const b = 2;\nexport const c = 3;\n' });
+    const base = git(dir, 'rev-parse', 'HEAD').trim();
+    git(dir, 'mv', 'src/old.ts', 'src/new name.ts');
+    await write(dir, { 'src/new name.ts': 'export const a = 1;\nexport const b = 20;\nexport const c = 3;\n' });
+    commitAll(dir, 'rename and edit');
+
+    const changed = await changedSince(dir, base);
+    expect(changed.files).toEqual(['src/new name.ts']);
+    expect([...changed.code.get('src/new name.ts')!]).toEqual([2]);
+  });
+
+  it('keeps untracked files whose names git would quote', async () => {
+    const dir = await repo({ 'src/rules.ts': 'export const a = 1;\n' });
+    const base = git(dir, 'rev-parse', 'HEAD').trim();
+    await write(dir, Object.fromEntries(ODD_NAMES.map((name) => [name, 'export const n = 1;\n'])));
+
+    const changed = await changedSince(dir, base);
+    expect(changed.files).toEqual([...ODD_NAMES].sort());
+    for (const name of ODD_NAMES) expect([...changed.code.get(name)!]).toEqual([1]);
   });
 });
 
@@ -554,6 +593,58 @@ describe('boardsmith verify: a result counts only for a commit on a clean tree',
     expect(again.path).toBe(join(dir, '.boardsmith', 'verify', `${head}.json`));
     expect(await readVerifyResult(dir, head)).toEqual(again.result);
     expect(await verifiedProblem(dir)).toMatch(/fail/i);
+  });
+});
+
+describe('boardsmith verify: a run counts only when what the tests run with stayed the same (#932)', () => {
+  /** A BoardSmith checkout outside the game's repository, linked in as the one the game loads. */
+  async function linkedBoardsmith(dir: string): Promise<string> {
+    const bs = join(tempTree('bs-verify-linked-'), 'BoardSmith');
+    await write(bs, { 'package.json': '{ "name": "boardsmith", "version": "0.0.0" }\n', 'index.js': 'export {};\n' });
+    initRepo(bs);
+    commitAll(bs, 'start');
+    await fs.rm(join(dir, 'node_modules', 'boardsmith'));
+    await fs.symlink(bs, join(dir, 'node_modules', 'boardsmith'), 'dir');
+    return bs;
+  }
+
+  it('refuses the run, writes no result, and names both commits when the linked BoardSmith moves mid-run', async () => {
+    const dir = await gameOnBranch(false);
+    const head = git(dir, 'rev-parse', 'HEAD').trim();
+    const bs = await linkedBoardsmith(dir);
+    const started = git(bs, 'rev-parse', 'HEAD').trim();
+    const { checks } = countingChecks();
+    const moving = {
+      ...checks,
+      build: async () => {
+        await write(bs, { 'index.js': 'export const changed = true;\n' });
+        commitAll(bs, 'advance');
+        return { passed: true, summary: 'stood in for by the fixture' };
+      },
+    };
+    const refusal = runVerify({ projectDir: dir, checks: moving, log: () => {} });
+    await expect(refusal).rejects.toThrow(/changed while `boardsmith verify` ran/);
+    await expect(refusal).rejects.toThrow(new RegExp(`${started}.*${git(bs, 'rev-parse', 'HEAD').trim()}`, 's'));
+    await expect(refusal).rejects.toThrow(/no result was recorded.*Run `boardsmith verify` again/s);
+    expect(await readVerifyResult(dir, head)).toBeUndefined();
+  });
+
+  it('stops before the next mutant once a linked package changes, and saves no mutant outcome', async () => {
+    const dir = await gameOnBranch(false);
+    const head = git(dir, 'rev-parse', 'HEAD').trim();
+    const dep = join(dirname(dir), 'dep');
+    await write(dep, { 'index.js': 'export const rate = 2;\n' });
+    await fs.mkdir(join(dirname(dir), 'node_modules'));
+    await fs.symlink(dep, join(dirname(dir), 'node_modules', 'dep'), 'dir');
+    const lines: string[] = [];
+    const log = (line: string) => {
+      lines.push(line);
+      if (line.startsWith('mutant 2/')) writeFileSync(join(dep, 'index.js'), 'export const rate = 3;\n');
+    };
+    await expect(runVerify({ projectDir: dir, checks: CHECKS, log })).rejects.toThrow(/the packages linked from outside the repository/);
+    expect(lines.filter((l) => /^mutant \d+\/\d+: /.test(l))).toHaveLength(2);
+    expect(await readVerifyResult(dir, head)).toBeUndefined();
+    expect(existsSync(await mutantCachePath(dir))).toBe(false);
   });
 });
 

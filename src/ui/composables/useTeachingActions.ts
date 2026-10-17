@@ -14,6 +14,7 @@
  */
 import type { Ref } from 'vue';
 import type { useToast } from './useToast.js';
+import { hostRefusal } from './usePlatformTransport.js';
 
 /** Which control the player pressed. */
 type TeachingAction =
@@ -25,8 +26,8 @@ type TeachingAction =
   | 'exit-tutorial';
 
 export interface TeachingActionsOptions {
-  /** Issue a host op. Rejects when the host refuses or the request fails. */
-  platformRequest: (op: string, payload: Record<string, unknown>) => Promise<unknown>;
+  /** Issue a host op. Resolves `{ success: false, error }` when the host refuses or never answers. */
+  platformRequest: (op: string, payload: Record<string, unknown>) => Promise<Record<string, unknown>>;
   /** The viewing seat. */
   playerSeat: Ref<number>;
   /** Whether the bot-vs-bot demo is running, per the last broadcast. */
@@ -82,13 +83,10 @@ export function useTeachingActions(options: TeachingActionsOptions): TeachingAct
     toast,
   } = options;
 
-  /** Call a host op, and say something useful if it refuses. */
-  async function request(op: string, payload: Record<string, unknown>, failure: string): Promise<void> {
-    try {
-      await platformRequest(op, payload);
-    } catch {
-      toast.error(failure);
-    }
+  /** Call a host op, and say something useful if it refuses. `feature` names it on a table without the op. */
+  async function request(op: string, payload: Record<string, unknown>, failure: string, feature: string): Promise<void> {
+    const refusal = hostRefusal(await platformRequest(op, payload), failure, `This table does not support ${feature}.`);
+    if (refusal) toast.error(refusal);
   }
 
   async function hint(): Promise<void> {
@@ -97,7 +95,7 @@ export function useTeachingActions(options: TeachingActionsOptions): TeachingAct
     // as the hint resolves (or fails), just before the bubble/ring appears.
     const thinkingId = toast.show('Thinking about the best move…', { type: 'info', duration: 0 });
     try {
-      await request('hint', { seat: playerSeat.value }, 'Hint unavailable — the bot could not suggest a move.');
+      await request('hint', { seat: playerSeat.value }, 'Hint unavailable — the bot could not suggest a move.', 'hints');
     } finally {
       toast.remove(thinkingId);
     }
@@ -106,9 +104,9 @@ export function useTeachingActions(options: TeachingActionsOptions): TeachingAct
   async function demoToggle(): Promise<void> {
     if (isDemoRunning.value) {
       // isDemoRunning updates from the next broadcast — no local mutation needed.
-      await request('demo-stop', {}, 'Failed to stop demo.');
+      await request('demo-stop', {}, 'Failed to stop demo.', 'the bot demo');
     } else {
-      await request('demo-start', {}, 'Failed to start demo.');
+      await request('demo-start', {}, 'Failed to start demo.', 'the bot demo');
     }
   }
 
@@ -124,6 +122,7 @@ export function useTeachingActions(options: TeachingActionsOptions): TeachingAct
         'heatmap-toggle',
         { seat: playerSeat.value, visible: nextVisible },
         'Failed to toggle move quality display.',
+        'the move quality display',
       );
     } finally {
       // The broadcast carrying the new heatmap state is delivered before the op
@@ -151,9 +150,9 @@ export function useTeachingActions(options: TeachingActionsOptions): TeachingAct
       case 'help-toggle':
         return helpToggle();
       case 'start-tutorial':
-        return request('start-tutorial', { seat: playerSeat.value }, 'Failed to start tutorial.');
+        return request('start-tutorial', { seat: playerSeat.value }, 'Failed to start tutorial.', 'tutorials');
       case 'exit-tutorial':
-        return request('exit-tutorial', { seat: playerSeat.value }, 'Failed to exit tutorial.');
+        return request('exit-tutorial', { seat: playerSeat.value }, 'Failed to exit tutorial.', 'tutorials');
     }
   }
 

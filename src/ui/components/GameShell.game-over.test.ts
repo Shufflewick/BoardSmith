@@ -50,14 +50,13 @@ const GameOverHarness = defineComponent({
     providesOwnGameOverUi: { type: Boolean, default: false },
     useCustomBoard: { type: Boolean, default: false },
   },
-  emits: ['new-game', 'rematch', 'dismiss'],
+  emits: ['dismiss'],
   data() {
     return { dismissed: false };
   },
   methods: {
     // Mirrors GameShell.vue's dismissGameOver(): hide the card/slot, return
-    // focus to .boardregion, and emit 'dismiss' for the parent to observe —
-    // does NOT touch rematch/new-game.
+    // focus to .boardregion, and emit 'dismiss' for the parent to observe.
     onDismiss() {
       this.dismissed = true;
       this.$emit('dismiss');
@@ -76,8 +75,6 @@ const GameOverHarness = defineComponent({
           :winners="winnerSeats.map(s => players.find(p => p.seat === s)).filter(Boolean)"
           :players="players"
           :is-draw="isDraw"
-          :rematch="() => $emit('rematch')"
-          :new-game="() => $emit('new-game')"
           :dismiss="onDismiss"
         />
         <GameOverCard
@@ -85,8 +82,6 @@ const GameOverHarness = defineComponent({
           :winner-seats="winnerSeats"
           :players="players"
           :is-draw="isDraw"
-          @new-game="$emit('new-game')"
-          @rematch="$emit('rematch')"
           @dismiss="onDismiss"
         />
       </template>
@@ -148,7 +143,7 @@ describe.each([
 //     paths, parity-checked under both board modes.
 //   - The dev-WS degrade never fabricates "Draw" from a bare [] (GameOverCard
 //     side — see GameOverCard.test.ts for the labeling adversarial case).
-//   - Dismiss never fires rematch/new-game/restart and leaves the board
+//   - Dismiss leaves the board
 //     reachable/focusable; the mounted game state (winnerSeats/players props)
 //     is untouched.
 // ---------------------------------------------------------------------------
@@ -185,25 +180,21 @@ describe.each([
   });
 });
 
-describe('GameShell game-over — adversarial: dismiss has no restart/leave side effect', () => {
-  it('clicking the close control emits ONLY "dismiss" — never "rematch" or "new-game"', async () => {
+describe('GameShell game-over — adversarial: dismiss only hides the card', () => {
+  it('clicking the close control emits "dismiss"', async () => {
     const wrapper = mountHarness({ complete: true, winnerSeats: [0] });
 
     await wrapper.find('[aria-label="Close"]').trigger('click');
 
     expect(wrapper.emitted('dismiss')).toHaveLength(1);
-    expect(wrapper.emitted('rematch')).toBeUndefined();
-    expect(wrapper.emitted('new-game')).toBeUndefined();
   });
 
-  it('pressing Escape emits ONLY "dismiss" — never "rematch" or "new-game"', async () => {
+  it('pressing Escape emits "dismiss"', async () => {
     const wrapper = mountHarness({ complete: true, winnerSeats: [0] });
 
     await wrapper.find('.game-over-card').trigger('keydown', { key: 'Escape' });
 
     expect(wrapper.emitted('dismiss')).toHaveLength(1);
-    expect(wrapper.emitted('rematch')).toBeUndefined();
-    expect(wrapper.emitted('new-game')).toBeUndefined();
   });
 
   it('after dismiss, the card is removed and the board region is present and focusable', async () => {

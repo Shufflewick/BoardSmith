@@ -161,7 +161,7 @@ export function createProgram(): Command {
   program
     .command('build')
     .description('Build this workspace for distribution (a game bundle, or BoardSmith\'s CLI)')
-    .option('-o, --out-dir <dir>', 'Output directory', 'dist')
+    .option('-o, --out-dir <dir>', 'Output directory, emptied before each build', 'dist')
     .action(buildCommand);
 
   // Packing for local development
@@ -389,10 +389,6 @@ export function createProgram(): Command {
     .command('chunk-check <slug>')
     .description("Record or repair a chunk's Verified Against provenance block, and exit non-zero if it was stale")
     .option('--project <dir>', 'Project directory (defaults to cwd)')
-    .option(
-      '--reverified-no-code-change <range>',
-      'Record a re-verification that found no code change (e.g. <verified-hash>..<head> — 0 manifest files changed)',
-    )
     .option('--json', 'Emit JSON instead of human-readable output')
     .action(chunkCheckCommand);
 
@@ -695,7 +691,8 @@ export function createProgram(): Command {
     .command('verify-impact-apply')
     .description(
       "Write the rules-staleness marker into every affected chunk's CHUNK.md then SKETCH.md, and " +
-        "record the run's impact map (refuses while any contradiction is un-adjudicated)",
+        "record the run's impact map (refuses while any pair is unclassified or any contradiction is " +
+        'un-adjudicated)',
     )
     .option('--project <dir>', 'Project directory (defaults to cwd)')
     .option('--run-id <id>', 'Report on a specific run instead of the most recent')

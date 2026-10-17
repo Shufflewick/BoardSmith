@@ -20,7 +20,6 @@ ShufflewickPub all run it.
 import {
   SnapshotSessionHost,
   executeOp,
-  generateGameId,
   type GameDefinition,
   type Op,
 } from 'boardsmith/session';
@@ -48,8 +47,6 @@ Node, and `boardsmith/session` also runs on Workers and in browsers.
 
 ### Utilities
 
-- `generateGameId()` - Generate unique game ID
-- `isPlayersTurn()` - Check if it's a player's turn
 - `buildPlayerState()` - Build player-specific state view
 
 ### Game Options
@@ -62,8 +59,7 @@ The rules `boardsmith build` publishes carry the whole list on their `gameDefini
 
 ### Player Colors
 
-- `STANDARD_PLAYER_COLORS` - Full color palette (8 colors)
-- `createColorOption()` - Create color selection option (used internally; define colors via `colorPalette` in boardsmith.json)
+- `createColorOption()` - Create a color player option; defaults to the engine's `DEFAULT_COLOR_PALETTE` with its names. `boardsmith dev` refuses a code-declared `color` option whose list differs from what the lobby offers (`boardsmith.json`'s `colorPalette`, else the engine palette)
 
 ### Executor Op Contract
 
@@ -177,7 +173,8 @@ changes nothing at the table.
 
 To set up a position between moves, use `arrange`. It edits a copy and then
 restores that copy as a debug restore does, so every seat is published the new
-position and the next move plays from it.
+position and the next move plays from it. When that position is a bot seat's
+turn, the bot has moved before `arrange` resolves, as with `send`.
 
 ```typescript
 // `round` stands for any property your game class declares; the copy is typed
