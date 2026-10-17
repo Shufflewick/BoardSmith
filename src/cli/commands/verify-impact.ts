@@ -949,7 +949,6 @@ export interface RepairGate {
   /** Present only for `reopen-playtest` / `close-without-replaytest`. */
   nextStatus?: string;
   clearMarker: boolean;
-  reverifyStamp: boolean;
   reason: string;
 }
 
@@ -978,8 +977,8 @@ export interface RepairGate {
  *      waive again, explicitly, as a fresh decision.
  *   5. `driftState === 'clean'` — the code did not move: `nextStatus` preserves `status`
  *      VERBATIM (including `verified (user-waived)` — decision 13's waiver is not upgraded to a
- *      bare `verified` just because a later pass re-confirmed no code changed), marker cleared,
- *      and a re-verification stamp with no code change is recorded (decision 11).
+ *      bare `verified` just because a later pass re-confirmed no code changed), and the
+ *      marker is cleared.
  */
 export function computeRepairGate(input: {
   status: string;
@@ -992,7 +991,6 @@ export function computeRepairGate(input: {
     return {
       disposition: 'unknown-drift',
       clearMarker: false,
-      reverifyStamp: false,
       reason:
         'drift-check could not determine whether this chunk\'s code moved (state: unknown) — ' +
         'the playtest-gate decision is deferred until code movement can be resolved. Never ' +
@@ -1004,7 +1002,6 @@ export function computeRepairGate(input: {
     return {
       disposition: 'not-applicable',
       clearMarker: false,
-      reverifyStamp: false,
       reason: 'This chunk was not flagged rules-stale — there is nothing to repair-gate.',
     };
   }
@@ -1013,7 +1010,6 @@ export function computeRepairGate(input: {
     return {
       disposition: 'not-applicable',
       clearMarker: false,
-      reverifyStamp: false,
       reason: `Status "${status}" has no playtest gate to re-open or close — this chunk was never verified.`,
     };
   }
@@ -1023,7 +1019,6 @@ export function computeRepairGate(input: {
       disposition: 'reopen-playtest',
       nextStatus: 'built',
       clearMarker: true,
-      reverifyStamp: false,
       reason:
         `This chunk's code changed since it was last verified (drift-check: drifted) — the ` +
         `playtest gate re-opens; status moves to "built" (the code exists and passes automated ` +
@@ -1037,11 +1032,9 @@ export function computeRepairGate(input: {
     disposition: 'close-without-replaytest',
     nextStatus: status,
     clearMarker: true,
-    reverifyStamp: true,
     reason:
       `This chunk's code did not change (drift-check: clean) — closes without re-playtesting; ` +
-      `status "${status}" is preserved verbatim (a waiver, if any, is not upgraded) and a ` +
-      `re-verification with no code change is stamped into "## Verified Against".`,
+      `status "${status}" is preserved verbatim (a waiver, if any, is not upgraded).`,
   };
 }
 

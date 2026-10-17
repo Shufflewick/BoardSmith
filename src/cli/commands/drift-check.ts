@@ -56,7 +56,9 @@ export const UNRESOLVABLE = 'unresolvable' as const;
 // -------------------------------------------------------------------------------------------
 
 /**
- * `git diff --name-only <hash> HEAD`, run with an explicit `cwd` and a validated hash.
+ * `git diff --name-only --relative <hash> HEAD`, run with an explicit `cwd` and a validated hash.
+ * `--relative` names files relative to `projectDir` and leaves out the rest of the repository, so
+ * a game in a subdirectory of its repo is compared on its own paths (#822).
  *
  * Returns the `UNRESOLVABLE` sentinel — never throws — when the hash is not hash-shaped, or when
  * git cannot resolve it (unknown commit, shallow clone missing history, etc.). The caller
@@ -70,7 +72,7 @@ export async function diffedFilesSince(
   if (!HASH_SHAPE.test(hash)) return UNRESOLVABLE;
 
   try {
-    const stdout = await git(projectDir, ['diff', '--name-only', hash, 'HEAD']);
+    const stdout = await git(projectDir, ['diff', '--name-only', '--relative', hash, 'HEAD']);
     return stdout
       .split('\n')
       .map((line) => line.trim())
@@ -278,7 +280,7 @@ export async function driftCheckCommand(
         continue;
       }
 
-      if (diffSet.has(path)) {
+      if (diffSet.has(relative(projectDir, resolved).split(sep).join('/'))) {
         changedFiles.push(path);
       }
     }
