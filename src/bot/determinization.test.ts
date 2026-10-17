@@ -714,3 +714,18 @@ describe('#1032 determinization: a new element may appear only where the seat ca
     expect(sandbox.pond.count(HandCard)).toBe(1);
   });
 });
+
+// #1098: a hand whose cards the seat cannot see still shows how many it holds,
+// so a sampler may not add a card to it, even one the seat cannot see.
+describe('#1098 determinization: a container the seat can count keeps its count', () => {
+  it('refuses a sampler that adds a hidden card to an opponent\'s hand, naming the hand and both counts', () => {
+    const sandbox = trickSandboxForSeat1();
+
+    expect(() => applyDeterminization(sandbox, 1, () => {
+      sandbox.hand(2).create(HandCard, 'extra', { rank: 5 });
+    }, () => 0.5)).toThrow(
+      `Space#${sandbox.hand(2).id} "hand-2" held 2 elements and now holds 3. The seat can count what that ` +
+      `container holds even where it cannot see them, so a sampler may not change how many it holds.`,
+    );
+  });
+});
