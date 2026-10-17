@@ -8,14 +8,16 @@
  * `fixtureSandbox` (`src/testing/fixture-sandbox.test-helper.ts`) runs such a
  * program where it can write only inside its own temp tree. This scan fails on
  * a test file that writes a program which both writes files and reads a path
- * from outside itself (`process.argv`, `process.env`, a shell `"$1"`, or unquoted `$1`, `$@`, `${x}`, `$OUT`),
- * unless the file uses `fixtureSandbox`.
+ * from outside itself (`process.argv`, `process.env`, a shell `"$1"`, or an
+ * unquoted `$1`, `$@`, `${x}` or `$OUT`), unless the file uses `fixtureSandbox`.
  *
  * It reads the strings a test spells a program in (parsed, so a quote or a
  * backtick in a comment is not mistaken for one). A program written some
  * other way (read from a fixture file on disk) is not seen, and neither is a
  * test that imports the sandbox but forgets to pass its env to one spawn; the
- * sandbox's own tests say what it guarantees.
+ * sandbox's own tests say what it guarantees. The other way, any test string
+ * with `>$<digit>` or `>$UPPER` in it (an HTML `'<b>$5</b>'`) reads as a shell
+ * write to a handed path, so a file holding one needs `fixtureSandbox` (#920).
  */
 import { describe, it, expect } from 'vitest';
 import ts from 'typescript';
