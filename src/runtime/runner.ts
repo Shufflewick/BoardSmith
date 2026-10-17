@@ -42,6 +42,7 @@ import { fillGameOptionDefaults } from '../session/game-option-selection.js';
 import { PlayerFacingError } from '../engine/errors.js';
 import { constructGame, animationFloorOf, type AnimationFloor } from '../engine/element/game.js';
 import { isDevThrowEnabled } from '../utils/dev.js';
+import { acceptsSubmission } from '../engine/utils/enumerate-moves.js';
 import type { RandomState } from '../utils/random.js';
 import type { MessageEntry } from '../engine/index.js';
 
@@ -730,18 +731,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     try {
       return this.serializeForHistory(actionName, player, args);
     } catch (error) {
-      if (!(error instanceof Error) || this.offersMove(actionName, player, args)) throw error;
+      if (!(error instanceof Error) || acceptsSubmission(this.game, actionName, player.seat, args)) throw error;
       return { success: false, error: error.message, errorCode: ErrorCode.INVALID_PICK };
     }
-  }
-
-  /** Whether the game would accept `args` for `actionName` from `player` now, as a held follow-up when it is one. */
-  private offersMove(actionName: string, player: Player, args: Record<string, unknown>): boolean {
-    const action = this.game.getAction(actionName);
-    if (!action) return false;
-    const followUp = followUpForSeat(this.getFlowState(), player.seat);
-    const options = followUp?.action === actionName ? { followUp } : undefined;
-    return new ActionExecutor(this.game).validateAction(action, player, args, options).valid;
   }
 
   /**

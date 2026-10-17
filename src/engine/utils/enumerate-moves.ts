@@ -22,6 +22,7 @@ import { constructGame, type Game, type GameOptions } from '../element/game.js';
 import type { Player } from '../player/player.js';
 import type { ActionDefinition, FollowUpAction, NumberSelection, PendingActionState, Selection } from '../action/types.js';
 import { availableActionsForSeat, followUpForSeat } from '../flow/seat-activity.js';
+import type { PerformOptions } from '../action/action.js';
 import { resolveMultiSelect, resolveOrderedList } from './resolve-multiselect.js';
 import { elementsAsIds } from './arg-builder.js';
 import { isElement } from '../element/game-element.js';
@@ -334,6 +335,34 @@ interface EnumerationStep {
 }
 
 /**
+ * Whether `game` takes `args` from `seat` for `actionName` now, judged as
+ * `executeAction` judges a submission up to `execute`, with a held follow-up's
+ * args, and without changing `game`. A repeating selection's picks change the
+ * game while they are checked (`onEach`), so they are made on a scratch copy
+ * of it, one at a time (#1101).
+ */
+export function acceptsSubmission(game: Game, actionName: string, seat: number, args: Record<string, unknown>): boolean {
+  const action = game.getAction(actionName);
+  if (!action) return false;
+  if (!game.getActionExecutor().hasRepeatingSelections(action)) {
+    return game.getActionExecutor().validateAction(action, game.getPlayer(seat)!, args, heldFollowUp(game, actionName, seat)).valid;
+  }
+  const scratch = scratchCopy(game);
+  scratch.reset();
+  const executor = scratch.game.getActionExecutor();
+  const copied = scratch.game.getAction(actionName)!;
+  const player = scratch.game.getPlayer(seat)!;
+  const fed = executor.feedThroughSelectionSteps(copied, player, args, heldFollowUp(scratch.game, actionName, seat));
+  return !('error' in fed) && executor.pendingActionRefusal(copied, player, fed.pendingState) === null;
+}
+
+/** The follow-up `seat` holds for `actionName` in `game`, as `executeAction` takes it. */
+function heldFollowUp(game: Game, actionName: string, seat: number): PerformOptions | undefined {
+  const followUp = followUpForSeat(game.getFlowState(), seat);
+  return followUp?.action === actionName ? { followUp } : undefined;
+}
+
+/**
  * Every legal move of an action that has a repeating selection, found by
  * making its picks on a scratch copy of the game (#325), or, above the budget,
  * `sample.count` of them drawn at random when the caller asked for a sample.
@@ -585,6 +614,7 @@ function scratchCopy(source: Game) {
 
   return {
     game,
+    reset,
     start,
     apply,
     /**
