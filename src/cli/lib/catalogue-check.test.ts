@@ -119,6 +119,22 @@ describe('what each game is checked against (#591)', () => {
   });
 });
 
+// #1095: four catalogue runs spawn dozens of processes, seconds on a busy machine,
+// so they run here, while the file is collected and no test timeout applies.
+const [afterUncommittedChange, afterCommit, afterCommitAgain] = await (async () => {
+  const fx = fixture();
+  await makeTree(fx.tree);
+  await makeGame(fx, 'hex');
+  await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue });
+
+  await writeFiles(fx.tree, { 'src/engine.ts': 'export const a = 1;' });
+  const uncommitted = statusOf(await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue }));
+
+  commitAll(fx.tree, 'engine change');
+  const committed = statusOf(await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue }));
+  return [uncommitted, committed, statusOf(await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue }))];
+})();
+
 describe('the cache of passing games (#591)', () => {
   it('keeps passes in the git common directory of the tree', async () => {
     const fx = fixture();
@@ -147,18 +163,10 @@ describe('the cache of passing games (#591)', () => {
     expect(statusOf(await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue }))).toEqual({ hex: 'passed' });
   });
 
-  it('runs every game again after the tree changes, committed or not', async () => {
-    const fx = fixture();
-    await makeTree(fx.tree);
-    await makeGame(fx, 'hex');
-    await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue });
-
-    await writeFiles(fx.tree, { 'src/engine.ts': 'export const a = 1;' });
-    expect(statusOf(await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue }))).toEqual({ hex: 'passed' });
-
-    commitAll(fx.tree, 'engine change');
-    expect(statusOf(await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue }))).toEqual({ hex: 'passed' });
-    expect(statusOf(await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue }))).toEqual({ hex: 'cached' });
+  it('runs every game again after the tree changes, committed or not', () => {
+    expect(afterUncommittedChange).toEqual({ hex: 'passed' });
+    expect(afterCommit).toEqual({ hex: 'passed' });
+    expect(afterCommitAgain).toEqual({ hex: 'cached' });
   });
 
   it('reuses a pass for the same tree content at another commit, as a thread merge of an up-to-date branch has', async () => {
