@@ -205,7 +205,7 @@ async function resolveConflicts(ctx: MergeContext): Promise<string[]> {
     const inDesign = name.startsWith(`${ctx.prefix}${DESIGN_DIR}/`) && name.endsWith('.md');
     const path = join(top, name);
     // A rename/rename conflict leaves no file at the old path; like any conflict here, a person settles it.
-    const text = inDesign ? await readIfExists(path, (path) => fs.readFile(path, 'utf-8')) : undefined;
+    const text = inDesign ? await readIfExists(path, (file) => fs.readFile(file, 'utf-8')) : undefined;
     const outcome = text === undefined ? undefined : resolveDesignConflicts(text);
     // Unchanged text had no markers to resolve: a modify/delete conflict, which a person must settle.
     if (!outcome || outcome.unresolved > 0 || outcome.text === text) {
@@ -222,7 +222,7 @@ async function resolveConflicts(ctx: MergeContext): Promise<string[]> {
 async function keepMainLock(ctx: MergeContext): Promise<void> {
   const lock = /^Session Lock:.*$/m.exec(await showAt(ctx, 'HEAD', SKETCH_MD))?.[0];
   const path = designPath(ctx.projectDir, SKETCH_MD);
-  const sketch = await readIfExists(path, (path) => fs.readFile(path, 'utf-8'));
+  const sketch = await readIfExists(path, (file) => fs.readFile(file, 'utf-8'));
   if (lock === undefined || sketch === undefined) return;
   const kept = sketch.replace(/^Session Lock:.*$/m, lock);
   if (kept === sketch) return;
@@ -633,7 +633,7 @@ async function recordMergeSignoffs(ctx: MergeContext, shared: SharedFile[]): Pro
     if (content !== undefined) entries.push({ path: file.path, content: sha256Hex(content), chunks: file.chunks, merge, when });
   }
   const path = designPath(ctx.projectDir, MERGE_SIGNOFFS_MD);
-  const existing = await readIfExists(path, (path) => fs.readFile(path, 'utf-8'));
+  const existing = await readIfExists(path, (file) => fs.readFile(file, 'utf-8'));
   await fs.writeFile(path, appendMergeSignoffs(existing, entries));
   await git(ctx.projectDir, ['add', '--', path]);
 }
@@ -670,7 +670,7 @@ async function recordCrossChunk(ctx: MergeContext, alongside: string[]): Promise
   const mainDiff = await git(ctx.top, ['diff', '--unified=0', ctx.fork, 'HEAD']);
   const refs = crossReferences(changedSide(branchDiff), changedSide(mainDiff));
   const path = designPath(ctx.projectDir, CROSS_CHUNK_MD);
-  const existing = await readIfExists(path, (path) => fs.readFile(path, 'utf-8'));
+  const existing = await readIfExists(path, (file) => fs.readFile(file, 'utf-8'));
   await fs.writeFile(path, appendCrossChunkEntry(existing, { chunk: ctx.slug, alongside, refs }));
   await git(ctx.projectDir, ['add', '--', path]);
   return refs.sharedFiles.length + refs.sharedNames.length > 0 ? 'pending' : 'none';
