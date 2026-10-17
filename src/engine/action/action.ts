@@ -7,6 +7,7 @@ import type {
   ActionDefinition,
   ActionContext,
   ActionResult,
+  ExecuteResult,
   Selection,
   ChoiceSelection,
   ElementSelection,
@@ -106,6 +107,26 @@ function failedExecute(actionName: string, error: unknown): ActionResult {
   return { success: false, error: message, partiallyApplied: true, rulesError: true };
 }
 
+const ENGINE_ONLY_FLAGS = ['rulesError', 'partiallyApplied', 'notSimulable'] as const;
+
+/**
+ * Drop the flags only the engine may set from what `execute()` returned (#1016).
+ * The type already forbids them; this catches plain JS and casts, so a game
+ * cannot code its own refusal as a crash and change what a host decides.
+ */
+function withoutEngineFlags(actionName: string, returned: ExecuteResult): ActionResult {
+  const smuggled = ENGINE_ONLY_FLAGS.filter((flag) => returned[flag] !== undefined);
+  if (smuggled.length === 0) return returned;
+  console.error(
+    `[BoardSmith] Action '${actionName}' returned ${smuggled.join(', ')} from execute(). ` +
+      'Only the engine sets these, so they were dropped. Refuse with ' +
+      "{ success: false, error: 'why' }; a crash is reported by throwing.",
+  );
+  const result: ActionResult = { ...returned };
+  for (const flag of smuggled) delete result[flag];
+  return result;
+}
+
 /**
  * Take what an action's `execute()` returned and make it mean what it says.
  *
@@ -129,7 +150,8 @@ function failedExecute(actionName: string, error: unknown): ActionResult {
  * Not `partiallyApplied`. The author believed they were refusing cleanly, and a clean
  * refusal mutated nothing, so there is nothing for the runner to roll back.
  */
-function acceptExecuteResult(actionName: string, result: ActionResult): ActionResult {
+function acceptExecuteResult(actionName: string, returned: ExecuteResult): ActionResult {
+  const result = withoutEngineFlags(actionName, returned);
   if (result.success) return result;
   if (typeof result.error === 'string' && result.error.trim() !== '') return result;
 

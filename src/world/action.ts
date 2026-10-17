@@ -72,7 +72,7 @@ import { Action } from "../engine/index.js";
 import type {
   ActionContext,
   ActionDefinition,
-  ActionResult,
+  ExecuteResult,
   ChoiceBoardRefs,
   ElementRef,
   Game,
@@ -1319,12 +1319,12 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * added.
    */
   execute(
-    fn: (args: A, context: WorldActionContext<G>) => ActionResult | void,
+    fn: (args: A, context: WorldActionContext<G>) => ExecuteResult | void,
   ): ActionDefinition {
     const handler = fn as unknown as (
       args: A,
       context: WorldActionContext<G> | WorldClockContext<G>,
-    ) => ActionResult | void;
+    ) => ExecuteResult | void;
     return this.inner.execute(((args: Record<string, unknown>, context: AnyContext) =>
       handler(
         args as A,
@@ -1423,10 +1423,10 @@ export class WorldClockAction<G extends Game = Game> {
   }
 
   execute(
-    fn: (args: Record<string, unknown>, context: WorldClockContext<G>) => ActionResult | void,
+    fn: (args: Record<string, unknown>, context: WorldClockContext<G>) => ExecuteResult | void,
   ): ActionDefinition {
     return this.action.execute(
-      fn as unknown as (args: NoArgs, context: WorldActionContext<G>) => ActionResult | void,
+      fn as unknown as (args: NoArgs, context: WorldActionContext<G>) => ExecuteResult | void,
     );
   }
 }
