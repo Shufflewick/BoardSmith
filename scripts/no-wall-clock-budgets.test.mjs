@@ -569,13 +569,13 @@ describe('wallClockBudgets', () => {
   });
 
   it('searches a name fed back its own many properties once per name and property, not once per path (#1104)', () => {
-    const children = Array.from({ length: 12 }, (_, at) => `walk(node.p${at});`).join(' ');
+    const children = Array.from({ length: 6 }, (_, at) => `walk(node.p${at});`).join(' ');
     const walk = `const s = Date.now();\nfunction walk(node) { expect(node.ms).toBeLessThan(5); ${children} }`;
     const scan = scanForBudgets(`${walk}\nwalk({ ms: 3 });`, 'x.test.mjs');
     expect(scan.budgets).toEqual([]);
-    // One name, `node`, read through 13 properties (ms, p0 to p11): no question can need more than 13 reads.
-    expect(scan.mostReads).toBeLessThanOrEqual(13);
-    expect(wallClockBudgets(`${walk}\nwalk({ p11: { ms: Date.now() - s } });`, 'x.test.mjs')).toHaveLength(1);
+    // `node` read through 7 properties needs at most 7 reads; kept small because a per-path search needs about 2000 here and hangs at 12.
+    expect(scan.mostReads).toBeLessThanOrEqual(7);
+    expect(wallClockBudgets(`${walk}\nwalk({ p5: { ms: Date.now() - s } });`, 'x.test.mjs')).toHaveLength(1);
   });
 
   it('takes an array held in a variable whole, since its positions are unknown (#1104)', () => {
