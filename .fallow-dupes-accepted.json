@@ -126,6 +126,14 @@
       ]
     },
     {
+      "content": "47c61f6daca7a39b",
+      "lines": 26,
+      "files": [
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue",
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue"
+      ]
+    },
+    {
       "content": "4f375ef9f1a0f0a1",
       "lines": 7,
       "files": [
@@ -271,14 +279,6 @@
       "lines": 7,
       "files": [
         "src/engine/element/game-element.ts"
-      ]
-    },
-    {
-      "content": "acb2e8b5b4423ed8",
-      "lines": 26,
-      "files": [
-        "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue",
-        "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue"
       ]
     },
     {
