@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { scanSandboxViolations } from '../lib/sandbox-scan.js';
 import { SOURCE_EXTENSIONS, collectSourceFiles } from '../lib/source-files.js';
 import { requireBoardsmithWorkspace } from '../lib/project-context.js';
@@ -262,13 +262,13 @@ function checkUnusedActions(filePath: string, content: string, allFiles: Map<str
  * overall verdict.
  */
 async function runPitfallLint(cwd: string): Promise<number> {
-  console.log(chalk.cyan('\nChecking for BoardSmith pitfalls...\n'));
+  console.log(styleText('cyan', '\nChecking for BoardSmith pitfalls...\n'));
 
   // The hints are text patterns over script code, so .vue files are left to the sandbox scan.
   const files = collectSourceFiles(join(cwd, 'src'), SOURCE_EXTENSIONS.filter((ext) => ext !== 'vue'));
 
   if (files.length === 0) {
-    console.log(chalk.yellow('No game source files found in src/'));
+    console.log(styleText('yellow', 'No game source files found in src/'));
     return 0;
   }
 
@@ -331,40 +331,40 @@ async function runPitfallLint(cwd: string): Promise<number> {
 
   for (const [filePath, issues] of issuesByFile) {
     const relPath = relative(cwd, filePath);
-    console.log(chalk.underline(relPath));
+    console.log(styleText('underline', relPath));
 
     // Sort by line number
     issues.sort((a, b) => a.line - b.line);
 
     for (const issue of issues) {
-      const icon = issue.severity === 'error' ? chalk.red('✗')
-        : issue.severity === 'warning' ? chalk.yellow('⚠')
-        : chalk.blue('ℹ');
+      const icon = issue.severity === 'error' ? styleText('red', '✗')
+        : issue.severity === 'warning' ? styleText('yellow', '⚠')
+        : styleText('blue', 'ℹ');
 
-      const location = chalk.dim(`${issue.line}:${issue.column || 0}`);
-      const rule = chalk.dim(`(${issue.rule})`);
+      const location = styleText('dim', `${issue.line}:${issue.column || 0}`);
+      const rule = styleText('dim', `(${issue.rule})`);
 
       console.log(`  ${location}  ${icon} ${issue.message} ${rule}`);
 
       if (issue.suggestion) {
-        console.log(chalk.dim(`         └─ ${issue.suggestion}`));
+        console.log(styleText('dim', `         └─ ${issue.suggestion}`));
       }
     }
     console.log('');
   }
 
   // Summary
-  console.log(chalk.dim('─'.repeat(50)));
-  console.log(`Checked ${chalk.cyan(result.filesChecked)} files`);
+  console.log(styleText('dim', '─'.repeat(50)));
+  console.log(`Checked ${styleText('cyan', String(result.filesChecked))} files`);
 
   if (result.issues.length === 0) {
-    console.log(chalk.green('✓ No issues found'));
+    console.log(styleText('green', '✓ No issues found'));
   } else {
     const parts: string[] = [];
-    if (result.errorCount > 0) parts.push(chalk.red(`${result.errorCount} error(s)`));
-    if (result.warningCount > 0) parts.push(chalk.yellow(`${result.warningCount} warning(s)`));
+    if (result.errorCount > 0) parts.push(styleText('red', `${result.errorCount} error(s)`));
+    if (result.warningCount > 0) parts.push(styleText('yellow', `${result.warningCount} warning(s)`));
     const infoCount = result.issues.length - result.errorCount - result.warningCount;
-    if (infoCount > 0) parts.push(chalk.blue(`${infoCount} info`));
+    if (infoCount > 0) parts.push(styleText('blue', `${infoCount} info`));
     console.log(`Found ${parts.join(', ')}`);
   }
 
@@ -431,9 +431,9 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   const checks: LintCheck[] = [];
 
   if (options.eslint && !hasAnyConfig(cwd, ESLINT_CONFIGS)) {
-    console.error(chalk.red('\nlint --eslint: this project has no ESLint config, so ESLint cannot run.'));
-    console.error(chalk.dim('Add an eslint.config.mjs to the project root that uses boardsmith/eslint-plugin, or drop --eslint.'));
-    console.error(chalk.dim('How: https://github.com/Shufflewick/BoardSmith/blob/main/docs/api/eslint-plugin.md\n'));
+    console.error(styleText('red', '\nlint --eslint: this project has no ESLint config, so ESLint cannot run.'));
+    console.error(styleText('dim', 'Add an eslint.config.mjs to the project root that uses boardsmith/eslint-plugin, or drop --eslint.'));
+    console.error(styleText('dim', 'How: https://github.com/Shufflewick/BoardSmith/blob/main/docs/api/eslint-plugin.md\n'));
     process.exit(1);
   }
 
@@ -454,8 +454,8 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   }
 
   if (checks.length === 0) {
-    console.log(chalk.yellow('\nNo lint checks apply here.'));
-    console.log(chalk.dim('Add an eslint.config.mjs or .stylelintrc.cjs, or run this in a game project.\n'));
+    console.log(styleText('yellow', '\nNo lint checks apply here.'));
+    console.log(styleText('dim', 'Add an eslint.config.mjs or .stylelintrc.cjs, or run this in a game project.\n'));
     return;
   }
 
@@ -466,9 +466,9 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   }
 
   if (failed.length > 0) {
-    console.error(chalk.red(`\nLint failed: ${failed.join(', ')}\n`));
+    console.error(styleText('red', `\nLint failed: ${failed.join(', ')}\n`));
     process.exit(1);
   }
 
-  console.log(chalk.green(`\nLint passed (${checks.map((c) => c.name).join(', ')})\n`));
+  console.log(styleText('green', `\nLint passed (${checks.map((c) => c.name).join(', ')})\n`));
 }

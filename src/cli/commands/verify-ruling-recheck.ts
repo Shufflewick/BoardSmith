@@ -5,7 +5,7 @@ import {
 } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { parseRulings } from './build-manifest.js';
 import { allocatedNumber } from '../lib/ledger-entries.js';
 import { listFiles } from '../lib/source-files.js';
@@ -427,10 +427,10 @@ export async function verifyRulingRecheckCommand(
   }
 
   if (transcription.scopeLimited) {
-    console.log(chalk.yellow(`⚠ Scope-limited: ${transcription.reason}`));
+    console.log(styleText('yellow', `⚠ Scope-limited: ${transcription.reason}`));
   }
   console.log(
-    chalk.green(`✓ Ruling re-check — ${rows.length} ruling(s), ${skipped.length} skipped`),
+    styleText('green', `✓ Ruling re-check — ${rows.length} ruling(s), ${skipped.length} skipped`),
   );
   for (const row of rows) {
     console.log(`  Ruling ${row.number}: ${row.verdict}`);
@@ -632,8 +632,8 @@ export async function verifyRulingRecordCommand(
   }
 
   console.log(
-    chalk.green(`✓ Ruling ${record.number}: ${record.verdict}`) +
-      chalk.dim(` — recorded in ${ledgerPath} (${recordCount} verdict(s) total)`),
+    styleText('green', `✓ Ruling ${record.number}: ${record.verdict}`) +
+      styleText('dim', ` — recorded in ${ledgerPath} (${recordCount} verdict(s) total)`),
   );
   return result;
 }
