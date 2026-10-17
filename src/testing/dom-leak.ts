@@ -932,6 +932,7 @@ async function wireWorldSeat(
     presence: ref(frame.presence),
     players: shallowRef([]),
     events: shallowRef([]),
+    linesDropped: ref(0),
     acting: ref(false),
     act: async (command) => ({
       ok: false,
