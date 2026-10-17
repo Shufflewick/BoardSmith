@@ -22,7 +22,8 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { extname, join, relative } from 'node:path';
+import ts from 'typescript';
 import { collectSourceFiles } from './source-files.js';
 
 export interface AssetViolation {
@@ -38,7 +39,7 @@ export interface AssetViolation {
 const BARE_IMG_TAG = /<img[\s/>]/i;
 
 /**
- * Blank out comment spans (JS `//`, JS `/* *\/`, Vue `<!-- -->`) across an entire
+ * Blank out comment spans (JS `//`, JS `/* *\/`, Vue `<!-- -->`) across a `.vue`
  * file's lines, replacing comment characters with spaces so every line keeps its
  * original length and 1-based index — callers that report `AssetViolation.line`
  * against the ORIGINAL source stay accurate. Block-comment and HTML-comment open
@@ -53,9 +54,10 @@ const BARE_IMG_TAG = /<img[\s/>]/i;
  * naive scanner that only special-cases `https://`-style `:`-prefixed URLs
  * blanks the rest of the line on any OTHER live `//` — including a bare
  * `<img>` tag later on that same line — silently defeating the ASSET-02
- * build gate. Quote state resets at the start of each live (non-comment)
- * segment scanned and does not persist across lines (multi-line JS template
- * literals are out of scope — see 162-CONTEXT.md D17 discretion).
+ * build gate. Quote state does not persist across lines, so a multi-line
+ * template literal, a regex `\/` or JSX text in a `.vue` `<script>` block can
+ * still be misread; every other source file goes through `stripScriptComments`,
+ * which uses TypeScript's own parser instead (#852).
  */
 interface StripCommentsResult {
   lines: string[];
@@ -68,7 +70,7 @@ interface StripCommentsResult {
   unterminated?: { line: number; kind: 'block' | 'html' };
 }
 
-function stripComments(lines: string[], isVue: boolean): StripCommentsResult {
+function stripComments(lines: string[]): StripCommentsResult {
   const stripped: string[] = [];
   // Which multi-line comment kind (if any) is open going INTO this line.
   let openKind: 'block' | 'html' | null = null;
@@ -82,9 +84,8 @@ function stripComments(lines: string[], isVue: boolean): StripCommentsResult {
   // false FAILs (an apostrophe phantom-quoted a following `<!-- <img> -->`).
   // Track the region so each grammar applies only where it is valid. The region
   // persists across lines (script/style blocks span lines); the file is scanned
-  // fresh per call so no cross-file leakage. Only a `.vue` file opens in template;
-  // every other source file is script throughout (#852).
-  let region: 'template' | 'script' | 'style' = isVue ? 'template' : 'script';
+  // fresh per call so no cross-file leakage.
+  let region: 'template' | 'script' | 'style' = 'template';
 
   for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
     const line = lines[lineIdx];
@@ -164,6 +165,38 @@ function stripComments(lines: string[], isVue: boolean): StripCommentsResult {
   };
 }
 
+const SCRIPT_KINDS: Record<string, ts.ScriptKind> = { '.tsx': ts.ScriptKind.TSX, '.jsx': ts.ScriptKind.JSX, '.js': ts.ScriptKind.JS, '.mjs': ts.ScriptKind.JS, '.cjs': ts.ScriptKind.JS };
+
+/**
+ * Blank out the comments of a script file (`.ts`, `.tsx`, `.js` and the rest),
+ * keeping line count and lengths. The comments come from TypeScript's parser, so
+ * comment-looking text inside a template literal, a regex or JSX text is kept
+ * and still scanned (#852).
+ */
+function stripScriptComments(content: string, filePath: string): StripCommentsResult {
+  const source = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true, SCRIPT_KINDS[extname(filePath)] ?? ts.ScriptKind.TS);
+  const comments = new Map<number, number>();
+  const visit = (node: ts.Node): void => {
+    const children = node.getChildren(source);
+    if (children.length > 0) { children.forEach(visit); return; }
+    // JSX text has no trivia: a `//` in it is text, not a comment.
+    if (node.kind === ts.SyntaxKind.JsxText) return;
+    for (const range of ts.getLeadingCommentRanges(content, node.pos) ?? []) comments.set(range.pos, range.end);
+  };
+  visit(source);
+
+  let text = content;
+  let unterminated: StripCommentsResult['unterminated'];
+  for (const [start, end] of comments) {
+    const comment = content.slice(start, end);
+    text = text.slice(0, start) + comment.replace(/[^\r\n]/g, ' ') + text.slice(end);
+    if (comment.startsWith('/*') && (comment.length < 4 || !comment.endsWith('*/'))) {
+      unterminated = { line: source.getLineAndCharacterOfPosition(start).line + 1, kind: 'block' };
+    }
+  }
+  return { lines: text.split('\n'), unterminated };
+}
+
 /**
  * Scan `<cwd>/src/ui` for bare `<img` tags.
  * Returns one violation per offending line; an empty array is a PASS.
@@ -179,7 +212,7 @@ export function scanAssetReachability(cwd: string): AssetViolation[] {
 
     const content = readFileSync(filePath, 'utf-8');
     const lines = content.split('\n');
-    const { lines: scanLines, unterminated } = stripComments(lines, filePath.endsWith('.vue'));
+    const { lines: scanLines, unterminated } = filePath.endsWith('.vue') ? stripComments(lines) : stripScriptComments(content, filePath);
     for (let i = 0; i < lines.length; i++) {
       if (BARE_IMG_TAG.test(scanLines[i])) {
         violations.push({

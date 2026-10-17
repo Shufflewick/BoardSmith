@@ -227,6 +227,23 @@ describe('scanAssetReachability', () => {
     expect(violations.map((v) => `${v.file}:${v.line}`).sort()).toEqual(['src/ui/Card.tsx:1', 'src/ui/render.ts:2']);
   });
 
+  // Review of #852: comment-looking text that is NOT a comment in a script file
+  // (inside a multi-line template literal, after a regex `\/`, in JSX text) must
+  // never hide a live <img>.
+  it.each([
+    ['src/ui/a.ts', 'export const t = `\n  <p>a // b</p> <img src="y">\n`;\n', 2],
+    ['src/ui/b.ts', 'export const t = `\n  /* x\n  <img src="y">\n  */\n`;\n', 3],
+    ['src/ui/c.ts', "s.replace(/\\//g, '-'); el.innerHTML = '<img src=\"y\">';\n", 1],
+    ['src/ui/d.tsx', 'export const D = () => <p>a // b <img src="y" /></p>;\n', 1],
+  ])('flags a live <img> after comment-looking text that is not a comment in %s', (file, content, line) => {
+    expect(scanWith({ [file]: content }).map((v) => v.line)).toEqual([line]);
+  });
+
+  it('surfaces an unterminated block comment in a .ts file (WR-01)', () => {
+    const violations = scanWith({ 'src/ui/e.ts': 'export const x = 1;\n/* never closed\n<img src="y">\n' });
+    expect(violations.map((v) => [v.line, /unterminated/.test(v.message)])).toEqual([[2, true]]);
+  });
+
   // F-11 (v4.8): an apostrophe in TEMPLATE text ("Player's hand") must NOT open
   // JS string-quote state. Pre-fix it did, so a following genuine
   // `<!-- <img> -->` HTML comment on the same line was not recognized and its
