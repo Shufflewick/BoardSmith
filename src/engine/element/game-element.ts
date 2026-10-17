@@ -770,8 +770,11 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       }
     }
 
-    // Indexed only once built: a constructor or attribute that throws leaves no half-built element in it (#963, #1093).
-    this._ctx._elementsById.set(element._t.id, element);
+    // Indexed only once built, with what its constructor created: a constructor or attribute that throws leaves nothing in it (#963, #1093, #1107).
+    // A parent still being built is not filed yet, and files its children when it is.
+    if (this._ctx._elementsById.get(this._t.id) === this) {
+      forEachInSubtree(element, (built) => this._ctx._elementsById.set(built._t.id, built));
+    }
     this.addChild(element);
 
     return element;

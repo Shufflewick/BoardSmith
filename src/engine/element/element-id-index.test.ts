@@ -16,11 +16,26 @@ import { TEST_WORLD_ELEMENT_ID_KEY } from './world-element-id-key.test-helper.js
 class IndexGame extends Game<IndexGame, Player> {
   constructor(options: GameOptions) {
     super(options);
-    this.registerElements([Card, Zone]);
+    this.registerElements([Card, Zone, Table, Room]);
   }
 }
 class Card extends Piece<IndexGame> {}
 class Zone extends Space<IndexGame> {}
+/** A zone whose constructor creates children, one of them with its own child. */
+class Table extends Zone {
+  constructor(ctx: ConstructorParameters<typeof Zone>[0]) {
+    super(ctx);
+    this.create(Card, 'leg');
+    this.create(Zone, 'drawer').create(Card, 'key');
+  }
+}
+/** A zone whose constructor creates a Table, so creates nest two deep. */
+class Room extends Zone {
+  constructor(ctx: ConstructorParameters<typeof Zone>[0]) {
+    super(ctx);
+    this.create(Table, 'table');
+  }
+}
 
 /** The answer a walk gives: the first element in tree order with this id, as `atId` always answered. */
 function walk(from: GameElement, id: number): GameElement | undefined {
@@ -162,6 +177,12 @@ describe('the id index holds every element in the game tree and the pile', () =>
     expect(unindexed(restoredFresh(game))).toEqual([]);
   });
 
+  it('after a create whose constructor creates children, nested (#1107)', () => {
+    const { game, hand } = table();
+    hand.create(Room, 'room');
+    expect(unindexed(game)).toEqual([]);
+  });
+
   it('after a world adopts a partition', () => {
     const game = new IndexGame({ playerCount: 2, seed: 'id-index-adopt', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     const room = game.create(Zone, 'room');
@@ -182,27 +203,38 @@ class BrokenCard extends Card {
   }
 }
 
+/** A zone whose constructor creates a card in itself and then throws (#1107). */
+class BrokenZone extends Zone {
+  constructor(ctx: ConstructorParameters<typeof Zone>[0]) {
+    super(ctx);
+    this.create(Card, 'orphan');
+    throw new Error('broken zone');
+  }
+}
+
 describe.each([
   ['its attributes fail to apply (#963)', (parent: GameElement) => parent.create(Card, 'bad', { id: 5 } as never), /reserved/i],
   ['its subclass constructor throws (#1093)', (parent: GameElement) => parent.create(BrokenCard, 'bad'), /broken card/],
+  ['its constructor creates a child and then throws (#1107)', (parent: GameElement) => parent.create(BrokenZone, 'bad'), /broken zone/],
 ] as const)('a create refused because %s leaves nothing in the id index', (_why, refuse, message) => {
-  /** Make the refused create, and return the id it was given. */
-  function refusedCreate(game: IndexGame, parent: GameElement): number {
+  /** Make the refused create, and return every id it gave out, the last one last. */
+  function refusedCreate(game: IndexGame, parent: GameElement): number[] {
+    const before = game._ctx.sequence;
     expect(() => refuse(parent)).toThrow(message);
-    return game._ctx.ids.mint(game._ctx.sequence - 1);
+    return Array.from({ length: game._ctx.sequence - before }, (_, i) => game._ctx.ids.mint(before + i));
   }
 
-  it('does not hold the half-built element', () => {
+  it('does not hold the half-built element, or anything created under it', () => {
     const { game, hand } = table();
-    const id = refusedCreate(game, hand);
-    expect(game._ctx._elementsById.has(id)).toBe(false);
+    const ids = refusedCreate(game, hand);
+    expect(ids.filter((id) => game._ctx._elementsById.has(id))).toEqual([]);
   });
 
   it('lets a world adopt a partition holding that id', () => {
     const game = new IndexGame({ playerCount: 2, seed: 'id-index-refused', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     const room = game.create(Zone, 'room');
     const token = room.create(Card, 'token');
-    const id = refusedCreate(game, room);
+    const id = refusedCreate(game, room).at(-1)!;
     game.definePartition(room.id);
     const json = JSON.parse(JSON.stringify(room.toJSON())) as ElementJSON;
     game.evictSubtree(room.id);
