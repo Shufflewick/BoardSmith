@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import { relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { readFencedJsonLedger } from '../lib/fenced-json-ledger.js';
 import { readLiveSlices } from './verify-derive-check.js';
 import { buildExampleExtractionPayload, isCitationHeaderLine } from './example-derivation.js';
@@ -232,7 +232,7 @@ async function printUpgrade(
   );
   if (result.upgraded.length === 0 && result.dropped.length === 0) {
     console.log(
-      chalk.green(
+      styleText('green',
         exists
           ? `✓ Nothing to upgrade: every record in ${result.ledgerPath} already carries lineText.`
           : `✓ Nothing to upgrade: this project has no example-replay ledger.`,
@@ -241,7 +241,7 @@ async function printUpgrade(
     return;
   }
   console.log(
-    chalk.green(
+    styleText('green',
       `✓ Upgraded ${result.upgraded.length} record(s) in ${result.ledgerPath}: each now carries the ` +
         `text of the slice line it cites, and keeps its verdict.`,
     ),
@@ -256,7 +256,7 @@ function printMovedAndDropped(result: ExampleLedgerUpgradeResult, decisions: rea
     for (const m of result.reanchored) console.log(`    ${m.from} → ${m.to}`);
   }
   if (result.dropped.length === 0) return;
-  console.log(chalk.yellow(`  ⚠ Dropped ${result.dropped.length} record(s) it could not upgrade:`));
+  console.log(styleText('yellow', `  ⚠ Dropped ${result.dropped.length} record(s) it could not upgrade:`));
   for (const d of decisions) {
     if (d.kind === 'dropped') console.log(`    ${d.exampleId}: ${DROP_REASONS[d.reason](d)}`);
   }

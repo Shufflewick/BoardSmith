@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action, actionStep, loop, type GameOptions } from '../engine/index.js';
+import { Game, Player, Action, Card, Deck, actionStep, loop, type GameOptions } from '../engine/index.js';
+import { parseExecutorOp } from './parse-executor-op.js';
 import { executeOp, DEBUG_OP_TYPES, type GameDefinitionLike, type ExecutableOp, type Op, type StateEnvelope } from './stateless-ops.js';
 import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
 import { boundaryKeyOf, boundaryKeyOfHost } from './testing/boundary-stamp.js';
@@ -242,6 +243,52 @@ describe('executeOp debug ops', () => {
 });
 
 // ---------------------------------------------------------------------------
+// #898: a plain Deck hides its cards from every seat, so a seat's view lists
+// stand-ins with negative ids that no debug edit can name. The Decks tab reads
+// the unfiltered view instead.
+// ---------------------------------------------------------------------------
+
+class HiddenPileGame extends Game<HiddenPileGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    const pile = this.create(Deck, 'pile');
+    for (const name of ['red', 'green', 'blue']) pile.create(Card, name);
+    this.registerAction(Action.create('pass').execute(() => ({ success: true })));
+    this.setFlow({ root: loop({ maxIterations: 1000, do: actionStep({ actions: ['pass'], player: (ctx) => ctx.game.getPlayer(1)! }) }) });
+  }
+}
+const hiddenPileDef: GameDefinitionLike = { gameClass: HiddenPileGame, gameType: 'hidden-pile', minPlayers: 1, maxPlayers: 2 };
+const hiddenPileOptions = { playerCount: 2, seed: 'hidden-pile' };
+
+describe('debugDeckView (#898)', () => {
+  const debug = { debug: true, fullHistory: true };
+
+  it("lists a face-down deck's real cards, by ids a debug edit accepts", async () => {
+    const start = succeeded(await executeOp(hiddenPileDef, hiddenPileOptions, null, null, { type: 'start' }, debug));
+    const seatPile = findByClass(view(start), 'Deck')!;
+    expect((seatPile.children ?? []).every((card) => card.id! < 0)).toBe(true);
+
+    const res = succeeded(await executeOp(hiddenPileDef, hiddenPileOptions, start.snapshot, null, { type: 'debugDeckView' }, debug));
+    const pile = findByClass(res.view as ViewNode, 'Deck')!;
+    const cards = pile.children as Array<ViewNode & { name: string }>;
+    const before = cards.map((card) => card.name);
+    expect([...before].sort()).toEqual(['blue', 'green', 'red']);
+    expect(cards.every((card) => card.id! > 0)).toBe(true);
+
+    const moved = succeeded(await executeOp(hiddenPileDef, hiddenPileOptions, start.snapshot, null, {
+      type: 'debugReorder', cardId: cards[0]!.id!, targetIndex: 2,
+    }, debug));
+    const after = succeeded(await executeOp(hiddenPileDef, hiddenPileOptions, moved.snapshot, null, { type: 'debugDeckView' }, debug));
+    const names = (findByClass(after.view as ViewNode, 'Deck')!.children as Array<{ name: string }>).map((card) => card.name);
+    expect(names).toEqual([before[1], before[2], before[0]]);
+  });
+
+  it('is never run by a platform executor', () => {
+    expect(parseExecutorOp({ type: 'debugDeckView' }).ok).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // #481: debug ops run only when the host turns debugging on, and a seat can
 // never use one to read another seat's view. Two layers gate them: the pure
 // `executeOp` (ShufflewickPub's executor and the dev host) and the
@@ -261,6 +308,7 @@ const EVERY_DEBUG_OP: ExecutableOp[] = [
   { type: 'debugReorder', cardId: 1, targetIndex: 0 },
   { type: 'debugTransfer', cardId: 1, targetDeckId: 1, position: 'first' },
   { type: 'debugShuffle', deckId: 1 },
+  { type: 'debugDeckView' },
 ];
 
 /** The debug ops that report one seat's view. */

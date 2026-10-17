@@ -207,10 +207,6 @@ const emit = defineEmits<{
   font-size: 12px;
 }
 /* Actions Section */
-.actions-section {
-  border-bottom: 1px solid var(--bsg-line);
-  padding-bottom: 16px;
-}
 .traces-error {
   color: var(--bsg-danger);
   padding: 8px;
