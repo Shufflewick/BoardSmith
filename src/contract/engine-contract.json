@@ -1,6 +1,6 @@
 {
-  "revision": 218,
-  "surfaceHash": "1a482cab1bea0579",
+  "revision": 219,
+  "surfaceHash": "42270c2a4d03684b",
   "payloadHash": "d98d9c3e91308953",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1674,19 +1674,27 @@
     },
     {
       "revision": 217,
-      "date": "2026-10-16",
-      "surfaceHash": "41c0e589d7f550d1",
-      "payloadHash": "6e5e0439d117d8a2",
+      "date": "2026-10-17",
+      "surfaceHash": "e031520954ec82d0",
+      "payloadHash": "d98d9c3e91308953",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "An action step settles skipIf and player once on entry, keeps that seat in its saved state (adds seat to the step's saved state) and refuses saved state naming no seat; repeat() refuses counts that are not whole numbers of 0 or more; scoring tracks refuse maxEntries below 1 (#786)."
+      "summary": "ErrorCode drops eight values nothing produced: SEAT_ALREADY_CLAIMED, INVALID_SEAT, NOT_AUTHORIZED, GAME_ALREADY_STARTED, LOBBY_NOT_READY, COLOR_ALREADY_TAKEN, INTERNAL_ERROR and REPLAY_FAILED (#807)."
     },
     {
       "revision": 218,
       "date": "2026-10-17",
-      "surfaceHash": "1a482cab1bea0579",
+      "surfaceHash": "eac42bcea41efca7",
       "payloadHash": "d98d9c3e91308953",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "Corrects revision 217: an action step asks skipIf only on entry and asks player once per pass (on entry, then after each move, so the seat may still change mid-step), and no longer saves a seat in its saved state (#786)."
+      "summary": "STANDARD_PLAYER_COLORS is removed from boardsmith/session and boardsmith/ui, and createColorOption() defaults to the engine's 16-colour DEFAULT_COLOR_PALETTE with its names (Black is #2c3e50) (#814)."
+    },
+    {
+      "revision": 219,
+      "date": "2026-10-17",
+      "surfaceHash": "42270c2a4d03684b",
+      "payloadHash": "d98d9c3e91308953",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "boardsmith/session no longer exports generateGameId or isPlayersTurn; nothing used them (#817)."
     }
   ]
 }

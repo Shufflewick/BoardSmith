@@ -30,6 +30,8 @@ import {
   type LocalWorldStore,
 } from './world-store.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { createMemoryWorldStore } from '../../testing/memory-world-store.js';
+import type { WorldStore } from '../../world/host/store.js';
 
 /**
  * ONE CHECKPOINT, the shape `runner.serialize` answers (#224).
@@ -959,5 +961,47 @@ describe('the local world store', () => {
     }
     expect(seen.some((text) => text.includes('SQLite is an experimental feature'))).toBe(false);
     expect(seen).toContain('a warning of the author\'s own');
+  });
+});
+
+/**
+ * A MIGRATION THAT GROWS A ROOM PAST THE BUDGET (#788).
+ *
+ * Refused before anything lands, by both stores in the same words: a store that
+ * wrote it would leave a room every later checkpoint refuses as too large.
+ */
+describe('a migration that grows a partition past the budget', () => {
+  const small = worldBudgets({ partitionMaxBytes: 64 });
+
+  async function refusal(store: WorldStore): Promise<unknown> {
+    await store.createAll({
+      partitions: { world: { parentId: 0, json: { name: 'world' } } } as WorldGenesis['partitions'],
+      nextElementId: 1_000_100,
+    });
+    try {
+      store.migrate({
+        partitions: { world: JSON.stringify({ pad: 'x'.repeat(200) }) },
+        created: { partitions: {}, created: {}, nextElementId: 1_000_100 },
+        events: [],
+        toStateVersion: 1,
+      });
+    } catch (error) {
+      expect(store.stateVersion()).toBe(0);
+      expect(await store.read('world')).toEqual({ parentId: 0, json: { name: 'world' } });
+      return error;
+    }
+    throw new Error('the migration was written');
+  }
+
+  it('is refused by the local store and the memory store with the same error', async () => {
+    const local = openWorldStore(worldStorePath(tempTree('bs-world-store-')), small);
+    try {
+      const fromLocal = await refusal(local);
+      const fromMemory = await refusal(createMemoryWorldStore('key', small));
+      expect(fromLocal).toMatchObject({ code: 'partition-too-large' });
+      expect(fromLocal).toEqual(fromMemory);
+    } finally {
+      local.close();
+    }
   });
 });
