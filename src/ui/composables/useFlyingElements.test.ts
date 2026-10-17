@@ -257,7 +257,7 @@ describe('useFlyingElements', () => {
       piles: Record<string, AutoWatchGameElement>,
       routes: Route[],
       change: () => void,
-    ): Promise<{ element?: string; from?: string; to?: string }[]> {
+    ): Promise<{ element: string | null; from?: string; to?: string }[]> {
       const probe = card(999);
       const all: Record<string, AutoWatchGameElement> = {
         ...piles,
