@@ -364,3 +364,17 @@ describe('the mutators find an object choice from a copy of its value (#857)', (
     expect(t.board.hoveredChoice?.targetRefs).toEqual([{ id: 41 }]);
   });
 });
+
+describe('the multi-select highlight follows the draft (#860)', () => {
+  it('clears when the draft is left holding only values with no board element', async () => {
+    const t = cellTable();
+    await t.mutators.startAction('markMany');
+    await t.mutators.toggleMultiSelectValue('cells', CELL_B.value);
+    await t.mutators.toggleMultiSelectValue('cells', CELL_A.value);
+    expect(t.board.hoveredChoice?.targetRefs).toEqual([{ id: 41 }]);
+
+    await t.mutators.toggleMultiSelectValue('cells', CELL_A.value);
+
+    expect(t.board.hoveredChoice).toBeNull();
+  });
+});

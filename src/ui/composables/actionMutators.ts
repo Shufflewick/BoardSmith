@@ -163,13 +163,12 @@ export function createActionMutators(
   function updateMultiSelectBoardHighlights(): void {
     if (!board) return;
     const selectedValues = controller.multiSelectDraft.value?.values ?? [];
-    if (selectedValues.length === 0) {
+    const choices = controller.currentChoices.value;
+    const refs = selectedValues.flatMap(val => choices.find(c => valuesEqual(c.value, val))?.refs ?? []);
+    if (refs.length === 0) {
       board.setHoveredChoice(null);
       return;
     }
-    const choices = controller.currentChoices.value;
-    const refs = selectedValues.flatMap(val => choices.find(c => valuesEqual(c.value, val))?.refs ?? []);
-    if (refs.length === 0) return;
     board.setHoveredChoice({
       value: selectedValues,
       display: `${selectedValues.length} selected`,
