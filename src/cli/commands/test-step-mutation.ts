@@ -1064,6 +1064,8 @@ interface DiffMutationInput {
   /** Outcomes of earlier runs, reused where nothing the mutant depends on changed (`lib/mutant-cache.ts`). */
   cache: MutantCache;
   log: (line: string) => void;
+  /** What changed in the execution context since the run began, checked before each mutant runs, so a mixed run stops early (#932). */
+  contextChange?: () => Promise<string | undefined>;
 }
 
 interface DiffMutationResult {
@@ -1184,6 +1186,8 @@ async function tallyMutants(
   const result: DiffMutationResult = { summary, reused: known.filter((k) => k !== undefined).length, survivors: [], equivalents: [] };
   for (const [i, mutant] of mutants.entries()) {
     const stored = known[i];
+    const change = stored === undefined ? await input.contextChange?.() : undefined;
+    if (change !== undefined) throw new Error(`what the tests run with changed after ${i} of ${mutants.length} mutants: ${change}`);
     const label = `mutant ${i + 1}/${mutants.length}: ${mutant.file}:${mutant.line} ${mutant.description}`;
     input.log(stored === undefined ? label : `${label} (reused: ${stored})`);
     const outcome = stored ?? (await runMutant(run!, mutant));
