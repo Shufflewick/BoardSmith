@@ -36,6 +36,11 @@ describe('scanSandboxViolations', () => {
     expect(scanSandboxViolations(dir).filter((v) => v.file === `src/rules/rng.${ext}`)).toHaveLength(3);
   });
 
+  it.each(['d.ts', 'd.mts', 'd.cts'])('skips a .%s declaration file', (ext) => {
+    write(`src/rules/x.${ext}`, 'export const x = Math.random();\n');
+    expect(scanSandboxViolations(dir)).toEqual([]);
+  });
+
   // Security rules (network/filesystem/eval) are enforced everywhere, including
   // UI helpers outside src/rules.
   it('flags security violations in UI helpers outside src/rules', () => {
