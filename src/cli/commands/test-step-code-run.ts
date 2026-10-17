@@ -27,7 +27,7 @@
  * module included, is the game's code.
  */
 import { posix } from 'node:path';
-import { mayBeSameOrInside } from '../lib/path-inside.js';
+import { isSameOrInside, mayBeSameOrInside } from '../lib/path-inside.js';
 import { findDispatches, parseSource, walk, type AstNode } from './test-step-ast.js';
 
 /** Modules a scan never needs: they mount components or run a game. */
@@ -317,7 +317,7 @@ function isLiteralConstant(module: InertModule, name: string, seen = new Set<str
 
 /** Whether an import takes only literal constants and types from a module that runs nothing on load. */
 function importsOnlyThemeConstants(node: AstNode, modulePath: string, context: CodeRunContext): boolean {
-  if (node.type !== 'ImportDeclaration' || !mayBeSameOrInside(THEME_CONSTANTS_DIR, modulePath)) return false;
+  if (node.type !== 'ImportDeclaration' || !isSameOrInside(THEME_CONSTANTS_DIR, modulePath)) return false;
   const specifiers = node.specifiers as Statement[];
   if (specifiers.length === 0 || specifiers.some((s) => s.type !== 'ImportSpecifier')) return false;
   const text = context.text(modulePath);

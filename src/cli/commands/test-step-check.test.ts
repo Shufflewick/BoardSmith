@@ -19,6 +19,7 @@ import {
 } from './test-step-ast.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { scriptRegions } from './test-step-sfc.js';
+import { findCodeRun } from './test-step-code-run.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 
 // -------------------------------------------------------------------------------------------
@@ -675,6 +676,15 @@ it('contrast', () => { expect(PALETTE[scheme].text).not.toBe(ACCENT_COLOR); });
 `,
     });
     expect(findings).toEqual([]);
+  });
+
+  // Only the exact src/ui/ is trusted; on a case-sensitive disk a folder SRC/ui can sit beside it (#1053).
+  it('reports a guard that imports literal theme constants from SRC/ui, in other letter case (#1053)', () => {
+    const scripts = new Map([['src/ui/theme.ts', THEME], ['SRC/ui/theme.ts', THEME]]);
+    const context = { text: (path: string) => scripts.get(path), wrappers: new Map() };
+    const run = (from: string) => findCodeRun(`import { PALETTE } from '${from}';\nvoid PALETTE;\n`, 'tests/guards/a.test.ts', context);
+    expect(run('../../src/ui/theme.js')).toBeUndefined();
+    expect(run('../../SRC/ui/theme.js')).toEqual({ line: 1, what: "imports SRC/ui/theme.ts from the game's src/" });
   });
 
   it.each([
