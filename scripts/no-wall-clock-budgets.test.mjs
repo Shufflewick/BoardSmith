@@ -13,9 +13,11 @@
  * by what it returned. This scan reads the syntax tree and fails on any
  * `expect(...)` whose subject subtracts a clock read, or a variable assigned
  * one, directly or through any chain of variables holding that difference,
- * whatever the matcher (#919, #1083). "A variable" is a declaration, parameter,
- * destructuring default, name destructured from a literal, class field, object
- * property or function declaration's return, and TypeScript's checker resolves
+ * whatever the matcher (#919, #1083, #1104). "A variable" is a declaration,
+ * parameter (including what a call passes it), destructuring default, name
+ * destructured at any depth from a literal or a variable, by declaration or
+ * assignment, class field, object property, or the return of a function
+ * declaration or method, and TypeScript's checker resolves
  * each name to the declaration it refers to, so shadowing follows the
  * language's own scope rules rather than a copy of them.
  *
@@ -60,27 +62,6 @@ function checkerFor(sourceFile) {
 }
 
 const HAS_VALUE = [ts.isVariableDeclaration, ts.isParameter, ts.isBindingElement, ts.isPropertyDeclaration, ts.isPropertyAssignment];
-/**
- * What a name destructured with no default takes from the array or object literal it is destructured from: the
- * matching element, every element from a rest on, or the matching property.
- */
-function destructured(element) {
-  const pattern = element.parent;
-  const from = pattern.parent.initializer && bare(pattern.parent.initializer);
-  if (from && ts.isArrayLiteralExpression(from)) {
-    const at = pattern.elements.indexOf(element);
-    return from.elements.slice(at, element.dotDotDotToken ? undefined : at + 1);
-  }
-  if (!from || !ts.isObjectLiteralExpression(from) || element.dotDotDotToken) return [];
-  return propertyValue(from, (element.propertyName ?? element.name).getText());
-}
-
-/** The value an object literal gives `key`, written as a property or a shorthand. */
-function propertyValue(literal, key) {
-  const property = literal.properties.find(({ name }) => name?.getText() === key);
-  if (!property) return [];
-  return [ts.isShorthandPropertyAssignment(property) ? property.name : property.initializer].filter(Boolean);
-}
 
 /** What a function returns: an arrow's expression body, or each `return` not inside a nested function. */
 const returnsOf = (fn) => (!fn.body ? [] : ts.isBlock(fn.body) ? returned(fn.body) : [fn.body]);
@@ -92,42 +73,91 @@ function returned(node) {
   return found;
 }
 
+/** The value a declaration, parameter, field, property or default gives its name, if it gives one. */
+const declaredValue = (node) => (HAS_VALUE.some((is) => is(node)) ? node.initializer
+  : ts.isShorthandPropertyAssignment(node) && node.objectAssignmentInitializer);
 const isCompound = (kind) => kind >= ts.SyntaxKind.FirstCompoundAssignment && kind <= ts.SyntaxKind.LastCompoundAssignment;
-/**
- * The name `node` gives values to, and those values: a declaration, parameter, field, property or default, a name
- * destructured from a literal, what a function declaration returns, `x = v`, or `x += v` (whose value is the whole
- * expression, so `x -= performance.now()` is a subtraction).
- */
-function assignmentAt(node) {
-  const value = HAS_VALUE.some((is) => is(node)) ? node.initializer : ts.isShorthandPropertyAssignment(node) && node.objectAssignmentInitializer;
-  if (value) return { target: node.name, values: [value] };
-  if (ts.isBindingElement(node)) return { target: node.name, values: destructured(node) };
-  if (ts.isFunctionDeclaration(node) && node.name && node.body) return { target: node.name, values: returnsOf(node) };
-  return ts.isBinaryExpression(node) ? binaryAssignment(node) : undefined;
-}
 
-/** `x = v` gives `x` the value `v`; `x += v` gives it the whole expression. */
-function binaryAssignment(node) {
-  const { kind } = node.operatorToken;
-  if (kind !== ts.SyntaxKind.EqualsToken && !isCompound(kind)) return undefined;
-  const target = ts.isPropertyAccessExpression(node.left) ? node.left.name : node.left;
-  return { target, values: [kind === ts.SyntaxKind.EqualsToken ? node.right : node] };
-}
-
-const EXPECTS = ['expect', 'expect.soft'];
+const EXPECTS = ['expect', 'expect.soft', 'vi.expect', 'vi.expect.soft'];
 /** Every `expect(...)` in a source whose subject measures a clock difference, with any matcher. */
 function wallClockBudgets(source, fileName = 'scanned.ts') {
   // Every finding needs a clock read written out, and most files have none: skip building a checker for them.
   if (!CLOCKS.some((clock) => source.includes(clock))) return [];
   const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
   const checker = checkerFor(sourceFile);
+
+  /** What each value gives element `at` of an array pattern, or every element from `at` on for a rest. */
+  const elementsAt = (values, at, rest) => values.map(bare).flatMap((from) => (ts.isArrayLiteralExpression(from)
+    ? from.elements.slice(at, rest ? undefined : at + 1) : [from]));
+  /**
+   * What each value gives property `key`: the name of the property its type declares, which holds that property's
+   * own value, or the whole value when its type is unknown.
+   */
+  const memberOf = (values, key) => values.map(bare).flatMap((from) => {
+    const declaration = checker.getTypeAtLocation(from).getProperty(key)?.valueDeclaration;
+    if (declaration?.name) return [declaration.name];
+    return ts.isObjectLiteralExpression(from) ? [] : [from];
+  });
+  /**
+   * Each name `target` gives values to, with those values: a name or `x.name` takes them whole, and a binding or
+   * assignment pattern hands each of its names its own part, however deeply nested. Defaults are their own assignments.
+   */
+  const unpack = (target, values) => {
+    if (ts.isMemberName(target)) return [{ target, values }];
+    if (ts.isPropertyAccessExpression(target)) return [{ target: target.name, values }];
+    if (ts.isBinaryExpression(target) && target.operatorToken.kind === ts.SyntaxKind.EqualsToken) return unpack(target.left, values);
+    if (ts.isArrayBindingPattern(target) || ts.isArrayLiteralExpression(target)) {
+      return target.elements.flatMap((element, at) => {
+        const rest = ts.isSpreadElement(element) || Boolean(element.dotDotDotToken);
+        const name = ts.isBindingElement(element) ? element.name : ts.isSpreadElement(element) ? element.expression : element;
+        return unpack(name, elementsAt(values, at, rest));
+      });
+    }
+    if (ts.isObjectBindingPattern(target)) {
+      return target.elements.flatMap((element) => (element.dotDotDotToken ? []
+        : unpack(element.name, memberOf(values, (element.propertyName ?? element.name).getText()))));
+    }
+    if (!ts.isObjectLiteralExpression(target)) return [];
+    return target.properties.flatMap((property) => {
+      if (ts.isShorthandPropertyAssignment(property)) return unpack(property.name, memberOf(values, property.name.text));
+      return ts.isPropertyAssignment(property) ? unpack(property.initializer, memberOf(values, property.name.getText())) : [];
+    });
+  };
+  /** What a call or `new` gives each parameter of the function it resolves to, a rest parameter taking every argument from it on. */
+  const passed = (call) => {
+    const parameters = checker.getResolvedSignature(call)?.declaration?.parameters ?? [];
+    const args = call.arguments ?? [];
+    return parameters.flatMap((parameter, at) => unpack(parameter.name, args.slice(at, parameter.dotDotDotToken ? undefined : at + 1)));
+  };
+  /**
+   * The names `node` gives values to, and those values: a declaration, parameter, field, property or default (each
+   * name of a pattern its own part), what a function declaration or method returns, what a call passes to the
+   * function's parameters, `x = v`, or `x += v` (whose value is the whole expression, so `x -= performance.now()` is a
+   * subtraction).
+   */
+  const assignmentsAt = (node) => {
+    const value = declaredValue(node);
+    if (value) return unpack(node.name, [value]);
+    if ((ts.isFunctionDeclaration(node) || ts.isMethodDeclaration(node)) && node.name && node.body) {
+      return [{ target: node.name, values: returnsOf(node) }];
+    }
+    if (ts.isCallExpression(node) || ts.isNewExpression(node)) return passed(node);
+    return ts.isBinaryExpression(node) ? binaryAssignments(node) : [];
+  };
+  /** `x = v` gives `x` the value `v`; `x += v` gives it the whole expression. */
+  const binaryAssignments = (node) => {
+    const { kind } = node.operatorToken;
+    if (kind === ts.SyntaxKind.EqualsToken) return unpack(node.left, [node.right]);
+    return isCompound(kind) ? unpack(node.left, [node]) : [];
+  };
+
   const assignments = [];
   const expects = [];
   const visit = (node) => {
-    const assignment = assignmentAt(node);
-    if (assignment && ts.isMemberName(assignment.target)) {
-      assignments.push(...assignment.values.map((value) => ({ target: assignment.target, value })));
-    } else if (ts.isCallExpression(node) && EXPECTS.includes(node.expression.getText()) && node.arguments.length > 0) {
+    for (const { target, values } of assignmentsAt(node)) {
+      if (ts.isMemberName(target)) assignments.push(...values.map((value) => ({ target, value })));
+    }
+    if (ts.isCallExpression(node) && EXPECTS.includes(node.expression.getText()) && node.arguments.length > 0) {
       expects.push(node);
     }
     ts.forEachChild(node, visit);
@@ -158,9 +188,12 @@ function wallClockBudgets(source, fileName = 'scanned.ts') {
   const subtractsClock = (node) => ts.isBinaryExpression(node)
     && [ts.SyntaxKind.MinusToken, ts.SyntaxKind.MinusEqualsToken].includes(node.operatorToken.kind)
     && (isClockTerm(node.left) || isClockTerm(node.right));
-  const measures = (node) => (ts.isFunctionLike(node)
-    ? returnsOf(node).some(measures)
-    : subtractsClock(node) || holds(durations, node) || ts.forEachChild(node, measures) === true);
+  const measures = (node) => {
+    if (ts.isFunctionLike(node)) return returnsOf(node).some(measures);
+    // A property the file declares holds its own value, whatever else the object holds (`h.n` beside `h.took()`).
+    if (ts.isPropertyAccessExpression(node) && checker.getSymbolAtLocation(node.name)) return holds(durations, node.name);
+    return subtractsClock(node) || holds(durations, node) || ts.forEachChild(node, measures) === true;
+  };
   // Until nothing changes, so a duration handed from name to name is followed to the end.
   for (let size = -1; size !== durations.size;) {
     size = durations.size;
@@ -425,6 +458,63 @@ describe('wallClockBudgets', () => {
 
   it('finds a budget asserted with expect.soft (#1083)', () => {
     expect(wallClockBudgets('expect.soft(Date.now() - start).toBeLessThan(500);')).toHaveLength(1);
+  });
+
+  it('finds a duration returned by a class or object method (#1104)', () => {
+    expect(wallClockBudgets('class A { took() { return Date.now() - s; } }\nexpect(new A().took()).toBeLessThan(5);')).toHaveLength(1);
+    expect(wallClockBudgets('const h = { took() { return Date.now() - s; } };\nexpect(h.took()).toBeLessThan(5);')).toHaveLength(1);
+  });
+
+  it('judges an object property by its own value, not by a duration beside it (#1104)', () => {
+    const h = 'const h = { took() { return Date.now() - s; }, n: 3 };';
+    expect(wallClockBudgets(`${h}\nexpect(h.n).toBe(3);`)).toEqual([]);
+    expect(wallClockBudgets(`${h}\nconst { n } = h;\nexpect(n).toBe(3);`)).toEqual([]);
+  });
+
+  it('finds a duration passed as an argument and asserted inside the function (#1104)', () => {
+    const forms = {
+      'a function declaration': 'function check(d) { expect(d).toBeLessThan(5); }',
+      'an arrow': 'const check = (d) => { expect(d).toBeLessThan(5); };',
+      'a rest parameter': 'function check(...ds) { expect(ds[0]).toBeLessThan(5); }',
+    };
+    for (const [form, helper] of Object.entries(forms)) {
+      expect(wallClockBudgets(`${helper}\ncheck(Date.now() - s);`), form).toHaveLength(1);
+    }
+    const method = 'class C { check(d) { expect(d).toBeLessThan(5); } }\nnew C().check(Date.now() - s);';
+    expect(wallClockBudgets(method)).toHaveLength(1);
+  });
+
+  it('finds a duration taken by nested destructuring, from a variable, or by assignment (#1104)', () => {
+    const start = 'const duration = Date.now() - s;';
+    const forms = {
+      'a nested array': 'const [[x]] = [[duration]];\nexpect(x).toBeLessThan(5);',
+      'a nested object': 'const { a: { b } } = { a: { b: duration } };\nexpect(b).toBeLessThan(5);',
+      'an array variable': 'const t = [duration];\nconst [x] = t;\nexpect(x).toBeLessThan(5);',
+      'an object variable': 'const o = { a: duration };\nconst { a } = o;\nexpect(a).toBeLessThan(5);',
+      'an array assignment': 'let x;\n[x] = [duration];\nexpect(x).toBeLessThan(5);',
+      'an object assignment': 'let a;\n({ a } = { a: duration });\nexpect(a).toBeLessThan(5);',
+      'a nested assignment': 'let x;\n[[x]] = [[duration]];\nexpect(x).toBeLessThan(5);',
+    };
+    for (const [form, rest] of Object.entries(forms)) {
+      expect(wallClockBudgets(`${start}\n${rest}`), form).toHaveLength(1);
+    }
+  });
+
+  it('does not flag a name destructured beside a duration by assignment or from a variable (#1104)', () => {
+    const start = 'const duration = Date.now() - s;';
+    expect(wallClockBudgets(`${start}\nlet d, n;\n[d, n] = [duration, 3];\nexpect(n).toBe(3);`)).toEqual([]);
+    expect(wallClockBudgets(`${start}\nconst o = { a: duration, n: 3 };\nconst { n } = o;\nexpect(n).toBe(3);`)).toEqual([]);
+  });
+
+  it('finds a budget asserted with vi.expect (#1104)', () => {
+    expect(wallClockBudgets('vi.expect(Date.now() - start).toBeLessThan(500);')).toHaveLength(1);
+  });
+
+  it('does not flag a wait-loop helper that reads the clock but returns no duration (#1104)', () => {
+    const method = 'class H { wait() { const s = Date.now(); while (Date.now() - s < 5) {} return done; } }';
+    expect(wallClockBudgets(`${method}\nexpect(new H().wait()).toBe(true);`)).toEqual([]);
+    const deadline = 'function waitUntil(end) { while (Date.now() < end) {} return done; }';
+    expect(wallClockBudgets(`${deadline}\nexpect(waitUntil(Date.now() + 5)).toBe(true);`)).toEqual([]);
   });
 
   it('leaves a timestamp checked against the clock alone', () => {
