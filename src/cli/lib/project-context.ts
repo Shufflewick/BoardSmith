@@ -1,4 +1,4 @@
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -48,7 +48,7 @@ function isBoardsmithWorkspace(cwd: string): boolean {
  */
 export function requireBoardsmithWorkspace(cwd: string): void {
   if (isBoardsmithWorkspace(cwd)) return;
-  console.error(chalk.red('Error: not a BoardSmith workspace'));
-  console.error(chalk.dim('Run this from a game project (has boardsmith.json) or the BoardSmith repo.'));
+  console.error(styleText('red', 'Error: not a BoardSmith workspace'));
+  console.error(styleText('dim', 'Run this from a game project (has boardsmith.json) or the BoardSmith repo.'));
   process.exit(1);
 }

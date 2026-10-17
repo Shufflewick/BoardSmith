@@ -16,6 +16,7 @@ import {
   Space,
   Piece,
   type GameOptions,
+  PlayerFacingError,
 } from '../../engine/index.js';
 import { worldAction, worldClockAction, type WorldDefinition } from '../../world/index.js';
 
@@ -306,7 +307,40 @@ const flood = worldAction<CardinalityWorld>('flood')
   .chooseFrom('drop', { choices: range(250) })
   .execute(() => {});
 
-const WORLD_ACTIONS = { shout, mark, nod, pair, hang, light, plant, sprout, harvest, say, scrawl, trespass, flood };
+/** A bug in the rules: its execute crashes every time it is taken (#847). */
+const grow = worldAction<CardinalityWorld>('grow')
+  .needs(inCommons)
+  .chooseFrom('how', { choices: ['tall'] })
+  .execute(() => {
+    throw new TypeError('the soil is undefined');
+  });
+
+/** How many times `balk` was taken, so a test can tell a refused move from one never sent. */
+export const balked = { times: 0 };
+
+/** The rules saying no, in words a player can read: a refusal, not a crash. */
+const balk = worldAction<CardinalityWorld>('balk')
+  .needs(inCommons)
+  .chooseFrom('how', { choices: ['flatly'] })
+  .execute(() => {
+    balked.times++;
+    throw new PlayerFacingError('Not today.');
+  });
+
+/** A bug in a selection's `validate`, which throws before `execute` is reached (#847). */
+const sift = worldAction<CardinalityWorld>('sift')
+  .needs(inCommons)
+  .chooseFrom('how', {
+    choices: ['finely'],
+    validate: () => {
+      throw new TypeError('the sieve is undefined');
+    },
+  })
+  .execute(() => {});
+
+const WORLD_ACTIONS = {
+  shout, mark, nod, pair, hang, light, plant, sprout, harvest, say, scrawl, trespass, flood, grow, balk, sift,
+};
 
 /**
  * A three-seat world bundle offering the named actions. `onArrive` names the

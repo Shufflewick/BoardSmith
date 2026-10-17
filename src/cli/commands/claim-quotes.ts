@@ -51,7 +51,7 @@
 import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { type InterpretationLine, interpretationLines, parseSupersededClaims } from './build-manifest.js';
 import { assertBareName } from '../lib/user-name.js';
 import {
@@ -628,7 +628,7 @@ export async function checkClaimQuotes(projectDir: string, slug: string): Promis
   const transition = await readGateTransition(projectDir);
   const preGate: PreGateClaims = {
     recorded: transition?.claims[slug] ?? {},
-    offer: transition === undefined && /^Status:\s*verified/m.test(chunkText),
+    offer: transition === undefined && /^Status:[ \t]*verified/m.test(chunkText),
   };
   const superseded = new Set(parseSupersededClaims(chunkText));
   const refusals: string[] = [];
@@ -676,7 +676,7 @@ export async function claimQuoteCheckCommand(
       'Pass the slug of a chunk in this project, which is the name of a directory under design/chunks/ holding a CHUNK.md.',
     );
   } catch (error) {
-    console.error(chalk.red((error as Error).message));
+    console.error(styleText('red', (error as Error).message));
     process.exitCode = 1;
     return;
   }
@@ -686,7 +686,7 @@ export async function claimQuoteCheckCommand(
     await fs.access(chunkMdPath(projectDir, slug));
   } catch {
     console.error(
-      chalk.red(`No CHUNK.md at ${shownChunk}. Check the slug, or pass --project <dir> for a different project.`),
+      styleText('red', `No CHUNK.md at ${shownChunk}. Check the slug, or pass --project <dir> for a different project.`),
     );
     process.exitCode = 1;
     return;
@@ -698,12 +698,12 @@ export async function claimQuoteCheckCommand(
   if (options.json) {
     console.log(JSON.stringify({ slug, ok, ...result }, null, 2));
   } else if (ok) {
-    console.log(chalk.green(passLine(shownChunk, result)));
+    console.log(styleText('green', passLine(shownChunk, result)));
   }
 
   if (!ok) {
     if (!options.json) {
-      console.error(chalk.red(`${shownChunk}: ${result.refusals.length} claim problem(s):`));
+      console.error(styleText('red', `${shownChunk}: ${result.refusals.length} claim problem(s):`));
       for (const refusal of result.refusals) console.error(`  • ${refusal}`);
     }
     process.exitCode = 1;

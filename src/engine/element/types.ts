@@ -23,6 +23,10 @@ export type ImageRef =
       width: number;
       /** Height of the sprite (pixels) */
       height: number;
+      /** Width of the whole sprite sheet image (pixels) */
+      sheetWidth: number;
+      /** Height of the whole sprite sheet image (pixels) */
+      sheetHeight: number;
     };
 
 /**

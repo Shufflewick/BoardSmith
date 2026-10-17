@@ -1067,12 +1067,24 @@ export class SnapshotSessionHost {
     // #481: debug ops need debugging on.
     const debugRefused = debugOpRefusal(op, this.adapters.debug === true);
     if (debugRefused) return debugRefused;
-    // #738: picks are kept under `seat`, so an op acting as another player would mix two seats.
-    if ('player' in op && op.player !== seat) {
+    // #1100: its answer is a bot seat's move with that move's args, which may be hidden from the caller.
+    if (op.type === 'botSuggest') {
       return {
         success: false,
         error:
-          `Seat ${seat} sent '${op.type}' as seat ${op.player}, and was refused. ` +
+          `Seat ${seat} sent 'botSuggest', and was refused: only the host itself searches for a bot's move. ` +
+          'Ask for a hint to see a suggested move for your own seat.',
+        category: 'protocol',
+      };
+    }
+    // #738: picks are kept under `seat`, so an op acting as another player would mix two seats.
+    // #950: hint, heatmapToggle and convertSeatToBot name theirs as `seat`.
+    const named = 'player' in op ? op.player : 'seat' in op ? op.seat : seat;
+    if (named !== seat) {
+      return {
+        success: false,
+        error:
+          `Seat ${seat} sent '${op.type}' as seat ${named}, and was refused. ` +
           'A seat can act and see only as itself; switch to that seat to do this.',
         category: 'protocol',
       };
@@ -1196,8 +1208,8 @@ export class SnapshotSessionHost {
     // arrive is a human action the bot seat is not going to take. The table
     // just sits there. (Undo alone never showed this — it rewinds to the
     // requesting seat's own turn start, so the pump would find no due bot seat
-    // anyway. A rewind can target ANY point, which is what made it reachable.)
-    const wakesBots = actionCompleted || op.type === 'undo' || op.type === 'debugRewind';
+    // anyway. A rewind or a restore can target ANY point, which is what made it reachable.)
+    const wakesBots = actionCompleted || op.type === 'undo' || op.type === 'debugRewind' || op.type === 'restoreEarlier';
     if (!wakesBots) return res;
     const tracked: Promise<void> = this.afterMove(`seat ${seat}'s ${op.type}`, actionCompleted).finally(() =>
       this.backgroundWork.delete(tracked),

@@ -35,6 +35,7 @@ function stubBridge(over: Partial<DebugBridge> = {}): DebugBridge {
     reorderCard: vi.fn(async () => {}),
     transferCard: vi.fn(async () => {}),
     shuffleDeck: vi.fn(async () => {}),
+    deckView: vi.fn(async () => ({})),
     ...over,
   };
 }
@@ -87,15 +88,48 @@ describe('history loading', () => {
     expect(timeline.historyError.value).toBeNull();
   });
 
-  it('ignores a second load while one is in flight', async () => {
-    let release: (v: SerializedAction[]) => void = () => {};
-    const history = vi.fn(() => new Promise<SerializedAction[]>((r) => { release = r; }));
+  it('asks again while a load is in flight and shows the newest answer, whatever order they arrive in', async () => {
+    const pending: Array<(v: SerializedAction[]) => void> = [];
+    const history = vi.fn(() => new Promise<SerializedAction[]>((r) => { pending.push(r); }));
     const { timeline } = setup({ history });
     const first = timeline.fetchHistory();
-    await timeline.fetchHistory();
-    expect(history).toHaveBeenCalledTimes(1);
-    release(HISTORY);
+    const second = timeline.fetchHistory();
+    expect(history).toHaveBeenCalledTimes(2);
+    pending[1]!(HISTORY);
+    await second;
+    pending[0]!(HISTORY.slice(0, 1));
     await first;
+    expect(timeline.actionHistory.value).toEqual(HISTORY);
+    expect(timeline.historyLoading.value).toBe(false);
+  });
+
+  it('stays loading until the newest answer arrives', async () => {
+    const pending: Array<(v: SerializedAction[]) => void> = [];
+    const history = vi.fn(() => new Promise<SerializedAction[]>((r) => { pending.push(r); }));
+    const { timeline } = setup({ history });
+    const first = timeline.fetchHistory();
+    const second = timeline.fetchHistory();
+    pending[0]!(HISTORY.slice(0, 1));
+    await first;
+    expect(timeline.historyLoading.value).toBe(true);
+    pending[1]!(HISTORY);
+    await second;
+    expect(timeline.actionHistory.value).toEqual(HISTORY);
+    expect(timeline.historyLoading.value).toBe(false);
+  });
+
+  it('leaves the error empty when an older load fails after the newest succeeded', async () => {
+    const pending: Array<{ resolve: (v: SerializedAction[]) => void; reject: (e: Error) => void }> = [];
+    const history = vi.fn(() => new Promise<SerializedAction[]>((resolve, reject) => { pending.push({ resolve, reject }); }));
+    const { timeline } = setup({ history });
+    const first = timeline.fetchHistory();
+    const second = timeline.fetchHistory();
+    pending[1]!.resolve(HISTORY);
+    await second;
+    pending[0]!.reject(new Error('older failed'));
+    await first;
+    expect(timeline.historyError.value).toBeNull();
+    expect(timeline.actionHistory.value).toEqual(HISTORY);
   });
 });
 

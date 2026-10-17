@@ -43,10 +43,25 @@ const peek = worldAction<PeekWorld>('peek')
     own.visits += '*';
   });
 
+/** The same pattern through `emit` (#933): an event in the neighbour's room,
+ *  which the command did not declare, swallowed before the write. */
+const shout = worldAction<PeekWorld>('shout')
+  .prompt('Shout next door')
+  .needs((ctx) => [roomOf(ctx.player.seat)])
+  .execute((_args, ctx) => {
+    try {
+      ctx.world.emit(roomOf(ctx.player.seat === 1 ? 2 : 1), { shout: true });
+    } catch {
+      // The pattern under test: the rules treat the refusal as control flow.
+    }
+    const own = ctx.world.partition(roomOf(ctx.player.seat)) as Room;
+    own.visits += '*';
+  });
+
 function peekBundle() {
   const world: WorldDefinition = {
     maxPlayers: 2,
-    actions: [peek],
+    actions: [peek, shout],
     view: (seat: number) => [roomOf(seat)],
     genesis: (game: Game) => ({
       [roomOf(1)]: game.create(Room, 'room-1'),
@@ -61,6 +76,16 @@ describe('a refusal the rules caught still refuses the command', () => {
     const world = await createTestWorld({ definition: peekBundle() });
 
     await expect(world.take(1, 'peek')).rejects.toMatchObject({ code: 'undeclared-partition' });
+
+    const state = JSON.stringify((await world.getPlayerView(1)).state);
+    expect(state).not.toContain('*');
+    await world.close();
+  });
+
+  it('refuses a swallowed emit in an undeclared partition the same way (#933)', async () => {
+    const world = await createTestWorld({ definition: peekBundle() });
+
+    await expect(world.take(1, 'shout')).rejects.toMatchObject({ code: 'undeclared-partition' });
 
     const state = JSON.stringify((await world.getPlayerView(1)).state);
     expect(state).not.toContain('*');
