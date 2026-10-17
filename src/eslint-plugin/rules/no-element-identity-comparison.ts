@@ -1,4 +1,5 @@
 import type { Rule } from 'eslint';
+import { COLLECTION_CALL_NAMES, collectElementTypeNames, typeReferenceName, walk } from './element-types.js';
 
 /**
  * Disallows `===`/`!==` identity comparison between GameElement instances,
@@ -17,10 +18,11 @@ import type { Rule } from 'eslint';
  * considered "GameElement-looking" using same-file evidence only:
  *
  *   (a) A variable/parameter whose declared TS type annotation names
- *       `GameElement` directly, or a class known (from evidence (b), in
- *       the SAME file) to extend `GameElement` (transitively).
+ *       an engine element class (`GameElement`, `Piece`, `Card`, ... --
+ *       ENGINE_ELEMENT_CLASS_NAMES in ./element-types.ts) directly, or a
+ *       class known (from evidence (b)) to extend one (transitively).
  *   (b) A `class X extends Y` declaration in the same file, where `Y` is
- *       `GameElement` or another known subclass -- used only to resolve
+ *       an engine element class or another known subclass -- used only to resolve
  *       type names for (a), not as a comparison target itself.
  *   (c) A variable whose initializer is a known collection-returning call
  *       (`.all(...)`, `.first(...)`, `.firstN(...)`, `.last(...)`,
@@ -56,57 +58,16 @@ import type { Rule } from 'eslint';
  * changes the surrounding expression shape rather than a single operand).
  */
 
-const COLLECTION_CALL_NAMES = new Set(['all', 'first', 'firstN', 'last', 'lastN']);
-
-interface ClassDecl {
-  name: string;
-  superName: string | undefined;
-}
-
-/** Generic deep walker over an ESLint/TS-ESLint AST subtree. */
-function walk(node: unknown, visit: (n: Record<string, unknown>) => void): void {
-  if (!node || typeof node !== 'object') return;
-  if (Array.isArray(node)) {
-    for (const item of node) walk(item, visit);
-    return;
-  }
-  const obj = node as Record<string, unknown>;
-  if (typeof obj.type === 'string') {
-    visit(obj);
-  }
-  for (const key of Object.keys(obj)) {
-    if (key === 'parent') continue;
-    const value = obj[key];
-    if (value && typeof value === 'object') {
-      walk(value, visit);
-    }
-  }
-}
-
 /** Resolves a TSTypeAnnotation wrapper to a referenced type name, if any. */
 function resolveTypeAnnotation(typeAnnotationWrapper: unknown): { name: string | undefined; isArray: boolean } {
   const wrapper = typeAnnotationWrapper as { typeAnnotation?: Record<string, unknown> } | undefined;
   const ta = wrapper?.typeAnnotation;
   if (!ta) return { name: undefined, isArray: false };
 
-  if (ta.type === 'TSTypeReference') {
-    const typeName = ta.typeName as { type?: string; name?: string } | undefined;
-    if (typeName?.type === 'Identifier' && typeof typeName.name === 'string') {
-      return { name: typeName.name, isArray: false };
-    }
-  }
-
   if (ta.type === 'TSArrayType') {
-    const elementType = ta.elementType as Record<string, unknown> | undefined;
-    if (elementType?.type === 'TSTypeReference') {
-      const typeName = elementType.typeName as { type?: string; name?: string } | undefined;
-      if (typeName?.type === 'Identifier' && typeof typeName.name === 'string') {
-        return { name: typeName.name, isArray: true };
-      }
-    }
+    return { name: typeReferenceName(ta.elementType as Record<string, unknown> | undefined), isArray: true };
   }
-
-  return { name: undefined, isArray: false };
+  return { name: typeReferenceName(ta), isArray: false };
 }
 
 /** Is this expression node "simple" enough to safely rewrite to `<expr>.id`? */
@@ -137,7 +98,7 @@ const rule: Rule.RuleModule = {
   },
 
   create(context) {
-    const elementTypeNames = new Set<string>(['GameElement']);
+    let elementTypeNames = new Set<string>();
     // Scope-hygiene fix (WR-03): membership is tracked by the *declaration*
     // Identifier AST node (the param/variable-declarator `id` node that
     // carried the GameElement(-ish) type annotation, or was initialized
@@ -174,32 +135,7 @@ const rule: Rule.RuleModule = {
 
     return {
       Program(program) {
-        // Pass 1: collect same-file class declarations to resolve which
-        // local type names are GameElement subclasses (transitively).
-        const classDecls: ClassDecl[] = [];
-        walk(program, (node) => {
-          if (node.type === 'ClassDeclaration') {
-            const id = node.id as { name?: string } | null | undefined;
-            const superClass = node.superClass as { type?: string; name?: string } | null | undefined;
-            if (id?.name) {
-              classDecls.push({
-                name: id.name,
-                superName: superClass?.type === 'Identifier' ? superClass.name : undefined,
-              });
-            }
-          }
-        });
-
-        let changed = true;
-        while (changed) {
-          changed = false;
-          for (const decl of classDecls) {
-            if (decl.superName && elementTypeNames.has(decl.superName) && !elementTypeNames.has(decl.name)) {
-              elementTypeNames.add(decl.name);
-              changed = true;
-            }
-          }
-        }
+        elementTypeNames = collectElementTypeNames(program);
 
         // Pass 2: collect declaration nodes (params/variable-declarator ids)
         // with a resolved GameElement(-ish) type annotation, and variables
