@@ -18,7 +18,9 @@
  * (see `src/ui/components/dice/die-preview-registry.fresh.test.ts`).
  *
  * The comment covers that statement and the later statements of the same
- * block, so a test that loads two modules after one reset needs it once. This
+ * block, so a test that loads two modules after one reset needs it once. An
+ * import in a function with no braces (`it('x', () => import('./a.js'))`) is
+ * covered only by a comment directly above the statement holding it (#921). This
  * scan reads the syntax tree, so an `import(` inside a string (an ESLint rule's
  * test case) is not a finding, and a `typeof import(...)` type is not a load.
  */
