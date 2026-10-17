@@ -23,8 +23,8 @@
  *
  * THE SIZE RULE (`reviewLevel`). Only a small change made by the mechanical role may skip review or
  * have a light one; everything else is reviewed in full. A change is mechanical only when every
- * dispatch since the last round was, and is measured in lines added plus lines removed; a changed
- * binary file counts as too large to lighten.
+ * dispatch since the last round was, and is measured in lines added plus lines removed, leaving the
+ * run logs out (#1000); a changed binary file counts as too large to lighten.
  */
 import { promises as fs } from 'node:fs';
 import { relative, resolve } from 'node:path';
@@ -70,9 +70,11 @@ export function reviewLevel(roles: string[], changedLines: number): { level: Rev
 
 const short = (commit: string) => commit.slice(0, 12);
 
-/** Lines added plus removed between two commits; Infinity when a binary file changed. */
+/** Lines added plus removed between two commits, outside the run logs; Infinity when a binary file changed. */
 async function changedLinesBetween(projectDir: string, from: string, to: string): Promise<number> {
-  const numstat = await git(projectDir, ['diff', '--numstat', from, to]);
+  // The run logs are the workflow's own bookkeeping between rounds, not the change under review (#1000).
+  const runLogs = relative(projectDir, designPath(projectDir, RUN_LOG_DIR));
+  const numstat = await git(projectDir, ['diff', '--numstat', from, to, '--', `:(exclude)${runLogs}`]);
   let total = 0;
   for (const line of numstat.split('\n').filter(Boolean)) {
     const [added, removed] = line.split('\t');
