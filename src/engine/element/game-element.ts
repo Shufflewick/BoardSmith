@@ -1250,7 +1250,9 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   /**
-   * Check if this element is visible to a player
+   * Whether the seat's view carries this element (#1062): its own visibility
+   * allows the seat, and so does every ancestor's, since nothing below an
+   * element hidden from the seat is ever sent to it.
    */
   isVisibleTo(player: Player | number): boolean {
     const seat = typeof player === 'number' ? player : player.seat;
@@ -1258,7 +1260,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     // For owner-based visibility, check this element's owner first,
     // then walk up the tree to find an owner (for inherited visibility)
     const ownerSeat = this.getEffectiveOwner()?.seat;
-    return canPlayerSee(visibility, seat, ownerSeat);
+    return canPlayerSee(visibility, seat, ownerSeat) && (this._t.parent?.isVisibleTo(seat) ?? true);
   }
 
   /**
