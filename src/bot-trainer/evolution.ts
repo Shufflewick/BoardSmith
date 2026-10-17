@@ -65,13 +65,12 @@ export function mutateWeights(
 }
 
 /**
- * Crossover two parent objective sets.
- *
- * For features in both parents: randomly pick weight from one
- * For features in only one parent: include with 50% probability
+ * Crossover two parent objective sets: each objective's weight comes from one
+ * parent at random. Both parents descend from the same objective set (mutation
+ * keeps every id), so they hold the same ids.
  *
  * @param parent1 - First parent objectives
- * @param parent2 - Second parent objectives
+ * @param parent2 - Second parent objectives, with the same ids as parent1
  * @param rng - Seeded random function
  * @returns Child objective set
  */
@@ -80,37 +79,8 @@ export function crossoverWeights(
   parent2: ObjectiveWeight[],
   rng: () => number
 ): ObjectiveWeight[] {
-  // Build maps for efficient lookup
-  const map1 = new Map(parent1.map(o => [o.id, o]));
-  const map2 = new Map(parent2.map(o => [o.id, o]));
-
-  // Get all unique feature IDs
-  const allIds = new Set([...map1.keys(), ...map2.keys()]);
-
-  const child: ObjectiveWeight[] = [];
-
-  for (const id of allIds) {
-    const obj1 = map1.get(id);
-    const obj2 = map2.get(id);
-
-    if (obj1 && obj2) {
-      // Feature in both parents: randomly pick one
-      const selected = rng() < 0.5 ? obj1 : obj2;
-      child.push({ ...selected });
-    } else if (obj1) {
-      // Only in parent1: include with 50% probability
-      if (rng() < 0.5) {
-        child.push({ ...obj1 });
-      }
-    } else if (obj2) {
-      // Only in parent2: include with 50% probability
-      if (rng() < 0.5) {
-        child.push({ ...obj2 });
-      }
-    }
-  }
-
-  return child;
+  const byId = new Map(parent2.map(o => [o.id, o]));
+  return parent1.map(o => ({ ...(rng() < 0.5 ? o : byId.get(o.id)!) }));
 }
 
 /**
