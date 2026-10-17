@@ -239,6 +239,36 @@ describe('useFlyingElements', () => {
     });
   });
 
+  describe('autoWatch work per update (#868)', () => {
+    /** Reads of the hand container's children during one gameView update with `cardCount` cards in it. */
+    async function handChildReadsPerUpdate(cardCount: number): Promise<number> {
+      const cards: AutoWatchGameElement[] = Array.from({ length: cardCount }, (_, i) => ({ id: 100 + i }));
+      let reads = 0;
+      const handGameEl = { id: 1 } as AutoWatchGameElement;
+      Object.defineProperty(handGameEl, 'children', { get: () => { reads++; return cards; } });
+      const gameViewRef = ref<AutoWatchGameElement | null>(null);
+      useFlyingElements({
+        autoWatch: {
+          gameView: () => gameViewRef.value,
+          containers: [{ ref: ref(makeContainer()), name: 'hand', element: () => handGameEl }],
+          getElementData: () => ({}),
+        },
+      });
+      gameViewRef.value = { id: 0, children: [handGameEl] };
+      await nextTick();
+      reads = 0;
+      gameViewRef.value = { id: 0, children: [handGameEl] };
+      await nextTick();
+      return reads;
+    }
+
+    it('reads a container a fixed number of times per update, however many elements it holds', async () => {
+      const small = await handChildReadsPerUpdate(1);
+      expect(small).toBeGreaterThan(0);
+      expect(await handChildReadsPerUpdate(50)).toBe(small);
+    });
+  });
+
   describe('test mode - manual fly()', () => {
     it('records a {kind:"fly", element:id} trace and resolves immediately', async () => {
       const startEl = makeContainer();

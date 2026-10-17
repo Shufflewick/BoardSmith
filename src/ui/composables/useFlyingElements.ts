@@ -909,31 +909,23 @@ export function useFlyingElements(
     const containerCounts = new Map<string, number>();
 
     /**
-     * Find which container an element belongs to in the game view tree
+     * Map every element id under a container to that container's name, in one
+     * walk per container. The first container listed wins for nested ones.
      */
-    function findElementContainer(
-      element: AutoWatchGameElement,
+    function mapElementContainers(
       containerElements: Map<string, AutoWatchGameElement | null>
-    ): string | null {
-      for (const [name, containerEl] of containerElements) {
-        if (containerEl && isDescendantOf(element, containerEl)) {
-          return name;
+    ): Map<number, string> {
+      const result = new Map<number, string>();
+      function visit(element: AutoWatchGameElement, name: string): void {
+        for (const child of element.children ?? []) {
+          if (!result.has(child.id)) result.set(child.id, name);
+          visit(child, name);
         }
       }
-      return null;
-    }
-
-    /**
-     * Check if an element is a descendant of a container element
-     */
-    function isDescendantOf(element: AutoWatchGameElement, container: AutoWatchGameElement): boolean {
-      if (!container.children) return false;
-
-      for (const child of container.children) {
-        if (child.id === element.id) return true;
-        if (isDescendantOf(element, child)) return true;
+      for (const [name, containerEl] of containerElements) {
+        if (containerEl) visit(containerEl, name);
       }
-      return false;
+      return result;
     }
 
     /**
@@ -941,21 +933,18 @@ export function useFlyingElements(
      */
     function collectElements(
       root: AutoWatchGameElement,
-      containerElements: Map<string, AutoWatchGameElement | null>,
+      elementContainers: Map<number, string>,
       result: Map<number, { element: AutoWatchGameElement; container: string | null; isHidden: boolean }>
     ): void {
-      const isHidden = isHiddenPlaceholder(root);
-      const container = findElementContainer(root, containerElements);
+      const container = elementContainers.get(root.id) ?? null;
 
       // Only track elements that are in tracked containers or have been tracked before
       if (container || elementLocations.has(root.id)) {
-        result.set(root.id, { element: root, container, isHidden });
+        result.set(root.id, { element: root, container, isHidden: isHiddenPlaceholder(root) });
       }
 
-      if (root.children) {
-        for (const child of root.children) {
-          collectElements(child, containerElements, result);
-        }
+      for (const child of root.children ?? []) {
+        collectElements(child, elementContainers, result);
       }
     }
 
@@ -1011,7 +1000,7 @@ export function useFlyingElements(
 
         // Collect current element states
         const currentElements = new Map<number, { element: AutoWatchGameElement; container: string | null; isHidden: boolean }>();
-        collectElements(newView, containerElements, currentElements);
+        collectElements(newView, mapElementContainers(containerElements), currentElements);
 
 
         // Collect current container counts
