@@ -10,7 +10,7 @@
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { defineComponent, h, nextTick } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
-import { enterIframe, leaveIframe, mountPlatformShell } from './GameShell.platform-mount.test-helper.js';
+import { enterIframe, leaveIframe, mountPlatformShell, type BoardComponent } from './GameShell.platform-mount.test-helper.js';
 import GameShell from './GameShell.vue';
 import BoardErrorBoundary from './BoardErrorBoundary.vue';
 import { defineGameUIs, defaultUI, devUI } from '../game-uis.js';
@@ -163,7 +163,7 @@ describe('GameShell board error boundary and the zoom fit (#1154)', () => {
     vi.stubGlobal('ResizeObserver', priorObserver);
   });
 
-  async function mountBoard(board: Parameters<typeof mountPlatformShell>[0]['board']) {
+  async function mountBoard(board: BoardComponent) {
     const wrapper = mountPlatformShell({ board });
     mounted.push(wrapper);
     await nextTick();
