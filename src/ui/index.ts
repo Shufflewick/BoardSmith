@@ -241,7 +241,6 @@ export { useBoardSize } from './composables/useBoardSize.js';
 // Screen-reader announcer (writes through GameShell's existing live regions)
 export {
   useAnnouncer,
-  provideAnnouncer,
   createAnnouncer,
   ANNOUNCER_KEY,
   type UseAnnouncerReturn,
