@@ -282,7 +282,7 @@ describe('every change to the game is seen by the next question', () => {
     runner.processSelectionStep(1, 'x', 2);
     game.getActionExecutor().fireOnCancelCallbacks(act, cancelled);
     expect(runner.performAction('gather', 1, { y: [1, 3] }).success).toBe(true);
-    // An onSelect that throws: the picks before it are cancelled.
+    // An onSelect that throws: the action is rolled back, its probes with it (#1142).
     expect(runner.performAction('risky', 1, { a: 1, b: 1 }).success).toBe(false);
     expect(runner.performAction('end', 1, {}).success).toBe(true);
     // A space's handler, for a move made by code outside the game.
@@ -301,7 +301,6 @@ describe('every change to the game is seen by the next question', () => {
       'onSelect:true',
       'onEach:true',
       'onEach:true',
-      'onCancel:true',
       'onExitPhase:true',
       'onEnter:true',
     ]);

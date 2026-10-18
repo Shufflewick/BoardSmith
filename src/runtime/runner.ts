@@ -220,10 +220,19 @@ function checkpointWithLiveLog(
  * The refusal for a flow that halted after `actionName` committed, its cause logged once (#1120).
  * Every live completion route reports through here, since the message carries the cause only in
  * dev and nothing logs a halt when it is created, which keeps a bot's search copies quiet (#31).
+ * Coded as a crash in the rules is, on every route (#1143).
  */
-function reportHalt(actionName: string, halt: FlowHaltedError): string {
+function reportHalt(actionName: string, halt: FlowHaltedError): ActionExecutionResult {
   console.error(`[BoardSmith] The flow failed after action '${actionName}' was committed:`, halt.cause);
-  return halt.message;
+  return { success: false, error: halt.message, errorCode: ErrorCode.ENGINE_ERROR };
+}
+
+/**
+ * The code of an action that failed: a crash in its rules (#847) is ENGINE_ERROR, as a halt is,
+ * so no caller reads it as the rules refusing; anything else is the rules refusing (#1143).
+ */
+function failureCode(result: ActionResult | undefined): ErrorCode {
+  return result?.rulesError ? ErrorCode.ENGINE_ERROR : ErrorCode.ACTION_EXECUTION_ERROR;
 }
 
 /** The kept history entries before action `actionIndex`, which a checkpoint there restores with. */
@@ -728,7 +737,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       // replay/undo/snapshot diverge from what actually happened.
       if (error instanceof FlowHaltedError) {
         this.actionHistory.push(this.recorded(actionName, history.entry));
-        return { success: false, error: reportHalt(actionName, error), errorCode: ErrorCode.ENGINE_ERROR };
+        return reportHalt(actionName, error);
       }
       // #47: an engine policy error's message was written to be read and goes
       // through; anything else is an arbitrary runtime error whose text would
@@ -745,6 +754,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
 
     // Check if the action failed (flow state contains error)
     if (flowState.actionError) {
+      // Read before the rollback, which restores a flow with no last action.
+      const failed = this.game.getLastActionResult();
       // #44: a clean refusal mutated nothing, but a THROW out of execute(), or
       // a repeating selection refused after onEach ran for some picks (#325),
       // may have applied part of its changes before it stopped — leaving the tree
@@ -755,7 +766,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
         error: flowState.actionPartiallyApplied
           ? this.rollbackToPreActionState(flowState.actionError)
           : flowState.actionError,
-        errorCode: ErrorCode.ACTION_EXECUTION_ERROR,
+        errorCode: failureCode(failed),
         flowState,
       };
     }
@@ -916,7 +927,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     player: Player,
     pendingState: PendingActionState,
     playerPosition: number
-  ): ActionResult {
+  ): ActionExecutionResult {
     const branchesBefore = pendingState.branchesBeforePicks;
     if (!branchesBefore) {
       // A pending state saved by an engine older than #1144 lacks the record.
@@ -935,12 +946,13 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
         this.game.continueFlowAfterPendingAction(actionResult, playerPosition);
       } catch (error) {
         if (!(error instanceof FlowHaltedError)) throw error;
-        return { success: false, error: reportHalt(action.name, error) };
+        return reportHalt(action.name, error);
       }
       return actionResult;
     }
-    if (!actionResult.partiallyApplied) return actionResult;
-    return { ...actionResult, error: this.rollbackToPreActionState(actionResult.error) };
+    const failed = { ...actionResult, errorCode: failureCode(actionResult) };
+    if (!actionResult.partiallyApplied) return failed;
+    return { ...failed, error: this.rollbackToPreActionState(actionResult.error) };
   }
 
   /**

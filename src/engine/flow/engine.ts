@@ -511,6 +511,8 @@ export class FlowEngine<G extends Game = Game> {
     if (!this.awaitingInput) {
       throw new Error('Flow is not awaiting input');
     }
+    // A move refused before any action ran has no last action, so none from an earlier move is read as its own.
+    this.lastActionResult = undefined;
 
     const currentFrame = this.stack[this.stack.length - 1];
 
