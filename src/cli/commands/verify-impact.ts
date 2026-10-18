@@ -19,6 +19,7 @@ import {
 } from './chunk-provenance.js';
 import { RULE_DELTA_KINDS, type RuleDelta, type ChunkVerdict, verifyClassifyStatusCommand } from './verify-classify.js';
 import { driftCheckCommand, type ChunkDrift } from './drift-check.js';
+import { withLedgerLock } from '../lib/ledger-lock.js';
 import {
   atomicWriteFile,
   appendLedgerLine,
@@ -766,26 +767,33 @@ export async function appendRuling(
   const rulingsPath = designPath(dir, RULINGS_MD);
   const relRulingsPath = join(DESIGN_DIR, RULINGS_MD);
 
-  let rulingsText: string;
-  try {
-    rulingsText = await fs.readFile(rulingsPath, 'utf-8');
-  } catch {
-    throw new Error(
-      `No ${relRulingsPath} found in ${dir}.\n` +
-        `A bs-built project always has one, scaffolded at \`boardsmith init\` time — this command\n` +
-        `never creates it. Confirm --project points at the right game directory, or restore\n` +
-        `${relRulingsPath} before recording an adjudication resolution.`,
-    );
+  async function readRulings(): Promise<string> {
+    try {
+      return await fs.readFile(rulingsPath, 'utf-8');
+    } catch {
+      throw new Error(
+        `No ${relRulingsPath} found in ${dir}.\n` +
+          `A bs-built project always has one, scaffolded at \`boardsmith init\` time — this command\n` +
+          `never creates it. Confirm --project points at the right game directory, or restore\n` +
+          `${relRulingsPath} before recording an adjudication resolution.`,
+      );
+    }
   }
 
-  const number = nextRulingNumber(rulingsText);
-  const block = renderRuling({ number, ...entry });
-  const separator = rulingsText.endsWith('\n\n') ? '' : rulingsText.endsWith('\n') ? '\n' : '\n\n';
-  const newText = rulingsText + separator + block;
+  // The lock file sits beside RULINGS.md, so a missing one is refused before the lock is taken.
+  await readRulings();
+  // Two adjudications in different runs share RULINGS.md, so the number and the append are taken under one lock.
+  return withLedgerLock(rulingsPath, async () => {
+    const rulingsText = await readRulings();
+    const number = nextRulingNumber(rulingsText);
+    const block = renderRuling({ number, ...entry });
+    const separator = rulingsText.endsWith('\n\n') ? '' : rulingsText.endsWith('\n') ? '\n' : '\n\n';
+    const newText = rulingsText + separator + block;
 
-  await atomicWriteFile(rulingsPath, newText);
+    await atomicWriteFile(rulingsPath, newText);
 
-  return { number, path: relRulingsPath };
+    return { number, path: relRulingsPath };
+  });
 }
 
 export interface VerifyImpactAdjudicateResult {
@@ -874,46 +882,50 @@ export async function verifyImpactAdjudicateCommand(options: {
   const quotedPass1 = classification.quotedPass1 ?? NO_VERBATIM_READING;
   const quotedPass2 = classification.quotedPass2 ?? NO_VERBATIM_READING;
 
-  const { ledgerFile, relLedgerPath, ledgerText, adjudications } = await readRunLedger(projectDir, runId);
-  const existing = adjudications.find((a) => a.pairId === pairId);
+  // The idempotence check reads the ledger too, so the lock spans the read, the ruling and the append.
+  const rulingNumber = await withLedgerLock(ledgerFilePath(projectDir, runId), async () => {
+    const { ledgerFile, relLedgerPath, ledgerText, adjudications } = await readRunLedger(projectDir, runId);
+    const existing = adjudications.find((a) => a.pairId === pairId);
 
-  let rulingNumber: number | undefined;
+    let assigned: number | undefined;
 
-  if (outcome === 'resolved') {
-    if (existing?.outcome === 'resolved' && existing.rulingNumber !== undefined) {
-      // Idempotent: this pair already has a recorded ruling — reuse it, never append a second
-      // RULINGS.md entry for an already-recorded resolution.
-      rulingNumber = existing.rulingNumber;
-    } else {
-      // RULINGS.md write FIRST (T-175-13) — both verbatim readings embedded into the Citation
-      // field, matching the real corpus's own convention of quoting the interpreted rulebook
-      // text inside "Citation interpreted or overridden:" (e.g. one-two-punch Ruling 22).
-      const appended = await appendRuling(projectDir, {
-        decision: options.decision!.trim(),
-        citation:
-          `${options.citation!.trim()} — Reading as built (pass 1): "${quotedPass1}" | ` +
-          `Reading in the fresh transcription (pass 2): "${quotedPass2}"`,
-        rationale: options.rationale!.trim(),
-      });
-      rulingNumber = appended.number;
+    if (outcome === 'resolved') {
+      if (existing?.outcome === 'resolved' && existing.rulingNumber !== undefined) {
+        // Idempotent: this pair already has a recorded ruling — reuse it, never append a second
+        // RULINGS.md entry for an already-recorded resolution.
+        assigned = existing.rulingNumber;
+      } else {
+        // RULINGS.md write FIRST (T-175-13) — both verbatim readings embedded into the Citation
+        // field, matching the real corpus's own convention of quoting the interpreted rulebook
+        // text inside "Citation interpreted or overridden:" (e.g. one-two-punch Ruling 22).
+        const appended = await appendRuling(projectDir, {
+          decision: options.decision!.trim(),
+          citation:
+            `${options.citation!.trim()} — Reading as built (pass 1): "${quotedPass1}" | ` +
+            `Reading in the fresh transcription (pass 2): "${quotedPass2}"`,
+          rationale: options.rationale!.trim(),
+        });
+        assigned = appended.number;
+      }
     }
-  }
 
-  const record: AdjudicationRecord = {
-    kind: 'adjudication',
-    pairId,
-    outcome,
-    ...(rulingNumber !== undefined ? { rulingNumber } : {}),
-    quotedPass1,
-    quotedPass2,
-    recordedAt: new Date().toISOString(),
-  };
+    const record: AdjudicationRecord = {
+      kind: 'adjudication',
+      pairId,
+      outcome,
+      ...(assigned !== undefined ? { rulingNumber: assigned } : {}),
+      quotedPass1,
+      quotedPass2,
+      recordedAt: new Date().toISOString(),
+    };
 
-  // Ledger record SECOND (T-175-13) — a crash between the RULINGS.md write above and this append
-  // leaves the ruling durable and the pair still pending, never a recorded resolution with no
-  // ruling behind it.
-  const newLedgerText = appendLedgerLine(ledgerText, relLedgerPath, JSON.stringify(record));
-  await atomicWriteFile(ledgerFile, newLedgerText);
+    // Ledger record SECOND (T-175-13) — a crash between the RULINGS.md write above and this append
+    // leaves the ruling durable and the pair still pending, never a recorded resolution with no
+    // ruling behind it.
+    const newLedgerText = appendLedgerLine(ledgerText, relLedgerPath, JSON.stringify(record));
+    await atomicWriteFile(ledgerFile, newLedgerText);
+    return assigned;
+  });
 
   const result: VerifyImpactAdjudicateResult = {
     pairId,
@@ -1411,9 +1423,10 @@ export async function verifyImpactApplyCommand(
 
     // Ledger append AFTER this chunk's writes land (decision 17) — a crash leaves a chunk either
     // fully-written-and-recorded or not recorded, never a half-written chunk falsely recorded.
-    const currentLedgerText = await fs.readFile(ledgerFile, 'utf-8');
-    const newLedgerText = appendLedgerLine(currentLedgerText, relLedgerPath, JSON.stringify(impactRecord));
-    await atomicWriteFile(ledgerFile, newLedgerText);
+    await withLedgerLock(ledgerFile, async () => {
+      const currentLedgerText = await fs.readFile(ledgerFile, 'utf-8');
+      await atomicWriteFile(ledgerFile, appendLedgerLine(currentLedgerText, relLedgerPath, JSON.stringify(impactRecord)));
+    });
 
     marked.push({
       slug: verdict.slug,
