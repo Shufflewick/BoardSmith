@@ -1,3 +1,5 @@
+import { isDevThrowEnabled } from '../../utils/dev.js';
+
 /** Said by the runner, and only after it has rolled a failed action back (#808, #989). */
 export const NOTHING_CHANGED = 'Nothing was changed.';
 
@@ -9,4 +11,12 @@ export const NOTHING_CHANGED = 'Nothing was changed.';
  */
 export function rulesErrorSentence(actionName: string): string {
   return `The "${actionName}" action could not be completed because of an error in the game's rules.`;
+}
+
+/**
+ * `sentence`, the player's words for a throw nobody wrote for them, with the thrown text after it
+ * only where `isDevThrowEnabled` says the reader is the author (#47, #1045).
+ */
+export function withDevDetail(sentence: string, error: unknown): string {
+  return isDevThrowEnabled() ? `${sentence} (${error instanceof Error ? error.message : String(error)})` : sentence;
 }
