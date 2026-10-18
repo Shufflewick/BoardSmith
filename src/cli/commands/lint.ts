@@ -1,7 +1,8 @@
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { styleText } from 'node:util';
 import { scanSandboxViolations } from '../lib/sandbox-scan.js';
+import { SOURCE_EXTENSIONS, collectSourceFiles } from '../lib/source-files.js';
 import { requireBoardsmithWorkspace } from '../lib/project-context.js';
 import { runTool } from '../lib/run-tool.js';
 import { selectChecks } from '../lib/select-checks.js';
@@ -122,30 +123,6 @@ const LINT_RULES = {
     negativePattern: /registerElements/,
   },
 };
-
-/**
- * Find all TypeScript files in a directory recursively
- */
-function findTypeScriptFiles(dir: string, files: string[] = []): string[] {
-  if (!existsSync(dir)) return files;
-
-  const entries = readdirSync(dir);
-  for (const entry of entries) {
-    const fullPath = join(dir, entry);
-
-    // Skip node_modules and hidden directories
-    if (entry === 'node_modules' || entry.startsWith('.')) continue;
-
-    const stat = statSync(fullPath);
-    if (stat.isDirectory()) {
-      findTypeScriptFiles(fullPath, files);
-    } else if (entry.endsWith('.ts') && !entry.endsWith('.d.ts')) {
-      files.push(fullPath);
-    }
-  }
-
-  return files;
-}
 
 /**
  * Lint a single file for BoardSmith-specific issues
@@ -287,12 +264,11 @@ function checkUnusedActions(filePath: string, content: string, allFiles: Map<str
 async function runPitfallLint(cwd: string): Promise<number> {
   console.log(styleText('cyan', '\nChecking for BoardSmith pitfalls...\n'));
 
-  // Find all TypeScript files
-  const srcDir = join(cwd, 'src');
-  const files = findTypeScriptFiles(srcDir);
+  // The hints are text patterns over script code, so .vue files are left to the sandbox scan.
+  const files = collectSourceFiles(join(cwd, 'src'), SOURCE_EXTENSIONS.filter((ext) => ext !== 'vue'));
 
   if (files.length === 0) {
-    console.log(styleText('yellow', 'No TypeScript files found in src/'));
+    console.log(styleText('yellow', 'No game source files found in src/'));
     return 0;
   }
 
