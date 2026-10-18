@@ -24,8 +24,9 @@
  *      line when the branch left, merged by chunk-merge since, or whose code the main line
  *      reworked since, #442) were allowed to be (`parallel-check`'s sketch-entry, run-alone,
  *      citation and pair rules, #820); `ledger-check`; `constraint-check` with its measurement tests;
- *      every verified chunk's sign-off still stands for its code (`assessSignoffs`); and the
- *      project's whole test suite.
+ *      every verified chunk's sign-off still stands for its code (`assessSignoffs`); then the
+ *      merged chunk's fast checks, as its gates ran them (#985, #987): the test files it added or
+ *      changed since its base (`chunkTests`), and typecheck. The whole suite runs at publish (#984).
  *      Any failure, or error, aborts the merge and leaves the main line exactly as it was.
  *   3a. A source file this branch and the main line both edited since the branch left (#403) is
  *      code no designer signed off: each chunk's sign-off saw only its own side. The merge vouches
@@ -75,6 +76,9 @@ import {
 } from '../lib/ledger-allocation.js';
 import { describeFinding, ledgerCheck } from './ledger-check.js';
 import { type TestRunner, checkConstraints, runVitest, unranTestsProblem } from './constraint-check.js';
+import { chunkTests } from './verify.js';
+import { type TypeCheckRun, typeCheckProject } from './validate.js';
+import { chunkVerifyBase } from '../lib/chunk-commits.js';
 import { VERIFIED, assessSignoffs, checkSignoff, chunkCodeFiles, readStatus, unaccountedEdits } from './chunk-signoff.js';
 import { verifiedAgainstIsCurrent } from './chunk-provenance.js';
 import { checkClaimQuotes } from './claim-quotes.js';
@@ -88,9 +92,14 @@ import { readIfExists, readListedText } from '../lib/read-if-exists.js';
 interface ChunkMergeOptions {
   /** The chunk's branch. Defaults to `chunk/<slug>`, the branch the dispatch contract names. */
   branch?: string;
-  /** Runs the measurement tests and the whole suite. Defaults to the project's own vitest. */
+  /** Runs the measurement tests and the chunk's own tests. Defaults to the project's own vitest. */
   runTests?: TestRunner;
+  /** Type-checks the combined tree. Defaults to vue-tsc, as `boardsmith typecheck` runs it. */
+  typeCheck?: (projectDir: string) => Promise<TypeCheckRun>;
 }
+
+/** What runs the checks that run code: tests and the type check. */
+type Runners = Required<Pick<ChunkMergeOptions, 'runTests' | 'typeCheck'>>;
 
 interface ChunkMergeResult {
   merged: boolean;
@@ -404,8 +413,12 @@ async function signoffProblems(projectDir: string): Promise<string[]> {
 
 const tail = (output: string) => output.trimEnd().split('\n').slice(-25).join('\n');
 
-/** Every tree-wide check on the combined tree. The whole suite runs last, only if the rest pass. */
-async function combinedTreeProblems(ctx: MergeContext, alongside: string[], runTests: TestRunner): Promise<string[]> {
+/**
+ * Every tree-wide check on the combined tree, then, only if they pass, the merged chunk's fast
+ * checks (#987): the tests it added or changed since its base, and typecheck, as its gates ran them
+ * (#985). The whole suite runs at publish (#984).
+ */
+async function combinedTreeProblems(ctx: MergeContext, alongside: string[], { runTests, typeCheck }: Runners): Promise<string[]> {
   const ledgers = await ledgerCheck(ctx.projectDir);
   const problems = [
     ...(await verifiedProblem(ctx)),
@@ -415,9 +428,21 @@ async function combinedTreeProblems(ctx: MergeContext, alongside: string[], runT
     ...(await signoffProblems(ctx.projectDir)),
   ];
   if (problems.length > 0) return problems;
-  const suite = await runTests(ctx.projectDir, []);
-  if ('refused' in suite) return [suite.refused];
-  return suite.ok ? [] : [`The project's test suite fails on the combined tree:\n${tail(suite.output)}`];
+  const base = await chunkVerifyBase(ctx.projectDir, ctx.slug);
+  // The files the chunk's branch changed, as its own `verify --chunk` measured them; not what the main line changed.
+  const changed = (await git(ctx.projectDir, ['diff', '--relative', '--name-only', '-z', base, ctx.branchCommit])).split('\0').filter(Boolean);
+  const tests = await chunkTests(ctx.projectDir, ctx.slug, base, changed);
+  if (!Array.isArray(tests)) {
+    if (!tests.passed) return [`${tests.summary} ${tests.next ?? ''}`.trim()];
+  } else {
+    const run = await runTests(ctx.projectDir, tests);
+    if ('refused' in run) return [run.refused];
+    if (!run.ok) return [`${ctx.slug}'s tests fail on the combined tree:\n${tail(run.output)}`];
+    const unran = unranTestsProblem(run.ran, tests);
+    if (unran) return [`${ctx.slug}'s tests ${unran[0]} on the combined tree: ${unran[1]}`];
+  }
+  const { result, compilerReport } = await typeCheck(ctx.projectDir);
+  return result.passed ? [] : [`The combined tree does not typecheck: ${result.message}.\n${compilerReport.join('\n')}`];
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -743,14 +768,14 @@ async function firstProblems(stages: Array<() => Promise<string[]>>): Promise<st
 }
 
 /** Merges with the lock held; aborts the merge, restoring the main line, on any refusal or error. */
-async function mergeLocked(ctx: MergeContext, runTests: TestRunner): Promise<ChunkMergeResult> {
+async function mergeLocked(ctx: MergeContext, runners: Runners): Promise<ChunkMergeResult> {
   const before = [...(await realNumbersAdded(ctx)), ...sharedRunFiles(ctx)];
   if (before.length) return refused(before);
 
   try {
     const left = await startMerge(ctx);
     if (typeof left === 'string') return refused([left]);
-    return await checkStartedMerge(ctx, left, runTests);
+    return await checkStartedMerge(ctx, left, runners);
   } catch (error) {
     // A step that throws must not leave the main checkout mid-merge.
     await gitSucceeds(ctx.top, ['merge', '--abort']);
@@ -759,7 +784,7 @@ async function mergeLocked(ctx: MergeContext, runTests: TestRunner): Promise<Chu
 }
 
 /** Checks and commits a merge `startMerge` began; aborts it, restoring the main line, on any refusal. */
-async function checkStartedMerge(ctx: MergeContext, left: string[], runTests: TestRunner): Promise<ChunkMergeResult> {
+async function checkStartedMerge(ctx: MergeContext, left: string[], runners: Runners): Promise<ChunkMergeResult> {
   if (left.length) {
     await gitSucceeds(ctx.top, ['merge', '--abort']);
     return refused([
@@ -775,8 +800,8 @@ async function checkStartedMerge(ctx: MergeContext, left: string[], runTests: Te
   // ledger-check would name it again; the allocation's refusal says what to write instead.
   const problems = await firstProblems([
     async () => refusals,
-    () => vouchForSharedFiles(ctx, shared, runTests),
-    () => combinedTreeProblems(ctx, alongside, runTests),
+    () => vouchForSharedFiles(ctx, shared, runners.runTests),
+    () => combinedTreeProblems(ctx, alongside, runners),
   ]);
   if (problems.length) {
     await gitSucceeds(ctx.top, ['merge', '--abort']);
@@ -806,7 +831,7 @@ export async function chunkMerge(projectDir: string, slug: string, options: Chun
   try {
     const ctx = await readContext(dir, slug, branch);
     if (typeof ctx === 'string') return refused([ctx]);
-    return await mergeLocked(ctx, options.runTests ?? runVitest);
+    return await mergeLocked(ctx, { runTests: options.runTests ?? runVitest, typeCheck: options.typeCheck ?? typeCheckProject });
   } finally {
     await lock.release();
   }

@@ -305,9 +305,14 @@ async function unpassedSuite(
   };
 }
 
-/** The test files a chunk added or changed since its base, which `--chunk` runs instead of the suite. */
-function chunkTestFiles(ctx: VerifyContext): string[] {
-  return ctx.changed.files.filter((path) => isTestFile(path) && existsSync(join(ctx.projectDir, path)));
+/**
+ * The tests a chunk's fast checks run (#985): the test files among `changed` (project-relative,
+ * since the chunk's base `base`) that exist. With none, the outcome `noChunkTests` gives instead.
+ * `--chunk` runs them on the chunk's commit, and chunk-merge on the combined tree (#987).
+ */
+export async function chunkTests(projectDir: string, chunk: string, base: string, changed: readonly string[]): Promise<string[] | VerifyCheckOutcome> {
+  const files = changed.filter((path) => isTestFile(path) && existsSync(join(projectDir, path)));
+  return files.length > 0 ? files : noChunkTests(projectDir, chunk, base);
 }
 
 /**
@@ -338,8 +343,8 @@ async function noChunkTests(projectDir: string, chunk: string, base: string): Pr
 async function testCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
   const cannot = await suiteCannotRun(ctx.projectDir);
   if (cannot) return cannot;
-  const files = ctx.chunk === undefined ? [] : chunkTestFiles(ctx);
-  if (ctx.chunk !== undefined && files.length === 0) return noChunkTests(ctx.projectDir, ctx.chunk, ctx.base.commit);
+  const files = ctx.chunk === undefined ? [] : await chunkTests(ctx.projectDir, ctx.chunk, ctx.base.commit, ctx.changed.files);
+  if (!Array.isArray(files)) return files;
   const suite = ctx.chunk === undefined ? 'the full suite' : "the chunk's tests";
   // Real absolute paths, as vitest names test files, so its filename filter matches only these.
   const root = await fs.realpath(ctx.projectDir);
