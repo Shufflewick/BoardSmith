@@ -44,4 +44,11 @@ describe('readCoverage: an unreadable coverage file (#1110)', () => {
     await fs.mkdir(coverage, { recursive: true });
     await expect(readCoverage(join(dir, 'coverage'), dir, test, 'a.test.ts')).rejects.toThrow(`Could not read ${coverage} (EISDIR)`);
   });
+
+  it('says the run wrote nothing when the test file itself is gone', async () => {
+    const dir = realpathSync(tempTree('bs-coverage-unreadable-'));
+    await expect(readCoverage(join(dir, 'coverage'), dir, join(dir, 'gone.test.ts'), 'gone.test.ts')).rejects.toThrow(
+      'The run that records which game code gone.test.ts runs wrote nothing for it',
+    );
+  });
 });
