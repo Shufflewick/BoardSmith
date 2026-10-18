@@ -19,10 +19,11 @@
  * is never carried by `boardsmith publish`.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { PersistenceStore, type PersistenceStoreState } from '../../persistence/index.js';
+import { atomicWriteFile } from '../commands/verify-run.js';
 
 /** Where a project's dev store lives, given the project root. */
 export function devStorePath(projectRoot: string): string {
@@ -41,15 +42,19 @@ export function devStorePath(projectRoot: string): string {
  */
 export function loadDevStore(path: string): {
   store: PersistenceStore;
-  save: () => void;
+  save: () => Promise<void>;
 } {
   const store = new PersistenceStore(readState(path));
+  const write = async () => {
+    mkdirSync(dirname(path), { recursive: true });
+    // Written whole or not at all, so a crash mid-save cannot tear the developer's store (#887).
+    await atomicWriteFile(path, `${JSON.stringify(store.toState(), null, 2)}\n`);
+  };
+  let last: Promise<void> = Promise.resolve();
   return {
     store,
-    save: () => {
-      mkdirSync(dirname(path), { recursive: true });
-      writeFileSync(path, `${JSON.stringify(store.toState(), null, 2)}\n`, 'utf8');
-    },
+    // One after another, so an older snapshot never lands last; each caller still sees its own failure.
+    save: () => (last = last.catch(() => undefined).then(write)),
   };
 }
 
