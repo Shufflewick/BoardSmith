@@ -1,6 +1,6 @@
 {
-  "revision": 234,
-  "surfaceHash": "1519c6e27c9683db",
+  "revision": 235,
+  "surfaceHash": "5ea89d6556f5a2e0",
   "payloadHash": "0e2d27db00239080",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1815,6 +1815,14 @@
       "payloadHash": "0e2d27db00239080",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A crash in the rules is now coded the same on every route an action takes (#1141, #1142, #1143). A throw that is not a PlayerFacingError out of execute(), or out of a pick's onSelect, onEach or until, now carries errorCode ENGINE_ERROR, as a flow halt does, on a single-step action (was ACTION_EXECUTION_ERROR), a pick-by-pick pending pick, including the picks sent with its first step (was INVALID_PICK), and a multi-step action's completion (was no code; a halt there was uncoded too). A multi-step completion that execute() refuses now carries ACTION_EXECUTION_ERROR, as on a single-step action (it had no code before). A whole submission of a repeating pick that crashes is marked rulesError and told the shared crash sentence with no 'Pick N of' prefix. Any throw out of onSelect, a PlayerFacingError included, in a single-step action or a whole submission now marks the result partiallyApplied, so the runner rolls the game back to its state before the action, the throwing onSelect's own changes and earlier picks' changes included, and a bot's search counts that try as a failure after changes and discards it, where a PlayerFacingError there was a plain refusal before. game.getLastActionResult() is unchanged: during a move it still returns the previous move's result. Hosts that tell a crash from a refusal by ENGINE_ERROR, such as a bot's refused-move retry, now see these as crashes."
+    },
+    {
+      "revision": 235,
+      "date": "2026-10-18",
+      "surfaceHash": "5ea89d6556f5a2e0",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A failed action that the runner rolls back now restores the flow from the same checkpoint as the elements (#972), so an open simultaneous step's awaiting seats, and which of them have completed, return to what they were before the action, on every route (whole, pick by pick, and through the session and a reload); the restored flow also has no action error and no last action result of its own. Game.relinkFlowElements() is replaced by Game.rollBackFlow(state). game.refreshAwaitingActions() called inside an action's own execute, onSelect or onEach now leaves the acting seat as it is, for that action's settling to decide (#973): a pick-by-pick action whose onEach makes its own seat done and refreshes now settles instead of throwing 'Seat N is not awaited by the open simultaneous step', and an action taken whole that does the same leaves its seat in the awaiting list marked completed, where before it was dropped from the list. No saved-state or payload shape changes."
     }
   ]
 }
