@@ -127,6 +127,7 @@ async function main() {
         tempDir,
         name: 'bench',
         context: 'monorepo',
+        gameOptions: config.gameOptions,
         exports: [`export { runBench } from ${JSON.stringify(join(HERE, 'probe.mjs'))};`],
       });
       const playerCount = setup.playerCount ?? bundle.gameDefinition.minPlayers;
