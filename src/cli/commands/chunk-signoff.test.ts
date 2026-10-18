@@ -706,3 +706,31 @@ describe('chunk-waiver: an unreadable SKETCH.md (#1110)', () => {
     ).rejects.toThrow(`Could not read ${sketch} (EISDIR)`);
   });
 });
+
+describe('chunk-waiver: an unreadable WAIVERS.md (#1110)', () => {
+  it('refuses, naming the file, and keeps every earlier waiver', async () => {
+    const project = await makeProject([{ slug: 'world-shell' }]);
+    const waive = () =>
+      recordWaiver({ project, chunks: 'world-shell', by: 'Jane Designer', expires: '2026-09-30', reason: 'shell', now: NOW });
+    await waive();
+    const ledger = join(project, DESIGN_DIR, WAIVERS_MD);
+    const before = await fs.readFile(ledger, 'utf-8');
+    await fs.chmod(ledger, 0o200);
+    try {
+      await expect(waive()).rejects.toThrow(`Could not read ${ledger} (EACCES)`);
+    } finally {
+      await fs.chmod(ledger, 0o644);
+    }
+    expect(await fs.readFile(ledger, 'utf-8')).toBe(before);
+  });
+});
+
+describe('chunk-reopen: an unreadable CHUNK.md (#1110)', () => {
+  it('names the file rather than calling the chunk missing', async () => {
+    const project = await makeProject([{ slug: 'world-shell' }]);
+    const chunk = join(project, DESIGN_DIR, 'chunks', 'world-shell', 'CHUNK.md');
+    await fs.rm(chunk);
+    await fs.mkdir(chunk);
+    await expect(recordReopen('world-shell', { project, reason: 'rework' })).rejects.toThrow(`Could not read ${chunk} (EISDIR)`);
+  });
+});
