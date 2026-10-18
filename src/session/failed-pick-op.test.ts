@@ -27,6 +27,7 @@ class UndoGame extends Game<UndoGame, Player> {
   from!: Zone;
   to!: Zone;
   taps = 0;
+  cancels = 0;
 
   constructor(options: GameOptions) {
     super(options);
@@ -35,11 +36,14 @@ class UndoGame extends Game<UndoGame, Player> {
     for (const name of ['one', 'two']) this.from.create(Token, name);
     const move = (name: string) => this.from.first(Token, name)?.putInto(this.to);
     const refuse = () => ({ success: false, error: 'Not today.' });
+    const first = { choices: ['a'], onSelect: () => move('one'), onCancel: () => { this.cancels++; this.to.first(Token, 'one')?.putInto(this.from); } };
     const pair = (name: string, execute: () => unknown) =>
       Action.create(name)
-        .chooseFrom('first', { choices: ['a'], onSelect: () => move('one'), onCancel: () => this.to.first(Token, 'one')?.putInto(this.from) })
+        .chooseFrom('first', first)
         .chooseFrom('second', { choices: ['b'], onSelect: () => move('two') })
         .execute(execute as () => void);
+    // A last pick that runs no callback, so only the action itself can refuse it.
+    const ask = (name: string) => Action.create(name).chooseFrom('first', first).chooseFrom('second', { choices: ['b'] });
 
     this.registerActions(
       Action.create('gather')
@@ -59,11 +63,13 @@ class UndoGame extends Game<UndoGame, Player> {
         .execute(refuse as () => void),
       pair('pairRefused', refuse),
       pair('pairCrash', crash),
+      ask('askRefused').execute(refuse as () => void),
+      ask('askVetoed').validate(() => 'Not with these.').execute(() => {}),
       Action.create('tap').execute(() => { this.taps++; }),
     );
     this.setFlow({
       root: simultaneousActionStep({
-        actions: ['gather', 'gatherRefused', 'pairRefused', 'pairCrash', 'tap'],
+        actions: ['gather', 'gatherRefused', 'pairRefused', 'pairCrash', 'askRefused', 'askVetoed', 'tap'],
         playerDone: () => false,
       }),
     });
@@ -128,8 +134,10 @@ describe('a failed pick-by-pick op keeps nothing (#1169)', () => {
       expect((await seat.pick('items', 'one')).success).toBe(true);
       const before = held(seat);
 
-      expect(await seat.pick('items', 'two')).toMatchObject({ success: false, errorCode: ErrorCode.ENGINE_ERROR });
+      const failed = await seat.pick('items', 'two') as { success: boolean; error?: string; errorCode?: ErrorCode };
 
+      expect(failed).toMatchObject({ success: false, errorCode: ErrorCode.ENGINE_ERROR });
+      expect(failed.error).toMatch(/ Nothing was changed\.$/);
       expect(moved(seat.game)).toEqual(['one']);
       expect(held(seat)).toEqual(before);
       expect(await seat.pick('items', 'done')).toMatchObject({ success: true, actionComplete: true });
@@ -186,6 +194,35 @@ describe('a failed pick-by-pick op keeps nothing (#1169)', () => {
       expect(moved(seat.game)).toEqual(['one', 'two']);
     });
   }
+
+  for (const [name, route] of Object.entries(routes)) {
+    for (const [action, refusal] of [['askRefused', 'Not today.'], ['askVetoed', 'Not with these.']]) {
+      it(`tells a refusal of '${action}' that changed nothing as just the refusal when checkpoints are off, and keeps the action open, on the ${name} route`, async () => {
+        const seat = route(action, runner(false));
+        expect((await seat.pick('first', 'a')).success).toBe(true);
+        const before = held(seat);
+
+        const failed = await seat.pick('second', 'b') as { error?: string };
+
+        expect(failed).toMatchObject({ success: false, errorCode: ErrorCode.ACTION_EXECUTION_ERROR });
+        expect(failed.error).toBe(refusal);
+        expect(moved(seat.game)).toEqual(['one']);
+        expect(held(seat)).toEqual(before);
+      });
+    }
+  }
+
+  it('runs onCancel once, when the player cancels, for an action whose refused step changed nothing, with checkpoints off', async () => {
+    const seat = sessionRoute('askVetoed', runner(false));
+    await seat.pick('first', 'a');
+    expect((await seat.pick('second', 'b')).success).toBe(false);
+    expect(seat.game.cancels).toBe(0);
+
+    seat.cancel();
+
+    expect(seat.game.cancels).toBe(1);
+    expect(moved(seat.game)).toEqual([]);
+  });
 
   it('hands a long-lived PickHandler back the pending action as it was before the failed op', async () => {
     const r = runner();

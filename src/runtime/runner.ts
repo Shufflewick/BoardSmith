@@ -153,7 +153,7 @@ export interface ActionExecutionResult {
   data?: Record<string, unknown>;
   /** `ActionResult.message` returned by the action's `execute()` (BUG-012). */
   message?: string;
-  /** From `executeCollectedAction`: its `execute()` failed part way, so `runPickOp` says what it undid. */
+  /** A pick callback or `execute()` threw part way, so `runPickOp` says what it undid. */
   partiallyApplied?: boolean;
 }
 
@@ -175,7 +175,7 @@ export interface PendingStepResult {
   data?: Record<string, unknown>;
   /** `ActionResult.message` from the completed action. Only set when `actionComplete`. */
   message?: string;
-  /** The action failed part way through its `execute()`, so `runPickOp` says what it undid. */
+  /** A pick callback or `execute()` threw part way, so `runPickOp` says what it undid. */
   partiallyApplied?: boolean;
 }
 
@@ -411,6 +411,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * host. Cleared automatically when the action completes.
    */
   private pendingActions: Map<number, PendingActionState> = new Map();
+
+  /** The state version just before the pick op in progress ran `execute()`, set by `executeCollectedAction` for `runPickOp`. */
+  private versionBeforeExecute: number | undefined;
 
   /**
    * Random seed (for deterministic replay). Captured from the passed
@@ -700,18 +703,23 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * the head checkpoint, refreshed as the op begins. An op that recorded the
    * action (one whose flow then halted) is not undone, nor is one that changed
    * the game with checkpoints turned off, whose error then says the game may
-   * still hold its changes. `undone` says the game is as before the op; the
-   * caller then puts the seat's pending action back as it was.
+   * still hold its changes. The op changed the game when game code ran in it
+   * before `execute()` (the state version moved) or something threw part way
+   * (`partiallyApplied`): an `execute()` that refuses cleanly changed nothing,
+   * as `performAction` takes it. `undone` says the game is as before the op;
+   * the caller then puts the seat's pending action back as it was.
    */
   runPickOp<R extends { success: boolean; error?: string; partiallyApplied?: boolean }>(run: () => R): { result: R; undone: boolean } {
     const recorded = this.actionCount;
     this.captureCheckpoint();
     const version = this.game._ctx._stateVersion;
+    this.versionBeforeExecute = undefined;
     const result = run();
     if (result.success || this.actionCount !== recorded) return { result, undone: false };
-    if (this.game._ctx._stateVersion === version) return { result, undone: true };
+    const changed = result.partiallyApplied || (this.versionBeforeExecute ?? this.game._ctx._stateVersion) !== version;
+    if (!changed) return { result, undone: true };
     const restored = this.restoreHeadCheckpoint();
-    // Told as `performAction` tells it: a partly run execute() says it was undone, and a change kept always says so.
+    // As `performAction` says it: undone after a throw, and the changes kept when nothing could be restored.
     const told = restored && !result.partiallyApplied ? result : { ...result, error: this.undoneError(result.error, restored) };
     return { result: told, undone: restored };
   }
@@ -967,6 +975,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * it and advance the flow when it succeeds. Run it inside `runPickOp`, which
    * puts the game back when it fails (#44, #801, #1169). A flow that halts
    * after the action is refused, as in `performAction`, rather than thrown (#1120).
+   * A pick that is no longer on offer, or the action's `validate`, refuses it
+   * before anything runs: the step is undone and `onCancel` does not run (#1169).
    */
   executeCollectedAction(pendingState: PendingActionState, playerPosition: number): ActionExecutionResult {
     const action = this.game.getAction(pendingState.actionName);
@@ -984,6 +994,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     }
     // Serialized before executing, and with each pick where it was before the picks' callbacks moved it (#1144).
     const serializedAction = this.serializeForHistory(action.name, player, pendingState.collectedArgs, undefined, branchesBefore);
+    const refusal = executor.pendingActionRefusal(action, player, pendingState);
+    if (refusal !== null) return { success: false, error: refusal, errorCode: ErrorCode.ACTION_EXECUTION_ERROR };
+    this.versionBeforeExecute = this.game._ctx._stateVersion;
     const actionResult = executor.executePendingAction(action, player, pendingState);
 
     if (actionResult.success) {
@@ -1271,7 +1284,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     const before = this.getPendingAction(playerPosition)!;
     const { result, undone } = this.runPickOp((): PendingStepResult => {
       const taken = this.takePick(pendingState, playerPosition, selectionName, value);
-      if (!taken.success) return { success: false, error: taken.error, errorCode: taken.errorCode };
+      if (!taken.success) return { success: false, error: taken.error, errorCode: taken.errorCode, partiallyApplied: taken.partiallyApplied };
       if (taken.complete) return this.completePendingAction(pendingState, playerPosition);
       return { success: true, actionComplete: false };
     });
@@ -1313,12 +1326,12 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     if (repeating) {
       const result = executor.processRepeatingStep(action, player, pendingState, value);
       if (result.error) {
-        return { success: false as const, error: result.error, errorCode: pickFailureCode(result), nextChoices: result.nextChoices };
+        return { success: false as const, error: result.error, errorCode: pickFailureCode(result), nextChoices: result.nextChoices, partiallyApplied: result.partiallyApplied };
       }
       step = result;
     } else {
       const result = executor.processSelectionStep(action, player, pendingState, selectionName, value);
-      if (!result.success) return { success: false as const, error: result.error, errorCode: pickFailureCode(result) };
+      if (!result.success) return { success: false as const, error: result.error, errorCode: pickFailureCode(result), partiallyApplied: result.partiallyApplied };
     }
 
     const complete = step.done && executor.isPendingActionComplete(action, pendingState);

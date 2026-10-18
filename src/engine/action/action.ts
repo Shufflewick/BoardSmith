@@ -2035,6 +2035,7 @@ export class ActionExecutor {
    *   - nextChoices: the next iteration's choices (if not done), labelled for
    *     a surface exactly as the first iteration's were
    *   - error: error message if something went wrong
+ *   - partiallyApplied: a pick callback threw, so the game may hold part of its changes
    *   - warnings: soft failures (a throwing `display()` or `boardRefs()`) met
    *     while labelling nextChoices, reported as the first pass reports them
    */
@@ -2043,7 +2044,7 @@ export class ActionExecutor {
     player: Player,
     pendingState: PendingActionState,
     value: unknown
-  ): { done: boolean; nextChoices?: ChoiceWithRefs[]; error?: string; rulesError?: boolean; warnings?: WarningEntry[] } {
+  ): { done: boolean; nextChoices?: ChoiceWithRefs[]; error?: string; rulesError?: boolean; partiallyApplied?: boolean; warnings?: WarningEntry[] } {
     if (this.passBoundPick(action, pendingState)) return { done: true };
     const selection = action.selections[pendingState.currentSelectionIndex];
     if (!selection) {
@@ -2122,7 +2123,7 @@ export class ActionExecutor {
         // selections whose onSelect already fired, then return an error.
         this.fireOnCancelCallbacks(action, pendingState);
         const crashed = pickHookThrew(action, 'onSelect', selection, error);
-        return { done: false, error: crashed.error, rulesError: crashed.rulesError };
+        return { done: false, error: crashed.error, rulesError: crashed.rulesError, partiallyApplied: true };
       }
     }
 
@@ -2136,7 +2137,7 @@ export class ActionExecutor {
         this.runPickCallback(pendingState, () => repeatConfig.onEach!(context, chosen));
       } catch (error) {
         const crashed = pickHookThrew(action, 'onEach', selection, error);
-        return { done: true, error: crashed.error, rulesError: crashed.rulesError };
+        return { done: true, error: crashed.error, rulesError: crashed.rulesError, partiallyApplied: true };
       }
     }
 
@@ -2157,7 +2158,7 @@ export class ActionExecutor {
         isDone = repeatConfig.until(context, chosen);
       } catch (error) {
         const crashed = pickHookThrew(action, 'until', selection, error);
-        return { done: true, error: crashed.error, rulesError: crashed.rulesError };
+        return { done: true, error: crashed.error, rulesError: crashed.rulesError, partiallyApplied: true };
       }
     }
 

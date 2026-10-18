@@ -38,7 +38,7 @@ export interface PickStepResult {
   data?: Record<string, unknown>;
   /** `ActionResult.message` from the completed multi-step action (BUG-012). */
   message?: string;
-  /** The action failed part way through its `execute()`, so `runPickOp` says what it undid. */
+  /** A pick callback or `execute()` threw part way, so `runPickOp` says what it undid. */
   partiallyApplied?: boolean;
   /** The follow-up the completed action chained to, with its action's metadata. */
   followUp?: FollowUpOffer;
@@ -157,7 +157,7 @@ export class PendingActionManager<G extends Game = Game> {
 
     const taken = this.#runner.takePick(pendingState, playerPosition, selectionName, value);
     if (!taken.success) {
-      return { success: false, error: taken.error, errorCode: taken.errorCode, nextChoices: taken.nextChoices };
+      return { success: false, error: taken.error, errorCode: taken.errorCode, nextChoices: taken.nextChoices, partiallyApplied: taken.partiallyApplied };
     }
 
     if (taken.complete) return this.#completePendingAction(pendingState, playerPosition);

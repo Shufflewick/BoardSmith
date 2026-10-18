@@ -204,12 +204,15 @@ then `onEach` runs for it, and `until` is tested.
   `onSelect`, `onEach` or `until` throws, or the last pick whose action is then
   refused or throws, leaves the game and the open action as they were before
   that step, on every route. The action stays open at the last good pick, so
-  the player can pick again or cancel, and cancelling runs `onCancel` for each
-  pick whose `onSelect` ran. The one exception is an in-memory game running
+  the player can pick again or cancel; `onCancel` runs only on that cancel,
+  for each pick whose `onSelect` ran. The one exception is an in-memory game running
   with `checkpoints: { enabled: false }`, which has nothing to restore: a
   failed step that changed the game keeps its changes, the action closes when
   its last pick failed, and the player is told the game may still hold the
-  step's partial changes and to check the board or restart from a save.
+  step's partial changes and to check the board or restart from a save. A step
+  whose callbacks did not run, refused by the action's `validate` or by an
+  `execute()` that returns `{ success: false }`, changed nothing, so it is
+  undone there too and the player is told only the refusal.
 - **Bots and the simulator find repeats by making the picks** on a scratch copy
   of the game, shortest sequences first, within enumeration's budget of 10,000
   values for one action (see [agent control](./agent-control.md)). The game
