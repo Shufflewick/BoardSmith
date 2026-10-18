@@ -68,10 +68,8 @@ async function runVitestReport(projectDir: string, relTestFilePath: string): Pro
       ['run', relTestFilePath, '--reporter=json', `--outputFile=${outFile}`],
       { cwd: projectDir },
     );
-    let text: string;
-    try {
-      text = await fs.readFile(outFile, 'utf-8');
-    } catch {
+    const text = await readIfExists(outFile, (p) => fs.readFile(p, 'utf-8'));
+    if (text === undefined) {
       throw new Error(
         `vitest wrote no report for ${relTestFilePath}.\n` +
           `Run \`boardsmith test ${relTestFilePath}\` in the project to see why — usually the ` +

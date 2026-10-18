@@ -50,6 +50,7 @@ import type { MutantCache } from '../lib/mutant-cache.js';
 import { readEquivalenceReview, type EquivalenceBasis, type EquivalenceReview, type EquivalentMutant } from '../lib/mutation-equivalences.js';
 import { sha256Hex } from '../lib/hash.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 import { VITEST_CONFIG_NAMES } from '../lib/test-run-scope.js';
 import { toolCommand } from '../lib/run-tool.js';
 
@@ -611,10 +612,14 @@ async function readReport(
   projectDir: string,
   pathOf: (realPath: string) => string | undefined,
 ): Promise<{ outcomes: Outcome[]; filesRun: Set<string>; failedFiles: FailedFile[] }> {
-  let report: { files: ReportedFile[] } | { refused: string };
+  const text = await readIfExists(reportPath, (p) => fs.readFile(p, 'utf-8'));
+  let report: { files: ReportedFile[] } | { refused: string } | undefined;
   try {
-    report = JSON.parse(await fs.readFile(reportPath, 'utf-8'));
+    report = text === undefined ? undefined : JSON.parse(text);
   } catch {
+    // A report cut short reads the same as none: the run did not finish writing it.
+  }
+  if (report === undefined) {
     throw new Error(
       'vitest exited without writing its report, so the test run could not be read.\n' +
         'Run `boardsmith test` in the project to see why the suite does not start, fix that, and run this check again.',
