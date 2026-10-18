@@ -1,5 +1,5 @@
 {
-  "revision": 233,
+  "revision": 234,
   "surfaceHash": "1519c6e27c9683db",
   "payloadHash": "0e2d27db00239080",
   "formatHash": "3aff5d1f34f52ec0",
@@ -1807,6 +1807,14 @@
       "payloadHash": "0e2d27db00239080",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "BoardSmithWorldEngine now refuses at construction a roster in which two players hold one seat, with the new platform-owned refusal roster-double-holder naming the seat and both players (#980); a store written before #796 may hold such rows, and the host resolves it by removing one holder from its stored roster."
+    },
+    {
+      "revision": 234,
+      "date": "2026-10-18",
+      "surfaceHash": "1519c6e27c9683db",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Restoring a saved game no longer relinks a flow variable or step data whose element is missing to the hand, deck or other zone concealing it; it throws the \"no longer exists\" error naming the flow slot, as it does for any other missing element (#947). That relink now happens only when restoring a seat's redacted copy (the bot's search game), and every redacted snapshot carries hiddenIdRemap, empty when nothing was renumbered. A saved state whose flow names an element its tree lacks (for example after a class rename) is now refused on load instead of resuming against the wrong element."
     }
   ]
 }
