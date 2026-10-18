@@ -87,6 +87,16 @@ class PackGame extends Game<PackGame, Seat> {
                 actions: ['move', 'nudge', 'pass'],
                 repeatUntil: (ctx) => ctx.game.turnPassed,
               }),
+              // An irreversible step inside the turn fences undo with no not-undoable entry to name.
+              execute((ctx) => {
+                ctx.game.turnPassed = false;
+              }, { irreversible: true }),
+              actionStep({
+                name: 'turn-after-commit',
+                actions: ['move', 'nudge', 'pass'],
+                repeatUntil: (ctx) => ctx.game.turnPassed,
+                turnScope: 'continue',
+              }),
             ),
           }),
         ),
@@ -147,12 +157,9 @@ function randomMove(r: GameRunner<PackGame>, next: () => number): { seat: number
   return { seat, action: offered.find((name) => name === 'checkIn' || name === 'pass')! };
 }
 
-/** The same undo decision; a refusal may name a later not-undoable action, since the kept history starts later. */
+/** The same undo decision, refusal wording included. */
 function expectSameUndo(got: ReturnType<typeof decideUndo>, want: ReturnType<typeof decideUndo>): void {
-  const named = (decision: ReturnType<typeof decideUndo>) => decision.allowed
-    ? decision
-    : { ...decision, error: decision.error.replace(/: \w+ is marked notUndoable/, ': an action is marked notUndoable') };
-  expect(named(got)).toEqual(named(want));
+  expect(got).toEqual(want);
 }
 
 describe('actionHistory: "undo" keeps only the history undo reads (#997)', () => {

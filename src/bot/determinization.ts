@@ -233,11 +233,13 @@ function visibleNewElement(before: KnownWorld, after: KnownWorld, seat: number):
 
 /**
  * Whether the seat's view says how many children this container holds, as
- * `redactTreeForSeat` decides: not inside something concealed, not itself
- * hidden, and not a zone whose 'hidden' mode keeps its size secret.
+ * `redactTreeForSeat` decides: not inside something concealed, and either a
+ * count-only element or one the seat can see that is not a zone whose 'hidden'
+ * mode keeps its size secret.
  */
 function countVisibleTo(container: GameElement, seat: number): boolean {
-  if (outermostConcealer(container, seat) || !container.isVisibleTo(seat)) return false;
+  if (outermostConcealer(container, seat)) return false;
+  if (!container.isVisibleTo(seat)) return container.getEffectiveVisibility().mode === 'count-only';
   const zone = hasZoneVisibility(container) ? container.getZoneVisibility() : undefined;
   return zone?.mode !== 'hidden' || canPlayerSee(zone, seat, container.getEffectiveOwner()?.seat);
 }
@@ -256,9 +258,11 @@ function childCountChange(before: KnownWorld, after: KnownWorld, seat: number): 
   for (const { element } of before.values()) {
     const prior = priorCounts.get(element) ?? 0;
     const now = nowCounts.get(element) ?? 0;
-    if (now === prior || !countVisibleTo(element, seat)) continue;
+    // A count-only element arrives empty, with its count: a sampler may leave it so or fill it to that count.
+    const known = element._viewChildCount ?? prior;
+    if (now === prior || now === known || !countVisibleTo(element, seat)) continue;
     return (
-      `${nameOf(element)} held ${prior} element${prior === 1 ? '' : 's'} and now holds ${now}. ` +
+      `${nameOf(element)} held ${known} element${known === 1 ? '' : 's'} and now holds ${now}. ` +
       `The seat can count what that container holds even where it cannot see them, ` +
       `so a sampler may not change how many it holds.`
     );

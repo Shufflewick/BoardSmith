@@ -1,7 +1,9 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { Action, Game, Player, actionStep, eachPlayer, loop, type GameOptions } from '../engine/index.js';
 import { createHeadlessSession } from '../testing/headless-session.js';
-import type { GameDefinitionLike } from './stateless-ops.js';
+import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
+import { SnapshotSessionHost } from './snapshot-session-host.js';
+import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
 
 // #997: a game keeping only the history undo reads, run by the session host a
 // hosted table uses. Every action index the host and the debug ops hand out
@@ -59,5 +61,40 @@ describe('the session host with a kept history (#997)', () => {
     const session = await played(5);
     const past = await session.send(1, { type: 'debugStateAt', actionIndex: 6, player: 1 });
     expect(past).toMatchObject({ success: false, error: 'Invalid action index: 6. History has 5 actions.' });
+  });
+
+  it('restores from a snapshot that dropped entries, holds times only for kept ones, and lines them up', async () => {
+    const session = await played(500);
+    const snapshot = session.host.snapshot!;
+    expect(snapshot.actionHistoryBase).toBe(499);
+
+    const restored = SnapshotSessionHost.restore(
+      {
+        playerCount: 2,
+        debug: true,
+        executeOp: (snap, pend, op) => executeOp(def, { playerCount: 2 }, snap, pend, op, { debug: true }),
+        record: () => {},
+        push: () => {},
+      },
+      { snapshot, pendingStates: {}, botSeats: [] },
+    );
+    // One slot per kept entry, not one per action the game ever took.
+    expect(Reflect.get(restored, 'arrivalTimes')).toHaveLength(1);
+
+    const now = vi.spyOn(Date, 'now');
+    for (const [seat, time] of [[1, 9_000], [2, 9_500]]) {
+      now.mockReturnValue(time);
+      const moved = await restored.handleOp(seat, { type: 'action', actionName: 'pass', player: seat, args: {}, boundaryKey: boundaryKeyOfHost(restored) });
+      if (!moved.success) throw new Error(moved.error);
+    }
+    now.mockRestore();
+    expect(Reflect.get(restored, 'arrivalTimes')).toHaveLength(1);
+
+    const history = await restored.handleOp(1, { type: 'debugHistory' });
+    expect(history).toMatchObject({
+      success: true,
+      actionHistoryBase: 501,
+      actionHistory: [{ name: 'pass', player: 2, timestamp: 9_500 }],
+    });
   });
 });

@@ -12,7 +12,6 @@ import type {
 import { closesSeat, debugOpRefusal, isReadOnlyOp, type DebugHistoryEntry } from './stateless-ops.js';
 import type { Annotation, FlowState } from '../engine/index.js';
 import type { GameStateSnapshot } from '../engine/utils/index.js';
-import { actionCountOf } from '../engine/utils/snapshot.js';
 import type { HistoryEntry } from '../engine/action/types.js';
 import { dueSeats, type SeatActivityState } from '../engine/flow/seat-activity.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-key.js';
@@ -137,7 +136,7 @@ type MutatingOp = Exclude<ExecutableOp, { type: ReadOnlyOpType | 'hint' | 'heatm
  * when it names a seat other than the caller (#738, #950). The `Record` makes
  * every new op choose.
  */
-const OP_SENDER: Record<Op['type'], 'seat' | 'host'> = {
+const OP_SENDER = {
   start: 'host',
   action: 'seat',
   expireSeat: 'seat',
@@ -166,7 +165,11 @@ const OP_SENDER: Record<Op['type'], 'seat' | 'host'> = {
   demoStop: 'seat',
   demoControl: 'seat',
   convertSeatToBot: 'seat',
-};
+} as const satisfies Record<Op['type'], 'seat' | 'host'>;
+/** The ops a seat may send through `handleOp`, read from {@link OP_SENDER} (#1109). */
+export type SeatOpType = { [K in Op['type']]: (typeof OP_SENDER)[K] extends 'seat' ? K : never }[Op['type']];
+/** An op a seat may send through `handleOp`. */
+export type SeatOp = OpOfType<SeatOpType>;
 const HOST_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set(
   (Object.keys(OP_SENDER) as Op['type'][]).filter((type) => OP_SENDER[type] === 'host'),
 );
@@ -632,14 +635,19 @@ export class SnapshotSessionHost {
   private lastFlowDebugInfo: SerializedFlowDebugInfo | null = null;
 
   /**
-   * When each entry of the game's action history reached this host, by
-   * history index (#547): what the Debug panel's history shows beside each
-   * move. Held here, never in the snapshot, because engine history stays
-   * clock-free (#54). Recorded only while debugging is on, so a host with it
-   * off reads no clock; an entry with no time is one made while debugging was
-   * off or before this host held the game.
+   * When each KEPT entry of the game's action history reached this host
+   * (#547): `arrivalTimes[i]` is action `arrivalBase + i`, what the Debug
+   * panel's history shows beside each move. Only kept entries, so a game that
+   * drops its old history (`checkpoints: { actionHistory: 'undo' }`, #997)
+   * holds a bounded array here too. Held here, never in the snapshot, because
+   * engine history stays clock-free (#54). Recorded only while debugging is
+   * on, so a host with it off reads no clock; an entry with no time is one
+   * made while debugging was off or before this host held the game.
    */
   private arrivalTimes: Array<number | undefined> = [];
+
+  /** The action `arrivalTimes[0]` is: the held snapshot's `actionHistoryBase`. */
+  private arrivalBase = 0;
 
   // Demo loop cancellation flag, move cap, and cancellable-delay handle.
   // demoAbort: set by demoStop to cancel the in-flight runDemoLoop.
@@ -935,7 +943,8 @@ export class SnapshotSessionHost {
     host.pendingStates = host.restorablePendingStates(state.pendingStates);
     host._snapshot = snapshot;
     // Moves made before this host held the game arrived at times it never saw.
-    host.arrivalTimes = new Array<undefined>(actionCountOf(snapshot)).fill(undefined);
+    host.arrivalBase = snapshot.actionHistoryBase ?? 0;
+    host.arrivalTimes = new Array<undefined>(snapshot.actionHistory.length).fill(undefined);
     host.botSeats = state.botSeats.map((s) => ({ ...s }));
     if (state.playerViews) host.lastPlayerViews = state.playerViews;
     if (state.spectatorView !== undefined) host.lastSpectatorView = state.spectatorView;
@@ -1040,7 +1049,7 @@ export class SnapshotSessionHost {
    */
   private async apply(res: StateEnvelope, seat?: number, pending: Record<string, unknown> | null = null): Promise<void> {
     this._snapshot = this.checkedSnapshot(res.snapshot, 'op');
-    this.noteArrivals(actionCountOf(this._snapshot));
+    this.noteArrivals(this._snapshot);
     // FLOW-01/03: every state-mutating op's stateEnvelope() carries a fresh
     // flowDebugInfo (shared serializeFlowDebugInfo — same shape as the
     // debug:flow-state op). Carry it forward
@@ -1059,10 +1068,18 @@ export class SnapshotSessionHost {
   }
 
   /**
-   * Bring {@link arrivalTimes} to a game of `length` actions: drop the times
-   * of entries an undo or rewind removed, and stamp each new entry with now.
+   * Bring {@link arrivalTimes} to `snapshot`'s kept history: drop the times of
+   * entries the game dropped from the front or an undo or rewind removed from
+   * the end, and stamp each new entry with now.
    */
-  private noteArrivals(length: number): void {
+  private noteArrivals(snapshot: GameStateSnapshot): void {
+    const base = snapshot.actionHistoryBase ?? 0;
+    const dropped = base - this.arrivalBase;
+    // A base that moved back is another game's history (a new game): this host saw none of it arrive.
+    if (dropped < 0) this.arrivalTimes = new Array<undefined>(snapshot.actionHistory.length).fill(undefined);
+    else this.arrivalTimes.splice(0, dropped);
+    this.arrivalBase = base;
+    const length = snapshot.actionHistory.length;
     if (this.arrivalTimes.length > length) this.arrivalTimes.length = length;
     const now = this.adapters.debug === true ? Date.now() : undefined;
     while (this.arrivalTimes.length < length) this.arrivalTimes.push(now);
@@ -1071,7 +1088,7 @@ export class SnapshotSessionHost {
   /** `history`, whose first entry is action `base`, with each entry's arrival time, where this host recorded one. */
   private withArrivalTimes(history: HistoryEntry[], base: number): DebugHistoryEntry[] {
     return history.map((entry, index) => {
-      const timestamp = this.arrivalTimes[base + index];
+      const timestamp = this.arrivalTimes[base - this.arrivalBase + index];
       return timestamp === undefined ? entry : { ...entry, timestamp };
     });
   }
@@ -1112,7 +1129,7 @@ export class SnapshotSessionHost {
    * State-mutating ops broadcast and persist the new state, THEN resolve,
    * without waiting for the bot run they wake ({@link settled}, #698).
    */
-  async handleOp<T extends Op['type']>(seat: number, op: OpOfType<T>): Promise<OpResultFor<T>> {
+  async handleOp<T extends SeatOpType>(seat: number, op: OpOfType<T>): Promise<OpResultFor<T>> {
     // `handle` answers each op from the branch that matched its type. TypeScript
     // narrows `op` there but cannot carry that back to a generic return type,
     // so it is stated here, once.

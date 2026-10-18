@@ -9,6 +9,7 @@ import { devWarn } from '../utils/dev.js';
 import { describeCheckpointAbsence } from '../runtime/index.js';
 import { ErrorCode } from '../types/protocol.js';
 import type { GameRunner } from '../runtime/index.js';
+import type { HistoryEntry } from '../engine/action/types.js';
 import type { PlayerGameState, ActionMetadata, PickMetadata, SerializedFlowDebugInfo, SerializedPendingActionState } from './types.js';
 import type { ElementJSON } from '../engine/index.js';
 
@@ -453,13 +454,13 @@ export class UndoRefusedError extends Error {
  *     past the target -- the same floor the runner's turn-anchored checkpoint
  *     window starts at, so the two cannot disagree. The floor is raised by an
  *     entry recorded with `undoable === false` (`.notUndoable()` ->
- *     `action-builder.ts`), refused naming the first such action since the
- *     target, and by `executeBarrierIndex`: a completed
+ *     `action-builder.ts`), and by `executeBarrierIndex`: a completed
  *     `execute({ irreversible: true })` node, taking back something a state
  *     restore cannot honestly take back (above all, information a human has
  *     already seen: a dealt hand, a revealed role). An ordinary bookkeeping
  *     `execute()` does NOT fence undo -- its effects are state, and state
- *     restores.
+ *     restores. The refusal names what set the floor: the not-undoable action
+ *     just below it, or else the irreversible step.
  *  3. Random fence (#18): opt-in per game via
  *     `GameDefinition.undo: { fenceRandomRewind: true }` and passed here as
  *     `fenceRandomRewind`. Refuse when the seeded RNG position at the target
@@ -485,6 +486,12 @@ export class UndoRefusedError extends Error {
 /** Why nothing can be undone in a finished game, whichever check refuses it. */
 const FINISHED_UNDO_REFUSAL = 'Cannot undo: the game is finished.';
 
+/** The not-undoable entry just below action `floor`, when there is one: it set the floor. */
+function notUndoableBelow(runner: GameRunner, floor: number): HistoryEntry | undefined {
+  const below = runner.actionHistory[floor - 1 - runner.actionHistoryBase];
+  return below?.undoable === false ? below : undefined;
+}
+
 export function assertUndoAllowed(args: {
   runner: GameRunner;
   turnStartActionIndex: number;
@@ -497,11 +504,12 @@ export function assertUndoAllowed(args: {
     throw new UndoRefusedError(FINISHED_UNDO_REFUSAL, 'finished-phase');
   }
 
-  if (runner.undoFloor(turnStartActionIndex) > turnStartActionIndex) {
-    // The floor decides; the history is read only to name what blocks the undo.
-    const blocking = runner.actionHistory
-      .slice(Math.max(0, turnStartActionIndex - runner.actionHistoryBase))
-      .find((entry) => entry.undoable === false);
+  const floor = runner.undoFloor(turnStartActionIndex);
+  if (floor > turnStartActionIndex) {
+    // The floor decides. It is named by what set it: the not-undoable entry
+    // just below it, or else the irreversible step. That entry is always kept
+    // (#997), so a game that drops old history gives the same refusal.
+    const blocking = notUndoableBelow(runner, floor);
     // A seat the host closed at a deadline is not the seat's own move to take back.
     if (blocking && isSeatExpiry(blocking)) {
       throw new UndoRefusedError(

@@ -67,6 +67,32 @@ export const browserScripts = () =>
  */
 export const surfaceOf = (page) => page.frameLocator('.world-dev__frame');
 
+/**
+ * Every frame that crosses `page`'s world socket, each way, in order, parsed.
+ * A frame that is not a JSON object is kept as `{ unparsed: <text> }`, so a run
+ * can read it instead of crashing on it. The arrays fill as the page runs.
+ */
+export function recordWorldFrames(page) {
+  const sent = [];
+  const received = [];
+  page.on('websocket', (ws) => {
+    if (!ws.url().includes('/__boardsmith/world')) return;
+    ws.on('framesent', ({ payload }) => sent.push(readFrame(String(payload))));
+    ws.on('framereceived', ({ payload }) => received.push(readFrame(String(payload))));
+  });
+  return { sent, received };
+}
+
+function readFrame(text) {
+  try {
+    const frame = JSON.parse(text);
+    if (frame !== null && typeof frame === 'object') return frame;
+  } catch {
+    // Not JSON: kept as text below.
+  }
+  return { unparsed: text };
+}
+
 /** Wait for the panel to be offering the action `name` to a seated player. */
 export async function waitForAction(page, name) {
   await surfaceOf(page).locator(`[data-bs-action="${name}"]`).waitFor({ timeout: 30_000 });

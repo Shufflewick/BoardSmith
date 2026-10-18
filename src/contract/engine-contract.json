@@ -1,7 +1,7 @@
 {
-  "revision": 228,
-  "surfaceHash": "78cc3a6fa6f722cc",
-  "payloadHash": "42faf88ae9f4cb97",
+  "revision": 229,
+  "surfaceHash": "5894461cddc02448",
+  "payloadHash": "0e2d27db00239080",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
@@ -1763,10 +1763,18 @@
     {
       "revision": 228,
       "date": "2026-10-18",
-      "surfaceHash": "78cc3a6fa6f722cc",
-      "payloadHash": "42faf88ae9f4cb97",
+      "surfaceHash": "8154825e47aebf3a",
+      "payloadHash": "0e2d27db00239080",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "Games may set checkpoints: { actionHistory: 'undo' } to keep only the action history undo reads, so a step of repeatable not-undoable moves has a fixed saved size; such snapshots carry actionHistoryBase, the number of dropped entries (#997). An older engine ignores the setting and keeps every entry, so a game using it needs this revision."
+      "summary": "A seat's view now marks an element it cannot see with visibility 'hidden' or 'count-only', and tells a seat denied a zone by hideContentsFrom that the zone is 'count-only' (it is sent one placeholder per card); GameElement gains the engine field _viewChildCount, so a bot's search sandbox keeps the counts and visibility its seat was shown (#1108)."
+    },
+    {
+      "revision": 229,
+      "date": "2026-10-18",
+      "surfaceHash": "5894461cddc02448",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Games may set checkpoints: { actionHistory: 'undo' } to keep only the action history undo reads, so a step of repeatable not-undoable moves has a fixed saved size; such snapshots carry actionHistoryBase, the number of dropped entries, GameRunner gains actionHistoryBase and actionCount, and GameRunner.replay takes the snapshot's history and refuses one that does not start at action 0 (#997). An undo refusal now names what set the undo limit (the not-undoable action just below it, or else the irreversible step). An older engine ignores the setting and keeps every entry, so a game using it needs this revision."
     }
   ]
 }

@@ -239,12 +239,16 @@ saved game stays a fixed size.
 - **Restore.** The latest state restores exactly. A snapshot is restored
   whole, and the history is never replayed to rebuild it.
 - **Undo.** Unchanged. Every entry undo reads is kept, so the same undo is
-  offered and refused as with the whole history.
+  offered and refused, with the same words, as with the whole history: a
+  refusal names what set the limit, the not-undoable action just below it or
+  else the irreversible step, and that entry is always kept.
 - **Action indices.** Unchanged. `snapshot.actionHistoryBase` says how many
   entries were dropped, so entry `i` is action `actionHistoryBase + i`.
   `runner.actionCount` counts the dropped ones too. The checkpoint window,
   `executeBarrierIndex`, the debug ops and the session host's arrival times
   all number actions this way.
+- **Session host.** It keeps arrival times only for the kept entries, so its
+  memory is bounded as well.
 - **Debug History tab.** It lists only the kept actions, numbered by their
   place in the game, and its header says how many earlier ones were not kept.
 - **Replay.** `GameRunner.replay` refuses a history that does not start at
@@ -253,7 +257,9 @@ saved game stays a fixed size.
   and time travel and replay work there as usual.
 
 `projectSnapshotSize` holds the history term flat for a snapshot that has
-dropped entries.
+dropped entries, at the size it measured. That assumes the measurement is
+typical: measure where the kept history is longest (late in the longest turn
+or step) for an upper bound.
 
 ## Measuring your own game
 

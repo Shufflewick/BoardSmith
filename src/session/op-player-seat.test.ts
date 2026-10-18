@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Game, Player, Action, actionStep, loop, type GameOptions } from '../engine/index.js';
 import { executeOp, type GameDefinitionLike, type Op } from './stateless-ops.js';
 import { stubExecuteOp } from './op-result.test-helper.js';
-import { SnapshotSessionHost } from './snapshot-session-host.js';
+import { SnapshotSessionHost, type SeatOp } from './snapshot-session-host.js';
 import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
 
 // #738: the host keeps a seat's half-made picks under the seat it was called
@@ -40,7 +40,7 @@ async function startedHost() {
 }
 
 describe('#738: an op naming another seat is refused', () => {
-  const opsAsSeat2 = (host: SnapshotSessionHost): Op[] => [
+  const opsAsSeat2 = (host: SnapshotSessionHost): SeatOp[] => [
     { type: 'action', actionName: 'pass', player: 2, args: {}, boundaryKey: boundaryKeyOfHost(host) },
     { type: 'expireSeat', player: 2, idleAction: 'pass', args: {}, boundaryKey: boundaryKeyOfHost(host) },
     { type: 'selectionStep', player: 2, selectionName: 'x', value: 1, actionName: 'pass', boundaryKey: boundaryKeyOfHost(host) },
@@ -72,7 +72,7 @@ describe('#738: an op naming another seat is refused', () => {
 
 // #950: hint, heatmapToggle and convertSeatToBot name their seat as `seat`, not `player`.
 describe('#950: an op naming another seat as `seat` is refused', () => {
-  const opsAsSeat1: Op[] = [
+  const opsAsSeat1: SeatOp[] = [
     { type: 'hint', seat: 1 },
     { type: 'heatmapToggle', seat: 1, visible: true },
     { type: 'convertSeatToBot', seat: 1 },
@@ -100,19 +100,22 @@ describe('#1100, #1102: a host-only op sent through handleOp is refused', () => 
     await host.settled();
     executed.length = 0;
     const now = host.snapshot;
-    const hostOnly: Op[] = [
-      { type: 'start' },
-      { type: 'restoreEarlier', snapshot: earlier },
-      { type: 'botSuggest', seats: [{ seat: 2 }] },
-    ];
-    for (const op of hostOnly) {
-      const res = await host.handleOp(1, op);
-      expect(res.success, op.type).toBe(false);
-      expect(!res.success && res.error, op.type).toBe(
-        `Seat 1 sent '${op.type}', and was refused: only the host itself sends it, ` +
+    // #1109: handleOp's type refuses each of these too; the run-time refusal is for untrusted wire input.
+    const results = [
+      // @ts-expect-error start is host-only
+      ['start', await host.handleOp(1, { type: 'start' })],
+      // @ts-expect-error restoreEarlier is host-only
+      ['restoreEarlier', await host.handleOp(1, { type: 'restoreEarlier', snapshot: earlier })],
+      // @ts-expect-error botSuggest is host-only
+      ['botSuggest', await host.handleOp(1, { type: 'botSuggest', seats: [{ seat: 2 }] })],
+    ] as const;
+    for (const [type, res] of results) {
+      expect(res.success, type).toBe(false);
+      expect(!res.success && res.error, type).toBe(
+        `Seat 1 sent '${type}', and was refused: only the host itself sends it, ` +
           'through host.start(), host.restoreEarlier(snapshot) or host.runBotTurns(), never through handleOp.',
       );
-      expect(!res.success && res.category, op.type).toBe('protocol');
+      expect(!res.success && res.category, type).toBe('protocol');
     }
     expect(executed).toEqual([]);
     expect(host.snapshot).toBe(now);

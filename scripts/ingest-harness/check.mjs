@@ -140,7 +140,7 @@ function getSliceFiles(dir) {
 }
 
 function findHeaderLabel(text, label) {
-  const re = new RegExp(`^${label}\\s*(.*)$`, 'm');
+  const re = new RegExp(`^${label}[ \\t]*(.*)$`, 'm');
   const m = text.match(re);
   if (!m) return null;
   return { index: m.index, value: m[1].trim() };

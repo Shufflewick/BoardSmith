@@ -490,6 +490,15 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    */
   _redactedAttributes?: Set<string>;
 
+  /**
+   * How many children the per-seat view this element was restored from said it
+   * holds (`childCount`, #1108). A count-only element the seat cannot see
+   * arrives with its count and no children, so this is the only place the
+   * count survives. Read once, when a sampler fills the restored sandbox; not
+   * written back by `toJSON`, since moves made in the sandbox would leave it stale.
+   */
+  _viewChildCount?: number;
+
   /** Static flag to identify GameElement classes */
   static isGameElement = true;
 
@@ -1257,11 +1266,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    */
   isVisibleTo(player: Player | number): boolean {
     const seat = typeof player === 'number' ? player : player.seat;
-    const visibility = this.getEffectiveVisibility();
-    // For owner-based visibility, check this element's owner first,
-    // then walk up the tree to find an owner (for inherited visibility)
-    const ownerSeat = this.getEffectiveOwner()?.seat;
-    return canPlayerSee(visibility, seat, ownerSeat) && (this._t.parent?.isVisibleTo(seat) ?? true);
+    return ownVisibilityAllows(this, seat) && (this._t.parent?.isVisibleTo(seat) ?? true);
   }
 
   /**
@@ -1637,6 +1642,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     if (json.name) {
       element.name = json.name;
     }
+    if (json.childCount !== undefined) element._viewChildCount = json.childCount;
 
     // Restore visibility if present. Adopt a COPY so the restored element
     // never shares mutable state with the snapshot it was restored from —
@@ -2123,6 +2129,17 @@ export function isElement(value: unknown): value is GameElement {
 /** An element that declares zone visibility for its children (i.e. a Space). */
 export interface ZoneVisibilityOwner {
   getZoneVisibility(): VisibilityState | undefined;
+}
+
+/**
+ * Whether the element's own visibility allows the seat, ancestors aside
+ * (#1123). Only for a walk that never descends below an element hidden from
+ * the seat, where every ancestor is already known visible; anywhere else,
+ * `isVisibleTo` is the answer. Not re-exported from the engine.
+ */
+export function ownVisibilityAllows(element: GameElement, seat: number): boolean {
+  // The owner is this element's, or the nearest ancestor's (inherited visibility).
+  return canPlayerSee(element.getEffectiveVisibility(), seat, element.getEffectiveOwner()?.seat);
 }
 
 /**

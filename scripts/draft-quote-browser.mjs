@@ -30,8 +30,8 @@
  * `boardsmith install-browser`.
  */
 // One line rather than the pick harness's stacked list, so two scripts importing
-// the same six helpers are not a clone group the duplication gate has to hold.
-import { assert, check, runBrowserRegression, summarise, surfaceOf, waitForAction, waitUntil } from './browser-harness.mjs';
+// the same seven helpers are not a clone group the duplication gate has to hold.
+import { assert, check, recordWorldFrames, runBrowserRegression, summarise, surfaceOf, waitForAction, waitUntil } from './browser-harness.mjs';
 
 // ── The fixture world ────────────────────────────────────────────────────────
 
@@ -303,22 +303,12 @@ await runBrowserRegression(
  * counting them is how a quote that quietly charged somebody would be caught.
  */
 function recordFrames(page) {
-  const byType = { quote: [], world_quote_result: [], action: [] };
-  const keep = ({ payload }) => {
-    let frame;
-    try {
-      frame = JSON.parse(String(payload));
-    } catch {
-      return; // not JSON: nothing this run reads
-    }
-    byType[frame.type]?.push(frame);
+  const { sent, received } = recordWorldFrames(page);
+  return {
+    asked: () => sent.filter((frame) => frame.type === 'quote'),
+    answered: () => received.filter((frame) => frame.type === 'world_quote_result'),
+    commands: () => sent.filter((frame) => frame.type === 'action'),
   };
-  page.on('websocket', (ws) => {
-    if (!ws.url().includes('/__boardsmith/world')) return;
-    ws.on('framesent', keep);
-    ws.on('framereceived', keep);
-  });
-  return { asked: byType.quote, answered: byType.world_quote_result, commands: byType.action };
 }
 
 async function driveThrough({ launch, hostUrl }) {
@@ -345,19 +335,19 @@ async function driveThrough({ launch, hostUrl }) {
     });
 
     await check('the quote request crossed the socket with the typed draft in it', () => {
-      assert(asked.length >= 1, 'no quote request reached the world host at all');
-      const typed = asked.find((frame) => frame.args?.weeks === 2);
-      assert(typed !== undefined, `no request carried the typed weeks: ${JSON.stringify(asked)}`);
+      assert(asked().length >= 1, 'no quote request reached the world host at all');
+      const typed = asked().find((frame) => frame.args?.weeks === 2);
+      assert(typed !== undefined, `no request carried the typed weeks: ${JSON.stringify(asked())}`);
       assert(typed.action === 'boost', `the request named "${typed.action}"`);
       assert(typed.args.resource === 'storage', 'the request dropped the bound resource');
-      const reply = answered.find((frame) => frame.requestId === typed.requestId);
+      const reply = answered().find((frame) => frame.requestId === typed.requestId);
       assert(reply !== undefined, "no reply carried the request's own id");
       assert(reply.ok === true, `the world refused: ${reply.message}`);
       assert(reply.quote?.[0] === '10 Essentia', `the reply priced it ${JSON.stringify(reply.quote)}`);
     });
 
     await check('nothing was spent by being quoted', async () => {
-      assert(commands.length === 0, 'a command was sent while the player was still drafting');
+      assert(commands().length === 0, 'a command was sent while the player was still drafting');
       assert(
         (await balance(page)) === 'Essentia: 16',
         `the balance moved while drafting: ${await balance(page)}`,
@@ -388,7 +378,7 @@ async function driveThrough({ launch, hostUrl }) {
       const surface = surfaceOf(page);
       await surface.locator('.number-input button', { hasText: 'Done' }).click();
       await surface.locator('[data-bs-confirm]').waitFor({ timeout: 15_000 });
-      assert(commands.length === 0, 'the world was charged by the last field being submitted');
+      assert(commands().length === 0, 'the world was charged by the last field being submitted');
       // The price is STILL on screen at the moment of deciding, which is the
       // whole requirement: shown before the purchase, not after it.
       const shown = await quoteText(page);
@@ -403,8 +393,8 @@ async function driveThrough({ launch, hostUrl }) {
       await surfaceOf(page).locator('[data-bs-confirm]').click();
       const paid = await waitUntil(() => balance(page), (read) => read === 'Essentia: 1', 20_000);
       assert(paid === 'Essentia: 1', `the balance read "${paid}" rather than sixteen less fifteen`);
-      assert(commands.length === 1, `${commands.length} commands were sent for one purchase`);
-      assert(commands[0].args.weeks === 3, `the order carried ${JSON.stringify(commands[0].args)}`);
+      assert(commands().length === 1, `${commands().length} commands were sent for one purchase`);
+      assert(commands()[0].args.weeks === 3, `the order carried ${JSON.stringify(commands()[0].args)}`);
     });
 
     // ── 5. The omitted quantity, which is the game's own default ────────────
