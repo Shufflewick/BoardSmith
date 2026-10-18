@@ -105,7 +105,7 @@ describe('SEC-04: whole-payload leak assertions for messageTo', () => {
   });
 
   it('withholds a private line from the WHOLE redacted snapshot of an unaddressed seat', () => {
-    // `createSnapshot({forSeat})` is the MCTS search sandbox's clone — a payload
+    // `createSeatSnapshot` is the MCTS search sandbox's clone, a payload
     // built precisely so a bot cannot reason over information its seat lacks.
     const seat2 = JSON.stringify(createSeatSnapshot(narratedGame(), 'LeakGame', undefined, {
       forSeat: 2, reseed: 'sandbox',

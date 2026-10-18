@@ -1044,7 +1044,7 @@ export class Game<
    * `to` is the message's AUDIENCE — the seats allowed to receive it. Absent
    * means everyone, which is what `message()` writes and what nearly every game
    * should be writing. Only `messageTo()` sets it. The audience is enforced
-   * server-side, in `createSnapshot`'s `forSeat` path and `getFormattedMessages`,
+   * server-side, in `createSeatSnapshot` and `getFormattedMessages`,
    * so an unaddressed seat never receives the bytes; this array itself is the
    * unfiltered truth and must stay that way (undo restores from it, so a
    * filtered copy here would silently destroy other seats' history).
