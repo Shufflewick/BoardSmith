@@ -49,7 +49,10 @@ a property whose value is an object literal with both a `checker` and a
 - `TrainingBundle` - A rules module built together with `benchmarkBot` and
   `weightedBot`
 - `WeightEvolverConfig` - Weight evolver config
-- `WeightEvolutionResult` - The evolved weights and the starting and best win rates
+- `WeightEvolutionResult` - The weights to keep, the search's starting and best
+  win rates, and the `confirmation`
+- `WeightConfirmation` - The confirmation rematch: games each, both win rates,
+  and whether the new weights were accepted
 - `UpdateWeightsOptions` - Options for `updateBotWeights`
 
 ## Training from the CLI
@@ -59,7 +62,7 @@ together with the benchmark, into a fresh `.boardsmith/evolve-bot-weights-tmp-<r
 (removed when it ends), reads the
 weights of the objectives in the rules directory's `bot.ts`, evolves them by
 benchmarking the game's own bot in parallel, and writes the new weights back into
-that `bot.ts`:
+that `bot.ts` only if they are confirmed stronger (see below):
 
 ```bash
 npx boardsmith evolve-bot-weights --generations 5 --population 20
@@ -67,6 +70,19 @@ npx boardsmith evolve-bot-weights --generations 5 --population 20
 
 The game's `gameDefinition` must set `bot.objectives` to the objectives function
 `bot.ts` exports; the command refuses a game without one.
+
+### Confirming an improvement
+
+The search scores about 125 candidates on 50 games each and picks the highest.
+Scores that noisy make the highest one lucky: when no candidate is stronger
+than the original, the best still scores around 68% against the original's
+50% (#870). So before keeping the pick, the evolver plays it and the original
+again, on 400 new games each that the search never played, the same games for
+both. The pick is kept only if it wins a one-sided two-proportion test at 5%:
+a pick no stronger than the original is kept at most about 1 run in 20, and a
+pick 10 points stronger is kept about 88% of the time (15 points: about 99%).
+Otherwise `bot.ts` is left as it was. The reported improvement is the
+confirmation's, not the search score.
 
 ### Reproducible runs
 

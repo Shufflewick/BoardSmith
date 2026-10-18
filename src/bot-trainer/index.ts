@@ -4,6 +4,7 @@ export {
   WeightEvolver,
   type WeightEvolverConfig,
   type WeightEvolutionResult,
+  type WeightConfirmation,
 } from './weight-evolver.js';
 
 // Reading and writing the objective weights in bot.ts
