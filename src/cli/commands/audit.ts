@@ -1,4 +1,4 @@
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -599,7 +599,7 @@ function buildAudits(
       name: 'changed files',
       run: async (cwd) => {
         const { outcome, report } = await runChangedFilesAudit(fallowAuditRunner(cwd), options.since);
-        console.log(outcome === 'pass' ? chalk.dim(report) : chalk.yellow(report));
+        console.log(outcome === 'pass' ? styleText('dim', report) : styleText('yellow', report));
         return outcome;
       },
     },
@@ -607,7 +607,7 @@ function buildAudits(
       name: 'template duplication',
       run: async (cwd) => {
         const { code, report, nothingToCheck } = await runTemplateDupesCheck(cwd);
-        console.log(code === 0 && !nothingToCheck ? chalk.dim(report) : chalk.yellow(report));
+        console.log(code === 0 && !nothingToCheck ? styleText('dim', report) : styleText('yellow', report));
         return nothingToCheck ? 'nothing-to-check' : outcomeOf(code);
       },
     },
@@ -615,7 +615,7 @@ function buildAudits(
       name: 'health baseline',
       run: async (cwd) => {
         const { code, report, skipped } = await runHealthBaselineCheck(cwd);
-        console.log(code === 0 && !skipped ? chalk.dim(report) : chalk.yellow(report));
+        console.log(code === 0 && !skipped ? styleText('dim', report) : styleText('yellow', report));
         return skipped ? 'skipped' : outcomeOf(code);
       },
     },
@@ -623,7 +623,7 @@ function buildAudits(
       name: 'dupes baseline',
       run: async (cwd) => {
         const { code, report, skipped } = await runDupesBaselineCheck(cwd);
-        console.log(code === 0 && !skipped ? chalk.dim(report) : chalk.yellow(report));
+        console.log(code === 0 && !skipped ? styleText('dim', report) : styleText('yellow', report));
         return skipped ? 'skipped' : outcomeOf(code);
       },
     },
@@ -640,10 +640,10 @@ function buildAudits(
  * `boardsmith audit`.
  */
 async function reportBacklog(cwd: string): Promise<void> {
-  console.log(chalk.cyan('\nWhole-repository dead-code backlog...\n'));
+  console.log(styleText('cyan', '\nWhole-repository dead-code backlog...\n'));
   await runTool('fallow', [], { cwd });
   console.log(
-    chalk.yellow(
+    styleText('yellow',
       '\nThis is a report of the whole repository, baselines set aside — not a verdict on '
       + 'your change.\nThe gate is `boardsmith audit`; see docs/fallow-gate.md.\n',
     ),
@@ -658,8 +658,8 @@ async function reportBacklog(cwd: string): Promise<void> {
  */
 async function backlogAction(cwd: string, conflicting: boolean): Promise<void> {
   if (conflicting) {
-    console.error(chalk.red('Error: --backlog is a whole-repository report, not one of the gate\'s checks.'));
-    console.error(chalk.dim('Run `boardsmith audit --backlog` on its own.'));
+    console.error(styleText('red', 'Error: --backlog is a whole-repository report, not one of the gate\'s checks.'));
+    console.error(styleText('dim', 'Run `boardsmith audit --backlog` on its own.'));
     process.exit(1);
   }
   await reportBacklog(cwd);
@@ -677,15 +677,15 @@ async function backlogAction(cwd: string, conflicting: boolean): Promise<void> {
  */
 async function sweepAction(cwd: string, conflicting: boolean, fileIssue: boolean): Promise<void> {
   if (conflicting) {
-    console.error(chalk.red('Error: --sweep is a whole-repository report, not one of the gate\'s checks.'));
-    console.error(chalk.dim('Run `boardsmith audit --sweep` on its own, optionally with --file-issue.'));
+    console.error(styleText('red', 'Error: --sweep is a whole-repository report, not one of the gate\'s checks.'));
+    console.error(styleText('dim', 'Run `boardsmith audit --sweep` on its own, optionally with --file-issue.'));
     process.exit(1);
   }
-  console.log(chalk.cyan('\nSweeping the whole repository for duplicate exports...\n'));
+  console.log(styleText('cyan', '\nSweeping the whole repository for duplicate exports...\n'));
   const { code, report } = await sweepDuplicateExports(cwd, {
     tracker: fileIssue ? githubIssueTracker(cwd) : undefined,
   });
-  console.log(code === 0 ? chalk.yellow(report) : chalk.red(report));
+  console.log(code === 0 ? styleText('yellow', report) : styleText('red', report));
   console.log('');
   // Findings never gate; only a scan that produced nothing readable does.
   if (code !== 0) process.exit(code);
@@ -700,14 +700,14 @@ async function sweepAction(cwd: string, conflicting: boolean, fileIssue: boolean
  */
 async function rekeyAction(cwd: string, conflicting: boolean): Promise<void> {
   if (conflicting) {
-    console.error(chalk.red('Error: --rekey-dupes rewrites the duplication baseline, it does not audit.'));
-    console.error(chalk.dim('Run `boardsmith audit --rekey-dupes` on its own, then `boardsmith audit`.'));
+    console.error(styleText('red', 'Error: --rekey-dupes rewrites the duplication baseline, it does not audit.'));
+    console.error(styleText('dim', 'Run `boardsmith audit --rekey-dupes` on its own, then `boardsmith audit`.'));
     process.exit(1);
   }
   let failed = false;
   for (const rekey of [rekeyDupesBaseline, rekeyTemplateDupes]) {
     const { code, report } = await rekey(cwd);
-    console.log(code === 0 ? chalk.green(report) : chalk.yellow(report));
+    console.log(code === 0 ? styleText('green', report) : styleText('yellow', report));
     failed ||= code !== 0;
   }
   if (failed) process.exit(1);
@@ -758,7 +758,7 @@ async function runAudits(
   const checked: string[] = [];
   const skipped: string[] = [];
   for (const audit of audits) {
-    console.log(chalk.cyan(`\nAuditing ${audit.name}...\n`));
+    console.log(styleText('cyan', `\nAuditing ${audit.name}...\n`));
     const outcome = await audit.run(cwd);
     if (outcome === 'fail') failed.push(audit.name);
     if (outcome === 'skipped') skipped.push(audit.name);
@@ -791,8 +791,8 @@ export async function auditCommand(options: AuditOptions): Promise<void> {
     );
   }
   if (options.fileIssue) {
-    console.error(chalk.red('Error: --file-issue files what --sweep finds, so it needs --sweep.'));
-    console.error(chalk.dim('Run `boardsmith audit --sweep --file-issue`.'));
+    console.error(styleText('red', 'Error: --file-issue files what --sweep finds, so it needs --sweep.'));
+    console.error(styleText('dim', 'Run `boardsmith audit --sweep --file-issue`.'));
     process.exit(1);
   }
   if (options.backlog) {
@@ -803,12 +803,12 @@ export async function auditCommand(options: AuditOptions): Promise<void> {
   const { failed, checked, skipped } = await runAudits(cwd, selectedAudits(options));
 
   if (failed.length > 0) {
-    console.error(chalk.red(`\nAudit reported findings: ${failed.join(', ')}\n`));
+    console.error(styleText('red', `\nAudit reported findings: ${failed.join(', ')}\n`));
     process.exit(1);
   }
 
   const { clean, line } = auditVerdict(checked, skipped);
-  console.log((clean ? chalk.green : chalk.yellow)(`\n${line}\n`));
+  console.log(styleText(clean ? 'green' : 'yellow', `\n${line}\n`));
 }
 
 /** The closing line of a run with no failures. Only a run that checked something and skipped nothing is clean. */

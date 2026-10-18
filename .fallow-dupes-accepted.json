@@ -16,26 +16,11 @@
       ]
     },
     {
-      "content": "1784dab72184ccca",
-      "lines": 37,
-      "files": [
-        "src/ui/composables/useFlyingElements.ts",
-        "src/ui/composables/usePlayerStatAnimation.ts"
-      ]
-    },
-    {
       "content": "22fd9ee1edbe9be5",
       "lines": 7,
       "files": [
         "src/ui/components/auto-ui/renderers/HandRenderer.vue",
         "src/ui/components/auto-ui/renderers/SpaceRenderer.vue"
-      ]
-    },
-    {
-      "content": "2375f84bcc213aab",
-      "lines": 8,
-      "files": [
-        "src/cli/commands/verify-classify.ts"
       ]
     },
     {
@@ -62,11 +47,11 @@
       ]
     },
     {
-      "content": "3e4d54a26324100d",
-      "lines": 9,
+      "content": "47c61f6daca7a39b",
+      "lines": 26,
       "files": [
-        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
-        "src/ui/components/auto-ui/renderers/HandRenderer.vue"
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue",
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue"
       ]
     },
     {
@@ -159,14 +144,6 @@
       ]
     },
     {
-      "content": "a021f38caf4b3cd5",
-      "lines": 7,
-      "files": [
-        "src/cli/commands/verify-classify.ts",
-        "src/cli/commands/verify-run.ts"
-      ]
-    },
-    {
       "content": "a65a466bf25aee08",
       "lines": 33,
       "files": [
@@ -189,11 +166,10 @@
       ]
     },
     {
-      "content": "acb2e8b5b4423ed8",
-      "lines": 26,
+      "content": "abe505cb0a457948",
+      "lines": 8,
       "files": [
-        "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue",
-        "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue"
+        "src/cli/commands/verify-classify.ts"
       ]
     },
     {
@@ -203,14 +179,6 @@
         "src/ui/components/GameHistory.vue",
         "src/ui/components/auto-ui/ActionPanel.vue",
         "src/ui/components/auto-ui/AutoRenderer.vue"
-      ]
-    },
-    {
-      "content": "b1fb6874a2db7793",
-      "lines": 6,
-      "files": [
-        "src/cli/commands/verify-classify.ts",
-        "src/cli/commands/verify-repair.ts"
       ]
     },
     {
@@ -295,21 +263,6 @@
       "lines": 9,
       "files": [
         "src/ui/composables/useFLIP.ts"
-      ]
-    },
-    {
-      "content": "fd6060434bc642e6",
-      "lines": 7,
-      "files": [
-        "src/cli/commands/verify-classify.ts"
-      ]
-    },
-    {
-      "content": "fd899edcd7857c9a",
-      "lines": 40,
-      "files": [
-        "src/ui/composables/useGameGrid.ts",
-        "src/ui/composables/useHexGrid.ts"
       ]
     }
   ]

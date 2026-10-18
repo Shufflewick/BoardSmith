@@ -933,6 +933,64 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
     expect(adds.map(b => b.attributes('aria-label'))).toEqual(['Add Move here (e4)', 'Add Pass']);
     expect(adds.map(b => b.text())).toEqual(['Move here', 'Pass']);
   });
+
+  // #1084: every destination of one piece shares its source ref, so the name comes from the target.
+  it('names each destination by its target square, not the shared source', () => {
+    const fromB6 = (to: string): ChoiceWithRefs => ({
+      value: to,
+      display: 'Move',
+      refs: [{ ref: { notation: 'b6' }, role: 'source' }, { ref: { notation: to }, role: 'target' }],
+    });
+    const wrapper = mountSpacePick([fromB6('a5'), fromB6('c5')]);
+
+    const buttons = wrapper.findAll('.anchored-choice-btn');
+    expect(buttons.map(b => b.attributes('aria-label'))).toEqual(['Move (a5)', 'Move (c5)']);
+  });
+
+  // #1105: a display that already says the square is not followed by it again.
+  it('does not repeat the square when the display already names it', () => {
+    const to = (display: string, square: string): ChoiceWithRefs => ({
+      value: display,
+      display,
+      refs: [{ ref: { notation: square }, role: 'target' }],
+    });
+    const wrapper = mountSpacePick([
+      to('a5', 'a5'),
+      to('Jump to c5', 'c5'),
+      to('Move', 'e3'),
+      to('a50', 'a5'),
+      to('Area g7x', 'g7'),
+      to('(0,-1)', '(0,-1)'),
+      to('Move', '-1'),
+      to('112', '1.2'),
+      to('-1,2', '1,2'),
+    ]);
+
+    const buttons = wrapper.findAll('.anchored-choice-btn');
+    expect(buttons.map(b => b.attributes('aria-label'))).toEqual([
+      'a5',
+      'Jump to c5',
+      'Move (e3)',
+      'a50 (a5)',
+      'Area g7x (g7)',
+      '(0,-1)',
+      'Move (-1)',
+      '112 (1.2)',
+      '-1,2 (1,2)',
+    ]);
+  });
+
+  it('never names the source square when the target has no square name', () => {
+    const toPile: ChoiceWithRefs = {
+      value: 'pile',
+      display: 'Discard pile',
+      refs: [{ ref: { notation: 'b6' }, role: 'source' }, { ref: { id: 42 }, role: 'target' }],
+    };
+    const wrapper = mountSpacePick([toPile, { value: 'pass', display: 'Pass' }], { multiSelect: { min: 1, max: 2 } });
+
+    const boxes = wrapper.findAll('.multi-select-choice input');
+    expect(boxes.map(b => b.attributes('aria-label'))).toEqual(['Discard pile', 'Pass']);
+  });
 });
 
 // ---------------------------------------------------------------------------

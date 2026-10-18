@@ -72,6 +72,8 @@ const props = withDefaults(defineProps<{
   // ── The log ────────────────────────────────────────────────────────────────
   /** The lines the log shows, oldest first. */
   messages: HistoryMessage[];
+  /** The line number of `messages[0]`, once a game prunes its log (#903). See `GameHistory`. */
+  messageOffset?: number;
   /** What the log says when it is empty, if "No activity yet" would be a lie.
    *  A world's log is a live tail, not a history. */
   logEmptyText?: string;
@@ -428,6 +430,7 @@ const mobileToggleLabel = computed(() => {
             v-if="isCompact || !railed"
             ref="historyPanel"
             :messages="messages"
+            :message-offset="messageOffset"
             :empty-text="logEmptyText"
             class="sidebar-history"
             data-testid="bs-log"
@@ -627,8 +630,9 @@ const mobileToggleLabel = computed(() => {
     </div>
 
     <!-- The adapter's debug surface: one placement, one keyboard shortcut, one
-         transport, and a tab set the adapter declares. -->
-    <div v-if="$slots.debug" data-testid="bs-debug">
+         transport, and a tab set the adapter declares. A dialog's focus trap leaves
+         it usable (data-bs-outside-modal): the end of a game is when it is needed (#1106). -->
+    <div v-if="$slots.debug" data-testid="bs-debug" data-bs-outside-modal>
       <slot name="debug"></slot>
     </div>
   </div>

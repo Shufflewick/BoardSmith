@@ -172,7 +172,9 @@ const titleText = computed(() => {
   border: 1px solid var(--bsg-line-2);
   border-radius: var(--bsg-r-lg);
   box-shadow: var(--bsg-shadow);
-  padding: var(--bsg-s6) var(--bsg-s5);
+  --goc-pad-x: var(--bsg-s5);
+  --goc-close: 44px;
+  padding: var(--bsg-s6) var(--goc-pad-x);
   min-width: 280px;
   max-width: min(480px, 90cqw);
   display: flex;
@@ -187,8 +189,8 @@ const titleText = computed(() => {
   position: absolute;
   top: 0;
   right: 0;
-  width: 44px;
-  height: 44px;
+  width: var(--goc-close);
+  height: var(--goc-close);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -211,6 +213,9 @@ const titleText = computed(() => {
   color: var(--bsg-ink);
   margin: 0;
   line-height: 1.2;
+  /* #1061: room for the corner Close button on both sides keeps the title centred and clear of it. */
+  padding-inline: calc(var(--goc-close) + var(--bsg-s2) - var(--goc-pad-x));
+  overflow-wrap: anywhere;
 }
 
 /* Winner list */

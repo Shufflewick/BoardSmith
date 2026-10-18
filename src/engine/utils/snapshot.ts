@@ -386,6 +386,14 @@ export interface PlayerStateView {
   /** Messages visible to this player */
   messages: Array<{ text: string; data?: Record<string, unknown> }>;
 
+  /**
+   * How many lines this player could see have been evicted from the front of
+   * the log (`game.pruneMessages`): `messages[i]` is this seat's line number
+   * `messageOffset + i`. Counts only its own lines, never other seats' private
+   * ones (#903). Absent while zero.
+   */
+  messageOffset?: number;
+
   /** Game phase */
   phase: string;
 
@@ -544,6 +552,7 @@ export function createPlayerView(
   const disabledActions = playerPosition > 0
     ? game.getDisabledActions(playerPosition)
     : undefined;
+  const messageOffset = game.messageOffsetFor(playerPosition);
 
   return {
     player: playerPosition,
@@ -558,6 +567,7 @@ export function createPlayerView(
     // Keeps each line's game-supplied `type` (#21) — flattening to `{ text }`
     // here was the last hop that dropped it.
     messages: game.getFormattedMessageEntries(playerPosition),
+    ...(messageOffset > 0 && { messageOffset }),
     phase: game.phase,
     complete: flowState?.complete ?? false,
     winners: flowState?.complete ? game.getWinners().map(p => p.seat) : undefined,
