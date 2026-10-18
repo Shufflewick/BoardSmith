@@ -1366,12 +1366,6 @@ export class ActionExecutor {
     args: Record<string, unknown>,
     options?: PerformOptions,
   ): ActionResult {
-    // The condition sees no picks, as availability and each step see it; the picks are checked one at a time below (#772).
-    const context = { game: this.game, player, args: this.resolveNonPickArgs(action, args, this.game) };
-    if (!options?.followUp && action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
-      return { success: false, error: 'Action is not available' };
-    }
-
     const pendingState = this.createPendingActionState(action.name, player.seat);
     Object.assign(pendingState.collectedArgs, options?.followUp?.args);
     let applied = false;
