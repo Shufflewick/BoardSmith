@@ -98,7 +98,7 @@ describe('restoring a save deeper than the current rules go is refused', () => {
   });
 });
 
-type CaseRules = 'unchanged' | 'reordered' | 'removed-other' | 'removed-own';
+type CaseRules = 'unchanged' | 'reordered' | 'removed-other' | 'removed-own' | 'with-default';
 
 class CaseGame extends Game<CaseGame> {
   static rules: CaseRules = 'unchanged';
@@ -112,20 +112,29 @@ class CaseGame extends Game<CaseGame> {
       reordered: { three: step('case-three'), two: step('case-two'), one: step('case-one') },
       'removed-other': { two: step('case-two'), three: step('case-three') },
       'removed-own': { one: step('case-one'), three: step('case-three') },
+      'with-default': { one: step('case-one'), three: step('case-three') },
     };
+    const fallback = CaseGame.rules === 'with-default' ? { default: step('case-default') } : {};
     this.setFlow({
-      root: sequence(step('first'), switchOn({ name: 'pick', on: () => 'two', cases: cases[CaseGame.rules] }), step('last')),
+      root: sequence(
+        step('first'),
+        switchOn({ name: 'pick', on: () => 'two', cases: cases[CaseGame.rules], ...fallback }),
+        step('last'),
+      ),
     });
   }
 }
 
-function restoreCaseTwoUnder(rules: CaseRules) {
-  CaseGame.rules = 'unchanged';
+/** Saves inside the switch under `savedUnder`, then starts a game under `rules` to restore it into. */
+function restoreUnder(rules: CaseRules, savedUnder: CaseRules = 'unchanged') {
+  CaseGame.rules = savedUnder;
   const live = new CaseGame({ playerCount: 1, seed: 's' });
   live.startFlow();
   live.continueFlow('a', {}, 1);
-  expect(live.getFlowDebugInfo().step).toBe('case-two');
+  expect(live.getFlowDebugInfo().step).toBe(savedUnder === 'with-default' ? 'case-default' : 'case-two');
   const saved = live.getFlowState()!;
+  // What a save from before #966 also held for case "two": its position among the cases, which must never be read.
+  saved.position.frameData!.__frame_1.branchIndex = 1;
 
   CaseGame.rules = rules;
   const restored = new CaseGame({ playerCount: 1, seed: 's' });
@@ -135,16 +144,23 @@ function restoreCaseTwoUnder(rules: CaseRules) {
 
 describe('#966: a switchOn case is restored by its key, not its position', () => {
   it('refuses a save inside a case the rules removed, naming the case, even when another case now sits at its position', () => {
-    const { restored, saved } = restoreCaseTwoUnder('removed-own');
+    const { restored, saved } = restoreUnder('removed-own');
     expect(() => restored.restoreFlowState(saved)).toThrow(
       /Flow position invalid: .*case "two" of switch "pick".*no longer have/,
+    );
+  });
+
+  it('refuses a save inside a default branch the rules removed, naming the default case', () => {
+    const { restored, saved } = restoreUnder('unchanged', 'with-default');
+    expect(() => restored.restoreFlowState(saved)).toThrow(
+      /Flow position invalid: .*the default case of switch "pick".*no longer have/,
     );
   });
 
   it.each(['unchanged', 'reordered', 'removed-other'] as const)(
     'restores a save inside case "two" into case "two" when the rules are %s',
     (rules) => {
-      const { restored, saved } = restoreCaseTwoUnder(rules);
+      const { restored, saved } = restoreUnder(rules);
       restored.restoreFlowState(saved);
       expect(restored.getFlowDebugInfo().step).toBe('case-two');
       restored.continueFlow('a', {}, 1);
