@@ -310,8 +310,9 @@ export class ResidentWorld {
   #closed = false;
   /** The event a batch saw refuse and when overdue work may next be tried,
    *  cleared by a batch none refused in. Read by every re-arm, so they all
-   *  agree, and by the catch-up refusal, which names the event (#939). */
-  #refused: { action: string; retryAt: number } | undefined;
+   *  agree, and by the catch-up refusal, which names the event by its
+   *  declared prompt, or its action name when it has none (#939, #1175). */
+  #refused: { label: string; retryAt: number } | undefined;
   /** The world lock. Every entry point queues behind it. */
   #lock: Promise<unknown> = Promise.resolve();
 
@@ -901,7 +902,7 @@ export class ResidentWorld {
             ? "This world is still catching up on events that were due before your command " +
                 "arrived, and its rules say a command must not overtake them. Nothing was changed. " +
                 "Send it again in a moment -- it will run exactly once when the world is level."
-            : `This world is waiting on its scheduled event "${this.#refused.action}", which could ` +
+            : `This world is waiting on its scheduled event "${this.#refused.label}", which could ` +
                 "not run and is still queued, and its rules say a command must not overtake it. " +
                 "Nothing was changed and your command was not kept. The world keeps retrying that " +
                 "event; send your command again once it has gone through, and it will run exactly once.",
@@ -1271,7 +1272,10 @@ export class ResidentWorld {
       return { ended: this.completed, displaced };
     });
     if (outcome.kind === "refused") {
-      this.#refused = { action: event.action, retryAt: this.now() + RETRY_WAIT_MS };
+      const label =
+        readWorldDefinition(this.#definition).actions.find((one) => one.name === event.action)?.prompt ??
+        event.action;
+      this.#refused = { label, retryAt: this.now() + RETRY_WAIT_MS };
       // A DUE EVENT THAT REFUSED IS SAID OUT LOUD AND LEFT QUEUED, at the
       // occurrence that refused -- which is where the last occurrence that ran
       // already re-armed it, so there is nothing more to write. Its effects

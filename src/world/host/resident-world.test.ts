@@ -49,6 +49,17 @@ const boom = worldClockAction<Ticker>('boom')
   .execute(() => {
     throw new Error('refused on purpose');
   });
+const fizz = worldClockAction<Ticker>('fizz')
+  .prompt('the harvest festival')
+  .needs(() => [LOG])
+  .execute(() => {
+    throw new Error('refused on purpose');
+  });
+const armFizz = worldClockAction<Ticker>('armFizz')
+  .needs(() => [])
+  .execute((_args, { world }) => {
+    world.schedule({ delayMs: MINUTE, action: 'fizz' });
+  });
 const tick = worldClockAction<Ticker>('tick').needs(() => [LOG]).execute(mark('t'));
 const arm = worldClockAction<Ticker>('arm')
   .needs(() => [])
@@ -77,7 +88,7 @@ function bundle(ordering: 'arrival' | 'chronological' = 'arrival') {
         if (viewThrows) throw viewThrows;
         return [LOG];
       },
-      actions: [boom, tick, arm, stamp, poke],
+      actions: [boom, fizz, armFizz, tick, arm, stamp, poke],
     } as WorldDefinition,
   } as ConstructorParameters<typeof ResidentWorld>[0]['definition'];
 }
@@ -178,6 +189,22 @@ describe('#793: ResidentWorld', () => {
     expect((refusal as Error).message).toMatch(/send your command again/);
     // The game's own error text is for the author's notice, not the player.
     expect((refusal as Error).message).not.toContain('refused on purpose');
+  });
+
+  it('names the stuck event by its declared prompt when it has one (#1175)', async () => {
+    const { world, advance } = host({ ordering: 'chronological' });
+    await world.start();
+    world.seat(worldSeatPlayer(1), 1);
+    await world.clockCommand('armFizz', {});
+    advance(3 * MINUTE);
+
+    const refusal = world.run(() =>
+      world.command({ player: worldSeatPlayer(1), order: { id: 'o1', at: OPENED }, action: 'poke', args: {} }),
+    );
+    await expect(refusal).rejects.toMatchObject({ code: 'world-catching-up' });
+    const message = (await refusal.catch((error: Error) => error)).message;
+    expect(message).toContain('"the harvest festival"');
+    expect(message).not.toContain('"fizz"');
   });
 
   it('still says "in a moment" when the world is only catching up (#939)', async () => {
