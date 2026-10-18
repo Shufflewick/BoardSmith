@@ -135,7 +135,7 @@ function mountAutoZoom(opts: {
   let api!: ReturnType<typeof useAutoZoom>;
   const wrapper = mount(defineComponent({
     setup() {
-      api = useAutoZoom(opts);
+      api = useAutoZoom({ ...opts, boardFailed: ref(false) });
       return () => h('div');
     },
   }));

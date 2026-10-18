@@ -18,7 +18,7 @@
 </template>
 
 <script setup lang="ts">
-import { onErrorCaptured, ref, watch } from 'vue';
+import { computed, onErrorCaptured, ref, watch } from 'vue';
 
 const props = defineProps<{
   /** The state the board draws; a new one gives a failed board another try. */
@@ -40,6 +40,9 @@ onErrorCaptured((error) => {
 watch([() => props.state, () => props.board], () => {
   failure.value = null;
 });
+
+/** True while the message stands in for the board; the shell's zoom fit never measures the message (#1154). */
+defineExpose({ failed: computed(() => failure.value !== null) });
 </script>
 
 <style scoped>

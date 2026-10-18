@@ -7,13 +7,15 @@
  * failed ("Cannot set properties of null (setting '__vnode')") and the Action
  * Panel froze until a reload. Driven on the REAL GameShell and transport.
  */
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
 import { defineComponent, h, nextTick } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
-import { enterIframe, leaveIframe, mountPlatformShell } from './GameShell.platform-mount.test-helper.js';
+import { enterIframe, leaveIframe, mountPlatformShell, type BoardComponent } from './GameShell.platform-mount.test-helper.js';
 import GameShell from './GameShell.vue';
 import BoardErrorBoundary from './BoardErrorBoundary.vue';
+import ControlsMenu from './ControlsMenu.vue';
 import { defineGameUIs, defaultUI, devUI } from '../game-uis.js';
+import { SETTLE_MS } from '../composables/useAutoZoom.js';
 
 function fromHost(data: Record<string, unknown>): void {
   window.dispatchEvent(new MessageEvent('message', { source: window.parent, data: { source: 'shufflewick', ...data } }));
@@ -116,6 +118,118 @@ describe('GameShell board error boundary (#1149)', () => {
     await flushPromises();
     expect(wrapper.find('[data-testid="bs-board-error"]').exists()).toBe(false);
     expect(wrapper.find('.other-board').exists()).toBe(true);
+  });
+});
+
+describe('GameShell board error boundary and the zoom fit (#1154)', () => {
+  // jsdom has no layout: the message is 400x300, a drawn board 800x600, an empty one 0x0, and the region `region`.
+  const region = { width: 800, height: 600 };
+  const observers: Array<{ target: Element; fire: () => void }> = [];
+  const priorObserver = globalThis.ResizeObserver;
+  /** A layout change: the observers of what changed size fire, then the region re-fit's frame runs. */
+  async function relayout(changed: 'board' | 'board and region'): Promise<void> {
+    for (const { target, fire } of observers) {
+      if (changed === 'board and region' || target.classList.contains('game-shell__zoom-container')) fire();
+    }
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await nextTick();
+  }
+
+  beforeEach(() => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    Object.assign(region, { width: 800, height: 600 });
+    observers.length = 0;
+    vi.stubGlobal('ResizeObserver', class {
+      live = true;
+      constructor(private readonly callback: () => void) {}
+      observe(target: Element) {
+        observers.push({ target, fire: () => { if (this.live) this.callback(); } });
+        this.callback();
+      }
+      disconnect() { this.live = false; }
+    });
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (!this.classList.contains('game-shell__zoom-container')) return { width: 0, height: 0 } as DOMRect;
+      if (this.querySelector('[data-testid="bs-board-error"]')) return { width: 400, height: 300 } as DOMRect;
+      return (this.querySelector('.good-board') ? { width: 800, height: 600 } : { width: 0, height: 0 }) as DOMRect;
+    });
+    const isRegion = (el: HTMLElement) => el.dataset.testid === 'bs-board';
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) { return isRegion(this) ? region.width : 0; });
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) { return isRegion(this) ? region.height : 0; });
+    enterIframe();
+  });
+
+  afterEach(() => {
+    vi.stubGlobal('ResizeObserver', priorObserver);
+  });
+
+  async function mountBoard(board: BoardComponent) {
+    const wrapper = mountPlatformShell({ board });
+    mounted.push(wrapper);
+    await nextTick();
+    fromHost({ type: 'init', seat: 1 });
+    return {
+      zoom: () => (wrapper.find('.game-shell__zoom-container').element as HTMLElement).style.getPropertyValue('--zoom-level'),
+      /** The player's own zoom, as the controls menu sets it. */
+      zoomByHand: (level: number) => wrapper.findComponent(ControlsMenu).vm.$emit('update:zoom', level),
+    };
+  }
+
+  /** Later than any settle timer a fit before it started, so a finished startup is finished. */
+  const settle = () => new Promise((resolve) => setTimeout(resolve, SETTLE_MS + 1));
+
+  it('a board that throws on its first state and draws on the second gets the zoom a normal first render gives', async () => {
+    // Like many real boards, it draws nothing until the first state arrives.
+    const { zoom } = await mountBoard(defineComponent({
+      props: { gameView: { type: Object, default: null } },
+      setup: (props) => () => (props.gameView ? h(ThrowingBoard, { gameView: props.gameView }) : null),
+    }));
+    fromHost(frame(true, 'Go first'));
+    await flushPromises();
+    await relayout('board and region');
+    await settle();
+
+    fromHost(frame(false, 'Go second'));
+    await flushPromises();
+    await relayout('board');
+    expect(zoom()).toBe('1');
+  });
+
+  it('a board that throws after startup, while the region shrinks, comes back fitted to the new region, not to the message', async () => {
+    // This board draws before any state (as Hex does), so startup ends on it.
+    const { zoom } = await mountBoard(ThrowingBoard);
+    await relayout('board and region');
+    await settle();
+    expect(zoom()).toBe('1');
+
+    fromHost(frame(true, 'Go first'));
+    await flushPromises();
+    Object.assign(region, { width: 600, height: 450 });
+    await relayout('board and region');
+
+    fromHost(frame(false, 'Go second'));
+    await flushPromises();
+    await relayout('board');
+    expect(zoom()).toBe('0.75');
+  });
+
+  it('a board that recovers after the player set the zoom by hand keeps the player\'s zoom', async () => {
+    const { zoom, zoomByHand } = await mountBoard(ThrowingBoard);
+    await relayout('board and region');
+    await settle();
+
+    fromHost(frame(true, 'Go first'));
+    await flushPromises();
+    zoomByHand(1.5);
+    await nextTick();
+    Object.assign(region, { width: 600, height: 450 });
+    await relayout('board and region');
+
+    fromHost(frame(false, 'Go second'));
+    await flushPromises();
+    await relayout('board');
+    expect(zoom()).toBe('1.5');
   });
 });
 
