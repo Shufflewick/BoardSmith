@@ -17,7 +17,9 @@
  * parameter (including what a call passes it), destructuring default, name
  * destructured at any depth from a literal or a variable, by declaration or
  * assignment, class field, object property, or the return of a function
- * declaration, method or getter. A property is judged by its own value, not by
+ * declaration, method or getter. An array `push`ed a duration holds one, and
+ * so does each element a for-of or an element callback (`forEach`, `map`, ...)
+ * takes from it (#1130). A property is judged by its own value, not by
  * what else its object holds; an array element taken from a variable rather
  * than a literal takes the whole array. TypeScript's checker resolves
  * each name to the declaration it refers to, so shadowing follows the
@@ -81,6 +83,7 @@ const declaredValue = (node) => (HAS_VALUE.some((is) => is(node)) ? node.initial
 const RETURNS = [ts.isFunctionDeclaration, ts.isMethodDeclaration, ts.isGetAccessorDeclaration];
 const isCompound = (kind) => kind >= ts.SyntaxKind.FirstCompoundAssignment && kind <= ts.SyntaxKind.LastCompoundAssignment;
 
+const ELEMENT_CALLBACKS = ['forEach', 'map', 'flatMap', 'filter', 'find', 'some', 'every'];
 const EXPECTS = ['expect', 'expect.soft', 'vi.expect', 'vi.expect.soft'];
 /** Every `expect(...)` in a source whose subject measures a clock difference, with any matcher. */
 const wallClockBudgets = (source, fileName) => scanForBudgets(source, fileName).budgets;
@@ -139,7 +142,7 @@ function scanForBudgets(source, fileName = 'scanned.ts') {
    * The names `node` gives values to, and those values: a declaration, parameter, field, property or default (each
    * name of a pattern its own part), what a function declaration, method or getter returns, what a call passes to the
    * function's parameters, `x = v`, or `x += v` (whose value is the whole expression, so `x -= performance.now()` is a
-   * subtraction).
+   * subtraction), what `arr.push(v)` gives `arr`, and the elements a for-of or an element callback takes from an array.
    */
   const assignmentsAt = (node) => {
     const value = declaredValue(node);
@@ -147,8 +150,27 @@ function scanForBudgets(source, fileName = 'scanned.ts') {
     if (RETURNS.some((is) => is(node)) && node.name && node.body) {
       return [{ target: node.name, values: returnsOf(node) }];
     }
-    if (ts.isCallExpression(node) || ts.isNewExpression(node)) return passed(node);
+    if (ts.isCallExpression(node)) return [...passed(node), ...arrayCallAssignments(node)];
+    if (ts.isNewExpression(node)) return passed(node);
+    if (ts.isForOfStatement(node)) return forOfAssignments(node);
     return ts.isBinaryExpression(node) ? binaryAssignments(node) : [];
+  };
+  /** `for (x of arr)` gives `x` each element of `arr`. */
+  const forOfAssignments = ({ initializer, expression }) => {
+    const target = ts.isVariableDeclarationList(initializer) ? initializer.declarations[0].name : initializer;
+    return unpack(target, elementsAt([expression], 0, true));
+  };
+  /**
+   * The array methods the checker cannot resolve without a standard library: `arr.push(v)` gives `arr` the value `v`,
+   * and an element callback (`arr.forEach((x) => ...)`) gives its first parameter each element of `arr`.
+   */
+  const arrayCallAssignments = (call) => {
+    if (!ts.isPropertyAccessExpression(call.expression)) return [];
+    const { expression: array, name } = call.expression;
+    if (name.text === 'push') return unpack(array, call.arguments);
+    const callback = call.arguments[0] && bare(call.arguments[0]);
+    if (!ELEMENT_CALLBACKS.includes(name.text) || !callback || !ts.isFunctionLike(callback) || !callback.parameters[0]) return [];
+    return unpack(callback.parameters[0].name, elementsAt([array], 0, true));
   };
   /** `x = v` gives `x` the value `v`; `x += v` gives it the whole expression. */
   const binaryAssignments = (node) => {
@@ -592,6 +614,36 @@ describe('wallClockBudgets', () => {
     expect(wallClockBudgets(`${method}\nexpect(new H().wait()).toBe(true);`)).toEqual([]);
     const deadline = 'function waitUntil(end) { while (Date.now() < end) {} return done; }';
     expect(wallClockBudgets(`${deadline}\nexpect(waitUntil(Date.now() + 5)).toBe(true);`)).toEqual([]);
+  });
+
+  it('finds durations pushed into an array and asserted through Math.max (#1130)', () => {
+    const source = [
+      'const times = [];',
+      'for (let i = 0; i < 10; i++) { const t = performance.now(); work(); times.push(performance.now() - t); }',
+      'expect(Math.max(...times)).toBeLessThan(50);',
+    ].join('\n');
+    expect(wallClockBudgets(source)).toHaveLength(1);
+  });
+
+  it('finds a duration taken by an array callback (#1130)', () => {
+    expect(wallClockBudgets('const d = Date.now() - s;\n[d].forEach((x) => expect(x).toBeLessThan(5));')).toHaveLength(1);
+    expect(wallClockBudgets('const ds = [Date.now() - s];\nds.map((x) => { expect(x).toBeLessThan(5); });')).toHaveLength(1);
+  });
+
+  it('finds a duration taken by a for-of over a durations array (#1130)', () => {
+    const source = ['const durations = [];', 'durations.push(Date.now() - s);', 'for (const x of durations) expect(x).toBeLessThan(5);'];
+    expect(wallClockBudgets(source.join('\n'))).toHaveLength(1);
+  });
+
+  it('does not flag an array of counts asserted beside a clock read (#1130)', () => {
+    const source = [
+      'const calls = [];',
+      'const t = performance.now();',
+      'for (const n of [1, 2]) calls.push(n);',
+      'calls.forEach((c) => expect(c).toBeLessThan(5));',
+      'expect(Math.max(...calls)).toBeLessThan(5);',
+    ].join('\n');
+    expect(wallClockBudgets(source)).toEqual([]);
   });
 
   it('leaves a timestamp checked against the clock alone', () => {
