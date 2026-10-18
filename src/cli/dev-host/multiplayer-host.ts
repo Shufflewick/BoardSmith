@@ -31,6 +31,7 @@ import {
 } from '../../session/index.js';
 import { createNodeWorldClock, type WorldHostClock } from './node-world-clock.js';
 import { runsAtOnce, type HostWorkGate } from '../../session/host-work-gate.js';
+import { isReadOnlyOp } from '../../session/stateless-ops.js';
 import { heldClock, type RulesReloadNotice } from './rules-reload-queue.js';
 import { dueSeats, type SeatActivityState } from '../../engine/index.js';
 import { seatDisplayName } from '../../engine/element/seat-defaults.js';
@@ -1370,7 +1371,8 @@ export class MultiplayerHost {
         { ...hostOptions, debug: this.debugOn() },
       );
       if (op.type === 'start' && !raw.success) startFailure = raw;
-      return this.commitAtGameOver(raw);
+      // A read-only op on a finished game reports the end state; it ended nothing (#1179).
+      return isReadOnlyOp(op) ? raw : this.commitAtGameOver(raw);
     };
 
     const session = createDevSession({
