@@ -109,6 +109,12 @@ function isAppendToDrawn(source: readonly HistoryMessage[], offset: number): boo
   return incoming.text === drawn.text && incoming.type === drawn.type;
 }
 
+function scrollToNewest() {
+  if (messagesContainer.value) {
+    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
+  }
+}
+
 watch(
   [() => props.messages, () => props.messageOffset ?? 0],
   ([newMessages, offset]) => {
@@ -137,11 +143,7 @@ watch(
       }
       nextIndex = end;
 
-      nextTick(() => {
-        if (messagesContainer.value) {
-          messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
-        }
-      });
+      nextTick(scrollToNewest);
     }
   },
   { immediate: true }
@@ -281,7 +283,7 @@ async function copyHistory() {
 // remain owned here — only the trigger moves to DebugPanel (single source
 // of truth, DEV-06).
 const hasMessages = computed(() => processedMessages.value.length > 0);
-defineExpose({ clearHistory, copyHistory, hasMessages });
+defineExpose({ clearHistory, copyHistory, hasMessages, scrollToNewest });
 </script>
 
 <template>
