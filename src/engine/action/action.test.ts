@@ -1165,7 +1165,8 @@ describe('Action Executor', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('"test" action could not be completed');
-      expect(result.error).toContain('Nothing was changed');
+      // Only the runner knows whether the action was rolled back, so only it may say so (#989).
+      expect(result.error).not.toContain('Nothing was changed');
     });
 
     it('always carries a PlayerFacingError\'s own message, which was written to be read', () => {

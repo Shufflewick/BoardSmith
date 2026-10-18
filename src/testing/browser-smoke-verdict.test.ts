@@ -592,7 +592,7 @@ describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
     });
 
     it("names what the walk typed in an action whose rules crashed, without suggesting the game wants another value", () => {
-      const crash = `${rulesErrorSentence('kindle')} Nothing was changed. (the hearth cracked)`;
+      const crash = `${rulesErrorSentence('kindle')} (the hearth cracked) Nothing was changed.`;
       expect(actionFailed('kindle', crash, [{ field: 'logs', value: '1', from: 'walk', kind: 'number' }], 0)).toBe(
         `The panel offered "kindle", and taking it failed: ${crash} The walk typed "1" in its field "logs".`,
       );
