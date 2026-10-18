@@ -40,10 +40,10 @@ export interface FocusTrapOptions {
 const FOCUSABLE_SELECTOR = [
   'a[href]',
   'area[href]',
-  'button:not([disabled])',
-  'input:not([disabled])',
-  'select:not([disabled])',
-  'textarea:not([disabled])',
+  'button:not(:disabled)',
+  'input:not(:disabled)',
+  'select:not(:disabled)',
+  'textarea:not(:disabled)',
   'iframe',
   'object',
   'embed',
@@ -51,8 +51,17 @@ const FOCUSABLE_SELECTOR = [
   '[contenteditable]',
 ].join(', ');
 
+// A hidden or inert match cannot take focus, so the Tab wrap must not stop on it (#1024).
+function canTakeFocus(el: HTMLElement): boolean {
+  if (el.closest('[inert]')) return false;
+  for (let node: HTMLElement | null = el; node; node = node.parentElement) {
+    if (getComputedStyle(node).display === 'none') return false;
+  }
+  return getComputedStyle(el).visibility === 'visible';
+}
+
 function getFocusable(container: HTMLElement): HTMLElement[] {
-  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+  return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(canTakeFocus);
 }
 
 // ---------------------------------------------------------------------------
@@ -66,6 +75,8 @@ function getFocusable(container: HTMLElement): HTMLElement[] {
 // opens inside an older trap's background (the game ends while ControlsMenu is
 // open) is reachable until it closes. Only `inert` this module added is ever
 // removed; `inert` the page set itself is left alone, even on the dialog's path.
+// An element marked `data-bs-outside-modal` (the dev-only Debug panel, #1106)
+// is not part of the page a dialog covers, so it is never made inert.
 // ---------------------------------------------------------------------------
 
 const openTraps: Array<Ref<HTMLElement | null>> = [];
@@ -73,7 +84,7 @@ let inertAdded: HTMLElement[] = [];
 
 function inertSiblingsOf(node: HTMLElement, parent: HTMLElement) {
   for (const sibling of Array.from(parent.children) as HTMLElement[]) {
-    if (sibling === node || sibling.hasAttribute('inert')) continue;
+    if (sibling === node || sibling.hasAttribute('inert') || sibling.hasAttribute('data-bs-outside-modal')) continue;
     sibling.setAttribute('inert', '');
     inertAdded.push(sibling);
   }

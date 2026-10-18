@@ -42,6 +42,7 @@ import { gitOutput as git, gitSucceeds } from './git-output.js';
 import { sha256Hex } from './hash.js';
 import { uncommittedContentHash } from './mutant-cache.js';
 import { withDirRemovedAfter } from './command-build-dir.js';
+import { readIfExists } from './read-if-exists.js';
 
 /** Where the catalogue is on a machine set up the usual way. */
 export const DEFAULT_CATALOGUE_ROOT = join(homedir(), 'BoardSmithGames');
@@ -148,7 +149,7 @@ async function readCatalogue(root: string): Promise<{ repos: CatalogueRepo[]; ga
   const notChecked: CatalogueRun['notChecked'] = [];
   for (const slug of (await fs.readdir(root)).sort()) {
     // stat, not the directory entry: a game the catalogue holds as a link to a checkout is a game too.
-    if (!(await fs.stat(join(root, slug)).catch(() => undefined))?.isDirectory()) continue;
+    if (!(await readIfExists(join(root, slug), fs.stat))?.isDirectory()) continue;
     const folder = await readFolder(slug, realpathSync(join(root, slug)));
     if (folder.repo !== undefined) repos.push(folder.repo);
     if (folder.notChecked !== undefined) notChecked.push({ slug, reason: folder.notChecked });

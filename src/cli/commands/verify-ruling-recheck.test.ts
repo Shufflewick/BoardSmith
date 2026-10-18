@@ -266,6 +266,16 @@ describe('resolveFreshTranscription', () => {
       expect(result.reason).toContain(`\`git restore ${slicesRel}\``);
     });
 
+    it('a link to a folder inside it: names the link instead of walking into it (#1048)', async () => {
+      await fs.symlink(runDir, join(slices, 'loop'));
+      const result = await resolveFreshTranscription(project, runId);
+      expect(result.scopeLimited).toBe(true);
+      if (!result.scopeLimited) return;
+      expectNeverCalledFake(result.reason);
+      expect(result.reason).toContain(`${slicesRel} could not be read: ${join(slices, 'loop')} is a link to a folder`);
+      expect(result.reason).not.toMatch(/permissions/);
+    });
+
     it('unreadable: says it could not be read, not that it is missing', async () => {
       await fs.chmod(slices, 0o000);
       try {

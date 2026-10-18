@@ -9,34 +9,10 @@
       ]
     },
     {
-      "content": "054c5432595bcc6a",
-      "lines": 20,
-      "files": [
-        "src/ui/components/helpers/HintOverlay.vue",
-        "src/ui/components/helpers/TutorialOverlay.vue"
-      ]
-    },
-    {
-      "content": "0901f80cc8826052",
-      "lines": 28,
-      "files": [
-        "src/ui/components/helpers/HintOverlay.vue",
-        "src/ui/components/helpers/TutorialOverlay.vue"
-      ]
-    },
-    {
       "content": "1207ddfa1fa44b57",
       "lines": 8,
       "files": [
         "src/cli/commands/verify-enumerate.ts"
-      ]
-    },
-    {
-      "content": "223d5ca54c33f5ed",
-      "lines": 30,
-      "files": [
-        "src/ui/components/helpers/HeatmapOverlay.vue",
-        "src/ui/components/helpers/TutorialOverlay.vue"
       ]
     },
     {
@@ -51,7 +27,7 @@
       "content": "30138a2100b37a20",
       "lines": 11,
       "files": [
-        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
+        "src/ui/components/auto-ui/renderers/CardBack.vue",
         "src/ui/components/auto-ui/renderers/HandRenderer.vue"
       ]
     },
@@ -68,23 +44,6 @@
       "lines": 15,
       "files": [
         "src/ui/composables/useFLIP.ts"
-      ]
-    },
-    {
-      "content": "414676b490ecfa18",
-      "lines": 23,
-      "files": [
-        "src/ui/components/helpers/HintOverlay.vue",
-        "src/ui/components/helpers/TutorialOverlay.vue"
-      ]
-    },
-    {
-      "content": "4613214a68f3d717",
-      "lines": 22,
-      "files": [
-        "src/ui/components/helpers/HeatmapOverlay.vue",
-        "src/ui/components/helpers/HintOverlay.vue",
-        "src/ui/components/helpers/TutorialOverlay.vue"
       ]
     },
     {
@@ -115,14 +74,6 @@
       "lines": 13,
       "files": [
         "src/ui/components/PlayShell.vue"
-      ]
-    },
-    {
-      "content": "75cfd652675ad8cf",
-      "lines": 26,
-      "files": [
-        "src/ui/components/helpers/HintOverlay.vue",
-        "src/ui/components/helpers/TutorialOverlay.vue"
       ]
     },
     {
@@ -239,26 +190,11 @@
       ]
     },
     {
-      "content": "b8843bcd1232e798",
-      "lines": 29,
-      "files": [
-        "src/ui/components/auto-ui/useAutoRendererAnimations.ts"
-      ]
-    },
-    {
       "content": "c3ce706ae9b61683",
       "lines": 18,
       "files": [
         "src/ui/components/auto-ui/renderers/DieRenderer.vue",
         "src/ui/components/auto-ui/renderers/PieceRenderer.vue"
-      ]
-    },
-    {
-      "content": "c4f4d5041c85bfef",
-      "lines": 24,
-      "files": [
-        "src/ui/components/helpers/HintOverlay.vue",
-        "src/ui/components/helpers/TutorialOverlay.vue"
       ]
     },
     {
@@ -293,22 +229,6 @@
       ]
     },
     {
-      "content": "cdf91f246a8fa43a",
-      "lines": 22,
-      "files": [
-        "src/ui/components/helpers/HeatmapOverlay.vue",
-        "src/ui/components/helpers/TutorialOverlay.vue"
-      ]
-    },
-    {
-      "content": "d4073999f27adcf2",
-      "lines": 103,
-      "files": [
-        "src/ui/components/helpers/HintOverlay.vue",
-        "src/ui/components/helpers/TutorialOverlay.vue"
-      ]
-    },
-    {
       "content": "db1eb8419dc57e42",
       "lines": 5,
       "files": [
@@ -336,14 +256,6 @@
       "lines": 9,
       "files": [
         "src/ui/composables/useFLIP.ts"
-      ]
-    },
-    {
-      "content": "fb906bc806168b64",
-      "lines": 24,
-      "files": [
-        "src/ui/components/helpers/HintOverlay.vue",
-        "src/ui/components/helpers/TutorialOverlay.vue"
       ]
     }
   ]

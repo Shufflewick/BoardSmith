@@ -121,6 +121,12 @@ describe('verifyExampleRunCommand', () => {
     await expectRunRefused(project, /missing.*boardsmith verify-example-emit --chunk punch/s);
   });
 
+  it('refuses to run when it cannot read the emitted file, rather than calling it missing', async () => {
+    await recordExampleReplayVerdicts(project, [notRunRecord(2, PASSING)]);
+    await fs.mkdir(join(project, 'tests', 'examples', 'punch.examples.test.ts'), { recursive: true });
+    await expectRunRefused(project, /Could not read .*tests\/examples\/punch\.examples\.test\.ts \(EISDIR\)/);
+  });
+
   it('refuses to run a file that no longer matches the ledger, writing nothing', async () => {
     await recordExampleReplayVerdicts(project, [notRunRecord(2, PASSING)]);
     await verifyExampleEmitCommand({ project, chunk: 'punch' });
