@@ -551,6 +551,7 @@ function confirmDraft(): void {
  * per-editor. There is no per-editor copy of this left to forget.
  */
 const editorInputError = ref<string | null>(null);
+const editorErrorEl = ref<HTMLElement | null>(null);
 
 watch(() => actionController.currentPickDraft.value, () => {
   editorInputError.value = null;
@@ -995,6 +996,8 @@ function submitEditorValue() {
   const refusal = editorValueRefusal();
   if (refusal !== null) {
     editorInputError.value = refusal;
+    // The bar caps its height and the message sits below Done, so bring it into view (#1159).
+    void nextTick(() => editorErrorEl.value?.scrollIntoView({ block: 'nearest' }));
     return;
   }
 
@@ -2072,7 +2075,13 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           <span v-if="currentPick.multiline" class="sr-only" role="status">
             {{ textLimitAnnouncement }}
           </span>
-          <p v-if="editorInputError" :id="editorErrorId" class="selection-error" role="alert">
+          <p
+            v-if="editorInputError"
+            :id="editorErrorId"
+            ref="editorErrorEl"
+            class="selection-error"
+            role="alert"
+          >
             {{ editorInputError }}
           </p>
         </div>

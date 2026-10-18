@@ -25,6 +25,9 @@ import { useActionController } from '../../composables/useActionController.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 import type { EnrichedActionMetadata } from '../../composables/useActionControllerTypes.js';
 
+// jsdom lays nothing out, so it has no `scrollIntoView`; the panel calls it on a refusal (#1159).
+Element.prototype.scrollIntoView = vi.fn();
+
 /**
  * ONE CONTROLLER, AND PANELS THAT COME AND GO OVER IT.
  *
