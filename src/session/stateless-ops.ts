@@ -12,8 +12,9 @@
 import type { Game, GameClass, TutorialDefinition, Annotation, FlowState, FollowUpOffer } from '../engine/index.js';
 import type { HistoryEntry } from '../engine/action/types.js';
 import { ErrorCode, type ChoiceWithRefs, type ValidElement } from '../types/protocol.js';
-import { dueSeats, canSeatAct, availableActionsForSeat, flowBoundaryKey, toPublicFlowState, PlayerFacingError } from '../engine/index.js';
+import { canSeatAct, availableActionsForSeat, flowBoundaryKey, toPublicFlowState, PlayerFacingError } from '../engine/index.js';
 import { withDevDetail } from '../engine/action/rules-error.js';
+import { dueSeatOffers, describeRefused } from '../engine/flow/seat-activity.js';
 import type { BoundaryKeyState } from '../engine/index.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState, WarningEntry } from './types.js';
 import { validateTutorialDefinition, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
@@ -750,11 +751,27 @@ function refuseStaleSubmission(snapshot: GameStateSnapshot | null, op: Executabl
   return errorResult(STALE_SUBMISSION_MESSAGE, 'protocol', ErrorCode.STALE_SUBMISSION);
 }
 
+/**
+ * The due bot seat to search: the first that can move, since a seat offered
+ * only disabled actions has nothing to search (#1133). When no due seat at
+ * all can move, the first due bot seat is reported stalled, with the reasons,
+ * so a table stuck on disabled actions is said out loud rather than gone quiet.
+ */
 function selectDueBotSeat(
   flowState: BotFlowState,
+  game: Game,
   botSeats: Set<number>,
-): number | undefined {
-  return dueSeats(flowState).find(seat => botSeats.has(seat));
+): { seat: number } | { stalled: { seat: number; reason: string } } | undefined {
+  const offers = dueSeatOffers(flowState, game);
+  const movable = offers.find((offer) => offer.canMove && botSeats.has(offer.seat));
+  if (movable) return { seat: movable.seat };
+  const dueBot = offers.find((offer) => botSeats.has(offer.seat));
+  if (!dueBot || offers.some((offer) => offer.canMove)) return undefined;
+  const refused = describeRefused(offers);
+  const reason =
+    'No seat the game is waiting on can move: none has an enabled action or a follow-up.' +
+    (refused.length > 0 ? ` Refused: ${refused.join('; ')}.` : '');
+  return { stalled: { seat: dueBot.seat, reason } };
 }
 
 // ---------------------------------------------------------------------------
@@ -1252,8 +1269,10 @@ async function handleBotSuggest(
   const runner = runnerFromSnapshot(snapshot, def);
   const flowState = runner.getFlowState() as BotFlowState | undefined;
   if (!flowState?.awaitingInput || flowState.complete) return { success: true };
-  const botPlayer = selectDueBotSeat(flowState, new Set(op.seats.map((s) => s.seat)));
-  if (botPlayer === undefined) return { success: true };
+  const due = selectDueBotSeat(flowState, runner.game as Game, new Set(op.seats.map((s) => s.seat)));
+  if (due === undefined) return { success: true };
+  if ('stalled' in due) return { success: true, botStalled: due.stalled };
+  const botPlayer = due.seat;
 
   const seatLevel = op.seats.find((s) => s.seat === botPlayer)?.level;
   // `def.bot` MUST be threaded through — it carries the game's MCTS hooks

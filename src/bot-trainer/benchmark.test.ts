@@ -166,6 +166,26 @@ class ActThenAcknowledgeGame extends Game<ActThenAcknowledgeGame, AcknowledgingP
   }
 }
 
+/**
+ * Both seats are due in one simultaneous step, but seat 1's only action is
+ * greyed out by its own `.disabled()` reason; seat 2's pick ends the game,
+ * and seat 2 wins (#1133).
+ */
+class SitOutGame extends Game<SitOutGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerActions(
+      Action.create<SitOutGame>('pick')
+        .disabled((ctx) => (ctx.player.seat === 1 ? 'Seat 1 sits this round out.' : false))
+        .chooseFrom('card', { choices: ['ace', 'king'] })
+        .execute((_a, ctx) => {
+          ctx.game.finish([ctx.player]);
+        }),
+    );
+    this.setFlow({ root: simultaneousActionStep({ actions: ['pick'] }) });
+  }
+}
+
 const noWeights: ObjectiveWeight[] = [];
 
 const benchmark = (gameCount: number, outcome: typeof DecisiveGame.outcome) => {
@@ -301,6 +321,18 @@ describe('benchmarkBot', () => {
     expect(result.gamesPlayed).toBe(2);
     expect(result.winRateAsPlayer0).toBe(1);
     expect(result.winRateAsPlayer1).toBe(0);
+  });
+
+  it('plays the due seat that can move when the first due seat is offered only disabled actions (#1133)', async () => {
+    const result = await benchmarkBot(SitOutGame, 'sit-out', undefined, noWeights, {
+      gameCount: 2,
+      mctsIterations: 1,
+      maxActions: 10,
+      seed: 'sit-out',
+    });
+    expect(result.failures).toEqual([]);
+    expect(result.incomplete).toBe(0);
+    expect(result.gamesPlayed).toBe(2);
   });
 
   it('keeps every reported rate inside 0..1', async () => {

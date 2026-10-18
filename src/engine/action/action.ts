@@ -388,7 +388,18 @@ export interface PerformOptions {
    * this, for the seat that owns the follow-up.
    */
   followUp?: FollowUpAction;
+  /**
+   * Called once the checks accept the submission, with the args `execute`
+   * receives, before `onSelect` or `execute` changes the game: how a host
+   * records the move that ran without checking it a second time (#1128). Not
+   * called for an action with a repeating selection, whose picks change the
+   * game while they are checked.
+   */
+  onAccepted?: AcceptedArgs;
 }
+
+/** Receives a submission's args once the action's checks accept them. */
+export type AcceptedArgs = (args: Record<string, unknown>) => void;
 
 /** The element an id a player sent names, or undefined. */
 type SeatIdReader = (id: number) => GameElement | undefined;
@@ -1314,6 +1325,7 @@ export class ActionExecutor {
     const checked = this.checkSubmission(action, player, args, options);
     if ('error' in checked) return { success: false, error: checked.error };
     const resolvedArgs = checked.args;
+    options?.onAccepted?.(resolvedArgs);
 
     // Fire onSelect for each selection that has it (before execute).
     // A throwing onSelect must ABORT the action (fail loud): fire onCancel for
@@ -1631,6 +1643,9 @@ export class ActionExecutor {
   isActionAvailable(action: ActionDefinition, player: Player): boolean {
     if (!this.conditionHolds(action, player)) return false;
 
+    // Its own `.disabled()` reason keeps it offered, greyed, even with no enabled pick, so the reason reaches the player (#1090).
+    if (this.game.getActionDisabledReason(action, player) !== null) return true;
+
     // Check if there's at least one valid path through all selections.
     // Pass action.name so tutorial gate disabled reasons are included when
     // filtering enabled choices — hasValidSelectionPath checks disabled===false.
@@ -1680,7 +1695,7 @@ export class ActionExecutor {
     // whether the action is offered is decided by the very walk that offers it,
     // so a trace can never name a reason the offer does not act on.
     this.traceSelectionPath(action.selections, player, trace.selections);
-    trace.available = this.hasValidSelectionPath(action.selections, player, {}, 0, action.name);
+    trace.available = this.isActionAvailable(action, player);
     return trace;
   }
 

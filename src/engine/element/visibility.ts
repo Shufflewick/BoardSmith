@@ -114,10 +114,11 @@ export function copyVisibilityState(state: VisibilityState): VisibilityState {
  * the checkpoint/restore path, which is the one that must be exact, reads the
  * full `toJSON()` and never comes through here.
  *
- * A COUNT-ONLY ZONE STAYS COUNT-ONLY WHEN IT DENIES. `canPlayerSee` refuses
- * 'hidden' and 'count-only' alike, but the serializer shows a count for one and
- * nothing at all for the other, and the children were already written from the
- * LIVE mode before this runs.
+ * A DENIED READER IS TOLD 'count-only' UNLESS THE MODE IS 'hidden'.
+ * `canPlayerSee` refuses 'hidden' and 'count-only' alike, but the serializer
+ * sends nothing at all of a 'hidden' zone and one placeholder per child of any
+ * other zone it denies (#750), so the reader can count those (#1108). An
+ * element denied to a reader never gets here: it is sent as a placeholder.
  *
  * Use ONLY on the per-player serialization path (`toJSONForPlayer`). The
  * full-fidelity `copyVisibilityState` is what the checkpoint/restore path
@@ -141,7 +142,7 @@ export function redactVisibilityForSeat(
  */
 function redactedModeForSeat(state: VisibilityState, seat: number): VisibilityMode {
   if (state.exceptPlayers?.includes(seat)) {
-    return state.mode === 'count-only' ? 'count-only' : 'hidden';
+    return state.mode === 'hidden' ? 'hidden' : 'count-only';
   }
   if (state.addPlayers?.includes(seat)) return 'all';
   return state.mode;

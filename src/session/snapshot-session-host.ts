@@ -119,6 +119,15 @@ function completesAction(op: Op, res: OpResult): boolean {
 }
 
 /**
+ * Whether `op` replaces the position every seat was looking at: an undo or a
+ * rewind goes back to another one, and a tutorial's setup rewrites the board
+ * (#1082). What any seat holds against the old position goes with it.
+ */
+function replacesPosition(op: Op): boolean {
+  return op.type === 'undo' || op.type === 'debugRewind' || op.type === 'restoreEarlier' || op.type === 'startTutorial';
+}
+
+/**
  * The ops that change the game and run through `executeOp`: every executable
  * op except the read-only ones and the teaching ops, which the host keeps as
  * its own state rather than as a move.
@@ -136,7 +145,7 @@ type MutatingOp = Exclude<ExecutableOp, { type: ReadOnlyOpType | 'hint' | 'heatm
  * when it names a seat other than the caller (#738, #950). The `Record` makes
  * every new op choose.
  */
-const OP_SENDER: Record<Op['type'], 'seat' | 'host'> = {
+const OP_SENDER = {
   start: 'host',
   action: 'seat',
   expireSeat: 'seat',
@@ -165,7 +174,11 @@ const OP_SENDER: Record<Op['type'], 'seat' | 'host'> = {
   demoStop: 'seat',
   demoControl: 'seat',
   convertSeatToBot: 'seat',
-};
+} as const satisfies Record<Op['type'], 'seat' | 'host'>;
+/** The ops a seat may send through `handleOp`, read from {@link OP_SENDER} (#1109). */
+export type SeatOpType = { [K in Op['type']]: (typeof OP_SENDER)[K] extends 'seat' ? K : never }[Op['type']];
+/** An op a seat may send through `handleOp`. */
+export type SeatOp = OpOfType<SeatOpType>;
 const HOST_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set(
   (Object.keys(OP_SENDER) as Op['type'][]).filter((type) => OP_SENDER[type] === 'host'),
 );
@@ -1111,7 +1124,7 @@ export class SnapshotSessionHost {
    * State-mutating ops broadcast and persist the new state, THEN resolve,
    * without waiting for the bot run they wake ({@link settled}, #698).
    */
-  async handleOp<T extends Op['type']>(seat: number, op: OpOfType<T>): Promise<OpResultFor<T>> {
+  async handleOp<T extends SeatOpType>(seat: number, op: OpOfType<T>): Promise<OpResultFor<T>> {
     // `handle` answers each op from the branch that matched its type. TypeScript
     // narrows `op` there but cannot carry that back to a generic return type,
     // so it is stated here, once.
@@ -1366,7 +1379,7 @@ export class SnapshotSessionHost {
       }
     }
 
-    if (op.type === 'undo' || op.type === 'debugRewind' || op.type === 'restoreEarlier') this.#forgetReplacedTree();
+    if (replacesPosition(op)) this.#forgetReplacedTree();
 
     await this.apply(res, seat ?? undefined, pending);
     return res;
@@ -1400,10 +1413,11 @@ export class SnapshotSessionHost {
 
   /**
    * Drop what every seat holds against a runner that was just replaced (undo,
-   * rewind, a demo's step back, a rules reload): hints, heatmaps, narration and
-   * half-made selections, which hold element ids from the old game tree. `apply`
-   * drops only the acting seat's selection, so another seat would otherwise stay
-   * mid-chain against a tree that no longer exists. A rules reload that restored
+   * rewind, a tutorial start, a demo's step back, a rules reload): hints,
+   * heatmaps, narration and half-made selections, which hold element ids from
+   * the old game tree. `apply` drops only the acting seat's selection, so
+   * another seat would otherwise stay mid-chain against a tree that no longer
+   * exists. A rules reload that restored
    * the saved tree keeps the selections: the tree they point into is unchanged.
    */
   #forgetReplacedTree({ keepPendingSelections = false } = {}): void {

@@ -61,28 +61,31 @@ function bundle(project: string, exports: string[]) {
   });
 }
 
+// Each bundle builds the whole engine, so all are built here, where no test timeout applies (#1127).
+const thisInstall = await bundle(linkedToThisCheckout, [simShard]);
+const thisInstallMiscased = caseInsensitive ? await bundle(linkedToThisCheckoutMiscased, [simShard]) : undefined;
+const otherInstallRefusal = await bundle(linkedToOtherInstall, [simShard]).then(() => undefined, (error: unknown) => error);
+const otherInstallRulesOnly = await bundle(linkedToOtherInstall, []);
+
 describe('importRuntimeBundle: one boardsmith per bundle (#696)', () => {
-  it('builds CLI-side source with rules that use this same install', async () => {
-    const module = await bundle(linkedToThisCheckout, [simShard]);
-    expect(typeof module.playShard).toBe('function');
+  it('builds CLI-side source with rules that use this same install', () => {
+    expect(typeof thisInstall.playShard).toBe('function');
   });
 
-  it.skipIf(!caseInsensitive)('treats a link to this checkout in other letter case as this same install', async () => {
-    const module = await bundle(linkedToThisCheckoutMiscased, [simShard]);
-    expect(typeof module.playShard).toBe('function');
+  it.skipIf(!caseInsensitive)('treats a link to this checkout in other letter case as this same install', () => {
+    expect(typeof thisInstallMiscased!.playShard).toBe('function');
   });
 
-  it("refuses to build CLI-side source with rules that use another install, naming both", async () => {
-    await expect(bundle(linkedToOtherInstall, [simShard])).rejects.toThrow(
+  it("refuses to build CLI-side source with rules that use another install, naming both", () => {
+    expect(otherInstallRefusal).toBeInstanceOf(Error);
+    expect((otherInstallRefusal as Error).message).toContain(
       `This game's rules import boardsmith from ${otherInstall}, but this boardsmith command runs from ${REPO}`,
     );
-    await expect(bundle(linkedToOtherInstall, [simShard])).rejects.toThrow(`npm install ${REPO}`,
-    );
+    expect((otherInstallRefusal as Error).message).toContain(`npm install ${REPO}`);
   });
 
-  it('still loads rules alone from another install, since nothing of the CLI is in that bundle', async () => {
-    const module = await bundle(linkedToOtherInstall, []);
-    expect(module.gameDefinition.gameType).toBe('one-engine');
+  it('still loads rules alone from another install, since nothing of the CLI is in that bundle', () => {
+    expect(otherInstallRulesOnly.gameDefinition.gameType).toBe('one-engine');
   });
 });
 

@@ -209,3 +209,60 @@ describe('MCTSBot: a step held open after every seat is done', () => {
     }
   });
 });
+
+/**
+ * Three seats pick at once, but seat 1's only action is greyed out by its own
+ * `.disabled()` reason, so the step offers it and seat 1 can never take it
+ * (#1133, made common by #1090). Over once seats 2 and 3 have picked.
+ */
+class SitOutGame extends Game<SitOutGame, Player> {
+  picked: number[] = [];
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerActions(
+      Action.create<SitOutGame>('pick')
+        .disabled((ctx) => (ctx.player.seat === 1 ? 'Seat 1 sits this round out.' : false))
+        .chooseFrom('card', { choices: ['ace', 'king', 'queen'] })
+        .execute((_a, ctx) => {
+          (ctx.game as SitOutGame).picked.push(ctx.player.seat);
+        }),
+    );
+    this.setFlow({
+      root: simultaneousActionStep({
+        actions: ['pick'],
+        playerDone: (ctx, player) => (ctx.game as SitOutGame).picked.includes(player.seat),
+      }),
+    });
+  }
+
+  override isFinished(): boolean {
+    return super.isFinished() || this.picked.length === 2;
+  }
+}
+
+describe('MCTSBot: a due seat with only disabled actions (#1133)', () => {
+  it('searches the next due seat that has an enabled move', async () => {
+    const game = new SitOutGame({ playerCount: 3, playerNames: ['A', 'B', 'C'], seed: 'sit-out' });
+    game.startFlow();
+    // Seat 1 is offered pick, greyed out, so it is due but has no move.
+    expect(game.getFlowState()!.awaitingPlayers!.find((p) => p.playerIndex === 1))
+      .toMatchObject({ completed: false, availableActions: ['pick'] });
+
+    const bot = new MCTSBot(game, SitOutGame, 'sit-out', 3, [], {
+      iterations: 50,
+      playoutDepth: 6,
+      seed: 'sit-out-3',
+      timeout: Infinity,
+      async: false,
+    });
+    const { root } = await (bot as unknown as { runSearch(): Promise<{ root: MCTSNode }> }).runSearch();
+
+    expect(root.children.length).toBe(3);
+    for (const child of root.children) {
+      expect(child.currentPlayer).toBe(2);
+      expect(child.allMoves.map((m) => m.args.card)).toEqual(['ace', 'king', 'queen']);
+      expect(child.children.length).toBeGreaterThan(0);
+    }
+  });
+});

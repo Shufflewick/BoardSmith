@@ -342,9 +342,10 @@ export interface AutoWatchOptions {
   shouldFlip?: (from: string, to: string, element: AutoWatchGameElement) => boolean;
 
   /**
-   * Routes for tracking elements that become hidden.
+   * Routes for tracking elements that become hidden, or move between face-down piles.
    * When elements disappear from a container and another container's count increases,
-   * fly from source to destination.
+   * fly from source to destination. A face-down pile's cards carry no stable ids, so
+   * auto-watch never follows them one by one: a flight out of one needs a route here.
    */
   countBasedRoutes?: CountBasedRoute[];
 
@@ -939,8 +940,9 @@ export function useFlyingElements(
     ): void {
       const container = elementContainers.get(root.id) ?? null;
 
-      // Only track elements that are in tracked containers or have been tracked before
-      if (container || elementLocations.has(root.id)) {
+      // Only track elements that are in tracked containers or have been tracked before.
+      // A negative id is a hidden zone's positional placeholder, so it names no card (#1097).
+      if ((container || elementLocations.has(root.id)) && root.id >= 0) {
         result.set(root.id, { element: root, container, isHidden: isHiddenPlaceholder(root) });
       }
 
@@ -980,6 +982,31 @@ export function useFlyingElements(
       const wasHidden = cached?.wasHidden ?? false;
       const isHidden = isHiddenPlaceholder(element);
       return wasHidden !== isHidden;
+    }
+
+    /** A flight between two tracked containers, or null while either is not on screen. */
+    function flightBetween(
+      from: string,
+      to: string,
+      key: string,
+      elementData: FlyingCardData,
+      flip: boolean,
+      element?: string,
+    ): FlyConfig | null {
+      const fromRef = getContainers().find((c) => c.name === from)?.ref;
+      const toRef = getContainers().find((c) => c.name === to)?.ref;
+      if (!fromRef?.value || !toRef?.value) return null;
+      return {
+        id: `auto-fly-${key}-${Date.now()}`,
+        startRect: fromRef.value.getBoundingClientRect(),
+        endRect: () => toRef.value?.getBoundingClientRect() ?? null,
+        elementData,
+        flip,
+        duration: autoWatchDuration,
+        from,
+        to,
+        element,
+      };
     }
 
     const stopWatcher = watch(
@@ -1044,27 +1071,9 @@ export function useFlyingElements(
             // move FROM that stale container — replaying the previous drag's
             // direction. So the move is recorded; only its animation is suppressed.
             if (lastDroppedElementId !== id) {
-              // Element moved between containers - trigger fly animation
-              const fromContainerConfig = getContainers().find((c) => c.name === oldContainer);
-              const toContainerConfig = getContainers().find((c) => c.name === newContainer);
-
-              if (fromContainerConfig?.ref.value && toContainerConfig?.ref.value) {
-                const shouldFlipFn = shouldFlip ?? defaultShouldFlip;
-                const flip = shouldFlipFn(oldContainer, newContainer, element);
-                const elementData = autoWatchGetElementData(element);
-
-                flyConfigs.push({
-                  id: `auto-fly-${id}-${Date.now()}`,
-                  startRect: fromContainerConfig.ref.value.getBoundingClientRect(),
-                  endRect: () => toContainerConfig.ref.value?.getBoundingClientRect() ?? null,
-                  elementData,
-                  flip,
-                  duration: autoWatchDuration,
-                  from: oldContainer,
-                  to: newContainer,
-                  element: String(id),
-                });
-              }
+              const flip = (shouldFlip ?? defaultShouldFlip)(oldContainer, newContainer, element);
+              const flight = flightBetween(oldContainer, newContainer, `${id}`, autoWatchGetElementData(element), flip, String(id));
+              if (flight) flyConfigs.push(flight);
             }
           }
 
@@ -1096,25 +1105,10 @@ export function useFlyingElements(
 
               if (newCount > oldCount) {
                 // Destination gained children - fly from source to destination
-                const fromContainerConfig = getContainers().find((c) => c.name === route.from);
-                const toContainerConfig = getContainers().find((c) => c.name === route.to);
-
-                if (fromContainerConfig?.ref.value && toContainerConfig?.ref.value) {
-                  const elementData = route.getElementData?.() ??
-                    (cachedData ? autoWatchGetElementData(cachedData.element) : { faceUp: false });
-
-                  flyConfigs.push({
-                    id: `auto-fly-count-${id}-${Date.now()}`,
-                    startRect: fromContainerConfig.ref.value.getBoundingClientRect(),
-                    endRect: () => toContainerConfig.ref.value?.getBoundingClientRect() ?? null,
-                    elementData,
-                    flip: route.flip ?? true,
-                    duration: autoWatchDuration,
-                    from: route.from,
-                    to: route.to,
-                    element: String(id),
-                  });
-                }
+                const elementData = route.getElementData?.() ??
+                  (cachedData ? autoWatchGetElementData(cachedData.element) : { faceUp: false });
+                const flight = flightBetween(route.from, route.to, `count-${id}`, elementData, route.flip ?? true, String(id));
+                if (flight) flyConfigs.push(flight);
               }
             }
 
@@ -1132,21 +1126,20 @@ export function useFlyingElements(
           // One flight per card gained, each from a source that lost a card not yet flown (#1027).
           if (flightsBetween(null, container) >= gained(container)) continue;
           const route = countBasedRoutes.find((r) => r.to === container && -gained(r.from) > flightsBetween(r.from, null));
-          const fromContainerConfig = route && getContainers().find((c) => c.name === route.from);
-          const toContainerConfig = getContainers().find((c) => c.name === container);
-          if (!route || !fromContainerConfig?.ref.value || !toContainerConfig?.ref.value) continue;
+          const flight = route && flightBetween(
+            route.from, container, `appear-${id}`, { ...autoWatchGetElementData(element), faceUp: false }, route.flip ?? true, String(id),
+          );
+          if (flight) flyConfigs.push(flight);
+        }
 
-          flyConfigs.push({
-            id: `auto-fly-appear-${id}-${Date.now()}`,
-            startRect: fromContainerConfig.ref.value.getBoundingClientRect(),
-            endRect: () => toContainerConfig.ref.value?.getBoundingClientRect() ?? null,
-            elementData: { ...autoWatchGetElementData(element), faceUp: false },
-            flip: route.flip ?? true,
-            duration: autoWatchDuration,
-            from: route.from,
-            to: container,
-            element: String(id),
-          });
+        // A face-down pile has no card ids to follow: fly what its count lost and the route's destination gained (#1097).
+        for (const route of countBasedRoutes) {
+          const owed = Math.min(-gained(route.from) - flightsBetween(route.from, null), gained(route.to) - flightsBetween(null, route.to));
+          for (let i = 0; i < owed; i++) {
+            const elementData = route.getElementData?.() ?? { faceUp: false };
+            const flight = flightBetween(route.from, route.to, `count-${route.from}-${route.to}-${i}`, elementData, route.flip ?? true);
+            if (flight) flyConfigs.push(flight);
+          }
         }
 
         // Update container counts

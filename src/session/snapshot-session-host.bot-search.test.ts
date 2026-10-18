@@ -12,7 +12,7 @@
  */
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { executeOp, isReadOnlyOp, STALE_SUBMISSION_MESSAGE, type ExecutableOp, type GameDefinitionLike, type Op, type OpSuccess } from './stateless-ops.js';
-import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
+import { SnapshotSessionHost, type SeatOp, type SnapshotSessionAdapters } from './snapshot-session-host.js';
 import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
 import { simultaneousRoundsFixtureDefinition } from './testing/fixtures/simultaneous-rounds-fixture.js';
 import { fixedDeployDefinition } from './testing/fixtures/timed-step-fixture.js';
@@ -200,7 +200,7 @@ describe('a bot search runs outside the one-at-a-time section (#635)', () => {
     await finish(t, pump, pick);
   });
 
-  const humanOps: Array<[string, (host: SnapshotSessionHost) => Op]> = [
+  const humanOps: Array<[string, (host: SnapshotSessionHost) => SeatOp]> = [
     ['a move', (host) => ({ type: 'action', actionName: 'x', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) })],
     ['a timed seat expiring', (host) => ({ type: 'expireSeat', player: 1, idleAction: 'pass', args: {}, boundaryKey: boundaryKeyOfHost(host) })],
     ['an undo', () => ({ type: 'undo', player: 1 })],
@@ -578,8 +578,8 @@ describe('a bot search runs outside the one-at-a-time section (#635)', () => {
   it("on a real game: a round that closes without the bot during its fourth search refuses the bot's move for it, and the bot commits in the next round (#700)", async () => {
     const t = await realTable(fixedDeployDefinition, 2, [2]);
     const pump = t.host.runBotTurns();
-    const commit = (): Op => ({ type: 'action', actionName: 'commit', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(t.host) });
-    const ops: Array<[number, () => Op]> = [
+    const commit = (): SeatOp => ({ type: 'action', actionName: 'commit', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(t.host) });
+    const ops: Array<[number, () => SeatOp]> = [
       [1, commit],
       [1, () => ({ type: 'undo', player: 1 })],
       [1, commit],
