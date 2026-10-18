@@ -1811,7 +1811,8 @@ function setOwnKey(target: Record<string, unknown>, key: string, value: unknown)
  *   class check, which fails across bundled copies of the engine.
  * - Any other element becomes `{ __elementRef: branch }`, or `{ __elementId }`
  *   in world mode, where non-resident partitions shift every branch index. A
- *   seat's view writes an element in the pile as `WITHHELD_PILE_BRANCH`.
+ *   seat's view, in a world too, writes an element in the pile as
+ *   `WITHHELD_PILE_BRANCH`.
  * - A Map, Set or typed array becomes a tagged shape {@link decodeValue}
  *   rebuilds.
  *
@@ -1858,11 +1859,12 @@ function encodeElementRef(
   // world, where non-resident partitions are absent, a path recorded against
   // the full world resolves against a partial one to a different element,
   // silently. Ids do not move.
-  if (ctx?._worldMode) {
-    return { __elementId: value.id };
-  }
+  // Before world mode's id: a seat is never told which element was removed, in a world either (#1043).
   if (withheldFromSeat(value)) {
     return { __elementRef: WITHHELD_PILE_BRANCH };
+  }
+  if (ctx?._worldMode) {
+    return { __elementId: value.id };
   }
   const before = branchesBefore?.[value.id];
   if (before === null) {

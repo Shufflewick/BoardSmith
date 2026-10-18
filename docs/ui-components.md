@@ -1509,7 +1509,7 @@ game.animate('score-reveal', { playerId: player.id, total: 42 });
 - An element the seat can see keeps its own path.
 - An element the seat cannot see is named by the outermost container that conceals it from that seat: a card in another player's hand arrives as the hand, a card in a count-only deck as the deck, a card anywhere inside a `contentsHidden()` zone as the zone. The seat learns which container, never the element's name, real id or place inside it, so a shuffle or a hidden zone's size stays hidden.
 - An element in `game.pile` arrives as a reference that names nothing in the seat's view.
-- In world mode a reference is written as `{ __elementId }`, and the same rule applies: an element the seat cannot see arrives as its concealer's id. The same rule covers every element reference a seat receives, in element attributes, settings and message data too (#1043).
+- In world mode a reference is written as `{ __elementId }`, and the same rules apply: an element the seat cannot see arrives as its concealer's id, and an element in the pile as the same reference that names nothing. A reference to an element in a partition not loaded on this instance is sent as written. These rules cover every element reference a seat receives, in element attributes, settings and message data too (#1043).
 
 A raw id such as `card.id` reaches every seat unchanged, so it gives away which card a hidden one is.
 

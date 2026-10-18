@@ -13,8 +13,15 @@
 import { describe, it, expect } from 'vitest';
 import { Game, Card, Deck, Hand, Piece, Space, Player, type ElementJSON, type GameOptions, type GameElement } from '../index.js';
 
+import { WITHHELD_PILE_BRANCH } from './game-element.js';
+
 class Marker extends Piece<DrawGame> {
   target?: GameElement;
+}
+
+/** Derives, for each seat, a reference to the last card in seat 1's hand. */
+class Lens extends Piece<DrawGame> {
+  static seatAttributes = { focus: (lens: Lens) => lens.game.hand.last(Card) };
 }
 
 class DrawGame extends Game<DrawGame, Player> {
@@ -205,4 +212,50 @@ describe('every element reference a seat receives is redacted the same way (#104
       }
     });
   }
+
+  for (const [view, worldMode] of [['table', false], ['world', true]] as const) {
+    it(`gives each seat its own reference in one toJSONForPlayers batch (${view})`, () => {
+      const game = makeGame(worldMode);
+      const card = game.hand.last(Card)!;
+      game.settings.spotlight = card;
+      const [owner, other] = game.toJSONForPlayers([1, 2]) as unknown as { settings: Record<string, unknown> }[];
+      expect(owner.settings.spotlight).toEqual(ref(game, card));
+      expect(other.settings.spotlight).toEqual(ref(game, game.hand));
+    });
+
+    it(`gives no seat the place or id of a removed element (${view})`, () => {
+      const game = makeGame(worldMode);
+      const card = game.hand.last(Card)!;
+      card.remove();
+      game.settings.last = card;
+      for (const seat of [1, 2, null]) {
+        const settings = (seatView(game, seat) as unknown as { settings: Record<string, unknown> }).settings;
+        expect(settings.last).toEqual({ __elementRef: WITHHELD_PILE_BRANCH });
+      }
+    });
+
+    it(`redacts a reference a seatAttributes derivation returns (${view})`, () => {
+      const game = makeGame(worldMode);
+      game.discard.create(Lens, 'lens');
+      const focus = (seat: number) => {
+        const discard = seatView(game, seat).children!.find((node) => node.name === 'discard')!;
+        return discard.children!.find((node) => node.name === 'lens')!.attributes!.focus;
+      };
+      expect(focus(1)).toEqual(ref(game, game.hand.last(Card)!));
+      expect(focus(2)).toEqual(ref(game, game.hand));
+    });
+  }
+
+  it('marks no world partition reached while building views', () => {
+    const game = makeGame(true);
+    for (const zone of [game.discard, game.vault, game.hand]) game.definePartition(zone.id);
+    game.discard.first(Marker)!.target = game.vault.first(Card, 'Crown')!;
+    game.settings.spotlight = game.hand.last(Card)!;
+    game.animate('moved', { card: game.vault.first(Card, 'vault-0')! });
+    game.takeTouchedPartitions();
+
+    game.toJSONForPlayer(2);
+    game.toJSONForPlayers([1, 2, null]);
+    expect([...game._ctx._reachedPartitions!.partitions]).toEqual([]);
+  });
 });
