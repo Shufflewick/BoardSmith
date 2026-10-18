@@ -12,7 +12,8 @@ import { describe, expect, it } from "vitest";
 import { Game, Space, type GameElement, type GameOptions } from "../engine/index.js";
 import { createWorld } from "./definition.js";
 import { settleDeclaration } from "./declaration.js";
-import type { StoredPartition, WorldResidency } from "./contract.js";
+import type { StoredPartition } from "./contract.js";
+import type { WorldResidency } from "./engine.js";
 import type { WorldRunnerHandle, WorldViewRefusal } from "./runner.js";
 import { storedWorld, worldOptions } from "./stored-world.test-helper.js";
 

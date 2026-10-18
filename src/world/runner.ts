@@ -1031,6 +1031,30 @@ function viewRefusalsOf(failures: ReadonlyArray<readonly [string, unknown]>): Re
   return refused;
 }
 
+/**
+ * One player's view for this round of a look, refused if it names fewer than
+ * the round before (#936): #717 judges who hears an event by "more as more is
+ * loaded, never fewer", so a drop is refused for the rest of the look.
+ */
+function viewRound(
+  engine: WorldEngine,
+  player: string,
+  rounds: Map<string, readonly string[] | WorldRefusal>,
+  loaded: readonly string[],
+): readonly string[] {
+  const earlier = rounds.get(player);
+  if (earlier instanceof WorldRefusal) throw earlier;
+  const named = engine.viewPartitions(player);
+  const dropped = earlier?.filter((name) => !named.includes(name)) ?? [];
+  if (dropped.length > 0) {
+    const refusal = viewDroppedPartition(dropped, loaded);
+    rounds.set(player, refusal);
+    throw refusal;
+  }
+  rounds.set(player, named);
+  return named;
+}
+
 /** A view that stopped naming partitions once `loaded` arrived (#936). */
 function viewDroppedPartition(dropped: readonly string[], loaded: readonly string[]): WorldRefusal {
   const quote = (names: readonly string[]) => names.map((name) => `"${name}"`).join(", ");
@@ -1510,7 +1534,6 @@ export function createWorldRunner(
         // A look's first round is the only one handed nothing, so it starts
         // the comparison afresh: between looks a command may move the player.
         if (loaded.length === 0) viewRounds.delete(player);
-        const earlier = viewRounds.get(player);
         // PER PLAYER, INSIDE ONE CALL (#310). `viewPartitions` runs the
         // bundle's own `world.view` for that seat and reads the seat off the
         // roster, so it throws for a seat the game cannot describe and for a
@@ -1523,18 +1546,7 @@ export function createWorldRunner(
         // seat that threw reaching for an absent partition may well succeed on
         // the round after the one that loaded it.
         try {
-          if (earlier instanceof WorldRefusal) throw earlier;
-          const named = engine.viewPartitions(player);
-          // NAMES MORE AS MORE IS LOADED, NEVER FEWER (#936): #717 judges who
-          // hears an event by that rule, so a drop is refused for the rest of
-          // the look rather than projected.
-          const dropped = earlier?.filter((name) => !named.includes(name)) ?? [];
-          if (dropped.length > 0) {
-            const refusal = viewDroppedPartition(dropped, loaded);
-            viewRounds.set(player, refusal);
-            throw refusal;
-          }
-          viewRounds.set(player, named);
+          const named = viewRound(engine, player, viewRounds, loaded);
           for (const name of named) {
             if (!store.holds(name) && !resident.has(name)) needs.add(name);
           }
