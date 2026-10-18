@@ -147,28 +147,23 @@ export function createWorldConnections(
           requestOrigin.set(hostRequestId, { clientId: from, loadId, requestId: asked.requestId });
           request = { ...asked, requestId: hostRequestId };
         }
+        const refuse =
+          refusal === null
+            ? undefined
+            : (text: string) => {
+                if (hostRequestId !== null) requestOrigin.delete(hostRequestId);
+                if (socket.readyState === WebSocket.OPEN) socket.send(toWireJson(refusal(text)));
+              };
         void queue
-          .admit({
-            run: () => host().handleMessage(from, request),
-            ...(refusal === null
-              ? {}
-              : {
-                  refuse: (text: string) => {
-                    if (hostRequestId !== null) requestOrigin.delete(hostRequestId);
-                    if (socket.readyState === WebSocket.OPEN) socket.send(toWireJson(refusal(text)));
-                  },
-                }),
-          })
+          .admit({ run: () => host().handleMessage(from, request), ...(refuse === undefined ? {} : { refuse }) })
           .catch((error: unknown) => {
-            if (hostRequestId !== null) requestOrigin.delete(hostRequestId);
             // The message, not the error object, exactly as `reloadWorld` in
             // `dev-world.ts` does it (#240).
-            console.error(
-              styleText('red',
-                `[boardsmith dev] world message '${pageText(message.type)}' failed: ` +
-                  `${error instanceof Error ? error.message : String(error)}`,
-              ),
-            );
+            const reason = error instanceof Error ? error.message : String(error);
+            // A page still waiting is told why, as the table road tells it (#1060): its rules' worker may have stopped.
+            if (hostRequestId === null || requestOrigin.has(hostRequestId)) refuse?.(reason);
+            if (hostRequestId !== null) requestOrigin.delete(hostRequestId);
+            console.error(styleText('red', `[boardsmith dev] world message '${pageText(message.type)}' failed: ${reason}`));
           });
       });
       socket.on('close', () => {

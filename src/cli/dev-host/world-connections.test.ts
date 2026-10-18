@@ -75,6 +75,12 @@ const warm = worldAction<Camp>('warm')
   .needs(() => ['fire'])
   .execute(() => {});
 
+/** Stops the rules worker, as a rule that kills its thread does (#1060). */
+const crash = worldAction<Camp>('crash')
+  .prompt('Stop the rules')
+  .needs(() => ['fire'])
+  .execute(() => process.exit(1));
+
 export const gameDefinition = {
   gameClass: Camp,
   gameType: 'camp',
@@ -83,7 +89,7 @@ export const gameDefinition = {
     maxPlayers: 4,
     genesis: (game: Camp) => ({ fire: game.create(Fire, 'fire') }),
     view: () => ['fire'],
-    actions: [stoke, warm],
+    actions: [stoke, warm, crash],
   },
 };
 `;
@@ -303,5 +309,37 @@ describe('#1099: a reply to a page that reloaded', () => {
     after.send(act('wc-1', 'o2', 'stoke'));
     expect(await answered).toMatchObject({ requestId: 'wc-1', ok: true });
     expect(after.frames.filter((frame) => frame.type === 'world_response')).toHaveLength(1);
+  });
+});
+
+describe('#1060: a command to a world whose rules worker stopped', () => {
+  it('is refused, the command that stopped it and every one after it', async () => {
+    const { server } = await serve();
+    const page = await open(server.port, 'p1');
+    const failures: string[] = [];
+    let failed: () => void = () => {};
+    const quiet = vi.spyOn(console, 'error').mockImplementation((...said: unknown[]) => {
+      const line = said.map(String).join(' ');
+      if (!line.includes("world message 'action' failed")) return;
+      failures.push(line);
+      failed();
+    });
+    cleanup.push(() => quiet.mockRestore());
+    /** Every frame the host sent before this has arrived: a pong follows them on the same socket. */
+    const fence = () => new Promise<void>((resolve) => {
+      page.socket.once('pong', () => resolve());
+      page.socket.ping();
+    });
+
+    for (const [requestId, action] of [['c1', 'crash'], ['c2', 'stoke']]) {
+      const hostFailed = new Promise<void>((resolve) => (failed = resolve));
+      page.send(act(requestId, `o-${requestId}`, action));
+      await hostFailed;
+      await fence();
+      expect(page.frames.filter((frame) => frame.type === 'world_response' && frame.requestId === requestId)).toEqual([
+        { type: 'world_response', requestId, ok: false, message: expect.stringContaining('Your rules stopped running') },
+      ]);
+    }
+    expect(failures).toHaveLength(2);
   });
 });

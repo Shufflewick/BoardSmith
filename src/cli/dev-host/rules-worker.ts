@@ -167,6 +167,8 @@ export async function startRulesWorker(bundlePath: string, data: unknown): Promi
   let closing: Promise<void> | null = null;
   /** Why calls fail, once the worker has stopped by itself. */
   let stopped: string | null = null;
+  const stoppedError = (): Error =>
+    new Error(`Your rules stopped running (${stopped}). Save a rules file, or restart boardsmith dev, to start them again.`);
   let drained: (() => void) | null = null;
 
   // An idle worker never keeps the process alive; one with a call in flight does.
@@ -187,7 +189,7 @@ export async function startRulesWorker(bundlePath: string, data: unknown): Promi
       }
       stopped ??= why;
       reject(stack === undefined ? new Error(why) : new RulesError(why, stack));
-      for (const call of pending.values()) call.reject(new Error(stopped));
+      for (const call of pending.values()) call.reject(stoppedError());
       pending.clear();
       settled();
     };
@@ -220,13 +222,7 @@ export async function startRulesWorker(bundlePath: string, data: unknown): Promi
       ready: answer,
       worker: {
         call<T>(type: string, payload?: unknown): Promise<T> {
-          if (stopped !== null) {
-            return Promise.reject(
-              new Error(
-                `Your rules stopped running (${stopped}). Save a rules file, or restart boardsmith dev, to start them again.`,
-              ),
-            );
-          }
+          if (stopped !== null) return Promise.reject(stoppedError());
           if (closing !== null) return Promise.reject(new Error('These rules were replaced, so they take no more calls.'));
           const id = ++nextId;
           return new Promise<T>((resolve, reject) => {
