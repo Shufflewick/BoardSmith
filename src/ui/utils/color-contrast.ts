@@ -11,7 +11,7 @@
  * dependency (forbidden without discussion per CLAUDE.md). A small
  * hand-rolled parser covers hex (#rgb/#rrggbb), rgb()/rgba(), hsl()/hsla(),
  * and the standard CSS named colors (`CSS_NAMED_COLORS`) — the shapes
- * the engine's default palette (hex) and `createColorOption()`-based custom game
+ * the engine's default palette (hex) and boardsmith.json `colorPalette` custom game
  * palettes (any legal CSS color string) can supply. It fails loud (throws) on
  * anything else rather than silently guessing wrong contrast. A render path
  * calls `seatInk()` instead, which degrades to a safe default ink rather than
@@ -39,9 +39,9 @@ const HSL_FN = /^hsla?\(\s*(-?[\d.]+)(?:deg)?\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*
 /**
  * The 148 standard CSS Color Module Level 4 named colors (147 legacy names +
  * `rebeccapurple`), lowercase name -> `#rrggbb`. Covers the common case of a
- * custom game author supplying `'crimson'`, `'tomato'`, etc. via
- * `createColorOption()`, which accepts any CSS color string with no format
- * restriction.
+ * custom game author supplying `'crimson'`, `'tomato'`, etc. in
+ * boardsmith.json's `colorPalette`, which accepts any CSS color string with no
+ * format restriction.
  */
 const CSS_NAMED_COLORS: Record<string, string> = {
   aliceblue: '#f0f8ff', antiquewhite: '#faebd7', aqua: '#00ffff', aquamarine: '#7fffd4',
@@ -228,7 +228,7 @@ const DEFAULT_SEAT_INK: ContrastInk = { ink: '#ffffff', textShadow: '0 1px 2px r
  *
  * A seat with no colour gets the default white ink, matching the accent fill
  * those components fall back to. `player.color` is a plain string at the
- * `createColorOption()` boundary, so it can be a legal CSS colour
+ * `colorPalette` boundary, so it can be a legal CSS colour
  * `contrastInk()` cannot parse; rather than crash the render, that also gets
  * the default ink, with one warning per colour naming `renderer` so the game
  * author can see why.

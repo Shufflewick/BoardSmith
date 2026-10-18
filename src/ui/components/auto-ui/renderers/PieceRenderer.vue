@@ -12,6 +12,7 @@
 
 import { computed, inject, ref, watch, type ComputedRef } from 'vue';
 import { resolvePieceVisual, type PieceVisual } from '../auto-ui-helpers.js';
+import { getSpriteStyle } from '../../../utils/image.js';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
 import { setTransformAwareDragImage } from '../../../composables/dragImage.js';
@@ -222,12 +223,7 @@ watch(effectivePieceImage, () => {
     <div
       v-else-if="pieceVisual.kind === 'sprite'"
       class="piece-sprite"
-      :style="{
-        backgroundImage: `url(${pieceVisual.sprite})`,
-        backgroundPosition: `-${pieceVisual.x}px -${pieceVisual.y}px`,
-        backgroundSize: `${pieceVisual.width}px ${pieceVisual.height}px`,
-        backgroundRepeat: 'no-repeat',
-      }"
+      :style="getSpriteStyle(pieceVisual.image)"
     />
 
     <!-- Branch 3: labeled token (player color or neutral ink) -->
@@ -363,7 +359,6 @@ watch(effectivePieceImage, () => {
 .piece-sprite {
   width: 100%;
   height: 100%;
-  background-repeat: no-repeat;
   border-radius: 50%;
 }
 
