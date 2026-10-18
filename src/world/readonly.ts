@@ -168,11 +168,14 @@ for (const [prototype, names] of BUILTIN_READ_NAMES) {
   }
 }
 
-/** The getter a property is read through, wherever on the chain it lives. */
-function getterOf(subject: object, property: string | symbol): unknown {
+/** One property, read through the projection; on a built-in object a listed
+ *  getter (`size`, `length`) gets the real object as its receiver, as a listed method does. */
+function readProperty(subject: object, property: string | symbol, receiver: unknown, safeReceiver: boolean): unknown {
+  if (safeReceiver) return Reflect.get(subject, property, receiver);
   for (let holder: object | null = subject; holder !== null; holder = Object.getPrototypeOf(holder)) {
     const held = Reflect.getOwnPropertyDescriptor(holder, property);
-    if (held !== undefined) return held.get;
+    if (held === undefined) continue;
+    return Reflect.get(subject, property, held.get !== undefined && BUILTIN_READS.has(held.get) ? subject : receiver);
   }
   return undefined;
 }
@@ -399,9 +402,7 @@ function projectedProperty(
   projection: object,
   safeReceiver: boolean,
 ): unknown {
-  // A built-in getter (`size`, `length`) needs the real object as its receiver, as a built-in method does.
-  const builtinGetter = !safeReceiver && BUILTIN_READS.has(getterOf(target, property) as object);
-  const held = Reflect.get(target, property, builtinGetter ? target : receiver);
+  const held = readProperty(target, property, receiver, safeReceiver);
   if (typeof held !== "function" || isClass(held)) return readOnlyProjection(held);
   const call = held as (...a: unknown[]) => unknown;
 
