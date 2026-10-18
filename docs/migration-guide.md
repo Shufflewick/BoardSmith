@@ -1,5 +1,16 @@
 # Migration Guide
 
+## `handleOp` and the headless `send` take only ops a seat may send (#1109)
+
+`SnapshotSessionHost.handleOp` and `HeadlessSession.send` now take a `SeatOp`,
+not any `Op`, so `start`, `restoreEarlier` and `botSuggest` no longer compile
+there. They were already refused at run time (#1102). Use the host's own entry
+points instead: `host.start()`, `host.restoreEarlier(snapshot)` and
+`host.runBotTurns()` (in a headless session, `session.start()` and
+`session.arrange()`; bot seats move on their own). Code that passes ops read
+from the wire as `Op` should type them as `SeatOp` where they are built, or
+keep relying on the run-time refusal for input it cannot type.
+
 ## boardsmith.json has no `scoreboard` key any more (#930)
 
 Nothing ever read `scoreboard`; only `boardsmith new` wrote it. `boardsmith
