@@ -570,7 +570,6 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       id,
       order: 'normal',
     };
-    this._ctx._elementsById.set(id, this);
   }
 
   /**
@@ -768,8 +767,6 @@ export class GameElement<G extends Game = any, P extends Player = any> {
           Object.assign(element, { [key]: value });
         }
       } catch (error) {
-        // Construction filed it in the id index; a refused create must not leave it there (#963).
-        this._ctx._elementsById.delete(element._t.id);
         // A reserved-key rejection already says exactly what is wrong and how
         // to fix it; wrapping it would bury that behind a generic heading.
         if (error instanceof ReservedAttributeError) throw error;
@@ -782,7 +779,11 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       }
     }
 
-    // Add to tree
+    // Indexed only once built, with what its constructor created: a constructor or attribute that throws leaves nothing in it (#963, #1093, #1107).
+    // A parent still being built is not filed yet, and files its children when it is.
+    if (this._ctx._elementsById.get(this._t.id) === this) {
+      forEachInSubtree(element, (built) => this._ctx._elementsById.set(built._t.id, built));
+    }
     this.addChild(element);
 
     return element;
@@ -1637,11 +1638,9 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     // the game's direct children get it in loadSerializedState), so e.g.
     // `piece.remove()` → `this.game.pile` throws after any restore.
     if (ctx.game) (element as GameElement).game = ctx.game;
-    // The stored id replaces the one construction minted. The minted id leaves
-    // the id index, unless it already names another element: a restore can
-    // mint an id it has already restored. Whoever builds the tree files it
-    // once it is built (`Game#loadSerializedState`, `Game#adoptSubtree`).
-    if (ctx._elementsById.get(element._t.id) === element) ctx._elementsById.delete(element._t.id);
+    // The stored id replaces the one construction minted. Whoever builds the
+    // tree files it in the id index once it is built (`Game#loadSerializedState`,
+    // `Game#adoptSubtree`).
     element._t.id = json.id;
 
     if (json.name) {

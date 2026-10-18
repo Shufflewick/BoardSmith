@@ -265,3 +265,53 @@ describe('HexBoardRenderer keyboard activation follows focus (#190)', () => {
     expect(() => mountBoard(board)).toThrow(/\$coordSystem 'cube'.*only 'axial'/s);
   });
 });
+
+/**
+ * #897 — arrow keys on a hexagon-shaped board, where rows have different lengths
+ * and start at different q. Left/Right walk a row (same r), Up/Down walk an axial
+ * column (same q), and a key with no cell that way leaves the cursor where it is.
+ */
+describe('HexBoardRenderer arrow keys on a hexagon-shaped board (#897)', () => {
+  const RADIUS = 2;
+  function hexagon(): GameElement {
+    const cells: GameElement[] = [];
+    for (let r = -RADIUS; r <= RADIUS; r++) {
+      for (let q = -RADIUS; q <= RADIUS; q++) {
+        if (Math.abs(q + r) > RADIUS) continue;
+        cells.push({ id: 100 + cells.length, className: 'HexSpace', name: `${q},${r}`, attributes: { q, r }, children: [] });
+      }
+    }
+    return { id: 1, className: 'HexBoard', name: 'Hexagon', attributes: { $layout: 'hex-grid' }, children: cells };
+  }
+
+  /** Press `keys` in turn and return the cell the tab stop is on after each. */
+  async function walk(keys: string[]) {
+    const { wrapper } = mountBoard(hexagon());
+    const at = () => wrapper.findAll('[role="gridcell"]').findIndex((c) => c.attributes('tabindex') === '0');
+    const names = hexagon().children!.map((c) => c.name);
+    const seen: string[] = [];
+    for (const key of keys) {
+      await wrapper.find('svg').trigger('keydown', { key });
+      seen.push(names[at()]!);
+    }
+    return seen;
+  }
+
+  it('walks the short top row with Right and stops at its end', async () => {
+    expect(await walk(['ArrowRight', 'ArrowRight', 'ArrowRight'])).toEqual(['1,-2', '2,-2', '2,-2']);
+  });
+
+  it('walks an axial column with Down into the longer rows and stops at the board edge', async () => {
+    expect(await walk(['ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown']))
+      .toEqual(['0,-1', '0,0', '0,1', '0,2', '0,2']);
+  });
+
+  it('reaches the start and end of the middle row, which is longer than the row it came from', async () => {
+    expect(await walk(['ArrowDown', 'ArrowDown', 'Home', 'End', 'ArrowLeft', 'ArrowUp']))
+      .toEqual(['0,-1', '0,0', '-2,0', '2,0', '1,0', '1,-1']);
+  });
+
+  it('stays put when no cell lies that way, though the row above has cells', async () => {
+    expect(await walk(['ArrowDown', 'ArrowDown', 'Home', 'ArrowUp'])).toEqual(['0,-1', '0,0', '-2,0', '-2,0']);
+  });
+});

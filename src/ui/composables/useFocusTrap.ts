@@ -75,6 +75,8 @@ function getFocusable(container: HTMLElement): HTMLElement[] {
 // opens inside an older trap's background (the game ends while ControlsMenu is
 // open) is reachable until it closes. Only `inert` this module added is ever
 // removed; `inert` the page set itself is left alone, even on the dialog's path.
+// An element marked `data-bs-outside-modal` (the dev-only Debug panel, #1106)
+// is not part of the page a dialog covers, so it is never made inert.
 // ---------------------------------------------------------------------------
 
 const openTraps: Array<Ref<HTMLElement | null>> = [];
@@ -82,7 +84,7 @@ let inertAdded: HTMLElement[] = [];
 
 function inertSiblingsOf(node: HTMLElement, parent: HTMLElement) {
   for (const sibling of Array.from(parent.children) as HTMLElement[]) {
-    if (sibling === node || sibling.hasAttribute('inert')) continue;
+    if (sibling === node || sibling.hasAttribute('inert') || sibling.hasAttribute('data-bs-outside-modal')) continue;
     sibling.setAttribute('inert', '');
     inertAdded.push(sibling);
   }

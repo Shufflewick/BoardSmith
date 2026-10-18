@@ -17,11 +17,13 @@ import {
   SMOKE_SPEC_PATH,
   startAnswering,
   walkStopped,
+  smokeActions,
   smokeFailure,
   smokeProblems,
   smokeRecord,
   smokeSeeds,
   smokeSummary,
+  smokeSteps,
   smokeWorldSeats,
   type ResolvedMemory,
   type SmokeInputView,
@@ -108,6 +110,16 @@ describe('smokeWorldSeats: the seats a world walk plays (#471)', () => {
   });
 });
 
+describe('smokeSteps: how many actions a walk takes at most (#924)', () => {
+  it('takes a positive whole number', () => {
+    expect(smokeSteps(12)).toBe(12);
+  });
+
+  it.each([0, -1, Number.NaN, 0.5])('refuses %s, which would walk no step and pass any game that loads', (steps) => {
+    expect(() => smokeSteps(steps)).toThrow(`\`steps\` in ${SMOKE_SPEC_PATH} takes a positive whole number, got "${steps}".`);
+  });
+});
+
 const REASON = 'Offered only after fifty quiet moves, which a walk from a fresh game never plays.';
 
 /** What a table walk that stalled at step 9 of the deal from "smoke" reports (#473). */
@@ -115,6 +127,22 @@ const TABLE_STALL =
   'The game stalled at step 9 of the game dealt from seed "smoke": no seat was offered anything for 30s, and the game ' +
   'was not over, so the players at that table could never finish it. Run `boardsmith smoke` to watch where the game ' +
   'stops offering actions: a step no seat can act in, or one waiting on something no player does.';
+
+describe('smokeActions: the actions a spec lists (#926)', () => {
+  it('gives the listed actions as they are', () => {
+    expect(smokeActions(['greet', 'wave'])).toEqual(['greet', 'wave']);
+  });
+
+  it('refuses a blank action, which the walk could never take', () => {
+    expect(() => smokeActions(['greet', ' '])).toThrow(
+      `\`actions\` in ${SMOKE_SPEC_PATH} has a blank name. Name each action as its rules do, such as "greet".`,
+    );
+  });
+
+  it('refuses an action listed twice, which would be reported twice', () => {
+    expect(() => smokeActions(['greet', 'wave', 'greet'])).toThrow(`\`actions\` in ${SMOKE_SPEC_PATH} lists "greet" twice. List each action once.`);
+  });
+});
 
 describe('smokeProblems', () => {
   it('passes a walk that took every listed action and saw no error', () => {
@@ -537,7 +565,8 @@ describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
   });
 
   it('fails a spec whose inputs name an action `actions` does not list, or give blank text', () => {
-    expect(smokeProblems(walk({ listed: ['attack'], taken: new Set(['attack']), inputs: { atack: { target: 'p2' }, attack: { target: ' ' } } }))).toEqual([
+    const fieldsMet = new Map([['attack', new Map([['target', 'text' as const]])]]);
+    expect(smokeProblems(walk({ listed: ['attack'], taken: new Set(['attack']), inputs: { atack: { target: 'p2' }, attack: { target: ' ' } }, fieldsMet }))).toEqual([
       `${SMOKE_SPEC_PATH} gives \`inputs\` for "atack", but \`actions\` does not list it. Name the action as \`actions\` ` +
         'does, or remove it from `inputs` if the game no longer has it.',
       `\`inputs.attack.target\` in ${SMOKE_SPEC_PATH} is blank, so the walk would type nothing there. Give the text a ` +
@@ -545,7 +574,7 @@ describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
     ]);
   });
 
-  it('fails an input whose field the walk never met in an action it opened, as a misspelt pick name is, naming those it met', () => {
+  it('fails an input whose field the walk never met in an action it opened or took, as a misspelt pick name is, naming those it met', () => {
     const opened = walk({
       listed: ['wave', 'greet'],
       taken: new Set(['wave', 'greet']),
@@ -555,6 +584,9 @@ describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
     expect(smokeProblems(opened)).toEqual([
       `\`inputs.wave.whim\` in ${SMOKE_SPEC_PATH} names a field the walk never met in "wave", whose fields it met are ` +
         '"whom". Name the field by the pick name its rules give it.',
+      // "greet" was taken in one press, so it has no fields at all (#926).
+      `\`inputs.greet.whom\` in ${SMOKE_SPEC_PATH} names a field the walk never met in "greet", whose fields it met are ` +
+        'none. Name the field by the pick name its rules give it.',
     ]);
     // An action the walk gave up on before it reached any field says nothing about the names.
     const stopped = walk({ listed: ['wave'], taken: new Set(), inputs: { wave: { whim: 'p2' } }, fieldsMet: new Map([['wave', new Map()]]) });
@@ -592,7 +624,7 @@ describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
     });
 
     it("names what the walk typed in an action whose rules crashed, without suggesting the game wants another value", () => {
-      const crash = `${rulesErrorSentence('kindle')} Nothing was changed. (the hearth cracked)`;
+      const crash = `${rulesErrorSentence('kindle')} (the hearth cracked) Nothing was changed.`;
       expect(actionFailed('kindle', crash, [{ field: 'logs', value: '1', from: 'walk', kind: 'number' }], 0)).toBe(
         `The panel offered "kindle", and taking it failed: ${crash} The walk typed "1" in its field "logs".`,
       );

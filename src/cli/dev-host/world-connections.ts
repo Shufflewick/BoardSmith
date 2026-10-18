@@ -10,7 +10,15 @@
  * ONE SOURCE OF TRUTH FOR "IS THIS PAGE STILL HERE". `send` and `isOpen` read
  * the same map and the same `readyState`, so the host can never believe in a
  * page its own frames are no longer reaching, or skip one they still reach.
+ *
+ * A REQUEST ID BELONGS TO ONE PAGE LOAD (#1099), as on the table host (#1041).
+ * A reloaded page keeps its client id and numbers its requests from 0 again,
+ * so each request reaches the host under an id of this module's own, and its
+ * answer goes back under the page's id only while the load that asked still
+ * holds the client's socket.
  */
+import { randomUUID } from 'node:crypto';
+
 import { styleText } from 'node:util';
 import { WebSocket } from 'ws';
 
@@ -73,6 +81,11 @@ export function createWorldConnections(
   queue: Pick<RulesReloadQueue, 'admit'>,
 ): WorldConnections {
   const clients = new Map<string, WebSocket>();
+  /** The page load each client's socket now belongs to. */
+  const pageLoad = new Map<string, string>();
+  /** Each request the host has not answered yet, by the id the host was given. */
+  const requestOrigin = new Map<string, { clientId: string; loadId: string; requestId: string }>();
+  let nextRequest = 0;
 
   const openSocket = (clientId: string): WebSocket | undefined => {
     const socket = clients.get(clientId);
@@ -81,7 +94,15 @@ export function createWorldConnections(
 
   return {
     send(clientId, message) {
-      openSocket(clientId)?.send(JSON.stringify(message));
+      const hostRequestId = (message as { requestId?: unknown }).requestId;
+      if (typeof hostRequestId !== 'string') {
+        openSocket(clientId)?.send(JSON.stringify(message));
+        return;
+      }
+      const origin = requestOrigin.get(hostRequestId);
+      requestOrigin.delete(hostRequestId);
+      if (origin === undefined || pageLoad.get(origin.clientId) !== origin.loadId) return;
+      openSocket(origin.clientId)?.send(JSON.stringify({ ...(message as object), requestId: origin.requestId }));
     },
 
     broadcast(message) {
@@ -94,6 +115,7 @@ export function createWorldConnections(
 
     accept(socket) {
       let clientId: string | null = null;
+      let loadId: string | null = null;
       socket.on('message', (raw) => {
         const message = parseSocketMessage(raw);
         if (message === null) return;
@@ -102,12 +124,22 @@ export function createWorldConnections(
             typeof message.clientId === 'string'
               ? message.clientId
               : `anon-${Math.random().toString(36).slice(2)}`;
+          // A caller that names no page load (a scripted client) is one per socket.
+          loadId = typeof message.loadId === 'string' ? message.loadId : randomUUID();
           clients.set(clientId, socket);
+          pageLoad.set(clientId, loadId);
         }
-        if (clientId === null) return; // a client identifies itself first
+        if (clientId === null || loadId === null) return; // a client identifies itself first
         const from = clientId;
-        const request = message as unknown as WorldDevRequest;
-        const refusal = refusalOf(request);
+        const asked = message as unknown as WorldDevRequest;
+        const refusal = refusalOf(asked);
+        let request = asked;
+        let hostRequestId: string | null = null;
+        if ('requestId' in asked) {
+          hostRequestId = String(nextRequest++);
+          requestOrigin.set(hostRequestId, { clientId: from, loadId, requestId: asked.requestId });
+          request = { ...asked, requestId: hostRequestId };
+        }
         void queue
           .admit({
             run: () => host().handleMessage(from, request),
@@ -115,11 +147,13 @@ export function createWorldConnections(
               ? {}
               : {
                   refuse: (text: string) => {
+                    if (hostRequestId !== null) requestOrigin.delete(hostRequestId);
                     if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(refusal(text)));
                   },
                 }),
           })
-          .catch((error: unknown) =>
+          .catch((error: unknown) => {
+            if (hostRequestId !== null) requestOrigin.delete(hostRequestId);
             // The message, not the error object, exactly as `reloadWorld` in
             // `dev-world.ts` does it (#240).
             console.error(
@@ -127,8 +161,8 @@ export function createWorldConnections(
                 `[boardsmith dev] world message '${String(message.type)}' failed: ` +
                   `${error instanceof Error ? error.message : String(error)}`,
               ),
-            ),
-          );
+            );
+          });
       });
       socket.on('close', () => {
         // Only tear down if THIS socket still owns the id: a reload's new socket
@@ -137,6 +171,8 @@ export function createWorldConnections(
         if (clientId !== null && clients.get(clientId) === socket) {
           const gone = clientId;
           clients.delete(gone);
+          pageLoad.delete(gone);
+          for (const [id, origin] of requestOrigin) if (origin.clientId === gone) requestOrigin.delete(id);
           // A departure waits for a pending reload like the page's messages
           // did (#387): it can start a departure's clock command.
           queue
@@ -152,7 +188,9 @@ export function createWorldConnections(
           socket.send(JSON.stringify(farewell));
         }
         clients.delete(clientId);
+        pageLoad.delete(clientId);
       }
+      requestOrigin.clear();
     },
   };
 }

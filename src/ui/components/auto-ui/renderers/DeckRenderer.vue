@@ -3,14 +3,17 @@
  * DeckRenderer — Per-element renderer for deck elements ($type='deck').
  *
  * Renders a stacked visual (up to 3 offset cards) with a 20px bold name and
- * count. Shows italic "Empty" when childCount/children length is 0.
- * Children are rendered via ElementRenderer.
+ * count. Children are rendered via ElementRenderer; a deck whose cards were not
+ * sent is drawn as card backs. Shows italic "Empty" only when the deck is known
+ * to be empty.
  */
 
-import { computed, inject, type Ref } from 'vue';
+import { computed, inject, ref, type Ref } from 'vue';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
+import { parseImageInfo, type ImageInfo } from '../../../utils/image.js';
 import ElementRenderer from './ElementRenderer.vue';
+import CardBack from './CardBack.vue';
 
 // ---------------------------------------------------------------------------
 // Local GameElement interface — dependency-free, mirrors auto-ui-helpers.ts
@@ -22,6 +25,7 @@ interface GameElement {
   attributes?: Record<string, unknown>;
   children?: GameElement[];
   childCount?: number;
+  zoneVisibility?: { mode: string };
 }
 
 const props = defineProps<{
@@ -33,6 +37,7 @@ const props = defineProps<{
 // ---------------------------------------------------------------------------
 const selectableElements = inject<Ref<Set<number>>>('selectableElements');
 const selectedElements = inject<Ref<Set<number>>>('selectedElements');
+const defaultBackImage = inject<Ref<ImageInfo | null>>('defaultBackImage', ref(null));
 
 // ---------------------------------------------------------------------------
 // Board interaction
@@ -95,13 +100,26 @@ const stackCards = computed(() => {
   return top.map((card, i) => ({ card, stackIndex: top.length - 1 - i }));
 });
 
-const isEmpty = computed(() => childCount.value === 0);
+// A 'hidden' zone sends neither its cards nor their count (#1056): its size is unknown, not 0.
+const isSizeHidden = computed(
+  () => props.element.childCount === undefined && props.element.zoneVisibility?.mode === 'hidden',
+);
+
+const isEmpty = computed(() => !isSizeHidden.value && childCount.value === 0);
+
+const countText = computed(() => {
+  if (isSizeHidden.value) return 'Size hidden';
+  return childCount.value > 0 ? `${childCount.value} cards` : '';
+});
+
+const backImage = computed(
+  () => parseImageInfo((props.element.attributes?.$images as Record<string, unknown> | undefined)?.back) ?? defaultBackImage.value,
+);
 
 // aria-label: deck name + card count + current interaction state
 const ariaLabel = computed(() => {
   const name = props.element.name || props.element.className;
-  const countPart = childCount.value > 0 ? `, ${childCount.value} cards` : '';
-  const label = `${name}${countPart}`;
+  const label = countText.value ? `${name}, ${countText.value.toLowerCase()}` : name;
   if (isDisabled.value) return `${label}, unavailable`;
   if (isSelected.value || isBoardSelected.value) return `${label}, selected`;
   if (isActionSelectable.value) return `${label}, selectable`;
@@ -138,16 +156,25 @@ const { attrs: selectableAttrs, onActivate, onKeydown } =
   >
     <!-- Header: name left (display font, 20px bold), count right (secondary ink) -->
     <div class="deck-header">
-      <span class="deck-label">{{ displayLabel }}</span>
-      <span v-if="childCount" class="deck-count">{{ childCount }} cards</span>
+      <span class="deck-label">{{ displayLabel }}</span>{{ ' ' }}<span v-if="countText" class="deck-count">{{ countText }}</span>
     </div>
 
-    <!-- Stack visual: up to 3 offset cards -->
+    <!-- Stack visual: up to 3 offset cards, or 3 backs when the cards were not sent -->
     <div v-if="!isEmpty" class="deck-stack">
-      <ElementRenderer
-        v-for="{ card, stackIndex } in stackCards"
-        :key="card.id"
-        :element="card"
+      <template v-if="stackCards.length">
+        <ElementRenderer
+          v-for="{ card, stackIndex } in stackCards"
+          :key="card.id"
+          :element="card"
+          class="deck-card"
+          :style="{ '--stack-index': stackIndex, zIndex: stackIndex }"
+        />
+      </template>
+      <CardBack
+        v-for="stackIndex in [2, 1, 0]"
+        v-else
+        :key="stackIndex"
+        :image="backImage"
         class="deck-card"
         :style="{ '--stack-index': stackIndex, zIndex: stackIndex }"
       />
@@ -247,6 +274,7 @@ const { attrs: selectableAttrs, onActivate, onKeydown } =
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
 }
 
 /* Name: 20px bold display type */
