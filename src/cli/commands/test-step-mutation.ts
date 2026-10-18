@@ -1310,10 +1310,6 @@ async function tallyMutants(
     const label = `mutant ${i + 1}/${mutants.length}: ${mutant.file}:${mutant.line} ${mutant.description}`;
     input.log(stored === undefined ? label : `${label} (reused: ${stored})`);
     const outcome = stored ?? (await runUnlessContextChanged(input, run!, mutant, i));
-    if (stored === undefined && outcome !== 'timed-out') {
-      input.cache.set(mutant, outcome);
-      await input.saveProgress?.();
-    }
     summary.mutants++;
     summary[COUNTED[outcome]]++;
     if (outcome === 'survived') await countSurvivor(input, mutant, review, result);
@@ -1322,11 +1318,18 @@ async function tallyMutants(
   return result;
 }
 
-/** Runs `mutant`, unless what the tests run with changed since the run began: then the run is mixed and stops here (#932). */
+/**
+ * Runs `mutant` and keeps its outcome, unless what the tests run with changed since the run began:
+ * then the run is mixed and stops here (#932). A timed-out mutant is not kept.
+ */
 async function runUnlessContextChanged(input: DiffMutationInput, run: GreenRunner, mutant: LocatedMutant, done: number): Promise<DiffOutcome> {
   const change = await input.contextChange?.();
   if (change !== undefined) throw new Error(`what the tests run with changed after ${done} mutants had run or been reused: ${change}`);
-  return runMutant(run, mutant);
+  const outcome = await runMutant(run, mutant);
+  if (outcome === 'timed-out') return outcome;
+  input.cache.set(mutant, outcome);
+  await input.saveProgress?.();
+  return outcome;
 }
 
 /** A signed proof can classify only the exact generated change that actually survived. */
