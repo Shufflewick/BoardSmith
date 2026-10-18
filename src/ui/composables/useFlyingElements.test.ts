@@ -18,6 +18,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ref, nextTick, defineComponent, h } from 'vue';
 import { mount } from '@vue/test-utils';
+import { Game, Card, Deck, Hand, Space, Player, type GameOptions } from '../../engine/index.js';
 
 // jsdom lacks matchMedia; modules that read it at import time would throw.
 vi.stubGlobal(
@@ -186,6 +187,285 @@ describe('useFlyingElements', () => {
         expect.objectContaining({ kind: 'fly', element: '42', from: 'opponentHand', to: 'myHand' })
       );
     });
+
+    it('does not fly from a stale container after the element passed through an untracked one (#867)', async () => {
+      const handEl = makeContainer();
+      const cribEl = makeContainer();
+      vi.spyOn(handEl, 'getBoundingClientRect').mockReturnValue(makeRect({ width: 60, height: 84 }));
+      vi.spyOn(cribEl, 'getBoundingClientRect').mockReturnValue(makeRect({ left: 300, width: 60, height: 84 }));
+      const card: AutoWatchGameElement = { id: 42, name: 'card' };
+      const handGameEl: AutoWatchGameElement = { id: 1, children: [card] };
+      const tableGameEl: AutoWatchGameElement = { id: 3, children: [] };
+      const cribGameEl: AutoWatchGameElement = { id: 2, children: [] };
+      const gameViewRef = ref<AutoWatchGameElement | null>(null);
+      const view = () => ({ id: 0, children: [{ ...handGameEl }, { ...tableGameEl }, { ...cribGameEl }] });
+
+      useFlyingElements({
+        autoWatch: {
+          gameView: () => gameViewRef.value,
+          containers: [
+            { ref: ref(handEl), name: 'hand', element: () => handGameEl },
+            { ref: ref(cribEl), name: 'crib', element: () => cribGameEl },
+          ],
+          getElementData: () => ({}),
+        },
+      });
+      enableAnimationTestMode();
+
+      gameViewRef.value = view();
+      await nextTick();
+
+      // hand -> untracked table
+      handGameEl.children = [];
+      tableGameEl.children = [card];
+      gameViewRef.value = view();
+      await nextTick();
+
+      // table -> crib: no known source, so no flight from the hand
+      tableGameEl.children = [];
+      cribGameEl.children = [card];
+      gameViewRef.value = view();
+      await nextTick();
+
+      // crib -> hand: a real tracked move, so the watcher has demonstrably run
+      cribGameEl.children = [];
+      handGameEl.children = [card];
+      gameViewRef.value = view();
+      await nextTick();
+      await waitFor(() => getAnimationTrace().length > 0);
+
+      expect(getAnimationTrace()).toEqual([
+        expect.objectContaining({ kind: 'fly', element: '42', from: 'crib', to: 'hand' }),
+      ]);
+    });
+  });
+
+  describe('autoWatch count-based routes (#1027)', () => {
+    type Route = { from: string; to: string };
+    const hidden = (id: number): AutoWatchGameElement => ({ id, attributes: { __hidden: true } });
+    const card = (id: number): AutoWatchGameElement => ({ id, name: 'card' });
+    const sizedContainer = () => {
+      const el = makeContainer();
+      vi.spyOn(el, 'getBoundingClientRect').mockReturnValue(makeRect({ width: 60, height: 84 }));
+      return el;
+    };
+
+    /**
+     * Tracks `piles` under `routes` and runs one update made by `change`. A probe card moves between two
+     * extra containers in the same update, so its flight proves the watcher ran; the flights returned leave it out.
+     */
+    async function flightsAfter(
+      piles: Record<string, AutoWatchGameElement>,
+      routes: Route[],
+      change: () => void,
+    ): Promise<{ element: string | null; from?: string; to?: string }[]> {
+      const probe = card(999);
+      const all: Record<string, AutoWatchGameElement> = {
+        ...piles,
+        probeA: { id: 900, children: [probe] },
+        probeB: { id: 901, children: [] },
+      };
+      const gameViewRef = ref<AutoWatchGameElement | null>(null);
+      const view = () => ({ id: 0, children: Object.values(all).map((pile) => ({ ...pile })) });
+      useFlyingElements({
+        autoWatch: {
+          gameView: () => gameViewRef.value,
+          containers: Object.entries(all).map(([name, pile]) => ({ ref: ref(sizedContainer()), name, element: () => pile })),
+          getElementData: () => ({}),
+          countBasedRoutes: routes,
+        },
+      });
+      enableAnimationTestMode();
+      gameViewRef.value = view();
+      await nextTick();
+
+      change();
+      all.probeA.children = [];
+      all.probeB.children = [probe];
+      gameViewRef.value = view();
+      await nextTick();
+      await waitFor(() => getAnimationTrace().some((t) => t.element === '999'));
+      expect(getAnimationTrace()).toContainEqual(expect.objectContaining({ element: '999' }));
+      return getAnimationTrace()
+        .filter((t) => t.element !== '999')
+        .map(({ element, from, to }) => ({ element, from, to }));
+    }
+
+    it('flies a card that appears in the hand from a pile that only reports its count', async () => {
+      const pond: AutoWatchGameElement = { id: 1, childCount: 3 };
+      const hand: AutoWatchGameElement = { id: 2, children: [] };
+      const flights = await flightsAfter({ pond, hand }, [{ from: 'pond', to: 'hand' }], () => {
+        pond.childCount = 2;
+        hand.children = [card(7)];
+      });
+
+      expect(flights).toEqual([{ element: '7', from: 'pond', to: 'hand' }]);
+    });
+
+    it('flies a drawn card once when the pile shows hidden placeholders', async () => {
+      const pond: AutoWatchGameElement = { id: 1, children: [hidden(-1), hidden(-2)] };
+      const hand: AutoWatchGameElement = { id: 2, children: [] };
+      const flights = await flightsAfter({ pond, hand }, [{ from: 'pond', to: 'hand' }], () => {
+        pond.children = [hidden(-1)];
+        hand.children = [card(7)];
+      });
+
+      expect(flights).toEqual([{ element: '7', from: 'pond', to: 'hand' }]);
+    });
+
+    it('does not fly a card that appears when no source lost one', async () => {
+      const pond: AutoWatchGameElement = { id: 1, childCount: 3 };
+      const hand: AutoWatchGameElement = { id: 2, children: [] };
+      const flights = await flightsAfter({ pond, hand }, [{ from: 'pond', to: 'hand' }], () => {
+        hand.children = [card(7)];
+      });
+
+      expect(flights).toEqual([]);
+    });
+
+    it('flies one card to each destination when one source loses two', async () => {
+      const pond: AutoWatchGameElement = { id: 1, childCount: 3 };
+      const hand: AutoWatchGameElement = { id: 2, children: [] };
+      const table: AutoWatchGameElement = { id: 3, children: [] };
+      const routes = [{ from: 'pond', to: 'hand' }, { from: 'pond', to: 'table' }];
+      const flights = await flightsAfter({ pond, hand, table }, routes, () => {
+        pond.childCount = 1;
+        hand.children = [card(7)];
+        table.children = [card(8)];
+      });
+
+      expect(flights).toEqual([
+        { element: '7', from: 'pond', to: 'hand' },
+        { element: '8', from: 'pond', to: 'table' },
+      ]);
+    });
+
+    it('flies one card when a source loses one and cards appear in two containers', async () => {
+      const pond: AutoWatchGameElement = { id: 1, childCount: 3 };
+      const hand: AutoWatchGameElement = { id: 2, children: [] };
+      const table: AutoWatchGameElement = { id: 3, children: [] };
+      const routes = [{ from: 'pond', to: 'hand' }, { from: 'pond', to: 'table' }];
+      const flights = await flightsAfter({ pond, hand, table }, routes, () => {
+        pond.childCount = 2;
+        hand.children = [card(7)];
+        table.children = [card(8)];
+      });
+
+      expect(flights).toEqual([{ element: '7', from: 'pond', to: 'hand' }]);
+    });
+
+    it('does not fly again into a hand whose gain another flight already covers', async () => {
+      const opponent: AutoWatchGameElement = { id: 1, children: [hidden(-1), hidden(-2)] };
+      const pond: AutoWatchGameElement = { id: 2, childCount: 3 };
+      const hand: AutoWatchGameElement = { id: 3, children: [] };
+      const routes = [{ from: 'opponent', to: 'hand' }, { from: 'pond', to: 'hand' }];
+      const flights = await flightsAfter({ opponent, pond, hand }, routes, () => {
+        opponent.children = [hidden(-1)];
+        pond.childCount = 2;
+        hand.children = [card(7)];
+      });
+
+      expect(flights).toEqual([{ element: '7', from: 'opponent', to: 'hand' }]);
+    });
+  });
+
+  describe('autoWatch between face-down piles, from real seat views (#1097)', () => {
+    /** Seat 1 holds an open hand and watches seat 2's and seat 3's face-down hands and a bag whose size it cannot see; a probe card moves between two open spaces. */
+    class TwoHandsGame extends Game<TwoHandsGame, Player> {
+      constructor(options: GameOptions) {
+        super(options);
+        for (const seat of [1, 2, 3]) {
+          const hand = this.create(Hand, `hand-${seat}`);
+          hand.player = this.getPlayer(seat)!;
+          hand.contentsVisibleToOwner();
+          for (let i = 0; i < 3; i++) hand.create(Card, `card-${seat}-${i}`);
+        }
+        this.create(Space, 'books');
+        const bag = this.create(Deck, 'bag');
+        bag.contentsHidden();
+        for (let i = 0; i < 3; i++) bag.create(Card, `bag-${i}`);
+        this.create(Space, 'probe-a').create(Card, 'probe');
+        this.create(Space, 'probe-b');
+      }
+    }
+
+    /** The flights seat 1's auto-watch shows when `from` gives its first card to `to`, under `routes`. */
+    async function flightsWhenGiven(from: string, to: string, routes: { from: string; to: string }[]) {
+      const game = new TwoHandsGame({ playerCount: 3, seed: 'bs1097' });
+      const gameViewRef = ref<AutoWatchGameElement | null>(null);
+      const inView = (name: string) => () => gameViewRef.value?.children?.find((c) => c.name === name);
+      const sized = () => {
+        const el = makeContainer();
+        vi.spyOn(el, 'getBoundingClientRect').mockReturnValue(makeRect({ width: 60, height: 84 }));
+        return ref(el);
+      };
+      useFlyingElements({
+        autoWatch: {
+          gameView: () => gameViewRef.value,
+          containers: ['hand-1', 'hand-2', 'hand-3', 'bag', 'probe-a', 'probe-b'].map((name) => ({ ref: sized(), name, element: inView(name) })),
+          getElementData: () => ({}),
+          countBasedRoutes: routes,
+        },
+      });
+      enableAnimationTestMode();
+      gameViewRef.value = game.toJSONForPlayer(1);
+      await nextTick();
+
+      game.first(from)!.first(Card)!.putInto(game.first(to)!);
+      game.first(Card, 'probe')!.putInto(game.first(Space, 'probe-b')!);
+      gameViewRef.value = game.toJSONForPlayer(1);
+      await nextTick();
+      await waitFor(() => getAnimationTrace().some((t) => t.to === 'probe-b'));
+      return getAnimationTrace().filter((t) => t.to !== 'probe-b').map(({ from, to }) => ({ from, to }));
+    }
+
+    it('flies nothing between two face-down hands when the first loses a card elsewhere', async () => {
+      expect(await flightsWhenGiven('hand-2', 'books', [])).toEqual([]);
+    });
+
+    it('flies a card the seat receives from the face-down hand that gave it, not a later one', async () => {
+      const routes = [{ from: 'hand-2', to: 'hand-1' }, { from: 'hand-3', to: 'hand-1' }];
+      expect(await flightsWhenGiven('hand-2', 'hand-1', routes)).toEqual([{ from: 'hand-2', to: 'hand-1' }]);
+    });
+
+    it('flies one card between two face-down hands along a count-based route', async () => {
+      const routes = [{ from: 'hand-2', to: 'hand-3' }];
+      expect(await flightsWhenGiven('hand-2', 'hand-3', routes)).toEqual([{ from: 'hand-2', to: 'hand-3' }]);
+    });
+
+    it('flies nothing along a route out of a pile whose size the seat cannot see', async () => {
+      expect(await flightsWhenGiven('bag', 'hand-1', [{ from: 'bag', to: 'hand-1' }])).toEqual([]);
+    });
+  });
+
+  describe('autoWatch work per update (#868)', () => {
+    /** Reads of the hand container's children during one gameView update with `cardCount` cards in it. */
+    async function handChildReadsPerUpdate(cardCount: number): Promise<number> {
+      const cards: AutoWatchGameElement[] = Array.from({ length: cardCount }, (_, i) => ({ id: 100 + i }));
+      let reads = 0;
+      const handGameEl = { id: 1 } as AutoWatchGameElement;
+      Object.defineProperty(handGameEl, 'children', { get: () => { reads++; return cards; } });
+      const gameViewRef = ref<AutoWatchGameElement | null>(null);
+      useFlyingElements({
+        autoWatch: {
+          gameView: () => gameViewRef.value,
+          containers: [{ ref: ref(makeContainer()), name: 'hand', element: () => handGameEl }],
+          getElementData: () => ({}),
+        },
+      });
+      gameViewRef.value = { id: 0, children: [handGameEl] };
+      await nextTick();
+      reads = 0;
+      gameViewRef.value = { id: 0, children: [handGameEl] };
+      await nextTick();
+      return reads;
+    }
+
+    it('reads a container a fixed number of times per update, however many elements it holds', async () => {
+      const small = await handChildReadsPerUpdate(1);
+      expect(small).toBeGreaterThan(0);
+      expect(await handChildReadsPerUpdate(50)).toBe(small);
+    });
   });
 
   describe('test mode - manual fly()', () => {
@@ -335,6 +615,34 @@ describe('useFlyingElements', () => {
       expect(getAnimationTrace()).toHaveLength(0);
 
       prefersReducedMotion.value = false;
+    });
+  });
+
+  describe('flyOnAppear ids (#868)', () => {
+    it('two flights started in the same millisecond keep separate ghosts', async () => {
+      const rafQueue: FrameRequestCallback[] = [];
+      vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => rafQueue.push(cb));
+      vi.stubGlobal('cancelAnimationFrame', vi.fn());
+      vi.spyOn(Date, 'now').mockReturnValue(1_000);
+      const sourceEl = makeContainer();
+      const targetEl = makeContainer();
+      vi.spyOn(sourceEl, 'getBoundingClientRect').mockReturnValue(makeRect({ width: 60, height: 84 }));
+      vi.spyOn(targetEl, 'getBoundingClientRect').mockReturnValue(makeRect({ left: 200, width: 60, height: 84 }));
+
+      const { flyOnAppear, flyingElements } = useFlyingElements({ duration: 50, holdDuration: 0 });
+      const first = ref<{ rank: string } | null>(null);
+      const second = ref<{ rank: string } | null>(null);
+      for (const element of [first, second]) {
+        flyOnAppear({ element, sourceRef: ref(sourceEl), targetRef: ref(targetEl), getElementData: (el) => ({ rank: el.rank }) });
+      }
+      first.value = { rank: 'A' };
+      second.value = { rank: 'K' };
+      await nextTick();
+      expect(flyingElements.value).toHaveLength(2);
+
+      // Finish only the first flight; the second ghost must stay.
+      rafQueue[0](performance.now() + 10_000);
+      expect(flyingElements.value).toHaveLength(1);
     });
   });
 

@@ -1,18 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { registerRenderer, resolveRenderer, resetRegistry } from './renderer-registry.js';
 import type { RendererEntry } from './renderer-registry.js';
-
-// ---------------------------------------------------------------------------
-// Minimal GameElement interface for test factories (mirrors renderer-registry.ts)
-// ---------------------------------------------------------------------------
-interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
-  childCount?: number;
-}
+import type { GameElement } from './auto-ui-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Factory helpers

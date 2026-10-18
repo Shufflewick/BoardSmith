@@ -1,15 +1,18 @@
-import { existsSync, readFileSync, realpathSync, writeFileSync, mkdirSync, cpSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync, mkdirSync, cpSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join, relative } from 'node:path';
 import { build as viteBuild } from 'vite';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import ora from 'ora';
 import { ENGINE_REVISION } from '../../contract/index.js';
 import { getProjectContext, loadGameDefinition, rulesEntrySource } from './game-runtime.js';
 import { buildCli, CLI_ENTRY, CLI_OUTFILE } from '../lib/build-cli.js';
 import { resolveUserPath } from '../lib/user-path.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
+import { isSameOrInside } from '../lib/path-inside.js';
 import { requireGameProjectManifests, requireRulesIndex, requireTableUi, resolveRulesDir, tableUiState } from '../lib/game-project.js';
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
+import { listFiles } from '../lib/source-files.js';
 import { parseGameOptionList } from '../../session/game-option-selection.js';
 import { readWorldDefinition, type WorldDefinition } from '../../world/index.js';
 import type { GameBackend, GameDefinition } from '../../session/index.js';
@@ -279,7 +282,7 @@ export function deriveManifest(
  * (`WORKER_ENTRIES`) are the only compiled artifacts the library produces.
  */
 async function buildLibrary(repoRoot: string): Promise<void> {
-  console.log(chalk.cyan('\nBuilding BoardSmith CLI...\n'));
+  console.log(styleText('cyan', '\nBuilding BoardSmith CLI...\n'));
   const spinner = ora(`Bundling ${CLI_ENTRY}...`).start();
 
   try {
@@ -294,8 +297,8 @@ async function buildLibrary(repoRoot: string): Promise<void> {
   }
 
   spinner.succeed(`CLI built (${CLI_OUTFILE})`);
-  console.log(chalk.dim('\n  Installed copies of BoardSmith run this bundle.'));
-  console.log(chalk.dim('  Inside this repo the CLI always runs from source, so you rarely need it.\n'));
+  console.log(styleText('dim', '\n  Installed copies of BoardSmith run this bundle.'));
+  console.log(styleText('dim', '  Inside this repo the CLI always runs from source, so you rarely need it.\n'));
 }
 
 
@@ -338,7 +341,7 @@ async function writeWorldEntryIfMissing(
   const { created } = await ensureWorldEntry(cwd, String(config.displayName || config.name));
   for (const file of created) {
     console.log(
-      chalk.dim(`  Wrote ${file} - a world project needs an entry, and this one had none.`),
+      styleText('dim', `  Wrote ${file} - a world project needs an entry, and this one had none.`),
     );
   }
 }
@@ -371,6 +374,39 @@ const DEFAULT_OUT_DIR = 'dist';
  */
 export function buildOutputDir(cwd: string, outDir: string | undefined): string {
   return resolveUserPath(cwd, outDir ?? DEFAULT_OUT_DIR);
+}
+
+/**
+ * Why build must not empty `outDir`, or undefined when it may (#842). It may only when the folder
+ * is missing, empty, or holds `rules/rules.js`, which only a build writes, and is not a symlink, the
+ * project, a folder holding it or the home folder. Native realpath, because on macOS the plain one
+ * keeps the letter case typed and `/USERS/me` would not match `/Users/me`.
+ */
+export function outDirRefusal(projectDir: string, outDir: string): string | undefined {
+  if (!existsSync(outDir)) return undefined;
+  if (lstatSync(outDir).isSymbolicLink()) {
+    return 'it is a symlink, and emptying it would remove only the link and send the build somewhere new.';
+  }
+  const real = realpathSync.native(outDir);
+  if (isSameOrInside(real, realpathSync.native(projectDir))) return 'it is the project folder or a folder holding it.';
+  if (real === realpathSync.native(homedir())) return 'it is your home folder.';
+  if (!statSync(real).isDirectory()) return 'it is a file, not a folder.';
+  if (readdirSync(real).length > 0 && !existsSync(join(real, 'rules', 'rules.js'))) {
+    return 'it is not empty and has no rules/rules.js, so it does not look like an earlier build output.';
+  }
+  return undefined;
+}
+
+/** Deletes `outDir`, so no file an earlier build wrote ships in this one (#842), or throws why not. */
+function emptyBuildOutputDir(projectDir: string, outDir: string): void {
+  const refusal = outDirRefusal(projectDir, outDir);
+  if (refusal !== undefined) {
+    throw new Error(
+      `Refusing to empty the build output folder ${outDir}: ${refusal} ` +
+      `Build deletes everything in its output folder first, so pass --out-dir a folder used only for build output, such as ${join(projectDir, 'dist')}.`,
+    );
+  }
+  if (existsSync(outDir)) rmSync(outDir, { recursive: true });
 }
 
 /** `boardsmith build`, in the current directory. */
@@ -426,8 +462,11 @@ async function buildProjectIn(projectDir: string, options: BuildOptions): Promis
   const rulesPath = resolveRulesDir(cwd, config);
   const rulesIndexPath = requireRulesIndex(rulesPath);
   requireTableUi(cwd, config);
+  // public/ is copied into dist/ as it is, and publish cannot follow a linked folder there (#1114).
+  listFiles(join(cwd, 'public'), { sourceTree: false });
+  emptyBuildOutputDir(cwd, outDir);
 
-  console.log(chalk.cyan(`\nBuilding ${config.displayName || config.name}...\n`));
+  console.log(styleText('cyan', `\nBuilding ${config.displayName || config.name}...\n`));
 
   const spinner = ora('Building game rules...').start();
 
@@ -539,21 +578,21 @@ async function buildProjectIn(projectDir: string, options: BuildOptions): Promis
     spinner.succeed('Manifest generated');
 
     // Report build sizes
-    console.log(chalk.green('\nBuild complete!\n'));
-    console.log(chalk.dim(`  Output: ${outDir}/`));
-    console.log(chalk.dim(`    rules/  - Game logic bundle`));
-    console.log(chalk.dim(`    ui/     - User interface bundle`));
+    console.log(styleText('green', '\nBuild complete!\n'));
+    console.log(styleText('dim', `  Output: ${outDir}/`));
+    console.log(styleText('dim', `    rules/  - Game logic bundle`));
+    console.log(styleText('dim', `    ui/     - User interface bundle`));
     if (hasWorldUi) {
       if (tableUi) {
-        console.log(chalk.dim(`      index.html - the table surface (GameShell)`));
+        console.log(styleText('dim', `      index.html - the table surface (GameShell)`));
       }
-      console.log(chalk.dim(`      world.html - the resident-world surface (WorldShell)`));
+      console.log(styleText('dim', `      world.html - the resident-world surface (WorldShell)`));
     }
-    console.log(chalk.dim(`    manifest.json - Game metadata\n`));
+    console.log(styleText('dim', `    manifest.json - Game metadata\n`));
 
-    console.log(chalk.cyan('Next steps:'));
-    console.log(chalk.dim('  boardsmith validate  - Run pre-publish checks'));
-    console.log(chalk.dim('  boardsmith publish   - Publish to boardsmith.io\n'));
+    console.log(styleText('cyan', 'Next steps:'));
+    console.log(styleText('dim', '  boardsmith validate  - Run pre-publish checks'));
+    console.log(styleText('dim', '  boardsmith publish   - Publish to boardsmith.io\n'));
 
   } catch (error) {
     spinner.fail('Build failed');

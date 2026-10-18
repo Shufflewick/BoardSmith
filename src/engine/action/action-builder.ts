@@ -4,7 +4,7 @@ import type { ElementRef } from '../../types/protocol.js';
 import type {
   ActionDefinition,
   ActionContext,
-  ActionResult,
+  ExecuteResult,
   Selection,
   ChoiceSelection,
   ChoiceValue,
@@ -491,6 +491,9 @@ export class Action<
    * Mark this action as non-undoable.
    * Use for actions that reveal hidden info, involve randomness, or shouldn't be undone.
    * When executed, undo is disabled for the rest of the turn.
+   * Each use is still recorded in the action history; a game whose seats may
+   * repeat one without limit keeps only what undo reads with
+   * `checkpoints: { actionHistory: 'undo' }` (docs/state-size.md).
    */
   notUndoable(): this {
     this.definition.undoable = false;
@@ -1035,7 +1038,8 @@ export class Action<
    * @param options.prompt - User-facing prompt text, or a function evaluated
    *   against the current game state each time the pick is rendered
    * @param options.pattern - `{ regex, message }`: the regex the input must
-   *   match, and the sentence the player is shown when it does not
+   *   match, and the sentence the player is shown when it does not. The g and
+   *   y flags are refused: they make the regex stateful between entries
    * @param options.minLength - Minimum required string length
    * @param options.maxLength - Maximum allowed string length. Default: {@link DEFAULT_TEXT_MAX_LENGTH}
    * @param options.maxBytes - The most UTF-8 bytes the text may add to a world
@@ -1100,6 +1104,12 @@ export class Action<
       throw new Error(
         `enterText('${name}') was given maxBytes ${String(options.maxBytes)}. maxBytes is the most ` +
           'bytes the text may take when stored, so it must be a whole number above zero.',
+      );
+    }
+    if (options.pattern && /[gy]/.test(options.pattern.regex.flags)) {
+      throw new Error(
+        `enterText('${name}') was given the pattern ${String(options.pattern.regex)}. A pattern checks the whole text, ` +
+          'so the g and y flags mean nothing here and would refuse every other valid entry. Remove them.',
       );
     }
     const selection = {
@@ -1238,7 +1248,7 @@ export class Action<
    * ```
    */
   execute(
-    fn: (args: A, context: ActionContext<G, A>) => ActionResult | void
+    fn: (args: A, context: ActionContext<G, A>) => ExecuteResult | void
   ): ActionDefinition {
     // The accumulated args type A and game type G are erased at the storage
     // boundary (ActionDefinition is non-generic); both are sound because the

@@ -7,7 +7,7 @@
  * the block sits in the game it belongs to, so blocks of one doc that import
  * each other (`./game.js`, `./elements.js`) compile together.
  *
- * The docs (`docs/*.md`) and the aspect templates `/design-game` copies game
+ * The docs (`docs/*.md`, `docs/api/*.md`) and the aspect templates `/design-game` copies game
  * code from (`src/cli/slash-command/aspects/*.md`, #645) both carry markers.
  *
  * `docs-game-typecheck.test.ts` compiles the `game` blocks (#511).
@@ -29,7 +29,7 @@ export interface MarkedDocBlock {
   readonly code: string;
 }
 
-const MARKER = /<!-- typecheck: ([a-z-]+)(?: (\S+))? -->\n```[a-z]*\n([\s\S]*?)```/g;
+const MARKER = /<!-- typecheck: ([a-z-]+)(?: (\S+))? -->\r?\n```[a-z]*\r?\n([\s\S]*?)```/g;
 const ANY_MARKER = /^<!-- typecheck:/gm;
 
 /** The kinds a gate compiles: `game` in docs-game-typecheck, `board` in aspect-boards-typecheck. */
@@ -64,7 +64,7 @@ export function parseMarkedBlocks(file: string, text: string, kind: string): Mar
 }
 
 /** The folders whose `*.md` files may mark blocks, relative to the repo root. */
-const MARKED_DIRS = ['docs', 'src/cli/slash-command/aspects'];
+const MARKED_DIRS = ['docs', 'docs/api', 'src/cli/slash-command/aspects'];
 
 /**
  * Every block in the `*.md` of `MARKED_DIRS` whose marker names `kind`, in

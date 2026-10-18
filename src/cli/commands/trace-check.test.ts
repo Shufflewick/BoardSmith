@@ -240,6 +240,31 @@ async function hashProject(root: string): Promise<string> {
   return hash.digest('hex');
 }
 
+describe('traceCheckCommand names what it cannot read instead of calling it missing (#1174)', () => {
+  it('names a CHUNK.md it cannot read rather than passing over the chunk', async () => {
+    const project = await makeProject();
+    const chunkMd = join(project, DESIGN_DIR, 'chunks', 'odd', 'CHUNK.md');
+    await fs.mkdir(chunkMd, { recursive: true });
+    await expect(traceCheckCommand({ project })).rejects.toThrow(`Could not read ${chunkMd} (EISDIR)`);
+  });
+
+  it('names a manifest-listed test file it cannot read rather than passing over it', async () => {
+    const project = await makeProject();
+    await makeChunk(project, 'jab', { claims: [1], manifestRows: [{ files: 'src/loop.test.ts', status: 'NEW' }] });
+    const loop = join(project, 'src', 'loop.test.ts');
+    await fs.mkdir(dirname(loop), { recursive: true });
+    await fs.symlink(loop, loop);
+    await expect(traceCheckCommand({ project })).rejects.toThrow(`Could not read ${loop} (ELOOP)`);
+  });
+
+  it('names a RULINGS.md it cannot read rather than finding no rulings', async () => {
+    const project = await makeProject();
+    const rulings = join(project, DESIGN_DIR, 'RULINGS.md');
+    await fs.mkdir(rulings);
+    await expect(traceCheckCommand({ project })).rejects.toThrow(`Could not read ${rulings} (EISDIR)`);
+  });
+});
+
 describe('traceCheckCommand', () => {
   it('a test file in no chunk manifest is unassociated-test, and its claim refs are recorded unresolved, never dropped', async () => {
     const project = await makeProject();
@@ -518,5 +543,28 @@ describe('traceCheckCommand — --json / human report', () => {
     const printedLines = logSpy.mock.calls.map((c) => String(c[0]));
 
     expect(printedLines.some((line) => /\+\d+ more — run --json for the full list/.test(line))).toBe(true);
+  });
+});
+
+describe('trace-check test discovery skips what the other source walks skip (#1048)', () => {
+  it('leaves out test files under node_modules and dot folders in tests/', async () => {
+    const project = await makeProject();
+    await makeChunk(project, 'jab', { claims: [1], manifestRows: [] });
+    await writeTestFile(project, 'tests/kept.test.ts', '// claim 1\n');
+    await writeTestFile(project, 'tests/node_modules/pkg/vendored.test.ts', '// claim 1\n');
+    await writeTestFile(project, 'tests/.cache/stale.test.ts', '// claim 1\n');
+
+    const result = await traceCheckCommand({ project });
+
+    const unassociated = result.findings.filter((f) => f.kind === 'unassociated-test').map((f) => f.subject);
+    expect(unassociated).toEqual(['tests/kept.test.ts']);
+  });
+
+  it('names a tests path that is a file instead of failing with a bare system error', async () => {
+    const project = await makeProject();
+    await makeChunk(project, 'jab', { claims: [1], manifestRows: [] });
+    await writeTestFile(project, 'tests', 'not a folder\n');
+
+    await expect(traceCheckCommand({ project })).rejects.toThrow(`${join(project, 'tests')} is a file, not a folder.`);
   });
 });

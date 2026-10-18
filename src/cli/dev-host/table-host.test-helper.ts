@@ -6,7 +6,7 @@
  * (`loadTableRuntime`), and run through `MultiplayerHost` with one seated
  * client, `dev`. Nothing here is a hand-built runtime.
  */
-import { loadTableRuntime, type TableRuntime } from '../commands/dev-table-runtime.js';
+import { bundleTableRules, loadTableRuntime, startTableRuntime, type TableRuntime } from '../commands/dev-table-runtime.js';
 import { MultiplayerHost, type HostOutbound, type MultiplayerHostOptions } from './multiplayer-host.js';
 import { rulesProject } from './rules-project.test-helper.js';
 import type { createDevHostClientMemory } from './test-client-memory.js';
@@ -16,6 +16,17 @@ export function tableProject(prefix: string, source: string) {
   const { rulesPath, tempDir, save } = rulesProject(prefix, source);
   const load = (): Promise<TableRuntime> => loadTableRuntime(rulesPath, tempDir, 'monorepo', undefined);
   return { save, load };
+}
+
+/**
+ * Bundle `source` once, in a project of its own, and answer a way to start it:
+ * each call is a fresh worker on that bundle, as each table a test opens needs,
+ * since a reload stops the worker of the rules it replaces (#885).
+ */
+export async function bundledTable(prefix: string, source: string): Promise<() => Promise<TableRuntime>> {
+  const { rulesPath, tempDir } = rulesProject(prefix, source);
+  const bundlePath = await bundleTableRules(rulesPath, tempDir, 'monorepo');
+  return () => startTableRuntime(bundlePath, undefined);
 }
 
 type GameStateFrame = Extract<HostOutbound, { type: 'game_state' }>;

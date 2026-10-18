@@ -55,7 +55,6 @@ import {
   WORLD_OWNER,
   assertSeatWithinWorld,
   createWorld,
-  nextDueBatch,
   runDueOccurrences,
   dispatchStep,
   rearmAt,
@@ -308,9 +307,11 @@ export class ResidentWorld {
    */
   #revision = 0;
   #closed = false;
-  /** When overdue work may next be tried, set by a batch an event refused in
-   *  and cleared by one none did. Read by every re-arm, so they all agree. */
-  #retryAt: number | undefined;
+  /** The event a batch saw refuse and when overdue work may next be tried,
+   *  cleared by a batch none refused in. Read by every re-arm, so they all
+   *  agree, and by the catch-up refusal, which names the event by its
+   *  declared prompt, or its action name when it has none (#939, #1175). */
+  #refused: { label: string; retryAt: number } | undefined;
   /** The world lock. Every entry point queues behind it. */
   #lock: Promise<unknown> = Promise.resolve();
 
@@ -530,13 +531,9 @@ export class ResidentWorld {
     return this.#store.seats().find((record) => record.player === player)?.seat;
   }
 
-  #allowanceFor(owner: string, pending: readonly PlannedEvent[]): ScheduleAllowance {
-    const mine = pending.filter((event) => event.owner === owner);
-    return {
-      unkeyed: mine.filter((event) => event.key === undefined).length,
-      keys: [...new Set(mine.flatMap((event) => (event.key === undefined ? [] : [event.key])))],
-      worldPending: pending.length,
-    };
+  #allowanceFor(owner: string): ScheduleAllowance {
+    const { unkeyed, keyed } = this.#store.pendingOf(owner);
+    return { unkeyed, keys: [...keyed.keys()], worldPending: this.#store.pendingCount() };
   }
 
   // ── starting ───────────────────────────────────────────────────────────────
@@ -892,11 +889,18 @@ export class ResidentWorld {
       // gamble. The `finally` below re-arms, so the catch-up is already
       // continuing while the player reads the refusal.
       if (await this.#catchUpBefore(arrivedAt)) {
+        // A REFUSED EVENT MAY NEVER GO THROUGH (#721, #939), so the player is
+        // told which one and is not promised "a moment".
         throw worldRefusal(
           "world-catching-up",
-          "This world is still catching up on events that were due before your command " +
-            "arrived, and its rules say a command must not overtake them. Nothing was changed. " +
-            "Send it again in a moment -- it will run exactly once when the world is level.",
+          this.#refused === undefined
+            ? "This world is still catching up on events that were due before your command " +
+                "arrived, and its rules say a command must not overtake them. Nothing was changed. " +
+                "Send it again in a moment -- it will run exactly once when the world is level."
+            : `This world is waiting on its scheduled event "${this.#refused.label}", which could ` +
+                "not run and is still queued, and its rules say a command must not overtake it. " +
+                "Nothing was changed and your command was not kept. The world keeps retrying that " +
+                "event; send your command again once it has gone through, and it will run exactly once.",
         );
       }
       // THE CATCH-UP CAN END THE WORLD, and then this command is refused like
@@ -907,7 +911,6 @@ export class ResidentWorld {
         command: { name: action, args },
         timing: null,
         arrivedAt,
-        queue: this.#store.pendingEvents(),
         receipt: { order, player },
       });
       return { kind: "committed", events };
@@ -946,7 +949,6 @@ export class ResidentWorld {
         command: { name, args },
         timing: { due: now, missedCount: 0 },
         arrivedAt: now,
-        queue: this.#store.pendingEvents(),
       });
       this.#onEvents(events);
     } finally {
@@ -973,12 +975,6 @@ export class ResidentWorld {
     timing: WorldTiming;
     arrivedAt: number;
     /**
-     * THE QUEUE AS COMMITTED NOW, read once by the caller (#746). Nothing
-     * before this dispatch's checkpoint writes the queue, so the allowance and
-     * the planning below both judge against it without re-reading.
-     */
-    queue: readonly PlannedEvent[];
-    /**
      * THE QUEUED EVENT THIS DISPATCH IS ONE OCCURRENCE OF, and where it is
      * owed next (`runDueOccurrences`' `owedDue`). The event is settled and
      * re-armed there in the same write as the occurrence's effects -- unless
@@ -1000,7 +996,7 @@ export class ResidentWorld {
      */
     about?: string;
   }): Promise<{ readonly events: readonly RoutedEvent[]; readonly displaced: boolean }> {
-    const { player, command, timing, arrivedAt, queue } = request;
+    const { player, command, timing, arrivedAt } = request;
     const runner = this.#world.runner;
 
     // THE ORDER EVERY HOST SHARES (#539): walk the action's declaration
@@ -1022,7 +1018,7 @@ export class ResidentWorld {
         // partition.
         readActivity: (seat) => Promise.resolve(this.#store.activityOf(seat)),
         readNoticeBox: (seat) => Promise.resolve({ seat, box: this.#store.noticeBox(seat) }),
-        allowance: (asking) => Promise.resolve(this.#allowanceFor(asking, queue)),
+        allowance: (asking) => Promise.resolve(this.#allowanceFor(asking)),
         apply: ({ allowance, answers }) =>
           runner.apply({
             player,
@@ -1041,13 +1037,15 @@ export class ResidentWorld {
             activity: this.#activityFor(request.about ?? player),
             ...answers,
           }),
-        planning: (owner) =>
-          Promise.resolve({
+        planning: (owner) => {
+          // Read on the first keyed request only: most dispatches schedule nothing keyed.
+          let keyed: ReadonlyMap<string, string> | undefined;
+          return Promise.resolve({
             nextSeq: this.#store.nextSeq(),
             mintId: this.#mintId,
-            replaces: (key: string) =>
-              queue.find((event) => event.owner === owner && event.key === key)?.id,
-          }),
+            replaces: (key: string) => (keyed ??= this.#store.pendingOf(owner).keyed).get(key),
+          });
+        },
       },
       this.#budgets,
     );
@@ -1140,7 +1138,7 @@ export class ResidentWorld {
    *
    * `rearmAt` is the library's answer, so every host arms for the same instant:
    * the earliest pending event, or now when something is already overdue --
-   * overload degrades to latency, never refusal -- or `#retryAt` when the last
+   * overload degrades to latency, never refusal -- or `#refused.retryAt` when the last
    * batch saw an event refuse, so a broken handler is not retried at once.
    */
   rearm(): void {
@@ -1156,7 +1154,14 @@ export class ResidentWorld {
 
   /** The instant `rearm` arms for, which is what a host shows as "next due". */
   nextWakeAt(): number | null {
-    return rearmAt(this.#store.pendingEvents(), this.now(), this.#retryAt);
+    const now = this.now();
+    const earliest = this.#store.earliestEvent();
+    if (earliest === undefined || earliest.due > now) {
+      return rearmAt(earliest === undefined ? [] : [earliest], now);
+    }
+    // OVERDUE WORK MAY WAIT FOR A RETRY, and a timer due before that retry still fires on time.
+    const upcoming = this.#store.earliestEvent(now);
+    return rearmAt(upcoming === undefined ? [earliest] : [earliest, upcoming], now, this.#refused?.retryAt);
   }
 
   /**
@@ -1168,7 +1173,7 @@ export class ResidentWorld {
    * delay produces a busy host rather than a wedged one.
    */
   async #drain(): Promise<void> {
-    this.#retryAt = undefined;
+    this.#refused = undefined;
     await this.#drainBatch(this.now(), new Set());
     this.rearm();
   }
@@ -1209,11 +1214,11 @@ export class ResidentWorld {
       // RE-ASKED BEFORE EVERY EVENT (#395): the one before may have ended the
       // world, and an ended world runs nothing else.
       if (this.completed) break;
-      const queue = this.#store.pendingEvents();
-      const event = this.#nextDue(queue, now, spent);
+      // `(due, seq)` order, the order `nextDueBatch` sorts by (#280).
+      const event = this.#store.nextDue(now, spent);
       if (event === undefined) break;
       spent.add(event.id);
-      ran += await this.#runQueued(event, now, queue);
+      ran += await this.#runQueued(event, now);
     }
     return ran;
   }
@@ -1228,15 +1233,9 @@ export class ResidentWorld {
    * loop is `runDueOccurrences`, the one every host runs (#539).
    *
    * Answers how many calls it made, which is a batch's own measure of progress.
-   *
-   * `queue` is the read that picked this event, still current for its first
-   * occurrence; every later one follows a checkpoint and reads again (#746).
    */
-  async #runQueued(event: PlannedEvent, now: number, queue: readonly PlannedEvent[]): Promise<number> {
-    let unwritten: readonly PlannedEvent[] | undefined = queue;
+  async #runQueued(event: PlannedEvent, now: number): Promise<number> {
     const outcome = await runDueOccurrences(event, now, this.#budgets, async (timing, owedDue) => {
-      const current = unwritten ?? this.#store.pendingEvents();
-      unwritten = undefined;
       const { events, displaced } = await this.#dispatch({
         player: null,
         command: { name: event.action, args: event.args },
@@ -1244,7 +1243,6 @@ export class ResidentWorld {
         // ITS `now` IS ITS `due`, never the wall clock at execution: a world
         // that drained late must produce the state a punctual one would.
         arrivedAt: timing.due,
-        queue: current,
         // THE EVENT'S OWNER IS WHO IT IS ABOUT (#383), which is not who is
         // charged for it. A seat's own deadline rechecks that seat.
         about: event.owner,
@@ -1263,7 +1261,10 @@ export class ResidentWorld {
       return { ended: this.completed, displaced };
     });
     if (outcome.kind === "refused") {
-      this.#retryAt = this.now() + RETRY_WAIT_MS;
+      const label =
+        readWorldDefinition(this.#definition).actions.find((one) => one.name === event.action)?.prompt ??
+        event.action;
+      this.#refused = { label, retryAt: this.now() + RETRY_WAIT_MS };
       // A DUE EVENT THAT REFUSED IS SAID OUT LOUD AND LEFT QUEUED, at the
       // occurrence that refused -- which is where the last occurrence that ran
       // already re-armed it, so there is nothing more to write. Its effects
@@ -1274,23 +1275,6 @@ export class ResidentWorld {
       );
     }
     return outcome.ran;
-  }
-
-  /**
-   * THE EARLIEST EVENT DUE AT `now` THAT THIS BATCH HAS NOT TAKEN.
-   *
-   * `nextDueBatch` is the library's ordering and is asked for one, so the
-   * order a re-reading drain runs in is the same `(due, seq)` a single
-   * selection ran in -- insertion still breaks a tie within one millisecond,
-   * and no second comparison of due times exists to disagree with it.
-   */
-  #nextDue(
-    queue: readonly PlannedEvent[],
-    now: number,
-    spent: ReadonlySet<string>,
-  ): PlannedEvent | undefined {
-    const queued = queue.filter((event) => !spent.has(event.id));
-    return nextDueBatch(queued, now, 1).batch[0];
   }
 
   /**
@@ -1333,7 +1317,7 @@ export class ResidentWorld {
       // to be overtaken, and the absence of a guarantee is not a lesser one.
       return false;
     }
-    this.#retryAt = undefined;
+    this.#refused = undefined;
     const spent = new Set<string>();
     for (let round = 0; round < this.#budgets.catchUpRounds; round++) {
       if (!this.#anythingDueAt(arrivedAt)) return false;
@@ -1352,7 +1336,7 @@ export class ResidentWorld {
   /** Whether any scheduled event was already due at `instant`, which is the
    *  whole of "is this world behind that instant?". */
   #anythingDueAt(instant: number): boolean {
-    return this.#store.pendingEvents().some((event) => event.due <= instant);
+    return this.#store.nextDue(instant, new Set()) !== undefined;
   }
 
   /**
@@ -1369,12 +1353,9 @@ export class ResidentWorld {
    * fire and no clock to move.
    */
   async fireDue(): Promise<WorldFireOutcome | null> {
-    const pending = this.#store.pendingEvents();
-    if (pending.length === 0) return null;
-    // A loop, not Math.min(...): spreading a queue past ~125k events overflows the stack (#791).
-    let earliest = Infinity;
-    for (const event of pending) if (event.due < earliest) earliest = event.due;
-    const jumpMs = Math.max(0, earliest - this.now());
+    const earliest = this.#store.earliestEvent();
+    if (earliest === undefined) return null;
+    const jumpMs = Math.max(0, earliest.due - this.now());
     // DURABLE BEFORE IT IS DRAINED. The partitions this firing settles become
     // durable at the advanced time, so the advance itself has to be on disk
     // first or a crash between the two leaves a world settled in a future its
@@ -1476,7 +1457,9 @@ export class ResidentWorld {
 }
 
 /** What went wrong, as a sentence. A `WorldRefusal`'s message is the one the
- *  author can act on, so it is passed through unedited. */
+ *  author can act on, so it is passed through unedited. Any other thrown text
+ *  is passed too, deliberately: only `boardsmith dev` and `TestWorld` drive a
+ *  resident world, so the reader is the author (#1045). */
 export function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }

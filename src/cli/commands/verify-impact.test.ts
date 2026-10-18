@@ -42,6 +42,7 @@ import {
 import {
   verifyRunInitCommand,
   verifyRunRecordCommand,
+  stagingSlicesDir,
   parseLedgerBody,
   resolveLedgerState,
   type ClassificationRecord,
@@ -146,10 +147,11 @@ describe('marker — renderRulesStaleness', () => {
     expect(body).toContain('| rulebook/03-scoring.md |');
   });
 
-  it('renders RULES_STALENESS_EMPTY when Attributed slices is empty', () => {
-    const record = baseRecord({ attributedSlices: [] });
+  it('says no slices are attributed, not that the chunk is not stale, when Attributed slices is empty (#998)', () => {
+    const record = baseRecord({ marker: RULES_STALE_MARKER, attributedSlices: [] });
     const body = renderRulesStaleness(record);
-    expect(body).toContain(RULES_STALENESS_EMPTY);
+    expect(body).toContain('_No slices attributed._');
+    expect(body).not.toContain(RULES_STALENESS_EMPTY);
   });
 
   it('omits Prior reading:/Changed reading: when absent', () => {
@@ -237,6 +239,14 @@ describe('marker — parseRulesStaleness (strict)', () => {
       'rulebook/02-play.md',
       'rulebook/03-scoring.md',
     ]);
+  });
+
+  it('round-trips a real rendered section: state rules-stale, with no attributed slices (#998)', () => {
+    const record = baseRecord({ marker: RULES_STALE_MARKER, attributedSlices: [] });
+    const text = `# Chunk: test\n\nStatus: verified\n\n${renderRulesStalenessSection(record)}`;
+    const parsed = parseRulesStaleness(text);
+    expect(parsed.state).toBe('rules-stale');
+    expect(parsed.record?.attributedSlices).toEqual([]);
   });
 
   it('round-trips prior/changed readings verbatim', () => {
@@ -648,6 +658,17 @@ async function sha256OfDir(root: string): Promise<Record<string, string>> {
   return map;
 }
 
+/** Everything a run printed to stdout through console.log, joined as the terminal would see it. */
+async function captureStdout(run: () => Promise<unknown>): Promise<string> {
+  const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  try {
+    await run();
+    return logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+  } finally {
+    logSpy.mockRestore();
+  }
+}
+
 async function singleContradictoryPairProject(
   projectRoot: string,
 ): Promise<{ project: string; runId: string; pairId: string }> {
@@ -705,6 +726,14 @@ describe('contradictory — verifyImpactGateCommand: read-only, exit-0, no-bypas
     expect(process.exitCode === undefined || process.exitCode === 0).toBe(true);
 
     process.exitCode = previousExitCode;
+  });
+
+  it('--json: stdout is exactly one parseable JSON object, with no inner report printed ahead of it (#832)', async () => {
+    const { project, runId, pairId } = await singleContradictoryPairProject(gateDir);
+
+    const stdout = await captureStdout(() => verifyImpactGateCommand({ project, runId, json: true }));
+
+    expect(JSON.parse(stdout).pending).toContain(pairId);
   });
 
   it('contradictory: verifyImpactGateCommand is read-only — a whole-project sha256 map is byte-identical before and after', async () => {
@@ -787,6 +816,19 @@ describe('contradictory — nextRulingNumber / appendRuling — over a self-cont
     await fs.mkdir(join(dir, DESIGN_DIR), { recursive: true });
   });
 
+  it('keeps every ruling, each with its own number, when several appendRuling calls run in parallel (#999)', async () => {
+    await fs.writeFile(join(dir, DESIGN_DIR, 'RULINGS.md'), rulingsCorpus());
+    const decisions = ['one', 'two', 'three', 'four', 'five'];
+
+    const appended = await Promise.all(
+      decisions.map((d) => appendRuling(dir, { decision: `Decision ${d}.`, citation: 'rulebook/a.md, p.1', rationale: 'Parallel.' })),
+    );
+
+    const text = await fs.readFile(join(dir, DESIGN_DIR, 'RULINGS.md'), 'utf-8');
+    for (const d of decisions) expect(text).toContain(`Decision ${d}.`);
+    expect(new Set(appended.map((a) => a.number)).size).toBe(decisions.length);
+  });
+
   it('contradictory: nextRulingNumber returns one past the corpus\'s last entry', async () => {
     const text = rulingsCorpus();
     expect(nextRulingNumber(text)).toBe(nextNumberFor());
@@ -860,13 +902,39 @@ describe('contradictory — nextRulingNumber / appendRuling — over a self-cont
     expect(appendedBlock).not.toMatch(/supersede[sd]?/i);
   });
 
+  it('appendRuling reuses an identical ruling on file, but never one a later ruling superseded (#839)', async () => {
+    const entry = { decision: 'Ties go to the dealer.', citation: 'rulebook/a.md, p.1', rationale: 'Asked.' };
+    await fs.writeFile(join(dir, DESIGN_DIR, 'RULINGS.md'), `# Rulings\n\n${renderRuling({ number: 1, ...entry })}`);
+    expect((await appendRuling(dir, entry)).number).toBe(1);
+
+    await fs.writeFile(
+      join(dir, DESIGN_DIR, 'RULINGS.md'),
+      `# Rulings\n\n${renderRuling({ number: 1, ...entry })}\n` +
+        renderRuling({ number: 2, decision: 'This supersedes Ruling 1.', citation: 'rulebook/a.md, p.1', rationale: 'Changed.' }),
+    );
+    expect((await appendRuling(dir, entry)).number).toBe(3);
+  });
+
   it('appendRuling throws an actionable error when RULINGS.md does not exist, and never creates one', async () => {
     await expect(
       appendRuling(dir, { decision: 'x', citation: 'y', rationale: 'z' }),
     ).rejects.toThrow(/No design\/RULINGS\.md found/);
     await expect(fs.access(join(dir, DESIGN_DIR, 'RULINGS.md'))).rejects.toThrow();
   });
+
+  it('appendRuling gives the same actionable error when --project has no design directory at all (#999)', async () => {
+    const elsewhere = tempTree('bs-verify-impact-no-design-');
+    await expect(
+      appendRuling(elsewhere, { decision: 'x', citation: 'y', rationale: 'z' }),
+    ).rejects.toThrow(/No design\/RULINGS\.md found/);
+  });
 });
+
+/** Every JSON record in a run's RUN.md ledger, in order. */
+async function runLedgerRecords(project: string, runId: string): Promise<Array<Record<string, unknown>>> {
+  const ledgerText = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'RUN.md'), 'utf-8');
+  return parseLedgerBody(ledgerText, 'RUN.md').lines.map((line) => line.record as unknown as Record<string, unknown>);
+}
 
 describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires human prose, UNADJUDICATED writes no ruling, idempotent per pair', () => {
   let adjDir: string;
@@ -886,6 +954,80 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
     return { project, runId, pairId };
   }
 
+  it('keeps every record when an adjudication and classify record calls run in parallel (#999)', async () => {
+    const { project, runId, pairId } = await contradictoryProjectWithRulings();
+    const evidence = ['one', 'two', 'three', 'four', 'five'];
+
+    // Quoted, so each re-classification stays "contradictory" and the adjudication may land in any order (#1172).
+    await Promise.all([
+      verifyImpactAdjudicateCommand({ project, runId, pairId, outcome: 'UNADJUDICATED', json: true }),
+      ...evidence.map((e) =>
+        verifyClassifyRecordCommand({
+          project, runId, pairId, label: 'contradictory', evidence: e, quotedPass1: 'Lower.', quotedPass2: 'Higher.', json: true,
+        }),
+      ),
+    ]);
+
+    const records = await runLedgerRecords(project, runId);
+    expect(records.filter((r) => r.kind === 'adjudication').map((r) => r.outcome)).toEqual(['UNADJUDICATED']);
+    expect(records.map((r) => String(r.evidence).split(' | ')[0])).toEqual(expect.arrayContaining(evidence));
+  });
+
+  it('writes one RULINGS.md entry when two resolved adjudications of the same pair run in parallel (#1164)', async () => {
+    const { project, runId, pairId } = await contradictoryProjectWithRulings();
+    const resolve = (decision: string) =>
+      verifyImpactAdjudicateCommand({
+        project, runId, pairId, outcome: 'resolved', decision, citation: 'rulebook/a.md, p.1', rationale: 'Parallel.', json: true,
+      });
+
+    const [first, second] = await Promise.all([resolve('Decision one.'), resolve('Decision two.')]);
+
+    expect(second.rulingNumber).toBe(first.rulingNumber);
+    const rulingsText = await fs.readFile(join(project, DESIGN_DIR, 'RULINGS.md'), 'utf-8');
+    expect(rulingsText.match(new RegExp(`^### Ruling ${nextNumberFor()}$`, 'gm'))).toHaveLength(1);
+    expect(rulingsText.match(/^### Ruling /gm)).toHaveLength(rulingsCorpus().match(/^### Ruling /gm)!.length + 1);
+    // Each call records its adjudication line (last write wins per pair), both naming the one ruling.
+    const adjudications = (await runLedgerRecords(project, runId)).filter((r) => r.kind === 'adjudication');
+    expect(adjudications.map((r) => r.rulingNumber)).toEqual([first.rulingNumber, first.rulingNumber]);
+  });
+
+  it('refuses, writing no ruling, when the pair is re-classified while adjudicate waits for the ledger lock (#1164)', async () => {
+    const { project, runId, pairId } = await contradictoryProjectWithRulings();
+    const rulingsBefore = await fs.readFile(join(project, DESIGN_DIR, 'RULINGS.md'), 'utf-8');
+    const realOpen = fs.open.bind(fs);
+    let reclassified = false;
+    // Lands the re-classification just before adjudicate's first try at the RUN.md lock.
+    const openSpy = vi.spyOn(fs, 'open').mockImplementation(async (...args: Parameters<typeof fs.open>) => {
+      if (!reclassified && String(args[0]).endsWith('RUN.md.lock')) {
+        reclassified = true;
+        await verifyClassifyRecordCommand({ project, runId, pairId, label: 'sharper', evidence: 'reread', json: true });
+      }
+      return realOpen(...args);
+    });
+    try {
+      await expect(
+        verifyImpactAdjudicateCommand({
+          project, runId, pairId, outcome: 'resolved', decision: 'Too late.', citation: 'rulebook/a.md, p.1', rationale: 'Raced.', json: true,
+        }),
+      ).rejects.toThrow(/has no recorded "contradictory" classification/);
+    } finally {
+      openSpy.mockRestore();
+    }
+    expect(reclassified).toBe(true);
+    expect(await fs.readFile(join(project, DESIGN_DIR, 'RULINGS.md'), 'utf-8')).toBe(rulingsBefore);
+    expect((await runLedgerRecords(project, runId)).filter((r) => r.kind === 'adjudication')).toEqual([]);
+  });
+
+  it('refuses a run that does not exist with its own message, not a bare ENOENT on the lock (#1164)', async () => {
+    const { project, pairId } = await contradictoryProjectWithRulings();
+    // A well-formed id, so the run lookup (not the id format check) is what refuses it.
+    const runId = '2099-01-01T00-00-00Z';
+    const attempt = verifyImpactAdjudicateCommand({ project, runId, pairId, outcome: 'UNADJUDICATED', json: true });
+    await expect(attempt).rejects.toThrow(runId);
+    await expect(attempt).rejects.not.toThrow(/Invalid --run-id/);
+    await expect(attempt).rejects.not.toThrow(/ENOENT/);
+  });
+
   it('unadjudicated: outcome "resolved" with no --decision rejects with a message naming the missing field', async () => {
     const { project, runId, pairId } = await contradictoryProjectWithRulings();
     await expect(
@@ -899,6 +1041,16 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
         json: true,
       }),
     ).rejects.toThrow(/decision/);
+  });
+
+  it('--json: stdout is exactly one parseable JSON object, with no inner report printed ahead of it (#832)', async () => {
+    const { project, runId, pairId } = await contradictoryProjectWithRulings();
+
+    const stdout = await captureStdout(() =>
+      verifyImpactAdjudicateCommand({ project, runId, pairId, outcome: 'UNADJUDICATED', json: true }),
+    );
+
+    expect(JSON.parse(stdout).outcome).toBe('UNADJUDICATED');
   });
 
   it('unadjudicated: outcome "UNADJUDICATED" writes NO RULINGS.md entry (sha256 unchanged) and records an AdjudicationRecord with that outcome', async () => {
@@ -951,6 +1103,31 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
     expect(gateResult.pending).not.toContain(pairId);
   });
 
+  it('a retry after a crash between the RULINGS.md write and the ledger write appends no second ruling (#839)', async () => {
+    const { project, runId, pairId } = await contradictoryProjectWithRulings();
+    const ledgerPath = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'RUN.md');
+    const ledgerBefore = await fs.readFile(ledgerPath, 'utf-8');
+    const resolution = {
+      project,
+      runId,
+      pairId,
+      outcome: 'resolved' as const,
+      decision: 'The higher-timing reading applies.',
+      citation: 'rulebook/a.md, p.1',
+      rationale: 'Designer confirmed.',
+      json: true,
+    };
+
+    const first = await verifyImpactAdjudicateCommand(resolution);
+    // The crash: the ruling is written but the ledger record never was.
+    await fs.writeFile(ledgerPath, ledgerBefore);
+    const retry = await verifyImpactAdjudicateCommand(resolution);
+
+    expect(retry.rulingNumber).toBe(first.rulingNumber);
+    const rulingsText = await fs.readFile(join(project, DESIGN_DIR, 'RULINGS.md'), 'utf-8');
+    expect(rulingsText.match(/^### Ruling \d+$/gm)).toHaveLength(nextNumberFor());
+  });
+
   it('unadjudicated: a second "resolved" call for the same pair reuses the same ruling number and does NOT append a second RULINGS.md entry', async () => {
     const { project, runId, pairId } = await contradictoryProjectWithRulings();
 
@@ -993,6 +1170,16 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
       (l) => l.type === 'adjudication' && l.record.pairId === pairId,
     );
     expect(adjudicationLines.length).toBe(2);
+  });
+
+  it('asks for the pair to be classified again when its staged slices changed after it was classified (#837)', async () => {
+    const { project, runId, pairId } = await contradictoryProjectWithRulings();
+    await fs.writeFile(join(stagingSlicesDir(project, runId), 'ua2.md'), 'p.1, A:\n"A later staged line."\n');
+    await verifyRunRecordCommand({ project, runId, unit: 'ua2', slice: 'ua2.md', json: true });
+
+    await expect(
+      verifyImpactAdjudicateCommand({ project, runId, pairId, outcome: 'UNADJUDICATED', json: true }),
+    ).rejects.toThrow(/out of date.*verify-classify-record/s);
   });
 
   it('no-bypass: verifyImpactAdjudicateCommand rejects an --outcome value other than "resolved"/"UNADJUDICATED"', async () => {
@@ -1060,17 +1247,15 @@ describe('repair-gate — computeRepairGate (pure, total)', () => {
       disposition: 'reopen-playtest',
       nextStatus: 'built',
       clearMarker: true,
-      reverifyStamp: false,
     });
   });
 
-  it('no-code-change: verified + stale + clean -> close-without-replaytest, nextStatus verified, reverifyStamp true', () => {
+  it('no-code-change: verified + stale + clean -> close-without-replaytest, nextStatus verified', () => {
     const gate = computeRepairGate({ status: 'verified', stale: true, driftState: 'clean' });
     expect(gate).toMatchObject({
       disposition: 'close-without-replaytest',
       nextStatus: 'verified',
       clearMarker: true,
-      reverifyStamp: true,
     });
   });
 
@@ -1144,7 +1329,7 @@ const IMPACT_QUOTED_PASS1 = 'The lower timing on their card resolves first.';
 
 async function buildImpactTestProject(
   root: string,
-  opts: { ruleDelta?: 'sharper' | 'contradictory'; drift?: 'clean' | 'drifted' } = {},
+  opts: { ruleDelta?: 'sharper' | 'contradictory'; drift?: 'clean' | 'drifted'; leaveXUnclassified?: boolean } = {},
 ): Promise<{ project: string; runId: string; pairId: string; firstSha: string }> {
   const project = join(root, `impact-project-${Math.random().toString(36).slice(2)}`);
   const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
@@ -1224,15 +1409,17 @@ async function buildImpactTestProject(
     throw new Error('fixture bug: expected one pair each for x.md and y.md');
   }
 
-  await verifyClassifyRecordCommand({
-    project,
-    runId,
-    pairId: xPair.pairId,
-    label: opts.ruleDelta ?? 'sharper',
-    quotedPass1: IMPACT_QUOTED_PASS1,
-    quotedPass2: changedLine,
-    json: true,
-  });
+  if (!opts.leaveXUnclassified) {
+    await verifyClassifyRecordCommand({
+      project,
+      runId,
+      pairId: xPair.pairId,
+      label: opts.ruleDelta ?? 'sharper',
+      quotedPass1: IMPACT_QUOTED_PASS1,
+      quotedPass2: changedLine,
+      json: true,
+    });
+  }
   await verifyClassifyRecordCommand({
     project,
     runId,
@@ -1423,6 +1610,26 @@ describe('contradictory / marker — verifyImpactApplyCommand', () => {
     logSpy.mockRestore();
   });
 
+  it('keeps every record when apply and classify record calls run in parallel (#999)', async () => {
+    const { project, runId, pairId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+    const evidence = Array.from({ length: 12 }, (_, i) => `record ${i}`);
+    // One record after another, so the ledger is being written for the whole of apply's run.
+    async function recordInTurn(): Promise<void> {
+      for (const e of evidence) {
+        // Quoted, so each re-classification stays "sharper" and apply's verdict does not depend on order (#1172).
+        await verifyClassifyRecordCommand({
+          project, runId, pairId, label: 'sharper', evidence: e, quotedPass1: 'Lower.', quotedPass2: 'Higher.', json: true,
+        });
+      }
+    }
+
+    await Promise.all([verifyImpactApplyCommand({ project, runId, json: true }), recordInTurn()]);
+
+    const records = await runLedgerRecords(project, runId);
+    expect(records.filter((r) => r.kind === 'impact').map((r) => [r.slug, r.ruleDelta])).toEqual([['movement', 'sharper']]);
+    expect(records.map((r) => String(r.evidence).split(' | ')[0])).toEqual(expect.arrayContaining(evidence));
+  });
+
   it('unadjudicated: a contradiction recorded UNADJUDICATED does not block — the chunk is marked stale with Adjudication: UNADJUDICATED', async () => {
     const { project, runId, pairId } = await buildImpactTestProject(root, {
       ruleDelta: 'contradictory',
@@ -1439,6 +1646,54 @@ describe('contradictory / marker — verifyImpactApplyCommand', () => {
     const parsed = parseRulesStaleness(chunkText);
     expect(parsed.state).toBe('rules-stale');
     expect(parsed.record?.adjudication).toBe('UNADJUDICATED');
+  });
+
+  it('--json: stdout is exactly one parseable JSON object, with no inner report printed ahead of it (#832)', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+
+    const stdout = await captureStdout(() => verifyImpactApplyCommand({ project, runId, json: true }));
+
+    expect(JSON.parse(stdout).marked.some((m: { slug: string }) => m.slug === 'movement')).toBe(true);
+  });
+
+  it('--json: a refusal for an unclassified pair is exactly one parseable JSON object too (#832, #830)', async () => {
+    const { project, runId, pairId } = await buildImpactTestProject(root, { drift: 'clean', leaveXUnclassified: true });
+
+    const stdout = await captureStdout(() => verifyImpactApplyCommand({ project, runId, json: true }));
+
+    const parsed = JSON.parse(stdout);
+    expect(parsed.blocked).toBe(true);
+    expect(parsed.pendingPairs).toEqual([pairId]);
+  });
+
+  it('unclassified: a pair still pending classification blocks the write entirely, naming the pair and verify-classify-record (#830)', async () => {
+    const { project, runId, pairId } = await buildImpactTestProject(root, { drift: 'clean', leaveXUnclassified: true });
+    const before = await sha256OfProject(project);
+
+    const result = await verifyImpactApplyCommand({ project, runId, json: true });
+    expect(result.blocked).toBe(true);
+    expect(result.pendingPairs).toEqual([pairId]);
+    expect(result.marked).toEqual([]);
+    expect(await sha256OfProject(project)).toEqual(before);
+
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await verifyImpactApplyCommand({ project, runId });
+    const printed = logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+    logSpy.mockRestore();
+    expect(printed).toContain(`boardsmith verify-classify-record --run-id ${runId} --pair-id ${pairId}`);
+  });
+
+  it('unclassified: resuming an interrupted classification as cosmetic leaves no stale marker (#830)', async () => {
+    const { project, runId, pairId } = await buildImpactTestProject(root, { drift: 'clean', leaveXUnclassified: true });
+    expect((await verifyImpactApplyCommand({ project, runId, json: true })).blocked).toBe(true);
+
+    await verifyClassifyRecordCommand({ project, runId, pairId, label: 'cosmetic', json: true });
+    const result = await verifyImpactApplyCommand({ project, runId, json: true });
+    expect(result.blocked).toBe(false);
+    expect(result.marked).toEqual([]);
+
+    const chunkText = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'movement', 'CHUNK.md'), 'utf-8');
+    expect(parseRulesStaleness(chunkText).state).not.toBe('rules-stale');
   });
 
   it('marker: a chunk whose ChunkVerdict.stale is false is left byte-identical after the run', async () => {
@@ -1498,7 +1753,7 @@ describe('contradictory / marker — verifyImpactApplyCommand', () => {
  */
 
 describe('cli.ts — verify-impact-* registration', () => {
-  it('registers all four verify-impact-* commands, chunk-check gains --reverified-no-code-change, and no command declares a bypass option', async () => {
+  it('registers all four verify-impact-* commands, chunk-check takes no --reverified-no-code-change (#827), and no command declares a bypass option', async () => {
     const cliSource = await fs.readFile(join(__dirname, '..', 'cli.ts'), 'utf-8');
 
     for (const name of [
@@ -1511,7 +1766,7 @@ describe('cli.ts — verify-impact-* registration', () => {
     }
 
     expect((cliSource.match(/verify-impact-/g) ?? []).length).toBeGreaterThanOrEqual(4);
-    expect(cliSource).toContain('--reverified-no-code-change');
+    expect(cliSource).not.toContain('--reverified-no-code-change');
 
     // Scoped to the verify-impact-* registration block only — `--force` legitimately exists
     // elsewhere in cli.ts (the unrelated `claude` command's `--force` to overwrite skills).
@@ -1523,5 +1778,16 @@ describe('cli.ts — verify-impact-* registration', () => {
     for (const bypass of ['--force', '--yes', '--skip-gate', '--clear']) {
       expect(block).not.toContain(bypass);
     }
+  });
+});
+
+describe('appendRuling: an unreadable RULINGS.md (#1110)', () => {
+  it('names the file rather than calling it missing', async () => {
+    const project = tempTree('bs-verify-impact-unreadable-');
+    const rulings = join(project, DESIGN_DIR, 'RULINGS.md');
+    await fs.mkdir(rulings, { recursive: true });
+    await expect(appendRuling(project, { decision: 'd', citation: 'c', rationale: 'r' })).rejects.toThrow(
+      `Could not read ${rulings} (EISDIR)`,
+    );
   });
 });

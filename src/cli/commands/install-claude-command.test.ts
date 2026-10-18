@@ -15,12 +15,14 @@
  * eleven suites that needed them used to hand-copy (#238).
  */
 import { describe, it, expect, beforeAll } from 'vitest';
-import { rmSync, existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
+import { rmSync, existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync, cpSync, symlinkSync, lstatSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { installClaudeCommand, uninstallClaudeCommand, SKILL_NAMES } from './install-claude-command.js';
+import { installClaudeCommand, uninstallClaudeCommand, SKILL_NAMES, skillSourceFiles } from './install-claude-command.js';
 import { installedSkillsTree, uninstalledSkillsTree } from './installed-skills.test-helper.js';
+import { readBoardsmithVersion } from '../lib/boardsmith-version.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..', '..', '..');
@@ -319,6 +321,55 @@ describe('installClaudeCommand — retires bs-generate-bot (issue #16)', () => {
   });
 });
 
+describe('installClaudeCommand: a retired skill it cannot look at is still removed (#1174)', () => {
+  const skills = installedSkillsTree('bs-install-retired-loop-');
+
+  it('a plain reinstall removes a leftover bs-generate-bot that links to itself', async () => {
+    const retired = join(skills.root, 'bs-generate-bot');
+    rmSync(retired, { force: true });
+    symlinkSync(retired, retired);
+    await installClaudeCommand({ local: true, skipLink: true });
+    expect(() => lstatSync(retired)).toThrow(/ENOENT/);
+  });
+
+  it('uninstall removes an owned path that links to itself', async () => {
+    const retired = join(skills.root, 'bs-generate-bot');
+    rmSync(retired, { force: true });
+    symlinkSync(retired, retired);
+    await uninstallClaudeCommand({ local: true });
+    expect(() => lstatSync(retired)).toThrow(/ENOENT/);
+  });
+});
+
+/**
+ * #846: an install whose skill sources have since changed is complete on disk but stale. A checkout
+ * keeps the same package version across pulls, so the stamp is the source tree's content hash.
+ */
+describe('installClaudeCommand — refreshes skills when their sources changed (#846)', () => {
+  const skills = installedSkillsTree('bs-install-upgrade-');
+
+  it('a plain reinstall over an install stamped with the same version but other content rewrites it', async () => {
+    const stamp = join(skills.root, 'bs-shared', 'SOURCE-HASH');
+    const entry = join(skills.root, 'bs-build-bot', 'SKILL.md');
+    writeFileSync(stamp, `${readBoardsmithVersion()}\n`);
+    writeFileSync(entry, 'stale copy from earlier sources');
+
+    await installClaudeCommand({ local: true, skipLink: true });
+
+    expect(readFileSync(entry, 'utf-8')).not.toBe('stale copy from earlier sources');
+    expect(readFileSync(stamp, 'utf-8').trim()).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it('a plain reinstall over an install of the same sources leaves it alone', async () => {
+    const entry = join(skills.root, 'bs-build-bot', 'SKILL.md');
+    writeFileSync(entry, 'edited after install');
+
+    await installClaudeCommand({ local: true, skipLink: true });
+
+    expect(readFileSync(entry, 'utf-8')).toBe('edited after install');
+  });
+});
+
 /**
  * WR-01: a `--force` reinstall must produce a tree identical to a fresh install — orphaned
  * files left inside installer-owned dirs (from a prior install where an upstream file was
@@ -593,5 +644,29 @@ describe('installClaudeCommand — SKILL_NAMES has one source of truth (structur
           `single source of truth, derived from SKILL_ENTRY_POINTS.`
       ).toEqual(expected);
     }
+  });
+});
+
+describe('skillSourceFiles — what the source hash reads (#1048)', () => {
+  function sources(): string {
+    const tree = tempTree('bs-skill-sources-');
+    const dir = join(tree, 'slash-command');
+    cpSync(join(REPO_ROOT, 'src', 'cli', 'slash-command'), dir, { recursive: true });
+    return dir;
+  }
+
+  it('reads every file in the shared folders, dot files included, and leaves test files out', () => {
+    const dir = sources();
+    writeFileSync(join(dir, 'bs', 'build', 'notes.test.ts'), '');
+    writeFileSync(join(dir, 'bs', 'build', '.keep.md'), '');
+    const files = skillSourceFiles(dir);
+    expect(files).toContain(join('bs', 'build', '.keep.md'));
+    expect(files).not.toContain(join('bs', 'build', 'notes.test.ts'));
+  });
+
+  it('stops on a link to a folder, naming it, instead of walking into it', () => {
+    const dir = sources();
+    symlinkSync(join(dir, 'bs'), join(dir, 'bs', 'build', 'loop'));
+    expect(() => skillSourceFiles(dir)).toThrow(`${join(dir, 'bs', 'build', 'loop')} is a link to a folder`);
   });
 });

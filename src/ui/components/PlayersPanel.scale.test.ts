@@ -119,3 +119,48 @@ describe('R1: presence is a marking on the seat row', () => {
     for (const s of present) expect(wrapper.text()).toContain(`Player ${s}`);
   });
 });
+
+describe('R1: a seat lookup does not scan the whole roster per row (#907)', () => {
+  /** A seat list that counts how many of its entries were read. */
+  function counted(list: number[]): { list: readonly number[]; reads: () => number } {
+    let reads = 0;
+    const proxy = new Proxy(list, {
+      get(target, key, receiver) {
+        if (typeof key === 'string' && /^\d+$/.test(key)) reads++;
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    return { list: proxy, reads: () => reads };
+  }
+
+  const all = Array.from({ length: 500 }, (_, i) => i);
+
+  it('reads the present seats a bounded number of times, not once per row', () => {
+    const present = counted([...all]);
+    mountPanel({ players: seats(500), presentSeats: present.list });
+    expect(present.reads()).toBeLessThan(500 * 5);
+  });
+
+  it('reads the acting seats a bounded number of times, not once per row', () => {
+    const due = counted([...all]);
+    mountPanel({ players: seats(500), dueSeats: due.list });
+    expect(due.reads()).toBeLessThan(500 * 5);
+  });
+});
+
+describe('the overflow count reads as English (#907)', () => {
+  it('says "1 other" for one hidden seat', () => {
+    const wrapper = mountPanel({ players: seats(13) });
+    expect(wrapper.find('.players-overflow').text()).toBe('and 1 other');
+  });
+
+  it('says "1 other" in the seat strip too', () => {
+    const wrapper = mountPanel({ players: seats(13), seatStrip: true });
+    expect(wrapper.find('.players-overflow').text()).toBe('and 1 other');
+  });
+
+  it('keeps the plural for more than one', () => {
+    const wrapper = mountPanel({ players: seats(14) });
+    expect(wrapper.find('.players-overflow').text()).toBe('and 2 others');
+  });
+});

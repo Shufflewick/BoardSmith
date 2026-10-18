@@ -209,6 +209,14 @@ export interface PendingActionState {
    * `GameRunner.markStalePicks` writes it (#767).
    */
   stalePicks?: string[];
+  /**
+   * Where this action's own picks' `onSelect` and `onEach` moved elements from:
+   * element id to its branch before the first of them that changed it, or
+   * `null` for one they created. The history entry names each pick by it, so
+   * it says where the pick was before the action (#1144). Present only on a
+   * pending action a host records (`createPendingActionState(..., true)`).
+   */
+  branchesBeforePicks?: Record<number, string | null>;
 }
 
 /**
@@ -710,7 +718,7 @@ export interface ActionDefinition {
    */
   validate?: (args: Record<string, unknown>, context: ActionContext) => boolean | string;
   /** The effect to execute */
-  execute: (args: Record<string, unknown>, context: ActionContext) => ActionResult | void;
+  execute: (args: Record<string, unknown>, context: ActionContext) => ExecuteResult | void;
   /**
    * Whether this action can be undone (default: true).
    * Set to false for actions that reveal hidden information (e.g., drawing cards),
@@ -828,33 +836,17 @@ export interface FollowUpOffer<TElement extends ValidElement = ValidElement> ext
 }
 
 /**
- * Result of action execution
+ * What an action's `execute()` may return. The engine-only flags are typed
+ * `never` so game code cannot set them; the engine also drops them at run time (#1016).
  */
-export interface ActionResult {
+export interface ExecuteResult {
   /** Whether the action succeeded */
   success: boolean;
   /** Error message if failed */
   error?: string;
-  /**
-   * Set by the engine when the action failed AFTER it may have changed the
-   * game: `execute()` threw (#44), or a whole submission of a repeating
-   * selection was refused after `onEach` had already run for some of its picks
-   * (#325).
-   *
-   * The distinction is the whole point: a clean refusal mutated nothing, so
-   * there is nothing to undo, while these failures may have landed part of
-   * their changes before they stopped. The runner reads this to roll the game
-   * back to the pre-action checkpoint, so a failed action really did do
-   * nothing. Never set by game code.
-   */
-  partiallyApplied?: boolean;
-  /**
-   * Set when the failure was a {@link NotSimulableError} — the game saying this
-   * move is legal but cannot be resolved from the information state it has
-   * (#31). A bot drops the move from its search rather than counting it as a
-   * failure; nothing is logged, and no hidden value is invented.
-   */
-  notSimulable?: boolean;
+  partiallyApplied?: never;
+  notSimulable?: never;
+  rulesError?: never;
   /** Additional data to return */
   data?: Record<string, unknown>;
   /** Message to log */
@@ -885,6 +877,40 @@ export interface ActionResult {
    * ```
    */
   followUp?: FollowUpAction;
+}
+
+/**
+ * Result of action execution: what `execute()` returned, plus the flags only the engine sets.
+ */
+export interface ActionResult extends Omit<ExecuteResult, 'partiallyApplied' | 'notSimulable' | 'rulesError'> {
+  /**
+   * Set by the engine when the action failed AFTER it may have changed the
+   * game: `execute()` or a pick's callback threw (#44, #1142), or a whole submission of a repeating
+   * selection was refused after `onEach` had already run for some of its picks
+   * (#325).
+   *
+   * The distinction is the whole point: a clean refusal mutated nothing, so
+   * there is nothing to undo, while these failures may have landed part of
+   * their changes before they stopped. The runner reads this to roll the game
+   * back to the pre-action checkpoint, so a failed action really did do
+   * nothing. Never set by game code.
+   */
+  partiallyApplied?: boolean;
+  /**
+   * Set when the failure was a {@link NotSimulableError} — the game saying this
+   * move is legal but cannot be resolved from the information state it has
+   * (#31). A bot drops the move from its search rather than counting it as a
+   * failure; nothing is logged, and no hidden value is invented.
+   */
+  notSimulable?: boolean;
+  /**
+   * Set when the failure was a crash in the rules: `execute()` or a pick's
+   * `onSelect`, `onEach` or `until` threw something that is not a
+   * {@link PlayerFacingError} (#847, #1141).
+   * A refusal never carries it, whatever its words, so a caller can tell the
+   * rules saying no from the rules breaking. Never set by game code.
+   */
+  rulesError?: boolean;
 }
 
 /**

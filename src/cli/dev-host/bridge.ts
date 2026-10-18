@@ -26,8 +26,10 @@ import {
   type SnapshotSessionAdapters,
   type PublishMeta,
   type BotSeat,
+  type SeatOp,
 } from '../../session/index.js';
 import { record, getEntries } from './log-capture.js';
+import { pageText } from './socket-message.js';
 import type { WarningEntry } from '../../types/protocol.js';
 
 /** The structured warnings a successful op carried (a pick or a choices query), or none. */
@@ -69,6 +71,8 @@ export type WireOp =
   | 'debug:reorder-card'
   | 'debug:transfer-card'
   | 'debug:shuffle-deck'
+  | 'debug:deck-view'
+  | 'debug:deck-view-at'
   // debug:logs (ERR-04): pulls the dev-host's captured server-side
   // errors/warnings ring buffer (log-capture.ts). Host-lifecycle op — like
   // demoStart/demoStop, it is resolved directly by the bridge and MUST NEVER
@@ -186,7 +190,8 @@ export function translateOp(
   wireOp: string,
   seat: number,
   payload: Record<string, unknown>,
-): Op | DebugLogsMarker | undefined {
+): SeatOp | DebugLogsMarker | undefined {
+  if (Object.hasOwn(DEBUG_WIRE_OPS, wireOp)) return DEBUG_WIRE_OPS[wireOp as keyof typeof DEBUG_WIRE_OPS](seat, payload);
   switch (wireOp) {
     case 'action':
       return {
@@ -239,53 +244,50 @@ export function translateOp(
         control: payload.control as 'pause' | 'play' | 'step' | 'back',
         delay: payload.delay as number | undefined,
       };
-    case 'debug:history':
-      return { type: 'debugHistory' };
-    // The seat-view debug ops always report the connection's own seat (#481):
-    // a payload never names the seat, so no seat can ask for another's view.
-    case 'debug:state-at':
-      return { type: 'debugStateAt', actionIndex: payload.actionIndex as number, player: seat };
-    case 'debug:state-diff':
-      return {
-        type: 'debugStateDiff',
-        fromIndex: payload.fromIndex as number,
-        toIndex: payload.toIndex as number,
-        player: seat,
-      };
-    case 'debug:action-traces':
-      return { type: 'debugActionTraces', player: seat };
-    case 'debug:flow-state':
-      return { type: 'debugFlowState', player: seat };
-    case 'debug:custom-data':
-      return { type: 'debugCustomData', player: seat };
-    case 'debug:rewind':
-      return { type: 'debugRewind', actionIndex: payload.actionIndex as number };
-    case 'debug:move-to-top':
-      return { type: 'debugReorder', cardId: payload.cardId as number, targetIndex: 0 };
-    case 'debug:reorder-card':
-      return {
-        type: 'debugReorder',
-        cardId: payload.cardId as number,
-        targetIndex: payload.targetIndex as number,
-      };
-    case 'debug:transfer-card':
-      return {
-        type: 'debugTransfer',
-        cardId: payload.cardId as number,
-        targetDeckId: payload.targetDeckId as number,
-        position: (payload.position as 'first' | 'last') ?? 'first',
-      };
-    case 'debug:shuffle-deck':
-      return { type: 'debugShuffle', deckId: payload.deckId as number };
-    case 'debug:logs':
-      // Host-lifecycle marker (ERR-04) — resolved directly in
-      // handleServerRequest by reading the ring buffer; never delegated to
-      // host.handleOp/executeOp (RESEARCH Pitfall 3).
-      return { type: 'debugLogs' };
     default:
       return undefined;
   }
 }
+
+/** How each Debug panel wire op becomes an op, one entry per name so none can be missed. */
+const DEBUG_WIRE_OPS: Record<
+  Extract<WireOp, `debug:${string}`>,
+  (seat: number, payload: Record<string, unknown>) => SeatOp | DebugLogsMarker
+> = {
+  'debug:history': () => ({ type: 'debugHistory' }),
+  // The seat-view debug ops always report the connection's own seat (#481):
+  // a payload never names the seat, so no seat can ask for another's view.
+  'debug:state-at': (seat, payload) => ({ type: 'debugStateAt', actionIndex: payload.actionIndex as number, player: seat }),
+  'debug:state-diff': (seat, payload) => ({
+    type: 'debugStateDiff',
+    fromIndex: payload.fromIndex as number,
+    toIndex: payload.toIndex as number,
+    player: seat,
+  }),
+  'debug:action-traces': (seat) => ({ type: 'debugActionTraces', player: seat }),
+  'debug:flow-state': (seat) => ({ type: 'debugFlowState', player: seat }),
+  'debug:custom-data': (seat) => ({ type: 'debugCustomData', player: seat }),
+  'debug:rewind': (_seat, payload) => ({ type: 'debugRewind', actionIndex: payload.actionIndex as number }),
+  'debug:move-to-top': (_seat, payload) => ({ type: 'debugReorder', cardId: payload.cardId as number, targetIndex: 0 }),
+  'debug:reorder-card': (_seat, payload) => ({
+    type: 'debugReorder',
+    cardId: payload.cardId as number,
+    targetIndex: payload.targetIndex as number,
+  }),
+  'debug:transfer-card': (_seat, payload) => ({
+    type: 'debugTransfer',
+    cardId: payload.cardId as number,
+    targetDeckId: payload.targetDeckId as number,
+    position: (payload.position as 'first' | 'last') ?? 'first',
+  }),
+  'debug:shuffle-deck': (_seat, payload) => ({ type: 'debugShuffle', deckId: payload.deckId as number }),
+  'debug:deck-view': () => ({ type: 'debugDeckView' }),
+  'debug:deck-view-at': (_seat, payload) => ({ type: 'debugDeckViewAt', actionIndex: payload.actionIndex as number }),
+  // Host-lifecycle marker (ERR-04) — resolved directly in
+  // handleServerRequest by reading the ring buffer; never delegated to
+  // host.handleOp/executeOp (RESEARCH Pitfall 3).
+  'debug:logs': () => ({ type: 'debugLogs' }),
+};
 
 /** A shaped reply: what the one seat that sent the op is told. */
 type Reply = Record<string, unknown>;
@@ -362,7 +364,8 @@ const SHAPERS: { [T in Op['type']]: (result: OpResultFor<T>) => Reply } = {
   demoControl: outcomeOnly,
   convertSeatToBot: outcomeOnly,
   restoreEarlier: outcomeOnly,
-  debugHistory: (r) => (r.success ? { success: true, actionHistory: r.actionHistory } : refusal(r)),
+  debugHistory: (r) =>
+    r.success ? { success: true, actionHistory: r.actionHistory, actionHistoryBase: r.actionHistoryBase } : refusal(r),
   // DebugPanel reads `data.state`; the op carries it as `historicalState`.
   debugStateAt: (r) => (r.success ? { success: true, state: r.historicalState } : refusal(r)),
   debugStateDiff: (r) => (r.success ? { success: true, diff: r.diff } : refusal(r)),
@@ -377,6 +380,8 @@ const SHAPERS: { [T in Op['type']]: (result: OpResultFor<T>) => Reply } = {
   debugReorder: outcomeOnly,
   debugTransfer: outcomeOnly,
   debugShuffle: outcomeOnly,
+  debugDeckView: (r) => (r.success ? { success: true, view: r.view } : refusal(r)),
+  debugDeckViewAt: (r) => (r.success ? { success: true, view: r.view } : refusal(r)),
 };
 
 /** Shape a `type` op's result into the reply its seat is sent. */
@@ -470,7 +475,7 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
       const message = err instanceof Error ? err.message : String(err);
       // The message, which is already extracted above for the ring buffer and
       // the response: the error object printed its stack too (#240).
-      console.error(`[boardsmith dev] server_request '${wireOp}' failed:`, message);
+      console.error(`[boardsmith dev] server_request '${wireOp}' failed: ${pageText(message)}`);
       record('error', message, wireOp);
       opts.postServerResponse(seat, requestId, { success: false, error: message });
     }

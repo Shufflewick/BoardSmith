@@ -7,7 +7,7 @@
 // without one of these cases -- assignment is the obvious one, and a mutating
 // METHOD writing through its own `this` is the one a `set` trap alone misses.
 import { describe, expect, it } from "vitest";
-import { Game, Piece, Player, Space } from "../engine/index.js";
+import { Game, PersistentMap, Piece, Player, Space } from "../engine/index.js";
 import type { GameOptions } from "../engine/index.js";
 import { readOnlyProjection } from "./readonly.js";
 import { WorldRefusal } from "./refusals.js";
@@ -387,5 +387,112 @@ describe("readOnlyProjection over classes (#285)", () => {
     expect(token.putInto).not.toBe(Token.prototype.putInto);
     expect(() => token.putInto(there)).toThrow(WorldRefusal);
     expect(here.first(Token)).toBeDefined();
+  });
+});
+
+describe("readOnlyProjection over built-in objects (#1171)", () => {
+  it("REFUSES every TypedArray write method, and the array is unchanged", () => {
+    const live = new Uint8Array([3, 1, 2]);
+    const projection = readOnlyProjection(live);
+
+    for (const [name, write] of [
+      ["fill", () => projection.fill(0)],
+      ["copyWithin", () => projection.copyWithin(0, 1)],
+      ["reverse", () => projection.reverse()],
+      ["sort", () => projection.sort()],
+      ["set", () => projection.set([9])],
+    ] as const) {
+      expect(write).toThrow(`cannot call "${name}" on a Uint8Array: it is not one of the built-in reads a world callback may call`);
+    }
+    expect([...live]).toEqual([3, 1, 2]);
+  });
+
+  it("REFUSES a Map method it does not know to be a read, such as a future getOrInsert", () => {
+    const prototype = Map.prototype as unknown as Record<string, unknown>;
+    const shipped = Object.hasOwn(prototype, "getOrInsert");
+    if (!shipped) {
+      // Stands in for the TC39 method until the runtime ships it: it inserts when the key is missing.
+      prototype.getOrInsert = function (this: Map<unknown, unknown>, key: unknown, value: unknown) {
+        if (!this.has(key)) this.set(key, value);
+        return this.get(key);
+      };
+    }
+    try {
+      const live = new Map<string, number>();
+      const projection = readOnlyProjection(live) as unknown as { getOrInsert(key: string, value: number): number };
+
+      expect(() => projection.getOrInsert("gold", 5)).toThrow(/cannot call "getOrInsert" on a Map: it is not one of the built-in reads.*move it into the command's run\(\)/);
+      expect(live.size).toBe(0);
+    } finally {
+      if (!shipped) delete prototype.getOrInsert;
+    }
+  });
+
+  it("still answers every Map and Set read", () => {
+    const map = readOnlyProjection(new Map([["a", 1], ["b", 2]]));
+    const set = readOnlyProjection(new Set(["x", "y"]));
+    const seen: string[] = [];
+    map.forEach((value, key) => seen.push(`${key}=${value}`));
+    set.forEach((value) => seen.push(value));
+
+    expect([map.get("a"), map.has("b"), map.size, [...map.keys()], [...map.values()]]).toEqual([1, true, 2, ["a", "b"], [1, 2]]);
+    expect([...map.entries()].map(([key, value]) => `${key}${value}`)).toEqual(["a1", "b2"]);
+    expect([...map].map(([key]) => key)).toEqual(["a", "b"]);
+    expect([set.has("x"), set.size, [...set], [...set.values()], [...set.keys()]]).toEqual([true, 2, ["x", "y"], ["x", "y"], ["x", "y"]]);
+    expect(seen).toEqual(["a=1", "b=2", "x", "y"]);
+    expect(String(map)).toBe("[object Map]");
+  });
+
+  it("still answers WeakMap, WeakSet and Date reads", () => {
+    const key = {};
+    const weakMap = readOnlyProjection(new WeakMap([[key, "held"]]));
+    const weakSet = readOnlyProjection(new WeakSet([key]));
+    const date = readOnlyProjection(new Date(0));
+
+    expect([weakMap.get(key), weakMap.has(key), weakSet.has(key)]).toEqual(["held", true, true]);
+    expect([date.getTime(), date.toISOString(), date.getUTCFullYear(), JSON.stringify(date), +date]).toEqual([
+      0, "1970-01-01T00:00:00.000Z", 1970, '"1970-01-01T00:00:00.000Z"', 0,
+    ]);
+    expect(() => date.setTime(5)).toThrow(/cannot call "setTime" on a Date/);
+  });
+
+  it("REFUSES a subclass's own get, which runs on the real Map and could write", () => {
+    class Tally extends Map<string, number> {
+      override get(key: string) {
+        if (!this.has(key)) this.set(key, 0);
+        return super.get(key);
+      }
+    }
+    const live = new Tally();
+
+    expect(() => readOnlyProjection(live).get("gold")).toThrow(/cannot call "get" on a Map/);
+    expect(live.size).toBe(0);
+  });
+
+  it("REFUSES a getter it does not list with the same readable refusal, not a runtime TypeError", () => {
+    const projection = readOnlyProjection(new Uint8Array(2));
+
+    expect(() => projection.buffer).toThrow(/cannot call "buffer" on a Uint8Array/);
+  });
+
+  it("still answers a PersistentMap's reads", () => {
+    const { game } = world();
+    const live = new PersistentMap<string, number>(game, "scores");
+    live.set("north", 3);
+    const projection = readOnlyProjection(live);
+
+    expect([projection.size, projection.get("north"), [...projection.entries()], [...projection]]).toEqual([
+      1, 3, [["north", 3]], [["north", 3]],
+    ]);
+    expect(() => projection.set("south", 1)).toThrow(/cannot call "set" on a PersistentMap/);
+  });
+
+  it("still answers every TypedArray read", () => {
+    const array = readOnlyProjection(new Int16Array([3, 1, 2]));
+
+    expect([array.length, array[0], array.at(-1), array.indexOf(1), array.includes(2), array.join("-")]).toEqual([3, 3, 2, 1, true, "3-1-2"]);
+    expect([[...array], [...array.slice(1)], [...array.map((value) => value * 2)], array.reduce((sum, value) => sum + value, 0)]).toEqual([
+      [3, 1, 2], [1, 2], [6, 2, 4], 6,
+    ]);
   });
 });

@@ -80,6 +80,16 @@ describe('resolveSkillsRoot', () => {
     const root = await resolveSkillsRoot(emptyProject);
     expect(root).toBe(join(fakeHome, '.claude', 'skills'));
   });
+
+  it('names a project skills root it cannot read rather than falling back to the home one (#1174)', async () => {
+    const fakeHome = tempTree('bs-skills-hash-home-');
+    process.env.HOME = fakeHome;
+    await writeSkillsTree(fakeHome, BASE_TREE);
+    const skills = join(dir, '.claude', 'skills');
+    await fs.mkdir(join(dir, '.claude'), { recursive: true });
+    await fs.symlink(skills, skills);
+    await expect(resolveSkillsRoot(dir)).rejects.toThrow(`Could not read ${skills} (ELOOP)`);
+  });
 });
 
 describe('hashSkillsTree', () => {
@@ -116,6 +126,13 @@ describe('hashSkillsTree', () => {
     const hashB = await hashSkillsTree(dirB);
 
     expect(hashA).not.toBe(hashB);
+  });
+
+  it('covers dot files and dot folders inside an installed skill (#1048)', async () => {
+    await writeSkillsTree(dir, BASE_TREE);
+    const hashBefore = await hashSkillsTree(dir);
+    await writeSkillsTree(dir, { ...BASE_TREE, 'bs-build-chunk/.notes/a.md': 'x\n' });
+    expect(await hashSkillsTree(dir)).not.toBe(hashBefore);
   });
 
   it('does NOT change when a non-bs- sibling directory is added to the skills root', async () => {

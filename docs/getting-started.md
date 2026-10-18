@@ -197,7 +197,9 @@ boardsmith dev --lan               # shorthand for --host 0.0.0.0
 boardsmith dev --lock-teaching
 
 # Keep the Debug panel on with several people seated. Without it, debugging is
-# on only while one browser holds every human seat (solo or hot-seat play)
+# on only while one browser holds every human seat (solo or hot-seat play).
+# With it, every seated person's Decks tab shows every face-down card and
+# every other player's hand, so use it only at a table you trust.
 boardsmith dev --debug
 
 # Don't auto-launch a browser tab (for scripts/CI driving the dev host,
@@ -211,6 +213,14 @@ boardsmith dev --no-open
 boardsmith test           # Run once
 boardsmith test --watch   # Watch mode
 ```
+
+`boardsmith lint` runs BoardSmith's pitfall checks, plus ESLint and Stylelint
+when the project has a config for them. It finds a config wherever the linter
+would: in the project folder, any parent folder, and the folders under `src/`
+the linter reads (any folder but `node_modules` for ESLint, hidden ones
+included; a folder holding a `.vue` file for Stylelint). ESLint is asked directly. Stylelint cannot be asked, so lint
+copies Stylelint 17's search, and stops on any other installed Stylelint major
+with the command to install 17 (`npm install -D stylelint@17`).
 
 ### 4. Validate Before Publishing
 
@@ -262,6 +272,20 @@ it to pass. Once Vitest confirms that a mutant made a test fail, the mutation
 check stops that run's workers, including tests already running. A surviving
 mutant still runs the whole suite to completion.
 
+A game with Vitest projects (`test.projects` in its config, or a workspace:
+`test.workspace`, or `vitest.workspace.ts` beside its config) gets each mutant
+in every project defined inline, such as
+`{ extends: './vitest.browser.config.ts' }`. A project named only by a path or
+glob builds its own config, which the mutation check cannot change, so the
+check refuses to run, names the project, and says how to write it inline. That
+includes a workspace that names the root config itself:
+
+```
+Vitest project "my-game" (vitest.config.ts) does not load the mutation check's mutant, so its tests would run against the original code. Name it in the workspace as an inline project, { extends: './vitest.config.ts' }, and run the check again.
+```
+
+Vitest's browser mode is not yet tested with the mutation check.
+
 Stopping mutation verification with Ctrl+C or SIGTERM stops its Vitest process
 group and waits for it to close before removing that run's temporary files.
 The interrupted command still exits by the signal, so it cannot record a pass.
@@ -281,10 +305,13 @@ uncommitted and untracked changes, and the git-ignored files that its
 cannot be read, or the exports reach every file in the package, nothing is
 reused or kept for that run, and `boardsmith verify` says why.
 Those outcomes are kept in the repository's git directory, shared by the main
-checkout and every worktree. A merge reuses them only when the merged tree is
-the tree the worktree verified: main has not moved since, or the branch merged
-main before its last verify. Otherwise every mutant runs again at the merge. So
-for a cheap merge, merge main into the branch first and verify there. Older
+checkout and every worktree. Each one is saved as soon as its mutant finishes, so
+a run that is interrupted, or stopped by a time limit, loses only the mutant it
+was running when it stopped, and the next run reuses the rest. A merge reuses
+them only when the merged tree is the tree the worktree verified: main has not
+moved since, or the branch merged main before its last verify. Otherwise every
+mutant runs again at the merge. So for a cheap merge, merge main into the branch
+first and verify there. Older
 BoardSmith kept these outcomes in `.boardsmith/verify/mutants.json`; that file
 is no longer read and can be deleted.
 
@@ -334,7 +361,16 @@ skipped.
 Commit first: a tree with uncommitted changes is refused before any check runs.
 The result is written to `.boardsmith/verify/<commit>.json`, tied to that one
 commit, to the base it measured from, and to whether the tree stayed clean while
-the checks ran. `boardsmith verify --check` exits 0 only when the current commit,
+the checks ran. The BoardSmith commit it names is the one the run started with.
+What the tests run with must also hold still for the whole run: the BoardSmith
+the command runs and the game loads (its commit and uncommitted changes), the
+installed packages, and the packages linked from outside the repository. If any
+of these changes, for example a linked BoardSmith checkout moves to a new
+commit, the run stops before its next mutant and ends with an error naming what
+changed. It records no result and keeps no mutant outcome found after the
+change, since checks after the change ran against different code. Run it again in a checkout nothing else
+edits while it runs, such as a separate BoardSmith worktree.
+`boardsmith verify --check` exits 0 only when the current commit,
 on a clean tree, has a passing full result, and otherwise says what to run.
 
 For a chunk the `bs-` skills build, `boardsmith verify --chunk <slug>` runs only
@@ -425,7 +461,9 @@ boardsmith review-gate deal             # may a model review of chunk deal start
 `boardsmith verify --chunk <slug>`, and otherwise prints the verify result every
 review prompt carries: that only the chunk's tests and typecheck ran, and that
 the full suite, build, validate, the smoke test and the mutation check run at
-publish, so no reviewer spends its time running checks. A
+publish, so no reviewer spends its time running checks. It reads what is under
+review from the chunk's run log: the change since the last review round, sized
+as mechanical only when every dispatch logged since was. A
 step that fails its verify, whose work a check such as `claim-quote-check`
 refuses, or whose reviewer asks for changes, is retried once at the same role
 with the failure output. A second failure at that role moves it one role up
@@ -494,8 +532,7 @@ publish to it again with `--publisher <slug>`; the other block is untouched.
   "tags": ["card-game"],
   "playtime": { "min": 15, "max": 30 },
   "cooperative": false,
-  "complexity": 2,
-  "scoreboard": { "stats": ["score"] }
+  "complexity": 2
 }
 ```
 

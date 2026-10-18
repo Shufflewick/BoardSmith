@@ -12,6 +12,7 @@
  * pointed in the history and what a rewind sends, and its tests cover both. This
  * renders what it is handed and emits what a click means.
  */
+import { computed } from 'vue';
 import type { HistoryEntry } from '../../composables/useDebugBridge.js';
 import { formatHistoryEntry, formatActionArgs, formatTimestamp } from './debug-format.js';
 import { seatInk, type ContrastInk } from '../../utils/color-contrast.js';
@@ -20,6 +21,8 @@ import DebugDialog from './DebugDialog.vue';
 
 const props = defineProps<{
   actionHistory: HistoryEntry[];
+  /** Which action the first entry is: the game dropped those before it (#997). */
+  actionHistoryBase: number;
   /**
    * The game's players, from the same state the player cards read. A badge
    * is filled with its seat's `color` and inked by `seatInk`, as the cards
@@ -35,6 +38,9 @@ const props = defineProps<{
   rewindLoading: boolean;
   rewindError: string | null;
 }>();
+
+/** Every action the game has played, dropped ones included: the indices the panel sends count them. */
+const actionCount = computed(() => props.actionHistoryBase + props.actionHistory.length);
 
 function badgeStyle(seat: number): { '--badge-seat': string | undefined; color: ContrastInk['ink'] } {
   const color = props.players.find((player) => player.seat === seat)?.color;
@@ -59,7 +65,7 @@ const emit = defineEmits<{
     class="tab-content history-tab"
   >
         <div class="history-header">
-          <span class="history-count">{{ actionHistory.length }} actions</span>
+          <span class="history-count">{{ actionCount }} actions<template v-if="actionHistoryBase > 0">, the first {{ actionHistoryBase }} not kept</template></span>
           <DebugButton @click="emit('refresh')" size="small" :disabled="historyLoading">
             {{ historyLoading ? 'Loading...' : 'Refresh' }}
           </DebugButton>
@@ -79,29 +85,29 @@ const emit = defineEmits<{
 
         <!-- Timeline slider -->
         <div v-if="actionHistory.length > 0" class="timeline-controls">
-          <DebugButton size="small" :disabled="selectedActionIndex === null || selectedActionIndex <= 0" @click="emit('select-action', (selectedActionIndex ?? actionHistory.length) - 1)" >
+          <DebugButton size="small" :disabled="selectedActionIndex !== null && selectedActionIndex <= actionHistoryBase" @click="emit('select-action', (selectedActionIndex ?? actionCount) - 1)" >
             &lt;
           </DebugButton>
           <input
             type="range"
-            :min="0"
-            :max="actionHistory.length"
-            :value="selectedActionIndex ?? actionHistory.length"
+            :min="actionHistoryBase"
+            :max="actionCount"
+            :value="selectedActionIndex ?? actionCount"
             @input="emit('select-action', parseInt(($event.target as HTMLInputElement).value))"
             class="timeline-slider"
           />
-          <DebugButton size="small" :disabled="selectedActionIndex === null || selectedActionIndex >= actionHistory.length"
-            @click="emit('select-action', (selectedActionIndex ?? actionHistory.length - 1) + 1)"
+          <DebugButton size="small" :disabled="selectedActionIndex === null || selectedActionIndex >= actionCount"
+            @click="emit('select-action', (selectedActionIndex ?? actionCount - 1) + 1)"
           >
             &gt;
           </DebugButton>
           <span class="timeline-position">
-            {{ selectedActionIndex ?? actionHistory.length }} / {{ actionHistory.length }}
+            {{ selectedActionIndex ?? actionCount }} / {{ actionCount }}
           </span>
           <DebugButton v-if="isViewingHistory" size="small" class="live-btn" @click="emit('back-to-live')" >
             Live
           </DebugButton>
-          <DebugButton v-if="isViewingHistory && selectedActionIndex !== null && selectedActionIndex < actionHistory.length" size="small" class="rewind-btn" :disabled="rewindLoading" @click="emit('rewind', selectedActionIndex)" title="Permanently rewind game to this action" >
+          <DebugButton v-if="isViewingHistory && selectedActionIndex !== null && selectedActionIndex < actionCount" size="small" class="rewind-btn" :disabled="rewindLoading" @click="emit('rewind', selectedActionIndex)" title="Permanently rewind game to this action" >
             {{ rewindLoading ? 'Rewinding...' : 'Rewind Here' }}
           </DebugButton>
         </div>
@@ -140,12 +146,12 @@ const emit = defineEmits<{
             class="history-item"
             :class="{
               current: index === actionHistory.length - 1 && !isViewingHistory,
-              selected: selectedActionIndex === index + 1
+              selected: selectedActionIndex === actionHistoryBase + index + 1
             }"
-            @click="emit('select-action', index + 1)"
+            @click="emit('select-action', actionHistoryBase + index + 1)"
           >
             <div class="history-item-header">
-              <span class="history-index">{{ index + 1 }}</span>
+              <span class="history-index">{{ actionHistoryBase + index + 1 }}</span>
               <span class="history-player" :style="badgeStyle(action.player)">
                 P{{ action.player }}
               </span>

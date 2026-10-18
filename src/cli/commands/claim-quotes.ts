@@ -50,8 +50,9 @@
 
 import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
+import { readIfExists } from '../lib/read-if-exists.js';
 import { join, resolve, sep } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { type InterpretationLine, interpretationLines, parseSupersededClaims } from './build-manifest.js';
 import { assertBareName } from '../lib/user-name.js';
 import {
@@ -65,6 +66,7 @@ import {
 } from '../lib/project-paths.js';
 import { type ChunkCommit, type PinnedCommit, chunkHistory, chunkPins, commitName, fileAtCommit } from '../lib/chunk-commits.js';
 import { readGateTransition } from '../lib/gate-transition.js';
+import { shortQuoteProblem } from '../lib/quote-length.js';
 import { markdownHeading } from '../lib/slice-sections.js';
 import { LINE_LOCATION_HINT, type LineRange, fileLines, lineRangeProblem, splitLineLocation } from '../lib/line-location.js';
 
@@ -363,11 +365,9 @@ async function readSourceFile(chunk: ChunkSources, source: SourceSpec): Promise<
     };
   }
   if (source.commit !== undefined) return readAtCommit(chunk, source, source.commit, shown);
-  try {
-    return { ok: true, text: await fs.readFile(join(projectDir, shown), 'utf8'), shown };
-  } catch {
-    return { ok: false, problem: `there is no file at ${shown}. ${PATH_RULE}` };
-  }
+  const text = await readIfExists(join(projectDir, shown), (p) => fs.readFile(p, 'utf8'));
+  if (text === undefined) return { ok: false, problem: `there is no file at ${shown}. ${PATH_RULE}` };
+  return { ok: true, text, shown };
 }
 
 function linesInRange(lines: string[], source: SourceSpec, range: LineRange, shown: string): Located {
@@ -508,6 +508,14 @@ async function checkPassage(
   passage: QuotedPassage,
   refusals: string[],
 ): Promise<CheckedQuote> {
+  const short = shortQuoteProblem(passage.quote);
+  if (short !== undefined) {
+    refusals.push(
+      `Claim ${claimNumber}: the quote "${passage.quote}" above Source: ${passage.source} ${short}. ` +
+        'Copy the whole sentence or line the claim rests on.',
+    );
+    return { ...passage, found: false };
+  }
   const located = await locate(chunk, passage.source);
   if (!located.ok) {
     refusals.push(`Claim ${claimNumber}: ${located.problem}`);
@@ -619,7 +627,7 @@ export async function checkClaimQuotes(projectDir: string, slug: string): Promis
   const transition = await readGateTransition(projectDir);
   const preGate: PreGateClaims = {
     recorded: transition?.claims[slug] ?? {},
-    offer: transition === undefined && /^Status:\s*verified/m.test(chunkText),
+    offer: transition === undefined && /^Status:[ \t]*verified/m.test(chunkText),
   };
   const superseded = new Set(parseSupersededClaims(chunkText));
   const refusals: string[] = [];
@@ -667,17 +675,15 @@ export async function claimQuoteCheckCommand(
       'Pass the slug of a chunk in this project, which is the name of a directory under design/chunks/ holding a CHUNK.md.',
     );
   } catch (error) {
-    console.error(chalk.red((error as Error).message));
+    console.error(styleText('red', (error as Error).message));
     process.exitCode = 1;
     return;
   }
 
   const shownChunk = shownChunkPath(slug);
-  try {
-    await fs.access(chunkMdPath(projectDir, slug));
-  } catch {
+  if ((await readIfExists(chunkMdPath(projectDir, slug), (p) => fs.stat(p))) === undefined) {
     console.error(
-      chalk.red(`No CHUNK.md at ${shownChunk}. Check the slug, or pass --project <dir> for a different project.`),
+      styleText('red', `No CHUNK.md at ${shownChunk}. Check the slug, or pass --project <dir> for a different project.`),
     );
     process.exitCode = 1;
     return;
@@ -689,12 +695,12 @@ export async function claimQuoteCheckCommand(
   if (options.json) {
     console.log(JSON.stringify({ slug, ok, ...result }, null, 2));
   } else if (ok) {
-    console.log(chalk.green(passLine(shownChunk, result)));
+    console.log(styleText('green', passLine(shownChunk, result)));
   }
 
   if (!ok) {
     if (!options.json) {
-      console.error(chalk.red(`${shownChunk}: ${result.refusals.length} claim problem(s):`));
+      console.error(styleText('red', `${shownChunk}: ${result.refusals.length} claim problem(s):`));
       for (const refusal of result.refusals) console.error(`  • ${refusal}`);
     }
     process.exitCode = 1;

@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { DESIGN_DIR, RULEBOOK_DIR } from './project-paths.js';
+import { readIfExists } from './read-if-exists.js';
 
 /**
  * The `pre-commit` hook `boardsmith init` installs into every scaffolded game project.
@@ -44,6 +45,8 @@ import { DESIGN_DIR, RULEBOOK_DIR } from './project-paths.js';
  *
  * - It FIXES and STAGES rather than failing the commit. A hook that blocks commits would fight
  *   the build protocol; one that quietly makes the artifacts correct just removes the failure.
+ *   It stages only the files `ingest-gaps --print-changed` names, never a slice the designer is
+ *   still editing (#851).
  * - It is a no-op before slices exist (the scaffold commit, any pre-transcription commit) and
  *   idempotent afterwards, so it is safe on every commit rather than only the right one.
  * - Every failure path is non-fatal. A game project must never become uncommittable because a
@@ -73,15 +76,18 @@ fi
 SLICES=$(ls "$RULEBOOK"/*.md 2>/dev/null | grep -v 'INDEX.md$' | grep -v '00-visual-survey.md$' | head -1)
 [ -n "$SLICES" ] || exit 0
 
-if ! npx --no-install boardsmith ingest-gaps >/dev/null 2>&1; then
+CHANGED=$(mktemp) || exit 0
+if ! npx --no-install boardsmith ingest-gaps --print-changed >"$CHANGED" 2>/dev/null; then
+  rm -f "$CHANGED"
   echo "boardsmith: ingest synthesis skipped (could not run 'boardsmith ingest-gaps')." >&2
   echo "boardsmith: run it manually before relying on $RULEBOOK/INDEX.md." >&2
   exit 0
 fi
 
-# Include the corrections in THIS commit rather than leaving them dirty afterwards.
-git add "$RULEBOOK/INDEX.md" >/dev/null 2>&1 || true
-git add "$RULEBOOK"/*.md >/dev/null 2>&1 || true
+# Include the corrections in THIS commit rather than leaving them dirty afterwards. Only the files
+# ingest-gaps changed: a slice the designer is still editing must not be swept into the commit.
+[ -s "$CHANGED" ] && xargs -0 git add -- <"$CHANGED" >/dev/null 2>&1
+rm -f "$CHANGED"
 
 exit 0
 `;
@@ -94,23 +100,25 @@ exit 0
  */
 export async function installIngestHook(
   projectPath: string,
-): Promise<'installed' | 'skipped-existing' | 'skipped-no-git'> {
+): Promise<'installed' | 'skipped-existing' | 'skipped-unreadable' | 'skipped-no-git'> {
   const hooksDir = join(projectPath, '.git', 'hooks');
   const hookPath = join(hooksDir, 'pre-commit');
 
   try {
     await fs.access(join(projectPath, '.git'));
   } catch {
+    // Whatever stops it, the hook cannot go in, and init reports that without failing.
     return 'skipped-no-git';
   }
 
+  let existing: string | undefined;
   try {
-    const existing = await fs.readFile(hookPath, 'utf-8');
-    // Never clobber a hook we did not write — a designer's own hook wins.
-    if (!existing.includes('BoardSmith ingest synthesis')) return 'skipped-existing';
+    existing = await readIfExists(hookPath, (p) => fs.readFile(p, 'utf-8'));
   } catch {
-    // No hook yet — the normal path.
+    return 'skipped-unreadable'; // Something we cannot read stands there: not ours to replace, and init must not fail.
   }
+  // Never clobber a hook we did not write — a designer's own hook wins.
+  if (existing !== undefined && !existing.includes('BoardSmith ingest synthesis')) return 'skipped-existing';
 
   try {
     await fs.mkdir(hooksDir, { recursive: true });

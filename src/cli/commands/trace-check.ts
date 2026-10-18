@@ -27,13 +27,14 @@ import {
   resolveManifestPath,
 } from './build-manifest.js';
 import {
-  CHUNK_MD,
   RULINGS_MD,
-  designChunksDir,
   designPath,
+  readChunkMdIfExists,
   requireChunkSlugs,
 } from '../lib/project-paths.js';
 import { ENTRY_NUMBER } from '../lib/ledger-entries.js';
+import { listFiles } from '../lib/source-files.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 
 // -------------------------------------------------------------------------------------------
 // scanTestCitations
@@ -208,26 +209,6 @@ function pushFinding(findings: Finding[], counts: Record<FindingKind, number>, f
   counts[f.kind]++;
 }
 
-/** Recursively collects every `*.test.ts` file under `dir`, returning absolute paths. */
-async function walkTestFiles(dir: string): Promise<string[]> {
-  const out: string[] = [];
-  async function walk(current: string): Promise<void> {
-    let entries: Array<{ name: string; isDirectory(): boolean; isFile(): boolean }>;
-    try {
-      entries = await fs.readdir(current, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      const full = join(current, entry.name);
-      if (entry.isDirectory()) await walk(full);
-      else if (entry.isFile() && entry.name.endsWith('.test.ts')) out.push(full);
-    }
-  }
-  await walk(dir);
-  return out;
-}
-
 /** POSIX-style path relative to `projectDir`, for stable comparison against manifest paths. */
 function relPosix(projectDir: string, absPath: string): string {
   return relative(projectDir, absPath).split(sep).join('/');
@@ -252,7 +233,6 @@ export async function traceCheckCommand(
   options: { project?: string; json?: boolean } = {},
 ): Promise<TraceCheckResult> {
   const projectDir = pathResolve(options.project ?? process.cwd());
-  const chunksDir = designChunksDir(projectDir);
   const slugs = await requireChunkSlugs(projectDir);
 
   const findings: Finding[] = [];
@@ -266,12 +246,8 @@ export async function traceCheckCommand(
   const claimCoverage: Record<string, Set<number>> = {};
 
   for (const slug of slugs) {
-    let chunkText: string;
-    try {
-      chunkText = await fs.readFile(join(chunksDir, slug, CHUNK_MD), 'utf-8');
-    } catch {
-      continue; // a chunks/<slug> dir with no CHUNK.md is not this command's problem to report
-    }
+    const chunkText = await readChunkMdIfExists(projectDir, slug);
+    if (chunkText === undefined) continue; // a chunks/<slug> dir with no CHUNK.md is not this command's problem to report
 
     liveClaims[slug] = parseInterpretationClaims(chunkText);
     inForce[slug] = claimsInForce(chunkText);
@@ -302,7 +278,7 @@ export async function traceCheckCommand(
 
   // --- Test-file discovery: tests/**/*.test.ts, plus manifest-listed paths ending .test.ts. ---
   const testsDir = join(projectDir, 'tests');
-  const walked = await walkTestFiles(testsDir);
+  const walked = listFiles(testsDir, { sourceTree: true, suffixes: ['.test.ts'] });
   const discovered = new Map<string, string>(); // relPosix path -> absolute path
   for (const abs of walked) discovered.set(relPosix(projectDir, abs), abs);
 
@@ -328,12 +304,8 @@ export async function traceCheckCommand(
   const citedRulings = new Set<string>();
 
   for (const [relPath, absPath] of [...discovered.entries()].sort(([a], [b]) => a.localeCompare(b))) {
-    let sourceText: string;
-    try {
-      sourceText = await fs.readFile(absPath, 'utf-8');
-    } catch {
-      continue; // a manifest-listed test file absent on disk is not this command's problem
-    }
+    const sourceText = await readIfExists(absPath, (p) => fs.readFile(p, 'utf-8'));
+    if (sourceText === undefined) continue; // a manifest-listed test file absent on disk is not this command's problem
 
     const { claims, rulings, importsRules } = scanTestCitations(sourceText);
     claimCitationTotal += claims.length;
@@ -410,13 +382,8 @@ export async function traceCheckCommand(
   }
 
   // --- RULINGS.md: ruling-untested + unparsed supersessions. Missing file -> zero findings. ---
-  let parsedRulings: ReturnType<typeof parseRulings> = [];
-  try {
-    const rulingsText = await fs.readFile(designPath(projectDir, RULINGS_MD), 'utf-8');
-    parsedRulings = parseRulings(rulingsText);
-  } catch {
-    parsedRulings = [];
-  }
+  const rulingsText = await readIfExists(designPath(projectDir, RULINGS_MD), (p) => fs.readFile(p, 'utf-8'));
+  const parsedRulings = rulingsText === undefined ? [] : parseRulings(rulingsText);
 
   for (const ruling of parsedRulings) {
     if (ruling.supersededBy !== undefined) continue; // superseded rulings are not demanded a test

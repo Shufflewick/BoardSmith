@@ -12,7 +12,7 @@
  *   - open() applies inert to sibling elements; close() removes it
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { ref, nextTick } from 'vue';
+import { ref, nextTick, effectScope } from 'vue';
 import { useFocusTrap } from './useFocusTrap.js';
 
 function makeKeyEvent(key: string, shiftKey = false): KeyboardEvent {
@@ -27,8 +27,16 @@ function appendDialog(html: string): HTMLElement {
   return el;
 }
 
+// Traps are made inside a scope, as in a component; stopping it closes any left open.
+let scope = effectScope();
+function trap(...args: Parameters<typeof useFocusTrap>) {
+  return scope.run(() => useFocusTrap(...args))!;
+}
+
 describe('useFocusTrap', () => {
   afterEach(() => {
+    scope.stop();
+    scope = effectScope();
     document.body.innerHTML = '';
     vi.clearAllMocks();
   });
@@ -40,7 +48,7 @@ describe('useFocusTrap', () => {
   it('open() focuses first focusable element inside the dialog after nextTick', async () => {
     const dialog = appendDialog('<button id="b1">First</button><button id="b2">Second</button>');
     const dialogRef = ref(dialog);
-    const { open } = useFocusTrap(dialogRef, { onClose: vi.fn() });
+    const { open } = trap(dialogRef, { onClose: vi.fn() });
 
     open();
     await nextTick();
@@ -51,7 +59,7 @@ describe('useFocusTrap', () => {
   it('open() does not throw when dialog has no focusable elements', () => {
     const dialog = appendDialog('<p>No buttons here</p>');
     const dialogRef = ref(dialog);
-    const { open } = useFocusTrap(dialogRef, { onClose: vi.fn() });
+    const { open } = trap(dialogRef, { onClose: vi.fn() });
 
     expect(async () => {
       open();
@@ -71,7 +79,7 @@ describe('useFocusTrap', () => {
 
     const dialog = appendDialog('<button id="b1">Inside</button>');
     const dialogRef = ref(dialog);
-    const { open, close } = useFocusTrap(dialogRef, { onClose: vi.fn() });
+    const { open, close } = trap(dialogRef, { onClose: vi.fn() });
 
     open();
     await nextTick();
@@ -83,7 +91,7 @@ describe('useFocusTrap', () => {
   it('close() does not throw when no element was previously focused', () => {
     const dialog = appendDialog('<button id="b1">Inside</button>');
     const dialogRef = ref(dialog);
-    const { open, close } = useFocusTrap(dialogRef, { onClose: vi.fn() });
+    const { open, close } = trap(dialogRef, { onClose: vi.fn() });
 
     // Do NOT call open() first — previouslyFocused is null
     expect(() => close()).not.toThrow();
@@ -96,7 +104,7 @@ describe('useFocusTrap', () => {
   it('Tab from last focusable wraps to first', async () => {
     const dialog = appendDialog('<button id="b1">First</button><button id="b2">Last</button>');
     const dialogRef = ref(dialog);
-    const { open, handleKeydown } = useFocusTrap(dialogRef, { onClose: vi.fn() });
+    const { open, handleKeydown } = trap(dialogRef, { onClose: vi.fn() });
 
     open();
     await nextTick();
@@ -113,7 +121,7 @@ describe('useFocusTrap', () => {
   it('Shift+Tab from first focusable wraps to last', async () => {
     const dialog = appendDialog('<button id="b1">First</button><button id="b2">Last</button>');
     const dialogRef = ref(dialog);
-    const { open, handleKeydown } = useFocusTrap(dialogRef, { onClose: vi.fn() });
+    const { open, handleKeydown } = trap(dialogRef, { onClose: vi.fn() });
 
     open();
     await nextTick();
@@ -127,13 +135,39 @@ describe('useFocusTrap', () => {
   it('Tab in a single-element dialog wraps back to that element', async () => {
     const dialog = appendDialog('<button id="only">Only</button>');
     const dialogRef = ref(dialog);
-    const { open, handleKeydown } = useFocusTrap(dialogRef, { onClose: vi.fn() });
+    const { open, handleKeydown } = trap(dialogRef, { onClose: vi.fn() });
 
     open();
     await nextTick();
 
     handleKeydown(makeKeyEvent('Tab'));
     expect(document.activeElement).toBe(dialog.querySelector('#only'));
+  });
+
+  // Each case is an element that matches the focusable selector but cannot take focus (#1024).
+  describe.each([
+    ['hidden attribute', '<button hidden>X</button>'],
+    ['display: none', '<button style="display: none">X</button>'],
+    ['display: none on an ancestor', '<div style="display: none"><button>X</button></div>'],
+    ['visibility: hidden on an ancestor', '<div style="visibility: hidden"><button>X</button></div>'],
+    ['inert ancestor', '<div inert><button>X</button></div>'],
+    ['disabled fieldset', '<fieldset disabled><input></fieldset>'],
+  ])('skips an element that cannot take focus (%s)', (_label, unfocusable) => {
+    it('Tab from the last focusable one wraps to the first', async () => {
+      const dialog = appendDialog(`${unfocusable}<button id="b1">First</button><button id="b2">Last</button>${unfocusable}`);
+      const { open, handleKeydown } = trap(ref(dialog), { onClose: vi.fn() });
+
+      open();
+      await nextTick();
+      expect(document.activeElement).toBe(dialog.querySelector('#b1'));
+
+      (dialog.querySelector('#b2') as HTMLButtonElement).focus();
+      handleKeydown(makeKeyEvent('Tab'));
+      expect(document.activeElement).toBe(dialog.querySelector('#b1'));
+
+      handleKeydown(makeKeyEvent('Tab', /* shiftKey= */ true));
+      expect(document.activeElement).toBe(dialog.querySelector('#b2'));
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -144,7 +178,7 @@ describe('useFocusTrap', () => {
     const onClose = vi.fn();
     const dialog = appendDialog('<button id="b1">OK</button>');
     const dialogRef = ref(dialog);
-    const { handleKeydown } = useFocusTrap(dialogRef, { escapeToClose: true, onClose });
+    const { handleKeydown } = trap(dialogRef, { escapeToClose: true, onClose });
 
     handleKeydown(makeKeyEvent('Escape'));
 
@@ -156,7 +190,7 @@ describe('useFocusTrap', () => {
     const dialog = appendDialog('<button id="b1">OK</button>');
     const dialogRef = ref(dialog);
     // No escapeToClose specified — should default to true
-    const { handleKeydown } = useFocusTrap(dialogRef, { onClose });
+    const { handleKeydown } = trap(dialogRef, { onClose });
 
     handleKeydown(makeKeyEvent('Escape'));
 
@@ -167,7 +201,7 @@ describe('useFocusTrap', () => {
     const onClose = vi.fn();
     const dialog = appendDialog('<button id="b1">Rematch</button>');
     const dialogRef = ref(dialog);
-    const { handleKeydown } = useFocusTrap(dialogRef, { escapeToClose: false, onClose });
+    const { handleKeydown } = trap(dialogRef, { escapeToClose: false, onClose });
 
     handleKeydown(makeKeyEvent('Escape'));
 
@@ -188,7 +222,7 @@ describe('useFocusTrap', () => {
 
     const dialog = appendDialog('<button id="b1">Focus me</button>');
     const dialogRef = ref(dialog);
-    const { open } = useFocusTrap(dialogRef, { onClose: vi.fn() });
+    const { open } = trap(dialogRef, { onClose: vi.fn() });
 
     open();
 
@@ -205,7 +239,7 @@ describe('useFocusTrap', () => {
 
     const dialog = appendDialog('<button id="b1">OK</button>');
     const dialogRef = ref(dialog);
-    const { open, close } = useFocusTrap(dialogRef, { onClose: vi.fn() });
+    const { open, close } = trap(dialogRef, { onClose: vi.fn() });
 
     open();
     expect(sibling.hasAttribute('inert')).toBe(true);
@@ -232,7 +266,7 @@ describe('useFocusTrap', () => {
     wrapper.appendChild(dialog);
 
     const dialogRef = ref(dialog);
-    const { open } = useFocusTrap(dialogRef, { onClose: vi.fn() });
+    const { open } = trap(dialogRef, { onClose: vi.fn() });
 
     open();
 
@@ -254,7 +288,7 @@ describe('useFocusTrap', () => {
 
     const dialog = appendDialog('<button id="b1">OK</button>');
     const dialogRef = ref<HTMLElement | null>(dialog);
-    const { open, close } = useFocusTrap(dialogRef, { onClose: vi.fn() });
+    const { open, close } = trap(dialogRef, { onClose: vi.fn() });
 
     open();
     expect(sibling.hasAttribute('inert')).toBe(true);
@@ -263,7 +297,144 @@ describe('useFocusTrap', () => {
     dialogRef.value = null;
 
     close();
-    // Cleanup must use _inertRoot (not dialogRef) so inert is removed even with null ref
+    // Cleanup must use the recorded elements (not dialogRef) so inert is removed even with null ref
     expect(sibling.hasAttribute('inert')).toBe(false);
+  });
+
+  it('disposing the owning scope while open removes inert (#862)', () => {
+    const app = document.createElement('div');
+    app.id = 'app';
+    document.body.appendChild(app);
+    const dialog = appendDialog('<button>OK</button>');
+
+    const scope = effectScope();
+    const trap = scope.run(() => useFocusTrap(ref(dialog), { onClose: vi.fn() }))!;
+    trap.open();
+    expect(app.hasAttribute('inert')).toBe(true);
+
+    scope.stop();
+    expect(app.hasAttribute('inert')).toBe(false);
+  });
+
+  // body > [#app > [#board, #shell > [#action-panel, #bs-game-modal > dialog]], #other]
+  function buildAppTree() {
+    const el = (id: string, parent: HTMLElement) => {
+      const node = document.createElement('div');
+      node.id = id;
+      parent.appendChild(node);
+      return node;
+    };
+    const app = el('app', document.body);
+    const board = el('board', app);
+    const shell = el('shell', app);
+    const actionPanel = el('action-panel', shell);
+    const modalHost = el('bs-game-modal', shell);
+    const other = el('other', document.body);
+    const dialog = el('dialog', modalHost);
+    dialog.innerHTML = '<button>OK</button>';
+    return { app, board, shell, actionPanel, modalHost, other, dialog };
+  }
+
+  it('a dialog inside #app makes the siblings at every level inert, but not its ancestors (#863)', () => {
+    const t = buildAppTree();
+    const { open, close } = trap(ref(t.dialog), { onClose: vi.fn() });
+
+    open();
+    for (const el of [t.board, t.actionPanel, t.other]) expect(el.hasAttribute('inert'), el.id).toBe(true);
+    for (const el of [t.app, t.shell, t.modalHost, t.dialog]) expect(el.hasAttribute('inert'), el.id).toBe(false);
+
+    close();
+    for (const el of [t.board, t.actionPanel, t.other]) expect(el.hasAttribute('inert'), el.id).toBe(false);
+  });
+
+  it('a background element marked data-bs-outside-modal stays live while the rest goes inert (#1106)', () => {
+    const t = buildAppTree();
+    t.board.setAttribute('data-bs-outside-modal', '');
+    const { open } = trap(ref(t.dialog), { onClose: vi.fn() });
+
+    open();
+    expect(t.board.hasAttribute('inert')).toBe(false);
+    for (const el of [t.actionPanel, t.other]) expect(el.hasAttribute('inert'), el.id).toBe(true);
+  });
+
+  it('close() leaves elements that were already inert before open() inert (#863)', () => {
+    const t = buildAppTree();
+    t.actionPanel.setAttribute('inert', '');
+    t.other.setAttribute('inert', '');
+    const { open, close } = trap(ref(t.dialog), { onClose: vi.fn() });
+
+    open();
+    close();
+
+    expect(t.actionPanel.hasAttribute('inert')).toBe(true);
+    expect(t.other.hasAttribute('inert')).toBe(true);
+    expect(t.board.hasAttribute('inert')).toBe(false);
+  });
+
+  it('a second trap opened over the first restores the first trap\'s state on close (#863)', () => {
+    const t = buildAppTree();
+    const popover = appendDialog('<button>Menu</button>');
+    const a = trap(ref(t.dialog), { onClose: vi.fn() });
+    const b = trap(ref(popover), { onClose: vi.fn() });
+
+    a.open();
+    b.open();
+    expect(t.app.hasAttribute('inert')).toBe(true);
+
+    b.close();
+    expect(t.app.hasAttribute('inert')).toBe(false);
+    for (const el of [t.board, t.actionPanel, t.other]) expect(el.hasAttribute('inert'), el.id).toBe(true);
+
+    a.close();
+    for (const el of [t.board, t.actionPanel, t.other]) expect(el.hasAttribute('inert'), el.id).toBe(false);
+  });
+
+  const inertIds = () => Array.from(document.querySelectorAll('[inert]'), (e) => e.id).sort();
+
+  it('closing the first trap while a second is open keeps the second one\'s background inert', () => {
+    const t = buildAppTree();
+    const popover = appendDialog('<button>Menu</button>');
+    popover.id = 'popover';
+    const a = trap(ref(t.dialog), { onClose: vi.fn() });
+    const b = trap(ref(popover), { onClose: vi.fn() });
+
+    a.open();
+    b.open();
+    a.close();
+    expect(inertIds()).toEqual(['app', 'other']);
+
+    b.close();
+    expect(inertIds()).toEqual([]);
+  });
+
+  it('open() twice then close() leaves nothing inert', () => {
+    const t = buildAppTree();
+    const { open, close } = trap(ref(t.dialog), { onClose: vi.fn() });
+
+    open();
+    open();
+    close();
+
+    expect(inertIds()).toEqual([]);
+  });
+
+  it('a trap opened inside the background of an open trap is reachable, and the first comes back on close', () => {
+    // ControlsMenu (body-level popover) is open when the game ends and GameOverCard opens inside #app.
+    const t = buildAppTree();
+    const popover = appendDialog('<button>Menu</button>');
+    popover.id = 'popover';
+    const menu = trap(ref(popover), { onClose: vi.fn() });
+    const card = trap(ref(t.dialog), { onClose: vi.fn() });
+
+    menu.open();
+    card.open();
+    expect(t.dialog.closest('[inert]')).toBeNull();
+    expect(inertIds()).toEqual(['action-panel', 'board', 'other', 'popover']);
+
+    card.close();
+    expect(inertIds()).toEqual(['app', 'other']);
+
+    menu.close();
+    expect(inertIds()).toEqual([]);
   });
 });

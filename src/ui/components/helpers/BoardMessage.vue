@@ -262,7 +262,8 @@ withDefaults(
 /* Caret on top: bubble sits BELOW the target → caret points upward */
 .bsg-board-message__caret--top {
   top: -8px;
-  left: 50%;
+  /* AnnotationLayer moves it when it shifts a bubble back on screen. */
+  left: var(--caret-left, 50%);
   transform: translateX(-50%);
   border-left: 8px solid transparent;
   border-right: 8px solid transparent;
@@ -282,7 +283,8 @@ withDefaults(
 /* Caret on bottom: bubble sits ABOVE the target → caret points downward */
 .bsg-board-message__caret--bottom {
   bottom: -8px;
-  left: 50%;
+  /* AnnotationLayer moves it when it shifts a bubble back on screen. */
+  left: var(--caret-left, 50%);
   transform: translateX(-50%);
   border-left: 8px solid transparent;
   border-right: 8px solid transparent;

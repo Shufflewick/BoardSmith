@@ -238,6 +238,40 @@ describe('useFLIP', () => {
       // Not in test mode: no trace should have been recorded.
       expect(getAnimationTrace()).toHaveLength(0);
     });
+
+    it('stays animating until the last of two overlapping runs finishes (#868)', async () => {
+      const container = makeContainer();
+      const child = document.createElement('div');
+      child.setAttribute('data-element-id', 'card-3');
+      container.appendChild(child);
+      let left = 0;
+      vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(() => makeRect({ left: (left += 100) }));
+      const finishers: Array<() => void> = [];
+      (HTMLElement.prototype as any).animate = () => ({
+        finished: new Promise<void>((resolve) => finishers.push(resolve)),
+        cancel: vi.fn(),
+      });
+      const onAnimationStart = vi.fn();
+      const onAnimationEnd = vi.fn();
+      const { capture, animate, isAnimating } = useFLIP({ containerRef: ref(container), onAnimationStart, onAnimationEnd });
+
+      capture();
+      const first = animate();
+      capture();
+      const second = animate();
+      expect(finishers).toHaveLength(2);
+
+      finishers[0]();
+      await first;
+      expect(isAnimating.value).toBe(true);
+      expect(onAnimationEnd).not.toHaveBeenCalled();
+
+      finishers[1]();
+      await second;
+      expect(isAnimating.value).toBe(false);
+      expect(onAnimationStart).toHaveBeenCalledTimes(1);
+      expect(onAnimationEnd).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('fail-loud missing anchor', () => {

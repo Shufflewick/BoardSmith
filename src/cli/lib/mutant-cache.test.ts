@@ -24,9 +24,9 @@ const installRecord = (...packages: string[]) => JSON.stringify({ packages: Obje
  * A committed game project with a rule, its test, the design records the bs- skills keep, an
  * installed BoardSmith, and npm's record of the install. `node_modules` is out of git, as in a game.
  */
-async function project(): Promise<string> {
+async function project(name = 'game'): Promise<string> {
   const tree = tempTree('bs-mutant-cache-');
-  const dir = join(tree, 'game');
+  const dir = join(tree, name);
   await write(dir, {
     '.gitignore': '.boardsmith/\nnode_modules/\n',
     'package-lock.json': '{ "lockfileVersion": 3 }\n',
@@ -295,8 +295,8 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
      * The game from `project()`, depending on `dep` as `"dep": "file:../dep"` installs it: a link in
      * `node_modules` to a sibling folder, which npm's install record names but whose content it does not.
      */
-    async function withSibling(sibling: { git: boolean }): Promise<{ dir: string; dep: string }> {
-      const dir = await project();
+    async function withSibling(sibling: { git: boolean }, name?: string): Promise<{ dir: string; dep: string }> {
+      const dir = await project(name);
       const dep = join(dirname(dir), 'dep');
       await write(dep, { 'package.json': JSON.stringify({ name: 'dep', version: '1.0.0' }), 'src/fee.ts': 'export const rate = 2;\n' });
       if (sibling.git) {
@@ -332,6 +332,11 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
         const { dir, dep } = await withSibling({ git: false });
         expect(await afterChange(dir, dep, change, undefined)).toEqual({ change: Object.keys(change)[0], outcome: undefined });
       }
+    });
+
+    it('runs the mutant again when a sibling package changed beside a repository whose folder name is not ASCII (#1053)', async () => {
+      const { dir, dep } = await withSibling({ git: false }, 'jeux-vidéo');
+      expect(await afterChange(dir, dep, { 'src/fee.ts': 'export const rate = 3;\n' }, undefined)).toEqual({ change: 'src/fee.ts', outcome: undefined });
     });
 
     it("runs the mutant again when the linked package's own install, or a package it links to in turn, changed", async () => {
@@ -448,6 +453,25 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
       }
     });
 
+    it('does not cache, and names the file, when an ignored entry point of a linked package cannot be read', async () => {
+      const { dir, dep } = await withSibling({ git: true });
+      await write(dep, { 'package.json': JSON.stringify({ name: 'dep', main: './main.js' }), '.gitignore': 'main.js\n' });
+      commitAll(dep, 'ignored entry point');
+      await fs.symlink('main.js', join(dep, 'main.js'));
+      expect((await openMutantCache(dir)).unavailable).toMatch(/Could not read .*dep\/main\.js \(ELOOP\)/);
+    });
+
+    it("does not cache, and names the folder, when a linked package's node_modules cannot be read (#1174)", async () => {
+      const { dir, dep } = await withSibling({ git: false });
+      // Searchable but not listable: its install record reads as absent, its links cannot be listed.
+      await fs.mkdir(join(dep, 'node_modules'), { mode: 0o300 });
+      try {
+        expect((await openMutantCache(dir)).unavailable).toMatch(/Could not read .*dep\/node_modules \(EACCES\)/);
+      } finally {
+        await fs.chmod(join(dep, 'node_modules'), 0o755);
+      }
+    });
+
     it('does not cache at all, and says why, when a linked folder cannot be read', async () => {
       const { dir, dep } = await withSibling({ git: false });
       await record(dir, 'killed');
@@ -502,6 +526,13 @@ describe('gameBoardsmithRoot: the BoardSmith a game loads', () => {
     const dir = join(tree, 'game');
     await write(dir, { 'package.json': '{}\n' });
     expect(await gameBoardsmithRoot(dir)).toBeUndefined();
+  });
+
+  it('refuses a BoardSmith install whose package.json it cannot read, rather than looking past it', async () => {
+    const tree = tempTree('bs-mutant-cache-game-');
+    const dir = join(tree, 'game');
+    await fs.mkdir(join(dir, 'node_modules', 'boardsmith', 'package.json'), { recursive: true });
+    await expect(gameBoardsmithRoot(dir)).rejects.toThrow(/Could not read .*node_modules\/boardsmith\/package\.json \(EISDIR\)/);
   });
 });
 

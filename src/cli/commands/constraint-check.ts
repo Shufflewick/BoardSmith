@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import { join, posix, relative, resolve, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawn } from 'node:child_process';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import {
   CONSTRAINTS_MD,
   DESIGN_DIR,
@@ -15,8 +15,10 @@ import { assertBareName } from '../lib/user-name.js';
 import { testRunScopeProblem } from '../lib/test-run-scope.js';
 import { extractSection, parseRulings, stripHtmlComments } from './build-manifest.js';
 import { ENTRY_NUMBER, entryHeadingPattern } from '../lib/ledger-entries.js';
-import { escapeRegExp } from '../lib/regexp.js';
+import { escapeRegExp } from '../../utils/regexp.js';
 import { toolCommand } from '../lib/run-tool.js';
+import { shortQuoteProblem } from '../lib/quote-length.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 
 /**
  * `boardsmith constraint-check [slug]`: does the project hold its own hard constraints (#288)?
@@ -185,7 +187,10 @@ function quoteRefusal(c: HardConstraint, source: string | undefined): string | u
   if (source === undefined) {
     return `${c.id} quotes ${c.source}, which does not exist. Give the file it is quoted from, relative to the project root.`;
   }
-  if (normalize(source).includes(normalize(c.quote))) return undefined;
+  const quote = normalize(c.quote);
+  const short = shortQuoteProblem(quote);
+  if (short !== undefined) return `${c.id}'s quote "${quote}" ${short}. Quote the whole constraint from ${c.source}.`;
+  if (normalize(source).includes(quote)) return undefined;
   return `${c.id}'s quote "${c.quote}" is not in ${c.source}. Copy the constraint's exact words from ${c.source}.`;
 }
 
@@ -212,17 +217,17 @@ async function constraintRefusals(projectDir: string, constraints: HardConstrain
   return refusals.filter((r): r is string => r !== undefined);
 }
 
-/** Every hard-constraint bullet in CLAUDE.md must be quoted by some ledger entry. */
+/** Every hard-constraint bullet in CLAUDE.md must be quoted whole by some ledger entry. */
 function coverageRefusals(claudeMd: string | undefined, constraints: HardConstraint[]): string[] {
   const quotes = constraints
     .filter((c) => c.source === 'CLAUDE.md' && c.quote)
     .map((c) => normalize(c.quote));
   return hardConstraintBullets(claudeMd)
-    .filter((bullet) => !quotes.some((q) => bullet.includes(q)))
+    .filter((bullet) => !quotes.some((q) => q.includes(bullet)))
     .map(
       (bullet) =>
         `CLAUDE.md states the hard constraint "${bullet}", and no entry in design/${CONSTRAINTS_MD} ` +
-        `quotes it. Add a "### C<n>" entry quoting it, so the constraints lens checks every chunk against it.`,
+        `quotes it whole. Add a "### C<n>" entry quoting the whole bullet, so the constraints lens checks every chunk against it.`,
     );
 }
 
@@ -390,7 +395,7 @@ export const runVitest: TestRunner = async (projectDir, files) => {
       child.on('error', (error) => done({ ok: false, output: error.message }));
       child.on('close', (code) => done({ ok: code === 0, output: text }));
     });
-    const reportText = await fs.readFile(reportPath, 'utf-8').catch(() => undefined);
+    const reportText = await readIfExists(reportPath, (path) => fs.readFile(path, 'utf-8'));
     return { ok, output, ran: testFilesInReport(reportText, await fs.realpath(projectDir)) };
   } finally {
     await fs.rm(reportDir, { recursive: true, force: true });
@@ -413,6 +418,30 @@ export function testFilesInReport(text: string | undefined, root: string): strin
   const results = (parsed as { testResults?: unknown } | null)?.testResults;
   if (!Array.isArray(results) || !results.every((r) => typeof (r as { name?: unknown })?.name === 'string')) return undefined;
   return results.map((r: { name: string }) => relative(root, r.name).split(sep).join(posix.sep));
+}
+
+/**
+ * Why a passing run does not show every file in `tests` ran, as `[verdict, detail]`, or `undefined`
+ * when it does. vitest skips a named file its config excludes and still exits 0 (#479, #821), so
+ * only `ran` shows a file was left out, and a run that cannot say which files ran proves nothing.
+ */
+export function unranTestsProblem(ran: string[] | undefined, tests: readonly string[]): [string, string] | undefined {
+  if (ran === undefined) {
+    return [
+      'cannot be confirmed',
+      `vitest's JSON report, which names the test files it ran, is missing or unreadable, so the run does not show they ran. ` +
+        `Run them by hand to see why vitest wrote no report.`,
+    ];
+  }
+  const ranSet = new Set(ran.map((f) => posix.normalize(f)));
+  const missing = tests.filter((t) => !ranSet.has(posix.normalize(t)));
+  if (missing.length === 0) return undefined;
+  const they = missing.length === 1 ? 'it' : 'them';
+  return [
+    'did not all run',
+    `${missing.join(', ')} did not run: the project's vitest config excludes ${they}, or does not include ${they}, ` +
+      `so the run proves nothing about ${they}. Fix the config's test include or exclude, or the path.`,
+  ];
 }
 
 /** The last lines of a test run, which is where vitest says what failed. */
@@ -459,6 +488,9 @@ export async function checkConstraints(
       refusals.push(run.refused);
     } else if (!run.ok) {
       refusals.push(`The constraint tests failed (${tests.join(', ')}). A measured constraint does not hold:\n${tail(run.output)}`);
+    } else {
+      const unran = unranTestsProblem(run.ran, tests);
+      if (unran) refusals.push(`The constraint tests ${unran[0]}, so no measured constraint is shown to hold: ${unran[1]}`);
     }
   }
   return { constraints, structures, tests, refusals };
@@ -481,13 +513,13 @@ function report(result: ConstraintCheckResult, slug: string | undefined, json: b
     return;
   }
   if (!ok) {
-    console.error(chalk.red(`${result.refusals.length} constraint problem(s):`));
+    console.error(styleText('red', `${result.refusals.length} constraint problem(s):`));
     for (const refusal of result.refusals) console.error(`  • ${refusal}`);
     return;
   }
   const tests = result.tests.length ? `; ${result.tests.length} measurement test file(s) passed.` : '.';
   console.log(
-    chalk.green(`✓ ${result.constraints.length} hard constraint(s) and ${result.structures.length} growing structure(s) hold${tests}`),
+    styleText('green', `✓ ${result.constraints.length} hard constraint(s) and ${result.structures.length} growing structure(s) hold${tests}`),
   );
 }
 
@@ -502,7 +534,7 @@ export async function constraintCheckCommand(
 ): Promise<void> {
   const problem = slugProblem(slug);
   if (problem !== undefined) {
-    console.error(chalk.red(problem));
+    console.error(styleText('red', problem));
     process.exitCode = 1;
     return;
   }

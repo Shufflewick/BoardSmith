@@ -1,7 +1,8 @@
 import { sha256Hex } from '../lib/hash.js';
+import { isSameOrInside } from '../lib/path-inside.js';
 import { promises as fs } from 'node:fs';
-import { isAbsolute, posix, relative, resolve, sep } from 'node:path';
-import chalk from 'chalk';
+import { posix, resolve } from 'node:path';
+import { styleText } from 'node:util';
 import {
   GATE_TRANSITION_MD,
   SKETCH_MD,
@@ -23,10 +24,12 @@ import {
   stripHtmlComments,
 } from './build-manifest.js';
 import { atomicWriteFile } from './verify-run.js';
+import { withLedgerLock } from '../lib/ledger-lock.js';
 import { checkConstraints } from './constraint-check.js';
 import { verifiedProblem } from '../lib/verify-result.js';
-import { escapeRegExp } from '../lib/regexp.js';
+import { escapeRegExp } from '../../utils/regexp.js';
 import { gitOutput as git } from '../lib/git-output.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 
 /**
  * `boardsmith chunk-signoff` / `boardsmith chunk-waiver` / `checkSignoff()`: who may say a chunk
@@ -178,7 +181,7 @@ export function designerNameProblem(by: string, flag: string): string | undefine
 // ---------------------------------------------------------------------------------------------
 
 export function readStatus(chunkText: string): string | undefined {
-  return /^Status:\s*(.*)$/m.exec(chunkText)?.[1].trim();
+  return /^Status:[ \t]*(.*)$/m.exec(chunkText)?.[1].trim();
 }
 
 /** The number of real items in `## Verified Checklist` (template placeholders excluded). */
@@ -201,14 +204,14 @@ function readUi(chunkText: string, slug: string): string {
 }
 
 async function readSketch(projectDir: string): Promise<string> {
-  try {
-    return await fs.readFile(designPath(projectDir, SKETCH_MD), 'utf-8');
-  } catch {
+  const text = await readIfExists(designPath(projectDir, SKETCH_MD), (p) => fs.readFile(p, 'utf-8'));
+  if (text === undefined) {
     throw new Error(
       `No ${SKETCH_MD} in this project's design/ folder. Run this from the game project, or ` +
         `pass --project <dir>.`,
     );
   }
+  return text;
 }
 
 function sketchEntryRange(sketch: string, slug: string): { start: number; end: number } | undefined {
@@ -251,11 +254,6 @@ async function needsDesignerPlaytest(projectDir: string, slug: string, chunkText
 const MISSING = 'missing';
 const OUTSIDE_PROJECT = 'outside-project';
 
-function isInside(dir: string, path: string): boolean {
-  const rel = relative(dir, path);
-  return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
-}
-
 /**
  * The chunk's code as a sign-off sees it: every source file its `## Build Manifest` names, each
  * with its own content hash. Anything under `design/` is left out however the manifest writes it
@@ -272,8 +270,8 @@ export async function chunkCodeFiles(projectDir: string, chunkText: string): Pro
       files[path] = OUTSIDE_PROJECT;
       continue;
     }
-    if (isInside(design, abs)) continue;
-    const content = await fs.readFile(abs).catch(() => undefined);
+    if (isSameOrInside(design, abs)) continue;
+    const content = await readIfExists(abs, fs.readFile);
     files[path] = content ? sha256Hex(content) : MISSING;
   }
   return files;
@@ -362,7 +360,7 @@ function readCode(body: string): CodeFiles | 'whole-file' | undefined {
   if (values.length === 0) return undefined;
   const code: CodeFiles = {};
   for (const value of values) {
-    const match = /^(\S+)[ \t]+(\S+)$/.exec(value);
+    const match = /^(.+)[ \t]+(\S+)$/.exec(value);
     if (!match) return undefined;
     code[match[1]] = match[2];
   }
@@ -460,7 +458,7 @@ function splitList(raw: string): string[] {
 }
 
 async function readWaivers(projectDir: string): Promise<Waiver[]> {
-  const text = await fs.readFile(designPath(projectDir, WAIVERS_MD), 'utf-8').catch(() => '');
+  const text = (await readIfExists(designPath(projectDir, WAIVERS_MD), (path) => fs.readFile(path, 'utf-8'))) ?? '';
   return parseWaivers(text);
 }
 
@@ -659,7 +657,7 @@ async function readProjectState(dir: string): Promise<ProjectState> {
 async function readChunkStates(dir: string): Promise<ChunkState[]> {
   const states: ChunkState[] = [];
   for (const slug of await chunkSlugs(dir)) {
-    const text = await fs.readFile(chunkMdPath(dir, slug), 'utf-8').catch(() => undefined);
+    const text = await readIfExists(chunkMdPath(dir, slug), (path) => fs.readFile(path, 'utf-8'));
     if (text === undefined) continue;
     states.push({
       slug,
@@ -929,9 +927,9 @@ function recordFromOptions(options: SignoffOptions, ctx: SignoffContext, when: s
 
 /** A chunk's CHUNK.md, or a refusal naming the slug fix when there is none. */
 async function readChunkText(dir: string, slug: string): Promise<string> {
-  return fs.readFile(chunkMdPath(dir, slug), 'utf-8').catch(() => {
-    throw new Error(`No chunk found at ${relChunkMdPath(slug)} in ${dir}.\n${SLUG_REMEDY}`);
-  });
+  const text = await readIfExists(chunkMdPath(dir, slug), (p) => fs.readFile(p, 'utf-8'));
+  if (text === undefined) throw new Error(`No chunk found at ${relChunkMdPath(slug)} in ${dir}.\n${SLUG_REMEDY}`);
+  return text;
 }
 
 async function readBuiltChunk(dir: string, slug: string): Promise<string> {
@@ -1118,20 +1116,22 @@ export async function recordWaiver(options: WaiverOptions): Promise<string> {
   const chunks = waiverChunks(options.chunks, await readSketch(dir));
 
   const ledgerPath = designPath(dir, WAIVERS_MD);
-  const existing = await fs.readFile(ledgerPath, 'utf-8').catch(() => WAIVERS_HEADER);
-  const next = parseWaivers(existing).reduce((max, w) => Math.max(max, Number(w.id.slice(1))), 0) + 1;
-  const id = `W${next}`;
-  const entry = [
-    `### Waiver ${id}`,
-    `- Granted by: ${options.by.trim()}`,
-    `- Granted: ${now.toISOString()}`,
-    `- Chunks: ${chunks.join(', ')}`,
-    `- Expires: ${options.expires}`,
-    `- Reason: ${options.reason.trim()}`,
-    '',
-  ].join('\n');
-  await atomicWriteFile(ledgerPath, `${existing.replace(/\n*$/, '\n\n')}${entry}`);
-  return id;
+  return withLedgerLock(ledgerPath, async () => {
+    const existing = (await readIfExists(ledgerPath, (p) => fs.readFile(p, 'utf-8'))) ?? WAIVERS_HEADER;
+    const next = parseWaivers(existing).reduce((max, w) => Math.max(max, Number(w.id.slice(1))), 0) + 1;
+    const id = `W${next}`;
+    const entry = [
+      `### Waiver ${id}`,
+      `- Granted by: ${options.by.trim()}`,
+      `- Granted: ${now.toISOString()}`,
+      `- Chunks: ${chunks.join(', ')}`,
+      `- Expires: ${options.expires}`,
+      `- Reason: ${options.reason.trim()}`,
+      '',
+    ].join('\n');
+    await atomicWriteFile(ledgerPath, `${existing.replace(/\n*$/, '\n\n')}${entry}`);
+    return id;
+  });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1144,17 +1144,17 @@ export async function chunkSignoffCommand(
   options: Omit<SignoffOptions, 'now'>,
 ): Promise<void> {
   const record = await recordSignoff(slug, options);
-  console.log(chalk.green(`✓ ${slug} signed off (${record.basis}); Status: ${derivedStatus(record)}`));
+  console.log(styleText('green', `✓ ${slug} signed off (${record.basis}); Status: ${derivedStatus(record)}`));
 }
 
 /** `boardsmith chunk-reopen <slug>`. Throws (clean one-line message via cli.ts) on refusal. */
 export async function chunkReopenCommand(slug: string, options: Omit<ReopenOptions, 'now'>): Promise<void> {
   await recordReopen(slug, options);
-  console.log(chalk.green(`✓ ${slug} reopened; its sign-off is void and Status: built`));
+  console.log(styleText('green', `✓ ${slug} reopened; its sign-off is void and Status: built`));
 }
 
 /** `boardsmith chunk-waiver`. Prints the new waiver's id. */
 export async function chunkWaiverCommand(options: Omit<WaiverOptions, 'now'>): Promise<void> {
   const id = await recordWaiver(options);
-  console.log(chalk.green(`✓ Waiver ${id} recorded for ${options.chunks}, until ${options.expires}`));
+  console.log(styleText('green', `✓ Waiver ${id} recorded for ${options.chunks}, until ${options.expires}`));
 }

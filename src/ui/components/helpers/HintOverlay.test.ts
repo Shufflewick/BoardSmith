@@ -285,3 +285,69 @@ describe('HintOverlay unmount (#749)', () => {
     fixture.remove();
   });
 });
+
+describe('HintOverlay placement (#927)', () => {
+  // Board at viewport (0,100), 400x400: top 100, bottom 500, centre y 300.
+  function mountOnBoard(annotation: Annotation, extraHtml = '') {
+    const fixture = document.createElement('div');
+    fixture.className = 'boardregion';
+    fixture.innerHTML = extraHtml;
+    document.body.appendChild(fixture);
+    vi.spyOn(fixture, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 100, 400, 400));
+    return mount(HintOverlay, {
+      global: { provide: { [GAME_CONTEXT_KEYS.gameState as symbol]: makeGameState(annotation) }, stubs: { Teleport: true } },
+      attachTo: fixture,
+    });
+  }
+
+  function bubbleStyle(wrapper: ReturnType<typeof mount>) {
+    return (wrapper.find('.bsg-board-message--annotation').element as HTMLElement).style;
+  }
+
+  it('centres an untargeted bubble on the board for placement="center"', async () => {
+    const wrapper = mountOnBoard({ text: 'Think about it', placement: 'center' });
+    await nextTick();
+    expect(bubbleStyle(wrapper).top).toBe('300px');
+    expect(bubbleStyle(wrapper).transform).toBe('translate(-50%, -50%)');
+    wrapper.unmount();
+  });
+
+  it('puts a targeted bubble at the top of the board for placement="top"', async () => {
+    const wrapper = mountOnBoard(
+      { text: 'Suggested move', target: { kind: 'element', ref: { id: 7 } }, placement: 'top' },
+      '<div data-bs-el-id="7"></div>',
+    );
+    await nextTick();
+    expect(wrapper.find('.bsg-tutorial-ring').exists()).toBe(true);
+    expect(bubbleStyle(wrapper).top).toBe('108px');
+    wrapper.unmount();
+  });
+
+  it('keeps the left edge of a bubble next to a target at the left edge on screen (#907)', async () => {
+    const fixture = document.createElement('div');
+    fixture.className = 'boardregion';
+    fixture.innerHTML = '<div data-bs-el-id="907"></div>';
+    document.body.appendChild(fixture);
+    vi.spyOn(fixture, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 100, 400, 400));
+    // Centre x = 10: half a 300px bubble centred there would start at -140.
+    vi.spyOn(fixture.querySelector('[data-bs-el-id="907"]')!, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 120, 20, 20));
+    const wrapper = mount(HintOverlay, {
+      global: { provide: { [GAME_CONTEXT_KEYS.gameState as symbol]: makeGameState({ text: 'Suggested move', target: { kind: 'element', ref: { id: 907 } } }) }, stubs: { Teleport: true } },
+      attachTo: fixture,
+    });
+    await nextTick();
+    expect(bubbleStyle(wrapper).left).toBe('10px');
+    // Shift left by half the bubble's width, but never past 8px from the viewport edge.
+    expect(bubbleStyle(wrapper).transform).toBe('translateX(max(-50%, -2px))');
+    // The caret still points at the target, kept clear of the card's rounded corner.
+    expect(bubbleStyle(wrapper).getPropertyValue('--caret-left')).toBe('min(50%, 12px)');
+    wrapper.unmount();
+  });
+
+  it('keeps an untargeted bubble without placement below the board', async () => {
+    const wrapper = mountOnBoard({ text: 'Suggested: c5 to a3' });
+    await nextTick();
+    expect(bubbleStyle(wrapper).top).toBe('508px');
+    wrapper.unmount();
+  });
+});

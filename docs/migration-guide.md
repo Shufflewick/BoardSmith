@@ -1,5 +1,92 @@
 # Migration Guide
 
+## `boardsmith test --selection` is removed (#986)
+
+`boardsmith test` no longer takes `--selection <path>`, the authored-test
+selection that ran only the files and test names listed in a manifest such as
+`.agent-policy-tests.json`. `agent-policy verify` now runs the tests related to
+a change instead, so nothing reads a selection. Delete any selection manifest
+and run `boardsmith test` (optionally with filename filters) instead.
+
+## Three unused public names are gone (#929)
+
+`provideAnnouncer` is removed from `boardsmith/ui`; provide the announcer with
+`provide(ANNOUNCER_KEY, announcer)`. `engineRootFieldAudience` is removed from
+the root export. `GameRunner.getFlowDebugInfo()` is removed; call
+`runner.game.getFlowDebugInfo()` instead.
+
+## `handleOp` and the headless `send` take only ops a seat may send (#1109)
+
+`SnapshotSessionHost.handleOp` and `HeadlessSession.send` now take a `SeatOp`,
+not any `Op`, so `start`, `restoreEarlier` and `botSuggest` no longer compile
+there. They were already refused at run time (#1102). Use the host's own entry
+points instead: `host.start()`, `host.restoreEarlier(snapshot)` and
+`host.runBotTurns()` (in a headless session, `session.start()` and
+`session.arrange()`; bot seats move on their own). Code that passes ops read
+from the wire as `Op` should type them as `SeatOp` where they are built, or
+keep relying on the run-time refusal for input it cannot type.
+
+## boardsmith.json has no `scoreboard` key any more (#930)
+
+Nothing ever read `scoreboard`; only `boardsmith new` wrote it. `boardsmith
+validate` now refuses it as an unknown key. Delete it from your
+`boardsmith.json`.
+
+## `simulateTutorial` starts a tutorial as the server does (#914)
+
+`simulateTutorial` now starts a tutorial through the same function as the
+server's `startTutorial` op. It runs the tutorial's `setup` before the first
+scripted move, restarts the flow with the learner seat to move, and gives only
+the learner seat a tutorial. So:
+
+- `scenario` is now a function of the game, called once after `setup` has run,
+  so its moves name the elements `setup` left on the board (#1079). A list is
+  no longer accepted. A list built before the call named elements a `setup`
+  that recreates them had already replaced, and the move failed with "That
+  choice is no longer available". Before:
+
+  ```typescript
+  const scenario = buildWalkthrough(testGame.game);
+  simulateTutorial(testGame, MY_TUTORIAL, { scenario });
+  ```
+
+  After:
+
+  ```typescript
+  simulateTutorial(testGame, MY_TUTORIAL, { scenario: (game) => buildWalkthrough(game) });
+  ```
+
+  A scenario that names no elements just wraps its list:
+  `scenario: () => [{ action: 'pass' }]`. Patch the game in the function, not
+  before the call, when the patch moves elements `setup` replaces.
+- Moves by other seats are no longer gated by the tutorial's steps.
+- A move's `expectStep` names the learner's step, whichever seat moves.
+- A `learnerSeat` other than the seat that opens the game now gets the opening
+  turn, as on the server: drop scripted moves for the seats before it.
+
+## `review-gate` reads what is under review from the run log (#829)
+
+`boardsmith review-gate` no longer takes `--since` or `--work-role`. It reads
+the chunk's run log, `design/run-log/<slug>.md`: the change under review is
+everything since the commit the latest finished review round names in its
+`Verify:` line (the chunk's verify base before any round), and it counts as
+mechanical only when every dispatch logged since that round has
+`Role: mechanical`. Drop both flags from any script or skill that passes them,
+and keep the run log current before the gate runs.
+
+## `toDebugString` drops the unused `showHidden` option (#913)
+
+`DebugStringOptions.showHidden` is removed; it was never read. Delete it from
+any `toDebugString(game, { ... })` call. The "Current Player" line now reads
+`(seat N)` instead of `(position undefined)`.
+
+## The game-over card has no New Game or Rematch button (#902)
+
+GameShell's game-over card and controls menu no longer offer New Game or
+Rematch, and the `#game-over` slot no longer passes `rematch` or `newGame`.
+Starting another game belongs to the host that started this one. A game whose
+`#game-over` slot used either prop must drop the button that called it.
+
 ## Chunk work runs `boardsmith verify --chunk <slug>`, with no selection (#985)
 
 `boardsmith verify --selection <path>` is removed, and so is the `focused`

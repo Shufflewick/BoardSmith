@@ -1,12 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createDebugBridge, type PlatformRequest } from './useDebugBridge.js';
+import { newestWins, createDebugBridge, type PlatformRequest } from './useDebugBridge.js';
 
 function bridgeWith(handler: PlatformRequest) {
   const platformRequest = vi.fn(handler);
   return { bridge: createDebugBridge(platformRequest), platformRequest };
 }
 
-const ok: PlatformRequest = async () => ({ success: true });
+const ok: PlatformRequest = async (op) => (op.startsWith('debug:deck-view') ? { success: true, view: { id: 1 } } : { success: true });
 
 describe('createDebugBridge without a host', () => {
   const bridge = createDebugBridge(null);
@@ -40,6 +40,8 @@ describe('debug bridge op names and payloads', () => {
     await bridge.reorderCard(10, 2);
     await bridge.transferCard(10, 7, 'last');
     await bridge.shuffleDeck(2);
+    await bridge.deckView(null);
+    await bridge.deckView(3);
 
     expect(platformRequest.mock.calls).toEqual([
       ['debug:action-traces', {}],
@@ -54,6 +56,8 @@ describe('debug bridge op names and payloads', () => {
       ['debug:reorder-card', { cardId: 10, targetIndex: 2 }],
       ['debug:transfer-card', { cardId: 10, targetDeckId: 7, position: 'last' }],
       ['debug:shuffle-deck', { deckId: 2 }],
+      ['debug:deck-view', {}],
+      ['debug:deck-view-at', { actionIndex: 3 }],
     ]);
   });
 });
@@ -75,6 +79,14 @@ describe('debug bridge failure messages', () => {
     await expect(bridge.reorderCard(1, 0)).rejects.toThrow('Failed to reorder card');
     await expect(bridge.transferCard(1, 2, 'first')).rejects.toThrow('Failed to transfer card');
     await expect(bridge.shuffleDeck(1)).rejects.toThrow('Failed to shuffle deck');
+    await expect(bridge.deckView(null)).rejects.toThrow('Failed to fetch the decks');
+    await expect(bridge.deckView(1)).rejects.toThrow('Failed to fetch the decks');
+  });
+
+  it('refuses a deck view the host sent without its table', async () => {
+    const { bridge } = bridgeWith(async () => ({ success: true }));
+    await expect(bridge.deckView(null)).rejects.toThrow('without the table');
+    await expect(bridge.deckView(1)).rejects.toThrow('without the table');
   });
 
   it('lets a broken transport through untouched, so it is not mistaken for a refusal', async () => {
@@ -113,8 +125,14 @@ describe('debug bridge response validation', () => {
 
   it('returns an empty history and an empty log when the host sends neither', async () => {
     const { bridge } = bridgeWith(ok);
-    expect(await bridge.history()).toEqual([]);
+    expect(await bridge.history()).toEqual({ actionHistory: [], actionHistoryBase: 0 });
     expect(await bridge.logs()).toEqual([]);
+  });
+
+  it('says which action the kept history starts at when the game dropped the ones before it (#997)', async () => {
+    const entry = { name: 'move', player: 1, args: {} };
+    const { bridge } = bridgeWith(async () => ({ success: true, actionHistory: [entry], actionHistoryBase: 899 }));
+    expect(await bridge.history()).toEqual({ actionHistory: [entry], actionHistoryBase: 899 });
   });
 });
 
@@ -179,5 +197,16 @@ describe('debug bridge transfer position', () => {
     const { bridge, platformRequest } = bridgeWith(ok);
     await bridge.transferCard(1, 2, 'first');
     expect(platformRequest.mock.calls[0][1]).toMatchObject({ position: 'first' });
+  });
+});
+
+describe('newestWins', () => {
+  it('keeps only the latest ticket current', () => {
+    const ticket = newestWins();
+    const first = ticket();
+    expect(first()).toBe(true);
+    const second = ticket();
+    expect(first()).toBe(false);
+    expect(second()).toBe(true);
   });
 });

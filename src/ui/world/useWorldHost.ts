@@ -102,6 +102,13 @@ export interface WorldHost {
    * costs.
    */
   events: ShallowRef<readonly WorldNarration[]>;
+  /**
+   * How many lines (events with `text`) the bound on `events` has dropped
+   * since this seat's log began: the log's line number of its first line
+   * (#1066). It counts only what this page was told, so it reveals nothing
+   * about any other seat.
+   */
+  linesDropped: Ref<number>;
   /** True once the host has sent one frame this UI understood. */
   heardFromHost: Ref<boolean>;
   /** True when the hello window passed with nothing from the host at all. */
@@ -184,6 +191,7 @@ export type WorldSeatHost = Pick<
   | 'presence'
   | 'players'
   | 'events'
+  | 'linesDropped'
   | 'acting'
   | 'act'
   | 'resolvePick'
@@ -194,6 +202,11 @@ export type WorldSeatHost = Pick<
  *  does. A promise nobody resolves is a button that spins forever. */
 const DROPPED_BEFORE_ANSWER =
   'The page stopped listening to this world before it answered.';
+
+/** Whether an event puts a line in the log: only one the game wrote a sentence for. */
+export function isLogLine(event: WorldNarration): event is WorldNarration & { text: string } {
+  return typeof event.text === 'string' && event.text.length > 0;
+}
 
 /**
  * WHAT A BUNDLE'S WORLD UI KNOWS, AND HOW IT ACTS (ShufflewickPub #128).
@@ -213,6 +226,13 @@ const DROPPED_BEFORE_ANSWER =
  * contested claim, a door that is not there -- and a caller that had to catch
  * one would be treating the rules working correctly as an exception.
  */
+/** Drop every request id that was a send of this order. */
+function forgetRequests(requests: Map<string, string>, orderId: string): void {
+  for (const [requestId, sentFor] of [...requests]) {
+    if (sentFor === orderId) requests.delete(requestId);
+  }
+}
+
 /**
  * ONE ANSWER TO A QUESTION, AS ITS CALLER READS IT (#378, #248).
  *
@@ -279,6 +299,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
   const presence = ref<readonly number[] | null>(null);
   const players = shallowRef<readonly WorldPlayer[]>([]);
   const events = shallowRef<readonly WorldNarration[]>([]);
+  const linesDropped = ref(0);
   const heardFromHost = ref(false);
   const hostSilent = ref(false);
   const acting = ref(false);
@@ -298,6 +319,9 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
       orderId: string;
     }
   >();
+  /** Requests this page stopped waiting on, by the order each was an attempt
+   *  at, so a reply that arrives late still strikes its order out (#888). */
+  const unansweredRequests = new Map<string, string>();
   /**
    * A PICK IN FLIGHT (ShufflewickPub #378), kept apart from a command in flight.
    *
@@ -324,18 +348,27 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
    * and it is the whole of what decides whether the order is struck out of the
    * book (#195): an answer -- taken or refused -- settles the order's fate, and
    * silence is exactly the case a reload has to be able to ask about again.
+   *
+   * An answer to any send of an order answers the order (#888), so it also
+   * resolves a resend of it that is still waiting.
    */
   function settle(
     requestId: string,
     outcome: WorldActionOutcome,
     source: { answered: boolean },
   ): void {
-    const waiting = pending.get(requestId);
-    if (waiting === undefined) return;
-    pending.delete(requestId);
-    clearTimeout(waiting.timer);
-    if (source.answered) orders.settle(waiting.orderId);
-    waiting.resolve(outcome);
+    const orderId = pending.get(requestId)?.orderId ?? unansweredRequests.get(requestId);
+    if (orderId === undefined) return;
+    if (source.answered) {
+      orders.settle(orderId);
+      forgetRequests(unansweredRequests, orderId);
+    }
+    for (const [id, waiting] of [...pending]) {
+      if (source.answered ? waiting.orderId !== orderId : id !== requestId) continue;
+      pending.delete(id);
+      clearTimeout(waiting.timer);
+      waiting.resolve(outcome);
+    }
     acting.value = pending.size > 0;
   }
 
@@ -389,6 +422,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
    */
   function forgetTheSeatThatLeft(): void {
     events.value = [];
+    linesDropped.value = 0;
     heldOffers = null;
   }
 
@@ -430,7 +464,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     // to be dispatched at all.
     if (!recovered && data.phase === 'watching' && data.seat !== null) {
       recovered = true;
-      void recover();
+      void recover(data.seat);
     }
   }
 
@@ -486,8 +520,8 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
    * and a question about a sequence number in the middle of a game is the
    * failure this replaces.
    */
-  async function recover(): Promise<void> {
-    const outstanding = orders.pending();
+  async function recover(forSeat: number): Promise<void> {
+    const outstanding = orders.pending(forSeat);
     if (outstanding.length === 0) return;
     recovering.value = true;
     const notices: string[] = [];
@@ -519,8 +553,9 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
    */
   function takeNarration(delivery: readonly WorldNarration[]): void {
     const kept = [...events.value, ...delivery];
-    events.value =
-      kept.length > WORLD_NARRATION_KEPT ? kept.slice(kept.length - WORLD_NARRATION_KEPT) : kept;
+    const cut = Math.max(0, kept.length - WORLD_NARRATION_KEPT);
+    linesDropped.value += kept.slice(0, cut).filter(isLogLine).length;
+    events.value = kept.slice(cut);
   }
 
   /** One answer, as the caller of `act` sees it. Absent fields stay absent:
@@ -653,21 +688,33 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
    * its fate is known. A timeout does not: "the world did not answer" is the
    * one outcome the book exists to remember, and an order struck out there is
    * an order a reload can no longer ask about.
+   *
+   * SILENCE IS ASKED ABOUT ONCE MORE, AT ONCE (#888), with the same order: the
+   * host answers a committed one from its receipt, so the repeat cannot run it
+   * twice. A second silence leaves the order in the book for a reload to ask
+   * about, and the request ids in `unansweredRequests` so a late reply still clears it.
    */
-  function dispatch(order: PendingOrder): Promise<WorldActionOutcome> {
+  function dispatch(order: PendingOrder, retried = false): Promise<WorldActionOutcome> {
     sequence += 1;
     const requestId = `wc-${sequence}`;
     const answered = new Promise<WorldActionOutcome>((resolve) => {
       const timer = setTimeout(() => {
-        if (pending.delete(requestId)) {
-          acting.value = pending.size > 0;
-          resolve({
-            ok: false,
-            message:
-              `The world did not answer "${order.action}". It may still have taken it -- this ` +
-              'page will ask again with the same order, so it cannot happen twice.',
-          });
+        if (!pending.delete(requestId)) return;
+        unansweredRequests.set(requestId, order.id);
+        if (!retried) {
+          void dispatch(order, true).then(resolve);
+          return;
         }
+        acting.value = pending.size > 0;
+        resolve({
+          ok: false,
+          message:
+            `The world did not answer "${order.action}", even when asked again. ` +
+            (orders.durable
+              ? 'Reload the page to check: it will ask about this same order, so it cannot happen twice.'
+              : 'This browser is not keeping a record of it, so a reload cannot check. Look at the ' +
+                'world before pressing again.'),
+        });
       }, commandTimeoutMs);
       pending.set(requestId, { resolve, timer, orderId: order.id });
     });
@@ -766,7 +813,15 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     // `someRef.value` is exactly what a caller will hand this -- so the book
     // takes the JSON round trip on the way in, and what it stores is what goes
     // on the wire.
-    return await dispatch(orders.open(command, args ?? {}));
+    // An order belongs to the seat that sent it, so a page with no seat yet has
+    // nobody to send one as (#889).
+    if (seat.value === null) {
+      return {
+        ok: false,
+        message: 'This page has not been given a seat in this world yet. Wait for it to load, then try again.',
+      };
+    }
+    return await dispatch(orders.open(seat.value, command, args ?? {}));
   }
 
   function start(): void {
@@ -795,6 +850,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     for (const requestId of [...pending.keys()]) {
       settle(requestId, { ok: false, message: DROPPED_BEFORE_ANSWER }, { answered: false });
     }
+    unansweredRequests.clear();
     // A QUESTION HAS NO ORDER TO STRIKE OUT -- but a promise nobody resolves is
     // still a panel that spins forever, and a quote is as unanswerable as a pick
     // once this frame has stopped listening.
@@ -818,6 +874,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     presence,
     players,
     events,
+    linesDropped,
     heardFromHost,
     hostSilent,
     acting,

@@ -129,6 +129,78 @@ describe('parseBuildManifest', () => {
     expect(parsed.entries.map((e) => e.path)).toEqual(['src/rules/game.ts']);
   });
 
+  it('reads a path with non-ASCII letters whole (#1113)', () => {
+    const chunk = tableChunk('| règles/a.ts, `règles/b.ts` | written |');
+    expect(parseBuildManifest(chunk).entries.map((e) => e.path)).toEqual(['règles/a.ts', 'règles/b.ts']);
+  });
+
+  // 'è' is the decomposed form some macOS tools write; git names the file 'règles'.
+  it.each(['règles/a.ts', '`règles/a.ts`'])(
+    'refuses the decomposed accent in %s rather than miss the file git names (#1117)',
+    (cell) => {
+      const chunk = tableChunk(`| ${cell} | written |`);
+      expect(() => parseBuildManifest(chunk)).toThrow(
+        `Build Manifest row 1: the File cell "${cell}" has "règles/a.ts", whose accented letters are written in decomposed form, so it never matches the file name git reports. Retype the path with composed letters (one character per accented letter, like \`règles/a.ts\`).`,
+      );
+    },
+  );
+
+  it('reads a backticked path whole, spaces and symbols included (#1116)', () => {
+    const chunk = tableChunk('| `my file.ts`, `@scope/x.ts` (edit), `~x.ts` | written |');
+    expect(parseBuildManifest(chunk).entries.map((e) => e.path)).toEqual(['my file.ts', '@scope/x.ts', '~x.ts']);
+  });
+
+  it('does not refuse prose about a path: notes are not checked, and a backticked `.name` is not a path', () => {
+    // Real cell shapes from the reference games' manifests.
+    const chunk = tableChunk(
+      [
+        '| src/rules/elements.ts (Sector.gossip, Almanac.gossipVenues/gossipUses) | written |',
+        '| `src/rules/hunt.ts` — `.narration` on each result | written |',
+      ].join('\n'),
+    );
+    expect(() => parseBuildManifest(chunk)).not.toThrow();
+  });
+
+  it('neither checks nor reads a note, backticks in it included (#1116)', () => {
+    const chunk = tableChunk(
+      [
+        '| `src/a.ts` (adds `Foo.bar` and a helper in utils.ts), `src/b.ts` | written |',
+        '| `src/c.ts` (see `b.ts`, then my notes.ts) — and `d.ts:12` | written |',
+      ].join('\n'),
+    );
+    expect(parseBuildManifest(chunk).entries.map((e) => e.path)).toEqual(['src/a.ts', 'src/b.ts', 'src/c.ts']);
+  });
+
+  it('trims a backticked path', () => {
+    const chunk = tableChunk('| ` my file.ts ` | written |');
+    expect(parseBuildManifest(chunk).entries.map((e) => e.path)).toEqual(['my file.ts']);
+  });
+
+  it.each(['b.ts:12', 'src/ui/**', 'docs/FR-013-...'])(
+    'refuses the backticked non-path `%s` without telling the author to add backticks (#1116)',
+    (span) => {
+      const chunk = tableChunk(`| \`${span}\` | written |`);
+      expect(() => parseBuildManifest(chunk)).toThrow(
+        span.includes('*')
+          ? `Build Manifest row 1: the File cell "\`${span}\`" has "${span}", a pattern. Patterns are not expanded: list each file in its own backticks.`
+          : `Build Manifest row 1: the File cell "\`${span}\`" has "${span}", which is not a file path (a path ends in a name and an extension, like \`src/rules/game.ts\`). Put notes about a file in brackets or after a dash.`,
+      );
+    },
+  );
+
+  it.each([
+    ['`tests/auctions-*.test.ts`', 'tests/auctions-*.test.ts'],
+    ['`src/[ab].ts`', 'src/[ab].ts'],
+    ['`src/a?.ts`', 'src/a?.ts'],
+    ['tests/auctions-*.test.ts', 'tests/auctions-*.test.ts'],
+    ['src/ui/{a.ts, b.vue}', 'src/ui/{a.ts'],
+  ])('refuses the pattern in "%s": patterns are not expanded (#1116)', (cell, fragment) => {
+    const chunk = tableChunk(`| ${cell} | written |`);
+    expect(() => parseBuildManifest(chunk)).toThrow(
+      `Build Manifest row 1: the File cell "${cell}" has "${fragment}", a pattern. Patterns are not expanded: list each file in its own backticks.`,
+    );
+  });
+
   it('records a zero-path row in pathlessRowIndexes and produces no entry', () => {
     const chunk = tableChunk('| (no files) | n/a |');
     const parsed = parseBuildManifest(chunk);
@@ -394,6 +466,22 @@ describe('extractVerifiedCommitHash', () => {
 
   it('returns undefined when the section has no hex token', () => {
     expect(extractVerifiedCommitHash(hashChunk('not recorded yet'))).toBeUndefined();
+  });
+
+  it('does not take a hex run in prose, such as a date, for the hash (#846)', () => {
+    expect(extractVerifiedCommitHash(hashChunk('Not recorded; build ran 20251015.'))).toBeUndefined();
+  });
+
+  it('takes a bare hash at the start of a line that prose follows (#846)', () => {
+    expect(extractVerifiedCommitHash(hashChunk('d34714c — the build stamp; later `abc1234` noted'))).toBe('d34714c');
+  });
+
+  it("takes the hash written into the template's comment slot (#846)", () => {
+    expect(extractVerifiedCommitHash(hashChunk('<!-- d505944c -->'))).toBe('d505944c');
+  });
+
+  it('skips prose hex runs and takes the hash written in backticks after them (#846)', () => {
+    expect(extractVerifiedCommitHash(hashChunk('Ran on 20251015, verified `abc1234`.'))).toBe('abc1234');
   });
 });
 

@@ -75,6 +75,21 @@ ruleTester.run('no-element-array-state', rule, {
         }
       `,
     },
+    // A GameElement imported under another name still owns its children (#1036).
+    {
+      code: `
+        import { GameElement as BaseElement } from 'boardsmith';
+        class Board extends BaseElement { pieces: Piece[] = []; }
+      `,
+    },
+    // A renamed import from anywhere but boardsmith is not an engine class (#1036).
+    {
+      code: `
+        import { Card as BaseCard } from './cards';
+        class Equipment extends BaseCard {}
+        class Tracker { gear: Equipment[] = []; }
+      `,
+    },
   ],
   invalid: [
     // GameElement[]-typed class field in a non-GameElement class.
@@ -108,6 +123,91 @@ ruleTester.run('no-element-array-state', rule, {
         }
       `,
       errors: [{ messageId: 'elementArrayAssignment' }],
+    },
+    // Games extend the engine's element classes, not GameElement directly (#872).
+    ...['Piece', 'Space', 'Card'].map((base) => ({
+      code: `
+        class Token extends ${base}<MyGame> {}
+        class Tracker { discard: Token[] = []; }
+      `,
+      errors: [{ messageId: 'elementArrayField' as const }],
+    })),
+    // A two-level chain through an engine class (#872).
+    {
+      code: `
+        class Pawn extends Card {}
+        class Card extends Piece<MyGame> {}
+        class Tracker { discard: Pawn[] = []; }
+      `,
+      errors: [{ messageId: 'elementArrayField' as const }],
+    },
+    // Game and Player are engine element classes (#872): an array of them on a plain class is
+    // element state, and an element class still may not persist a collection query.
+    ...['Game', 'Player'].flatMap((base) => [
+      {
+        code: `
+          class Mine extends ${base} {}
+          class Tracker { seen: Mine[] = []; }
+        `,
+        errors: [{ messageId: 'elementArrayField' as const }],
+      },
+      {
+        code: `
+          class Mine extends ${base} {
+            captured = this.all(Card);
+          }
+        `,
+        errors: [{ messageId: 'elementArrayAssignment' as const }],
+      },
+    ]),
+    // Game and Player subclasses are where games keep state, so they get no child-array exemption.
+    {
+      code: `
+        class Card extends Piece<MyGame> {}
+        class MyGame extends Game { discard: Card[] = []; }
+      `,
+      errors: [{ messageId: 'elementArrayField' as const }],
+    },
+    {
+      code: `class MyGame extends Game { pool: GameElement[] = []; }`,
+      errors: [{ messageId: 'elementArrayField' as const }],
+    },
+    // The docs/common-pitfalls.md "Player Data Serialization" example.
+    ...['GameElement', 'Piece'].map((base) => ({
+      code: `
+        class Squad extends ${base} {}
+        class MyPlayer extends Player { squadRefs: Squad[] = []; }
+      `,
+      errors: [{ messageId: 'elementArrayField' as const }],
+    })),
+    {
+      code: `
+        class BaseGame extends Game {}
+        class MyGame extends BaseGame { discard: Card[] = []; }
+        class Card extends Piece {}
+      `,
+      errors: [{ messageId: 'elementArrayField' as const }],
+    },
+    // An engine class imported under another name is still an element class (#1036).
+    ...['boardsmith', 'boardsmith/world'].map((source) => ({
+      code: `
+        import { Card as BaseCard } from '${source}';
+        class Equipment extends BaseCard {}
+        class Tracker { gear: Equipment[] = []; }
+      `,
+      errors: [{ messageId: 'elementArrayField' as const }],
+    })),
+    {
+      code: `
+        import { Piece as BasePiece } from 'boardsmith';
+        class Tracker { militia: BasePiece[] = []; }
+      `,
+      errors: [{ messageId: 'elementArrayField' as const }],
+    },
+    // Check (c) applies in a direct GameElement subclass too (#1036).
+    {
+      code: `class Board extends GameElement { captured = this.all(Card); }`,
+      errors: [{ messageId: 'elementArrayAssignment' as const }],
     },
   ],
 });

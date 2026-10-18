@@ -166,6 +166,13 @@ describe('verifiedProblem: the one question every done claim asks', () => {
     expect(await verifiedProblem(dir)).toMatch(/could not be read.*boardsmith verify/s);
   });
 
+  it('names a result file that is a folder rather than calling it missing (#1174)', async () => {
+    const dir = await project();
+    const head = git(dir, 'rev-parse', 'HEAD').trim();
+    await fs.mkdir(verifyResultPath(dir, head), { recursive: true });
+    await expect(readVerifyResult(dir, head)).rejects.toThrow(`Could not read ${verifyResultPath(dir, head)} (EISDIR)`);
+  });
+
   /**
    * A chunk's gates (sign-off, review, close) take only that chunk's fast checks, its tests and
    * typecheck (`verify --chunk`); everything else asks for the full verify, which runs at publish (#985).

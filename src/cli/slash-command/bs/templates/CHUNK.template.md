@@ -93,7 +93,7 @@ full
 
      A claim is a line that starts with its number, `1. `, at the start of the line; bold is
      optional, and every such line is checked. Every claim carries the exact source passage it
-     rests on and where it is. A `Source:` path
+     rests on, at least 3 words, and where it is. A `Source:` path
      that names a design record (rulebook/..., RULINGS.md) or climbs out of design/ (../src/...)
      is read from design/, any other path from the project root; cite a Markdown source (a slice, RULINGS.md) by heading or line
      range, and code by file and line (code this chunk replaced as it was in one of the chunk's
@@ -205,7 +205,10 @@ full
 ## Build Manifest
 <!-- Per-file build manifest for build-step crash/resume — file-by-file, not step-by-step, so a
      session that crashes mid-build knows exactly which files were already written vs. still
-     pending, without re-deriving that from git status alone. -->
+     pending, without re-deriving that from git status alone. Write each path in backticks
+     (`src/rules/game.ts`), one file per path, never a pattern, with any note in brackets or
+     after a dash: a backticked path is read whole, so a path with a space or a symbol needs
+     them, and a bare path that cannot be read whole is refused. -->
 
 | File | Status |
 |------|--------|

@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { countsAt, decodeMappings } from './test-step-coverage.js';
+import { promises as fs, realpathSync } from 'node:fs';
+import { join } from 'node:path';
+import { countsAt, decodeMappings, readCoverage } from './test-step-coverage.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * #485: a test that pins earlier behaviour is mutation-tested on the game code it runs, read from
@@ -29,5 +32,25 @@ describe('decodeMappings', () => {
   });
   it('refuses a character that is not base64, naming it', () => {
     expect(() => decodeMappings('AA!A')).toThrow('holds "!", which is not base64');
+  });
+});
+
+describe('readCoverage: an unreadable coverage file (#1110)', () => {
+  it('names the file rather than saying the run wrote nothing', async () => {
+    const tree = tempTree('bs-coverage-unreadable-');
+    const dir = realpathSync(tree);
+    const test = join(dir, 'a.test.ts');
+    await fs.writeFile(test, '');
+    const coverage = join(dir, 'coverage', `${encodeURIComponent(test)}.json`);
+    await fs.mkdir(coverage, { recursive: true });
+    await expect(readCoverage(join(dir, 'coverage'), dir, test, 'a.test.ts')).rejects.toThrow(`Could not read ${coverage} (EISDIR)`);
+  });
+
+  it('says the run wrote nothing when the test file itself is gone', async () => {
+    const tree = tempTree('bs-coverage-unreadable-');
+    const dir = realpathSync(tree);
+    await expect(readCoverage(join(dir, 'coverage'), dir, join(dir, 'gone.test.ts'), 'gone.test.ts')).rejects.toThrow(
+      'The run that records which game code gone.test.ts runs wrote nothing for it',
+    );
   });
 });

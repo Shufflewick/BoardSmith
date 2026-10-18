@@ -16,6 +16,7 @@
  * in what Vite does to itself.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
+import { EventEmitter } from 'node:events';
 import { mkdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -27,6 +28,7 @@ import { DEV_HOST_ALIVE_PATH } from '../../testing/browser-smoke-clock.js';
 import { freePort } from '../lib/free-port.js';
 import { teardownInOrder } from '../dev-host/shutdown.js';
 import { createRulesReloadQueue } from '../dev-host/rules-reload-queue.js';
+import { bundledTable } from '../dev-host/table-host.test-helper.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const TEST_WS_PATH = '/__boardsmith/test-ws';
@@ -63,13 +65,16 @@ function connect(port: number, headers?: Record<string, string>): Promise<string
 }
 
 /** Serve an empty project through `serveVite`, with one claimed socket path. */
-async function serveEmpty(onConnection: Parameters<typeof claimWebSocketPath>[1], server: InlineConfig['server'] = {}) {
+async function serveEmpty(
+  onConnection: Parameters<typeof claimWebSocketPath>[1],
+  config: Pick<InlineConfig, 'server' | 'preview' | 'plugins'> = {},
+) {
   dir = tempTree('bs-dev-server-');
   writeFileSync(join(dir, 'index.html'), '<!doctype html><title>t</title>');
   const claimed = claimWebSocketPath(TEST_WS_PATH, onConnection);
   const port = await freePort();
   const served = await serveVite({
-    config: { root: dir, configFile: false, logLevel: 'silent', server },
+    config: { root: dir, configFile: false, logLevel: 'silent', ...config },
     port,
     host: '127.0.0.1',
     sockets: [claimed],
@@ -139,9 +144,28 @@ describe('a dev host socket answers only pages it served (#719)', () => {
   }, 30000);
 
   it('accepts a host name the project lists in server.allowedHosts', async () => {
-    const { port } = await serveEmpty((socket) => socket.send('ours'), { allowedHosts: ['.table.example'] });
+    const { port } = await serveEmpty((socket) => socket.send('ours'), { server: { allowedHosts: ['.table.example'] } });
     const named = `den.table.example:${port}`;
     expect(await connect(port, { Host: named, Origin: `http://${named}` })).toBe('ours');
+  }, 30000);
+
+  // Vite also allows a string server.host, server.hmr.host, preview.host and server.origin's hostname (#941).
+  it.each<[string, Pick<InlineConfig, 'server' | 'preview' | 'plugins'>]>([
+    ['server.host', { server: { host: 'den.table.example' } }],
+    ['server.origin', { server: { origin: 'http://den.table.example:9999' } }],
+    ['preview.host', { preview: { host: 'den.table.example' } }],
+    // serveVite replaces the inline server.hmr, so a game's hmr.host arrives merged from its own config, as here.
+    ['server.hmr.host', { plugins: [{ name: 'game-config', config: () => ({ server: { hmr: { host: 'den.table.example' } } }) }] }],
+  ])('accepts the host name the project names in %s', async (_option, config) => {
+    const { port } = await serveEmpty((socket) => socket.send('ours'), config);
+    const named = `den.table.example:${port}`;
+    expect(await connect(port, { Host: named, Origin: `http://${named}` })).toBe('ours');
+  }, 30000);
+
+  it('still refuses a host the project names nowhere, beside one it does name (#941)', async () => {
+    const { port } = await serveEmpty((socket) => socket.send('ours'), { server: { host: 'den.table.example' } });
+    const other = `sub.den.table.example:${port}`;
+    await expect(connect(port, { Host: other, Origin: `http://${other}` })).rejects.toThrow(/socket hang up/);
   }, 30000);
 
   it('accepts a page whose origin is the host it connected to, as a --lan browser\'s is', async () => {
@@ -161,25 +185,40 @@ describe('a served Vite leaves the process alone (#382)', () => {
   }, 30000);
 });
 
+/** Serve a page with Vite, answering {@link DEV_HOST_ALIVE_PATH} as the dev host does; answers its port. */
+async function servedAlive(): Promise<number> {
+  dir = tempTree('bs-dev-alive-');
+  writeFileSync(join(dir, 'index.html'), '<!doctype html><title>t</title>');
+  const port = await freePort();
+  const served = await serveVite({
+    config: {
+      root: dir,
+      configFile: false,
+      logLevel: 'silent',
+      plugins: [{ name: 'alive', configureServer: (server) => answerAlive(server) }],
+    },
+    port,
+    host: '127.0.0.1',
+    sockets: [],
+    release: () => {},
+  });
+  const teardown = teardownInOrder(served.resources);
+  stopServed = () => teardown.run();
+  return port;
+}
+
+/** Rules that keep their worker busy while they load, as a loaded machine does (#885). */
+const RULES_BUSY_LOADING = [
+  "import { Game, Player } from 'boardsmith';",
+  'const until = Date.now() + 1_000;',
+  'while (Date.now() < until) { /* busy */ }',
+  'class Idle extends Game<Idle, Player> {}',
+  "export const gameDefinition = { gameClass: Idle, gameType: 'alive-busy', minPlayers: 1, maxPlayers: 1 };",
+].join('\n');
+
 describe('the dev host says it is answering (#609)', () => {
   it(`answers ${DEV_HOST_ALIVE_PATH} with nothing, and leaves every other path to the rest of the dev host`, async () => {
-    dir = tempTree('bs-dev-alive-');
-    writeFileSync(join(dir, 'index.html'), '<!doctype html><title>t</title>');
-    const port = await freePort();
-    const served = await serveVite({
-      config: {
-        root: dir,
-        configFile: false,
-        logLevel: 'silent',
-        plugins: [{ name: 'alive', configureServer: (server) => answerAlive(server) }],
-      },
-      port,
-      host: '127.0.0.1',
-      sockets: [],
-      release: () => {},
-    });
-    const teardown = teardownInOrder(served.resources);
-    stopServed = () => teardown.run();
+    const port = await servedAlive();
 
     const alive = await fetch(`http://127.0.0.1:${port}${DEV_HOST_ALIVE_PATH}`);
     const page = await fetch(`http://127.0.0.1:${port}/`);
@@ -188,6 +227,26 @@ describe('the dev host says it is answering (#609)', () => {
     expect(await alive.text()).toBe('');
     expect(page.status).toBe(200);
   }, 30000);
+
+  it('answers only once rules busy in their worker have answered, since the rules run in it (#885)', async () => {
+    const start = await bundledTable('bs-dev-alive-busy-', RULES_BUSY_LOADING);
+    const port = await servedAlive();
+    const order: string[] = [];
+
+    const loading = start().then((runtime) => {
+      order.push('rules loaded');
+      return runtime;
+    });
+    const alive = fetch(`http://127.0.0.1:${port}${DEV_HOST_ALIVE_PATH}`).then((answer) => {
+      order.push('alive answered');
+      return answer;
+    });
+    const [runtime, answer] = await Promise.all([loading, alive]);
+    await runtime.close();
+
+    expect(answer.status).toBe(204);
+    expect(order).toEqual(['rules loaded', 'alive answered']);
+  }, 60_000);
 });
 
 /**
@@ -340,4 +399,26 @@ describe('a rules edit reloads the rules on the server (#201, #343)', () => {
     expect(events).toEqual(['start 1', 'end 1', 'start 2', 'end 2']);
     vi.restoreAllMocks();
   }, 30000);
+});
+
+describe('only a change inside the rules folder reloads the rules (#1053)', () => {
+  /** The files `reloadOnRulesEdit` hands the queue, for each change the watcher reports. */
+  function savedFor(rulesDir: string, changes: string[]): string[] {
+    const watcher = Object.assign(new EventEmitter(), { add: () => watcher });
+    const saved: string[] = [];
+    reloadOnRulesEdit({
+      vite: { watcher } as unknown as Pick<ViteDevServer, 'watcher'>,
+      rulesDir,
+      cwd: '/game',
+      queue: { saved: async (file) => void saved.push(file) },
+    });
+    for (const change of changes) watcher.emit('change', change);
+    return saved;
+  }
+
+  it('ignores a sibling folder whose name starts with the rules folder\'s', () => {
+    expect(savedFor('/game/src/rules', ['/game/src/rules-old/index.ts', '/game/src/rules/index.ts'])).toEqual([
+      join('src', 'rules', 'index.ts'),
+    ]);
+  });
 });

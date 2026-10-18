@@ -133,6 +133,7 @@ function mountDock(props: Record<string, unknown> = {}, attach = false): Mounted
   });
   const wrapper = mount(PlayShell, {
     props: {
+      boardFailed: false,
       players: [{ seat: 0, name: 'Ivy' }, { seat: 1, name: 'Rook' }],
       playerSeat: 0,
       messages: [],

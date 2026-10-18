@@ -263,6 +263,22 @@ function onSquareClick(squareId: number) {
 </script>
 ```
 
+#### Replacing the action panel
+
+The `action-panel` slot replaces the built-in Action Panel wholesale. It receives
+`boardFailed`: true while the board shows its error message instead of drawing,
+false otherwise. The built-in panel lists a large pick's candidates while it is
+true, rather than handing the pick to a board that is not there; your panel
+should do the same.
+
+```vue
+<GameShell :uis="uis">
+  <template #action-panel="{ boardFailed }">
+    <MyActionPanel :list-every-choice="boardFailed" />
+  </template>
+</GameShell>
+```
+
 ### AutoUI
 
 Automatic UI generation from game state. A production-ready UI for any game — ideal for simple games or as a starting point before investing in a custom UI.
@@ -341,6 +357,9 @@ This is a change of surface, not of content, and three things keep it honest:
   the size of the choice before walking into it.
 - If even ONE candidate lacks a board ref the panel keeps every button, because
   deferring would leave that candidate reachable from neither surface.
+- While the board shows its error message in place of the board (it threw while
+  drawing), there is no board to choose on, so the panel lists every candidate;
+  it hands the pick back once the board draws again (#1153).
 - **Focus goes with the choice** (see "Board keyboard handoff" below). Without
   that the player who pressed the control would be standing on something that
   just unmounted.
@@ -461,6 +480,9 @@ export default defineGameUIs({
 
 Exactly one entry is `defaultUI()`: that is the board a production build
 renders. `devUI()` entries exist only under `boardsmith dev`.
+`defaultUI()` takes the board component itself, not a loader and not a bare
+functional component (wrap one in `defineComponent`), and refuses a function
+both when compiling and when running.
 
 Under `boardsmith dev`, the dev host shows a **UI dropdown** to switch which UI
 renders the running game, without restarting. It lists every entry in the
@@ -533,7 +555,9 @@ To let players choose colors when they set up a game, define `colorPalette` in `
 }
 ```
 
-If `colorPalette` is omitted, the standard 8-color palette is used. Plain hex strings are also accepted (e.g., `["#ff0000", "#0000ff"]`).
+If `colorPalette` is omitted, the engine's 16 named colours (`DEFAULT_COLOR_PALETTE`: Red, Blue, Green, Yellow, ...) are used. Plain hex strings are also accepted (e.g., `["#ff0000", "#0000ff"]`).
+
+A colour list declared in code (a `color` player option such as `createColorOption()`, or `gameDefinition.colorPalette`) is never published, so `boardsmith dev` refuses to start unless it matches exactly what the lobby will offer; declare custom colours in `boardsmith.json`'s `colorPalette` instead.
 
 ## Helper Components
 
@@ -1102,10 +1126,15 @@ When `elementSelector` equals `destinationSelector`, the composable auto-detects
 ```typescript
 import { useActionAnimations, FlyingCardsOverlay } from 'boardsmith/ui';
 
+// The board receives `actionController` and `gameView` as props from GameShell.
+const props = defineProps<{ actionController: UseActionControllerReturn; gameView: GameViewElement | null }>();
 const gameViewRef = ref(null);
+watchEffect(() => { gameViewRef.value = props.gameView; });
 
 const actionAnimations = useActionAnimations({
   gameView: gameViewRef,
+  // Tells the composable how each action ended, so a refused one puts its element back.
+  actionController: props.actionController,
   animations: [
     // Movement animation (element moves to a different destination)
     {
@@ -1126,14 +1155,13 @@ const actionAnimations = useActionAnimations({
   ],
 });
 
-// Register with actionController (in GameTable setup)
-function setupAnimations(actionController, gameView) {
-  gameViewRef.value = gameView;
-  // Returns an unregister function. Called inside setup(), the hook is also
-  // unregistered automatically when the component's effect scope disposes.
-  return actionController.onBeforeAutoExecute(actionAnimations.onBeforeAutoExecute);
-}
+// Returns an unregister function. Called inside setup(), the hook is also
+// unregistered automatically when the component's effect scope disposes.
+// A game may wrap this hook (to skip some actions, say); the outcome still arrives.
+props.actionController.onBeforeAutoExecute(actionAnimations.onBeforeAutoExecute);
 ```
+
+A `{selection}` placeholder goes only inside a double-quoted attribute value, as above. Its value is escaped for that spot, so quotes and backslashes in it are safe; a placeholder anywhere else (`#card-{card}`, `[data-x='{card}']`) is refused when `useActionAnimations` is set up.
 
 In template:
 ```vue
@@ -1149,6 +1177,8 @@ When the composable detects a flip-in-place animation (`elementSelector === dest
 - Configures internal timing to avoid flash/flicker issues
 
 You don't need to set `hideDestination`, `flip`, or `crossfadeDuration` - they're configured automatically.
+
+**When it plays:** the composable listens to `actionController.onAfterAutoExecute` for each action's result. The flight plays only once the server has accepted the action and the state it produced has rendered; a state update from another seat while the action is in flight does not play it. If the server refuses the action, or it is cancelled before it is sent, the hidden element gets back exactly the inline styles it had and no flight plays.
 
 **Animation Config Options:**
 
@@ -1495,7 +1525,7 @@ game.animate('score-reveal', { playerId: player.id, total: 42 });
 - An element the seat can see keeps its own path.
 - An element the seat cannot see is named by the outermost container that conceals it from that seat: a card in another player's hand arrives as the hand, a card in a count-only deck as the deck, a card anywhere inside a `contentsHidden()` zone as the zone. The seat learns which container, never the element's name, real id or place inside it, so a shuffle or a hidden zone's size stays hidden.
 - An element in `game.pile` arrives as a reference that names nothing in the seat's view.
-- World mode is the exception: there a reference is written as `{ __elementId }` with the element's real id for every seat (#956).
+- In world mode a reference is written as `{ __elementId }`, and the same rules apply: an element the seat cannot see arrives as its concealer's id, and an element in the pile as the same reference that names nothing. A reference to an element in a partition not loaded on this instance is sent as written. These rules cover every element reference a seat receives, in element attributes, settings and message data too (#1043).
 
 A raw id such as `card.id` reaches every seat unchanged, so it gives away which card a hidden one is.
 

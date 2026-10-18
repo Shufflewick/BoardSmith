@@ -51,7 +51,9 @@ function oneActionUntilFinished(action: string): FlowDefinition {
  * a game option, so it does not travel through the start op's options (a
  * player's selection could not carry it anyway, #447).
  */
-let writeAtEnd: { persist?: unknown; persistPrivate?: unknown } | undefined;
+let writeAtEnd: { persist?: unknown | PersistFromHanded; persistPrivate?: unknown } | undefined;
+/** A public write worked out from what the session was handed, such as a row named after its session key. */
+type PersistFromHanded = (handed: PersistStartPayload) => unknown;
 
 /** A game that reads its store at start and writes to both channels at the end. */
 class StoreGame extends Game<StoreGame, Player> {
@@ -68,7 +70,9 @@ class StoreGame extends Game<StoreGame, Player> {
     const write = writeAtEnd;
     this.registerAction(
       Action.create('finish').execute(() => {
-        if (write?.persist !== undefined) this.persist = write.persist;
+        const persist = write?.persist;
+        if (typeof persist === 'function') this.persist = (persist as PersistFromHanded)(this.handed!);
+        else if (persist !== undefined) this.persist = persist;
         if (write?.persistPrivate !== undefined) this.persistPrivate = write.persistPrivate;
         this.finish([this.getPlayer(1)!]);
         return { success: true };
@@ -88,8 +92,9 @@ const def: GameDefinitionLike = {
 /** One dev host, wired to a store, with whatever the game should write at the end. */
 function makeHost(options: {
   store: PersistenceStore;
-  write?: { persist?: unknown; persistPrivate?: unknown };
+  write?: { persist?: unknown | PersistFromHanded; persistPrivate?: unknown };
   playerCount?: number;
+  onChange?: () => Promise<void>;
 }): { host: MultiplayerHost; sent: HostOutbound[]; startOptions: () => Record<string, unknown> } {
   const sent: HostOutbound[] = [];
   let startOptions: Record<string, unknown> = {};
@@ -100,10 +105,11 @@ function makeHost(options: {
     maxPlayers: 2,
     makeSeed: () => 'persist-seed',
     persistence: {
-      sessionKey: 'dev-session',
+      runKey: 'dev-session',
       gameVersion: 'dev',
       store: options.store,
       now: () => 1000,
+      onChange: options.onChange,
     },
     // harness shape, shared verbatim with the sibling multiplayer-host suites.
     // fallow-ignore-next-line code-duplication
@@ -148,7 +154,25 @@ describe('boardsmith dev — the persistence store (#41 item 2)', () => {
 
     const payload = startOptions()[PERSIST_KEY] as PersistStartPayload;
     expect(payload.entries).toEqual([]);
-    expect(payload.sessionKey).toBe('dev-session');
+    expect(payload.sessionKey).toBe('dev-session-1');
+  });
+
+  it('#883: each game in one dev run gets its own session key, so one game\'s keyed rows never replace another\'s', async () => {
+    const store = new PersistenceStore();
+    const { host, sent, startOptions } = makeHost({
+      store,
+      write: { persist: (handed: PersistStartPayload) => ({ entries: [{ key: `death:${handed.sessionKey}`, value: 1 }] }) },
+    });
+    const sessionKey = () => (startOptions()[PERSIST_KEY] as PersistStartPayload).sessionKey;
+    await host.handleMessage('A', { type: 'hello' });
+    const first = sessionKey();
+    await playToEnd(host, sent);
+    await host.handleMessage('A', { type: 'restart' }); // "New game"
+    const second = sessionKey();
+    await playToEnd(host, sent);
+
+    expect(second).not.toBe(first);
+    expect(store.toState().rows.map((row) => row.key).sort()).toEqual([`death:${first}`, `death:${second}`].sort());
   });
 
   it('warns the developer about a store row it could not read (#740)', async () => {
@@ -209,6 +233,30 @@ describe('boardsmith dev — the persistence store (#41 item 2)', () => {
 
     expect(refusalFrom(replies)).toContain('wire ceiling');
     expect(store.toState().rows).toEqual([]);
+  });
+});
+
+describe('boardsmith dev: saving the store (#1179)', () => {
+  it('saves once when the finishing move commits, and not again for a read-only debug request', async () => {
+    const store = new PersistenceStore();
+    const commit = vi.spyOn(store, 'commit');
+    const onChange = vi.fn(async () => {});
+    const { host, sent } = makeHost({
+      store,
+      onChange,
+      write: { persist: { entries: [{ key: 'hall-of-fame', value: { wins: 1 } }] } },
+    });
+    await host.handleMessage('A', { type: 'hello' });
+    await playToEnd(host, sent);
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledTimes(1);
+
+    const before = sent.length;
+    await host.handleMessage('A', { type: 'server_request', requestId: 'r2', op: 'debug:history', payload: {} });
+    expect(refusalFrom(sent.slice(before))).toBeUndefined();
+
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledTimes(1);
   });
 });
 

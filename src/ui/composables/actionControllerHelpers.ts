@@ -6,8 +6,9 @@
  */
 
 import type { EnrichedActionMetadata, ChoiceWithRefs, ElementRef, EnrichedPickMetadata, PickSnapshot } from './useActionControllerTypes.js';
-import { devWarn } from '../../utils/dev.js';
 import { labelOfValue, valuesEqual } from '../../engine/action/choice-matching.js';
+import { numberRuleErrors } from '../../engine/action/number-rules.js';
+import { textPickRefusal } from '../../engine/action/text-rules.js';
 
 // ============================================
 // MultiSelect Resolution (Pit of Success — single source of truth)
@@ -245,4 +246,16 @@ export function actionNeedsWizardMode(
   }
 
   return { needed: false };
+}
+
+/**
+ * Why a client refuses `value` for a typed pick (text or number), or null.
+ *
+ * The one check the Action Panel's editor and `controller.fill` both make, so a
+ * custom UI is refused what the panel is refused, in the engine's words (#1057).
+ */
+export function editorRuleRefusal(pick: EnrichedPickMetadata, value: unknown): string | null {
+  if (pick.type === 'text') return textPickRefusal(pick, value);
+  if (pick.type === 'number') return numberRuleErrors(pick.name, value, pick)[0] ?? null;
+  return null;
 }

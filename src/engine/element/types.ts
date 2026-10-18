@@ -23,6 +23,10 @@ export type ImageRef =
       width: number;
       /** Height of the sprite (pixels) */
       height: number;
+      /** Width of the whole sprite sheet image (pixels) */
+      sheetWidth: number;
+      /** Height of the whole sprite sheet image (pixels) */
+      sheetHeight: number;
     };
 
 /**
@@ -51,7 +55,8 @@ export type ElementContext = {
    * look an element up instead of walking the tree. Derived, never
    * serialized: the tree is the source of truth, and `atId` answers from here
    * only for an element whose parents reach both the element asked and the
-   * game. An element is filed when it is created; a restore files the whole
+   * game. An element is filed once its create completes, with whatever its
+   * constructor created under it; a restore files the whole
    * rebuilt tree and an adoption the grafted subtree, once each is built; an
    * eviction drops the evicted subtree. Not public API.
    */
@@ -68,6 +73,11 @@ export type ElementContext = {
    * one is. Not public API.
    */
   _changingDepth: number;
+  /**
+   * Internal (#973): the seat whose action's own code is running (`actingFor`
+   * in `state-version.ts`), if any. Not public API.
+   */
+  _actingSeat?: number;
   /**
    * Internal (#631): how many reads of the flow's state there have been
    * (`flowStateRead` in `state-version.ts`), to tell whether a pick's callbacks

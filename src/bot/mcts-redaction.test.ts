@@ -13,7 +13,7 @@ import {
   type GameOptions,
   type ElementJSON,
 } from '../engine/index.js';
-import { createSnapshot } from '../engine/utils/index.js';
+import { createSnapshot, snapshotTree } from '../engine/utils/index.js';
 import { MCTSBot } from './mcts-bot.js';
 
 // ============================================================================
@@ -165,7 +165,7 @@ describe('MCTSBot redaction (bot-02 / T-159-06)', () => {
     // Reach into the bot's private capture path directly (mirrors
     // mcts-restore.test.ts's use of `(bot as any).restoreGame`).
     const snapshot = (bot as any).captureSnapshot();
-    const secretCardJson = findById(snapshot.state as ElementJSON, game.secretCard.id);
+    const secretCardJson = findById(snapshotTree(snapshot) as ElementJSON, game.secretCard.id);
 
     expect(secretCardJson).toBeDefined();
     // Pre-fix: captureSnapshot clones game.toJSON() (full truth) -- the
@@ -260,7 +260,7 @@ describe('createSnapshot non-bot default (T-159-08 guard)', () => {
 
     // The exact call shape runner.ts:527 uses -- no `opts` argument at all.
     const snapshot = createSnapshot(game, 'hidden-info', [], 'guard-1');
-    const secretCardJson = findById(snapshot.state as ElementJSON, game.secretCard.id);
+    const secretCardJson = findById(snapshotTree(snapshot) as ElementJSON, game.secretCard.id);
 
     expect(secretCardJson).toBeDefined();
     // The default path must NEVER redact -- only an explicit `forSeat` opts
@@ -428,7 +428,7 @@ describe('MCTSBot simultaneous-step soundness with 3 co-deciders (F-07)', () => 
     // the descent (applyMoveToSearchGame) must capture it. Pre-fix it did not.
 
     const rootFlow = bot.searchGame.getFlowState();
-    const root = bot.createNode(rootFlow, null, null, []);
+    const root = bot.createNode(rootFlow, null, null, [], bot.playerIndex);
 
     // Descend seat 1's pick. applyMoveToSearchGame captures the pre-reveal
     // baseline from the world (fresh at the root), then applies the move.
@@ -437,13 +437,13 @@ describe('MCTSBot simultaneous-step soundness with 3 co-deciders (F-07)', () => 
     // which is the seat the node's own moves are made as (#522).
     const move1 = { action: 'pick', args: { choice: pick1 } };
     bot.applyMoveToSearchGame({ parent: root, parentMove: move1 });
-    const child1 = bot.createNode(bot.searchGame.getFlowState(), root, move1, []);
+    const child1 = bot.createNode(bot.searchGame.getFlowState(), root, move1, [], bot.seatToMove(bot.searchGame.getFlowState()).seat);
     expect(child1.currentPlayer).toBe(2);
 
     // Descend seat 2's pick (step now mid; baseline must persist from root).
     const move2 = { action: 'pick', args: { choice: pick2 } };
     bot.applyMoveToSearchGame({ parent: child1, parentMove: move2 });
-    const child2 = bot.createNode(bot.searchGame.getFlowState(), child1, move2, []);
+    const child2 = bot.createNode(bot.searchGame.getFlowState(), child1, move2, [], bot.seatToMove(bot.searchGame.getFlowState()).seat);
     expect(child2.currentPlayer).toBe(3);
 
     // Enumerate seat 3's moves — must be reveal-blind (pre-reveal baseline).
@@ -725,7 +725,7 @@ describe('MCTSBot flow-variable relinking over a TRUE-hidden zone (WR-01 / 163-R
     // D24 concealment guard: the redacted wire payload must carry NEITHER a
     // `children` key NOR a `childCount` key for the hidden zone -- this must
     // stay true both before and after the WR-01 fix.
-    const secretZoneJson = findById(snapshot.state as ElementJSON, game.secretZone.id)!;
+    const secretZoneJson = findById(snapshotTree(snapshot) as ElementJSON, game.secretZone.id)!;
     expect(secretZoneJson).toBeDefined();
     expect('children' in secretZoneJson).toBe(false);
     expect('childCount' in secretZoneJson).toBe(false);

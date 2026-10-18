@@ -120,11 +120,6 @@
         "count": 1
       }
     },
-    "src/cli/commands/test.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/cli/commands/trace-check.ts": {
       "complexity_critical": {
         "count": 1
@@ -197,7 +192,7 @@
     },
     "src/cli/commands/verify-ruling-recheck.ts": {
       "complexity_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "src/cli/commands/verify-run.ts": {
@@ -205,7 +200,7 @@
         "count": 1
       },
       "complexity_high": {
-        "count": 2
+        "count": 1
       },
       "complexity_moderate": {
         "count": 3
@@ -234,16 +229,6 @@
         "count": 2
       }
     },
-    "src/cli/lib/asset-scan.ts": {
-      "complexity_critical": {
-        "count": 1
-      }
-    },
-    "src/cli/lib/authored-tests.ts": {
-      "complexity_moderate": {
-        "count": 2
-      }
-    },
     "src/cli/lib/verify-result.ts": {
       "complexity_moderate": {
         "count": 1
@@ -256,13 +241,13 @@
     },
     "src/engine/action/action.ts": {
       "complexity_critical": {
-        "count": 2
-      },
-      "complexity_high": {
         "count": 1
       },
+      "complexity_high": {
+        "count": 2
+      },
       "complexity_moderate": {
-        "count": 5
+        "count": 4
       }
     },
     "src/engine/action/helpers.ts": {
@@ -363,14 +348,19 @@
         "count": 1
       }
     },
+    "src/eslint-plugin/rules/element-types.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
     "src/eslint-plugin/rules/no-element-array-state.ts": {
       "complexity_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "src/eslint-plugin/rules/no-element-identity-comparison.ts": {
       "complexity_moderate": {
-        "count": 3
+        "count": 1
       }
     },
     "src/runtime/runner.ts": {
@@ -481,15 +471,7 @@
         "count": 1
       }
     },
-    "src/ui/components/auto-ui/AutoRenderer.vue": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/ui/components/auto-ui/auto-ui-helpers.ts": {
-      "complexity_high": {
-        "count": 1
-      },
       "complexity_moderate": {
         "count": 1
       }
@@ -506,7 +488,7 @@
     },
     "src/ui/components/auto-ui/renderers/CardRenderer.vue": {
       "complexity_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue": {
@@ -515,9 +497,6 @@
       }
     },
     "src/ui/components/auto-ui/renderers/HandRenderer.vue": {
-      "complexity_high": {
-        "count": 1
-      },
       "complexity_moderate": {
         "count": 1
       }
@@ -534,7 +513,7 @@
     },
     "src/ui/components/auto-ui/useAutoRendererAnimations.ts": {
       "complexity_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "src/ui/components/debug/ActionsTab.vue": {
@@ -572,22 +551,12 @@
         "count": 1
       },
       "complexity_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "src/ui/components/helpers/FlyingCardsOverlay.vue": {
       "complexity_moderate": {
         "count": 1
-      }
-    },
-    "src/ui/components/helpers/HintOverlay.vue": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
-    "src/ui/components/helpers/TutorialOverlay.vue": {
-      "complexity_moderate": {
-        "count": 2
       }
     },
     "src/ui/components/helpers/ZoomPreviewOverlay.vue": {
@@ -754,7 +723,6 @@
     "src/cli/commands/verify-enumerate.ts:complexity",
     "src/ui/components/PlayersPanel.vue:complexity",
     "src/ui/components/ControlsMenu.vue:complexity",
-    "src/cli/lib/asset-scan.ts:complexity",
     "src/ui/components/debug/DecksTab.vue:complexity",
     "src/ui/components/debug/ActionsTab.vue:complexity",
     "src/ui/components/dice/Die3D.vue:complexity"

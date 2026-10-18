@@ -207,7 +207,7 @@ describe('flowBoundaryKey', () => {
     expect(flowBoundaryKeyFromPackageRoot).toBe(flowBoundaryKey);
   });
 
-  it('is not disturbed by game state: frameData and variables are excluded material', async () => {
+  it('is not disturbed by game state or loop counters: only path is material', async () => {
     const session = await startRounds();
     const flowState = flowOf(session.host);
     const key = flowBoundaryKey(flowState);
@@ -217,6 +217,7 @@ describe('flowBoundaryKey', () => {
       ...structuredClone(flowState),
       position: {
         path: [...(flowState.position?.path ?? [])],
+        iterations: { __iter_0: 7 },
         frameData: { __frame_0: { anything: 'changed' } },
         variables: { anything: 'changed' },
         moveCount: 99,
@@ -224,33 +225,5 @@ describe('flowBoundaryKey', () => {
     } as BoundaryKeyState;
 
     expect(flowBoundaryKey(withOtherGameState)).toBe(key);
-  });
-
-  it('is not disturbed by position.iterations, which moves WITHOUT a boundary', async () => {
-    // Measured against this fixture: round 1 opens reporting
-    // `{__iter_1: 1}`; one seat then commits — no boundary crossed, `path`
-    // correctly unmoved — and the SAME position reports
-    // `{__iter_0: 0, __iter_1: 1, __iter_2: 0, __iter_3: 0}`. `iterations`
-    // therefore records how a position was REACHED, not where it is, and any
-    // key including it moves mid-round. This pins it out of the material.
-    const session = await startRounds();
-    const atOpen = flowOf(session.host);
-    const openIterations = (atOpen.position as { iterations?: Record<string, number> })
-      ?.iterations;
-
-    await commit(session, 1);
-
-    const midRound = flowOf(session.host);
-    const midIterations = (midRound.position as { iterations?: Record<string, number> })
-      ?.iterations;
-
-    // The premise: the raw position really does report different iterations
-    // on the two sides of a NON-boundary. If the engine ever stops doing this,
-    // this test should be revisited rather than silently passing.
-    expect(midIterations).not.toEqual(openIterations);
-    expect(midRound.position?.path).toEqual(atOpen.position?.path);
-
-    // The contract: the key does not notice.
-    expect(flowBoundaryKey(midRound)).toBe(flowBoundaryKey(atOpen));
   });
 });

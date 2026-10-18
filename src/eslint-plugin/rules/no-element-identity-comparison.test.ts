@@ -64,6 +64,18 @@ ruleTester.run('no-element-identity-comparison', rule, {
     },
   ],
   invalid: [
+    // An engine class imported under another name is still an element class (#1036).
+    {
+      code: `
+        import { Card as BaseCard } from 'boardsmith';
+        function f(a: BaseCard, b: BaseCard) { return a === b; }
+      `,
+      output: `
+        import { Card as BaseCard } from 'boardsmith';
+        function f(a: BaseCard, b: BaseCard) { return a.id === b.id; }
+      `,
+      errors: [{ messageId: 'identityComparison' }],
+    },
     // Simple binary identity comparison between same-file-typed GameElement
     // subclass operands -- auto-fixable to `.id` comparison.
     {
@@ -108,5 +120,43 @@ ruleTester.run('no-element-identity-comparison', rule, {
       `,
       errors: [{ messageId: 'identityIncludes' }],
     },
+    // Games extend the engine's element classes, not GameElement directly (#872).
+    ...['Piece', 'Space', 'Card'].map((base) => ({
+      code: `
+        class Token extends ${base}<MyGame> {}
+        const same = (a: Token, b: Token) => a === b;
+      `,
+      output: `
+        class Token extends ${base}<MyGame> {}
+        const same = (a: Token, b: Token) => a.id === b.id;
+      `,
+      errors: [{ messageId: 'identityComparison' as const }],
+    })),
+    // A two-level chain through an engine class (#872).
+    {
+      code: `
+        class Pawn extends Card {}
+        class Card extends Piece<MyGame> {}
+        const same = (a: Pawn, b: Pawn) => a === b;
+      `,
+      output: `
+        class Pawn extends Card {}
+        class Card extends Piece<MyGame> {}
+        const same = (a: Pawn, b: Pawn) => a.id === b.id;
+      `,
+      errors: [{ messageId: 'identityComparison' as const }],
+    },
+    // Game and Player are engine element classes, so their subclasses are elements too (#872).
+    ...['Game', 'Player'].map((base) => ({
+      code: `
+        class Mine extends ${base} {}
+        const same = (a: Mine, b: Mine) => a === b;
+      `,
+      output: `
+        class Mine extends ${base} {}
+        const same = (a: Mine, b: Mine) => a.id === b.id;
+      `,
+      errors: [{ messageId: 'identityComparison' as const }],
+    })),
   ],
 });

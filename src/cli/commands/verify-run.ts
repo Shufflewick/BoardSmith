@@ -3,9 +3,11 @@ import {
 } from '../lib/project-paths.js';
 import { randomBytes } from 'node:crypto';
 import { sha256Hex } from '../lib/hash.js';
+import { readIfExists } from '../lib/read-if-exists.js';
+import { withLedgerLock } from '../lib/ledger-lock.js';
 import { promises as fs } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { parseSliceSource, readRecordedSourcePaths, sliceDocuments } from './rulebook-sources.js';
 
 /**
@@ -286,21 +288,38 @@ export function runRootDir(projectDir: string, runId: string): string {
   return dir;
 }
 
-/**
- * Every verify run's id under `<projectDir>/rulebook/.verify/`, oldest first: run-ids sort
- * lexicographically because the format is fixed-width UTC. Empty when there are none.
- */
-export async function listRunIds(projectDir: string): Promise<string[]> {
-  let entries: Array<{ name: string; isDirectory(): boolean }>;
-  try {
-    entries = await fs.readdir(join(designRulebookDir(projectDir), '.verify'), { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  return entries
+/** Every folder under `<projectDir>/rulebook/.verify/` named like a run id, oldest first, run or not. */
+async function runIdFolders(projectDir: string): Promise<string[]> {
+  const entries = await readIfExists(join(designRulebookDir(projectDir), '.verify'), (p) => fs.readdir(p, { withFileTypes: true }));
+  return (entries ?? [])
     .filter((e) => e.isDirectory() && RUN_ID_RE.test(e.name))
     .map((e) => e.name)
     .sort();
+}
+
+/**
+ * Every verify run's id under `<projectDir>/rulebook/.verify/`, oldest first: run-ids sort
+ * lexicographically because the format is fixed-width UTC. A folder counts only if it holds a
+ * RUN.md (#1003). Empty when there are none.
+ */
+export async function listRunIds(projectDir: string): Promise<string[]> {
+  const runs: string[] = [];
+  for (const id of await runIdFolders(projectDir)) {
+    if (await exists(ledgerFilePath(projectDir, id))) runs.push(id);
+  }
+  return runs;
+}
+
+/**
+ * The most recent run's id, the default for a command given no `--run-id`; `undefined` when there
+ * is none. Names each run-id folder that is not a run on stderr, so it can be removed (#1003).
+ */
+export async function latestRunId(projectDir: string): Promise<string | undefined> {
+  const runs = await listRunIds(projectDir);
+  for (const id of await runIdFolders(projectDir)) {
+    if (!runs.includes(id)) console.error(styleText('yellow', `⚠ ${await missingRunMessage(projectDir, id)}`));
+  }
+  return runs.at(-1);
 }
 
 /**
@@ -310,6 +329,15 @@ export async function listRunIds(projectDir: string): Promise<string[]> {
  */
 export function stagingSlicesDir(projectDir: string, runId: string): string {
   return resolve(runRootDir(projectDir, runId), 'slices');
+}
+
+/**
+ * This run's own ledger path — `rulebook/.verify/<runId>/RULING-VERDICTS.md`. Run-scoped, unlike
+ * CHECK-04's and CHECK-06's project-level ledgers: a ruling's verdict is a judgment against ONE
+ * run's fresh transcription, so it cannot outlive the run that produced it.
+ */
+export function rulingVerdictsLedgerPath(projectDir: string, runId: string): string {
+  return join(runRootDir(projectDir, runId), 'RULING-VERDICTS.md');
 }
 
 /**
@@ -397,8 +425,13 @@ export function locateFences(
       `${relLedgerPath} is missing its machine-owned fences.\n` +
         `Expected ${RUN_LEDGER_BEGIN} ... ${RUN_LEDGER_END}.\n` +
         `This file is written by \`boardsmith verify-run-init\`/\`verify-run-record\`, never by\n` +
-        `hand. Restore it by re-running \`boardsmith verify-run-init --run-id <id>\`, then re-run\n` +
-        `this command.`,
+        `hand, and re-running verify-run-init with this run's id leaves it as it is.\n` +
+        `From the project directory, restore the committed copy with \`git restore ${relLedgerPath}\`,\n` +
+        `then re-run this command. The restore drops every slice recorded since that commit:\n` +
+        `\`boardsmith verify-run-status\` no longer lists those units as recorded, and lists any range\n` +
+        `completed since then as pending, so record them again with \`boardsmith verify-run-record\`.\n` +
+        `If it was never committed, start a new run with \`boardsmith verify-run-init\` (no --run-id)\n` +
+        `and stage its slices again.`,
     );
   }
   return { beginIdx, endIdx };
@@ -774,6 +807,8 @@ export function resolveLedgerState(lines: ParsedLine[]): {
   recorded: LedgerRecord[];
   completeRanges: Set<string>;
   classifications: ClassificationRecord[];
+  /** Pairs whose classification predates a later record of one of its units (#837). */
+  recordedSinceClassified: Set<string>;
   impacts: ImpactRecord[];
   adjudications: AdjudicationRecord[];
 } {
@@ -808,10 +843,20 @@ export function resolveLedgerState(lines: ParsedLine[]): {
   // Last-write-wins per pairId — a later classification line for the same pair supersedes an
   // earlier one. File order (`index`) is the ledger's own append order, so the later `Map.set`
   // for a repeated `pairId` always wins.
-  const classificationsByPairId = new Map<string, ClassificationRecord>();
+  const classificationsByPairId = new Map<string, ParsedClassificationLine>();
   for (const line of lines) {
     if (line.type !== 'classification') continue;
-    classificationsByPairId.set(line.record.pairId, line.record);
+    classificationsByPairId.set(line.record.pairId, line);
+  }
+
+  // Ledger order, not recordedAt: two records can share a millisecond, file order cannot.
+  const lastUnitIndex = new Map<string, number>();
+  for (const line of lines) {
+    if (line.type === 'unit') lastUnitIndex.set(line.record.unitId, line.index);
+  }
+  const recordedSinceClassified = new Set<string>();
+  for (const { record, index } of classificationsByPairId.values()) {
+    if (record.units.some((u) => (lastUnitIndex.get(u) ?? -1) > index)) recordedSinceClassified.add(record.pairId);
   }
 
   // Last-write-wins per slug — same file-order rationale as classifications above.
@@ -831,10 +876,76 @@ export function resolveLedgerState(lines: ParsedLine[]): {
   return {
     recorded,
     completeRanges,
-    classifications: [...classificationsByPairId.values()],
+    classifications: [...classificationsByPairId.values()].map((l) => l.record),
+    recordedSinceClassified,
     impacts: [...impactsBySlug.values()],
     adjudications: [...adjudicationsByPairId.values()],
   };
+}
+
+/** Reads a run's ledger and resolves its current state — the read every ledger consumer starts with. */
+export async function readRunLedgerState(
+  projectDir: string,
+  runId: string,
+): Promise<ReturnType<typeof resolveLedgerState>> {
+  const ledgerFile = ledgerFilePath(projectDir, runId);
+  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
+  return resolveLedgerState(parseLedgerBody(ledgerText, relative(projectDir, ledgerFile)).lines);
+}
+
+/** The advice for an edited slice: reset its range, unless that range is complete or absent. */
+function sliceMismatchWarning(record: LedgerRecord, completeRanges: Set<string>): string {
+  const mismatch = `unit "${record.unitId}"'s recorded sha256 no longer matches ${record.slicePath} on disk (hand-edit or tamper detected)`;
+  if (record.rangeId && !completeRanges.has(record.rangeId)) {
+    return (
+      `${mismatch} — treating as NOT recorded. Restore the slice's recorded text, or reset its range ` +
+      `with \`verify-run-record --reset-range ${record.rangeId}\` and record it again.`
+    );
+  }
+  // A complete range cannot be reset, so its unit is as final as one recorded without a range.
+  const final = record.rangeId ? `Its range "${record.rangeId}" is complete` : 'It was recorded without a range';
+  return (
+    `${mismatch} — leaving its slice out. ${final}, so it cannot be recorded ` +
+    `again in this run. Restore the slice's recorded text, or, if that text is lost, start a new run ` +
+    `with \`boardsmith verify-run-init\` (no \`--run-id\`).`
+  );
+}
+
+/**
+ * Re-hashes each recorded slice against the file on disk (L8/T-173-12) — the one check every
+ * reader of recorded units shares (#837). A slice whose path escapes the staging dir or whose
+ * sha256 no longer matches is left out with a warning naming the unit. A slice missing from disk
+ * is returned in `missing`, for the caller to report in its own terms.
+ */
+export async function checkRecordedSlices(
+  stagingDir: string,
+  records: LedgerRecord[],
+  completeRanges: Set<string>,
+): Promise<{ intact: { record: LedgerRecord; bytes: Buffer }[]; missing: LedgerRecord[]; warnings: string[] }> {
+  const intact: { record: LedgerRecord; bytes: Buffer }[] = [];
+  const missing: LedgerRecord[] = [];
+  const warnings: string[] = [];
+  for (const record of records) {
+    const sliceAbs = resolve(stagingDir, record.slicePath);
+    const relToStaging = relative(stagingDir, sliceAbs);
+    if (relToStaging === '' || relToStaging.startsWith('..') || isAbsolute(relToStaging)) {
+      warnings.push(
+        `unit "${record.unitId}"'s recorded slice path escapes the staging dir — treating as NOT recorded`,
+      );
+      continue;
+    }
+    const bytes = await readIfExists(sliceAbs, (p) => fs.readFile(p));
+    if (bytes === undefined) {
+      missing.push(record);
+      continue;
+    }
+    if (sha256Hex(bytes) !== record.sha256) {
+      warnings.push(sliceMismatchWarning(record, completeRanges));
+      continue;
+    }
+    intact.push({ record, bytes });
+  }
+  return { intact, missing, warnings };
 }
 
 // -------------------------------------------------------------------------------------------
@@ -871,9 +982,7 @@ export async function verifyRunInitCommand(
   const projectDir = resolve(options.project ?? process.cwd());
   const rulebookDir = designRulebookDir(projectDir);
 
-  try {
-    await fs.access(rulebookDir);
-  } catch {
+  if ((await readIfExists(rulebookDir, (p) => fs.stat(p))) === undefined) {
     throw new Error(
       `No rulebook/ directory in ${projectDir}.\n` +
         `A verify run re-transcribes an existing rulebook — run \`boardsmith ingest-archive\`\n` +
@@ -891,12 +1000,7 @@ export async function verifyRunInitCommand(
 
   let created: boolean;
   let ranges: ManifestRange[];
-  let existingText: string | undefined;
-  try {
-    existingText = await fs.readFile(ledgerFile, 'utf-8');
-  } catch {
-    existingText = undefined;
-  }
+  const existingText = await readIfExists(ledgerFile, (p) => fs.readFile(p, 'utf-8'));
   if (existingText !== undefined) {
     created = false;
     // Resume: the manifest was decided at first init and is never re-derived — whatever
@@ -921,12 +1025,12 @@ export async function verifyRunInitCommand(
     return result;
   }
 
-  console.log(chalk.green(created ? '✓ Allocated verify run' : '✓ Resuming existing verify run'));
-  console.log(`  ${chalk.gray('run-id:')} ${runId}`);
-  console.log(`  ${chalk.gray('staging:')} ${result.stagingDir}`);
-  console.log(`  ${chalk.gray('ledger:')} ${result.ledgerPath}`);
+  console.log(styleText('green', created ? '✓ Allocated verify run' : '✓ Resuming existing verify run'));
+  console.log(`  ${styleText('gray', 'run-id:')} ${runId}`);
+  console.log(`  ${styleText('gray', 'staging:')} ${result.stagingDir}`);
+  console.log(`  ${styleText('gray', 'ledger:')} ${result.ledgerPath}`);
   for (const r of ranges) {
-    console.log(`  ${chalk.gray('range:')} ${r.rangeId} — pages ${r.pages} of ${r.source}`);
+    console.log(`  ${styleText('gray', 'range:')} ${r.rangeId} — pages ${r.pages} of ${r.source}`);
   }
   return result;
 }
@@ -951,24 +1055,59 @@ export interface VerifyRunRangeActionResult {
   alreadyRecorded: boolean;
 }
 
+/** Whether anything stands at `path`, counting what cannot be looked at (no permission, a link loop) as there. */
+async function present(path: string): Promise<boolean> {
+  try {
+    return (await readIfExists(path, fs.lstat)) !== undefined;
+  } catch {
+    return true;
+  }
+}
+
 /**
- * Reads the ledger file or throws the actionable "no verify run found" error. Exported (174-02) —
- * `verify-classify.ts` is the second caller of this read helper, sharing the same error message
- * and the same "run must be initialized first" contract.
+ * Why `runId` names no usable run, and what to do about it: the one message every `--run-id`
+ * command gives. Never suggests init with this id: a mistyped id would become a real, latest run (#833).
  */
+export async function missingRunMessage(projectDir: string, runId: string): Promise<string> {
+  // Throws, naming RUN.md, when something stands there that cannot be read: the message readLedgerOrThrow gives.
+  await exists(ledgerFilePath(projectDir, runId));
+  const runDir = runRootDir(projectDir, runId);
+  if (await present(runDir)) {
+    const noRun = `${relative(projectDir, runDir)}/ has no RUN.md, so verify-run-init did not make it.\n`;
+    const verdicts = rulingVerdictsLedgerPath(projectDir, runId);
+    if (await present(verdicts)) {
+      return (
+        noRun +
+        `It holds ${relative(projectDir, verdicts)}: verdicts recorded under the mistyped id "${runId}". ` +
+        `Use \`boardsmith verify-ruling-record --run-id <right run>\` to re-record them against the right run ` +
+        `before removing the folder.`
+      );
+    }
+    return noRun + `Remove that folder; it is not a verify run.`;
+  }
+  const existing = await listRunIds(projectDir);
+  return (
+    `No verify run "${runId}" found in ${projectDir}.\n` +
+    (existing.length > 0
+      ? `Runs that do exist: ${existing.join(', ')}.`
+      : `No verify runs exist yet. Run \`boardsmith verify-run-init\` first.`)
+  );
+}
+
+/** Whether anything is at `path`; one that cannot be looked at (no permission, a link loop) is thrown, naming it. */
+export async function exists(path: string): Promise<boolean> {
+  return (await readIfExists(path, fs.stat)) !== undefined;
+}
+
+/** Reads the run's RUN.md, or throws `missingRunMessage` when the run does not exist. */
 export async function readLedgerOrThrow(
   ledgerFile: string,
   runId: string,
   projectDir: string,
 ): Promise<string> {
-  try {
-    return await fs.readFile(ledgerFile, 'utf-8');
-  } catch {
-    throw new Error(
-      `No verify run "${runId}" found in ${projectDir}.\n` +
-        `Run \`boardsmith verify-run-init --run-id ${runId}\` first.`,
-    );
-  }
+  const text = await readIfExists(ledgerFile, (p) => fs.readFile(p, 'utf-8'));
+  if (text === undefined) throw new Error(await missingRunMessage(projectDir, runId));
+  return text;
 }
 
 /**
@@ -1035,7 +1174,7 @@ async function recordRangeMarker(
     if (completeRanges.has(rangeId)) {
       const result: VerifyRunRangeActionResult = { runId, rangeId, action: kind, alreadyRecorded: true };
       if (options.json) console.log(JSON.stringify(result, null, 2));
-      else console.log(chalk.gray(`= range "${rangeId}" was already complete for run ${runId} — no-op`));
+      else console.log(styleText('gray', `= range "${rangeId}" was already complete for run ${runId} — no-op`));
       return result;
     }
   } else {
@@ -1060,9 +1199,9 @@ async function recordRangeMarker(
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
   } else if (kind === 'range-complete') {
-    console.log(chalk.green(`✓ Range "${rangeId}" marked complete`));
+    console.log(styleText('green', `✓ Range "${rangeId}" marked complete`));
   } else {
-    console.log(chalk.yellow(`↺ Range "${rangeId}" reset — its prior units will read as NOT recorded`));
+    console.log(styleText('yellow', `↺ Range "${rangeId}" reset — its prior units will read as NOT recorded`));
   }
   return result;
 }
@@ -1089,19 +1228,32 @@ async function recordRangeMarker(
  * directly against the ledger.
  */
 export async function verifyRunRecordCommand(
-  options: VerifyRunOptions & {
-    runId?: string;
-    unit?: string;
-    slice?: string;
-    range?: string;
-    completeRange?: string;
-    resetRange?: string;
-  } = {},
+  options: VerifyRunRecordOptions = {},
 ): Promise<VerifyRunRecordResult | VerifyRunRangeActionResult> {
   const { runId } = options;
   if (!runId) throw new Error('verify-run-record requires --run-id <id>.');
   assertValidRunId(runId);
+  const projectDir = resolve(options.project ?? process.cwd());
+  const ledgerFile = ledgerFilePath(projectDir, runId);
+  // The lock file sits beside the ledger, so a run that was never initialised is refused first.
+  await readLedgerOrThrow(ledgerFile, runId, projectDir);
+  return withLedgerLock(ledgerFile, () => recordInRun(options, runId));
+}
 
+interface VerifyRunRecordOptions extends VerifyRunOptions {
+  runId?: string;
+  unit?: string;
+  slice?: string;
+  range?: string;
+  completeRange?: string;
+  resetRange?: string;
+}
+
+/** `verifyRunRecordCommand`'s work, run while it holds the ledger's lock (#831). */
+async function recordInRun(
+  options: VerifyRunRecordOptions,
+  runId: string,
+): Promise<VerifyRunRecordResult | VerifyRunRangeActionResult> {
   const modeCount = [options.unit, options.completeRange, options.resetRange].filter(
     (v) => v !== undefined,
   ).length;
@@ -1166,7 +1318,7 @@ export async function verifyRunRecordCommand(
     if (options.json) {
       console.log(JSON.stringify(result, null, 2));
     } else {
-      console.log(chalk.gray(`= unit "${unit}" was already recorded for run ${runId} — no-op`));
+      console.log(styleText('gray', `= unit "${unit}" was already recorded for run ${runId} — no-op`));
     }
     return result;
   }
@@ -1182,10 +1334,8 @@ export async function verifyRunRecordCommand(
     );
   }
 
-  let stat: import('node:fs').Stats;
-  try {
-    stat = await fs.stat(sliceAbs);
-  } catch {
+  const stat = await readIfExists(sliceAbs, (p) => fs.stat(p));
+  if (stat === undefined) {
     throw new Error(
       `Slice not found: ${relative(projectDir, sliceAbs)}.\n` +
         `verify-run-record only records a slice-unit AFTER its file is confirmed written — write\n` +
@@ -1225,9 +1375,9 @@ export async function verifyRunRecordCommand(
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
   } else {
-    console.log(chalk.green(`✓ Recorded unit "${unit}"`));
-    console.log(`  ${chalk.gray('slice:')} ${relToStaging}`);
-    console.log(`  ${chalk.gray('sha256:')} ${hash}`);
+    console.log(styleText('green', `✓ Recorded unit "${unit}"`));
+    console.log(`  ${styleText('gray', 'slice:')} ${relToStaging}`);
+    console.log(`  ${styleText('gray', 'sha256:')} ${hash}`);
   }
   return result;
 }
@@ -1274,14 +1424,13 @@ export async function verifyRunStatusCommand(
   if (runId) {
     assertValidRunId(runId);
   } else {
-    const runIds = await listRunIds(projectDir);
-    if (runIds.length === 0) {
+    runId = await latestRunId(projectDir);
+    if (runId === undefined) {
       throw new Error(
         `No verify runs found under rulebook/.verify/ in ${projectDir}.\n` +
           `Run \`boardsmith verify-run-init\` first.`,
       );
     }
-    runId = runIds[runIds.length - 1];
   }
 
   const stagingDir = stagingSlicesDir(projectDir, runId);
@@ -1294,36 +1443,13 @@ export async function verifyRunStatusCommand(
   const { lines, malformedLines } = parseLedgerBody(ledgerText, relLedgerPath);
   const { recorded: activeRecords, completeRanges } = resolveLedgerState(lines);
 
-  const recorded: string[] = [];
-  const warnings: string[] = [];
-
-  for (const rec of activeRecords) {
-    const sliceAbs = resolve(stagingDir, rec.slicePath);
-    const relToStaging = relative(stagingDir, sliceAbs);
-    if (relToStaging === '' || relToStaging.startsWith('..') || isAbsolute(relToStaging)) {
-      warnings.push(
-        `unit "${rec.unitId}"'s recorded slice path escapes the staging dir — treating as NOT recorded`,
-      );
-      continue;
-    }
-    let bytes: Buffer;
-    try {
-      bytes = await fs.readFile(sliceAbs);
-    } catch {
-      warnings.push(
-        `unit "${rec.unitId}"'s recorded slice ${rec.slicePath} was not found on disk — treating as NOT recorded`,
-      );
-      continue;
-    }
-    if (sha256Hex(bytes) !== rec.sha256) {
-      warnings.push(
-        `unit "${rec.unitId}"'s recorded sha256 no longer matches ${rec.slicePath} on disk — ` +
-          `treating as NOT recorded (hand-edit or tamper detected)`,
-      );
-      continue;
-    }
-    recorded.push(rec.unitId);
+  const { intact, missing, warnings } = await checkRecordedSlices(stagingDir, activeRecords, completeRanges);
+  for (const rec of missing) {
+    warnings.push(
+      `unit "${rec.unitId}"'s recorded slice ${rec.slicePath} was not found on disk — treating as NOT recorded`,
+    );
   }
+  const recorded = intact.map(({ record }) => record.unitId);
 
   if (malformedLines.length > 0) {
     warnings.push(
@@ -1346,7 +1472,7 @@ export async function verifyRunStatusCommand(
   };
 
   for (const w of warnings) {
-    console.error(chalk.yellow(`⚠ ${w}`));
+    console.error(styleText('yellow', `⚠ ${w}`));
   }
 
   if (options.json) {
@@ -1354,14 +1480,14 @@ export async function verifyRunStatusCommand(
     return result;
   }
 
-  console.log(chalk.green(`✓ Verify run ${runId} — ${result.count} unit(s) recorded`));
-  console.log(`  ${chalk.gray('staging:')} ${result.stagingDir}`);
+  console.log(styleText('green', `✓ Verify run ${runId} — ${result.count} unit(s) recorded`));
+  console.log(`  ${styleText('gray', 'staging:')} ${result.stagingDir}`);
   for (const unitId of result.recorded) {
-    console.log(`  ${chalk.gray('-')} ${unitId}`);
+    console.log(`  ${styleText('gray', '-')} ${unitId}`);
   }
   if (manifestRanges.length > 0) {
-    console.log(`  ${chalk.gray('ranges recorded:')} ${rangesRecorded.join(', ') || '(none)'}`);
-    console.log(`  ${chalk.gray('ranges pending:')} ${rangesPending.join(', ') || '(none)'}`);
+    console.log(`  ${styleText('gray', 'ranges recorded:')} ${rangesRecorded.join(', ') || '(none)'}`);
+    console.log(`  ${styleText('gray', 'ranges pending:')} ${rangesPending.join(', ') || '(none)'}`);
   }
   return result;
 }

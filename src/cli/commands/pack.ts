@@ -2,8 +2,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, rename
 import { join, basename } from 'node:path';
 import { execFileSync, execSync, spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { createHash } from 'node:crypto';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import ora from 'ora';
 import { getProjectContext } from '../lib/project-context.js';
 import { buildCli, CLI_OUTFILE } from '../lib/build-cli.js';
@@ -11,6 +10,7 @@ import { resolveUserPath } from '../lib/user-path.js';
 import { withCleanupAfter } from '../lib/command-build-dir.js';
 import { takeOsLock } from '../lib/os-lock.js';
 import { gitOutput } from '../lib/git-output.js';
+import { filesContentHash } from '../lib/hash.js';
 
 interface PackOptions {
   outDir?: string;
@@ -39,14 +39,6 @@ interface PackResult {
   tarball: string;
   /** The version written into the packed `package.json`; see `packVersion`. */
   packVersion: string;
-}
-
-/**
- * Check if a package name is a BoardSmith package.
- */
-function isBoardSmithPackage(name: string | undefined): boolean {
-  if (!name) return false;
-  return name === 'boardsmith' || name === 'eslint-plugin-boardsmith';
 }
 
 /**
@@ -95,8 +87,6 @@ export function readContractRevision(root: string): number {
  *
  * The file list is npm's own (`npm pack --dry-run`), so the `files` globs in
  * `package.json` are applied by the program that applies them for real.
- * Paths are sorted, and each path and length is hashed beside its bytes so
- * moving content between files cannot collide.
  */
 function packedContentHash(pkgPath: string): string {
   const [report] = JSON.parse(
@@ -106,14 +96,7 @@ function packedContentHash(pkgPath: string): string {
       stdio: ['ignore', 'pipe', 'pipe'],
     }),
   ) as [{ files: { path: string }[] }];
-  const paths = report.files.map((file) => file.path).sort();
-  const hash = createHash('sha256');
-  for (const path of paths) {
-    const content = readFileSync(join(pkgPath, path));
-    hash.update(`${path}\0${content.length}\0`);
-    hash.update(content);
-  }
-  return hash.digest('hex').slice(0, 12);
+  return filesContentHash(pkgPath, report.files.map((file) => file.path)).slice(0, 12);
 }
 
 /**
@@ -317,18 +300,18 @@ async function integrateWithTarget(
 
   // Validate target has package.json
   if (!existsSync(targetPkgJsonPath)) {
-    console.error(chalk.red(`Error: No package.json found at ${absoluteTarget}`));
-    console.error(chalk.dim('Make sure the target path is a valid npm project'));
+    console.error(styleText('red', `Error: No package.json found at ${absoluteTarget}`));
+    console.error(styleText('dim', 'Make sure the target path is a valid npm project'));
     process.exit(1);
   }
 
-  console.log(chalk.cyan('\nIntegrating with target project...\n'));
+  console.log(styleText('cyan', '\nIntegrating with target project...\n'));
 
   // Create vendor directory if missing
   const vendorDir = join(absoluteTarget, 'vendor');
   if (!existsSync(vendorDir)) {
     mkdirSync(vendorDir, { recursive: true });
-    console.log(chalk.dim(`Created ${vendorDir}`));
+    console.log(styleText('dim', `Created ${vendorDir}`));
   }
 
   // Copy tarballs to vendor/
@@ -346,7 +329,7 @@ async function integrateWithTarget(
     results.map((r) => r.name),
   );
   if (pruned.length > 0) {
-    console.log(chalk.dim(`Removed ${pruned.length} stale tarball(s): ${pruned.join(', ')}`));
+    console.log(styleText('dim', `Removed ${pruned.length} stale tarball(s): ${pruned.join(', ')}`));
   }
 
   // Read and update target's package.json
@@ -382,8 +365,8 @@ async function integrateWithTarget(
   }
 
   if (updatedDeps.length === 0) {
-    console.log(chalk.yellow('No BoardSmith dependencies found in target package.json'));
-    console.log(chalk.dim('Tarballs copied but no dependencies updated'));
+    console.log(styleText('yellow', 'No BoardSmith dependencies found in target package.json'));
+    console.log(styleText('dim', 'Tarballs copied but no dependencies updated'));
     return;
   }
 
@@ -395,11 +378,11 @@ async function integrateWithTarget(
   for (const [pkgName, tarball] of tarballMap) {
     targetPkgJson.overrides[pkgName] = `file:./vendor/${tarball}`;
   }
-  console.log(chalk.dim(`Added ${tarballMap.size} overrides for nested dependency resolution`));
+  console.log(styleText('dim', `Added ${tarballMap.size} overrides for nested dependency resolution`));
 
   // Write updated package.json
   writeFileSync(targetPkgJsonPath, JSON.stringify(targetPkgJson, null, 2) + '\n');
-  console.log(chalk.dim(`Updated ${updatedDeps.length} dependencies in package.json`));
+  console.log(styleText('dim', `Updated ${updatedDeps.length} dependencies in package.json`));
 
   // Run npm install in target
   const installSpinner = ora('Running npm install in target...').start();
@@ -412,15 +395,15 @@ async function integrateWithTarget(
   } catch (error) {
     installSpinner.fail('npm install failed');
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(chalk.red(`  ${errorMessage}`));
+    console.error(styleText('red', `  ${errorMessage}`));
     process.exit(1);
   }
 
   // Print summary
-  console.log(chalk.green('\nTarget integration complete!\n'));
-  console.log(chalk.dim('Updated dependencies:'));
+  console.log(styleText('green', '\nTarget integration complete!\n'));
+  console.log(styleText('dim', 'Updated dependencies:'));
   for (const dep of updatedDeps) {
-    console.log(chalk.dim(`  ${dep}`));
+    console.log(styleText('dim', `  ${dep}`));
   }
   console.log('');
 }
@@ -433,16 +416,16 @@ function validateMonorepoRoot(cwd: string): void {
   const rootPkgJson = join(cwd, 'package.json');
 
   if (!existsSync(rootPkgJson)) {
-    console.error(chalk.red('Error: package.json not found'));
-    console.error(chalk.dim('Make sure you are in the BoardSmith repository root'));
+    console.error(styleText('red', 'Error: package.json not found'));
+    console.error(styleText('dim', 'Make sure you are in the BoardSmith repository root'));
     process.exit(1);
   }
 
   // Check for src/engine/ which indicates BoardSmith repo
   const srcEngine = join(cwd, 'src', 'engine');
   if (!existsSync(srcEngine)) {
-    console.error(chalk.red('Error: This command must be run from the BoardSmith repository root'));
-    console.error(chalk.dim('Current directory does not contain src/engine/'));
+    console.error(styleText('red', 'Error: This command must be run from the BoardSmith repository root'));
+    console.error(styleText('dim', 'Current directory does not contain src/engine/'));
     process.exit(1);
   }
 }
@@ -471,16 +454,16 @@ export async function packCommand(options: PackOptions): Promise<void> {
 
   // Check context - pack is only for the BoardSmith library, not game projects
   if (getProjectContext(cwd) === 'standalone') {
-    console.error(chalk.red('Error: boardsmith pack is for packaging the BoardSmith library itself'));
-    console.error(chalk.dim('You are in a standalone game project.'));
-    console.error(chalk.dim('Games depend on boardsmith from npm or a local file: link.'));
+    console.error(styleText('red', 'Error: boardsmith pack is for packaging the BoardSmith library itself'));
+    console.error(styleText('dim', 'You are in a standalone game project.'));
+    console.error(styleText('dim', 'Games depend on boardsmith from npm or a local file: link.'));
     process.exit(1);
   }
 
   // Validate we're in monorepo root
   validateMonorepoRoot(cwd);
 
-  console.log(chalk.cyan('\nBoardSmith Pack\n'));
+  console.log(styleText('cyan', '\nBoardSmith Pack\n'));
 
   // The tarball ships `dist/` — an installed BoardSmith runs the bundled CLI,
   // never the TypeScript sources. Rebuild it here, explicitly, so a tarball can
@@ -491,7 +474,7 @@ export async function packCommand(options: PackOptions): Promise<void> {
     cliSpinner.succeed(`CLI bundle built (${CLI_OUTFILE})`);
   } catch (error) {
     cliSpinner.fail('CLI bundle build failed');
-    console.error(chalk.red(error instanceof Error ? error.message : String(error)));
+    console.error(styleText('red', error instanceof Error ? error.message : String(error)));
     process.exit(1);
   }
 
@@ -525,11 +508,11 @@ export async function packCommand(options: PackOptions): Promise<void> {
   packSpinner.succeed(`Packed ${results.map((r) => r.name).join(', ')}`);
 
   // Print summary
-  console.log(chalk.green('\nPack complete!\n'));
-  console.log(chalk.dim(`Output: ${outputPath}/`));
-  console.log(chalk.dim('Tarballs:'));
+  console.log(styleText('green', '\nPack complete!\n'));
+  console.log(styleText('dim', `Output: ${outputPath}/`));
+  console.log(styleText('dim', 'Tarballs:'));
   for (const result of results) {
-    console.log(chalk.dim(`  ${result.tarball}`));
+    console.log(styleText('dim', `  ${result.tarball}`));
   }
 
   // If targets specified, integrate the SAME tarballs with each of them.
@@ -539,9 +522,9 @@ export async function packCommand(options: PackOptions): Promise<void> {
       await integrateWithTarget(target, outputPath, results);
     }
   } else {
-    console.log(chalk.cyan('\nNext steps:'));
-    console.log(chalk.dim('  In your consumer project:'));
-    console.log(chalk.dim(`  npm install ${outputPath}/<package>.tgz`));
+    console.log(styleText('cyan', '\nNext steps:'));
+    console.log(styleText('dim', '  In your consumer project:'));
+    console.log(styleText('dim', `  npm install ${outputPath}/<package>.tgz`));
     console.log('');
   }
 }

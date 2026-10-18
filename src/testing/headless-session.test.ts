@@ -4,6 +4,7 @@ import { eachPlayerFixtureDefinition } from '../session/testing/fixtures/each-pl
 import { Game, Player, Action, actionStep, eachPlayer, loop, type GameOptions } from '../engine/index.js';
 import type { GameDefinitionLike } from '../session/stateless-ops.js';
 import { selectGameOptions } from '../session/game-option-selection.js';
+import type { GameStateSnapshot } from '../runtime/index.js';
 
 /**
  * Public-path tests for `createHeadlessSession` (boardsmith/testing).
@@ -237,5 +238,71 @@ describe('createHeadlessSession with teaching locked (#529)', () => {
     const result = await session.send(1, { type: 'startTutorial', player: 1 });
     expect(result.error).not.toBe(LOCKOUT);
     expect(session.playerState(1).teachingDisabled).not.toBe(true);
+  });
+});
+
+describe('host-only ops through send (#1109)', () => {
+  it('does not compile, and the host refuses them at run time', async () => {
+    const session = createHeadlessSession(tallyGameDef, { playerCount: 2, seed: 'host-only' });
+    await session.start();
+    const results = [
+      // @ts-expect-error start is host-only: use session.start()
+      await session.send(1, { type: 'start' }),
+      // @ts-expect-error restoreEarlier is host-only: use session.arrange()
+      await session.send(1, { type: 'restoreEarlier', snapshot: {} as GameStateSnapshot }),
+      // @ts-expect-error botSuggest is host-only: the session wakes bot seats itself
+      await session.send(1, { type: 'botSuggest', seats: [{ seat: 2 }] }),
+    ];
+    expect(results.map((r) => r.success)).toEqual([false, false, false]);
+  });
+});
+
+describe('a restore that lands on a bot seat\'s turn (#915)', () => {
+  /** A table where seat 2 has just become a bot on its own turn: on the roster, with nothing yet waking it. */
+  async function parkedOnBotTurn(seed: string) {
+    const session = createHeadlessSession(tallyGameDef, { playerCount: 2, seed });
+    await session.start();
+    await session.send(1, { type: 'action', actionName: 'add', player: 1, args: {} });
+    session.makeSeatBot(2);
+    return session;
+  }
+
+  it('wakes the bot when a restoreEarlier goes back to its turn', async () => {
+    const session = createHeadlessSession(tallyGameDef, { playerCount: 2, seed: 'restore-bot' });
+    await session.start();
+    await session.send(1, { type: 'action', actionName: 'add', player: 1, args: {} });
+    const botsTurn = session.host.snapshot;
+    await session.send(2, { type: 'action', actionName: 'add', player: 2, args: {} });
+    session.makeSeatBot(2);
+
+    const result = await session.host.restoreEarlier(botsTurn!);
+    await session.host.settled();
+
+    expect(result.success).toBe(true);
+    expect(session.readGame().tallies).toEqual([1, 1]);
+    expect(session.playerState(1).isMyTurn).toBe(true);
+  });
+
+  it('lets the bot reply to an arranged position before arrange resolves', async () => {
+    const session = await parkedOnBotTurn('arrange-bot');
+
+    await session.arrange((game) => {
+      game.tallies = [10, 20];
+    });
+
+    expect(session.readGame().tallies).toEqual([10, 21]);
+    expect(session.playerState(1).isMyTurn).toBe(true);
+  });
+
+  it("wakes no bot when the arranged position is a human's turn", async () => {
+    const session = createHeadlessSession(tallyGameDef, { playerCount: 2, seed: 'arrange-human' }, [{ seat: 2 }]);
+    await session.start();
+
+    await session.arrange((game) => {
+      game.tallies = [10, 20];
+    });
+
+    expect(session.readGame().tallies).toEqual([10, 20]);
+    expect(session.playerState(1).isMyTurn).toBe(true);
   });
 });

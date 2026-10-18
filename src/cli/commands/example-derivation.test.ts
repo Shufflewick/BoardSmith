@@ -10,12 +10,14 @@ import {
   buildExampleTranslationPayload,
   EXAMPLE_EXTRACTION_TOKEN,
   EXAMPLE_TRANSLATION_TOKEN,
+  TRANSLATION_DECLARATION_BUDGET,
+  portableMessage,
   type WorkedExampleSpec,
   type GameApiSurface,
 } from './example-derivation.js';
 import { DERIVE_CHECK_LEDGER_BEGIN } from './verify-derive-check.js';
 import { readFile } from 'node:fs/promises';
-import { promises as fs } from 'node:fs';
+import { existsSync, promises as fs, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { generateTsConfig } from '../lib/project-scaffold.js';
@@ -508,9 +510,11 @@ async function writeRulesFiles(rules: string, files: Record<string, string[]>): 
   }
 }
 
-/** A surface's symbols in name order, so a listing compares without depending on walk order. */
-function symbolsByName(surface: GameApiSurface): GameApiSurface['exportedSymbols'] {
-  return [...surface.exportedSymbols].sort((a, b) => a.name.localeCompare(b.name));
+/** A surface's listing (name, kind, module) in name order, so it compares without depending on walk order. */
+function symbolsByName(surface: GameApiSurface): Omit<GameApiSurface['exportedSymbols'][number], 'declaration'>[] {
+  return [...surface.exportedSymbols]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(({ name, kind, module }) => ({ name, kind, module }));
 }
 
 /**
@@ -595,6 +599,12 @@ describe('collectGameApiSurface — re-exports through subfolders, at any depth 
     await expect(collectGameApiSurface(projectDir)).rejects.toThrow(
       /src\/rules\/world\/index\.ts re-exports '\.\.\/\.\.\/\.\.\/tests\/helpers\.js', which is outside src\//,
     );
+  });
+
+  it.skipIf(!existsSync(process.cwd().toUpperCase()))('refuses a re-export that names src/ in other letter case, since the surface reads only src/ as spelled (#1053)', async () => {
+    await fs.writeFile(join(projectDir, 'src', 'rules', 'world', 'index.ts'), "export * from '../../../SRC/rules/sim/dice/roll.js';\n");
+
+    await expect(collectGameApiSurface(projectDir)).rejects.toThrow(/re-exports '\.\.\/\.\.\/\.\.\/SRC\/rules\/sim\/dice\/roll\.js', which is outside src\//);
   });
 });
 
@@ -696,7 +706,7 @@ describe('collectGameApiSurface — names imported and then exported by a local 
 
     const surface = await collectGameApiSurface(projectDir);
 
-    expect(surface.exportedSymbols).toEqual([
+    expect(symbolsByName(surface)).toEqual([
       { name: 'MyGame', kind: 'class', module: 'src/rules/game.ts' },
     ]);
   });
@@ -740,7 +750,7 @@ describe('collectGameApiSurface — reads the source as TypeScript does (#372)',
 
     const surface = await collectGameApiSurface(projectDir);
 
-    expect(surface.exportedSymbols).toEqual([
+    expect(symbolsByName(surface)).toEqual([
       { name: 'kept', kind: 'function', module: 'src/rules/index.ts' },
     ]);
   });
@@ -846,7 +856,7 @@ describe('collectGameApiSurface — reads the source as TypeScript does (#372)',
 
     const surface = await collectGameApiSurface(projectDir);
 
-    expect(surface.exportedSymbols).toEqual([
+    expect(symbolsByName(surface)).toEqual([
       { name: 'deepThing', kind: 'function', module: 'src/rules/deep/thing.ts' },
     ]);
   });
@@ -875,6 +885,285 @@ describe('collectGameApiSurface — reads the source as TypeScript does (#372)',
     await fs.rm(join(projectDir, 'tsconfig.json'));
 
     await expect(collectGameApiSurface(projectDir)).rejects.toThrow(/No tsconfig\.json in /);
+  });
+
+  it('names a tsconfig.json it cannot look at rather than calling it missing (#1174)', async () => {
+    await writeParsedFixtureProject(projectDir, { 'index.ts': ['export function kept(): void {}'] });
+    const config = join(projectDir, 'tsconfig.json');
+    await fs.rm(config);
+    await fs.symlink(config, config);
+
+    await expect(collectGameApiSurface(projectDir)).rejects.toThrow(`Could not read ${config} (ELOOP)`);
+  });
+});
+
+/**
+ * A project shaped like the case #1087 was found on: a helper taking an exported union type
+ * (`survivorValue(unitType: UnitType): number`), a tick constant, an enum and an interface reached
+ * only through another signature, a class with non-public members, a whole-module binding, and a
+ * module the compiler cannot write declarations for. Each body carries a sentinel that must never
+ * reach the payload.
+ */
+async function writeDeclarationsFixtureProject(root: string): Promise<string> {
+  const rules = join(root, 'src', 'rules');
+  await fs.mkdir(join(rules, 'sim'), { recursive: true });
+  await writeGameTsConfig(root);
+  await writeRulesFiles(rules, {
+    'index.ts': [
+      "export * from './elements.js';",
+      "export * from './damage.js';",
+      "export * from './sim/movement.js';",
+      "export * from './broken.js';",
+      "export * from './leaky.js';",
+      "export * as movement from './sim/movement.js';",
+    ],
+    'elements.ts': [
+      "export type UnitType = 'Crawler' | 'Scuttler';",
+      // A one-member alias, as Windup Warfare's UnitType is: the checker keeps no alias on its type.
+      "export type Terrain = 'Mud';",
+      'export enum Facing { North, East = 5 }',
+      'export interface UnitStats { hp: number; facing: Facing; armor: Armor; late: Late }',
+      'interface Armor { plates: number }',
+      // Exported by a later list, so its declaration statement has no `export`.
+      'interface Late { at: number }',
+      'export { Late };',
+      'export class Unit {',
+      '  private secret = 1;',
+      '  protected guarded = 2;',
+      '  #hidden = 3;',
+      '  constructor(readonly unitType: UnitType) {}',
+      '  damage(amount: number): number {',
+      '    return amount * this.secret * this.#hidden + this.guarded; // UNIT_BODY_SENTINEL',
+      '  }',
+      '}',
+    ],
+    'damage.ts': [
+      "import type { UnitType, UnitStats, Facing, Terrain } from './elements.js';",
+      "import { makeSpare } from './spares.js';",
+      '/** Points a surviving unit is worth. */',
+      'export function survivorValue(unitType: UnitType): number {',
+      "  return unitType === 'Crawler' ? 4 : 1; // SURVIVOR_BODY_SENTINEL",
+      '}',
+      'export function facingOf(stats: UnitStats): Facing {',
+      '  return stats.facing;',
+      '}',
+      'export function slowdown(terrain: Terrain): number {',
+      "  return terrain === 'Mud' ? 2 : 1;",
+      '}',
+      // Inferred from a module damage.ts never imports a type from: the compiler writes import("./spares.js").Spare.
+      'export const SPARE = makeSpare();',
+    ],
+    'spares.ts': ['export interface Spare { bolts: number }', 'export function makeSpare(): Spare {', '  return { bolts: 1 };', '}'],
+    'sim/movement.ts': ['export const TICK_SECONDS = 0.05;'],
+    // `thing`'s inferred type is a class with a private member that broken.ts cannot name.
+    'hidden.ts': ['class Hidden {', '  private x = 1;', '}', 'export function make() {', '  return new Hidden();', '}'],
+    'broken.ts': ["import { make } from './hidden.js';", 'export const thing = make();', 'export const thing2 = make();'],
+    // `leaked`'s inferred type is an interface stash.ts does not export: the compiler's message names that module's path.
+    'stash.ts': ['interface Stashed { n: number }', 'export function makeStash(): Stashed {', '  return { n: 1 };', '}'],
+    'leaky.ts': ["import { makeStash } from './stash.js';", 'export const leaked = makeStash();'],
+  });
+  return root;
+}
+
+function symbolNamed(surface: GameApiSurface, name: string): GameApiSurface['exportedSymbols'][number] {
+  const symbol = surface.exportedSymbols.find((s) => s.name === name);
+  if (!symbol) throw new Error(`the surface lists no ${name}`);
+  return symbol;
+}
+
+/** A predicate spec any declarations payload can be built for. */
+const DECLARATIONS_SPEC: WorkedExampleSpec = createWorkedExampleSpec({
+  id: workedExampleId({ slicePath: 'rulebook/02-damage.md', lineNumber: 1 }),
+  sliceText: '"A surviving Crawler deals 4 damage."',
+  returned: {
+    slicePath: 'rulebook/02-damage.md',
+    lineNumber: 1,
+    pageCitation: 'p.2',
+    kind: 'predicate',
+    sourceText: '"A surviving Crawler deals 4 damage."',
+    setup: 'One surviving Crawler.',
+    expected: 'It deals 4 damage.',
+  },
+});
+
+describe('collectGameApiSurface — carries the declarations a translator needs (#1087)', () => {
+  let projectDir: string;
+  let surface: GameApiSurface;
+
+  beforeEach(async () => {
+    projectDir = tempTree('bs-example-derivation-declarations-');
+    await writeDeclarationsFixtureProject(projectDir);
+    surface = await collectGameApiSurface(projectDir);
+  });
+
+  it("gives a function's signature and the declaration of the exported union type it takes", () => {
+    expect(symbolNamed(surface, 'survivorValue').declaration).toEqual({
+      text: 'export declare function survivorValue(unitType: UnitType): number;',
+    });
+    expect(surface.referencedTypes).toContainEqual({
+      name: 'UnitType',
+      kind: 'type',
+      module: 'src/rules/elements.ts',
+      exported: true,
+      declaration: { text: "export type UnitType = 'Crawler' | 'Scuttler';" },
+    });
+
+    const payload = buildExampleTranslationPayload(DECLARATIONS_SPEC, surface);
+    expect(payload).toContain(
+      '- survivorValue (function, src/rules/damage.ts)\n' +
+        '    export declare function survivorValue(unitType: UnitType): number;',
+    );
+    expect(payload).toContain(
+      "- UnitType (type, src/rules/elements.ts)\n    export type UnitType = 'Crawler' | 'Scuttler';",
+    );
+  });
+
+  it("gives a const's literal value, and an enum's member values", () => {
+    expect(symbolNamed(surface, 'TICK_SECONDS').declaration).toEqual({
+      text: 'export declare const TICK_SECONDS = 0.05;',
+    });
+    expect(symbolNamed(surface, 'Facing').declaration).toEqual({
+      text: 'export declare enum Facing {\n    North = 0,\n    East = 5\n}',
+    });
+  });
+
+  it("gives a class's public member signatures and nothing private or protected", () => {
+    expect(symbolNamed(surface, 'Unit').declaration).toEqual({
+      text: [
+        'export declare class Unit {',
+        '    readonly unitType: UnitType;',
+        '    constructor(unitType: UnitType);',
+        '    damage(amount: number): number;',
+        '}',
+      ].join('\n'),
+    });
+  });
+
+  it('follows referenced types transitively, nearest first, each once, and none already listed', () => {
+    expect(surface.referencedTypes.map((t) => `${t.name} (${t.kind}${t.exported ? '' : ', not exported'})`)).toEqual([
+      'Terrain (type)',
+      'UnitStats (interface)',
+      'UnitType (type)',
+      'Spare (interface)',
+      'Armor (interface, not exported)',
+      'Late (interface)',
+    ]);
+    const payload = buildExampleTranslationPayload(DECLARATIONS_SPEC, surface);
+    expect(payload).toContain('- Armor (interface, src/rules/elements.ts, not exported)\n    interface Armor {');
+    expect(payload).toContain('- Late (interface, src/rules/elements.ts)\n    interface Late {');
+  });
+
+  it('never carries an implementation body or a comment', () => {
+    const payload = buildExampleTranslationPayload(DECLARATIONS_SPEC, surface);
+    expect(payload).not.toContain('SENTINEL');
+    expect(payload).not.toContain('return stats.facing');
+    expect(payload).not.toContain('Points a surviving unit');
+    expect(payload).not.toContain('secret');
+    expect(payload).not.toContain('guarded');
+    expect(payload).not.toContain('#private');
+  });
+
+  it('says explicitly when a declaration cannot be produced, and why', () => {
+    expect(symbolNamed(surface, 'thing').declaration).toEqual({
+      unavailable: expect.stringMatching(
+        /cannot write declarations for src\/rules\/broken\.ts.*thing: Property 'x' of exported anonymous class type may not be private or protected/s,
+      ),
+    });
+    expect(symbolNamed(surface, 'movement').declaration).toEqual({
+      unavailable: expect.stringMatching(/binds a whole module or a default export/),
+    });
+
+    const payload = buildExampleTranslationPayload(DECLARATIONS_SPEC, surface);
+    expect(payload).toMatch(
+      /- thing \(const, src\/rules\/broken\.ts\)\n {4}declaration unavailable: the TypeScript compiler cannot write declarations/,
+    );
+    // A module-wide reason is printed once.
+    expect(payload).toContain(
+      '- thing2 (const, src/rules/broken.ts)\n    declaration unavailable: the same reason as thing above.',
+    );
+  });
+
+  it("names modules in the compiler's reasons relative to the project, never by an absolute path", async () => {
+    const { unavailable } = symbolNamed(surface, 'leaked').declaration as { unavailable: string };
+    expect(unavailable).toContain("leaked: Exported variable 'leaked' has or is using name 'Stashed' from external module \"src/rules/stash\"");
+    const payload = buildExampleTranslationPayload(DECLARATIONS_SPEC, surface);
+    for (const root of [projectDir, realpathSync(projectDir)]) expect(payload).not.toContain(root);
+  });
+
+  it('lists names in a fixed character order, whatever the locale', async () => {
+    await writeRulesFiles(join(projectDir, 'src', 'rules'), {
+      'index.ts': ['export const beta = 1;', 'export const alpha = 2;', 'export const Alpha = 3;'],
+    });
+
+    const ordered = await collectGameApiSurface(projectDir);
+
+    expect(ordered.exportedSymbols.map((s) => s.name)).toEqual(['Alpha', 'alpha', 'beta']);
+  });
+
+  it('prints a hand-written declaration file under src/ as it is written, without its comments', async () => {
+    await writeRulesFiles(join(projectDir, 'src', 'rules'), {
+      'index.ts': ["export * from './ambient.js';"],
+      'ambient.d.ts': ['/** A doc comment. */', 'export declare const AMBIENT: 3;'],
+    });
+
+    const ambient = await collectGameApiSurface(projectDir);
+
+    expect(symbolNamed(ambient, 'AMBIENT')).toEqual({
+      name: 'AMBIENT',
+      kind: 'const',
+      module: 'src/rules/ambient.d.ts',
+      declaration: { text: 'export declare const AMBIENT: 3;' },
+    });
+  });
+
+  it('is byte-identical across two runs', async () => {
+    const again = await collectGameApiSurface(projectDir);
+    expect(again).toEqual(surface);
+    expect(buildExampleTranslationPayload(DECLARATIONS_SPEC, again)).toBe(
+      buildExampleTranslationPayload(DECLARATIONS_SPEC, surface),
+    );
+  });
+
+  it('never carries text from the test directory, even through a type a rules module infers from it', async () => {
+    await fs.mkdir(join(projectDir, 'tests'), { recursive: true });
+    await fs.writeFile(
+      join(projectDir, 'tests', 'fixture.ts'),
+      'export function fixture() {\n  return { TEST_ONLY_FIELD: 1 };\n}\n',
+    );
+    await writeRulesFiles(join(projectDir, 'src', 'rules'), {
+      'index.ts': ["import { fixture } from '../../tests/fixture.js';", 'export const DATA = fixture();'],
+    });
+
+    const leaky = await collectGameApiSurface(projectDir);
+
+    expect(buildExampleTranslationPayload(DECLARATIONS_SPEC, leaky)).not.toContain('TEST_ONLY_FIELD');
+  });
+
+  it("names a package's types as the game's compiler sees them, and never lists a package's exports", async () => {
+    const pkg = join(projectDir, 'node_modules', 'fakepkg');
+    await fs.mkdir(pkg, { recursive: true });
+    await fs.writeFile(join(pkg, 'package.json'), JSON.stringify({ name: 'fakepkg', types: 'index.d.ts' }));
+    await fs.writeFile(
+      join(pkg, 'index.d.ts'),
+      'export interface PkgThing { size: number }\nexport declare function fromPackage(): void;\n',
+    );
+    await writeRulesFiles(join(projectDir, 'src', 'rules'), {
+      'index.ts': [
+        "export * from 'fakepkg';",
+        "import type { PkgThing } from 'fakepkg';",
+        'export function usePkg(thing: PkgThing) {',
+        '  return thing;',
+        '}',
+      ],
+    });
+
+    const withPackage = await collectGameApiSurface(projectDir);
+
+    expect(withPackage.exportedSymbols.map((s) => s.name)).toEqual(['usePkg']);
+    expect(symbolNamed(withPackage, 'usePkg').declaration).toEqual({
+      text: 'export declare function usePkg(thing: PkgThing): PkgThing;',
+    });
+    expect(withPackage.referencedTypes).toEqual([]);
   });
 });
 
@@ -921,7 +1210,8 @@ describe('buildExampleTranslationPayload — translation (Task 3)', () => {
     const api: GameApiSurface = {
       projectDir: SYNTHETIC_PROJECT_DIR,
       testDir: join(SYNTHETIC_PROJECT_DIR, 'tests'),
-      exportedSymbols: [{ name: 'legalScoringPatterns', kind: 'function', module: 'src/rules/scoring.ts' }],
+      exportedSymbols: [{ name: 'legalScoringPatterns', kind: 'function', module: 'src/rules/scoring.ts', declaration: { text: 'export declare function legalScoringPatterns(): void;' } }],
+      referencedTypes: [],
     };
     const payload = buildExampleTranslationPayload(predicateSpec, api);
     expect(payload).toContain('predicate');
@@ -933,7 +1223,8 @@ describe('buildExampleTranslationPayload — translation (Task 3)', () => {
     const api: GameApiSurface = {
       projectDir: SYNTHETIC_PROJECT_DIR,
       testDir: join(SYNTHETIC_PROJECT_DIR, 'tests'),
-      exportedSymbols: [{ name: 'readyGuards', kind: 'function', module: 'src/rules/guards.ts' }],
+      exportedSymbols: [{ name: 'readyGuards', kind: 'function', module: 'src/rules/guards.ts', declaration: { text: 'export declare function readyGuards(): void;' } }],
+      referencedTypes: [],
     };
     const payload = buildExampleTranslationPayload(transitionSpec, api);
     expect(payload).toContain('doAction');
@@ -962,7 +1253,8 @@ describe('buildExampleTranslationPayload — translation (Task 3)', () => {
     const api: GameApiSurface = {
       projectDir: SYNTHETIC_PROJECT_DIR,
       testDir: join(SYNTHETIC_PROJECT_DIR, 'tests'),
-      exportedSymbols: [{ name: 'readyGuards', kind: 'function', module: 'src/rules/guards.ts' }],
+      exportedSymbols: [{ name: 'readyGuards', kind: 'function', module: 'src/rules/guards.ts', declaration: { text: 'export declare function readyGuards(): void;' } }],
+      referencedTypes: [],
     };
     const payload = buildExampleTranslationPayload(transitionSpec, api);
     expect(payload).toContain('two nested directories below the project root');
@@ -975,10 +1267,58 @@ describe('buildExampleTranslationPayload — translation (Task 3)', () => {
       projectDir: SYNTHETIC_PROJECT_DIR,
       testDir: join(SYNTHETIC_PROJECT_DIR, 'tests'),
       exportedSymbols: [],
+      referencedTypes: [],
     };
     const payload = buildExampleTranslationPayload(predicateSpec, emptyApi);
     expect(payload).toContain('unexecutable');
     expect(payload.length).toBeGreaterThan(0);
+  });
+});
+
+describe('buildExampleTranslationPayload — the declaration budget (#1087)', () => {
+  function symbol(name: string, length: number): GameApiSurface['exportedSymbols'][number] {
+    return { name, kind: 'const', module: 'src/rules/big.ts', declaration: { text: 'x'.repeat(length) } };
+  }
+
+  it('counts an unavailable reason against the budget', () => {
+    const api: GameApiSurface = {
+      projectDir: SYNTHETIC_PROJECT_DIR,
+      testDir: join(SYNTHETIC_PROJECT_DIR, 'tests'),
+      exportedSymbols: [
+        symbol('first', TRANSLATION_DECLARATION_BUDGET - 10),
+        { name: 'second', kind: 'const', module: 'src/rules/big.ts', declaration: { unavailable: 'r'.repeat(50) } },
+      ],
+      referencedTypes: [],
+    };
+
+    const payload = buildExampleTranslationPayload(DECLARATIONS_SPEC, api);
+
+    expect(payload).toMatch(/- second \(const, src\/rules\/big\.ts\)\n {4}declaration omitted: /);
+    expect(payload).not.toContain('r'.repeat(50));
+  });
+
+  it('prints declarations in order until the budget is spent, then marks every later one omitted', () => {
+    const api: GameApiSurface = {
+      projectDir: SYNTHETIC_PROJECT_DIR,
+      testDir: join(SYNTHETIC_PROJECT_DIR, 'tests'),
+      exportedSymbols: [
+        symbol('first', TRANSLATION_DECLARATION_BUDGET - 10),
+        symbol('second', 20),
+        symbol('third', 1),
+      ],
+      referencedTypes: [
+        { name: 'Later', kind: 'type', module: 'src/rules/big.ts', exported: true, declaration: { text: 'type Later = 1;' } },
+      ],
+    };
+
+    const payload = buildExampleTranslationPayload(DECLARATIONS_SPEC, api);
+
+    expect(payload).toContain('x'.repeat(TRANSLATION_DECLARATION_BUDGET - 10));
+    for (const name of ['second (const', 'third (const', 'Later (type']) {
+      expect(payload).toMatch(new RegExp(`- ${name.replace('(', '\\(')}, src/rules/big\\.ts\\)\\n {4}declaration omitted: `));
+    }
+    expect(payload).not.toContain('type Later = 1;');
+    expect(payload.length).toBeLessThan(TRANSLATION_DECLARATION_BUDGET + 10_000);
   });
 });
 
@@ -1186,4 +1526,27 @@ describe('SC-3 — both pipeline sides derive from one module', () => {
       }
     },
   );
+});
+
+describe('portableMessage', () => {
+  it('makes a quoted path inside a POSIX project root project-relative', () => {
+    expect(portableMessage(['/work/game'], `Cannot find module "/work/game/src/rules.ts".`)).toBe(
+      'Cannot find module "src/rules.ts".',
+    );
+  });
+
+  it('makes a quoted path inside a drive-letter project root project-relative (#1147)', () => {
+    expect(portableMessage(['C:/work/game'], `Cannot find module "C:/work/game/src/rules.ts".`)).toBe(
+      'Cannot find module "src/rules.ts".',
+    );
+  });
+
+  it('hides a quoted drive-letter path outside the project the same way as a POSIX one (#1147)', () => {
+    expect(portableMessage(['C:/work/game'], `Type from 'C:/Users/someone/lib/x.ts' and "/home/someone/lib/x.ts".`)).toBe(
+      `Type from 'a module outside the project' and "a module outside the project".`,
+    );
+    expect(portableMessage(['C:/work/game'], `Type from "D:/cache/node_modules/pkg/index.d.ts".`)).toBe(
+      'Type from "node_modules/pkg/index.d.ts".',
+    );
+  });
 });

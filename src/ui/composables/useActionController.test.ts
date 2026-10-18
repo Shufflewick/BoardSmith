@@ -601,6 +601,80 @@ describe('useActionController', () => {
       expect(calls).toEqual(['hook:forcedPlay', 'send:forcedPlay']);
     });
 
+    describe('onAfterAutoExecute is told how each auto-executed action ended (#861)', () => {
+      function autoExecuteForcedPlay() {
+        const controller = useActionController({
+          sendAction, availableActions, actionMetadata, isMyTurn, autoFill: true, autoExecute: true,
+        });
+        const outcomes: unknown[] = [];
+        controller.onAfterAutoExecute((result) => { outcomes.push(result); });
+        return { controller, outcomes };
+      }
+
+      /** Let the auto-execute watcher, the send and the listener calls all finish. */
+      async function settle(): Promise<void> {
+        for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 0));
+      }
+
+      it('passes the server result on success, once', async () => {
+        const { controller, outcomes } = autoExecuteForcedPlay();
+
+        await controller.start('forcedPlay');
+        await settle();
+
+        expect(outcomes).toHaveLength(1);
+        expect(outcomes[0]).toMatchObject({ success: true });
+      });
+
+      it('passes the refusal when the server rejects the action', async () => {
+        sendAction.mockResolvedValue({ success: false, error: 'Not allowed' });
+        const { controller, outcomes } = autoExecuteForcedPlay();
+
+        await controller.start('forcedPlay');
+        await settle();
+
+        expect(outcomes).toEqual([{ success: false, error: 'Not allowed' }]);
+      });
+
+      it('passes a failure when the transport throws', async () => {
+        sendAction.mockRejectedValue(new Error('Connection lost'));
+        const { controller, outcomes } = autoExecuteForcedPlay();
+
+        await controller.start('forcedPlay');
+        await settle();
+
+        expect(outcomes).toEqual([{ success: false, error: 'Connection lost' }]);
+      });
+
+      it('passes a failure when the action is cancelled during the hooks, and sends nothing', async () => {
+        const { controller, outcomes } = autoExecuteForcedPlay();
+        controller.onBeforeAutoExecute(() => { controller.cancel(); });
+
+        await controller.start('forcedPlay');
+        await settle();
+
+        expect(outcomes).toEqual([{ success: false, error: 'Action was cancelled' }]);
+        expect(sendAction).not.toHaveBeenCalled();
+      });
+
+      it('a listener that throws does not stop the others', async () => {
+        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const controller = useActionController({
+          sendAction, availableActions, actionMetadata, isMyTurn, autoFill: true, autoExecute: true,
+        });
+        const outcomes: unknown[] = [];
+        controller.onAfterAutoExecute(() => { throw new Error('broken listener'); });
+        controller.onAfterAutoExecute((result) => { outcomes.push(result); });
+
+        await controller.start('forcedPlay');
+        await settle();
+
+        expect(outcomes).toHaveLength(1);
+        expect(consoleErrorSpy).toHaveBeenCalledWith('[ActionController] afterAutoExecute listener failed:', expect.any(Error));
+        consoleErrorSpy.mockRestore();
+      });
+    });
+
     it('onBeforeAutoExecute accumulates hooks and runs them in registration order (UIX-05, PROC-02 regression)', async () => {
       const calls: string[] = [];
       const controller = useActionController({

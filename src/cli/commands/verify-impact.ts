@@ -8,8 +8,9 @@ import {
   relChunkMdPath,
 } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
+import { readIfExists } from '../lib/read-if-exists.js';
 import { join, relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { findHeadingIndex, parseRulings } from './build-manifest.js';
 import { allocatedNumber } from '../lib/ledger-entries.js';
 import {
@@ -19,6 +20,7 @@ import {
 } from './chunk-provenance.js';
 import { RULE_DELTA_KINDS, type RuleDelta, type ChunkVerdict, verifyClassifyStatusCommand } from './verify-classify.js';
 import { driftCheckCommand, type ChunkDrift } from './drift-check.js';
+import { withLedgerLock } from '../lib/ledger-lock.js';
 import {
   atomicWriteFile,
   appendLedgerLine,
@@ -30,7 +32,7 @@ import {
   type AdjudicationRecord,
   type ImpactRecord,
 } from './verify-run.js';
-import { escapeRegExp } from '../lib/regexp.js';
+import { escapeRegExp } from '../../utils/regexp.js';
 
 /**
  * `verify-impact.ts` — Phase 175's impact-map / repair-gating surface: VERIFY-05's
@@ -83,6 +85,9 @@ export const RULES_STALENESS_END = '<!-- boardsmith:rules-staleness:end -->';
  * flagged rules-stale — matching `VERIFIED_AGAINST_EMPTY`'s role for `## Verified Against`.
  */
 export const RULES_STALENESS_EMPTY = '_Not rules-stale._';
+
+/** An empty `Attributed slices:` list. Not `RULES_STALENESS_EMPTY`: a stale marker must not say it is not stale (#998). */
+const NO_ATTRIBUTED_SLICES = '_No slices attributed._';
 
 /**
  * The two values this marker can carry — frozen array + derived type, never a hand-written
@@ -150,7 +155,7 @@ export interface RulesStalenessRecord {
 /**
  * Pure — returns only the body that lives BETWEEN the fences, mirroring
  * `renderVerifiedAgainst`'s shape exactly. `Attributed slices:` renders as a `| slice |`
- * markdown table when non-empty and as `RULES_STALENESS_EMPTY` when empty (mirroring
+ * markdown table when non-empty and as `NO_ATTRIBUTED_SLICES` when empty (mirroring
  * `renderVerifiedAgainst`'s `Cited slices:` handling). `Prior reading:`/`Changed reading:` are
  * rendered verbatim and OMITTED when absent (mirroring how `renderVerifiedAgainst` omits
  * `Reason:` on `full` scope).
@@ -167,7 +172,7 @@ export function renderRulesStaleness(record: RulesStalenessRecord): string {
     lines.push('|---|');
     for (const s of record.attributedSlices) lines.push(`| ${s} |`);
   } else {
-    lines.push(RULES_STALENESS_EMPTY);
+    lines.push(NO_ATTRIBUTED_SLICES);
   }
   if (record.priorReading !== undefined) {
     lines.push('');
@@ -577,6 +582,51 @@ export function formatBothReadings(c: Contradiction): string {
   return lines.join('\n');
 }
 
+/**
+ * `verifyClassifyStatusCommand` is the single authority for the resolved run id and the
+ * per-chunk verdicts. Every command here composes it through this one call, quiet, so its own
+ * report never lands ahead of the caller's output and breaks a `--json` caller's parse (#832).
+ */
+function readClassifyStatus(projectDir: string, runId: string | undefined) {
+  return verifyClassifyStatusCommand({ project: projectDir, runId, json: false, quiet: true });
+}
+
+/** A run's ledger, as read text, and the adjudications it records. */
+async function readRunLedger(projectDir: string, runId: string) {
+  const ledgerFile = ledgerFilePath(projectDir, runId);
+  const relLedgerPath = relative(projectDir, ledgerFile);
+  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
+  const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
+  const { adjudications } = resolveLedgerState(lines);
+  return { ledgerFile, relLedgerPath, ledgerText, adjudications };
+}
+
+/** A run's classifications, recorded adjudications and the contradictions they leave. */
+async function readRunContradictions(projectDir: string, requestedRunId: string | undefined) {
+  const classifyStatus = await readClassifyStatus(projectDir, requestedRunId);
+  const runId = classifyStatus.runId;
+  const { ledgerFile, relLedgerPath, adjudications } = await readRunLedger(projectDir, runId);
+
+  const contradictions = collectContradictions({
+    classifications: classifyStatus.classified,
+    adjudications,
+    chunkVerdicts: classifyStatus.chunkVerdicts,
+  });
+  return { classifyStatus, runId, ledgerFile, relLedgerPath, adjudications, contradictions };
+}
+
+/** Each chunk's drift and provenance status, by slug, both read quietly for the same reason. */
+async function readChunkState(projectDir: string) {
+  const [driftResult, provenanceResult] = await Promise.all([
+    driftCheckCommand({ project: projectDir, json: false, quiet: true }),
+    chunkProvenanceStatusCommand({ project: projectDir, json: false, quiet: true }),
+  ]);
+  return {
+    driftBySlug: new Map(driftResult.chunks.map((c) => [c.chunk, c] as const)),
+    statusBySlug: new Map(provenanceResult.chunks.map((c) => [c.slug, c.status] as const)),
+  };
+}
+
 export interface VerifyImpactGateResult {
   runId: string;
   contradictions: Contradiction[];
@@ -608,33 +658,7 @@ export async function verifyImpactGateCommand(
 ): Promise<VerifyImpactGateResult> {
   const projectDir = resolve(options.project ?? process.cwd());
 
-  // `verifyClassifyStatusCommand` is the single existing authority for both the resolved runId
-  // (most-recent-run resolution) and the per-chunk verdict roll-up — never re-derived here.
-  const classifyStatus = await verifyClassifyStatusCommand({
-    project: projectDir,
-    runId: options.runId,
-    // json: false — this is an internal composition call. verifyClassifyStatusCommand's own
-    // json:true path prints its OWN JSON.stringify(result) to stdout as a side effect
-    // (verify-classify.ts's convention), independent of whatever this caller's own --json
-    // handling does below. Passing json:true here would print a second, unrelated top-level
-    // JSON object ahead of this command's own result on every invocation (found live while
-    // producing 175-PROOF.md's real verify-impact-gate --json output: stdout contained two
-    // concatenated JSON objects instead of one, breaking a real caller's JSON.parse(stdout)).
-    json: false,
-  });
-  const runId = classifyStatus.runId;
-
-  const ledgerFile = ledgerFilePath(projectDir, runId);
-  const relLedgerPath = relative(projectDir, ledgerFile);
-  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
-  const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
-  const { adjudications } = resolveLedgerState(lines);
-
-  const contradictions = collectContradictions({
-    classifications: classifyStatus.classified,
-    adjudications,
-    chunkVerdicts: classifyStatus.chunkVerdicts,
-  });
+  const { classifyStatus, runId, contradictions } = await readRunContradictions(projectDir, options.runId);
 
   const pending = contradictions.filter((c) => c.adjudication !== 'resolved').map((c) => c.pairId);
   const summary = {
@@ -658,12 +682,12 @@ export async function verifyImpactGateCommand(
   }
 
   if (contradictions.length === 0) {
-    console.log(chalk.green(`✓ No contradictory findings pending adjudication — run ${runId}`));
+    console.log(styleText('green', `✓ No contradictory findings pending adjudication — run ${runId}`));
     return result;
   }
 
   console.log(
-    chalk.yellow(
+    styleText('yellow',
       `⚠ ${pending.length} of ${contradictions.length} contradictory finding(s) pending adjudication — run ${runId}`,
     ),
   );
@@ -729,6 +753,8 @@ export function renderRuling(input: {
  * `existingText + separator + newBlock` through `atomicWriteFile` (`verify-run.ts`) — the ONE
  * atomic write path this repo has, never a second `fs.writeFile`. A caller-side test proves this
  * is truly append-only by asserting the new file content `startsWith` the original byte-for-byte.
+ * An entry whose three fields match a ruling already in the file that nothing supersedes returns
+ * that ruling's number and writes nothing, so adjudicate's retry after a crash appends no duplicate.
  *
  * `RULINGS.md`'s absence is a TOOL FAILURE, not a case to paper over: a bs-built project always
  * has one (scaffolded at `init` time), so a missing file here means this command is being run
@@ -744,26 +770,37 @@ export async function appendRuling(
   const rulingsPath = designPath(dir, RULINGS_MD);
   const relRulingsPath = join(DESIGN_DIR, RULINGS_MD);
 
-  let rulingsText: string;
-  try {
-    rulingsText = await fs.readFile(rulingsPath, 'utf-8');
-  } catch {
-    throw new Error(
-      `No ${relRulingsPath} found in ${dir}.\n` +
-        `A bs-built project always has one, scaffolded at \`boardsmith init\` time — this command\n` +
-        `never creates it. Confirm --project points at the right game directory, or restore\n` +
-        `${relRulingsPath} before recording an adjudication resolution.`,
-    );
+  async function readRulings(): Promise<string> {
+    const text = await readIfExists(rulingsPath, (p) => fs.readFile(p, 'utf-8'));
+    if (text === undefined) {
+      throw new Error(
+        `No ${relRulingsPath} found in ${dir}.\n` +
+          `A bs-built project always has one, scaffolded at \`boardsmith init\` time — this command\n` +
+          `never creates it. Confirm --project points at the right game directory, or restore\n` +
+          `${relRulingsPath} before recording an adjudication resolution.`,
+      );
+    }
+    return text;
   }
 
-  const number = nextRulingNumber(rulingsText);
-  const block = renderRuling({ number, ...entry });
-  const separator = rulingsText.endsWith('\n\n') ? '' : rulingsText.endsWith('\n') ? '\n' : '\n\n';
-  const newText = rulingsText + separator + block;
+  // The lock file sits beside RULINGS.md, so a missing one is refused before the lock is taken.
+  await readRulings();
+  // Two adjudications in different runs share RULINGS.md, so the number and the append are taken under one lock.
+  return withLedgerLock(rulingsPath, async () => {
+    const rulingsText = await readRulings();
+    const number = nextRulingNumber(rulingsText);
+    const block = renderRuling({ number, ...entry });
+    // A retry after a crash between this write and the caller's ledger write finds its ruling already here.
+    const body = block.slice(block.indexOf('\n') + 1).trim();
+    const written = parseRulings(rulingsText).find((r) => r.body.trim() === body && r.supersededBy === undefined);
+    if (written) return { number: allocatedNumber('Ruling', written.id), path: relRulingsPath };
+    const separator = rulingsText.endsWith('\n\n') ? '' : rulingsText.endsWith('\n') ? '\n' : '\n\n';
+    const newText = rulingsText + separator + block;
 
-  await atomicWriteFile(rulingsPath, newText);
+    await atomicWriteFile(rulingsPath, newText);
 
-  return { number, path: relRulingsPath };
+    return { number, path: relRulingsPath };
+  });
 }
 
 export interface VerifyImpactAdjudicateResult {
@@ -794,7 +831,7 @@ export interface VerifyImpactAdjudicateResult {
  *
  * WRITE ORDER: `RULINGS.md` first, the ledger record second (T-175-13) — a crash between the two
  * leaves the ruling durable and the pair still PENDING (re-runnable), never a recorded resolution
- * with no ruling behind it.
+ * with no ruling behind it. A retry with the same words reuses that ruling (`appendRuling`).
  */
 export async function verifyImpactAdjudicateCommand(options: {
   project?: string;
@@ -831,77 +868,72 @@ export async function verifyImpactAdjudicateCommand(options: {
     }
   }
 
-  // `verifyClassifyStatusCommand` is the single existing authority for both the resolved runId
-  // and the recorded classification verdicts — never re-derived here.
-  const classifyStatus = await verifyClassifyStatusCommand({
-    project: projectDir,
-    runId: options.runId,
-    // json: false — this is an internal composition call. verifyClassifyStatusCommand's own
-    // json:true path prints its OWN JSON.stringify(result) to stdout as a side effect
-    // (verify-classify.ts's convention), independent of whatever this caller's own --json
-    // handling does below. Passing json:true here would print a second, unrelated top-level
-    // JSON object ahead of this command's own result on every invocation (found live while
-    // producing 175-PROOF.md's real verify-impact-gate --json output: stdout contained two
-    // concatenated JSON objects instead of one, breaking a real caller's JSON.parse(stdout)).
-    json: false,
-  });
-  const runId = classifyStatus.runId;
+  // Resolved before the lock, so a missing run is refused with its own message, not ENOENT on the lock file.
+  const { runId } = await readClassifyStatus(projectDir, options.runId);
 
-  const classification = classifyStatus.classified.find((c) => c.pairId === pairId);
-  if (!classification || classification.ruleDelta !== 'contradictory') {
-    throw new Error(
-      `Pair "${pairId}" has no recorded "contradictory" classification in run ${runId}.\n` +
-        `Run \`boardsmith verify-impact-gate --run-id ${runId}\` to list pending contradictions.`,
-    );
-  }
-
-  const quotedPass1 = classification.quotedPass1 ?? NO_VERBATIM_READING;
-  const quotedPass2 = classification.quotedPass2 ?? NO_VERBATIM_READING;
-
-  const ledgerFile = ledgerFilePath(projectDir, runId);
-  const relLedgerPath = relative(projectDir, ledgerFile);
-  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
-  const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
-  const { adjudications } = resolveLedgerState(lines);
-  const existing = adjudications.find((a) => a.pairId === pairId);
-
-  let rulingNumber: number | undefined;
-
-  if (outcome === 'resolved') {
-    if (existing?.outcome === 'resolved' && existing.rulingNumber !== undefined) {
-      // Idempotent: this pair already has a recorded ruling — reuse it, never append a second
-      // RULINGS.md entry for an already-recorded resolution.
-      rulingNumber = existing.rulingNumber;
-    } else {
-      // RULINGS.md write FIRST (T-175-13) — both verbatim readings embedded into the Citation
-      // field, matching the real corpus's own convention of quoting the interpreted rulebook
-      // text inside "Citation interpreted or overridden:" (e.g. one-two-punch Ruling 22).
-      const appended = await appendRuling(projectDir, {
-        decision: options.decision!.trim(),
-        citation:
-          `${options.citation!.trim()} — Reading as built (pass 1): "${quotedPass1}" | ` +
-          `Reading in the fresh transcription (pass 2): "${quotedPass2}"`,
-        rationale: options.rationale!.trim(),
-      });
-      rulingNumber = appended.number;
+  // The classification and idempotence checks read the ledger too, so the lock spans them, the ruling and the append.
+  const rulingNumber = await withLedgerLock(ledgerFilePath(projectDir, runId), async () => {
+    const classifyStatus = await readClassifyStatus(projectDir, runId);
+    if (classifyStatus.outOfDatePairs.includes(pairId)) {
+      throw new Error(
+        `Pair "${pairId}"'s classification in run ${runId} is out of date: its staged slices changed after ` +
+          `it was classified.\nClassify it again with \`boardsmith verify-classify-record --run-id ${runId} ` +
+          `--pair-id ${pairId}\`, then adjudicate it.`,
+      );
     }
-  }
+    const classification = classifyStatus.classified.find((c) => c.pairId === pairId);
+    if (!classification || classification.ruleDelta !== 'contradictory') {
+      throw new Error(
+        `Pair "${pairId}" has no recorded "contradictory" classification in run ${runId}.\n` +
+          `Run \`boardsmith verify-impact-gate --run-id ${runId}\` to list pending contradictions.`,
+      );
+    }
 
-  const record: AdjudicationRecord = {
-    kind: 'adjudication',
-    pairId,
-    outcome,
-    ...(rulingNumber !== undefined ? { rulingNumber } : {}),
-    quotedPass1,
-    quotedPass2,
-    recordedAt: new Date().toISOString(),
-  };
+    const quotedPass1 = classification.quotedPass1 ?? NO_VERBATIM_READING;
+    const quotedPass2 = classification.quotedPass2 ?? NO_VERBATIM_READING;
 
-  // Ledger record SECOND (T-175-13) — a crash between the RULINGS.md write above and this append
-  // leaves the ruling durable and the pair still pending, never a recorded resolution with no
-  // ruling behind it.
-  const newLedgerText = appendLedgerLine(ledgerText, relLedgerPath, JSON.stringify(record));
-  await atomicWriteFile(ledgerFile, newLedgerText);
+    const { ledgerFile, relLedgerPath, ledgerText, adjudications } = await readRunLedger(projectDir, runId);
+    const existing = adjudications.find((a) => a.pairId === pairId);
+
+    let assigned: number | undefined;
+
+    if (outcome === 'resolved') {
+      if (existing?.outcome === 'resolved' && existing.rulingNumber !== undefined) {
+        // Idempotent: this pair already has a recorded ruling — reuse it, never append a second
+        // RULINGS.md entry for an already-recorded resolution.
+        assigned = existing.rulingNumber;
+      } else {
+        // RULINGS.md write FIRST (T-175-13) — both verbatim readings embedded into the Citation
+        // field, matching the real corpus's own convention of quoting the interpreted rulebook
+        // text inside "Citation interpreted or overridden:" (e.g. one-two-punch Ruling 22).
+        const appended = await appendRuling(projectDir, {
+          decision: options.decision!.trim(),
+          citation:
+            `${options.citation!.trim()} — Reading as built (pass 1): "${quotedPass1}" | ` +
+            `Reading in the fresh transcription (pass 2): "${quotedPass2}"`,
+          rationale: options.rationale!.trim(),
+        });
+        assigned = appended.number;
+      }
+    }
+
+    const record: AdjudicationRecord = {
+      kind: 'adjudication',
+      pairId,
+      outcome,
+      ...(assigned !== undefined ? { rulingNumber: assigned } : {}),
+      quotedPass1,
+      quotedPass2,
+      recordedAt: new Date().toISOString(),
+    };
+
+    // Ledger record SECOND (T-175-13) — a crash between the RULINGS.md write above and this append
+    // leaves the ruling durable and the pair still pending, never a recorded resolution with no
+    // ruling behind it.
+    const newLedgerText = appendLedgerLine(ledgerText, relLedgerPath, JSON.stringify(record));
+    await atomicWriteFile(ledgerFile, newLedgerText);
+    return assigned;
+  });
 
   const result: VerifyImpactAdjudicateResult = {
     pairId,
@@ -916,11 +948,11 @@ export async function verifyImpactAdjudicateCommand(options: {
 
   if (outcome === 'resolved') {
     console.log(
-      chalk.green(`✓ Recorded Ruling ${rulingNumber} for pair ${pairId} (run ${runId})`),
+      styleText('green', `✓ Recorded Ruling ${rulingNumber} for pair ${pairId} (run ${runId})`),
     );
   } else {
     console.log(
-      chalk.yellow(`⚠ Pair ${pairId} deferred as UNADJUDICATED — remains pending (run ${runId})`),
+      styleText('yellow', `⚠ Pair ${pairId} deferred as UNADJUDICATED — remains pending (run ${runId})`),
     );
   }
   return result;
@@ -949,7 +981,6 @@ export interface RepairGate {
   /** Present only for `reopen-playtest` / `close-without-replaytest`. */
   nextStatus?: string;
   clearMarker: boolean;
-  reverifyStamp: boolean;
   reason: string;
 }
 
@@ -978,8 +1009,8 @@ export interface RepairGate {
  *      waive again, explicitly, as a fresh decision.
  *   5. `driftState === 'clean'` — the code did not move: `nextStatus` preserves `status`
  *      VERBATIM (including `verified (user-waived)` — decision 13's waiver is not upgraded to a
- *      bare `verified` just because a later pass re-confirmed no code changed), marker cleared,
- *      and a re-verification stamp with no code change is recorded (decision 11).
+ *      bare `verified` just because a later pass re-confirmed no code changed), and the
+ *      marker is cleared.
  */
 export function computeRepairGate(input: {
   status: string;
@@ -992,7 +1023,6 @@ export function computeRepairGate(input: {
     return {
       disposition: 'unknown-drift',
       clearMarker: false,
-      reverifyStamp: false,
       reason:
         'drift-check could not determine whether this chunk\'s code moved (state: unknown) — ' +
         'the playtest-gate decision is deferred until code movement can be resolved. Never ' +
@@ -1004,7 +1034,6 @@ export function computeRepairGate(input: {
     return {
       disposition: 'not-applicable',
       clearMarker: false,
-      reverifyStamp: false,
       reason: 'This chunk was not flagged rules-stale — there is nothing to repair-gate.',
     };
   }
@@ -1013,7 +1042,6 @@ export function computeRepairGate(input: {
     return {
       disposition: 'not-applicable',
       clearMarker: false,
-      reverifyStamp: false,
       reason: `Status "${status}" has no playtest gate to re-open or close — this chunk was never verified.`,
     };
   }
@@ -1023,7 +1051,6 @@ export function computeRepairGate(input: {
       disposition: 'reopen-playtest',
       nextStatus: 'built',
       clearMarker: true,
-      reverifyStamp: false,
       reason:
         `This chunk's code changed since it was last verified (drift-check: drifted) — the ` +
         `playtest gate re-opens; status moves to "built" (the code exists and passes automated ` +
@@ -1037,11 +1064,9 @@ export function computeRepairGate(input: {
     disposition: 'close-without-replaytest',
     nextStatus: status,
     clearMarker: true,
-    reverifyStamp: true,
     reason:
       `This chunk's code did not change (drift-check: clean) — closes without re-playtesting; ` +
-      `status "${status}" is preserved verbatim (a waiver, if any, is not upgraded) and a ` +
-      `re-verification with no code change is stamped into "## Verified Against".`,
+      `status "${status}" is preserved verbatim (a waiver, if any, is not upgraded).`,
   };
 }
 
@@ -1114,15 +1139,15 @@ function emptyDispositionCounts(): Record<RepairGateDisposition, number> {
 function printImpactHumanReport(result: VerifyImpactStatusResult): void {
   const { staleFraction, staleSlugs, dispositionCounts, contradictionsPending, entries } = result;
 
-  console.log(chalk.green(`✓ Verify-impact status — run ${result.runId}`));
-  console.log(`  ${chalk.gray('rules-stale:')} ${staleFraction.stale} of ${staleFraction.total} chunks rules-stale`);
+  console.log(styleText('green', `✓ Verify-impact status — run ${result.runId}`));
+  console.log(`  ${styleText('gray', 'rules-stale:')} ${staleFraction.stale} of ${staleFraction.total} chunks rules-stale`);
   if (staleSlugs.length > 0) {
     // Decision 15: EVERY stale slug, no cap, no "and N more".
-    console.log(`  ${chalk.yellow('stale chunks:')} ${staleSlugs.join(', ')}`);
+    console.log(`  ${styleText('yellow', 'stale chunks:')} ${staleSlugs.join(', ')}`);
   }
   if (contradictionsPending.length > 0) {
     console.log(
-      `  ${chalk.yellow('contradictions pending adjudication:')} ${contradictionsPending.join(', ')}`,
+      `  ${styleText('yellow', 'contradictions pending adjudication:')} ${contradictionsPending.join(', ')}`,
     );
   }
 
@@ -1159,21 +1184,8 @@ export async function verifyImpactStatusCommand(
 ): Promise<VerifyImpactStatusResult> {
   const projectDir = resolve(options.project ?? process.cwd());
 
-  const classifyStatus = await verifyClassifyStatusCommand({
-    project: projectDir,
-    runId: options.runId,
-    json: false,
-    quiet: true,
-  });
-  const runId = classifyStatus.runId;
-
-  const [driftResult, provenanceResult] = await Promise.all([
-    driftCheckCommand({ project: projectDir, json: false, quiet: true }),
-    chunkProvenanceStatusCommand({ project: projectDir, json: false, quiet: true }),
-  ]);
-
-  const driftBySlug = new Map(driftResult.chunks.map((c) => [c.chunk, c] as const));
-  const statusBySlug = new Map(provenanceResult.chunks.map((c) => [c.slug, c.status] as const));
+  const { classifyStatus, runId, contradictions } = await readRunContradictions(projectDir, options.runId);
+  const { driftBySlug, statusBySlug } = await readChunkState(projectDir);
 
   const warnings = [...classifyStatus.warnings];
   const entries: ImpactMapEntry[] = [];
@@ -1209,16 +1221,6 @@ export async function verifyImpactStatusCommand(
   const dispositionCounts = emptyDispositionCounts();
   for (const e of entries) dispositionCounts[e.gate.disposition]++;
 
-  const ledgerFile = ledgerFilePath(projectDir, runId);
-  const relLedgerPath = relative(projectDir, ledgerFile);
-  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
-  const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
-  const { adjudications } = resolveLedgerState(lines);
-  const contradictions = collectContradictions({
-    classifications: classifyStatus.classified,
-    adjudications,
-    chunkVerdicts: classifyStatus.chunkVerdicts,
-  });
   const contradictionsPending = contradictions
     .filter((c) => c.adjudication !== 'resolved')
     .map((c) => c.pairId);
@@ -1257,6 +1259,39 @@ export interface VerifyImpactApplyResult {
   warnings: string[];
 }
 
+/** The blocked result `verify-impact-apply` returns, writing nothing, with the command to run per pair. */
+function refuseApply(
+  runId: string,
+  pendingPairs: string[],
+  warnings: string[],
+  json: boolean | undefined,
+  reason: string,
+  flag: string,
+  command: string,
+): VerifyImpactApplyResult {
+  const result: VerifyImpactApplyResult = {
+    runId,
+    blocked: true,
+    pendingPairs,
+    marked: [],
+    skippedTailEntries: [],
+    warnings,
+  };
+  if (json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+  console.log(
+    styleText('yellow',
+      `⚠ ${pendingPairs.length} ${reason}.\n` +
+        pendingPairs
+          .map((p) => `    boardsmith ${command} --run-id ${runId} --pair-id ${p} ${flag} ...`)
+          .join('\n'),
+    ),
+  );
+  return result;
+}
+
 /**
  * `boardsmith verify-impact-apply` — VERIFY-05's write orchestration: the staleness write,
  * refusing structurally while any contradiction is un-adjudicated.
@@ -1266,6 +1301,8 @@ export interface VerifyImpactApplyResult {
  * gate to the write it guards).
  *
  * Sequence (`build/ask.md`'s Gate-Before-Write applied to a CLI):
+ *   0. Any pair still in `pendingPairs` blocks the ENTIRE write (#830): a pair classified later
+ *      could come back cosmetic, and nothing clears a marker from a chunk that is no longer stale.
  *   1. Resolve the run, compute `collectContradictions`. Any `adjudication === 'pending'` blocks
  *      the ENTIRE write — nothing is touched, and the result names every pending pair plus the
  *      exact next command (decision 6 — the gate fires BEFORE any staleness write).
@@ -1289,69 +1326,39 @@ export async function verifyImpactApplyCommand(
 ): Promise<VerifyImpactApplyResult> {
   const projectDir = resolve(options.project ?? process.cwd());
 
-  const classifyStatus = await verifyClassifyStatusCommand({
-    project: projectDir,
-    runId: options.runId,
-    // json: false — this is an internal composition call. verifyClassifyStatusCommand's own
-    // json:true path prints its OWN JSON.stringify(result) to stdout as a side effect
-    // (verify-classify.ts's convention), independent of whatever this caller's own --json
-    // handling does below. Passing json:true here would print a second, unrelated top-level
-    // JSON object ahead of this command's own result on every invocation (found live while
-    // producing 175-PROOF.md's real verify-impact-gate --json output: stdout contained two
-    // concatenated JSON objects instead of one, breaking a real caller's JSON.parse(stdout)).
-    json: false,
-  });
-  const runId = classifyStatus.runId;
-
-  const ledgerFile = ledgerFilePath(projectDir, runId);
-  const relLedgerPath = relative(projectDir, ledgerFile);
-  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
-  const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
-  const { adjudications } = resolveLedgerState(lines);
-
-  const contradictions = collectContradictions({
-    classifications: classifyStatus.classified,
-    adjudications,
-    chunkVerdicts: classifyStatus.chunkVerdicts,
-  });
+  const { classifyStatus, runId, ledgerFile, relLedgerPath, adjudications, contradictions } = await readRunContradictions(
+    projectDir,
+    options.runId,
+  );
   const pendingContradictions = contradictions.filter((c) => c.adjudication === 'pending');
 
-  if (pendingContradictions.length > 0) {
-    const pendingPairs = pendingContradictions.map((c) => c.pairId);
-    const result: VerifyImpactApplyResult = {
+  if (classifyStatus.pendingPairs.length > 0) {
+    return refuseApply(
       runId,
-      blocked: true,
-      pendingPairs,
-      marked: [],
-      skippedTailEntries: [],
-      warnings: classifyStatus.warnings,
-    };
-    if (options.json) {
-      console.log(JSON.stringify(result, null, 2));
-      return result;
-    }
-    console.log(
-      chalk.yellow(
-        `⚠ ${pendingPairs.length} contradictory finding(s) still pending adjudication — writes ` +
-          `nothing until every one is resolved.\n` +
-          pendingPairs
-            .map(
-              (p) =>
-                `    boardsmith verify-impact-adjudicate --run-id ${runId} --pair-id ${p} ` +
-                `--outcome resolved|UNADJUDICATED ...`,
-            )
-            .join('\n'),
-      ),
+      classifyStatus.pendingPairs,
+      classifyStatus.warnings,
+      options.json,
+      'pair(s) not yet classified — writes nothing until every pair has a verdict. Classify ' +
+        'each, then run verify-impact-apply again',
+      '--label cosmetic|sharper|contradictory',
+      'verify-classify-record',
     );
-    return result;
   }
 
-  const [driftResult, provenanceResult] = await Promise.all([
-    driftCheckCommand({ project: projectDir, json: false }),
-    chunkProvenanceStatusCommand({ project: projectDir, json: false }),
-  ]);
-  const driftBySlug = new Map(driftResult.chunks.map((c) => [c.chunk, c] as const));
-  const statusBySlug = new Map(provenanceResult.chunks.map((c) => [c.slug, c.status] as const));
+  if (pendingContradictions.length > 0) {
+    return refuseApply(
+      runId,
+      pendingContradictions.map((c) => c.pairId),
+      classifyStatus.warnings,
+      options.json,
+      'contradictory finding(s) still pending adjudication — writes nothing until every one is ' +
+        'resolved',
+      '--outcome resolved|UNADJUDICATED',
+      'verify-impact-adjudicate',
+    );
+  }
+
+  const { driftBySlug, statusBySlug } = await readChunkState(projectDir);
 
   const adjudicationByPairId = new Map(adjudications.map((a) => [a.pairId, a] as const));
   const classificationByPairId = new Map(classifyStatus.classified.map((c) => [c.pairId, c] as const));
@@ -1424,9 +1431,10 @@ export async function verifyImpactApplyCommand(
 
     // Ledger append AFTER this chunk's writes land (decision 17) — a crash leaves a chunk either
     // fully-written-and-recorded or not recorded, never a half-written chunk falsely recorded.
-    const currentLedgerText = await fs.readFile(ledgerFile, 'utf-8');
-    const newLedgerText = appendLedgerLine(currentLedgerText, relLedgerPath, JSON.stringify(impactRecord));
-    await atomicWriteFile(ledgerFile, newLedgerText);
+    await withLedgerLock(ledgerFile, async () => {
+      const currentLedgerText = await fs.readFile(ledgerFile, 'utf-8');
+      await atomicWriteFile(ledgerFile, appendLedgerLine(currentLedgerText, relLedgerPath, JSON.stringify(impactRecord)));
+    });
 
     marked.push({
       slug: verdict.slug,
@@ -1449,9 +1457,9 @@ export async function verifyImpactApplyCommand(
     return result;
   }
 
-  console.log(chalk.green(`✓ Marked ${marked.length} chunk(s) rules-stale — run ${runId}`));
+  console.log(styleText('green', `✓ Marked ${marked.length} chunk(s) rules-stale — run ${runId}`));
   if (skippedTailEntries.length > 0) {
-    console.log(`  ${chalk.yellow('skipped (sketch-level tail entries):')} ${skippedTailEntries.join(', ')}`);
+    console.log(`  ${styleText('yellow', 'skipped (sketch-level tail entries):')} ${skippedTailEntries.join(', ')}`);
   }
   return result;
 }

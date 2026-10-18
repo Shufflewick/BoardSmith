@@ -88,7 +88,7 @@ describe('ingest-archive — archiving', () => {
     await fs.mkdir(project, { recursive: true });
     await expect(
       ingestArchiveCommand(join(dir, 'nope.pdf'), { project, json: true }),
-    ).rejects.toThrow(/not found or unreadable/);
+    ).rejects.toThrow(/not found/);
     // Critically: no INDEX.md claiming provenance for a file that was never archived.
     await expect(fs.access(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'))).rejects.toThrow();
   });
@@ -99,6 +99,41 @@ describe('ingest-archive — archiving', () => {
     await expect(ingestArchiveCommand(sourcePath, { project, json: true })).rejects.toThrow(
       /already exists .* and differs/,
     );
+  });
+
+  it('refuses, naming the file, when the archived copy cannot be read, and leaves it as it was (#1110)', async () => {
+    const project = await run();
+    const archived = join(project, DESIGN_DIR, 'rulebook', 'source', 'src-rules.pdf');
+    await fs.writeFile(archived, 'different bytes');
+    await fs.chmod(archived, 0o200);
+    try {
+      await expect(ingestArchiveCommand(sourcePath, { project, json: true })).rejects.toThrow(`Could not read ${archived} (EACCES)`);
+    } finally {
+      await fs.chmod(archived, 0o644);
+    }
+    expect(await fs.readFile(archived, 'utf-8')).toBe('different bytes');
+  });
+
+  it('refuses, naming the file, when INDEX.md cannot be read, before archiving anything (#1110)', async () => {
+    const project = join(dir, 'game');
+    const index = join(project, DESIGN_DIR, 'rulebook', 'INDEX.md');
+    await fs.mkdir(index, { recursive: true });
+    await expect(ingestArchiveCommand(sourcePath, { project, json: true })).rejects.toThrow(`Could not read ${index} (EISDIR)`);
+    await expect(fs.readdir(join(project, DESIGN_DIR, 'rulebook'))).resolves.toEqual(['INDEX.md']);
+  });
+
+  it('names a rulebook it cannot read rather than calling it missing (#1110)', async () => {
+    const project = join(dir, 'game');
+    const folder = join(dir, 'folder.pdf');
+    await fs.mkdir(folder);
+    await expect(ingestArchiveCommand(folder, { project, json: true })).rejects.toThrow(`Could not read ${folder} (EISDIR)`);
+  });
+
+  it('ingest-gaps names an INDEX.md it cannot read rather than calling it missing (#1110)', async () => {
+    const project = join(dir, 'game');
+    const index = join(project, DESIGN_DIR, 'rulebook', 'INDEX.md');
+    await fs.mkdir(index, { recursive: true });
+    await expect(ingestGapsCommand({ project, quiet: true, skipRelabel: true })).rejects.toThrow(`Could not read ${index} (EISDIR)`);
   });
 
   it('is idempotent when the archived copy is byte-identical', async () => {
@@ -238,6 +273,60 @@ describe('ingest-archive — multiple sources (177-19)', () => {
     const second = JSON.parse(firstOut[1]);
     expect(first.recordedAsAdditionalSource).toBe(false);
     expect(second.recordedAsAdditionalSource).toBe(true);
+  });
+
+  describe('archived file names with spaces or pipes (#823)', () => {
+    const indexOf = (project: string) =>
+      fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'), 'utf-8');
+
+    it('a primary whose name has a space stays the primary when a second source is archived', async () => {
+      const spacedPath = join(dir, 'My Rules.pdf');
+      await fs.writeFile(spacedPath, RULES_BYTES);
+      const project = join(dir, 'spaced');
+      await fs.mkdir(project, { recursive: true });
+      await ingestArchiveCommand(spacedPath, { project, json: true });
+      await ingestArchiveCommand(cardsPath, { project, json: true });
+
+      const index = await indexOf(project);
+      expect(/^Source:\s*(.*)$/m.exec(index)![1].trim()).toBe('rulebook/source/My Rules.pdf');
+      expect(/^Source hash:\s*(.*)$/m.exec(index)![1].trim()).toBe(RULES_HASH);
+      expect(parseAdditionalSources(index)).toEqual([
+        { path: 'rulebook/source/cards.pdf', sourceHash: CARDS_HASH },
+      ]);
+    });
+
+    it('re-running on an unchanged primary whose name has a space keeps its Transcribed date', async () => {
+      const spacedPath = join(dir, 'My Rules.pdf');
+      await fs.writeFile(spacedPath, RULES_BYTES);
+      const project = join(dir, 'spaced-rerun');
+      await fs.mkdir(project, { recursive: true });
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        vi.setSystemTime(new Date('2026-09-23T12:00:00'));
+        await ingestArchiveCommand(spacedPath, { project, json: true });
+        const before = await indexOf(project);
+        vi.setSystemTime(new Date('2026-09-24T12:00:00'));
+        await ingestArchiveCommand(spacedPath, { project, json: true });
+        expect(await indexOf(project)).toBe(before);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('an additional source whose name has a pipe keeps the table intact and reads back unchanged', async () => {
+      const pipedPath = join(dir, 'cards|v2.pdf');
+      await fs.writeFile(pipedPath, CARDS_BYTES);
+      const project = join(dir, 'piped');
+      await fs.mkdir(project, { recursive: true });
+      await ingestArchiveCommand(rulesPath, { project, json: true, additionalSource: [pipedPath] });
+      await ingestArchiveCommand(rulesPath, { project, json: true, additionalSource: [pipedPath] });
+
+      const index = await indexOf(project);
+      expect(index).toContain('| rulebook/source/cards\\|v2.pdf |');
+      expect(parseAdditionalSources(index)).toEqual([
+        { path: 'rulebook/source/cards|v2.pdf', sourceHash: CARDS_HASH },
+      ]);
+    });
   });
 });
 
@@ -424,7 +513,7 @@ describe('ingest-archive --additional-source (#305)', () => {
 
   it('refuses an unreadable additional source BEFORE archiving anything', async () => {
     expect(await refusedBeforeWriting([join(dir, 'missing-reference.md')])).toMatch(
-      /Additional source not found or unreadable: .*missing-reference\.md/,
+      /Additional source not found: .*missing-reference\.md/,
     );
   });
 
@@ -683,6 +772,17 @@ describe('v4.9 — machine-owned gaps section and ingest-check (170-PROOF-RUN-2)
     await expect(ingestGapsCommand({ project, quiet: true })).rejects.toThrow(
       /ingest-archive/,
     );
+  });
+
+  it('leaves INDEX.md untouched when the gaps section is already current (#829)', async () => {
+    const project = await withSlices(['Named-but-undefined (p.1): x']);
+    await ingestGapsCommand({ project, quiet: true });
+    const indexPath = join(project, DESIGN_DIR, 'rulebook', 'INDEX.md');
+    const past = new Date('2020-01-01T00:00:00Z');
+    await fs.utimes(indexPath, past, past);
+    const result = await ingestGapsCommand({ project, quiet: true });
+    expect(result.changed).toBe(false);
+    expect((await fs.stat(indexPath)).mtime.getTime()).toBe(past.getTime());
   });
 
   describe('ingest-check', () => {
@@ -1151,6 +1251,17 @@ describe('ingest-archive — existing INDEX.md adoption (decision 1b)', () => {
     const matches = index.match(/^Source:/gm) ?? [];
     expect(matches).toHaveLength(1);
     expect(/^Source:\s*(.*)$/m.exec(index)![1].trim()).toBe('rulebook/source/rules.pdf');
+  });
+
+  it('wrap-safe even when the wrapped prose starts with the archive path (#823)', async () => {
+    const prose = 'rulebook/source/rules.pdf (2 pages). This index is built from the';
+    const project = await writePreProvenanceIndex(dir, {
+      sourceLines: [`Source: ${prose}`, WRAPPED_SOURCE_LINE2],
+    });
+    await ingestArchiveCommand(rulesPdfPath, { project, json: true });
+    const index = await readIndex(project);
+    expect(/^Source:\s*(.*)$/m.exec(index)![1].trim()).toBe('rulebook/source/rules.pdf');
+    expect(index).toContain(`\n${prose}\n${WRAPPED_SOURCE_LINE2}\n`);
   });
 
   it('B10 payoff check: computeVerificationScope reports full for the repaired fixture', async () => {

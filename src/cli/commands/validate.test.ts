@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stripVTControlCharacters } from 'node:util';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   ALLOWED_TOP_LEVEL_KEYS,
@@ -24,6 +25,7 @@ import {
   successGuidance,
   typeScriptFailureDetails,
   validateProject,
+  listVitestFiles,
 } from './validate.js';
 import { ENGINE_REVISION } from '../../contract/index.js';
 import {
@@ -251,6 +253,14 @@ describe('validate.ts checkMetadataIssues', () => {
     expect(issues[0]).toContain('defineGameUIs');
   });
 
+  // Issue 930: nothing ever read `scoreboard`, so a leftover one is refused with a pointed message.
+  it("rejects a leftover 'scoreboard' key and says to remove it", () => {
+    const issues = checkMetadataIssues({ ...validConfig(), scoreboard: { stats: ['score'] } });
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain("Unknown key 'scoreboard'");
+    expect(issues[0]).toContain('Remove this key from boardsmith.json');
+  });
+
   it('passes a config carrying the editor $schema key (CR-02 regression)', () => {
     const issues = checkMetadataIssues({
       $schema: 'https://boardsmith.io/schemas/boardsmith.schema.json',
@@ -470,6 +480,22 @@ describe('validateBundleSize measures the real publish zip, not the raw dist (WR
     expect(passed).toBe(false);
     expect(details).toMatch(/file ceiling/i);
   }, 60_000);
+
+  it('WARNS, never passes, when there is no build to measure (#845)', async () => {
+    const result = await validateBundleSize(tempTree('bs-bundle-size-'), false);
+    expect(result).toMatchObject({ passed: false, severity: 'warning' });
+    expect(result.message).toMatch(/not measured/i);
+  });
+
+  it('WARNS, never passes, when the built dist cannot be packaged to measure (#845)', async () => {
+    const cwd = tempTree('bs-bundle-size-');
+    makeDist(cwd, 16);
+    rmSync(join(cwd, 'dist', 'manifest.json'));
+    const result = await validateBundleSize(cwd, false);
+    expect(result).toMatchObject({ passed: false, severity: 'warning' });
+    expect(result.message).toMatch(/not measured/i);
+    expect((result.details ?? []).join('\n')).toMatch(/not measurable/);
+  });
 });
 
 /**
@@ -679,6 +705,20 @@ describe('validate.ts validateAssetPaths — declared manifest assets must resol
 
     expect(result.passed).toBe(false);
     expect((result.details ?? []).join('\n')).toContain('/cards/');
+  });
+
+  it('matches a public folder whose name has regex characters literally (#846)', async () => {
+    mkdirSync(join(projectDir, 'public', 'art (v2)'), { recursive: true });
+    mkdirSync(join(projectDir, 'public', 'a.b'), { recursive: true });
+    const result = await scanShippedFile(
+      join('data', 'cards.json'),
+      JSON.stringify([{ image: '/art (v2)/one.png', other: '/axb/two.png' }]),
+    );
+
+    expect(result.passed).toBe(false);
+    const details = (result.details ?? []).join('\n');
+    expect(details).toContain('"/art (v2)/..."');
+    expect(details).not.toContain('a.b');
   });
 });
 
@@ -980,17 +1020,17 @@ describe('validateRequiredFiles — a world has a different entry point (#168)',
 
   it('passes a table game with the table entry point', async () => {
     writeTableUi();
-    expect((await validateRequiredFiles(dir, false)).passed).toBe(true);
+    expect((await validateRequiredFiles(dir, false, {})).passed).toBe(true);
   });
 
   it('passes a world with the world entry point and no table half', async () => {
     writeWorldUi();
-    expect((await validateRequiredFiles(dir, true)).passed).toBe(true);
+    expect((await validateRequiredFiles(dir, true, {})).passed).toBe(true);
   });
 
   it('fails a world that declares one and has no world surface', async () => {
     writeTableUi();
-    const result = await validateRequiredFiles(dir, true);
+    const result = await validateRequiredFiles(dir, true, {});
     expect(result.passed).toBe(false);
     expect(result.details).toContain('world.html');
     expect(result.details).toContain('src/rules/world.ts');
@@ -998,27 +1038,42 @@ describe('validateRequiredFiles — a world has a different entry point (#168)',
 
   it('still fails a table game missing its UI registry', async () => {
     writeFileSync(join(dir, 'index.html'), '');
-    const result = await validateRequiredFiles(dir, false);
+    const result = await validateRequiredFiles(dir, false, {});
     expect(result.passed).toBe(false);
     expect(result.details).toEqual(['src/ui/uis.ts', 'src/ui/App.vue']);
   });
 
   it('asks a table that lost index.html but kept other UI files for its page and shell (#556)', async () => {
     writeFileSync(join(dir, 'src', 'ui', 'uis.ts'), '');
-    const result = await validateRequiredFiles(dir, false);
+    const result = await validateRequiredFiles(dir, false, {});
     expect(result.passed).toBe(false);
     expect(result.details).toEqual(['index.html', 'src/ui/App.vue']);
   });
 
   it('asks a table with no UI yet (no index.html, #556) only for its rules', async () => {
-    expect(await validateRequiredFiles(dir, false)).toMatchObject({ passed: true, details: [] });
+    expect(await validateRequiredFiles(dir, false, {})).toMatchObject({ passed: true, details: [] });
     rmSync(join(dir, 'src', 'rules', 'game.ts'));
-    expect((await validateRequiredFiles(dir, false)).details).toEqual(['src/rules/game.ts']);
+    expect((await validateRequiredFiles(dir, false, {})).details).toEqual(['src/rules/game.ts']);
+  });
+
+  it('reads the rules from paths.rules, as build does, and names the resolved paths when missing (#843)', async () => {
+    const config = { paths: { rules: 'rules' } };
+    rmSync(join(dir, 'src', 'rules'), { recursive: true });
+    expect((await validateRequiredFiles(dir, false, config)).details).toEqual(['rules/index.ts', 'rules/game.ts']);
+    mkdirSync(join(dir, 'rules'));
+    for (const file of ['index.ts', 'game.ts']) writeFileSync(join(dir, 'rules', file), '');
+    expect(await validateRequiredFiles(dir, false, config)).toMatchObject({ passed: true, details: [] });
+  });
+
+  it("looks for a world's world.ts in paths.rules too (#843)", async () => {
+    writeWorldUi();
+    const result = await validateRequiredFiles(dir, true, { paths: { rules: 'rules' } });
+    expect(result.details).toEqual(['rules/index.ts', 'rules/game.ts', 'rules/world.ts']);
   });
 });
 
 describe("#196: what validation tells an author to do next", () => {
-  /** Chalk may or may not colour, depending on where the suite runs. */
+  /** styleText may or may not colour, depending on where the suite runs. */
   const plain = (isWorld: boolean, warnings = 0): string =>
     // eslint-disable-next-line no-control-regex
     successGuidance(isWorld, warnings).join('\n').replace(/\u001B\[[0-9;]*m/g, '');
@@ -1125,6 +1180,8 @@ describe('remote image sources must be declared before they are used (#370)', ()
     for (const [rel, contents] of [
       ['dist/ui/assets/app.css', `.board { background: url(${REMOTE}); }`],
       ['dist/rules/rules.js', `const sprite = "${REMOTE}";`],
+      // Build output has nothing to skip, so a dot folder is read too (#1048).
+      ['dist/ui/.vite/chunk.js', `const sprite = "${REMOTE}";`],
     ] as const) {
       const cwd = project({ 'boardsmith.json': '{}', [rel]: contents });
       const result = await validateAssetPaths(cwd);
@@ -1141,6 +1198,78 @@ describe('remote image sources must be declared before they are used (#370)', ()
     const result = await validateAssetPaths(cwd);
     const lines = (result.details ?? []).filter((line) => line.includes(REMOTE));
     expect(lines).toHaveLength(1);
+  });
+});
+
+describe('absolute asset paths are found in subfolders too (#1111)', () => {
+  it.each([
+    ['data/sub/x.json', '{ "image": "/cards/ace.png" }'],
+    ['dist/ui/assets/chunks/board.js', 'const src = "/cards/ace.png";'],
+  ])('reports one in %s', async (rel, contents) => {
+    const cwd = tempTree('bs-abs-paths-');
+    mkdirSync(join(cwd, 'public', 'cards'), { recursive: true });
+    mkdirSync(join(cwd, rel, '..'), { recursive: true });
+    writeFileSync(join(cwd, rel), contents);
+    const result = await validateAssetPaths(cwd);
+    expect(result.passed).toBe(false);
+    expect((result.details ?? []).join('\n')).toContain(`${rel}: absolute path "/cards/..." found`);
+  });
+});
+
+/** Runs validateProject in `cwd` with a passing type check, and returns what it threw and printed. */
+async function validatePrinted(cwd: string): Promise<{ thrown: unknown; printed: string }> {
+  const lines: string[] = [];
+  const log = vi.spyOn(console, 'log').mockImplementation((line?: unknown) => void lines.push(String(line)));
+  try {
+    const typeCheck = { result: { name: 'TypeScript', passed: true, message: '' }, programFiles: [], compilerReport: [] };
+    await validateProject(cwd, { typeCheck });
+    return { thrown: undefined, printed: stripVTControlCharacters(lines.join('\n')) };
+  } catch (thrown) {
+    return { thrown, printed: stripVTControlCharacters(lines.join('\n')) };
+  } finally {
+    log.mockRestore();
+  }
+}
+
+describe('a linked folder in dist/ or data/ fails validate and every check still prints (#1114)', () => {
+  /** A built table game, with a folder `link` made at `linkAt` (relative to the project). */
+  function projectWithLinkedFolder(linkAt: string): { cwd: string; link: string } {
+    const cwd = tempTree('bs-validate-linked-folder-');
+    writeFileSync(join(cwd, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table', playerCount: { min: 2, max: 4 } }));
+    mkdirSync(join(cwd, 'dist', 'rules'), { recursive: true });
+    mkdirSync(join(cwd, 'dist', 'ui'), { recursive: true });
+    mkdirSync(join(cwd, 'data'), { recursive: true });
+    writeFileSync(join(cwd, 'dist', 'manifest.json'), JSON.stringify({ name: 'fixture', backend: 'table', playerCount: { min: 2, max: 4 } }));
+    writeFileSync(join(cwd, 'dist', 'rules', 'rules.js'), 'module.exports = {};\n');
+    writeFileSync(join(cwd, 'dist', 'ui', 'index.html'), '<!DOCTYPE html><html></html>');
+    mkdirSync(join(cwd, 'elsewhere'));
+    writeFileSync(join(cwd, 'elsewhere', 'card.png'), '');
+    const link = join(cwd, linkAt);
+    symlinkSync(join(cwd, 'elsewhere'), link, 'dir');
+    return { cwd, link };
+  }
+
+  const linkMessage = (link: string) =>
+    `${link} is a link to a folder, and links are followed only to files. Replace the link with a copy of what it should point to.`;
+
+  it('fails Bundle Size, not warns, for a linked folder at the top of dist/', async () => {
+    const { cwd, link } = projectWithLinkedFolder('dist/cards');
+    const { thrown, printed } = await validatePrinted(cwd);
+    expect(thrown).toBeInstanceOf(Error);
+    expect(printed).toContain('Bundle Size: FAIL');
+    expect(printed).toContain(linkMessage(link));
+    expect(printed).not.toContain('Run `boardsmith build` to measure it now');
+    expect(printed).toContain('Required Files:');
+  });
+
+  it.each(['dist/ui/cards', 'dist/rules/cards', 'data/cards'])('fails Asset Paths for a linked folder at %s', async (linkAt) => {
+    const { cwd, link } = projectWithLinkedFolder(linkAt);
+    const { thrown, printed } = await validatePrinted(cwd);
+    expect(thrown).toBeInstanceOf(Error);
+    expect(printed).toContain('Asset Paths: FAIL');
+    expect(printed).toContain(linkMessage(link));
+    expect(printed).toContain('Bundle Size:');
+    expect(printed).toContain('Required Files:');
   });
 });
 
@@ -1214,5 +1343,25 @@ describe('a project with no vitest is told to install it, never to run npx (#595
     expect(output).toContain('vitest is not installed in this project.');
     expect(output).toContain('npm install -D vitest');
     expect(output).not.toContain('npx vitest');
+  });
+});
+
+describe('listVitestFiles — only real test files, whatever else vitest prints (#846)', () => {
+  it('ignores a line a config prints to stdout', async () => {
+    const dir = tempTree('boardsmith-vitest-list-');
+    symlinkSync(fileURLToPath(new URL('../../../node_modules', import.meta.url)), join(dir, 'node_modules'), 'dir');
+    writeFileSync(join(dir, 'package.json'), '{"type":"module"}\n');
+    writeFileSync(
+      join(dir, 'vitest.config.mjs'),
+      "console.log('hello from the config');\nexport default { test: { include: ['tests/**/*.test.ts'] } };\n",
+    );
+    mkdirSync(join(dir, 'tests'));
+    writeFileSync(join(dir, 'tests', 'a.test.ts'), "import { it } from 'vitest';\nit('a', () => {});\n");
+
+    const listing = await listVitestFiles(dir);
+
+    expect(listing.ok).toBe(true);
+    expect(listing.files).toHaveLength(1);
+    expect(listing.files[0]).toMatch(/tests\/a\.test\.ts$/);
   });
 });

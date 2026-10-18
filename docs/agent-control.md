@@ -461,11 +461,18 @@ person is one browser: the dev host knows each by the id the page keeps in
 a private window is another. A seat held by someone who stepped away still
 counts until they leave it. While two or more people hold seats, every
 `debug:*` op (`debug:history`, `debug:state-at`, `debug:state-diff`,
-`debug:action-traces`, `debug:flow-state`, `debug:rewind`, the deck edits and
-`debug:logs`) is refused for everyone, and the Debug panel is hidden. It comes
-back as soon as only one person is seated. `boardsmith dev --debug` keeps it on
-for a trusted table. Whatever the setting, a debug op that shows a seat's view
-always shows the asking seat's own.
+`debug:action-traces`, `debug:flow-state`, `debug:custom-data`, `debug:rewind`,
+the deck edits, `debug:deck-view`, `debug:deck-view-at` and `debug:logs`) is refused for everyone, and
+the Debug panel is hidden. It comes back as soon as only one person is seated.
+`boardsmith dev --debug` keeps it on for a trusted table. The seat-view ops
+(`debug:state-at`, `debug:state-diff`, `debug:action-traces`,
+`debug:flow-state`, `debug:custom-data`) always show the asking seat's own view.
+`debug:deck-view` does not: it returns the whole table with nothing hidden, so
+the Decks tab can list and edit face-down cards by their real ids (#898).
+`debug:deck-view-at` returns the same unfiltered table as it stood after a past
+action, for the Decks tab while time travelling (#1071). With
+`--debug`, that means every seated person can see every face-down card and
+every other player's hand.
 
 `debugToggle`/`uiSwitch` are host-level relay-only fan-out ops — like
 `hello`/`join`/`leave`/`restart`/`follow`, they have no per-caller reply to

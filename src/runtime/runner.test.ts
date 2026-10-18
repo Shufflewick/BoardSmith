@@ -615,7 +615,7 @@ describe('GameRunner', () => {
           gameType: 'test-game',
           gameOptions: { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'replay-test' },
         },
-        runner1.actionHistory
+        runner1
       );
 
       // Should have same state
@@ -863,7 +863,7 @@ describe('GameRunner', () => {
 
     it('captures nothing at all when disabled, and says so when undo is attempted', () => {
       const snapshot = playedRunner(8, { enabled: false }).getSnapshot();
-      expect(snapshot.actionCheckpoints!.entries).toHaveLength(0);
+      expect(snapshot.actionCheckpoints).toBeUndefined();
       expect(GameRunner.fromCheckpoint(snapshot, 4, LongGame)).toBeNull();
       expect(describeCheckpointAbsence(snapshot.actionCheckpoints, 4, 'debug', 'turn')).toContain('enabled: false');
     });
@@ -886,12 +886,10 @@ describe('GameRunner', () => {
     });
 
     it('rebuilds its window at the current action count when a snapshot carries none', () => {
-      // A snapshot written before the window existed carries no usable window.
+      // A snapshot written with checkpoints disabled carries no window.
       // Restoring must not leave a hole per preceding action -- those would
       // serialize as nulls forever and read back as "missing", not "not kept".
-      const runner = playedRunner(6);
-      const snapshot = runner.getSnapshot();
-      delete (snapshot as { actionCheckpoints?: unknown }).actionCheckpoints;
+      const snapshot = playedRunner(6, { enabled: false }).getSnapshot();
 
       const restored = GameRunner.fromSnapshot(snapshot, LongGame);
       const next = restored.getSnapshot();
@@ -915,14 +913,13 @@ describe('GameRunner', () => {
         checkpoints: { enabled: false },
       });
       const next = restored.getSnapshot();
-      expect(next.actionCheckpoints!.entries).toHaveLength(0);
-      expect(next.actionCheckpoints!.baseIndex).toBe(12);
+      expect(next.actionCheckpoints).toBeUndefined();
 
-      // And it stays shed: every later round is emitted with an empty window,
+      // And it stays shed: every later round is emitted with no window,
       // so the emitted window is honest evidence of the policy in force rather
       // than of whatever policy last wrote the stored snapshot.
       expect(restored.performAction('pass', 1, {}).success).toBe(true);
-      expect(restored.getSnapshot().actionCheckpoints!.entries).toHaveLength(0);
+      expect(restored.getSnapshot().actionCheckpoints).toBeUndefined();
 
       // The state actually gets smaller, which is the point.
       expect(JSON.stringify(next).length).toBeLessThan(JSON.stringify(grown).length);

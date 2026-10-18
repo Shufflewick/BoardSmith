@@ -46,23 +46,35 @@ import {
 
 ## Examples
 
+The runner examples construct `MyGame`, a game class like this one. A real game also registers its elements, actions and flow; [Getting Started](../getting-started.md) builds one.
+
+<!-- typecheck: game src/game.ts -->
+```typescript
+import { Game } from 'boardsmith';
+
+export class MyGame extends Game<MyGame> {}
+```
+
 ### Using GameRunner
 
+<!-- typecheck: game src/run.ts -->
 ```typescript
 import { GameRunner } from 'boardsmith/runtime';
-import { MyGame } from './game';
+import { MyGame } from './game.js';
 
 // Create a game runner
 const runner = new GameRunner({
   GameClass: MyGame,
   gameType: 'my-game',
-  playerCount: 2,
-  playerNames: ['Alice', 'Bob'],
+  gameOptions: {
+    playerCount: 2,
+    playerNames: ['Alice', 'Bob'],
+  },
 });
 
 // Get current state
 const snapshot = runner.getSnapshot();
-console.log('Current player:', snapshot.flowState.currentPlayer);
+console.log('Current player:', snapshot.flowState?.currentPlayer);
 
 // Perform an action (actionName, player, args) -- player seats are 1-indexed
 const result = runner.performAction('move', 1, { from: 'a1', to: 'b2' });
@@ -147,15 +159,19 @@ isSerializedReference({ x: 1 }); // false
 
 ### Runner with Action History
 
+<!-- typecheck: game src/history.ts -->
 ```typescript
 import { GameRunner } from 'boardsmith/runtime';
+import { MyGame } from './game.js';
 
 const runner = new GameRunner({
   GameClass: MyGame,
   gameType: 'my-game',
-  playerCount: 2,
-  playerNames: ['Alice', 'Bob'],
-  seed: 'deterministic-seed',
+  gameOptions: {
+    playerCount: 2,
+    playerNames: ['Alice', 'Bob'],
+    seed: 'deterministic-seed',
+  },
 });
 
 // Perform a series of actions (actionName, player, args) -- player seats are 1-indexed
@@ -163,8 +179,8 @@ runner.performAction('draw', 1, {});
 runner.performAction('play', 1, { card: 'card-1' });
 runner.performAction('draw', 2, {});
 
-// Read the recorded action history (a public readonly field)
-console.log(`${runner.actionHistory.length} actions played`);
+// The action count, entries dropped by `checkpoints: { actionHistory: 'undo' }` included
+console.log(`${runner.actionCount} actions played`);
 
 // Capture the current state as a snapshot
 const snapshot = runner.getSnapshot();

@@ -10,6 +10,7 @@ import type { FlowState, Game, GameClass, AnimationEvent, PendingActionState } f
 import type { PlayerStateView } from '../engine/utils/index.js';
 import type { BotStrategy } from '../bot/index.js';
 import type { TutorialDefinition, TutorialStepView, Annotation } from '../engine/tutorial/types.js';
+import type { FollowUpOffer } from '../engine/action/types.js';
 import type { CheckpointPolicy, UndoPolicy, GameMetrics } from '../engine/index.js';
 import type { WorldDefinition } from '../world/definition.js';
 import type {
@@ -47,26 +48,7 @@ import { ErrorCode } from '../types/protocol.js';
 export { ErrorCode };
 
 // Re-export debug tracing types from engine for convenience
-export type { PickTrace, ConditionDetail } from '../engine/index.js';
-
-// Re-export repeating selection types from engine
-export type { PendingActionState, RepeatingSelectionState, RepeatConfig } from '../engine/index.js';
-
-import type { RefWithRole, FollowUpOffer } from '../engine/action/types.js';
-export type { RefWithRole };
-
-// Re-export tutorial types for consumers of the session surface
-export type {
-  TutorialDefinition,
-  TutorialStep,
-  TutorialGate,
-  TutorialGateAllowList,
-  TutorialGateCondition,
-  TutorialAdvanceCondition,
-  TutorialGateContext,
-  TutorialProgress,
-  TutorialStepView,
-} from '../engine/tutorial/types.js';
+export type { PickTrace } from '../engine/index.js';
 
 // ============================================
 // Game Class Types
@@ -143,15 +125,11 @@ export interface GameDefinition {
   /** Preset configurations for quick setup */
   presets?: GamePreset[];
   /**
-   * Code-declared color palette for this game's seats. The single
-   * source-of-truth entry shape ({id,hex,label}) also enforced by
-   * `boardsmith validate`'s `colorPalette` check — do not diverge from it.
-   *
-   * Dev (`boardsmith dev`) resolves the effective palette in this order:
-   * `gameDefinition.colorPalette` -> `boardsmith.json` `colorPalette` ->
-   * the engine's `DEFAULT_COLOR_PALETTE`. `publish` already writes
-   * `manifest.colorPalette` from its own source; this field unifies the
-   * game-authored declaration so dev matches what publish emits.
+   * Code-declared color palette for this game's seats, in the {id,hex,label}
+   * shape `boardsmith validate` enforces on `boardsmith.json`'s `colorPalette`.
+   * It is never published: the live lobby offers `boardsmith.json`'s
+   * `colorPalette`, else the engine's `DEFAULT_COLOR_PALETTE`, so
+   * `boardsmith dev` refuses to start when this differs from that.
    */
   colorPalette?: Array<{ id: string; hex: string; label: string }>;
   /**
@@ -173,7 +151,8 @@ export interface GameDefinition {
    *
    * ```ts
    * checkpoints: { max: 20 }   // also never more than 20; a longer turn's undo is refused
-   * checkpoints: { enabled: false }   // no undo, no time-travel, flat size
+   * checkpoints: { enabled: false }   // no undo, no time-travel
+   * checkpoints: { actionHistory: 'undo' }   // keep only the action history undo reads
    * ```
    *
    * See `docs/state-size.md`.
@@ -350,6 +329,11 @@ export interface PlayerGameState {
   /** Formatted game messages visible to this player */
   messages?: Array<{ text: string }>;
   /**
+   * This player's line number of `messages[0]`: how many of the lines it could
+   * see the game has pruned from the front of the log (#903). Absent while zero.
+   */
+  messageOffset?: number;
+  /**
    * How many checkpoint RESTORES (undo / rewind / host-driven restore) this
    * game's timeline has undergone (`runner.restoreEpoch`).
    *
@@ -521,6 +505,8 @@ export interface SerializedPendingActionState {
   conditionHeld?: boolean;
   picksOnOffer?: string[];
   stalePicks?: string[];
+  /** Persisted only: `pendingActionForSeat` leaves it out of what a seat is shown (#1144). */
+  branchesBeforePicks?: Record<number, string | null>;
 }
 
 /**
@@ -558,18 +544,6 @@ export interface SerializedFlowDebugInfo {
 export type { LobbyState, SlotStatus, LobbySlot, LobbyInfo };
 
 // ============================================
-// Session Types
-// ============================================
-
-// ============================================
-// Bot Types
-// ============================================
-
-// ============================================
-// Adapter Interfaces
-// ============================================
-
-// ============================================
 // Request/Response Types
 // ============================================
 
@@ -580,8 +554,3 @@ export type { WebSocketMessage };
 // The lobby request and response shapes are owned by ../types/protocol.js
 // (#375); the session serves them, so it hands out the protocol's own.
 export type { PlayerConfig, CreateGameRequest, ClaimSeatRequest, ClaimSeatResponse, JoinLobbyRequest, JoinLobbyResponse };
-
-// ============================================
-// Lobby Request/Response Types
-// ============================================
-

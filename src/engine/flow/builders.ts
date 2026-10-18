@@ -16,6 +16,7 @@ import type {
   TurnScope,
 } from './types.js';
 import { checkDeclaredTimeLimit } from './step-time-limit.js';
+import { SWITCH_DEFAULT_KEY } from './flow-navigation.js';
 
 /**
  * Create a sequence of steps executed in order
@@ -151,6 +152,9 @@ function defaultLoopBound(bound: Partial<LoopBound>): LoopBound {
  * ```
  */
 export function repeat<G extends Game = Game>(times: number, body: FlowNode<G>): FlowNode<G> {
+  if (!Number.isInteger(times) || times < 0) {
+    throw new Error(`repeat() needs a whole number of times, 0 or more, but got ${times}.`);
+  }
   return {
     type: 'repeat',
     config: {
@@ -388,6 +392,13 @@ export function switchOn<G extends Game = Game>(config: {
   cases: Record<string, FlowNode<G>>;
   default?: FlowNode<G>;
 }): FlowNode<G> {
+  if (Object.prototype.hasOwnProperty.call(config.cases, SWITCH_DEFAULT_KEY)) {
+    const label = config.name ? `switchOn "${config.name}"` : 'switchOn';
+    throw new Error(
+      `${label} has a case named "${SWITCH_DEFAULT_KEY}", the name a save uses for the default branch, ` +
+      `so a save in that case could not be told apart from one in the default branch. Rename the case.`
+    );
+  }
   return {
     type: 'switch',
     config: {

@@ -9,6 +9,7 @@ import {
   isPlayerElement,
   isPlayerIdentityAttribute,
   lookUpId,
+  ownVisibilityAllows,
   PILE_BRANCH,
   WITHHELD_PILE_BRANCH,
   readDynamicAttribute,
@@ -51,7 +52,7 @@ import {
   type VisibilityState,
 } from './visibility.js';
 import type { ActionDefinition, ActionResult, ActionTrace, ActionDebugInfo, PickTrace, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
-import { ActionExecutor, type PerformOptions } from '../action/action.js';
+import { ActionExecutor, type AcceptedArgs, type PerformOptions } from '../action/action.js';
 import { hasActionTemp, settingsForSeat } from '../action/helpers.js';
 import type { FlowDefinition, FlowState, FlowDebugInfo } from '../flow/types.js';
 import type { TutorialDefinition, TutorialProgress } from '../tutorial/types.js';
@@ -114,70 +115,7 @@ import { checkForVolatileState } from './volatile-state.js';
 import { PersistentMap } from './persistent-map.js';
 import { PERSIST_KEY, PERSIST_PRIVATE_KEY } from '../../persistence/persistence.js';
 import { ENGINE_OWNED_GAME_FIELDS, describeEngineFieldShadow } from './engine-owned-fields.js';
-
-/**
- * Default player color palette, used when a game doesn't pass `GameOptions.colors`.
- *
- * 16 colors, matching the platform's seat ceiling, so a game can declare any
- * supported player count without hand-supplying a palette. Seats are assigned in
- * order (seat 1 = index 0), and the first eight entries are unchanged from when
- * the palette stopped there — a game that already shipped keeps the colors its
- * players know.
- *
- * **Distinctness.** Measured, not eyeballed: pairwise CIEDE2000 (ΔE00) across all
- * 120 pairs. Normal vision min ΔE00 = 10.8, which is the pre-existing
- * `#f39c12`/`#e67e22` pair from the original eight — every pair involving a newly
- * added color is ≥ 12.4, so extending to 16 does not tighten the palette's
- * floor. Under simulated dichromacy the floors are lower (protanopia 4.7,
- * deuteranopia 3.7, tritanopia 0.0 for red-vs-pink), which is inherent to 16
- * categorical hues rather than to this particular choice — the original eight
- * already measured 8.9 / 6.1 / 2.7. Color is therefore never the sole carrier of
- * player identity: every entry also has a name in {@link DEFAULT_COLOR_LABELS},
- * surfaced as `player.colorLabel`.
- */
-export const DEFAULT_COLOR_PALETTE: readonly string[] = [
-  '#e74c3c',  // Red
-  '#3498db',  // Blue
-  '#27ae60',  // Green
-  '#f39c12',  // Yellow
-  '#9b59b6',  // Purple
-  '#1abc9c',  // Teal
-  '#e67e22',  // Orange
-  '#2c3e50',  // Black (dark navy)
-  '#e84393',  // Pink
-  '#8bc34a',  // Lime
-  '#4834d4',  // Indigo
-  '#a0522d',  // Brown
-  '#7f8c8d',  // Slate
-  '#0e6655',  // Pine (dark teal)
-  '#f1948a',  // Salmon
-  '#85c1e9',  // Sky
-] as const;
-
-/**
- * Human-readable names for the default palette hexes.
- * Lets `player.colorLabel` resolve to a word (e.g. "Red") for player-facing
- * text — logs, narration — even when a game doesn't define a labeled palette.
- * Games with a custom labeled palette pass their own map via `GameOptions.colorLabels`.
- */
-export const DEFAULT_COLOR_LABELS: Readonly<Record<string, string>> = {
-  '#e74c3c': 'Red',
-  '#3498db': 'Blue',
-  '#27ae60': 'Green',
-  '#f39c12': 'Yellow',
-  '#9b59b6': 'Purple',
-  '#1abc9c': 'Teal',
-  '#e67e22': 'Orange',
-  '#2c3e50': 'Black',
-  '#e84393': 'Pink',
-  '#8bc34a': 'Lime',
-  '#4834d4': 'Indigo',
-  '#a0522d': 'Brown',
-  '#7f8c8d': 'Slate',
-  '#0e6655': 'Pine',
-  '#f1948a': 'Salmon',
-  '#85c1e9': 'Sky',
-};
+import { DEFAULT_COLOR_PALETTE, DEFAULT_COLOR_LABELS, seatDisplayName } from './seat-defaults.js';
 
 /** Every element id carried by a serialized subtree, for `adoptSubtree`. */
 function collectJsonIds(json: ElementJSON, into: number[]): void {
@@ -358,6 +296,19 @@ export type GameClass<G extends Game = Game> = new (options: GameOptions) => G;
 export type RandomnessPolicy = 'allowed' | 'forbidden';
 
 /**
+ * How many message-log lines have been evicted, as `toJSON()` writes it; each
+ * field is absent while zero. See `docs/state-size.md` § the message log.
+ */
+export interface LogEviction {
+  /** Every evicted line (#25): what turns a checkpoint's watermark into a position. */
+  messagesEvicted?: number;
+  /** Evicted lines with no audience (#903). */
+  messagesEvictedPublic?: number;
+  /** Evicted private lines, by each seat they were addressed to (#903). */
+  messagesEvictedTo?: Record<string, number>;
+}
+
+/**
  * Where a restore must not take the animation numbering below: the live
  * game's counters, read with {@link animationFloorOf}.
  */
@@ -383,6 +334,9 @@ export function animationFloorOf(state: unknown): AnimationFloor {
  *
  * - `messagesEvicted`, the log's eviction offset (#25), is engine bookkeeping
  *   with no meaning to a client, and an ever-growing number in every payload.
+ *   `messagesEvictedPublic` and `messagesEvictedTo` count the same evictions by
+ *   audience (#903); the second holds every seat's private count, so a seat
+ *   gets only its own total, as `PlayerStateView.messageOffset`.
  * - `animationEventSeq` counts EVERY seat's events, `animateTo` ones included,
  *   so a seat watching it rise would learn another seat played a private
  *   animation, and be pushed a changed view when nothing it may see changed
@@ -400,7 +354,7 @@ export function animationFloorOf(state: unknown): AnimationFloor {
  * here is measurable in bot search time.
  */
 function withoutRestoreOnlyFields(root: ReturnType<Game['toJSON']>) {
-  const { messagesEvicted: _evicted, animationEventSeq: _seq, animationSeqBySeat: _seqBySeat, pile: _pile, ...seatView } = root;
+  const { messagesEvicted: _evicted, messagesEvictedPublic: _public, messagesEvictedTo: _to, animationEventSeq: _seq, animationSeqBySeat: _seqBySeat, pile: _pile, ...seatView } = root;
   return seatView;
 }
 
@@ -467,7 +421,7 @@ export interface AnimationEvent {
    * Event-specific data payload. Live in the game's buffer; `toJSON()` writes
    * an element in it as `{ __elementRef }` and a player as `{ __playerRef, seat,
    * color, name }`, and a seat's payload names an element it cannot see by the
-   * outermost container concealing it (#752, `concealRefsForSeat`).
+   * outermost container concealing it (#752, #1043, `concealRefsForSeat`).
    */
   data: Record<string, unknown>;
   /**
@@ -616,7 +570,7 @@ const SAFE_LAYOUT_KEYS = new Set([
   '$type', '$layout',
   '$direction', '$gap', '$overlap', '$fan', '$fanAngle', '$align',
   '$rowLabels', '$columnLabels', '$rowCoord', '$colCoord',
-  '$hexOrientation', '$coordSystem', '$qCoord', '$rCoord', '$sCoord',
+  '$hexOrientation', '$coordSystem', '$qCoord', '$rCoord',
   '$hexSize',
 ]);
 
@@ -956,14 +910,6 @@ export function isEngineRootField(key: string): boolean {
 }
 
 /**
- * What the engine has decided about `key`, or `undefined` when the field is not
- * the engine's — see {@link isEngineRootField}.
- */
-export function engineRootFieldAudience(key: string): GameRootFieldAudience | undefined {
-  return Object.hasOwn(GAME_ROOT_FIELD_AUDIENCE, key) ? GAME_ROOT_FIELD_AUDIENCE[key] : undefined;
-}
-
-/**
  * The Player subclass a game declared, recovered from the game type itself.
  *
  * A game already names its player once, in `class MyGame extends Game<MyGame,
@@ -1162,6 +1108,15 @@ export class Game<
    */
   private _messagesEvicted: number = 0;
 
+  /**
+   * The same evictions counted by audience (#903): lines with no audience, and
+   * for each seat the private lines addressed to it. A seat's log is filtered to
+   * what it may see, so `_messagesEvicted` is not its offset, and sending it
+   * would tell the seat how many private lines other seats had.
+   */
+  private _messagesEvictedPublic: number = 0;
+  private _messagesEvictedTo: Map<number, number> = new Map();
+
   /** Original constructor options (for snapshot restoration) */
   private _constructorOptions: Record<string, unknown> = {};
 
@@ -1257,6 +1212,7 @@ export class Game<
     };
 
     super(ctx);
+    this._ctx._elementsById.set(this._t.id, this);
 
     this.random = random;
     // LOAD-BEARING. `G` is the game's own concrete class (`class MyGame extends
@@ -1337,7 +1293,7 @@ export class Game<
     this.settings.playerCount = options.playerCount;
     const playerNames = Array.from(
       { length: options.playerCount },
-      (_, i) => options.playerNames?.[i] ?? `Player ${i + 1}`
+      (_, i) => seatDisplayName(i + 1, options.playerNames?.[i])
     );
     this.settings.playerNames = playerNames;
 
@@ -1538,6 +1494,7 @@ export class Game<
     name: string
   ): T {
     const element = new elementClass(this._ctx);
+    this._ctx._elementsById.set(element._t.id, element);
     element.name = name;
     element.game = this;
 
@@ -2427,9 +2384,6 @@ export class Game<
   }
 
   /**
-   * Get all registered action names
-   */
-  /**
    * Re-derive the awaiting set of the currently open `simultaneousActionStep`,
    * admitting seats that have become eligible since it opened (#28).
    *
@@ -2443,6 +2397,8 @@ export class Game<
    * this step is left alone. The step's `players` filter is re-evaluated and
    * only seats it includes are admitted; a seat already awaited stays even if
    * the filter has since dropped it. No-op when no simultaneous step is open.
+   * Inside a seat's own action (its `execute`, `onSelect` or `onEach`) that
+   * seat is left for the action's settling to decide (#973).
    *
    * When every seat is then done (the step's `allDone`), the step ends: at
    * once when called from outside game code, and when the running action
@@ -2452,9 +2408,13 @@ export class Game<
    *
    * @example
    * ```typescript
-   * // In the round-boundary execute() that materialises pending arrivals:
-   * for (const seat of arriving) placeCharacter(game, seat);
-   * game.refreshAwaitingActions();
+   * // In an action's execute(), while the simultaneous step is open: the
+   * // arriving seat is admitted now, and if no seat is left to wait on, the
+   * // step ends once this action settles, not inside execute().
+   * Action.create('summon').execute(() => {
+   *   placeCharacter(game, arrivingSeat);
+   *   game.refreshAwaitingActions(arrivingSeat);
+   * });
    * ```
    */
   refreshAwaitingActions(seat?: number): void {
@@ -2462,6 +2422,9 @@ export class Game<
     if (state) this.#applyFlowCompletion(state);
   }
 
+  /**
+   * Get all registered action names
+   */
   getActionNames(): string[] {
     return [...this._actions.keys()];
   }
@@ -2557,6 +2520,9 @@ export class Game<
    * the panel, `performAction` refuses with it, and `enumerateActionMoves`
    * leaves out what it refuses (#690), so an enumerated move is never answered
    * "Action X is disabled".
+   *
+   * Ask it only once the action's condition holds: a false condition guards
+   * the disabled rule, which may read what only that condition makes safe (#1129).
    */
   getActionRefusalReason(action: ActionDefinition, player: P): string | null {
     return getActionLevelDisabledReasons(this, player.seat, [action.name])[action.name]
@@ -2693,6 +2659,11 @@ export class Game<
       return { success: false, error: `Unknown action: ${actionName}` };
     }
 
+    // The condition first, as the offer checks it: a false condition guards every rule after it (#1129).
+    if (!options?.followUp && !this._actionExecutor.conditionHolds(action, player)) {
+      return { success: false, error: 'Action is not available' };
+    }
+
     // Enforce action-level disabling at execution, not just in the projection
     // layer: a greyed-out button must also be a closed door (HR-01).
     const disabledReason = this.getActionRefusalReason(action, player);
@@ -2703,9 +2674,18 @@ export class Game<
       };
     }
 
-    // A refused action is not a new batch, so only an action that runs clears the buffer.
-    this._animationEvents = [];
-    return this._actionExecutor.executeAction(action, player, args, options);
+    // A refused action is not a new batch, so the buffer is cleared only once
+    // the checks accept the submission (#1128). A repeating pick changes the
+    // game while it is checked, so that action's batch starts before its picks.
+    if (this._actionExecutor.hasRepeatingSelections(action)) {
+      this._animationEvents = [];
+      return this._actionExecutor.executeAction(action, player, args, options);
+    }
+    const onAccepted = (accepted: Record<string, unknown>): void => {
+      options?.onAccepted?.(accepted);
+      this._animationEvents = [];
+    };
+    return this._actionExecutor.executeAction(action, player, args, { ...options, onAccepted });
   }
 
   // ============================================
@@ -3250,13 +3230,14 @@ export class Game<
    * @param actionName Action name to perform
    * @param args Action arguments
    * @param playerIndex Optional player index for simultaneous actions
+   * @param onAccepted Handed the action's args once its checks accept them (`PerformOptions.onAccepted`)
    */
-  continueFlow(actionName: string, args: Record<string, unknown>, playerIndex?: number): FlowState {
+  continueFlow(actionName: string, args: Record<string, unknown>, playerIndex?: number, onAccepted?: AcceptedArgs): FlowState {
     if (!this._flowEngine) {
       throw new Error('Flow not started');
     }
 
-    const state = this._flowEngine.resume(actionName, args, playerIndex);
+    const state = this._flowEngine.resume(actionName, args, playerIndex, onAccepted);
 
     this.#applyFlowCompletion(state);
 
@@ -3373,8 +3354,9 @@ export class Game<
    *   by `toJSONForPlayer`) for callers restoring a REDACTED clone. Lets an
    *   element-typed flow variable that pointed at a now-anonymized hidden-zone
    *   child relink to its correct redacted placeholder instead of being left as a
-   *   dead serialized marker. Absent for the default (un-redacted) restore path —
-   *   behavior there is unchanged.
+   *   dead serialized marker. Pass it exactly when restoring a redacted clone,
+   *   even if empty: only then may a missing element relink to its concealing
+   *   ancestor. Absent (a full restore), a missing element throws (#947).
    */
   restoreFlowState(state: FlowState, idRemap?: Map<number, number>): void {
     if (!this._flowDefinition) {
@@ -3397,13 +3379,17 @@ export class Game<
   }
 
   /**
-   * Point every element the running flow holds at the same element of the
-   * current tree, after `loadSerializedState` rebuilt the tree in place under a
-   * flow that stays where it is (a failed action's rollback, #679). A flow
-   * restored with `restoreFlowState` relinks itself.
+   * Put the running flow back to `state`, after `loadSerializedState` rebuilt
+   * the tree in place to the same moment (a failed action's rollback, #679,
+   * #972): the open step's awaiting seats come back with the elements, and
+   * every element the flow holds is relinked to the rebuilt tree. The flow
+   * engine itself is kept, so its count of irreversible steps carries on.
    */
-  relinkFlowElements(): void {
-    this._flowEngine?.relinkElements();
+  rollBackFlow(state: FlowState): void {
+    const result = this._flowEngine?.restoreFullState(state);
+    if (!result?.success) {
+      throw new Error(`The flow could not be rolled back to its state before the failed action: ${result?.error ?? 'no flow is running'}.`);
+    }
   }
 
   /**
@@ -3917,7 +3903,7 @@ export class Game<
 
     return players.map(p => ({
       value: p.seat,
-      label: p.name ?? `Player ${p.seat}`,
+      label: seatDisplayName(p.seat, p.name),
     }));
   }
 
@@ -4220,6 +4206,12 @@ export class Game<
   /** Drop `count` entries from the front, keeping the eviction offset in step. */
   #evictFront(count: number): void {
     if (count <= 0) return;
+    for (let i = 0; i < count; i++) {
+      const { to } = this.messages[i];
+      if (!to) this._messagesEvictedPublic++;
+      // A Set, as canSeeMessage asks "is the seat in it", not "how often".
+      else for (const seat of new Set(to)) this._messagesEvictedTo.set(seat, (this._messagesEvictedTo.get(seat) ?? 0) + 1);
+    }
     this.messages = this.messages.slice(count);
     this._messagesEvicted += count;
   }
@@ -4241,6 +4233,39 @@ export class Game<
    */
   get messagesEvicted(): number {
     return this._messagesEvicted;
+  }
+
+  /**
+   * How many of the lines `seat` may see have been evicted: the absolute
+   * position, among that seat's own lines, of the first one it still receives
+   * (#903). Same audience rule as `canSeeMessage`.
+   * @internal
+   */
+  messageOffsetFor(seat: number | null | undefined): number {
+    if (seat === null || seat === undefined) return this._messagesEvictedPublic;
+    return this._messagesEvictedPublic + (this._messagesEvictedTo.get(seat) ?? 0);
+  }
+
+  /** Adopt the eviction counts `logEviction` wrote; absent ones are zero. */
+  #restoreLogEviction(json: LogEviction): void {
+    this._messagesEvicted = json.messagesEvicted ?? 0;
+    this._messagesEvictedPublic = json.messagesEvictedPublic ?? 0;
+    this._messagesEvictedTo = new Map(
+      Object.entries(json.messagesEvictedTo ?? {}).map(([seat, n]) => [Number(seat), n] as const),
+    );
+  }
+
+  /**
+   * The eviction counts as `toJSON()` writes them, each absent while zero. A
+   * checkpoint restore takes these live values over the checkpoint's own (#803).
+   * @internal
+   */
+  get logEviction(): LogEviction {
+    return {
+      ...(this._messagesEvicted > 0 && { messagesEvicted: this._messagesEvicted }),
+      ...(this._messagesEvictedPublic > 0 && { messagesEvictedPublic: this._messagesEvictedPublic }),
+      ...(this._messagesEvictedTo.size > 0 && { messagesEvictedTo: Object.fromEntries(this._messagesEvictedTo) }),
+    };
   }
 
     /**
@@ -4304,10 +4329,10 @@ export class Game<
    *
    * @param type - Event type identifier (e.g., 'combat', 'score-item')
    * @param data - Event-specific data payload: plain data, elements and
-   *   players. Each seat receives an element as `{ __elementRef: branch }`, a
-   *   path in its own view: the element's, or for one the seat cannot see, the
-   *   outermost container concealing it (world mode excepted, #956). Pass the
-   *   element, not `card.id`: a raw id reaches every seat as it is.
+   *   players. Each seat receives an element as `{ __elementRef: branch }` (in
+   *   a world, `{ __elementId }`) naming the element, or for one the seat cannot
+   *   see, the outermost container concealing it (#1043). Pass the element, not
+   *   `card.id`: a raw id reaches every seat as it is.
    * @param callback - Optional callback to advance truth (convenience).
    *   Runs immediately as normal game code, after the event is buffered. Its
    *   mutations change the game like any other code; they are not recorded
@@ -4462,11 +4487,9 @@ export class Game<
     animationEventSeq?: number;
     /** Each recipient's animation event counter (#489) — see AnimationEvent.seatIds. */
     animationSeqBySeat?: Record<string, number>;
-    /** Message-log front-eviction offset (#25) — see Game#messagesEvicted. */
-    messagesEvicted?: number;
     /** The elements in `game.pile`, when there are any (#655). Never in a seat's view. */
     pile?: ElementJSON[];
-  } {
+  } & LogEviction {
     // CR-02: the top-level fields below MUST be copies, never live references.
     // `createActionCheckpoint`/`createSnapshot` store this result as-is, and
     // the live-session undo/rewind/time-travel paths never JSON-round-trip it.
@@ -4510,10 +4533,10 @@ export class Game<
       ...(this._animationSeqBySeat.size > 0 && {
         animationSeqBySeat: Object.fromEntries(this._animationSeqBySeat),
       }),
-      // How many log entries have been evicted (#25). Restored below so a
-      // resumed game still resolves an old checkpoint's watermark correctly.
-      // One number for the whole game, not a field on every line.
-      ...(this._messagesEvicted > 0 && { messagesEvicted: this._messagesEvicted }),
+      // How many log entries have been evicted (#25), and by audience (#903).
+      // Restored below so a resumed game still resolves an old checkpoint's
+      // watermark, and each seat keeps its offset. Not a field on every line.
+      ...this.logEviction,
       ...savedPile(this),
       // Only include the events array if the buffer is non-empty (avoid
       // cluttering empty snapshots with an empty array).
@@ -4554,7 +4577,8 @@ export class Game<
   serializeMessageLog(forSeat?: number | null): MessageEntry[] {
     if (forSeat === undefined) return encodeValue(this.messages, this._ctx, this.constructor.name, 'messages') as MessageEntry[];
     const source = this.messages.filter((m) => this.canSeeMessage(m, forSeat));
-    return serializeForSeat(this._ctx, () => encodeValue(source, this._ctx, this.constructor.name, 'messages')) as MessageEntry[];
+    const encoded = serializeForSeat(this._ctx, () => encodeValue(source, this._ctx, this.constructor.name, 'messages'));
+    return concealRefsForSeat(encoded, this, forSeat ?? -1) as MessageEntry[];
   }
 
   /**
@@ -4709,9 +4733,7 @@ export class Game<
    * a time. That hook is author code handed the filtered tree and free to
    * rewrite it in place, and a batch shares every attribute bag it had no
    * reason to redact -- so one seat's rewrite would reach the next seat's view.
-   * Nothing the engine can read decides whether a hook writes, which is the
-   * same reason `testing/visibility.ts` gates its own fast paths on the hook's
-   * absence.
+   * Nothing the engine can read decides whether a hook writes.
    */
   toJSONForPlayers(players: readonly (P | number | null)[]): SeatViewJSON[] {
     const GameClass = this.constructor as typeof Game;
@@ -4749,7 +4771,7 @@ export class Game<
     // #758: a child of a concealed zone whose own grant reaches this seat goes out whole.
     const grantedChild = (element: GameElement, i: number, childJson: ElementJSON): ElementJSON | null => {
       const child = element._t.children[i];
-      return child?.isVisibleTo(visibilityPosition) ? filterElement(childJson, child) : null;
+      return child && ownVisibilityAllows(child, visibilityPosition) ? filterElement(childJson, child) : null;
     };
 
     // A CONCEALED ZONE'S CHILDREN AS ANONYMOUS PLACEHOLDERS, for the count-only
@@ -4790,7 +4812,7 @@ export class Game<
       // Handle count-only mode: show count but not contents
       // Preserve element name and safe $-prefixed system attributes (like $type) for AutoUI
       // rendering; redact identity-bearing image refs ($image, $images.face).
-      if (visibility.mode === 'count-only' && !element.isVisibleTo(visibilityPosition)) {
+      if (visibility.mode === 'count-only' && !ownVisibilityAllows(element, visibilityPosition)) {
         // Drop `name` — for a leaf element (e.g. a Card named "AS") the name is
         // identity-bearing. Seed __hidden so the SEC-02 regression guard
         // (collectAllHiddenAttrs) sweeps this surface too.
@@ -4799,11 +4821,13 @@ export class Game<
           id: json.id,
           attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(json.attributes ?? {}) },
           childCount: element._t.children.length,
+          // What this seat was shown, no roster (#411), so a restore knows it cannot see in (#1108).
+          visibility: { mode: 'count-only', explicit: true },
         };
       }
 
-      // Check if element is visible to this player
-      if (!element.isVisibleTo(visibilityPosition)) {
+      // Its ancestors were all visible, or this walk would not have reached it (#1123).
+      if (!ownVisibilityAllows(element, visibilityPosition)) {
         // Return a hidden placeholder.
         //
         // INTENTIONAL ASYMMETRY (WR-02, iteration 2): unlike the zone branches
@@ -4839,6 +4863,7 @@ export class Game<
           // branches below. redactHiddenElementAttrs drops $image and narrows
           // $images to { back } only, so $images.face still never leaks.
           attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(json.attributes ?? {}) },
+          visibility: { mode: 'hidden', explicit: true },
         };
       }
 
@@ -5031,7 +5056,8 @@ export class Game<
       };
     };
 
-    let filteredState = filterElement(fullJson, this) ?? fullJson;
+    // #1043: one pass for every reference in the view (attributes, settings, animation data).
+    let filteredState = concealRefsForSeat(filterElement(fullJson, this) ?? fullJson, this, visibilityPosition);
 
     // Apply playerView transformation if defined
     const GameClass = this.constructor as typeof Game;
@@ -5107,8 +5133,7 @@ export class Game<
                 `that did not number events per seat: start the game again under this engine.`,
             );
           }
-          // #752: a reference into what this seat cannot see names only the container hiding it.
-          return { ...event, id: own, data: concealRefsForSeat(event.data, this, visibilityPosition) as Record<string, unknown> };
+          return { ...event, id: own };
         });
       if (visible.length === 0) delete view.animationEvents;
       else view.animationEvents = visible;
@@ -5182,9 +5207,10 @@ export class Game<
     // tree is far worse than an honestly empty one, and reads as history
     // corruption rather than as a missing argument.
     this.messages = options?.messageLog ?? [];
-    // Resume the eviction offset, so an old checkpoint's watermark still
-    // resolves to the right boundary after a restore (#25).
-    this._messagesEvicted = (json as { messagesEvicted?: number }).messagesEvicted ?? 0;
+    // Resume the eviction counts, so an old checkpoint's watermark still
+    // resolves to the right boundary after a restore (#25), and each seat keeps
+    // its offset (#903).
+    this.#restoreLogEviction(json);
 
     // Restore animation events if present.
     //
@@ -5298,6 +5324,15 @@ export class Game<
         child.game = this;
         container._t.children.push(child);
       }
+    }
+    const builtFor = this.getConstructorOptions().playerCount;
+    if (this.players.length !== builtFor) {
+      throw new Error(
+        `This game state holds ${this.players.length} players, but this game was built for ${builtFor}. ` +
+          `The state is truncated, or belongs to a game with a different player count.\n` +
+          `  Fix: restore it into a game constructed with the options it was created with ` +
+          `(a snapshot carries them as gameOptions), or start the game again if the state is damaged.`
+      );
     }
     this._ctx._elementsById.clear();
     for (const root of [this, this.pile]) {

@@ -3,6 +3,8 @@ import { ref, computed, watch, nextTick, onUnmounted } from 'vue';
 
 interface GameMessage {
   id: number;
+  /** The line's number among all the seat's lines, pruned ones included (#903). */
+  index: number;
   text: string;
   timestamp: Date;
   /**
@@ -30,6 +32,12 @@ interface GameHistoryProps {
   /** Array of messages from game state */
   messages: HistoryMessage[];
   /**
+   * The line number of `messages[0]`: how many of this seat's lines the game
+   * has pruned from the front of its log (#903). Without it a sliding window
+   * reads as a different log on every trim.
+   */
+  messageOffset?: number;
+  /**
    * What the log says when it holds nothing, if the default is a lie.
    *
    * A TABLE's log is state: re-sent whole, durable across a reload, the whole
@@ -56,10 +64,10 @@ const messagesContainer = ref<HTMLElement | null>(null);
 
 const processedMessages = ref<GameMessage[]>([]);
 let messageCounter = 0;
-// Tracks how many source messages have been processed. Never reset on clear —
-// that is the fix for the silent un-clear bug: the watcher always starts from
-// this index so pre-clear messages are never re-added when new ones arrive.
-let lastProcessedSourceIndex = 0;
+// The line number of the next line to draw. Never reset on clear — that is the
+// fix for the silent un-clear bug: the watcher always starts from here, so
+// pre-clear messages are never re-added when new ones arrive.
+let nextIndex = 0;
 
 /** A line's text and the game's classification of it, however it was written. */
 function lineOf(message: HistoryMessage): { text: string; type: string } {
@@ -78,53 +86,64 @@ function lineOf(message: HistoryMessage): { text: string; type: string } {
  * seat that left stayed on screen until the page was reloaded -- which is one
  * player's private lines drawn over another player's board.
  *
- * So the question is asked rather than assumed: a list is an append when it is
- * at least as long as what was processed and still carries the same lines in
- * the places already drawn. Anything else is a DIFFERENT log, and a different
- * log is drawn from scratch.
+ * So the question is asked rather than assumed: a list is an append when it
+ * reaches at least as far as what was processed and still carries the same
+ * lines at the line numbers already drawn. Anything else is a DIFFERENT log,
+ * and a different log is drawn from scratch. Line numbers start at
+ * `messageOffset`, so a game pruning its log's front is still an append (#903).
  */
-function isAppendToDrawn(source: readonly HistoryMessage[]): boolean {
-  if (source.length < lastProcessedSourceIndex) return false;
+function isAppendToDrawn(source: readonly HistoryMessage[], offset: number): boolean {
+  if (offset + source.length < nextIndex) return false;
   // The last line already drawn is the cheap witness: every line before it came
   // in the same deliveries, and a source that dropped or replaced anything
   // moves it.
-  if (lastProcessedSourceIndex === 0) return true;
+  if (nextIndex === 0) return true;
   const drawn = processedMessages.value[processedMessages.value.length - 1];
   // NOTHING DRAWN, BUT LINES PROCESSED, is the player having pressed Clear.
   // That is the one case where holding no lines is not a different log, and
   // rebuilding here would put back exactly what they asked to be rid of.
   if (!drawn) return true;
-  const incoming = lineOf(source[lastProcessedSourceIndex - 1]!);
+  // Pruned along with every line before it: nothing drawn is left to compare.
+  if (drawn.index < offset) return true;
+  const incoming = lineOf(source[drawn.index - offset]!);
   return incoming.text === drawn.text && incoming.type === drawn.type;
 }
 
+function scrollToNewest() {
+  if (messagesContainer.value) {
+    messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
+  }
+}
+
 watch(
-  () => props.messages,
-  (newMessages) => {
-    if (!isAppendToDrawn(newMessages)) {
+  [() => props.messages, () => props.messageOffset ?? 0],
+  ([newMessages, offset]) => {
+    if (!isAppendToDrawn(newMessages, offset)) {
       processedMessages.value = [];
-      lastProcessedSourceIndex = 0;
+      nextIndex = 0;
     }
-    if (newMessages.length > lastProcessedSourceIndex) {
-      for (let i = lastProcessedSourceIndex; i < newMessages.length; i++) {
-        const { text, type } = lineOf(newMessages[i]!);
+    // The game pruned these; the lines that remain keep their arrival time.
+    if (processedMessages.value.length > 0 && processedMessages.value[0]!.index < offset) {
+      processedMessages.value = processedMessages.value.filter((m) => m.index >= offset);
+    }
+    const end = offset + newMessages.length;
+    if (end > nextIndex) {
+      for (let i = Math.max(nextIndex, offset); i < end; i++) {
+        const { text, type } = lineOf(newMessages[i - offset]!);
 
         if (text) {
           processedMessages.value.push({
             id: messageCounter++,
+            index: i,
             text,
             timestamp: new Date(),
             type,
           });
         }
       }
-      lastProcessedSourceIndex = newMessages.length;
+      nextIndex = end;
 
-      nextTick(() => {
-        if (messagesContainer.value) {
-          messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight;
-        }
-      });
+      nextTick(scrollToNewest);
     }
   },
   { immediate: true }
@@ -140,7 +159,7 @@ function formatTime(date: Date): string {
 
 function clearHistory() {
   processedMessages.value = [];
-  // Do NOT reset lastProcessedSourceIndex — resetting it would cause the
+  // Do NOT reset nextIndex — resetting it would cause the
   // watcher to re-add all pre-clear messages on the next state update.
   // messageCounter stays monotonic so message IDs remain unique after clear.
 }
@@ -264,7 +283,7 @@ async function copyHistory() {
 // remain owned here — only the trigger moves to DebugPanel (single source
 // of truth, DEV-06).
 const hasMessages = computed(() => processedMessages.value.length > 0);
-defineExpose({ clearHistory, copyHistory, hasMessages });
+defineExpose({ clearHistory, copyHistory, hasMessages, scrollToNewest });
 </script>
 
 <template>
@@ -322,6 +341,8 @@ defineExpose({ clearHistory, copyHistory, hasMessages });
     </div>
   </div>
 </template>
+
+<style scoped src="./sr-only.css"></style>
 
 <style scoped>
 .game-history {
@@ -386,19 +407,6 @@ defineExpose({ clearHistory, copyHistory, hasMessages });
 /* Copy was refused by the platform — colour the outcome, don't just swap glyphs. */
 .history-copy--failed {
   color: var(--bsg-danger);
-}
-
-/* Screen-reader only (mirrors AutoRenderer's helper; scoped styles don't share). */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 .history-copy svg {

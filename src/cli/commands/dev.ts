@@ -3,27 +3,29 @@ import { join, resolve, relative, dirname } from 'node:path';
 import type { Plugin as VitePlugin } from 'vite';
 import { fileURLToPath } from 'node:url';
 import { WebSocket } from 'ws';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import open from 'open';
 
-import type { GameDefinition } from '../../session/index.js';
-import { DEFAULT_COLOR_PALETTE } from '../../engine/index.js';
+import { createColorOption, type ColorChoice, type ColorOptionDefinition, type GameDefinition } from '../../session/index.js';
 import type { GameStateSnapshot } from '../../engine/utils/index.js';
-import { MultiplayerHost, type TableRules } from '../dev-host/multiplayer-host.js';
-import { claimDevHostSocket } from '../dev-host/connection-handler.js';
+import { MultiplayerHost } from '../dev-host/multiplayer-host.js';
+import type { TableDefinition } from '../dev-host/table-rules-worker.js';
+import { claimDevHostSocket, logMessageFailure } from '../dev-host/connection-handler.js';
 import { devStorePath, loadDevStore } from '../dev-host/persistence-file-store.js';
 import { resetWorldStore, worldResetNotice, worldStoreDir } from '../dev-host/world-store.js';
 import { announceHost, hostHoldings, onShutdown, type HostHoldings } from '../dev-host/shutdown.js';
 import { requireFreePort } from '../dev-host/port.js';
 import type { PersistenceStore } from '../../persistence/index.js';
 import { getProjectContext, toPosix } from './game-runtime.js';
-import { loadTableRuntime, tableRulesReloadQueue } from './dev-table-runtime.js';
+import { loadTableRuntime, tableRulesReloadQueue, type TableRuntime } from './dev-table-runtime.js';
 import { gateOf } from '../dev-host/rules-reload-queue.js';
+import { RulesError } from '../dev-host/rules-worker.js';
 import { findUnknownKeys } from '../lib/config-schema.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex, requireTableUi } from '../lib/game-project.js';
 import { resolveWorldMode } from '../lib/world-project.js';
 import { resolveUserPath } from '../lib/user-path.js';
 import { makeCommandBuildDir } from '../lib/command-build-dir.js';
+import { parsePositiveWholeNumber } from '../../utils/positive-whole-number.js';
 import { loadWorldRuntime, startWorldDevServer, type WorldRuntime } from './dev-world.js';
 import {
   answerAlive,
@@ -34,13 +36,11 @@ import {
   serveDevDocuments,
   serveVite,
 } from './dev-server.js';
-import { parseBotLevel } from '../../bot/index.js';
+import { DIFFICULTY_PRESETS, MAX_BOT_ITERATIONS, parseBotLevel } from '../../bot/index.js';
 
 import type { DevHostConfig, DevOptionDef } from '../dev-host/config-types.js';
 import {
-  GameOptionSelectionError,
   assertPresetsSelectable,
-  declaredGameOptionsOf,
   selectDesignerGameOptions,
 } from '../../session/game-option-selection.js';
 import type { GameOptionDefinition, GamePreset } from '../../session/types.js';
@@ -68,12 +68,6 @@ interface DevOptions {
   reset?: boolean;
 }
 
-/** Thrown by the pure dev.ts flag/host validators below; `devCommand` catches
- * it, prints an actionable `chalk.red` error, and exits non-zero. Kept as a
- * distinct class (not a bare Error) so devCommand's catch can distinguish an
- * intentional validation failure from an unexpected bug. */
-export class DevFlagError extends Error {}
-
 /**
  * Refuse `--reset` on a project that has no world to reset.
  *
@@ -83,25 +77,10 @@ export class DevFlagError extends Error {}
  */
 export function assertWorldProjectForReset(worldMode: boolean): void {
   if (worldMode) return;
-  throw new DevFlagError(
-    'Error: --reset deletes a PERSISTENT WORLD\'s local store, and this project does not declare ' +
-      '"backend": "world" in boardsmith.json, so it has no world to delete. A table game\'s ' +
-      'cross-session state lives in .boardsmith-dev-store.json; delete that file directly if ' +
-      'that is what you meant.',
+  throw new Error(
+    '--reset takes a project that declares "backend": "world" in boardsmith.json, got one that does not, so there is no world to delete. ' +
+      'A table game keeps its cross-session state in .boardsmith-dev-store.json; delete that file directly if that is what you meant.',
   );
-}
-
-/**
- * Fail-fast positive-integer parser for `--port`/`--players` (CLIX-06),
- * copying the `simulate.ts:145-153` idiom. Pure (no process.exit) so it is
- * directly unit-testable without a real dev server (PROC-02).
- */
-export function parsePositiveInt(flagName: string, raw: string): number {
-  const value = Number(raw);
-  if (!Number.isInteger(value) || value < 1) {
-    throw new DevFlagError(`Error: --${flagName} must be a positive integer, got "${raw}"`);
-  }
-  return value;
 }
 
 /**
@@ -111,24 +90,21 @@ export function parsePositiveInt(flagName: string, raw: string): number {
  * path and reason — on a missing file or invalid JSON; there is deliberately
  * NO silent fallback to a fresh start (CLAUDE.md hard rule: no fallbacks that
  * mask real problems). Pure (no process.exit) so it is directly unit-testable,
- * mirroring `parsePositiveInt`/`parseBotSeats`.
+ * mirroring `parseBotSeats`.
  */
 export function parseSeedFile(path: string): GameStateSnapshot {
-  if (!existsSync(path)) {
-    throw new DevFlagError(`Error: --seed file not found: ${path}`);
-  }
+  const refuse = (problem: string): Error => new Error(`--seed takes a recorded game state JSON file, got "${path}", which ${problem}.`);
+  if (!existsSync(path)) throw refuse('does not exist');
   let raw: string;
   try {
     raw = readFileSync(path, 'utf-8');
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new DevFlagError(`Error: --seed file could not be read at ${path}: ${reason}`);
+    throw refuse(`could not be read: ${error instanceof Error ? error.message : String(error)}`);
   }
   try {
     return JSON.parse(raw) as GameStateSnapshot;
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new DevFlagError(`Error: --seed file at ${path} is not valid JSON: ${reason}`);
+    throw refuse(`is not valid JSON: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -140,32 +116,20 @@ export function parseSeedFile(path: string): GameStateSnapshot {
 export function validateBotLevel(level: string): void {
   try {
     parseBotLevel(level);
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new DevFlagError(`Error: --bot-level is invalid. ${reason}`);
+  } catch {
+    const presets = Object.keys(DIFFICULTY_PRESETS).join(', ');
+    throw new Error(`--bot-level takes ${presets} or an iteration count from 1 to ${MAX_BOT_ITERATIONS}, got "${level}".`);
   }
 }
 
 /**
  * Fail-fast `--bot` seat parser (CLIX-06). Player positions are 1-indexed and
  * comma-separated per flag occurrence (`--bot 1,2` or repeated `--bot 1 --bot 2`).
- * Unlike the old `.filter(n => !isNaN(n))` behavior, a non-numeric entry now
- * throws instead of being silently dropped.
+ * An entry that is not a positive whole number throws instead of being dropped.
  */
 export function parseBotSeats(raw: string[] | undefined): number[] {
   if (!raw) return [];
-  const seats: number[] = [];
-  for (const group of raw) {
-    for (const part of group.split(',')) {
-      const trimmed = part.trim();
-      const value = Number(trimmed);
-      if (!Number.isInteger(value)) {
-        throw new DevFlagError(`Error: --bot must be a comma-separated list of positive integers, got "${trimmed}"`);
-      }
-      seats.push(value);
-    }
-  }
-  return seats;
+  return raw.flatMap((group) => group.split(',').map((part) => parsePositiveWholeNumber('--bot', part.trim())));
 }
 
 /**
@@ -174,9 +138,7 @@ export function parseBotSeats(raw: string[] | undefined): number[] {
  */
 export function resolveEffectivePlayerCount(playerCount: number, minPlayers: number, maxPlayers: number): number {
   if (playerCount < minPlayers || playerCount > maxPlayers) {
-    throw new DevFlagError(
-      `Error: --players ${playerCount} is out of range for this game (must be between ${minPlayers} and ${maxPlayers}).`,
-    );
+    throw new Error(`--players takes a whole number from ${minPlayers} to ${maxPlayers} for this game, got "${playerCount}".`);
   }
   return playerCount;
 }
@@ -185,13 +147,13 @@ export function resolveEffectivePlayerCount(playerCount: number, minPlayers: num
  * D14/DEVHOST-02: `--players` defaults to the game's `minPlayers` (not a
  * hardcoded '2') so a bare `boardsmith dev` on a solo game (minPlayers=1,
  * maxPlayers=1) starts instead of erroring (default 2 > max 1). An EXPLICIT
- * `--players` is unaffected: it still runs through `parsePositiveInt` +
+ * `--players` is unaffected: it still runs through `parsePositiveWholeNumber` +
  * `resolveEffectivePlayerCount`, which still throws on an out-of-range value
  * naming the bound — this only changes what happens when the flag is unset.
  */
 export function resolvePlayerCount(rawPlayers: string | undefined, minPlayers: number, maxPlayers: number): number {
   if (rawPlayers === undefined) return minPlayers;
-  return resolveEffectivePlayerCount(parsePositiveInt('players', rawPlayers), minPlayers, maxPlayers);
+  return resolveEffectivePlayerCount(parsePositiveWholeNumber('--players', rawPlayers), minPlayers, maxPlayers);
 }
 
 /**
@@ -202,11 +164,7 @@ export function resolvePlayerCount(rawPlayers: string | undefined, minPlayers: n
 export function validateBotSeats(botPlayers: number[], effectivePlayerCount: number): void {
   const invalidBotPlayers = botPlayers.filter(p => p < 1 || p > effectivePlayerCount);
   if (invalidBotPlayers.length > 0) {
-    throw new DevFlagError(
-      `Error: Invalid bot player position(s): ${invalidBotPlayers.join(', ')}\n` +
-        `Player positions are 1-indexed (1 to ${effectivePlayerCount}).\n` +
-        `Example: --bot 2 for a 2-player game means player 2 is bot.`,
-    );
+    throw new Error(`--bot takes seats from 1 to ${effectivePlayerCount} for this game, got "${invalidBotPlayers.join(',')}".`);
   }
 }
 
@@ -240,9 +198,8 @@ export function shouldOpenBrowser(options: { open?: boolean }): boolean {
 
 export function resolveHost(options: { host?: string; lan?: boolean }): { host: string; isNonLocal: boolean } {
   if (options.lan && options.host !== undefined) {
-    throw new DevFlagError(
-      `Error: --lan and --host ${options.host} conflict; pass one or the other.\n` +
-        `--lan is shorthand for --host 0.0.0.0 (serve to your whole network).`,
+    throw new Error(
+      `--lan takes no --host, since it is shorthand for --host 0.0.0.0, got --host ${options.host}. Pass one or the other.`,
     );
   }
   const host = options.host ?? (options.lan ? '0.0.0.0' : '127.0.0.1');
@@ -340,7 +297,7 @@ function normalizeColorPalette(
     const hex = (entry.value ?? entry.hex ?? entry.color) as string | undefined;
     if (hex === undefined) {
       console.warn(
-        chalk.yellow(
+        styleText('yellow',
           `  Warning: colorPalette entry ${JSON.stringify(entry)} is missing "value"/"hex"/"color" — skipped (not rendered as a swatch).`,
         ),
       );
@@ -353,27 +310,51 @@ function normalizeColorPalette(
 }
 
 /**
- * D16/DEVHOST-04: ordered dev color-palette resolver — a game's
- * code-declared `GameDefinition.colorPalette` is honored ahead of
- * `boardsmith.json`'s `colorPalette`, which is honored ahead of the engine's
- * `DEFAULT_COLOR_PALETTE`. Reuses `normalizeColorPalette` (already coerces
- * plain hex strings, `{value,label}`, and `{id,hex,label}` objects) — no new
- * normalizer, no new palette shape.
+ * D16/DEVHOST-04: the dev `color` player option, always offered, resolved as
+ * production does: the published manifest carries only `boardsmith.json`'s
+ * `colorPalette`, else players are seated in the engine palette (#814). A palette a
+ * game declares in code is never published, so one that differs is refused
+ * here rather than shown in dev and missing live. Its choices also seed each
+ * seat's colour in MultiplayerHost, so the option and the seats always agree.
  */
-export function resolveColorPalette(
-  gameDefinition: { colorPalette?: Array<{ id: string; hex: string; label: string }> },
+export function resolveColorOption(
+  gameDefinition: Pick<GameDefinition, 'playerOptions' | 'colorPalette'>,
   config: { colorPalette?: Array<string | Record<string, unknown>> },
-): Array<{ value: string; label: string }> {
-  if (gameDefinition.colorPalette) return normalizeColorPalette(gameDefinition.colorPalette);
-  if (config.colorPalette) return normalizeColorPalette(config.colorPalette);
-  return normalizeColorPalette([...DEFAULT_COLOR_PALETTE]);
+): ColorOptionDefinition {
+  const option = createColorOption(config.colorPalette && normalizeColorPalette(config.colorPalette));
+  const source = config.colorPalette ? 'boardsmith.json\'s "colorPalette"' : 'the engine\'s default palette';
+  for (const [where, palette] of Object.entries(codeColorPalettes(gameDefinition))) {
+    if (palette && !samePalette(normalizeColorPalette(palette), option.choices)) {
+      throw new Error(
+        `Your gameDefinition declares ${where} in code, but the live lobby uses ${source} ` +
+          `(${option.choices.map((c) => c.label).join(', ')}), so dev would show colours players never get. ` +
+          `Declare the palette in boardsmith.json's "colorPalette", or remove ${where} from your gameDefinition.`,
+      );
+    }
+  }
+  return option;
+}
+
+/** The colour lists a game declares in code, by where it declares them. */
+function codeColorPalettes(gameDefinition: Pick<GameDefinition, 'playerOptions' | 'colorPalette'>) {
+  const declared = gameDefinition.playerOptions?.color;
+  // A `color` option that is not a colour list (or has no choices) can never match, so it is refused too.
+  const choices = declared?.type === 'color' ? declared.choices : undefined;
+  return { 'playerOptions.color': declared && (choices ?? []), colorPalette: gameDefinition.colorPalette };
+}
+
+function samePalette(a: ColorChoice[], b: ColorChoice[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((c, i) => c.value.toLowerCase() === b[i]!.value.toLowerCase() && c.label === b[i]!.label)
+  );
 }
 
 /**
  * D13/DEVHOST-01: parse repeatable `--game-option key=value` flags into a flat
  * record, splitting each entry on the FIRST "=" (a value may itself contain
  * "="). Fail-loud (T-161-03) on an entry missing "=" instead of silently
- * dropping it — matches the `parsePositiveInt`/`parseBotSeats` idiom.
+ * dropping it — matches the `parseBotSeats` idiom.
  */
 export function parseGameOptionFlags(raw: string[] | undefined): Record<string, string> {
   if (!raw) return {};
@@ -381,9 +362,7 @@ export function parseGameOptionFlags(raw: string[] | undefined): Record<string, 
   for (const entry of raw) {
     const eq = entry.indexOf('=');
     if (eq === -1) {
-      throw new DevFlagError(
-        `Error: --game-option must be "key=value", got "${entry}" (missing "=").`,
-      );
+      throw new Error(`--game-option takes "key=value", got "${entry}".`);
     }
     result[entry.slice(0, eq)] = entry.slice(eq + 1);
   }
@@ -402,13 +381,13 @@ export interface ResolvedPreset {
  * `configure` message's `preset` field). Applying a preset is a shortcut for
  * setting its underlying options — returns the WHOLE bundle (never a partial
  * pick) plus the preset's player count when it declares `players`. Throws an
- * actionable `DevFlagError` naming the unknown preset and the declared names.
+ * Error naming the unknown preset and the declared names.
  */
 export function resolvePreset(presets: GamePreset[] | undefined, name: string): ResolvedPreset {
   const preset = (presets ?? []).find((p) => p.name === name);
   if (!preset) {
-    const known = (presets ?? []).map((p) => p.name).join(', ') || '(none declared)';
-    throw new DevFlagError(`Error: --preset "${name}" is not declared by this game. Declared presets: ${known}.`);
+    const known = (presets ?? []).map((p) => p.name).join(', ') || 'it declares none';
+    throw new Error(`--preset takes a preset this game declares (${known}), got "${name}".`);
   }
   const resolved: ResolvedPreset = { options: { ...preset.options } };
   if (preset.players?.length) resolved.playerCount = preset.players.length;
@@ -548,7 +527,7 @@ export function boardsmithDevHostPlugin(args: {
 
 /** Build the dev-host config the browser consumes from the resolved game definition. */
 function buildDevConfig(args: {
-  gameDefinition: GameDefinition;
+  gameDefinition: TableDefinition;
   gameOptions: Record<string, GameOptionDefinition> | undefined;
   minPlayers: number;
   maxPlayers: number;
@@ -558,7 +537,7 @@ function buildDevConfig(args: {
   colorPalette: Array<{ value: string; label: string }>;
   teachingDisabled: boolean;
 }): DevHostConfig {
-  const gd = args.gameDefinition as GameDefinition & {
+  const gd = args.gameDefinition as TableDefinition & {
     playerOptions?: Record<string, unknown>;
   };
   return {
@@ -588,13 +567,13 @@ function buildDevConfig(args: {
  * That is the platform's own opt-in rule, kept here so a local run and a
  * published one differ in nothing.
  */
-function openDevStore(
-  gameDefinition: GameDefinition,
+async function openDevStore(
+  gameDefinition: Pick<GameDefinition, 'persistence'>,
   storeFile: string,
-): { store: PersistenceStore; save: () => void } | null {
+): Promise<{ store: PersistenceStore; save: () => Promise<void> } | null> {
   if (gameDefinition.persistence !== true) return null;
   const devStore = loadDevStore(storeFile);
-  devStore.save();
+  await devStore.save();
   return devStore;
 }
 
@@ -604,21 +583,15 @@ export async function devCommand(options: DevOptions): Promise<void> {
   // still bundling or Vite is still starting releases exactly what exists by
   // then, and one after "Ready!" releases all of it.
   const holdings = hostHoldings();
-  onShutdown(holdings, { say: (line) => console.log(chalk.dim(line)) });
+  onShutdown(holdings, { say: (line) => console.log(styleText('dim', line)) });
   try {
     await startDev(options, holdings);
   } catch (error) {
     // A START THAT FAILS RELEASES WHAT IT HELD, TOO (#543): the build directory
     // this run made, and anything opened after it. Without this every failed
     // start left one more `dev-tmp-*` directory behind.
-    await holdings.run().catch((stopError: Error) => console.error(chalk.red(stopError.message)));
-    // A flag or host setting the game refuses is the author's to fix: say what
-    // is wrong and exit non-zero. Anything else is rethrown for `cli.ts` to
-    // render as one line.
-    if (error instanceof DevFlagError || error instanceof GameOptionSelectionError) {
-      console.error(chalk.red(error.message));
-      process.exit(1);
-    }
+    await holdings.run().catch((stopError: Error) => console.error(styleText('red', stopError.message)));
+    // `cli.ts` prints the refusal as one line and exits non-zero.
     throw error;
   }
 }
@@ -629,9 +602,9 @@ export async function devCommand(options: DevOptions): Promise<void> {
 // fallow-ignore-next-line complexity
 async function startDev(options: DevOptions, holdings: HostHoldings): Promise<void> {
 
-  // Fail-fast on non-numeric --port/--players/--bot (CLIX-06) — actionable
-  // errors before any server work, matching simulate.ts's Number.isInteger idiom.
-  const port = parsePositiveInt('port', options.port);
+  // Fail-fast on non-numeric --port/--players/--bot (CLIX-06): actionable errors before any server work.
+  const port = parsePositiveWholeNumber('--port', options.port);
+  if (port > 65535) throw new Error(`--port takes a port number from 1 to 65535, got "${options.port}".`);
   const botPlayers = parseBotSeats(options.bot);
   // NOTE: --players is resolved AFTER gameDefinition loads (D14) — its default
   // is the game's minPlayers, not a literal, so it cannot be parsed this early.
@@ -644,9 +617,10 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   const cwd = process.cwd();
 
   if (UNSAFE_PORTS.has(port)) {
-    console.error(chalk.red(`Error: Port ${port} is blocked by browsers for security reasons.`));
-    console.error(chalk.dim('Try a different port like 5173, 3000, 8080, or any port above 1024 that isn\'t restricted.'));
-    process.exit(1);
+    throw new Error(
+      `--port takes a port browsers allow, got "${options.port}", which browsers block for security. ` +
+        'Try 5173, 3000, 8080, or another port above 1024 that browsers do not block.',
+    );
   }
 
   // A TAKEN PORT IS REFUSED BEFORE ANYTHING IS OPENED (#345): before `--reset`
@@ -681,12 +655,12 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   const configPath = requireGameProject(cwd);
   const config: BoardSmithConfig = JSON.parse(readFileSync(configPath, 'utf-8'));
   requireTableUi(cwd, config);
-  console.log(chalk.cyan(`\nStarting development server for ${config.displayName || config.name}...`));
+  console.log(styleText('cyan', `\nStarting development server for ${config.displayName || config.name}...`));
 
   // CLIX-02: loud (non-exiting) warning on unknown top-level boardsmith.json
   // keys — dev warns, `boardsmith validate` is the hard gate.
   for (const warning of formatUnknownKeyWarnings(config as unknown as Record<string, unknown>)) {
-    console.warn(chalk.yellow(`  ${warning}`));
+    console.warn(styleText('yellow', `  ${warning}`));
   }
 
   // #158: the manifest's `world` block is the whole declaration -- no flag.
@@ -706,27 +680,29 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   // it, so it lands here in one piece.
   if (options.reset === true) {
     assertWorldProjectForReset(worldMode);
-    console.log(chalk.dim(`  ${worldResetNotice(resetWorldStore(cwd), worldStoreDir(cwd))}`));
+    console.log(styleText('dim', `  ${worldResetNotice(resetWorldStore(cwd), worldStoreDir(cwd))}`));
   }
 
   // CLIX-04 (T-135-12): loud, unmissable banner whenever the effective bind
   // host is non-localhost — exposure to the LAN must never be silent.
   if (isNonLocal) {
-    console.log(chalk.yellow(`  ⚠ Serving to your whole network (binding ${host}) — anyone on your LAN can join and browse project source.`));
-    console.log(chalk.yellow(`    Pass --host 127.0.0.1 for local-only.`));
+    console.log(styleText('yellow', `  ⚠ Serving to your whole network (binding ${host}) — anyone on your LAN can join and browse project source.`));
+    console.log(styleText('yellow', `    Pass --host 127.0.0.1 for local-only.`));
   }
 
   const context = getProjectContext(cwd);
   if (context === 'monorepo') {
-    console.log(chalk.dim('  Running in monorepo context (using source resolution)'));
+    console.log(styleText('dim', '  Running in monorepo context (using source resolution)'));
   }
 
   const uiPath = config.paths?.ui ? resolveUserPath(cwd, config.paths.ui) : cwd;
   const rulesPath = resolveRulesDir(cwd, config);
 
   if (!existsSync(uiPath)) {
-    console.error(chalk.red(`Error: UI path not found: ${uiPath}`));
-    process.exit(1);
+    throw new Error(
+      `The UI directory ${uiPath} does not exist. "paths.ui" in boardsmith.json names it; ` +
+        'create that directory, or point "paths.ui" at the directory that holds your index.html.',
+    );
   }
 
   const rulesIndexPath = requireRulesIndex(rulesPath);
@@ -737,15 +713,17 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   const tempDir = makeCommandBuildDir(cwd, 'dev');
   holdings.hold([{ name: `the build directory (${tempDir})`, close: () => rmSync(tempDir, { recursive: true, force: true }) }]);
 
-  console.log(chalk.dim(`  Loading game rules from ${rulesPath}...`));
+  console.log(styleText('dim', `  Loading game rules from ${rulesPath}...`));
 
   // THROWN, NOT PRINTED (#240). Handing the error object to `console.error`
   // printed Node's own formatting of it -- every stack frame, and the absolute
   // path of both this CLI and the game being loaded -- and exited before
-  // `cli.ts`'s handler could render it as one clean line.
+  // `cli.ts`'s handler could render it as one clean line. The one stack it
+  // carries is one the rules threw (#885), which names the author's own line.
   const rulesFailed = (error: unknown): Error =>
     new Error(
-      `Failed to load this game's rules: ${error instanceof Error ? error.message : String(error)}`,
+      `Failed to load this game's rules: ${error instanceof Error ? error.message : String(error)}` +
+        (error instanceof RulesError ? `\n${error.stack}` : ''),
     );
 
   // A WORLD IS A DIFFERENT RUN, AND THIS IS WHERE THE ROADS PART (#167).
@@ -764,7 +742,11 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   if (worldMode) {
     let runtime: WorldRuntime;
     try {
-      runtime = await holdings.acquire(() => loadWorldRuntime(rulesPath, tempDir, context), () => []);
+      // The world's run stops the worker it runs in; this stops it if the run never opens.
+      runtime = await holdings.acquire(
+        () => loadWorldRuntime(rulesPath, tempDir, context),
+        (loaded) => [{ name: 'the rules worker', close: () => loaded.worker.close() }],
+      );
     } catch (error) {
       throw rulesFailed(error);
     }
@@ -772,6 +754,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
     await startWorldDevServer({
       cwd,
       uiPath,
+      rulesDir: rulesPath,
       runtime,
       displayName: config.displayName || gameDefinition.displayName || gameDefinition.gameType,
       context,
@@ -780,25 +763,25 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
       holdings,
       openBrowser: shouldOpenBrowser(options),
       // HOW THE WORLD HOST GETS THE RULES AGAIN (#201). `loadWorldRuntime`
-      // cache-busts its own import, so re-running it is a genuine re-read of
-      // the author's edited source rather than the module this process loaded
-      // at startup.
+      // bundles the author's edited source into a new worker (#885).
       reloadRules: () => loadWorldRuntime(rulesPath, tempDir, context),
     });
     return;
   }
 
   // Load the game runtime (Node side): gameDefinition + the rules that run it, one engine.
-  let gameDefinition: GameDefinition;
-  let tableRules: TableRules;
+  let runtime: TableRuntime;
+  let gameDefinition: TableDefinition;
   let minPlayers: number;
   let gameOptions: Record<string, GameOptionDefinition> | undefined;
   let maxPlayers: number;
   let colorPalette: Array<{ value: string; label: string }> = [];
   try {
-    const runtime = await holdings.acquire(() => loadTableRuntime(rulesPath, tempDir, context, config.gameOptions), () => []);
+    runtime = await holdings.acquire(
+      () => loadTableRuntime(rulesPath, tempDir, context, config.gameOptions),
+      (loaded) => [{ name: 'the rules worker', close: () => loaded.close() }],
+    );
     gameDefinition = runtime.gameDefinition;
-    tableRules = runtime.rules;
   } catch (error) {
     throw rulesFailed(error);
   }
@@ -826,7 +809,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
 
     // boardsmith.json's gameOptions, the one declaration (#701), which the
     // rules bundle carries on the definition.
-    gameOptions = declaredGameOptionsOf(gameDefinition);
+    gameOptions = gameDefinition.declaredGameOptions;
     const presets: GamePreset[] = gameDefinition.presets ?? [];
     // A preset is a shortcut a player picks, so one naming a designer-only or
     // undeclared option is refused here, at load, rather than when picked.
@@ -836,14 +819,9 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
       ? configOptionsToRecord<import('../../session/types.js').PlayerOptionDefinition>(config.playerOptions)
       : undefined;
 
-    // D16/DEVHOST-04: gameDefinition.colorPalette -> boardsmith.json
-    // colorPalette -> engine DEFAULT_COLOR_PALETTE. Always resolves to a
-    // non-empty palette, so the `color` playerOption is always offered.
-    colorPalette = resolveColorPalette(gameDefinition, config);
-    playerOptions = {
-      ...playerOptions,
-      color: { type: 'color' as const, label: 'Color', choices: colorPalette },
-    };
+    const color = resolveColorOption(gameDefinition, config);
+    colorPalette = color.choices;
+    playerOptions = { ...playerOptions, color };
 
     gameDefinition = {
       ...gameDefinition,
@@ -853,7 +831,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
       ...(playerOptions && { playerOptions }),
     };
 
-    console.log(chalk.dim(`  Loaded game: ${gameDefinition.displayName || gameDefinition.gameType}`));
+    console.log(styleText('dim', `  Loaded game: ${gameDefinition.displayName || gameDefinition.gameType}`));
   } catch (error) {
     throw new Error(
       `Failed to open a table for this game: ${error instanceof Error ? error.message : String(error)}`,
@@ -900,7 +878,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   // Clear Vite cache to prevent stale file references when switching games
   const viteCacheDir = join(uiPath, 'node_modules', '.vite');
   if (existsSync(viteCacheDir)) {
-    console.log(chalk.dim('  Clearing Vite cache...'));
+    console.log(styleText('dim', '  Clearing Vite cache...'));
     try {
       rmSync(viteCacheDir, { recursive: true, force: true });
     } catch {
@@ -933,7 +911,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
     const clients = new Map<string, WebSocket>();
 
     const storeFile = devStorePath(cwd);
-    const devStore = openDevStore(gameDefinition, storeFile);
+    const devStore = await openDevStore(gameDefinition, storeFile);
 
     const mpHost = new MultiplayerHost({
       playerCount: effectivePlayerCount,
@@ -955,10 +933,10 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
         ? {
             persistence: {
               store: devStore.store,
-              // One dev run is one session, and the key has to be unique per
-              // session: it is what a game uses to name an APPEND without
-              // colliding with another sitting's row.
-              sessionKey: `dev-${Date.now()}`,
+              // The run's id: each game started in the run is handed its own
+              // session key from it, `<runKey>-<n>`, which a game uses to name
+              // an APPEND without colliding with another game's row (#883).
+              runKey: `dev-${Date.now()}`,
               // Never a plausible-looking version number. A game migrating on
               // `gameVersion` must be able to tell a row a local run wrote from
               // one a published build did.
@@ -967,7 +945,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
             },
           }
         : {}),
-      executeOp: tableRules.executeOp,
+      executeOp: runtime.rules.executeOp,
       // A step deadline, a demo move or a bot's next move that comes due while
       // an edited rules file rebuilds waits in the reload queue below with the
       // pages' messages (#387, #388).
@@ -985,9 +963,10 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
     // still building runs on it (#379).
     const rulesReload = tableRulesReloadQueue({
       host: mpHost,
-      running: gameDefinition,
+      running: runtime,
       load: () => loadTableRuntime(rulesPath, tempDir, context, config.gameOptions),
     });
+    holdings.hold([{ name: "the table's rules worker", close: () => rulesReload.closeRules() }]);
 
     // The `noServer` upgrade routing that leaves Vite's HMR socket alone lives
     // in `dev-server.ts`, shared with the world run: two copies of it is how
@@ -1003,14 +982,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
       mpHost,
       clients,
       queue: rulesReload,
-      onError: (err, msgType) =>
-        // The message, not the error: a running dev server has nothing to
-        // throw to, and a stack trace in its log is the same leak (#240).
-        console.error(
-          chalk.red(
-            `[boardsmith dev] message '${msgType}' failed: ${err instanceof Error ? err.message : String(err)}`,
-          ),
-        ),
+      onError: logMessageFailure,
     });
 
     // A refused listen closes Vite and this host's socket before the error
@@ -1055,38 +1027,38 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
       join: 'others can join',
       networkUrls: served.networkUrls,
       say: (line) => console.log(line),
-      green: chalk.green,
-      cyan: chalk.cyan,
+      green: (text: string) => styleText('green', text),
+      cyan: (text: string) => styleText('cyan', text),
     });
 
-    console.log(chalk.dim(`  ${multiplayerBannerLine(isNonLocal)}`));
-    console.log(chalk.cyan(`  Seats: ${effectivePlayerCount} (open seats play as bot${botPlayers.length ? `; --bot ${botPlayers.join(',')} pre-marked` : ''}, level ${botLevel}).`));
+    console.log(styleText('dim', `  ${multiplayerBannerLine(isNonLocal)}`));
+    console.log(styleText('cyan', `  Seats: ${effectivePlayerCount} (open seats play as bot${botPlayers.length ? `; --bot ${botPlayers.join(',')} pre-marked` : ''}, level ${botLevel}).`));
     if (teachingDisabled) {
-      console.log(chalk.yellow(`  Teaching lockout active (--lock-teaching): hint, heatmap, demo, and tutorial are disabled.`));
+      console.log(styleText('yellow', `  Teaching lockout active (--lock-teaching): hint, heatmap, demo, and tutorial are disabled.`));
     }
     console.log(
       options.debug === true
-        ? chalk.yellow('  Debugging forced on (--debug): everyone seated can read every seat\'s moves, rewind and edit decks.')
-        : chalk.dim('  Debugging is on while one person holds every human seat, and off once a second person sits down (--debug keeps it on).'),
+        ? styleText('yellow', '  Debugging forced on (--debug): everyone seated can read every seat\'s moves, rewind and edit decks.')
+        : styleText('dim', '  Debugging is on while one person holds every human seat, and off once a second person sits down (--debug keeps it on).'),
     );
     if (seedSnapshot) {
-      console.log(chalk.cyan(`  Seeded start (--seed ${options.seed}): initial state loaded from the recorded snapshot instead of a fresh start.`));
+      console.log(styleText('cyan', `  Seeded start (--seed ${options.seed}): initial state loaded from the recorded snapshot instead of a fresh start.`));
     }
 
     // #41 item 2. The cross-session store is live before any client connects,
     // so a game that declares `persistence: true` is exercised against a real
     // store from the first move rather than only after it is published.
     if (devStore !== null) {
-      console.log(chalk.cyan(`  Cross-session store: ${storeFile}.`));
+      console.log(styleText('cyan', `  Cross-session store: ${storeFile}.`));
     }
 
     if (shouldOpenBrowser(options)) {
       await open(hostUrl);
     } else {
-      console.log(chalk.dim('  Skipping auto-open (--no-open): connect a client to claim seat 1 yourself.'));
+      console.log(styleText('dim', '  Skipping auto-open (--no-open): connect a client to claim seat 1 yourself.'));
     }
 
-    console.log(chalk.green('\n  Ready! Press Ctrl+C to stop.\n'));
+    console.log(styleText('green', '\n  Ready! Press Ctrl+C to stop.\n'));
   } catch (error) {
     throw new Error(
       `Failed to start the Vite dev server: ${error instanceof Error ? error.message : String(error)}`,

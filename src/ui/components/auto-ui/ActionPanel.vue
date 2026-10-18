@@ -16,8 +16,9 @@
 import { ref, computed, watch, inject, nextTick, useId, onMounted, onBeforeUnmount } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
-import { formatActionName, getDisplayFromValue, labelOfPick, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
+import { choiceBoardTarget, editorRuleRefusal, formatActionName, getDisplayFromValue, labelOfPick, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
 import { createActionMutators } from '../../composables/actionMutators.js';
+import { escapeRegExp } from '../../../utils/regexp.js';
 import type {
   UseActionControllerReturn,
   EnrichedPickMetadata,
@@ -44,8 +45,6 @@ import {
 // reaches for `MAX_FLAT_CHOICE_CANDIDATES`: the panel must apply the SAME
 // rules the server applies, and a second copy of them is a second rule set
 // (#229 for text, #237 for number).
-import { numberRuleErrors } from '../../../engine/action/number-rules.js';
-import { textRuleErrors } from '../../../engine/action/text-rules.js';
 import { choiceValueKey } from '../../../engine/action/choice-matching.js';
 import ActionHelpPopover from '../helpers/ActionHelpPopover.vue';
 // Type-only, so the log component's module (and its stylesheet) never enters
@@ -143,6 +142,12 @@ const props = defineProps<{
    * Absent and `false` both mean the list on screen is the whole answer.
    */
   actionsPending?: boolean;
+  /**
+   * True while the shell's BoardErrorBoundary shows its message in place of the
+   * board (#1153): there is no board to choose on, so the panel hands no pick to it.
+   * Optional because games mount the panel in their own tests; both shells always pass it.
+   */
+  boardFailed?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -546,6 +551,7 @@ function confirmDraft(): void {
  * per-editor. There is no per-editor copy of this left to forget.
  */
 const editorInputError = ref<string | null>(null);
+const editorErrorEl = ref<HTMLElement | null>(null);
 
 watch(() => actionController.currentPickDraft.value, () => {
   editorInputError.value = null;
@@ -913,6 +919,7 @@ const anchoredChoices = computed(() => _splitChoices.value.anchored);
  * candidate must be reachable on the board before the panel will yield.
  */
 const deferPickToBoard = computed(() => {
+  if (props.boardFailed) return false;
   const type = currentPick.value?.type;
   if (type === 'choice') return shouldDeferChoicePickToBoard(offeredChoices.value);
   return shouldDeferElementPickToBoard(type, offeredElements.value);
@@ -951,10 +958,10 @@ function skipOptionalSelection() {
 /**
  * Why the value in the open editor cannot be submitted, or null.
  *
- * The rules come from the engine's OWN validators -- `textRuleErrors` (#229)
- * and `numberRuleErrors` (#237) -- so what the panel refuses here and what the
- * server would refuse are the same rule in the same words, rather than two
- * copies that drift. `validate` is deliberately not among them: a game's custom
+ * The rules come from the engine's OWN validators, through `editorRuleRefusal`
+ * (#229, #237, #1057), which `controller.fill` also uses -- so what the panel
+ * refuses here, what a custom UI is refused, and what the server would refuse
+ * are the same rule in the same words, rather than two copies that drift. `validate` is deliberately not among them: a game's custom
  * validator closes over game state and never reaches a client, so the engine
  * stays the authority and this is the subset a client can honestly check.
  *
@@ -965,26 +972,8 @@ function skipOptionalSelection() {
 function editorValueRefusal(): string | null {
   const pick = currentPick.value;
   if (!pick) return null;
-  if (pick.type === 'number') {
-    const val = numberInputValue.value;
-    if (val === null) return null;
-    return numberRuleErrors(pick.name, val, pick)[0] ?? null;
-  }
-  if (pick.type === 'text') {
-    return textRuleErrors(pick.name, textInputValue.value, {
-      minLength: pick.minLength,
-      maxLength: pick.maxLength,
-      maxBytes: pick.maxBytes,
-      multiline: pick.multiline,
-      // The wire carries a pattern as its source string with its sentence;
-      // compiling it here is the only form the rule can be applied in.
-      pattern:
-        pick.pattern === undefined
-          ? undefined
-          : { regex: new RegExp(pick.pattern.source), message: pick.pattern.message },
-    })[0] ?? null;
-  }
-  return null;
+  const value = pick.type === 'number' ? numberInputValue.value : textInputValue.value;
+  return value === null ? null : editorRuleRefusal(pick, value);
 }
 
 /**
@@ -1007,6 +996,8 @@ function submitEditorValue() {
   const refusal = editorValueRefusal();
   if (refusal !== null) {
     editorInputError.value = refusal;
+    // The bar caps its height and the message sits below Done, so bring it into view (#1159).
+    void nextTick(() => editorErrorEl.value?.scrollIntoView({ block: 'nearest' }));
     return;
   }
 
@@ -1198,9 +1189,22 @@ function restoreFocusAfterRemoval(index: number): void {
   )?.focus();
 }
 
+/**
+ * What a choice's control reads out: its display, plus its board square when it has one (#934)
+ * and the display does not already name that square as a whole word (#1105).
+ */
+function choiceSpokenName(choice: ChoiceWithRefs): string {
+  // The square the board picks, not the source every destination of one piece shares (#1084).
+  const notation = choiceBoardTarget(choice)?.notation;
+  if (!notation) return choice.display;
+  // A leading '-' is part of a coordinate, so "1,2" is not named by "-1,2".
+  const named = new RegExp(`(?<![\\w-])${escapeRegExp(notation)}(?!\\w)`).test(choice.display);
+  return named ? choice.display : `${choice.display} (${notation})`;
+}
+
 /** What one built entry reads as: the label of the button that adds it. */
 function orderedEntryDisplay(value: unknown): string {
-  return labelOfPick(value, filteredChoices.value);
+  return labelOfPick(value, offeredChoices.value);
 }
 
 /** "Added: 2/3", or "Added: 2" when the list has no upper bound. */
@@ -1815,8 +1819,8 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             </li>
           </ol>
           <div ref="orderedChoiceRow" class="choice-buttons ordered-list-choices">
-            <!-- #313: the candidates are on the board (so none is in filteredChoices);
-                 the entries above stay here. -->
+            <!-- #313 / #935: the candidates are on the board, so the handoff replaces
+                 the Add buttons (id refs stay in filteredChoices); the entries above stay here. -->
             <button
               v-if="deferPickToBoard"
               class="choice-btn board-handoff-btn"
@@ -1829,19 +1833,21 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
                  gesture (#252). Announced on its own, "University" says neither
                  what pressing it does nor that pressing it again repeats it, and
                  a row of buttons all reading "Add University" is unreadable. -->
-            <button
-              v-for="choice in filteredChoices"
-              :key="choiceValueKey(choice.value)"
-              class="choice-btn ordered-list-add"
-              :aria-label="`Add ${choice.display}`"
-              v-disabled-reason="orderedListAddDisabledReason(choice.disabled)"
-              :aria-disabled="isDisabled(orderedListAddDisabledReason(choice.disabled)) || undefined"
-              @click="addListEntry(currentPick.name, choice.value)"
-              @mouseenter="handleChoiceHover(choice)"
-              @mouseleave="handleChoiceLeave"
-            >
-              {{ choice.display }}
-            </button>
+            <template v-else>
+              <button
+                v-for="choice in filteredChoices"
+                :key="choiceValueKey(choice.value)"
+                class="choice-btn ordered-list-add"
+                :aria-label="`Add ${choiceSpokenName(choice)}`"
+                v-disabled-reason="orderedListAddDisabledReason(choice.disabled)"
+                :aria-disabled="isDisabled(orderedListAddDisabledReason(choice.disabled)) || undefined"
+                @click="addListEntry(currentPick.name, choice.value)"
+                @mouseenter="handleChoiceHover(choice)"
+                @mouseleave="handleChoiceLeave"
+              >
+                {{ choice.display }}
+              </button>
+            </template>
             <DoneButton
               :disabled-reason="orderedListDoneDisabledReason"
               @click="confirmMultiSelect"
@@ -1878,6 +1884,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               <input
                 type="checkbox"
                 :checked="isMultiSelectValueSelected(choice.value)"
+                :aria-label="choiceSpokenName(choice)"
                 :aria-disabled="isDisabled(multiSelectDisabledReason(choice.disabled, choice.value)) || undefined"
                 @click="toggleMultiSelectValue(currentPick.name, choice.value, choice.display)"
               />
@@ -2025,6 +2032,8 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               :maxlength="currentPick.maxLength"
               rows="6"
             ></textarea>
+            <!-- No HTML `pattern`: the browser compiles it under `v` with no
+                 other flags, so it can refuse what the server accepts (#890). -->
             <input
               v-else
               v-bind="editorFieldAttrs"
@@ -2032,7 +2041,6 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               v-model="textInputValue"
               :minlength="currentPick.minLength"
               :maxlength="currentPick.maxLength"
-              :pattern="currentPick.pattern?.source"
               @keyup.enter="submitEditorValue"
             />
             <!-- Above the submit button, not below it: the bar caps its own
@@ -2069,7 +2077,13 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           <span v-if="currentPick.multiline" class="sr-only" role="status">
             {{ textLimitAnnouncement }}
           </span>
-          <p v-if="editorInputError" :id="editorErrorId" class="selection-error" role="alert">
+          <p
+            v-if="editorInputError"
+            :id="editorErrorId"
+            ref="editorErrorEl"
+            class="selection-error"
+            role="alert"
+          >
             {{ editorInputError }}
           </p>
         </div>
@@ -2090,7 +2104,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             :key="choiceValueKey(choice.value)"
             class="choice-btn anchored-choice-btn"
             v-disabled-reason="choice.disabled"
-            :aria-label="`${choice.display}${choice.refs?.find(r => r.ref.notation)?.ref.notation ? ' (' + choice.refs.find(r => r.ref.notation)!.ref.notation + ')' : ''}`"
+            :aria-label="choiceSpokenName(choice)"
             @click="executeChoice(currentPick.name, choice)"
             @mouseenter="handleChoiceHover(choice)"
             @mouseleave="handleChoiceLeave"
@@ -2142,6 +2156,8 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
   </div>
   </div>
 </template>
+
+<style scoped src="../sr-only.css"></style>
 
 <style scoped>
 .action-panel {
@@ -2279,20 +2295,6 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 .action-group-chevron {
   margin-left: 6px;
   opacity: 0.75;
-}
-
-/* Announcements for a screen reader only. The visible half of every one of
-   these is the button list itself. */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 /* Action configuration - horizontal flow layout */
@@ -2632,19 +2634,6 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
   color: var(--bsg-danger);
   font-size: 0.85rem;
   white-space: normal;
-}
-
-/* Screen-reader only (mirrors AutoRenderer's helper; scoped styles don't share). */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 .input-hint {

@@ -51,9 +51,10 @@
  * table dev store does.
  *
  * A DIRECTORY rather than the table store's single dotfile, because SQLite owns
- * more than one file: `world.db` is accompanied by `world.db-wal` and
- * `world.db-shm` while the database is open, and a rollback of the last
- * transaction is read out of them. One directory keeps them together, makes the
+ * more than one file: `world.db` is accompanied by `world.db-wal` while the
+ * database is open, and a rollback of the last transaction is read out of it;
+ * `world.db.holder` names the run holding it (#881), and `world.db.lock` is
+ * that run's hold (#1040). One directory keeps them together, makes the
  * ignore rule one line, and makes `boardsmith dev --reset` one removal that
  * cannot leave a sidecar behind describing a database that is gone.
  *
@@ -68,9 +69,9 @@
  * host's own answer from its open connections at the instant it asks.
  */
 
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 
 import type { DeclaredSeatActivityStamp, StoredPartition } from '../../world/contract.js';
 import {
@@ -132,12 +133,66 @@ export function worldStorePath(projectRoot: string): string {
  *
  * Answers whether anything was there, so the caller can say "reset" or
  * "nothing to reset" rather than guessing.
+ *
+ * Refused while another run holds the world (#1040), and done holding it, so
+ * no run can open the world while it is being deleted. The lock file stays:
+ * a run that took a new one while this one held the old would hold the world too.
  */
 export function resetWorldStore(projectRoot: string): boolean {
   const dir = worldStoreDir(projectRoot);
   if (!existsSync(dir)) return false;
-  rmSync(dir, { recursive: true, force: true });
-  return true;
+  const path = worldStorePath(projectRoot);
+  const kept = basename(lockPath(path));
+  // Asked before the lock writes its holder note, which is not a world.
+  const hadWorld = readdirSync(dir).some((name) => name !== kept);
+  const lock = takeWorldLock(path);
+  try {
+    for (const name of readdirSync(dir)) if (name !== kept) rmSync(join(dir, name), { recursive: true, force: true });
+  } finally {
+    lock.release();
+  }
+  return hadWorld;
+}
+
+/** A run's hold on its world: released by {@link WorldLock.release} or by the process ending. */
+export interface WorldLock {
+  /** Let go of the world. Releasing twice is releasing once. */
+  release(): void;
+}
+
+/**
+ * HOLD THE WORLD FOR A WHOLE RUN (#1040), refusing with the #881 message when another run holds it.
+ *
+ * The store's own connection is the lock while it is open, but a rules reload
+ * closes it before reopening, and a store in a rules worker closes when the
+ * worker stops; a second run could take the world in either gap. So the run
+ * holds this, on its own file, from before it opens the store until it stops,
+ * and `--reset` takes it before deleting anything. SQLite's exclusive mode is
+ * the lock for the store's reason: the OS drops it when the process dies.
+ */
+export function takeWorldLock(path: string, holder: { readonly port?: number } = {}): WorldLock {
+  mkdirSync(dirname(path), { recursive: true });
+  const db = new (loadSqlite().DatabaseSync)(lockPath(path));
+  try {
+    db.exec('PRAGMA locking_mode = EXCLUSIVE');
+    // Nothing is ever written here, so no journal file is needed.
+    db.exec('PRAGMA journal_mode = MEMORY');
+    // Exclusive locking mode keeps this lock after the commit, until the connection closes.
+    db.exec('BEGIN EXCLUSIVE');
+    db.exec('COMMIT');
+    writeFileSync(holderPath(path), JSON.stringify({ pid: process.pid, port: holder.port }));
+  } catch (error) {
+    db.close();
+    throw (error as { errcode?: number }).errcode === SQLITE_BUSY ? heldElsewhere(path) : error;
+  }
+  let released = false;
+  return {
+    release(): void {
+      if (released) return;
+      released = true;
+      db.close();
+    },
+  };
 }
 
 /**
@@ -198,28 +253,42 @@ export interface LocalWorldStore extends WorldStore {
  * for itself would be a second place a laptop and the platform could silently
  * disagree about how large a partition may be, which is exactly what #165 moved
  * the budgets into the library to prevent.
+ *
+ * ONE RUN PER WORLD (#881). Two runs on one database each write whole
+ * partitions back over the other's and both fire the same scheduled events, so
+ * the connection holds the file exclusively until it closes. The OS drops that
+ * lock when the process dies, so a crashed run leaves nothing to clean up.
+ * `port` is only recorded, to name this run in a second one's refusal.
  */
-export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldStore {
+export function openWorldStore(
+  path: string,
+  budgets: WorldBudgets,
+  holder: { readonly port?: number } = {},
+): LocalWorldStore {
   mkdirSync(dirname(path), { recursive: true });
   const db = new (loadSqlite().DatabaseSync)(path);
   let closed = false;
 
-  // WAL, because a dev host writes small and often and a rollback journal
-  // rewrites the whole page set for each of them. FULL rather than WAL's usual
-  // NORMAL: NORMAL lets the last few commits live in the OS page cache, which
-  // survives this process dying but not the machine doing so -- and "close the
-  // laptop and open it again" is the acceptance sentence for this store.
-  db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA synchronous = FULL');
   // CLOSED IF IT REFUSES TO OPEN. A store this code cannot read is a startup
   // failure the host reports and exits on, and a connection left behind holds
   // SQLite's WAL sidecars open against a database the author is about to move
   // aside or hand to a `boardsmith dev` that CAN read it.
   try {
+    // EXCLUSIVE before WAL, so the WAL index lives in this process's memory and
+    // the first access below takes a lock held for the connection's life.
+    db.exec('PRAGMA locking_mode = EXCLUSIVE');
+    // WAL, because a dev host writes small and often and a rollback journal
+    // rewrites the whole page set for each of them. FULL rather than WAL's usual
+    // NORMAL: NORMAL lets the last few commits live in the OS page cache, which
+    // survives this process dying but not the machine doing so -- and "close the
+    // laptop and open it again" is the acceptance sentence for this store.
+    db.exec('PRAGMA journal_mode = WAL');
+    writeFileSync(holderPath(path), JSON.stringify({ pid: process.pid, port: holder.port }));
+    db.exec('PRAGMA synchronous = FULL');
     prepareSchema(db, path);
   } catch (error) {
     db.close();
-    throw error;
+    throw (error as { errcode?: number }).errcode === SQLITE_BUSY ? heldElsewhere(path) : error;
   }
 
   const stmt = {
@@ -241,9 +310,16 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
     sweepReceipts: db.prepare('DELETE FROM receipts WHERE at < ?'),
     addDirty: db.prepare('INSERT INTO dirty (name) VALUES (?) ON CONFLICT(name) DO NOTHING'),
     clearDirty: db.prepare('DELETE FROM dirty WHERE name = ?'),
-    listEvents: db.prepare(
-      'SELECT id, due, seq, key, owner, action, args, every_ms, attempts ' +
-        'FROM scheduled ORDER BY due, seq',
+    listEvents: db.prepare(`${EVENT_COLUMNS} FROM scheduled ORDER BY due, seq`),
+    countEvents: db.prepare('SELECT COUNT(*) AS count FROM scheduled'),
+    // shortcut: no index on owner, so this scans the table (keys and ids only, no args); add one in a layout step if a dev world's queue makes it show.
+    ownerEvents: db.prepare('SELECT id, key FROM scheduled WHERE owner = ?'),
+    earliestEventAfter: db.prepare(
+      `${EVENT_COLUMNS} FROM scheduled WHERE due > ? ORDER BY due, seq LIMIT 1`,
+    ),
+    nextDue: db.prepare(
+      `${EVENT_COLUMNS} FROM scheduled WHERE due <= ? ` +
+        'AND id NOT IN (SELECT value FROM json_each(?)) ORDER BY due, seq LIMIT 1',
     ),
     writeEvent: db.prepare(
       'INSERT INTO scheduled (id, due, seq, key, owner, action, args, every_ms, attempts) ' +
@@ -455,17 +531,32 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
     },
 
     pendingEvents(): readonly PlannedEvent[] {
-      return (stmt.listEvents.all() as EventRow[]).map((row) => ({
-        id: row.id,
-        due: row.due,
-        seq: row.seq,
-        owner: row.owner,
-        action: row.action,
-        args: JSON.parse(row.args) as Record<string, unknown>,
-        attempts: row.attempts,
-        ...(row.key === null ? {} : { key: row.key }),
-        ...(row.every_ms === null ? {} : { everyMs: row.every_ms }),
-      }));
+      return (stmt.listEvents.all() as EventRow[]).map(plannedEvent);
+    },
+
+    pendingCount(): number {
+      return (stmt.countEvents.get() as { count: number }).count;
+    },
+
+    pendingOf(owner: string) {
+      const rows = stmt.ownerEvents.all(owner) as Array<{ id: string; key: string | null }>;
+      let unkeyed = 0;
+      const keyed = new Map<string, string>();
+      for (const row of rows) {
+        if (row.key === null) unkeyed += 1;
+        else keyed.set(row.key, row.id);
+      }
+      return { unkeyed, keyed };
+    },
+
+    earliestEvent(after: number = Number.MIN_SAFE_INTEGER): PlannedEvent | undefined {
+      const row = stmt.earliestEventAfter.get(after) as EventRow | undefined;
+      return row === undefined ? undefined : plannedEvent(row);
+    },
+
+    nextDue(at: number, taken: ReadonlySet<string>): PlannedEvent | undefined {
+      const row = stmt.nextDue.get(at, JSON.stringify([...taken])) as EventRow | undefined;
+      return row === undefined ? undefined : plannedEvent(row);
     },
 
     nextSeq(): number {
@@ -771,6 +862,8 @@ interface ReceiptRow {
   message: string | null;
 }
 
+const EVENT_COLUMNS = 'SELECT id, due, seq, key, owner, action, args, every_ms, attempts';
+
 /** One scheduled event as SQLite hands it back. */
 interface EventRow {
   id: string;
@@ -782,6 +875,20 @@ interface EventRow {
   args: string;
   every_ms: number | null;
   attempts: number;
+}
+
+function plannedEvent(row: EventRow): PlannedEvent {
+  return {
+    id: row.id,
+    due: row.due,
+    seq: row.seq,
+    owner: row.owner,
+    action: row.action,
+    args: JSON.parse(row.args) as Record<string, unknown>,
+    attempts: row.attempts,
+    ...(row.key === null ? {} : { key: row.key }),
+    ...(row.every_ms === null ? {} : { everyMs: row.every_ms }),
+  };
 }
 
 const LAUNCHED_KEY = 'launched';
@@ -986,6 +1093,38 @@ export function prepareSchema(
     if (stamped !== step.to) throw upgradeLeftWrongStamp(step, stamped, path);
     at = step.to;
   }
+}
+
+/** SQLite's "database is locked". */
+const SQLITE_BUSY = 5;
+
+/** The file a run holds for as long as it runs (#1040). */
+function lockPath(path: string): string {
+  return `${path}.lock`;
+}
+
+/** Where the run holding a store records who it is. */
+function holderPath(path: string): string {
+  return `${path}.holder`;
+}
+
+/** The refusal a second run gets, naming the run that holds the world. */
+function heldElsewhere(path: string): Error {
+  let held: { pid?: number; port?: number } = {};
+  try {
+    held = JSON.parse(readFileSync(holderPath(path), 'utf8')) as typeof held;
+  } catch {
+    // Any failure only leaves the run unnamed: the refusal below stands either way.
+  }
+  const who =
+    held.pid === undefined
+      ? 'another `boardsmith dev` (it did not record its pid)'
+      : `another \`boardsmith dev\` (pid ${held.pid}${held.port === undefined ? '' : `, port ${held.port}`})`;
+  return new Error(
+    `The world at ${path} is already open in ${who}. Two runs on one world overwrite each ` +
+      `other's rooms and both fire its scheduled events, so this one will not open it. Stop that ` +
+      `run (Ctrl+C in its terminal${held.pid === undefined ? '' : `, or \`kill ${held.pid}\``}) and start this one again.`,
+  );
 }
 
 /**

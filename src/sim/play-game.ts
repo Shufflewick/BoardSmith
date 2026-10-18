@@ -5,16 +5,24 @@
  *
  * @module
  */
-import type { Game, FlowState } from '../engine/index.js';
-import { dueSeats, availableActionsForSeat } from '../engine/index.js';
+import type { Game, FlowState, PublishedFollowUp } from '../engine/index.js';
+import { followUpForSeat } from '../engine/index.js';
+import { dueSeatOffers, describeRefused } from '../engine/flow/seat-activity.js';
 import { refuseChangeSince } from '../engine/element/state-version.js';
+import { encodeValue } from '../engine/element/game-element.js';
 import { endOfGameRecords, type GameMetrics, type MetricRecord, type MetricSink } from '../engine/metrics.js';
 import { createTestGame, type TestGame } from '../testing/test-game.js';
 import { SeededRandom } from '../utils/random.js';
 import type { Policy, SimulatedGame } from './policies.js';
 
-/** Stop a single game after this many consecutive rejected actions. */
-const MAX_CONSECUTIVE_FAILURES = 10;
+/** The move's args as the action history would write them, or a plain note when they cannot be written. */
+function describeMove(args: Record<string, unknown>, game: Game, action: string): string {
+  try {
+    return `the move ${JSON.stringify(encodeValue(args, game._ctx, `action '${action}'`, 'args'))}`;
+  } catch {
+    return 'a move that could not be shown';
+  }
+}
 
 /**
  * Says whether a game has reached the place it is meant to rest: return the
@@ -46,7 +54,7 @@ export interface SingleGameResult {
    * Whether the simulation got stuck: no seat had an enabled action and the
    * game did not declare that stop a rest, it could not produce a valid move
    * (e.g. an action requires input the random simulator cannot generate),
-   * or generated moves were repeatedly rejected. See {@link SingleGameResult.error}.
+   * or the game rejected a move a policy chose. See {@link SingleGameResult.error}.
    */
   stuck: boolean;
   /**
@@ -56,7 +64,7 @@ export interface SingleGameResult {
   resting: boolean;
   /** The reason `isResting` gave, when the game is resting */
   restReason?: string;
-  /** Error message if crashed, or the reason the simulation got stuck */
+  /** Error message if crashed, or the reason the simulation got stuck or exceeded max actions */
   error?: string;
   /** Number of actions taken */
   actionCount: number;
@@ -78,40 +86,28 @@ export interface SingleGameResult {
 
 
 /**
- * The seats a flow state is waiting on, each with the actions it offers them,
- * answered by the engine's one rule for who may act (`dueSeats`). @internal
- */
-function offeredSeats(flowState: FlowState): Array<{ seat: number; actionNames: string[] }> {
-  return dueSeats(flowState).map((seat) => ({
-    seat,
-    actionNames: availableActionsForSeat(flowState, seat),
-  }));
-}
-
-/**
- * The seats that can act right now, each with its ENABLED actions, plus why
- * every refused action is refused.
+ * The seats that can act right now (with an ENABLED action or a held
+ * follow-up, #911), each with its enabled actions, plus why every refused
+ * action is refused.
  *
  * An action's `.disabled()` rule (and a tutorial gate) keeps it in the flow's
  * available actions so the panel can grey it out and say why, while the
  * server refuses it. A refused action is not a move, so it is left out here,
- * through `game.getDisabledActions`, the same channel the panel reads (#318).
+ * through the engine's `dueSeatOffers`, the rule the bot pump and benchmark
+ * read too (#318, #1133).
  * @internal
  */
 function enabledSeats(
   game: Game,
   flowState: FlowState
-): { seats: Array<{ seat: number; actionNames: string[] }>; refused: string[] } {
-  const seats: Array<{ seat: number; actionNames: string[] }> = [];
-  const refused: string[] = [];
-  for (const { seat, actionNames } of offeredSeats(flowState)) {
-    const disabled = game.getDisabledActions(seat);
-    const enabled = actionNames.filter((name) => !(name in disabled));
-    const blocked = actionNames.filter((name) => name in disabled);
-    refused.push(...blocked.map((name) => `player ${seat}'s '${name}' (${disabled[name].replace(/\.$/, '')})`));
-    if (enabled.length > 0) seats.push({ seat, actionNames: enabled });
-  }
-  return { seats, refused };
+): { seats: Array<{ seat: number; actionNames: string[]; followUp?: PublishedFollowUp }>; refused: string[] } {
+  const offers = dueSeatOffers(flowState, game);
+  return {
+    seats: offers
+      .filter((offer) => offer.canMove)
+      .map(({ seat, enabled }) => ({ seat, actionNames: enabled, followUp: followUpForSeat(flowState, seat) })),
+    refused: describeRefused(offers),
+  };
 }
 
 /**
@@ -309,7 +305,6 @@ export async function playGame<G extends Game>(
   let stuck = false;
   let stuckReason: string | undefined;
   let restReason: string | undefined;
-  let consecutiveFailures = 0;
   const recorder = metricRecorder(definition.metrics);
 
   try {
@@ -334,6 +329,9 @@ export async function playGame<G extends Game>(
 
       if (actionCount >= maxActions) {
         exceededMaxActions = true;
+        stuckReason =
+          `Game did not finish within the maximum of ${maxActions} action${maxActions === 1 ? '' : 's'}. ` +
+          'Raise maxActions if the game is just long, or check its flow for a loop that never ends.';
         break;
       }
 
@@ -369,6 +367,7 @@ export async function playGame<G extends Game>(
         game: testGame.game,
         seat: actor.seat,
         actions: actor.actionNames,
+        followUp: actor.followUp,
         random: seatRandom[actor.seat - 1],
         definition,
       });
@@ -385,8 +384,7 @@ export async function playGame<G extends Game>(
         break;
       }
 
-      // Uses tryAction (not doAction) so the consecutiveFailures retry branch
-      // below keeps working as a normal control-flow branch, not a throw.
+      // tryAction (not doAction) so a rejection below is reported as stuck, not a crash.
       recorder.refuseStray(`policy '${policy.name}'`);
       const result = testGame.tryAction(actor.seat, choice.action, choice.args);
       recorder.check();
@@ -394,7 +392,6 @@ export async function playGame<G extends Game>(
       if (result.success) {
         recorder.keep();
         actionCount++;
-        consecutiveFailures = 0;
         if (!testGame.isComplete()) {
           restReason = declaredRest(isResting, testGame.game);
           if (restReason !== undefined) break;
@@ -402,19 +399,14 @@ export async function playGame<G extends Game>(
         continue;
       }
 
-      // A move built from the engine's own choices was rejected. That is a real
-      // inconsistency between availability and validation -- surface it loudly
-      // rather than retrying forever.
+      // The game rejected the move a policy chose: fail the game on the first one (#910).
       recorder.discard();
-      consecutiveFailures++;
-      if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-        stuck = true;
-        stuckReason =
-          `${consecutiveFailures} consecutive actions generated from valid choices were rejected. ` +
-          `Last: action '${choice.action}' failed with: ${result.error ?? 'unknown error'}. ` +
-          'This indicates the action\'s reported choices disagree with its validation.';
-        break;
-      }
+      stuck = true;
+      stuckReason =
+        `Action '${choice.action}' rejected ${describeMove(choice.args, testGame.game, choice.action)}, chosen by policy '${policy.name}': ` +
+        `${(result.error ?? 'unknown error').replace(/\.$/, '')}. A simulated game fails on its first rejected move: ` +
+        'an action must accept every move its enabled choices offer, and a policy must choose only from them.';
+      break;
     }
 
     const duration = Date.now() - startTime;

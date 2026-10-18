@@ -31,7 +31,8 @@
  * floor's colour-literal and asset scans (`build/test.md`). No code mutant can make a scan fail, so
  * a guard is never a Spec Manifest file and is never mutation-tested; the full suite runs it. A guard
  * the chunk wrote or changed that runs the game's code is a finding, since it would be a behaviour test
- * hidden from the mutation check (`test-step-code-run.ts` says what counts, #443, #485).
+ * hidden from the mutation check (`test-step-code-run.ts` says what counts, #443, #485). So is any other
+ * guard that loads a support file under `tests/` the chunk changed, directly or through another (#1013).
  *
  * "The chunk added" means the lines whose last change is one of the chunk's own
  * `chunk-<slug>/` commits, or is not committed yet (`addedImplementationLines`).
@@ -39,8 +40,9 @@
  * Any finding exits non-zero. There is no flag that skips a check.
  */
 import { promises as fs } from 'node:fs';
+import { readIfExists, readListedText } from '../lib/read-if-exists.js';
 import { join, relative, resolve as pathResolve, sep } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import {
   claimsInForce,
   extractSection,
@@ -61,12 +63,13 @@ import {
 } from './test-step-ast.js';
 import { runMutationCheck, type MutationSummary } from './test-step-mutation.js';
 import { scriptRegions } from './test-step-sfc.js';
-import { findCodeRun, type CodeRunContext } from './test-step-code-run.js';
+import { findCodeRun, supportFilesLoaded, type CodeRunContext } from './test-step-code-run.js';
 import { findHandBuiltShellContext } from './test-step-shell-context.js';
 import { findChunkCommits } from '../lib/chunk-commits.js';
-import { gitOutput as git } from '../lib/git-output.js';
+import { blameHeader, gitOutput as git } from '../lib/git-output.js';
 import { chunkMdPath, relChunkMdPath } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
+import { mayBeSameOrInside } from '../lib/path-inside.js';
 
 const TEST_STEP_FINDING_KINDS = Object.freeze([
   'spec-manifest-empty',
@@ -136,6 +139,24 @@ function parseClaimsCell(cell: string): number[] {
   return [...text.matchAll(/(?<![\w-])\d+(?![\w-])/g)].map((m) => Number(m[0]));
 }
 
+/** The exempt row must give a reason and be the only row besides `none (regression)` rows (build/spec.md "Exemptions"). */
+function refuseBadExemption(rows: SpecManifestRow[], exemption: string | undefined): void {
+  if (exemption === '') {
+    throw new Error(
+      'The Spec Manifest\'s exempt row gives no reason. Say why the chunk adds no new game behavior in its ' +
+        'second cell: `| exempt | <reason> | n/a |` (build/spec.md "Exemptions").',
+    );
+  }
+  const tested = rows.find((row) => !row.regression);
+  if (exemption !== undefined && tested !== undefined) {
+    throw new Error(
+      `The Spec Manifest marks this chunk exempt but also lists ${tested.testFile}. An exempt row must be the only ` +
+        'row besides `none (regression)` rows: remove the exempt row if the chunk has tests of its own, or remove ' +
+        'the other rows (build/spec.md "Exemptions").',
+    );
+  }
+}
+
 /** Reads the `| Test File | Claims Covered | RED Observed |` table. */
 export function parseSpecManifest(chunkText: string): SpecManifest {
   const body = extractSection(chunkText, '## Spec Manifest');
@@ -166,15 +187,13 @@ export function parseSpecManifest(chunkText: string): SpecManifest {
       regression: /^none\s*\(regression\)$/i.test(stripCell(cells[1])),
     });
   }
+  refuseBadExemption(rows, exemption);
   return { rows, exemption };
 }
 
 // -------------------------------------------------------------------------------------------
 // git: which lines this chunk wrote
 // -------------------------------------------------------------------------------------------
-
-/** The hash git blame gives a line that is not committed yet. */
-const UNCOMMITTED = '0'.repeat(40);
 
 const IMPLEMENTATION_FILE = /\.(ts|mts|cts|js|mjs)$/;
 /** A script file under `src/`: where verbs are defined. */
@@ -186,13 +205,13 @@ const isImplementation = (path: string) =>
  */
 export const isChunkCode = (path: string) => isImplementation(path) || (path.startsWith('src/') && path.endsWith('.vue'));
 
-/** Line numbers of `path` as it is now whose last change is one of `owners`. */
+/** Line numbers of `path` as it is now whose last change is one of `owners`, or not committed yet. */
 async function ownedLines(projectDir: string, path: string, owners: ReadonlySet<string>): Promise<Set<number>> {
   const lines = new Set<number>();
   const blame = await git(projectDir, ['blame', '--porcelain', '--', path]);
   for (const line of blame.split('\n')) {
-    const header = /^([0-9a-f]{40}) \d+ (\d+)/.exec(line);
-    if (header && owners.has(header[1])) lines.add(Number(header[2]));
+    const header = blameHeader(line);
+    if (header && (header.commit === null || owners.has(header.commit))) lines.add(header.line);
   }
   return lines;
 }
@@ -208,13 +227,13 @@ async function addedImplementationLines(
   chunkCommits: ReadonlySet<string>,
 ): Promise<Map<string, Set<number>>> {
   const touched = new Set<string>();
-  const committed = await git(projectDir, ['log', '--no-walk', '--format=', '--name-only', ...chunkCommits]);
-  const uncommitted = await git(projectDir, ['diff', 'HEAD', '--name-only', '--', 'src']);
+  // `--relative`: log and diff name files from the repo root, ls-files from the project; a nested game needs one base.
+  const committed = await git(projectDir, ['log', '--no-walk', '--format=', '--name-only', '--relative', ...chunkCommits]);
+  const uncommitted = await git(projectDir, ['diff', 'HEAD', '--name-only', '--relative', '--', 'src']);
   for (const path of [...committed.split('\n'), ...uncommitted.split('\n')]) {
     if (isChunkCode(path)) touched.add(path);
   }
 
-  const owners = new Set([...chunkCommits, UNCOMMITTED]);
   const added = new Map<string, Set<number>>();
   for (const path of [...touched].sort()) {
     try {
@@ -222,7 +241,7 @@ async function addedImplementationLines(
     } catch {
       continue; // deleted since
     }
-    const lines = await ownedLines(projectDir, path, owners);
+    const lines = await ownedLines(projectDir, path, chunkCommits);
     if (lines.size > 0) added.set(path, lines);
   }
   const untracked = await git(projectDir, ['ls-files', '--others', '--exclude-standard', '--', 'src']);
@@ -238,11 +257,8 @@ async function implementationNow(projectDir: string): Promise<SourceFile[]> {
   const listed = await git(projectDir, ['ls-files', '--cached', '--others', '--exclude-standard', '--', 'src']);
   const files: SourceFile[] = [];
   for (const path of listed.split('\n').filter(isImplementation)) {
-    try {
-      files.push({ path, text: await fs.readFile(join(projectDir, path), 'utf-8') });
-    } catch {
-      continue; // listed by git but deleted in the working tree
-    }
+    const text = await readListedText(join(projectDir, path));
+    if (text !== undefined) files.push({ path, text });
   }
   return files;
 }
@@ -252,11 +268,8 @@ async function testSupportSources(projectDir: string): Promise<SourceFile[]> {
   const listed = await git(projectDir, ['ls-files', '--cached', '--others', '--exclude-standard', '--', 'tests']);
   const sources: SourceFile[] = [];
   for (const path of listed.split('\n').filter((p) => /\.(ts|mts|js|mjs)$/.test(p))) {
-    try {
-      sources.push({ path, text: await fs.readFile(join(projectDir, path), 'utf-8') });
-    } catch {
-      continue; // listed by git but deleted in the working tree
-    }
+    const text = await readListedText(join(projectDir, path));
+    if (text !== undefined) sources.push({ path, text });
   }
   return sources;
 }
@@ -288,14 +301,14 @@ export interface ChunkTestFile {
 }
 
 async function readChunk(projectDir: string, slug: string): Promise<string> {
-  try {
-    return await fs.readFile(chunkMdPath(projectDir, slug), 'utf-8');
-  } catch {
+  const text = await readIfExists(chunkMdPath(projectDir, slug), (p) => fs.readFile(p, 'utf-8'));
+  if (text === undefined) {
     throw new Error(
       `No ${relChunkMdPath(slug)} in ${projectDir}.\n` +
         'Check the chunk slug (it is the directory name under design/chunks/), or pass --project <dir>.',
     );
   }
+  return text;
 }
 
 /** The claims a chunk owes tests for, and the ones it no longer does. */
@@ -332,11 +345,8 @@ function manifestShapeFindings(manifest: SpecManifest, claims: ChunkClaims): Tes
 async function readRowFile(projectDir: string, row: SpecManifestRow): Promise<ChunkTestFile | undefined> {
   const absPath = resolveManifestPath(projectDir, row.testFile);
   if (absPath === 'escapes') return undefined;
-  try {
-    return { path: row.testFile, absPath, source: await fs.readFile(absPath, 'utf-8') };
-  } catch {
-    return undefined;
-  }
+  const source = await readIfExists(absPath, (p) => fs.readFile(p, 'utf-8'));
+  return source === undefined ? undefined : { path: row.testFile, absPath, source };
 }
 
 /** Whether each claim the row lists is in force and cited by a test in the file that runs. */
@@ -372,7 +382,7 @@ const GUARD_TEST_DIR = 'tests/guards/';
 /** Whether a manifest path names a file under `GUARD_TEST_DIR`. */
 function isGuardFile(projectDir: string, testFile: string): boolean {
   const absPath = resolveManifestPath(projectDir, testFile);
-  return absPath !== 'escapes' && absPath.startsWith(join(projectDir, GUARD_TEST_DIR));
+  return absPath !== 'escapes' && mayBeSameOrInside(join(projectDir, GUARD_TEST_DIR), absPath);
 }
 
 /** The RED Observed finding for a row, if it has one; an exempt chunk's `none (regression)` row reads `n/a`. */
@@ -528,6 +538,8 @@ interface ChunkTestScope {
   touched: SourceFile[];
   /** The paths under `tests/` the chunk created, committed or not. */
   created: ReadonlySet<string>;
+  /** The guards the chunk wrote or changed, and every other guard that loads a support file it changed (#1013). */
+  guards: SourceFile[];
   /** What `findCodeRun` reads beyond the file in hand: the project's scripts and dispatch helpers. */
   context: CodeRunContext;
 }
@@ -561,11 +573,8 @@ async function projectScripts(projectDir: string): Promise<SourceFile[]> {
   const scripts: SourceFile[] = [];
   const wanted = (p: string) => /\.[cm]?[jt]sx?$/.test(p) && !/(^|\/)node_modules\//.test(p);
   for (const path of lines(listed).filter(wanted)) {
-    try {
-      scripts.push({ path, text: await fs.readFile(join(projectDir, path), 'utf-8') });
-    } catch {
-      continue; // listed by git but deleted in the working tree
-    }
+    const text = await readListedText(join(projectDir, path));
+    if (text !== undefined) scripts.push({ path, text });
   }
   return scripts;
 }
@@ -583,9 +592,9 @@ async function chunkTestScope(
   testFiles: ChunkTestFile[],
 ): Promise<ChunkTestScope> {
   const log = async (...filter: string[]) =>
-    lines(await git(projectDir, ['log', '--no-walk', '--no-renames', '--format=', '--name-only', ...filter, ...chunkCommits]));
+    lines(await git(projectDir, ['log', '--no-walk', '--no-renames', '--format=', '--name-only', '--relative', ...filter, ...chunkCommits]));
   const diff = async (...filter: string[]) =>
-    lines(await git(projectDir, ['diff', 'HEAD', '--no-renames', '--name-only', ...filter]));
+    lines(await git(projectDir, ['diff', 'HEAD', '--no-renames', '--name-only', '--relative', ...filter]));
   const untracked = lines(await git(projectDir, ['ls-files', '--others', '--exclude-standard']));
   const touched = new Set([...(await log()), ...(await diff()), ...untracked]);
   const created = new Set([...(await log('--diff-filter=A')), ...(await diff('--diff-filter=A')), ...untracked]);
@@ -594,6 +603,9 @@ async function chunkTestScope(
   const support = scripts.filter((f) => f.path.startsWith('tests/'));
   const text = new Map(scripts.map((f) => [f.path, f.text]));
   const manifest = manifestPaths(projectDir, testFiles);
+  const context: CodeRunContext = { text: (path) => text.get(path), wrappers: findDispatchWrappers(support) };
+  const loadsChangedSupport = ({ path, text: source }: SourceFile) =>
+    [...supportFilesLoaded(source, path, context)].some((loaded) => touched.has(loaded));
   return {
     touched: [
       ...testFiles.map((f) => ({ path: f.path, text: f.source })),
@@ -602,7 +614,8 @@ async function chunkTestScope(
       ),
     ],
     created,
-    context: { text: (path) => text.get(path), wrappers: findDispatchWrappers(support) },
+    guards: support.filter((f) => f.path.startsWith(GUARD_TEST_DIR) && (touched.has(f.path) || loadsChangedSupport(f))),
+    context,
   };
 }
 
@@ -623,27 +636,26 @@ function shellContextFindings(scope: ChunkTestScope): TestStepFinding[] {
   );
 }
 
-/** A guard the chunk wrote or changed that runs the game's code (see the file comment). */
+/** A guard the chunk wrote, changed or changed a support file of, that runs the game's code (see the file comment). */
 function guardRunsCodeFindings(scope: ChunkTestScope): TestStepFinding[] {
-  return scope.touched
-    .filter(({ path }) => path.startsWith(GUARD_TEST_DIR))
-    .flatMap(({ path, text }) => {
-      const run = findCodeRun(text, path, scope.context);
-      if (run === undefined) return [];
-      return [
-        {
-          kind: 'guard-runs-code' as const,
-          subject: `${path}:${run.line}`,
-          detail:
-            `Line ${run.line} of ${path} ${run.what}. A file under ${GUARD_TEST_DIR} holds scans only (tests that read ` +
-            'source as text, with `readFileSync` or an import ending `?raw`): it is never mutation-tested, so a test ' +
-            'there that runs the game could pass whatever the code does. The one game module a scan may import is ' +
-            'literal constants under src/ui/, such as the theme colours a contrast check needs. Move this test to ' +
-            "the chunk's own test file and list that file in the Spec Manifest " +
-            '(build/test.md "The A11y Floor").',
-        },
-      ];
-    });
+  return scope.guards.flatMap(({ path, text }) => {
+    const run = findCodeRun(text, path, scope.context);
+    if (run === undefined) return [];
+    return [
+      {
+        kind: 'guard-runs-code' as const,
+        subject: `${path}:${run.line}`,
+        detail:
+          `Line ${run.line} of ${path} ${run.what}. A file under ${GUARD_TEST_DIR} holds scans only (tests that read ` +
+          "source as text, with `readFileSync`, an import ending `?raw`, or `import.meta.glob` with `query: '?raw'`): " +
+          'it is never mutation-tested, so a test ' +
+          'there that runs the game could pass whatever the code does. The one game module a scan may import is ' +
+          'literal constants under src/ui/, such as the theme colours a contrast check needs. Move this test to ' +
+          "the chunk's own test file and list that file in the Spec Manifest " +
+          '(build/test.md "The A11y Floor").',
+      },
+    ];
+  });
 }
 
 /**
@@ -745,7 +757,7 @@ export async function testStepCheckCommand(
       testFiles,
       added,
       claims: liveClaims,
-      log: options.json ? () => {} : (line) => console.error(chalk.dim(line)),
+      log: options.json ? () => {} : (line) => console.error(styleText('dim', line)),
     });
     result.mutation = mutation.summary;
     result.findings.push(...mutation.findings);
@@ -771,11 +783,11 @@ function printReport(result: TestStepCheckResult): void {
     );
   }
   if (result.findings.length === 0) {
-    console.log(chalk.green('Passed: every claim has a test that can fail, and every verb runs through the engine.'));
+    console.log(styleText('green', 'Passed: every claim has a test that can fail, and every verb runs through the engine.'));
     return;
   }
-  console.log(chalk.red(`${result.findings.length} finding(s). The test step does not pass until each is fixed:`));
+  console.log(styleText('red', `${result.findings.length} finding(s). The test step does not pass until each is fixed:`));
   for (const f of result.findings) {
-    console.log(`\n${chalk.bold(`${f.kind}: ${f.subject}`)}\n  ${f.detail}`);
+    console.log(`\n${styleText('bold', `${f.kind}: ${f.subject}`)}\n  ${f.detail}`);
   }
 }

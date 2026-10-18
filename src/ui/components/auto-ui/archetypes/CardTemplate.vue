@@ -14,18 +14,8 @@
 
 import { computed } from 'vue';
 import ElementRenderer from '../renderers/ElementRenderer.vue';
-
-// ---------------------------------------------------------------------------
-// Local GameElement interface — mirrors auto-ui-helpers.ts / ElementRenderer.vue
-// ---------------------------------------------------------------------------
-interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
-  childCount?: number;
-}
+import { isHand } from '../archetype-selector.js';
+import type { GameElement } from '../auto-ui-helpers.js';
 
 const props = defineProps<{
   topLevelChildren: GameElement[];
@@ -37,16 +27,12 @@ const props = defineProps<{
 
 /** Hand elements: dominant zone — fill remaining space */
 const handElements = computed(() =>
-  props.topLevelChildren.filter(el =>
-    el.attributes?.$type === 'hand' || el.className === 'Hand'
-  )
+  props.topLevelChildren.filter(isHand)
 );
 
 /** Peripheral elements: decks, discards, any non-hand zones — auto-height above hands */
 const peripheralElements = computed(() =>
-  props.topLevelChildren.filter(el =>
-    el.attributes?.$type !== 'hand' && el.className !== 'Hand'
-  )
+  props.topLevelChildren.filter(el => !isHand(el))
 );
 </script>
 

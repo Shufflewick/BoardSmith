@@ -18,6 +18,7 @@ import { GameRunner } from '../../runtime/runner.js';
 import { createSnapshot } from '../utils/snapshot.js';
 import { Card, CardsGame, DuelGame, Pawn, type PawnMove } from './choice-cache-fixtures.test-helper.js';
 import { TEST_WORLD_ELEMENT_ID_KEY } from '../element/world-element-id-key.test-helper.js';
+import { snapshotTree } from '../utils/index.js';
 
 const devMode = vi.hoisted(() => ({ override: null as boolean | null }));
 vi.mock('../../utils/dev.js', async (importOriginal) => {
@@ -29,8 +30,13 @@ afterEach(() => {
   devMode.override = null;
 });
 
-function start<G extends Game>(GameClass: new (options: GameOptions) => G, playerCount = 2): GameRunner<G> {
-  const runner = new GameRunner<G>({ GameClass, gameType: 'bs631', gameOptions: { playerCount, seed: 'bs631' } });
+function start<G extends Game>(GameClass: new (options: GameOptions) => G, playerCount = 2, checkpoints = true): GameRunner<G> {
+  const runner = new GameRunner<G>({
+    GameClass,
+    gameType: 'bs631',
+    gameOptions: { playerCount, seed: 'bs631' },
+    checkpoints: { enabled: checkpoints },
+  });
   runner.start();
   return runner;
 }
@@ -281,7 +287,7 @@ describe('every change to the game is seen by the next question', () => {
     runner.processSelectionStep(1, 'x', 2);
     game.getActionExecutor().fireOnCancelCallbacks(act, cancelled);
     expect(runner.performAction('gather', 1, { y: [1, 3] }).success).toBe(true);
-    // An onSelect that throws: the picks before it are cancelled.
+    // An onSelect that throws: the action is rolled back, its probes with it (#1142).
     expect(runner.performAction('risky', 1, { a: 1, b: 1 }).success).toBe(false);
     expect(runner.performAction('end', 1, {}).success).toBe(true);
     // A space's handler, for a move made by code outside the game.
@@ -300,10 +306,18 @@ describe('every change to the game is seen by the next question', () => {
       'onSelect:true',
       'onEach:true',
       'onEach:true',
-      'onCancel:true',
       'onExitPhase:true',
       'onEnter:true',
     ]);
+  });
+
+  it("an onCancel run while a throwing onSelect aborts sees its own change, where nothing rolls it back", () => {
+    devMode.override = false;
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const runner = start(ProbeGame, 1, false);
+    expect(runner.performAction('risky', 1, { a: 1, b: 1 }).success).toBe(false);
+    log.mockRestore();
+    expect(runner.game.probes.at(-1)).toBe('onCancel:true');
   });
 
   it('an action run outside the flow', () => {
@@ -335,7 +349,7 @@ describe('every change to the game is seen by the next question', () => {
     expect(runner.performAction(first.action, 1, first.args).success).toBe(true);
     expect(describeMoves(game, 2).length).toBeGreaterThan(0);
 
-    game.loadSerializedState(opening.state);
+    game.loadSerializedState(snapshotTree(opening));
     game.setRandomState(opening.randomState);
     game.restoreFlowState(opening.flowState!);
     expect(describeMoves(game, 1)).toEqual(openingMoves);
@@ -349,7 +363,7 @@ describe('every change to the game is seen by the next question', () => {
     const pawn = game.first(Pawn, 'p1-1')!;
     pawn.putInto(game.squares[4]);
     expect(destinations(game, 1, pawn)).toEqual([5]);
-    game.loadSerializedState(opening.state);
+    game.loadSerializedState(snapshotTree(opening));
     expect(destinations(game, 1, game.first(Pawn, 'p1-1')!)).toEqual([2]);
   });
 

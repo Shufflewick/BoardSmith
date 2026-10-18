@@ -207,6 +207,30 @@ class GemDraftGame extends Game<GemDraftGame, Player> {
   }
 }
 
+/** A PickGame to 30 whose `validate` refuses 3, a value the engine still offers as enabled (#910). */
+class RejectThreeGame extends Game<RejectThreeGame, Player> {
+  total = 0;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerAction(
+      Action.create<RejectThreeGame>('pick')
+        .chooseFrom('value', { choices: [1, 2, 3], validate: (v) => v !== 3 })
+        .execute((args, ctx) => {
+          ctx.game.total += args.value as number;
+          return { success: true };
+        }),
+    );
+    this.setFlow({
+      root: loop({
+        while: (ctx) => ctx.game.total < 30,
+        maxIterations: 100,
+        do: eachPlayer({ do: actionStep({ actions: ['pick'] }) }),
+      }),
+    });
+  }
+}
+
 describe('simulateRandomGames', () => {
   it("treats an empty-string `optional` as required, as the engine does (#476)", async () => {
     const results = await simulateRandomGames(EmptyLabelTextGame, {
@@ -234,6 +258,21 @@ describe('simulateRandomGames', () => {
     expect(results.games.map((g) => g.winners)).toEqual([[2], [1], [1, 2], [2], [2], [2], [1], [3]]);
   });
 
+  it('fails a game on the first engine-generated move its validation rejects, naming the action and move (#910)', async () => {
+    const results = await simulateRandomGames(RejectThreeGame, {
+      count: 20,
+      playerCounts: [2],
+      seed: 'bs910',
+      timeout: 5000,
+    });
+
+    expect(results.completed).toBe(0);
+    expect(results.stuck).toBe(20);
+    for (const game of results.games) {
+      expect(game.error).toMatch(/^Action 'pick' rejected the move \{"value":3\}, chosen by policy 'random': /);
+    }
+  });
+
   it('generates valid arguments so arg-based games complete (F49)', async () => {
     const results = await simulateRandomGames(PickGame, {
       count: 12,
@@ -249,6 +288,30 @@ describe('simulateRandomGames', () => {
     expect(results.timedOut).toBe(0);
     // Every completed game must have actually executed arg-bearing actions.
     expect(results.averageActions).toBeGreaterThan(0);
+  });
+
+  it('plays every listed player count, spreading the games evenly (#916)', async () => {
+    const results = await simulateRandomGames(PickGame, { count: 4, playerCounts: [2, 3, 4], seed: 'spread' });
+    expect(results.games.map((g) => g.playerCount)).toEqual([2, 2, 3, 4]);
+  });
+
+  it('refuses an empty player count list (#916)', async () => {
+    await expect(simulateRandomGames(PickGame, { count: 4, playerCounts: [] })).rejects.toThrow(
+      /playerCounts is empty/,
+    );
+  });
+
+  it('refuses fewer games than player counts, which would leave a count unplayed (#916)', async () => {
+    await expect(simulateRandomGames(PickGame, { count: 2, playerCounts: [2, 3, 4] })).rejects.toThrow(
+      /count 2 is smaller than the 3 player counts/,
+    );
+  });
+
+  it('says why a game cut off at maxActions failed (#916)', async () => {
+    const results = await simulateRandomGames(PickGame, { count: 1, playerCounts: [2], seed: 'cut', maxActions: 1 });
+    expect(results.exceededMaxActions).toBe(1);
+    expect(results.games[0].error).toMatch(/maximum of 1 action/);
+    expect(results.errors).toEqual([results.games[0].error]);
   });
 
   it('is deterministic and reproducible from the base seed (F50)', async () => {

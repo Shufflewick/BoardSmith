@@ -6,8 +6,9 @@ import WorldShell from './WorldShell.vue';
 import { useWorld, type WorldContext } from './useWorld.js';
 import { WORLD_HOST_SOURCE, WORLD_UI_SOURCE } from './worldProtocol.js';
 import { orderBookKey } from './orderBook.js';
-import { defineGameUIs, defaultUI } from '../game-uis.js';
+import { defineGameUIs, defaultUI, devUI } from '../game-uis.js';
 import { useToast } from '../composables/useToast.js';
+import { useDebugBridge, type DebugBridge } from '../composables/useDebugBridge.js';
 import { countPageSingletons, unresolvedComponents } from '../components/page-singletons.test-helper.js';
 
 /**
@@ -268,6 +269,23 @@ describe('WorldShell', () => {
     });
     expect(() => mount(Loose)).toThrow(/outside a WorldShell/);
   });
+
+  it('refuses a host request rather than answering it with nothing, since a world has no host ops (#897)', async () => {
+    let bridge!: DebugBridge;
+    const Asker = defineComponent({
+      setup() {
+        bridge = useDebugBridge();
+        return () => h('div');
+      },
+    });
+    const wrapper = mount(WorldShell, {
+      props: { uis: defineGameUIs({ Asker: defaultUI(Asker) }), displayName: 'Gloamhall' },
+    });
+    await drawn(wrapper, stateFrame());
+
+    await expect(bridge.customDebug()).rejects.toThrow(/requires a host bridge/);
+    wrapper.unmount();
+  });
 });
 
 /**
@@ -370,6 +388,25 @@ describe('WorldShell — the shared chrome (#170)', () => {
     named.unmount();
   });
 
+  it('never invents "Player N" for a seat whose host sent an empty name (#1044)', async () => {
+    const wrapper = mountShell();
+    tell(wrapper, stateFrame({ players: [{ seat: 4, name: '' }, { seat: 2, name: 'Rook' }] } as never));
+    await nextTick();
+    const seats = wrapper.find('[data-testid="bs-seats"]').text();
+    expect(seats).toContain('Rook');
+    expect(seats).not.toContain('Player 4');
+    wrapper.unmount();
+  });
+
+  it.each(['', '   '])('names a seat whose host sent the blank name %j "Seat N" (#1115)', async (blank) => {
+    const wrapper = mountShell();
+    tell(wrapper, stateFrame({ seat: 7, presence: [2, 7], players: [{ seat: 7, name: blank }, { seat: 2, name: 'Rook' }] } as never));
+    await nextTick();
+    const names = wrapper.findAll('[data-testid="bs-seats"] .player-name').map((n) => n.text());
+    expect(names).toEqual(['Seat 7', 'Rook']);
+    wrapper.unmount();
+  });
+
   it('marks who is here on the seat rows rather than in a list of its own', async () => {
     const wrapper = mountShell();
     tell(wrapper, stateFrame({ players: [{ seat: 2, name: 'Rook' }, { seat: 4, name: 'Ivy' }] } as never));
@@ -394,6 +431,39 @@ describe('WorldShell — the shared chrome (#170)', () => {
     const log = wrapper.find('[data-testid="bs-log"]').text();
     expect(log).toContain('Rook says hello.');
     expect(log).not.toContain('{');
+    wrapper.unmount();
+  });
+
+  it('trims a full tail without redrawing the lines it keeps (#1066)', async () => {
+    // Text-less events share the tail with lines, so the offset must count lines, not events.
+    const wrapper = mountShell();
+    tell(wrapper, stateFrame());
+    for (let n = 0; n < 150; n += 1) {
+      tell(wrapper, {
+        source: WORLD_HOST_SOURCE,
+        type: 'world_events',
+        events: [{ scope: 'world', payload: { n } }, { scope: 'world', payload: { n }, text: `line ${n}` }],
+      });
+    }
+    await nextTick();
+    const lineTexts = () => wrapper.findAll('[data-testid="bs-log"] .message .text').map((line) => line.text());
+    expect(lineTexts()).toHaveLength(100);
+    expect(lineTexts()[0]).toBe('line 50');
+    const kept = wrapper.findAll('[data-testid="bs-log"] .message').map((line) => line.element);
+
+    tell(wrapper, {
+      source: WORLD_HOST_SOURCE,
+      type: 'world_events',
+      events: [{ scope: 'world', payload: {} }, { scope: 'world', payload: {}, text: 'line 150' }],
+    });
+    await nextTick();
+
+    const lines = wrapper.findAll('[data-testid="bs-log"] .message');
+    expect(lineTexts()[0]).toBe('line 51');
+    expect(lineTexts()[lineTexts().length - 1]).toBe('line 150');
+    // The same nodes: a role="log" region announces inserted nodes, not kept ones.
+    expect(lines).toHaveLength(kept.length);
+    expect(lines.slice(0, -1).every((line, i) => line.element === kept[i + 1])).toBe(true);
     wrapper.unmount();
   });
 
@@ -500,6 +570,73 @@ describe('WorldShell — the shared chrome (#170)', () => {
     expect(wrapper.text()).toContain('defaultUI()');
     wrapper.unmount();
   });
+
+  it('shows a board that throws in place of the board, keeps the panel, and draws it again on the next view (#1149)', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const Fragile = defineComponent({
+      props: { gameView: { type: null, required: true } },
+      setup: (props) => () => {
+        if ((props.gameView as { said?: string })?.said === 'boom') throw new Error('no room here');
+        return h('p', { class: 'fragile' }, 'drawn');
+      },
+    });
+    const wrapper = mount(WorldShell, { props: { uis: defineGameUIs({ Fragile: defaultUI(Fragile) }), displayName: 'Gloamhall' } });
+    await drawn(wrapper, stateFrame({ view: { phase: 'watching', state: { said: 'boom' } } }));
+    expect(wrapper.find('[data-testid="bs-board-error"]').text()).toContain('no room here');
+    expect(consoleError).toHaveBeenCalledTimes(1);
+    expect(wrapper.find('[data-testid="bs-action-panel"]').text().toLowerCase()).toContain('look');
+    await drawn(wrapper, stateFrame({ revision: 2 }));
+    expect(wrapper.find('[data-testid="bs-board-error"]').exists()).toBe(false);
+    expect(wrapper.find('.fragile').exists()).toBe(true);
+    consoleError.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('lists a large pick in the panel while the board shows its error, and hands it back when the board draws (#1153)', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const Fragile = defineComponent({
+      props: { gameView: { type: null, required: true } },
+      setup: (props) => () => {
+        if ((props.gameView as { said?: string })?.said === 'boom') throw new Error('no room here');
+        return h('p', { class: 'fragile' }, 'drawn');
+      },
+    });
+    // 50 rooms, each drawn on the board, so the panel would hand the pick to the board.
+    const rooms = Array.from({ length: 50 }, (_, i) => ({
+      value: `r${i}`,
+      display: `Room ${i}`,
+      refs: [{ ref: { notation: `r${i}` }, role: 'target' }],
+    }));
+    const walk = { name: 'walk', prompt: 'Walk', selections: [{ name: 'room', type: 'choice', prompt: 'Which room?', choices: rooms }] };
+    const wrapper = mount(WorldShell, { props: { uis: defineGameUIs({ Fragile: defaultUI(Fragile) }), displayName: 'Gloamhall' } });
+    await drawn(wrapper, stateFrame({ actions: [walk], view: { phase: 'watching', state: { said: 'boom' } } }));
+    const panel = () => wrapper.find('[data-testid="bs-action-panel"]');
+    await panel().findAll('button').find((b) => b.text().includes('Walk'))!.trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="bs-board-error"]').exists()).toBe(true);
+    expect(panel().find('.board-handoff-btn').exists(), 'there is no board to choose on').toBe(false);
+    expect(panel().findAll('.anchored-choice-btn')).toHaveLength(50);
+
+    await drawn(wrapper, stateFrame({ actions: [walk], revision: 2 }));
+    expect(wrapper.find('.fragile').exists()).toBe(true);
+    expect(panel().findAll('.anchored-choice-btn')).toHaveLength(0);
+    expect(panel().find('.board-handoff-btn').text()).toBe('Choose on the board (50)');
+    wrapper.unmount();
+  });
+
+  it('renders the default UI and never a devUI() entry: a world has no dev UI switcher (#896)', async () => {
+    const DevBoard = defineComponent({ setup: () => () => h('p', { class: 'dev-board' }, 'dev') });
+    const wrapper = mount(WorldShell, {
+      props: {
+        uis: defineGameUIs({ Dev: devUI(async () => ({ default: DevBoard })), Rooms: defaultUI(Rooms) }),
+        displayName: 'Gloamhall',
+      },
+    });
+    await drawn(wrapper, stateFrame());
+    expect(wrapper.find('.rooms').exists()).toBe(true);
+    expect(wrapper.find('.dev-board').exists()).toBe(false);
+    wrapper.unmount();
+  });
 });
 
 /**
@@ -537,7 +674,7 @@ describe('WorldShell — recovering an order left over from the last page (#195)
   function leaveUnanswered(action: string, args: Record<string, unknown>): void {
     localStorage.setItem(
       orderBookKey(location.pathname),
-      JSON.stringify([{ id: 'o-left-over', at: 1, action, args }]),
+      JSON.stringify([{ id: 'o-left-over', seat: 4, at: 1, action, args }]),
     );
   }
 
@@ -612,7 +749,8 @@ describe('WorldShell — the shell owns the modal host a board teleports into (#
     },
   });
 
-  it('mounts a board whose Teleport finds the shell\'s host, with no Vue warning', async () => {
+  /** Mount the board, send `frames` in turn, and check its Teleport found the shell's host with no warning. */
+  async function expectTeleportLands(frames: unknown[]) {
     const warnings: string[] = [];
     const warn = vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
       warnings.push(args.map(String).join(' '));
@@ -629,8 +767,10 @@ describe('WorldShell — the shell owns the modal host a board teleports into (#
       },
       attachTo: document.body,
     });
-    tell(wrapper, stateFrame());
-    await flushPromises();
+    for (const frame of frames) {
+      tell(wrapper, frame);
+      await flushPromises();
+    }
 
     const said = [...warnings, ...errors].join('\n');
     expect(said).not.toContain('Failed to locate Teleport target');
@@ -644,6 +784,18 @@ describe('WorldShell — the shell owns the modal host a board teleports into (#
     warn.mockRestore();
     error.mockRestore();
     wrapper.unmount();
+  }
+
+  it('mounts a board whose Teleport finds the shell\'s host, with no Vue warning', async () => {
+    await expectTeleportLands([stateFrame()]);
+  });
+
+  it('waits for the host again when the chrome comes back after a refusal (#897)', async () => {
+    await expectTeleportLands([
+      stateFrame(),
+      stateFrame({ phase: 'refused', view: null, notice: 'You are not a member of this world.', revision: 2 }),
+      stateFrame({ revision: 3 }),
+    ]);
   });
 });
 

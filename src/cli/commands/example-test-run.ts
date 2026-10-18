@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { runToolCapturingStdout } from '../lib/run-tool.js';
 import {
   chunkDescribeTitle,
@@ -13,6 +13,7 @@ import {
   recordExampleReplayVerdicts,
   type ExampleReplayRecord,
 } from './verify-example-replay.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 
 /**
  * `example-test-run.ts` — where a worked example's `agrees`/`disagrees` verdict comes from (#319).
@@ -67,10 +68,8 @@ async function runVitestReport(projectDir: string, relTestFilePath: string): Pro
       ['run', relTestFilePath, '--reporter=json', `--outputFile=${outFile}`],
       { cwd: projectDir },
     );
-    let text: string;
-    try {
-      text = await fs.readFile(outFile, 'utf-8');
-    } catch {
+    const text = await readIfExists(outFile, (p) => fs.readFile(p, 'utf-8'));
+    if (text === undefined) {
       throw new Error(
         `vitest wrote no report for ${relTestFilePath}.\n` +
           `Run \`boardsmith test ${relTestFilePath}\` in the project to see why — usually the ` +
@@ -91,6 +90,9 @@ function failureSummary(messages: readonly string[]): string {
   const summary = (stackStart === -1 ? lines : lines.slice(0, stackStart)).join('\n').trim();
   return summary.length > 0 ? summary : 'The test failed without a message.';
 }
+
+/** What vitest reports, stack aside, when a test ran with `expect.hasAssertions()` and made none. */
+const NO_ASSERTIONS_FAILURE = 'Error: expected any number of assertion, but got none';
 
 /** The emitted file's results, found by path (vitest reports the file's real path). */
 async function fileResultFor(
@@ -142,6 +144,14 @@ function observeExample(
     );
   }
   const failed = results.filter((a) => a.status === 'failed');
+  const unasserted = failed.find((a) => failureSummary(a.failureMessages) === NO_ASSERTIONS_FAILURE);
+  if (unasserted) {
+    throw new Error(
+      `The test "${unasserted.title}" for the worked example at ${where} makes no assertions, so ` +
+        `it observed nothing.\nA worked-example test must check the outcome with expect(...). ` +
+        `Re-dispatch the translator and record its return again. Nothing was recorded.`,
+    );
+  }
   const observed = {
     exampleId: record.exampleId,
     slicePath: record.slicePath,
@@ -153,6 +163,7 @@ function observeExample(
     provenance: record.provenance,
     testFilePath: relTestFilePath,
     translation: record.translation,
+    extractionHash: record.extractionHash,
   };
   if (failed.length === 0) {
     return createExampleReplayRecord({
@@ -171,18 +182,18 @@ function observeExample(
 
 function printRunResult(result: VerifyExampleRunResult): void {
   if (result.records.length === 0) {
-    console.log(chalk.green(`✓ ${result.relTestFilePath} has no translated examples to run.`));
+    console.log(styleText('green', `✓ ${result.relTestFilePath} has no translated examples to run.`));
     return;
   }
   const disagrees = result.records.filter((r) => r.verdict === 'disagrees');
   console.log(
-    chalk.green(
+    styleText('green',
       `✓ Ran ${result.relTestFilePath}: ${result.records.length - disagrees.length} agree, ` +
         `${disagrees.length} disagree.`,
     ),
   );
   for (const record of disagrees) {
-    console.log(chalk.yellow(`  ⚠ ${record.slicePath}:${record.lineNumber} — ${record.observed}`));
+    console.log(styleText('yellow', `  ⚠ ${record.slicePath}:${record.lineNumber} — ${record.observed}`));
   }
 }
 
@@ -205,10 +216,10 @@ export async function verifyExampleRunCommand(
   const chunk = options.chunk;
   const tests = await renderChunkExampleTests(projectDir, chunk);
 
-  const onDisk = await fs.readFile(tests.testFilePath, 'utf-8').catch(() => null);
+  const onDisk = await readIfExists(tests.testFilePath, (path) => fs.readFile(path, 'utf-8'));
   if (onDisk !== tests.fileText) {
     throw new Error(
-      `${tests.relTestFilePath} is ${onDisk === null ? 'missing' : 'out of date with the ledger'}.\n` +
+      `${tests.relTestFilePath} is ${onDisk === undefined ? 'missing' : 'out of date with the ledger'}.\n` +
         `Run \`boardsmith verify-example-emit --chunk ${chunk}\` first, then run this again.`,
     );
   }

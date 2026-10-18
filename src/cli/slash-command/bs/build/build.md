@@ -61,6 +61,18 @@ are mutation-tested (`build/test.md` item 2(c)):
   runs setup, or asserts a constant, is not a pin.
 - A scan that only reads source as text goes in `tests/guards/`, never in a row.
 
+## Light path: `build` writes the exempt row
+
+A `light` chunk (the light path in `state-machine.md` "Step Names") has no
+`spec` step, so there are no failing tests to turn green and no Spec Manifest yet. It adds no new
+game behaviour, so `build` writes its `## Spec Manifest` as the one row
+`| exempt | <reason> | n/a |` (`build/spec.md` "Exemptions"), in the same commit as the code. The
+reason must not be empty: name why there is no new behaviour (an asset swap, a restyle, a copy
+change). The only other rows allowed beside it are `none (regression)` rows (above); an exempt row
+beside any other row, or with no reason, is refused by `boardsmith test-step-check` and
+`boardsmith verify --chunk <slug>`. If the chunk turns out to need new behaviour, stop: that is a
+re-proposal on the full ceremony, not an exempt row.
+
 ## Fresh-Context Exception (one of the two steps allowed to read raw slices)
 
 Every other step in this pipeline restates the Context-Economics Hard Rule
@@ -154,6 +166,15 @@ mid-build resumes by reading this table: any row still `pending` is unfinished w
 `state-machine.md`'s crash-resume discipline relies on for the `build` step specifically — it is
 finer-grained than the step-level Step Checklist, because a single `build` step can span many
 files.
+
+Write each path in the File cell in backticks, one per path, comma-separated
+(`` `src/rules/game.ts`, `tests/game.test.ts` ``), with any note after it in parentheses or after a
+dash. Backticks inside a note are fine: nothing in a note is read as a path. A backticked path is
+read whole, exactly as written, so a path with a space or a symbol (`` `my file.ts` ``,
+`` `@scope/x.ts` ``) needs them. List every file on its own: a pattern (`` `tests/*.test.ts` ``) is
+not expanded. Type accented letters in composed form (one character each, as git names files).
+A path the commands cannot read whole, a pattern, a backticked name that is not a file path, or a
+path with a decomposed accent is refused with a message naming the cell, never read in part.
 
 ## Test Script — Rewritten in Interaction Terms
 

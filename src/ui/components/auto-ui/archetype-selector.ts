@@ -14,23 +14,17 @@
  * 'grid-board' (see Research Pitfall 4).
  */
 
-// ---------------------------------------------------------------------------
-// Local GameElement interface — do NOT import from engine (module is dependency-free)
-// Mirrors auto-ui-helpers.ts lines 12-19.
-// ---------------------------------------------------------------------------
-interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
-  childCount?: number;
-}
+import type { GameElement } from './auto-ui-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Archetype
 // ---------------------------------------------------------------------------
 export type Archetype = 'grid-board' | 'card' | 'tableau' | 'unsupported';
+
+/** A hand is what the engine marks one (`Hand` sets `$type`), never a class name; CardTemplate shares this. */
+export function isHand(el: GameElement): boolean {
+  return el.attributes?.$type === 'hand';
+}
 
 // ---------------------------------------------------------------------------
 // selectArchetype
@@ -51,9 +45,9 @@ export function selectArchetype(topLevelElements: GameElement[]): Archetype {
 
   // 2. Dominant card/hand/deck zones → card
   //    Threshold: card-type count > 0 AND count >= half of all top-level elements
-  const cardTypes = new Set(['card', 'hand', 'deck']);
+  const cardTypes = new Set(['card', 'deck']);
   const cardCount = topLevelElements.filter(
-    (el) => cardTypes.has(el.attributes?.$type as string),
+    (el) => isHand(el) || cardTypes.has(el.attributes?.$type as string),
   ).length;
   if (cardCount > 0 && cardCount >= topLevelElements.length / 2) return 'card';
 

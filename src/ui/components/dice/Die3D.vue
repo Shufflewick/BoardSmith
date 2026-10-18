@@ -9,8 +9,9 @@ import { ref, computed, watch, onMounted, onUnmounted, inject, type PropType } f
 import * as THREE from 'three';
 import {
   pendingRenders,
-  isRenderingGlobally,
-  setIsRenderingGlobally,
+  liveDieContexts,
+  countDieContext,
+  MAX_LIVE_DIE_CONTEXTS,
   getNextComponentId,
   DIE_ANIMATION_CONTEXT_KEY,
   createDieAnimationContext,
@@ -143,36 +144,28 @@ function cancelComponentRenders(componentId: number) {
   }
 }
 
+let drainingQueue = false;
+
+/** Start queued renders while fewer than MAX_LIVE_DIE_CONTEXTS dice hold a WebGL context. */
 function processRenderQueue() {
-  if (isRenderingGlobally || pendingRenders.length === 0) return;
-
-  // Skip cancelled renders
-  while (pendingRenders.length > 0 && pendingRenders[0].cancelled) {
-    pendingRenders.shift();
+  // A render that rebuilds its scene releases a context mid-call; the outer loop recounts.
+  if (drainingQueue) return;
+  drainingQueue = true;
+  try {
+    while (liveDieContexts < MAX_LIVE_DIE_CONTEXTS && pendingRenders.length > 0) {
+      const queuedRender = pendingRenders.shift()!;
+      if (!queuedRender.cancelled) queuedRender.fn();
+    }
+  } finally {
+    drainingQueue = false;
   }
-
-  if (pendingRenders.length === 0) return;
-
-  setIsRenderingGlobally(true);
-  const queuedRender = pendingRenders.shift()!;
-
-  // Execute the render function if not cancelled
-  if (!queuedRender.cancelled) {
-    queuedRender.fn();
-  }
-
-  // Wait for render to complete and context to be disposed by browser GC
-  setTimeout(() => {
-    setIsRenderingGlobally(false);
-    processRenderQueue();
-  }, 300);
 }
 
 /**
  * Check if this die needs animation (new roll that hasn't been animated yet)
  */
 function shouldAnimateDie(dieId: string | number | undefined, rollCount: number): boolean {
-  if (!dieId || rollCount <= 0) return false;
+  if (dieId === undefined || rollCount <= 0) return false;
   const lastAnimated = animatedRollCounts.get(dieId) ?? 0;
   const needsAnimation = rollCount > lastAnimated;
   return needsAnimation;
@@ -182,7 +175,7 @@ function shouldAnimateDie(dieId: string | number | undefined, rollCount: number)
  * Mark a die's rollCount as animated
  */
 function markAnimated(dieId: string | number | undefined, rollCount: number) {
-  if (dieId) {
+  if (dieId !== undefined) {
     animatedRollCounts.set(dieId, rollCount);
   }
 }
@@ -567,7 +560,8 @@ function createDieMaterials(numFaces: number, color: string, textColor: string =
 
 function setFaceRotation(faceNumber: number): THREE.Euler {
   const dieType = `d${props.sides}`;
-  const normal = faceNormals[faceNumber - 1];
+  // A never-rolled die (value 0) rests on face 1, dimmed by the template.
+  const normal = faceNormals[Math.max(faceNumber, 1) - 1];
 
   if (!normal) {
     console.warn(`No normal for face ${faceNumber}`);
@@ -605,6 +599,7 @@ function initScene() {
   camera.position.z = 5;
 
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  countDieContext(1);
   renderer.setSize(props.size, props.size);
   renderer.setPixelRatio(window.devicePixelRatio);
   renderer.setClearColor(0x000000, 0);
@@ -668,7 +663,7 @@ function createDieMesh() {
   scene.add(mesh);
 
   // Set initial rotation
-  const euler = setFaceRotation(props.value || 1);
+  const euler = setFaceRotation(props.value);
   mesh.rotation.copy(euler);
   targetRotation.copy(euler);
 }
@@ -734,6 +729,7 @@ function disposeWebGL() {
       containerRef.value.removeChild(renderer.domElement);
     }
     renderer = null;
+    countDieContext(-1);
   }
 
   if (mesh) {
@@ -749,6 +745,7 @@ function disposeWebGL() {
   scene = null;
   camera = null;
   webglDisposed = true;
+  processRenderQueue();
 }
 
 /**
@@ -776,24 +773,25 @@ function restoreWebGL() {
   initScene();
 }
 
+let rebuildQueued = false;
+
 /**
- * Regenerate snapshot with a new value without keeping WebGL active.
+ * Regenerate snapshot with the current props without keeping WebGL active.
  * Creates WebGL context, renders, snapshots, then disposes immediately.
  * Queued to avoid creating too many WebGL contexts at once.
  */
-function regenerateSnapshot(newValue: number) {
+function regenerateSnapshot() {
+  // The queued rebuild reads props when it runs, so one covers every change made while it waits.
+  if (rebuildQueued) return;
+  rebuildQueued = true;
   queueRender(() => {
+    rebuildQueued = false;
+    // A roll started since this was queued: its live scene draws and snapshots the current props.
+    if (!webglDisposed) return;
     // Temporarily restore WebGL
     webglDisposed = false;
     isShowingSnapshot.value = false;
     initScene();
-
-    // Set the new rotation
-    if (mesh) {
-      const euler = setFaceRotation(newValue);
-      targetRotation.copy(euler);
-      mesh.rotation.copy(euler);
-    }
 
     // Take snapshot and dispose immediately
     scheduleSnapshotAndDispose();
@@ -854,14 +852,14 @@ async function updateTextures() {
 
 // Watch for rollCount changes - trigger animation for new rolls
 watch(() => props.rollCount, (newRollCount) => {
-  if (!newRollCount || !props.dieId) return;
-
   // Check if this is a new roll that needs animation
   if (shouldAnimateDie(props.dieId, newRollCount)) {
     markAnimated(props.dieId, newRollCount);
 
     // Queue the animation render
     queueRender(() => {
+      // A live scene may still have its first still pending; that still would dispose the scene under this roll.
+      clearTimeout(sceneInitTimer);
       // Restore WebGL if needed
       if (isShowingSnapshot.value || webglDisposed) {
         webglDisposed = false;
@@ -879,12 +877,18 @@ watch(() => props.rollCount, (newRollCount) => {
   }
 });
 
-// NOTE: We intentionally do NOT watch for value changes.
-// Value should only change when roll() is called, which increments rollCount.
-// The rollCount watcher handles animation. When animation completes, it snapshots
-// with the current (new) value.
-// If value changes without rollCount (e.g., flip ability), we need to handle
-// that differently - for now, just ignore it and let the component remount.
+// A value set without a roll (setValue, a flip, undo) must redraw the face too (#892).
+watch(() => props.value, (value) => {
+  // A roll arriving with this value animates to it; its watcher may run after this one.
+  if (shouldAnimateDie(props.dieId, props.rollCount)) return;
+  if (mesh && !webglDisposed) {
+    const euler = setFaceRotation(value);
+    targetRotation.copy(euler);
+    if (!isAnimating) mesh.rotation.copy(euler);
+  } else if (isShowingSnapshot.value) {
+    regenerateSnapshot();
+  }
+});
 
 // Watch for color/texture changes
 watch([() => props.color, () => props.faceLabels, () => props.faceImages, () => props.zeroIndexed], () => {
@@ -893,7 +897,7 @@ watch([() => props.color, () => props.faceLabels, () => props.faceImages, () => 
     updateTextures();
   } else if (isShowingSnapshot.value) {
     // In snapshot mode - regenerate snapshot with new colors/textures
-    regenerateSnapshot(props.value);
+    regenerateSnapshot();
   }
 }, { deep: true });
 
@@ -904,7 +908,7 @@ watch(() => props.sides, () => {
     createDieMesh();
   } else if (isShowingSnapshot.value) {
     // In snapshot mode - regenerate snapshot with new geometry
-    regenerateSnapshot(props.value);
+    regenerateSnapshot();
   }
   // If neither, onMounted will handle it
 });
@@ -915,7 +919,7 @@ watch(() => props.size, (newSize) => {
     renderer.setSize(newSize, newSize);
   } else if (isShowingSnapshot.value) {
     // In snapshot mode - regenerate snapshot at new size
-    regenerateSnapshot(props.value);
+    regenerateSnapshot();
   }
 });
 
@@ -923,7 +927,7 @@ onMounted(() => {
   // Check if this die needs animation (new roll that hasn't been animated yet)
   const needsAnimation = shouldAnimateDie(props.dieId, props.rollCount ?? 0);
 
-  if (needsAnimation && props.dieId) {
+  if (needsAnimation) {
     // Mark as animated before queuing
     markAnimated(props.dieId, props.rollCount ?? 0);
 
@@ -969,6 +973,7 @@ onUnmounted(() => {
        makes the die readable to anything that is not a pair of eyes. -->
   <div
     class="die-3d-container"
+    :class="{ 'die-unrolled': value < 1 }"
     role="img"
     :aria-label="ariaLabel"
     :style="{ width: `${size}px`, height: `${size}px` }"
@@ -996,6 +1001,10 @@ onUnmounted(() => {
   display: inline-block;
   cursor: pointer;
   position: relative;
+}
+
+.die-unrolled {
+  opacity: 0.4;
 }
 
 .die-canvas-container {

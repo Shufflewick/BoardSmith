@@ -151,6 +151,35 @@ describe('useActionController picks', () => {
       expect(controller.getCollectedPick('items')).toEqual({ value: [1, 2], display: 'One, Two', skipped: false });
     });
 
+    it('records every pick of a finished onEach repeat, as the server holds them all (#1023)', async () => {
+      const pickStep = vi.fn()
+        .mockResolvedValueOnce({ success: true, done: false })
+        .mockResolvedValueOnce({ success: true, done: false })
+        .mockResolvedValueOnce({ success: true, done: true });
+      actionMetadata.value = {
+        repeatAction: {
+          name: 'repeatAction',
+          prompt: 'Select multiple',
+          selections: [
+            { name: 'items', type: 'choice', prompt: 'Select items', repeat: { hasOnEach: true }, choices: [{ value: 1, display: 'One' }, { value: 2, display: 'Two' }, { value: 0, display: 'Done' }] },
+            { name: 'note', type: 'text', prompt: 'Note' },
+          ],
+        },
+      };
+      availableActions.value = ['repeatAction'];
+      const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn, autoExecute: false, pickStep });
+
+      await controller.start('repeatAction');
+      await controller.fill('items', 1);
+      await controller.fill('items', 2);
+      // Each round is its own question: drafts and focus key on how many picks came before.
+      expect(controller.repeatingState.value?.accumulated).toHaveLength(2);
+      await controller.fill('items', 0);
+
+      expect(controller.getCollectedPick('items')).toEqual({ value: [1, 2, 0], display: 'One, Two, Done', skipped: false });
+      expect(controller.currentArgs.value.items).toEqual([1, 2, 0]);
+    });
+
     it('should clear action when actionComplete is true', async () => {
       const pickStep = vi.fn()
         .mockResolvedValueOnce({ success: true, done: false })
@@ -333,47 +362,6 @@ describe('useActionController picks', () => {
       expect(result.valid).toBe(false);
       expect(result.error).toBe('Invalid selection');
       expect(controller.lastError.value).toBe('Invalid selection');
-    });
-
-    it('should clear accumulated for hasOnEach selections', async () => {
-      const pickStep = vi.fn().mockResolvedValue({
-        success: true,
-        done: false,
-      });
-
-      const repeatMeta: Record<string, EnrichedActionMetadata> = {
-        repeatAction: {
-          name: 'repeatAction',
-          prompt: 'Process each',
-          selections: [
-            {
-              name: 'items',
-              type: 'choice',
-              prompt: 'Select',
-              repeat: { hasOnEach: true }, // Items processed immediately
-              choices: [{ value: 1, display: 'One' }],
-            },
-          ],
-        },
-      };
-
-      actionMetadata.value = { ...createTestMetadata(), ...repeatMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'repeatAction'];
-
-      const controller = useActionController({
-        sendAction,
-        availableActions,
-        actionMetadata,
-        isMyTurn,
-        autoExecute: false,
-        pickStep,
-      });
-
-      await controller.start('repeatAction');
-      await controller.fill('items', 1);
-
-      // With hasOnEach, accumulated should be cleared after processing
-      expect(controller.repeatingState.value?.accumulated).toEqual([]);
     });
   });
 

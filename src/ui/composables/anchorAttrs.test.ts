@@ -200,7 +200,7 @@ describe('useSelectableGrid.cellAttrs returns anchorAttrs for cell identity', ()
     const bi = makeMockInteraction();
     const { cellAttrs } = useSelectableGrid(
       computed(() => cells),
-      computed(() => 2),
+      (c) => ({ row: 0, col: c.id }),
       (c) => ({ id: c.id }),
       bi as BoardInteraction,
       () => {},
@@ -214,7 +214,7 @@ describe('useSelectableGrid.cellAttrs returns anchorAttrs for cell identity', ()
     const bi = makeMockInteraction();
     const { cellAttrs } = useSelectableGrid(
       computed(() => cells),
-      computed(() => 1),
+      (c) => ({ row: 0, col: c.id }),
       (c) => ({ id: c.id, notation: (c as typeof cells[0]).notation }),
       bi as BoardInteraction,
       () => {},

@@ -66,6 +66,7 @@
  */
 import type {
   ActionContext,
+  ActionResult,
   ActionDefinition,
   ElementJSON,
   Game,
@@ -129,6 +130,7 @@ import {
   type WorldNoticeWrite,
 } from "./notices.js";
 import { devWarn, evaluateCondition, GameElement } from "../engine/index.js";
+import { failedExecute } from "../engine/action/action.js";
 import { readOnlyProjection } from "./readonly.js";
 import { assertAnsweredAllocations, assertCreatedRoots } from "./migration.js";
 import { worldBudgets, type WorldBudgets } from "./budgets.js";
@@ -491,6 +493,16 @@ function creditsUnavailable(action: string): WorldRefusal {
 }
 
 /**
+ * What a refused action result throws. A crash in the rules is coded
+ * `rules-error` (game-owned) so a caller can tell it from a refusal (#847); the
+ * rules saying no stays a plain `Error` carrying the game's own sentence.
+ */
+function failedResultError(action: string, result: ActionResult): Error {
+  const message = result.error ?? `The "${action}" action was refused and said nothing about why.`;
+  return result.rulesError === true ? worldRefusal("rules-error", message) : new Error(message);
+}
+
+/**
  * One seat waiting to be projected, and everything the projection needs.
  *
  * `at` is where the seat sits in the answer being assembled, so a batch can
@@ -571,6 +583,19 @@ export class BoardSmithWorldEngine implements WorldEngine {
     }
     this.game = options.game;
     this.seats = new Map(options.seats);
+    const holders = new Map<number, string>();
+    for (const [player, seat] of this.seats) {
+      const first = holders.get(seat);
+      if (first !== undefined) {
+        throw worldRefusal(
+          "roster-double-holder",
+          `The roster this world was built from has two players holding seat ${seat}: "${first}" ` +
+            `and "${player}". Both would command its holdings, so the world will not open. Remove ` +
+            `one of them from the stored roster, then open the world again.`,
+        );
+      }
+      holders.set(seat, player);
+    }
     this.store = options.store;
     this.view = options.view;
     this.vacateByClock = options.vacateByClock;
@@ -2574,18 +2599,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
         // throw is what triggers the rollback that makes "refused" mean the
         // world is unchanged.
         //
-        // THE CLASSIFIED ONE IF THERE WAS ONE, and the game's own sentence
-        // otherwise. A plain `Error` is deliberate for the second case: under
-        // the flat table a refusing handler threw the game's own exception and
-        // it travelled unclassified, which is how a host tells "the rules said
-        // no" from "the platform's bookkeeping broke". Giving that a code would
-        // relabel every bug in a game's rules as one of the platform's words.
-        throw (
-          ledger.refused ??
-          new Error(
-            result.error ?? `The "${command.name}" action was refused and said nothing about why.`,
-          )
-        );
+        // THE CLASSIFIED ONE IF THERE WAS ONE, and the result's own otherwise.
+        throw ledger.refused ?? failedResultError(command.name, result);
       }
       // A REFUSAL THE RULES CAUGHT STILL REFUSES (#288). Every facility refusal
       // is a hard constraint the platform enforces -- a partition the command
@@ -2916,6 +2931,11 @@ export class BoardSmithWorldEngine implements WorldEngine {
         return root;
       },
       emit: (scope: string, payload: unknown, narration?: WorldNarrationLine) => {
+        // HELD TO THE DECLARATION, not to residency (#933), so what an earlier
+        // command or a wake left loaded cannot decide whether this is refused.
+        const undeclared =
+          scope === WORLD_SCOPE ? null : declaredRefusal(action, scope, named, emittedIn);
+        if (undeclared !== null) raise(undeclared);
         // NORMALIZED HERE AND NOWHERE ELSE (#186). A game may write a bare
         // string or the `{ text, type }` `GameHistory` takes; everything
         // downstream -- the routing, the host, the shell's filter -- reads one
@@ -3030,7 +3050,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
   private executeSeatless(
     definition: ActionDefinition,
     args: Readonly<Record<string, unknown>>,
-  ): { success: boolean; error?: string } {
+  ): ActionResult {
     try {
       const result = definition.execute({ ...args }, {
         game: this.game,
@@ -3038,10 +3058,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
       } as unknown as ActionContext);
       return result ?? { success: true };
     } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : String(error),
-      };
+      // The seated road's crash handling, so a clock crash is coded and worded the same (#1045).
+      return failedExecute(definition.name, error);
     }
   }
 
@@ -3060,9 +3078,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
    *     those, only the seats whose `world.view` names the partition (#717),
    *     judged by `viewTells`.
    *
-   * A SCOPE THAT NAMES NOTHING IS A REFUSAL, not an event delivered to nobody.
-   * The silent version is invisible: the game author sees an event that never
-   * arrives, and cannot tell that from nobody having been watching.
+   * A SCOPE THAT NAMES NOTHING NEVER GETS HERE: `emit` refused it when the
+   * command did not declare it (#933), and a declared partition is resident.
    *
    * The whole roster is walked for the tree check, and each seat that passes it
    * runs its `world.view` once per command (`views` holds the answers), so a
@@ -3077,17 +3094,6 @@ export class BoardSmithWorldEngine implements WorldEngine {
   ): readonly number[] {
     const all = [...this.seats.values()];
     if (scope === WORLD_SCOPE) return all;
-
-    if (!this.residentIds.has(scope)) {
-      throw worldRefusal(
-        "unknown-scope",
-        `Command "${commandName}" addressed an event to scope "${scope}", which is neither the ` +
-          `reserved "${WORLD_SCOPE}" scope nor a partition this world has loaded. An event's scope ` +
-          `is how the platform decides who is told about it, so one nobody can be in would be ` +
-          `delivered to nobody at all -- silently. Name a partition the command declared, or ` +
-          `"${WORLD_SCOPE}" if everybody should hear it.`,
-      );
-    }
 
     const root = this.rootOf(scope);
     const owner = root.getEffectiveOwner();
@@ -3536,20 +3542,26 @@ function assertDeclared(command: string, name: string, declared: readonly string
   if (refusal !== null) throw refusal;
 }
 
-/** The same question, answered rather than raised, for the one caller that has
- *  to record a refusal before it propagates. */
+const askedFor = (command: string, name: string): string =>
+  `Action "${command}" asked for partition "${name}", which it did not declare. ` +
+  `Name it in the needs() of the step that reaches it, so the host loads it before that step ` +
+  `runs; an undeclared partition is not resident and would not be reported dirty either.`;
+
+const emittedIn = (command: string, name: string): string =>
+  `Action "${command}" emitted an event in "${name}", which it did not declare. An ` +
+  `event's scope is "${WORLD_SCOPE}" (everybody seated here) or a partition the ` +
+  "action names in needs(). Declare it there, or fix the name if it is a typo.";
+
+/** The same question, answered rather than raised, for the dispatch facilities
+ *  (`partition` and `emit`), which record a refusal before it propagates. */
 function declaredRefusal(
   command: string,
   name: string,
   declared: readonly string[],
+  wording: (command: string, name: string) => string = askedFor,
 ): WorldRefusal | null {
   if (declared.includes(name)) return null;
-  return worldRefusal(
-    "undeclared-partition",
-    `Action "${command}" asked for partition "${name}", which it did not declare. ` +
-      `Name it in the needs() of the step that reaches it, so the host loads it before that step ` +
-      `runs; an undeclared partition is not resident and would not be reported dirty either.`,
-  );
+  return worldRefusal("undeclared-partition", wording(command, name));
 }
 
 /**

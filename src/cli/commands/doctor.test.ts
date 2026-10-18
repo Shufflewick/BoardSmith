@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { join } from 'node:path';
-import { doctorCommand } from './doctor.js';
+import { appendGitignoreEntry, doctorCommand } from './doctor.js';
 import { DESIGN_DIR, SCRATCH_DIR } from '../lib/project-paths.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { GAME_VITE_CONFIG, GAME_VITE_CONFIG_FILE } from '../lib/test-run-scope.js';
@@ -215,6 +215,19 @@ describe('boardsmith doctor', () => {
     expect(process.exitCode).toBe(1);
   });
 
+  it('reports a conflict, and moves nothing over it, when the design copy is a link it cannot follow (#1174)', async () => {
+    const projectDir = await project({ 'SKETCH.md': 'root copy\n' });
+    const designCopy = join(projectDir, DESIGN_DIR, 'SKETCH.md');
+    await fs.mkdir(join(projectDir, DESIGN_DIR), { recursive: true });
+    await fs.symlink(designCopy, designCopy);
+
+    const result = await doctorCommand({ project: projectDir, fix: true });
+
+    expect(result.findings.map((f) => f.kind)).toEqual(['move-conflict']);
+    expect(await read(join(projectDir, 'SKETCH.md'))).toBe('root copy\n');
+    expect(await fs.readlink(designCopy)).toBe(designCopy);
+  });
+
   it('is idempotent — a second --fix run finds nothing and exits zero', async () => {
     const projectDir = await project({
       'SKETCH.md': '# sketch\n',
@@ -306,6 +319,30 @@ describe('boardsmith doctor', () => {
     expect(await read(join(projectDir, '.gitignore'))).toMatch(/^\.boardsmith\/$/m);
   });
 
+  it('refuses, naming the file, when .gitignore cannot be read, and leaves it as it was (#1110)', async () => {
+    const projectDir = await project({ '.gitignore': 'node_modules/\n' });
+    const gitignore = join(projectDir, '.gitignore');
+    await fs.chmod(gitignore, 0o200);
+    try {
+      await expect(doctorCommand({ project: projectDir, fix: true })).rejects.toThrow(`Could not read ${gitignore} (EACCES)`);
+    } finally {
+      await fs.chmod(gitignore, 0o644);
+    }
+    expect(await read(gitignore)).toBe('node_modules/\n');
+  });
+
+  it('the ignore-rule writer itself refuses an unreadable .gitignore and leaves it as it was (#1110)', async () => {
+    const projectDir = await project({ '.gitignore': 'node_modules/\n' });
+    const gitignore = join(projectDir, '.gitignore');
+    await fs.chmod(gitignore, 0o200);
+    try {
+      await expect(appendGitignoreEntry(projectDir)).rejects.toThrow(`Could not read ${gitignore} (EACCES)`);
+    } finally {
+      await fs.chmod(gitignore, 0o644);
+    }
+    expect(await read(gitignore)).toBe('node_modules/\n');
+  });
+
   it('a project whose .gitignore already covers .boardsmith/ is healthy', async () => {
     const projectDir = await project({ '.gitignore': 'node_modules/\n.boardsmith/\n' });
 
@@ -314,6 +351,18 @@ describe('boardsmith doctor', () => {
     expect(result.healthy).toBe(true);
     expect(process.exitCode).toBeUndefined();
   });
+
+  it.each(['.boardsmith', '/.boardsmith/', '/.boardsmith'])(
+    'accepts %s, which git applies the same as .boardsmith/ (#846)',
+    async (line) => {
+      const projectDir = await project({ '.gitignore': `node_modules/\n${line}\n` });
+
+      const result = await doctorCommand({ project: projectDir });
+
+      expect(result.findings).toEqual([]);
+      expect(process.exitCode).toBeUndefined();
+    },
+  );
 
   it('--json emits the machine-readable result and no human report', async () => {
     const projectDir = await project({ 'SKETCH.md': '# sketch\n' });

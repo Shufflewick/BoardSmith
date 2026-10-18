@@ -97,7 +97,8 @@ import { easeOutCubic } from '../../utils/easing.js';
 import { tryUseBoardInteraction } from './useBoardInteraction.js';
 import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
 import { isDevThrowEnabled } from '../../utils/dev.js';
-import { isHiddenPlaceholder } from '../../engine/element/hidden-placeholder.js';
+import { isHiddenPlaceholder, isPositionalPlaceholderId } from '../../engine/element/hidden-placeholder.js';
+import type { SpriteData } from '../utils/image.js';
 
 /**
  * Game element type for auto-watch mode
@@ -124,9 +125,9 @@ export interface FlyingCardData {
   /** Custom back color/gradient (e.g., 'var(--bsg-surface-2)' or 'linear-gradient(...)') */
   backColor?: string;
   /** Face image - URL string or sprite object */
-  faceImage?: string | { sprite: string; x: number; y: number; width?: number; height?: number };
+  faceImage?: string | SpriteData;
   /** Back image - URL string or sprite object */
-  backImage?: string | { sprite: string; x: number; y: number; width?: number; height?: number };
+  backImage?: string | SpriteData;
   /** Player seat who owns this element (for piece rendering) */
   playerSeat?: number;
   /** Any additional data for custom rendering */
@@ -341,9 +342,10 @@ export interface AutoWatchOptions {
   shouldFlip?: (from: string, to: string, element: AutoWatchGameElement) => boolean;
 
   /**
-   * Routes for tracking elements that become hidden.
+   * Routes for tracking elements that become hidden, or move between face-down piles.
    * When elements disappear from a container and another container's count increases,
-   * fly from source to destination.
+   * fly from source to destination. A face-down pile's cards carry no stable ids, so
+   * auto-watch never follows them one by one: a flight out of one needs a route here.
    */
   countBasedRoutes?: CountBasedRoute[];
 
@@ -797,6 +799,9 @@ export function useFlyingElements(
     await Promise.all(promises);
   }
 
+  // A counter, not a timestamp: two flights in one millisecond would share an id and remove each other's ghost.
+  let appearFlightCount = 0;
+
   /**
    * Declarative "fly when element appears" helper.
    * Sets up a watcher and triggers animation when element becomes truthy.
@@ -841,7 +846,7 @@ export function useFlyingElements(
         onStart?.();
 
         await fly({
-          id: `fly-appear-${Date.now()}`,
+          id: `fly-appear-${++appearFlightCount}`,
           startRect: sourceRect,
           endRect: () => targetRef.value?.getBoundingClientRect() ?? targetRect,
           elementData,
@@ -906,31 +911,23 @@ export function useFlyingElements(
     const containerCounts = new Map<string, number>();
 
     /**
-     * Find which container an element belongs to in the game view tree
+     * Map every element id under a container to that container's name, in one
+     * walk per container. The first container listed wins for nested ones.
      */
-    function findElementContainer(
-      element: AutoWatchGameElement,
+    function mapElementContainers(
       containerElements: Map<string, AutoWatchGameElement | null>
-    ): string | null {
-      for (const [name, containerEl] of containerElements) {
-        if (containerEl && isDescendantOf(element, containerEl)) {
-          return name;
+    ): Map<number, string> {
+      const result = new Map<number, string>();
+      function visit(element: AutoWatchGameElement, name: string): void {
+        for (const child of element.children ?? []) {
+          if (!result.has(child.id)) result.set(child.id, name);
+          visit(child, name);
         }
       }
-      return null;
-    }
-
-    /**
-     * Check if an element is a descendant of a container element
-     */
-    function isDescendantOf(element: AutoWatchGameElement, container: AutoWatchGameElement): boolean {
-      if (!container.children) return false;
-
-      for (const child of container.children) {
-        if (child.id === element.id) return true;
-        if (isDescendantOf(element, child)) return true;
+      for (const [name, containerEl] of containerElements) {
+        if (containerEl) visit(containerEl, name);
       }
-      return false;
+      return result;
     }
 
     /**
@@ -938,21 +935,19 @@ export function useFlyingElements(
      */
     function collectElements(
       root: AutoWatchGameElement,
-      containerElements: Map<string, AutoWatchGameElement | null>,
+      elementContainers: Map<number, string>,
       result: Map<number, { element: AutoWatchGameElement; container: string | null; isHidden: boolean }>
     ): void {
-      const isHidden = isHiddenPlaceholder(root);
-      const container = findElementContainer(root, containerElements);
+      const container = elementContainers.get(root.id) ?? null;
 
-      // Only track elements that are in tracked containers or have been tracked before
-      if (container || elementLocations.has(root.id)) {
-        result.set(root.id, { element: root, container, isHidden });
+      // Only track elements that are in tracked containers or have been tracked before.
+      // A positional placeholder names no card (#1097).
+      if ((container || elementLocations.has(root.id)) && !isPositionalPlaceholderId(root.id)) {
+        result.set(root.id, { element: root, container, isHidden: isHiddenPlaceholder(root) });
       }
 
-      if (root.children) {
-        for (const child of root.children) {
-          collectElements(child, containerElements, result);
-        }
+      for (const child of root.children ?? []) {
+        collectElements(child, elementContainers, result);
       }
     }
 
@@ -989,6 +984,31 @@ export function useFlyingElements(
       return wasHidden !== isHidden;
     }
 
+    /** A flight between two tracked containers, or null while either is not on screen. */
+    function flightBetween(
+      from: string,
+      to: string,
+      key: string,
+      elementData: FlyingCardData,
+      flip: boolean,
+      element?: string,
+    ): FlyConfig | null {
+      const fromRef = getContainers().find((c) => c.name === from)?.ref;
+      const toRef = getContainers().find((c) => c.name === to)?.ref;
+      if (!fromRef?.value || !toRef?.value) return null;
+      return {
+        id: `auto-fly-${key}-${Date.now()}`,
+        startRect: fromRef.value.getBoundingClientRect(),
+        endRect: () => toRef.value?.getBoundingClientRect() ?? null,
+        elementData,
+        flip,
+        duration: autoWatchDuration,
+        from,
+        to,
+        element,
+      };
+    }
+
     const stopWatcher = watch(
       gameView,
       async (newView, oldView) => {
@@ -1008,7 +1028,7 @@ export function useFlyingElements(
 
         // Collect current element states
         const currentElements = new Map<number, { element: AutoWatchGameElement; container: string | null; isHidden: boolean }>();
-        collectElements(newView, containerElements, currentElements);
+        collectElements(newView, mapElementContainers(containerElements), currentElements);
 
 
         // Collect current container counts
@@ -1035,10 +1055,12 @@ export function useFlyingElements(
 
         const flyConfigs: FlyConfig[] = [];
         const lastDroppedElementId = boardInteraction?.consumeLastDroppedElementId() ?? null;
+        const appeared: { id: number; element: AutoWatchGameElement; container: string }[] = [];
 
         // Check for elements that moved between containers
         for (const [id, { element, container: newContainer, isHidden }] of currentElements) {
           const oldContainer = elementLocations.get(id);
+          if (!oldContainer && newContainer && !isHidden) appeared.push({ id, element, container: newContainer });
 
           if (oldContainer && newContainer && oldContainer !== newContainer) {
             // Skip the fly animation for an element that was just drag-dropped
@@ -1049,27 +1071,9 @@ export function useFlyingElements(
             // move FROM that stale container — replaying the previous drag's
             // direction. So the move is recorded; only its animation is suppressed.
             if (lastDroppedElementId !== id) {
-              // Element moved between containers - trigger fly animation
-              const fromContainerConfig = getContainers().find((c) => c.name === oldContainer);
-              const toContainerConfig = getContainers().find((c) => c.name === newContainer);
-
-              if (fromContainerConfig?.ref.value && toContainerConfig?.ref.value) {
-                const shouldFlipFn = shouldFlip ?? defaultShouldFlip;
-                const flip = shouldFlipFn(oldContainer, newContainer, element);
-                const elementData = autoWatchGetElementData(element);
-
-                flyConfigs.push({
-                  id: `auto-fly-${id}-${Date.now()}`,
-                  startRect: fromContainerConfig.ref.value.getBoundingClientRect(),
-                  endRect: () => toContainerConfig.ref.value?.getBoundingClientRect() ?? null,
-                  elementData,
-                  flip,
-                  duration: autoWatchDuration,
-                  from: oldContainer,
-                  to: newContainer,
-                  element: String(id),
-                });
-              }
+              const flip = (shouldFlip ?? defaultShouldFlip)(oldContainer, newContainer, element);
+              const flight = flightBetween(oldContainer, newContainer, `${id}`, autoWatchGetElementData(element), flip, String(id));
+              if (flight) flyConfigs.push(flight);
             }
           }
 
@@ -1079,8 +1083,12 @@ export function useFlyingElements(
           // into the next update.
           if (newContainer) {
             elementLocations.set(id, newContainer);
+            elementDataCache.set(id, { element, wasHidden: isHidden });
+          } else {
+            // In an untracked container: forget the old one so a later move does not fly from it (#867).
+            elementLocations.delete(id);
+            elementDataCache.delete(id);
           }
-          elementDataCache.set(id, { element, wasHidden: isHidden });
         }
 
         // Check for elements that disappeared (visible → hidden or removed)
@@ -1097,25 +1105,10 @@ export function useFlyingElements(
 
               if (newCount > oldCount) {
                 // Destination gained children - fly from source to destination
-                const fromContainerConfig = getContainers().find((c) => c.name === route.from);
-                const toContainerConfig = getContainers().find((c) => c.name === route.to);
-
-                if (fromContainerConfig?.ref.value && toContainerConfig?.ref.value) {
-                  const elementData = route.getElementData?.() ??
-                    (cachedData ? autoWatchGetElementData(cachedData.element) : { faceUp: false });
-
-                  flyConfigs.push({
-                    id: `auto-fly-count-${id}-${Date.now()}`,
-                    startRect: fromContainerConfig.ref.value.getBoundingClientRect(),
-                    endRect: () => toContainerConfig.ref.value?.getBoundingClientRect() ?? null,
-                    elementData,
-                    flip: route.flip ?? true,
-                    duration: autoWatchDuration,
-                    from: route.from,
-                    to: route.to,
-                    element: String(id),
-                  });
-                }
+                const elementData = route.getElementData?.() ??
+                  (cachedData ? autoWatchGetElementData(cachedData.element) : { faceUp: false });
+                const flight = flightBetween(route.from, route.to, `count-${id}`, elementData, route.flip ?? true, String(id));
+                if (flight) flyConfigs.push(flight);
               }
             }
 
@@ -1126,41 +1119,26 @@ export function useFlyingElements(
         }
 
         // Check for elements that appeared (hidden → visible or new)
-        for (const [id, { element, container, isHidden }] of currentElements) {
-          if (!elementLocations.has(id) && container && !isHidden) {
-            // New visible element - check count-based routes for source
-            for (const route of countBasedRoutes) {
-              if (route.to !== container) continue;
+        const flightsBetween = (from: string | null, to: string | null) =>
+          flyConfigs.filter((c) => (from === null || c.from === from) && (to === null || c.to === to)).length;
+        const gained = (name: string) => (currentCounts.get(name) ?? 0) - (containerCounts.get(name) ?? 0);
+        for (const { id, element, container } of appeared) {
+          // One flight per card gained, each from a source that lost a card not yet flown (#1027).
+          if (flightsBetween(null, container) >= gained(container)) continue;
+          const route = countBasedRoutes.find((r) => r.to === container && -gained(r.from) > flightsBetween(r.from, null));
+          const flight = route && flightBetween(
+            route.from, container, `appear-${id}`, { ...autoWatchGetElementData(element), faceUp: false }, route.flip ?? true, String(id),
+          );
+          if (flight) flyConfigs.push(flight);
+        }
 
-              const oldCount = containerCounts.get(route.from) ?? 0;
-              const newCount = currentCounts.get(route.from) ?? 0;
-
-              if (newCount < oldCount) {
-                // Source lost children - fly from source to this element
-                const fromContainerConfig = getContainers().find((c) => c.name === route.from);
-                const toContainerConfig = getContainers().find((c) => c.name === container);
-
-                if (fromContainerConfig?.ref.value && toContainerConfig?.ref.value) {
-                  const elementData = autoWatchGetElementData(element);
-
-                  flyConfigs.push({
-                    id: `auto-fly-appear-${id}-${Date.now()}`,
-                    startRect: fromContainerConfig.ref.value.getBoundingClientRect(),
-                    endRect: () => toContainerConfig.ref.value?.getBoundingClientRect() ?? null,
-                    elementData: { ...elementData, faceUp: false },
-                    flip: route.flip ?? true,
-                    duration: autoWatchDuration,
-                    from: route.from,
-                    to: container,
-                    element: String(id),
-                  });
-                }
-              }
-            }
-
-            // Add to tracking
-            elementLocations.set(id, container);
-            elementDataCache.set(id, { element, wasHidden: isHidden });
+        // A face-down pile has no card ids to follow: fly what its count lost and the route's destination gained (#1097).
+        for (const route of countBasedRoutes) {
+          const owed = Math.min(-gained(route.from) - flightsBetween(route.from, null), gained(route.to) - flightsBetween(null, route.to));
+          for (let i = 0; i < owed; i++) {
+            const elementData = route.getElementData?.() ?? { faceUp: false };
+            const flight = flightBetween(route.from, route.to, `count-${route.from}-${route.to}-${i}`, elementData, route.flip ?? true);
+            if (flight) flyConfigs.push(flight);
           }
         }
 

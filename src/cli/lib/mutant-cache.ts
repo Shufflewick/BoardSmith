@@ -2,8 +2,10 @@ import { createHash } from 'node:crypto';
 import { sha256Hex } from './hash.js';
 import { promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
+import { isSameOrInside } from './path-inside.js';
 import { boardsmithPackageRoot } from './boardsmith-version.js';
 import { gitOutput as git } from './git-output.js';
+import { readIfExists } from './read-if-exists.js';
 
 /**
  * The outcomes of `boardsmith verify`'s mutants, kept so a re-verify runs only the mutants whose
@@ -56,9 +58,15 @@ import { gitOutput as git } from './git-output.js';
  * `save` puts the ones this run looked up or recorded in front of those already on file and drops
  * the oldest past the limit, so two checkouts verifying in turn do not evict each other. A run that
  * tried no mutant leaves the file as it was. Two runs saving at the same moment can lose one run's
- * new outcomes, which costs only running those mutants again.
- * `boardsmith verify` saves only when the tree stayed clean for the whole run, since the key is
- * computed from the commit and would not describe files edited mid-run.
+ * new outcomes, which costs only running those mutants again; each save writes all of the run's
+ * outcomes again, so the next one puts back what an overlapping save dropped.
+ * `boardsmith verify` saves after each mutant it runs, so an interrupted run keeps every finished
+ * outcome (#940). A save is about 10ms for a full file (1.6MB), next to a mutant's whole-suite run
+ * of seconds. It saves only while the tree is clean, since the key is computed from the commit and
+ * would not describe files edited mid-run. It also captures the execution context
+ * (`captureExecutionContext`) once when it starts, keys the cache by that capture, and refuses the
+ * rest of the run, keeping nothing more, when the context changed before or while a mutant ran, or
+ * by its end (#932, #940): outcomes from a mixed run would be stored under a key they do not fit.
  */
 
 const CACHE_FORMAT = 4;
@@ -95,14 +103,6 @@ function ancestors(dir: string): string[] {
   return dirs;
 }
 
-async function readIfPresent(path: string): Promise<Buffer | undefined> {
-  try {
-    return await fs.readFile(path);
-  } catch {
-    return undefined;
-  }
-}
-
 /**
  * The BoardSmith package a game's tests load: the first `node_modules/boardsmith` in the game
  * folder or a folder above it, as Node resolves the import, with links followed. Undefined when
@@ -111,7 +111,7 @@ async function readIfPresent(path: string): Promise<Buffer | undefined> {
 export async function gameBoardsmithRoot(projectDir: string): Promise<string | undefined> {
   for (const dir of ancestors(await fs.realpath(projectDir))) {
     const candidate = join(dir, 'node_modules', 'boardsmith');
-    if ((await readIfPresent(join(candidate, 'package.json'))) !== undefined) return fs.realpath(candidate);
+    if ((await readIfExists(join(candidate, 'package.json'), fs.readFile)) !== undefined) return fs.realpath(candidate);
   }
   return undefined;
 }
@@ -154,13 +154,12 @@ export async function uncommittedContentHash(root: string): Promise<string> {
   return hash.digest('hex');
 }
 
-/** True when git ignores `path` (relative to `root`, the top of a checkout), whether or not it exists. */
-async function ignoredByGit(root: string, path: string): Promise<boolean> {
+/** Which of `paths` (relative to `root`, the top of a checkout) git ignores, whether or not they exist, in one git call. */
+async function ignoredByGit(root: string, paths: readonly string[]): Promise<Set<string>> {
   try {
-    await git(root, ['check-ignore', '-q', '--', path]);
-    return true;
+    return new Set((await git(root, ['check-ignore', '--', ...paths])).split('\n').filter(Boolean));
   } catch (error) {
-    if ((error as { code?: unknown }).code === 1) return false;
+    if ((error as { code?: unknown }).code === 1) return new Set();
     throw error;
   }
 }
@@ -189,14 +188,8 @@ function entryScope(root: string, target: string): { parts: string[]; star: bool
   return { parts: scope.split(sep), star: star !== -1 };
 }
 
-/** The outermost of the folders `parts` names, from the top down, that git ignores, if any. */
-async function outermostIgnored(root: string, parts: string[]): Promise<string | undefined> {
-  for (let n = 1; n <= parts.length; n++) {
-    const prefix = parts.slice(0, n).join('/');
-    if (await ignoredByGit(root, prefix)) return prefix;
-  }
-  return undefined;
-}
+/** Each folder `parts` names, from the top down. */
+const prefixes = (parts: string[]) => parts.map((_, n) => parts.slice(0, n + 1).join('/'));
 
 /** Every ignored file or folder under the folder `parts` names, except those inside `node_modules`. */
 async function ignoredUnder(root: string, parts: string[]): Promise<string[]> {
@@ -220,7 +213,7 @@ async function ignoredUnder(root: string, parts: string[]): Promise<string[]> {
  * A pattern that reaches the whole package, and a target outside it, cannot be bounded, and throw.
  */
 async function ignoredEntryPointsHash(root: string): Promise<string> {
-  const manifest = await readIfPresent(join(root, 'package.json'));
+  const manifest = await readIfExists(join(root, 'package.json'), fs.readFile);
   const pkg = (manifest === undefined ? {} : JSON.parse(manifest.toString('utf-8'))) as Record<string, unknown>;
   const targets = entryTargets([pkg.main, pkg.module, pkg.exports]);
   if (targets.length === 0) targets.push('index.js');
@@ -229,12 +222,13 @@ async function ignoredEntryPointsHash(root: string): Promise<string> {
   const hashPath = async (path: string) => {
     if (hashed.has(path)) return;
     const full = join(root, path);
-    const stat = await fs.stat(full).catch(() => undefined);
+    const stat = await readIfExists(full, fs.stat);
     hashed.set(path, stat === undefined ? 'absent' : stat.isDirectory() ? await folderContentHash(full) : sha256Hex(await fs.readFile(full)));
   };
-  for (const target of targets) {
-    const { parts, star } = entryScope(root, target);
-    const ignored = await outermostIgnored(root, parts);
+  const scopes = targets.map((target) => entryScope(root, target));
+  const ignoredPaths = await ignoredByGit(root, [...new Set(scopes.flatMap(({ parts }) => prefixes(parts)))]);
+  for (const { parts, star } of scopes) {
+    const ignored = prefixes(parts).find((prefix) => ignoredPaths.has(prefix));
     if (ignored !== undefined) await hashPath(ignored);
     else if (star) for (const path of await ignoredUnder(root, parts)) await hashPath(path);
   }
@@ -293,18 +287,12 @@ async function repositoryTreeHash(projectDir: string, treeRef: string): Promise<
 async function installedPackagesHash(projectDir: string): Promise<string> {
   const records: string[] = [];
   for (const dir of ancestors(await fs.realpath(projectDir))) {
-    const record = await readIfPresent(join(dir, 'node_modules', '.package-lock.json'));
+    const record = await readIfExists(join(dir, 'node_modules', '.package-lock.json'), fs.readFile);
     if (record === undefined) continue;
     const digest = sha256Hex(record);
     if (!records.includes(digest)) records.push(digest);
   }
   return sha256Hex(records.join('\0'));
-}
-
-/** True when `path` is `dir` or lies inside it. */
-function within(dir: string, path: string): boolean {
-  const rel = relative(dir, path);
-  return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
 }
 
 /**
@@ -336,13 +324,8 @@ async function folderContentHash(dir: string): Promise<string> {
 /** The links in `dir/node_modules`, scoped packages included, each with the path it is reached by. */
 async function installedLinks(nodeModules: string): Promise<string[]> {
   const links: string[] = [];
-  let entries;
-  try {
-    entries = await fs.readdir(nodeModules, { withFileTypes: true });
-  } catch {
-    return links;
-  }
-  for (const entry of entries) {
+  const entries = await readIfExists(nodeModules, (p) => fs.readdir(p, { withFileTypes: true }));
+  for (const entry of entries ?? []) {
     if (entry.name.startsWith('.')) continue;
     const path = join(nodeModules, entry.name);
     if (entry.isSymbolicLink()) links.push(path);
@@ -401,7 +384,7 @@ async function linkedPackagesHash(projectDir: string): Promise<string> {
       named.set(`missing ${link}`, points);
       return;
     }
-    if (named.has(target) || within(repository, target) || target.split(sep).includes('node_modules')) return;
+    if (named.has(target) || isSameOrInside(repository, target) || target.split(sep).includes('node_modules')) return;
     named.set(target, await linkedFolderName(target, link));
     await scan(target);
   }
@@ -410,7 +393,7 @@ async function linkedPackagesHash(projectDir: string): Promise<string> {
     for (const dir of ancestors(from)) {
       if (scanned.has(dir)) continue;
       scanned.add(dir);
-      const record = await readIfPresent(join(dir, 'node_modules', '.package-lock.json'));
+      const record = await readIfExists(join(dir, 'node_modules', '.package-lock.json'), fs.readFile);
       if (record !== undefined && !gameFolders.has(dir)) named.set(`record ${dir}`, sha256Hex(record));
       for (const link of await installedLinks(join(dir, 'node_modules'))) await visitLink(link);
     }
@@ -427,6 +410,7 @@ export async function mutantCachePath(projectDir: string): Promise<string> {
 
 /** The outcomes on file, the most recently used first. */
 async function readEntries(path: string): Promise<Map<string, CachedOutcome>> {
+  // A cache: any file it cannot read or parse only means every mutant runs again.
   try {
     const file = JSON.parse(await fs.readFile(path, 'utf-8')) as { format?: number; outcomes?: unknown };
     if (file.format !== CACHE_FORMAT || !Array.isArray(file.outcomes)) return new Map();
@@ -462,33 +446,75 @@ export interface MutantCache extends MutationFingerprints {
   save(): Promise<void>;
 }
 
-async function mutationFingerprints(projectDir: string, treeRef: string): Promise<MutationFingerprints> {
+/**
+ * What the tests run with besides the repository's own files: the BoardSmith running this command
+ * and the one the game loads (`toolRevisions`), what is installed, and every package linked from
+ * outside the repository. Each is named in words, so `executionContextChange` can say which moved.
+ */
+export interface ExecutionContext {
+  readonly parts: Readonly<Record<'boardsmith' | 'installed' | 'linked', string>>;
+  /** Why no mutant outcome may be trusted or stored this run, when a linked package cannot be read. */
+  readonly unavailable?: string;
+}
+
+const PART_NAMES: Readonly<Record<keyof ExecutionContext['parts'], string>> = {
+  boardsmith: 'the BoardSmith this command runs and the game loads',
+  installed: "the installed packages (npm's install records)",
+  linked: 'the packages linked from outside the repository',
+};
+
+/** Reads the execution context of the game in `projectDir` as it stands now. */
+export async function captureExecutionContext(projectDir: string): Promise<ExecutionContext> {
   let linked: string;
+  let unavailable: string | undefined;
   try {
     linked = await linkedPackagesHash(projectDir);
   } catch (error) {
-    return uncached(`the mutant cache is off for this run: ${error instanceof Error ? error.message : String(error)}`);
+    const reason = error instanceof Error ? error.message : String(error);
+    linked = `unreadable: ${reason}`;
+    unavailable = `the mutant cache is off for this run: ${reason}`;
   }
-  const [prefix, tree, installed, tools] = await Promise.all([
-    git(projectDir, ['rev-parse', '--show-prefix']).then((p) => p.trim()),
-    repositoryTreeHash(projectDir, treeRef),
-    installedPackagesHash(projectDir),
-    toolRevisions(projectDir),
-  ]);
-  return { fingerprint: (m) => sha256Hex(JSON.stringify([CACHE_FORMAT, tools, process.version, tree, installed, linked, prefix, m.file, 'source' in m ? sha256Hex(m.source) : m.sourceHash])) };
+  const [installed, boardsmith] = await Promise.all([installedPackagesHash(projectDir), toolRevisions(projectDir)]);
+  return { parts: { boardsmith, installed, linked }, ...(unavailable === undefined ? {} : { unavailable }) };
 }
 
-/** The cache for the commit checked out in `projectDir`, as its tests run with what is installed now. */
-export async function openMutantCache(projectDir: string): Promise<MutantCache> {
-  const path = await mutantCachePath(projectDir);
-  const context = await mutationFingerprints(projectDir, 'HEAD');
+/**
+ * What changed in the execution context since `before` was captured, in words, or undefined when
+ * nothing did. The BoardSmith revisions are shown before and after, since a person can read them.
+ */
+export async function executionContextChange(projectDir: string, before: ExecutionContext): Promise<string | undefined> {
+  const now = await captureExecutionContext(projectDir);
+  const changed = (Object.keys(PART_NAMES) as (keyof ExecutionContext['parts'])[])
+    .filter((part) => now.parts[part] !== before.parts[part])
+    .map((part) => (part === 'boardsmith' ? `${PART_NAMES[part]} (was ${before.parts[part]}, now ${now.parts[part]})` : PART_NAMES[part]));
+  return changed.length === 0 ? undefined : changed.join('; ');
+}
+
+async function mutationFingerprints(projectDir: string, context: ExecutionContext): Promise<MutationFingerprints> {
   if (context.unavailable !== undefined) return uncached(context.unavailable);
+  const { boardsmith, installed, linked } = context.parts;
+  const [prefix, tree] = await Promise.all([
+    git(projectDir, ['rev-parse', '--show-prefix']).then((p) => p.trim()),
+    repositoryTreeHash(projectDir, 'HEAD'),
+  ]);
+  return { fingerprint: (m) => sha256Hex(JSON.stringify([CACHE_FORMAT, boardsmith, process.version, tree, installed, linked, prefix, m.file, 'source' in m ? sha256Hex(m.source) : m.sourceHash])) };
+}
+
+/**
+ * The cache for the commit checked out in `projectDir`, as its tests run in `context` (by default,
+ * what is installed now). `boardsmith verify` hands in the context it captured when it started, so
+ * the outcomes it stores are keyed by the context it checks again before saving them.
+ */
+export async function openMutantCache(projectDir: string, context?: ExecutionContext): Promise<MutantCache> {
+  const path = await mutantCachePath(projectDir);
+  const fingerprints = await mutationFingerprints(projectDir, context ?? (await captureExecutionContext(projectDir)));
+  if (fingerprints.unavailable !== undefined) return uncached(fingerprints.unavailable);
   const stored = await readEntries(path);
   const used = new Map<string, CachedOutcome>();
-  const keyOf = (m: MutantText) => context.fingerprint(m)!;
+  const keyOf = (m: MutantText) => fingerprints.fingerprint(m)!;
 
   return {
-    fingerprint: context.fingerprint,
+    fingerprint: fingerprints.fingerprint,
     get(mutant) {
       const key = keyOf(mutant);
       const outcome = stored.get(key);

@@ -93,7 +93,18 @@ export function useSelectable(
 
 /**
  * Manage roving-tabindex keyboard navigation for a 2D grid of board cells.
- * Mirrors the canonical implementation in planning/mockups/boardsmith-chrome.html:569-618.
+ *
+ * @example
+ * ```ts
+ * const { currentIdx, handleGridKeydown, handleGridFocusIn, registerCell, cellAttrs } = useSelectableGrid(
+ *   squares, // ComputedRef<Square[]>, in any order
+ *   (sq) => ({ row: 8 - sq.rank, col: sq.file - 1 }),
+ *   (sq) => ({ id: sq.id }),
+ *   board,
+ *   (sq) => board.triggerElementSelect({ id: sq.id }),
+ *   'square',
+ * );
+ * ```
  *
  * The grid container should receive:
  *   role="grid"  aria-label="Game board, N by M"
@@ -101,8 +112,9 @@ export function useSelectable(
  * Each cell should receive:
  *   role="gridcell"  :tabindex="currentIdx === cellIndex ? '0' : '-1'"
  *
- * @param cells           ComputedRef of all grid cells (flat row-major array)
- * @param cols            ComputedRef of the column count
+ * @param cells           ComputedRef of all grid cells, in any order
+ * @param position        A cell's row and column on the board. Arrow keys move to
+ *   the nearest cell in the same row or column, so tree order and gaps never matter (#891).
  * @param getIdentity     Maps a cell to its ElementRef (id/name/notation)
  * @param boardInteraction  BoardInteraction from tryUseBoardInteraction() — may be null/undefined
  * @param onActivate      What Enter/Space does to a cell. The composable calls it
@@ -138,7 +150,7 @@ export function useSelectable(
  */
 export function useSelectableGrid<T>(
   cells: ComputedRef<T[]>,
-  cols: ComputedRef<number>,
+  position: (cell: T) => { row: number; col: number },
   getIdentity: (cell: T) => ElementRef,
   boardInteraction: BoardInteraction | null | undefined,
   onActivate: (cell: T) => void,
@@ -255,23 +267,43 @@ export function useSelectableGrid<T>(
     currentIdx.value = Math.max(0, Math.min(len - 1, i));
   }
 
+  // [axis that varies, direction, farthest rather than nearest] for each navigation key.
+  const MOVES: Record<string, ['row' | 'col', 1 | -1, boolean]> = {
+    ArrowRight: ['col', 1, false],
+    ArrowLeft: ['col', -1, false],
+    ArrowDown: ['row', 1, false],
+    ArrowUp: ['row', -1, false],
+    Home: ['col', -1, true],
+    End: ['col', 1, true],
+  };
+
   /**
-   * Move the cursor for one navigation key — follows mockup lines 601-606 exactly.
+   * Move the cursor for one navigation key to the nearest (Home/End: farthest)
+   * cell in that direction along the same row or column; it stays put at an edge.
    * Returns false when the key is not one this grid navigates by, so the caller
    * can leave the event alone.
    */
   function moveCursorBy(key: string): boolean {
-    const COLS = cols.value;
-    const i = currentIdx.value;
-    switch (key) {
-      case 'ArrowRight': focusCell(i + 1); return true;
-      case 'ArrowLeft': focusCell(i - 1); return true;
-      case 'ArrowDown': focusCell(i + COLS); return true;
-      case 'ArrowUp': focusCell(i - COLS); return true;
-      case 'Home': focusCell(i - (i % COLS)); return true;
-      case 'End': focusCell(i - (i % COLS) + COLS - 1); return true;
-      default: return false;
-    }
+    const move = MOVES[key];
+    if (!move) return false;
+    const [axis, dir, farthest] = move;
+    const cross = axis === 'row' ? 'col' : 'row';
+    const current = cells.value[currentIdx.value];
+    if (current === undefined) return true;
+    const here = position(current);
+    let best = -1;
+    let bestDist = 0;
+    cells.value.forEach((cell, i) => {
+      const p = position(cell);
+      const dist = (p[axis] - here[axis]) * dir;
+      if (p[cross] !== here[cross] || dist <= 0) return;
+      if (best === -1 || (farthest ? dist > bestDist : dist < bestDist)) {
+        best = i;
+        bestDist = dist;
+      }
+    });
+    if (best !== -1) currentIdx.value = best;
+    return true;
   }
 
   /**

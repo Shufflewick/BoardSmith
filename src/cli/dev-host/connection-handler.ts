@@ -1,9 +1,12 @@
 import { randomUUID } from 'node:crypto';
+import { styleText } from 'node:util';
 import type { WebSocket } from 'ws';
 import { claimWebSocketPath } from '../commands/dev-server.js';
 import type { ClientInbound, HostOutbound, MultiplayerHost } from './multiplayer-host.js';
 import type { RulesReloadQueue } from './rules-reload-queue.js';
+import { pageText, parseSocketMessage } from './socket-message.js';
 import { DEV_HOST_WS_PATH } from './socket-path.js';
+import { toWireJson } from './wire-json.js';
 
 /**
  * The messages that run the table's rules, and so are refused rather than run
@@ -19,11 +22,20 @@ const RUNS_THE_RULES: ReadonlySet<ClientInbound['type']> = new Set([
 ]);
 
 interface DevHostConnectionOptions {
-  mpHost: Pick<MultiplayerHost, 'handleMessage' | 'disconnect'>;
+  mpHost: Pick<MultiplayerHost, 'handleMessage' | 'disconnect' | 'bindPageLoad' | 'forgetPageLoad'>;
   clients: Map<string, WebSocket>;
   queue: Pick<RulesReloadQueue, 'admit'>;
-  /** Called when an async message dispatch rejects; receives the failing message type. */
+  /** Called when an async message dispatch rejects; receives the failing message type, escaped and capped for a log (#1089). */
   onError: (err: unknown, msgType: string) => void;
+}
+
+/**
+ * How `boardsmith dev` reports a table message that failed: the message, not
+ * the error, since a stack trace in its log is a leak (#240), escaped because a
+ * page can influence it (#1132).
+ */
+export function logMessageFailure(err: unknown, msgType: string): void {
+  console.error(styleText('red', `[boardsmith dev] message '${msgType}' failed: ${pageText(err instanceof Error ? err.message : String(err))}`));
 }
 
 /**
@@ -65,6 +77,12 @@ export function claimDevHostSocket(opts: DevHostConnectionOptions): ReturnType<t
  * cannot take over the routing of a page that shares its client id. A fresh
  * page load names no run and joins as the first arrival or a reconnect would.
  *
+ * Each `hello` also names the page load it comes from (#1041), and every
+ * `server_request` is stamped with this socket's load, so the host answers a
+ * request only while that load still holds the client's socket: a reloaded
+ * page reuses its client id and its request ids, and must not receive the
+ * answers meant for the page it replaced.
+ *
  * Every message is admitted through the rules reload queue (#379), so one that
  * arrives while a saved rules edit is still rebuilding waits for the new rules.
  * So is a page's departure (#387): a bot covering its seat is a move, and it
@@ -81,7 +99,7 @@ export function createDevHostConnectionHandler(opts: DevHostConnectionOptions): 
 
   return (socket: WebSocket) => {
     const send = (message: HostOutbound) => {
-      if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(message));
+      if (socket.readyState === socket.OPEN) socket.send(toWireJson(message));
     };
     const dispatch = (clientId: string, msg: ClientInbound) => {
       const refusal = (message: string): HostOutbound => ({
@@ -94,46 +112,50 @@ export function createDevHostConnectionHandler(opts: DevHostConnectionOptions): 
           run: () => mpHost.handleMessage(clientId, msg),
           ...(RUNS_THE_RULES.has(msg.type) ? { refuse: (message: string) => send(refusal(message)) } : {}),
         })
-        .catch((err: unknown) => onError(err, msg.type));
+        .catch((err: unknown) => onError(err, pageText(msg.type)));
     };
 
     let clientId: string | null = null;
+    let loadId = '';
 
-    socket.on('message', (raw) => {
-      let msg: { type?: string; clientId?: unknown; [key: string]: unknown };
-      try {
-        msg = JSON.parse(raw.toString());
-      } catch {
-        return;
-      }
-      if (msg.type === 'hello') {
-        if (msg.runId !== undefined && msg.runId !== runId) {
-          send({ type: 'stale_run' });
-          return;
-        }
-        send({ type: 'welcome', runId });
-        clientId =
-          typeof msg.clientId === 'string' ? msg.clientId : `anon-${Math.random().toString(36).slice(2)}`;
-        clients.set(clientId, socket);
-        dispatch(clientId, { type: 'hello' });
-        return;
-      }
-      // A client must identify itself via `hello` first; a tab from an earlier
-      // run never does (#416).
-      if (!clientId) return;
-      dispatch(clientId, msg as ClientInbound);
-    });
-
-    socket.on('close', () => {
-      // Only tear down if THIS socket still owns the clientId mapping. A stale
-      // close from a superseded (reloaded) socket must not disconnect the
-      // reconnected client — that would orphan every future broadcast/response
-      // to its seat (DEF-C).
+    type Inbound = { type?: string; clientId?: unknown; [key: string]: unknown };
+    // Only if this socket still owns the id: a reloaded page's stale close must not disconnect its new socket (DEF-C).
+    const release = () => {
       if (clientId && clients.get(clientId) === socket) {
         const gone = clientId;
         clients.delete(gone);
+        mpHost.forgetPageLoad(gone);
         queue.admit({ run: async () => mpHost.disconnect(gone) }).catch((err: unknown) => onError(err, 'disconnect'));
       }
+    };
+
+    const identify = (msg: Inbound) => {
+      if (msg.runId !== undefined && msg.runId !== runId) {
+        send({ type: 'stale_run' });
+        return;
+      }
+      send({ type: 'welcome', runId });
+      const next = typeof msg.clientId === 'string' ? msg.clientId : `anon-${Math.random().toString(36).slice(2)}`;
+      // A socket that changes identity leaves as its old client, so that seat is covered (#887).
+      if (next !== clientId) release();
+      clientId = next;
+      clients.set(clientId, socket);
+      // A caller that names no page load (a scripted client) is one per socket.
+      loadId = typeof msg.loadId === 'string' ? msg.loadId : randomUUID();
+      mpHost.bindPageLoad(clientId, loadId);
+      dispatch(clientId, { type: 'hello' });
+    };
+
+    socket.on('message', (raw) => {
+      const msg = parseSocketMessage(raw);
+      if (msg === null) return;
+      if (msg.type === 'hello') return identify(msg);
+      // A client must identify itself via `hello` first; a tab from an earlier
+      // run never does (#416).
+      if (!clientId) return;
+      dispatch(clientId, (msg.type === 'server_request' ? { ...msg, loadId } : msg) as ClientInbound);
     });
+
+    socket.on('close', release);
   };
 }

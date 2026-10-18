@@ -47,12 +47,51 @@ export interface WeightEvolverConfig {
  * Result of weight evolution.
  */
 export interface WeightEvolutionResult {
-  /** Optimized objectives with new weights */
+  /** The weights to keep: the search's pick if the confirmation accepted it, otherwise the original weights */
   objectives: ObjectiveWeight[];
-  /** Best fitness achieved (win rate 0-1) */
+  /**
+   * The search's best score (win rate 0-1). The top of many noisy scores, so it
+   * overstates the pick's strength (#870); `confirmation` measures it.
+   */
   bestFitness: number;
   /** Initial fitness before evolution (win rate 0-1) */
   initialFitness: number;
+  /** The rematch of the search's pick against the original, or undefined when the search kept the original */
+  confirmation?: WeightConfirmation;
+}
+
+/**
+ * The search's pick and the original weights, benchmarked again on the same
+ * fresh games, which the search never played.
+ */
+export interface WeightConfirmation {
+  /** Games each set played */
+  games: number;
+  /** The original weights' win rate (0-1) */
+  originalWinRate: number;
+  /** The search pick's win rate (0-1) */
+  candidateWinRate: number;
+  /** Whether the pick won by enough to keep it (see {@link confirmsImprovement}) */
+  accepted: boolean;
+}
+
+/** Games each set plays in the confirmation, split evenly between the seats. */
+const CONFIRMATION_GAMES = 400;
+/** One-sided 95% critical value of the standard normal. */
+const Z_95 = 1.645;
+
+/**
+ * Whether the pick's win rate beats the original's by more than chance explains:
+ * a one-sided pooled two-proportion z-test at 5% over `games` games each.
+ *
+ * When the pick is no stronger, it is accepted at most about 5% of the time; the
+ * shared games correlate the two scores, which only lowers that. At 400 games
+ * each, a pick 10 points stronger than an original at 50% is accepted about 88%
+ * of the time, 15 points about 99%, and 5 points about 41%.
+ */
+function confirmsImprovement(originalWinRate: number, candidateWinRate: number, games: number): boolean {
+  const pooled = (originalWinRate + candidateWinRate) / 2;
+  return candidateWinRate - originalWinRate > Z_95 * Math.sqrt((2 * pooled * (1 - pooled)) / games);
 }
 
 const DEFAULT_CONFIG: Required<Omit<WeightEvolverConfig, 'seed' | 'onProgress' | 'workerCount' | 'gameTimeout'>> = {
@@ -120,7 +159,7 @@ export class WeightEvolver {
     bundle.weightedBot(gameClass, this.gameType, bot, objectives);
 
     // Benchmark initial objectives to get baseline
-    this.reportProgress({
+    this.config.onProgress?.({
       iteration: 0,
       totalIterations: this.config.evolutionGenerations ?? 5,
       gamesCompleted: 0,
@@ -145,13 +184,46 @@ export class WeightEvolver {
 
     const initialFitness = initialFitnesses[0];
 
-    // Run evolution
-    const result = await this.runEvolution(objectives, initialFitness);
+    const search = await this.runEvolution(objectives, initialFitness);
+    return { ...(await this.confirm(objectives, search)), bestFitness: search.bestFitness, initialFitness };
+  }
 
+  /**
+   * The weights to keep: the search's pick only if, benchmarked again beside the
+   * original on games seeded from a stage the search never used, it wins by more
+   * than chance, since its search score is the luckiest of many (#870).
+   */
+  private async confirm(
+    original: ObjectiveWeight[],
+    { objectives: candidate, bestFitness }: { objectives: ObjectiveWeight[]; bestFitness: number },
+  ): Promise<{ objectives: ObjectiveWeight[]; confirmation?: WeightConfirmation }> {
+    if (candidate === original) return { objectives: original };
+    const generations = this.config.evolutionGenerations ?? 5;
+    this.config.onProgress?.({
+      iteration: generations,
+      totalIterations: generations,
+      gamesCompleted: 0,
+      totalGames: 2,
+      bestWinRate: bestFitness,
+      objectiveCount: candidate.length,
+      message: `Confirming the best weights against the original on ${CONFIRMATION_GAMES} fresh games each...`,
+    });
+    const [originalWinRate, candidateWinRate] = await runParallelBenchmarks(
+      this.gameModulePath,
+      this.gameType,
+      [original, candidate],
+      {
+        gameCount: CONFIRMATION_GAMES,
+        mctsIterations: this.config.benchmarkMCTSIterations ?? 100,
+        maxActions: this.config.maxActionsPerGame,
+        ...this.benchmarkSeeding('confirm'),
+      },
+      { workerCount: this.config.workerCount },
+    );
+    const accepted = confirmsImprovement(originalWinRate, candidateWinRate, CONFIRMATION_GAMES);
     return {
-      objectives: result.objectives,
-      bestFitness: result.bestFitness,
-      initialFitness,
+      objectives: accepted ? candidate : original,
+      confirmation: { games: CONFIRMATION_GAMES, originalWinRate, candidateWinRate, accepted },
     };
   }
 
@@ -181,7 +253,7 @@ export class WeightEvolver {
     let bestFitness = initialFitness;
 
     for (let gen = 1; gen <= generations; gen++) {
-      this.reportProgress({
+      this.config.onProgress?.({
         iteration: gen,
         totalIterations: generations,
         gamesCompleted: 0,
@@ -198,7 +270,7 @@ export class WeightEvolver {
       // Combine parents + offspring
       const population = [...parents, ...offspring];
 
-      this.reportProgress({
+      this.config.onProgress?.({
         iteration: gen,
         totalIterations: generations,
         gamesCompleted: 0,
@@ -221,7 +293,7 @@ export class WeightEvolver {
         },
         { workerCount: this.config.workerCount },
         (completed, total) => {
-          this.reportProgress({
+          this.config.onProgress?.({
             iteration: gen,
             totalIterations: generations,
             gamesCompleted: completed,
@@ -247,7 +319,7 @@ export class WeightEvolver {
       // Decay sigma for finer search
       sigma *= 0.9;
 
-      this.reportProgress({
+      this.config.onProgress?.({
         iteration: gen,
         totalIterations: generations,
         gamesCompleted: population.length,
@@ -271,14 +343,5 @@ export class WeightEvolver {
     return this.config.seed === undefined
       ? { seed, timeout: this.config.gameTimeout ?? 30000 }
       : { seed, reproducible: true };
-  }
-
-  /**
-   * Report progress to callback.
-   */
-  private reportProgress(progress: TrainingProgress): void {
-    if (this.config.onProgress) {
-      this.config.onProgress(progress);
-    }
   }
 }

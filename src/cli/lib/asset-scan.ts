@@ -10,45 +10,29 @@
  * heuristic locked in 152-CONTEXT.md. `AssetImage` lives in `boardsmith/ui`
  * (issue #81), so no path inside a game is exempt: routing art through
  * `<AssetImage>` is the one sanctioned path, and anything else is a FAIL regardless
- * of what `src` resolves to. Today the `bs-build-chunk` skill's `test` step is the
- * caller (see build/test.md); any future CLI wiring (`boardsmith build`/`lint`)
+ * of what `src` resolves to. Today the `/bs:build-chunk` `test` step is the
+ * caller (see `src/cli/slash-command/bs/build/test.md`); any future CLI wiring
  * should delegate here too rather than growing a second, subtly different regex
  * scanner — the single-source-of-truth pattern `sandbox-scan.ts` established.
  *
- * WR-02: this module is re-exported from `boardsmith/testing`
- * (`src/testing/index.ts`) so games can call the gate directly. It is ALSO
- * imported by a hardcoded relative path from the `bs-build-chunk` skill's
- * `build/test.md`. If you move or rename this file, update BOTH of those
- * importers — neither is caught by this package's own type-check.
+ * Games import it from its own subpath, `boardsmith/asset-scan` (the `exports`
+ * entry in package.json), not from `boardsmith/testing`, so the testing barrel
+ * stays free of Node types (see `src/testing/index.ts`). If you move or rename
+ * this file, update that `exports` entry.
  */
 
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { extname, join, relative } from 'node:path';
+import ts from 'typescript';
+import { parse as parseSfc } from 'vue/compiler-sfc';
+import { collectSourceFiles } from './source-files.js';
 
 export interface AssetViolation {
   /** Path relative to the project root. */
   file: string;
-  line: number;
+  /** Absent when the problem has no line, such as a Vue parser error without a location. */
+  line?: number;
   message: string;
-}
-
-function collectSourceFiles(dir: string, files: string[] = []): string[] {
-  if (!existsSync(dir)) return files;
-
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
-
-    const fullPath = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      collectSourceFiles(fullPath, files);
-      continue;
-    }
-    if (/\.(vue|ts|tsx|js|jsx)$/.test(entry.name)) {
-      files.push(fullPath);
-    }
-  }
-
-  return files;
 }
 
 // A real <img> tag: `<img` followed by whitespace, `/`, or `>` — case-insensitive
@@ -56,130 +40,120 @@ function collectSourceFiles(dir: string, files: string[] = []): string[] {
 // like `<img-carousel>` (a false positive `\b` would have matched).
 const BARE_IMG_TAG = /<img[\s/>]/i;
 
-/**
- * Blank out comment spans (JS `//`, JS `/* *\/`, Vue `<!-- -->`) across an entire
- * file's lines, replacing comment characters with spaces so every line keeps its
- * original length and 1-based index — callers that report `AssetViolation.line`
- * against the ORIGINAL source stay accurate. Block-comment and HTML-comment open
- * state is tracked ACROSS line boundaries (a `/* *\/` or `<!-- -->` can span many
- * lines). Only comment content is stripped — live markup and string literals are
- * left untouched (D17 fix is comment-scoped only, not a second/looser detector).
- *
- * CR-02: comment-opener detection is quote-aware WITHIN each line — a `//`,
- * `/*`, or `<!--` sequence that appears INSIDE a live single/double/backtick
- * quoted span (an HTML attribute value like `href="//example.com"`, or a JS
- * string literal like `"a // b"`) is never treated as a comment opener. A
- * naive scanner that only special-cases `https://`-style `:`-prefixed URLs
- * blanks the rest of the line on any OTHER live `//` — including a bare
- * `<img>` tag later on that same line — silently defeating the ASSET-02
- * build gate. Quote state resets at the start of each live (non-comment)
- * segment scanned and does not persist across lines (multi-line JS template
- * literals are out of scope — see 162-CONTEXT.md D17 discretion).
- */
+/** A file's lines with comments blanked, so line numbers and lengths match the original. */
 interface StripCommentsResult {
   lines: string[];
   /**
-   * WR-01: set when a block/HTML comment opener is never closed by EOF —
+   * WR-01: each block/HTML comment opener never closed by EOF —
    * everything after it was silently blanked (treated as commented-out) and
    * NOT scanned for bare `<img>` tags. `line` is the 1-based line the
    * comment opened on; `kind` distinguishes `/* *\/` from `<!-- -->`.
    */
-  unterminated?: { line: number; kind: 'block' | 'html' };
+  unterminated: { line: number; kind: 'block' | 'html' }[];
+  /** #1096: what Vue's parser could not read in a `.vue` file, at 1-based lines. */
+  parseErrors?: { line?: number; reason: string }[];
 }
 
-function stripComments(lines: string[]): StripCommentsResult {
-  const stripped: string[] = [];
-  // Which multi-line comment kind (if any) is open going INTO this line.
-  let openKind: 'block' | 'html' | null = null;
-  let openedAtLine: number | undefined;
-  // F-11: a `.vue` file mixes regions with DIFFERENT comment/quote grammars.
-  // JS `//` line comments, `/* */` block comments and string-quote tracking are
-  // valid ONLY inside `<script>`; `<style>` has `/* */` + quotes but no `//`;
-  // the TEMPLATE region has ONLY `<!-- -->` HTML comments — apostrophes and
-  // `//` there are literal text. Applying JS lexing to template text both
-  // defeated the gate (a `//` blanked a following real <img>) and produced
-  // false FAILs (an apostrophe phantom-quoted a following `<!-- <img> -->`).
-  // Track the region so each grammar applies only where it is valid. The region
-  // persists across lines (script/style blocks span lines); the file is scanned
-  // fresh per call so no cross-file leakage.
-  let region: 'template' | 'script' | 'style' = 'template';
+const blank = (text: string): string => text.replace(/[^\r\n]/g, ' ');
 
-  for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
-    const line = lines[lineIdx];
-    let out = '';
-    let i = 0;
-    // Quote state is intentionally per-line (multi-line template literals are
-    // out of scope — see the interface doc).
-    let quote: string | null = null;
+const SCRIPT_KINDS: Record<string, ts.ScriptKind> = { '.tsx': ts.ScriptKind.TSX, '.jsx': ts.ScriptKind.JSX, '.js': ts.ScriptKind.JS, '.mjs': ts.ScriptKind.JS, '.cjs': ts.ScriptKind.JS };
 
-    while (i < line.length) {
-      // Inside a multi-line comment: consume until its closer.
-      if (openKind === 'block') {
-        const close = line.indexOf('*/', i);
-        if (close === -1) { out += ' '.repeat(line.length - i); i = line.length; }
-        else { out += ' '.repeat(close + 2 - i); i = close + 2; openKind = null; }
-        continue;
-      }
-      if (openKind === 'html') {
-        const close = line.indexOf('-->', i);
-        if (close === -1) { out += ' '.repeat(line.length - i); i = line.length; }
-        else { out += ' '.repeat(close + 3 - i); i = close + 3; openKind = null; }
-        continue;
-      }
-
-      const ch = line[i];
-
-      // Inside a string literal (script/style only — template never enters one).
-      if (quote) {
-        if (ch === '\\' && quote !== '`') { out += line.slice(i, i + 2); i += 2; continue; }
-        if (ch === quote) quote = null;
-        out += ch;
-        i++;
-        continue;
-      }
-
-      // Region EXIT: `</script>` / `</style>` returns to template.
-      if (region === 'script' && line.startsWith('</script', i)) { region = 'template'; out += ch; i++; continue; }
-      if (region === 'style' && line.startsWith('</style', i)) { region = 'template'; out += ch; i++; continue; }
-
-      if (region === 'template') {
-        // Region ENTER: `<script`/`<style` switch grammar for what follows.
-        if (line.startsWith('<script', i)) { region = 'script'; out += ch; i++; continue; }
-        if (line.startsWith('<style', i)) { region = 'style'; out += ch; i++; continue; }
-        // The ONLY comment in template is the HTML comment.
-        if (line.startsWith('<!--', i)) { out += '    '; i += 4; openKind = 'html'; openedAtLine = lineIdx + 1; continue; }
-        // Everything else (including `'`, `"`, `//`, `/*`) is literal text.
-        out += ch;
-        i++;
-        continue;
-      }
-
-      // region is 'script' or 'style' — apply the relevant lexing.
-      // String literals: JS uses ' " ` ; CSS uses ' " .
-      if (ch === '"' || ch === "'" || (region === 'script' && ch === '`')) { quote = ch; out += ch; i++; continue; }
-      // Line comments: JS only. A `//` preceded by `:` is a URL scheme separator.
-      if (region === 'script' && ch === '/' && line[i + 1] === '/') {
-        if (line[i - 1] === ':') { out += '//'; i += 2; continue; }
-        out += ' '.repeat(line.length - i);
-        i = line.length;
-        continue;
-      }
-      // Block comments: JS and CSS.
-      if (ch === '/' && line[i + 1] === '*') { out += '  '; i += 2; openKind = 'block'; openedAtLine = lineIdx + 1; continue; }
-      // HTML comments can legally appear even inside <script> in a .vue SFC's
-      // raw text in rare cases, but bare <img> never lives in script/style, so
-      // no HTML-comment handling is needed here — treat as literal.
-      out += ch;
-      i++;
-    }
-
-    stripped.push(out);
-  }
-
-  return {
-    lines: stripped,
-    unterminated: openKind ? { line: openedAtLine!, kind: openKind } : undefined,
+/**
+ * Blank out the comments of a script file (`.ts`, `.tsx`, `.js` and the rest),
+ * keeping line count and lengths. The comments come from TypeScript's parser, so
+ * comment-looking text inside a template literal, a regex or JSX text is kept
+ * and still scanned (#852).
+ */
+function stripScriptComments(content: string, filePath: string): StripCommentsResult {
+  const source = ts.createSourceFile(filePath, content, ts.ScriptTarget.Latest, true, SCRIPT_KINDS[extname(filePath)] ?? ts.ScriptKind.TS);
+  const tokens: ts.Node[] = [];
+  // A JSDoc node lies inside its comment, which the token it documents already reports.
+  const isJSDoc = (node: ts.Node): boolean => node.kind >= ts.SyntaxKind.FirstJSDocNode && node.kind <= ts.SyntaxKind.LastJSDocNode;
+  const visit = (node: ts.Node): void => {
+    const children = node.getChildren(source).filter((child) => !isJSDoc(child));
+    if (children.length > 0) children.forEach(visit);
+    else tokens.push(node);
   };
+  visit(source);
+  const comments = new Map<number, number>();
+  const collect = (ranges: ts.CommentRange[] | undefined): void => { for (const r of ranges ?? []) comments.set(r.pos, r.end); };
+  // Leading ranges start after a line break, trailing ones before it; JSX text has no trivia, so a `//` in it is text.
+  tokens.forEach((token, i) => {
+    if (token.kind === ts.SyntaxKind.JsxText) return;
+    collect(ts.getLeadingCommentRanges(content, token.pos));
+    if (tokens[i + 1]?.kind !== ts.SyntaxKind.JsxText) collect(ts.getTrailingCommentRanges(content, token.end));
+  });
+
+  const parts: string[] = [];
+  let cursor = 0;
+  const unterminated: StripCommentsResult['unterminated'] = [];
+  for (const [start, end] of [...comments].sort((a, b) => a[0] - b[0])) {
+    if (end <= cursor) continue;
+    const comment = content.slice(start, end);
+    parts.push(content.slice(cursor, start), blank(content.slice(Math.max(start, cursor), end)));
+    cursor = end;
+    if (comment.startsWith('/*') && (comment.length < 4 || !comment.endsWith('*/'))) {
+      unterminated.push({ line: source.getLineAndCharacterOfPosition(start).line + 1, kind: 'block' });
+    }
+  }
+  parts.push(content.slice(cursor));
+  return { lines: parts.join('').split('\n'), unterminated };
+}
+
+/**
+ * Blank out the comments of a `.vue` file, keeping line count and lengths. Vue's
+ * own parser finds the blocks: each `<script>` goes through `stripScriptComments`
+ * like any script file (#1017), `<style>` is blanked whole since CSS cannot render
+ * an `<img>`, and the rest is template, where only `<!-- -->` is a comment (F-11).
+ */
+function stripVueComments(content: string, relPath: string): StripCommentsResult {
+  // Vue puts this name in some of its error text, so it is the project path, never the machine one.
+  const { descriptor, errors } = parseSfc(content, { filename: relPath });
+  const blocks = [descriptor.script, descriptor.scriptSetup, ...descriptor.styles]
+    .filter((block) => block !== null)
+    .sort((a, b) => a.loc.start.offset - b.loc.start.offset);
+  const unterminated: StripCommentsResult['unterminated'] = [];
+  const template = (text: string, offset: number): string => text.replace(/<!--[\s\S]*?(?:-->|$)/g, (comment: string, at: number) => {
+    if (!comment.endsWith('-->')) unterminated.push({ line: content.slice(0, offset + at).split('\n').length, kind: 'html' });
+    return blank(comment);
+  });
+
+  let out = '';
+  let cursor = 0;
+  for (const block of blocks) {
+    const { start, end } = block.loc;
+    out += template(content.slice(cursor, start.offset), cursor);
+    if (block.type === 'style') out += blank(block.content);
+    else {
+      const script = stripScriptComments(block.content, `${relPath}.${block.lang ?? 'js'}`);
+      out += script.lines.join('\n');
+      unterminated.push(...script.unterminated.map(({ line, kind }) => ({ line: start.line + line - 1, kind })));
+    }
+    cursor = end.offset;
+  }
+  out += template(content.slice(cursor), cursor);
+  // An unclosed template comment runs to the end of the file, so Vue's errors are that same cause, already reported.
+  const parseErrors = unterminated.some(({ kind }) => kind === 'html') ? [] : errors.map((error) => ({ line: 'loc' in error ? error.loc?.start.line : undefined, reason: error.message }));
+  return { lines: out.split('\n'), unterminated, parseErrors };
+}
+
+/** The parts of a file the scan could not read, each as a violation: a false PASS otherwise. */
+function unscannedParts(relPath: string, { unterminated, parseErrors = [] }: StripCommentsResult): AssetViolation[] {
+  const violations: AssetViolation[] = parseErrors.map(({ line, reason }) => ({
+    file: relPath,
+    line,
+    message: `${relPath}${line === undefined ? '' : `:${line}`} could not be read as a Vue file: ${reason} Fix it so Vue can parse the file (close every tag you open, such as <template> or <script>); until then the file is not fully scanned for bare <img> tags.`,
+  }));
+  // WR-01: a comment that never closes silently blanks everything after it (including any real <img> tags).
+  for (const { line, kind } of unterminated) {
+    const commentLabel = kind === 'block' ? '/* block' : '<!-- HTML';
+    violations.push({
+      file: relPath,
+      line,
+      message: `${relPath}:${line} has an unterminated ${commentLabel} comment that is never closed. Everything after it was NOT scanned for bare <img> tags, so this is a false PASS risk -- close the comment (or remove the stray opener).`,
+    });
+  }
+  return violations;
 }
 
 /**
@@ -197,9 +171,9 @@ export function scanAssetReachability(cwd: string): AssetViolation[] {
 
     const content = readFileSync(filePath, 'utf-8');
     const lines = content.split('\n');
-    const { lines: scanLines, unterminated } = stripComments(lines);
+    const stripped = filePath.endsWith('.vue') ? stripVueComments(content, relPath) : stripScriptComments(content, filePath);
     for (let i = 0; i < lines.length; i++) {
-      if (BARE_IMG_TAG.test(scanLines[i])) {
+      if (BARE_IMG_TAG.test(stripped.lines[i])) {
         violations.push({
           file: relPath,
           line: i + 1,
@@ -207,18 +181,7 @@ export function scanAssetReachability(cwd: string): AssetViolation[] {
         });
       }
     }
-
-    // WR-01: a comment that never closes silently blanks everything after
-    // it (including any real <img> tags) -- fail loud with an actionable
-    // violation instead of a false PASS.
-    if (unterminated) {
-      const commentLabel = unterminated.kind === 'block' ? '/* block' : '<!-- HTML';
-      violations.push({
-        file: relPath,
-        line: unterminated.line,
-        message: `${relPath}:${unterminated.line} has an unterminated ${commentLabel} comment that is never closed. Everything after it was NOT scanned for bare <img> tags, so this is a false PASS risk -- close the comment (or remove the stray opener).`,
-      });
-    }
+    violations.push(...unscannedParts(relPath, stripped));
   }
 
   return violations;

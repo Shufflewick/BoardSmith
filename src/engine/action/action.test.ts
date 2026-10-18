@@ -12,6 +12,7 @@ import {
 } from '../index.js';
 import type { ActionContext, ActionDefinition } from '../index.js';
 import { ActionExecutor } from './action.js';
+import { rulesErrorSentence } from './rules-error.js';
 
 // Test classes
 class TestGame extends Game<TestGame, Player> {}
@@ -1165,7 +1166,8 @@ describe('Action Executor', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('"test" action could not be completed');
-      expect(result.error).toContain('Nothing was changed');
+      // Only the runner knows whether the action was rolled back, so only it may say so (#989).
+      expect(result.error).not.toContain('Nothing was changed');
     });
 
     it('always carries a PlayerFacingError\'s own message, which was written to be read', () => {
@@ -1186,6 +1188,50 @@ describe('Action Executor', () => {
       expect(executor.executeAction(threw, game.getPlayer(1)!, {}).partiallyApplied).toBe(true);
       // A clean refusal mutated nothing, so it carries no such mark.
       expect(executor.executeAction(refused, game.getPlayer(1)!, {}).partiallyApplied).toBeUndefined();
+    });
+
+    it('marks a crash in the rules, and only a crash, as rulesError (#847)', () => {
+      const player = game.getPlayer(1)!;
+      const threw = Action.create('threw').execute(() => {
+        throw new TypeError('boom');
+      });
+      const onSelectThrew = Action.create('onSelectThrew')
+        .chooseFrom('pick', { choices: ['a'], onSelect: () => { throw new TypeError('boom'); } })
+        .execute(() => {});
+      const playerFacing = Action.create('playerFacing').execute(() => {
+        throw new PlayerFacingError('Not today.');
+      });
+      const refused = Action.create('refused').execute(() => ({ success: false, error: 'no' }));
+
+      expect(executor.executeAction(threw, player, {}).rulesError).toBe(true);
+      expect(executor.executeAction(onSelectThrew, player, { pick: 'a' }).rulesError).toBe(true);
+      expect(executor.executeAction(playerFacing, player, {}).rulesError).toBeUndefined();
+      expect(executor.executeAction(refused, player, {}).rulesError).toBeUndefined();
+    });
+
+    it('drops the engine-only flags a game returns, and says so in the log (#1016)', () => {
+      const player = game.getPlayer(1)!;
+      // Plain JS, or a cast, gets past the type; the engine must still not believe it.
+      const smuggled = { success: false, error: 'no', rulesError: true, partiallyApplied: true, notSimulable: true };
+      const action = Action.create('smuggle').execute(() => smuggled as unknown as { success: false; error: string });
+      const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const result = executor.executeAction(action, player, {});
+        expect(result).toEqual({ success: false, error: 'no' });
+        expect(Object.keys(result).sort()).toEqual(['error', 'success']);
+        expect(logged.mock.calls.join('\n')).toMatch(/smuggle.*rulesError, partiallyApplied, notSimulable.*engine/s);
+      } finally {
+        logged.mockRestore();
+      }
+    });
+
+    it('does not let a game type an engine-only flag into what execute returns (#1016)', () => {
+      // @ts-expect-error rulesError is set only by the engine
+      Action.create('a').execute(() => ({ success: false, error: 'no', rulesError: true }));
+      // @ts-expect-error partiallyApplied is set only by the engine
+      Action.create('b').execute(() => ({ success: false, error: 'no', partiallyApplied: true }));
+      // @ts-expect-error notSimulable is set only by the engine
+      Action.create('c').execute(() => ({ success: false, error: 'no', notSimulable: true }));
     });
 
     it('refuses a `{ success: false }` that named no error, and says which field to set (#90)', () => {
@@ -2739,10 +2785,8 @@ describe('onSelect throwing aborts the action (F35)', () => {
     const result = executor.executeAction(action, player, { color: 'red', size: 'M' });
 
     expect(result.success).toBe(false);
-    // Actionable: names the offending selection, the action, and the original message.
-    expect(result.error).toContain("'size'");
-    expect(result.error).toContain("'test'");
-    expect(result.error).toContain('size hook blew up');
+    // The shared crash sentence, with the thrown text only because tests run with dev throwing on (#1120).
+    expect(result.error).toBe(`${rulesErrorSentence('test')} (size hook blew up)`);
     // execute() must NOT run (action not committed).
     expect(executed).toBe(false);
     // onCancel fired for the selection whose onSelect already ran; the throwing
@@ -2794,8 +2838,7 @@ describe('onSelect throwing aborts the action (F35)', () => {
     // Second selection's onSelect throws → abort with actionable error + onCancel.
     const step2 = executor.processSelectionStep(action, player, pendingState, 'size', 'M');
     expect(step2.success).toBe(false);
-    expect(step2.error).toContain("'size'");
-    expect(step2.error).toContain('size hook blew up');
+    expect(step2.error).toBe(`${rulesErrorSentence('test')} (size hook blew up)`);
     expect(events).toEqual(['onSelect:color', 'onCancel:color']);
   });
 });
@@ -3051,6 +3094,37 @@ describe('Object-subset choice resolution (custom-UI partial choice objects)', (
 
     const resolved = executor.resolveArgs(action, { destination: bogus }, player);
     expect(executor.validateAction(action, player, resolved).valid).toBe(false);
+  });
+
+  // #1131: an object with no own keys had no field to fail, so it named the only object choice.
+  const NOT_OFFERED = 'That choice is no longer available';
+  for (const [kind, empty] of [['{}', {}], ['a Date', new Date(0)], ['a Map', new Map()], ['a Set', new Set()]] as const) {
+    it(`refuses ${kind} as the only object choice offered (#1131)`, () => {
+      const action = Action.create('pick')
+        .chooseFrom('item', { choices: [{ label: 'a' }] })
+        .execute(() => {});
+      const result = executor.executeAction(action, game.getPlayer(1)!, { item: empty });
+      expect(result.error).toContain(NOT_OFFERED);
+    });
+
+    it(`refuses ${kind} as an item of a multiSelect with one object choice (#1131)`, () => {
+      const action = Action.create('pick')
+        .chooseFrom('items', { choices: [1, { label: 'a' }], multiSelect: { min: 1 } })
+        .execute(() => {});
+      const result = executor.executeAction(action, game.getPlayer(1)!, { items: [1, empty] });
+      expect(result.error).toContain(NOT_OFFERED);
+    });
+  }
+
+  it('still picks an offered {} by equality, beside a choice that carries a key (#1131)', () => {
+    const picked: unknown[] = [];
+    const action = Action.create('pick')
+      .chooseFrom('item', { choices: [{}, { label: 'a' }] })
+      .execute((args) => { picked.push(args.item); });
+    const player = game.getPlayer(1)!;
+    expect(executor.executeAction(action, player, { item: {} }).success).toBe(true);
+    expect(executor.executeAction(action, player, { item: { label: 'a' } }).success).toBe(true);
+    expect(picked).toEqual([{}, { label: 'a' }]);
   });
 });
 

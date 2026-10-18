@@ -97,6 +97,12 @@ export function createMemoryWorldStore(
     }
   }
 
+  /** Ordered `(due, seq)`, the order `nextDueBatch` sorts by -- a world's
+   *  behaviour must not depend on how a store happened to return ties. */
+  function queued(): PlannedEvent[] {
+    return [...events.values()].sort((a, b) => a.due - b.due || a.seq - b.seq);
+  }
+
   /** Insert-or-replace, so an event re-armed under its own id and one whose
    *  arguments a migration rewrote take the same path. */
   function writeEvents(planned: readonly PlannedEvent[]): void {
@@ -123,7 +129,9 @@ export function createMemoryWorldStore(
       }
     }
     if (extras.activity !== undefined) {
-      activity.set(extras.activity.seat, extras.activity.at);
+      // A high-water mark, as the SQLite store's `max(at, excluded.at)` keeps it.
+      const { seat, at } = extras.activity;
+      activity.set(seat, Math.max(at, activity.get(seat) ?? at));
     }
     writeNoticeBoxes(extras.notices ?? []);
     releaseChair(extras.vacate);
@@ -225,10 +233,24 @@ export function createMemoryWorldStore(
       for (const name of names) dirty.delete(name);
     },
 
-    /** Ordered `(due, seq)`, the order `nextDueBatch` sorts by -- a world's
-     *  behaviour must not depend on how a store happened to return ties. */
-    pendingEvents: () =>
-      [...events.values()].sort((a, b) => a.due - b.due || a.seq - b.seq),
+    pendingEvents: queued,
+
+    pendingCount: () => events.size,
+
+    pendingOf(owner: string) {
+      let unkeyed = 0;
+      const keyed = new Map<string, string>();
+      for (const event of events.values()) {
+        if (event.owner !== owner) continue;
+        if (event.key === undefined) unkeyed += 1;
+        else keyed.set(event.key, event.id);
+      }
+      return { unkeyed, keyed };
+    },
+
+    earliestEvent: (after = Number.MIN_SAFE_INTEGER) => queued().find((event) => event.due > after),
+
+    nextDue: (at, taken) => queued().find((event) => event.due <= at && !taken.has(event.id)),
 
     nextSeq: () => seq,
 

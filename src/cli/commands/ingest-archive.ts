@@ -3,14 +3,16 @@ import {
 } from '../lib/project-paths.js';
 import { resolveUserPath } from '../lib/user-path.js';
 import { sha256Hex } from '../lib/hash.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 import { promises as fs } from 'node:fs';
-import { basename, dirname, join, resolve } from 'node:path';
-import chalk from 'chalk';
+import { basename, dirname, join, relative, resolve } from 'node:path';
+import { styleText } from 'node:util';
 import { DERIVED_LINE_RE } from './derived-line-pattern.js';
 import {
   ADDITIONAL_SOURCES_BEGIN,
   ADDITIONAL_SOURCES_END,
   ADDITIONAL_SOURCES_HEADING,
+  ARCHIVE_PREFIX,
   type AdditionalSourceRecord,
   parseAdditionalSources,
 } from './rulebook-sources.js';
@@ -151,7 +153,7 @@ function isoDate(now: Date): string {
 
 /** Renders the `## Additional Sources` section body (between the fences), one row per record. */
 function renderAdditionalSourcesSection(records: AdditionalSourceRecord[]): string {
-  const rows = records.map((r) => `| ${r.path} | ${r.sourceHash} |`).join('\n');
+  const rows = records.map((r) => `| ${r.path.replaceAll('|', '\\|')} | ${r.sourceHash} |`).join('\n');
   return `${ADDITIONAL_SOURCES_HEADING}
 
 <!-- MACHINE-OWNED. Do not write between the fences below, and do not move or delete them.
@@ -305,9 +307,10 @@ ${INDEX_HEADINGS[2]}
  * the slice-side marker count, so dedup here would make a working sweep look like a dropping one.
  */
 export async function ingestGapsCommand(
-  options: { project?: string; json?: boolean; skipRelabel?: boolean; quiet?: boolean } = {},
-): Promise<{ gapsWritten: number; slicesScanned: number; changed: boolean }> {
+  options: { project?: string; json?: boolean; skipRelabel?: boolean; quiet?: boolean; printChanged?: boolean } = {},
+): Promise<{ gapsWritten: number; slicesScanned: number; changed: boolean; files: string[] }> {
   const projectDir = resolve(options.project ?? process.cwd());
+  const quiet = options.quiet || options.printChanged;
 
   // Relabel FIRST, as part of this command rather than as a second one the session must
   // remember. Both were separate commands for one run: the archive landed (it is forced by an
@@ -317,19 +320,16 @@ export async function ingestGapsCommand(
   //
   // Ordering matters: relabelling moves presentation lines off the Derived prefix, and the gaps
   // sweep below reads final slice content.
-  let relabelled = 0;
-  if (!options.skipRelabel) {
-    relabelled = (
-      await relabelDerivedLines({ project: projectDir, quiet: options.quiet })
-    ).relabelled;
-  }
   const rulebookDir = designRulebookDir(projectDir);
+  const files = new Set<string>();
+  if (!options.skipRelabel) {
+    const { changes } = await relabelDerivedLines({ project: projectDir, quiet });
+    for (const c of changes) files.add(relative(projectDir, join(rulebookDir, c.file)));
+  }
   const indexPath = join(rulebookDir, 'INDEX.md');
 
-  let index: string;
-  try {
-    index = await fs.readFile(indexPath, 'utf-8');
-  } catch {
+  const index = await readIfExists(indexPath, (p) => fs.readFile(p, 'utf-8'));
+  if (index === undefined) {
     throw new Error(
       `No rulebook/INDEX.md in ${projectDir}.\n` +
         `Run \`boardsmith init <name> --rulebook <path>\` first, or \`boardsmith ingest-archive <path>\` in an existing project.`,
@@ -374,21 +374,27 @@ export async function ingestGapsCommand(
   const body = entries.length
     ? `\n${entries.join('\n')}\n`
     : `\n${GAPS_EMPTY}\n`;
-  const changed = before !== body || relabelled > 0;
+  if (before !== body) {
+    await fs.writeFile(
+      indexPath,
+      index.slice(0, begin + GAPS_BEGIN.length) + body + index.slice(end),
+    );
+    files.add(relative(projectDir, indexPath));
+  }
 
-  await fs.writeFile(
-    indexPath,
-    index.slice(0, begin + GAPS_BEGIN.length) + body + index.slice(end),
-  );
-
-  const result = { gapsWritten: entries.length, slicesScanned: names.length, changed };
+  const result = { gapsWritten: entries.length, slicesScanned: names.length, changed: files.size > 0, files: [...files] };
+  if (options.printChanged) {
+    // NUL-terminated so the pre-commit hook can hand any file name to `git add` intact.
+    process.stdout.write(result.files.map((f) => `${f}\0`).join(''));
+    return result;
+  }
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
     return result;
   }
-  if (!options.quiet) {
+  if (!quiet) {
     console.log(
-      chalk.green(
+      styleText('green',
         `✓ Filled ${heading} — ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} from ${names.length} slice${names.length === 1 ? '' : 's'}`,
       ),
     );
@@ -511,16 +517,16 @@ export async function relabelDerivedLines(
   const result = { relabelled: changed.length, changes: changed };
   if (options.quiet) return result;
   if (!changed.length) {
-    console.log(chalk.green('✓ No Derived (p. line carries presentation-only vocabulary'));
+    console.log(styleText('green', '✓ No Derived (p. line carries presentation-only vocabulary'));
     return result;
   }
   console.log(
-    chalk.green(
+    styleText('green',
       `✓ Relabelled ${changed.length} line${changed.length === 1 ? '' : 's'} Derived → Visual`,
     ),
   );
   for (const c of changed) {
-    console.log(`  ${chalk.gray(`${c.file}:${c.line}`)} matched "${c.matched}"`);
+    console.log(`  ${styleText('gray', `${c.file}:${c.line}`)} matched "${c.matched}"`);
   }
   return result;
 }
@@ -547,12 +553,10 @@ async function readSourceToArchive(
   role: 'Rulebook' | 'Additional source',
 ): Promise<SourceToArchive> {
   const sourcePath = resolveUserPath(process.cwd(), userPath);
-  let bytes: Buffer;
-  try {
-    bytes = await fs.readFile(sourcePath);
-  } catch {
+  const bytes = await readIfExists(sourcePath, (p) => fs.readFile(p));
+  if (bytes === undefined) {
     throw new Error(
-      `${role} not found or unreadable: ${sourcePath}\n` +
+      `${role} not found: ${sourcePath}\n` +
         (role === 'Rulebook'
           ? 'Pass the path to the rulebook file (PDF, images, or text) as the first argument.'
           : 'Pass the path to a document the rules incorporate (PDF, images, or text) to --additional-source.'),
@@ -562,7 +566,7 @@ async function readSourceToArchive(
     sourcePath,
     bytes,
     archivePath: archivePathFor(projectDir, userPath),
-    relArchivePath: `rulebook/source/${basename(sourcePath)}`,
+    relArchivePath: `${ARCHIVE_PREFIX}${basename(sourcePath)}`,
   };
 }
 
@@ -571,12 +575,8 @@ async function readSourceToArchive(
  * already in place is fine (a re-run); a different one is refused before anything is written.
  */
 async function assertArchiveSlotFree(source: SourceToArchive): Promise<void> {
-  let existing: Buffer;
-  try {
-    existing = await fs.readFile(source.archivePath);
-  } catch {
-    return; // Not archived yet -- the normal path.
-  }
+  const existing = await readIfExists(source.archivePath, (p) => fs.readFile(p));
+  if (existing === undefined) return; // Not archived yet -- the normal path.
   if (sha256Hex(existing) !== sha256Hex(source.bytes)) {
     throw new Error(
       `${source.relArchivePath} already exists in this project and differs from ${source.sourcePath}.\n` +
@@ -614,12 +614,8 @@ async function readAllSources(
     extras.push(await readSourceToArchive(projectDir, path, 'Additional source'));
   }
 
-  let recordedPrimary: string | undefined;
-  try {
-    recordedPrimary = readCanonicalPrimarySource(await fs.readFile(indexPath, 'utf-8'))?.path;
-  } catch {
-    recordedPrimary = undefined; // No INDEX.md yet.
-  }
+  const indexText = await readIfExists(indexPath, (p) => fs.readFile(p, 'utf-8'));
+  const recordedPrimary = indexText === undefined ? undefined : readCanonicalPrimarySource(indexText)?.path;
 
   const claimed = new Map<string, string>([[primary.relArchivePath, primary.sourcePath]]);
   for (const extra of extras) {
@@ -662,18 +658,12 @@ export async function ingestArchiveCommand(
   // designer INDEX.md with a fresh scaffold on ANY throw raised while repairing — a read failure,
   // a transform error, a partial write. The scaffold branch below is now reached ONLY when
   // INDEX.md genuinely does not exist; a repair error propagates as a plain exception instead.
-  let indexExists: boolean;
-  try {
-    await fs.access(indexPath);
-    indexExists = true;
-  } catch {
-    indexExists = false;
-  }
+  const existingText = await readIfExists(indexPath, (p) => fs.readFile(p, 'utf-8'));
 
   let wroteIndex = false;
   let headerBroughtToContract = false;
   let recordedAsAdditionalSource = false;
-  if (!indexExists) {
+  if (existingText === undefined) {
     await fs.mkdir(dirname(indexPath), { recursive: true });
     await fs.writeFile(
       indexPath,
@@ -688,7 +678,6 @@ export async function ingestArchiveCommand(
     wroteIndex = true;
     headerBroughtToContract = true;
   } else {
-    const existingText = await fs.readFile(indexPath, 'utf-8');
     const canonicalPrimary = readCanonicalPrimarySource(existingText);
 
     // A DIFFERENT source is already the canonical primary — this call must NOT silently
@@ -742,42 +731,42 @@ export async function ingestArchiveCommand(
   }
 
   if (recordedAsAdditionalSource) {
-    console.log(chalk.green('✓ Archived ADDITIONAL source rulebook (a different primary source is already recorded)'));
-    console.log(`  ${chalk.gray('path:')} ${relArchivePath}`);
-    console.log(`  ${chalk.gray('sha256:')} ${sourceHash}`);
+    console.log(styleText('green', '✓ Archived ADDITIONAL source rulebook (a different primary source is already recorded)'));
+    console.log(`  ${styleText('gray', 'path:')} ${relArchivePath}`);
+    console.log(`  ${styleText('gray', 'sha256:')} ${sourceHash}`);
     console.log(
-      `  ${chalk.gray('index:')} rulebook/INDEX.md's "${ADDITIONAL_SOURCES_HEADING}" section updated (primary Source:/Source hash: untouched)`,
+      `  ${styleText('gray', 'index:')} rulebook/INDEX.md's "${ADDITIONAL_SOURCES_HEADING}" section updated (primary Source:/Source hash: untouched)`,
     );
   } else {
-    console.log(chalk.green('✓ Archived source rulebook'));
-    console.log(`  ${chalk.gray('path:')} ${relArchivePath}`);
-    console.log(`  ${chalk.gray('sha256:')} ${sourceHash}`);
+    console.log(styleText('green', '✓ Archived source rulebook'));
+    console.log(`  ${styleText('gray', 'path:')} ${relArchivePath}`);
+    console.log(`  ${styleText('gray', 'sha256:')} ${sourceHash}`);
     // Only report the header as updated when it was actually brought to the four-line contract —
     // the unconditional "provenance header updated" message is what hid this defect (T-173-03).
     if (wroteIndex) {
       console.log(
-        `  ${chalk.gray('index:')} rulebook/INDEX.md written with provenance header + section scaffolding`,
+        `  ${styleText('gray', 'index:')} rulebook/INDEX.md written with provenance header + section scaffolding`,
       );
     } else if (headerBroughtToContract) {
       console.log(
-        `  ${chalk.gray('index:')} rulebook/INDEX.md provenance header updated (existing sections untouched)`,
+        `  ${styleText('gray', 'index:')} rulebook/INDEX.md provenance header updated (existing sections untouched)`,
       );
     } else {
       console.log(
-        `  ${chalk.gray('index:')} rulebook/INDEX.md was NOT updated — its provenance header was already at contract`,
+        `  ${styleText('gray', 'index:')} rulebook/INDEX.md was NOT updated — its provenance header was already at contract`,
       );
     }
   }
   for (const extra of additionalSources) {
-    console.log(chalk.green('✓ Archived additional source'));
-    console.log(`  ${chalk.gray('path:')} ${extra.archivedPath}`);
-    console.log(`  ${chalk.gray('sha256:')} ${extra.sourceHash}`);
-    console.log(`  ${chalk.gray('index:')} recorded in rulebook/INDEX.md's "${ADDITIONAL_SOURCES_HEADING}" section`);
+    console.log(styleText('green', '✓ Archived additional source'));
+    console.log(`  ${styleText('gray', 'path:')} ${extra.archivedPath}`);
+    console.log(`  ${styleText('gray', 'sha256:')} ${extra.sourceHash}`);
+    console.log(`  ${styleText('gray', 'index:')} recorded in rulebook/INDEX.md's "${ADDITIONAL_SOURCES_HEADING}" section`);
   }
   if (recordedAsAdditionalSource) return;
   console.log();
-  console.log(chalk.gray('Fill the scaffolded sections from the transcription summaries.'));
-  console.log(chalk.gray('Keep every heading exactly as written — downstream tooling parses them.'));
+  console.log(styleText('gray', 'Fill the scaffolded sections from the transcription summaries.'));
+  console.log(styleText('gray', 'Keep every heading exactly as written — downstream tooling parses them.'));
 }
 
 /** The line-bounds of one matched `^Label:` line (multiline-anchored), or `undefined` if absent. */
@@ -792,6 +781,22 @@ function findLabelLine(
 }
 
 /**
+ * Whether a `Source:` line is a bare path (replaceable in place) rather than the first line of
+ * wrapped prose. A space is allowed only in an archived path, whose file name may have one (#823).
+ */
+function isBarePathSource(text: string, sourceLine: { end: number; value: string }): boolean {
+  const lineEnd = text.indexOf('\n', sourceLine.end);
+  const nextLine = lineEnd === -1 ? undefined : text.slice(lineEnd + 1).split('\n')[0];
+  return (
+    (sourceLine.value.startsWith(ARCHIVE_PREFIX) || !/\s/.test(sourceLine.value)) &&
+    (nextLine === undefined ||
+      nextLine.trim() === '' ||
+      nextLine.startsWith('## ') ||
+      HEADER_LABELS.some((label) => nextLine.startsWith(label)))
+  );
+}
+
+/**
  * Reads the PRIMARY `Source:`/`Source hash:` pair ONLY when it is already fully canonical — a
  * bare path (never wrapped prose) with a `Source hash:` line present too. Returns `undefined`
  * for every other shape (no `Source:` line at all, a `Source hash:` line missing, or the
@@ -800,28 +805,15 @@ function findLabelLine(
  * (`ingestArchiveCommand`, deciding whether the CURRENT archive call names a genuinely DIFFERENT
  * primary source) only acts on this when the comparison is actually meaningful.
  *
- * Mirrors the `isBarePath` classification inside `repairExistingIndex`'s own `Source:` branch —
- * duplicated rather than extracted, matching this file's own established precedent for a single
- * small predicate two call sites both need at slightly different points in the file's control
- * flow. (The `ANY_ANNOTATION_LINE_RE`/filter duplication this comment used to point at as
- * precedent was itself consolidated away in 177.1-01 — `verify-enumerate.ts` and
- * `verify-derive-check.ts` now both import `ANNOTATION_CITATION_RE` from
- * `derived-line-pattern.ts` rather than re-spelling it.)
+ * Shares `isBarePathSource` with `repairExistingIndex`'s own `Source:` branch, so the two can
+ * never disagree about which shape a `Source:` line has.
  */
 function readCanonicalPrimarySource(text: string): { path: string; hash: string } | undefined {
   const sourceLine = findLabelLine(text, 'Source:');
   const hashLine = findLabelLine(text, 'Source hash:');
   if (!sourceLine || !hashLine) return undefined;
 
-  const lineEnd = text.indexOf('\n', sourceLine.end);
-  const nextLine = lineEnd === -1 ? undefined : text.slice(lineEnd + 1).split('\n')[0];
-  const isBarePath =
-    !/\s/.test(sourceLine.value) &&
-    (nextLine === undefined ||
-      nextLine.trim() === '' ||
-      nextLine.startsWith('## ') ||
-      HEADER_LABELS.some((label) => nextLine.startsWith(label)));
-  if (!isBarePath) return undefined;
+  if (!isBarePathSource(text, sourceLine)) return undefined;
 
   return { path: sourceLine.value, hash: hashLine.value };
 }
@@ -923,14 +915,7 @@ async function repairExistingIndex(
     // continuation line, which is non-blank and would otherwise look like wrapped prose again.
   } else {
     const lineEnd = text.indexOf('\n', sourceLine.end);
-    const nextLine = lineEnd === -1 ? undefined : text.slice(lineEnd + 1).split('\n')[0];
-    const isBarePath =
-      !/\s/.test(sourceLine.value) &&
-      (nextLine === undefined ||
-        nextLine.trim() === '' ||
-        nextLine.startsWith('## ') ||
-        HEADER_LABELS.some((label) => nextLine.startsWith(label)));
-    if (isBarePath) {
+    if (isBarePathSource(text, sourceLine)) {
       // bare path (today's shape) — replace the line in place.
       text = text.slice(0, sourceLine.start) + `Source: ${relArchivePath}` + text.slice(sourceLine.end);
     } else {

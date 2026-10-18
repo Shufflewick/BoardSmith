@@ -22,6 +22,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { mount } from '@vue/test-utils';
 import CardRenderer from './CardRenderer.vue';
+import type { GameElement } from '../auto-ui-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -32,14 +33,6 @@ function styleBlock(filename: string): string {
   const source = readFileSync(resolve(DIR, filename), 'utf-8');
   const parts = source.split('<style scoped>');
   return parts[1] ?? '';
-}
-
-interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
 }
 
 function buildCardElement(overrides: Partial<GameElement> = {}): GameElement {

@@ -21,6 +21,7 @@ import './builtin-renderers.js';
 
 import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import type { PresentationOverlay } from './presentation.js';
+import { parseImageInfo, type ImageInfo } from '../../utils/image.js';
 import { useFlyingElements } from '../../composables/useFlyingElements.js';
 import FlyingCardsOverlay from '../helpers/FlyingCardsOverlay.vue';
 import { DIE_ANIMATION_CONTEXT_KEY, createDieAnimationContext } from '../dice/die3d-state.js';
@@ -31,25 +32,7 @@ import GridBoardTemplate from './archetypes/GridBoardTemplate.vue';
 import CardTemplate from './archetypes/CardTemplate.vue';
 import TableauTemplate from './archetypes/TableauTemplate.vue';
 import UnsupportedTopologyPanel from './archetypes/UnsupportedTopologyPanel.vue';
-
-// ---------------------------------------------------------------------------
-// Local GameElement interface — mirrors auto-ui-helpers.ts lines 12-19
-// ---------------------------------------------------------------------------
-export interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
-  childCount?: number;
-}
-
-// ---------------------------------------------------------------------------
-// Type for image info (used by findDefaultBackImage and per-element renderers)
-// ---------------------------------------------------------------------------
-type ImageInfo =
-  | { type: 'url'; src: string }
-  | { type: 'sprite'; sprite: string; x: number; y: number; width: number; height: number };
+import type { GameElement } from './auto-ui-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Props — interaction arrays removed (useBoardInteraction provides those)
@@ -87,23 +70,9 @@ function findDefaultBackImage(element: GameElement | null | undefined): ImageInf
   if (!element) return null;
 
   // Check this element's $images
-  const images = element.attributes?.$images as { back?: string | { sprite: string; x?: number; y?: number; width?: number; height?: number } } | undefined;
-  if (images?.back) {
-    if (typeof images.back === 'string') {
-      return { type: 'url', src: images.back };
-    }
-    // For coordinate-based sprites, return the FULL sprite object with coordinates
-    if (typeof images.back === 'object' && images.back.sprite && typeof images.back.x === 'number' && typeof images.back.y === 'number') {
-      return {
-        type: 'sprite',
-        sprite: images.back.sprite,
-        x: images.back.x,
-        y: images.back.y,
-        width: images.back.width ?? 238,
-        height: images.back.height ?? 333,
-      };
-    }
-  }
+  const images = element.attributes?.$images as Record<string, unknown> | undefined;
+  const back = parseImageInfo(images?.back);
+  if (back) return back;
 
   // Recursively check children
   if (element.children) {
@@ -234,6 +203,8 @@ useAutoRendererAnimations(animationEvents, { fly });
   </div>
 </template>
 
+<style scoped src="../sr-only.css"></style>
+
 <style scoped>
 .auto-renderer {
   position: relative;
@@ -283,19 +254,6 @@ useAutoRendererAnimations(animationEvents, { fly });
   .skeleton-bar {
     animation: none;
   }
-}
-
-/* Screen-reader only helper (no raw hex — uses inherit) */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 /* Retry affordance */

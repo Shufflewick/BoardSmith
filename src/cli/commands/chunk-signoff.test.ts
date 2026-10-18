@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { promises as fs } from 'node:fs';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { existsSync, promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { DESIGN_DIR, MERGE_SIGNOFFS_MD, WAIVERS_MD } from '../lib/project-paths.js';
@@ -16,6 +16,7 @@ import {
   recordWaiver,
   recordReopen,
   parseSignoff,
+  readStatus,
 } from './chunk-signoff.js';
 import { chunkCheckCommand, chunkProvenanceStatusCommand } from './chunk-provenance.js';
 import {
@@ -181,6 +182,13 @@ describe('recordSignoff — a chunk does not reach verified while a constraint d
   });
 });
 
+describe('readStatus', () => {
+  it('reads an empty Status line as empty, never the line below it (#829)', () => {
+    expect(readStatus('Status:\nverified\n')).toBe('');
+    expect(readStatus('Status:  built  \n')).toBe('built');
+  });
+});
+
 describe('waivers — scoped to named chunks, and they expire', () => {
   it('a waiver naming one chunk verifies that chunk as verified (user-waived)', async () => {
     const project = await makeProject([{ slug: 'world-shell' }, { slug: 'combat' }]);
@@ -258,6 +266,17 @@ describe('waivers — scoped to named chunks, and they expire', () => {
     await expect(
       recordWaiver({ project, chunks: 'world-shell', by: 'orchestrator', expires: '2026-09-30', reason: 'x', now: NOW }),
     ).rejects.toThrow(/designer/i);
+  });
+
+  it('parallel waivers are all kept, each with its own id (#831)', async () => {
+    const slugs = ['a', 'b', 'c', 'd', 'e'];
+    const project = await makeProject(slugs.map((slug) => ({ slug })));
+    const ids = await Promise.all(
+      slugs.map((chunks) => recordWaiver({ project, chunks, by: 'Jane', expires: '2026-09-30', reason: 'x', now: NOW })),
+    );
+    expect([...ids].sort()).toEqual(['W1', 'W2', 'W3', 'W4', 'W5']);
+    const ledger = await fs.readFile(join(project, DESIGN_DIR, WAIVERS_MD), 'utf-8');
+    for (const slug of slugs) expect(ledger).toContain(`- Chunks: ${slug}\n`);
   });
 
   it('a second waiver gets the next id', async () => {
@@ -399,6 +418,26 @@ describe('a sign-off counts only for the chunk as it was signed (#295)', () => {
     expect((await checkSignoff(project, 'deal')).length).toBeGreaterThan(0);
   });
 
+  it('records a path with non-ASCII letters whole and reports a later change to it (#1113)', async () => {
+    const project = await makeProject([{ slug: 'deal', manifest: { 'règles/a.ts': 'v1' } }]);
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    expect(Object.keys(parseSignoff(await readChunk(project, 'deal')).record!.code)).toEqual(['règles/a.ts']);
+    await setStatusByHand(project, 'deal', 'built');
+    await fs.writeFile(join(project, 'règles/a.ts'), 'v2');
+    expect(await verifiedByHandProblems(project, 'deal')).toMatch(/règles\/a\.ts changed after it/);
+  });
+
+  it('refuses a bare path with a space, and records it whole once backticked (#1116)', async () => {
+    const project = await makeProject([{ slug: 'deal', manifest: { 'my file.ts': 'v1' } }]);
+    await expect(signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW })).rejects.toThrow(
+      'Wrap the path in backticks: `my file.ts`',
+    );
+    const text = await readChunk(project, 'deal');
+    await fs.writeFile(chunkPath(project, 'deal'), text.replace('| my file.ts |', '| `my file.ts` |'));
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    expect(Object.keys(parseSignoff(await readChunk(project, 'deal')).record!.code)).toEqual(['my file.ts']);
+  });
+
   it('a design ledger in the manifest changing at close does not void the sign-off', async () => {
     const project = await makeProject([
       { slug: 'deal', manifest: { 'src/deal.ts': 'v1', 'DECISIONS.md': '# Decisions\n' } },
@@ -495,6 +534,15 @@ describe('an edit to a shared file is accounted for by the chunk that made it (#
     expect((await assessSignoffs(project)).get('shop')!.sharedEdits).toEqual([
       { path: 'src/rules.ts', coveredBy: 'deal, shop', how: 'merged' },
     ]);
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await chunkProvenanceStatusCommand({ project });
+      const out = log.mock.calls.map((c) => c.join(' ')).join('\n');
+      expect(out).toContain('src/rules.ts (vouched for by the merge of deal, shop)');
+      expect(out).toContain('or is building it, or the merge named vouched for it):');
+    } finally {
+      log.mockRestore();
+    }
 
     await fs.writeFile(ledger, record(createHash('sha256').update('rules v2').digest('hex'), new Date('2026-09-26T00:00:00Z')));
     expect((await checkSignoff(project, 'deal')).join('\n')).toContain('src/rules.ts');
@@ -537,6 +585,18 @@ describe('an edit to a shared file is accounted for by the chunk that made it (#
     await fs.writeFile(join(project, DESIGN_DIR, 'ASSETS.md'), '# Assets\n- a row close added\n');
     expect(await checkSignoff(project, 'deal')).toEqual([]);
     expect(Object.keys(parseSignoff(await readChunk(project, 'deal')).record!.code)).toEqual(['src/deal.ts']);
+  });
+
+  // Skipping is strict: only the exact design/ folder is left out, so a miscased name stays signed code (#1053).
+  it.skipIf(!existsSync(process.cwd().toUpperCase()))('a file named Design/ASSETS.md, in other letter case, is code the sign-off covers (#1053)', async () => {
+    const project = await makeProject([{ slug: 'deal', manifest: { 'src/deal.ts': 'v1' } }]);
+    await fs.writeFile(join(project, DESIGN_DIR, 'ASSETS.md'), '# Assets\n');
+    const text = await readChunk(project, 'deal');
+    await fs.writeFile(chunkPath(project, 'deal'), text.replace('| src/deal.ts | written |', '| src/deal.ts | written |\n| Design/ASSETS.md | written |'));
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    expect(Object.keys(parseSignoff(await readChunk(project, 'deal')).record!.code)).toEqual(['Design/ASSETS.md', 'src/deal.ts']);
+    await fs.writeFile(join(project, DESIGN_DIR, 'ASSETS.md'), '# Assets\n- changed after sign-off\n');
+    expect((await checkSignoff(project, 'deal')).join('\n')).toContain('Design/ASSETS.md');
   });
 
   it('a sign-off with the old single whole-file hash is refused, naming the one-time transition', async () => {
@@ -610,3 +670,67 @@ function signOffUnverified(project: string): Promise<unknown> {
 async function commitWithoutVerify(project: string): Promise<void> {
   commitAll(project, 'more work, not verified');
 }
+
+describe('a design or code file the sign-off cannot read is refused, never read as missing (#1049)', () => {
+  it('refuses a Build Manifest file it cannot read, rather than recording it as missing', async () => {
+    const project = await makeProject([{ slug: 'deal', manifest: { 'src/deal.ts': 'deal v1' } }]);
+    await fs.rm(join(project, 'src/deal.ts'));
+    await fs.mkdir(join(project, 'src/deal.ts'));
+    await expect(assessSignoffs(project)).rejects.toThrow(`Could not read ${join(project, 'src/deal.ts')} (EISDIR)`);
+  });
+
+  it('refuses a CHUNK.md it cannot read, rather than leaving that chunk out', async () => {
+    const project = await makeProject([{ slug: 'deal' }, { slug: 'shop' }]);
+    const chunkMd = join(project, DESIGN_DIR, 'chunks', 'shop', 'CHUNK.md');
+    await fs.rm(chunkMd);
+    await fs.mkdir(chunkMd);
+    await expect(assessSignoffs(project)).rejects.toThrow(`Could not read ${chunkMd} (EISDIR)`);
+  });
+
+  it('refuses a waivers ledger it cannot read, rather than reading it as holding no waiver', async () => {
+    const project = await makeProject([{ slug: 'deal' }]);
+    await fs.mkdir(join(project, DESIGN_DIR, WAIVERS_MD));
+    await expect(signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW })).rejects.toThrow(
+      `Could not read ${join(project, DESIGN_DIR, WAIVERS_MD)} (EISDIR)`,
+    );
+  });
+});
+
+describe('chunk-waiver: an unreadable SKETCH.md (#1110)', () => {
+  it('names the file rather than calling it missing', async () => {
+    const project = tempTree('bs-chunk-signoff-unreadable-');
+    const sketch = join(project, DESIGN_DIR, 'SKETCH.md');
+    await fs.mkdir(sketch, { recursive: true });
+    await expect(
+      recordWaiver({ project, chunks: 'world-shell', by: 'Jane Designer', expires: '2026-09-30', reason: 'shell', now: NOW }),
+    ).rejects.toThrow(`Could not read ${sketch} (EISDIR)`);
+  });
+});
+
+describe('chunk-waiver: an unreadable WAIVERS.md (#1110)', () => {
+  it('refuses, naming the file, and keeps every earlier waiver', async () => {
+    const project = await makeProject([{ slug: 'world-shell' }]);
+    const waive = () =>
+      recordWaiver({ project, chunks: 'world-shell', by: 'Jane Designer', expires: '2026-09-30', reason: 'shell', now: NOW });
+    await waive();
+    const ledger = join(project, DESIGN_DIR, WAIVERS_MD);
+    const before = await fs.readFile(ledger, 'utf-8');
+    await fs.chmod(ledger, 0o200);
+    try {
+      await expect(waive()).rejects.toThrow(`Could not read ${ledger} (EACCES)`);
+    } finally {
+      await fs.chmod(ledger, 0o644);
+    }
+    expect(await fs.readFile(ledger, 'utf-8')).toBe(before);
+  });
+});
+
+describe('chunk-reopen: an unreadable CHUNK.md (#1110)', () => {
+  it('names the file rather than calling the chunk missing', async () => {
+    const project = await makeProject([{ slug: 'world-shell' }]);
+    const chunk = join(project, DESIGN_DIR, 'chunks', 'world-shell', 'CHUNK.md');
+    await fs.rm(chunk);
+    await fs.mkdir(chunk);
+    await expect(recordReopen('world-shell', { project, reason: 'rework' })).rejects.toThrow(`Could not read ${chunk} (EISDIR)`);
+  });
+});

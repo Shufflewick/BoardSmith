@@ -357,7 +357,8 @@ here.
    typecheck alone. The
    full suite, build, validate, the smoke test and a mutation check run once, at publish, as
    `boardsmith verify`; the full suite is the regression check that a chunk did not break an
-   earlier chunk's tests, and `boardsmith chunk-merge` runs it on the combined tree too. The smoke
+   earlier chunk's tests. `boardsmith chunk-merge` runs only the merged chunk's fast checks on the
+   combined tree, not the full suite. The smoke
    test is the game's `tests/browser/smoke.spec.ts` (a required output of any chunk that adds an
    action or a UI control, `build/spec.md`), run in Chromium against `boardsmith dev` served from
    a fresh copy of the project; `npx boardsmith smoke` runs it alone while you work, and a machine
@@ -384,7 +385,8 @@ first UI chunk writes it, a later chunk extends it when it adds a token pair, an
 the Spec Manifest. A chunk's fast checks run it when the chunk added or changed it; the full suite,
 at every `chunk-merge` and at publish, runs it always. A guard holds
 scans only; a test that mounts a component or cites a claim belongs in the chunk's test file. A guard
-reads the game's source with `readFileSync` or an import ending `?raw`; the one game module it may
+reads the game's source with `readFileSync`, an import ending `?raw`, or `import.meta.glob` with
+`query: '?raw'`; the one game module it may
 import is literal constants under `src/ui/`, such as the palette a contrast check reads (rule list
 above).
 

@@ -20,6 +20,10 @@ import {
   resolveLedgerState,
   ledgerFilePath,
   readLedgerOrThrow,
+  missingRunMessage,
+  latestRunId,
+  listRunIds,
+  checkRecordedSlices,
   type ClassificationRecord,
   type ImpactRecord,
   type AdjudicationRecord,
@@ -136,6 +140,85 @@ describe('verifyRunInitCommand — staging + run allocation', () => {
     expect(stagedStillThere).toBe('staged content\n');
   });
 
+  it('refuses, naming the file, when the run ledger cannot be read, and leaves it as it was (#1110)', async () => {
+    const project = await liveProject();
+    const first = await verifyRunInitCommand({ project, json: true });
+    const ledgerAbs = join(project, first.ledgerPath);
+    const before = await fs.readFile(ledgerAbs, 'utf-8');
+    await fs.chmod(ledgerAbs, 0o200);
+    try {
+      await expect(verifyRunInitCommand({ project, runId: first.runId, json: true })).rejects.toThrow(
+        `Could not read ${ledgerAbs} (EACCES)`,
+      );
+    } finally {
+      await fs.chmod(ledgerAbs, 0o644);
+    }
+    expect(await fs.readFile(ledgerAbs, 'utf-8')).toBe(before);
+  });
+
+  it('names a run ledger that links to itself rather than calling the run missing (#1110)', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, json: true });
+    const ledgerAbs = join(project, init.ledgerPath);
+    await fs.rm(ledgerAbs);
+    await fs.symlink(ledgerAbs, ledgerAbs);
+    // Every way to a run reads it the same way: by --run-id, as the latest run, or in the list (#1174).
+    for (const reading of [
+      () => readLedgerOrThrow(ledgerAbs, init.runId, project),
+      () => missingRunMessage(project, init.runId),
+      () => latestRunId(project),
+      () => listRunIds(project),
+    ]) {
+      await expect(reading()).rejects.toThrow(`Could not read ${ledgerAbs} (ELOOP)`);
+    }
+  });
+
+  it('says a run folder it cannot search could not be read, never that it is not a run (#1110)', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, json: true });
+    const runDir = join(project, init.ledgerPath, '..');
+    await fs.chmod(runDir, 0o000);
+    try {
+      for (const reading of [() => missingRunMessage(project, init.runId), () => latestRunId(project)]) {
+        await expect(reading()).rejects.toThrow(`Could not read ${join(project, init.ledgerPath)} (EACCES)`);
+      }
+    } finally {
+      await fs.chmod(runDir, 0o755);
+    }
+  });
+
+  it('names a .verify/ folder it cannot list rather than saying there are no runs (#1174)', async () => {
+    const project = await liveProject();
+    const verifyDir = join(project, DESIGN_DIR, 'rulebook', '.verify');
+    await fs.symlink(verifyDir, verifyDir);
+    await expect(listRunIds(project)).rejects.toThrow(`Could not read ${verifyDir} (ELOOP)`);
+  });
+
+  it('names a recorded slice it cannot read rather than counting it as not recorded (#1174)', async () => {
+    const stagingDir = join(dir, 'staging');
+    await fs.mkdir(join(stagingDir, '03-setup.md'), { recursive: true });
+    const record = { unitId: '03-setup', slicePath: '03-setup.md', sha256: 'a'.repeat(64) } as Parameters<typeof checkRecordedSlices>[1][number];
+    await expect(checkRecordedSlices(stagingDir, [record], new Set())).rejects.toThrow(`Could not read ${join(stagingDir, '03-setup.md')} (EISDIR)`);
+  });
+
+  it('names an unreadable rulebook/ rather than calling it missing (#1110)', async () => {
+    const project = join(dir, 'game');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
+    await fs.mkdir(join(project, DESIGN_DIR), { recursive: true });
+    await fs.symlink(rulebookDir, rulebookDir);
+    await expect(verifyRunInitCommand({ project, json: true })).rejects.toThrow(`Could not read ${rulebookDir} (ELOOP)`);
+  });
+
+  it('names an unreadable slice rather than calling it missing (#1110)', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, json: true });
+    const sliceAbs = join(project, init.stagingDir, '03-setup.md');
+    await fs.symlink(sliceAbs, sliceAbs);
+    await expect(
+      verifyRunRecordCommand({ project, runId: init.runId, unit: '03-setup', slice: '03-setup.md', json: true }),
+    ).rejects.toThrow(`Could not read ${sliceAbs} (ELOOP)`);
+  });
+
   it('S4: stagingSlicesDir resolves under <projectDir>/rulebook/.verify/', async () => {
     const project = await liveProject();
     const runId = '2026-07-28T22-18-00Z';
@@ -208,6 +291,17 @@ describe('verifyRunRecordCommand / verifyRunStatusCommand — ledger', () => {
     await fs.writeFile(join(stagingAbs, '03-setup.md'), 'staged setup content\n');
     return { project, runId: init.runId, stagingAbs };
   }
+
+  it('keeps every record when several record calls run in parallel (#831)', async () => {
+    const { project, runId, stagingAbs } = await initAndStage();
+    const units = ['a', 'b', 'c', 'd', 'e', 'f'];
+    for (const unit of units) await fs.writeFile(join(stagingAbs, `${unit}.md`), `slice ${unit}\n`);
+    await Promise.all(
+      units.map((unit) => verifyRunRecordCommand({ project, runId, unit, slice: `${unit}.md`, json: true })),
+    );
+    const status = await verifyRunStatusCommand({ project, runId, json: true });
+    expect([...status.recorded].sort()).toEqual(units);
+  });
 
   it('L1: appends exactly one record strictly between the fences, leaving outside-fence content byte-identical', async () => {
     const { project, runId } = await initAndStage();
@@ -321,6 +415,24 @@ describe('verifyRunRecordCommand / verifyRunStatusCommand — ledger', () => {
     expect(status.runId).toBe(newer.runId);
   });
 
+  it('with no --run-id, a later run-id folder with no RUN.md is not the default run, and is named for removal once (#1003)', async () => {
+    const project = await liveProject();
+    const real = await verifyRunInitCommand({ project, runId: '2026-01-01T00-00-00Z', json: true });
+    const fake = '2099-01-01T00-00-00Z';
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook', '.verify', fake), { recursive: true });
+    const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const status = await verifyRunStatusCommand({ project, json: true });
+      expect(status.runId).toBe(real.runId);
+      const notices = stderr.mock.calls.map((c) => String(c[0])).filter((m) => m.includes(fake));
+      expect(notices).toHaveLength(1);
+      expect(notices[0]).toContain(`${DESIGN_DIR}/rulebook/.verify/${fake}/ has no RUN.md`);
+      expect(notices[0]).toMatch(/Remove that folder; it is not a verify run/);
+    } finally {
+      stderr.mockRestore();
+    }
+  });
+
   it('L7: a torn final in-fence line reads as that unit NOT recorded (crash safety), with a warning, no throw', async () => {
     const { project, runId } = await initAndStage();
     await verifyRunRecordCommand({ project, runId, unit: '03-setup', slice: '03-setup.md', json: true });
@@ -360,6 +472,32 @@ describe('verifyRunRecordCommand / verifyRunStatusCommand — ledger', () => {
     await expect(
       verifyRunRecordCommand({ project, runId, unit: 'x', slice: '03-setup.md', json: true }),
     ).rejects.toThrow(/machine-owned fences/);
+  });
+
+  it('L9: the repair the fences error advises restores a working run (#1006)', async () => {
+    const { project, runId, stagingAbs } = await initAndStage();
+    await verifyRunRecordCommand({ project, runId, unit: '03-setup', slice: '03-setup.md', json: true });
+    execSync('git init', { cwd: project, stdio: 'ignore' });
+    execSync('git add -A', { cwd: project, stdio: 'ignore' });
+    execSync('git -c user.email=t@t -c user.name=t commit -m run', { cwd: project, stdio: 'ignore' });
+    await fs.writeFile(join(stagingAbs, '07-turn.md'), 'staged turn content\n');
+    await verifyRunRecordCommand({ project, runId, unit: '07-turn', slice: '07-turn.md', json: true });
+    const ledgerAbs = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'RUN.md');
+    await fs.writeFile(ledgerAbs, '# Verify Run Ledger\n\nno fences here\n');
+
+    const message = await verifyRunStatusCommand({ project, runId, json: true }).then(
+      () => '',
+      (err: Error) => err.message,
+    );
+    expect(message).not.toMatch(/verify-run-init --run-id/);
+    const advised = message.match(/`(git restore [^`]+)`/)?.[1];
+    expect(advised).toBeDefined();
+    expect(message).toMatch(/drops every slice recorded since that commit/);
+    execSync(advised!, { cwd: project, stdio: 'ignore' });
+
+    // The committed record comes back; the one made after the commit is gone, as the message says.
+    const status = await verifyRunStatusCommand({ project, runId, json: true });
+    expect(status.recorded).toEqual(['03-setup']);
   });
 });
 

@@ -147,7 +147,6 @@ export function createProgram(): Command {
     .description('Run this workspace\'s tests (the game\'s, or BoardSmith\'s own after a type check)')
     .option('-w, --watch', 'Watch mode - re-run tests on changes')
     .option('--coverage', 'Generate coverage report')
-    .option('--selection <path>', 'Run only the exact file and full test names in an authored-test selection')
     .option('--browser', "BoardSmith's own repository only: run the browser regressions (scripts/*-browser.mjs) in Chromium instead of the default suite, without the type check the default run does first")
     .option('--verdict-file <path>', 'When the run does not pass, also write why to <path> (for a merge gate to repeat)')
     .action(testCommand);
@@ -161,7 +160,7 @@ export function createProgram(): Command {
   program
     .command('build')
     .description('Build this workspace for distribution (a game bundle, or BoardSmith\'s CLI)')
-    .option('-o, --out-dir <dir>', 'Output directory', 'dist')
+    .option('-o, --out-dir <dir>', 'Output directory, emptied before each build', 'dist')
     .action(buildCommand);
 
   // Packing for local development
@@ -232,10 +231,8 @@ export function createProgram(): Command {
       "Refuse a model review of a chunk's work unless `boardsmith verify --chunk <slug>` passed for this commit; " +
         'when open, print the review level and the verify brief every review prompt carries',
     )
-    .option('--work-role <role>', 'The role that did the work under review (mechanical, bounded or judgement); only small mechanical changes skip or lighten review')
-    .option('--since <commit>', 'Review only the change since this commit: the one the last round reviewed, or where a mechanical change began')
     .option('--project <dir>', 'Project directory (defaults to cwd)')
-    .action((slug: string, options: { workRole?: string; since?: string; project?: string }) => reviewGateCommand(slug, options));
+    .action((slug: string, options: { project?: string }) => reviewGateCommand(slug, options));
 
   // The bs- skills name roles, never models (#454): which agent type each role is dispatched as.
   program
@@ -366,6 +363,7 @@ export function createProgram(): Command {
     .option('--project <dir>', 'Project directory (defaults to cwd)')
     .option('--skip-relabel', 'Do not relabel presentation-only Derived lines first')
     .option('--json', 'Emit JSON instead of human-readable output')
+    .option('--print-changed', 'Print only the paths of the files it changed, each followed by a NUL byte')
     .action(discardResult(ingestGapsCommand));
 
   program
@@ -390,10 +388,6 @@ export function createProgram(): Command {
     .command('chunk-check <slug>')
     .description("Record or repair a chunk's Verified Against provenance block, and exit non-zero if it was stale")
     .option('--project <dir>', 'Project directory (defaults to cwd)')
-    .option(
-      '--reverified-no-code-change <range>',
-      'Record a re-verification that found no code change (e.g. <verified-hash>..<head> — 0 manifest files changed)',
-    )
     .option('--json', 'Emit JSON instead of human-readable output')
     .action(chunkCheckCommand);
 
@@ -529,7 +523,7 @@ export function createProgram(): Command {
   program
     .command('chunk-merge <slug>')
     .description(
-      "Merge a chunk's branch into the main line, one merge at a time: allocate ledger numbers, re-run every tree-wide check on the combined tree, and record cross-chunk references for the audit",
+      "Merge a chunk's branch into the main line, one merge at a time: allocate ledger numbers, re-run every tree-wide check, then the chunk's tests and typecheck, on the combined tree, and record cross-chunk references for the audit",
     )
     .option('--project <dir>', 'Project directory (defaults to cwd)')
     .option('--branch <name>', "The chunk's branch (defaults to chunk/<slug>)")
@@ -696,7 +690,8 @@ export function createProgram(): Command {
     .command('verify-impact-apply')
     .description(
       "Write the rules-staleness marker into every affected chunk's CHUNK.md then SKETCH.md, and " +
-        "record the run's impact map (refuses while any contradiction is un-adjudicated)",
+        "record the run's impact map (refuses while any pair is unclassified or any contradiction is " +
+        'un-adjudicated)',
     )
     .option('--project <dir>', 'Project directory (defaults to cwd)')
     .option('--run-id <id>', 'Report on a specific run instead of the most recent')

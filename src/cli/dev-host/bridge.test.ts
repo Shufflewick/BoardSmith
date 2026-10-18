@@ -143,6 +143,12 @@ describe('dev host bridge', () => {
       expect(r).toEqual({ success: true, followUp: { action: 'next' } });
     });
 
+    it('returns the kept history and the action it starts at for debugHistory (#997)', () => {
+      const entry = { name: 'pass', player: 1, args: {} };
+      const r = shapeResult('debugHistory', { success: true, ...ENVELOPE, actionHistory: [entry], actionHistoryBase: 7 });
+      expect(r).toEqual({ success: true, actionHistory: [entry], actionHistoryBase: 7 });
+    });
+
     it('returns only the pick answer for resolveChoices (#450)', () => {
       const r = shapeResult('resolveChoices', { success: true, choices: [{ value: 'red', display: 'Red' }, { value: 'blue', display: 'Blue' }] });
       expect(r).toEqual({
@@ -625,6 +631,8 @@ describe('dev host bridge', () => {
       ['debug:reorder-card', { cardId: 1, targetIndex: 0 }],
       ['debug:transfer-card', { cardId: 1, targetDeckId: 1 }],
       ['debug:shuffle-deck', { deckId: 1 }],
+      ['debug:deck-view', {}],
+      ['debug:deck-view-at', { actionIndex: 0 }],
       ['debug:logs', {}],
     ] as const) {
       it(`refuses ${wireOp} when the session was created without debugging`, async () => {
@@ -647,6 +655,24 @@ describe('dev host bridge', () => {
       await session.start();
       await session.handleServerRequest(1, 'h', 'debug:history', {});
       expect(responses[responses.length - 1].result.success).toBe(true);
+    });
+
+    it('answers debug:deck-view with the unfiltered table and nothing else (#898)', async () => {
+      const { session, responses } = sessionWithDebug(true);
+      await session.start();
+      await session.handleServerRequest(1, 'v', 'debug:deck-view', {});
+      const { result } = responses[responses.length - 1];
+      expect(Object.keys(result).sort()).toEqual(['success', 'view']);
+      expect(result.view).toMatchObject({ className: expect.any(String), children: expect.any(Array) });
+    });
+
+    it('answers debug:deck-view-at with the unfiltered table at that position and nothing else (#1071)', async () => {
+      const { session, responses } = sessionWithDebug(true);
+      await session.start();
+      await session.handleServerRequest(1, 'v', 'debug:deck-view-at', { actionIndex: 0 });
+      const { result } = responses[responses.length - 1];
+      expect(Object.keys(result).sort()).toEqual(['success', 'view']);
+      expect(result.view).toMatchObject({ className: expect.any(String), children: expect.any(Array) });
     });
   });
 

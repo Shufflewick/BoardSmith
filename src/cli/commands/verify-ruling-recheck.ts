@@ -4,12 +4,26 @@ import {
   designRulebookDir,
 } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
+import { readIfExists } from '../lib/read-if-exists.js';
 import { dirname, join, relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { parseRulings } from './build-manifest.js';
 import { allocatedNumber } from '../lib/ledger-entries.js';
+import { listFiles } from '../lib/source-files.js';
 import { readFencedJsonLedger } from '../lib/fenced-json-ledger.js';
-import { atomicWriteFile, listRunIds, RUN_ID_RE, runRootDir, stagingSlicesDir } from './verify-run.js';
+import { withLedgerLock } from '../lib/ledger-lock.js';
+import { parsePositiveWholeNumber } from '../../utils/positive-whole-number.js';
+import {
+  atomicWriteFile,
+  exists,
+  ledgerFilePath,
+  latestRunId,
+  missingRunMessage,
+  readLedgerOrThrow,
+  RUN_ID_RE,
+  rulingVerdictsLedgerPath,
+  stagingSlicesDir,
+} from './verify-run.js';
 
 /**
  * `verify-ruling-recheck.ts` — CHECK-01's mechanical half (176-CONTEXT.md decision 2): the CLI
@@ -199,9 +213,10 @@ export type FreshTranscriptionResolution =
 /**
  * Resolves the fresh STAGED transcription a re-check judgment reads against — never the live
  * `rulebook/` slices (decision 9: auditing against the pass-1 slices would re-check code against
- * the very text staleness was computed from). If no run is staged, an explicit `--run-id` does
- * not resolve, or the staged slices directory exists but is empty, this reports SCOPE-LIMITED
- * (PROV-02's pattern) — it never throws and never silently falls back to a live slice path.
+ * the very text staleness was computed from). If no run is staged, an explicit `--run-id` names
+ * no run (the shared `missingRunMessage`), a real run's slices folder is missing, a file, or
+ * unreadable (a message naming that folder and its remedies), or the folder is empty, this reports
+ * SCOPE-LIMITED (PROV-02's pattern) — it never throws and never silently falls back to a live slice path.
  * Every path this function can return is rooted at the dot-prefixed `rulebook/.verify/` staging
  * tree (`stagingSlicesDir`'s own convention: "dot-prefixed so no walker mistakes a staged slice
  * for a live one") — never a bare `rulebook/<file>.md` live-slice path.
@@ -227,8 +242,8 @@ export async function resolveFreshTranscription(
 
   let resolvedRunId = runId;
   if (resolvedRunId === undefined) {
-    const runIds = await listRunIds(projectDir);
-    if (runIds.length === 0) {
+    resolvedRunId = await latestRunId(projectDir);
+    if (resolvedRunId === undefined) {
       return {
         scopeLimited: true,
         reason:
@@ -237,15 +252,20 @@ export async function resolveFreshTranscription(
         missingPath: relative(projectDir, join(designRulebookDir(projectDir), '.verify')),
       };
     }
-    resolvedRunId = runIds[runIds.length - 1];
   }
 
   const stagingDir = stagingSlicesDir(projectDir, resolvedRunId);
   let entryNames: string[];
   try {
-    entryNames = await fs.readdir(stagingDir, { recursive: true });
-  } catch {
-    entryNames = [];
+    await fs.readdir(stagingDir); // listFiles reads a missing folder as empty; here that has its own message
+    entryNames = listFiles(stagingDir, { sourceTree: false, suffixes: ['.md'] }).map((path) => relative(stagingDir, path));
+  } catch (err) {
+    const missingPath = relative(projectDir, stagingDir);
+    // A real run with no usable slices folder is not a missing run, and must never be called one (#1002).
+    if (!(await exists(ledgerFilePath(projectDir, resolvedRunId)))) {
+      return { scopeLimited: true, reason: await missingRunMessage(projectDir, resolvedRunId), missingPath };
+    }
+    return { scopeLimited: true, reason: slicesUnusableMessage(resolvedRunId, missingPath, err), missingPath };
   }
   // Exclude any path with a `superseded/` directory component (176-06 ADDED ITEM 1, promoted
   // from 176-05's reported finding). A staged tree MAY retain a `slices/superseded/` subfolder
@@ -256,7 +276,6 @@ export async function resolveFreshTranscription(
   // Filtered on path segments, not a substring match, so a real slice legitimately named e.g.
   // `01-superseded-cards.md` (no `superseded/` directory component) is never excluded.
   const slicePaths = entryNames
-    .filter((n) => n.endsWith('.md'))
     .filter((n) => !n.split(/[\\/]/).includes('superseded'))
     .sort();
 
@@ -276,6 +295,24 @@ export async function resolveFreshTranscription(
     stagingDir: relative(projectDir, stagingDir),
     slicePaths,
   };
+}
+
+/** Why a real run's `slices/` cannot be read, and the remedies that leave its RUN.md alone. */
+function slicesUnusableMessage(runId: string, slicesPath: string, err: unknown): string {
+  const code = (err as NodeJS.ErrnoException).code;
+  const run = `Verify run "${runId}"`;
+  // Re-init of the same id would only make an empty folder; its records block restaging there.
+  const remedies =
+    `If the run was committed, run \`git restore ${slicesPath}\` in the project folder; ` +
+    `otherwise start a new run with \`boardsmith verify-run-init\`.`;
+  if (code === 'ENOENT') {
+    return `${run}'s staged transcription is missing: ${slicesPath} does not exist. ${remedies}`;
+  }
+  if (code === 'ENOTDIR') {
+    return `${run}'s staged transcription is missing: ${slicesPath} is a file, not a folder. Move that file aside. ${remedies}`;
+  }
+  if (code === undefined) return `${run}'s staged transcription at ${slicesPath} could not be read: ${(err as Error).message}`;
+  return `${run}'s staged transcription at ${slicesPath} could not be read (${code}). Check its permissions.`;
 }
 
 // -------------------------------------------------------------------------------------------
@@ -305,6 +342,18 @@ function emptyVerdictCounts(): Record<RulingVerdict, number> {
   const counts = {} as Record<RulingVerdict, number>;
   for (const v of RULING_VERDICTS) counts[v] = 0;
   return counts;
+}
+
+/** The project's RULINGS.md, or an error saying how to point at the right project. */
+async function readRulingsMd(projectDir: string): Promise<string> {
+  const text = await readIfExists(designPath(projectDir, RULINGS_MD), (p) => fs.readFile(p, 'utf-8'));
+  if (text === undefined) {
+    throw new Error(
+      `No RULINGS.md found in this project directory.\n` +
+        `Pass --project <dir> to target the bs-project this run should read.`,
+    );
+  }
+  return text;
 }
 
 /**
@@ -337,19 +386,7 @@ export async function verifyRulingRecheckCommand(
   } = {},
 ): Promise<VerifyRulingRecheckResult> {
   const projectDir = resolve(options.project ?? process.cwd());
-  const rulingsPath = designPath(projectDir, RULINGS_MD);
-
-  let rulingsText: string;
-  try {
-    rulingsText = await fs.readFile(rulingsPath, 'utf-8');
-  } catch {
-    throw new Error(
-      `No RULINGS.md found in this project directory.\n` +
-        `Pass --project <dir> to target the bs-project this run should read.`,
-    );
-  }
-
-  const { enumerated, skipped, unparsedSupersession } = enumerateRulingsForRecheck(rulingsText);
+  const { enumerated, skipped, unparsedSupersession } = enumerateRulingsForRecheck(await readRulingsMd(projectDir));
   const transcription = await resolveFreshTranscription(projectDir, options.runId);
 
   // The durable half of the verdict source (the defect this command was filed for): verdicts
@@ -391,10 +428,10 @@ export async function verifyRulingRecheckCommand(
   }
 
   if (transcription.scopeLimited) {
-    console.log(chalk.yellow(`⚠ Scope-limited: ${transcription.reason}`));
+    console.log(styleText('yellow', `⚠ Scope-limited: ${transcription.reason}`));
   }
   console.log(
-    chalk.green(`✓ Ruling re-check — ${rows.length} ruling(s), ${skipped.length} skipped`),
+    styleText('green', `✓ Ruling re-check — ${rows.length} ruling(s), ${skipped.length} skipped`),
   );
   for (const row of rows) {
     console.log(`  Ruling ${row.number}: ${row.verdict}`);
@@ -402,14 +439,6 @@ export async function verifyRulingRecheckCommand(
   return result;
 }
 
-/**
- * This run's own ledger path — `rulebook/.verify/<runId>/RULING-VERDICTS.md`. Run-scoped, unlike
- * CHECK-04's and CHECK-06's project-level ledgers: a ruling's verdict is a judgment against ONE
- * run's fresh transcription, so it cannot outlive the run that produced it.
- */
-export function rulingVerdictsLedgerPath(projectDir: string, runId: string): string {
-  return join(runRootDir(projectDir, runId), 'RULING-VERDICTS.md');
-}
 
 /**
  * Persists verdicts to this run's ledger through `atomicWriteFile` — the ONE atomic ledger write
@@ -449,10 +478,14 @@ export async function recordRulingVerdicts(
   runId: string,
   records: RulingVerdictRecord[],
 ): Promise<{ ledgerPath: string }> {
-  const existing = await readRulingVerdicts(projectDir, runId);
-  const incoming = new Set(records.map((r) => r.number));
-  const merged = [...existing.filter((r) => !incoming.has(r.number)), ...records];
-  return replaceRulingVerdicts(projectDir, runId, merged);
+  const ledgerPath = rulingVerdictsLedgerPath(projectDir, runId);
+  await fs.mkdir(dirname(ledgerPath), { recursive: true });
+  return withLedgerLock(ledgerPath, async () => {
+    const existing = await readRulingVerdicts(projectDir, runId);
+    const incoming = new Set(records.map((r) => r.number));
+    const merged = [...existing.filter((r) => !incoming.has(r.number)), ...records];
+    return replaceRulingVerdicts(projectDir, runId, merged);
+  });
 }
 
 /**
@@ -520,7 +553,7 @@ export async function verifyRulingRecordCommand(
   options: {
     project?: string;
     runId?: string;
-    number?: string | number;
+    number?: string;
     verdict?: string;
     reasoning?: string;
     json?: boolean;
@@ -538,26 +571,12 @@ export async function verifyRulingRecordCommand(
     );
   }
 
-  const number = Number(options.number);
-  if (!Number.isInteger(number) || number < 1) {
-    throw new Error(
-      `"--number ${options.number ?? '<missing>'}" is not a RULINGS.md entry number.\n` +
-        `Pass the positive whole number of the ruling this verdict is for.`,
-    );
-  }
+  // Before anything is written: a mistyped id must not create a run folder that sorts as latest.
+  await readLedgerOrThrow(ledgerFilePath(projectDir, runId), runId, projectDir);
 
-  const rulingsPath = designPath(projectDir, RULINGS_MD);
-  let rulingsText: string;
-  try {
-    rulingsText = await fs.readFile(rulingsPath, 'utf-8');
-  } catch {
-    throw new Error(
-      `No RULINGS.md found in this project directory.\n` +
-        `Pass --project <dir> to target the bs-project this run should read.`,
-    );
-  }
+  const number = parsePositiveWholeNumber('--number', options.number ?? '');
 
-  const { enumerated, skipped } = enumerateRulingsForRecheck(rulingsText);
+  const { enumerated, skipped } = enumerateRulingsForRecheck(await readRulingsMd(projectDir));
   if (!enumerated.some((e) => e.number === number)) {
     const supersededBy = skipped.find((s) => s.number === number)?.supersededBy;
     if (supersededBy !== undefined) {
@@ -597,8 +616,8 @@ export async function verifyRulingRecordCommand(
   }
 
   console.log(
-    chalk.green(`✓ Ruling ${record.number}: ${record.verdict}`) +
-      chalk.dim(` — recorded in ${ledgerPath} (${recordCount} verdict(s) total)`),
+    styleText('green', `✓ Ruling ${record.number}: ${record.verdict}`) +
+      styleText('dim', ` — recorded in ${ledgerPath} (${recordCount} verdict(s) total)`),
   );
   return result;
 }

@@ -11,9 +11,9 @@ export { Die } from './die.js';
 export { DicePool } from './dice-pool.js';
 export { Grid, GridCell } from './grid.js';
 export { HexGrid, HexCell } from './hex-grid.js';
+export { DEFAULT_COLOR_PALETTE } from './seat-defaults.js';
 export {
   Game,
-  DEFAULT_COLOR_PALETTE,
   WORLD_PARTITION_ID_FLOOR,
   RandomnessForbiddenError,
   // The engine's own root-field audience table, and the two accessors a game
@@ -21,7 +21,6 @@ export {
   GAME_ROOT_FIELD_AUDIENCE,
   GAME_SELF_SERIALIZED_FIELDS,
   isEngineRootField,
-  engineRootFieldAudience,
   // Every GameOptions field, so a host can keep a player's selection off them.
   ENGINE_OWNED_GAME_OPTION_KEYS,
   // The live game's animation counters, which a restore stays above (#489).

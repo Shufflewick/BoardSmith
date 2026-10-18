@@ -42,7 +42,7 @@
  */
 
 import { promises as fs } from 'node:fs';
-import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
+import { blameHeader, gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { join as pathJoin, relative as pathRelative, resolve as pathResolve } from 'node:path';
 import {
   CROSS_CHUNK_MD,
@@ -70,6 +70,7 @@ import { NUMBERED_LEDGER_SPECS, provisionalHeadings, provisionalReferences } fro
 import { checkCrossChunkLedger } from './cross-chunk.js';
 import { type VerifyLookup, type VerifyOnFile, checkRunLogRoles, reviewRoundCommits, runLogEntries } from '../lib/run-log-roles.js';
 import { readVerifyResult, verifyResultPath, verifyResultsDir } from '../lib/verify-result.js';
+import { readIfExists, readListedText } from '../lib/read-if-exists.js';
 
 export type LedgerFindingKind =
   | 'duplicate-number'
@@ -545,10 +546,10 @@ async function provisionalCitedOnMainLine(projectDir: string, headed: LedgerFind
     .filter(Boolean);
   const found: LedgerFinding[] = [];
   for (const file of [...new Set(files)].sort()) {
-    const buffer = await fs.readFile(pathJoin(projectDir, file)).catch(() => undefined);
-    // A file deleted from the working tree, or a binary file, cites nothing.
-    if (buffer === undefined || buffer.includes(0)) continue;
-    for (const id of provisionalReferences(file, buffer.toString('utf-8'))) {
+    const text = await readListedText(pathJoin(projectDir, file));
+    // A file deleted from the working tree, a folder git lists, or a binary file, cites nothing.
+    if (text === undefined) continue;
+    for (const id of provisionalReferences(file, text)) {
       if (already.has(`${file}\0${id}`)) continue;
       const inDesign = file.startsWith(design);
       found.push({
@@ -653,8 +654,6 @@ async function runLogFiles(projectDir: string): Promise<string[]> {
 // Git: the commit time of each line of a run log
 // ---------------------------------------------------------------------------------------------
 
-const UNCOMMITTED = /^0{40}$/;
-
 function isGitRepo(projectDir: string): Promise<boolean> {
   return gitSucceeds(projectDir, ['rev-parse', '--show-toplevel']);
 }
@@ -689,18 +688,18 @@ interface LineCommit {
 async function lineCommits(projectDir: string, relPath: string): Promise<Array<LineCommit | null>> {
   const porcelain = await git(projectDir, ['blame', '--line-porcelain', '--', relPath]);
   const commits: Array<LineCommit | null> = [];
-  let sha = '';
+  let sha: string | null = null;
   let finalLine = 0;
   let time = 0;
   for (const line of porcelain.split('\n')) {
-    const header = /^([0-9a-f]{40}) \d+ (\d+)/.exec(line);
+    const header = blameHeader(line);
     if (header) {
-      sha = header[1];
-      finalLine = Number(header[2]);
+      sha = header.commit;
+      finalLine = header.line;
     } else if (line.startsWith('committer-time ')) {
       time = Number(line.slice('committer-time '.length));
     } else if (line.startsWith('\t')) {
-      commits[finalLine] = UNCOMMITTED.test(sha) ? null : { sha, time };
+      commits[finalLine] = sha === null ? null : { sha, time };
     }
   }
   return commits;
@@ -742,11 +741,7 @@ function evidenceDetail(path: string, rel: string | undefined, problem: Evidence
 }
 
 async function fileExists(path: string): Promise<boolean> {
-  try {
-    return (await fs.stat(path)).isFile();
-  } catch {
-    return false;
-  }
+  return (await readIfExists(path, fs.stat))?.isFile() ?? false;
 }
 
 function isIgnored(projectDir: string, rel: string): Promise<boolean> {

@@ -5,7 +5,7 @@
  * Fake timers stand in for the machine: an answer that takes long is a page or host that was busy.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ANSWER_TICK_MS, clocks, FROZEN_MS, PageClock, PageTimeOverrun, withinPageTime } from './browser-smoke-clock.js';
+import { anyWithinPageTime, ANSWER_TICK_MS, clocks, FROZEN_MS, lastErrorsLand, PageClock, PageTimeOverrun, withinPageTime } from './browser-smoke-clock.js';
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
@@ -102,5 +102,71 @@ describe('withinPageTime', () => {
 
     await failed;
     clock.stop();
+  });
+});
+
+describe('anyWithinPageTime (#926)', () => {
+  const ranOutError = () => Object.assign(new Error('locator.waitFor: Timeout exceeded.'), { name: 'TimeoutError' });
+
+  /** What `anyWithinPageTime` gives for `attempts` on a page that always answers, once 60s of (fake) time has passed. */
+  async function outcome(...attempts: ((timeout: number) => Promise<unknown>)[]): Promise<boolean | Error> {
+    const { clock } = clockAnswering(() => 0);
+    const page = {};
+    clocks.set(page, clock);
+    const waiting = anyWithinPageTime(page, 5_000, 'waiting for a turn', attempts).catch((error: Error) => error);
+    await vi.advanceTimersByTimeAsync(60_000);
+    clock.stop();
+    return waiting;
+  }
+
+  /** A wait that runs out after its timeout, as a locator that never appears does. */
+  const neverThere = (timeout: number) => new Promise<never>((_, fail) => setTimeout(() => fail(ranOutError()), timeout));
+
+  it('is true once any wait is met', async () => {
+    expect(await outcome(neverThere, () => Promise.resolve())).toBe(true);
+  });
+
+  it('is false when every wait ran out of page time', async () => {
+    expect(await outcome(neverThere, neverThere)).toBe(false);
+  });
+
+  it('passes on any other error, as a frame detached under the wait, even when another wait ran out', async () => {
+    const detached = new Error('locator.waitFor: Frame was detached');
+    expect(await outcome(neverThere, () => Promise.reject(detached))).toBe(detached);
+  });
+});
+
+describe('lastErrorsLand (#925)', () => {
+  /** A page with its own clock, whose questions are answered after `answerMs` of (fake) time. */
+  function pageAnswering(answerMs: number): { page: object; clock: PageClock } {
+    const { clock } = clockAnswering(() => answerMs);
+    const page = {};
+    clocks.set(page, clock);
+    return { page, clock };
+  }
+
+  /** Whether an error that reaches the page `atMs` after the last press has landed by the time `waiting` is done. */
+  async function landsBefore(waiting: () => Promise<void>, atMs: number): Promise<boolean> {
+    let landed = false;
+    setTimeout(() => (landed = true), atMs);
+    const seen = waiting().then(() => landed);
+    await vi.advanceTimersByTimeAsync(5_000);
+    return seen;
+  }
+
+  it('waits on the page clock, so an error a starved page shows 600 ms after the last press still lands', async () => {
+    const starved = pageAnswering(300);
+
+    expect(await landsBefore(() => lastErrorsLand([starved.page]), 600)).toBe(true);
+    starved.clock.stop();
+  });
+
+  it("waits until every seat's browser has had the wait, so a starved second seat's late error still lands", async () => {
+    const first = pageAnswering(0);
+    const second = pageAnswering(300);
+
+    expect(await landsBefore(() => lastErrorsLand([first.page, second.page]), 600)).toBe(true);
+    first.clock.stop();
+    second.clock.stop();
   });
 });

@@ -30,10 +30,10 @@ debug tools. Each connected seat renders inside a `GameShell` **iframe** — the
 the bridge:
 
 - `window.__BOARDSMITH_DEVTOOLS` lives on the **outer page's `window`**, not
-  inside the iframe. It's a cache that DevHost keeps up to date by listening
-  for `postMessage({ type: 'boardsmith:devtools-state-update', ... })` pushed
-  from the iframe on every state change — so reads are synchronous, no
-  `await` needed.
+  inside the iframe. Each read calls a reader the game's `GameShell` puts on the
+  iframe's window (the iframe is served from the same origin), so it returns the
+  game's current state, synchronously, with no `await`. Nothing is built or
+  posted when the game updates and nobody reads (#960).
 - `boardsmith:action-resolved` is dispatched inside `useActionController`,
   which runs **inside the game iframe** — so you listen for it on
   `iframe.contentWindow`, not on the outer `window`.
@@ -124,11 +124,12 @@ interface BoardsmithDevtools {
 }
 ```
 
-All four methods are synchronous reads against a cached snapshot — there is
-no round trip to the server or the iframe when you call them. If
-`window.__BOARDSMITH_DEVTOOLS` is `undefined`, you're either in a production
-build or the page hasn't finished its first snapshot push yet (reconnect or
-wait a tick).
+Every method returns a copy of the game iframe's current state, built
+when you call it, so changing it changes nothing in the game. There is no round
+trip to the server. If
+`window.__BOARDSMITH_DEVTOOLS` is `undefined`, you're in a production build or
+the dev host page hasn't mounted yet. If the methods return `null` or `[]`, the
+game iframe hasn't mounted `GameShell` yet, or has no state yet.
 
 ## 3. `boardsmith:action-resolved`
 
@@ -316,16 +317,19 @@ Two of them read as the worked examples:
   when an entry unmounts.
 
 ```sh
-boardsmith test --browser                # every one, as `agent-policy verify` runs them
+boardsmith test --browser                # every one, as a thread merge runs them
 node scripts/ordered-list-browser.mjs    # one, with its checks printed as it goes
 ```
 
 `boardsmith test --browser` (`vitest.browser.config.ts`, #533) runs one case per
 `scripts/*-browser.mjs`, found by name, that runs the script and expects it to
-exit 0; `agent-policy verify` runs it as its `browser` check. They are **not**
+exit 0. A thread merge runs it as its `browser` step when the merge changes
+`src/ui/`, `src/cli/dev-host/`, `src/world/` or a browser script
+(`thread.extraMergeSteps` in `.agent-policy.json`); `agent-policy verify` does not
+run it, so run it by hand while working on those areas. They are **not**
 part of a plain `boardsmith test`, so the default suite needs no Chromium, and
-`--browser` skips the type check a plain run does first, since verify's `test`
-check has done it on the same commit. They use
+`--browser` skips the type check a plain run does first, since the merge's
+`typecheck` check has done it on the same commit. They use
 BoardSmith's own Playwright and the Chromium `boardsmith install-browser` puts on
 the machine, found the same way as the smoke check below. They never skip: with
 that Chromium missing one says to run `boardsmith install-browser` and exits

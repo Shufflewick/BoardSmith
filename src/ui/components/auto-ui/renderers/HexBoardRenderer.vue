@@ -29,7 +29,7 @@
  */
 
 import { computed, inject, nextTick, watch, type ComputedRef } from 'vue';
-import { hexToPixel, getHexPolygonPoints } from '../../../composables/useHexGrid.js';
+import { hexToPixel, getHexPolygonPoints, hexCoordNames } from '../../../composables/useHexGrid.js';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import { useSelectableGrid } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
@@ -37,19 +37,7 @@ import { resolvePresentation } from '../presentation.js';
 import type { PresentationOverlay } from '../presentation.js';
 import { GAME_CONTEXT_KEYS } from '../../../composables/useGameContext.js';
 import { boardCellStates } from './board-cell-states.js';
-
-// ---------------------------------------------------------------------------
-// Local GameElement interface — do NOT import from engine (module is dependency-free)
-// Mirrors auto-ui-helpers.ts lines 12-19.
-// ---------------------------------------------------------------------------
-interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
-  childCount?: number;
-}
+import type { GameElement } from '../auto-ui-helpers.js';
 
 const props = defineProps<{
   element: GameElement;
@@ -70,12 +58,9 @@ const orientation = computed(
 );
 
 // Coordinate attribute names declared on the board element
-const qCoordName = computed(
-  () => (props.element.attributes?.$qCoord as string | undefined) ?? 'q'
-);
-const rCoordName = computed(
-  () => (props.element.attributes?.$rCoord as string | undefined) ?? 'r'
-);
+const coordNames = computed(() => hexCoordNames(props.element));
+const qCoordName = computed(() => coordNames.value.q);
+const rCoordName = computed(() => coordNames.value.r);
 
 // ── Closed-form functions (no hand-rolled trig) ──────────────────────────────
 
@@ -195,7 +180,7 @@ const displayLabel = computed(
 // ── A11Y-01: useSelectableGrid — roving tabindex for hex grid navigation ────
 //
 // hexCells: flat array of all hex cells (children of the board element)
-// hexCols: width of the hex grid in cells (q-range + 1) for ArrowUp/Down row math
+// hexCellAxes: a cell's r as its row and q as its column, for arrow-key moves
 // The SVG root receives @keydown; each <g> receives :tabindex from currentIdx.
 //
 // NOTE (research Open Q3): tabindex on SVG <g> is spec-valid but Safari/VoiceOver
@@ -203,8 +188,7 @@ const displayLabel = computed(
 // If manual VoiceOver/Safari testing fails, escalate to overlay <button> approach.
 const hexCells = computed(() => props.element.children ?? []);
 
-// Compute grid width as the q-coordinate range + 1 for roving-tabindex row math
-// and for aria-colcount on the role="grid" SVG root (WR-02).
+// Grid width as the q-coordinate range + 1, for aria-colcount on the role="grid" SVG root (WR-02).
 const hexCols = computed(() => {
   const cells = hexCells.value;
   if (!cells.length) return 1;
@@ -232,6 +216,11 @@ const hexRows = computed(() => {
   return maxR - minR + 1;
 });
 
+function hexCellAxes(cell: GameElement) {
+  const attrs = cell.attributes ?? {};
+  return { row: (attrs[rCoordName.value] as number) ?? 0, col: (attrs[qCoordName.value] as number) ?? 0 };
+}
+
 // Hex cell activation: selectable AND passive selectElement branches.
 // Called from both click and keyboard (Enter/Space) for consistent behavior.
 function handleHexActivate(cell: GameElement) {
@@ -254,7 +243,7 @@ const {
   focusFirstCandidate,
 } = useSelectableGrid(
   hexCells,
-  hexCols,
+  hexCellAxes,
   cellIdentity,
   boardInteraction,
   handleHexActivate,

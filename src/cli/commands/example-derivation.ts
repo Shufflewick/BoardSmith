@@ -9,6 +9,8 @@ import {
   DERIVE_CHECK_LEDGER_END,
 } from './verify-derive-check.js';
 import { DERIVED_LINE_RE } from './derived-line-pattern.js';
+import { isSameOrInside } from '../lib/path-inside.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 
 /**
  * `example-derivation.ts` — the ONE shared module both the build side (TEST-01, `build/test.md`)
@@ -450,22 +452,45 @@ export function assertValidExampleLineNumbers(
 /** Handshake token proving a dispatch prompt was copied, not composed from memory. */
 export const EXAMPLE_TRANSLATION_TOKEN = 'BS-EXAMPLE-TRANSLATE-V1';
 
+/**
+ * A symbol's declaration as the TypeScript compiler writes it in a `.d.ts` file (signatures and
+ * types, never implementations), or why there is none.
+ */
+export type ApiDeclaration = { text: string } | { unavailable: string };
+
 export interface GameApiSymbol {
   name: string;
   kind: 'function' | 'const' | 'class';
   /** Path relative to `projectDir`, forward-slash separated, always under `src/`. */
   module: string;
+  declaration: ApiDeclaration;
+}
+
+/** A type declared under `src/` that a listed declaration mentions, directly or through another such type. */
+export interface GameApiType {
+  name: string;
+  kind: 'class' | 'interface' | 'type' | 'enum';
+  module: string;
+  /** False for a type its module does not export under this name: it is constructed by shape, never imported. */
+  exported: boolean;
+  declaration: ApiDeclaration;
 }
 
 export interface GameApiSurface {
   projectDir: string;
   testDir: string;
   exportedSymbols: GameApiSymbol[];
+  /** Nearest first: the types the listed declarations mention, then the types those mention. */
+  referencedTypes: GameApiType[];
 }
+
+/** A name to list, before its declaration is printed. `declared` is absent for a module or default binding. */
+type ListedName = Omit<GameApiSymbol, 'declaration'> & { declared?: ts.Symbol };
 
 /**
  * One game's rules as its own compiler sees them: the game's compiler options, a `Program`
- * rooted at `src/rules/index.ts` that holds only files under `src/`, and that program's checker.
+ * rooted at `src/rules/index.ts` that holds no project file outside `src/` and `node_modules/`,
+ * and that program's checker.
  * `srcDir` ends in `/` and, like every path here, is absolute and in the compiler's forward-slash
  * form, which is the form the compiler reports file names in. It is deliberately not made a real
  * path: the compiler reports the game's own modules under the path it was given, so a real path
@@ -474,11 +499,15 @@ export interface GameApiSurface {
 interface RulesProgram {
   projectDir: string;
   srcDir: string;
+  /** The project directory as given and as its real path. */
+  projectRoots: string[];
   options: ts.CompilerOptions;
   program: ts.Program;
   checker: ts.TypeChecker;
   /** Modules whose `export ... from` declarations have already been checked. */
   checkedModules: Set<string>;
+  /** Each module's declaration output, written once. */
+  declarations: Map<string, ModuleDeclarations>;
 }
 
 /** Where a module specifier leads: a module of the game's own rules, or a package. */
@@ -489,11 +518,7 @@ function toProjectRelativeModule(rules: RulesProgram, fileName: string): string 
 }
 
 async function isFile(path: string): Promise<boolean> {
-  try {
-    return (await fs.stat(path)).isFile();
-  } catch {
-    return false;
-  }
+  return (await readIfExists(path, fs.stat))?.isFile() ?? false;
 }
 
 /** The game's own compiler options, read from its `tsconfig.json` as `tsc` reads them. */
@@ -524,18 +549,38 @@ async function readGameCompilerOptions(projectDir: string): Promise<ts.CompilerO
 }
 
 /**
- * Builds the program over the game's rules. The compiler host hands the program only files under
- * `src/`, so the compiler never reads the test directory or a package: a package is never the
- * game's own rules, and `buildExampleTranslationPayload` promises never to carry test text.
+ * Builds the program over the game's rules, set to write declarations. Inside the project the
+ * compiler host hands the program only files under `src/` and `node_modules/`, so it never reads
+ * the test directory: `buildExampleTranslationPayload` promises never to carry test text. Packages
+ * and the standard library are read, because a declaration printed without them would name `any`
+ * wherever the game names a package's type.
  */
 async function createRulesProgram(projectDir: string): Promise<RulesProgram> {
-  const options = await readGameCompilerOptions(projectDir);
+  const options: ts.CompilerOptions = {
+    ...(await readGameCompilerOptions(projectDir)),
+    declaration: true,
+    emitDeclarationOnly: true,
+    noEmit: false,
+    noEmitOnError: false,
+    removeComments: true,
+    declarationMap: false,
+    composite: false,
+    incremental: false,
+  };
   const compilerProjectDir = resolve(projectDir).split(sep).join('/');
   const srcDir = `${compilerProjectDir}/src/`;
+  const projectRoots = [compilerProjectDir, ts.sys.realpath?.(compilerProjectDir) ?? compilerProjectDir];
+  const refused = (fileName: string) =>
+    projectRoots.some(
+      (root) =>
+        isSameOrInside(root, fileName) &&
+        !isSameOrInside(join(root, 'src'), fileName) &&
+        !isSameOrInside(join(root, 'node_modules'), fileName),
+    );
   const host = ts.createCompilerHost(options, true);
   const readSourceFile = host.getSourceFile.bind(host);
   host.getSourceFile = (fileName, ...rest) =>
-    fileName.startsWith(srcDir) ? readSourceFile(fileName, ...rest) : undefined;
+    refused(fileName) ? undefined : readSourceFile(fileName, ...rest);
   const program = ts.createProgram({
     rootNames: [`${compilerProjectDir}/src/rules/index.ts`],
     options,
@@ -544,10 +589,12 @@ async function createRulesProgram(projectDir: string): Promise<RulesProgram> {
   return {
     projectDir: compilerProjectDir,
     srcDir,
+    projectRoots,
     options,
     program,
     checker: program.getTypeChecker(),
     checkedModules: new Set(),
+    declarations: new Map(),
   };
 }
 
@@ -590,7 +637,7 @@ function resolveSpecifier(
   }
   if (resolvedModule.isExternalLibraryImport) return { kind: 'package' };
   const file = rules.program.getSourceFile(resolvedModule.resolvedFileName);
-  if (!resolvedModule.resolvedFileName.startsWith(rules.srcDir) || !file) {
+  if (!isSameOrInside(rules.srcDir, resolvedModule.resolvedFileName) || !file) {
     throw new Error(
       `${importerModule} re-exports '${specifier.text}', which is outside src/.\n` +
         `The worked-example API surface lists only the game's own rules under src/. Move that ` +
@@ -647,16 +694,18 @@ function bindsModuleOrDefault(declaration: ts.Declaration): boolean {
   return false;
 }
 
-/** The surface entry for a symbol declared in the game's rules, or none for a type. */
-function declaredSymbol(rules: RulesProgram, symbol: ts.Symbol): GameApiSymbol | undefined {
+/** The surface entry for a value declared in the game's rules, or none for a type or a package's value. */
+function declaredSymbol(rules: RulesProgram, symbol: ts.Symbol): ListedName | undefined {
   if (!(symbol.flags & ts.SymbolFlags.Value)) return undefined;
   const declaration = symbol.valueDeclaration ?? symbol.declarations![0];
+  if (!declaration.getSourceFile().fileName.startsWith(rules.srcDir)) return undefined;
   const kind: GameApiSymbol['kind'] =
     symbol.flags & ts.SymbolFlags.Class ? 'class' : symbol.flags & ts.SymbolFlags.Function ? 'function' : 'const';
   return {
     name: symbol.name,
     kind,
     module: toProjectRelativeModule(rules, declaration.getSourceFile().fileName),
+    declared: symbol,
   };
 }
 
@@ -665,7 +714,7 @@ function declaredSymbol(rules: RulesProgram, symbol: ts.Symbol): GameApiSymbol |
  * and lists nothing, at a type-only import or export or at a package. It stops at a whole-module
  * or default binding and lists the name where it is exported, as `const`.
  */
-function surfaceEntry(rules: RulesProgram, exported: ts.Symbol): GameApiSymbol | undefined {
+function surfaceEntry(rules: RulesProgram, exported: ts.Symbol): ListedName | undefined {
   let current = exported;
   let exportedAs = exported;
   while (current.flags & ts.SymbolFlags.Alias) {
@@ -704,6 +753,269 @@ function surfaceEntry(rules: RulesProgram, exported: ts.Symbol): GameApiSymbol |
   return declaredSymbol(rules, current);
 }
 
+/** A printed declaration, and the symbols of the names it mentions. */
+interface PrintedDeclaration {
+  text: string;
+  references: ts.Symbol[];
+}
+
+/** One module's declaration output: its printed statements by declared name, or why there is none. */
+type ModuleDeclarations = { byName: Map<string, PrintedDeclaration[]> } | { unavailable: string };
+
+const DECLARATION_PRINTER = ts.createPrinter({ removeComments: true });
+
+/** The names a top-level statement declares, in a source file or a declaration file. */
+function declaredNames(statement: ts.Statement): string[] {
+  if (ts.isVariableStatement(statement)) {
+    return statement.declarationList.declarations.flatMap((d) => (ts.isIdentifier(d.name) ? [d.name.text] : []));
+  }
+  const name = (statement as ts.DeclarationStatement).name;
+  return name && ts.isIdentifier(name) ? [name.text] : [];
+}
+
+function isPrivateOrProtected(declaration: ts.Declaration): boolean {
+  const name = (declaration as ts.NamedDeclaration).name;
+  return (
+    (name !== undefined && ts.isPrivateIdentifier(name)) ||
+    (ts.getCombinedModifierFlags(declaration) & (ts.ModifierFlags.Private | ts.ModifierFlags.Protected)) !== 0
+  );
+}
+
+/** A declaration-file statement as a translator sees it: a class keeps its constructor and public members. */
+function forTranslator(statement: ts.Statement): ts.Statement {
+  if (!ts.isClassDeclaration(statement)) return statement;
+  return ts.factory.updateClassDeclaration(
+    statement,
+    statement.modifiers,
+    statement.name,
+    statement.typeParameters,
+    statement.heritageClauses,
+    statement.members.filter((m) => ts.isConstructorDeclaration(m) || !isPrivateOrProtected(m)),
+  );
+}
+
+/** `A`, `A.B` or `a.B` as its parts. */
+function nameParts(node: ts.Node): string[] | undefined {
+  if (ts.isIdentifier(node)) return [node.text];
+  const [left, right] = ts.isQualifiedName(node)
+    ? [node.left, node.right]
+    : ts.isPropertyAccessExpression(node)
+      ? [node.expression, node.name]
+      : [];
+  const leftParts = left && nameParts(left);
+  return leftParts && right && ts.isIdentifier(right) ? [...leftParts, right.text] : undefined;
+}
+
+/** A name a declaration file mentions in a type, `typeof` or `extends` position, and the module an `import("…")` type names it from. */
+interface NameReference {
+  parts: string[];
+  from?: string;
+}
+
+/** The name a declaration-file node refers to, when it is a type, `typeof`, `extends` or `import("…")` reference. */
+function referenceTarget(node: ts.Node): ts.Node | undefined {
+  if (ts.isTypeReferenceNode(node)) return node.typeName;
+  if (ts.isExpressionWithTypeArguments(node)) return node.expression;
+  if (ts.isTypeQueryNode(node)) return node.exprName;
+  if (ts.isImportTypeNode(node)) return node.qualifier;
+  return undefined;
+}
+
+function importTypeModule(node: ts.Node): string | undefined {
+  return ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument) && ts.isStringLiteral(node.argument.literal)
+    ? node.argument.literal.text
+    : undefined;
+}
+
+function collectNameReferences(node: ts.Node, references: NameReference[], typeParameters: Set<string>): void {
+  if (ts.isTypeParameterDeclaration(node)) typeParameters.add(node.name.text);
+  const target = referenceTarget(node);
+  const parts = target && nameParts(target);
+  if (parts) references.push({ parts, from: importTypeModule(node) });
+  ts.forEachChild(node, (child) => collectNameReferences(child, references, typeParameters));
+}
+
+function aliasTarget(rules: RulesProgram, symbol: ts.Symbol): ts.Symbol {
+  return symbol.flags & ts.SymbolFlags.Alias ? rules.checker.getAliasedSymbol(symbol) : symbol;
+}
+
+function exportNamed(rules: RulesProgram, module: ts.Symbol | undefined, name: string): ts.Symbol | undefined {
+  return module && rules.checker.getExportsOfModule(module).find((s) => s.name === name);
+}
+
+/** The module symbol `specifier` resolves to from `importer`, as the game's compiler resolves it. */
+function moduleSymbolOf(rules: RulesProgram, importer: ts.SourceFile, specifier: string): ts.Symbol | undefined {
+  const resolved = ts.resolveModuleName(specifier, importer.fileName, rules.options, ts.sys).resolvedModule;
+  const target = resolved && rules.program.getSourceFile(resolved.resolvedFileName);
+  return target && rules.checker.getSymbolAtLocation(target);
+}
+
+/**
+ * The symbol a name in `file`'s declaration output means, resolved by the checker in `file`'s own
+ * scope, which is the scope the compiler wrote those names for. Global names resolve to nothing.
+ */
+function resolveNameReference(rules: RulesProgram, file: ts.SourceFile, reference: NameReference): ts.Symbol | undefined {
+  const [first, ...rest] = reference.parts;
+  let symbol =
+    reference.from === undefined
+      ? rules.checker.resolveName(first, file, ts.SymbolFlags.Type | ts.SymbolFlags.Value | ts.SymbolFlags.Namespace, true)
+      : exportNamed(rules, moduleSymbolOf(rules, file, reference.from), first);
+  for (const part of rest) {
+    symbol = symbol && aliasTarget(rules, symbol);
+    // `Enum.Member` and the like mean the enclosing declaration; only a namespace is looked into.
+    if (!symbol || !(symbol.flags & ts.SymbolFlags.Module)) break;
+    symbol = exportNamed(rules, symbol, part);
+  }
+  return symbol && aliasTarget(rules, symbol);
+}
+
+/** A compiler message with each quoted absolute path (POSIX or drive-letter) made machine-independent: project-relative, from `node_modules/`, or neither. */
+export function portableMessage(projectRoots: readonly string[], message: string): string {
+  return message.replace(/(["'])((?:[A-Za-z]:)?\/[^"']*)\1/g, (_quoted, quote: string, path: string) => {
+    const root = projectRoots.find((r) => path.startsWith(`${r}/`));
+    const inPackages = path.lastIndexOf('/node_modules/');
+    const portable = root
+      ? path.slice(root.length + 1)
+      : inPackages >= 0
+        ? path.slice(inPackages + 1)
+        : 'a module outside the project';
+    return `${quote}${portable}${quote}`;
+  });
+}
+
+/**
+ * Has the compiler write `file`'s declaration file, in memory (a hand-written `.d.ts` is its own). When it cannot (a declaration whose
+ * type the module cannot name), it writes none for the whole module, so every name there is
+ * unavailable, with the compiler's own reasons.
+ */
+function moduleDeclarations(rules: RulesProgram, file: ts.SourceFile): ModuleDeclarations {
+  const cached = rules.declarations.get(file.fileName);
+  if (cached) return cached;
+  const module = toProjectRelativeModule(rules, file.fileName);
+  let text: string | undefined = file.isDeclarationFile ? file.text : undefined;
+  const { diagnostics } = file.isDeclarationFile
+    ? { diagnostics: [] }
+    : rules.program.emit(file, (_name, written) => (text = written), undefined, true);
+  let result: ModuleDeclarations;
+  if (diagnostics.length > 0) {
+    const reasons = diagnostics.map((d) => diagnosticReason(rules, file, d));
+    result = {
+      unavailable:
+        `the TypeScript compiler cannot write declarations for ${module} (${reasons.join('; ')}). ` +
+        `Give what it names a type ${module} can name, and every declaration there is printed.`,
+    };
+  } else if (text === undefined) {
+    result = { unavailable: `the TypeScript compiler wrote no declarations for ${module}.` };
+  } else {
+    result = { byName: printedByName(rules, file, text) };
+  }
+  rules.declarations.set(file.fileName, result);
+  return result;
+}
+
+/** A declaration diagnostic, led by the names of the statement it is about. */
+function diagnosticReason(rules: RulesProgram, file: ts.SourceFile, diagnostic: ts.Diagnostic): string {
+  const start = diagnostic.start;
+  const statement = start === undefined ? undefined : file.statements.find((s) => s.pos <= start && start < s.end);
+  const names = statement ? declaredNames(statement).join(', ') : '';
+  return `${names ? `${names}: ` : ''}${portableMessage(rules.projectRoots, ts.flattenDiagnosticMessageText(diagnostic.messageText, ' '))}`;
+}
+
+/** `file`'s declaration text, printed statement by statement under the names each declares. */
+function printedByName(rules: RulesProgram, file: ts.SourceFile, text: string): Map<string, PrintedDeclaration[]> {
+  const dts = ts.createSourceFile('declarations.d.ts', text, ts.ScriptTarget.Latest, true);
+  const byName = new Map<string, PrintedDeclaration[]>();
+  for (const statement of dts.statements) {
+    const names = declaredNames(statement);
+    if (names.length === 0) continue;
+    const node = forTranslator(statement);
+    const found: NameReference[] = [];
+    const typeParameters = new Set<string>();
+    collectNameReferences(node, found, typeParameters);
+    const printed: PrintedDeclaration = {
+      text: DECLARATION_PRINTER.printNode(ts.EmitHint.Unspecified, node, dts),
+      references: found
+        .filter((r) => r.from !== undefined || !typeParameters.has(r.parts[0]))
+        .flatMap((r) => resolveNameReference(rules, file, r) ?? []),
+    };
+    for (const name of names) byName.set(name, [...(byName.get(name) ?? []), printed]);
+  }
+  return byName;
+}
+
+/** `symbol`'s declaration, and the symbols its text mentions. */
+function declarationOf(rules: RulesProgram, symbol: ts.Symbol): { declaration: ApiDeclaration; references: ts.Symbol[] } {
+  const file = (symbol.valueDeclaration ?? symbol.declarations![0]).getSourceFile();
+  const module = moduleDeclarations(rules, file);
+  if ('unavailable' in module) return { declaration: module, references: [] };
+  const statements = module.byName.get(symbol.name);
+  if (!statements) {
+    const unavailable = `the TypeScript compiler's declarations for ${toProjectRelativeModule(rules, file.fileName)} declare no ${symbol.name}.`;
+    return { declaration: { unavailable }, references: [] };
+  }
+  return {
+    declaration: { text: statements.map((s) => s.text).join('\n') },
+    references: statements.flatMap((s) => s.references),
+  };
+}
+
+/** The entry for a type declared under `src/`, or none for a value, or a package's or the standard library's type. */
+function typeEntry(rules: RulesProgram, symbol: ts.Symbol): Omit<GameApiType, 'declaration'> | undefined {
+  const declaration = symbol.declarations?.[0];
+  if (!declaration?.getSourceFile().fileName.startsWith(rules.srcDir)) return undefined;
+  const { flags } = symbol;
+  const kind: GameApiType['kind'] | undefined =
+    flags & ts.SymbolFlags.Class
+      ? 'class'
+      : flags & ts.SymbolFlags.Enum
+        ? 'enum'
+        : flags & ts.SymbolFlags.Interface
+          ? 'interface'
+          : flags & ts.SymbolFlags.TypeAlias
+            ? 'type'
+            : undefined;
+  if (!kind) return undefined;
+  const module = rules.checker.getSymbolAtLocation(declaration.getSourceFile());
+  const exported =
+    module !== undefined &&
+    rules.checker.getExportsOfModule(module).some((s) => s.name === symbol.name && aliasTarget(rules, s) === symbol);
+  return { name: symbol.name, kind, module: toProjectRelativeModule(rules, declaration.getSourceFile().fileName), exported };
+}
+
+// Code-unit order, not localeCompare: the same tree must give the same payload on every machine.
+const byCodeUnits = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+const byModuleThenName = (a: { module: string; name: string }, b: { module: string; name: string }): number =>
+  byCodeUnits(a.module, b.module) || byCodeUnits(a.name, b.name);
+
+/**
+ * The types the printed declarations mention, then the types those mention, until none is new:
+ * each printed once, level by level, each level sorted. Every one is a type declared under `src/`,
+ * so the walk ends within the game's own declarations.
+ */
+function collectReferencedTypes(rules: RulesProgram, listedReferences: ts.Symbol[], listed: ListedName[]): GameApiType[] {
+  const printed = new Set(listed.map((s) => `${s.module}\0${s.name}`));
+  const referenced: GameApiType[] = [];
+  let references = listedReferences;
+  while (references.length > 0) {
+    const level = new Map<string, { entry: Omit<GameApiType, 'declaration'>; symbol: ts.Symbol }>();
+    for (const symbol of references) {
+      const entry = typeEntry(rules, symbol);
+      const key = entry && `${entry.module}\0${entry.name}`;
+      if (!entry || !key || printed.has(key)) continue;
+      printed.add(key);
+      level.set(key, { entry, symbol });
+    }
+    const sorted = [...level.values()].sort((a, b) => byModuleThenName(a.entry, b.entry));
+    references = [];
+    for (const { entry, symbol } of sorted) {
+      const { declaration, references: next } = declarationOf(rules, symbol);
+      referenced.push({ ...entry, declaration });
+      references.push(...next);
+    }
+  }
+  return referenced;
+}
+
 /**
  * Produces a generated game project's exported rules API surface MECHANICALLY — a listing, not
  * an inference — by compiling `src/rules/index.ts` with the TypeScript compiler, under the game's
@@ -715,10 +1027,19 @@ function surfaceEntry(rules: RulesProgram, exported: ts.Symbol): GameApiSymbol |
  * import, or by `export * as ns`, is listed as `const` at the module that exports it, which is
  * where it can be imported by name.
  *
+ * Each listed name carries its declaration as the compiler writes it in the module's `.d.ts`
+ * (#1087): signatures and types, no bodies, no comments, and only a class's public members and
+ * constructor. `referencedTypes` adds the declarations of the `src/` types those declarations
+ * name, resolved by the checker in the declaring module's scope, then the types those name, until
+ * none is new. Each is printed once, so the whole is at most the game's own declaration output. A
+ * module the compiler cannot write declarations for, and a module or default binding, carry
+ * `{ unavailable }` with the reason instead.
+ *
  * Documented limits, so a caller never over-trusts this surface:
  *
  *   - Only runtime values are listed. Interfaces, type aliases and anything exported or imported
  *     with `type` are not, and neither is a name from a package or `index.ts`'s default export.
+ *     A type appears only in `referencedTypes`, when a printed declaration names it.
  *   - It does NOT know whether a symbol is pure, side-effecting, or even callable with the shape
  *     a translator might assume. `kind` is `class` for a class, `function` for a function
  *     declaration, and `const` for every other value (a variable of any kind, an enum, a
@@ -728,8 +1049,8 @@ function surfaceEntry(rules: RulesProgram, exported: ts.Symbol): GameApiSymbol |
  * resolves outside `src/`, and a re-export of a name its target does not export all throw, naming
  * the module and specifier, so a broken chain is never reported as a smaller surface.
  *
- * Reads only under `${projectDir}/src/` (and the project's `tsconfig.json`) — never `testDir`: the
- * compiler host refuses every other source file. `buildExampleTranslationPayload`'s "never
+ * Inside the project it reads only `src/`, `node_modules/` and `tsconfig.json` — never `testDir`:
+ * the compiler host refuses every other source file there. `buildExampleTranslationPayload`'s "never
  * contains the project's existing test files" guarantee (178-CONTEXT.md decision 6) holds because
  * this function is the ONLY source of project-derived text in that payload.
  */
@@ -750,18 +1071,36 @@ export async function collectGameApiSurface(projectDir: string): Promise<GameApi
   checkReexports(rules, indexFile);
   const indexModule = rules.checker.getSymbolAtLocation(indexFile);
 
-  const symbols = new Map<string, GameApiSymbol>();
+  const symbols = new Map<string, ListedName>();
   for (const exported of indexModule ? rules.checker.getExportsOfModule(indexModule) : []) {
     if (exported.name === 'default') continue;
     const symbol = surfaceEntry(rules, exported);
     if (symbol) symbols.set(`${symbol.module}\0${symbol.name}`, symbol);
   }
 
-  const exportedSymbols = [...symbols.values()].sort(
-    (a, b) => a.module.localeCompare(b.module) || a.name.localeCompare(b.name),
-  );
-  return { projectDir, testDir, exportedSymbols };
+  const listed = [...symbols.values()].sort(byModuleThenName);
+  const listedReferences: ts.Symbol[] = [];
+  const exportedSymbols = listed.map(({ declared, ...entry }): GameApiSymbol => {
+    if (!declared) {
+      const unavailable =
+        `${entry.name} binds a whole module or a default export, which has no declaration of its ` +
+        `own. Export the names it binds by name from src/rules/index.ts to list their declarations.`;
+      return { ...entry, declaration: { unavailable } };
+    }
+    const { declaration, references } = declarationOf(rules, declared);
+    listedReferences.push(...references);
+    return { ...entry, declaration };
+  });
+  const referencedTypes = collectReferencedTypes(rules, listedReferences, listed);
+  return { projectDir, testDir, exportedSymbols, referencedTypes };
 }
+
+/**
+ * The most declaration text one translation payload carries (about 15k tokens). Every example's
+ * payload carries the game's whole printed API, so this bounds a very large game's payloads; the
+ * listing itself is never cut. The largest game measured when this was set, MERC, prints 42k.
+ */
+export const TRANSLATION_DECLARATION_BUDGET = 60_000;
 
 /**
  * Builds the translation dispatch payload for ONE validated `WorkedExampleSpec`: names the
@@ -771,9 +1110,11 @@ export async function collectGameApiSurface(projectDir: string): Promise<GameApi
  * translator that can see an existing test writes agreement with it, not a test of the example
  * (178-CONTEXT.md decision 6). This holds structurally: every string in this payload is either a
  * literal here, a field of `spec` (validated by `createWorkedExampleSpec`, sourced from the
- * rulebook slice), or `api.exportedSymbols` (sourced only from `collectGameApiSurface`, which
- * never reads under `testDir`) — there is no code path in this function that could read
- * `api.testDir`.
+ * rulebook slice), or `api.exportedSymbols`/`api.referencedTypes` (sourced only from
+ * `collectGameApiSurface`, which never reads under `testDir`) — there is no code path in this
+ * function that could read `api.testDir`. Declarations are printed until
+ * `TRANSLATION_DECLARATION_BUDGET` characters of them are spent; every later entry is still listed,
+ * marked omitted.
  *
  * `unexecutable` is never decided HERE — a payload is built and dispatched even when the supplied
  * surface has no obviously matching symbol; deciding `unexecutable` (with a named reason) is the
@@ -783,7 +1124,25 @@ export function buildExampleTranslationPayload(
   spec: WorkedExampleSpec,
   api: GameApiSurface,
 ): string {
-  const symbolLines = api.exportedSymbols.map((s) => `- ${s.name} (${s.kind}, ${s.module})`);
+  let budget = TRANSLATION_DECLARATION_BUDGET;
+  /** Each unavailable reason printed so far, with the entry it was printed under. */
+  const reasonsPrinted = new Map<string, string>();
+  const entryLines = (entry: GameApiSymbol | GameApiType): string[] => {
+    const header = `- ${entry.name} (${entry.kind}, ${entry.module}${'exported' in entry && !entry.exported ? ', not exported' : ''})`;
+    const { declaration } = entry;
+    const firstWithReason = 'unavailable' in declaration ? reasonsPrinted.get(declaration.unavailable) : undefined;
+    if (firstWithReason) return [header, `    declaration unavailable: the same reason as ${firstWithReason} above.`];
+    const body = 'text' in declaration ? declaration.text : `declaration unavailable: ${declaration.unavailable}`;
+    if (body.length > budget) {
+      budget = 0;
+      return [header, `    declaration omitted: the ${TRANSLATION_DECLARATION_BUDGET}-character declaration budget is spent.`];
+    }
+    budget -= body.length;
+    if ('unavailable' in declaration) reasonsPrinted.set(declaration.unavailable, entry.name);
+    return [header, ...body.split('\n').map((line) => `    ${line}`)];
+  };
+  const symbolLines = api.exportedSymbols.flatMap(entryLines);
+  const typeLines = api.referencedTypes.flatMap(entryLines);
 
   const targetGuidance =
     spec.kind === 'predicate'
@@ -810,9 +1169,22 @@ export function buildExampleTranslationPayload(
     '',
     targetGuidance,
     '',
-    `Project exported API surface (src/ only, ${symbolLines.length} symbol(s); this listing is ` +
-      `mechanical, not curated for this example — not every symbol below is relevant):`,
+    `Project exported API surface (src/ only, ${api.exportedSymbols.length} symbol(s); this listing is ` +
+      `mechanical, not curated for this example — not every symbol below is relevant). Under each ` +
+      `symbol is its declaration as the TypeScript compiler writes it in a .d.ts file: signatures ` +
+      `and types, never implementations:`,
     ...symbolLines,
+    '',
+    `Types those declarations reference, declared under src/ (${api.referencedTypes.length} type(s), ` +
+      `nearest first). A type from a package or the standard library is named above but not ` +
+      `declared here. A type marked "not exported" cannot be imported: build a value of its shape:`,
+    ...typeLines,
+    '',
+    `Declarations are printed in the order above until ${TRANSLATION_DECLARATION_BUDGET} characters ` +
+      `of them have been printed; every later one says "declaration omitted". "declaration ` +
+      `unavailable" gives the reason the compiler could not write one. When the example needs a ` +
+      `symbol, or a type, whose declaration is omitted or unavailable, return verdictHint ` +
+      `"unexecutable" with unexecutableReason "missing-api-declaration" — never guess a signature.`,
     '',
     'Import paths: every module above is given relative to the project root (e.g. ' +
       '"src/rules/game.ts"). Your `imports` will be hoisted into a generated file that always ' +

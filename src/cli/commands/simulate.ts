@@ -1,12 +1,12 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 
 import { availableParallelism } from 'node:os';
 import { gameSeed, type SingleGameResult } from '../../sim/play-game.js';
 import type { SimulatedGame } from '../../sim/policies.js';
 import { buildReport, formatReport, formatComparison, reportCsv, type PlayerCountReport } from '../../sim/report.js';
-import { cliSourceFile, getProjectContext, importRuntimeBundle, runtimeBundlePath, toPosix, UnimportedRedirectError } from './game-runtime.js';
+import { cliSourceFile, getProjectContext, importRuntimeBundle, toPosix, UnimportedRedirectError } from './game-runtime.js';
 import { seatPolicies, type ShardRequest, type SimulationBundle } from '../lib/sim-shard.js';
 import { playOnWorkers } from '../lib/sim-workers.js';
 import { buildVariants, parseCompare, type CompareDimension, type Variant } from '../lib/sim-variants.js';
@@ -16,6 +16,7 @@ import type { GameOptionDefinition } from '../../session/types.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { simulateReplayCommand } from '../lib/replay-command.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
+import { parsePositiveWholeNumber } from '../../utils/positive-whole-number.js';
 
 interface SimulateOptions {
   /** Games per player count. */
@@ -84,10 +85,7 @@ export function parsePlayerCounts(
     return Array.from({ length: maxPlayers - minPlayers + 1 }, (_, i) => minPlayers + i);
   }
   const counts = raw.split(',').map((part) => {
-    if (!/^\d+$/.test(part) || Number(part) < 1) {
-      throw new Error(`--players takes positive whole numbers separated by commas (e.g. 2,4,6), got "${raw}".`);
-    }
-    const count = Number(part);
+    const count = parsePositiveWholeNumber('--players', part);
     if ((minPlayers !== undefined && count < minPlayers) || (maxPlayers !== undefined && count > maxPlayers)) {
       throw new Error(`--players ${count} is outside this game's range of ${minPlayers} to ${maxPlayers} players.`);
     }
@@ -153,9 +151,8 @@ const PRODUCTION_ONLY =
  * the replay finished, the production message and that it fails only in production mode.
  */
 function failure(g: SingleGameResult, inDevMode: SingleGameResult | undefined): Pick<PerGameReport, 'error' | 'productionOnly'> {
-  const own = g.error ?? (g.exceededMaxActions ? 'Game exceeded the maximum action count.' : undefined);
-  if (inDevMode?.completed) return { error: [own, PRODUCTION_ONLY].filter(Boolean).join(' '), productionOnly: true };
-  const error = inDevMode?.error ?? own;
+  if (inDevMode?.completed) return { error: [g.error, PRODUCTION_ONLY].filter(Boolean).join(' '), productionOnly: true };
+  const error = inDevMode?.error ?? g.error;
   return error === undefined ? {} : { error };
 }
 
@@ -251,7 +248,7 @@ export async function loadSimulation(
       ],
       redirects,
     });
-    return { ...(module as unknown as LoadedSimulation), bundlePath: runtimeBundlePath(tempDir, name) };
+    return module as unknown as LoadedSimulation;
   } catch (error) {
     if (error instanceof UnimportedRedirectError) {
       const files = error.files.map((file) => toPosix(relative(cwd, file))).join(' and ');
@@ -311,9 +308,7 @@ async function planVariants(
 
 /** A positive whole number of worker threads, every core's worth when `--jobs` is not given. */
 function parseJobs(raw: string | undefined): number {
-  if (raw === undefined) return availableParallelism();
-  if (!/^\d+$/.test(raw) || Number(raw) < 1) throw new Error(`--jobs takes a positive whole number of worker threads, got "${raw}".`);
-  return Number(raw);
+  return raw === undefined ? availableParallelism() : parsePositiveWholeNumber('--jobs', raw);
 }
 
 /** The flags read before the rules are loaded. */
@@ -326,12 +321,8 @@ interface RunFlags {
 }
 
 function parseRunFlags(options: SimulateOptions): RunFlags {
-  const gamesPerCount = Number(options.games);
-  if (!Number.isInteger(gamesPerCount) || gamesPerCount < 1) {
-    throw new Error(`Error: --games must be a positive integer, got "${options.games}"`);
-  }
   return {
-    gamesPerCount,
+    gamesPerCount: parsePositiveWholeNumber('--games', options.games),
     jobs: parseJobs(options.jobs),
     dimensions: parseCompare(options.compare),
     seed: options.replay ?? options.seed ?? crypto.randomUUID(),
@@ -406,7 +397,7 @@ export async function simulateCommand(options: SimulateOptions): Promise<void> {
   try {
     flags = parseRunFlags(options);
   } catch (error) {
-    console.error(chalk.red((error as Error).message));
+    console.error(styleText('red', (error as Error).message));
     process.exitCode = 1;
     return;
   }
@@ -420,7 +411,7 @@ export async function simulateCommand(options: SimulateOptions): Promise<void> {
     try {
       plan = await planRun(cwd, options, flags, base, bundle);
     } catch (error) {
-      console.error(chalk.red((error as Error).message));
+      console.error(styleText('red', (error as Error).message));
       return undefined;
     }
     const runs: VariantRun[] = [];
@@ -443,13 +434,13 @@ export async function simulateCommand(options: SimulateOptions): Promise<void> {
 
 /** Print a variant's games that did not finish, each with its replay command. */
 function printFailures(print: (line: string) => void, { variant, result }: VariantRun, compared: boolean): void {
-  if (compared && result.failing.length > 0) print(chalk.bold(`Variant ${variant.label}:`));
+  if (compared && result.failing.length > 0) print(styleText('bold', `Variant ${variant.label}:`));
   for (const g of result.failing) {
-    print(chalk.red(`Game ${g.index} ${g.status} (seed ${g.seed}) after ${g.turns} action(s).`));
-    if (g.error) print(chalk.dim(`  ${g.error}`));
+    print(styleText('red', `Game ${g.index} ${g.status} (seed ${g.seed}) after ${g.turns} action(s).`));
+    if (g.error) print(styleText('dim', `  ${g.error}`));
     if (g.productionOnly) continue;
     const replay = simulateReplayCommand({ seed: g.seed, playerCount: g.players }, variant.gameOptions, variant.policyFlags, variant.data);
-    print(chalk.dim(`  Replay: ${replay}`));
+    print(styleText('dim', `  Replay: ${replay}`));
   }
 }
 
@@ -466,7 +457,7 @@ function printResult(heading: string, runs: VariantRun[], compared: boolean, csv
   }
   const print = csv ? console.error : console.log;
   if (!csv) {
-    console.log(chalk.cyan(`\n${heading}\n`));
+    console.log(styleText('cyan', `\n${heading}\n`));
     if (runs.length > 1) {
       console.log('Variants (each difference is from variant 1):');
       runs.forEach(({ variant }, i) => console.log(`  ${i + 1}  ${variant.label}`));
@@ -476,7 +467,7 @@ function printResult(heading: string, runs: VariantRun[], compared: boolean, csv
   for (const run of runs) printFailures(print, run, compared);
   if (!finished) {
     const unfinished = runs.reduce((sum, { result }) => sum + result.failing.length, 0);
-    print(chalk.bold(`\n${unfinished} game(s) did not finish, so no statistics are reported.\n`));
+    print(styleText('bold', `\n${unfinished} game(s) did not finish, so no statistics are reported.\n`));
     return;
   }
   console.log(compared ? formatComparison(reports) : formatReport(reports[0].report));

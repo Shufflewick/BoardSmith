@@ -138,7 +138,7 @@ export function stopwatch(page: object): (budgetMs: number) => boolean {
 }
 
 /** Whether `error` is a wait running out of time. */
-export const ranOut = (error: unknown) => error instanceof Error && error.name === 'TimeoutError';
+const ranOut = (error: unknown) => error instanceof Error && error.name === 'TimeoutError';
 
 /**
  * Waits for what `attempt` waits for, given `timeout` ms of the wall clock a try, until `budgetMs`
@@ -161,6 +161,23 @@ export async function withinPageTime<T>(
       if (!ranOut(error) || over(budgetMs)) throw error;
     }
   }
+}
+
+/**
+ * Waits, as {@link withinPageTime} does, until any of `attempts` is met: true once one is, false
+ * when every one ran out of page time. Any other error, as a frame detached under its wait, is
+ * thrown, even when another wait ran out, so it is reported rather than taken for a quiet game (#926).
+ */
+export function anyWithinPageTime(page: object, budgetMs: number, what: string, attempts: readonly ((timeout: number) => Promise<unknown>)[]): Promise<boolean> {
+  const any = (timeout: number) =>
+    Promise.any(attempts.map((attempt) => attempt(timeout))).catch((none: AggregateError) => Promise.reject(none.errors.find((error) => !ranOut(error)) ?? none.errors[0]));
+  return withinPageTime(page, budgetMs, what, any).then(
+    () => true,
+    (error: unknown) => {
+      if (!ranOut(error)) throw error;
+      return false;
+    },
+  );
 }
 
 /**
@@ -188,4 +205,20 @@ export async function actWithinPageTime<T>(
     if (over(budgetMs)) throw new PageTimeOverrun(what, budgetMs);
     await meanwhile?.();
   }
+}
+
+/** How much of each page's time the walk gives errors its last press raised to reach the page's listeners. */
+const LAST_ERRORS_MS = 250;
+
+/**
+ * Waits until {@link LAST_ERRORS_MS} of each of `pages`' own time has passed, so errors the walk's
+ * last press raised in any seat's browser land before the verdict, however starved that browser is (#925).
+ */
+export async function lastErrorsLand(pages: readonly object[]): Promise<void> {
+  await Promise.all(
+    pages.map(async (page) => {
+      const over = stopwatch(page);
+      while (!over(LAST_ERRORS_MS)) await new Promise((tick) => setTimeout(tick, ANSWER_TICK_MS));
+    }),
+  );
 }

@@ -11,30 +11,37 @@
  * only what it cannot know: the view it is rendering, and how the panel copies
  * to the clipboard (which drives a panel-level toast).
  *
+ * It lists the host's unfiltered table rather than the seat's view: a seat sees
+ * a face-down deck as stand-ins whose ids no edit can name. Live that is
+ * `debug:deck-view` (#898); while time travelling it is `debug:deck-view-at`
+ * for the action picked (#1071), with edits off (#899).
+ *
  * `useDebugBridge()` resolves through injection, so the tab reaches the host
  * without the panel threading a transport down to it.
  */
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import {
   discoverDecks,
   discoverCardContainers,
   filterDecks,
   decksExpandedBySearch,
   cardMatchesSearch,
-  getCardDisplayName,
+  getElementDisplayName,
   type DeckInfo,
 } from './debug-view-tree.js';
-import { useDebugBridge } from '../../composables/useDebugBridge.js';
+import { useDebugBridge, newestWins } from '../../composables/useDebugBridge.js';
 import { useDeckWorkbench } from '../../composables/useDeckWorkbench.js';
 import DebugButton from './DebugButton.vue';
 import DebugDialog from './DebugDialog.vue';
 import DebugSearchInput from './DebugSearchInput.vue';
 
 const props = defineProps<{
-  /** The player view being rendered -- live, or a historical one during time travel. */
+  /** The player view being rendered, undefined while the tab is hidden; each new one asks for the table again. */
   view: unknown;
   /** The panel's copy-with-toast, so a copy here reads the same as anywhere else. */
   copy: (value: unknown) => void | Promise<void>;
+  /** The action being viewed while time travelling, or null when live. In history an edit would act on the live game, not the table shown (#899). */
+  historyIndex: number | null;
 }>();
 
 const bridge = useDebugBridge();
@@ -43,8 +50,38 @@ const deckSearchQuery = ref('');
 const expandedDecks = ref<Set<number>>(new Set());
 const selectedDeckCard = ref<{ deckId: number; cardId: number } | null>(null);
 
-const discoveredDecks = computed(() => discoverDecks(props.view));
-const discoveredCardContainers = computed(() => discoverCardContainers(props.view));
+const isViewingHistory = computed(() => props.historyIndex !== null);
+
+/** The host's last unfiltered table, and why the last request for it failed. */
+const shownView = ref<unknown>(undefined);
+const loadError = ref<string | null>(null);
+const tableTicket = newestWins();
+
+/** Ask the host for the table at the position shown; the newest request wins. */
+async function fetchTable(): Promise<void> {
+  const isNewest = tableTicket();
+  try {
+    const table = await bridge.deckView(props.historyIndex);
+    if (!isNewest()) return;
+    shownView.value = table;
+    loadError.value = null;
+  } catch (err) {
+    if (isNewest()) loadError.value = err instanceof Error ? err.message : String(err);
+  }
+}
+
+// A new view or a new position in history is a new table, so ask again.
+watch(() => [props.view, props.historyIndex] as const, ([view]) => {
+  if (view !== undefined) void fetchTable();
+}, { immediate: true });
+
+/** What the tab is showing, said above the list: every card, live or at the action picked. */
+const notice = computed(() => (isViewingHistory.value
+  ? { kind: 'deck-history-notice', text: 'Viewing history: every card as it stood then, face-down cards included. Deck edits are off because they would change the live game. Go back to live to edit.' }
+  : { kind: 'deck-unfiltered-notice', text: 'Showing every card, face-down cards included. Debug only: no player sees this view.' }));
+
+const discoveredDecks = computed(() => discoverDecks(shownView.value));
+const discoveredCardContainers = computed(() => discoverCardContainers(shownView.value));
 
 const filteredDecks = computed(() => filterDecks(discoveredDecks.value, deckSearchQuery.value));
 
@@ -88,21 +125,20 @@ const {
   deckManipulationLoading,
   deckManipulationError,
   moveCardToTop,
-  reorderCard,
-  transferCard,
   shuffleDeck,
   moveCardUp,
   moveCardDown,
   transferDialogOpen,
-  transferDialogCardId,
-  transferDialogSourceDeckId,
   transferDialogTargetDeckId,
   transferDialogPosition,
   availableTargetContainers,
   openTransferDialog,
   closeTransferDialog,
   confirmTransfer,
-} = useDeckWorkbench({ bridge, cardContainers: discoveredCardContainers });
+} = useDeckWorkbench({ bridge, cardContainers: discoveredCardContainers, afterEdit: fetchTable });
+
+const editsOff = computed(() => isViewingHistory.value || deckManipulationLoading.value);
+const transferDialogShown = computed(() => transferDialogOpen.value && !isViewingHistory.value);
 </script>
 
 <template>
@@ -121,14 +157,24 @@ const {
       />
     </div>
 
+    <div class="deck-notice" :class="notice.kind" role="status">{{ notice.text }}</div>
+
     <!-- Error message -->
     <div v-if="deckManipulationError" class="deck-error">
       {{ deckManipulationError }}
       <DebugButton size="small" @click="deckManipulationError = null">Dismiss</DebugButton>
     </div>
 
+    <div v-if="loadError" class="deck-error">
+      Could not load the decks: {{ loadError }}
+    </div>
+
+    <div v-else-if="shownView === undefined" class="no-decks">
+      Loading decks...
+    </div>
+
     <!-- No decks found -->
-    <div v-if="filteredDecks.length === 0" class="no-decks">
+    <div v-else-if="filteredDecks.length === 0" class="no-decks">
       <template v-if="discoveredDecks.length === 0">
         No deck elements found in game state.
         <div class="deck-hint">
@@ -159,11 +205,11 @@ const {
             <span class="deck-name">{{ deck.name }}</span>
             <span class="deck-count">[{{ deck.cards.length }} cards]</span>
             <div class="deck-actions" @click.stop>
-              <DebugButton size="small" class="deck-action-btn" @click="shuffleDeck(deck.id)" :disabled="deckManipulationLoading" title="Shuffle deck" aria-label="Shuffle deck" >
-                <span aria-hidden="true">🔀</span>
+              <DebugButton size="small" class="deck-action-btn" @click="shuffleDeck(deck.id)" :disabled="editsOff" title="Shuffle deck" aria-label="Shuffle deck" >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
               </DebugButton>
               <DebugButton size="small" class="deck-action-btn" @click="copyDeckToClipboard(deck)" title="Copy deck JSON" aria-label="Copy deck JSON" >
-                <span aria-hidden="true">📋</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
               </DebugButton>
             </div>
           </div>
@@ -184,45 +230,45 @@ const {
               @click="selectDeckCard(deck.id, card.id)"
             >
               <span class="card-position">{{ index }}</span>
-              <span class="card-name">{{ getCardDisplayName(card) }}</span>
+              <span class="card-name">{{ getElementDisplayName(card) }}</span>
               <span class="card-class">{{ card.className }}</span>
               <span class="card-id">#{{ card.id }}</span>
               <div class="card-actions" @click.stop>
                 <button
                   class="card-action-btn"
                   @click="moveCardToTop(card.id)"
-                  :disabled="index === 0 || deckManipulationLoading"
+                  :disabled="index === 0 || editsOff"
                   title="Move to top"
                   aria-label="Move to top"
                 >
-                  <span aria-hidden="true">⬆️</span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h14M12 20V9M6 14l6-6 6 6"/></svg>
                 </button>
                 <button
                   class="card-action-btn"
                   @click="moveCardUp(deck, card.id)"
-                  :disabled="index === 0 || deckManipulationLoading"
+                  :disabled="index === 0 || editsOff"
                   title="Move up"
                   aria-label="Move up"
                 >
-                  <span aria-hidden="true">↑</span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
                 </button>
                 <button
                   class="card-action-btn"
                   @click="moveCardDown(deck, card.id)"
-                  :disabled="index === deck.cards.length - 1 || deckManipulationLoading"
+                  :disabled="index === deck.cards.length - 1 || editsOff"
                   title="Move down"
                   aria-label="Move down"
                 >
-                  <span aria-hidden="true">↓</span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
                 </button>
                 <button
                   class="card-action-btn"
                   @click="openTransferDialog(card.id, deck.id)"
-                  :disabled="discoveredCardContainers.length < 2 || deckManipulationLoading"
+                  :disabled="discoveredCardContainers.length < 2 || editsOff"
                   title="Transfer to another container"
                   aria-label="Transfer to another container"
                 >
-                  <span aria-hidden="true">➡️</span>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
                 </button>
               </div>
             </div>
@@ -253,7 +299,7 @@ const {
 
     <!-- Transfer Dialog -->
     <DebugDialog
-      v-if="transferDialogOpen"
+      v-if="transferDialogShown"
       title="Transfer Card"
       close-label="Close transfer dialog"
       @close="closeTransferDialog"
@@ -335,6 +381,20 @@ const {
   border-radius: 3px;
   color: var(--bsg-accent-2);
   font-size: 10px;
+}
+.deck-notice {
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--deck-notice) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--deck-notice) 40%, transparent);
+  border-radius: 6px;
+  color: var(--bsg-ink);
+  font-size: 12px;
+}
+.deck-unfiltered-notice {
+  --deck-notice: var(--bsg-accent-2);
+}
+.deck-history-notice {
+  --deck-notice: var(--bsg-warn);
 }
 /* Decks split view */
 .decks-split-view {

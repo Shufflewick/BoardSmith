@@ -195,6 +195,22 @@ describe('recordGateTransition — the one-time transition', () => {
     expect(parseSignoff(await readChunk(project, 'shop')).record).toMatchObject({ when: NOW.toISOString() });
   });
 
+  it('a rerun after the Sign-off section is deleted restores the sign-off as issued, never one for code changed since (#829)', async () => {
+    const project = await makeProject([
+      { slug: 'deal', status: 'verified', preGate: true, manifest: { 'src/deal.ts': 'v1' } },
+    ]);
+    await transition({ project, by: 'Jane Designer', now: NOW });
+    const issued = parseSignoff(await readChunk(project, 'deal')).record;
+    await fs.writeFile(join(project, 'src/deal.ts'), 'v2, reworked without a reopen');
+    expect(await checkSignoff(project, 'deal')).not.toEqual([]);
+
+    const deal = await readChunk(project, 'deal');
+    await fs.writeFile(chunkPath(project, 'deal'), deal.replace(/^## Sign-off\n[\s\S]*?(?=^## )/m, ''));
+    await transition({ project, by: 'Jane Designer', now: new Date('2026-09-27T00:00:00Z') });
+    expect(parseSignoff(await readChunk(project, 'deal')).record).toEqual(issued);
+    expect(await checkSignoff(project, 'deal')).not.toEqual([]);
+  });
+
   it('refuses a transition recorded by the run itself', async () => {
     const project = await makeProject([{ slug: 'deal', status: 'verified', preGate: true }]);
     await expect(transition({ project, by: 'orchestrator', now: NOW })).rejects.toThrow(/designer/i);
@@ -341,5 +357,25 @@ describe('recordGateTransition: the transition records chunks as done, so it nee
       /gate transition was not recorded.*boardsmith verify/s,
     );
     await expect(fs.access(join(project, 'design', GATE_TRANSITION_MD))).rejects.toThrow();
+  });
+});
+
+describe('recordGateTransition — a file it cannot read is refused, never read as missing (#1049)', () => {
+  it('refuses a Build Manifest file it cannot read, rather than hashing it as missing', async () => {
+    const project = await makeProject([{ slug: 'deal', manifest: { 'src/deal.ts': 'v1' } }]);
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: SIGNED });
+    await makeWholeFileSignoff(project, 'deal', wholeFileHash({ 'src/deal.ts': 'v1' }));
+    await fs.rm(join(project, 'src/deal.ts'));
+    await fs.symlink('deal.ts', join(project, 'src/deal.ts'));
+
+    await expect(transition({ project, by: 'Jane Designer', now: NOW })).rejects.toThrow(`Could not read ${join(project, 'src/deal.ts')} (ELOOP)`);
+  });
+
+  it('refuses a CHUNK.md it cannot read, rather than passing over the chunk', async () => {
+    const project = await makeProject([{ slug: 'deal', status: 'verified', preGate: true }]);
+    await fs.rm(chunkPath(project, 'deal'));
+    await fs.symlink('CHUNK.md', chunkPath(project, 'deal'));
+
+    await expect(transition({ project, by: 'Jane Designer', now: NOW })).rejects.toThrow(`Could not read ${chunkPath(project, 'deal')} (ELOOP)`);
   });
 });

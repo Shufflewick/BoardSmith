@@ -38,6 +38,13 @@ describe('commands that are steps of another command (#534)', () => {
   });
 });
 
+describe('boardsmith test has no authored-test selection (#986)', () => {
+  it('offers no --selection: verify runs the related tests, so nothing reads a selection', () => {
+    const test = createProgram().commands.find((c) => c.name() === 'test')!;
+    expect(test.options.map((o) => o.long)).not.toContain('--selection');
+  });
+});
+
 describe('boardsmith claude uninstall --local (#348)', () => {
   const skills = installedSkillsTree('bs-cli-claude-uninstall-');
 

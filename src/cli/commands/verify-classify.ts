@@ -2,13 +2,15 @@ import {
   DESIGN_DIR,
   RULEBOOK_DIR,
   chunkSlugs,
-  designChunksDir,
   designDir,
   designRulebookDir,
+  readChunkMdIfExists,
 } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
 import { basename, isAbsolute, join, relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
+import { withLedgerLock } from '../lib/ledger-lock.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 import {
   type VerificationScope,
   computeVerificationScope,
@@ -21,6 +23,7 @@ import {
 import {
   NON_SLICE_FILES,
   parseSliceSource,
+  readLiveSlices,
   readRecordedSourcePaths,
   sliceDocuments,
 } from './rulebook-sources.js';
@@ -32,10 +35,12 @@ import {
   appendLedgerLine,
   atomicWriteFile,
   ledgerFilePath,
-  listRunIds,
-  parseLedgerBody,
+  latestRunId,
+  exists,
+  missingRunMessage,
   readLedgerOrThrow,
-  resolveLedgerState,
+  readRunLedgerState,
+  checkRecordedSlices,
   stagingSlicesDir,
 } from './verify-run.js';
 
@@ -240,7 +245,7 @@ function spansOverlap(a: PageSpan, b: PageSpan): boolean {
  */
 export function livePageSpan(sliceText: string): PageSpan | undefined {
   const pages: number[] = [];
-  const citationRe = /p\.(\d+)/g;
+  const citationRe = /\bp\.(\d+)/g;
   let match: RegExpExecArray | null;
   while ((match = citationRe.exec(sliceText)) !== null) {
     pages.push(Number(match[1]));
@@ -468,24 +473,17 @@ export interface ProvenanceResult {
 
 /** Every `.md` file directly in the project's `rulebook/` — `[]` when there is no such directory. */
 async function rulebookSliceFilenames(projectDir: string): Promise<string[]> {
-  try {
-    const entries = await fs.readdir(designRulebookDir(projectDir), { withFileTypes: true });
-    return entries.filter((e) => e.isFile() && e.name.endsWith('.md')).map((e) => e.name);
-  } catch {
-    return [];
-  }
+  const entries = await readIfExists(designRulebookDir(projectDir), (p) => fs.readdir(p, { withFileTypes: true }));
+  return (entries ?? []).filter((e) => e.isFile() && e.name.endsWith('.md')).map((e) => e.name);
 }
 
 /** Each chunk's `CHUNK.md` text, in `chunkSlugs` order; a chunk directory without one is skipped. */
 async function readChunkTexts(projectDir: string): Promise<Array<{ slug: string; chunkText: string }>> {
-  const chunksDir = designChunksDir(projectDir);
   const chunks: Array<{ slug: string; chunkText: string }> = [];
   for (const slug of await chunkSlugs(projectDir)) {
-    try {
-      chunks.push({ slug, chunkText: await fs.readFile(join(chunksDir, slug, 'CHUNK.md'), 'utf-8') });
-    } catch {
-      // No CHUNK.md in this directory — not a chunk to scan.
-    }
+    const chunkText = await readChunkMdIfExists(projectDir, slug);
+    // No CHUNK.md in this directory: not a chunk to scan.
+    if (chunkText !== undefined) chunks.push({ slug, chunkText });
   }
   return chunks;
 }
@@ -655,25 +653,18 @@ async function resolveRunId(projectDir: string, runId?: string): Promise<string>
           `2026-07-28T22-18-00Z — the exact value \`boardsmith verify-run-init\` printed.`,
       );
     }
-    const existing = await listRunIds(projectDir);
-    if (!existing.includes(runId)) {
-      throw new Error(
-        `No verify run "${runId}" found in ${projectDir}.\n` +
-          (existing.length > 0
-            ? `Runs that do exist: ${existing.join(', ')}.`
-            : `No verify runs exist yet — run \`boardsmith verify-run-init\` first.`),
-      );
-    }
+    // Only the named run: another run that cannot be read is no reason to refuse this one.
+    if (!(await exists(ledgerFilePath(projectDir, runId)))) throw new Error(await missingRunMessage(projectDir, runId));
     return runId;
   }
-  const runIds = await listRunIds(projectDir);
-  if (runIds.length === 0) {
+  const latest = await latestRunId(projectDir);
+  if (latest === undefined) {
     throw new Error(
       `No verify runs found under rulebook/.verify/ in ${projectDir}.\n` +
         `Run \`boardsmith verify-run-init\` first.`,
     );
   }
-  return runIds[runIds.length - 1];
+  return latest;
 }
 
 /**
@@ -686,69 +677,39 @@ async function resolveRunId(projectDir: string, runId?: string): Promise<string>
 async function computeRunPairs(
   projectDir: string,
   runId: string,
-): Promise<{ pairs: SlicePair[]; provenance: Record<string, ProvenanceResult>; warnings: string[] }> {
+): Promise<{
+  pairs: SlicePair[];
+  provenance: Record<string, ProvenanceResult>;
+  classifications: ClassificationRecord[];
+  recordedSinceClassified: Set<string>;
+  warnings: string[];
+}> {
   const warnings: string[] = [];
 
-  const rulebookDir = designRulebookDir(projectDir);
-  let ruleFileNames: string[] = [];
-  try {
-    const entries = await fs.readdir(rulebookDir, { withFileTypes: true });
-    ruleFileNames = entries
-      .filter(
-        // ingest-archive.ts's own exclusion: 00-visual-survey.md is presentation-by-design (the
-        // UI-ask handoff artifact), never a rule slice a classifier compares. INDEX.md is the
-        // archive manifest, not a slice either.
-        (e) =>
-          e.isFile() &&
-          e.name.endsWith('.md') &&
-          e.name !== 'INDEX.md' &&
-          e.name !== '00-visual-survey.md',
-      )
-      .map((e) => e.name)
-      .sort();
-  } catch {
-    throw new Error(
-      `No rulebook/ directory in ${projectDir}.\n` +
-        `A verify pass compares against an existing rulebook — nothing to pair here.`,
-    );
-  }
-  const liveSlices = await Promise.all(
-    ruleFileNames.map(async (name) => ({
-      path: `rulebook/${name}`,
-      text: await fs.readFile(join(rulebookDir, name), 'utf-8'),
-    })),
-  );
+  const liveSlices = await readLiveSlices(projectDir);
 
   const stagingDir = stagingSlicesDir(projectDir, runId);
-  const ledgerFile = ledgerFilePath(projectDir, runId);
-  const relLedgerPath = relative(projectDir, ledgerFile);
-  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
-  const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
-  const { recorded } = resolveLedgerState(lines);
+  const { recorded, classifications, recordedSinceClassified, completeRanges } = await readRunLedgerState(projectDir, runId);
+  const { intact, missing, warnings: sliceWarnings } = await checkRecordedSlices(stagingDir, recorded, completeRanges);
+  warnings.push(...sliceWarnings);
 
-  const stagedUnits: { unit: string; slicePath: string; rangeId?: string; text: string }[] = [];
-  for (const rec of recorded) {
-    const abs = resolve(stagingDir, rec.slicePath);
-    let text: string;
-    try {
-      text = await fs.readFile(abs, 'utf-8');
-    } catch {
-      // Recorded in the ledger but missing on disk: reported, never silently dropped from the
-      // pair set (174-PLAN.md pairs-2). An empty text has no derivable p.N span, so pairSlices()
-      // reports it as its own unpaired-slice group rather than pretending it does not exist.
-      warnings.push(
-        `unit "${rec.unitId}"'s recorded slice ${rec.slicePath} was not found on disk — ` +
-          `reporting it as an unpaired finding rather than silently dropping it`,
-      );
-      text = '';
-    }
-    stagedUnits.push({
-      unit: rec.unitId,
-      slicePath: rec.slicePath,
-      ...(rec.rangeId ? { rangeId: rec.rangeId } : {}),
-      text,
-    });
+  for (const record of missing) {
+    warnings.push(
+      `unit "${record.unitId}"'s recorded slice ${record.slicePath} was not found on disk — ` +
+        `reporting it as an unpaired finding rather than silently dropping it`,
+    );
   }
+  // A missing slice stays in the pair set with empty text (174-PLAN.md pairs-2): it has no p.N
+  // span, so pairSlices() reports it as its own unpaired-slice group instead of dropping it.
+  const stagedUnits = [
+    ...intact.map(({ record, bytes }) => ({ record, text: bytes.toString('utf-8') })),
+    ...missing.map((record) => ({ record, text: '' })),
+  ].map(({ record, text }) => ({
+    unit: record.unitId,
+    slicePath: record.slicePath,
+    ...(record.rangeId ? { rangeId: record.rangeId } : {}),
+    text,
+  }));
 
   const pairs = pairSlices({ liveSlices, stagedUnits, sources: await readRecordedSourcePaths(projectDir) });
 
@@ -757,7 +718,7 @@ async function computeRunPairs(
   );
   const provenance: Record<string, ProvenanceResult> = Object.fromEntries(provenanceEntries);
 
-  return { pairs, provenance, warnings };
+  return { pairs, provenance, classifications, recordedSinceClassified, warnings };
 }
 
 export interface VerifyClassifyPairsResult {
@@ -817,24 +778,24 @@ export async function verifyClassifyPairsCommand(
 
   const result: VerifyClassifyPairsResult = { runId, pairs, provenance, warnings, summary };
 
-  for (const w of warnings) console.error(chalk.yellow(`⚠ ${w}`));
+  for (const w of warnings) console.error(styleText('yellow', `⚠ ${w}`));
 
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
     return result;
   }
 
-  console.log(chalk.green(`✓ Verify-classify pairs — run ${runId}`));
+  console.log(styleText('green', `✓ Verify-classify pairs — run ${runId}`));
   console.log(
-    `  ${chalk.gray('paired:')} ${summary.paired}  ${chalk.gray('presentation-only:')} ` +
-      `${summary.presentationOnly}  ${chalk.gray('unpaired:')} ${summary.unpaired}`,
+    `  ${styleText('gray', 'paired:')} ${summary.paired}  ${styleText('gray', 'presentation-only:')} ` +
+      `${summary.presentationOnly}  ${styleText('gray', 'unpaired:')} ${summary.unpaired}`,
   );
   // Report volume, not emptiness (172's finding): one line per pair, grouped by kind, never a
   // per-line body dump.
   for (const kind of PAIR_KINDS) {
     const group = pairs.filter((p) => p.kind === kind);
     if (group.length === 0) continue;
-    console.log(`  ${chalk.gray(`${kind}:`)} ${group.length} group(s)`);
+    console.log(`  ${styleText('gray', `${kind}:`)} ${group.length} group(s)`);
     for (const p of group) {
       console.log(
         `    - ${p.pairId} (live:${p.liveSlices.length} staged:${p.stagedSlices.length}` +
@@ -862,7 +823,7 @@ const RULE_DELTA_SET: ReadonlySet<string> = new Set(RULE_DELTA_KINDS);
  *
  * A missing or out-of-enum `--label` is never thrown on — it is a subagent-fidelity failure, not
  * a caller bug (decision 8) — it silently normalizes to `unclassified` with a
- * `console.error(chalk.yellow(...))` warning naming what was received verbatim. `sharper`/
+ * `console.error(styleText('yellow', ...))` warning naming what was received verbatim. `sharper`/
  * `contradictory` additionally REQUIRE both `--quoted-pass1` and `--quoted-pass2` non-empty
  * (decision 9); either missing (or whitespace-only) demotes the same way, naming which quote was
  * absent, never recording an evidence-free `sharper`/`contradictory`.
@@ -904,7 +865,7 @@ export async function verifyClassifyRecordCommand(
       `"unclassified" rather than guessing (decision 8: a malformed subagent return is never ` +
       `silently "cosmetic").`;
     warnings.push(warning);
-    console.error(chalk.yellow(`⚠ ${warning}`));
+    console.error(styleText('yellow', `⚠ ${warning}`));
   }
 
   const quotedPass1 = (options.quotedPass1 ?? '').trim();
@@ -919,7 +880,7 @@ export async function verifyClassifyRecordCommand(
         `(decision 9) — ${missing.join(' and ')} was empty/whitespace-only. Recording ` +
         `"unclassified" rather than an evidence-free "${ruleDelta}".`;
       warnings.push(warning);
-      console.error(chalk.yellow(`⚠ ${warning}`));
+      console.error(styleText('yellow', `⚠ ${warning}`));
       ruleDelta = 'unclassified';
     }
   }
@@ -951,9 +912,10 @@ export async function verifyClassifyRecordCommand(
 
   const ledgerFile = ledgerFilePath(projectDir, runId);
   const relLedgerPath = relative(projectDir, ledgerFile);
-  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
-  const newText = appendLedgerLine(ledgerText, relLedgerPath, JSON.stringify(record));
-  await atomicWriteFile(ledgerFile, newText);
+  await withLedgerLock(ledgerFile, async () => {
+    const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
+    await atomicWriteFile(ledgerFile, appendLedgerLine(ledgerText, relLedgerPath, JSON.stringify(record)));
+  });
 
   const result: VerifyClassifyRecordResult = { runId, record, warnings };
   if (options.json) {
@@ -961,7 +923,7 @@ export async function verifyClassifyRecordCommand(
     return result;
   }
   console.log(
-    chalk.green(`✓ Recorded classification for pair "${pair.pairId}": ${ruleDelta} (stale: ${stale})`),
+    styleText('green', `✓ Recorded classification for pair "${pair.pairId}": ${ruleDelta} (stale: ${stale})`),
   );
   return result;
 }
@@ -1265,10 +1227,10 @@ export function resolveCitationAttribution(input: {
  * `unclassified` verdict demoted for a missing quote, or a malformed-label `unclassified` the
  * subagent never quoted anything for — cannot be narrowed, so conservatively every one of the
  * pair's live slices the chunk cites is treated as affected (decision 8: never silently clean
- * where the tool is blind). An `unpaired-slice` group (nothing was ever compared for it) always
- * contributes `unclassified` to any chunk citing its live slice(s); `presentation-only` groups
- * contribute nothing, matching decision 17's treatment of presentation content as outside the
- * rule-bearing comparison entirely.
+ * where the tool is blind). An `unpaired-slice` group (nothing was ever compared for it), or a
+ * paired group still in pendingPairs (not compared yet), always contributes `unclassified` to any
+ * chunk citing its live slice(s); `presentation-only` groups contribute nothing, matching decision
+ * 17's treatment of presentation content as outside the rule-bearing comparison entirely.
  *
  * **Corrective follow-up (174-04 FALSE-CLEAN fix), and why it OUTRANKS decision 19's ladder:**
  * narrowing to "does this chunk's OWN cited live slice contain the quote" is only correct once you
@@ -1337,17 +1299,15 @@ async function computeChunkVerdicts(
 
       if (pair.kind === 'presentation-only') continue; // decision 17: never a stale contribution
 
-      if (pair.kind === 'unpaired-slice') {
-        // Nothing was ever compared for this content — never silently clean (decision 8).
+      const record = classificationsByPairId.get(pair.pairId);
+      if (pair.kind === 'unpaired-slice' || !record) {
+        // Nothing was ever compared (unpaired), or not yet (pendingPairs) — never silently clean (decision 8, #830).
         pairIds.add(pair.pairId);
         if (RULE_DELTA_SEVERITY.unclassified > RULE_DELTA_SEVERITY[ruleDelta]) {
           ruleDelta = 'unclassified';
         }
         continue;
       }
-
-      const record = classificationsByPairId.get(pair.pairId);
-      if (!record) continue; // not yet classified — pendingPairs, not this chunk's problem yet
 
       if (record.ruleDelta === 'cosmetic') {
         // Cosmetic carries no quote to narrow by — it is reported as "nothing changed here" for
@@ -1464,9 +1424,41 @@ async function computeChunkVerdicts(
   return { verdicts: results, warnings: [...warningSet] };
 }
 
+function sameList(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+/**
+ * A verdict counts only for the staged content it was made on: once its pair's units or staged
+ * slices change, or one of its units is recorded again, the pair must be classified again (#837).
+ * A verdict whose pair no longer exists is in neither list, and only a `paired` pair is out of
+ * date, so `outOfDatePairs` is always a subset of `pendingPairs`.
+ */
+function splitCurrentClassifications(
+  recorded: ClassificationRecord[],
+  pairsById: Map<string, SlicePair>,
+  recordedSinceClassified: Set<string>,
+): { classifications: ClassificationRecord[]; outOfDatePairs: string[] } {
+  const classifications: ClassificationRecord[] = [];
+  const outOfDatePairs: string[] = [];
+  for (const c of recorded) {
+    const pair = pairsById.get(c.pairId);
+    if (pair === undefined) continue;
+    const current =
+      !recordedSinceClassified.has(c.pairId) &&
+      sameList(c.units, pair.stagedUnits) &&
+      sameList(c.stagedSlices, pair.stagedSlices);
+    if (current) classifications.push(c);
+    else if (pair.kind === 'paired') outOfDatePairs.push(c.pairId);
+  }
+  return { classifications, outOfDatePairs };
+}
+
 export interface VerifyClassifyStatusResult {
   runId: string;
   pendingPairs: string[];
+  /** Pairs whose recorded classification no longer matches their staged content — classify them again. */
+  outOfDatePairs: string[];
   classified: ClassificationRecord[];
   warnings: string[];
   summary: {
@@ -1501,13 +1493,19 @@ export async function verifyClassifyStatusCommand(
 ): Promise<VerifyClassifyStatusResult> {
   const projectDir = resolve(options.project ?? process.cwd());
   const runId = await resolveRunId(projectDir, options.runId);
-  const { pairs, warnings: pairingWarnings } = await computeRunPairs(projectDir, runId);
+  const {
+    pairs,
+    classifications: recordedClassifications,
+    recordedSinceClassified,
+    warnings: pairingWarnings,
+  } = await computeRunPairs(projectDir, runId);
 
-  const ledgerFile = ledgerFilePath(projectDir, runId);
-  const relLedgerPath = relative(projectDir, ledgerFile);
-  const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
-  const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
-  const { classifications } = resolveLedgerState(lines);
+  const pairsById = new Map(pairs.map((p) => [p.pairId, p]));
+  const { classifications, outOfDatePairs } = splitCurrentClassifications(
+    recordedClassifications,
+    pairsById,
+    recordedSinceClassified,
+  );
   const classifiedByPairId = new Map(classifications.map((c) => [c.pairId, c]));
 
   const pairedPairs = pairs.filter((p) => p.kind === 'paired');
@@ -1522,7 +1520,7 @@ export async function verifyClassifyStatusCommand(
   const stale = classifications.filter((c) => c.stale).length;
 
   const pairedRuleBearingClassified = classifications.filter(
-    (c) => pairs.find((p) => p.pairId === c.pairId)?.kind === 'paired',
+    (c) => pairsById.get(c.pairId)?.kind === 'paired',
   );
   const cosmeticOverRuleBearing = pairedRuleBearingClassified.filter(
     (c) => c.ruleDelta === 'cosmetic',
@@ -1556,13 +1554,14 @@ export async function verifyClassifyStatusCommand(
   const result: VerifyClassifyStatusResult = {
     runId,
     pendingPairs,
+    outOfDatePairs,
     classified: classifications,
     warnings,
     summary,
     chunkVerdicts,
   };
 
-  for (const w of warnings) console.error(chalk.yellow(`⚠ ${w}`));
+  for (const w of warnings) console.error(styleText('yellow', `⚠ ${w}`));
 
   if (options.quiet) return result;
 
@@ -1571,18 +1570,18 @@ export async function verifyClassifyStatusCommand(
     return result;
   }
 
-  console.log(chalk.green(`✓ Verify-classify status — run ${runId}`));
+  console.log(styleText('green', `✓ Verify-classify status — run ${runId}`));
   console.log(
-    `  ${chalk.gray('classified:')} ${summary.classified}/${summary.paired} paired group(s) — ` +
+    `  ${styleText('gray', 'classified:')} ${summary.classified}/${summary.paired} paired group(s) — ` +
       `${summary.cosmetic} cosmetic, ${summary.sharper} sharper, ${summary.contradictory} contradictory, ` +
       `${summary.unclassified} unclassified (cosmeticPct: ${summary.cosmeticPct}%)`,
   );
   if (pendingPairs.length > 0) {
-    console.log(`  ${chalk.yellow('pending:')} ${pendingPairs.join(', ')}`);
+    console.log(`  ${styleText('yellow', 'pending:')} ${pendingPairs.join(', ')}`);
   }
   const staleChunks = chunkVerdicts.filter((c) => c.stale);
   if (staleChunks.length > 0) {
-    console.log(`  ${chalk.yellow('stale chunks:')} ${staleChunks.map((c) => c.slug).join(', ')}`);
+    console.log(`  ${styleText('yellow', 'stale chunks:')} ${staleChunks.map((c) => c.slug).join(', ')}`);
   }
   return result;
 }

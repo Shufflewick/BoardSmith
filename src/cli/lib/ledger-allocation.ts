@@ -16,7 +16,7 @@
  * so the only way a number reaches `main` from a parallel branch is through this allocation.
  */
 import { PROVISIONAL_NUMBER, blankComments, citableText, entryHeadingPattern } from './ledger-entries.js';
-import { escapeRegExp } from './regexp.js';
+import { escapeRegExp } from '../../utils/regexp.js';
 import { CONSTRAINTS_MD, DECISIONS_MD, FILINGS_MD, QUESTIONS_MD, RULINGS_MD } from './project-paths.js';
 
 /** One kind of numbered entry: its ledger, its heading word, and what separates word and number. */
@@ -39,18 +39,14 @@ export const NUMBERED_LEDGER_SPECS: readonly NumberedLedgerSpec[] = [
   { file: CONSTRAINTS_MD, kind: 'G', sep: '' },
 ];
 
-function headingPattern(spec: NumberedLedgerSpec, id: string): RegExp {
-  return entryHeadingPattern(spec.kind, spec.sep, id);
-}
-
 /** Real (allocated) numbers used as headings, in file order, template comments excluded. */
 function plainNumbers(text: string, spec: NumberedLedgerSpec): number[] {
-  return [...blankComments(text).matchAll(headingPattern(spec, '\\d+'))].map((m) => Number(m[1]));
+  return [...blankComments(text).matchAll(entryHeadingPattern(spec.kind, spec.sep, '\\d+'))].map((m) => Number(m[1]));
 }
 
 /** Provisional ids used as headings, in file order, e.g. `Ruling @trading.1`. */
 export function provisionalHeadings(text: string, spec: NumberedLedgerSpec): string[] {
-  return [...blankComments(text).matchAll(headingPattern(spec, PROVISIONAL_NUMBER))].map(
+  return [...blankComments(text).matchAll(entryHeadingPattern(spec.kind, spec.sep, PROVISIONAL_NUMBER))].map(
     (m) => `${spec.kind}${spec.sep}${m[1]}`,
   );
 }

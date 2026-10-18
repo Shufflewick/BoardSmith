@@ -95,10 +95,16 @@ export function computeFitZoom(
 export function useAutoZoom(options: {
   /** The zoom container (`.game-shell__zoom-container`) — sized to the board's natural content. */
   boardEl: Ref<HTMLElement | null>;
+  /** Which board UI is showing. Switching it swaps the board inside the same
+   *  zoom container, so it restarts startup fitting as a new element does (#1161). */
+  boardUi: Readonly<Ref<unknown>>;
   /** The scrollable board region (`.boardregion`) the board must fit inside. */
   regionEl: Ref<HTMLElement | null>;
+  /** True while BoardErrorBoundary shows its message in place of the board.
+   *  No fit measures the message, so the board never inherits its zoom (#1154). */
+  boardFailed: Readonly<Ref<boolean>>;
 }) {
-  const { boardEl, regionEl } = options;
+  const { boardEl, boardUi, regionEl, boardFailed } = options;
 
   const zoomLevel = ref(1.0);
 
@@ -108,16 +114,17 @@ export function useAutoZoom(options: {
   const pinnedBoards = provideBoardRegionPin();
 
   /** True once the user has manually zoomed (the slider). While true, the
-   *  persistent available-space re-fit is a no-op — `fitZoom()` clears it. */
+   *  persistent available-space re-fit is a no-op — `fitZoom()` and a new board clear it. */
   let userControlled = false;
 
 
   /** Measure and apply the fitted zoom. Returns true when both boxes were
-   *  measurable (a fit was computed), false when layout isn't ready yet. */
+   *  measurable (a fit was computed), false when layout isn't ready yet or the
+   *  board's error message stands in for it. */
   function measureAndFit(): boolean {
     const board = boardEl.value;
     const region = regionEl.value;
-    if (!board || !region) return false;
+    if (!board || !region || boardFailed.value) return false;
 
     const appliedZoom = parseFloat(getComputedStyle(board).zoom) || 1;
     const rect = board.getBoundingClientRect();
@@ -163,10 +170,12 @@ export function useAutoZoom(options: {
   }
 
   // The board lives under a v-if (game screen); a new element means a new
-  // game / remount, so startup fitting begins again for it.
-  watch(boardEl, (el) => {
+  // game / remount, and a new UI means a new board, so startup fitting begins again.
+  watch([boardEl, boardUi], ([el]) => {
     endStartup();
     startupDone = false;
+    // The fresh fit replaces any hand-set zoom, so later resizes re-fit the new board (#1163).
+    userControlled = false;
     if (el && typeof ResizeObserver !== 'undefined') {
       boardObserver = new ResizeObserver(onBoardResize);
       boardObserver.observe(el); // observe() always fires an initial callback
@@ -212,6 +221,11 @@ export function useAutoZoom(options: {
     // teardownRefit's cancelAnimationFrame(pendingFrame) always covers it.
     scheduleRefit();
   }, { immediate: true, flush: 'post' });
+
+  // A region change skipped while the message showed is caught up when the board returns.
+  watch(boardFailed, (failed) => {
+    if (!failed) scheduleRefit();
+  }, { flush: 'post' });
 
   onUnmounted(() => {
     endStartup();

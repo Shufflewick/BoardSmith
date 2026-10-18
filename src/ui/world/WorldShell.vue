@@ -47,12 +47,14 @@
       :player-seat="host.seat.value ?? -1"
       :present-seats="host.presence.value"
       :messages="play.messages.value"
+      :message-offset="play.messageOffset.value"
       :log-empty-text="LOG_EMPTY_TEXT"
       :may-act="play.mayAct.value"
       :available-actions="play.availableActions.value"
       :action-metadata="play.actionMetadata.value"
       :disabled-actions="play.disabledActions.value"
       :actions-pending="host.offersPending.value"
+      :board-failed="boardFailed"
       :panel-token="panelToken"
       :prompt="actionController.currentPick.value?.prompt"
       :connection="connectionIndicator"
@@ -82,11 +84,9 @@
              `<Teleport to="#bs-game-modal">` always finds the host `PlayShell`
              renders. `GameShell` holds a table's board back for exactly this
              reason; the guarantee is the SHELL's, so both give it. -->
-        <component
-          v-if="boardHostReady && boardComponent"
-          :is="boardComponent"
-          v-bind="boardProps"
-        />
+        <BoardErrorBoundary v-if="boardHostReady && boardComponent" ref="boardBoundary" :state="boardProps.gameView" :board="boardComponent">
+          <component :is="boardComponent" v-bind="boardProps" />
+        </BoardErrorBoundary>
         <!-- Only reachable if the registry's default entry resolved to no
              component — a broken uis.ts. Name the fix, don't render blank.
              It waits for the same tick, so a shell that has not finished
@@ -111,8 +111,9 @@ import { useWorldHost } from './useWorldHost.js';
 import { provideWorldSeat, useWorldSeat } from './useWorldSeat.js';
 import PlayShell, { type PlayConnection } from '../components/PlayShell.vue';
 import Toast from '../components/Toast.vue';
+import BoardErrorBoundary from '../components/BoardErrorBoundary.vue';
 import DisabledReasonTooltip from '../components/helpers/DisabledReasonTooltip.vue';
-import { resolveUiComponent, type GameUIRegistry } from '../game-uis.js';
+import type { GameUIRegistry } from '../game-uis.js';
 import { worldBoardProps } from '../board-props.js';
 import { createBoardInteraction } from '../composables/useBoardInteraction.js';
 import { useToast } from '../composables/useToast.js';
@@ -146,10 +147,9 @@ const props = defineProps<{
    *
    * A world had no registry because (said `validate.ts`) it had "no turn, no
    * flow position and no action table to switch boards over". #169 gave it an
-   * action table, so the reason expired: the dev UI switcher works for a world
-   * now, and `devUI(() => import('boardsmith/ui/auto-ui'))` makes AutoUI a
-   * world's default board with no new renderer at all -- a world's view IS the
-   * serialized element tree a table's is.
+   * action table, so the reason expired. A world renders the registry's
+   * `defaultUI()` entry and nothing else: it has no dev UI switcher, so its
+   * `devUI()` entries never show (#896).
    */
   uis: GameUIRegistry;
   /** What to call this game before the host has said what this world is called. */
@@ -190,11 +190,7 @@ const boardProps = computed(() => worldBoardProps(seat, host));
  *  two worlds of the same game have different names and only one is this one. */
 const worldTitle = computed(() => host.worldName.value ?? props.displayName);
 
-const isDevBuild = import.meta.env.DEV;
-const selectedUiName = ref('');
-const boardComponent = computed(() =>
-  resolveUiComponent(props.uis, selectedUiName.value, isDevBuild),
-);
+const boardComponent = computed(() => props.uis.entries[props.uis.defaultName]?.component ?? null);
 
 /**
  * THE OTHER HALF OF #169: A REFUSAL THE PANEL EARNED.
@@ -282,12 +278,18 @@ function trackCompact(event: MediaQueryListEvent | MediaQueryList): void {
  * document and the documented pattern works.
  */
 const boardHostReady = ref(false);
+const boardBoundary = ref<InstanceType<typeof BoardErrorBoundary> | null>(null);
+// No boundary mounted means no board, so nothing has failed.
+const boardFailed = computed(() => boardBoundary.value?.failed ?? false);
+const chromeDrawn = computed(() => host.view.value !== null && host.phase.value !== 'refused');
 watch(
-  () => host.view.value !== null && host.phase.value !== 'refused',
-  async (chromeDrawn) => {
-    if (!chromeDrawn) return;
+  chromeDrawn,
+  async (drawn) => {
+    // A refusal unmounts the chrome and its host, so the board waits for them again.
+    boardHostReady.value = false;
+    if (!drawn) return;
     await nextTick();
-    boardHostReady.value = true;
+    boardHostReady.value = chromeDrawn.value;
   },
   { immediate: true },
 );
@@ -334,8 +336,10 @@ defineExpose({ host });
   padding: 1rem;
 }
 
-/* LOST sits over the board region, marking the last view as no longer live. */
-.world-shell__lost {
+/* Both banners sit over the top of the board: LOST marks the last view as no
+   longer live, RECOVERING says an order from the last page is being asked about. */
+.world-shell__lost,
+.world-shell__recovering {
   position: absolute;
   top: 0;
   left: 0;
@@ -343,8 +347,11 @@ defineExpose({ host });
   z-index: 20;
   margin: 0;
   padding: 0.75rem 1rem;
-  background: color-mix(in srgb, var(--bsg-warn) 25%, var(--bsg-surface));
+  background: var(--bsg-surface);
   color: var(--bsg-ink);
+}
+.world-shell__lost {
+  background: color-mix(in srgb, var(--bsg-warn) 25%, var(--bsg-surface));
 }
 
 .empty-game-area {

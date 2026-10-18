@@ -17,7 +17,7 @@
  * Driven over real sockets through the handler `boardsmith dev` runs, into a
  * real `MultiplayerHost` for each run.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 import { executeOp } from '../../session/index.js';
 import { eachPlayerFixtureDefinition as game } from '../../session/testing/fixtures/each-player-fixture.js';
@@ -56,6 +56,7 @@ async function startRun() {
   const run = {
     port: server.port,
     server,
+    mpHost,
     graces,
     stop: async () => {
       if (stopped) return;
@@ -165,5 +166,34 @@ describe('#416: a reconnect within the same run keeps its seat (#412)', () => {
     const { page } = await seatedPage(run, 'A');
     expect(page.frames.find((f) => f.type === 'init')?.seat).toBe(1);
     expect(run.graces.armed()).toEqual([]);
+  });
+});
+
+describe('#879: a frame that is not a message', () => {
+  it('is dropped, and the page is still served', async () => {
+    const { page } = await seatedPage(await startRun(), 'A');
+    for (const junk of ['null', '42', '"x"', '[]', '{}', 'not json']) page.socket.send(junk);
+
+    expect((await seatsSeenBy(page)).find((s) => s.seat === 1)).toMatchObject({ mine: true, connected: true });
+  });
+});
+
+describe('#887: a second hello on one socket naming a different client', () => {
+  it('lets the first client go, so its seat starts the reconnect grace like any departure', async () => {
+    const run = await startRun();
+    const { page, runId } = await seatedPage(run, 'A');
+    const welcomed = page.next((f) => f.type === 'welcome');
+    page.send({ type: 'hello', clientId: 'B', runId });
+    await welcomed;
+
+    expect((await seatsSeenBy(page)).find((s) => s.seat === 1)).toMatchObject({ mine: false, connected: false });
+    expect(run.graces.armed()).toEqual([10_000]);
+
+    // Closing the socket afterwards lets go of the new client only; the old one already left.
+    const disconnect = vi.spyOn(run.mpHost, 'disconnect');
+    const gone = run.server.closed();
+    page.socket.close();
+    await gone;
+    expect(disconnect.mock.calls).toEqual([['B']]);
   });
 });

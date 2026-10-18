@@ -522,9 +522,11 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
       }
 
       // If a previous element selection was auto-filled, mark it as draggable.
+      // Only a single-element pick has one dragged piece: drag-to-start never
+      // starts a list pick, so a list (even of one) marks nothing (#965).
       if (selection.filterBy && currentActionMeta.value) {
         const firstSel = currentActionMeta.value.selections[0];
-        if ((firstSel?.type === 'element' || firstSel?.type === 'elements') && currentArgs.value[firstSel.name] !== undefined) {
+        if (firstSel?.type === 'element' && currentArgs.value[firstSel.name] !== undefined) {
           const selectedPieceId = currentArgs.value[firstSel.name] as number;
           const firstValid = controller.getValidElements(firstSel).find(ve => ve.id === selectedPieceId);
           board.setDraggableSelectedElement(firstValid ? elementClickRef(firstValid) : { id: selectedPieceId });

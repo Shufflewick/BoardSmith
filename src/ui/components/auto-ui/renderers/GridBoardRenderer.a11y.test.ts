@@ -14,10 +14,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { nextTick } from 'vue';
 import GridBoardRenderer from './GridBoardRenderer.vue';
-import {
-  mountBoardRenderer,
-  type GameElement,
-} from './board-renderer-a11y.test-helper.js';
+import { mountBoardRenderer } from './board-renderer-a11y.test-helper.js';
+import type { GameElement } from '../auto-ui-helpers.js';
 import { createBoardInteraction } from '../../../composables/useBoardInteraction.js';
 
 /** This suite's renderer, so every mount below reads the same as the other board's. */
@@ -80,6 +78,14 @@ describe('GridBoardRenderer a11y — role=grid/gridcell + roving tabindex', () =
       const label = cell.attributes('aria-label') ?? '';
       expect(label.length).toBeGreaterThan(0);
     }
+  });
+
+  it('labels unnamed cells past column z aa, ab, ... (#868)', () => {
+    const board = buildGridElement(28, 1);
+    for (const cell of board.children!) delete cell.name;
+    const labels = mountBoard(board).wrapper.findAll('[role="gridcell"]').map((c) => c.attributes('aria-label') ?? '');
+    expect(labels[25]).toMatch(/^z1,/);
+    expect(labels[27]).toMatch(/^ab1,/);
   });
 
   it('exactly one cell has tabindex="0" initially', () => {

@@ -1,8 +1,10 @@
-import { existsSync, readFileSync, realpathSync, statSync, readdirSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, readdirSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, relative, sep, resolve as resolvePath } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import ora from 'ora';
 import { scanSandboxViolations } from '../lib/sandbox-scan.js';
+import { listFiles } from '../lib/source-files.js';
 import {
   findUnknownKeys,
   findUnknownKeysIn,
@@ -89,12 +91,14 @@ async function runValidation(
   const configPath = requireGameProject(cwd);
   const results: ValidationResult[] = [];
 
+  const config = JSON.parse(readFileSync(configPath, 'utf-8')) as {
+    backend?: unknown;
+    paths?: { rules?: string };
+  };
   // Which BACKEND this game declares, read once. `backend` is the single
   // declaration (#171), and what it changes below is which entry point the
   // project must have.
-  const worldMode = resolveWorldMode(
-    JSON.parse(readFileSync(configPath, 'utf-8')) as { backend?: unknown },
-  );
+  const worldMode = resolveWorldMode(config);
 
   // 1. Check metadata completeness
   results.push(await validateMetadata(cwd));
@@ -116,7 +120,7 @@ async function runValidation(
   results.push(await validateBundleSize(cwd, worldMode));
 
   // 6. Required files check
-  results.push(await validateRequiredFiles(cwd, worldMode));
+  results.push(await validateRequiredFiles(cwd, worldMode, config));
 
   // 7. Choice cardinality — the panel offers hierarchy, never free text (#172).
   results.push(await validateChoiceCardinality(cwd, worldMode));
@@ -132,7 +136,7 @@ async function runValidation(
  * (`publish`, `verify`) stops there, and the CLI exits non-zero with the message.
  */
 export async function validateProject(cwd: string, options: { typeCheck?: TypeCheckRun } = {}): Promise<void> {
-  console.log(chalk.cyan('\nValidating game...\n'));
+  console.log(styleText('cyan', '\nValidating game...\n'));
   const { results, worldMode } = await runValidation(cwd, options);
   printResults(results);
   if (hasBlockingFailure(results)) {
@@ -149,25 +153,25 @@ export async function validateCommand(): Promise<void> {
 
 /** One check's icon and status word: pass, advisory warning, or failure. */
 function verdictLabel(result: ValidationResult): { icon: string; status: string } {
-  if (result.passed) return { icon: chalk.green('✓'), status: chalk.green('PASS') };
+  if (result.passed) return { icon: styleText('green', '✓'), status: styleText('green', 'PASS') };
   if (result.severity === 'warning') {
-    return { icon: chalk.yellow('⚠'), status: chalk.yellow('WARN') };
+    return { icon: styleText('yellow', '⚠'), status: styleText('yellow', 'WARN') };
   }
-  return { icon: chalk.red('✗'), status: chalk.red('FAIL') };
+  return { icon: styleText('red', '✗'), status: styleText('red', 'FAIL') };
 }
 
 /** Prints every check's verdict and its failure detail. */
 function printResults(results: ValidationResult[]): void {
-  console.log(chalk.cyan('\nValidation Results:\n'));
+  console.log(styleText('cyan', '\nValidation Results:\n'));
 
   for (const result of results) {
     const { icon, status } = verdictLabel(result);
     console.log(`  ${icon} ${result.name}: ${status}`);
     if (result.passed) continue;
 
-    console.log(chalk.dim(`    ${result.message}`));
+    console.log(styleText('dim', `    ${result.message}`));
     for (const detail of result.details ?? []) {
-      console.log(chalk.dim(`      - ${detail}`));
+      console.log(styleText('dim', `      - ${detail}`));
     }
   }
 
@@ -194,40 +198,40 @@ function printResults(results: ValidationResult[]): void {
 export function successGuidance(isWorld: boolean, warnings: number): string[] {
   const lines = [
     warnings === 0
-      ? chalk.green('All validation checks passed!\n')
-      : chalk.yellow(
+      ? styleText('green', 'All validation checks passed!\n')
+      : styleText('yellow',
           `Validation passed with ${warnings} warning(s). They do not block publishing, but read them above: ` +
             'a warning is either something to fix or a check that could not run.\n',
         ),
-    chalk.cyan('Next steps:'),
+    styleText('cyan', 'Next steps:'),
   ];
   if (isWorld) {
     lines.push(
-      chalk.dim('  boardsmith dev      - Run this world: genesis, its durable store, and its seats'),
-      chalk.dim('  boardsmith build    - Build for production'),
-      chalk.dim('  boardsmith publish  - Publish to boardsmith.io\n'),
-      chalk.yellow('World:') +
-        chalk.dim(
+      styleText('dim', '  boardsmith dev      - Run this world: genesis, its durable store, and its seats'),
+      styleText('dim', '  boardsmith build    - Build for production'),
+      styleText('dim', '  boardsmith publish  - Publish to boardsmith.io\n'),
+      styleText('yellow', 'World:') +
+        styleText('dim',
           ' this game declares a persistent world, and `boardsmith dev` runs it: the\n' +
             '       project\'s durable local store, genesis once, a seat per browser, and scheduled\n' +
             '       events firing on their due time. `boardsmith dev --reset` deletes the world and\n' +
             `       runs genesis again. BoardSmith ${WORLD_AUTHORING_DOC} is the authoring guide.\n`,
         ),
-      chalk.yellow('Tip:') + chalk.dim(' Run `boardsmith dev`, take a seat, and issue your world\'s commands.'),
-      chalk.dim('     The host says every refusal out loud, including:'),
-      chalk.dim('     - A handler reading a partition its partitions() did not declare'),
-      chalk.dim('     - A schedule past this world\'s caps, or at an invalid delay\n'),
+      styleText('yellow', 'Tip:') + styleText('dim', ' Run `boardsmith dev`, take a seat, and issue your world\'s commands.'),
+      styleText('dim', '     The host says every refusal out loud, including:'),
+      styleText('dim', '     - A handler reading a partition its partitions() did not declare'),
+      styleText('dim', '     - A schedule past this world\'s caps, or at an invalid delay\n'),
     );
     return lines;
   }
   lines.push(
-    chalk.dim('  boardsmith dev      - Test gameplay and check for runtime warnings'),
-    chalk.dim('  boardsmith build    - Build for production'),
-    chalk.dim('  boardsmith publish  - Publish to boardsmith.io\n'),
-    chalk.yellow('Tip:') + chalk.dim(' Run `boardsmith dev` and play through your game.'),
-    chalk.dim('     The engine will warn about issues like:'),
-    chalk.dim('     - Flow steps referencing non-existent actions'),
-    chalk.dim('     - Element reference comparisons instead of ID comparisons\n'),
+    styleText('dim', '  boardsmith dev      - Test gameplay and check for runtime warnings'),
+    styleText('dim', '  boardsmith build    - Build for production'),
+    styleText('dim', '  boardsmith publish  - Publish to boardsmith.io\n'),
+    styleText('yellow', 'Tip:') + styleText('dim', ' Run `boardsmith dev` and play through your game.'),
+    styleText('dim', '     The engine will warn about issues like:'),
+    styleText('dim', '     - Flow steps referencing non-existent actions'),
+    styleText('dim', '     - Element reference comparisons instead of ID comparisons\n'),
   );
   return lines;
 }
@@ -269,6 +273,11 @@ export function checkMetadataIssues(config: Record<string, unknown>): string[] {
       issues.push(
         "Unknown key 'ui' — a game's UIs are declared in src/ui/uis.ts (defineGameUIs), "
         + 'which is the single source of truth for which boards exist and which one ships. '
+        + 'Remove this key from boardsmith.json.',
+      );
+    } else if (key === 'scoreboard') {
+      issues.push(
+        "Unknown key 'scoreboard': nothing in BoardSmith or the platform ever read it. "
         + 'Remove this key from boardsmith.json.',
       );
     } else if (key === 'playerCount') {
@@ -786,23 +795,28 @@ async function validateTestTypeCoverage(
   };
 }
 
-/** Ask vitest for the files it would run, without running them. */
-async function listVitestFiles(cwd: string): Promise<{ ok: boolean; files: string[]; refusal?: string }> {
-  // Not `runVitestRecorded`: that runs tests and records their progress, and this only lists them.
-  let listed: { code: number; stdout: string };
+/**
+ * Ask vitest for the files it would run, without running them. The list is read from the JSON
+ * file vitest writes, not its stdout, where anything a config or plugin prints would pass for a file.
+ */
+export async function listVitestFiles(cwd: string): Promise<{ ok: boolean; files: string[]; refusal?: string }> {
+  const scratch = mkdtempSync(join(tmpdir(), 'boardsmith-vitest-list-'));
+  const listPath = join(scratch, 'files.json');
   try {
-    listed = await runToolCapturingStdout('vitest', ['list', '--filesOnly'], { cwd });
-  } catch (error) {
-    // vitest is missing or would not start: say why, since nothing else will.
-    return { ok: false, files: [], refusal: (error as Error).message };
+    // Not `runVitestRecorded`: that runs tests and records their progress, and this only lists them.
+    let code: number;
+    try {
+      ({ code } = await runToolCapturingStdout('vitest', ['list', '--filesOnly', `--json=${listPath}`], { cwd }));
+    } catch (error) {
+      // vitest is missing or would not start: say why, since nothing else will.
+      return { ok: false, files: [], refusal: (error as Error).message };
+    }
+    if (code !== 0 || !existsSync(listPath)) return { ok: false, files: [] };
+    const listed = JSON.parse(readFileSync(listPath, 'utf-8')) as Array<{ file: string }>;
+    return { ok: true, files: listed.map((entry) => entry.file) };
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
   }
-  return {
-    ok: listed.code === 0,
-    files: listed.stdout
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0),
-  };
 }
 
 async function validateSecurity(cwd: string): Promise<ValidationResult> {
@@ -832,6 +846,8 @@ async function validateSecurity(cwd: string): Promise<ValidationResult> {
   };
 }
 
+const NOT_MEASURED = 'Bundle size not measured; publish builds and checks it before upload';
+
 /**
  * Bundle sizes, measured in the units the SERVER measures them in — and only
  * the gates that actually apply to this game's backend.
@@ -845,18 +861,27 @@ export async function validateBundleSize(cwd: string, worldMode: boolean): Promi
   const distDir = join(cwd, 'dist');
   const rulesJsPath = join(distDir, 'rules', 'rules.js');
 
-  // If no build exists, skip — publish will build automatically
+  // Unmeasured is a warning, not a pass: publish builds and measures again (#845).
   if (!existsSync(distDir) || !existsSync(rulesJsPath)) {
     return {
       name: 'Bundle Size',
-      passed: true,
-      message: '',
-      details: ['No build found — sizes will be checked after build during publish'],
+      passed: false,
+      severity: 'warning',
+      message: NOT_MEASURED,
+      details: ['No build found in dist/. Run `boardsmith build` to measure it now.'],
     };
+  }
+
+  // A linked folder fails publish however often it rebuilds, so it blocks here rather than warns (#1114).
+  try {
+    listFiles(distDir, { sourceTree: false });
+  } catch (error) {
+    return { name: 'Bundle Size', passed: false, message: (error as Error).message };
   }
 
   const issues: string[] = [];
   const notes: string[] = [];
+  let measured = true;
 
   const rulesSource = readFileSync(rulesJsPath, 'utf-8');
   const rulesRawBytes = Buffer.byteLength(rulesSource, 'utf-8');
@@ -898,35 +923,17 @@ export async function validateBundleSize(cwd: string, worldMode: boolean): Promi
     // dist/ is incomplete (e.g. missing manifest.json) so the real publish zip
     // cannot be assembled — publish rebuilds and gates the zip itself.
     const reason = (error as Error).message.split('\n')[0];
-    notes.push(`Compressed bundle: not measurable (${reason}) — checked again during publish`);
+    notes.push(`Compressed bundle: not measurable (${reason}). Run \`boardsmith build\` to measure it now.`);
+    measured = false;
   }
 
-  return {
-    name: 'Bundle Size',
-    passed: issues.length === 0,
-    message: issues.length > 0 ? 'Bundle size limits exceeded' : '',
-    details: issues.length > 0 ? issues : notes,
-  };
-}
-
-/** Files in `dir` with the given extension, or none if `dir` does not exist. */
-function listFilesWithExtension(dir: string, extension: string): string[] {
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir)
-    .filter((entry) => entry.endsWith(extension))
-    .map((entry) => join(dir, entry));
-}
-
-/** Every file under `dir`, at any depth, whose name ends in one of `extensions`. */
-function listFilesUnder(dir: string, extensions: readonly string[]): string[] {
-  if (!existsSync(dir)) return [];
-  const found: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) found.push(...listFilesUnder(full, extensions));
-    else if (extensions.some((ext) => entry.name.endsWith(ext))) found.push(full);
+  if (issues.length > 0) {
+    return { name: 'Bundle Size', passed: false, message: 'Bundle size limits exceeded', details: issues };
   }
-  return found;
+  if (!measured) {
+    return { name: 'Bundle Size', passed: false, severity: 'warning', message: NOT_MEASURED, details: notes };
+  }
+  return { name: 'Bundle Size', passed: true, message: '', details: notes };
 }
 
 /**
@@ -937,7 +944,7 @@ function findAbsolutePathIssues(cwd: string, files: string[], publicDirs: string
   const issues: string[] = [];
   for (const filePath of files) {
     const content = readFileSync(filePath, 'utf-8');
-    const offending = publicDirs.find((dir) => new RegExp(`["'\`]\\/${dir}\\/`).test(content));
+    const offending = publicDirs.find((dir) => ['"', "'", '`'].some((quote) => content.includes(`${quote}/${dir}/`)));
     if (offending) {
       issues.push(`${filePath.replace(cwd + '/', '')}: absolute path "/${offending}/..." found`);
     }
@@ -964,7 +971,7 @@ function findDanglingManifestAssets(cwd: string): string[] {
   try {
     config = JSON.parse(readFileSync(configPath, 'utf-8')) as Record<string, unknown>;
   } catch {
-    // A malformed boardsmith.json is the Project Config check's business, not
+    // A boardsmith.json it cannot read or parse is the Metadata check's report, not
     // this one's; reporting it twice would only obscure the real error.
     return [];
   }
@@ -1024,8 +1031,8 @@ function findUndeclaredImageSources(cwd: string, files: string[]): string[] {
   });
 }
 
-/** `boardsmith.json`'s declared sources, or none. A malformed config is the
- *  Project Config check's business, not this one's. */
+/** `boardsmith.json`'s declared sources, or none. A config it cannot read or
+ *  parse is the Metadata check's report, not this one's. */
 function declaredImageSources(cwd: string): string[] {
   const configPath = join(cwd, 'boardsmith.json');
   if (!existsSync(configPath)) return [];
@@ -1076,28 +1083,32 @@ export async function validateAssetPaths(cwd: string): Promise<ValidationResult>
   // sheet is set in `src/rules/game.ts`, not in a component -- so a scan that
   // opened only the UI bundle passed cribbage while it shipped
   // `sprite: '/cards/deck-sprite.svg'` (ShufflewickPub #260).
-  const filesToScan = publicDirs.length > 0
-    ? [
-        ...listFilesWithExtension(join(cwd, 'dist', 'ui', 'assets'), '.js'),
-        ...listFilesWithExtension(join(cwd, 'dist', 'rules'), '.js'),
-        ...listFilesWithExtension(join(cwd, 'data'), '.json'),
-      ]
-    : [];
+  let filesToScan: string[];
+  let remoteFiles: string[];
+  try {
+    filesToScan = publicDirs.length > 0
+      ? [
+          ...listFiles(join(cwd, 'dist', 'ui', 'assets'), { sourceTree: false, suffixes: ['.js'] }),
+          ...listFiles(join(cwd, 'dist', 'rules'), { sourceTree: false, suffixes: ['.js'] }),
+          ...listFiles(join(cwd, 'data'), { sourceTree: false, suffixes: ['.json'] }),
+        ]
+      : [];
+    // REMOTE ARTWORK IS SCANNED OVER THE WHOLE BUILT BUNDLE, not only when the
+    // project has a `public/` tree: a game whose artwork lives entirely off-bundle
+    // has no `public/` directory at all, which is exactly the case this catches.
+    remoteFiles = [
+      // All of `dist/ui`, not only `assets/`: the entry HTML can name artwork too.
+      ...listFiles(join(cwd, 'dist', 'ui'), { sourceTree: false, suffixes: ['.js', '.css', '.html'] }),
+      ...listFiles(join(cwd, 'dist', 'rules'), { sourceTree: false, suffixes: ['.js'] }),
+      ...listFiles(join(cwd, 'data'), { sourceTree: false, suffixes: ['.json'] }),
+    ];
+  } catch (error) {
+    // A linked folder is a failed check, not a crash, so every other check still prints (#1114).
+    return { name: 'Asset Paths', passed: false, message: (error as Error).message, details: danglingIssues };
+  }
 
   const absoluteIssues = findAbsolutePathIssues(cwd, filesToScan, publicDirs);
-
-  // REMOTE ARTWORK IS SCANNED OVER THE WHOLE BUILT BUNDLE, not only when the
-  // project has a `public/` tree: a game whose artwork lives entirely off-bundle
-  // has no `public/` directory at all, which is exactly the case this catches.
-  const remoteIssues = findUndeclaredImageSources(cwd, [
-    // RECURSIVELY, unlike the absolute-path scan above: Vite emits the built UI
-    // into `dist/ui/assets/`, so a flat listing of `dist/ui` opens the entry
-    // HTML and misses every stylesheet and chunk the game's artwork is actually
-    // named in.
-    ...listFilesUnder(join(cwd, 'dist', 'ui'), ['.js', '.css', '.html']),
-    ...listFilesUnder(join(cwd, 'dist', 'rules'), ['.js']),
-    ...listFilesUnder(join(cwd, 'data'), ['.json']),
-  ]);
+  const remoteIssues = findUndeclaredImageSources(cwd, remoteFiles);
 
   if (danglingIssues.length === 0 && absoluteIssues.length === 0 && remoteIssues.length === 0) {
     return { name: 'Asset Paths', passed: true, message: '' };
@@ -1151,16 +1162,21 @@ function assetPathMessage(
  * with no UI yet. A table that has any UI file has a UI, so it needs all three.
  */
 function uiFilesRequired(cwd: string, isWorld: boolean): string[] {
-  if (isWorld) return ['src/ui/uis.ts', 'world.html', 'src/world-main.ts', 'src/rules/world.ts'];
+  if (isWorld) return ['src/ui/uis.ts', 'world.html', 'src/world-main.ts'];
   return tableUiState(cwd).state === 'none' ? [] : [TABLE_UI_ENTRY, 'src/ui/uis.ts', 'src/ui/App.vue'];
 }
 
-export async function validateRequiredFiles(cwd: string, isWorld: boolean): Promise<ValidationResult> {
+export async function validateRequiredFiles(
+  cwd: string,
+  isWorld: boolean,
+  config: { paths?: { rules?: string } },
+): Promise<ValidationResult> {
+  const rulesDir = resolveRulesDir(cwd, config);
+  const rulesFiles = ['index.ts', 'game.ts', ...(isWorld ? ['world.ts'] : [])];
   const required = [
     'boardsmith.json',
     'package.json',
-    'src/rules/index.ts',
-    'src/rules/game.ts',
+    ...rulesFiles.map((file) => relative(cwd, join(rulesDir, file))),
     // A WORLD AND A TABLE HAVE DIFFERENT ENTRY POINTS, and requiring both would
     // require every world to carry a table half it does not have. A table
     // mounts GameShell from index.html; a world mounts WorldShell from

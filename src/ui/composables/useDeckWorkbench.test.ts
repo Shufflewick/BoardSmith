@@ -27,7 +27,7 @@ function stubBridge(over: Partial<DebugBridge> = {}): DebugBridge {
     actionTraces: vi.fn(async () => ({ traces: [], flowContext: null })),
     flowState: vi.fn(async () => null),
     customDebug: vi.fn(async () => null),
-    history: vi.fn(async () => []),
+    history: vi.fn(async () => ({ actionHistory: [], actionHistoryBase: 0 })),
     logs: vi.fn(async () => []),
     stateAt: vi.fn(),
     stateDiff: vi.fn(async () => null),
@@ -36,6 +36,7 @@ function stubBridge(over: Partial<DebugBridge> = {}): DebugBridge {
     reorderCard: vi.fn(async () => {}),
     transferCard: vi.fn(async () => {}),
     shuffleDeck: vi.fn(async () => {}),
+    deckView: vi.fn(async () => ({})),
     ...over,
   };
 }
@@ -43,7 +44,8 @@ function stubBridge(over: Partial<DebugBridge> = {}): DebugBridge {
 function setup(over: Partial<DebugBridge> = {}) {
   const bridge = stubBridge(over);
   const cardContainers = ref(CONTAINERS);
-  return { bridge, cardContainers, workbench: useDeckWorkbench({ bridge, cardContainers }) };
+  const afterEdit = vi.fn();
+  return { bridge, cardContainers, afterEdit, workbench: useDeckWorkbench({ bridge, cardContainers, afterEdit }) };
 }
 
 describe('deck edits', () => {
@@ -57,6 +59,18 @@ describe('deck edits', () => {
     expect(bridge.reorderCard).toHaveBeenCalledWith(10, 2);
     expect(bridge.transferCard).toHaveBeenCalledWith(10, 3, 'last');
     expect(bridge.shuffleDeck).toHaveBeenCalledWith(2);
+  });
+
+  it('reports each edit the host accepted, and not one it refused (#898)', async () => {
+    let refuse = false;
+    const { afterEdit, workbench } = setup({
+      shuffleDeck: vi.fn(async () => { if (refuse) throw new Error('no'); }),
+    });
+    await workbench.shuffleDeck(2);
+    expect(afterEdit).toHaveBeenCalledTimes(1);
+    refuse = true;
+    await workbench.shuffleDeck(2);
+    expect(afterEdit).toHaveBeenCalledTimes(1);
   });
 
   it('a transfer with no stated end goes to the front', async () => {

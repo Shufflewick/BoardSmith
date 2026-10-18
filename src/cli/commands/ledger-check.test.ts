@@ -280,11 +280,11 @@ function located(findings: LedgerFinding[]): Array<`${string}:${LedgerFindingKin
   return findings.map((f) => `${f.ledger}:${f.kind}` as const);
 }
 
-async function project(files: Record<string, string>): Promise<string> {
+async function project(files: Record<string, string>, objectFormat = 'sha1'): Promise<string> {
   const tree = tempTree('bs-ledger-check-');
   const dir = join(tree, 'proj');
   await fs.mkdir(join(dir, 'design'), { recursive: true });
-  execSync('git init', { cwd: dir, stdio: 'ignore' });
+  execSync(`git init --object-format=${objectFormat}`, { cwd: dir, stdio: 'ignore' });
   for (const [name, text] of Object.entries(files)) {
     await fs.mkdir(dirname(join(dir, 'design', name)), { recursive: true });
     await fs.writeFile(join(dir, 'design', name), text);
@@ -332,6 +332,16 @@ describe('ledgerCheck — the whole project', () => {
     const result = await ledgerCheck(dir);
     expect(located(result.findings)).toEqual(['run-log/core-loop.md:run-timestamp']);
     expect(result.findings[0].detail).toMatch(/Finished at/);
+  });
+
+  it('reads blame in a SHA-256 repository, whose hashes are 64 characters (#829)', async () => {
+    const dir = await project(
+      { 'run-log/core-loop.md': dispatch(1, '2026-09-23T10:00:00Z', 'closed', '2026-09-23T11:00:00Z') },
+      'sha256',
+    );
+    commitAt(dir, '2026-09-23T10:30:00Z');
+    const result = await ledgerCheck(dir);
+    expect(located(result.findings)).toEqual(['run-log/core-loop.md:run-timestamp']);
   });
 
   it('checks every chunk run log on its own, so two chunks built at once never share a field (#294)', async () => {
@@ -413,6 +423,17 @@ describe('ledgerCheck — the whole project', () => {
     await fs.mkdir(join(dir, 'src'), { recursive: true });
     await fs.writeFile(join(dir, 'src', 'x.ts'), '// Decisions 2 and @a.1\n');
     expect(located((await ledgerCheck(dir)).findings)).toEqual(['src/x.ts:provisional-on-main-line']);
+  });
+
+  it('passes over a link to a folder, and refuses a file it cannot read rather than finding no citation in it (#1049)', async () => {
+    const dir = await project({ 'RULINGS.md': ruling(1) });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    await fs.mkdir(join(dir, 'src'), { recursive: true });
+    await fs.symlink('../design', join(dir, 'src', 'design-link'));
+    expect(located((await ledgerCheck(dir)).findings)).toEqual([]);
+
+    await fs.writeFile(join(dir, 'src', 'x.ts'), '// Decisions 2 and @a.1\n', { mode: 0o000 });
+    await expect(ledgerCheck(dir)).rejects.toThrow(`Could not read ${join(dir, 'src', 'x.ts')} (EACCES)`);
   });
 
   it('accepts provisional ids in a chunk\'s own worktree, where a parallel branch writes them', async () => {
@@ -606,6 +627,17 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
     const result = await ledgerCheck(dir);
     expect(evidence(result.findings)).toEqual([]);
     expect(result.checked).toContain('chunks/world-shell/CHUNK.md');
+  });
+
+  it('names a cited file it cannot look at rather than calling it missing (#1174)', async () => {
+    const dir = await tree({
+      'design/DECISIONS.md': '### Decision 257\n- Decision: food holds; see `.boardsmith/scratch/loop.mjs`.\n',
+    });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    const loop = join(dir, '.boardsmith/scratch/loop.mjs');
+    await fs.mkdir(join(loop, '..'), { recursive: true });
+    await fs.symlink(loop, loop);
+    await expect(ledgerCheck(dir)).rejects.toThrow(`Could not read ${loop} (ELOOP)`);
   });
 
   it('fails a verified chunk that cites a missing file, an untracked file, or a path outside the project', async () => {
@@ -815,8 +847,8 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
           '   > if (this.complete) { return this.finish();',
           '   Source: ../node_modules/boardsmith/src/engine/flow/engine.ts:2-3',
           '2. **The same, cited from the project root.**',
-          '   > return this.finish();',
-          '   Source: node_modules/boardsmith/src/engine/flow/engine.ts:3',
+          '   > return this.finish(); }',
+          '   Source: node_modules/boardsmith/src/engine/flow/engine.ts:3-4',
         ),
       },
       { 'src/engine/flow/engine.ts': engineTs },

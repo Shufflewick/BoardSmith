@@ -1032,6 +1032,46 @@ function viewRefusalsOf(failures: ReadonlyArray<readonly [string, unknown]>): Re
 }
 
 /**
+ * One player's view for this round of a look, refused if it names fewer than
+ * the round before (#936): #717 judges who hears an event by "more as more is
+ * loaded, never fewer", so a drop is refused for the rest of the look.
+ */
+function viewRound(
+  engine: WorldEngine,
+  player: string,
+  rounds: Map<string, readonly string[] | WorldRefusal>,
+  loaded: readonly string[],
+): readonly string[] {
+  const earlier = rounds.get(player);
+  if (earlier instanceof WorldRefusal) throw earlier;
+  const named = engine.viewPartitions(player);
+  const dropped = earlier?.filter((name) => !named.includes(name)) ?? [];
+  if (dropped.length > 0) {
+    const refusal = viewDroppedPartition(dropped, loaded);
+    rounds.set(player, refusal);
+    throw refusal;
+  }
+  rounds.set(player, named);
+  return named;
+}
+
+/** A view that stopped naming partitions once `loaded` arrived (#936). */
+function viewDroppedPartition(dropped: readonly string[], loaded: readonly string[]): WorldRefusal {
+  const quote = (names: readonly string[]) => {
+    const quoted = names.map((name) => `"${name}"`);
+    return quoted.length === 1 ? quoted[0]! : `${quoted.slice(0, -1).join(", ")} and ${quoted.at(-1)!}`;
+  };
+  return worldRefusal(
+    "view-dropped-partition",
+    `This world's \`world.view\` named ${quote(dropped)} in one round of a look and dropped ` +
+      `${dropped.length === 1 ? "it" : "them"} in the next, after ${quote(loaded)} loaded. A view may name more ` +
+      `partitions as more is loaded, never fewer, because who hears an event is judged against ` +
+      `only what a command declared. Keep naming ${quote(dropped)} alongside what the loaded ` +
+      `partitions add.`,
+  );
+}
+
+/**
  * The store the engine reads through INSIDE the child.
  *
  * It never reaches anywhere. The parent fills it immediately before the
@@ -1161,6 +1201,9 @@ export function createWorldRunner(
    */
   migrationHooks: WorldMigrationHooks = {},
 ): WorldRunnerHandle {
+  /** What each player's view named on the last round of the look in
+   *  progress, or the refusal its view earned on an earlier round (#936). */
+  const viewRounds = new Map<string, readonly string[] | WorldRefusal>();
   return stopsOnStaleStamp({
     /**
      * Which partitions the parent must send for this command.
@@ -1489,6 +1532,11 @@ export function createWorldRunner(
       const resident = residentNames(engine);
       const needs = new Set<string>();
       const failures: Array<readonly [string, unknown]> = [];
+      const loaded = Object.keys(supplied);
+      // A look's first round is the only one handed nothing, so it starts the
+      // comparison afresh, even after a look cut short: between looks a command
+      // may move the player. Looks are serialised by the world lock.
+      if (loaded.length === 0) viewRounds.clear();
       for (const player of players) {
         // PER PLAYER, INSIDE ONE CALL (#310). `viewPartitions` runs the
         // bundle's own `world.view` for that seat and reads the seat off the
@@ -1502,7 +1550,8 @@ export function createWorldRunner(
         // seat that threw reaching for an absent partition may well succeed on
         // the round after the one that loaded it.
         try {
-          for (const name of engine.viewPartitions(player)) {
+          const named = viewRound(engine, player, viewRounds, loaded);
+          for (const name of named) {
             if (!store.holds(name) && !resident.has(name)) needs.add(name);
           }
         } catch (error) {

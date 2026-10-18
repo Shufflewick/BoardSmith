@@ -3,10 +3,10 @@ import {
 } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { parse as parseTypeScript } from '@typescript-eslint/parser';
 import { atomicWriteFile } from './verify-run.js';
-import { readLiveSlices } from './verify-derive-check.js';
+import { readLiveSlices } from './rulebook-sources.js';
 import { resolveCitedSlices } from './chunk-provenance.js';
 import { scanSourceForSandboxViolations, type SandboxViolation } from '../lib/sandbox-scan.js';
 import {
@@ -291,7 +291,9 @@ function renderExampleTestFile(input: {
       "for this chunk regenerates ONLY this file, never another chunk's.",
   );
   lines.push('');
-  lines.push("import { describe, it, expect } from 'vitest';");
+  lines.push(
+    `import { describe, it, expect${executable.length > 0 ? ', beforeEach' : ''} } from 'vitest';`,
+  );
   for (const imp of hoistedImports) lines.push(imp);
   lines.push('');
 
@@ -345,10 +347,14 @@ function renderExampleTestFile(input: {
   }
 
   // Each example's test sits in a describe() titled with its exampleId, so a test result names
-  // the example it belongs to (`verify-example-run` reads the verdict back that way).
+  // the example it belongs to (`verify-example-run` reads the verdict back that way). A test that
+  // asserts nothing fails `hasAssertions`, so it can never pass as agreeing (#826).
   for (const record of executable) {
     lines.push(...renderCitationComment(record));
     lines.push(`  describe('${stringLiteralSafe(record.exampleId)}', () => {`);
+    lines.push('    beforeEach(() => {');
+    lines.push('      expect.hasAssertions();');
+    lines.push('    });');
     lines.push(indentCode(record.translation.testCode, '    '));
     lines.push('  });');
     lines.push('');
@@ -566,7 +572,7 @@ export async function verifyExampleEmitCommand(
   }
 
   console.log(
-    chalk.green(
+    styleText('green',
       `✓ Emitted ${result.relTestFilePath} — ${result.testBlockCount} test(s), ` +
         `${result.exemptCount} exempt example(s)${result.chunkExempt ? ' (chunk-wide exemption)' : ''}.`,
     ),

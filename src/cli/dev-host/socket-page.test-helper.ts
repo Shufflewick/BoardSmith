@@ -44,7 +44,12 @@ export async function serveSockets(onConnection: (socket: WebSocket) => void): P
     // Registered AFTER the road's own handler, so by the time this sees a
     // message the handler has already taken it.
     socket.on('message', (raw) => {
-      const message = JSON.parse(raw.toString()) as Frame;
+      let message: Frame;
+      try {
+        message = JSON.parse(raw.toString()) as Frame;
+      } catch {
+        return; // a test sending a frame that is not JSON (#879) waits on none
+      }
       for (const waiter of [...waiters]) {
         if (!waiter.accept(message)) continue;
         waiters.splice(waiters.indexOf(waiter), 1);
@@ -67,13 +72,14 @@ export async function serveSockets(onConnection: (socket: WebSocket) => void): P
 /**
  * Open a page on `port`, say hello as `clientId`, and resolve once the host
  * sends a frame `greeted` takes. `hello.runId` is the server run a page names
- * when its socket reconnects (#416); a fresh page load names none.
+ * when its socket reconnects (#416); a fresh page load names none. `hello.loadId`
+ * is the page load the socket belongs to (#1041).
  */
 export async function openSocketPage(
   port: number,
   clientId: string,
   greeted: (frame: Frame) => boolean,
-  hello: { runId?: unknown } = {},
+  hello: { runId?: unknown; loadId?: unknown } = {},
 ): Promise<SocketPage> {
   const socket = new WebSocket(`ws://127.0.0.1:${port}`);
   const frames: Frame[] = [];

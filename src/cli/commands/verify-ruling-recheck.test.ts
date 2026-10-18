@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { promises as fs, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   RULING_VERDICTS,
@@ -10,8 +11,10 @@ import {
   enumerateRulingsForRecheck,
   resolveFreshTranscription,
   recordRulingVerdicts,
+  readRulingVerdicts,
   verifyRulingRecheckCommand,
 } from './verify-ruling-recheck.js';
+import { ledgerFilePath, verifyRunInitCommand } from './verify-run.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
@@ -189,6 +192,105 @@ describe('resolveFreshTranscription', () => {
     }
   });
 
+  it('a mistyped --run-id is reported as no such run, not as an empty slices folder (#1002)', async () => {
+    const project = join(dir, 'game');
+    const runId = '2026-07-30T10-00-00Z';
+    const slices = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'slices');
+    await fs.mkdir(slices, { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'RUN.md'), '# Verify Run\n');
+    await fs.writeFile(join(slices, '01-setup.md'), '# Setup\n');
+    const result = await resolveFreshTranscription(project, '2099-01-01T00-00-00Z');
+    expect(result.scopeLimited).toBe(true);
+    if (result.scopeLimited) {
+      expect(result.reason).toContain('No verify run "2099-01-01T00-00-00Z" found');
+      expect(result.reason).toContain(`Runs that do exist: ${runId}.`);
+      expect(result.reason).not.toMatch(/exists but contains no/);
+    }
+  });
+
+  describe('a real run (it has RUN.md) whose slices folder cannot be used (#1002)', () => {
+    const runId = '2026-07-30T10-00-00Z';
+    let project: string;
+    let runDir: string;
+    let slices: string;
+    const slicesRel = `${DESIGN_DIR}/rulebook/.verify/${runId}/slices`;
+    const git = (...args: string[]) => execFileSync('git', args, { cwd: project, stdio: 'ignore' });
+
+    beforeEach(async () => {
+      project = join(dir, 'game');
+      runDir = join(project, DESIGN_DIR, 'rulebook', '.verify', runId);
+      slices = join(runDir, 'slices');
+      await fs.mkdir(slices, { recursive: true });
+      await fs.writeFile(join(runDir, 'RUN.md'), '# Verify Run\n\n- unit 01 done\n');
+      await fs.writeFile(join(slices, '01-setup.md'), '# Setup\n');
+    });
+
+    function expectNeverCalledFake(reason: string) {
+      expect(reason).toContain(`Verify run "${runId}"`);
+      expect(reason).not.toMatch(/has no RUN\.md/);
+      expect(reason).not.toMatch(/Remove that folder/);
+    }
+
+    it('missing: says the staged transcription is missing, and its two remedies leave RUN.md untouched', async () => {
+      git('init', '-q');
+      git('add', '-A');
+      git('-c', 'user.email=t@example.com', '-c', 'user.name=T', 'commit', '-q', '-m', 'run');
+      await fs.rm(slices, { recursive: true });
+      const runMd = await fs.readFile(join(runDir, 'RUN.md'));
+
+      const result = await resolveFreshTranscription(project, runId);
+      expect(result.scopeLimited).toBe(true);
+      if (!result.scopeLimited) return;
+      expectNeverCalledFake(result.reason);
+      expect(result.reason).toContain('staged transcription is missing');
+      expect(result.reason).toContain(`\`git restore ${slicesRel}\``);
+      expect(result.reason).toContain('`boardsmith verify-run-init`');
+      expect(result.reason).not.toContain('--run-id');
+      expect(result.reason).not.toMatch(/move .* aside/i);
+
+      git('restore', slicesRel);
+      await verifyRunInitCommand({ project, json: true });
+      expect(await fs.readFile(join(runDir, 'RUN.md'))).toEqual(runMd);
+      expect((await resolveFreshTranscription(project, runId)).scopeLimited).toBe(false);
+    });
+
+    it('a file in its place: says so and to move the file aside first', async () => {
+      await fs.rm(slices, { recursive: true });
+      await fs.writeFile(slices, 'not a folder');
+      const result = await resolveFreshTranscription(project, runId);
+      expect(result.scopeLimited).toBe(true);
+      if (!result.scopeLimited) return;
+      expectNeverCalledFake(result.reason);
+      expect(result.reason).toContain(`${slicesRel} is a file, not a folder`);
+      expect(result.reason).toMatch(/Move that file aside/);
+      expect(result.reason).toContain(`\`git restore ${slicesRel}\``);
+    });
+
+    it('a link to a folder inside it: names the link instead of walking into it (#1048)', async () => {
+      await fs.symlink(runDir, join(slices, 'loop'));
+      const result = await resolveFreshTranscription(project, runId);
+      expect(result.scopeLimited).toBe(true);
+      if (!result.scopeLimited) return;
+      expectNeverCalledFake(result.reason);
+      expect(result.reason).toContain(`${slicesRel} could not be read: ${join(slices, 'loop')} is a link to a folder`);
+      expect(result.reason).not.toMatch(/permissions/);
+    });
+
+    it('unreadable: says it could not be read, not that it is missing', async () => {
+      await fs.chmod(slices, 0o000);
+      try {
+        const result = await resolveFreshTranscription(project, runId);
+        expect(result.scopeLimited).toBe(true);
+        if (!result.scopeLimited) return;
+        expectNeverCalledFake(result.reason);
+        expect(result.reason).toContain(`${slicesRel} could not be read`);
+        expect(result.reason).not.toMatch(/missing/);
+      } finally {
+        await fs.chmod(slices, 0o755);
+      }
+    });
+  });
+
   it('returns scopeLimited for a malformed --run-id, never throwing', async () => {
     const project = join(dir, 'game');
     await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
@@ -281,6 +383,7 @@ describe('resolveFreshTranscription', () => {
       const stagingDir = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'slices');
       await fs.mkdir(stagingDir, { recursive: true });
       await fs.writeFile(join(stagingDir, '01-setup.md'), '## Setup\n\ntext\n');
+      await fs.writeFile(ledgerFilePath(project, runId), '# Verify Run\n');
     }
     const result = await resolveFreshTranscription(project);
     expect(result.scopeLimited).toBe(false);
@@ -313,6 +416,21 @@ describe('recordRulingVerdicts — the one atomic write path (176-CONTEXT.md dec
     expect(src).not.toMatch(/\bwriteFileSync\(/);
     expect(src).not.toMatch(/\bfsPromises\.writeFile\(/);
     expect(src).toMatch(/\batomicWriteFile\(/);
+  });
+
+  it('keeps every verdict when several record calls run in parallel (#831)', async () => {
+    const project = join(dir, 'game');
+    const runId = '2026-07-30T10-00-00Z';
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'slices'), { recursive: true });
+    const numbers = [1, 2, 3, 4, 5, 6];
+    await Promise.all(
+      numbers.map((number) =>
+        recordRulingVerdicts(project, runId, [
+          createRulingVerdictRecord({ number, verdict: 'still-needed', reasoning: 'Still missing.' }),
+        ]),
+      ),
+    );
+    expect((await readRulingVerdicts(project, runId)).map((r) => r.number).sort()).toEqual(numbers);
   });
 
   it('persists verdict records to the run-scoped ledger, never touching RULINGS.md', async () => {
@@ -419,5 +537,14 @@ describe('verifyRulingRecheckCommand', () => {
       expect(message).not.toMatch(/\.ts:\d/);
       expect(message).not.toMatch(/\bsrc\//);
     }
+  });
+});
+
+describe('verify-ruling-recheck: an unreadable RULINGS.md (#1110)', () => {
+  it('names the file rather than calling it missing', async () => {
+    const project = tempTree('bs-ruling-recheck-unreadable-');
+    const rulings = join(project, DESIGN_DIR, 'RULINGS.md');
+    await fs.mkdir(rulings, { recursive: true });
+    await expect(verifyRulingRecheckCommand({ project, json: true })).rejects.toThrow(`Could not read ${rulings} (EISDIR)`);
   });
 });

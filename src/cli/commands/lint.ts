@@ -1,8 +1,12 @@
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
-import chalk from 'chalk';
+import { existsSync, promises as fs, readdirSync, readFileSync, statSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join, relative } from 'node:path';
+import { styleText } from 'node:util';
+import { ESLint } from 'eslint';
 import { scanSandboxViolations } from '../lib/sandbox-scan.js';
+import { SOURCE_EXTENSIONS, collectSourceFiles } from '../lib/source-files.js';
 import { requireBoardsmithWorkspace } from '../lib/project-context.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 import { runTool } from '../lib/run-tool.js';
 import { selectChecks } from '../lib/select-checks.js';
 
@@ -122,30 +126,6 @@ const LINT_RULES = {
     negativePattern: /registerElements/,
   },
 };
-
-/**
- * Find all TypeScript files in a directory recursively
- */
-function findTypeScriptFiles(dir: string, files: string[] = []): string[] {
-  if (!existsSync(dir)) return files;
-
-  const entries = readdirSync(dir);
-  for (const entry of entries) {
-    const fullPath = join(dir, entry);
-
-    // Skip node_modules and hidden directories
-    if (entry === 'node_modules' || entry.startsWith('.')) continue;
-
-    const stat = statSync(fullPath);
-    if (stat.isDirectory()) {
-      findTypeScriptFiles(fullPath, files);
-    } else if (entry.endsWith('.ts') && !entry.endsWith('.d.ts')) {
-      files.push(fullPath);
-    }
-  }
-
-  return files;
-}
 
 /**
  * Lint a single file for BoardSmith-specific issues
@@ -285,14 +265,13 @@ function checkUnusedActions(filePath: string, content: string, allFiles: Map<str
  * overall verdict.
  */
 async function runPitfallLint(cwd: string): Promise<number> {
-  console.log(chalk.cyan('\nChecking for BoardSmith pitfalls...\n'));
+  console.log(styleText('cyan', '\nChecking for BoardSmith pitfalls...\n'));
 
-  // Find all TypeScript files
-  const srcDir = join(cwd, 'src');
-  const files = findTypeScriptFiles(srcDir);
+  // The hints are text patterns over script code, so .vue files are left to the sandbox scan.
+  const files = collectSourceFiles(join(cwd, 'src'), SOURCE_EXTENSIONS.filter((ext) => ext !== 'vue'));
 
   if (files.length === 0) {
-    console.log(chalk.yellow('No TypeScript files found in src/'));
+    console.log(styleText('yellow', 'No game source files found in src/'));
     return 0;
   }
 
@@ -355,40 +334,40 @@ async function runPitfallLint(cwd: string): Promise<number> {
 
   for (const [filePath, issues] of issuesByFile) {
     const relPath = relative(cwd, filePath);
-    console.log(chalk.underline(relPath));
+    console.log(styleText('underline', relPath));
 
     // Sort by line number
     issues.sort((a, b) => a.line - b.line);
 
     for (const issue of issues) {
-      const icon = issue.severity === 'error' ? chalk.red('✗')
-        : issue.severity === 'warning' ? chalk.yellow('⚠')
-        : chalk.blue('ℹ');
+      const icon = issue.severity === 'error' ? styleText('red', '✗')
+        : issue.severity === 'warning' ? styleText('yellow', '⚠')
+        : styleText('blue', 'ℹ');
 
-      const location = chalk.dim(`${issue.line}:${issue.column || 0}`);
-      const rule = chalk.dim(`(${issue.rule})`);
+      const location = styleText('dim', `${issue.line}:${issue.column || 0}`);
+      const rule = styleText('dim', `(${issue.rule})`);
 
       console.log(`  ${location}  ${icon} ${issue.message} ${rule}`);
 
       if (issue.suggestion) {
-        console.log(chalk.dim(`         └─ ${issue.suggestion}`));
+        console.log(styleText('dim', `         └─ ${issue.suggestion}`));
       }
     }
     console.log('');
   }
 
   // Summary
-  console.log(chalk.dim('─'.repeat(50)));
-  console.log(`Checked ${chalk.cyan(result.filesChecked)} files`);
+  console.log(styleText('dim', '─'.repeat(50)));
+  console.log(`Checked ${styleText('cyan', String(result.filesChecked))} files`);
 
   if (result.issues.length === 0) {
-    console.log(chalk.green('✓ No issues found'));
+    console.log(styleText('green', '✓ No issues found'));
   } else {
     const parts: string[] = [];
-    if (result.errorCount > 0) parts.push(chalk.red(`${result.errorCount} error(s)`));
-    if (result.warningCount > 0) parts.push(chalk.yellow(`${result.warningCount} warning(s)`));
+    if (result.errorCount > 0) parts.push(styleText('red', `${result.errorCount} error(s)`));
+    if (result.warningCount > 0) parts.push(styleText('yellow', `${result.warningCount} warning(s)`));
     const infoCount = result.issues.length - result.errorCount - result.warningCount;
-    if (infoCount > 0) parts.push(chalk.blue(`${infoCount} info`));
+    if (infoCount > 0) parts.push(styleText('blue', `${infoCount} info`));
     console.log(`Found ${parts.join(', ')}`);
   }
 
@@ -401,36 +380,129 @@ interface LintCheck {
   run: () => Promise<number>;
 }
 
-/**
- * Config filenames that mean "this workspace has opted into <tool>". Only
- * configured tools run, so `boardsmith lint` never fails a game project for
- * lacking a linter it never set up.
+/*
+ * Only configured tools run, so `boardsmith lint` never fails a game project
+ * for lacking a linter it never set up. Each check below finds a config
+ * exactly where its linter would, so lint never calls a configured project
+ * unconfigured, or the reverse (#1094).
  */
-const ESLINT_CONFIGS = [
-  'eslint.config.js',
-  'eslint.config.mjs',
-  'eslint.config.cjs',
-  'eslint.config.ts',
-  // ESLint no longer reads .eslintrc files. They stay here on purpose, so an
-  // author who has one gets ESLint's own message on how to migrate instead of
-  // a silently skipped check (#624).
-  '.eslintrc.js',
-  '.eslintrc.cjs',
-  '.eslintrc.json',
-];
 
+// ESLint no longer reads .eslintrc files. They count here on purpose, so an
+// author who has one gets ESLint's own message on how to migrate instead of a
+// silently skipped check (#624).
+const LEGACY_ESLINT_CONFIGS = ['.eslintrc.js', '.eslintrc.cjs', '.eslintrc.json'];
+
+/** `dir` and every folder under it, hidden ones included as ESLint lints them, except node_modules. */
+function foldersUnder(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  const below = readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && entry.name !== 'node_modules')
+    .flatMap((entry) => foldersUnder(join(dir, entry.name)));
+  return [dir, ...below];
+}
+
+/**
+ * Asks boardsmith's own ESLint, the copy lint runs, whether it finds a config
+ * from this project, or from any folder under src/, upward.
+ */
+async function hasEslintConfig(cwd: string): Promise<boolean> {
+  if (LEGACY_ESLINT_CONFIGS.some((name) => existsSync(join(cwd, name)))) return true;
+  const eslint = new ESLint({ cwd });
+  if ((await eslint.findConfigFile()) !== undefined) return true;
+  for (const dir of foldersUnder(join(cwd, 'src'))) {
+    // ESLint's lookup starts in the folder holding the path, so any name inside `dir` asks from `dir`.
+    if ((await eslint.findConfigFile(join(dir, '__placeholder__'))) !== undefined) return true;
+  }
+  return false;
+}
+
+// Stylelint 17 searches with cosmiconfig 9's 'global' strategy. These are
+// that search's file names; Stylelint's own resolveConfig() cannot be asked,
+// as it throws instead of returning undefined when there is no config, and
+// it lives in the game's install, which may not have it.
+// shortcut: a cosmiconfig meta config (a "cosmiconfig" key or .config/config.json) is not read; read it if a game uses one.
+const RC_EXTENSIONS = ['', '.json', '.yaml', '.yml', '.js', '.ts', '.cjs', '.mjs'];
 const STYLELINT_CONFIGS = [
-  '.stylelintrc.cjs',
-  '.stylelintrc.js',
-  '.stylelintrc.json',
-  '.stylelintrc',
-  'stylelint.config.js',
-  'stylelint.config.cjs',
-  'stylelint.config.mjs',
+  ...RC_EXTENSIONS.flatMap((ext) => [`.stylelintrc${ext}`, `.config/stylelintrc${ext}`]),
+  ...['js', 'ts', 'cjs', 'mjs'].map((ext) => `stylelint.config.${ext}`),
 ];
+const STYLELINT_GLOBAL_CONFIGS = RC_EXTENSIONS.map((ext) => `config${ext}`);
 
-function hasAnyConfig(cwd: string, candidates: string[]): boolean {
-  return candidates.some((name) => existsSync(join(cwd, name)));
+/** `start` and each parent, stopping after the home folder (or at the root, outside it). */
+function stylelintSearchDirs(start: string): string[] {
+  const home = homedir();
+  const dirs = [start];
+  for (let dir = start; dir !== home && dirname(dir) !== dir; dir = dirname(dir)) dirs.push(dirname(dir));
+  return dirs;
+}
+
+/** Stylelint's global config folder, as cosmiconfig's env-paths names it. */
+function stylelintGlobalDir(): string {
+  const home = homedir();
+  if (process.platform === 'darwin') return join(home, 'Library', 'Preferences', 'stylelint');
+  if (process.platform === 'win32') return join(process.env.APPDATA || join(home, 'AppData', 'Roaming'), 'stylelint', 'Config');
+  return join(process.env.XDG_CONFIG_HOME || join(home, '.config'), 'stylelint');
+}
+
+/** Stylelint skips an empty config file and keeps searching. */
+function isNonEmptyFile(path: string): boolean {
+  return existsSync(path) && statSync(path).isFile() && readFileSync(path, 'utf-8').trim() !== '';
+}
+
+function hasStylelintKey(pkgPath: string): boolean {
+  if (!isNonEmptyFile(pkgPath)) return false;
+  let pkg: unknown;
+  try {
+    pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+  } catch {
+    pkg = undefined;
+  }
+  if (typeof pkg !== 'object' || pkg === null || Array.isArray(pkg)) {
+    throw new Error(
+      `${pkgPath} is not a valid JSON object. boardsmith lint reads it to find a Stylelint config ` +
+        `(a "stylelint" key). Fix the JSON in that file and run lint again.`,
+    );
+  }
+  return (pkg as Record<string, unknown>).stylelint != null;
+}
+
+/** The search above is Stylelint 17's, so another installed major is refused rather than guessed at. */
+async function requireStylelint17(cwd: string): Promise<void> {
+  const manifest = join(cwd, 'node_modules', 'stylelint', 'package.json');
+  const text = await readIfExists(manifest, (path) => fs.readFile(path, 'utf-8'));
+  if (text === undefined) return;
+  let pkg: unknown;
+  try {
+    pkg = JSON.parse(text);
+  } catch {
+    pkg = undefined;
+  }
+  const version = typeof pkg === 'object' && pkg !== null ? (pkg as Record<string, unknown>).version : undefined;
+  if (typeof version !== 'string') {
+    throw new Error(
+      `${manifest} is not a JSON object with a "version", so boardsmith lint cannot tell which Stylelint is installed. ` +
+        'Reinstall Stylelint 17 with: npm install -D stylelint@17',
+    );
+  }
+  if (version.split('.')[0] === '17') return;
+  throw new Error(
+    `This project has Stylelint ${version} installed. boardsmith lint's Stylelint config detection is written ` +
+      `for Stylelint 17, so it cannot tell whether Stylelint ${version} would find a config. ` +
+      'Install Stylelint 17 with: npm install -D stylelint@17',
+  );
+}
+
+/** Searches from the project, then from each folder holding a .vue file lint passes Stylelint, as Stylelint does. */
+async function hasStylelintConfig(cwd: string): Promise<boolean> {
+  await requireStylelint17(cwd);
+  const configIn = (dir: string): boolean =>
+    hasStylelintKey(join(dir, 'package.json')) || STYLELINT_CONFIGS.some((name) => isNonEmptyFile(join(dir, name)));
+  if (stylelintSearchDirs(cwd).some(configIn)) return true;
+  const vueDirs = new Set(collectSourceFiles(join(cwd, 'src'), ['vue']).map((file) => dirname(file)));
+  // Each .vue folder's search climbs back into the project, already checked above, so it stops there.
+  const below = (start: string): string[] => (start === cwd ? [] : [start, ...below(dirname(start))]);
+  const found = [...vueDirs].some((start) => below(start).some(configIn));
+  return found || STYLELINT_GLOBAL_CONFIGS.some((name) => isNonEmptyFile(join(stylelintGlobalDir(), name)));
 }
 
 /**
@@ -453,14 +525,30 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   });
 
   const checks: LintCheck[] = [];
+  const hasEslint = wants('eslint') && await hasEslintConfig(cwd);
+  const hasCssConfig = wants('css') && await hasStylelintConfig(cwd);
 
-  if (wants('eslint') && hasAnyConfig(cwd, ESLINT_CONFIGS)) {
+  if (options.eslint && !hasEslint) {
+    console.error(styleText('red', '\nlint --eslint: this project has no ESLint config, so ESLint cannot run.'));
+    console.error(styleText('dim', 'Add an eslint.config.mjs to the project root that uses boardsmith/eslint-plugin, or drop --eslint.'));
+    console.error(styleText('dim', 'How: https://github.com/Shufflewick/BoardSmith/blob/main/docs/api/eslint-plugin.md\n'));
+    process.exit(1);
+  }
+
+  if (options.css && !hasCssConfig) {
+    console.error(styleText('red', '\nlint --css: this project has no Stylelint config, so Stylelint cannot run.'));
+    console.error(styleText('dim', "Add a .stylelintrc.cjs to the project root with customSyntax: 'postcss-html' (so it reads the <style> blocks in .vue files), or drop --css."));
+    console.error(styleText('dim', 'The game also needs both packages installed: npm install -D stylelint postcss-html\n'));
+    process.exit(1);
+  }
+
+  if (hasEslint) {
     const args = ['src/'];
     if (options.fix) args.push('--fix');
     checks.push({ name: 'ESLint', run: () => runTool('eslint', args, { cwd }) });
   }
 
-  if (wants('css') && hasAnyConfig(cwd, STYLELINT_CONFIGS)) {
+  if (hasCssConfig) {
     const args = ['src/**/*.vue'];
     if (options.fix) args.push('--fix');
     checks.push({ name: 'Stylelint', run: () => runTool('stylelint', args, { cwd }) });
@@ -471,8 +559,8 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   }
 
   if (checks.length === 0) {
-    console.log(chalk.yellow('\nNo lint checks apply here.'));
-    console.log(chalk.dim('Add an eslint.config.mjs or .stylelintrc.cjs, or run this in a game project.\n'));
+    console.log(styleText('yellow', '\nNo lint checks apply here.'));
+    console.log(styleText('dim', 'Add an eslint.config.mjs or .stylelintrc.cjs, or run this in a game project.\n'));
     return;
   }
 
@@ -483,9 +571,9 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   }
 
   if (failed.length > 0) {
-    console.error(chalk.red(`\nLint failed: ${failed.join(', ')}\n`));
+    console.error(styleText('red', `\nLint failed: ${failed.join(', ')}\n`));
     process.exit(1);
   }
 
-  console.log(chalk.green(`\nLint passed (${checks.map((c) => c.name).join(', ')})\n`));
+  console.log(styleText('green', `\nLint passed (${checks.map((c) => c.name).join(', ')})\n`));
 }

@@ -20,6 +20,7 @@ import {
   Piece,
   Player,
   Action,
+  PlayerFacingError,
   loop,
   eachPlayer,
   actionStep,
@@ -28,7 +29,10 @@ import {
 } from '../engine/index.js';
 import { GameRunner } from './runner.js';
 import { PendingActionManager } from '../session/pending-action-manager.js';
+import { snapshotTree } from '../engine/utils/index.js';
 import { TestGame } from '../testing/test-game.js';
+
+const AUTHOR_REFUSAL = 'The bell has rung. Nothing was changed. Replan next round.';
 
 class Token extends Piece<HalfwayGame, Player> {}
 class Zone extends Space<HalfwayGame, Player> {}
@@ -89,6 +93,15 @@ class HalfwayGame extends Game<HalfwayGame, Player> {
         .execute(() => {
           throw new Error('rules bug after a moving pick');
         }),
+      // A refusal written for the player, thrown after moving a token, whose own
+      // text happens to hold the runner's sentence (#989).
+      Action.create('moveThenRefuse')
+        .prompt('Move, then refuse')
+        .execute((_args, ctx) => {
+          const game = ctx.game as HalfwayGame;
+          game.source.first(Token)!.putInto(game.target);
+          throw new PlayerFacingError(AUTHOR_REFUSAL);
+        }),
       Action.create('cleanMove')
         .prompt('Move one')
         .execute((_args, ctx) => {
@@ -106,7 +119,7 @@ class HalfwayGame extends Game<HalfwayGame, Player> {
         root: loop({
           while: (ctx) => (ctx.get<number>('round') ?? 1) <= 20,
           maxIterations: 50,
-          do: eachPlayer({ do: actionStep({ actions: ['halfMove', 'animateThenFail', 'pickThenFail', 'movingPickThenFail', 'cleanMove', 'refuse'] }) }),
+          do: eachPlayer({ do: actionStep({ actions: ['halfMove', 'animateThenFail', 'pickThenFail', 'movingPickThenFail', 'moveThenRefuse', 'cleanMove', 'refuse'] }) }),
         }),
         setup: (ctx) => ctx.set('round', 1),
       }
@@ -126,10 +139,18 @@ function makeRunner(checkpoints?: { enabled: boolean }) {
 }
 
 describe('an execute() that throws half-way through', () => {
-  it('reports failure', () => {
+  it('reports failure, and says nothing was changed only once the runner has rolled it back (#989)', () => {
     const runner = makeRunner();
     const result = runner.performAction('halfMove', 1, {});
     expect(result.success).toBe(false);
+    expect(result.error).toMatch(/could not be completed.* Nothing was changed\.$/);
+  });
+
+  it('adds the sentence after a PlayerFacingError once rolled back (#989)', () => {
+    const runner = makeRunner();
+    const result = runner.performAction('moveThenRefuse', 1, {});
+    expect(result.error).toBe(`${AUTHOR_REFUSAL} Nothing was changed.`);
+    expect(runner.game.target.all(Token)).toHaveLength(0);
   });
 
   it('leaves the element tree exactly as it was', () => {
@@ -176,6 +197,48 @@ describe('an execute() that throws half-way through', () => {
   });
 });
 
+describe('an execute() that throws half-way with no checkpoint to roll back to (#808)', () => {
+  function runnerWithoutCheckpoints() {
+    const runner = new GameRunner({
+      GameClass: HalfwayGame,
+      gameType: 'halfway',
+      gameOptions: { playerCount: 2, playerNames: ['A', 'B'], seed: 'atomic' },
+      checkpoints: { enabled: false },
+    });
+    runner.start();
+    return runner;
+  }
+
+  function expectPartialChangesReported(error: string | undefined) {
+    expect(error).toContain('could not be completed');
+    expect(error).not.toContain('Nothing was changed');
+    expect(error).toMatch(/failed part way.*may still hold its partial changes.*checkpoints are turned off/);
+  }
+
+  it('says the game may hold the partial changes and what to do, never that nothing changed', () => {
+    const runner = runnerWithoutCheckpoints();
+    const result = runner.performAction('halfMove', 1, {});
+    expect(result.success).toBe(false);
+    expect(runner.game.target.all(Token)).toHaveLength(3);
+    expectPartialChangesReported(result.error);
+  });
+
+  it('leaves a PlayerFacingError\'s own text whole and adds the warning (#989)', () => {
+    const runner = runnerWithoutCheckpoints();
+    const result = runner.performAction('moveThenRefuse', 1, {});
+    expect(result.error).toMatch(new RegExp(`^${AUTHOR_REFUSAL} The action failed part way`));
+  });
+
+  it('says the same on the pick-by-pick path', () => {
+    const runner = runnerWithoutCheckpoints();
+    runner.startPendingAction('pickThenFail', 1);
+    const result = runner.processSelectionStep(1, 'how', 'all');
+    expect(result.success).toBe(false);
+    expect(runner.game.target.all(Token)).toHaveLength(3);
+    expectPartialChangesReported(result.error);
+  });
+});
+
 describe('an execute() that animates and then throws (#751)', () => {
   it('leaves no animation event in either seat\'s view or the saved snapshot', () => {
     const runner = makeRunner();
@@ -187,7 +250,7 @@ describe('an execute() that animates and then throws (#751)', () => {
     for (const seat of [1, 2]) {
       expect(runner.getPlayerView(seat).state.animationEvents ?? []).toEqual([]);
     }
-    expect(runner.getSnapshot().state.animationEvents ?? []).toEqual([]);
+    expect(snapshotTree(runner.getSnapshot()).animationEvents ?? []).toEqual([]);
   });
 });
 
@@ -199,7 +262,7 @@ describe('an execute() that throws after its picks were taken one at a time (#80
     expect(runner.game.pendingAnimationEvents).toEqual([]);
     expect(runner.actionHistory).toHaveLength(0);
     const snapshot = runner.getSnapshot();
-    expect(snapshot.state.animationEvents ?? []).toEqual([]);
+    expect(snapshotTree(snapshot).animationEvents ?? []).toEqual([]);
     const restored = GameRunner.fromSnapshot(snapshot, HalfwayGame);
     expect(restored.game.source.all(Token)).toHaveLength(5);
     expect(restored.game.target.all(Token)).toHaveLength(0);
@@ -252,7 +315,7 @@ describe('an action that refuses without mutating', () => {
 // roll back to unless something called getSnapshot in between (#802).
 describe('a second action that throws half-way, with no snapshot taken between (#802)', () => {
   function expectAfterFirstAction(runner: GameRunner<HalfwayGame>, messagesBefore: number, error?: string) {
-    expect(error).not.toContain('disabled');
+    expect(error).not.toContain('checkpoints are turned off');
     expect(runner.game.source.all(Token)).toHaveLength(4);
     expect(runner.game.target.all(Token)).toHaveLength(1);
     expect(runner.game.messages.length).toBe(messagesBefore);
@@ -335,6 +398,6 @@ describe('a second action that throws half-way, with no snapshot taken between (
 
     const result = runner.performAction('halfMove', 2, {});
 
-    expect(result.error).toContain('per-action checkpoints are disabled');
+    expect(result.error).toContain('per-action checkpoints are turned off');
   });
 });

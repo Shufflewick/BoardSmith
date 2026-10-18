@@ -884,26 +884,6 @@ describe('chunk-check', () => {
     errSpy.mockRestore();
   });
 
-  it('writes the Re-verified (no code change): stamp when --reverified-no-code-change is supplied, and writes nothing without it (175-02)', async () => {
-    const { project } = await makeCheckProject();
-    await makeChunk(project, 'jab', JAB_CITES);
-
-    await chunkCheckCommand('jab', { project, json: true });
-    const withoutFlag = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
-    expect(withoutFlag).not.toContain('Re-verified');
-
-    process.exitCode = undefined;
-    await chunkCheckCommand('jab', {
-      project,
-      json: true,
-      reverifiedNoCodeChange: 'aaa111..bbb222 — 0 manifest files changed',
-    });
-    const withFlag = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
-    expect(withFlag).toContain(
-      'Re-verified (no code change): aaa111..bbb222 — 0 manifest files changed',
-    );
-  });
-
   /**
    * `<slug>` is an IDENTITY: it is recorded into the block this command writes, and it addresses
    * `design/chunks/<slug>/CHUNK.md`. #240's shape, found in `init`, is one argument being both
@@ -1115,6 +1095,14 @@ describe('chunk-provenance-status', () => {
   it('names design/chunks/ when the project has no chunks directory', async () => {
     const project = tempTree('chunk-provenance-no-chunks-');
     await expect(chunkProvenanceStatusCommand({ project, json: true })).rejects.toThrow(/No design\/chunks\/ directory/);
+  });
+
+  it('names a CHUNK.md it cannot read instead of skipping the chunk (#1174)', async () => {
+    const { project } = await makeStatusProject();
+    await fs.mkdir(join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md'), { recursive: true });
+    await expect(chunkProvenanceStatusCommand({ project, quiet: true })).rejects.toThrow(
+      `Could not read ${join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md')} (EISDIR)`,
+    );
   });
 
   it('a well-formed full block reports state full', async () => {
@@ -1479,58 +1467,19 @@ describe('projectProvenanceState', () => {
   });
 });
 
-/**
- * 175-CONTEXT.md decision 11 — the `Re-verified (no code change):` label, APPENDED as the ninth
- * `VERIFIED_AGAINST_LABELS` member. It is a genuinely NEW concept, never a reuse of
- * `SCOPE_REASONS` (which encodes why a verification's scope was reduced, not whether code moved).
- */
-describe('VERIFIED_AGAINST_LABELS — Re-verified (no code change) append (175-02)', () => {
-  const PRE_CHANGE_EIGHT_LABELS = [
-    'Scope:',
-    'Reason:',
-    'Rulebook edition:',
-    'Rulebook source hash:',
-    'Engine revision:', // #440: replaced 'BoardSmith version:', package.json's never-changing 0.0.1
-    'Skills tree hash:',
-    'Cited slices:',
-    'Unresolved citations:',
-  ] as const;
+describe('## Verified Against — render and parse shape', () => {
+  const record: VerifiedAgainstRecord = {
+    scope: SCOPE_FULL,
+    edition: 'First Printing 2020',
+    sourceHash: 'deadbeef',
+    engineRevision: 47,
+    skillsTreeHash: 'cafef00d',
+    citedSlices: [],
+    unresolved: [],
+  };
 
-  function baseRecord(overrides: Partial<VerifiedAgainstRecord> = {}): VerifiedAgainstRecord {
-    return {
-      scope: SCOPE_FULL,
-      edition: 'First Printing 2020',
-      sourceHash: 'deadbeef',
-      engineRevision: 47,
-      skillsTreeHash: 'cafef00d',
-      citedSlices: [],
-      unresolved: [],
-      ...overrides,
-    };
-  }
-
-  it('has exactly ten members: Re-verified appended ninth, Additional source hash tenth (#305)', () => {
-    expect(VERIFIED_AGAINST_LABELS).toHaveLength(10);
-    expect(VERIFIED_AGAINST_LABELS[8]).toBe('Re-verified (no code change):');
-    expect(VERIFIED_AGAINST_LABELS[9]).toBe('Additional source hash:');
-  });
-
-  it('the first eight members deep-equal the pre-change label set, byte-for-byte', () => {
-    expect(VERIFIED_AGAINST_LABELS.slice(0, 8)).toEqual(PRE_CHANGE_EIGHT_LABELS);
-  });
-
-  it('SCOPE_REASONS holds its 8 members, none mentioning "code change"', () => {
-    expect(SCOPE_REASONS).toHaveLength(8);
-    expect(SCOPE_REASONS.some((r) => r.includes('code change'))).toBe(false);
-  });
-
-  it('renderVerifiedAgainst omits the new label entirely for a record without reverifiedNoCodeChange — byte-identical to the pre-change shape', () => {
-    const record = baseRecord();
-    const rendered = renderVerifiedAgainst(record);
-    expect(rendered).not.toContain('Re-verified');
-    // Hard-coded expected block, pinned so a future change cannot silently start emitting the
-    // new label for a record that never asked for it.
-    expect(rendered).toBe(
+  it('renderVerifiedAgainst writes exactly the labels the record carries, in order', () => {
+    expect(renderVerifiedAgainst(record)).toBe(
       '\nScope: full\n' +
         'Rulebook edition: First Printing 2020\n' +
         'Rulebook source hash: deadbeef\n' +
@@ -1543,41 +1492,13 @@ describe('VERIFIED_AGAINST_LABELS — Re-verified (no code change) append (175-0
     );
   });
 
-  it('renders the label with its evidence string when the field is present, positioned before Cited slices:', () => {
-    const record = baseRecord({
-      reverifiedNoCodeChange: 'abc123..def456 — 0 manifest files changed',
-    });
-    const rendered = renderVerifiedAgainst(record);
-    expect(rendered).toContain(
-      'Re-verified (no code change): abc123..def456 — 0 manifest files changed',
-    );
-    expect(rendered.indexOf('Re-verified')).toBeLessThan(rendered.indexOf('Cited slices:'));
-  });
-
-  it('round-trips reverifiedNoCodeChange through parseVerifiedAgainst', () => {
-    const record = baseRecord({
-      reverifiedNoCodeChange: 'abc123..def456 — 0 manifest files changed',
-    });
-    const rendered = renderVerifiedAgainst(record);
+  it('a rendered block parses back as valid, not malformed', () => {
     const chunkText =
       `# Chunk: x\n\n${VERIFIED_AGAINST_HEADING}\n\n${VERIFIED_AGAINST_BEGIN}` +
-      `${rendered}${VERIFIED_AGAINST_END}\n`;
-    const parsed = parseVerifiedAgainst(chunkText);
-    expect(parsed.blockMalformed).toBe(false);
-    expect(parsed.reverifiedNoCodeChange).toBe('abc123..def456 — 0 manifest files changed');
-  });
-
-  it('an existing eight-label block (no Re-verified line) still parses as valid, not malformed', () => {
-    const record = baseRecord();
-    const rendered = renderVerifiedAgainst(record);
-    expect(rendered).not.toContain('Re-verified');
-    const chunkText =
-      `# Chunk: x\n\n${VERIFIED_AGAINST_HEADING}\n\n${VERIFIED_AGAINST_BEGIN}` +
-      `${rendered}${VERIFIED_AGAINST_END}\n`;
+      `${renderVerifiedAgainst(record)}${VERIFIED_AGAINST_END}\n`;
     const parsed = parseVerifiedAgainst(chunkText);
     expect(parsed.blockMalformed).toBe(false);
     expect(parsed.state).toBe(SCOPE_FULL);
-    expect(parsed.reverifiedNoCodeChange).toBeUndefined();
   });
 });
 
@@ -1656,5 +1577,58 @@ describe('## Verified Against — additional source hashes (#305)', () => {
         sourceHash: createHash('sha256').update('# Reference\n').digest('hex'),
       },
     ]);
+  });
+});
+
+describe('chunk-check: an unreadable CHUNK.md (#1110)', () => {
+  it('names the file rather than calling it missing', async () => {
+    const project = tempTree('bs-chunk-provenance-unreadable-');
+    const chunk = join(project, DESIGN_DIR, 'chunks', 'punch', 'CHUNK.md');
+    await fs.mkdir(chunk, { recursive: true });
+    await expect(recordVerifiedAgainst('punch', { project })).rejects.toThrow(`Could not read ${chunk} (EISDIR)`);
+  });
+});
+
+describe('chunk provenance names what it cannot read instead of calling it missing (#1174)', () => {
+  it('a rulebook/ it cannot look at, rather than a project with no rulebook', async () => {
+    const project = await makeProject('no-rulebook-project');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
+    await fs.mkdir(join(project, DESIGN_DIR), { recursive: true });
+    await fs.symlink(rulebookDir, rulebookDir);
+    await expect(computeVerificationScope(project)).rejects.toThrow(`Could not read ${rulebookDir} (ELOOP)`);
+  });
+
+  it('an INDEX.md it cannot read, rather than a missing one', async () => {
+    const project = await makeProject('index-missing');
+    const indexPath = join(project, DESIGN_DIR, 'rulebook', 'INDEX.md');
+    await fs.mkdir(indexPath);
+    await expect(computeVerificationScope(project)).rejects.toThrow(`Could not read ${indexPath} (EISDIR)`);
+  });
+
+  it('an archived source it cannot read, rather than a missing one', async () => {
+    const project = await makeProject('source-missing');
+    const archivedPath = join(project, DESIGN_DIR, 'rulebook', 'source', 'rules.pdf');
+    await fs.mkdir(archivedPath, { recursive: true });
+    await expect(computeVerificationScope(project)).rejects.toThrow(`Could not read ${archivedPath} (EISDIR)`);
+  });
+
+  it('an additional source it cannot read, rather than a missing one', async () => {
+    const project = await archiveRulesWithReference(Buffer.from('# Reference\n'));
+    const reference = join(project, DESIGN_DIR, 'rulebook', 'source', 'REFERENCE.md');
+    await fs.rm(reference);
+    await fs.mkdir(reference);
+    await expect(computeVerificationScope(project)).rejects.toThrow(`Could not read ${reference} (EISDIR)`);
+  });
+
+  it('a rulebook/ it cannot list when recording provenance, rather than one with no slices', async () => {
+    const project = await makeProject('full');
+    await writeChunk(project, 'punch', await readChunkTemplate());
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
+    await fs.chmod(rulebookDir, 0o300);
+    try {
+      await expect(recordVerifiedAgainst('punch', { project })).rejects.toThrow(`Could not read ${rulebookDir} (EACCES)`);
+    } finally {
+      await fs.chmod(rulebookDir, 0o755);
+    }
   });
 });

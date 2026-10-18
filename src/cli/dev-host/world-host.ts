@@ -92,7 +92,7 @@ interface LocalWorldHostOptions {
    * file is rebuilding runs on the rules the world runs once the rebuild
    * settles. Without one it runs the moment it comes due.
    */
-  readonly hostWork?: HostWorkGate;
+  readonly hostWork?: Pick<HostWorkGate, 'hold'>;
 }
 
 /** Everything a browser may ask this host to do. */
@@ -142,7 +142,7 @@ export class LocalWorldHost {
   readonly #send: (clientId: string, message: unknown) => void;
   readonly #isOpen: (clientId: string) => boolean;
   readonly #clock: WorldHostClock;
-  readonly #hostWork: HostWorkGate;
+  readonly #hostWork: Pick<HostWorkGate, 'hold'>;
   readonly #world: ResidentWorld;
 
   /** Which seat each connection is looking through. A connection whose socket
@@ -196,6 +196,8 @@ export class LocalWorldHost {
    * same pages in the host that replaces this one, so a move a page sent while
    * the edit was building is still that seat's move on the new rules.
    */
+  // Called by `world-rules-worker.ts` through a getter fallow does not follow.
+  // fallow-ignore-next-line unused-class-member
   attachments(): ReadonlyMap<string, number> {
     return new Map(this.#attached);
   }

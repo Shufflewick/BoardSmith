@@ -1,9 +1,9 @@
 /**
  * State-size measurement for CI.
  *
- * A game's saved state is not its board. It is the board PLUS one full copy of
- * the element tree per retained checkpoint. A hosted table retains them back
- * to the start of the current turn, so:
+ * A game's saved state is not its board. It is one full copy of the element
+ * tree per retained checkpoint, the newest of which is the board itself (#804).
+ * A hosted table retains them back to the start of the current turn, so:
  *
  *     saved size  ~=  tree size  x  (undoable actions in the longest turn + 1)  +  history  +  log
  *
@@ -44,7 +44,9 @@
  */
 
 import { checkpointCount } from '../engine/index.js';
-import type { GameStateSnapshot } from '../engine/utils/index.js';
+import { snapshotTree, type GameStateSnapshot } from '../engine/utils/index.js';
+import { actionCountOf } from '../engine/utils/snapshot.js';
+import { parsePositiveWholeNumber } from '../utils/positive-whole-number.js';
 
 /** Byte length of a value's JSON encoding (UTF-8 bytes, not UTF-16 units). */
 function jsonByteLength(value: unknown): number {
@@ -55,7 +57,7 @@ function jsonByteLength(value: unknown): number {
 export interface SnapshotSizeMeasurement {
   /** Total serialized size of the snapshot, in bytes. */
   totalBytes: number;
-  /** `snapshot.state` — the element tree. The thing that gets multiplied. */
+  /** The element tree (`snapshotTree`). The thing that gets multiplied. */
   treeBytes: number;
   /** All retained per-action checkpoints, in total. */
   checkpointBytes: number;
@@ -63,6 +65,12 @@ export interface SnapshotSizeMeasurement {
   checkpointCount: number;
   /** `snapshot.actionHistory` — grows with the game, but per action, not per tree. */
   actionHistoryBytes: number;
+  /**
+   * Whether the game has dropped actions from the front of its history
+   * (`checkpoints: { actionHistory: 'undo' }`). Its history then stays about
+   * the size it is, and `projectSnapshotSize` holds that term flat.
+   */
+  actionHistoryTrimmed: boolean;
   /**
    * `snapshot.messageLog` — the message log, stored once per snapshot.
    *
@@ -73,8 +81,8 @@ export interface SnapshotSizeMeasurement {
    */
   messageLogBytes: number;
   /**
-   * How many actions the measured game had actually taken
-   * (`snapshot.actionHistory.length`).
+   * How many actions the measured game had actually taken, dropped history
+   * entries included.
    *
    * The denominator for every per-action rate in `projectSnapshotSize`. Using
    * `checkpointCount` instead is wrong under a `checkpoints: { max }` policy,
@@ -95,12 +103,13 @@ export function measureSnapshotSize(snapshot: GameStateSnapshot): SnapshotSizeMe
   const checkpointBytes = jsonByteLength(snapshot.actionCheckpoints);
   return {
     totalBytes: jsonByteLength(snapshot),
-    treeBytes: jsonByteLength(snapshot.state),
+    treeBytes: jsonByteLength(snapshotTree(snapshot)),
     checkpointBytes,
     checkpointCount: count,
     actionHistoryBytes: jsonByteLength(snapshot.actionHistory),
+    actionHistoryTrimmed: (snapshot.actionHistoryBase ?? 0) > 0,
     messageLogBytes: jsonByteLength(snapshot.messageLog),
-    observedActionCount: snapshot.actionHistory.length,
+    observedActionCount: actionCountOf(snapshot),
     bytesPerCheckpoint: count === 0 ? 0 : Math.round(checkpointBytes / count),
   };
 }
@@ -121,7 +130,8 @@ export function measureSnapshotSize(snapshot: GameStateSnapshot): SnapshotSizeMe
  * with it.
  *
  * The result is NOT flat in `actionCount` even then. Two terms still grow
- * linearly: the action history, and the message log. Capping checkpoints
+ * linearly: the action history (unless the game keeps only what undo reads,
+ * `checkpoints: { actionHistory: 'undo' }`), and the message log. Capping checkpoints
  * removed the log's multiplier, not the log's growth — a game that narrates
  * every action accumulates that text forever, and on a long enough game it
  * becomes the dominant term on its own. That is a real remaining limit, not a
@@ -161,11 +171,13 @@ export function projectSnapshotSize(
   // checkpoint count — under a `max` policy those differ by orders of magnitude
   // and dividing by the wrong one silently inflates the projection.
   const observed = Math.max(1, measurement.observedActionCount);
-  const historyPerAction = measurement.actionHistoryBytes / observed;
+  const historyBytes = measurement.actionHistoryTrimmed
+    ? measurement.actionHistoryBytes
+    : (measurement.actionHistoryBytes / observed) * actionCount;
   const logBytes =
     options?.messageLogBytes ?? (measurement.messageLogBytes / observed) * actionCount;
 
-  return Math.round(fixed + retained * perCheckpoint + actionCount * historyPerAction + logBytes);
+  return Math.round(fixed + retained * perCheckpoint + historyBytes + logBytes);
 }
 
 /**
@@ -182,17 +194,16 @@ export function projectSnapshotSize(
  * ```
  */
 export function assertStateBudget(measurement: SnapshotSizeMeasurement, budgetBytes: number): void {
-  if (!Number.isSafeInteger(budgetBytes) || budgetBytes <= 0) {
-    throw new Error(
-      `assertStateBudget needs the host's state budget as a positive whole number of bytes, but was given ${budgetBytes}. ` +
-        'Check where the test reads the budget from.',
-    );
+  try {
+    parsePositiveWholeNumber("assertStateBudget's budgetBytes", String(budgetBytes));
+  } catch (error) {
+    throw new Error(`${(error as Error).message} Check where the test reads the budget from.`);
   }
   if (measurement.totalBytes <= budgetBytes) return;
   const bytes = (n: number) => `${n.toLocaleString('en-US')} bytes`;
   throw new Error(
     `The saved game state is ${bytes(measurement.totalBytes)}, over the host's budget of ${bytes(budgetBytes)}.\n` +
-      `  game tree:      ${bytes(measurement.treeBytes)}\n` +
+      `  game tree:      ${bytes(measurement.treeBytes)}${measurement.checkpointCount > 0 ? ' (the newest checkpoint, counted below)' : ''}\n` +
       `  checkpoints:    ${measurement.checkpointCount} checkpoints, ${bytes(measurement.checkpointBytes)}\n` +
       `  action history: ${bytes(measurement.actionHistoryBytes)}\n` +
       `  message log:    ${bytes(measurement.messageLogBytes)}\n` +

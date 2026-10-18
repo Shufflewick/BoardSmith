@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { existsSync, promises as fs } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { takeOsLock } from '../lib/os-lock.js';
 import { chunkMerge, resolveDesignConflicts } from './chunk-merge.js';
@@ -10,6 +10,7 @@ import { recordPassingVerify } from '../lib/verify-result.test-helper.js';
 import { recordVerifiedAgainst } from './chunk-provenance.js';
 import { checkClaimQuotes } from './claim-quotes.js';
 import { checkConstraints, type TestRunner } from './constraint-check.js';
+import type { TypeCheckRun } from './validate.js';
 
 /**
  * #294: `boardsmith chunk-merge` is the one way a chunk built on its own branch reaches the main
@@ -55,6 +56,13 @@ const budgetRunner: TestRunner = async (projectDir, files) => {
     ? { ok: true, output: `partition ${total} bytes`, ran: [...files] }
     : { ok: false, output: `world partition is ${total} bytes, over the 512 byte budget` };
 };
+
+/** The project's type check, standing in for vue-tsc, which these fixtures do not install. */
+const typeCheck = async (): Promise<TypeCheckRun> => ({
+  result: { name: 'TypeScript', passed: true, message: 'No type errors' },
+  programFiles: [],
+  compilerReport: [],
+});
 
 function sketchEntry(slug: string, citations: string, milestone = 'none'): string {
   return [
@@ -160,6 +168,7 @@ async function buildOnBranch(slug: string, bytes: number, extra: Record<string, 
       '- Detail: n/a',
       '',
     ].join('\n'),
+    [`tests/${slug}.test.ts`]: `// ${slug}'s test\n`,
     ...extra,
   });
   // A sign-off needs the chunk's work committed and verified (#452).
@@ -189,9 +198,9 @@ describe('chunkMerge: the combined tree is checked, not the branch alone', () =>
     await buildOnBranch('trading', 150);
     await buildOnBranch('quests', 150);
 
-    const first = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    const first = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
     expect(first.refusals).toEqual([]);
-    const second = await chunkMerge(main, 'quests', { runTests: budgetRunner });
+    const second = await chunkMerge(main, 'quests', { runTests: budgetRunner, typeCheck });
     expect(second.refusals).toEqual([]);
     expect(second.alongside).toEqual(['trading']);
 
@@ -209,9 +218,9 @@ describe('chunkMerge: the combined tree is checked, not the branch alone', () =>
     expect((await checkConstraints(trading, { runTests: budgetRunner })).refusals).toEqual([]);
     expect((await checkConstraints(quests, { runTests: budgetRunner })).refusals).toEqual([]);
 
-    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner })).refusals).toEqual([]);
+    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck })).refusals).toEqual([]);
     const before = head();
-    const result = await chunkMerge(main, 'quests', { runTests: budgetRunner });
+    const result = await chunkMerge(main, 'quests', { runTests: budgetRunner, typeCheck });
 
     expect(result.merged).toBe(false);
     expect(result.refusals.join('\n')).toMatch(/over the 512 byte budget/);
@@ -222,8 +231,8 @@ describe('chunkMerge: the combined tree is checked, not the branch alone', () =>
   it('refuses chunks built together that the sketch says may not be: overlapping citations', async () => {
     await buildOnBranch('trading', 100);
     await buildOnBranch('auctions', 100);
-    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner })).refusals).toEqual([]);
-    const result = await chunkMerge(main, 'auctions', { runTests: budgetRunner });
+    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck })).refusals).toEqual([]);
+    const result = await chunkMerge(main, 'auctions', { runTests: budgetRunner, typeCheck });
     expect(result.refusals.join('\n')).toMatch(/both cite rulebook\/04-trading\.md/);
     expect(status()).toBe('');
   });
@@ -231,13 +240,13 @@ describe('chunkMerge: the combined tree is checked, not the branch alone', () =>
   /** Trading is merged and verified on the main line; then auctions, which cites trading's page, leaves it. */
   async function tradingVerifiedBeforeAuctionsLeft(): Promise<void> {
     await buildOnBranch('trading', 100);
-    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner })).refusals).toEqual([]);
+    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck })).refusals).toEqual([]);
     await buildOnBranch('auctions', 100);
   }
 
   /** Auctions' merge is refused under the pair rule, as built alongside trading, and main is left as it was. */
   async function expectAuctionsRefusedAlongsideTrading(): Promise<void> {
-    const result = await chunkMerge(main, 'auctions', { runTests: budgetRunner });
+    const result = await chunkMerge(main, 'auctions', { runTests: budgetRunner, typeCheck });
     expect(result.merged).toBe(false);
     expect(result.refusals.join('\n')).toMatch(/both cite rulebook\/04-trading\.md/);
     expect(status()).toBe('');
@@ -255,7 +264,7 @@ describe('chunkMerge: the combined tree is checked, not the branch alone', () =>
     });
     git(main, 'commit', '-q', '-am', 'bookkeeping on trading');
 
-    const result = await chunkMerge(main, 'auctions', { runTests: budgetRunner });
+    const result = await chunkMerge(main, 'auctions', { runTests: budgetRunner, typeCheck });
     expect(result.refusals).toEqual([]);
     expect(result.alongside).toEqual([]);
     expect(status()).toBe('');
@@ -301,9 +310,169 @@ describe('chunkMerge: the combined tree is checked, not the branch alone', () =>
     git(main, 'add', '-A');
     git(main, 'commit', '-q', '-m', 'main line moves on');
 
-    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
     expect(result.refusals).toEqual([]);
     expect(status()).toBe('');
+  });
+});
+
+/**
+ * #987: the combined tree runs the merged chunk's fast checks, as its gates did (#985): the test
+ * files it added or changed since its base, and typecheck. The whole suite runs at publish (#984).
+ */
+describe("chunkMerge: the merged chunk's tests and typecheck, never the whole suite (#987)", () => {
+  async function mergeRecording(runTests: TestRunner = budgetRunner, check = typeCheck) {
+    const runs: string[][] = [];
+    const typeChecked: string[] = [];
+    const result = await chunkMerge(main, 'trading', {
+      runTests: (dir, files) => {
+        runs.push([...files]);
+        return runTests(dir, files);
+      },
+      typeCheck: (dir) => {
+        typeChecked.push(dir);
+        return check();
+      },
+    });
+    return { result, runs, typeChecked };
+  }
+
+  beforeEach(async () => {
+    await buildOnBranch('trading', 150, { 'tests/trading-rules.test.ts': '// more of trading\n' });
+    // A test the main line changed after the branch left is not the merged chunk's.
+    await write(main, { 'tests/core.test.ts': '// core\n' });
+    git(main, 'add', '-A');
+    git(main, 'commit', '-q', '-m', 'core test');
+  });
+
+  it("runs the constraint tests, then only the test files the chunk added or changed, then typecheck once", async () => {
+    const { result, runs, typeChecked } = await mergeRecording();
+    expect(result.refusals).toEqual([]);
+    expect(runs).toEqual([['tests/budget.test.ts'], ['tests/trading-rules.test.ts', 'tests/trading.test.ts']]);
+    expect(typeChecked).toEqual([main]);
+  });
+
+  it("refuses, leaving main as it was, when the chunk's tests fail on the combined tree", async () => {
+    const before = head();
+    const failing: TestRunner = async (dir, files) =>
+      files.includes('tests/trading.test.ts') ? { ok: false, output: 'tests/trading.test.ts: expected 2 to be 3' } : budgetRunner(dir, files);
+    const { result, typeChecked } = await mergeRecording(failing);
+    expect(result.refusals.join('\n')).toMatch(/trading's tests fail on the combined tree[\s\S]*expected 2 to be 3/);
+    expect(typeChecked).toEqual([]);
+    expect([head(), status()]).toEqual([before, '']);
+  });
+
+  it('refuses, leaving main as it was, when the combined tree does not typecheck', async () => {
+    const before = head();
+    const typeErrors = async (): Promise<TypeCheckRun> => ({
+      result: { name: 'TypeScript', passed: false, message: '1 type error' },
+      programFiles: [],
+      compilerReport: ["src/trading.ts(1,14): error TS2322: Type 'string' is not assignable to type 'number'."],
+    });
+    const { result } = await mergeRecording(budgetRunner, typeErrors);
+    expect(result.refusals.join('\n')).toMatch(/does not typecheck: 1 type error[\s\S]*TS2322/);
+    expect([head(), status()]).toEqual([before, '']);
+  });
+
+  it('leaves out a test file the chunk deleted, running only the ones it added or changed', async () => {
+    await write(main, { 'tests/old-quests.test.ts': '// replaced by quests\n' });
+    git(main, 'add', '-A');
+    git(main, 'commit', '-q', '-m', 'old quests test');
+    const quests = await buildOnBranch('quests', 100);
+    git(quests, 'rm', '-q', 'tests/old-quests.test.ts');
+    git(quests, 'commit', '-q', '-m', 'chunk-quests/close: drop the old test');
+    const runs: string[][] = [];
+    const recording: TestRunner = (dir, files) => {
+      runs.push([...files]);
+      return budgetRunner(dir, files);
+    };
+    expect((await chunkMerge(main, 'quests', { runTests: recording, typeCheck })).refusals).toEqual([]);
+    expect(runs).toEqual([['tests/budget.test.ts'], ['tests/quests.test.ts']]);
+  });
+
+  it("refuses, leaving main as it was, when one of the chunk's tests did not run", async () => {
+    const before = head();
+    const skipsOne: TestRunner = async (dir, files) => {
+      const run = await budgetRunner(dir, files);
+      return 'refused' in run ? run : { ...run, ran: files.filter((f) => f !== 'tests/trading.test.ts') };
+    };
+    const { result, typeChecked } = await mergeRecording(skipsOne);
+    expect(result.refusals.join('\n')).toMatch(/trading's tests did not all run on the combined tree: tests\/trading\.test\.ts did not run/);
+    expect(typeChecked).toEqual([]);
+    expect([head(), status()]).toEqual([before, '']);
+  });
+
+  it('refuses a chunk with no test of its own, as its gates do, and passes an exempt one on typecheck alone', async () => {
+    const quests = await buildOnBranch('quests', 100);
+    git(quests, 'rm', '-q', 'tests/quests.test.ts');
+    git(quests, 'commit', '-q', '-m', 'chunk-quests/close: no test');
+    const runs: string[][] = [];
+    const recording: TestRunner = (dir, files) => {
+      runs.push([...files]);
+      return budgetRunner(dir, files);
+    };
+    const refused = await chunkMerge(main, 'quests', { runTests: recording, typeCheck });
+    expect(refused.refusals.join('\n')).toMatch(/Chunk "quests" added or changed no test file since its base[\s\S]*Then run chunk-merge again\./);
+
+    const chunkPath = 'design/chunks/quests/CHUNK.md';
+    await write(quests, {
+      [chunkPath]: (await read(quests, chunkPath)).replace('<!-- | src/...test.ts | 1, 3, 4 | pending / yes | -->', '| exempt | a restyle, no rules change | n/a |'),
+    });
+    git(quests, 'commit', '-q', '-am', 'chunk-quests/close: exempt');
+    runs.length = 0;
+    expect((await chunkMerge(main, 'quests', { runTests: recording, typeCheck })).refusals).toEqual([]);
+    expect(runs).toEqual([['tests/budget.test.ts']]);
+  });
+});
+
+describe("chunkMerge: parallel-check's refusals for chunks built together (#820)", () => {
+  /** Adds `entries` to the sketch on the main line, before any branch leaves it. */
+  async function addToSketch(...entries: string[]): Promise<void> {
+    const sketch = await read(main, 'design/SKETCH.md');
+    await write(main, { 'design/SKETCH.md': sketch.replace('## Ideas Backlog', `${entries.join('\n')}## Ideas Backlog`) });
+    git(main, 'commit', '-q', '-am', 'sketch entries');
+  }
+
+  /** Merges trading, then `slug` built beside it; returns the refusals of the second merge. */
+  async function refusalsBesideTrading(slug: string): Promise<string> {
+    await buildOnBranch('trading', 100);
+    await buildOnBranch(slug, 100);
+    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck })).refusals).toEqual([]);
+    const before = head();
+    const result = await chunkMerge(main, slug, { runTests: budgetRunner, typeCheck });
+    expect(result.merged).toBe(false);
+    expect(head()).toBe(before);
+    expect(status()).toBe('');
+    return result.refusals.join('\n');
+  }
+
+  it('refuses a chunk with no rulebook citations', async () => {
+    await addToSketch(sketchEntry('bare', 'none'));
+    expect(await refusalsBesideTrading('bare')).toMatch(/bare has no rulebook citations/);
+  });
+
+  it('refuses a citation that names no rulebook slice', async () => {
+    await addToSketch(sketchEntry('ghost', 'rulebook/09-missing.md'));
+    expect(await refusalsBesideTrading('ghost')).toMatch(/ghost cites rulebook\/09-missing\.md, which names no single file/);
+  });
+
+  it('refuses the final-acceptance chunk built beside another', async () => {
+    await addToSketch(sketchEntry('finale', 'rulebook/07-quests.md', 'final-acceptance'));
+    expect(await refusalsBesideTrading('finale')).toMatch(/finale is the final-acceptance chunk.*always built on its own/);
+  });
+
+  it('refuses a chunk built alongside that has no sketch entry', async () => {
+    await buildOnBranch('trading', 100);
+    await buildOnBranch('quests', 100);
+    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck })).refusals).toEqual([]);
+    // The main line drops trading's sketch entry after merging it, so quests' merge cannot read it.
+    const sketch = await read(main, 'design/SKETCH.md');
+    await write(main, { 'design/SKETCH.md': sketch.replace(/### trading\n[\s\S]*?\n\n/, '') });
+    git(main, 'commit', '-q', '-am', 'drop trading from the sketch');
+    const before = head();
+    const result = await chunkMerge(main, 'quests', { runTests: budgetRunner, typeCheck });
+    expect(result.refusals.join('\n')).toMatch(/There is no chunk "trading" in SKETCH\.md/);
+    expect(head()).toBe(before);
   });
 });
 
@@ -318,9 +487,9 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
       'src/quest-rules.ts': '// Ruling @quests.1: quests expire.\nexport const QUESTS_EXPIRE = true;\n',
     });
 
-    const first = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    const first = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
     expect(first.allocated).toEqual({ 'Ruling @trading.1': 'Ruling 2' });
-    const second = await chunkMerge(main, 'quests', { runTests: budgetRunner });
+    const second = await chunkMerge(main, 'quests', { runTests: budgetRunner, typeCheck });
     expect(second.refusals).toEqual([]);
     expect(second.allocated).toEqual({ 'Ruling @quests.1': 'Ruling 3' });
 
@@ -346,7 +515,7 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
     ].join('\n');
     await buildOnBranch('trading', 100, { 'design/FILINGS.md': `${template.trimEnd()}\n\n${filing}` });
 
-    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
     expect(result.refusals).toEqual([]);
     expect(result.allocated).toEqual({ 'Filing @trading.1': 'Filing 1' });
     const filings = await read(main, 'design/FILINGS.md');
@@ -359,7 +528,7 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
       'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',
       'design/notes.md': 'Prices follow Rulings 1 and @trading.1.\n',
     });
-    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
     expect(result.refusals).toEqual([]);
     expect(result.allocated).toEqual({ 'Ruling @trading.1': 'Ruling 2' });
     expect(await read(main, 'design/notes.md')).toBe('Prices follow Rulings 1 and 2.\n');
@@ -371,7 +540,7 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
       'design/RULINGS.md': `# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n${rulings}`,
       'src/trading-rules.ts': '// Rulings @trading.1 to .3 apply here.\n// Rulings 1 and @trading.1, .2\nexport const X = 1;\n',
     });
-    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
     expect(result.refusals).toEqual([]);
     expect(await read(main, 'src/trading-rules.ts')).toBe(
       '// Rulings 2 to 4 apply here.\n// Rulings 1 and 2, 3\nexport const X = 1;\n',
@@ -386,7 +555,7 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
       'design/notes.md': 'Prices follow Rulings @trading.1 to .3.\n',
     });
     const before = head();
-    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
     expect(result.merged).toBe(false);
     expect(result.refusals).toEqual([
       'design/notes.md cites the range "Rulings @trading.1 to .3", but those ids became Rulings 2, 4 and 3, ' +
@@ -402,7 +571,7 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
       'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',
       'design/notes.md': 'Prices follow Rulings @trading.1-3.\n',
     });
-    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
     expect(result.merged).toBe(false);
     expect(result.refusals).toEqual([expect.stringMatching(/^design\/notes\.md writes "@trading\.1-3", which reads as a range of ids/)]);
     expect(status()).toBe('');
@@ -413,7 +582,7 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
       'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',
       'design/notes.md': 'Ruling @trading.1 - 2 players only.\n\nSee Decision .2 too.\n',
     });
-    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
     expect(result.merged).toBe(false);
     expect(result.refusals).toEqual([
       'design/notes.md writes "@trading.1 - 2", which reads as a range of ids, so the merge cannot tell whether 2 is ' +
@@ -432,7 +601,7 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
       'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',
       'design/notes.md': 'Prices follow @trading.1.\n',
     });
-    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
     expect(result.merged).toBe(false);
     expect(result.refusals.join('\n')).toContain(
       'design/notes.md cites @trading.1 without saying what kind of entry it is. Write the kind in front of it ' +
@@ -444,14 +613,14 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
     await buildOnBranch('trading', 100, {
       'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling 2\n- Decision: prices are public.\n',
     });
-    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
     expect(result.merged).toBe(false);
     expect(result.refusals.join('\n')).toMatch(/Ruling 2.*Ruling @trading\.1/);
   });
 
   it('refuses a branch that writes RUN.md or another chunk\'s run log', async () => {
     await buildOnBranch('trading', 100, { 'design/RUN.md': '# Run\n\nRun Status: active\n' });
-    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
     expect(result.refusals.join('\n')).toMatch(/design\/RUN\.md/);
   });
 });
@@ -470,8 +639,8 @@ describe('chunkMerge: references between chunks built together go to the audit',
     });
     await buildOnBranch('auctions', 100);
 
-    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner })).refusals).toEqual([]);
-    const second = await chunkMerge(main, 'quests', { runTests: budgetRunner });
+    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck })).refusals).toEqual([]);
+    const second = await chunkMerge(main, 'quests', { runTests: budgetRunner, typeCheck });
     expect(second.refusals).toEqual([]);
     expect(second.crossChunk).toBe('pending');
 
@@ -482,10 +651,36 @@ describe('chunkMerge: references between chunks built together go to the audit',
     expect(ledger).toContain('`market`');
     expect(ledger).toMatch(/^- Verdict: pending$/m);
 
-    const third = await chunkMerge(main, 'auctions', { runTests: budgetRunner });
+    const third = await chunkMerge(main, 'auctions', { runTests: budgetRunner, typeCheck });
     expect(third.merged).toBe(false);
     expect(third.refusals.join('\n')).toMatch(/CROSS-CHUNK\.md, Merge 1/);
   });
+});
+
+describe('chunkMerge: a file it cannot read is refused, never read as missing (#1049)', () => {
+  /** Replaces `rel` in `dir` with a link to itself, which no read gets through, and commits it. */
+  async function commitLoop(dir: string, rel: string): Promise<void> {
+    await fs.mkdir(dirname(join(dir, rel)), { recursive: true });
+    await fs.rm(join(dir, rel), { force: true });
+    await fs.symlink(basename(rel), join(dir, rel));
+    git(dir, 'add', '-A');
+    git(dir, 'commit', '-q', '-m', `${rel} links to itself`);
+  }
+
+  for (const [what, rel] of [
+    ['a file the branch changed', 'docs/loop.txt'],
+    ["the chunk's CHUNK.md", 'design/chunks/trading/CHUNK.md'],
+    ['the sketch whose session lock it keeps', 'design/SKETCH.md'],
+  ] as const) {
+    it(`refuses ${what}, naming it, and leaves main as it was`, async () => {
+      await commitLoop(await buildOnBranch('trading', 100), rel);
+      const before = head();
+
+      await expect(chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck })).rejects.toThrow(new RegExp(`Could not read \\S+/game/${rel} \\(ELOOP\\)`));
+      expect(head()).toBe(before);
+      expect(status()).toBe('');
+    });
+  }
 });
 
 describe('chunkMerge: preconditions', () => {
@@ -495,12 +690,12 @@ describe('chunkMerge: preconditions', () => {
     const other = await takeOsLock(join(common, 'boardsmith-chunk-merge.flock'), 'chunk-merge', 'chunk-merge of quests (branch chunk/quests)');
     if (typeof other === 'string') throw new Error(other);
 
-    const refused = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    const refused = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
     // A merge in flight leaves the main checkout dirty; a second run is told about the merge, not
     // asked to clean up the files that merge is working on.
     const sketch = await read(main, 'design/SKETCH.md');
     await fs.writeFile(join(main, 'design/SKETCH.md'), `${sketch}\nmid-merge\n`);
-    const whileDirty = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    const whileDirty = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
     await fs.writeFile(join(main, 'design/SKETCH.md'), sketch);
     await other.release();
     expect(refused.merged).toBe(false);
@@ -510,14 +705,14 @@ describe('chunkMerge: preconditions', () => {
     expect(whileDirty.refusals).toEqual(refused.refusals);
     expect(git(main, 'status', '--porcelain')).toBe('');
 
-    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner })).refusals).toEqual([]);
+    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck })).refusals).toEqual([]);
     expect(existsSync(join(common, 'boardsmith-chunk-merge.flock.holder'))).toBe(false);
   });
 
   it('names a merge a killed chunk-merge left half done, and how to undo it (#441)', async () => {
     await buildOnBranch('trading', 100);
     git(main, 'merge', '--no-ff', '--no-commit', 'chunk/trading');
-    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
     expect(result.refusals).toEqual([
       'The main checkout holds a merge that was started and never finished, most likely by a chunk-merge ' +
         'that was stopped partway. Undo it with `git merge --abort` in the main checkout, then run chunk-merge again.',
@@ -525,11 +720,11 @@ describe('chunkMerge: preconditions', () => {
   });
 
   it('refuses a dirty main checkout, a missing branch, and a chunk that is not verified', async () => {
-    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner })).refusals.join('\n')).toMatch(/no branch chunk\/trading/);
+    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck })).refusals.join('\n')).toMatch(/no branch chunk\/trading/);
 
     await buildOnBranch('trading', 100);
     await fs.appendFile(join(main, 'src/core.ts'), '// edit\n');
-    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner })).refusals.join('\n')).toMatch(/uncommitted changes/);
+    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck })).refusals.join('\n')).toMatch(/uncommitted changes/);
     git(main, 'checkout', '--', 'src/core.ts');
 
     const worktree = join(dirname(main), 'wt-quests');
@@ -537,7 +732,7 @@ describe('chunkMerge: preconditions', () => {
     await write(worktree, { 'src/quests.ts': 'export const PARTITION_BYTES = 1;\n', 'design/chunks/quests/CHUNK.md': await chunkMd('quests') });
     git(worktree, 'add', '-A');
     git(worktree, 'commit', '-q', '-m', 'wip');
-    expect((await chunkMerge(main, 'quests', { runTests: budgetRunner })).refusals.join('\n')).toMatch(/quests is "built", not verified/);
+    expect((await chunkMerge(main, 'quests', { runTests: budgetRunner, typeCheck })).refusals.join('\n')).toMatch(/quests is "built", not verified/);
     expect(status()).toBe('');
   });
 
@@ -547,6 +742,57 @@ describe('chunkMerge: preconditions', () => {
     const { refusals } = await chunkMerge(main, 'trading');
     expect(refusals).toEqual([expect.stringMatching(/has no vite\.config\.ts[\s\S]*boardsmith doctor --fix/)]);
     expect([head(), status()]).toEqual([before, '']);
+  });
+
+  it('refuses with git\'s own reason when git will not start the merge, leaving the index untouched (#824)', async () => {
+    await buildOnBranch('trading', 100);
+    // An untracked file where the branch adds one: git refuses before writing anything, so no MERGE_HEAD.
+    await fs.writeFile(join(main, 'src/trading.ts'), '// mine\n');
+    const before = head();
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([expect.stringMatching(/untracked working tree files would be overwritten[\s\S]*src\/trading\.ts/)]);
+    expect(result.refusals.join('\n')).not.toMatch(/not verified/);
+    expect([head(), git(main, 'status', '--porcelain')]).toEqual([before, '?? src/trading.ts\n']);
+    expect(await read(main, 'src/trading.ts')).toBe('// mine\n');
+  });
+});
+
+describe('chunkMerge: a design file one side deleted and the other edited (#825)', () => {
+  // git leaves a modify/delete conflict with no markers, so there is nothing a merge may resolve.
+  async function expectRefused(): Promise<void> {
+    const before = head();
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([expect.stringMatching(/conflicts in .*design\/rulebook\/05-market\.md/)]);
+    expect([head(), status()]).toEqual([before, '']);
+  }
+
+  it('refuses when the branch deleted it and the main line edited it', async () => {
+    const worktree = await buildOnBranch('trading', 100);
+    git(worktree, 'rm', '-q', 'design/rulebook/05-market.md');
+    git(worktree, 'commit', '-q', '-m', 'chunk-trading/drop market');
+    await fs.appendFile(join(main, 'design/rulebook/05-market.md'), 'Prices rise.\n');
+    git(main, 'commit', '-q', '-am', 'edit market');
+    await expectRefused();
+  });
+
+  it('refuses when the main line deleted it and the branch edited it', async () => {
+    const worktree = await buildOnBranch('trading', 100);
+    await fs.appendFile(join(worktree, 'design/rulebook/05-market.md'), 'Prices rise.\n');
+    git(worktree, 'commit', '-q', '-am', 'chunk-trading/edit market');
+    git(main, 'rm', '-q', 'design/rulebook/05-market.md');
+    git(main, 'commit', '-q', '-m', 'drop market');
+    await expectRefused();
+  });
+
+  it('refuses, rather than failing to read it, when both renamed it differently and git left no file there', async () => {
+    const worktree = await buildOnBranch('trading', 100);
+    git(worktree, 'mv', 'design/rulebook/05-market.md', 'design/rulebook/05-bazaar.md');
+    git(worktree, 'commit', '-q', '-m', 'chunk-trading/rename market');
+    git(main, 'mv', 'design/rulebook/05-market.md', 'design/rulebook/05-shops.md');
+    git(main, 'commit', '-q', '-m', 'rename market');
+    await expectRefused();
   });
 });
 
@@ -569,10 +815,10 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
     return budgetRunner(projectDir, files);
   };
 
-  /** A chunk whose Build Manifest names src/world.ts, with a quoted claim and its own test. */
-  async function sharedChunkMd(slug: string, claim: string): Promise<string> {
+  /** A chunk whose Build Manifest names the shared file (src/world.ts), with a quoted claim and its own test. */
+  async function sharedChunkMd(slug: string, claim: string, shared = 'src/world.ts'): Promise<string> {
     return (await chunkMd(slug))
-      .replace(`| src/${slug}.ts | written |`, `| src/${slug}.ts | written |\n| src/world.ts | written |`)
+      .replace(`| src/${slug}.ts | written |`, `| src/${slug}.ts | written |\n| ${shared} | written |`)
       .replace(/^1\. \*\*<!-- claim text -->\*\*\n.*\n.*\n/m, `${claim}\n`)
       .replace('<!-- | src/...test.ts | 1, 3, 4 | pending / yes | -->', `| tests/${slug}.test.ts | 1 | yes |`);
   }
@@ -590,13 +836,14 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
 
   async function buildShared(
     slug: 'trading' | 'quests',
-    options: { claim?: string; test?: string; worldFile?: string; chunkCheck?: boolean; extra?: Record<string, string> } = {},
+    options: { claim?: string; test?: string; worldFile?: string; shared?: string; chunkCheck?: boolean; extra?: Record<string, string> } = {},
   ): Promise<void> {
     const claim = options.claim ?? (slug === 'trading' ? TRADING_CLAIM : QUESTS_CLAIM);
+    const shared = options.shared ?? 'src/world.ts';
     const worktree = await buildOnBranch(slug, 100, {
-      [`design/chunks/${slug}/CHUNK.md`]: await sharedChunkMd(slug, claim),
+      [`design/chunks/${slug}/CHUNK.md`]: await sharedChunkMd(slug, claim, shared),
       [`tests/${slug}.test.ts`]: options.test ?? `// ${slug}'s own test\n`,
-      'src/world.ts': options.worldFile ?? (slug === 'trading' ? world(1, 0) : world(0, 1)),
+      [shared]: options.worldFile ?? (slug === 'trading' ? world(1, 0) : world(0, 1)),
       ...options.extra,
     });
     if (options.chunkCheck === false) return;
@@ -618,11 +865,11 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
   it("vouches for the combined file with both chunks' own checks, and records it naming both chunks and the merge", async () => {
     await buildShared('trading');
     await buildShared('quests');
-    expect((await chunkMerge(main, 'trading', { runTests: ownTestsRunner })).refusals).toEqual([]);
+    expect((await chunkMerge(main, 'trading', { runTests: ownTestsRunner, typeCheck })).refusals).toEqual([]);
     const mainBefore = head();
     const branchTip = git(main, 'rev-parse', 'chunk/quests').trim();
 
-    const result = await chunkMerge(main, 'quests', { runTests: ownTestsRunner });
+    const result = await chunkMerge(main, 'quests', { runTests: ownTestsRunner, typeCheck });
     expect(result.refusals).toEqual([]);
     expect(await read(main, 'src/world.ts')).toBe(world(1, 1));
 
@@ -647,19 +894,30 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
     expect(status()).toBe('');
   });
 
+  it('vouches for a shared file whose name has non-ASCII letters, as the Build Manifests write it (#1113)', async () => {
+    await write(main, { 'src/règles.ts': world(0, 0) });
+    git(main, 'add', '-A');
+    git(main, 'commit', '-q', '-m', 'règles');
+    await buildShared('trading', { shared: 'src/règles.ts' });
+    await buildShared('quests', { shared: 'src/règles.ts' });
+    expect((await chunkMerge(main, 'trading', { runTests: ownTestsRunner, typeCheck })).refusals).toEqual([]);
+    expect((await chunkMerge(main, 'quests', { runTests: ownTestsRunner, typeCheck })).refusals).toEqual([]);
+    expect(await read(main, 'design/MERGE-SIGNOFFS.md')).toContain('### src/règles.ts');
+  });
+
   /**
    * Merges `first`, then `second`, and expects the second merge to be refused with `refusal`,
    * leaving the main line, its working tree and design/MERGE-SIGNOFFS.md as they were.
    */
   async function expectSecondMergeRefused(first: string, second: string, refusal: RegExp): Promise<void> {
-    expect((await chunkMerge(main, first, { runTests: ownTestsRunner })).refusals).toEqual([]);
+    expect((await chunkMerge(main, first, { runTests: ownTestsRunner, typeCheck })).refusals).toEqual([]);
     await expectMergeRefused(second, ownTestsRunner, refusal);
   }
 
   /** Expects merging `slug` to be refused with `refusal`, leaving the main line and its records as they were. */
   async function expectMergeRefused(slug: string, runTests: TestRunner, refusal: RegExp): Promise<void> {
     const before = head();
-    const result = await chunkMerge(main, slug, { runTests });
+    const result = await chunkMerge(main, slug, { runTests, typeCheck });
     expect(result.merged).toBe(false);
     expect(result.refusals.join('\n')).toMatch(refusal);
     expect([head(), status()]).toEqual([before, '']);
@@ -697,8 +955,8 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
     await write(main, { [skill]: 'skill text v2\n' });
     git(main, 'commit', '-q', '-am', 'skills reinstalled');
 
-    expect((await chunkMerge(main, 'trading', { runTests: ownTestsRunner })).refusals).toEqual([]);
-    expect((await chunkMerge(main, 'quests', { runTests: ownTestsRunner })).refusals).toEqual([]);
+    expect((await chunkMerge(main, 'trading', { runTests: ownTestsRunner, typeCheck })).refusals).toEqual([]);
+    expect((await chunkMerge(main, 'quests', { runTests: ownTestsRunner, typeCheck })).refusals).toEqual([]);
   });
 
   it("refuses when a chunk's chunk-check fails on the combined tree", async () => {
@@ -710,7 +968,7 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
   it("refuses, and leaves no record behind, when a chunk's sign-off fails once the merge has vouched", async () => {
     await buildShared('trading');
     await buildShared('quests');
-    expect((await chunkMerge(main, 'trading', { runTests: ownTestsRunner })).refusals).toEqual([]);
+    expect((await chunkMerge(main, 'trading', { runTests: ownTestsRunner, typeCheck })).refusals).toEqual([]);
     // An edit to trading's own file on the main line that no chunk accounts for voids its sign-off.
     await write(main, { 'src/trading.ts': 'export const PARTITION_BYTES = 101;\n' });
     git(main, 'commit', '-q', '-am', 'an unaccounted edit');
@@ -724,7 +982,7 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
       extra: { 'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n' },
     });
 
-    const result = await chunkMerge(main, 'trading', { runTests: ownTestsRunner });
+    const result = await chunkMerge(main, 'trading', { runTests: ownTestsRunner, typeCheck });
     expect(result.refusals).toEqual([]);
     expect(result.allocated).toEqual({ 'Ruling @trading.1': 'Ruling 2' });
     expect(await read(main, 'src/world.ts')).toBe(`// Ruling 2: prices are public.\n${world(1, 0)}`);
@@ -771,7 +1029,7 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
           'vite.config.ts': config(['node_modules/**', 'dist/**']),
         },
       });
-      expect((await chunkMerge(main, 'trading', { runTests: configRunner })).refusals).toEqual([]);
+      expect((await chunkMerge(main, 'trading', { runTests: configRunner, typeCheck })).refusals).toEqual([]);
       // Quests shares no file with trading; only the config stands between it and the main line.
       await buildOnBranch('quests', 100);
       await write(main, { 'vite.config.ts': edited });
@@ -782,7 +1040,7 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
       await tradingSignsTheConfig(config(['node_modules/**', 'dist/**', '.worktrees/**', '**/tests/browser/**']));
       expect((await assessSignoffs(main)).get('trading')!.problems.join('\n')).toMatch(/vite\.config\.ts changed after it/);
 
-      const result = await chunkMerge(main, 'quests', { runTests: configRunner });
+      const result = await chunkMerge(main, 'quests', { runTests: configRunner, typeCheck });
       expect(result.refusals).toEqual([]);
       expect(result.alongside).toEqual([]);
       expect(result.vouched).toEqual([{ path: 'vite.config.ts', chunks: ['trading'], why: 'test-config' }]);
@@ -838,7 +1096,7 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
       const throws: TestRunner = async () => {
         throw new Error('the test runner broke');
       };
-      await expect(chunkMerge(main, 'quests', { runTests: throws })).rejects.toThrow('the test runner broke');
+      await expect(chunkMerge(main, 'quests', { runTests: throws, typeCheck })).rejects.toThrow('the test runner broke');
       expect([head(), status()]).toEqual([before, '']);
       await expect(fs.access(join(main, '.git/MERGE_HEAD'))).rejects.toThrow();
     });
@@ -858,7 +1116,7 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
         'design/chunks/trading/CHUNK.md': (await chunkMd('trading'))
           .replace('| src/trading.ts | written |', '| src/trading.ts | written |\n| vitest.config.ts | written |'),
       });
-      expect((await chunkMerge(main, 'trading', { runTests: ownTestsRunner })).refusals).toEqual([]);
+      expect((await chunkMerge(main, 'trading', { runTests: ownTestsRunner, typeCheck })).refusals).toEqual([]);
       await buildOnBranch('quests', 100);
       await fs.unlink(join(main, 'vitest.config.ts'));
       await write(main, { 'vite.config.ts': config(['**/tests/browser/**']) });
@@ -877,7 +1135,7 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
 
   it('refuses a branch that writes the merge sign-offs itself', async () => {
     await buildOnBranch('trading', 100, { 'design/MERGE-SIGNOFFS.md': '# Merge Sign-offs\n' });
-    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
     expect(result.refusals.join('\n')).toMatch(/design\/MERGE-SIGNOFFS\.md/);
   });
 });

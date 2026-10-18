@@ -33,6 +33,7 @@ import {
 } from '../index.js';
 import { GameRunner } from '../../runtime/index.js';
 import { createHeadlessSession } from '../../testing/headless-session.js';
+import { snapshotTree } from '../utils/index.js';
 
 class Card extends Piece<AliasGame> {}
 class Zone extends Space<AliasGame> {}
@@ -158,7 +159,7 @@ describe('CR-02: toJSON emits copies — checkpoints do not alias live game stat
     // which is now a sibling of `state` rather than a field inside it. The
     // aliasing hazard is identical: `fromSnapshot` hands the array to the
     // restored game, so it has to be a copy on one side or the other.
-    const state = snapshot.state as ReturnType<AliasGame['toJSON']>;
+    const state = snapshotTree(snapshot) as ReturnType<AliasGame['toJSON']>;
     expect(snapshot.messageLog!.length).toBe(snapshotMessages);
     expect((state.settings.stash as { nested: string }).nested).toBe('undone-value');
   });

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action, actionStep, loop, type GameOptions } from '../engine/index.js';
-import { executeOp, DEBUG_OP_TYPES, type GameDefinitionLike, type ExecutableOp, type Op, type StateEnvelope } from './stateless-ops.js';
+import { Game, Player, Action, Card, Deck, actionStep, loop, type GameOptions } from '../engine/index.js';
+import { parseExecutorOp } from './parse-executor-op.js';
+import { executeOp, DEBUG_OP_TYPES, type GameDefinitionLike, type Op, type OpOfType, type DebugOpType, type StateEnvelope } from './stateless-ops.js';
 import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
 import { boundaryKeyOf, boundaryKeyOfHost } from './testing/boundary-stamp.js';
 import { collectFixtureDefinition } from './testing/fixtures/collect-fixture.js';
@@ -242,6 +243,79 @@ describe('executeOp debug ops', () => {
 });
 
 // ---------------------------------------------------------------------------
+// #898: a plain Deck hides its cards from every seat, so a seat's view lists
+// stand-ins with negative ids that no debug edit can name. The Decks tab reads
+// the unfiltered view instead.
+// ---------------------------------------------------------------------------
+
+class HiddenPileGame extends Game<HiddenPileGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    const pile = this.create(Deck, 'pile');
+    for (const name of ['red', 'green', 'blue']) pile.create(Card, name);
+    this.registerAction(Action.create('pass').execute(() => ({ success: true })));
+    this.setFlow({ root: loop({ maxIterations: 1000, do: actionStep({ actions: ['pass'], player: (ctx) => ctx.game.getPlayer(1)! }) }) });
+  }
+}
+const hiddenPileDef: GameDefinitionLike = { gameClass: HiddenPileGame, gameType: 'hidden-pile', minPlayers: 1, maxPlayers: 2 };
+const hiddenPileOptions = { playerCount: 2, seed: 'hidden-pile' };
+
+describe('debugDeckView (#898)', () => {
+  const debug = { debug: true, fullHistory: true };
+
+  it("lists a face-down deck's real cards, by ids a debug edit accepts", async () => {
+    const start = succeeded(await executeOp(hiddenPileDef, hiddenPileOptions, null, null, { type: 'start' }, debug));
+    const seatPile = findByClass(view(start), 'Deck')!;
+    expect((seatPile.children ?? []).every((card) => card.id! < 0)).toBe(true);
+
+    const res = succeeded(await executeOp(hiddenPileDef, hiddenPileOptions, start.snapshot, null, { type: 'debugDeckView' }, debug));
+    const pile = findByClass(res.view as ViewNode, 'Deck')!;
+    const cards = pile.children as Array<ViewNode & { name: string }>;
+    const before = cards.map((card) => card.name);
+    expect([...before].sort()).toEqual(['blue', 'green', 'red']);
+    expect(cards.every((card) => card.id! > 0)).toBe(true);
+
+    const moved = succeeded(await executeOp(hiddenPileDef, hiddenPileOptions, start.snapshot, null, {
+      type: 'debugReorder', cardId: cards[0]!.id!, targetIndex: 2,
+    }, debug));
+    const after = succeeded(await executeOp(hiddenPileDef, hiddenPileOptions, moved.snapshot, null, { type: 'debugDeckView' }, debug));
+    const names = (findByClass(after.view as ViewNode, 'Deck')!.children as Array<{ name: string }>).map((card) => card.name);
+    expect(names).toEqual([before[1], before[2], before[0]]);
+  });
+
+  it('is never run by a platform executor', () => {
+    expect(parseExecutorOp({ type: 'debugDeckView' }).ok).toBe(false);
+    expect(parseExecutorOp({ type: 'debugDeckViewAt', actionIndex: 0 }).ok).toBe(false);
+  });
+});
+
+describe('debugDeckViewAt (#1071)', () => {
+  const debug = { debug: true, fullHistory: true };
+
+  it("lists a face-down deck's real cards as they stood at a past position", async () => {
+    const start = succeeded(await executeOp(hiddenPileDef, hiddenPileOptions, null, null, { type: 'start' }, debug));
+    const live = succeeded(await executeOp(hiddenPileDef, hiddenPileOptions, start.snapshot, null, { type: 'debugDeckView' }, debug));
+    const order = (findByClass(live.view as ViewNode, 'Deck')!.children as Array<ViewNode & { name: string }>);
+    const passed = succeeded(await executeOp(hiddenPileDef, hiddenPileOptions, start.snapshot, null, {
+      type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOf(start.snapshot),
+    }, debug));
+    const reordered = succeeded(await executeOp(hiddenPileDef, hiddenPileOptions, passed.snapshot, null, {
+      type: 'debugReorder', cardId: order[0]!.id!, targetIndex: 2,
+    }, debug));
+
+    const res = succeeded(await executeOp(hiddenPileDef, hiddenPileOptions, reordered.snapshot, null, { type: 'debugDeckViewAt', actionIndex: 0 }, debug));
+    const cards = findByClass(res.view as ViewNode, 'Deck')!.children as Array<ViewNode & { name: string }>;
+    expect(cards.map((card) => [card.id, card.name])).toEqual(order.map((card) => [card.id, card.name]));
+  });
+
+  it('refuses a position outside the history', async () => {
+    const start = succeeded(await executeOp(hiddenPileDef, hiddenPileOptions, null, null, { type: 'start' }, debug));
+    const res = refused(await executeOp(hiddenPileDef, hiddenPileOptions, start.snapshot, null, { type: 'debugDeckViewAt', actionIndex: 5 }, debug));
+    expect(res.error).toMatch(/Invalid action index: 5/);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // #481: debug ops run only when the host turns debugging on, and a seat can
 // never use one to read another seat's view. Two layers gate them: the pure
 // `executeOp` (ShufflewickPub's executor and the dev host) and the
@@ -250,7 +324,7 @@ describe('executeOp debug ops', () => {
 // ---------------------------------------------------------------------------
 
 /** One instance of every debug op, each valid against a two-pass game. */
-const EVERY_DEBUG_OP: ExecutableOp[] = [
+const EVERY_DEBUG_OP: OpOfType<DebugOpType>[] = [
   { type: 'debugHistory' },
   { type: 'debugStateAt', actionIndex: 1, player: 1 },
   { type: 'debugStateDiff', fromIndex: 0, toIndex: 1, player: 1 },
@@ -261,10 +335,12 @@ const EVERY_DEBUG_OP: ExecutableOp[] = [
   { type: 'debugReorder', cardId: 1, targetIndex: 0 },
   { type: 'debugTransfer', cardId: 1, targetDeckId: 1, position: 'first' },
   { type: 'debugShuffle', deckId: 1 },
+  { type: 'debugDeckView' },
+  { type: 'debugDeckViewAt', actionIndex: 1 },
 ];
 
 /** The debug ops that report one seat's view. */
-const SEAT_VIEW_OPS: ExecutableOp[] = [
+const SEAT_VIEW_OPS: OpOfType<DebugOpType>[] = [
   { type: 'debugStateAt', actionIndex: 1, player: 2 },
   { type: 'debugStateDiff', fromIndex: 0, toIndex: 1, player: 2 },
   { type: 'debugActionTraces', player: 2 },

@@ -532,8 +532,10 @@ function screens() {
   // line, before a `const` here would be initialised.
   return [
     { width: 375, height: 812 },
+    { width: 390, height: 844 },
     { width: 844, height: 390 },
     { width: 1280, height: 900 },
+    { width: 1440, height: 900 },
   ];
 }
 
@@ -586,6 +588,34 @@ async function onASmallerScreen(browser, hostUrl, viewport) {
       const bar = await barGeometry(surface);
       assert(bar.top >= bar.strip - 1, `the bar's top is at ${bar.top}, above the strip at ${bar.strip}`);
     });
+
+    // A refusal the player cannot see is the silent Done of #229 again: the
+    // bar caps its height, and the message used to land below that cap (#1159).
+    for (const [action, editor, value] of [
+      ['setCreed', '.text-input', 'Too short.'],
+      ['recycle', '.number-input', '1'],
+    ]) {
+      await check(`${size}: a refusal in ${editor} is in view inside the bar when it appears`, async () => {
+        await startAction(page, action, editor);
+        await surface.locator(`${editor} textarea, ${editor} input`).first().fill(value);
+        // Bringing the message into view must scroll only the bar, never the page or the board.
+        const scrolled = async () => [
+          await page.evaluate(() => document.scrollingElement.scrollTop),
+          ...(await surface.locator('html').evaluate(() =>
+            [document.scrollingElement.scrollTop, document.querySelector('.boardregion')?.scrollTop ?? 0])),
+        ];
+        const before = await scrolled();
+        await surface.locator(`${editor} .done-button`).click();
+        await surface.locator(`${editor} .selection-error`).waitFor({ timeout: 10_000 });
+        const bar = await barGeometry(surface, [`${editor} .selection-error`]);
+        const after = await scrolled();
+        // Closed before asserting, so the next editor's check starts from rest.
+        await surface.locator('.cancel-btn').click();
+        await surface.locator(editor).waitFor({ state: 'detached', timeout: 10_000 });
+        assert(bar.outside.length === 0, `not in view inside the bar: ${bar.outside.join(', ')}`);
+        assert(after.join() === before.join(), `page, frame and board scroll moved from ${before} to ${after}`);
+      });
+    }
   });
 }
 

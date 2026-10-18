@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi, type MockInstance } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { promises as fs } from 'node:fs';
+import { existsSync, promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
   checkTestStep,
@@ -19,6 +19,7 @@ import {
 } from './test-step-ast.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { scriptRegions } from './test-step-sfc.js';
+import { findCodeRun } from './test-step-code-run.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 
 // -------------------------------------------------------------------------------------------
@@ -58,6 +59,26 @@ describe('parseSpecManifest', () => {
     const manifest = parseSpecManifest(chunkMd('| exempt | asset swap only, no rules change | n/a |\n'));
     expect(manifest.rows).toEqual([]);
     expect(manifest.exemption).toBe('asset swap only, no rules change');
+  });
+
+  it('refuses an exempt row with no reason', () => {
+    expect(() => parseSpecManifest(chunkMd('| exempt |  | n/a |\n'))).toThrow(
+      'The Spec Manifest\'s exempt row gives no reason. Say why the chunk adds no new game behavior in its ' +
+        'second cell: `| exempt | <reason> | n/a |` (build/spec.md "Exemptions").',
+    );
+  });
+
+  it('refuses an exempt row beside a test file row, but not beside a none (regression) row', () => {
+    expect(() =>
+      parseSpecManifest(chunkMd('| exempt | restyle | n/a |\n| tests/a.test.ts | 1 | yes |\n| tests/pin.test.ts | none (regression) | n/a |\n')),
+    ).toThrow(
+      'The Spec Manifest marks this chunk exempt but also lists tests/a.test.ts. An exempt row must be the only ' +
+        'row besides `none (regression)` rows: remove the exempt row if the chunk has tests of its own, or remove ' +
+        'the other rows (build/spec.md "Exemptions").',
+    );
+    expect(
+      parseSpecManifest(chunkMd('| exempt | restyle | n/a |\n| tests/pin.test.ts | none (regression) | n/a |\n')).exemption,
+    ).toBe('restyle');
   });
 
   it('ignores table-shaped lines inside an HTML comment, such as the template\'s own example', () => {
@@ -329,11 +350,14 @@ const AUCTION_CHUNK = (rows: string) =>
 describe('checkTestStep (static checks)', () => {
   let project: string;
 
-  beforeEach(async () => {
+  beforeEach(() => startProject());
+
+  /** A project with one earlier chunk's commit, in a repository of the given object format. */
+  async function startProject(objectFormat = 'sha1'): Promise<void> {
     const tree = tempTree('bs-test-step-');
     project = join(tree, 'project');
     await fs.mkdir(project, { recursive: true });
-    git(project, 'init', '-q');
+    git(project, 'init', '-q', `--object-format=${objectFormat}`);
     git(project, 'config', 'user.email', 't@example.com');
     git(project, 'config', 'user.name', 'T');
     await write(project, {
@@ -344,7 +368,7 @@ describe('checkTestStep (static checks)', () => {
     await write(project, { 'design/chunks/auction/CHUNK.md': AUCTION_CHUNK('') });
     git(project, 'add', '-A');
     git(project, 'commit', '-q', '-m', 'chunk-auction/step-ask');
-  });
+  }
 
   async function build(files: Record<string, string>, rows: string): Promise<void> {
     await write(project, { ...files, 'design/chunks/auction/CHUNK.md': AUCTION_CHUNK(rows) });
@@ -360,6 +384,33 @@ export const pass = Action.create('pass');
   const DISPATCHES_BOTH = `import { it } from 'vitest';
 it('claim 1 and 2', () => { testGame.doAction(1, 'bid'); testGame.doAction(1, 'pass'); });
 `;
+
+  describe('names a file it cannot read rather than passing over it (#1174)', () => {
+    const PASSING = { 'src/rules/auction.ts': RULES, 'tests/auction.test.ts': DISPATCHES_BOTH };
+    const ROW = '| tests/auction.test.ts | 1, 2 | yes |\n';
+
+    it("a Spec Manifest row's test file, rather than calling it missing", async () => {
+      await build({ 'src/rules/auction.ts': RULES }, ROW);
+      const testFile = join(project, 'tests', 'auction.test.ts');
+      await fs.mkdir(testFile, { recursive: true });
+      await expect(checkTestStep(project, 'auction')).rejects.toThrow(`Could not read ${testFile} (EISDIR)`);
+    });
+
+    for (const [what, path] of [
+      ['an implementation file', 'src/rules/game.ts'],
+      ['a test harness file', 'tests/helper.ts'],
+      ['a project script', 'scripts/tool.mjs'],
+    ]) {
+      it(`${what} git lists`, async () => {
+        await build(PASSING, ROW);
+        const abs = join(project, path);
+        await fs.mkdir(dirname(abs), { recursive: true });
+        await fs.rm(abs, { force: true });
+        await fs.symlink(abs, abs);
+        await expect(checkTestStep(project, 'auction')).rejects.toThrow(`Could not read ${abs} (ELOOP)`);
+      });
+    }
+  });
 
   // git quotes a non-ASCII path unless asked not to, and a quoted path matches no file read elsewhere (#531).
   it('reads a chunk file with a non-ASCII name by its real path', async () => {
@@ -400,6 +451,19 @@ it('claim 2 — pass', () => { passTurn(game); });
     const result = await checkTestStep(project, 'auction');
     expect(result.findings.map((f) => [f.kind, f.subject])).toEqual([['verb-not-dispatched', 'pass']]);
     expect(result.findings[0].detail).toMatch(/doAction/);
+  });
+
+  it('still finds the lines the chunk wrote in a SHA-256 repository, whose hashes are 64 characters (#829)', async () => {
+    await startProject('sha256');
+    await build(
+      {
+        'src/rules/auction.ts': RULES,
+        'tests/auction.test.ts': `import { it } from 'vitest';\nit('claim 1 and 2', () => { testGame.doAction(1, 'bid'); });\n`,
+      },
+      '| tests/auction.test.ts | 1, 2 | yes |\n',
+    );
+    const result = await checkTestStep(project, 'auction');
+    expect(result.findings.map((f) => [f.kind, f.subject])).toEqual([['verb-not-dispatched', 'pass']]);
   });
 
   it('follows a world game\'s verb wrapper and its test harness, and still catches the verb it never runs (sotf#36)', async () => {
@@ -521,6 +585,15 @@ it('no bare asset <img>', () => { expect(scanAssetReachability(process.cwd())).t
     expect(findings[0].detail).toContain('build/test.md');
   });
 
+  it.skipIf(!existsSync(process.cwd().toUpperCase()))('reports a guard file the Spec Manifest names in other letter case (#1053)', async () => {
+    await build(
+      { 'src/rules/auction.ts': RULES, 'tests/auction.test.ts': DISPATCHES_BOTH, 'tests/guards/a11y-floor.test.ts': GUARD },
+      '| tests/auction.test.ts | 1, 2 | yes |\n| TESTS/Guards/a11y-floor.test.ts | a11y | yes |\n',
+    );
+    const findings = (await checkTestStep(project, 'auction')).findings;
+    expect(findings.map((f) => `${f.kind} ${f.subject}`)).toEqual(['guard-in-manifest TESTS/Guards/a11y-floor.test.ts']);
+  });
+
   it('accepts a guard file the chunk wrote that the Spec Manifest does not list (#443)', async () => {
     const manifestFiles = await passingManifestFiles(
       { 'src/rules/auction.ts': RULES, 'tests/auction.test.ts': DISPATCHES_BOTH, 'tests/guards/a11y-floor.test.ts': GUARD },
@@ -589,6 +662,32 @@ export function hexToRgb(hex: string): number[] { return [parseInt(hex.slice(1, 
     ['automocks a game module with vi.mock and no factory', `import { vi } from 'vitest';\nvi.mock('../../src/rules/auction');\n`, 2, 'src/rules/auction.ts'],
     ['spies on a game module with vi.mock and an options object', `import { vi } from 'vitest';\nvi.mock('../../src/rules/auction', { spy: true });\n`, 2, 'src/rules/auction.ts'],
     ['loads a game module by a computed path', "const name = 'auction';\nawait import(`../../src/rules/${name}`);\n", 2, 'src/rules/'],
+    ['loads every rules module with an eager import.meta.glob (#841)', `const rules = import.meta.glob('../../src/rules/*.ts', { eager: true });\nvoid rules;\n`, 1, 'src/rules/*.ts'],
+    ['makes importers with a lazy import.meta.glob (#841)', `const rules = import.meta.glob(['../../src/rules/*.ts', '!../../src/rules/x.ts']);\nvoid rules;\n`, 1, 'src/rules/*.ts'],
+    ['globs the game with options this check cannot read (#841)', `const OPTS = { query: '?raw' };\nconst rules = import.meta.glob('../../src/rules/*.ts', OPTS);\nvoid rules;\n`, 2, 'options this check cannot read'],
+    ['globs from the tests folder with a wildcard (#841)', `const g = import.meta.glob("../**/*.ts", { eager: true });\nvoid g;\n`, 1, '../**/*.ts'],
+    ['globs src and tests with a brace set (#841)', `const g = import.meta.glob("../../{src,tests}/**/*.ts", { eager: true });\nvoid g;\n`, 1, '../../{src,tests}/**/*.ts'],
+    ['globs with a wildcard folder before rules (#841)', `const g = import.meta.glob("../../*/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '../../*/rules/*.ts'],
+    ['globs the whole project from its root (#841)', `const g = import.meta.glob("/**/*.ts", { eager: true });\nvoid g;\n`, 1, '/**/*.ts'],
+    ['globs relative to a base option (#841)', `const g = import.meta.glob("./rules/*.ts", { base: "../../src", eager: true });\nvoid g;\n`, 1, 'without `base`'],
+    ['globs support files under tests (#841)', `const g = import.meta.glob("../support/*.ts", { eager: true });\nvoid g;\n`, 1, '../support/*.ts'],
+    ['globs with a query that is not only raw (#841)', `const g = import.meta.glob("../../src/rules/*.ts", { query: "?raw&x", eager: true });\nvoid g;\n`, 1, 'src/rules/*.ts'],
+    ['globs with a url query (#841)', `const g = import.meta.glob("../../src/rules/*.ts", { query: "?url", eager: true });\nvoid g;\n`, 1, 'src/rules/*.ts'],
+    ['globs with a raw query a later duplicate key overrides (#841)', `const g = import.meta.glob("../../src/rules/*.ts", { 'query': '?raw', query: '?url' });\nvoid g;\n`, 1, 'src/rules/*.ts'],
+    ['globs with a computed option key (#841)', `const g = import.meta.glob("../../src/rules/*.ts", { ['query']: '?raw' });\nvoid g;\n`, 1, 'options this check cannot read'],
+    ['globs through a wildcard folder and back up into src/ (#841)', `const g = import.meta.glob("../../docs/*/../../src/x.ts", { eager: true });\nvoid g;\n`, 1, '../../docs/*/../../src/x.ts'],
+    ['globs through ** and back up into src/ (#841)', `const g = import.meta.glob("../../docs/**/../../src/a.ts", { eager: true });\nvoid g;\n`, 1, '../../docs/**/../../src/a.ts'],
+    ['globs with a brace set that climbs into src/ (#841)', `const g = import.meta.glob("../../docs/{../src,x}/*.ts", { eager: true });\nvoid g;\n`, 1, '../../docs/{../src,x}/*.ts'],
+    ['globs with an extglob that climbs into src/ (#841)', `const g = import.meta.glob("../../docs/@(x|../src)/*.ts", { eager: true });\nvoid g;\n`, 1, '../../docs/@(x|../src)/*.ts'],
+    ['globs from above the project back into it (#841)', `const g = import.meta.glob("../../../*/src/x.ts", { eager: true });\nvoid g;\n`, 1, '../../../*/src/x.ts'],
+    ['globs src/ from the root with a doubled slash (#841)', `const g = import.meta.glob("//src/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '//src/rules/*.ts'],
+    ['globs src/ from the root with a tripled slash (#841)', `const g = import.meta.glob("///src/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '///src/rules/*.ts'],
+    ['globs with a brace set holding a ) that climbs into src/ (#841)', `const g = import.meta.glob("../../docs/{x),../src}/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '../../docs/{x),../src}/rules/*.ts'],
+    ['globs src/ spelled in upper case, which a case-insensitive disk matches (#841)', `const g = import.meta.glob("../../SRC/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '../../SRC/rules/*.ts'],
+    ['globs src/ spelled with a long s, which a case-insensitive disk folds to s (#841)', `const g = import.meta.glob("../../ſrc/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '../../ſrc/rules/*.ts'],
+    ['imports src/ spelled in upper case, which a case-insensitive disk loads (#1053)', `import { bid } from '../../SRC/rules/auction';\nvoid bid;\n`, 1, 'SRC/rules/auction'],
+    ['imports src/ spelled with a long s, which a case-insensitive disk folds to s (#1053)', `import { bid } from '../../ſrc/rules/auction';\nvoid bid;\n`, 1, 'ſrc/rules/auction'],
+    ['globs with a pattern this check cannot read (#841)', `const PATTERN = '../../src/rules/*.ts';\nconst rules = import.meta.glob(PATTERN, { eager: true });\nvoid rules;\n`, 2, 'a pattern this check cannot read'],
   ])('reports a guard that %s from the game\'s src/ (#485)', async (_what, guard, line, module) => {
     const findings = await findingsFor({
       'src/rules/auction.ts': RULES,
@@ -598,6 +697,26 @@ export function hexToRgb(hex: string): number[] { return [parseInt(hex.slice(1, 
     });
     expect(findings.map((f) => [f.kind, f.subject])).toEqual([['guard-runs-code', `tests/guards/a11y-floor.test.ts:${line}`]]);
     expect(findings[0].detail).toContain(module);
+  });
+
+  it('accepts a guard that globs the game as raw text with import.meta.glob (#841)', async () => {
+    const findings = await findingsFor({
+      'src/rules/auction.ts': RULES,
+      'tests/guards/a11y-floor.test.ts': `const a = import.meta.glob('../../src/ui/**/*.vue', { query: '?raw', import: 'default', eager: true });
+const b = import.meta.glob(['../../src/rules/*.ts'], { as: 'raw', eager: true });
+const c = import.meta.glob('../../src/rules/*.ts', { 'query': '?raw', eager: true });
+void a; void b; void c;
+`,
+    });
+    expect(findings).toEqual([]);
+  });
+
+  it('accepts a glob whose only pattern reaching src/ is a ! exclusion (#841)', async () => {
+    const findings = await findingsFor({
+      'src/rules/auction.ts': RULES,
+      'tests/guards/a11y-floor.test.ts': `const g = import.meta.glob(['../../docs/*.md', '!../../src/**/*.ts'], { eager: true });\nvoid g;\n`,
+    });
+    expect(findings).toEqual([]);
   });
 
   it('accepts a guard that mocks a game module with a factory, which never loads the real one (#485)', async () => {
@@ -620,6 +739,15 @@ it('contrast', () => { expect(PALETTE[scheme].text).not.toBe(ACCENT_COLOR); });
 `,
     });
     expect(findings).toEqual([]);
+  });
+
+  // Only the exact src/ui/ is trusted; on a case-sensitive disk a folder SRC/ui can sit beside it (#1053).
+  it('reports a guard that imports literal theme constants from SRC/ui, in other letter case (#1053)', () => {
+    const scripts = new Map([['src/ui/theme.ts', THEME], ['SRC/ui/theme.ts', THEME]]);
+    const context = { text: (path: string) => scripts.get(path), wrappers: new Map() };
+    const run = (from: string) => findCodeRun(`import { PALETTE } from '${from}';\nvoid PALETTE;\n`, 'tests/guards/a.test.ts', context);
+    expect(run('../../src/ui/theme.js')).toBeUndefined();
+    expect(run('../../SRC/ui/theme.js')).toEqual({ line: 1, what: "imports SRC/ui/theme.ts from the game's src/" });
   });
 
   it.each([
@@ -767,14 +895,20 @@ it('regression: a bid is defined', () => { expect(bid).toBeTruthy(); });
       expect(result.findings[0].detail).toMatch(/set it to n\/a/);
     });
 
-    it.each([
-      ['in a chunk that is not exempt', '| tests/auction.test.ts | 1, 2 | yes |\n| tests/pin.test.ts | none (regression) | n/a |\n', '1. **Bid.** a\n2. **Pass.** b\n'],
-      ['marked anything but none (regression)', '| exempt | refactor | n/a |\n| tests/pin.test.ts | none (budget) | n/a |\n', ''],
-      ['that lists a claim', '| exempt | refactor | n/a |\n| tests/pin.test.ts | 3 (regression) | n/a |\n', ''],
-    ])('still demands an observed red for a row %s', async (_what, rows, claims) => {
-      if (rows.includes('tests/auction.test.ts')) await write(project, { 'tests/auction.test.ts': DISPATCHES_BOTH });
-      const result = await exemptChunk(rows, claims);
+    it('still demands an observed red for a none (regression) row in a chunk that is not exempt', async () => {
+      await write(project, { 'tests/auction.test.ts': DISPATCHES_BOTH });
+      const result = await exemptChunk(
+        '| tests/auction.test.ts | 1, 2 | yes |\n| tests/pin.test.ts | none (regression) | n/a |\n',
+        '1. **Bid.** a\n2. **Pass.** b\n',
+      );
       expect(result.findings.map((f) => [f.kind, f.subject])).toContainEqual(['red-not-observed', 'tests/pin.test.ts']);
+    });
+
+    it.each([
+      ['marked anything but none (regression)', '| tests/pin.test.ts | none (budget) | n/a |'],
+      ['that lists a claim', '| tests/pin.test.ts | 3 (regression) | n/a |'],
+    ])('refuses an exempt chunk with a row %s', async (_what, row) => {
+      await expect(exemptChunk(`| exempt | refactor | n/a |\n${row}\n`)).rejects.toThrow(/exempt but also lists tests\/pin\.test\.ts/);
     });
   });
 
@@ -802,6 +936,51 @@ it('regression: a bid is defined', () => { expect(bid).toBeTruthy(); });
     git(project, 'add', '-A');
     git(project, 'commit', '-q', '-m', 'chunk-setup/step-close');
     const findings = await findingsFor({ 'src/rules/auction.ts': RULES, 'tests/old.test.ts': `${RUNS_GAME}// extended\n` });
+    expect(findings).toEqual([]);
+  });
+
+  // #1013: a guard the chunk never touched starts running the game when a support file it loads changes.
+  it.each([
+    ['imports the game', 'tests/support/scan.ts', `import { bid } from '../../src/rules/auction.js';\nexport const files = () => bid;\n`, 'src/rules/auction.ts'],
+    ['globs the game', 'tests/support/scan.ts', `export const files = import.meta.glob('../../src/rules/*.ts', { eager: true });\n`, 'src/rules/*.ts'],
+    ['is loaded through another support file and imports the game', 'tests/support/deep.ts', `import { bid } from '../../src/rules/auction.js';\nexport const deep = () => bid;\n`, 'src/rules/auction.ts'],
+  ])('reports an untouched guard whose support file the chunk changed so it %s (#1013)', async (_what, support, text, module) => {
+    await write(project, {
+      'tests/support/deep.ts': 'export const deep = () => 1;\n',
+      'tests/support/scan.ts': `import { deep } from './deep';\nexport const files = () => deep();\n`,
+      'tests/guards/a11y-floor.test.ts': `import { it } from 'vitest';\nimport { files } from '../support/scan';\nit('x', () => { files(); });\n`,
+    });
+    git(project, 'add', '-A');
+    git(project, 'commit', '-q', '-m', 'chunk-setup/step-close');
+    const findings = await findingsFor({ 'src/rules/auction.ts': RULES, [support]: text });
+    expect(findings.map((f) => [f.kind, f.subject])).toEqual([['guard-runs-code', 'tests/guards/a11y-floor.test.ts:2']]);
+    expect(findings[0].detail).toContain(module);
+  });
+
+  it('follows support files that import each other without looping (#1013)', async () => {
+    await write(project, {
+      'tests/support/a.ts': `import { b } from './b';\nexport const a = () => b;\n`,
+      'tests/support/b.ts': `import { a } from './a';\nexport const b = () => a;\n`,
+      'tests/guards/a11y-floor.test.ts': `import { a } from '../support/a';\na();\n`,
+    });
+    git(project, 'add', '-A');
+    git(project, 'commit', '-q', '-m', 'chunk-setup/step-close');
+    const findings = await findingsFor({
+      'src/rules/auction.ts': RULES,
+      'tests/support/b.ts': `import { a } from './a';\nimport { bid } from '../../src/rules/auction.js';\nexport const b = () => [a, bid];\n`,
+    });
+    expect(findings.map((f) => [f.kind, f.subject])).toEqual([['guard-runs-code', 'tests/guards/a11y-floor.test.ts:1']]);
+  });
+
+  it('leaves alone an untouched guard whose support files the chunk did not change (#1013)', async () => {
+    await write(project, {
+      'tests/support/scan.ts': `import { start } from '../../src/rules/game.js';\nexport const files = () => start;\n`,
+      'tests/support/other.ts': 'export const other = 1;\n',
+      'tests/guards/a11y-floor.test.ts': `import { files } from '../support/scan';\nfiles();\n`,
+    });
+    git(project, 'add', '-A');
+    git(project, 'commit', '-q', '-m', 'chunk-setup/step-close');
+    const findings = await findingsFor({ 'src/rules/auction.ts': RULES, 'tests/support/other.ts': 'export const other = 2;\n' });
     expect(findings).toEqual([]);
   });
 
@@ -886,6 +1065,34 @@ it('claim 1 and 2', () => { testGame.doAction(1, 'bid'); });
   it('refuses a chunk with no step commit, saying how to commit one', async () => {
     await write(project, { 'design/chunks/other/CHUNK.md': AUCTION_CHUNK('') });
     await expect(checkTestStep(project, 'other')).rejects.toThrow(/chunk-other\/step-/);
+  });
+});
+
+describe('checkTestStep in a game nested inside a larger repository (#846)', () => {
+  it('reads the chunk\'s files by game-relative path, the same as a game at the repo root', async () => {
+    const repo = join(tempTree('bs-test-step-nested-'), 'repo');
+    const project = join(repo, 'games', 'auction-game');
+    await fs.mkdir(project, { recursive: true });
+    git(repo, 'init', '-q');
+    git(repo, 'config', 'user.email', 't@example.com');
+    git(repo, 'config', 'user.name', 'T');
+    await write(project, { 'src/rules/game.ts': "export const start = Action.create('start');\n" });
+    git(repo, 'add', '-A');
+    git(repo, 'commit', '-q', '-m', 'chunk-setup/step-close');
+    await write(project, {
+      'src/rules/auction.ts': "export const bid = Action.create('bid');\nexport const pass = Action.create('pass');\n",
+      'tests/auction.test.ts': `import { it } from 'vitest';
+it('claim 1 and 2', () => { testGame.doAction(1, 'bid'); testGame.doAction(1, 'pass'); });
+`,
+      'design/chunks/auction/CHUNK.md': AUCTION_CHUNK('| tests/auction.test.ts | 1, 2 | yes |\n'),
+    });
+    git(repo, 'add', '-A');
+    git(repo, 'commit', '-q', '-m', 'chunk-auction/step-build');
+
+    const result = await checkTestStep(project, 'auction');
+    expect([...result.added.keys()]).toEqual(['src/rules/auction.ts']);
+    expect(result.verbs).toEqual(['bid', 'pass']);
+    expect(result.findings).toEqual([]);
   });
 });
 
@@ -1012,5 +1219,14 @@ it('claim 2 — tautology', () => { const high = 3; expect(high).toBe(3); });
     expect(result.findings.map((f) => [f.kind, f.subject])).toEqual([['verb-not-dispatched', 'bid']]);
     expect(result.mutation).toBeUndefined();
     expect(process.exitCode).toBe(1);
+  });
+});
+
+describe('test-step-check: an unreadable CHUNK.md (#1110)', () => {
+  it('names the file rather than calling it missing', async () => {
+    const project = tempTree('bs-test-step-unreadable-');
+    const chunk = join(project, 'design', 'chunks', 'punch', 'CHUNK.md');
+    await fs.mkdir(chunk, { recursive: true });
+    await expect(checkTestStep(project, 'punch')).rejects.toThrow(`Could not read ${chunk} (EISDIR)`);
   });
 });

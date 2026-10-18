@@ -434,3 +434,69 @@ describe('assertHidden — honors static playerView post-transform', () => {
     expect(() => assertHidden(card, 1)).not.toThrow();
   });
 });
+
+// ---------------------------------------------------------------------------
+// #909: with no static playerView, the assertions still judge from the seat's
+// serialized tree, which isVisibleTo() agrees with (#1062)
+// ---------------------------------------------------------------------------
+
+class VisAssertNestedCard extends Card<VisAssertNestedGame> {
+  rank!: string;
+}
+
+/**
+ * - `vault` is a contentsHidden() zone holding a showToAll() card.
+ * - `covered` is a hideFromAll() card with a child card.
+ */
+class VisAssertNestedGame extends Game<VisAssertNestedGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([VisAssertNestedCard]);
+
+    const vault = this.create(Space, 'vault');
+    vault.contentsHidden();
+    const shown = vault.create(VisAssertNestedCard, 'shown-in-vault', { rank: 'A' });
+    shown.showToAll();
+
+    const table = this.create(Space, 'table');
+    const covered = table.create(VisAssertNestedCard, 'covered', { rank: 'B' });
+    covered.hideFromAll();
+    covered.create(VisAssertNestedCard, 'under-covered', { rank: 'C' });
+
+    this.registerAction(
+      Action.create<VisAssertNestedGame>('pass').execute(() => ({ success: true })),
+    );
+
+    this.setFlow({
+      root: loop({
+        while: () => false,
+        maxIterations: 10,
+        do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
+      }),
+    });
+  }
+}
+
+describe('assertHidden / assertVisible — judged from the serialized tree without playerView (#909)', () => {
+  function cardIn(name: string) {
+    const tg = TestGame.create(VisAssertNestedGame, { playerCount: 2, seed: 'vis-assert-909' });
+    const card = tg.game.first(VisAssertNestedCard, { name })!;
+    const sent = JSON.stringify(tg.game.toJSONForPlayer(1)).includes(`"id":${card.id},`);
+    return { card, sent };
+  }
+
+  it('a child of a hideFromAll() card: seat 1 is never sent it, so it is hidden', () => {
+    const { card, sent } = cardIn('under-covered');
+    expect(card.isVisibleTo(1)).toBe(false);
+    expect(sent).toBe(false);
+    expect(() => assertHidden(card, 1)).not.toThrow();
+    expect(() => assertVisible(card, 1)).toThrow(/NOT visible to seat 1/);
+  });
+
+  it('a showToAll() card in a contentsHidden() zone is sent to seat 1 (#758), so it is visible', () => {
+    const { card, sent } = cardIn('shown-in-vault');
+    expect(sent).toBe(true);
+    expect(() => assertVisible(card, 1)).not.toThrow();
+    expect(() => assertHidden(card, 1)).toThrow(/visible to seat 1/);
+  });
+});

@@ -3,6 +3,7 @@ import { createHeadlessSession } from '../../testing/headless-session.js';
 import { undoFenceFixtureDefinition } from './fixtures/undo-fence-fixture.js';
 import type { Op } from '../stateless-ops.js';
 import { succeeded } from '../op-result.test-helper.js';
+import { snapshotTree } from '../../engine/utils/index.js';
 
 /**
  * UNDO-02 (finished-phase half): undo must be refused OUTRIGHT once
@@ -22,7 +23,7 @@ describe('UNDO-02: undo refused once the game is finished', () => {
     expect(end.success).toBe(true);
     // `phase` is a TOP-LEVEL field of the serialized state, not an entry in the
     // generic attribute bag — see GAME_TOP_LEVEL_FIELDS in engine/element/game.ts.
-    expect((end.snapshot as { state?: { phase?: string } } | null)?.state?.phase).toBe('finished');
+    expect(snapshotTree(end.snapshot).phase).toBe('finished');
 
     const undo = await session.send(1, { type: 'undo', player: 1 });
 

@@ -20,6 +20,7 @@ import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
 // mutation that belongs to an unfinished action.
 import { repeatingCollectDefinition as collectDef } from './testing/fixtures/repeating-collect-fixture.js';
 import { succeeded } from './op-result.test-helper.js';
+import { snapshotTree } from '../engine/utils/index.js';
 
 const options = { playerCount: 2, seed: 'bs320' };
 
@@ -91,7 +92,7 @@ describe('SnapshotSessionHost restores in-progress selections (#320)', () => {
     const done = succeeded(await pick(second.host, 'stop'));
     expect(done.success).toBe(true);
     expect(done.actionComplete).toBe(true);
-    expect(second.host.snapshot!.state.attributes.collected).toEqual(['p1', 'p2', 'stop']);
+    expect(snapshotTree(second.host.snapshot!).attributes.collected).toEqual(['p1', 'p2', 'stop']);
   });
 
   it("a restored seat's pending action is broadcast to that seat only", async () => {

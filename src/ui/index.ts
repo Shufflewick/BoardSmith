@@ -241,7 +241,6 @@ export { useBoardSize } from './composables/useBoardSize.js';
 // Screen-reader announcer (writes through GameShell's existing live regions)
 export {
   useAnnouncer,
-  provideAnnouncer,
   createAnnouncer,
   ANNOUNCER_KEY,
   type UseAnnouncerReturn,
@@ -391,10 +390,7 @@ export type {
 } from './types.js';
 
 // Re-export color utilities from session package
-export {
-  STANDARD_PLAYER_COLORS,
-  type ColorChoice,
-} from '../session/index.js';
+export type { ColorChoice } from '../session/index.js';
 
 // Re-export animation event types from engine for convenience
 export type { AnimationEvent } from '../engine/index.js';

@@ -43,10 +43,11 @@ import { createServer as createHttpServer, type IncomingMessage } from 'node:htt
 import { isIP } from 'node:net';
 import { networkInterfaces } from 'node:os';
 import { join, relative, resolve } from 'node:path';
+import { isSameOrInside } from '../lib/path-inside.js';
 
 import type { Duplex } from 'node:stream';
 
-import { createServer as createViteServer, normalizePath, type Connect, type InlineConfig, type Plugin as VitePlugin, type ViteDevServer } from 'vite';
+import { createServer as createViteServer, type Connect, type InlineConfig, type Plugin as VitePlugin, type ResolvedConfig, type ViteDevServer } from 'vite';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import type { RulesReloadQueue } from '../dev-host/rules-reload-queue.js';
@@ -54,6 +55,7 @@ import { boardsmithSourceEntries } from './game-runtime.js';
 import type { HeldResource } from '../dev-host/shutdown.js';
 import { portRefusal } from '../dev-host/port.js';
 import { DEV_HOST_ALIVE_PATH } from '../../testing/browser-smoke-clock.js';
+import { rulesAnswered } from '../dev-host/rules-worker.js';
 
 /**
  * The one thing this module needs of an HTTP server: that it emits `upgrade`.
@@ -75,7 +77,7 @@ interface HttpUpgradeServer {
  */
 interface ClaimedWebSocketPath {
   /** Route this path's upgrades on `httpServer`. `serveVite` calls it. */
-  attach(httpServer: HttpUpgradeServer, allowedHosts: () => AllowedHosts): void;
+  attach(httpServer: HttpUpgradeServer, viteConfig: () => ResolvedConfig | undefined): void;
   /** Stop accepting connections; called from the run's shutdown. */
   close(): void;
 }
@@ -101,7 +103,7 @@ export function claimWebSocketPath(
   const wss = new WebSocketServer({ noServer: true });
   wss.on('connection', onConnection);
   return {
-    attach(httpServer, allowedHosts) {
+    attach(httpServer, viteConfig) {
       httpServer.on('upgrade', (req, socket, head) => {
         let pathname: string;
         try {
@@ -110,7 +112,7 @@ export function claimWebSocketPath(
           return;
         }
         if (pathname !== path) return; // not ours -- Vite HMR handles it
-        if (!hostAllowed(allowedHosts(), req.headers.host) || !fromOurOwnPage(req)) {
+        if (!hostAllowed(viteConfig(), req.headers.host) || !fromOurOwnPage(req)) {
           socket.destroy();
           return;
         }
@@ -121,26 +123,46 @@ export function claimWebSocketPath(
   };
 }
 
-type AllowedHosts = readonly string[] | true | undefined;
-
 /**
- * Vite's DNS-rebinding guard, `server.allowedHosts`, which its middleware applies to every page but
- * not to an upgrade we route ourselves (#719): localhost, an IP literal, or a host the project allows.
+ * Vite's DNS-rebinding guard (Vite 5.4's `isHostAllowed`), which its middleware applies to every page
+ * but not to an upgrade we route ourselves (#719): localhost, an IP literal, a host the project
+ * lists in `server.allowedHosts`, or one it names as a server, HMR or preview host or origin (#941).
+ * No config yet means Vite's defaults.
  */
-function hostAllowed(allowedHosts: AllowedHosts, hostHeader: string | undefined): boolean {
+function hostAllowed(config: ResolvedConfig | undefined, hostHeader: string | undefined): boolean {
+  const allowedHosts = config?.server.allowedHosts ?? [];
   if (allowedHosts === true) return true;
-  if (hostHeader === undefined) return false;
-  let hostname: string;
-  try {
-    hostname = new URL(`http://${hostHeader}`).hostname;
-  } catch {
-    return false;
-  }
+  const hostname = hostnameOf(hostHeader);
+  if (hostname === undefined) return false;
   if (isIP(hostname.replace(/^\[(.*)\]$/, '$1')) !== 0) return true;
   if (hostname === 'localhost' || hostname.endsWith('.localhost')) return true;
-  return (allowedHosts ?? []).some(
+  if (config !== undefined && namedHosts(config).includes(hostname)) return true;
+  return allowedHosts.some(
     (allowed) => allowed === hostname || (allowed.startsWith('.') && (allowed.slice(1) === hostname || hostname.endsWith(allowed))),
   );
+}
+
+/** The host name in a `Host` header, or undefined when there is none or it does not parse. */
+function hostnameOf(hostHeader: string | undefined): string | undefined {
+  if (hostHeader === undefined) return undefined;
+  try {
+    return new URL(`http://${hostHeader}`).hostname;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The hosts Vite allows beyond `server.allowedHosts`, exactly as its `getAdditionalAllowedHosts` lists them. */
+function namedHosts({ server, preview }: ResolvedConfig): string[] {
+  const hosts = [server.host, typeof server.hmr === 'object' ? server.hmr.host : undefined, preview.host];
+  if (server.origin) {
+    try {
+      hosts.push(new URL(server.origin).hostname);
+    } catch {
+      // Vite skips an origin it cannot parse too.
+    }
+  }
+  return hosts.filter((host): host is string => typeof host === 'string' && host !== '');
 }
 
 /**
@@ -163,16 +185,19 @@ function requestPath(req: Connect.IncomingMessage): string {
 }
 
 /**
- * Answers {@link DEV_HOST_ALIVE_PATH} at once, with nothing (#609). The smoke walk asks it every
- * tick to tell a dev host that is answering, whose time counts, from one too busy or starved to
- * answer, whose time does not. Registered in the `configureServer` BODY, ahead of Vite's own
+ * Answers {@link DEV_HOST_ALIVE_PATH} with nothing, once its rules workers have answered (#609).
+ * The smoke walk asks it every tick to tell a dev host that is answering, whose time counts, from
+ * one too busy or starved to answer, whose time does not; the rules run in workers (#885), so the
+ * host is busy while they are. Registered in the `configureServer` BODY, ahead of Vite's own
  * middlewares, so the answer costs nothing but the dev host's attention.
  */
 export function answerAlive(server: ViteDevServer): void {
   server.middlewares.use((req, res, next) => {
     if (requestPath(req) !== DEV_HOST_ALIVE_PATH) return next();
-    res.statusCode = 204;
-    res.end();
+    void rulesAnswered().then(() => {
+      res.statusCode = 204;
+      res.end();
+    });
   });
 }
 
@@ -300,7 +325,7 @@ export function reloadOnRulesEdit(args: {
 }): void {
   args.vite.watcher.add(args.rulesDir);
   args.vite.watcher.on('change', (changed: string) => {
-    if (!changed.startsWith(args.rulesDir)) return;
+    if (!isSameOrInside(args.rulesDir, changed)) return;
     void args.queue.saved(relative(args.cwd, changed));
   });
 }
@@ -345,7 +370,7 @@ export async function serveVite(args: {
   // restart replaces them on the same `vite` object.
   const httpServer = createHttpServer((req, res) => vite!.middlewares(req, res));
   // Read on every upgrade, because a `vite.config.ts` restart can change it.
-  for (const socket of args.sockets) socket.attach(httpServer, () => vite?.config.server.allowedHosts);
+  for (const socket of args.sockets) socket.attach(httpServer, () => vite?.config);
   try {
     vite = await createViteServer({
       ...args.config,
@@ -413,13 +438,13 @@ function networkUrls(host: string, port: number): string[] {
  * with nothing left for it to wait on.
  */
 async function closeViteServer(vite: ViteDevServer): Promise<void> {
-  const depsDir = `${normalizePath(resolve(vite.config.cacheDir, 'deps'))}/`;
+  const depsDir = resolve(vite.config.cacheDir, 'deps');
   const waited = new Set<string>();
   for (;;) {
     const inFlight = [...vite.moduleGraph.urlToModuleMap.values()].filter(
       (module) =>
         module.file !== null &&
-        module.file.startsWith(depsDir) &&
+        isSameOrInside(depsDir, module.file) &&
         module.transformResult === null &&
         !waited.has(module.url),
     );

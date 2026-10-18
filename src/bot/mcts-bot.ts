@@ -9,7 +9,8 @@ import type {
 import type { HistoryEntry } from '../engine/action/types.js';
 import type { GameStateSnapshot } from '../engine/utils/index.js';
 import { canSeatAct, dueSeats, availableActionsForSeat, followUpForSeat } from '../engine/index.js';
-import { createSnapshot } from '../engine/utils/index.js';
+import { isElement } from '../engine/element/game-element.js';
+import { createSnapshot, snapshotTree } from '../engine/utils/index.js';
 import { enumerateActionMoves } from '../engine/utils/enumerate-moves.js';
 import { constructGame } from '../engine/element/game.js';
 import type {
@@ -52,9 +53,24 @@ type SearchMoveOutcome = 'made' | 'refused' | 'refusedAfterChanges';
 /**
  * A search's steps (#669): how many it made, how many were scored (the rest
  * were thrown away), whether it chose at random because no root move could be
- * played through, and why the first thrown-away step failed.
+ * played through, why the first thrown-away step failed, and why the game
+ * first refused a move cleanly (#874).
  */
-type SearchSteps = { made: number; scored: number; choseAtRandom: boolean; firstFailure?: string };
+type SearchSteps = { made: number; scored: number; choseAtRandom: boolean; firstFailure?: string; firstRefusal?: string };
+
+/** Add a sub-search's steps into `total`: a parallel bot's move is one search, split. */
+function addSearchSteps(total: SearchSteps, sub: SearchSteps): void {
+  total.made += sub.made;
+  total.scored += sub.scored;
+  total.firstFailure ??= sub.firstFailure;
+  total.firstRefusal ??= sub.firstRefusal;
+  total.choseAtRandom &&= sub.choseAtRandom;
+}
+
+/** An object literal, not a class instance: the only objects whose fields a move's args are walked through. */
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && Object.getPrototypeOf(v) === Object.prototype;
+}
 
 /**
  * MCTS (Monte-Carlo Tree Search) Bot
@@ -194,9 +210,9 @@ export class MCTSBot<G extends Game = Game> {
    * is #19/#31, and this does not close it.
    */
   async play(): Promise<BotMove | null> {
-    if (this.config.parallel && this.config.parallel > 1) {
-      return this.playParallel();
-    }
+    // No more sub-searches than iterations, so each runs at least one (#876).
+    const subSearches = Math.min(this.config.parallel ?? 1, this.config.iterations);
+    if (subSearches > 1) return this.playParallel(subSearches);
     const { move } = await this.runSearch();
     this.warnIfStepsWereDropped(this.searchSteps);
     return move;
@@ -242,8 +258,7 @@ export class MCTSBot<G extends Game = Game> {
    * each gets an equal share of the time still left, so the whole move stays
    * within `timeout` (#634). An infinite timeout stays infinite for each.
    */
-  private async playParallel(): Promise<BotMove | null> {
-    const parallelCount = this.config.parallel!;
+  private async playParallel(parallelCount: number): Promise<BotMove | null> {
     const iterationsPerSearch = Math.floor(this.config.iterations / parallelCount);
     const deadline = Date.now() + (this.config.timeout ?? 2000);
 
@@ -301,10 +316,7 @@ export class MCTSBot<G extends Game = Game> {
         return null;
       }
 
-      steps.made += subBot.searchSteps.made;
-      steps.scored += subBot.searchSteps.scored;
-      steps.firstFailure ??= subBot.searchSteps.firstFailure;
-      steps.choseAtRandom &&= subBot.searchSteps.choseAtRandom;
+      addSearchSteps(steps, subBot.searchSteps);
       entryFor(move).votes++;
       for (const child of root.children) entryFor(child.parentMove!).visits += child.visits;
     }
@@ -334,7 +346,7 @@ export class MCTSBot<G extends Game = Game> {
     }
 
     // Check if this is our turn (either currentPlayer matches or we're in awaitingPlayers)
-    if (!this.canBotAct(liveFlowState)) {
+    if (!canSeatAct(liveFlowState, this.playerIndex)) {
       throw new Error(`Not bot's turn (player ${this.playerIndex})`);
     }
     this.searchSteps = { made: 0, scored: 0, choseAtRandom: false };
@@ -384,7 +396,7 @@ export class MCTSBot<G extends Game = Game> {
     // #73: under determinization one world offering a single move says nothing
     // about the others, so the fast path is only sound without a sampler.
     if (allMoves.length === 1 && !this.determinize) {
-      const root = this.createNode(flowState, null, null, allMoves);
+      const root = this.createNode(flowState, null, null, allMoves, this.playerIndex);
       return { move: allMoves[0], root };
     }
 
@@ -414,7 +426,7 @@ export class MCTSBot<G extends Game = Game> {
     this.raveTable.clear();
 
     // Create root node with moves (blocking-only when threatened, sampled otherwise)
-    const root = this.createNode(flowState, null, null, moves);
+    const root = this.createNode(flowState, null, null, moves, this.playerIndex);
 
     // Run MCTS iterations with timeout failsafe
     const startTime = Date.now();
@@ -435,7 +447,7 @@ export class MCTSBot<G extends Game = Game> {
       const selection = this.selectWithPath(root);
 
       // EXPAND: Try one unexplored move, creating child
-      const child = selection.spoiled ? null : this.expandIncremental(selection.leaf);
+      const child = selection.spoiled ? null : this.expandIncremental(selection.leaf, selection.onTurn);
 
       // PLAYOUT: Random simulation from current state, collect playout moves for RAVE
       const playout = child ? this.playoutIncremental() : null;
@@ -559,11 +571,14 @@ export class MCTSBot<G extends Game = Game> {
    * (#421): below it, every child is a move for a seat that is not to move
    * here. `spoiled` means a refused move changed this world before it was
    * refused, so it matches no node and the iteration has to be dropped.
+   * `onTurn` says whether this world is on the leaf's turn, so expansion
+   * need not list the world's moves again to ask.
    */
   private selectWithPath(root: MCTSNode): {
     leaf: MCTSNode;
     treeMoves: TreeMove[];
     spoiled: boolean;
+    onTurn: boolean;
   } {
     const treeMoves: TreeMove[] = [];
     let node = root;
@@ -574,21 +589,23 @@ export class MCTSBot<G extends Game = Game> {
       this.resumeSearchGame(resumed.copy);
     }
 
-    while (this.turnMatchesWorld(node)) {
+    let onTurn = this.turnMatchesWorld(node);
+    while (onTurn) {
       this.saveCopyOf(node);
       const eligible = this.eligibleChildrenForWorld(node);
       if (node.untriedMoves.length > 0 || eligible.length === 0) break;
       const child = this.selectChild(node, eligible);
       // Apply the child's move to searchGame to descend
       const outcome = this.applyMoveToSearchGame(child);
-      if (outcome === 'refusedAfterChanges') return { leaf: node, treeMoves, spoiled: true };
+      if (outcome === 'refusedAfterChanges') return { leaf: node, treeMoves, spoiled: true, onTurn: false };
       // A clean refusal left the world at `node`, so the walk ends there.
       if (outcome === 'refused') break;
       // Track tree path move for RAVE (player is from parent node where move was made)
       treeMoves.push({ move: child.parentMove!, player: node.currentPlayer });
       node = child;
+      onTurn = this.turnMatchesWorld(node);
     }
-    return { leaf: node, treeMoves, spoiled: false };
+    return { leaf: node, treeMoves, spoiled: false, onTurn };
   }
 
   /**
@@ -614,10 +631,10 @@ export class MCTSBot<G extends Game = Game> {
     if (Boolean(live.complete) !== Boolean(node.flowState.complete)) return false;
     if (live.complete) return true;
     if (node.parent === null) return canSeatAct(live, node.currentPlayer);
-    // A world held open with no seat to move matches only a node held open the same way.
-    const liveSeat = this.seatToMove(live);
-    if ((liveSeat === undefined) !== (this.seatToMove(node.flowState) === undefined)) return false;
-    return liveSeat === undefined || liveSeat === node.currentPlayer;
+    // A world held open with no seat to move matches only a node held open the same way,
+    // which is a node grown with no moves: `node.flowState` is not loaded, so it cannot be enumerated.
+    const next = this.seatToMove(live);
+    return next.seat === node.currentPlayer && (next.moves.length > 0) === (node.allMoves.length > 0);
   }
 
   /**
@@ -823,7 +840,10 @@ export class MCTSBot<G extends Game = Game> {
       return { outcome: 'refusedAfterChanges', flowState: this.worldFlowState() };
     }
     if (flowState.actionError === undefined) return { outcome: 'made', flowState };
-    if (!flowState.actionPartiallyApplied) return { outcome: 'refused', flowState };
+    if (!flowState.actionPartiallyApplied) {
+      this.searchSteps.firstRefusal ??= flowState.actionError;
+      return { outcome: 'refused', flowState };
+    }
     this.searchSteps.firstFailure ??= flowState.actionError;
     return { outcome: 'refusedAfterChanges', flowState };
   }
@@ -831,12 +851,13 @@ export class MCTSBot<G extends Game = Game> {
   /**
    * EXPAND with incremental state: Apply one unexplored move to searchGame.
    * The searchGame is already positioned at the node's state from selection.
+   * `onTurn` is selection's answer to whether this world is on the node's turn.
    * Returns the new child node, the node itself when there is nothing to grow
    * here or the move was refused, or null when a refused move changed the
    * world first (the iteration is spoiled, #421).
    */
-  private expandIncremental(node: MCTSNode): MCTSNode | null {
-    if (node.untriedMoves.length === 0 || node.flowState.complete || !this.turnMatchesWorld(node)) {
+  private expandIncremental(node: MCTSNode, onTurn: boolean): MCTSNode | null {
+    if (node.untriedMoves.length === 0 || node.flowState.complete || !onTurn) {
       return node;
     }
 
@@ -858,13 +879,11 @@ export class MCTSBot<G extends Game = Game> {
 
     // The moves of the seat that moves next, which is the seat the child records.
     // A finished game, or a step held open with no seat to move, has none.
-    const nextSeat = flowState.complete ? undefined : this.seatToMove(flowState);
-    const newMoves =
-      nextSeat === undefined ? [] : this.movesFor(this.searchGame!, flowState, nextSeat, { sample: true });
+    const next = this.seatToMove(flowState);
 
     // Create child node (no snapshot needed: every step restores the search
     // game whole, from the root or a saved copy, before it walks the tree)
-    const child = this.createNode(flowState, node, move, newMoves);
+    const child = this.createNode(flowState, node, move, next.moves, next.seat);
     node.children.push(child);
 
     return child;
@@ -902,11 +921,7 @@ export class MCTSBot<G extends Game = Game> {
 
       // One seat lists the moves and makes the one chosen (#522). With no seat
       // to move, the step is held open from outside: score the position as it stands.
-      const currentPlayer = this.seatToMove(flowState);
-      if (currentPlayer === undefined) {
-        break;
-      }
-      const moves = this.movesFor(this.searchGame, flowState, currentPlayer, { sample: true });
+      const { seat: currentPlayer, moves } = this.seatToMove(flowState);
       if (moves.length === 0) {
         break;
       }
@@ -1134,24 +1149,24 @@ export class MCTSBot<G extends Game = Game> {
    * objects go stale. Feeding a stale (foreign-tree) element into
    * `continueFlow` -> `Piece.putInto` would splice a wrong-instance object into
    * the live tree and duplicate its id. Element ids are stable across restore,
-   * so we canonicalize by id here. Non-element args (scalars, `{value,label}`
-   * choices without a numeric `id`) pass through untouched; already-live
-   * objects resolve to themselves (no-op).
+   * so we canonicalize by id here, wherever the element sits: inside arrays and
+   * plain objects too, since the engine matches a plain choice against the
+   * current world's offer by its JSON (#1038). Everything else, including a
+   * plain choice's own `id` (#873), passes through untouched; already-live
+   * elements resolve to themselves (no-op).
    */
   private rebindArgs(args: Record<string, unknown>): Record<string, unknown> {
     const game = this.searchGame;
     if (!game) return args;
-    const rebindOne = (v: unknown): unknown => {
-      if (v && typeof v === 'object' && typeof (v as { id?: unknown }).id === 'number') {
-        return game.getElementById((v as { id: number }).id) ?? v;
+    const rebind = (v: unknown): unknown => {
+      if (isElement(v)) return game.getElementById(v.id) ?? v;
+      if (Array.isArray(v)) return v.map(rebind);
+      if (isPlainObject(v)) {
+        return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, rebind(x)]));
       }
       return v;
     };
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(args)) {
-      out[k] = Array.isArray(v) ? v.map(rebindOne) : rebindOne(v);
-    }
-    return out;
+    return Object.fromEntries(Object.entries(args).map(([k, v]) => [k, rebind(v)]));
   }
 
   // ============================================================================
@@ -1160,17 +1175,20 @@ export class MCTSBot<G extends Game = Game> {
   // ============================================================================
 
   /**
-   * Generate a unique key for a move (used for RAVE table lookup)
+   * Generate a unique key for a move (used for RAVE table lookup). An element,
+   * wherever it sits in the args, is keyed by its id, not its subtree, so the
+   * move keeps one key in every sampled world (#876).
    */
   private getMoveKey(move: BotMove): string {
-    return `${move.action}:${JSON.stringify(move.args)}`;
-  }
-
-  /**
-   * Check if the bot can act in the current flow state
-   */
-  private canBotAct(flowState: FlowState): boolean {
-    return canSeatAct(flowState, this.playerIndex);
+    const keyOf = (v: unknown): unknown => {
+      if (isElement(v)) return { elementId: v.id };
+      if (Array.isArray(v)) return v.map(keyOf);
+      if (isPlainObject(v)) {
+        return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, keyOf(x)]));
+      }
+      return v;
+    };
+    return `${move.action}:${JSON.stringify(keyOf(move.args))}`;
   }
 
   // ============================================================================
@@ -1179,23 +1197,30 @@ export class MCTSBot<G extends Game = Game> {
   // ============================================================================
 
   /**
-   * The seat that moves next below the root: the first due seat that has a
-   * move to make, either an action the step lists for it or a follow-up it
-   * holds. A seat holding a follow-up is listed with no actions, so it comes
-   * first in its own right rather than being skipped (#522).
+   * The seat that moves next below the root, with its moves: the first due
+   * seat with at least one move to make, from {@link movesFor}. A seat holding
+   * a follow-up is listed with no actions, so it comes first in its own right
+   * rather than being skipped (#522); a seat offered only disabled actions
+   * has no move, so it is skipped for the next due seat (#1133).
    *
-   * Only for a flow state that is not complete. The root's seat is always the
+   * Only for the flow state of the world loaded into `searchGame`, which is
+   * what the moves are enumerated against. The root's seat is always the
    * bot's own, whatever order the step lists its seats in.
    *
-   * `undefined` when no seat has a move: a simultaneous step whose seats are
-   * all done but whose `allDone` is still false waits for something outside
-   * the step to close it (the engine's external-gate pattern). The search has
-   * no move to make there, so such a node is a leaf, scored as it stands.
+   * No moves, with the bot's seat standing in, when the game is over or no
+   * due seat has a move: a simultaneous step whose seats are all done (or
+   * offered only disabled actions) but whose `allDone` is still false waits
+   * for something outside the step to close it (the engine's external-gate
+   * pattern). The search has no move to make there, so such a node is a
+   * leaf, scored as it stands.
    */
-  private seatToMove(flowState: FlowState): number | undefined {
-    return dueSeats(flowState).find(
-      (s) => availableActionsForSeat(flowState, s).length > 0 || followUpForSeat(flowState, s) !== undefined,
-    );
+  private seatToMove(flowState: FlowState): { seat: number; moves: BotMove[] } {
+    const due = flowState.complete ? [] : dueSeats(flowState);
+    for (const seat of due) {
+      const moves = this.movesFor(this.searchGame!, flowState, seat, { sample: true });
+      if (moves.length > 0) return { seat, moves };
+    }
+    return { seat: this.playerIndex, moves: [] };
   }
 
   /**
@@ -1403,7 +1428,7 @@ export class MCTSBot<G extends Game = Game> {
     // bot reason over a different world than the one it is playing in. On a
     // `forSeat` clone `createSnapshot` has already filtered it to that seat's
     // audience, so the sandbox cannot see private lines the seat may not.
-    game.loadSerializedState(snapshot.state, { messageLog: snapshot.messageLog ?? [] });
+    game.loadSerializedState(snapshotTree(snapshot), { messageLog: snapshot.messageLog ?? [] });
 
     // Restore the element id sequence so newly created elements don't drift.
     if (snapshot.sequence !== undefined) {
@@ -1418,7 +1443,9 @@ export class MCTSBot<G extends Game = Game> {
     // a marker by getPosition; restoreFlowState relinks it to the freshly
     // loaded tree. `hiddenIdRemap` (CR-02, 159) is only ever present on a
     // redacted (`forSeat`) snapshot: it lets a marker that pointed at a
-    // now-anonymized hidden-zone child relink to its redacted placeholder. A
+    // now-anonymized hidden-zone child relink to its redacted placeholder, and
+    // passing it is what allows a missing element to relink to its concealing
+    // zone at all (#947); a restore with no map refuses instead. A
     // DESCENDANT clone's snapshot is written from the already-redacted search
     // game, whose markers hold its own ids, so it needs no remap.
     if (snapshot.flowState) {
@@ -1438,6 +1465,7 @@ export class MCTSBot<G extends Game = Game> {
     parent: MCTSNode | null,
     parentMove: BotMove | null,
     allMoves: BotMove[],
+    currentPlayer: number,
   ): MCTSNode {
     // Order moves if moveOrdering hook is available
     // This determines exploration order: first moves are tried first
@@ -1457,15 +1485,10 @@ export class MCTSBot<G extends Game = Game> {
       untriedMoves,
       visits: 0,
       value: 0,
-      // The seat whose moves this node lists and makes (#522). The root is the bot's own
-      // decision. Below it, `seatToMove`: not `flowState.currentPlayer`, which a simultaneous
-      // step never advances (#321), so every co-decider node was once read as the bot's own and
-      // the search assumed the opponent would cooperate. A finished game, or a step held open
-      // with no seat to move, has no children, so the bot's seat stands in.
-      currentPlayer:
-        parent === null || flowState.complete
-          ? this.playerIndex
-          : (this.seatToMove(flowState) ?? this.playerIndex),
+      // The seat whose moves this node lists and makes (#522), from the caller: the bot's own
+      // at the root, `seatToMove` below it (not `flowState.currentPlayer`, which a simultaneous
+      // step never advances, #321), and the bot's seat for a node with no moves.
+      currentPlayer,
       ...this.terminalProof(flowState),
       availability: 0,
       refusedMoveKeys: new Set(),
@@ -1630,10 +1653,27 @@ export class MCTSBot<G extends Game = Game> {
    * search then quietly rests its choice on a few steps, or on none. Once per
    * move: a parallel bot adds its sub-searches' steps up and warns once. The
    * warning changes nothing about which move is chosen.
+   *
+   * A clean refusal changes nothing, so it is scored, not thrown away; when the
+   * game refused every move at the root the search still chose at random, and
+   * that gets its own warning (#874).
    */
-  private warnIfStepsWereDropped({ made, scored, choseAtRandom, firstFailure }: SearchSteps): void {
+  private warnIfStepsWereDropped({ made, scored, choseAtRandom, firstFailure, firstRefusal }: SearchSteps): void {
     const dropped = made - scored;
-    if (!isDevMode() || made === 0 || dropped * 2 < made) return;
+    if (!isDevMode() || made === 0) return;
+    if (dropped * 2 < made) {
+      if (choseAtRandom && firstRefusal !== undefined) {
+        console.warn(
+          `[BoardSmith] MCTS bot for seat ${this.playerIndex}: the game refused every move the bot tried, `
+          + 'so the bot chose its move at random. The first refusal said:\n\n'
+          + `  ${firstRefusal}\n\n`
+          + 'The game offered these moves and then refused them when they were made. When an action\'s '
+          + '`execute` returns `success: false` for a choice it offers, move that rule into the action\'s '
+          + '`validate` or its choices, so the move is never offered.',
+        );
+      }
+      return;
+    }
     console.warn(
       `[BoardSmith] MCTS bot for seat ${this.playerIndex}: ${dropped} of ${made} search steps were thrown away, `
       + 'because a move changed the game and then failed. The first one failed with:\n\n'

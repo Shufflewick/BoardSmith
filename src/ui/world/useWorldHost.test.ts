@@ -55,6 +55,12 @@ function memoryStorage(): OrderStorage {
   };
 }
 
+/** A page the host has seated, which is what acting needs (#889). */
+function seated<T extends ReturnType<typeof useWorldHost>>(host: T): T {
+  deliver(host, stateFrame());
+  return host;
+}
+
 function deliver(
   host: ReturnType<typeof useWorldHost>,
   data: unknown,
@@ -310,7 +316,7 @@ describe('useWorldHost', () => {
   });
 
   it('sends a command and resolves it with its own answer', async () => {
-    const host = make();
+    const host = seated(make());
     const answered = host.act('say', { text: 'hello' });
     const sent = posted[0] as { requestId: string; action: string; args: unknown; source: string };
     expect(sent.source).toBe(WORLD_UI_SOURCE);
@@ -329,7 +335,7 @@ describe('useWorldHost', () => {
   });
 
   it('resolves a refusal rather than throwing it', async () => {
-    const host = make();
+    const host = seated(make());
     const answered = host.act('move', { to: 'cellar' });
     const sent = posted[0] as { requestId: string };
     deliver(host, {
@@ -343,7 +349,7 @@ describe('useWorldHost', () => {
   });
 
   it('answers two commands in flight by name, in either order', async () => {
-    const host = make();
+    const host = seated(make());
     const first = host.act('look', {});
     const second = host.act('say', { text: 'oi' });
     const ids = (posted as { requestId: string }[]).map((m) => m.requestId);
@@ -359,9 +365,10 @@ describe('useWorldHost', () => {
   });
 
   it('fails a command the host never answers, rather than spinning forever', async () => {
-    const host = make();
+    const host = seated(make());
     const answered = host.act('look', {});
-    vi.advanceTimersByTime(20_000);
+    // Two windows: the page asks once more with the same order before it gives up (#888).
+    vi.advanceTimersByTime(40_000);
     const outcome = await answered;
     expect(outcome.ok).toBe(false);
     expect(outcome.message).toMatch(/look/);
@@ -375,7 +382,7 @@ describe('useWorldHost', () => {
   });
 
   it('tells everything outstanding that no answer is coming when it stops', async () => {
-    const host = make();
+    const host = seated(make());
     host.start();
     const answered = host.act('look', {});
     host.stop();
@@ -646,6 +653,19 @@ describe('useWorldHost — the world narrating (#331)', () => {
     expect(host.events.value).toEqual([]);
   });
 
+  it('counts the lines it drops from a full tail, and starts again for a new seat (#1066)', () => {
+    const host = make();
+    deliver(host, stateFrame({ seat: 3 }));
+    for (let n = 0; n < WORLD_NARRATION_KEPT + 6; n += 1) {
+      // Only every other event is a line; the log numbers lines, not events.
+      narrate(host, [{ scope: 'seat:3', payload: { n }, ...(n % 2 === 0 ? { text: `line ${n}` } : {}) }]);
+    }
+    expect(host.linesDropped.value).toBe(3);
+
+    deliver(host, stateFrame({ seat: 7 }));
+    expect(host.linesDropped.value).toBe(0);
+  });
+
   it('keeps the log through a re-push of the state to the same seat', () => {
     const host = make();
     deliver(host, stateFrame({ seat: 3 }));
@@ -763,7 +783,7 @@ describe('useWorldHost — an order that outlives the page (#195)', () => {
   }
 
   it('names every command with a durable order id, written down before it is sent', () => {
-    const host = page();
+    const host = seated(page());
     void host.act('found', { name: 'Ceres' });
     const [command] = commands();
     expect(typeof command.order.id).toBe('string');
@@ -774,7 +794,7 @@ describe('useWorldHost — an order that outlives the page (#195)', () => {
   });
 
   it('forgets an order the world answered, taken or refused', async () => {
-    const host = page();
+    const host = seated(page());
     const taken = host.act('found', {});
     answer(host);
     await taken;
@@ -790,7 +810,7 @@ describe('useWorldHost — an order that outlives the page (#195)', () => {
   });
 
   it('keeps an order the world never answered, and asks about it again after a reload', async () => {
-    const host = page();
+    const host = seated(page());
     const uncertain = host.act('found', { name: 'Ceres' });
     const sent = commands()[0];
     // Silence: the reply was lost. The command times out with nobody to hear.
@@ -810,12 +830,83 @@ describe('useWorldHost — an order that outlives the page (#195)', () => {
     expect(reloaded.recovering.value).toBe(true);
   });
 
+  it('asks once more with the SAME order when the world is silent, and takes that answer (#888)', async () => {
+    const host = seated(page());
+    const pressed = host.act('found', { name: 'Ceres' });
+    vi.advanceTimersByTime(20_000);
+
+    const [first, again] = commands();
+    expect(commands()).toHaveLength(2);
+    expect(again.order).toEqual(first.order);
+    expect(again.requestId).not.toBe(first.requestId);
+    expect(host.acting.value).toBe(true);
+
+    answer(host, { replayed: true });
+    await expect(pressed).resolves.toEqual({ ok: true, replayed: true });
+    expect(JSON.parse(storage.getItem(BOOK_KEY) ?? '[]')).toEqual([]);
+  });
+
+  it('asks again only once, then says what is true: a reload finds out (#888)', async () => {
+    const host = seated(page());
+    const pressed = host.act('found', {});
+    vi.advanceTimersByTime(40_000);
+    expect(commands()).toHaveLength(2);
+    const outcome = await pressed;
+    expect(outcome.ok).toBe(false);
+    expect(outcome.message).toMatch(/found/);
+    expect(outcome.message).toMatch(/reload/i);
+    expect(host.acting.value).toBe(false);
+    // The order stays written down, because its fate is still unknown.
+    expect(JSON.parse(storage.getItem(BOOK_KEY) ?? '[]')).toHaveLength(1);
+  });
+
+  it('takes a late answer to the first send while the second is still waiting (#888)', async () => {
+    const host = seated(page());
+    const pressed = host.act('found', {});
+    vi.advanceTimersByTime(20_000);
+    const [first] = commands();
+    deliver(host, { source: WORLD_HOST_SOURCE, type: 'world_response', requestId: first.requestId, ok: true });
+
+    await expect(pressed).resolves.toEqual({ ok: true });
+    expect(host.acting.value).toBe(false);
+    expect(JSON.parse(storage.getItem(BOOK_KEY) ?? '[]')).toEqual([]);
+  });
+
+  it('does not promise a reload can check when this browser keeps no book (#888)', async () => {
+    const host = seated(
+      useWorldHost({ post: (message) => posted.push(message), orders: createOrderBook({ storage: null }) }),
+    );
+    const pressed = host.act('found', {});
+    vi.advanceTimersByTime(40_000);
+    const { message } = await pressed;
+    expect(message).not.toMatch(/reload the page to check/i);
+    expect(message).toMatch(/look at the world before pressing again/i);
+  });
+
+  it('strikes the order out when a reply arrives after the page stopped waiting (#888)', async () => {
+    const host = seated(page());
+    const pressed = host.act('found', {});
+    vi.advanceTimersByTime(40_000);
+    await pressed;
+
+    const [first] = commands();
+    deliver(host, { source: WORLD_HOST_SOURCE, type: 'world_response', requestId: first.requestId, ok: true });
+    expect(JSON.parse(storage.getItem(BOOK_KEY) ?? '[]')).toEqual([]);
+
+    // So a reload has nothing left to ask about.
+    const reloaded = page();
+    reloaded.start();
+    deliver(reloaded, stateFrame());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(commands()).toHaveLength(2);
+  });
+
   /**
    * A page that sent an order and heard nothing, then reloaded. Every case
    * below starts here; what they differ about is what the world says next.
    */
   async function reloadedHoldingAnOrder() {
-    page().act('found', {});
+    seated(page()).act('found', {});
     vi.advanceTimersByTime(60_000);
     const before = commands().length;
     const reloaded = page();
@@ -843,7 +934,7 @@ describe('useWorldHost — an order that outlives the page (#195)', () => {
   });
 
   it('waits for a seat: a command needs one, so an unseated frame recovers nothing', async () => {
-    page().act('found', {});
+    seated(page()).act('found', {});
     vi.advanceTimersByTime(60_000);
     const before = commands().length;
 
@@ -876,6 +967,32 @@ describe('useWorldHost — an order that outlives the page (#195)', () => {
     deliver(third, stateFrame());
     await vi.advanceTimersByTimeAsync(0);
     expect(commands().length).toBe(before);
+  });
+
+  it("does not re-send another seat's order after a reload seated elsewhere (#889)", async () => {
+    seated(page()).act('found', {});
+    vi.advanceTimersByTime(60_000);
+    const before = commands().length;
+
+    const elsewhere = page();
+    elsewhere.start();
+    deliver(elsewhere, stateFrame({ seat: 5 }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(commands()).toHaveLength(before);
+
+    // Seat 3's order is still there for seat 3.
+    const back = page();
+    deliver(back, stateFrame());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(commands()).toHaveLength(before + 1);
+  });
+
+  it('opens no order before the page is seated, and says why (#889)', async () => {
+    const outcome = await page().act('found', {});
+    expect(outcome.ok).toBe(false);
+    expect(outcome.message).toMatch(/seat/);
+    expect(commands()).toHaveLength(0);
+    expect(JSON.parse(storage.getItem(BOOK_KEY) ?? '[]')).toEqual([]);
   });
 
   it('reports a browser that cannot keep a book, rather than implying recovery it cannot do', () => {

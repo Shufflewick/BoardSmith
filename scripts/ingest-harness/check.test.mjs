@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
 import path from 'node:path';
 import { checkIngestArtifacts, CHECK_IDS } from './check.mjs';
+import { CONFORMING_DIR, CONFORMING_SOURCE_HASH } from './conforming-fixture.test-helper.mjs';
 import { tempTree } from '../../src/testing/temp-tree.test-helper.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -29,13 +30,11 @@ const __dirname = path.dirname(__filename);
 
 const FIXTURES_DIR = path.join(__dirname, '__fixtures__');
 const NONCONFORMING_DIR = path.join(FIXTURES_DIR, 'nonconforming');
-const CONFORMING_DIR = path.join(FIXTURES_DIR, 'conforming');
 
 // The real seven/rules.pdf hash, verified 2026-07-27 and re-verified at the proof run
 // (170-05-PLAN.md context block). Used only as the "expected" hash against the
 // non-conforming fixture, which never archived a copy in the first place.
 const SEVEN_SOURCE_HASH = '5138858e789452d6d366e3ba3a898b5d5417a3561ee23bd53123fd98fe337880';
-const CONFORMING_SOURCE_HASH = '94b836814e8d4849fdff5f5e782a78a7c0a5b8f008808384096cb95359106a89';
 
 function findCheck(result, id) {
   const check = result.checks.find((c) => c.id === id);
@@ -311,5 +310,43 @@ describe('gaps-reconciliation (e2) — partial fills inside intact fences', () =
     const e2 = findCheck(result, 'gaps-reconciliation');
     expect(e2.pass).toBe(false);
     expect(e2.detail).toMatch(/not built purely from the slice markers/);
+  });
+});
+
+describe('header-block (d) — an empty header value', () => {
+  function withHeaderLine(label, replacement) {
+    const tmp = tempTree('bs-d-');
+    fs.cpSync(CONFORMING_DIR, tmp, { recursive: true });
+    const indexPath = path.join(tmp, 'rulebook', 'INDEX.md');
+    const text = fs.readFileSync(indexPath, 'utf8');
+    fs.writeFileSync(indexPath, text.replace(new RegExp(`^${label}.*$`, 'm'), replacement));
+    return checkIngestArtifacts({
+      projectDir: tmp,
+      sourceFileName: 'rules.pdf',
+      expectedSourceHash: CONFORMING_SOURCE_HASH,
+    });
+  }
+
+  it.each(['Edition:', 'Source hash:'])('fails an empty "%s" instead of reading the next line as its value', (label) => {
+    const check = findCheck(withHeaderLine(label, label), 'header-block');
+    expect(check.pass).toBe(false);
+    expect(check.detail).toContain(`"${label}" line missing or has an empty value`);
+  });
+});
+
+describe('stated check counts', () => {
+  // #1077: the README and run.mjs spell the counts out in prose, and they went stale when a check joined.
+  const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen'];
+  const COUNT = new RegExp(`\\b(${WORDS.join('|')})(?:\\s+|-)(produced-artifact checks|checks|row|pass)\\b`, 'g');
+
+  it.each(['README.md', 'run.mjs'])('%s states CHECK_IDS.length produced-artifact checks, plus one for gate item (g)', (file) => {
+    const text = fs.readFileSync(path.join(__dirname, file), 'utf8');
+    const stated = [...text.matchAll(COUNT)].map(([phrase, word, kind]) => ({
+      phrase: phrase.replace(/\s+/g, ' '),
+      count: WORDS.indexOf(word),
+      expected: kind === 'produced-artifact checks' ? CHECK_IDS.length : CHECK_IDS.length + 1,
+    }));
+    expect(stated.length).toBeGreaterThan(0);
+    expect(stated.filter((s) => s.count !== s.expected).map((s) => s.phrase)).toEqual([]);
   });
 });

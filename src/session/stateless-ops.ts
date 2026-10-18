@@ -12,10 +12,13 @@
 import type { Game, GameClass, TutorialDefinition, Annotation, FlowState, FollowUpOffer } from '../engine/index.js';
 import type { HistoryEntry } from '../engine/action/types.js';
 import { ErrorCode, type ChoiceWithRefs, type ValidElement } from '../types/protocol.js';
-import { dueSeats, canSeatAct, availableActionsForSeat, flowBoundaryKey, toPublicFlowState } from '../engine/index.js';
+import { canSeatAct, availableActionsForSeat, flowBoundaryKey, toPublicFlowState, PlayerFacingError } from '../engine/index.js';
+import { withDevDetail } from '../engine/action/rules-error.js';
+import { dueSeatOffers, describeRefused } from '../engine/flow/seat-activity.js';
 import type { BoundaryKeyState } from '../engine/index.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState, WarningEntry } from './types.js';
-import { validateTutorialDefinition, initialProgress, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
+import { validateTutorialDefinition, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
+import { learnerSeatRefusal, startTutorial } from '../engine/tutorial/start.js';
 import { executeDebugCommand, type GameCommand } from './debug-command.js';
 import {
   GameRunner,
@@ -27,6 +30,7 @@ import {
   type UndoPolicy,
   type RandomnessPolicy,
 } from '../runtime/index.js';
+import { snapshotTree } from '../engine/utils/index.js';
 import { createBot, parseBotLevel } from '../bot/index.js';
 import type { BotMove } from '../bot/types.js';
 import { describeMoveForHint } from './move-summary.js';
@@ -35,7 +39,6 @@ import { PickHandler } from './pick-handler.js';
 import { missingFieldError } from './parse-executor-op.js';
 import { runnerFromSnapshot } from './runner-from-snapshot.js';
 import { declaredGameOptionsOf } from './game-option-selection.js';
-import { changing } from '../engine/element/state-version.js';
 import {
   offerFollowUp,
   buildPlayerState,
@@ -47,6 +50,7 @@ import {
   UndoRefusedError,
   decideUndo,
   debuggingOffMessage,
+  pendingActionForSeat,
 } from './utils.js';
 
 // ---------------------------------------------------------------------------
@@ -138,7 +142,8 @@ export type ExecutorOp =
    * A bot's search: the move one due bot seat among `seats` would make, found
    * WITHOUT making it. Read-only: the game is left as it was. A host makes the
    * move as an ordinary `action` op for that seat, once it has checked the game
-   * still stands where the search began (#635).
+   * still stands where the search began (#635). Host-internal:
+   * `SnapshotSessionHost.handleOp` refuses it (#1100).
    */
   | { type: 'botSuggest'; seats: Array<{ seat: number; level?: string }> };
 
@@ -167,13 +172,20 @@ export type DevOp =
   | { type: 'debugReorder'; cardId: number; targetIndex: number }
   | { type: 'debugTransfer'; cardId: number; targetDeckId: number; position: 'first' | 'last' }
   | { type: 'debugShuffle'; deckId: number }
+  // debugDeckView: the whole table with nothing hidden, so the Decks tab can
+  // list a face-down deck's real cards by the ids its edits send (#898).
+  | { type: 'debugDeckView' }
+  // debugDeckViewAt: the same unfiltered table as it stood after action
+  // `actionIndex`, for the Decks tab while time travelling (#1071).
+  | { type: 'debugDeckViewAt'; actionIndex: number }
   /**
    * restoreEarlier: go back to a WHOLE earlier snapshot of this game that the
    * host kept itself -- a demo stepping back one move. Run against the CURRENT
    * snapshot, and a restore in every sense a client sees
    * (`restoreEarlierSnapshot`): the restore epoch advances, so seats drop stale
    * element ids and reset their animation watermark. Only the host composes it
-   * (`SnapshotSessionHost`'s demo); no client message maps to it.
+   * (`SnapshotSessionHost`'s demo, and the headless session's `arrange`); no
+   * client message maps to it.
    */
   | { type: 'restoreEarlier'; snapshot: unknown }
   | { type: 'startTutorial'; player: number }
@@ -278,6 +290,8 @@ const DEBUG_OP_TYPE_MAP: Record<DebugOpType, true> = {
   debugReorder: true,
   debugTransfer: true,
   debugShuffle: true,
+  debugDeckView: true,
+  debugDeckViewAt: true,
 };
 export const DEBUG_OP_TYPES: ReadonlySet<Op['type']> = new Set(Object.keys(DEBUG_OP_TYPE_MAP) as DebugOpType[]);
 
@@ -294,6 +308,8 @@ export type ReadOnlyOpType =
   | 'debugActionTraces'
   | 'debugFlowState'
   | 'debugCustomData'
+  | 'debugDeckView'
+  | 'debugDeckViewAt'
   | 'botSuggest';
 
 const READ_ONLY_OP_TYPE_MAP: Record<ReadOnlyOpType, true> = {
@@ -304,6 +320,8 @@ const READ_ONLY_OP_TYPE_MAP: Record<ReadOnlyOpType, true> = {
   debugActionTraces: true,
   debugFlowState: true,
   debugCustomData: true,
+  debugDeckView: true,
+  debugDeckViewAt: true,
   botSuggest: true,
 };
 export const READ_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set(Object.keys(READ_ONLY_OP_TYPE_MAP) as ReadOnlyOpType[]);
@@ -332,7 +350,7 @@ export interface OpFailure {
    * handler carries the code they gave (e.g. NOT_YOUR_TURN, ENGINE_ERROR,
    * CHOICES_EVALUATION_ERROR), and a code is never invented for one that gave
    * none. The engine's own protocol refusals carry their own code
-   * (STALE_SUBMISSION).
+   * (STALE_SUBMISSION), and an op that crashed carries ENGINE_ERROR (#1045).
    */
   errorCode?: ErrorCode;
   category: OpFailureCategory;
@@ -424,8 +442,12 @@ export interface OpSuccessFields {
   };
   cancelAction: Record<never, never>;
   undo: Record<never, never>;
-  /** The game's action history, oldest first. */
-  debugHistory: { actionHistory: DebugHistoryEntry[] };
+  /**
+   * The game's kept action history, oldest first. Entry `i` is action
+   * `actionHistoryBase + i`; the base is absent while no action was dropped
+   * (`checkpoints: { actionHistory: 'undo' }`, #997).
+   */
+  debugHistory: { actionHistory: DebugHistoryEntry[]; actionHistoryBase?: number };
   debugStateAt: { historicalState: unknown };
   debugStateDiff: { diff: ElementDiff };
   debugActionTraces: { traces: unknown[]; flowContext: unknown };
@@ -437,6 +459,10 @@ export interface OpSuccessFields {
   debugReorder: Record<never, never>;
   debugTransfer: Record<never, never>;
   debugShuffle: Record<never, never>;
+  /** The game as `toJSON()` writes it: every element, none hidden from any seat. */
+  debugDeckView: { view: ReturnType<Game['toJSON']> };
+  /** As `debugDeckView`, for the game as it stood after the action asked for. */
+  debugDeckViewAt: { view: ReturnType<Game['toJSON']> };
   restoreEarlier: Record<never, never>;
   startTutorial: Record<never, never>;
   exitTutorial: Record<never, never>;
@@ -473,11 +499,11 @@ export interface OpSuccessFields {
 }
 
 /**
- * The ops whose success carries no {@link StateEnvelope}: a choices query and a
- * bot's search change nothing and answer one caller (#450, #675), and the
- * host's lifecycle ops publish through the host itself.
+ * The ops whose success carries no {@link StateEnvelope}: a choices query, a
+ * bot's search and a hint or heatmap change nothing and answer one caller
+ * (#450, #675, #816), and the host's lifecycle ops publish through the host itself.
  */
-type StatelessOpType = 'resolveChoices' | 'botSuggest' | HostOp['type'];
+type StatelessOpType = 'resolveChoices' | 'botSuggest' | 'hint' | 'heatmapToggle' | HostOp['type'];
 
 /**
  * What every success shares. `error` and `errorCode` are named only to say they
@@ -657,7 +683,7 @@ function stateEnvelope(runner: GameRunner, playerCount: number): StateEnvelope {
  * one place both channels live, so the commit is the game's and no view's.
  */
 function persistCommitOf(snapshot: GameStateSnapshot): PersistCommit {
-  const attributes = snapshot.state.attributes;
+  const attributes = snapshotTree(snapshot).attributes;
   const commit: PersistCommit = {};
   if (attributes[PERSIST_KEY] !== undefined) commit.public = attributes[PERSIST_KEY];
   if (attributes[PERSIST_PRIVATE_KEY] !== undefined) commit.private = attributes[PERSIST_PRIVATE_KEY];
@@ -676,6 +702,20 @@ function errorResult(
     ...(errorCode === undefined ? {} : { errorCode }),
     category,
   };
+}
+
+/**
+ * The refusal for a throw out of an op (#1045). A `PlayerFacingError` was written to be read and
+ * travels verbatim; anything else is a crash, logged here and replaced by a fixed sentence.
+ */
+function unexpectedErrorResult(error: unknown): OpFailure {
+  if (error instanceof PlayerFacingError) return errorResult(error, 'executor');
+  console.error('[BoardSmith] An op failed unexpectedly:', error);
+  return errorResult(
+    withDevDetail('The game could not process that request because of an error. Try again, or reload the page.', error),
+    'executor',
+    ErrorCode.ENGINE_ERROR,
+  );
 }
 
 /**
@@ -725,11 +765,27 @@ function refuseStaleSubmission(snapshot: GameStateSnapshot | null, op: Executabl
   return errorResult(STALE_SUBMISSION_MESSAGE, 'protocol', ErrorCode.STALE_SUBMISSION);
 }
 
+/**
+ * The due bot seat to search: the first that can move, since a seat offered
+ * only disabled actions has nothing to search (#1133). When no due seat at
+ * all can move, the first due bot seat is reported stalled, with the reasons,
+ * so a table stuck on disabled actions is said out loud rather than gone quiet.
+ */
 function selectDueBotSeat(
   flowState: BotFlowState,
+  game: Game,
   botSeats: Set<number>,
-): number | undefined {
-  return dueSeats(flowState).find(seat => botSeats.has(seat));
+): { seat: number } | { stalled: { seat: number; reason: string } } | undefined {
+  const offers = dueSeatOffers(flowState, game);
+  const movable = offers.find((offer) => offer.canMove && botSeats.has(offer.seat));
+  if (movable) return { seat: movable.seat };
+  const dueBot = offers.find((offer) => botSeats.has(offer.seat));
+  if (!dueBot || offers.some((offer) => offer.canMove)) return undefined;
+  const refused = describeRefused(offers);
+  const reason =
+    'No seat the game is waiting on can move: none has an enabled action or a follow-up.' +
+    (refused.length > 0 ? ` Refused: ${refused.join('; ')}.` : '');
+  return { stalled: { seat: dueBot.seat, reason } };
 }
 
 // ---------------------------------------------------------------------------
@@ -1082,7 +1138,6 @@ async function handleHint(
 
   return {
     success: true,
-    ...stateEnvelope(runner, gameOptions.playerCount),
     hintAnnotation: { seat: op.seat, annotation },
   };
 }
@@ -1117,7 +1172,6 @@ async function handleHeatmapToggle(
   if (!op.visible) {
     return {
       success: true,
-      ...stateEnvelope(runner, gameOptions.playerCount),
       heatmapUpdate: { seat: op.seat, visible: false, entries: [] },
     };
   }
@@ -1177,35 +1231,13 @@ async function handleHeatmapToggle(
 
   return {
     success: true,
-    ...stateEnvelope(runner, gameOptions.playerCount),
     heatmapUpdate: { seat: op.seat, visible: true, entries },
   };
 }
 
 /**
- * Why `player` cannot start a tutorial for `learnerSeat` on a table of
- * `playerCount` seats, or `undefined` when it can. Only the learner seat starts
- * a tutorial, and the learner seat must be one the table has.
- */
-function learnerSeatRefusal(learnerSeat: number, player: number, playerCount: number): string | undefined {
-  if (learnerSeat > playerCount) {
-    return `This tutorial is for seat ${learnerSeat}, but this table has ${playerCount} seats, so no one can start it. ` +
-      `Start it on a table of at least ${learnerSeat} players, or set the tutorial's learnerSeat to a seat this table has.`;
-  }
-  if (player !== learnerSeat) {
-    return `This tutorial is for seat ${learnerSeat}, so seat ${player} cannot start it. Start it from seat ${learnerSeat}.`;
-  }
-  return undefined;
-}
-
-/**
- * Start a tutorial for `op.player`: apply the tutorial's setup, put the flow
- * back at its beginning with the tutorial's learner seat to move (#546, #552),
- * activate the first step and run the auto-advance pump. Refused, with the
- * game left as it was, when `op.player` is not the learner seat or the table
- * has no such seat, when the game is over, or when the restarted flow still
- * would not prompt the learner: a tutorial the learner cannot act in is a dead
- * table.
+ * Start a tutorial for `op.player` through {@link startTutorial}, the same
+ * start `simulateTutorial` uses (#914). A refusal leaves the game as it was.
  */
 function handleStartTutorial(
   def: RunnerDef,
@@ -1224,42 +1256,12 @@ function handleStartTutorial(
   }
   // IN-01: validate definition BEFORE constructing the runner (fail-loud before expensive work).
   validateTutorialDefinition(def.tutorial);
-  const { learnerSeat } = def.tutorial;
-  const seatRefusal = learnerSeatRefusal(learnerSeat, op.player, gameOptions.playerCount);
+  const seatRefusal = learnerSeatRefusal(def.tutorial.learnerSeat, op.player, gameOptions.playerCount);
   if (seatRefusal) return errorResult(seatRefusal, 'protocol');
   const runner = runnerFromSnapshot(snapshot, def);
-  // #552: a finished game stays finished. The restart below could bring its
-  // flow back to life while its phase still read 'finished'.
-  if (runner.game.phase === 'finished') {
-    return errorResult(
-      'The tutorial cannot start because this game is over. Start a new game, then start the tutorial.',
-      'protocol',
-    );
-  }
-  // R-01: apply the tutorial's setup callback before setting initial progress so
-  // the board is in the deterministic tutorial position before any advanceWhen
-  // predicates fire. setup is optional; games without a preset omit it.
-  const setup = def.tutorial.setup;
-  if (setup) changing(runner.game._ctx, () => setup(runner.game as Game));
-  // #546, #552: a tutorial begins on the learner's turn, so restart the flow
-  // with the learner seat to move. This runs none of the game's opening again.
-  runner.game.restartFlowForTutorial(learnerSeat);
   // A refusal discards this runner, so the caller's snapshot is untouched.
-  const due = dueSeats(runner.getFlowState());
-  if (!due.includes(op.player)) {
-    const toMove = due.length > 0 ? `seat ${due.join(', ')} is` : 'no seat is';
-    return errorResult(
-      `The tutorial cannot start for seat ${op.player}: when the game restarts for the tutorial, ` +
-        `${toMove} to move, not seat ${op.player}. The game's flow gives the opening turn to a set seat, ` +
-        `so set the tutorial's learnerSeat to the seat that moves first.`,
-      'protocol',
-    );
-  }
-  runner.game.tutorialProgress.set(op.player, initialProgress(def.tutorial));
-  // CR-01: pump auto-advance immediately after setting initial progress so steps
-  // with always-true advanceWhen predicates (e.g. capture-tip) advance before
-  // the learner's first action, matching the simulate-tutorial parity invariant.
-  autoAdvanceTutorial(runner.game as Game, op.player);
+  const refusal = startTutorial(runner.game as Game, def.tutorial, op.player);
+  if (refusal) return errorResult(refusal, 'protocol');
   return { success: true, ...stateEnvelope(runner, gameOptions.playerCount) };
 }
 
@@ -1281,8 +1283,10 @@ async function handleBotSuggest(
   const runner = runnerFromSnapshot(snapshot, def);
   const flowState = runner.getFlowState() as BotFlowState | undefined;
   if (!flowState?.awaitingInput || flowState.complete) return { success: true };
-  const botPlayer = selectDueBotSeat(flowState, new Set(op.seats.map((s) => s.seat)));
-  if (botPlayer === undefined) return { success: true };
+  const due = selectDueBotSeat(flowState, runner.game as Game, new Set(op.seats.map((s) => s.seat)));
+  if (due === undefined) return { success: true };
+  if ('stalled' in due) return { success: true, botStalled: due.stalled };
+  const botPlayer = due.seat;
 
   const seatLevel = op.seats.find((s) => s.seat === botPlayer)?.level;
   // `def.bot` MUST be threaded through — it carries the game's MCTS hooks
@@ -1364,6 +1368,21 @@ function missingCheckpoint(def: RunnerDef, snapshot: GameStateSnapshot, actionIn
   return errorResult(`No checkpoint at action index ${actionIndex}: ${why}`, 'executor');
 }
 
+/** The live runner and the game as it stood after `actionIndex`, or why that position cannot be shown. */
+function runnersAt(
+  def: RunnerDef,
+  snapshot: GameStateSnapshot,
+  actionIndex: number,
+): { current: GameRunner; at: GameRunner } | OpFailure {
+  const current = runnerFromSnapshot(snapshot, def);
+  const historyLength = current.actionCount;
+  if (actionIndex < 0 || actionIndex > historyLength) {
+    return errorResult(`Invalid action index: ${actionIndex}. History has ${historyLength} actions.`, 'protocol');
+  }
+  const at = runnerFromCheckpoint(def, snapshot, actionIndex);
+  return at ? { current, at } : missingCheckpoint(def, snapshot, actionIndex);
+}
+
 function handleRestoreEarlier(
   def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
@@ -1391,6 +1410,7 @@ function handleDebugHistory(
     success: true,
     ...stateEnvelope(runner, gameOptions.playerCount),
     actionHistory: [...runner.actionHistory],
+    ...(runner.actionHistoryBase > 0 && { actionHistoryBase: runner.actionHistoryBase }),
   };
 }
 
@@ -1400,20 +1420,12 @@ function handleDebugStateAt(
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'debugStateAt' }>,
 ): OpResultFor<'debugStateAt'> {
-  const current = runnerFromSnapshot(snapshot, def);
-  const historyLength = current.actionHistory.length;
-  if (op.actionIndex < 0 || op.actionIndex > historyLength) {
-    return errorResult(
-      `Invalid action index: ${op.actionIndex}. History has ${historyLength} actions.`,
-      'protocol',
-    );
-  }
-  const at = runnerFromCheckpoint(def, snapshot, op.actionIndex);
-  if (!at) return missingCheckpoint(def, snapshot, op.actionIndex);
+  const runners = runnersAt(def, snapshot, op.actionIndex);
+  if ('success' in runners) return runners;
   return {
     success: true,
-    ...stateEnvelope(current, gameOptions.playerCount),
-    historicalState: buildPlayerState(at, [], op.player, { includeActionMetadata: false }),
+    ...stateEnvelope(runners.current, gameOptions.playerCount),
+    historicalState: buildPlayerState(runners.at, [], op.player, { includeActionMetadata: false }),
   };
 }
 
@@ -1424,7 +1436,7 @@ function handleDebugStateDiff(
   op: Extract<Op, { type: 'debugStateDiff' }>,
 ): OpResultFor<'debugStateDiff'> {
   const current = runnerFromSnapshot(snapshot, def);
-  const historyLength = current.actionHistory.length;
+  const historyLength = current.actionCount;
   if (op.fromIndex < 0 || op.fromIndex > historyLength) {
     return errorResult(`Invalid fromIndex: ${op.fromIndex}`, 'protocol');
   }
@@ -1494,7 +1506,7 @@ function handleDebugFlowState(
   // SECURITY (T-123-10): pendingAction is derived ONLY from the passed-in
   // pendingState — the requesting seat's own persisted pending state, threaded
   // by the host (naturally seat-scoped) — never by reading another seat's state.
-  const pendingAction = (pendingState as unknown as SerializedPendingActionState | null) ?? undefined;
+  const pendingAction = pendingState ? pendingActionForSeat(pendingState) : undefined;
 
   return {
     success: true,
@@ -1522,6 +1534,34 @@ function handleDebugCustomData(
   };
 }
 
+function handleDebugDeckView(
+  def: RunnerDef,
+  gameOptions: { playerCount: number; [key: string]: unknown },
+  snapshot: GameStateSnapshot,
+): OpResultFor<'debugDeckView'> {
+  const runner = runnerFromSnapshot(snapshot, def);
+  return {
+    success: true,
+    ...stateEnvelope(runner, gameOptions.playerCount),
+    view: (runner.game as Game).toJSON(),
+  };
+}
+
+function handleDebugDeckViewAt(
+  def: RunnerDef,
+  gameOptions: { playerCount: number; [key: string]: unknown },
+  snapshot: GameStateSnapshot,
+  op: Extract<Op, { type: 'debugDeckViewAt' }>,
+): OpResultFor<'debugDeckViewAt'> {
+  const runners = runnersAt(def, snapshot, op.actionIndex);
+  if ('success' in runners) return runners;
+  return {
+    success: true,
+    ...stateEnvelope(runners.current, gameOptions.playerCount),
+    view: (runners.at.game as Game).toJSON(),
+  };
+}
+
 function handleDebugRewind(
   def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
@@ -1529,7 +1569,7 @@ function handleDebugRewind(
   op: Extract<Op, { type: 'debugRewind' }>,
 ): OpResultFor<'debugRewind'> {
   const current = runnerFromSnapshot(snapshot, def);
-  const historyLength = current.actionHistory.length;
+  const historyLength = current.actionCount;
   if (op.actionIndex < 0) {
     return errorResult(
       `Invalid action index: ${op.actionIndex}. History has ${historyLength} actions.`,
@@ -1739,6 +1779,10 @@ async function runOp(
         return handleDebugFlowState(def, gameOptions, snap, pendingState, op);
       case 'debugCustomData':
         return handleDebugCustomData(def, gameOptions, snap, op);
+      case 'debugDeckView':
+        return handleDebugDeckView(def, gameOptions, snap);
+      case 'debugDeckViewAt':
+        return handleDebugDeckViewAt(def, gameOptions, snap, op);
       case 'debugRewind':
         return handleDebugRewind(def, gameOptions, snap, op);
       case 'restoreEarlier':
@@ -1810,6 +1854,6 @@ async function runOp(
       'protocol',
     );
   } catch (err) {
-    return errorResult(err, 'executor');
+    return unexpectedErrorResult(err);
   }
 }

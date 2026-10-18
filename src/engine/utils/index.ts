@@ -12,6 +12,8 @@ export type {
 // State snapshots
 export {
   createSnapshot,
+  createRunnerSnapshot,
+  snapshotTree,
   createActionCheckpoint,
   checkpointAt,
   checkpointCount,
@@ -30,7 +32,7 @@ export type {
 } from './snapshot.js';
 
 // Legal-move enumeration (INTRO-04)
-export { enumerateLegalMoves, generateCombinations } from './enumerate-moves.js';
+export { enumerateLegalMoves } from './enumerate-moves.js';
 
 // Arg builder (INTRO-03)
 export { buildActionArgs } from './arg-builder.js';

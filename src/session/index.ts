@@ -58,8 +58,6 @@ export { ErrorCode } from './types.js';
 // ============================================
 
 export {
-  generateGameId,
-  isPlayersTurn,
   buildActionMetadata,
   buildPlayerState,
 } from './utils.js';
@@ -69,7 +67,6 @@ export {
 // ============================================
 
 export {
-  STANDARD_PLAYER_COLORS,
   createColorOption,
   type ColorChoice,
   type ColorOptionDefinition,
@@ -101,6 +98,10 @@ export { computeUndoInfo, debuggingOffMessage } from './utils.js';
 // Exposed so the stateless executor can enrich an action's followUp with the
 // same metadata the dev server attaches, letting the embedded UI auto-start it.
 export { buildSingleActionMetadata } from './utils.js';
+
+// The one reader of a snapshot's element tree (#804): hosts that inspect a
+// stored snapshot read the tree through it, never `snapshot.state`.
+export { snapshotTree } from '../engine/utils/index.js';
 
 // Pure stateless op executor — single source of truth for per-op game execution.
 export * from './stateless-ops.js';

@@ -46,6 +46,7 @@
 import {
   assert,
   check,
+  recordWorldFrames,
   runBrowserRegression,
   summarise,
   surfaceOf,
@@ -362,11 +363,7 @@ async function drive({ launch, hostUrl }) {
 async function oneSeatWalksTheMenu({ browser, hostUrl }) {
   const context = await browser.newContext();
   const page = await context.newPage();
-  const sent = [];
-  page.on('websocket', (ws) => {
-    if (!ws.url().includes('/__boardsmith/world')) return;
-    ws.on('framesent', ({ payload }) => sent.push(String(payload)));
-  });
+  const { sent } = recordWorldFrames(page);
   await page.goto(hostUrl);
   await waitForAction(page, 'construct');
   // THE HANDSHAKE IS NOT NAVIGATION. `hello` goes up when the frame
@@ -382,6 +379,11 @@ async function oneSeatWalksTheMenu({ browser, hostUrl }) {
     );
     await until(() => shownGroups(page), ['Dump', 'More'], 'the top level drew the wrong groups');
     assert((await levelLabel(page)) === null, 'the top level drew a current-group label');
+  });
+
+  await check("a group's screen-reader text is in the page but not on screen", async () => {
+    const box = await surfaceOf(page).locator('[data-bs-action-group="Dump"] .sr-only').boundingBox();
+    assert(box !== null && box.width <= 1 && box.height <= 1, `the group's screen-reader text took ${JSON.stringify(box)}`);
   });
 
   await check('a group occupies one button, and its members appear only on opening', async () => {
@@ -412,7 +414,7 @@ async function oneSeatWalksTheMenu({ browser, hostUrl }) {
     const during = sent.slice(sentBeforeNavigating);
     assert(
       during.length === 0,
-      `navigating the menu sent ${during.length} frame(s): ${during.join(' | ')}`,
+      `navigating the menu sent ${during.length} frame(s): ${during.map((frame) => JSON.stringify(frame)).join(' | ')}`,
     );
   });
 

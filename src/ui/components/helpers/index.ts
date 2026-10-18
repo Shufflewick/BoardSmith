@@ -5,12 +5,4 @@ export { default as ZoomPreviewOverlay } from './ZoomPreviewOverlay.vue';
 export { default as Button } from './Button.vue';
 export { default as DisabledReasonTooltip } from './DisabledReasonTooltip.vue';
 
-// Button types - defined here since TypeScript can't extract types from .vue files
-export type ButtonVariant =
-  | 'primary'
-  | 'secondary'
-  | 'danger'
-  | 'ghost'
-  | 'icon';
-
-export type ButtonSize = 'small' | 'default' | 'large';
+export type { ButtonVariant, ButtonSize } from './Button.vue';

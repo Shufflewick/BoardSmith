@@ -133,8 +133,12 @@ describe('#201: reloading a world\'s rules', () => {
   });
 
   it('reopens the same world on the new rules, and seats the pages where they were', () => {
-    expect(at('await worldHost.close()')).toBeLessThan(at('worldHost = await openOn(rules)'));
-    expect(at('worldHost = await openOn(rules)')).toBeLessThan(at("type: 'attach'"));
+    expect(at("await call(running, 'close', undefined)")).toBeLessThan(at('await openIn(rules)'));
+    expect(at('await openIn(rules)')).toBeLessThan(at("type: 'attach'"));
+  });
+
+  it("stops the old rules' worker only once the world is open on the new ones (#885)", () => {
+    expect(at('await openIn(rules)')).toBeLessThan(at('await replaced.worker.close()'));
   });
 
 });

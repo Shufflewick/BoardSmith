@@ -37,8 +37,9 @@ import {
   extractVerifiedCommitHash,
   resolveManifestPath,
 } from './build-manifest.js';
-import { CHUNK_MD, designChunksDir, requireChunkSlugs } from '../lib/project-paths.js';
+import { readChunkMdIfExists, requireChunkSlugs } from '../lib/project-paths.js';
 import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 
 /**
  * Closes T-172-01: a hand-edited `## Verified Commit Hash` is untrusted input reaching a git
@@ -56,7 +57,9 @@ export const UNRESOLVABLE = 'unresolvable' as const;
 // -------------------------------------------------------------------------------------------
 
 /**
- * `git diff --name-only <hash> HEAD`, run with an explicit `cwd` and a validated hash.
+ * `git diff --name-only --relative <hash> HEAD`, run with an explicit `cwd` and a validated hash.
+ * `--relative` names files relative to `projectDir` and leaves out the rest of the repository, so
+ * a game in a subdirectory of its repo is compared on its own paths (#822).
  *
  * Returns the `UNRESOLVABLE` sentinel — never throws — when the hash is not hash-shaped, or when
  * git cannot resolve it (unknown commit, shallow clone missing history, etc.). The caller
@@ -70,7 +73,7 @@ export async function diffedFilesSince(
   if (!HASH_SHAPE.test(hash)) return UNRESOLVABLE;
 
   try {
-    const stdout = await git(projectDir, ['diff', '--name-only', hash, 'HEAD']);
+    const stdout = await git(projectDir, ['diff', '--name-only', '--relative', hash, 'HEAD']);
     return stdout
       .split('\n')
       .map((line) => line.trim())
@@ -134,12 +137,7 @@ export interface DriftCheckResult {
 }
 
 async function fileExists(absPath: string): Promise<boolean> {
-  try {
-    await fs.stat(absPath);
-    return true;
-  } catch {
-    return false;
-  }
+  return (await readIfExists(absPath, fs.stat)) !== undefined;
 }
 
 /**
@@ -165,7 +163,6 @@ export async function driftCheckCommand(
   await assertGitRepo(projectDir);
   const head = await resolveHead(projectDir);
 
-  const chunksDir = designChunksDir(projectDir);
   const slugs = await requireChunkSlugs(projectDir);
 
   const findings: Finding[] = [];
@@ -201,12 +198,8 @@ export async function driftCheckCommand(
   }
 
   for (const slug of slugs) {
-    let chunkText: string;
-    try {
-      chunkText = await fs.readFile(join(chunksDir, slug, CHUNK_MD), 'utf-8');
-    } catch {
-      continue; // a chunks/<slug> dir with no CHUNK.md is not this command's problem to report
-    }
+    const chunkText = await readChunkMdIfExists(projectDir, slug);
+    if (chunkText === undefined) continue; // a chunks/<slug> dir with no CHUNK.md is not this command's problem to report
 
     const manifest = parseBuildManifest(chunkText);
     for (const rowIndex of manifest.pathlessRowIndexes) {
@@ -278,7 +271,7 @@ export async function driftCheckCommand(
         continue;
       }
 
-      if (diffSet.has(path)) {
+      if (diffSet.has(relative(projectDir, resolved).split(sep).join('/'))) {
         changedFiles.push(path);
       }
     }

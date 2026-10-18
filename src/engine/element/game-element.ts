@@ -490,6 +490,15 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    */
   _redactedAttributes?: Set<string>;
 
+  /**
+   * How many children the per-seat view this element was restored from said it
+   * holds (`childCount`, #1108). A count-only element the seat cannot see
+   * arrives with its count and no children, so this is the only place the
+   * count survives. Read once, when a sampler fills the restored sandbox; not
+   * written back by `toJSON`, since moves made in the sandbox would leave it stale.
+   */
+  _viewChildCount?: number;
+
   /** Static flag to identify GameElement classes */
   static isGameElement = true;
 
@@ -561,7 +570,6 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       id,
       order: 'normal',
     };
-    this._ctx._elementsById.set(id, this);
   }
 
   /**
@@ -771,7 +779,11 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       }
     }
 
-    // Add to tree
+    // Indexed only once built, with what its constructor created: a constructor or attribute that throws leaves nothing in it (#963, #1093, #1107).
+    // A parent still being built is not filed yet, and files its children when it is.
+    if (this._ctx._elementsById.get(this._t.id) === this) {
+      forEachInSubtree(element, (built) => this._ctx._elementsById.set(built._t.id, built));
+    }
     this.addChild(element);
 
     return element;
@@ -1248,15 +1260,13 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   /**
-   * Check if this element is visible to a player
+   * Whether the seat's view carries this element (#1062): its own visibility
+   * allows the seat, and so does every ancestor's, since nothing below an
+   * element hidden from the seat is ever sent to it.
    */
   isVisibleTo(player: Player | number): boolean {
     const seat = typeof player === 'number' ? player : player.seat;
-    const visibility = this.getEffectiveVisibility();
-    // For owner-based visibility, check this element's owner first,
-    // then walk up the tree to find an owner (for inherited visibility)
-    const ownerSeat = this.getEffectiveOwner()?.seat;
-    return canPlayerSee(visibility, seat, ownerSeat);
+    return ownVisibilityAllows(this, seat) && (this._t.parent?.isVisibleTo(seat) ?? true);
   }
 
   /**
@@ -1624,16 +1634,15 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     // the game's direct children get it in loadSerializedState), so e.g.
     // `piece.remove()` → `this.game.pile` throws after any restore.
     if (ctx.game) (element as GameElement).game = ctx.game;
-    // The stored id replaces the one construction minted. The minted id leaves
-    // the id index, unless it already names another element: a restore can
-    // mint an id it has already restored. Whoever builds the tree files it
-    // once it is built (`Game#loadSerializedState`, `Game#adoptSubtree`).
-    if (ctx._elementsById.get(element._t.id) === element) ctx._elementsById.delete(element._t.id);
+    // The stored id replaces the one construction minted. Whoever builds the
+    // tree files it in the id index once it is built (`Game#loadSerializedState`,
+    // `Game#adoptSubtree`).
     element._t.id = json.id;
 
     if (json.name) {
       element.name = json.name;
     }
+    if (json.childCount !== undefined) element._viewChildCount = json.childCount;
 
     // Restore visibility if present. Adopt a COPY so the restored element
     // never shares mutable state with the snapshot it was restored from —
@@ -1802,7 +1811,8 @@ function setOwnKey(target: Record<string, unknown>, key: string, value: unknown)
  *   class check, which fails across bundled copies of the engine.
  * - Any other element becomes `{ __elementRef: branch }`, or `{ __elementId }`
  *   in world mode, where non-resident partitions shift every branch index. A
- *   seat's view writes an element in the pile as `WITHHELD_PILE_BRANCH`.
+ *   seat's view, in a world too, writes an element in the pile as
+ *   `WITHHELD_PILE_BRANCH`.
  * - A Map, Set or typed array becomes a tagged shape {@link decodeValue}
  *   rebuilds.
  *
@@ -1817,12 +1827,26 @@ function setOwnKey(target: Record<string, unknown>, key: string, value: unknown)
  * @param subject - What holds the value, for error messages (a class name, or
  *   `action 'play'`).
  * @param path - The property path to `value`, for error messages.
+ * @param branchesBefore - A pending action's `branchesBeforePicks`: an element
+ *   listed is written at the branch it had there (#1144).
  */
-export function encodeValue(value: unknown, ctx: ElementContext | undefined, subject: string, path: string): unknown {
-  return encodeAt(value, ctx, subject, path, new Set(), 0);
+export function encodeValue(
+  value: unknown,
+  ctx: ElementContext | undefined,
+  subject: string,
+  path: string,
+  branchesBefore?: Readonly<Record<number, string | null>>,
+): unknown {
+  return encodeAt(value, ctx, subject, path, new Set(), 0, branchesBefore);
 }
 
-function encodeElementRef(value: GameElement, ctx: ElementContext | undefined): object {
+function encodeElementRef(
+  value: GameElement,
+  ctx: ElementContext | undefined,
+  subject: string,
+  path: string,
+  branchesBefore: Readonly<Record<number, string | null>> | undefined,
+): object {
   // #149: the one shared structural answer to "is this a player?" -- a
   // numeric `seat` is not it, because a per-seat board carries one too and
   // would then serialize as a `__playerRef` to a seat with no such player.
@@ -1835,13 +1859,23 @@ function encodeElementRef(value: GameElement, ctx: ElementContext | undefined): 
   // world, where non-resident partitions are absent, a path recorded against
   // the full world resolves against a partial one to a different element,
   // silently. Ids do not move.
-  if (ctx?._worldMode) {
-    return { __elementId: value.id };
-  }
+  // Before world mode's id: a seat is never told which element was removed, in a world either (#1043).
   if (withheldFromSeat(value)) {
     return { __elementRef: WITHHELD_PILE_BRANCH };
   }
-  return { __elementRef: value.branch() };
+  if (ctx?._worldMode) {
+    return { __elementId: value.id };
+  }
+  const before = branchesBefore?.[value.id];
+  if (before === null) {
+    throw new Error(
+      `Cannot record ${subject}: '${path}' is "${value.name ?? value.constructor.name}", which an earlier pick's ` +
+        `onSelect or onEach created, so it did not exist when the action began. History names each pick where it ` +
+        `was before the action, so a pick cannot take an element the same action's callbacks create: create it in ` +
+        `execute, or offer it in a later action.`
+    );
+  }
+  return { __elementRef: before ?? value.branch() };
 }
 
 function encodeAt(
@@ -1851,6 +1885,7 @@ function encodeAt(
   path: string,
   ancestors: Set<object>,
   depth: number,
+  branchesBefore: Readonly<Record<number, string | null>> | undefined,
 ): unknown {
   if (value === null || value === undefined || typeof value !== 'object') {
     return value;
@@ -1860,7 +1895,7 @@ function encodeAt(
   // with `isElement`, not `instanceof`: an action argument can come from a
   // game bundled with its own copy of the engine.
   if (isElement(value)) {
-    return encodeElementRef(value, ctx);
+    return encodeElementRef(value, ctx, subject, path, branchesBefore);
   }
 
   if (ancestors.has(value)) {
@@ -1877,7 +1912,8 @@ function encodeAt(
     );
   }
 
-  const encode = (child: unknown, childPath: string) => encodeAt(child, ctx, subject, childPath, ancestors, depth + 1);
+  const encode = (child: unknown, childPath: string) =>
+    encodeAt(child, ctx, subject, childPath, ancestors, depth + 1, branchesBefore);
   ancestors.add(value);
   try {
     if (Array.isArray(value)) {
@@ -2120,6 +2156,17 @@ export function isElement(value: unknown): value is GameElement {
 /** An element that declares zone visibility for its children (i.e. a Space). */
 export interface ZoneVisibilityOwner {
   getZoneVisibility(): VisibilityState | undefined;
+}
+
+/**
+ * Whether the element's own visibility allows the seat, ancestors aside
+ * (#1123). Only for a walk that never descends below an element hidden from
+ * the seat, where every ancestor is already known visible; anywhere else,
+ * `isVisibleTo` is the answer. Not re-exported from the engine.
+ */
+export function ownVisibilityAllows(element: GameElement, seat: number): boolean {
+  // The owner is this element's, or the nearest ancestor's (inherited visibility).
+  return canPlayerSee(element.getEffectiveVisibility(), seat, element.getEffectiveOwner()?.seat);
 }
 
 /**

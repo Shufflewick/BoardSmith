@@ -122,6 +122,31 @@ describe('checkClaimQuotes: rulebook-sourced claims', () => {
     expect(refusals[0]).toMatch(/open question/);
   });
 
+  it('refuses an empty quote, which every location would contain (#819)', async () => {
+    const refusals = await refusalsFor(`1. **Armour subtracts.**
+   >
+   Source: rulebook/08-combat.md §"Armour"`);
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]).toMatch(/Claim 1: the quote "" .*has 0 words.*at least 3.*Copy the whole sentence/);
+  });
+
+  it('refuses a one- or two-word quote even when the cited section contains it (#819)', async () => {
+    for (const quote of ['Armour', 'Armour subtracts']) {
+      const refusals = await refusalsFor(`1. **Armour subtracts.**
+   > ${quote}
+   Source: rulebook/08-combat.md §"Armour"`);
+      expect(refusals).toHaveLength(1);
+      expect(refusals[0]).toMatch(new RegExp(`Claim 1: the quote "${quote}" .*at least 3`));
+    }
+  });
+
+  it('accepts a three-word quote found in the cited section (#819)', async () => {
+    const refusals = await refusalsFor(`1. **Armour subtracts.**
+   > Armour subtracts from
+   Source: rulebook/08-combat.md §"Armour"`);
+    expect(refusals).toEqual([]);
+  });
+
   it('refuses a paraphrase: the quote is not in the cited section', async () => {
     await writeChunk(`1. **Ties go against the attacker.**
    > Ties favour the defender.
@@ -154,6 +179,14 @@ describe('checkClaimQuotes: rulebook-sourced claims', () => {
    > Armour subtracts from damage.
    Source: rulebook/09-missing.md §"Armour"`);
     expect(refusals[0]).toMatch(/no file at design\/rulebook\/09-missing\.md/);
+  });
+
+  it('names a cited file it cannot read rather than saying there is none (#1174)', async () => {
+    await fs.mkdir(join(project, 'design/rulebook/09-folder.md'), { recursive: true });
+    await writeChunk(`1. **Armour subtracts.**
+   > Armour subtracts from damage.
+   Source: rulebook/09-folder.md §"Armour"`);
+    await expect(checkClaimQuotes(project, 'combat')).rejects.toThrow(`Could not read ${join(project, 'design/rulebook/09-folder.md')} (EISDIR)`);
   });
 
   it('refuses a citation with no section or line range', async () => {
@@ -202,7 +235,7 @@ describe('checkClaimQuotes: rulebook-sourced claims', () => {
 
   it('refuses a BoardSmith:<path> Source, naming the installed-package path it reads BoardSmith source by (#432)', async () => {
     const refusals = await refusalsFor(`1. **The engine finishes a complete game.**
-   > return this.finish();
+   > if (this.complete) return this.finish();
    Source: BoardSmith:src/engine/flow/engine.ts:1309-1312`);
     expect(refusals).toHaveLength(1);
     expect(refusals[0]).toMatch(/Claim 1: .*BoardSmith's own source is cited from the installed package, as \.\.\/node_modules\/boardsmith\/src\/engine\/flow\/engine\.ts:1309-1312/);
@@ -294,8 +327,9 @@ describe('checkClaimQuotes: code-sourced claims', () => {
   it('refuses a line past the last one when the file ends in a newline (#414)', async () => {
     await write('old/lib/ending.pm', `${CODE_SOURCE}\n`);
     const refusals = await refusalsFor(`1. **The higher roll wins.**
+   > return 1;
    > }
-   Source: ../old/lib/ending.pm:7-8`);
+   Source: ../old/lib/ending.pm:6-8`);
     expect(refusals[0]).toMatch(/cites line 8, but old\/lib\/ending\.pm has 7 lines/);
   });
 
@@ -524,5 +558,15 @@ describe('the CHUNK.md template', () => {
     expect(refusals).toHaveLength(1);
     // The unfilled placeholder is not a claim (#402), so the section has nothing in it yet.
     expect(refusals[0]).toMatch(/no claims and no open questions/);
+  });
+});
+
+describe('claim-quote-check: an unreadable CHUNK.md (#1110)', () => {
+  it('names the file rather than calling it missing', async () => {
+    const dir = tempTree('bs-claim-quotes-unreadable-');
+    const chunk = join(dir, 'design', 'chunks', 'punch', 'CHUNK.md');
+    await fs.mkdir(dirname(chunk), { recursive: true });
+    await fs.symlink(chunk, chunk);
+    await expect(claimQuoteCheckCommand('punch', { project: dir })).rejects.toThrow(`Could not read ${chunk} (ELOOP)`);
   });
 });

@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Game, Player, Action, actionStep, type GameOptions } from '../engine/index.js';
-import { createSnapshot } from '../engine/utils/index.js';
+import { createSnapshot, snapshotTree } from '../engine/utils/index.js';
 import { applyDeterminization } from './determinization.js';
 
 const devMode = vi.hoisted(() => ({ override: null as boolean | null }));
@@ -58,8 +58,8 @@ describe('determinization and reused choices (#631)', () => {
     // The seat's redacted sandbox, restored as the bot restores it.
     const snapshot = createSnapshot(game, 'safe', [], undefined, { forSeat: 1, reseed: 'sandbox' });
     const sandbox = new SafeGame(snapshot.gameOptions as GameOptions);
-    sandbox.loadSerializedState(snapshot.state);
-    sandbox.restoreFlowState(snapshot.flowState!);
+    sandbox.loadSerializedState(snapshotTree(snapshot));
+    sandbox.restoreFlowState(snapshot.flowState!, snapshot.hiddenIdRemap);
     const codes = () =>
       sandbox.getActionExecutor().getChoices(sandbox.getAction('dial')!.selections[0], sandbox.getPlayer(1)!, {}, 'dial').map((c) => c.value);
     expect(codes()).toEqual([]);

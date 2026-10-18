@@ -621,6 +621,48 @@ pick and leaves with it. Without it your board renders the element's internal
 name and nothing outside the app can tell which of your nodes answers the open
 selection.
 
+### Keyboard Navigation for a Grid: `useSelectableGrid()`
+
+`useSelectableGrid(cells, position, getIdentity, boardInteraction, onActivate, elementType?, isCandidate?)`
+gives a board of cells one tab stop and arrow-key movement. `position(cell)`
+returns the cell's `{ row, col }`. An arrow key moves to the nearest cell in the
+same row or column, and Home/End go to the ends of the row. So the order of
+`cells` and any gaps in the board do not matter (#891).
+
+```vue
+<script setup lang="ts">
+import { computed } from 'vue';
+import { useBoardInteraction, useSelectableGrid } from 'boardsmith/ui';
+
+const props = defineProps<{ squares: { id: number; rank: number; file: number }[] }>();
+const board = useBoardInteraction();
+const squares = computed(() => props.squares);
+
+const { currentIdx, handleGridKeydown, handleGridFocusIn, registerCell, cellAttrs } = useSelectableGrid(
+  squares,
+  (square) => ({ row: 8 - square.rank, col: square.file - 1 }),
+  (square) => ({ id: square.id }),
+  board,
+  (square) => board.triggerElementSelect({ id: square.id }),
+  'square',
+);
+</script>
+
+<template>
+  <div role="grid" @keydown="handleGridKeydown" @focusin="handleGridFocusIn">
+    <div
+      v-for="(square, idx) in squares"
+      :key="square.id"
+      :ref="(el) => registerCell(el as Element | null, idx)"
+      v-bind="cellAttrs(square)"
+      role="gridcell"
+      :tabindex="idx === currentIdx ? 0 : -1"
+      :style="{ gridRow: 9 - square.rank, gridColumn: square.file }"
+    />
+  </div>
+</template>
+```
+
 ## Step 6: Handling Dependent Selections
 
 When selection B depends on selection A (e.g., "select merc, then select their equipment"):
@@ -760,7 +802,7 @@ const { playerSeat, isMyTurn, isViewingHistory, availableActions, actionControll
 `usePlayContext()` returns the fields both shells publish, so it works the same at
 a table and in a persistent world. Use it in any component a game shares between
 the two. `useGameContext()` returns the whole table context, adding `gameState`,
-`dueSeats`, `timeTravelDiff` and `turnDeadline`. It throws in a world, which has
+`dueSeats`, `timeTravelDiff`, `turnDeadline` and `platformRequest`. It throws in a world, which has
 none of those. `tryUseGameContext()` returns the table context or `undefined`, and
 never throws.
 
@@ -992,7 +1034,9 @@ the announcement, or the other way round.
 Two separate questions decide what a game's ending looks like.
 
 **Who draws it.** By default the shell draws its `GameOverCard`. Fill the
-`#game-over` slot to draw your own card in its place, or set
+`#game-over` slot to draw your own card in its place (the shell puts it in a
+layer positioned over the visible board, so it stays in view however the board
+is scrolled; a `position: absolute; inset: 0` wrapper fills that layer), or set
 `providesOwnGameOverUi` on GameShell when your board draws the ending itself.
 Then no card is drawn, but the shell still announces the result. Either form
 works in a template: `provides-own-game-over-ui` or `providesOwnGameOverUi`.

@@ -13,7 +13,10 @@ import {
   getBackgroundImageStyle,
 } from './image.js';
 
-const SPRITE = { sprite: '/cards.png', x: 238, y: 333, width: 238, height: 333 };
+// A standard 13x5 deck of 238x333 cards.
+const SHEET = { sheetWidth: 13 * 238, sheetHeight: 5 * 333 };
+const SPRITE = { sprite: '/cards.png', x: 238, y: 333, width: 238, height: 333, ...SHEET };
+const ORIGIN = { sprite: '/cards.png', x: 0, y: 0, width: 238, height: 333, ...SHEET };
 
 describe('parseImageInfo', () => {
   it('reads a string as a URL image', () => {
@@ -22,20 +25,24 @@ describe('parseImageInfo', () => {
 
   it('reads a sprite object with coordinates as a sprite image', () => {
     expect(parseImageInfo(SPRITE)).toEqual({
-      type: 'sprite', sprite: '/cards.png', x: 238, y: 333, width: 238, height: 333,
+      type: 'sprite', sprite: '/cards.png', x: 238, y: 333, width: 238, height: 333, ...SHEET,
     });
   });
 
   it('accepts coordinates of zero', () => {
-    expect(parseImageInfo({ sprite: '/cards.png', x: 0, y: 0 })).toMatchObject({
-      type: 'sprite', x: 0, y: 0,
-    });
+    expect(parseImageInfo(ORIGIN)).toMatchObject({ type: 'sprite', x: 0, y: 0 });
   });
 
-  it('defaults to standard playing-card dimensions when none are given', () => {
-    expect(parseImageInfo({ sprite: '/cards.png', x: 0, y: 0 })).toMatchObject({
-      width: 238, height: 333,
-    });
+  it('refuses a sprite with no sprite size or sheet size, naming what is missing (#864)', () => {
+    expect(() => parseImageInfo({ sprite: '/cards.png', x: 0, y: 0 })).toThrow(
+      "Sprite image '/cards.png' at x 0, y 0 is missing width, height, sheetWidth, sheetHeight. "
+      + 'Give each sprite its own width and height and the whole sheet image\'s sheetWidth and sheetHeight, in pixels.',
+    );
+  });
+
+  it('refuses a sprite missing only the sheet size (#864)', () => {
+    expect(() => parseImageInfo({ sprite: '/cards.png', x: 0, y: 0, width: 238, height: 333 }))
+      .toThrow('is missing sheetWidth, sheetHeight.');
   });
 
   it('treats a sprite path with no coordinates as a plain URL', () => {
@@ -128,8 +135,32 @@ describe('getSpriteStyle', () => {
     expect(style.backgroundRepeat).toBe('no-repeat');
   });
 
-  it('scales for a 60x84 card by default', () => {
-    expect(getSpriteStyle(SPRITE)).toEqual(getSpriteStyle(SPRITE, 60, 84));
+  it('with no size, fits one sprite cell to whatever box the element has (#1019)', () => {
+    // Resolve the percentages the way CSS does for a box, and compare with the pixel style for that box.
+    const resolve = (style: ReturnType<typeof getSpriteStyle>, boxW: number, boxH: number) => {
+      const [sw, sh] = String(style.backgroundSize).split(' ').map((v) => parseFloat(v) / 100);
+      const [px, py] = String(style.backgroundPosition).split(' ').map((v) => parseFloat(v) / 100);
+      return { size: [sw * boxW, sh * boxH], position: [(boxW - sw * boxW) * px, (boxH - sh * boxH) * py] };
+    };
+    for (const [boxW, boxH] of [[60, 84], [72, 100.8], [96, 134.4]]) {
+      const fitted = resolve(getSpriteStyle(SPRITE), boxW, boxH);
+      const pixels = getSpriteStyle(SPRITE, boxW, boxH);
+      expect(fitted.size.map((v) => v.toFixed(3))).toEqual(
+        String(pixels.backgroundSize).split(' ').map((v) => parseFloat(v).toFixed(3)));
+      // `+ 0` turns -0 into 0, so a first-column offset compares equal as a string.
+      expect(fitted.position.map((v) => (v + 0).toFixed(3))).toEqual(
+        String(pixels.backgroundPosition).split(' ').map((v) => (parseFloat(v) + 0).toFixed(3)));
+    }
+  });
+
+  it('with no size, puts the last cell of a sheet at the far edge', () => {
+    const corner = { sprite: '/grid.png', x: 200, y: 140, width: 100, height: 140, sheetWidth: 300, sheetHeight: 280 };
+    expect(getSpriteStyle(corner)).toMatchObject({ backgroundSize: '300% 200%', backgroundPosition: '100% 100%' });
+  });
+
+  it('with no size, puts a sprite on a one-cell-wide sheet at the left edge', () => {
+    const column = { sprite: '/col.png', x: 0, y: 140, width: 100, height: 140, sheetWidth: 100, sheetHeight: 700 };
+    expect(getSpriteStyle(column)).toMatchObject({ backgroundSize: '100% 500%', backgroundPosition: '0% 25%' });
   });
 
   it('accepts an already parsed sprite', () => {
@@ -148,13 +179,23 @@ describe('getSpriteStyle', () => {
   });
 
   it('puts the top-left cell at the origin', () => {
-    const style = getSpriteStyle({ sprite: '/cards.png', x: 0, y: 0 }, 60, 84);
+    const style = getSpriteStyle(ORIGIN, 60, 84);
     expect(style.backgroundPosition).toBe('0px 0px');
   });
 
-  it('scales the whole 13x5 sheet to match the cell size', () => {
+  it('scales the whole sheet to match the cell size', () => {
     const style = getSpriteStyle(SPRITE, 238, 333);
     expect(style.backgroundSize).toBe(`${13 * 238}px ${5 * 333}px`);
+  });
+
+  it('scales by the sprite\'s own size and the given sheet size, not a 238x333 card on a 13x5 sheet (#864)', () => {
+    const sprite = { sprite: '/tiles.png', x: 100, y: 140, width: 100, height: 140, sheetWidth: 1000, sheetHeight: 700 };
+    const style = getSpriteStyle(sprite, 100, 140);
+    expect(style.backgroundPosition).toBe('-100px -140px');
+    expect(style.backgroundSize).toBe('1000px 700px');
+    expect(getSpriteStyle(sprite, 50, 70)).toMatchObject({
+      backgroundPosition: '-50px -70px', backgroundSize: '500px 350px',
+    });
   });
 
   it('returns no styles for a URL image', () => {

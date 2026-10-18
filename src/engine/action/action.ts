@@ -1,12 +1,13 @@
-import { rulesErrorSentence } from './rules-error.js';
+import { rulesErrorSentence, withDevDetail } from './rules-error.js';
 import type { GameElement } from '../element/game-element.js';
-import { isElement } from '../element/game-element.js';
+import { forEachInSubtree, isElement } from '../element/game-element.js';
 import type { Player } from '../player/player.js';
 import type { Game } from '../element/game.js';
 import type {
   ActionDefinition,
   ActionContext,
   ActionResult,
+  ExecuteResult,
   Selection,
   ChoiceSelection,
   ElementSelection,
@@ -36,9 +37,10 @@ import { findMatchingChoice, isSerializedElement, oneChoiceListRefusal, oneEleme
 import { numberRuleErrors } from './number-rules.js';
 import { formatRepeatCandidates } from '../element/pick-candidates.js';
 import { placeholderIdsFor } from '../element/seat-placeholders.js';
+import { isPositionalPlaceholderId } from '../element/hidden-placeholder.js';
 import type { ChoiceWithRefs, WarningEntry } from '../../types/protocol.js';
 import { textRuleErrors } from './text-rules.js';
-import { changing } from '../element/state-version.js';
+import { actingFor, changing } from '../element/state-version.js';
 import { reusedCandidates } from './choice-cache.js';
 import { resolveMultiSelect, resolveOrderedList } from '../utils/resolve-multiselect.js';
 
@@ -53,27 +55,45 @@ const NO_LONGER_AVAILABLE =
   'That choice is no longer available. Things changed while you were choosing, so please choose again.';
 
 /**
- * Turn a throw out of an action's `execute()` into a failure result.
- *
- * Two things happen here that did not before:
- *
- * - The full error, stack and all, is logged where the game runs and NOT put
- *   on the wire (#47). A raw `TypeError: Cannot read properties of undefined
- *   (reading 'suit')` reaching a player leaks implementation detail and tells
- *   them nothing they can act on.
- * - The result is marked `partiallyApplied`, so the runner knows the action may have
- *   applied part of its changes before it stopped and rolls the game back
- *   (#44). A clean refusal carries no such mark, because it mutated nothing.
+ * Turn a throw out of game code that changes the game (`execute()`, and a
+ * pick's `onSelect`, `onEach` and `until`) into a failure result: the shared
+ * crash handling of {@link gameCodeThrew}, marked `partiallyApplied`, so the
+ * runner knows the action may have applied part of its changes before it
+ * stopped and rolls the game back (#44, #1142). A clean refusal carries no such
+ * mark, because it mutated nothing. `where` names the hook in the log.
  */
-function failedExecute(actionName: string, error: unknown): ActionResult {
+export function failedExecute(actionName: string, error: unknown, where = `Action '${actionName}' execution`): ActionResult {
+  return { ...gameCodeThrew(actionName, where, error), partiallyApplied: true };
+}
+
+/** A pick's `hook` threw: {@link failedExecute}, its log naming the hook and the pick (#1120). */
+function pickHookThrew(action: ActionDefinition, hook: string, selection: Selection, error: unknown): ActionResult {
+  return failedExecute(action.name, error, `${hook} of '${selection.name}' in action '${action.name}'`);
+}
+
+/** What one fed pick says: why it was refused, whether the game changed, and whether the rules crashed (#1141). */
+type FedPick = { error?: string; applied: boolean; rulesError?: boolean };
+
+/**
+ * Turn a throw out of game code an action runs (`execute`, `onSelect`, a
+ * repeat's `onEach` and `until`, #1120) into a failure result. The full error,
+ * stack and all, is logged where the game runs and NOT put on the wire (#47). A
+ * raw `TypeError: Cannot read properties of undefined (reading 'suit')`
+ * reaching a player leaks implementation detail and tells them nothing they
+ * can act on. A `PlayerFacingError` is a refusal, not a crash, and is not logged:
+ * move listing tries every value through these hooks, so a log per refusal
+ * floods it (#31, #1120). `where` names the hook in the log.
+ */
+function gameCodeThrew(actionName: string, where: string, error: unknown): ActionResult {
   // #31: a game saying "I cannot resolve this from the information state I
   // have" is an expected answer inside a bot's redacted sandbox, not a crash.
   // Logging it printed a stack per rollout — measured at 198 MB in 15 seconds
   // on one game — for a search that was working as designed.
   if (error instanceof NotSimulableError) {
-    return { success: false, error: error.message, partiallyApplied: true, notSimulable: true };
+    return { success: false, error: error.message, notSimulable: true };
   }
-  console.error(`[BoardSmith] Action '${actionName}' execution failed:`, error);
+  if (error instanceof PlayerFacingError) return { success: false, error: error.message };
+  console.error(`[BoardSmith] ${where} failed:`, error);
   // WHERE THE SENTENCE WENT, said once and only where it is news (#191).
   //
   // A throw out of `execute` is one of two things and the log cannot tell them
@@ -81,30 +101,36 @@ function failedExecute(actionName: string, error: unknown): ActionResult {
   // is a bug and its text must not reach a player, while "the hearth holds 3
   // logs and you offered 14" is a refusal the player can only discover by
   // trying, and a generic sentence is least useful for exactly that class.
-  //
-  // Not printed for a `PlayerFacingError`, which already did the right thing.
-  if (!(error instanceof PlayerFacingError)) {
-    console.error(
-      `[BoardSmith] The player is told a generic sentence instead of the one above. ` +
-        `If that throw was a REFUSAL you wrote for them to read, throw a PlayerFacingError ` +
-        `(or a subclass) -- its message travels verbatim. Anything else is replaced, so an ` +
-        `accidental error cannot leak implementation detail to a player.`,
-    );
-  }
-  // An engine policy refusal was written to be read — its message IS the
-  // actionable next step. Anything else is an arbitrary runtime error, and
-  // goes no further than this log.
-  const generic = `${rulesErrorSentence(actionName)} Nothing was changed.`;
-  // A PlayerFacingError's text was written to be read, so it always travels.
-  // Anything else travels only in a positively-labelled dev/test environment,
+  console.error(
+    `[BoardSmith] The player is told a generic sentence instead of the one above. ` +
+      `If that throw was a REFUSAL you wrote for them to read, throw a PlayerFacingError ` +
+      `(or a subclass) -- its message travels verbatim. Anything else is replaced, so an ` +
+      `accidental error cannot leak implementation detail to a player.`,
+  );
+  // The thrown text travels only in a positively-labelled dev/test environment,
   // where the reader is the author who needs it and there is no player to leak
   // to. In production it goes no further than the log above.
-  const message = error instanceof PlayerFacingError
-    ? error.message
-    : isDevThrowEnabled()
-      ? `${generic} (${error instanceof Error ? error.message : String(error)})`
-      : generic;
-  return { success: false, error: message, partiallyApplied: true };
+  return { success: false, error: withDevDetail(rulesErrorSentence(actionName), error), rulesError: true };
+}
+
+const ENGINE_ONLY_FLAGS = ['rulesError', 'partiallyApplied', 'notSimulable'] as const;
+
+/**
+ * Drop the flags only the engine may set from what `execute()` returned (#1016).
+ * The type already forbids them; this catches plain JS and casts, so a game
+ * cannot code its own refusal as a crash and change what a host decides.
+ */
+function withoutEngineFlags(actionName: string, returned: ExecuteResult): ActionResult {
+  const smuggled = ENGINE_ONLY_FLAGS.filter((flag) => returned[flag] !== undefined);
+  if (smuggled.length === 0) return returned;
+  console.error(
+    `[BoardSmith] Action '${actionName}' returned ${smuggled.join(', ')} from execute(). ` +
+      'Only the engine sets these, so they were dropped. Refuse with ' +
+      "{ success: false, error: 'why' }; a crash is reported by throwing.",
+  );
+  const result: ActionResult = { ...returned };
+  for (const flag of smuggled) delete result[flag];
+  return result;
 }
 
 /**
@@ -130,7 +156,8 @@ function failedExecute(actionName: string, error: unknown): ActionResult {
  * Not `partiallyApplied`. The author believed they were refusing cleanly, and a clean
  * refusal mutated nothing, so there is nothing for the runner to roll back.
  */
-function acceptExecuteResult(actionName: string, result: ActionResult): ActionResult {
+function acceptExecuteResult(actionName: string, returned: ExecuteResult): ActionResult {
+  const result = withoutEngineFlags(actionName, returned);
   if (result.success) return result;
   if (typeof result.error === 'string' && result.error.trim() !== '') return result;
 
@@ -370,7 +397,18 @@ export interface PerformOptions {
    * this, for the seat that owns the follow-up.
    */
   followUp?: FollowUpAction;
+  /**
+   * Called once the checks accept the submission, with the args `execute`
+   * receives, before `onSelect` or `execute` changes the game: how a host
+   * records the move that ran without checking it a second time (#1128). Not
+   * called for an action with a repeating selection, whose picks change the
+   * game while they are checked.
+   */
+  onAccepted?: AcceptedArgs;
 }
+
+/** Receives a submission's args once the action's checks accept them. */
+export type AcceptedArgs = (args: Record<string, unknown>) => void;
 
 /** The element an id a player sent names, or undefined. */
 type SeatIdReader = (id: number) => GameElement | undefined;
@@ -602,7 +640,7 @@ export class ActionExecutor {
     return (id) => {
       // A direct hit first: a game restored from a seat's view (a bot's search) holds its placeholders as real elements.
       const element = game.getElementById(id);
-      if (element || id >= 0 || !player) return element;
+      if (element || !isPositionalPlaceholderId(id) || !player) return element;
       realIdOf ??= new Map([...placeholderIdsFor(this.game, player.seat)].map(([real, placeholder]) => [placeholder, real]));
       const realId = realIdOf.get(id);
       return realId === undefined ? undefined : game.getElementById(realId);
@@ -1019,32 +1057,15 @@ export class ActionExecutor {
     // Type-specific validation
     switch (selection.type) {
       case 'text': {
-        const textSel = selection as TextSelection;
-        const str = value as string;
-        if (typeof str !== 'string') {
-          errors.push(`${selection.name} must be a string`);
-        } else {
-          // The bounds live in `text-rules.ts` because the Action Panel has to
-          // apply the same ones to tell a player why their text will be refused
-          // before they submit it (#229). Two copies of these three checks is
-          // two rule sets that drift.
-          errors.push(...textRuleErrors(selection.name, str, textSel));
-        }
+        // The bounds live in `text-rules.ts` because the Action Panel and a
+        // custom UI's `fill` apply the same ones before submitting (#229, #1057).
+        errors.push(...textRuleErrors(selection.name, value, selection as TextSelection));
         break;
       }
 
       case 'number': {
-        const numSel = selection as NumberSelection;
-        const num = value as number;
-        if (typeof num !== 'number' || isNaN(num)) {
-          errors.push(`${selection.name} must be a number`);
-        } else {
-          // The bounds live in `number-rules.ts` because the Action Panel has to
-          // apply the same ones to tell a player why their number will be
-          // refused before they submit it (#237), exactly as the text case above
-          // does. Two copies of these three checks is two rule sets that drift.
-          errors.push(...numberRuleErrors(selection.name, num, numSel));
-        }
+        // The bounds live in `number-rules.ts` for the same reason (#237, #1057).
+        errors.push(...numberRuleErrors(selection.name, value, selection as NumberSelection));
         break;
       }
     }
@@ -1201,7 +1222,9 @@ export class ActionExecutor {
   }
 
   /**
-   * Validate all arguments for an action
+   * Validate all arguments for an action. A repeating selection's picks are
+   * not made here, since their `onEach` changes the game: `acceptsSubmission`
+   * (utils/enumerate-moves) judges those on a copy (#1101).
    */
   validateAction(
     action: ActionDefinition,
@@ -1225,6 +1248,8 @@ export class ActionExecutor {
     args: Record<string, unknown>,
     options?: PerformOptions,
   ): { args: Record<string, unknown> } | { error: string } {
+    // A held follow-up's args over the client's.
+    args = { ...args, ...options?.followUp?.args };
     // A follow-up is offered by the chain, not its condition. The condition
     // sees no picks, as availability and each pick-by-pick step see it.
     const resolved = this.resolveNonPickArgs(action, args, this.game);
@@ -1289,10 +1314,10 @@ export class ActionExecutor {
       return this.executeThroughSelectionSteps(action, player, args, options);
     }
 
-    // A held follow-up's args over the client's.
-    const checked = this.checkSubmission(action, player, { ...args, ...options?.followUp?.args }, options);
+    const checked = this.checkSubmission(action, player, args, options);
     if ('error' in checked) return { success: false, error: checked.error };
     const resolvedArgs = checked.args;
+    options?.onAccepted?.(resolvedArgs);
 
     // Fire onSelect for each selection that has it (before execute).
     // A throwing onSelect must ABORT the action (fail loud): fire onCancel for
@@ -1303,10 +1328,9 @@ export class ActionExecutor {
     for (const selection of action.selections) {
       if (selection.onSelect && resolvedArgs[selection.name] != null) {
         try {
-          changing(this.game._ctx, () => (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(resolvedArgs[selection.name], onSelectCtx));
+          actingFor(this.game._ctx, player.seat, () => (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(resolvedArgs[selection.name], onSelectCtx));
           firedSelections.push(selection);
         } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
           // Compensate: run onCancel for selections whose onSelect already fired.
           for (const fired of firedSelections) {
             if (fired.onCancel) {
@@ -1317,10 +1341,7 @@ export class ActionExecutor {
               }
             }
           }
-          return {
-            success: false,
-            error: `onSelect for selection '${selection.name}' in action '${action.name}' threw: ${message}`,
-          };
+          return pickHookThrew(action, 'onSelect', selection, error);
         }
       }
     }
@@ -1337,7 +1358,7 @@ export class ActionExecutor {
   /** Run an action's `execute`, the one place it is called, as game code that changes the game (#631). */
   private runExecute(action: ActionDefinition, args: Record<string, unknown>, context: ActionContext): ActionResult {
     try {
-      const result = changing(this.game._ctx, () => action.execute(args, context));
+      const result = actingFor(this.game._ctx, context.player.seat, () => action.execute(args, context));
       return result ? acceptExecuteResult(action.name, result) : { success: true };
     } catch (error) {
       return failedExecute(action.name, error);
@@ -1365,10 +1386,31 @@ export class ActionExecutor {
     args: Record<string, unknown>,
     options?: PerformOptions,
   ): ActionResult {
-    // The condition sees no picks, as availability and each step see it; the picks are checked one at a time below (#772).
-    const context = { game: this.game, player, args: this.resolveNonPickArgs(action, args, this.game) };
-    if (!options?.followUp && action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
-      return { success: false, error: 'Action is not available' };
+    const fed = this.feedThroughSelectionSteps(action, player, args, options);
+    if ('error' in fed) {
+      return { success: false, error: fed.error, rulesError: fed.rulesError, ...(fed.applied && { partiallyApplied: true }) };
+    }
+    const result = this.executePendingAction(action, player, fed.pendingState);
+    return !result.success && fed.applied ? { ...result, partiallyApplied: true } : result;
+  }
+
+  /**
+   * A whole submission's picks made through the selection steps, as
+   * {@link executeThroughSelectionSteps} makes them before `execute`: the
+   * pending action they complete, or why they were refused. `applied` says
+   * whether a callback that can change the game (`onSelect`, `onEach`) ran, so
+   * the game is not as it was. Ask {@link pendingActionRefusal} of the pending
+   * action for the action-level gate.
+   */
+  feedThroughSelectionSteps(
+    action: ActionDefinition,
+    player: Player,
+    args: Record<string, unknown>,
+    options?: PerformOptions,
+  ): { pendingState: PendingActionState; applied: boolean } | { error: string; applied: boolean; rulesError?: boolean } {
+    // The condition first, with no picks, as the offer checks it; the picks are checked one at a time below (#772, #1129).
+    if (!options?.followUp && !this.conditionHolds(action, player)) {
+      return { error: 'Action is not available', applied: false };
     }
 
     const pendingState = this.createPendingActionState(action.name, player.seat);
@@ -1380,12 +1422,10 @@ export class ActionExecutor {
       applied ||= step.applied;
       if (step.error !== undefined) {
         this.fireOnCancelCallbacks(action, pendingState);
-        return { success: false, error: step.error, ...(applied && { partiallyApplied: true }) };
+        return { error: step.error, applied, rulesError: step.rulesError };
       }
     }
-
-    const result = this.executePendingAction(action, player, pendingState);
-    return !result.success && applied ? { ...result, partiallyApplied: true } : result;
+    return { pendingState, applied };
   }
 
   /**
@@ -1399,10 +1439,10 @@ export class ActionExecutor {
     pendingState: PendingActionState,
     selection: Selection,
     value: unknown
-  ): { error?: string; applied: boolean } {
+  ): FedPick {
     if (!this.isRepeatingSelection(selection)) {
       const step = this.processSelectionStep(action, player, pendingState, selection.name, value);
-      return { error: step.success ? undefined : step.error, applied: false };
+      return { error: step.success ? undefined : step.error, applied: step.partiallyApplied === true, rulesError: step.rulesError };
     }
     if (value === undefined || value === null) {
       if (!selection.optional) return { error: `Missing required selection: ${selection.name}`, applied: false };
@@ -1428,7 +1468,8 @@ export class ActionExecutor {
    * (`passBoundPick`): `submitted` is not read for it. A key of `submitted`
    * that names no pick is refused (#662), and so is a `selectionName` that names none (#776).
    *
-   * Returns why a pick was refused, or `undefined` when every pick was made.
+   * Returns why a pick was refused, and whether the rules crashed (#1142), or
+   * `undefined` when every pick was made.
    */
   makePicksBefore(
     action: ActionDefinition,
@@ -1436,18 +1477,18 @@ export class ActionExecutor {
     pendingState: PendingActionState,
     selectionName: string,
     submitted: Record<string, unknown>
-  ): string | undefined {
+  ): { error: string; rulesError?: boolean } | undefined {
     const refusal = this.undeclaredArgsRefusal(action, submitted);
-    if (refusal) return refusal;
+    if (refusal) return { error: refusal };
     const target = action.selections.findIndex(s => s.name === selectionName);
     if (target === -1) {
-      return `'${action.name}' has no pick named '${selectionName}'. It takes: ${action.selections.map(s => s.name).join(', ')}.`;
+      return { error: `'${action.name}' has no pick named '${selectionName}'. It takes: ${action.selections.map(s => s.name).join(', ')}.` };
     }
     while (pendingState.currentSelectionIndex < target) {
       if (this.passBoundPick(action, pendingState)) continue;
       const selection = action.selections[pendingState.currentSelectionIndex];
-      const { error } = this.feedSelection(action, player, pendingState, selection, submitted[selection.name]);
-      if (error !== undefined) return error;
+      const { error, rulesError } = this.feedSelection(action, player, pendingState, selection, submitted[selection.name]);
+      if (error !== undefined) return { error, rulesError };
     }
     return undefined;
   }
@@ -1500,7 +1541,7 @@ export class ActionExecutor {
     pendingState: PendingActionState,
     selection: Selection,
     picks: unknown[]
-  ): { error?: string; applied: boolean } {
+  ): FedPick {
     const index = pendingState.currentSelectionIndex;
     let applied = false;
     for (const [pickIndex, pick] of picks.entries()) {
@@ -1509,6 +1550,8 @@ export class ActionExecutor {
       }
       const step = this.feedRepeatPick(action, player, pendingState, selection, pick);
       applied ||= step.applied;
+      // The shared crash sentence stands alone, as on every other route.
+      if (step.rulesError) return { ...step, applied };
       if (step.error) return { error: `Pick ${pickIndex + 1} of "${selection.name}": ${step.error}`, applied };
     }
     if (pendingState.repeating) {
@@ -1529,13 +1572,13 @@ export class ActionExecutor {
     pendingState: PendingActionState,
     selection: Selection,
     pick: unknown
-  ): { error?: string; applied: boolean } {
+  ): FedPick {
     const iterationsBefore = pendingState.repeating?.iterationCount ?? 0;
     const step = this.processRepeatingStep(action, player, pendingState, this.repeatPickValue(selection, pick));
     // A pick that got past validation has run onSelect/onEach, even when they
     // then failed, so the game may have changed.
     const applied = !step.error || (pendingState.repeating?.iterationCount ?? 0) > iterationsBefore;
-    return { error: step.error, applied };
+    return { error: step.error, applied, rulesError: step.rulesError };
   }
 
   private repeatShapeError(selection: Selection, value: unknown): string {
@@ -1583,16 +1626,17 @@ export class ActionExecutor {
     return this.hasValidSelectionPath(action.selections, player, resolved, 0, action.name);
   }
 
-  isActionAvailable(action: ActionDefinition, player: Player): boolean {
-    const context: ActionContext = {
-      game: this.game,
-      player,
-      args: {},
-    };
+  /** Whether the action's condition offers it to `player`, with empty args as availability sees it. */
+  conditionHolds(action: ActionDefinition, player: Player): boolean {
+    return !action.condition
+      || evaluateCondition(action.condition, { game: this.game, player, args: {} }, `action '${action.name}'`);
+  }
 
-    if (action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
-      return false;
-    }
+  isActionAvailable(action: ActionDefinition, player: Player): boolean {
+    if (!this.conditionHolds(action, player)) return false;
+
+    // Its own `.disabled()` reason keeps it offered, greyed, even with no enabled pick, so the reason reaches the player (#1090).
+    if (this.game.getActionDisabledReason(action, player) !== null) return true;
 
     // Check if there's at least one valid path through all selections.
     // Pass action.name so tutorial gate disabled reasons are included when
@@ -1643,7 +1687,7 @@ export class ActionExecutor {
     // whether the action is offered is decided by the very walk that offers it,
     // so a trace can never name a reason the offer does not act on.
     this.traceSelectionPath(action.selections, player, trace.selections);
-    trace.available = this.hasValidSelectionPath(action.selections, player, {}, 0, action.name);
+    trace.available = this.isActionAvailable(action, player);
     return trace;
   }
 
@@ -1999,7 +2043,7 @@ export class ActionExecutor {
     player: Player,
     pendingState: PendingActionState,
     value: unknown
-  ): { done: boolean; nextChoices?: ChoiceWithRefs[]; error?: string; warnings?: WarningEntry[] } {
+  ): { done: boolean; nextChoices?: ChoiceWithRefs[]; error?: string; rulesError?: boolean; warnings?: WarningEntry[] } {
     if (this.passBoundPick(action, pendingState)) return { done: true };
     const selection = action.selections[pendingState.currentSelectionIndex];
     if (!selection) {
@@ -2067,21 +2111,18 @@ export class ActionExecutor {
     if (isFirstIteration && selection.onSelect) {
       try {
         const ctx = this.createOnSelectContext();
-        changing(this.game._ctx, () => (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(chosen, ctx));
+        this.runPickCallback(pendingState, () => (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(chosen, ctx));
 
         if (!pendingState.onSelectFired) {
           pendingState.onSelectFired = new Set();
         }
         pendingState.onSelectFired.add(pendingState.currentSelectionIndex);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
         // Fail loud: a throwing onSelect aborts the action. Fire onCancel for
         // selections whose onSelect already fired, then return an error.
         this.fireOnCancelCallbacks(action, pendingState);
-        return {
-          done: false,
-          error: `onSelect for selection '${selection.name}' in action '${action.name}' threw: ${message}`,
-        };
+        const crashed = pickHookThrew(action, 'onSelect', selection, error);
+        return { done: false, error: crashed.error, rulesError: crashed.rulesError };
       }
     }
 
@@ -2092,9 +2133,10 @@ export class ActionExecutor {
     // Run onEach callback if present
     if (repeatConfig?.onEach) {
       try {
-        changing(this.game._ctx, () => repeatConfig.onEach!(context, chosen));
+        this.runPickCallback(pendingState, () => repeatConfig.onEach!(context, chosen));
       } catch (error) {
-        return { done: true, error: error instanceof Error ? error.message : String(error) };
+        const crashed = pickHookThrew(action, 'onEach', selection, error);
+        return { done: true, error: crashed.error, rulesError: crashed.rulesError };
       }
     }
 
@@ -2114,7 +2156,8 @@ export class ActionExecutor {
       try {
         isDone = repeatConfig.until(context, chosen);
       } catch (error) {
-        return { done: true, error: error instanceof Error ? error.message : String(error) };
+        const crashed = pickHookThrew(action, 'until', selection, error);
+        return { done: true, error: crashed.error, rulesError: crashed.rulesError };
       }
     }
 
@@ -2149,15 +2192,46 @@ export class ActionExecutor {
   }
 
   /**
-   * Create initial pending action state for an action.
+   * Create initial pending action state for an action. `recorded` when a host
+   * records the action in its history: its picks' callbacks then note where
+   * they moved elements from, in `branchesBeforePicks` (#1144).
    */
-  createPendingActionState(actionName: string, playerPosition: number): PendingActionState {
+  createPendingActionState(actionName: string, playerPosition: number, recorded = false): PendingActionState {
     return {
       actionName,
       playerPosition,
       collectedArgs: {},
       currentSelectionIndex: 0,
+      ...(recorded && { branchesBeforePicks: {} }),
     };
+  }
+
+  /**
+   * Run a pick's `onSelect` or `onEach`. In a recorded pending action, note in
+   * `branchesBeforePicks` the branch each element had before the first such
+   * callback that moved it, and `null` for one it created, so the history
+   * entry can name every pick where it was before the action (#1144).
+   */
+  private runPickCallback(pendingState: PendingActionState, run: () => void): void {
+    const noted = pendingState.branchesBeforePicks;
+    // World mode records elements by id, which no move changes.
+    const seat = pendingState.playerPosition;
+    if (!noted || this.game._ctx._worldMode) {
+      actingFor(this.game._ctx, seat, run);
+      return;
+    }
+    const before = branchesById(this.game);
+    try {
+      actingFor(this.game._ctx, seat, run);
+    } finally {
+      // Also after a throw: what the callback moved before it threw stays moved.
+      const after = branchesById(this.game);
+      // Replaced, not changed in place, so a copy of the state taken earlier keeps what it had.
+      const moved = { ...noted };
+      for (const [id, branch] of before) if (!(id in moved) && after.get(id) !== branch) moved[id] = branch;
+      for (const id of after.keys()) if (!before.has(id) && !(id in moved)) moved[id] = null;
+      pendingState.branchesBeforePicks = moved;
+    }
   }
 
   /**
@@ -2170,7 +2244,7 @@ export class ActionExecutor {
     pendingState: PendingActionState,
     selectionName: string,
     value: unknown
-  ): { success: boolean; error?: string } {
+  ): ActionResult {
     const selectionIndex = action.selections.findIndex(s => s.name === selectionName);
     if (selectionIndex === -1) {
       return { success: false, error: `Selection ${selectionName} not found` };
@@ -2187,7 +2261,7 @@ export class ActionExecutor {
     // If it's a repeating selection, delegate to processRepeatingStep
     if (this.isRepeatingSelection(selection)) {
       const result = this.processRepeatingStep(action, player, pendingState, value);
-      return { success: !result.error, error: result.error };
+      return { success: !result.error, error: result.error, rulesError: result.rulesError };
     }
 
     // Skipping an optional selection: a null/undefined value means "no choice".
@@ -2219,7 +2293,7 @@ export class ActionExecutor {
     if (selection.onSelect) {
       try {
         const ctx = this.createOnSelectContext();
-        changing(this.game._ctx, () => (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(resolvedValue, ctx));
+        this.runPickCallback(pendingState, () => (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(resolvedValue, ctx));
 
         // Track that onSelect fired for this selection (for onCancel)
         if (!pendingState.onSelectFired) {
@@ -2227,13 +2301,9 @@ export class ActionExecutor {
         }
         pendingState.onSelectFired.add(selectionIndex);
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
         // Compensate: run onCancel for selections whose onSelect already fired.
         this.fireOnCancelCallbacks(action, pendingState);
-        return {
-          success: false,
-          error: `onSelect for selection '${selection.name}' in action '${action.name}' threw: ${message}`,
-        };
+        return pickHookThrew(action, 'onSelect', selection, error);
       }
     }
 
@@ -2347,4 +2417,11 @@ export class ActionExecutor {
     }
     return null;
   }
+}
+
+/** Every element's branch, by id, in the game's tree and its pile. */
+function branchesById(game: Game): Map<number, string> {
+  const branches = new Map<number, string>();
+  for (const root of [game, game.pile]) forEachInSubtree(root, (element) => branches.set(element.id, element.branch()));
+  return branches;
 }

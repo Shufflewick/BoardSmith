@@ -2,6 +2,7 @@ import {
   chunkMdPath,
   designDir,
   designRulebookDir,
+  readChunkMdIfExists,
   relChunkMdPath,
   requireChunkSlugs,
   DESIGN_DIR,
@@ -9,8 +10,9 @@ import {
 import { assertBareName } from '../lib/user-name.js';
 import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
+import { readIfExists } from '../lib/read-if-exists.js';
 import { basename, join, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { normalizeEdition } from './ingest-archive.js';
 import {
   NON_SLICE_FILES,
@@ -22,7 +24,7 @@ import {
 import { ENGINE_REVISION } from '../../contract/index.js';
 import { hashSkillsTree } from '../lib/skills-tree-hash.js';
 import { findHeadingIndex } from './build-manifest.js';
-import { type SharedEdit, assessSignoffs, checkSignoff } from './chunk-signoff.js';
+import { type SharedEdit, assessSignoffs, checkSignoff, readStatus } from './chunk-signoff.js';
 
 /**
  * `computeVerificationScope()` / `resolveCitedSlices()` — the two pure computations behind
@@ -117,12 +119,7 @@ export interface VerificationScope {
 }
 
 async function exists(path: string): Promise<boolean> {
-  try {
-    await fs.access(path);
-    return true;
-  } catch {
-    return false;
-  }
+  return (await readIfExists(path, fs.stat)) !== undefined;
 }
 
 /**
@@ -145,12 +142,8 @@ export async function computeVerificationScope(projectDir: string): Promise<Veri
   }
 
   const indexPath = join(rulebookDir, 'INDEX.md');
-  let index: string;
-  try {
-    index = await fs.readFile(indexPath, 'utf-8');
-  } catch {
-    return { scope: SCOPE_CODE_ONLY, reason: 'index-missing' };
-  }
+  const index = await readIfExists(indexPath, (p) => fs.readFile(p, 'utf-8'));
+  if (index === undefined) return { scope: SCOPE_CODE_ONLY, reason: 'index-missing' };
 
   // A project's ADDITIONAL sources (`## Additional Sources`, `ingest-archive.ts`) are checked the
   // same way as the primary (archived file exists AND its SHA-256 matches), and reported whatever
@@ -174,14 +167,7 @@ export async function computeVerificationScope(projectDir: string): Promise<Veri
   // (`rulebook/source/rules.pdf`), not to the project root. Resolving it anywhere else silently
   // reports `source-missing` on a project whose source is right there.
   const archivedFullPath = sourcePath ? join(designDir(dir), sourcePath) : undefined;
-  let archivedBuf: Buffer | undefined;
-  if (archivedFullPath) {
-    try {
-      archivedBuf = await fs.readFile(archivedFullPath);
-    } catch {
-      archivedBuf = undefined;
-    }
-  }
+  const archivedBuf = archivedFullPath === undefined ? undefined : await readIfExists(archivedFullPath, (p) => fs.readFile(p));
   if (!archivedBuf) {
     return {
       scope: SCOPE_CODE_ONLY,
@@ -291,10 +277,8 @@ async function verifyAdditionalSources(
   const failedAdditionalSources: NonNullable<VerificationScope['failedAdditionalSources']> = [];
   for (const record of parseAdditionalSources(index)) {
     const row = { sourcePath: record.path, sourceHash: record.sourceHash };
-    let buf: Buffer;
-    try {
-      buf = await fs.readFile(join(designDir(dir), record.path));
-    } catch {
+    const buf = await readIfExists(join(designDir(dir), record.path), (p) => fs.readFile(p));
+    if (buf === undefined) {
       failedAdditionalSources.push({ ...row, reason: 'additional-source-missing' });
       continue;
     }
@@ -413,16 +397,6 @@ export const VERIFIED_AGAINST_END = '<!-- boardsmith:verified-against:end -->';
  * copy. Changing one is a breaking change, mirroring `INDEX_HEADINGS`/`HEADER_LABELS` in
  * `ingest-archive.ts`.
  */
-/**
- * The ninth label, appended (175-CONTEXT.md decision 11), is a genuinely NEW concept — not a
- * reuse of `SCOPE_REASONS` above. Research measured that `## Verified Against` today has NO
- * timestamp and NO signal for "this run found no code change", and that `SCOPE_REASONS` encodes
- * something else entirely: WHY a verification's SCOPE was reduced (source unreadable/missing/
- * mismatched), never WHETHER a chunk's code moved. The stamp's value embeds its own evidence
- * (`<recorded-verified-hash>..<head> — 0 manifest files changed`) rather than asserting a bare
- * boolean (T-175-07), because the block itself carries no timestamp — a human reading CHUNK.md
- * cannot otherwise tell how fresh the claim is without a `git blame`.
- */
 export const VERIFIED_AGAINST_LABELS = Object.freeze([
   'Scope:',
   'Reason:',
@@ -432,7 +406,6 @@ export const VERIFIED_AGAINST_LABELS = Object.freeze([
   'Skills tree hash:',
   'Cited slices:',
   'Unresolved citations:',
-  'Re-verified (no code change):',
   'Additional source hash:',
 ] as const);
 
@@ -445,7 +418,6 @@ const [
   LABEL_SKILLS_HASH,
   LABEL_CITED,
   LABEL_UNRESOLVED,
-  LABEL_REVERIFIED,
   LABEL_ADDITIONAL_SOURCE,
 ] = VERIFIED_AGAINST_LABELS;
 
@@ -495,15 +467,6 @@ export interface VerifiedAgainstRecord {
   skillsTreeHash: string;
   citedSlices: Array<{ path: string; hash: string }>;
   unresolved: string[];
-  /**
-   * 175-CONTEXT.md decision 11's re-verification stamp — present ONLY when this run re-verified a
-   * chunk whose code did NOT move. The value names its own evidence (the drift comparison that
-   * justifies the claim), formatted `<recorded-verified-hash>..<head> — 0 manifest files changed`,
-   * rather than asserting a bare boolean. Omitted entirely (never rendered as an empty line) when
-   * absent — this run either did not re-verify, or found code that DID change (decision 12: goes
-   * to `built` instead, no stamp).
-   */
-  reverifiedNoCodeChange?: string;
 }
 
 /**
@@ -523,9 +486,6 @@ export function renderVerifiedAgainst(record: VerifiedAgainstRecord): string {
   }
   lines.push(`${LABEL_ENGINE} ${record.engineRevision}`);
   lines.push(`${LABEL_SKILLS_HASH} ${record.skillsTreeHash}`);
-  if (record.reverifiedNoCodeChange) {
-    lines.push(`${LABEL_REVERIFIED} ${record.reverifiedNoCodeChange}`);
-  }
   lines.push('');
   lines.push(LABEL_CITED);
   lines.push('');
@@ -646,12 +606,6 @@ export async function verifiedAgainstIsCurrent(projectDir: string, slug: string)
 
 interface VerifiedAgainstOptions {
   project?: string;
-  /**
-   * 175-CONTEXT.md decision 11's stamp value — the drift comparison evidence justifying a
-   * "re-verified, no code change" claim (e.g. `<hash>..<head> — 0 manifest files changed`).
-   * When supplied, writes the `Re-verified (no code change):` label; omitted otherwise.
-   */
-  reverifiedNoCodeChange?: string;
 }
 
 /** A block written before #440, whose `BoardSmith version:` line names no engine. */
@@ -708,10 +662,8 @@ async function planVerifiedAgainst(
   const chunkPath = chunkMdPath(projectDir, slug);
   const relChunkPath = relChunkMdPath(slug);
 
-  let chunkText: string;
-  try {
-    chunkText = await fs.readFile(chunkPath, 'utf-8');
-  } catch {
+  const chunkText = await readIfExists(chunkPath, (p) => fs.readFile(p, 'utf-8'));
+  if (chunkText === undefined) {
     throw new Error(
       `No chunk found at ${relChunkPath} in ${projectDir}.\n` +
         `Check the slug, or run \`boardsmith chunk-provenance-status\` to list known chunks.`,
@@ -721,14 +673,10 @@ async function planVerifiedAgainst(
   const projectScope = await computeVerificationScope(projectDir);
 
   const rulebookDir = designRulebookDir(projectDir);
-  let sliceFilenames: string[] = [];
-  try {
-    sliceFilenames = (await fs.readdir(rulebookDir)).filter(
-      (f) => f.endsWith('.md') && f !== 'INDEX.md',
-    );
-  } catch {
-    sliceFilenames = []; // no rulebook/ at all — nothing to resolve against
-  }
+  // No rulebook/ at all: nothing to resolve against.
+  const sliceFilenames = ((await readIfExists(rulebookDir, (p) => fs.readdir(p))) ?? []).filter(
+    (f) => f.endsWith('.md') && f !== 'INDEX.md',
+  );
 
   // The heading position in the file AS READ, before this run writes anything. Computed once and
   // reused both for scanning citations and for locating where to write below.
@@ -763,9 +711,6 @@ async function planVerifiedAgainst(
     skillsTreeHash: await hashSkillsTree(projectDir),
     citedSlices,
     unresolved,
-    ...(options.reverifiedNoCodeChange
-      ? { reverifiedNoCodeChange: options.reverifiedNoCodeChange }
-      : {}),
   };
 
   const newBody = renderVerifiedAgainst(record);
@@ -824,7 +769,7 @@ function reportUpToDate(
   engineRecorded: number | undefined,
 ): void {
   console.log(
-    chalk.green(
+    styleText('green',
       `✓ ${relChunkMdPath(slug)} — Verified Against up to date (${record.scope}${record.reason ? `, ${record.reason}` : ''})`,
     ),
   );
@@ -875,15 +820,6 @@ export async function chunkCheckCommand(
   options: {
     project?: string;
     json?: boolean;
-    /**
-     * 175-CONTEXT.md decision 11's stamp value — the drift comparison evidence justifying a
-     * "re-verified, no code change" claim (e.g. `<hash>..<head> — 0 manifest files changed`).
-     * When supplied, writes the `Re-verified (no code change):` label; omitted otherwise. The
-     * `--reverified-no-code-change <range>` CLI flag itself is registered by plan 175-04 in
-     * `cli.ts`, to keep that file in one plan's `files_modified` — this option is exposed here
-     * only, ready for that registration to pass through.
-     */
-    reverifiedNoCodeChange?: string;
   } = {},
 ): Promise<void> {
   // `<slug>` NAMES a chunk, it does not LOCATE one (#240). Refused before it is
@@ -910,10 +846,7 @@ export async function chunkCheckCommand(
     previousBody,
     skillsTreeChanged,
     engineRecorded,
-  } = await recordVerifiedAgainst(slug, {
-    project: options.project,
-    reverifiedNoCodeChange: options.reverifiedNoCodeChange,
-  });
+  } = await recordVerifiedAgainst(slug, { project: options.project });
   const record = { scope: recordScope, reason: recordReason };
 
   // #291: a verified Status must be backed by a recorded sign-off. Nothing here can be repaired:
@@ -938,7 +871,7 @@ export async function chunkCheckCommand(
 
   if (signoffProblems.length) {
     if (!options.json) {
-      console.error(chalk.red(`${relChunkPath}'s verified status is not backed by a valid sign-off:`));
+      console.error(styleText('red', `${relChunkPath}'s verified status is not backed by a valid sign-off:`));
       for (const p of signoffProblems) console.error(`  • ${p}`);
       console.error('');
     }
@@ -967,13 +900,13 @@ export async function chunkCheckCommand(
       if (!bullets.length) bullets.push('provenance fields refreshed');
     }
 
-    console.error(chalk.yellow(`${relChunkPath}'s "${VERIFIED_AGAINST_HEADING}" was out of sync. It has been REPAIRED:`));
+    console.error(styleText('yellow', `${relChunkPath}'s "${VERIFIED_AGAINST_HEADING}" was out of sync. It has been REPAIRED:`));
     for (const b of bullets) {
       console.error(`  • ${b}`);
     }
     console.error('');
-    console.error(chalk.yellow(`Re-read ${relChunkPath} before continuing — the copy you have is stale.`));
-    console.error(chalk.dim(`Then re-run \`boardsmith chunk-check ${slug}\`; it will pass.`));
+    console.error(styleText('yellow', `Re-read ${relChunkPath} before continuing — the copy you have is stale.`));
+    console.error(styleText('dim', `Then re-run \`boardsmith chunk-check ${slug}\`; it will pass.`));
   }
 
   // Set the exit code rather than throwing: `program.parse()` does not await action handlers, so
@@ -1022,12 +955,6 @@ export interface ParsedVerifiedAgainst {
   skillsTreeHash?: string;
   citedSlices: string[];
   unresolved: string[];
-  /**
-   * 175-CONTEXT.md decision 11's re-verification stamp, round-tripped. `undefined` when the label
-   * is ABSENT — an eight-label block predates this change and is not malformed (an old block
-   * parsing as valid, not as damaged, is the whole point of appending rather than restructuring).
-   */
-  reverifiedNoCodeChange?: string;
   /**
    * true only when a "## Verified Against" HEADING exists but its body could not be parsed (a
    * fence missing, a required label removed). Distinct from the ordinary "no heading at all"
@@ -1078,11 +1005,7 @@ export function parseVerifiedAgainst(chunkText: string): ParsedVerifiedAgainst {
   if (body === VERIFIED_AGAINST_EMPTY) return unparsed(false); // freshly scaffolded, never run
 
   const readLabel = (label: string): string | undefined => {
-    // Escape regex metacharacters (T-175-XX): `LABEL_REVERIFIED` is
-    // 'Re-verified (no code change):' — the parentheses are literal text in the label, not a
-    // regex capture group, and an unescaped label would silently fail to match.
-    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const match = new RegExp(`^${escaped}\\s*(.*)$`, 'm').exec(body);
+    const match = new RegExp(`^${label}\\s*(.*)$`, 'm').exec(body);
     return match ? match[1].trim() : undefined;
   };
 
@@ -1091,8 +1014,6 @@ export function parseVerifiedAgainst(chunkText: string): ParsedVerifiedAgainst {
   const sourceHashRaw = readLabel(LABEL_SOURCE_HASH);
   const engineRaw = ENGINE_LINE_RE.exec(body)?.[1];
   const skillsHashRaw = readLabel(LABEL_SKILLS_HASH);
-  // Absence is valid — an eight-label block predates decision 11's append and is not malformed.
-  const reverifiedNoCodeChangeRaw = readLabel(LABEL_REVERIFIED);
 
   if (
     (scopeRaw !== SCOPE_FULL && scopeRaw !== SCOPE_CODE_ONLY) ||
@@ -1147,9 +1068,6 @@ export function parseVerifiedAgainst(chunkText: string): ParsedVerifiedAgainst {
     skillsTreeHash: skillsHashRaw,
     citedSlices,
     unresolved,
-    ...(reverifiedNoCodeChangeRaw !== undefined
-      ? { reverifiedNoCodeChange: reverifiedNoCodeChangeRaw }
-      : {}),
     blockMalformed: false,
   };
 }
@@ -1229,6 +1147,13 @@ export interface ChunkProvenanceStatusResult {
   projectProvenanceState: 'pre-provenance' | 'partial' | 'complete' | 'empty';
 }
 
+// A Record over every `how`, so a new kind of cover fails typecheck until it has a label.
+const SHARED_EDIT_LABEL: Record<SharedEdit['how'], string> = {
+  'signed-off': 'signed off with',
+  'being-built': 'being built by',
+  merged: 'vouched for by the merge of',
+};
+
 /**
  * `boardsmith chunk-provenance-status [--json]` — enumerates `chunks/*␣/CHUNK.md`, parses each
  * one's `## Verified Against` block, and reports the three-state classification, edition/
@@ -1256,15 +1181,10 @@ export async function chunkProvenanceStatusCommand(
   const counts = { full: 0, codeConformanceOnly: 0, unknown: 0 };
 
   for (const slug of slugs) {
-    let chunkText: string;
-    try {
-      chunkText = await fs.readFile(chunkMdPath(projectDir, slug), 'utf-8');
-    } catch {
-      continue; // a chunks/<slug> dir with no CHUNK.md is not this command's problem to report
-    }
+    const chunkText = await readChunkMdIfExists(projectDir, slug);
+    if (chunkText === undefined) continue; // a chunks/<slug> dir with no CHUNK.md is not this command's problem to report
 
-    const statusMatch = /^Status:\s*(.*)$/m.exec(chunkText);
-    const status = statusMatch ? statusMatch[1].trim() : 'unknown';
+    const status = readStatus(chunkText) ?? 'unknown';
 
     const parsed = parseVerifiedAgainst(chunkText);
 
@@ -1346,7 +1266,7 @@ export async function chunkProvenanceStatusCommand(
   const engineKeys = Object.keys(byEngineRevision);
   if (editionKeys.length > 1 || skillsHashKeys.length > 1 || engineKeys.length > 1) {
     console.log('');
-    console.log(chalk.yellow('Drift:'));
+    console.log(styleText('yellow', 'Drift:'));
     if (editionKeys.length > 1) {
       for (const key of editionKeys) {
         console.log(`  edition ${key}: ${byEdition[key].join(', ')}`);
@@ -1372,7 +1292,7 @@ export async function chunkProvenanceStatusCommand(
     // `chunk-check` — goes unread too.
     if (projectProvenanceState === 'pre-provenance') {
       console.log(
-        chalk.yellow(
+        styleText('yellow',
           `NO RECORDED PROVENANCE YET — this project's verifications predate provenance ` +
             `recording, so all ${verifiedWithoutProvenance.length} verified chunk(s) lack a ` +
             `"${VERIFIED_AGAINST_HEADING}" block. This is expected for a project built before ` +
@@ -1382,7 +1302,7 @@ export async function chunkProvenanceStatusCommand(
       );
     } else {
       console.log(
-        chalk.red(
+        styleText('red',
           `VERIFIED WITHOUT PROVENANCE — this project DOES record provenance elsewhere, yet ` +
             `these chunks' Status claims verification with no valid ` +
             `"${VERIFIED_AGAINST_HEADING}" block behind it. That is the signature of a skipped ` +
@@ -1398,7 +1318,7 @@ export async function chunkProvenanceStatusCommand(
   if (verifiedWithoutSignoff.length) {
     console.log('');
     console.log(
-      chalk.red(
+      styleText('red',
         `VERIFIED WITHOUT SIGN-OFF: these chunks' Status claims verification that no valid ` +
           `designer sign-off backs. Set each back to built and have the designer sign it off ` +
           `with \`boardsmith chunk-signoff <slug>\`:`,
@@ -1414,11 +1334,11 @@ export async function chunkProvenanceStatusCommand(
     console.log('');
     console.log(
       `Shared files edited since sign-off (for information; each sign-off still stands, because ` +
-        `the chunk named signed off the edit or is building it):`,
+        `the chunk named signed off the edit or is building it, or the merge named vouched for it):`,
     );
     for (const { slug, edits } of signoffSharedEdits) {
       const described = edits.map((e) =>
-        `${e.path} (${e.how === 'signed-off' ? 'signed off with' : 'being built by'} ${e.coveredBy})`,
+        `${e.path} (${SHARED_EDIT_LABEL[e.how]} ${e.coveredBy})`,
       );
       console.log(`  • ${slug}: ${described.join(', ')}`);
     }

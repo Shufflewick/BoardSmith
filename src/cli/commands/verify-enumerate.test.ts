@@ -619,6 +619,49 @@ describe('composeArithmeticClaim', () => {
     if (!outcome.ok) expect(outcome.reason).toMatch(/does not mention the operand value 10/);
   });
 
+  it('does not count a page citation like (p.1) as mentioning operand 1 (#839)', () => {
+    const outcome = composeArithmeticClaim({
+      derivedLineText: 'Derived (p.1): 7 players each get cards, 7 in all.',
+      operation: 'multiply',
+      operands: [groundedNumeric('7 players.', 7, 'players'), groundedNumeric('1 card each.', 1, 'cards')],
+      claimedResult: { magnitude: 7, unit: 'cards', approximate: false },
+    });
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.reason).toMatch(/does not mention the operand value 1 /);
+  });
+
+  it('counts an operand mentioned as its own number, even at the end of a sentence (#839)', () => {
+    const outcome = composeArithmeticClaim({
+      derivedLineText: 'Derived (p.2): 7 players get 1. So 7 cards.',
+      operation: 'multiply',
+      operands: [groundedNumeric('7 players.', 7, 'players'), groundedNumeric('1 card each.', 1, 'cards')],
+      claimedResult: { magnitude: 7, unit: 'cards', approximate: false },
+    });
+    expect(outcome.ok).toBe(true);
+  });
+
+  it('counts operands written right after a letter, as in "7x4x4 = 112" and "x1.5" (#839)', () => {
+    const product = composeArithmeticClaim({
+      derivedLineText: 'Derived (p.3): 7x4x4 = 112 cards.',
+      operation: 'multiply',
+      operands: [
+        groundedNumeric('7 players.', 7, 'cards'),
+        groundedNumeric('4 suits.', 4, 'cards'),
+        groundedNumeric('4 ranks.', 4, 'cards'),
+      ],
+      claimedResult: { magnitude: 112, unit: 'cards', approximate: false },
+    });
+    expect(product.ok).toBe(true);
+
+    const scaled = composeArithmeticClaim({
+      derivedLineText: 'Derived (p.4): damage taken x1.5 over 2 hits (x3).',
+      operation: 'multiply',
+      operands: [groundedNumeric('x1.5 damage.', 1.5, 'damage'), groundedNumeric('2 hits.', 2, 'damage')],
+      claimedResult: { magnitude: 3, unit: 'damage', approximate: false },
+    });
+    expect(scaled.ok).toBe(true);
+  });
+
   it('refuses when computed result does not match the claimed result', () => {
     const derivedLineText = '7 x 4 x 4 = 112 in this text but claim says otherwise: 100.';
     const operands = [
@@ -971,6 +1014,32 @@ describe('QuoteVerifiedProvenance', () => {
     const provenance = await QuoteVerifiedProvenance.obtain(project);
     expect(provenance).not.toBeNull();
     expect(provenance?.sourceHash).toBe(sourceHash);
+  });
+
+  it('names a project folder it cannot list rather than finding no unarchived source in it (#1174)', async () => {
+    const project = join(dir, 'unlistable');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
+    await fs.mkdir(rulebookDir, { recursive: true });
+    const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes\n');
+    const relArchivedPath = 'rulebook/source/rules.pdf';
+    await fs.writeFile(
+      join(rulebookDir, 'INDEX.md'),
+      renderIndex({
+        gameName: 'game',
+        edition: 'First Printing 2020',
+        archivedPath: relArchivedPath,
+        sourceHash: createHash('sha256').update(sourceBuf).digest('hex'),
+        transcribed: '2026-07-28',
+      }),
+    );
+    await fs.mkdir(dirname(join(project, DESIGN_DIR, relArchivedPath)), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, relArchivedPath), sourceBuf);
+    await fs.chmod(project, 0o300);
+    try {
+      await expect(QuoteVerifiedProvenance.obtain(project)).rejects.toThrow(`Could not read ${project} (EACCES)`);
+    } finally {
+      await fs.chmod(project, 0o755);
+    }
   });
 
   it('is null when the archived source bytes no longer match the recorded hash', async () => {

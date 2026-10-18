@@ -49,6 +49,31 @@ project — the output of `buildExampleTranslationPayload` (`example-derivation.
 (`action`, transition only), `expected`, and the project's real exported symbol listing
 (`name`/`kind`/`module`, from `collectGameApiSurface`).
 
+**Declarations.** Under each listed symbol, indented, is its declaration exactly as the TypeScript
+compiler writes it in a `.d.ts` file for the game: a function's parameters and return type (every
+overload), a const's type (and its value, when its type is that literal value, as in
+`export declare const TICK_SECONDS = 0.05;`), an enum's member values, a class's constructor and
+public members. A second section, `Types those declarations reference`, gives the declarations of
+the types those mention that the game declares under `src/` (interfaces, type aliases, enums,
+classes), then the types those mention, nearest first, each once. Names from a package (such as
+`boardsmith`'s `Game` or `Player`) or the standard library appear in declarations but are not
+declared. None of this is an implementation: no function body, initializer expression, comment,
+or private or protected member is ever printed. Use the declarations to construct real values of
+the right shape and to call each symbol correctly; a declaration is the compiler's own, never a
+guess, so do not second-guess it either.
+
+Two markers replace a declaration:
+
+- `declaration unavailable: <reason>` — the compiler could not write one (the reason is its own
+  message, with module paths given relative to the project), or the name binds a whole module or
+  a default export. A reason already printed for an earlier entry reads `the same reason as
+  <name> above`.
+- `declaration omitted: ...` — the payload's declaration budget was spent before this entry.
+  Declarations are printed in listing order, then type order, until the budget is spent.
+
+The symbol itself is still listed and still importable under either marker; only its declaration
+is missing.
+
 **You never see, and are never told anything about:**
 
 - the slice's other content — no other worked example, no surrounding rule prose beyond what the
@@ -92,7 +117,10 @@ never an invented `isRun([5, 6, 7])`-shaped function that does not appear in the
 
 Whichever branch applies, use ONLY symbols that actually appear in the supplied
 `exportedSymbols` listing. The listing is mechanical, not curated for this example — not every
-symbol in it is relevant, but nothing outside it is usable.
+symbol in it is relevant, but nothing outside it is usable. A type in the referenced-types
+section may be imported with `import type` from the module it is listed at, under the name it is
+listed with, unless its entry is marked `not exported`: such a type is built by its shape, never
+imported.
 
 ---
 
@@ -101,10 +129,15 @@ symbol in it is relevant, but nothing outside it is usable.
 Guessing at an API that is not in the supplied surface is forbidden, and is the single most likely
 failure mode of this contract — say so plainly to yourself before writing any code. When no viable
 translation exists, return `unexecutable` with a `unexecutableReason` drawn from this enumerated
-list (state which one applies; do not invent a fourth without naming it as a genuine new case):
+list (state which one applies; do not invent another without naming it as a genuine new case):
 
 - **`no-matching-symbol`** — no symbol in the supplied `exportedSymbols` expresses this example's
-  action or predicate, under any name.
+  action or predicate, under any name. Read the declarations before choosing this: a helper whose
+  name does not suggest the example may still be the one its signature fits.
+- **`missing-api-declaration`** — a listed symbol does express the example, but its declaration,
+  or the declaration of a type you would need to construct its arguments, is marked
+  `declaration unavailable` or `declaration omitted`, so a correct call cannot be written without
+  guessing. Never use `no-matching-symbol` for this case: the symbol exists.
 - **`unmodeled-component-state`** — the example depends on component/element state the current
   chunk's exported surface does not model yet (e.g. a zone, a card kind, a flag that would need to
   exist for the example to be constructible, but does not appear anywhere in the surface).
@@ -152,7 +185,7 @@ orchestrator files your return, unchanged, under the `exampleId` it dispatched y
   testCode: string,           // required when a translation is possible; '' when unexecutable
   imports: string[],          // the import statements testCode depends on, one per entry
   verdictHint: "agrees" | "disagrees" | "unexecutable",   // ADVISORY ONLY — see below
-  unexecutableReason?: "no-matching-symbol" | "unmodeled-component-state" | "image-derived-indeterminate"
+  unexecutableReason?: "no-matching-symbol" | "missing-api-declaration" | "unmodeled-component-state" | "image-derived-indeterminate"
 }
 ```
 
@@ -163,7 +196,10 @@ orchestrator files your return, unchanged, under the `exampleId` it dispatched y
   file whose assertions every one of them "passed". **An emission whose `testCode` declares no
   top-level `it(...)`/`test(...)` is REJECTED outright, naming your example's
   `slicePath:lineNumber`, and nothing is written** — the same treatment a malformed `imports`
-  entry gets. Follow the target project's own `it(...)` idiom as shown in the payload. Leave
+  entry gets. The test must check the outcome with vitest's `expect(...)`: the CLI adds
+  `expect.hasAssertions()` to every example, so a test that makes no `expect` assertion fails, and
+  `verify-example-run` refuses it rather than recording a verdict. Follow the target project's
+  own `it(...)` idiom as shown in the payload. Leave
   `testCode` `''` only when `verdictHint` is `"unexecutable"`.
 - `imports` are the import statements the code needs, kept separate from `testCode` so the emitter
   can compose them predictably rather than parsing them back out of a code string.
@@ -174,7 +210,7 @@ orchestrator files your return, unchanged, under the `exampleId` it dispatched y
   is useful triage signal for a human or for build-time reporting — but do not treat it, or expect
   it to be treated, as the verdict of record.
 - `unexecutableReason` is REQUIRED when `verdictHint` is `"unexecutable"`, and must be one of the
-  three named reasons above — never omitted, never a free-form string in its place.
+  four named reasons above — never omitted, never a free-form string in its place.
 - **Never return the spec's fields back verbatim, and never return the project's exported-symbol
   listing back.** Return only the code, its imports, and your hint.
 

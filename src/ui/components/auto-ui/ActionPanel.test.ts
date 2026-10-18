@@ -27,7 +27,6 @@ import { mount } from '@vue/test-utils';
 import ActionPanel from './ActionPanel.vue';
 import { splitAnchoredChoices } from './action-panel-helpers.js';
 import type { ChoiceWithRefs } from '../../composables/useActionControllerTypes.js';
-import { DISABLED_TOOLTIP_ID } from '../../composables/useDisabledReasonTooltip.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 import { stubActionController } from './action-panel-controller.test-helper.js';
 import {
@@ -463,8 +462,9 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
     const btn = wrapper.find('[data-bs-action="build"]');
     expect(btn.attributes('aria-disabled')).toBe('true');
     expect(btn.attributes('data-bs-disabled-reason')).toBe('You need 3 wood; you have 1.');
-    // Points at the shared tooltip, so a screen reader reads the reason on focus.
-    expect(btn.attributes('aria-describedby')).toBe(DISABLED_TOOLTIP_ID);
+    // Described by a node holding the reason, there whether or not the tooltip shows (#865).
+    const describedById = btn.attributes('aria-describedby')!;
+    expect(document.getElementById(describedById)?.textContent).toBe('You need 3 wood; you have 1.');
     // Never the native attribute: that would drop the button out of the tab
     // order and take the reason with it.
     expect(btn.attributes('disabled')).toBeUndefined();
@@ -654,11 +654,11 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
 });
 
 /** Mount the panel inside a host that provides a real board interaction. */
-function mountWithBoard(controller: Record<string, unknown>, bi: BoardInteraction) {
+function mountWithBoard(controller: Record<string, unknown>, bi: BoardInteraction, panelProps: Record<string, unknown> = {}) {
   const Host = defineComponent({
     setup() {
       provideBoardInteraction(bi);
-      return () => h(ActionPanel, { availableActions: [], isMyTurn: true });
+      return () => h(ActionPanel, { availableActions: [], isMyTurn: true, ...panelProps });
     },
   });
   return mount(Host, {
@@ -868,6 +868,8 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
     expect(wrapper.findAll('.ordered-list-add')).toHaveLength(0);
     // The list is still readable and each entry still removable from the panel.
     expect(wrapper.findAll('.ordered-list-entry')).toHaveLength(2);
+    // #935: notation refs leave the panel's own list empty, so the label comes from the offered choices.
+    expect(wrapper.findAll('.ordered-list-label').map(l => l.text())).toEqual(['Space 3', 'Space 3']);
     expect(wrapper.findAll('.ordered-list-remove')).toHaveLength(2);
     expect(wrapper.find('.done-button').exists()).toBe(true);
   });
@@ -911,6 +913,86 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
     expect(appendListEntry).toHaveBeenCalledWith('space', 's2');
     expect(fill).not.toHaveBeenCalled();
   });
+
+  // #934: a screen reader hears the square as well as the display text.
+  const moveHere: ChoiceWithRefs[] = [
+    { value: 'e4', display: 'Move here', refs: [{ ref: { notation: 'e4' }, role: 'target' }] },
+    { value: 'pass', display: 'Pass' },
+  ];
+
+  it('names the square in a multi-select checkbox label', () => {
+    const wrapper = mountSpacePick(moveHere, { multiSelect: { min: 1, max: 2 } });
+
+    const boxes = wrapper.findAll('.multi-select-choice input');
+    expect(boxes.map(b => b.attributes('aria-label'))).toEqual(['Move here (e4)', 'Pass']);
+    expect(wrapper.findAll('.multi-select-choice').map(o => o.text())).toEqual(['Move here', 'Pass']);
+  });
+
+  it('names the square in an ordered-list Add label', () => {
+    const wrapper = mountSpacePick(moveHere, { orderedList: { min: 1, max: 2 } });
+
+    const adds = wrapper.findAll('.ordered-list-add');
+    expect(adds.map(b => b.attributes('aria-label'))).toEqual(['Add Move here (e4)', 'Add Pass']);
+    expect(adds.map(b => b.text())).toEqual(['Move here', 'Pass']);
+  });
+
+  // #1084: every destination of one piece shares its source ref, so the name comes from the target.
+  it('names each destination by its target square, not the shared source', () => {
+    const fromB6 = (to: string): ChoiceWithRefs => ({
+      value: to,
+      display: 'Move',
+      refs: [{ ref: { notation: 'b6' }, role: 'source' }, { ref: { notation: to }, role: 'target' }],
+    });
+    const wrapper = mountSpacePick([fromB6('a5'), fromB6('c5')]);
+
+    const buttons = wrapper.findAll('.anchored-choice-btn');
+    expect(buttons.map(b => b.attributes('aria-label'))).toEqual(['Move (a5)', 'Move (c5)']);
+  });
+
+  // #1105: a display that already says the square is not followed by it again.
+  it('does not repeat the square when the display already names it', () => {
+    const to = (display: string, square: string): ChoiceWithRefs => ({
+      value: display,
+      display,
+      refs: [{ ref: { notation: square }, role: 'target' }],
+    });
+    const wrapper = mountSpacePick([
+      to('a5', 'a5'),
+      to('Jump to c5', 'c5'),
+      to('Move', 'e3'),
+      to('a50', 'a5'),
+      to('Area g7x', 'g7'),
+      to('(0,-1)', '(0,-1)'),
+      to('Move', '-1'),
+      to('112', '1.2'),
+      to('-1,2', '1,2'),
+    ]);
+
+    const buttons = wrapper.findAll('.anchored-choice-btn');
+    expect(buttons.map(b => b.attributes('aria-label'))).toEqual([
+      'a5',
+      'Jump to c5',
+      'Move (e3)',
+      'a50 (a5)',
+      'Area g7x (g7)',
+      '(0,-1)',
+      'Move (-1)',
+      '112 (1.2)',
+      '-1,2 (1,2)',
+    ]);
+  });
+
+  it('never names the source square when the target has no square name', () => {
+    const toPile: ChoiceWithRefs = {
+      value: 'pile',
+      display: 'Discard pile',
+      refs: [{ ref: { notation: 'b6' }, role: 'source' }, { ref: { id: 42 }, role: 'target' }],
+    };
+    const wrapper = mountSpacePick([toPile, { value: 'pass', display: 'Pass' }], { multiSelect: { min: 1, max: 2 } });
+
+    const boxes = wrapper.findAll('.multi-select-choice input');
+    expect(boxes.map(b => b.attributes('aria-label'))).toEqual(['Discard pile', 'Pass']);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -927,13 +1009,19 @@ describe('ActionPanel large element-id-anchored choice picks (#341)', () => {
     }));
   }
 
-  function mountPiecePick(choices: ChoiceWithRefs[]) {
+  function mountPiecePick(
+    choices: ChoiceWithRefs[],
+    pick: Record<string, unknown> = {},
+    overrides: Record<string, unknown> = {},
+    panelProps: Record<string, unknown> = {},
+  ) {
     const controller = stubActionController({
       currentAction: ref('recruit'),
-      currentPick: ref({ name: 'piece', type: 'choice', prompt: 'Choose a piece to recruit' }),
+      currentPick: ref({ name: 'piece', type: 'choice', prompt: 'Choose a piece to recruit', ...pick }),
       currentChoices: ref(choices),
+      ...overrides,
     });
-    return mountWithBoard(controller, createBoardInteraction());
+    return mountWithBoard(controller, createBoardInteraction(), panelProps);
   }
 
   it('renders one board handoff control instead of 3,720 buttons', () => {
@@ -945,6 +1033,26 @@ describe('ActionPanel large element-id-anchored choice picks (#341)', () => {
     expect(handoff.attributes('aria-label')).toContain('3720 options');
     expect(wrapper.findAll('.choice-btn:not(.board-handoff-btn)')).toHaveLength(0);
     expect(wrapper.text()).toContain('Choose a piece to recruit');
+  });
+
+  // #935: id refs are not split out as anchored, so the Add buttons must be hidden by the handoff itself.
+  it('shows only the handoff, not every Add button, for an ordered list handed to the board', () => {
+    const wrapper = mountPiecePick(pieces(50), { orderedList: { min: 1, max: 4 } }, {
+      multiSelectDraft: ref({ selectionName: 'piece', values: ['p3'] }),
+    });
+
+    expect(wrapper.find('.board-handoff-btn').exists()).toBe(true);
+    expect(wrapper.findAll('.ordered-list-add')).toHaveLength(0);
+    expect(wrapper.find('.ordered-list-label').text()).toBe('Piece 3');
+    expect(wrapper.findAll('.ordered-list-remove')).toHaveLength(1);
+    expect(wrapper.find('.done-button').exists()).toBe(true);
+  });
+
+  it('lists every Add button for that ordered list while the board shows its error message (#1153)', () => {
+    const wrapper = mountPiecePick(pieces(50), { orderedList: { min: 1, max: 4 } }, {}, { boardFailed: true });
+
+    expect(wrapper.find('.board-handoff-btn').exists()).toBe(false);
+    expect(wrapper.findAll('.ordered-list-add')).toHaveLength(50);
   });
 
   it('keeps every button when two candidates name the same element', () => {

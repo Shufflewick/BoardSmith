@@ -14,6 +14,7 @@ import { turnSequence, orderSeatsByTurn, type SeatActivityState } from '../../en
 import type { BoundaryKeyState } from '../../engine/flow/boundary-key.js';
 import { audioService } from '../../client/audio.js';
 import ActionPanel from './auto-ui/ActionPanel.vue';
+import BoardErrorBoundary from './BoardErrorBoundary.vue';
 import ControlsMenu from './ControlsMenu.vue';
 import DebugPanel from './DebugPanel.vue';
 import PlayShell, { type PlayConnection } from './PlayShell.vue';
@@ -33,7 +34,7 @@ import { setupDragDropOrchestration } from '../composables/useDragDropTargets';
 import { useTableSeat, provideTableSeat } from '../composables/useTableSeat.js';
 import { tableBoardProps, type DisplayedGameState } from '../board-props.js';
 import { useBoardFocusHandoff } from '../composables/useBoardFocusHandoff';
-import { maybePostDevtoolsUpdate } from './GameShell.devtools.js';
+import { exposeDevtoolsSnapshot } from './GameShell.devtools.js';
 import { useZoomPreview } from '../composables/useZoomPreview';
 import { useAutoZoom, SETTLE_MS } from '../composables/useAutoZoom';
 import { useToast } from '../composables/useToast';
@@ -42,7 +43,9 @@ import type { PickChoicesResult, PickStepResponse } from '../composables/useActi
 import type { GameState, PlayerState } from '../../client/types.js';
 import type { GameRootView } from '../types.js';
 import turnNotificationSound from '../assets/turn-notification.mp3';
-import { usePlatformTransport } from '../composables/usePlatformTransport.js';
+import { hostRefusal, usePlatformTransport } from '../composables/usePlatformTransport.js';
+import { seatDisplay } from '../seat-display.js';
+import { seatDisplayName } from '../../engine/element/seat-defaults.js';
 
 // Get or set the global "Show action help" preference.
 // Key: boardsmith_action_help; default ON (true) when absent.
@@ -199,8 +202,11 @@ function postDevUiList(): void {
 const state = shallowRef<GameState | null>(null);
 const isMyTurn = computed(() => state.value?.state.isMyTurn ?? false);
 
-// The seat this page renders, from the host's `init` message.
+// The seat this page renders, from the host's `init` message. It changes only
+// with a view of that seat: a board shown the new seat over the last seat's view
+// reads private data that is not there (#1135).
 const playerSeat = ref<number>(-1); // -1 means no seat assigned yet (spectator)
+let seatFromHost = -1;
 // Host anti-cheat: teaching features disabled for this session.
 // Set from the platform init postMessage (data.teachingDisabled) for first-render
 // before any broadcast. The broadcast-preferred computed below (teachingDisabledProp)
@@ -267,9 +273,14 @@ function updateCompact(mql: MediaQueryList | MediaQueryListEvent) {
 // / menu "Fit".
 const boardregionEl = computed(() => playShell.value?.boardRegionEl ?? null);
 const zoomContainerEl = computed(() => playShell.value?.zoomContainerEl ?? null);
+const boardBoundary = ref<InstanceType<typeof BoardErrorBoundary> | null>(null);
+// No boundary mounted means no board, so nothing has failed.
+const boardFailed = computed(() => boardBoundary.value?.failed ?? false);
 const { zoomLevel, setZoom, fitZoom } = useAutoZoom({
   boardEl: zoomContainerEl,
+  boardUi: selectedUiComponent,
   regionEl: boardregionEl,
+  boardFailed,
 });
 
 // Connection health (IA-01): driven by the host's postMessage heartbeat.
@@ -473,10 +484,6 @@ function hostResult<T extends { success: boolean }>(raw: Record<string, unknown>
   return { ...raw, success: raw.success === true } as T;
 }
 
-/** Read an error message off an untyped host response, with a fallback. */
-function hostErrorText(raw: Record<string, unknown>, fallback: string): string {
-  return typeof raw.error === 'string' && raw.error.length > 0 ? raw.error : fallback;
-}
 
 // The wire itself lives in `usePlatformTransport` — request ids, the pending
 // map, the timeout, and the response hand-off. What stays here is the ONE thing
@@ -492,6 +499,12 @@ const platformTransport = usePlatformTransport({
 
 function platformRequest(op: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
   return platformTransport.request(op, payload);
+}
+
+/** Show the player a host refusal; the transport resolves one rather than rejecting. */
+function toastRefusal(result: Record<string, unknown>, failed: string, unsupported?: string): void {
+  const refusal = hostRefusal(result, failed, unsupported);
+  if (refusal) toast.error(refusal);
 }
 
 // Board interaction state (shared between ActionPanel and game board)
@@ -546,7 +559,7 @@ const tableSeat = useTableSeat({
     })),
   // Cancel pending action on server (for onSelect-routed actions)
   cancelPendingAction: async (player) => {
-    await platformRequest('cancel_action', { player });
+    toastRefusal(await platformRequest('cancel_action', { player }), 'Could not cancel the action.');
   },
   // Phase 3: Repeating selections - processed step by step on server
   pickStep: async (player, selectionName, value, actionName, initialArgs) =>
@@ -581,6 +594,8 @@ const {
 // unfiltered. If this is ever empty when it should not be, fix
 // `buildPlayerState`/`getFormattedMessages`, do not reintroduce a second source.
 const gameMessages = computed(() => state.value?.state?.messages ?? []);
+// The seat's line number of its first line, once the game prunes its log (#903).
+const messageOffset = computed(() => state.value?.state?.messageOffset ?? 0);
 
 // ── Unread log entries at the compact tier (#22) ───────────────────────────
 //
@@ -595,22 +610,29 @@ const gameMessages = computed(() => state.value?.state?.messages ?? []);
 // by a game — a game-supplied number would be a second definition of "how much
 // log is there".
 
+/** How many lines this seat has been sent, pruned ones included: a line number, not the window's length (#903). */
+const logEnd = computed(() => messageOffset.value + gameMessages.value.length);
+
 /** How many entries had been written when the player last had the log open. */
 const logReadWatermark = ref(0);
 
+// Never more than the log holds: lines the game pruned unread are not behind the toggle.
 const unreadLogCount = computed(() =>
-  Math.max(0, gameMessages.value.length - logReadWatermark.value)
+  Math.min(gameMessages.value.length, Math.max(0, logEnd.value - logReadWatermark.value))
 );
 
 /**
  * Opening the log marks it read; so does new activity arriving while it is
  * already open, which is the case that would otherwise show a badge behind a
- * panel the player is looking at.
+ * panel the player is looking at. Line numbers start again in a new game, and
+ * are reused after an undo takes lines back, so both lower the watermark.
  */
 watch(
-  [mobileExpanded, () => gameMessages.value.length],
-  ([expanded, length]) => {
-    if (expanded) logReadWatermark.value = length;
+  [mobileExpanded, logEnd, () => state.value?.state.gameInstanceId],
+  ([expanded, end, game], previous) => {
+    if (expanded) logReadWatermark.value = end;
+    else if (previous?.[2] !== undefined && game !== previous[2]) logReadWatermark.value = 0;
+    else if (end < logReadWatermark.value) logReadWatermark.value = end;
   },
   { immediate: true }
 );
@@ -627,7 +649,8 @@ watch(
  * and a connection state to show.
  */
 const panelPlayers = computed(() => {
-  const all = players.value;
+  // A table names every seat; a world's names are its host's alone, so PlayersPanel adds none (#1044).
+  const all = players.value.map((p) => ({ ...p, name: seatDisplayName(p.seat, p.name) }));
   if (props.playerOrder === 'seat' || all.length < 2) return all;
 
   const sequence = Array.isArray(props.playerOrder)
@@ -659,8 +682,7 @@ const currentPlayerName = computed(() => {
   if (isSimultaneous.value) return '';
   const currentPos = state.value?.state?.currentPlayer;
   if (currentPos === undefined) return '';
-  const player = players.value.find(p => p.seat === currentPos);
-  return player?.name || `Player ${currentPos + 1}`;
+  return seatDisplay(players.value, currentPos).name;
 });
 // The OTHER seats a simultaneous step is still waiting on, for the Action
 // Panel's waiting line. The viewer is left out (D27): the panel shows the
@@ -671,10 +693,7 @@ const awaitingPlayerNames = computed(() => {
   if (!isSimultaneous.value) return [];
   return dueSeatsNow.value
     .filter((seat) => seat !== playerSeat.value)
-    .map((seat) => {
-      const player = players.value.find(pl => pl.seat === seat);
-      return { seat, name: player?.name || `Player ${seat + 1}`, color: typeof (player as any)?.color === 'string' ? (player as any).color : undefined };
-    });
+    .map((seat) => seatDisplay(players.value, seat));
 });
 
 // Active player (whose turn it is) for the action-bar turn token. D27:
@@ -688,9 +707,8 @@ const activePlayer = computed(() => {
   if (isSimultaneous.value) return null;
   const seat = state.value?.state?.currentPlayer;
   if (seat === undefined) return null;
-  const p = players.value.find(pl => pl.seat === seat) as { name?: string; color?: string } | undefined;
-  if (!p) return null;
-  return { name: p.name ?? `Player ${seat + 1}`, seat, color: p.color };
+  if (!players.value.some(pl => pl.seat === seat)) return null;
+  return seatDisplay(players.value, seat);
 });
 
 /**
@@ -723,14 +741,9 @@ const activePlayer = computed(() => {
  */
 const panelToken = computed(() => {
   if (isSimultaneous.value) {
-    const me = myPlayer.value as { name?: string; color?: string; seat?: number } | undefined;
+    const me = myPlayer.value;
     if (!me || me.seat === undefined) return null;
-    return {
-      kind: 'you' as const,
-      name: me.name ?? `Player ${me.seat + 1}`,
-      seat: me.seat,
-      color: me.color,
-    };
+    return { kind: 'you' as const, ...seatDisplay(players.value, me.seat) };
   }
   const active = activePlayer.value;
   return active ? { kind: 'active' as const, ...active } : null;
@@ -739,9 +752,7 @@ const panelToken = computed(() => {
 const currentPlayerColor = computed((): string | undefined => {
   const currentPos = state.value?.state?.currentPlayer;
   if (currentPos === undefined) return undefined;
-  const player = players.value.find(p => p.seat === currentPos) as Record<string, unknown> | undefined;
-  if (!player) return undefined;
-  return typeof player.color === 'string' ? player.color : undefined;
+  return seatDisplay(players.value, currentPos).color;
 });
 
 // Board-provided prompt (for dynamic prompts based on UI state)
@@ -763,11 +774,7 @@ async function handleUndo(): Promise<void> {
     toast.error('Return to the current position before undoing.');
     return;
   }
-  const result = await platformRequest('undo', { player: playerSeat.value });
-  if (!result.success) {
-    console.error('Undo failed:', result.error);
-    toast.error(hostErrorText(result, 'Undo failed.'));
-  }
+  toastRefusal(await platformRequest('undo', { player: playerSeat.value }), 'Undo failed.');
   // State update arrives via the game_state broadcast.
 }
 
@@ -803,42 +810,24 @@ setupDragDropOrchestration({
 // not wired anything up, so "Choose on the board" can never leave focus on <body>.
 useBoardFocusHandoff(boardInteraction, zoomContainerEl);
 
-// ── DEV-02: devtools postMessage bridge ──────────────────────────────────────
-// In a host, dev builds only: broadcast reactive state to window.parent
-// so the `boardsmith dev` host page can expose window.__BOARDSMITH_DEVTOOLS.
-// The entire watch registration is guarded by isDevBuild so production builds
-// dead-code-eliminate this block (import.meta.env.DEV is false in production).
-if (isDevBuild) {
-  watch(
-    [
-      availableActions,
-      actionMetadata,
-      playerSeat,
-      () => boardInteraction.currentAction,
-      () => boardInteraction.currentPickIndex,
-      () => boardInteraction.validElements.length,
-      state,
-    ],
-    () => {
-      maybePostDevtoolsUpdate(
-        { isDevBuild, inHost },
-        {
-          seat: playerSeat.value,
-          state: state.value?.state ?? null,
-          availableActions: availableActions.value,
-          actionMetadata: actionMetadata.value,
-          boardInteraction: {
-            currentAction: boardInteraction.currentAction,
-            currentPickIndex: boardInteraction.currentPickIndex,
-            validElements: boardInteraction.validElements,
-          },
-          flowDebugInfo: state.value?.state?.flowDebugInfo,
-          pendingAction: state.value?.state?.pendingAction,
-        },
-      );
+// ── DEV-02: devtools bridge ─────────────────────────────────────────────────
+// In a host, dev builds only: the `boardsmith dev` host page calls this reader
+// when window.__BOARDSMITH_DEVTOOLS is read, so no state is built per push (#960).
+// Guarded by isDevBuild so production builds dead-code-eliminate it.
+if (isDevBuild && inHost) {
+  onUnmounted(exposeDevtoolsSnapshot(window, () => ({
+    seat: playerSeat.value,
+    state: state.value?.state ?? null,
+    availableActions: availableActions.value,
+    actionMetadata: actionMetadata.value,
+    boardInteraction: {
+      currentAction: boardInteraction.currentAction,
+      currentPickIndex: boardInteraction.currentPickIndex,
+      validElements: boardInteraction.validElements,
     },
-    { deep: false },
-  );
+    flowDebugInfo: state.value?.state?.flowDebugInfo,
+    pendingAction: state.value?.state?.pendingAction,
+  })));
 }
 
 // Zoom preview (Alt+hover to enlarge cards) - uses event delegation for all cards
@@ -871,11 +860,8 @@ async function sendDemoControl(
   control: 'pause' | 'play' | 'step' | 'back',
   delay?: number
 ): Promise<void> {
-  try {
-    await platformRequest('demo-control', delay !== undefined ? { control, delay } : { control });
-  } catch {
-    toast.error('Demo control failed.');
-  }
+  const result = await platformRequest('demo-control', delay !== undefined ? { control, delay } : { control });
+  toastRefusal(result, 'Demo control failed.', 'This table does not support demo controls.');
 }
 
 function setDemoSpeed(delay: number): void {
@@ -1046,7 +1032,7 @@ if (inHost) {
     if (!data || data.source !== 'shufflewick') return;
 
     if (data.type === 'init') {
-      playerSeat.value = data.seat;
+      seatFromHost = data.seat;
       // D-02 / LOCK-01 criterion 1: consume teachingDisabled for first-render gating
       // before any broadcast arrives. The broadcast-preferred computed (teachingDisabledProp)
       // will override this with the authoritative session value on first state update.
@@ -1091,10 +1077,11 @@ if (inHost) {
       // Hand-mapping individual fields here is what caused the recurring
       // "works in dev, broken in the iframe" bugs, so there is deliberately no
       // per-field reconstruction.
+      playerSeat.value = seatFromHost;
       state.value = {
         flowState: view.flowState,
         state: view.state,
-        playerSeat: playerSeat.value,
+        playerSeat: seatFromHost,
         isSpectator: false,
       } as any;
 
@@ -1158,12 +1145,13 @@ if (inHost) {
 function handleSwitchPlayer(position: number) {
   // The host owns which seat the iframe renders; ask it to switch (the dev
   // host reloads this iframe as that seat).
-  void platformRequest('debug:switch-seat', { seat: position });
+  void platformRequest('debug:switch-seat', { seat: position })
+    .then((result) => toastRefusal(result, 'Could not switch seats.'));
 }
 
 function handleRestartGame() {
-  // The host owns the session; ask it to start a fresh game.
-  void platformRequest('debug:restart', {});
+  // Debug panel only (#902): the host owns the session; ask it to start a fresh game.
+  void platformRequest('debug:restart', {}).then((result) => toastRefusal(result, 'Could not start a new game.'));
 }
 
 // Time travel handler - updates the game view to show historical state
@@ -1189,15 +1177,6 @@ watch(() => state.value?.state.gameInstanceId, (game, previous) => {
 // Debug highlight handler - highlights an element on the board
 function handleHighlightElement(elementId: number | null) {
   debugHighlightedElementId.value = elementId;
-}
-
-// Menu handlers
-function handleMenuItemClick(id: string) {
-  if (id === 'new-game') {
-    // D11 (ENDGAME-02): "New Game" restarts via the same real restart path as
-    // Rematch.
-    handleRestartGame();
-  }
 }
 
 // Retry handler — wired from AutoUI → GameShell when the user clicks Retry
@@ -1248,7 +1227,7 @@ watch(
       // now derived from broadcast state (WR-04), so we only fire the request;
       // the session broadcasts the updated state on its own.
       if (isDemoRunning.value) {
-        void platformRequest('demo-stop', {}).catch(() => {/* best-effort */});
+        void platformRequest('demo-stop', {}).then((result) => toastRefusal(result, 'Failed to stop demo.'));
       }
     }
   },
@@ -1268,10 +1247,7 @@ watch(
     gameOverAnnounced = true;
     // Said from the same `winnerSeats`/`isDraw` the card draws, both read off
     // the host's validated frame, so the two can never name different results.
-    const winnerNames = winnerSeats.value.map((seat) => {
-      const p = players.value.find((pl) => pl.seat === seat);
-      return (p as any)?.name || `Player ${seat}`;
-    });
+    const winnerNames = winnerSeats.value.map((seat) => seatDisplay(players.value, seat).name);
     announcer.announce(announceGameOver(winnerNames, isDraw.value), { assertive: true });
   },
   { flush: 'post' },
@@ -1404,11 +1380,13 @@ defineExpose({
          `gatedIsMyTurn`. -->
     <PlayShell
       ref="playShell"
+      :board-failed="boardFailed"
       :players="panelPlayers"
       :player-seat="playerSeat"
       :due-seats="dueSeatsNow"
       :show-turn-status="props.showTurnStatus"
       :messages="gameMessages"
+      :message-offset="messageOffset"
       :unread-log-count="unreadLogCount"
       :may-act="isMyTurn"
       :available-actions="gatedAvailableActions"
@@ -1437,7 +1415,7 @@ defineExpose({
            `state.hint`, `state.heatmap` -- so none of them is the shell's. -->
       <template #board-overlays>
         <!-- Game Over result card: overlays the board behind a Slate scrim (IA-07, D10).
-             Scrim is absolute inside .boardregion — cannot cover the .actionbar sibling
+             Scrim is absolute over .board-viewport, outside the board's scroller, so it stays over the visible board (#1068); cannot cover the .actionbar sibling
              or browser chrome (T-100-06-02). winnerSeats degrades to [] in dev-WS mode;
              isDraw distinguishes that degrade from a genuine draw.
              It appears when `gameOverRevealed` says the ending is on screen -- the same answer
@@ -1445,8 +1423,8 @@ defineExpose({
              (holdGameOverUntil) holds the card back too (#419).
              A filled #game-over slot replaces the default card entirely; providesOwnGameOverUi
              suppresses BOTH (the game renders its own end state on its own board). Dismissing
-             (close button / Escape) reveals the board without restarting or leaving.
-             @new-game and @rematch both restart via the one real restart path (D11/ENDGAME-02). -->
+             (close button / Escape) reveals the board without leaving. There is no
+             New Game or Rematch: a deployed host has no restart op (#902). -->
         <template v-if="gameOverRevealed && !props.providesOwnGameOverUi && !gameOverDismissed">
           <slot
             v-if="$slots['game-over']"
@@ -1454,8 +1432,6 @@ defineExpose({
             :winners="gameOverWinners"
             :players="players"
             :is-draw="isDraw"
-            :rematch="handleRestartGame"
-            :new-game="() => handleMenuItemClick('new-game')"
             :dismiss="dismissGameOver"
           />
           <GameOverCard
@@ -1463,14 +1439,12 @@ defineExpose({
             :winner-seats="winnerSeats"
             :players="players"
             :is-draw="isDraw"
-            @new-game="handleMenuItemClick('new-game')"
-            @rematch="handleRestartGame"
             @dismiss="dismissGameOver"
           />
         </template>
         <!-- Tutorial annotation overlay: mounts once here so it appears over BOTH
              the registry's board component (default or dev-switcher selection)
-             path. Position is absolute inside .boardregion (inset: 0, z-index: 20).
+             path. Its bubbles teleport to body (AnnotationLayer, position: fixed, z-index: 20).
              Sits above the turn prompt (z-5) and below GameOverCard scrim (z-50).
              No props — injects gameState and renders only when tutorial.content
              is present (v-if internal). Not inside zoom-container so it measures
@@ -1570,12 +1544,13 @@ defineExpose({
              Action Panel and the game context are handed, so none of them can
              disagree (#520, #516). -->
         <template v-if="shellMounted">
-        <component
-          v-if="selectedUiComponent"
-          :is="selectedUiComponent"
-          v-bind="boardProps"
-          @retry="handleRetry"
-        />
+        <BoardErrorBoundary v-if="selectedUiComponent" ref="boardBoundary" :state="gameView" :board="selectedUiComponent">
+          <component
+            :is="selectedUiComponent"
+            v-bind="boardProps"
+            @retry="handleRetry"
+          />
+        </BoardErrorBoundary>
         <!-- Only reachable if the registry's default entry resolved to no
              component — a broken uis.ts. Name the fix, don't render blank. -->
         <div v-else class="empty-game-area">
@@ -1643,13 +1618,12 @@ defineExpose({
           :is-tutorial-running="isTutorialRunningProp"
           :teaching-disabled="teachingDisabledProp"
           @undo="handleUndo"
-          @menu-item-click="handleMenuItemClick"
           @teaching-action="handleTeachingAction"
         />
       </template>
 
       <template #action-panel>
-        <slot name="action-panel">
+        <slot name="action-panel" :board-failed="boardFailed">
           <ActionPanel
             :available-actions="gatedAvailableActions"
             :action-metadata="gatedActionMetadata"
@@ -1663,6 +1637,7 @@ defineExpose({
             :current-player-name="currentPlayerName"
             :current-player-color="currentPlayerColor"
             :awaiting-players="awaitingPlayerNames"
+            :board-failed="boardFailed"
             @undo="handleUndo"
           />
         </slot>

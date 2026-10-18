@@ -90,8 +90,8 @@
  */
 
 import { ref, readonly, computed, watch, nextTick, getCurrentScope, onScopeDispose } from 'vue';
-import { getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList } from './actionControllerHelpers.js';
 import { devWarn } from '../../utils/dev.js';
+import { getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList, editorRuleRefusal } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
 import { findMatchingChoice, oneChoiceListRefusal, oneElementListRefusal, valuesEqual } from '../../engine/action/choice-matching.js';
 
@@ -132,6 +132,8 @@ import type {
   UseActionControllerOptions,
   RepeatingState,
   UseActionControllerReturn,
+  AfterAutoExecuteListener,
+  BeforeAutoExecuteHook,
 } from './useActionControllerTypes.js';
 
 /**
@@ -221,10 +223,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // independently-registered consumers (e.g. a board component and a player-stats
   // panel) can each register a hook without clobbering the others; the watcher
   // awaits them sequentially in registration order.
-  type BeforeAutoExecuteHook = (actionName: string, args: Record<string, unknown>) => void | Promise<void>;
   const beforeAutoExecuteHooks = ref<BeforeAutoExecuteHook[]>(
     initialBeforeAutoExecute ? [initialBeforeAutoExecute] : []
   );
+  const afterAutoExecuteListeners = ref<AfterAutoExecuteListener[]>([]);
 
   // Helper to get current value of potentially reactive options
   const getAutoFill = (): boolean => {
@@ -1444,7 +1446,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         && !isViewingHistoryValue()) {
       const seq = actionStartTick.value;
       await runBeforeAutoExecuteHooks(currentAction.value);
-      if (!actionMovedOn(seq)) executeCurrentAction();
+      const result: ControllerActionResult = actionMovedOn(seq)
+        ? { success: false, error: 'Action was cancelled' }
+        : await executeCurrentAction();
+      notifyAfterAutoExecute(result);
     }
   });
 
@@ -1466,6 +1471,15 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       } catch (err) {
         console.error('[ActionController] beforeAutoExecute hook failed:', err);
       }
+    }
+  }
+
+  /** Tell every after-auto-execute listener how the action ended; one failing listener never stops the rest. */
+  function notifyAfterAutoExecute(result: ControllerActionResult): void {
+    for (const listener of [...afterAutoExecuteListeners.value]) {
+      Promise.resolve()
+        .then(() => listener(result))
+        .catch((err) => console.error('[ActionController] afterAutoExecute listener failed:', err));
     }
   }
 
@@ -1534,7 +1548,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * ```typescript
    * // In the board component's <script setup>
    * const props = defineProps<{ actionController: UseActionControllerReturn; gameView: GameViewElement | null }>();
-   * const { onBeforeAutoExecute } = useActionAnimations({ gameView, animations: [...] });
+   * const { onBeforeAutoExecute } = useActionAnimations({
+   *   gameView, actionController: props.actionController, animations: [...],
+   * });
    *
    * props.actionController.onBeforeAutoExecute(onBeforeAutoExecute);
    * ```
@@ -1556,11 +1572,21 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * returned function is called.
    */
   function onBeforeAutoExecute(hook: BeforeAutoExecuteHook): () => void {
-    beforeAutoExecuteHooks.value.push(hook);
+    return addScoped(beforeAutoExecuteHooks.value, hook);
+  }
+
+  /** Add a listener told how each auto-executed action ended (#861); see the return type. */
+  function onAfterAutoExecute(listener: AfterAutoExecuteListener): () => void {
+    return addScoped(afterAutoExecuteListeners.value, listener);
+  }
+
+  /** Add to a list until the returned function is called or the current scope disposes. */
+  function addScoped<T>(list: T[], item: T): () => void {
+    list.push(item);
     const unregister = (): void => {
-      const idx = beforeAutoExecuteHooks.value.indexOf(hook);
+      const idx = list.indexOf(item);
       if (idx !== -1) {
-        beforeAutoExecuteHooks.value.splice(idx, 1);
+        list.splice(idx, 1);
       }
     };
     if (getCurrentScope()) {
@@ -1630,12 +1656,16 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * currentAction stale and blocks the next auto-start. `seq` is actionStartTick
    * when the caller began: the clear is skipped if a newer action started during
    * the await, or it would wipe that freshly started action (the cross-turn
-   * auto-start race). Every result is published through resolveAction, and a
-   * followUp the server hands back is started.
+   * auto-start race). Every result is published through resolveAction, under
+   * the seat that sent it, and a followUp the server hands back is started.
+   * A reply that lands after the page changed seats (#1150) is the last seat's:
+   * its error and followUp are not shown to or started for the new one.
    */
   async function sendAndResolve(actionName: string, args: Record<string, unknown>, seq: number): Promise<ControllerActionResult> {
     isExecuting.value = true;
     lastError.value = null;
+    const seat = playerSeat?.value ?? 0;
+    const sameSeat = (): boolean => (playerSeat?.value ?? 0) === seat;
 
     try {
       let result: ControllerActionResult;
@@ -1646,10 +1676,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         // ready with nothing left to send it again (#860).
         result = { success: false, error: err instanceof Error ? err.message : 'Action failed' };
       }
-      if (!result.success) {
+      if (!result.success && sameSeat()) {
         setError(result.error || 'Action failed');
       }
-      resolveAction(actionName, playerSeat?.value ?? 0, result);
+      resolveAction(actionName, seat, result);
 
       if (!actionMovedOn(seq)) {
         currentAction.value = null;
@@ -1657,7 +1687,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         clearAdvancedState();
       }
 
-      if (result.success && result.followUp) {
+      if (result.success && result.followUp && sameSeat()) {
         queueFollowUp(result.followUp);
       }
 
@@ -2015,6 +2045,37 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return { success: true };
   }
 
+  /** Why `fill` refuses this value for this pick before anything is sent, or null. */
+  function fillValueRefusal(selection: EnrichedPickMetadata, value: unknown): string | null {
+    const selectionName = selection.name;
+    // PIT OF SUCCESS: Reject a scalar for a multiSelect pick (UIX-02).
+    // Mirrors toggleMultiSelect's reverse guard:
+    // that guard rejects a non-multiSelect selection from toggleMultiSelect; this one
+    // rejects a multiSelect selection from fill() unless the value is already an array.
+    const multiSelectCfg = resolveMultiSelectConfig(selection);
+    if (multiSelectCfg && !Array.isArray(value)) {
+      return (
+        `fill('${selectionName}', ...) rejected: '${selectionName}' is a multiSelect selection ` +
+        `(min ${multiSelectCfg.min}, max ${multiSelectCfg.max ?? 'unlimited'}) and requires an array. ` +
+        `Use toggleMultiSelect()/confirmMultiSelect(), or pass an array directly to fill().`
+      );
+    }
+
+    // THE SAME GUARD FOR A LIST (#249). A list pick's value is a sequence, and a
+    // bare entry submitted as the whole answer is the mistake most likely to be
+    // made by a custom UI that has just learned the verb.
+    const orderedListCfg = resolveOrderedListConfig(selection);
+    if (orderedListCfg && !Array.isArray(value)) {
+      return (
+        `fill('${selectionName}', ...) rejected: '${selectionName}' is an ordered list ` +
+        `(min ${orderedListCfg.min}, max ${orderedListCfg.max ?? 'unlimited'}) and requires an array. ` +
+        `Use appendListEntry()/confirmMultiSelect(), or pass the whole array to fill().`
+      );
+    }
+
+    return editorRuleRefusal(selection, value);
+  }
+
   async function fill(selectionName: string, value: unknown): Promise<PickValidationResult> {
     // CR-02: EVERY fill() failure path must setError() — GameShell's UIX-01
     // watch is the only place a failed action surfaces (ActionPanel's direct
@@ -2051,31 +2112,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return { valid: false, error };
     }
 
-    // PIT OF SUCCESS: Reject a scalar for a multiSelect pick (UIX-02).
-    // Mirrors toggleMultiSelect's reverse guard (useActionController.ts ~1729-1734):
-    // that guard rejects a non-multiSelect selection from toggleMultiSelect; this one
-    // rejects a multiSelect selection from fill() unless the value is already an array.
-    const multiSelectCfg = resolveMultiSelectConfig(selection);
-    if (multiSelectCfg && !Array.isArray(value)) {
-      const error =
-        `fill('${selectionName}', ...) rejected: '${selectionName}' is a multiSelect selection ` +
-        `(min ${multiSelectCfg.min}, max ${multiSelectCfg.max ?? 'unlimited'}) and requires an array. ` +
-        `Use toggleMultiSelect()/confirmMultiSelect(), or pass an array directly to fill().`;
-      setError(error);
-      return { valid: false, error };
-    }
-
-    // THE SAME GUARD FOR A LIST (#249). A list pick's value is a sequence, and a
-    // bare entry submitted as the whole answer is the mistake most likely to be
-    // made by a custom UI that has just learned the verb.
-    const orderedListCfg = resolveOrderedListConfig(selection);
-    if (orderedListCfg && !Array.isArray(value)) {
-      const error =
-        `fill('${selectionName}', ...) rejected: '${selectionName}' is an ordered list ` +
-        `(min ${orderedListCfg.min}, max ${orderedListCfg.max ?? 'unlimited'}) and requires an array. ` +
-        `Use appendListEntry()/confirmMultiSelect(), or pass the whole array to fill().`;
-      setError(error);
-      return { valid: false, error };
+    const shapeRefusal = fillValueRefusal(selection, value);
+    if (shapeRefusal !== null) {
+      setError(shapeRefusal);
+      return { valid: false, error: shapeRefusal };
     }
 
     const { value: offered, refusal } = resolvePick(selection, value);
@@ -2199,11 +2239,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         });
         repeatingState.value = null;
         return { valid: true };
-      }
-
-      // For selections with onEach, clear accumulated since items are processed immediately
-      if (selection.repeat?.hasOnEach) {
-        repeatingState.value.accumulated = [];
       }
 
       // More iterations needed - update choices if provided
@@ -2790,11 +2825,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     // Hook registration (for GameShell users who can't pass options at creation)
     onBeforeAutoExecute,
+    onAfterAutoExecute,
 
     // Animation gating (soft continuation pattern)
     animationsPending,       // True when animations are playing
     showActionPanel,         // True when safe to show action UI (turn + no animations + no followUp)
   };
 }
-
-export default useActionController;

@@ -97,7 +97,8 @@ five; the last two are dispatches it is never asked about:
 5. **Merge, one merge at a time.** When a chunk closes, run `boardsmith chunk-merge <slug>` from the
    main checkout. Never merge a chunk branch by hand: this command is the gate. It merges under a
    lock, allocates real ledger numbers on the combined tree, re-runs `ledger-check`,
-   `constraint-check` with its measurement tests, every sign-off and the whole test suite on the
+   `constraint-check` with its measurement tests and every sign-off, then the merged chunk's fast
+   checks (the test files it added or changed since its base, and typecheck), all on the
    combined tree, and refuses (leaving the main checkout exactly as it was) when any of them fails,
    even though the branch passed them alone. A source file this chunk and one merged while it was
    built both edited is code neither sign-off saw: the merge vouches for it by re-running both

@@ -16,6 +16,7 @@ import type { DevHostConfig } from './config-types.js';
 import Toast from '../../ui/components/Toast.vue';
 import { useToast } from '../../ui/composables/useToast.js';
 import { applyTheme } from '../../ui/theme.js';
+import { readDevtoolsSnapshot } from '../../ui/components/GameShell.devtools.js';
 import { loadDevClientId, TABLE_CLIENT_KEY } from './dev-client-id.js';
 import { DEV_HOST_WS_PATH } from './socket-path.js';
 import { useMenuDismiss } from './use-menu-dismiss.js';
@@ -32,6 +33,9 @@ const cfg = props.config;
 // Shared with the world dev host, which needs the identical guarantee under its
 // own key; `dev-client-id.ts` says why the keys are separate.
 const clientId = loadDevClientId(TABLE_CLIENT_KEY, 'c');
+// This page load, named in every hello: the game numbers its requests from
+// req-0 on each load, so the host answers only the load that asked (#1041).
+const loadId = `l-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
 
 // ── Lobby / game state (driven by the host over WS) ──────────────────────────
 /** One seat as the host shows it to this page (`LobbySeat` in multiplayer-host.ts). */
@@ -44,6 +48,8 @@ interface SeatInfo {
   name: string;
   color?: string;
   connected: boolean;
+  /** A bot plays the seat now. */
+  bot: boolean;
 }
 // The game is always live on the host: this client is in the game once it holds a
 // seat (mySeat). The first client to connect is auto-seated by the host and lands
@@ -59,10 +65,6 @@ const followActive = ref(false);
 // the currently-selected one. Handled inside GameShell; no effect in production.
 const uiOptions = ref<string[]>([]);
 const selectedUi = ref('');
-
-// DEV-02: snapshot of the latest devtools state broadcast from the game iframe.
-// Read methods on window.__BOARDSMITH_DEVTOOLS close over this ref.
-const devtoolsSnapshot = ref<Record<string, unknown> | null>(null);
 
 const nameInput = ref('');
 const colorInput = ref<string | undefined>(undefined);
@@ -217,7 +219,7 @@ function wsSend(message: Record<string, unknown>): void {
 function connect(): void {
   ws = new WebSocket(wsUrl());
   ws.addEventListener('open', () =>
-    wsSend({ type: 'hello', clientId, ...(joinedRunId === null ? {} : { runId: joinedRunId }) }),
+    wsSend({ type: 'hello', clientId, loadId, ...(joinedRunId === null ? {} : { runId: joinedRunId }) }),
   );
   ws.addEventListener('message', (ev) => {
     try {
@@ -269,6 +271,8 @@ function onHostMessage(msg: Record<string, unknown>): void {
       // the game before it (one a rules reload could not carry across, say) no
       // longer describes anything on screen.
       errorMsg.value = null;
+      // The cached view belongs to the old seat; a replay must never pair it with the new one (#1151).
+      if (msg.seat !== lastInitSeat) lastGameState = null;
       lastInitSeat = msg.seat as number;
       mySeat.value = msg.seat as number;
       postToGame({ type: 'init', seat: msg.seat, teachingDisabled: cfg.teachingDisabled === true });
@@ -398,11 +402,6 @@ function onWindowMessage(event: MessageEvent): void {
   // Ctrl/Cmd+D inside the iframe) so the header Debug button stays in sync.
   if (data.type === 'dev-debug-state') {
     debugOpen.value = !!data.open;
-    return;
-  }
-  // DEV-02: game iframe broadcasts its current devtools state snapshot.
-  if (data.type === 'boardsmith:devtools-state-update') {
-    devtoolsSnapshot.value = data as Record<string, unknown>;
     return;
   }
   // The game advertises its available UIs; populate the switcher dropdown.
@@ -556,18 +555,15 @@ onMounted(() => {
   // Gated by import.meta.env.DEV — Vite dead-code-eliminates this block in
   // production builds so the global is never assigned outside the dev host.
   if (import.meta.env.DEV) {
+    // Each read asks the game iframe for its current state (#960).
+    const snapshot = () => readDevtoolsSnapshot(iframeRef.value?.contentWindow);
     window.__BOARDSMITH_DEVTOOLS = {
-      getState: (_seat?: number) => (devtoolsSnapshot.value?.state as any) ?? null,
-      getAvailableActions: (_seat?: number) =>
-        (devtoolsSnapshot.value?.availableActions as string[]) ?? [],
-      getActionMetadata: (_seat?: number) =>
-        devtoolsSnapshot.value?.actionMetadata as Record<string, unknown> | undefined,
-      getBoardInteractionState: () =>
-        (devtoolsSnapshot.value?.boardInteraction as any) ?? null,
-      getFlowDebugInfo: (_seat?: number) =>
-        (devtoolsSnapshot.value?.flowDebugInfo as any) ?? null,
-      getPendingAction: (_seat?: number) =>
-        (devtoolsSnapshot.value?.pendingAction as any) ?? null,
+      getState: (_seat?: number) => snapshot()?.state ?? null,
+      getAvailableActions: (_seat?: number) => snapshot()?.availableActions ?? [],
+      getActionMetadata: (_seat?: number) => snapshot()?.actionMetadata,
+      getBoardInteractionState: () => snapshot()?.boardInteraction ?? null,
+      getFlowDebugInfo: (_seat?: number) => snapshot()?.flowDebugInfo ?? null,
+      getPendingAction: (_seat?: number) => snapshot()?.pendingAction ?? null,
     };
   }
 });
@@ -800,7 +796,7 @@ onUnmounted(() => {
                     :class="seat.connected ? 'is-online' : 'is-offline'"
                   ></span>
                   {{ seat.name || `Seat ${seat.seat}` }}
-                  <span v-if="cfg.botSeats.includes(seat.seat)" class="seat-switcher-menu__ai">bot</span>
+                  <span v-if="seat.bot" class="seat-switcher-menu__ai">bot</span>
                   <span v-if="seat.seat === mySeat" class="seat-switcher-menu__current-label"> (you)</span>
                 </button>
                 <div class="seat-switcher-menu__sep"></div>

@@ -31,7 +31,7 @@ import { describe, it, expect } from 'vitest';
 import { executeOp, SUBMISSION_OP_TYPES, type GameDefinitionLike, type ExecutableOp, type OpResult } from '../stateless-ops.js';
 import type { HeadlessOp } from '../../testing/headless-session.js';
 import { boundaryKeyOf } from './boundary-stamp.js';
-import type { GameStateSnapshot } from '../../runtime/index.js';
+import { snapshotTree, type GameStateSnapshot } from '../../engine/utils/index.js';
 import {
   fencedScumDefinition,
   unfencedScumDefinition,
@@ -43,6 +43,8 @@ import {
 import { refused } from '../op-result.test-helper.js';
 
 type HostOptions = Parameters<typeof executeOp>[5];
+/** What this driver sends: it calls the executor directly, as a host does, so it sends the host's own ops too. */
+type DriverOp = HeadlessOp | Extract<ExecutableOp, { type: 'start' | 'botSuggest' }>;
 
 /**
  * A stateless session: every op rebuilds its runner from a snapshot that has
@@ -60,7 +62,7 @@ function statelessSession(
     get snapshot() {
       return snapshot;
     },
-    async send(op: HeadlessOp) {
+    async send(op: DriverOp) {
       // This driver IS the client: it composed `op` against the snapshot it is
       // holding, in this same tick, so that snapshot's boundary is the true
       // answer — not a default. A caller that supplies its own key keeps it.
@@ -77,8 +79,7 @@ function statelessSession(
 }
 
 function attributesOf(snapshot: unknown): Record<string, unknown> {
-  return ((snapshot as GameStateSnapshot).state as { attributes?: Record<string, unknown> })
-    .attributes ?? {};
+  return snapshotTree(snapshot as GameStateSnapshot).attributes;
 }
 
 const soloOptions = { playerCount: 1, seed: 'scum-seed' };

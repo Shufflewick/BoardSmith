@@ -2,23 +2,27 @@
 /**
  * GameOverCard — Slate result overlay (IA-07, D10)
  *
- * Overlays the board inside .boardregion behind a Slate scrim when the game
+ * Overlays the visible board behind a Slate scrim when the game
  * is complete. Shows winners from the validated winnerSeats × players list;
  * a genuine draw (isDraw=true) labels "Draw"; winner data that is merely
  * unavailable (dev-WS degrade, isDraw=false with no seats) stays "Game Over".
  * The card never renders winner tokens when there are no winners (D10).
  *
- * Scrim is positioned absolute inside .boardregion — it cannot cover browser
- * chrome or the .actionbar (which is a sibling of .stage, not a child).
+ * Scrim is positioned absolute over .board-viewport, outside the board's
+ * scroller, so a board wider than the region never scrolls it away (#1068).
+ * It cannot cover browser chrome or the .actionbar (which is a sibling of
+ * .stage, not a child).
  *
  * Focus is trapped inside the card on mount (A11Y-07). The card is dismissable
  * (D10): a close button and Escape both emit 'dismiss'. Dismissing does not
- * restart or leave the game — the caller (GameShell) hides the card and
- * returns focus to the board.
+ * leave the game — the caller (GameShell) hides the card and returns focus to
+ * the board. It offers no New Game or Rematch: a deployed host has no restart
+ * op (#902).
  */
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useFocusTrap } from '../composables/useFocusTrap';
-import { seatInk } from '../utils/color-contrast';
+import PlayerToken from './PlayerToken.vue';
+import { seatDisplay } from '../seat-display.js';
 
 export interface Player {
   seat: number;
@@ -43,58 +47,21 @@ const props = withDefaults(defineProps<{
 });
 
 const emit = defineEmits<{
-  rematch: [];
-  'new-game': [];
-  /** Card dismissed via close button or Escape. Does not restart or leave. */
+  /** Card dismissed via close button or Escape. Does not leave the game. */
   dismiss: [];
 }>();
 
 const cardRef = ref<HTMLElement | null>(null);
 
-// LIBX-03 / F-17: the winner glyph's ink comes from the seat color the same
-// way PlayerToken's does, instead of a hardcoded `--bsg-bg`, so a dark seat
-// color on the dark theme (or a pale one on light) stays legible.
-function winnerInk(color?: string): string {
-  return seatInk(color, 'GameOverCard').ink;
-}
-
-const { open: openTrap, close: closeTrap, handleKeydown } = useFocusTrap(cardRef, {
+const { open: openTrap, handleKeydown } = useFocusTrap(cardRef, {
   escapeToClose: true,
   onClose: () => emit('dismiss'),
 });
 
 onMounted(() => openTrap());
-onBeforeUnmount(() => closeTrap());
 
-// ---------------------------------------------------------------------------
-// Shape set (mirrors PlayersPanel.vue, IA-06): seat index → shape class.
-// Keeps player identity tokens visually consistent across the shell.
-// ---------------------------------------------------------------------------
-const SHAPES = [
-  'sh-circle',
-  'sh-square',
-  'sh-hexagon',
-  'sh-octagon',
-  'sh-diamond',
-  'sh-pentagon',
-  'sh-shield',
-  'sh-plus',
-] as const;
-
-function playerShape(index: number): string {
-  return SHAPES[index % SHAPES.length];
-}
-
-function playerInitial(name: string): string {
-  return (name.trim()[0] ?? '?').toUpperCase();
-}
-
-/** Players whose seat number appears in winnerSeats. */
-const winners = computed(() =>
-  props.winnerSeats
-    .map(seat => props.players.find(p => p.seat === seat))
-    .filter((p): p is Player => p !== undefined)
-);
+/** The winners, shown as every other surface shows their seat. */
+const winners = computed(() => props.winnerSeats.map((seat) => seatDisplay(props.players, seat)));
 
 /**
  * h2 title text — a pure function of winners + isDraw (UI-SPEC §1):
@@ -138,28 +105,16 @@ const titleText = computed(() => {
           :key="player.seat"
           class="winner-row"
         >
-          <span
-            class="tok"
-            :class="playerShape(players.findIndex(p => p.seat === player.seat))"
-            :style="player.color ? { '--tc': player.color } : {}"
-          >
-            <span class="shape"></span>
-            <span class="ini" :style="{ color: winnerInk(player.color) }">{{ playerInitial(player.name) }}</span>
-          </span>
+          <PlayerToken :name="player.name" :seat="player.seat" :color="player.color" :size="32" />
           <span class="winner-name">{{ player.name }}</span>
         </div>
-      </div>
-
-      <div class="game-over-actions">
-        <button class="goc-btn goc-btn--primary" @click="emit('new-game')">New Game</button>
-        <button class="goc-btn goc-btn--ghost" @click="emit('rematch')">Rematch</button>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* Scrim: absolute inside .boardregion so it overlays the board but cannot
+/* Scrim: absolute over .board-viewport so it overlays the visible board but cannot
    reach the .actionbar (sibling of .stage) or browser chrome (T-100-06-02). */
 .game-over-scrim {
   position: absolute;
@@ -179,7 +134,9 @@ const titleText = computed(() => {
   border: 1px solid var(--bsg-line-2);
   border-radius: var(--bsg-r-lg);
   box-shadow: var(--bsg-shadow);
-  padding: var(--bsg-s6) var(--bsg-s5);
+  --goc-pad-x: var(--bsg-s5);
+  --goc-close: 44px;
+  padding: var(--bsg-s6) var(--goc-pad-x);
   min-width: 280px;
   max-width: min(480px, 90cqw);
   display: flex;
@@ -194,8 +151,8 @@ const titleText = computed(() => {
   position: absolute;
   top: 0;
   right: 0;
-  width: 44px;
-  height: 44px;
+  width: var(--goc-close);
+  height: var(--goc-close);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -218,6 +175,9 @@ const titleText = computed(() => {
   color: var(--bsg-ink);
   margin: 0;
   line-height: 1.2;
+  /* #1061: room for the corner Close button on both sides keeps the title centred and clear of it. */
+  padding-inline: calc(var(--goc-close) + var(--bsg-s2) - var(--goc-pad-x));
+  overflow-wrap: anywhere;
 }
 
 /* Winner list */
@@ -239,89 +199,5 @@ const titleText = computed(() => {
   font-size: 1rem;
   font-weight: 600;
   color: var(--bsg-ink);
-}
-
-/* Player identity token (mirrors PlayersPanel.vue) */
-.tok {
-  position: relative;
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  --tc: var(--bsg-accent);
-}
-
-.tok .shape {
-  position: absolute;
-  inset: 0;
-  background: var(--tc);
-  opacity: 0.85;
-}
-
-.tok .ini {
-  position: relative;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--bsg-bg);
-  line-height: 1;
-  z-index: 1;
-}
-
-/* Shape clip-paths (same set as PlayersPanel.vue) */
-.sh-circle .shape { border-radius: 50%; }
-.sh-square .shape { border-radius: var(--bsg-r-sm); }
-.sh-hexagon .shape { clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%); }
-.sh-octagon .shape { clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%); }
-.sh-diamond .shape { clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); }
-.sh-pentagon .shape { clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%); }
-.sh-shield .shape { clip-path: polygon(50% 0%, 100% 25%, 100% 65%, 50% 100%, 0% 65%, 0% 25%); }
-.sh-plus .shape { clip-path: polygon(33% 0%, 67% 0%, 67% 33%, 100% 33%, 100% 67%, 67% 67%, 67% 100%, 33% 100%, 33% 67%, 0% 67%, 0% 33%, 33% 33%); }
-
-/* Action buttons */
-.game-over-actions {
-  display: flex;
-  gap: var(--bsg-s3);
-  flex-wrap: wrap;
-  justify-content: center;
-}
-
-.goc-btn {
-  height: 46px;
-  padding: 0 var(--bsg-s5);
-  border-radius: var(--bsg-r-sm);
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 700;
-  font-family: inherit;
-  border: 1px solid transparent;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--bsg-s2);
-  transition: 0.13s ease;
-  white-space: nowrap;
-}
-
-.goc-btn--primary {
-  background: var(--bsg-accent);
-  color: var(--bsg-accent-ink);
-  border-color: color-mix(in srgb, var(--bsg-accent) 70%, black);
-}
-
-.goc-btn--primary:hover {
-  filter: brightness(1.06);
-  transform: translateY(-1px);
-}
-
-.goc-btn--ghost {
-  background: transparent;
-  color: var(--bsg-ink-2);
-  border-color: var(--bsg-line);
-}
-
-.goc-btn--ghost:hover {
-  color: var(--bsg-ink);
-  border-color: var(--bsg-line-2);
 }
 </style>

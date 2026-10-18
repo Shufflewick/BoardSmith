@@ -11,13 +11,16 @@
  * (`src/cli/slash-command/agents/`); a project maps a role to another agent in boardsmith.json.
  */
 
-import { promises as fs } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { promises as fs, statSync } from 'node:fs';
+import { join, dirname, relative } from 'node:path';
 import { homedir } from 'node:os';
 import { execSync } from 'node:child_process';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { ROLES, defaultAgentType } from '../lib/agent-roles.js';
 import { boardsmithPackageRoot } from '../lib/boardsmith-version.js';
+import { filesContentHash } from '../lib/hash.js';
+import { listFiles } from '../lib/source-files.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 
 interface InstallOptions {
   force?: boolean;
@@ -83,6 +86,12 @@ const SHARED_DIRS = ['build', 'ingest', 'orchestrate', 'templates', 'aspects', '
  * `routing.md` (which role each piece of work is dispatched to, and when review may start).
  */
 const SHARED_FILES = ['state-machine.md', 'reporting.md', 'routing.md'];
+
+/**
+ * The content hash of the skill sources this install was copied from, written last so a partial
+ * copy carries none. Not the package version: a checkout keeps one version across every pull.
+ */
+const SOURCE_STAMP = join(SHARED_ROOT, 'SOURCE-HASH');
 
 /**
  * A known leaf file inside each shared dir (relative to `targetDir`). A COMPLETE install
@@ -163,12 +172,12 @@ function expectedInstallPaths(targetDir: string): string[] {
 }
 
 /**
- * True only when EVERY expected install path is present AND no retired skill directory survives
- * (a complete, current, non-partial install). A tree that still carries a retired directory is
+ * True only when EVERY expected install path is present, the stamp matches `sourceHash`, AND no retired skill directory survives (a complete, current, non-partial install). A tree that still carries a retired directory is
  * NOT complete: it must fall through to the pre-copy clean that removes it, or a designer who
  * installed an earlier version would keep the stale skill until they thought to pass `--force`.
  */
-async function isFullyInstalled(targetDir: string): Promise<boolean> {
+async function isFullyInstalled(targetDir: string, sourceHash: string): Promise<boolean> {
+  // In these two checks any failure means "install again", which rewrites the piece or fails naming it.
   for (const path of expectedInstallPaths(targetDir)) {
     try {
       await fs.access(path);
@@ -176,13 +185,15 @@ async function isFullyInstalled(targetDir: string): Promise<boolean> {
       return false; // Missing piece → partial/absent install
     }
   }
+  try {
+    const stamped = await fs.readFile(join(targetDir, SOURCE_STAMP), 'utf-8');
+    if (stamped.trim() !== sourceHash) return false; // Copied from other skill sources
+  } catch {
+    return false; // No stamp → an unstamped or partial install
+  }
   for (const skillName of RETIRED_SKILL_NAMES) {
-    try {
-      await fs.access(join(targetDir, skillName));
-      return false; // A retired skill is still on disk → not a current install
-    } catch {
-      // Absent, as it should be.
-    }
+    // A retired skill still on disk, even one that cannot be followed, is not a current install.
+    if ((await readIfExists(join(targetDir, skillName), fs.lstat)) !== undefined) return false;
   }
   return true;
 }
@@ -201,6 +212,13 @@ function skillSources(slashCommandDir: string): string[] {
     ...SHARED_FILES.map((file) => join(bsDir, file)),
     ...AGENT_FILES.map((file) => join(slashCommandDir, 'agents', file)),
   ];
+}
+
+/** Every file the copy reads, relative to `slashCommandDir`. */
+export function skillSourceFiles(slashCommandDir: string): string[] {
+  return skillSources(slashCommandDir).flatMap((path) =>
+    statSync(path).isDirectory() ? listFiles(path, { sourceTree: false }).filter(excludeTestFiles) : [path],
+  ).map((file) => relative(slashCommandDir, file));
 }
 
 /** Throws, naming the first missing one, unless every skill source exists. */
@@ -234,12 +252,12 @@ async function copySkillTree(
   // "Already installed" must mean the FULL expected set is present, not a single sentinel.
   // A partial/interrupted install (e.g. first SKILL.md written but shared tree never copied)
   // must NOT short-circuit as complete — it falls through to a clean re-copy that finishes it.
-  if (!force && (await isFullyInstalled(targetDir))) {
-    return false; // Fully installed, not overwriting
-  }
-
   // The pre-clean below deletes the current install, so first prove there is something to replace it with.
   await assertSkillSourcesExist(slashCommandDir);
+  const sourceHash = filesContentHash(slashCommandDir, skillSourceFiles(slashCommandDir));
+  if (!force && (await isFullyInstalled(targetDir, sourceHash))) {
+    return false; // Fully installed, not overwriting
+  }
 
   // Pre-clean every installer-owned path before copying so the result is authoritative:
   // fs.cp merges into an existing tree and never deletes orphans (renamed/removed upstream
@@ -278,6 +296,7 @@ async function copySkillTree(
     await fs.copyFile(join(slashCommandDir, 'agents', file), join(agentsDir, file));
   }
 
+  await fs.writeFile(join(targetDir, SOURCE_STAMP), `${sourceHash}\n`);
   return true;
 }
 
@@ -297,8 +316,8 @@ export async function installClaudeCommand(options: InstallOptions = {}): Promis
   const installed = await copySkillTree(boardsmithRoot, targetDir, force);
 
   if (!installed) {
-    console.log(chalk.yellow('BoardSmith skills already installed at:'));
-    console.log(chalk.gray(`  ${targetDir}`));
+    console.log(styleText('yellow', 'BoardSmith skills already installed at:'));
+    console.log(styleText('gray', `  ${targetDir}`));
     console.log('');
     console.log('Use --force to overwrite.');
     return;
@@ -306,10 +325,10 @@ export async function installClaudeCommand(options: InstallOptions = {}): Promis
 
   // Link BoardSmith globally so `npx boardsmith` works anywhere
   if (!options.skipLink) {
-    console.log(chalk.gray('Linking BoardSmith globally...'));
+    console.log(styleText('gray', 'Linking BoardSmith globally...'));
     try {
       execSync('npm link --force', { cwd: boardsmithRoot, stdio: 'pipe' });
-      console.log(chalk.green('✓ BoardSmith linked globally'));
+      console.log(styleText('green', '✓ BoardSmith linked globally'));
     } catch (err) {
       // Check if it's ALREADY linked globally without touching the network. A bare
       // `npx boardsmith --version` would DOWNLOAD and execute a registry package named
@@ -318,58 +337,58 @@ export async function installClaudeCommand(options: InstallOptions = {}): Promis
       // `npm ls -g` only inspects already-installed global packages and never fetches.
       try {
         execSync('npm ls -g --depth=0 boardsmith', { stdio: 'pipe' });
-        console.log(chalk.green('✓ BoardSmith already linked globally'));
+        console.log(styleText('green', '✓ BoardSmith already linked globally'));
       } catch {
         // `npm ls -g` also exits non-zero for UNRELATED global-tree problems (extraneous or
         // invalid deps elsewhere), so a failure here does not prove boardsmith is unlinked —
         // it only means we could not confirm the link. Soften the wording accordingly.
-        console.error(chalk.yellow('Warning: Could not confirm BoardSmith is linked globally.'));
-        console.error(chalk.gray('If `npx boardsmith` is not found, run with sudo or fix npm permissions.'));
-        console.error(chalk.gray(`Manual fix: cd ${boardsmithRoot} && npm link`));
+        console.error(styleText('yellow', 'Warning: Could not confirm BoardSmith is linked globally.'));
+        console.error(styleText('gray', 'If `npx boardsmith` is not found, run with sudo or fix npm permissions.'));
+        console.error(styleText('gray', `Manual fix: cd ${boardsmithRoot} && npm link`));
       }
     }
   }
 
-  console.log(chalk.green('✓ Installed BoardSmith skills for Claude Code'));
+  console.log(styleText('green', '✓ Installed BoardSmith skills for Claude Code'));
   console.log('');
-  console.log(chalk.gray(`  Location: ${targetDir}`));
-  console.log(chalk.gray(`  BoardSmith: ${boardsmithRoot}`));
+  console.log(styleText('gray', `  Location: ${targetDir}`));
+  console.log(styleText('gray', `  BoardSmith: ${boardsmithRoot}`));
   console.log('');
   console.log('Skills:');
-  console.log(chalk.cyan('  bs-create-game') + chalk.gray('   - Start a new game — from an idea or a rulebook (start here)'));
-  console.log(chalk.cyan('  bs-ingest-rules') + chalk.gray('  - Ingest a rulebook and produce the initial sketch/chunk plan'));
-  console.log(chalk.cyan('  bs-build-game') + chalk.gray('    - Build the whole game: chunk by chunk (independent ones side by side), resumable, questions filed'));
-  console.log(chalk.cyan('  bs-build-chunk') + chalk.gray('   - Build, test, audit, and playtest one chunk at a time'));
-  console.log(chalk.cyan('  bs-check-status') + chalk.gray('  - Report sketch/chunk progress and next steps'));
-  console.log(chalk.cyan('  bs-insert-chunk') + chalk.gray('  - Insert a new chunk into an existing sketch'));
-  console.log(chalk.cyan('  bs-build-bot') + chalk.gray('      - Generate a computer opponent for the finished game'));
-  console.log(chalk.cyan('  bs-verify-game') + chalk.gray('   - Re-verify an existing game against its archived rulebook source'));
+  console.log(styleText('cyan', '  bs-create-game') + styleText('gray', '   - Start a new game — from an idea or a rulebook (start here)'));
+  console.log(styleText('cyan', '  bs-ingest-rules') + styleText('gray', '  - Ingest a rulebook and produce the initial sketch/chunk plan'));
+  console.log(styleText('cyan', '  bs-build-game') + styleText('gray', '    - Build the whole game: chunk by chunk (independent ones side by side), resumable, questions filed'));
+  console.log(styleText('cyan', '  bs-build-chunk') + styleText('gray', '   - Build, test, audit, and playtest one chunk at a time'));
+  console.log(styleText('cyan', '  bs-check-status') + styleText('gray', '  - Report sketch/chunk progress and next steps'));
+  console.log(styleText('cyan', '  bs-insert-chunk') + styleText('gray', '  - Insert a new chunk into an existing sketch'));
+  console.log(styleText('cyan', '  bs-build-bot') + styleText('gray', '      - Generate a computer opponent for the finished game'));
+  console.log(styleText('cyan', '  bs-verify-game') + styleText('gray', '   - Re-verify an existing game against its archived rulebook source'));
   console.log('');
-  console.log(chalk.gray('Each skill reads from a shared reference tree (build/, ingest/,'));
+  console.log(styleText('gray', 'Each skill reads from a shared reference tree (build/, ingest/,'));
   console.log(
-    chalk.gray(
+    styleText('gray',
       'orchestrate/, templates/, aspects/, state-machine.md, reporting.md, routing.md) installed under bs-shared/.'
     )
   );
   console.log('');
   console.log('Role agents (the skills dispatch work by role, never by model):');
-  console.log(chalk.cyan('  bs-mechanical') + chalk.gray('    - Bulk edits, searches and summaries'));
-  console.log(chalk.cyan('  bs-bounded') + chalk.gray('       - Implementation where failing tests say what done is'));
-  console.log(chalk.cyan('  bs-judgement') + chalk.gray('     - Spec, investigate, red team, fidelity, anything touching a ruling'));
-  console.log(chalk.cyan('  bs-review') + chalk.gray('        - Review, once `boardsmith verify` has passed'));
-  console.log(chalk.cyan('  bs-second-opinion') + chalk.gray(' - An independent second reading, on a different model from bs-judgement'));
-  console.log(chalk.gray(`  Location: ${agentsDirFor(targetDir)}`));
-  console.log(chalk.gray('  To use other agents, map roles in boardsmith.json, e.g. "agents": { "judgement": "senior" }.'));
-  console.log(chalk.gray('Projects built with an older BoardSmith skill are auto-detected'));
-  console.log(chalk.gray('and offered a one-time conversion by bs-ingest-rules.'));
+  console.log(styleText('cyan', '  bs-mechanical') + styleText('gray', '    - Bulk edits, searches and summaries'));
+  console.log(styleText('cyan', '  bs-bounded') + styleText('gray', '       - Implementation where failing tests say what done is'));
+  console.log(styleText('cyan', '  bs-judgement') + styleText('gray', '     - Spec, investigate, red team, fidelity, anything touching a ruling'));
+  console.log(styleText('cyan', '  bs-review') + styleText('gray', '        - Review, once `boardsmith verify` has passed'));
+  console.log(styleText('cyan', '  bs-second-opinion') + styleText('gray', ' - An independent second reading, on a different model from bs-judgement'));
+  console.log(styleText('gray', `  Location: ${agentsDirFor(targetDir)}`));
+  console.log(styleText('gray', '  To use other agents, map roles in boardsmith.json, e.g. "agents": { "judgement": "senior" }.'));
+  console.log(styleText('gray', 'Projects built with an older BoardSmith skill are auto-detected'));
+  console.log(styleText('gray', 'and offered a one-time conversion by bs-ingest-rules.'));
   console.log('');
-  console.log(chalk.bold('Next step: ') + 'open Claude Code and type ' + chalk.bold.cyan('/bs-create-game'));
-  console.log(chalk.gray('to start designing your first game. (Restart Claude Code first if it'));
-  console.log(chalk.gray("was already running, so it picks up the newly installed skills.)"));
+  console.log(styleText('bold', 'Next step: ') + 'open Claude Code and type ' + styleText(['bold', 'cyan'], '/bs-create-game'));
+  console.log(styleText('gray', 'to start designing your first game. (Restart Claude Code first if it'));
+  console.log(styleText('gray', "was already running, so it picks up the newly installed skills.)"));
   console.log('');
 
   if (options.local) {
-    console.log(chalk.yellow('Note: Installed locally to this project.'));
+    console.log(styleText('yellow', 'Note: Installed locally to this project.'));
     console.log('Run without --local to install globally.');
   }
 }
@@ -385,19 +404,15 @@ export async function uninstallClaudeCommand(options: { local?: boolean } = {}):
   // bs-shared/ namespace and the role agents). Never a generic top-level name like
   // `templates`/`build`, so uninstall cannot wipe an unrelated user skill or agent that shares it.
   for (const itemPath of ownedPaths(targetDir)) {
-    try {
-      await fs.access(itemPath);
-    } catch {
-      continue; // Doesn't exist, skip
-    }
+    if ((await readIfExists(itemPath, fs.lstat)) === undefined) continue; // Doesn't exist, skip
     await fs.rm(itemPath, { recursive: true, force: true });
-    console.log(chalk.gray(`  Removed: ${itemPath}`));
+    console.log(styleText('gray', `  Removed: ${itemPath}`));
     removedAny = true;
   }
 
   if (removedAny) {
-    console.log(chalk.green('✓ Uninstalled BoardSmith skills'));
+    console.log(styleText('green', '✓ Uninstalled BoardSmith skills'));
   } else {
-    console.log(chalk.yellow('No BoardSmith skills found.'));
+    console.log(styleText('yellow', 'No BoardSmith skills found.'));
   }
 }

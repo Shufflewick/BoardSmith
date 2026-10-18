@@ -20,10 +20,10 @@ import type {
   ElementsSelection,
   Player,
   GameClass,
-  FollowUpAction,
   GameMetrics,
+  PublishedFollowUp,
 } from '../engine/index.js';
-import { followUpForSeat, MoveListTooLargeError } from '../engine/index.js';
+import { MoveListTooLargeError } from '../engine/index.js';
 import { enumerateActionMoves, enumerateLegalMoves, numberInputValues } from '../engine/utils/enumerate-moves.js';
 import { createBot } from '../bot/index.js';
 import type { BotStrategy, DifficultyLevel } from '../bot/types.js';
@@ -58,8 +58,14 @@ export interface PolicyTurn {
   game: Game;
   /** The seat to move. */
   seat: number;
-  /** The seat's enabled actions. */
+  /** The seat's enabled actions. A held follow-up is not among them: it is {@link PolicyTurn.followUp}. */
   actions: string[];
+  /**
+   * The follow-up this seat holds, if any (#1078): its `action` taken with its
+   * bound `args` plus the picks those args leave open. It may be the seat's
+   * only move, with `actions` empty.
+   */
+  followUp?: PublishedFollowUp;
   /** This seat's own seeded generator, so one seat's policy never moves another seat's draws. */
   random: SeededRandom;
   /** The game being simulated. */
@@ -95,16 +101,21 @@ export interface SelectionChoicesObservation {
 
 /**
  * Builds one random, valid move from each enabled action, step by step from
- * the engine's own choices, and plays one of them. `onSelectionChoices` sees
- * every choice, element and elements step it builds (not a repeating one,
- * whose candidates exist only on a scratch copy); it cannot change the game.
+ * the engine's own choices, and from the seat's held follow-up (#911), and
+ * plays one of them. `onSelectionChoices` sees
+ * every choice, element and elements step it builds for an action (not a
+ * repeating one, whose candidates exist only on a scratch copy); it cannot
+ * change the game. A follow-up's move comes from move enumeration instead, so
+ * its open number input needs `integer: true` as well as min and max to be
+ * listed, and `onSelectionChoices` never sees its choice steps: the
+ * choice-cardinality audit skips an action reached only as a follow-up.
  */
 export function random(
   options: { onSelectionChoices?: (observation: SelectionChoicesObservation) => void } = {},
 ): Policy {
   return {
     name: 'random',
-    choose({ game, seat, actions, random: rng }) {
+    choose({ game, seat, actions, followUp: held, random: rng }) {
       const player = game.getPlayer(seat);
       if (!player) return { noMove: `No playable move for player ${seat}: there is no such player.` };
       const moves: PolicyMove[] = [];
@@ -119,6 +130,9 @@ export function random(
         if (built.ok) moves.push({ action, args: built.args });
         else reasons.push(built.reason);
       }
+      const followUp = randomFollowUpMove(game, player, held, rng);
+      moves.push(...followUp.moves);
+      reasons.push(...followUp.reasons);
       if (moves.length > 0) return rng.pick(moves);
       return {
         noMove:
@@ -130,6 +144,33 @@ export function random(
       };
     },
   };
+}
+
+/**
+ * One random move from the seat's held follow-up, or why it has none; neither
+ * when it holds none. A follow-up is not among the seat's actions, and its
+ * bound args come from the follow-up itself (#911).
+ */
+function randomFollowUpMove(
+  game: Game,
+  player: Player,
+  followUp: PublishedFollowUp | undefined,
+  rng: SeededRandom,
+): { moves: PolicyMove[]; reasons: string[] } {
+  if (!followUp) return { moves: [], reasons: [] };
+  const actionDef = game.getAction(followUp.action);
+  if (!actionDef) return { moves: [], reasons: [`follow-up '${followUp.action}' is not registered on the game`] };
+  const moves = enumerateActionMoves(game, actionDef, player, { followUp, sampleAboveBudget: { count: 1, random: rng } });
+  if (moves.length === 0) {
+    return {
+      moves: [],
+      reasons: [
+        `follow-up '${followUp.action}' has no move the simulator can list: ` +
+          'every pick is refused, or a number input lacks min, max and integer: true',
+      ],
+    };
+  }
+  return { moves: [{ action: followUp.action, args: rng.pick(moves) }], reasons: [] };
 }
 
 /**
@@ -145,8 +186,7 @@ export function random(
 export function greedy<G extends Game>(score: (game: G, move: PolicyMove, seat: number) => number): Policy {
   return {
     name: 'greedy',
-    choose({ game, seat, actions, random: rng }) {
-      const followUp = followUpForSeat(game.getFlowState(), seat);
+    choose({ game, seat, actions, followUp, random: rng }) {
       const unlistable = unlistableNumberInput(game, actions, followUp);
       if (unlistable) return { noMove: unlistable };
       let moves: PolicyMove[];
@@ -177,7 +217,7 @@ export function greedy<G extends Game>(score: (game: G, move: PolicyMove, seat: 
  * enabled action, or the held follow-up, with a number input its args do not
  * already answer and enumeration cannot list (#689).
  */
-function unlistableNumberInput(game: Game, actions: string[], followUp: FollowUpAction | undefined): string | undefined {
+function unlistableNumberInput(game: Game, actions: string[], followUp: PublishedFollowUp | undefined): string | undefined {
   const offered = [
     ...actions.map((action) => ({ action, args: {} })),
     ...(followUp ? [{ action: followUp.action, args: followUp.args ?? {} }] : []),

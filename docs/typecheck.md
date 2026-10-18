@@ -15,7 +15,7 @@ it there.
 1. **`boardsmith test`** runs it first in this repository and runs no test at
    all if it fails. So a type error is found while you are still working, not
    at merge. `boardsmith test --browser` (the browser regressions) does not:
-   verify runs it after the plain run has type-checked the same commit.
+   a merge runs it after `typecheck` has checked the same commit.
 2. **At merge.** Maintainers merge a branch into `main` only through a gate
    that runs `boardsmith test` on the merged tree, and the gate refuses the
    branch if it fails. Because it checks
@@ -90,7 +90,7 @@ in every game.
   `boardsmith/runtime`) with only ES2022 and
   Workers-shaped declarations (#488). Read a runtime
   global by its bare name, never as a property of `globalThis`.
-- **The code blocks in `docs/*.md`.** A Markdown file is not compiled. A
+- **The code blocks in `docs/*.md` and `docs/api/*.md`.** A Markdown file is not compiled. A
   block an author copies into a game is marked with a
   `<!-- typecheck: game <path> -->` line directly above its fence, and
   `src/contract/docs-game-typecheck.test.ts` writes each marked block to

@@ -20,13 +20,22 @@ import { ErrorCode } from '../types/protocol.js';
 import { describeMoveForNarration } from './move-summary.js';
 import { runsAtOnce, type HostWorkGate } from './host-work-gate.js';
 import { StatePushGate } from './state-push-gate.js';
-import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState } from './types.js';
+import type { HeatmapEntry, SerializedFlowDebugInfo } from './types.js';
+import { pendingActionForSeat } from './utils.js';
 
 export type { Op, OpResult } from './stateless-ops.js';
 // The adapter's half of #487: every host that pushes these views keeps one.
 export { StatePushGate, type StatePushGateOptions } from './state-push-gate.js';
 
-const MAX_BOT_MOVES = 500;
+/** Bot moves a run makes before it yields to the event loop, so a long all-bot game never starves the host's I/O and timers (#815). */
+const BOT_MOVES_PER_STRETCH = 500;
+
+/**
+ * Bot moves one run may make before it is stopped as a runaway (#815): a run
+ * lasts until no bot is due, so on an all-bot table it is the whole game, and
+ * this bounds a game whose bots never end it.
+ */
+const MAX_BOT_MOVES_PER_RUN = 20_000;
 
 /**
  * Bot searches thrown away as stale in a row before the bot's moves are made
@@ -88,9 +97,35 @@ function botMoveOp(
   return { type: 'action', actionName, player, args, boundaryKey };
 }
 
+/**
+ * The most moves a demo can step back through. Step back reviews the last few
+ * moves, and each entry is a whole snapshot, so holding all 200 moves' worth
+ * would keep ten times the memory for no use.
+ */
+const MAX_DEMO_HISTORY = 20;
+
+/** The longest pause between demo moves; past an hour a learner wants pause, not a slower speed. */
+const MAX_DEMO_DELAY_MS = 3_600_000;
+
+/** Why a client's demo `delay` cannot pace the demo, or `null` when it can. */
+function demoDelayRefusal(delay: unknown): string | null {
+  if (Number.isInteger(delay) && (delay as number) >= 0 && (delay as number) <= MAX_DEMO_DELAY_MS) return null;
+  const shown = typeof delay === 'number' ? String(delay) : JSON.stringify(delay);
+  return `The demo delay must be a whole number of milliseconds from 0 to ${MAX_DEMO_DELAY_MS}, but it is ${shown}.`;
+}
+
 /** Whether `op`, which `res` answered with success, ended the acting seat's move. */
 function completesAction(op: Op, res: OpResult): boolean {
   return closesSeat(op) || ('actionComplete' in res && res.actionComplete === true);
+}
+
+/**
+ * Whether `op` replaces the position every seat was looking at: an undo or a
+ * rewind goes back to another one, and a tutorial's setup rewrites the board
+ * (#1082). What any seat holds against the old position goes with it.
+ */
+function replacesPosition(op: Op): boolean {
+  return op.type === 'undo' || op.type === 'debugRewind' || op.type === 'restoreEarlier' || op.type === 'startTutorial';
 }
 
 /**
@@ -99,6 +134,56 @@ function completesAction(op: Op, res: OpResult): boolean {
  * its own state rather than as a move.
  */
 type MutatingOp = Exclude<ExecutableOp, { type: ReadOnlyOpType | 'hint' | 'heatmapToggle' }>;
+
+/**
+ * Who sends each op, enumerated ONCE (#1102). A `host` op is composed only by
+ * the session host itself, which runs it through `executeOp` directly, so
+ * `handleOp` refuses it from a seat: `start` would begin
+ * the game again, `restoreEarlier` replaces the game with the sender's
+ * snapshot, and `botSuggest` answers with a bot seat's move, which may be
+ * hidden from the sender. `expireSeat` and `convertSeatToBot` are host
+ * decisions too, but hosts send them through `handleOp`, and each is refused
+ * when it names a seat other than the caller (#738, #950). The `Record` makes
+ * every new op choose.
+ */
+const OP_SENDER = {
+  start: 'host',
+  action: 'seat',
+  expireSeat: 'seat',
+  selectionStep: 'seat',
+  resolveChoices: 'seat',
+  cancelAction: 'seat',
+  undo: 'seat',
+  botSuggest: 'host',
+  debugHistory: 'seat',
+  debugStateAt: 'seat',
+  debugStateDiff: 'seat',
+  debugActionTraces: 'seat',
+  debugFlowState: 'seat',
+  debugCustomData: 'seat',
+  debugRewind: 'seat',
+  debugReorder: 'seat',
+  debugTransfer: 'seat',
+  debugShuffle: 'seat',
+  debugDeckView: 'seat',
+  debugDeckViewAt: 'seat',
+  restoreEarlier: 'host',
+  startTutorial: 'seat',
+  exitTutorial: 'seat',
+  hint: 'seat',
+  heatmapToggle: 'seat',
+  demoStart: 'seat',
+  demoStop: 'seat',
+  demoControl: 'seat',
+  convertSeatToBot: 'seat',
+} as const satisfies Record<Op['type'], 'seat' | 'host'>;
+/** The ops a seat may send through `handleOp`, read from {@link OP_SENDER} (#1109). */
+export type SeatOpType = { [K in Op['type']]: (typeof OP_SENDER)[K] extends 'seat' ? K : never }[Op['type']];
+/** An op a seat may send through `handleOp`. */
+export type SeatOp = OpOfType<SeatOpType>;
+const HOST_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set(
+  (Object.keys(OP_SENDER) as Op['type'][]).filter((type) => OP_SENDER[type] === 'host'),
+);
 
 /**
  * Consecutive persist() failures before `persistenceHealthy` flips false
@@ -561,14 +646,19 @@ export class SnapshotSessionHost {
   private lastFlowDebugInfo: SerializedFlowDebugInfo | null = null;
 
   /**
-   * When each entry of the game's action history reached this host, by
-   * history index (#547): what the Debug panel's history shows beside each
-   * move. Held here, never in the snapshot, because engine history stays
-   * clock-free (#54). Recorded only while debugging is on, so a host with it
-   * off reads no clock; an entry with no time is one made while debugging was
-   * off or before this host held the game.
+   * When each KEPT entry of the game's action history reached this host
+   * (#547): `arrivalTimes[i]` is action `arrivalBase + i`, what the Debug
+   * panel's history shows beside each move. Only kept entries, so a game that
+   * drops its old history (`checkpoints: { actionHistory: 'undo' }`, #997)
+   * holds a bounded array here too. Held here, never in the snapshot, because
+   * engine history stays clock-free (#54). Recorded only while debugging is
+   * on, so a host with it off reads no clock; an entry with no time is one
+   * made while debugging was off or before this host held the game.
    */
   private arrivalTimes: Array<number | undefined> = [];
+
+  /** The action `arrivalTimes[0]` is: the held snapshot's `actionHistoryBase`. */
+  private arrivalBase = 0;
 
   // Demo loop cancellation flag, move cap, and cancellable-delay handle.
   // demoAbort: set by demoStop to cancel the in-flight runDemoLoop.
@@ -584,7 +674,8 @@ export class SnapshotSessionHost {
   // demoStepConsume: one-shot — released the gate for a single move; re-pauses after.
   // demoRewound: set by 'back' — tells the loop to re-suggest from the restored
   //   snapshot instead of executing the now-stale narrated move.
-  // demoHistory: pre-move snapshots so 'back' can rewind one move at a time.
+  // demoHistory: pre-move snapshots so 'back' can rewind one move at a time,
+  //   the last MAX_DEMO_HISTORY only (each is a whole game).
   // _demoWake: resolves the current pace-gate wait (woken by any control op / stop).
   private demoDelay = 1200;
   private demoPaused = false;
@@ -722,7 +813,7 @@ export class SnapshotSessionHost {
     // only — never shared across seats. A seat must never receive another
     // seat's accumulated pending-action args.
     const pendingAction = this.pendingStates.get(seat);
-    if (pendingAction) state.pendingAction = pendingAction as unknown as SerializedPendingActionState;
+    if (pendingAction) state.pendingAction = pendingActionForSeat(pendingAction);
     if (this.demoRunning) {
       state.isDemoRunning = true;
       // Playback-control state so clients can render the demo control bar.
@@ -863,6 +954,7 @@ export class SnapshotSessionHost {
     host.pendingStates = host.restorablePendingStates(state.pendingStates);
     host._snapshot = snapshot;
     // Moves made before this host held the game arrived at times it never saw.
+    host.arrivalBase = snapshot.actionHistoryBase ?? 0;
     host.arrivalTimes = new Array<undefined>(snapshot.actionHistory.length).fill(undefined);
     host.botSeats = state.botSeats.map((s) => ({ ...s }));
     if (state.playerViews) host.lastPlayerViews = state.playerViews;
@@ -968,7 +1060,7 @@ export class SnapshotSessionHost {
    */
   private async apply(res: StateEnvelope, seat?: number, pending: Record<string, unknown> | null = null): Promise<void> {
     this._snapshot = this.checkedSnapshot(res.snapshot, 'op');
-    this.noteArrivals(this._snapshot.actionHistory.length);
+    this.noteArrivals(this._snapshot);
     // FLOW-01/03: every state-mutating op's stateEnvelope() carries a fresh
     // flowDebugInfo (shared serializeFlowDebugInfo — same shape as the
     // debug:flow-state op). Carry it forward
@@ -987,19 +1079,27 @@ export class SnapshotSessionHost {
   }
 
   /**
-   * Bring {@link arrivalTimes} to a history of `length` entries: drop the times
-   * of entries an undo or rewind removed, and stamp each new entry with now.
+   * Bring {@link arrivalTimes} to `snapshot`'s kept history: drop the times of
+   * entries the game dropped from the front or an undo or rewind removed from
+   * the end, and stamp each new entry with now.
    */
-  private noteArrivals(length: number): void {
+  private noteArrivals(snapshot: GameStateSnapshot): void {
+    const base = snapshot.actionHistoryBase ?? 0;
+    const dropped = base - this.arrivalBase;
+    // A base that moved back is another game's history (a new game): this host saw none of it arrive.
+    if (dropped < 0) this.arrivalTimes = new Array<undefined>(snapshot.actionHistory.length).fill(undefined);
+    else this.arrivalTimes.splice(0, dropped);
+    this.arrivalBase = base;
+    const length = snapshot.actionHistory.length;
     if (this.arrivalTimes.length > length) this.arrivalTimes.length = length;
     const now = this.adapters.debug === true ? Date.now() : undefined;
     while (this.arrivalTimes.length < length) this.arrivalTimes.push(now);
   }
 
-  /** `history` with each entry's arrival time, where this host recorded one. */
-  private withArrivalTimes(history: HistoryEntry[]): DebugHistoryEntry[] {
+  /** `history`, whose first entry is action `base`, with each entry's arrival time, where this host recorded one. */
+  private withArrivalTimes(history: HistoryEntry[], base: number): DebugHistoryEntry[] {
     return history.map((entry, index) => {
-      const timestamp = this.arrivalTimes[index];
+      const timestamp = this.arrivalTimes[base - this.arrivalBase + index];
       return timestamp === undefined ? entry : { ...entry, timestamp };
     });
   }
@@ -1025,12 +1125,22 @@ export class SnapshotSessionHost {
   }
 
   /**
+   * Replace the game with `snapshot`, an earlier or arranged position of this
+   * game, as a restore every seat sees, and wake the bots when it is a bot
+   * seat's turn. Host-only: `handleOp` refuses `restoreEarlier` from a seat
+   * (#1102). Resolves once published; the bots' replies follow ({@link settled}).
+   */
+  async restoreEarlier(snapshot: GameStateSnapshot): Promise<OpResultFor<'restoreEarlier'>> {
+    return (await this.applyMutatingOp(null, { type: 'restoreEarlier', snapshot })) as OpResultFor<'restoreEarlier'>;
+  }
+
+  /**
    * Run `op` for `seat` and answer with that op's own result. Read-only ops
    * (a choices query, the read-only debug ops) do NOT mutate or broadcast.
    * State-mutating ops broadcast and persist the new state, THEN resolve,
    * without waiting for the bot run they wake ({@link settled}, #698).
    */
-  async handleOp<T extends Op['type']>(seat: number, op: OpOfType<T>): Promise<OpResultFor<T>> {
+  async handleOp<T extends SeatOpType>(seat: number, op: OpOfType<T>): Promise<OpResultFor<T>> {
     // `handle` answers each op from the branch that matched its type. TypeScript
     // narrows `op` there but cannot carry that back to a generic return type,
     // so it is stated here, once.
@@ -1041,12 +1151,24 @@ export class SnapshotSessionHost {
     // #481: debug ops need debugging on.
     const debugRefused = debugOpRefusal(op, this.adapters.debug === true);
     if (debugRefused) return debugRefused;
-    // #738: picks are kept under `seat`, so an op acting as another player would mix two seats.
-    if ('player' in op && op.player !== seat) {
+    // #1100, #1102: start, restoreEarlier and botSuggest would let a seat restart the game, replace it, or read a bot's hidden move.
+    if (HOST_ONLY_OP_TYPES.has(op.type)) {
       return {
         success: false,
         error:
-          `Seat ${seat} sent '${op.type}' as seat ${op.player}, and was refused. ` +
+          `Seat ${seat} sent '${op.type}', and was refused: only the host itself sends it, ` +
+          'through host.start(), host.restoreEarlier(snapshot) or host.runBotTurns(), never through handleOp.',
+        category: 'protocol',
+      };
+    }
+    // #738: picks are kept under `seat`, so an op acting as another player would mix two seats.
+    // #950: hint, heatmapToggle and convertSeatToBot name theirs as `seat`.
+    const named = 'player' in op ? op.player : 'seat' in op ? op.seat : seat;
+    if (named !== seat) {
+      return {
+        success: false,
+        error:
+          `Seat ${seat} sent '${op.type}' as seat ${named}, and was refused. ` +
           'A seat can act and see only as itself; switch to that seat to do this.',
         category: 'protocol',
       };
@@ -1055,6 +1177,10 @@ export class SnapshotSessionHost {
     // because they need the broadcast adapter and a cancellable async lifetime.
     // demoStart: fire-and-forget runDemoLoop; return minimal envelope immediately.
     // demoStop: set demoAbort flag; the loop's finally block broadcasts cleanup.
+    if ((op.type === 'demoStart' || op.type === 'demoControl') && op.delay !== undefined) {
+      const refusal = demoDelayRefusal(op.delay);
+      if (refusal !== null) return { success: false, error: refusal, category: 'protocol' };
+    }
     if (op.type === 'demoStart') {
       // Fail-loud: teaching features locked out by the host.
       if (this.adapters.teachingDisabled) {
@@ -1068,7 +1194,7 @@ export class SnapshotSessionHost {
           level: this.botSeats[0]?.level,
         }));
         // Reset playback controls for a fresh run.
-        this.demoDelay = typeof op.delay === 'number' ? op.delay : 1200;
+        this.demoDelay = op.delay ?? 1200;
         this.demoPaused = false;
         this.demoStepConsume = false;
         this.demoRewound = false;
@@ -1092,7 +1218,7 @@ export class SnapshotSessionHost {
     if (op.type === 'demoControl') {
       // No-op if no demo is running (the control bar only renders while running).
       if (this.demoRunning) {
-        if (typeof op.delay === 'number') this.demoDelay = op.delay;
+        if (op.delay !== undefined) this.demoDelay = op.delay;
         switch (op.control) {
           case 'pause':
             this.demoPaused = true;
@@ -1141,7 +1267,7 @@ export class SnapshotSessionHost {
     if (isReadOnlyOp(op)) {
       const res = await this.adapters.executeOp(this.snapshot, this.pendingStates.get(seat) ?? null, op);
       if (op.type === 'debugHistory' && res.success && 'actionHistory' in res) {
-        return { ...res, actionHistory: this.withArrivalTimes(res.actionHistory) };
+        return { ...res, actionHistory: this.withArrivalTimes(res.actionHistory, res.actionHistoryBase ?? 0) };
       }
       return res;
     }
@@ -1157,7 +1283,7 @@ export class SnapshotSessionHost {
    * than a client waits for the answer to a move that has already landed. What
    * they change reaches every seat as an ordinary publish.
    */
-  private async applyMutatingOp(seat: number, op: MutatingOp): Promise<OpResult> {
+  private async applyMutatingOp(seat: number | null, op: MutatingOp): Promise<OpResult> {
     const res = await this.enqueue(() => this.commitMutatingOp(seat, op));
     if (!res.success) return res;
     const actionCompleted = completesAction(op, res);
@@ -1166,10 +1292,10 @@ export class SnapshotSessionHost {
     // arrive is a human action the bot seat is not going to take. The table
     // just sits there. (Undo alone never showed this — it rewinds to the
     // requesting seat's own turn start, so the pump would find no due bot seat
-    // anyway. A rewind can target ANY point, which is what made it reachable.)
-    const wakesBots = actionCompleted || op.type === 'undo' || op.type === 'debugRewind';
+    // anyway. A rewind or a restore can target ANY point, which is what made it reachable.)
+    const wakesBots = actionCompleted || op.type === 'undo' || op.type === 'debugRewind' || op.type === 'restoreEarlier';
     if (!wakesBots) return res;
-    const tracked: Promise<void> = this.afterMove(`seat ${seat}'s ${op.type}`, actionCompleted).finally(() =>
+    const tracked: Promise<void> = this.afterMove(`${seat === null ? 'the host' : `seat ${seat}`}'s ${op.type}`, actionCompleted).finally(() =>
       this.backgroundWork.delete(tracked),
     );
     this.backgroundWork.add(tracked);
@@ -1237,7 +1363,7 @@ export class SnapshotSessionHost {
   }
 
   /** Execute `op`, then hold, publish and persist what it made. Runs inside the one-at-a-time section. */
-  private async commitMutatingOp(seat: number, op: MutatingOp): Promise<OpResult> {
+  private async commitMutatingOp(seat: number | null, op: MutatingOp): Promise<OpResult> {
     // An op that closes the seat (the seat's own action, or the host closing a
     // seat at a deadline) runs without the seat's in-progress selection: it does not
     // continue those picks. They are dropped only once the close SUCCEEDS. A
@@ -1245,15 +1371,19 @@ export class SnapshotSessionHost {
     // the round it named is over (a stale submission), in which case the picks
     // belong to the new round and must survive.
     const closing = closesSeat(op);
-    const res = await this.adapters.executeOp(this.snapshot, closing ? null : this.pendingStates.get(seat) ?? null, op);
+    const res = await this.adapters.executeOp(
+      this.snapshot,
+      closing || seat === null ? null : this.pendingStates.get(seat) ?? null,
+      op,
+    );
     if (!res.success) return res;
-    if (closing) this.pendingStates.delete(seat);
+    if (closing && seat !== null) this.pendingStates.delete(seat);
     // Only a selection step leaves the seat mid-action; every other op ends it.
     const pending = 'pendingState' in res ? res.pendingState : null;
 
     // Clear hint for the acting seat on successful action/selectionStep (completion):
     // a hint answers the position the seat was in, which its move just changed.
-    if (completesAction(op, res)) {
+    if (seat !== null && completesAction(op, res)) {
       const seatTransient = this.transientTeachingState.get(seat);
       if (seatTransient?.hint) {
         const { hint: _h, ...rest } = seatTransient;
@@ -1265,9 +1395,9 @@ export class SnapshotSessionHost {
       }
     }
 
-    if (op.type === 'undo' || op.type === 'debugRewind') this.#forgetReplacedTree();
+    if (replacesPosition(op)) this.#forgetReplacedTree();
 
-    await this.apply(res, seat, pending);
+    await this.apply(res, seat ?? undefined, pending);
     return res;
   }
 
@@ -1299,10 +1429,11 @@ export class SnapshotSessionHost {
 
   /**
    * Drop what every seat holds against a runner that was just replaced (undo,
-   * rewind, a demo's step back, a rules reload): hints, heatmaps, narration and
-   * half-made selections, which hold element ids from the old game tree. `apply`
-   * drops only the acting seat's selection, so another seat would otherwise stay
-   * mid-chain against a tree that no longer exists. A rules reload that restored
+   * rewind, a tutorial start, a demo's step back, a rules reload): hints,
+   * heatmaps, narration and half-made selections, which hold element ids from
+   * the old game tree. `apply` drops only the acting seat's selection, so
+   * another seat would otherwise stay mid-chain against a tree that no longer
+   * exists. A rules reload that restored
    * the saved tree keeps the selections: the tree they point into is unchanged.
    */
   #forgetReplacedTree({ keepPendingSelections = false } = {}): void {
@@ -1640,9 +1771,11 @@ export class SnapshotSessionHost {
           this.hostWork.hold(() => this.runBotTurns());
           break;
         }
-        if (moves >= MAX_BOT_MOVES) {
-          console.error('[SnapshotSessionHost] bot pump hit MAX_BOT_MOVES cap (500); stopping to avoid runaway.');
-          break;
+        if (moves >= MAX_BOT_MOVES_PER_RUN) {
+          throw new Error(
+            `The bots made ${MAX_BOT_MOVES_PER_RUN} moves in a row without the game ending or a human's turn coming up, ` +
+              `so they were stopped. A game whose bots never finish it has a bug in its rules or bot hooks.`,
+          );
         }
         const wakes = this.botWakes;
         const step = await this.botStep(staleInARow >= MAX_STALE_BOT_SEARCHES);
@@ -1651,8 +1784,9 @@ export class SnapshotSessionHost {
           continue;
         }
         staleInARow = 0;
-        if (step === 'moved') moves++;
-        else if (step === 'done' && this.botWakes === wakes) break;
+        if (step === 'moved') {
+          if (++moves % BOT_MOVES_PER_STRETCH === 0) await new Promise((resolve) => setTimeout(resolve, 0));
+        } else if (step === 'done' && this.botWakes === wakes) break;
       }
     } finally {
       this.botPumpRunning = false;
@@ -1876,6 +2010,7 @@ export class SnapshotSessionHost {
       this.demoHistory.pop(); // fail-clean: undo the history push
       return 'failed';
     }
+    if (this.demoHistory.length > MAX_DEMO_HISTORY) this.demoHistory.shift();
     return 'moved';
   }
 

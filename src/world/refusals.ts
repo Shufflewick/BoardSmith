@@ -189,9 +189,13 @@ export const WORLD_REFUSALS = {
   },
 
   // ---- GAME: the bundle's own doing; dead-letters, never parks ----
+  "rules-error": {
+    owner: "game",
+    why: "#847, #1045: an action's `execute` or `onSelect` threw something that is not a `PlayerFacingError`, so the engine marked its result `rulesError` and the command was rolled back. Coded so a caller can tell a crash in the rules from the rules saying no, which still travels as a plain Error carrying the game's own sentence. GAME-owned, which is what an uncoded throw already was: the same bundle crashes the same way next time",
+  },
   "undeclared-partition": {
     owner: "game",
-    why: "a handler read a partition its partitions() did not declare -- a bundle bug, and the same bundle will do it again next time",
+    why: "a handler read, or emitted an event in, a partition its partitions() did not declare -- a bundle bug, and the same bundle will do it again next time",
   },
   "undeclared-activity": {
     owner: "game",
@@ -343,10 +347,6 @@ export const WORLD_REFUSALS = {
     owner: "game",
     why: "an action built with `worldAction()` reached `ctx.world` while no world was running it (#169) -- registered on a table, or reached after the dispatch that bound its facilities finished. The bundle's own doing, and the same bundle does it again",
   },
-  "unknown-scope": {
-    owner: "game",
-    why: "a handler addressed an event to a scope that is neither the reserved world scope nor a partition this world has loaded (#58). The platform routes on the scope, so an event nobody can be in reaches nobody -- refused rather than delivered silently to no one",
-  },
   "undecided-audience": {
     owner: "game",
     why: "#717: a seat the tree lets see an event's scope has a `world.view` that could only say whether it names that scope by reading a partition the command did not declare. Who hears is judged against what the command declared, so residency cannot decide it; the declaration is in the bundle's source, and the same command refuses the same way next time",
@@ -367,6 +367,10 @@ export const WORLD_REFUSALS = {
     owner: "game",
     why: "#122: a bundle's `world.view()` named a partition it had not seen on every round of declaration, so `declaration.ts`'s round ceiling stopped it. Two-phase declaration exists so a view can read an index and then name the room the index names; one that names something new every round is walking the world, which is the O(world) read the mechanism exists to prevent. A VIEW ONLY, since #169: an action's declaration is an ordered walk whose length is its own selection count, so it cannot fail this way and has no ceiling to trip. GAME-owned because the declaration is the bundle's own and the same bundle writes the same one next time",
   },
+  "view-dropped-partition": {
+    owner: "game",
+    why: "#936: a bundle's `world.view()` stopped naming a partition it named on an earlier round of the same look, once more was loaded. #717 judges who hears an event by running the view against only what a command declared, which is right only if a view names more as more is loaded and never fewer; a view that drops a name would be told about events its settled view does not show. GAME-owned because the view is the bundle's own and does the same next time",
+  },
   "partition-too-large": {
     owner: "game",
     why: "a partition serialized to more than `budgets.ts:WorldBudgets.partitionMaxBytes` (#110). The budget is the platform's, drawn well below the SQLite value wall #74 measured, but what a partition CONTAINS is entirely the bundle's -- the same call `schedule-cap` makes about a platform cap a bundle's own choices ran into. Game-owned so one room that outgrew its budget cannot park a world 499 other players are in, and the refusal names the fix the author can actually apply: split the partition",
@@ -377,7 +381,7 @@ export const WORLD_REFUSALS = {
   },
   "partition-missing": {
     owner: "game",
-    why: "#134: a bundle named a partition this world's store does not have. Every one of its three raise sites addresses the game author -- \"Check the name, or create the partition before a command names it\" -- because the reachable producer is a `partitions()` or `world.view` declaration with a typo in it, the same species of bundle bug as `invalid-partition-name`, `undeclared-partition` and `unknown-scope`. It was PLATFORM-owned until #134, so two consecutive occurrences climbed the park ladder and ended a 500-player world's season over one misspelt room name. The platform's own bookkeeping breaking has its own codes -- `partition-not-resident`, `partition-vanished`, `checkpoint-unknown-partition` -- and those still park",
+    why: "#134: a bundle named a partition this world's store does not have. Every one of its three raise sites addresses the game author -- \"Check the name, or create the partition before a command names it\" -- because the reachable producer is a `partitions()` or `world.view` declaration with a typo in it, the same species of bundle bug as `invalid-partition-name` and `undeclared-partition`. It was PLATFORM-owned until #134, so two consecutive occurrences climbed the park ladder and ended a 500-player world's season over one misspelt room name. The platform's own bookkeeping breaking has its own codes -- `partition-not-resident`, `partition-vanished`, `checkpoint-unknown-partition` -- and those still park",
   },
 
   // ---- PLATFORM: a host's own bookkeeping broke; deterministic, so a host with a park ladder parks ----
@@ -432,6 +436,10 @@ export const WORLD_REFUSALS = {
       "a bundle cannot correct it -- and refused rather than reported as a " +
       "release of nobody, because a chair the two layers disagree about is " +
       "exactly the chair that must not be handed on",
+  },
+  "roster-double-holder": {
+    owner: "platform",
+    why: "#980: a host built a world from a roster in which two players hold one seat. Before #796 `seat` let a second player take a held chair, so a store may still hold such rows. Both would command the seat's holdings while `holderOf` and the clock's vacate release only the first, so the engine refuses rather than pick one. PLATFORM-owned and deterministic: the roster is the host's own durable state, a bundle cannot repair it, and the same rows come back on every wake. The host resolves it by unseating one of the named players in its store",
   },
   "partition-not-resident": {
     owner: "platform",

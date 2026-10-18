@@ -22,10 +22,11 @@
  *   3. On the combined tree, before anything is committed, it re-runs every tree-wide check:
  *      the chunk is verified; the chunks really built alongside it (not yet verified on the main
  *      line when the branch left, merged by chunk-merge since, or whose code the main line
- *      reworked since, #442) were allowed to be (the
- *      `parallel-check` pair rule); `ledger-check`; `constraint-check` with its measurement tests;
- *      every verified chunk's sign-off still stands for its code (`assessSignoffs`); and the
- *      project's whole test suite.
+ *      reworked since, #442) were allowed to be (`parallel-check`'s sketch-entry, run-alone,
+ *      citation and pair rules, #820); `ledger-check`; `constraint-check` with its measurement tests;
+ *      every verified chunk's sign-off still stands for its code (`assessSignoffs`); then the
+ *      merged chunk's fast checks, as its gates ran them (#985, #987): the test files it added or
+ *      changed since its base (`chunkTests`), and typecheck. The whole suite runs at publish (#984).
  *      Any failure, or error, aborts the merge and leaves the main line exactly as it was.
  *   3a. A source file this branch and the main line both edited since the branch left (#403) is
  *      code no designer signed off: each chunk's sign-off saw only its own side. The merge vouches
@@ -52,7 +53,7 @@
 import { promises as fs } from 'node:fs';
 import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { join, posix, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { sha256Hex } from '../lib/hash.js';
 import {
   CROSS_CHUNK_MD,
@@ -74,22 +75,31 @@ import {
   unreadableShorthand,
 } from '../lib/ledger-allocation.js';
 import { describeFinding, ledgerCheck } from './ledger-check.js';
-import { type TestRunner, checkConstraints, runVitest } from './constraint-check.js';
-import { VERIFIED, assessSignoffs, checkSignoff, chunkCodeFiles, unaccountedEdits } from './chunk-signoff.js';
+import { type TestRunner, checkConstraints, runVitest, unranTestsProblem } from './constraint-check.js';
+import { chunkTests } from './verify.js';
+import { type TypeCheckRun, typeCheckProject } from './validate.js';
+import { chunkVerifyBase } from '../lib/chunk-commits.js';
+import { VERIFIED, assessSignoffs, checkSignoff, chunkCodeFiles, readStatus, unaccountedEdits } from './chunk-signoff.js';
 import { verifiedAgainstIsCurrent } from './chunk-provenance.js';
 import { checkClaimQuotes } from './claim-quotes.js';
 import { parseSpecManifest } from './test-step-check.js';
-import { chunkCitations, pairProblems, readSketchChunks } from './parallel-check.js';
+import { besideAnyProblems, pairProblems, readSketchChunks } from './parallel-check.js';
 import { appendCrossChunkEntry, changedSide, crossReferences } from './cross-chunk.js';
 import { takeOsLock } from '../lib/os-lock.js';
 import { onlyTestCollectionChanged } from '../lib/test-config-edit.js';
+import { readIfExists, readListedText } from '../lib/read-if-exists.js';
 
 interface ChunkMergeOptions {
   /** The chunk's branch. Defaults to `chunk/<slug>`, the branch the dispatch contract names. */
   branch?: string;
-  /** Runs the measurement tests and the whole suite. Defaults to the project's own vitest. */
+  /** Runs the measurement tests and the chunk's own tests. Defaults to the project's own vitest. */
   runTests?: TestRunner;
+  /** Type-checks the combined tree. Defaults to vue-tsc, as `boardsmith typecheck` runs it. */
+  typeCheck?: (projectDir: string) => Promise<TypeCheckRun>;
 }
+
+/** What runs the checks that run code: tests and the type check. */
+type Runners = Required<Pick<ChunkMergeOptions, 'runTests' | 'typeCheck'>>;
 
 interface ChunkMergeResult {
   merged: boolean;
@@ -203,8 +213,11 @@ async function resolveConflicts(ctx: MergeContext): Promise<string[]> {
   for (const name of conflicted) {
     const inDesign = name.startsWith(`${ctx.prefix}${DESIGN_DIR}/`) && name.endsWith('.md');
     const path = join(top, name);
-    const outcome = inDesign ? resolveDesignConflicts(await fs.readFile(path, 'utf-8')) : undefined;
-    if (!outcome || outcome.unresolved > 0) {
+    // A rename/rename conflict leaves no file at the old path; like any conflict here, a person settles it.
+    const text = inDesign ? await readIfExists(path, (file) => fs.readFile(file, 'utf-8')) : undefined;
+    const outcome = text === undefined ? undefined : resolveDesignConflicts(text);
+    // Unchanged text had no markers to resolve: a modify/delete conflict, which a person must settle.
+    if (!outcome || outcome.unresolved > 0 || outcome.text === text) {
       left.push(name);
       continue;
     }
@@ -218,7 +231,7 @@ async function resolveConflicts(ctx: MergeContext): Promise<string[]> {
 async function keepMainLock(ctx: MergeContext): Promise<void> {
   const lock = /^Session Lock:.*$/m.exec(await showAt(ctx, 'HEAD', SKETCH_MD))?.[0];
   const path = designPath(ctx.projectDir, SKETCH_MD);
-  const sketch = await fs.readFile(path, 'utf-8').catch(() => undefined);
+  const sketch = await readIfExists(path, (file) => fs.readFile(file, 'utf-8'));
   if (lock === undefined || sketch === undefined) return;
   const kept = sketch.replace(/^Session Lock:.*$/m, lock);
   if (kept === sketch) return;
@@ -229,12 +242,6 @@ async function keepMainLock(ctx: MergeContext): Promise<void> {
 // ---------------------------------------------------------------------------------------------
 // Allocation: provisional ids become real numbers on the combined tree
 // ---------------------------------------------------------------------------------------------
-
-async function readText(path: string): Promise<string | undefined> {
-  const buffer = await fs.readFile(path).catch(() => undefined);
-  if (buffer === undefined || buffer.includes(0)) return undefined;
-  return buffer.toString('utf-8');
-}
 
 /** Why a provisional id cited in file `name` after allocation stops the merge, and the fix. */
 function citationRefusal(name: string, id: string): string {
@@ -282,7 +289,7 @@ async function allocate(
   const ledgers = NUMBERED_LEDGER_SPECS.map((spec) => ({ spec, path: `${ctx.prefix}${DESIGN_DIR}/${spec.file}` }));
   const files: Record<string, string> = {};
   for (const name of new Set([...ctx.changed, ...ledgers.map((l) => l.path)])) {
-    const text = await readText(join(top, name));
+    const text = await readListedText(join(top, name));
     if (text !== undefined) files[name] = text;
   }
   const { files: rewritten, mapping, problems } = allocateProvisional(files, ledgers);
@@ -374,11 +381,11 @@ async function changedBy(ctx: MergeContext, commit: string): Promise<string[]> {
 
 /** A CHUNK.md's Status, or `missing` when it has none (or there is no CHUNK.md). */
 function statusOf(chunkText: string): string {
-  return /^Status:\s*(.*)$/m.exec(chunkText)?.[1].trim() ?? 'missing';
+  return readStatus(chunkText) ?? 'missing';
 }
 
 async function verifiedProblem(ctx: MergeContext): Promise<string[]> {
-  const status = statusOf(await fs.readFile(chunkMdPath(ctx.projectDir, ctx.slug), 'utf-8').catch(() => ''));
+  const status = statusOf((await readIfExists(chunkMdPath(ctx.projectDir, ctx.slug), (path) => fs.readFile(path, 'utf-8'))) ?? '');
   if (status.startsWith(VERIFIED)) return [];
   return [
     `${ctx.slug} is "${status}", not verified. A chunk's branch is merged once the chunk has closed; ` +
@@ -390,13 +397,12 @@ async function concurrencyProblems(ctx: MergeContext, alongside: string[]): Prom
   if (alongside.length === 0) return [];
   const chunks = await readSketchChunks(ctx.projectDir);
   const bySlug = new Map(chunks.map((c) => [c.slug, c]));
-  const self = bySlug.get(ctx.slug);
-  if (!self) return [`${SKETCH_MD} has no entry for ${ctx.slug}.`];
-  const mine = await chunkCitations(ctx.projectDir, self);
-  const problems: string[] = [];
+  const mine = await besideAnyProblems(ctx.projectDir, bySlug, ctx.slug);
+  const problems = [...mine.problems];
   for (const other of alongside) {
-    const chunk = bySlug.get(other);
-    if (chunk) problems.push(...pairProblems(chunks, mine, await chunkCitations(ctx.projectDir, chunk)));
+    const theirs = await besideAnyProblems(ctx.projectDir, bySlug, other);
+    problems.push(...theirs.problems);
+    if (mine.citations && theirs.citations) problems.push(...pairProblems(chunks, mine.citations, theirs.citations));
   }
   return problems;
 }
@@ -407,8 +413,12 @@ async function signoffProblems(projectDir: string): Promise<string[]> {
 
 const tail = (output: string) => output.trimEnd().split('\n').slice(-25).join('\n');
 
-/** Every tree-wide check on the combined tree. The whole suite runs last, only if the rest pass. */
-async function combinedTreeProblems(ctx: MergeContext, alongside: string[], runTests: TestRunner): Promise<string[]> {
+/**
+ * Every tree-wide check on the combined tree, then, only if they pass, the merged chunk's fast
+ * checks (#987): the tests it added or changed since its base, and typecheck, as its gates ran them
+ * (#985). The whole suite runs at publish (#984).
+ */
+async function combinedTreeProblems(ctx: MergeContext, alongside: string[], { runTests, typeCheck }: Runners): Promise<string[]> {
   const ledgers = await ledgerCheck(ctx.projectDir);
   const problems = [
     ...(await verifiedProblem(ctx)),
@@ -418,9 +428,21 @@ async function combinedTreeProblems(ctx: MergeContext, alongside: string[], runT
     ...(await signoffProblems(ctx.projectDir)),
   ];
   if (problems.length > 0) return problems;
-  const suite = await runTests(ctx.projectDir, []);
-  if ('refused' in suite) return [suite.refused];
-  return suite.ok ? [] : [`The project's test suite fails on the combined tree:\n${tail(suite.output)}`];
+  const base = await chunkVerifyBase(ctx.projectDir, ctx.slug);
+  // The files the chunk's branch changed, as its own `verify --chunk` measured them; not what the main line changed.
+  const changed = (await git(ctx.projectDir, ['diff', '--relative', '--name-only', '-z', base, ctx.branchCommit])).split('\0').filter(Boolean);
+  const tests = await chunkTests(ctx.projectDir, ctx.slug, base, changed);
+  if (!Array.isArray(tests)) {
+    if (!tests.passed) return [`${tests.summary} ${tests.next ?? ''} Then run chunk-merge again.`];
+  } else {
+    const run = await runTests(ctx.projectDir, tests);
+    if ('refused' in run) return [run.refused];
+    if (!run.ok) return [`${ctx.slug}'s tests fail on the combined tree:\n${tail(run.output)}`];
+    const unran = unranTestsProblem(run.ran, tests);
+    if (unran) return [`${ctx.slug}'s tests ${unran[0]} on the combined tree: ${unran[1]}`];
+  }
+  const { result, compilerReport } = await typeCheck(ctx.projectDir);
+  return result.passed ? [] : [`The combined tree does not typecheck: ${result.message}.\n${compilerReport.join('\n')}`];
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -440,7 +462,7 @@ interface SharedFile {
 }
 
 async function manifestPaths(projectDir: string, slug: string): Promise<Set<string>> {
-  const text = await fs.readFile(chunkMdPath(projectDir, slug), 'utf-8').catch(() => undefined);
+  const text = await readIfExists(chunkMdPath(projectDir, slug), (path) => fs.readFile(path, 'utf-8'));
   if (text === undefined) return new Set();
   return new Set(Object.keys(await chunkCodeFiles(projectDir, text)).map((p) => posix.normalize(p)));
 }
@@ -566,31 +588,18 @@ async function ownTestsFailure(
   const what = `${slug}'s own tests (${tests.join(', ')}) fail`;
   if ('refused' in run) return [what, run.refused];
   if (!run.ok) return [what, tail(run.output)];
-  if (run.ran === undefined) {
-    return [
-      `${slug}'s own tests cannot be confirmed`,
-      `vitest's JSON report, which names the test files it ran, is missing or unreadable, so the run does not show they ran. ` +
-        `Run them in the chunk's worktree to see why vitest wrote no report.`,
-    ];
-  }
+  const unran = unranTestsProblem(run.ran, tests);
+  if (unran) return [`${slug}'s own tests ${unran[0]}`, unran[1]];
   const own = new Set(tests.map((t) => posix.normalize(t)));
-  const ran = new Set(run.ran.map((f) => posix.normalize(f)));
-  const missing = tests.filter((t) => !ran.has(posix.normalize(t)));
-  const they = (files: string[]) => (files.length === 1 ? 'it' : 'them');
-  if (missing.length) {
-    return [
-      `${slug}'s own tests did not all run`,
-      `${missing.join(', ')} did not run: the project's vitest config excludes ${they(missing)}, ` +
-        `or does not include ${they(missing)}, so the run proves nothing about ${they(missing)}.`,
-    ];
-  }
+  // unranTestsProblem refuses an undefined `ran`, so it is set here.
+  const ran = new Set(run.ran!.map((f) => posix.normalize(f)));
   const extra = [...ran].filter((f) => !own.has(f)).sort();
   if (extra.length === 0) return undefined;
   return [
     `${slug}'s own tests did not run alone`,
     `${extra.join(', ')} ran with them, because vitest runs every collected file whose path contains a named one. ` +
       `A file outside the chunk's Spec Manifest can share state with its tests, so the run does not show their result is their own. ` +
-      `Rename the test files so no path contains another, or leave ${they(extra)} out of the vitest config's include.`,
+      `Rename the test files so no path contains another, or leave ${extra.length === 1 ? 'it' : 'them'} out of the vitest config's include.`,
   ];
 }
 
@@ -637,12 +646,12 @@ async function recordMergeSignoffs(ctx: MergeContext, shared: SharedFile[]): Pro
   const when = new Date().toISOString();
   const entries: MergeSignoff[] = [];
   for (const file of shared) {
-    const content = await fs.readFile(join(ctx.projectDir, file.path)).catch(() => undefined);
+    const content = await readIfExists(join(ctx.projectDir, file.path), fs.readFile);
     // A file the merge deleted has no code to vouch for; its chunks' manifests answer for that.
     if (content !== undefined) entries.push({ path: file.path, content: sha256Hex(content), chunks: file.chunks, merge, when });
   }
   const path = designPath(ctx.projectDir, MERGE_SIGNOFFS_MD);
-  const existing = await fs.readFile(path, 'utf-8').catch(() => undefined);
+  const existing = await readIfExists(path, (file) => fs.readFile(file, 'utf-8'));
   await fs.writeFile(path, appendMergeSignoffs(existing, entries));
   await git(ctx.projectDir, ['add', '--', path]);
 }
@@ -679,7 +688,7 @@ async function recordCrossChunk(ctx: MergeContext, alongside: string[]): Promise
   const mainDiff = await git(ctx.top, ['diff', '--unified=0', ctx.fork, 'HEAD']);
   const refs = crossReferences(changedSide(branchDiff), changedSide(mainDiff));
   const path = designPath(ctx.projectDir, CROSS_CHUNK_MD);
-  const existing = await fs.readFile(path, 'utf-8').catch(() => undefined);
+  const existing = await readIfExists(path, (file) => fs.readFile(file, 'utf-8'));
   await fs.writeFile(path, appendCrossChunkEntry(existing, { chunk: ctx.slug, alongside, refs }));
   await git(ctx.projectDir, ['add', '--', path]);
   return refs.sharedFiles.length + refs.sharedNames.length > 0 ? 'pending' : 'none';
@@ -725,10 +734,19 @@ async function readContext(projectDir: string, slug: string, branch: string): Pr
   };
 }
 
-/** Starts the merge without committing it; returns the files whose conflicts remain. */
-async function startMerge(ctx: MergeContext): Promise<string[]> {
-  const merged = await gitSucceeds(ctx.top, ['-c', 'merge.conflictStyle=diff3', 'merge', '--no-ff', '--no-commit', ctx.branchCommit]);
-  const left = merged ? [] : await resolveConflicts(ctx);
+/**
+ * Starts the merge without committing it; returns the files whose conflicts remain, or, when git
+ * refused to start the merge at all (no MERGE_HEAD, e.g. an untracked file in the way), why.
+ */
+async function startMerge(ctx: MergeContext): Promise<string[] | string> {
+  const failure = await git(ctx.top, ['-c', 'merge.conflictStyle=diff3', 'merge', '--no-ff', '--no-commit', ctx.branchCommit]).then(
+    () => undefined,
+    (error: Error) => error.message,
+  );
+  if (failure !== undefined && !(await gitSucceeds(ctx.top, ['rev-parse', '--verify', '--quiet', 'MERGE_HEAD']))) {
+    return `Git would not start merging ${ctx.branch}; fix what it reports. ${failure}`;
+  }
+  const left = failure === undefined ? [] : await resolveConflicts(ctx);
   if (left.length === 0) await keepMainLock(ctx);
   return left;
 }
@@ -750,12 +768,14 @@ async function firstProblems(stages: Array<() => Promise<string[]>>): Promise<st
 }
 
 /** Merges with the lock held; aborts the merge, restoring the main line, on any refusal or error. */
-async function mergeLocked(ctx: MergeContext, runTests: TestRunner): Promise<ChunkMergeResult> {
+async function mergeLocked(ctx: MergeContext, runners: Runners): Promise<ChunkMergeResult> {
   const before = [...(await realNumbersAdded(ctx)), ...sharedRunFiles(ctx)];
   if (before.length) return refused(before);
 
   try {
-    return await checkStartedMerge(ctx, await startMerge(ctx), runTests);
+    const left = await startMerge(ctx);
+    if (typeof left === 'string') return refused([left]);
+    return await checkStartedMerge(ctx, left, runners);
   } catch (error) {
     // A step that throws must not leave the main checkout mid-merge.
     await gitSucceeds(ctx.top, ['merge', '--abort']);
@@ -764,7 +784,7 @@ async function mergeLocked(ctx: MergeContext, runTests: TestRunner): Promise<Chu
 }
 
 /** Checks and commits a merge `startMerge` began; aborts it, restoring the main line, on any refusal. */
-async function checkStartedMerge(ctx: MergeContext, left: string[], runTests: TestRunner): Promise<ChunkMergeResult> {
+async function checkStartedMerge(ctx: MergeContext, left: string[], runners: Runners): Promise<ChunkMergeResult> {
   if (left.length) {
     await gitSucceeds(ctx.top, ['merge', '--abort']);
     return refused([
@@ -780,8 +800,8 @@ async function checkStartedMerge(ctx: MergeContext, left: string[], runTests: Te
   // ledger-check would name it again; the allocation's refusal says what to write instead.
   const problems = await firstProblems([
     async () => refusals,
-    () => vouchForSharedFiles(ctx, shared, runTests),
-    () => combinedTreeProblems(ctx, alongside, runTests),
+    () => vouchForSharedFiles(ctx, shared, runners.runTests),
+    () => combinedTreeProblems(ctx, alongside, runners),
   ]);
   if (problems.length) {
     await gitSucceeds(ctx.top, ['merge', '--abort']);
@@ -811,7 +831,7 @@ export async function chunkMerge(projectDir: string, slug: string, options: Chun
   try {
     const ctx = await readContext(dir, slug, branch);
     if (typeof ctx === 'string') return refused([ctx]);
-    return await mergeLocked(ctx, options.runTests ?? runVitest);
+    return await mergeLocked(ctx, { runTests: options.runTests ?? runVitest, typeCheck: options.typeCheck ?? typeCheckProject });
   } finally {
     await lock.release();
   }
@@ -819,11 +839,11 @@ export async function chunkMerge(projectDir: string, slug: string, options: Chun
 
 function report(slug: string, result: ChunkMergeResult): void {
   if (!result.merged) {
-    console.error(chalk.red(`${slug} was not merged. The main line is unchanged. Fix each of these, then run chunk-merge again:`));
+    console.error(styleText('red', `${slug} was not merged. The main line is unchanged. Fix each of these, then run chunk-merge again:`));
     for (const refusal of result.refusals) console.error(`  • ${refusal}`);
     return;
   }
-  console.log(chalk.green(`✓ ${slug} merged; every tree-wide check passed on the combined tree.`));
+  console.log(styleText('green', `✓ ${slug} merged; every tree-wide check passed on the combined tree.`));
   for (const [from, to] of Object.entries(result.allocated)) console.log(`  ${from} is now ${to}.`);
   for (const { path, chunks, why } of result.vouched) {
     const changed = {
@@ -852,7 +872,7 @@ export async function chunkMergeCommand(
   try {
     assertBareName('<slug>', slug, "Pass the slug of the chunk whose branch to merge, as SKETCH.md's Ordered Chunk List names it.");
   } catch (error) {
-    console.error(chalk.red((error as Error).message));
+    console.error(styleText('red', (error as Error).message));
     process.exitCode = 1;
     return;
   }

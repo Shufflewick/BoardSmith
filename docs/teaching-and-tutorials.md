@@ -267,8 +267,10 @@ const testGame = TestGame.create(MyGame, {
   tutorialSetup: true,    // applies your game's tutorial board preset
 });
 
-const scenario: TutorialScenarioMove[] = [
-  { action: 'move', args: { ... }, expectStep: 'step-2-id' },
+// Called once, after the tutorial has started and its setup has run,
+// so the moves name the elements setup placed.
+const scenario = (game: MyGame): TutorialScenarioMove[] => [
+  { action: 'move', args: { piece: game.first(Piece, 'learner-piece')!, ... }, expectStep: 'step-2-id' },
   { action: 'endTurn' },
 ];
 
@@ -284,7 +286,7 @@ expect(result.stepsVisited).toContain('step-1-id');
 expect(result.stepsVisited).toContain('step-2-id');
 ```
 
-`simulateTutorial` runs the tutorial for its `learnerSeat`: each scripted move is made by that seat unless the move names its own `seat`. It runs the scripted scenario through the engine's own `autoAdvanceTutorial` pump and `getDisabledActions` gate — no second evaluator. Three drift dimensions are detected:
+`simulateTutorial` runs the tutorial for its `learnerSeat`: each scripted move is made by that seat unless the move names its own `seat`. It starts the tutorial exactly as the server's `startTutorial` op does (the same function): it applies `setup`, restarts the flow with the learner to move, and gives only the learner a tutorial, so another seat's moves are never gated and a move's `expectStep` names the learner's step (#914). The scenario is a function of the game, not a list: `simulateTutorial` calls it once, after `setup` has run, so its moves name the elements `setup` left on the board. A reference taken before the call would name an element `setup` may have replaced (#1079). It runs the scripted scenario through the engine's own `autoAdvanceTutorial` pump and `getDisabledActions` gate — no second evaluator. Three drift dimensions are detected:
 
 1. **Gate drift** — a scripted action excluded by the active step's gate throws with the step id and gate reason.
 2. **Predicate drift** — a move with `expectStep` set throws `"Tutorial drift (predicate): ..."` if `advanceWhen` did not advance to that step.
@@ -304,14 +306,12 @@ it('break: playerHasCaptures patched to false → tutorial stalls at capture-tip
     seed: 'checkers-tutorial-pinned',
     tutorialSetup: true,
   });
-  // ... build args from intact state first ...
-
   // Simulate removing the mandatory-capture rule.
   // capture-tip.advanceWhen calls game.playerHasCaptures(player) → false → never fires.
   testGame.game.playerHasCaptures = () => false;
 
   expect(() =>
-    simulateTutorial(testGame, CHECKERS_TUTORIAL, { scenario: WALKTHROUGH }),
+    simulateTutorial(testGame, CHECKERS_TUTORIAL, { scenario: (game) => buildWalkthrough(game) }),
   ).toThrow(/Tutorial drift/);
 });
 ```
@@ -333,7 +333,10 @@ it('break (primary): checkForBooks patched to never score → tutorial stalls at
 
   expect(() => {
     const result = simulateTutorial(testGame, GO_FISH_TUTORIAL, {
-      scenario: /* two-ask walkthrough */,
+      scenario: () => [
+        { action: 'ask', args: { target: 2, rank: '7' }, expectStep: 'turn-continuation' },
+        { action: 'ask', args: { target: 2, rank: 'Q' } },
+      ],
     });
     // book-formed.advanceWhen (bookCount > 0) never fires → stalls.
     assertTutorialCompletes(result);
@@ -397,6 +400,8 @@ Send the `demoStart` op to enter demo mode: all seats are bot-controlled, and ea
 { type: 'demoStop' }
 { type: 'demoControl', control: 'pause' | 'play' | 'step' | 'back', delay?: number }
 ```
+
+`delay` must be a whole number of milliseconds from 0 to 3,600,000, or the op is refused. `back` reaches only the last 20 demo moves.
 
 The default narration reads "Player N: actionName" (the host is not handed player names) and adds only destination-like args (`to`, `destination`, `target`, `square`, `cell`, `position`) rather than dumping JSON. Supply the host's `narrateMove(player, action, args)` adapter for games with rich arg types (objects, nested references) where that cannot produce a readable move description. A hidden-information game must supply it, because the narration is broadcast to every seat.
 

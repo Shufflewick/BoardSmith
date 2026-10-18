@@ -24,15 +24,7 @@ import {
   provideBoardInteraction,
 } from '../../../composables/useBoardInteraction.js';
 import type { BoardInteraction } from '../../../composables/useBoardInteraction.js';
-
-/** The element shape both board renderers read, mirrored from them. */
-export interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
-}
+import type { GameElement } from '../auto-ui-helpers.js';
 
 /**
  * Mount `component` inside a wrapper that provides board interaction.

@@ -6,6 +6,7 @@ import {
   ingestSliceSourceCommand,
   parseSliceSource,
   readSliceSources,
+  readRecordedSourcePaths,
   recordedSourcePaths,
   sliceDocuments,
   withSliceSource,
@@ -118,6 +119,29 @@ describe('ingest-slice-source', () => {
     expect(sources.get('01-setup.md')).toBeUndefined();
     // The visual survey covers the whole rulebook, so it is not a slice of one document.
     expect(sources.has('00-visual-survey.md')).toBe(false);
+  });
+
+  it('names a rulebook/ it cannot list rather than finding no slices (#1174)', async () => {
+    await fs.chmod(rulebook(), 0o300);
+    try {
+      await expect(readSliceSources(project)).rejects.toThrow(`Could not read ${rulebook()} (EACCES)`);
+    } finally {
+      await fs.chmod(rulebook(), 0o755);
+    }
+  });
+
+  it('names an INDEX.md it cannot read rather than finding no recorded documents (#1174)', async () => {
+    await fs.rm(join(rulebook(), 'INDEX.md'));
+    await fs.mkdir(join(rulebook(), 'INDEX.md'));
+    await expect(readRecordedSourcePaths(project)).rejects.toThrow(`Could not read ${join(rulebook(), 'INDEX.md')} (EISDIR)`);
+  });
+
+  it('names a slice it cannot read rather than calling it missing (#1110)', async () => {
+    await fs.rm(join(rulebook(), '01-setup.md'));
+    await fs.mkdir(join(rulebook(), '01-setup.md'));
+    await expect(ingestSliceSourceCommand(RULES, ['01-setup.md'], { project, json: true })).rejects.toThrow(
+      `Could not read ${join(rulebook(), '01-setup.md')} (EISDIR)`,
+    );
   });
 
   it('accepts the rulebook/ spelling a chunk citation uses, and is a no-op when already recorded', async () => {

@@ -1,5 +1,5 @@
 import { secureRandomHex } from '../utils/secure-random.js';
-import { rulesErrorSentence } from '../engine/action/rules-error.js';
+import { NOTHING_CHANGED, rulesErrorSentence, withDevDetail } from '../engine/action/rules-error.js';
 import { ActionExecutor, evaluateConditionWithTrace } from '../engine/action/action.js';
 import {
   createActionCheckpoint,
@@ -15,7 +15,6 @@ import {
   isSeatExpiry,
   type ActionResult,
   type FlowState,
-  type FlowDebugInfo,
   type ActionCheckpoint,
   type ActionCheckpointWindow,
   type PendingActionState,
@@ -26,7 +25,8 @@ import {
 import {
   serializeAction,
   deserializeAction,
-  createSnapshot,
+  createRunnerSnapshot,
+  snapshotTree,
   createPlayerView,
   createAllPlayerViews,
   type GameStateSnapshot,
@@ -36,12 +36,12 @@ import type {
   SerializedAction,
   HistoryEntry,
 } from '../engine/action/types.js';
-import type { RandomnessPolicy } from '../engine/element/game.js';
+import type { LogEviction, RandomnessPolicy } from '../engine/element/game.js';
 import { ErrorCode, type GameOptionDefinition } from '../types/protocol.js';
 import { fillGameOptionDefaults } from '../session/game-option-selection.js';
 import { PlayerFacingError } from '../engine/errors.js';
 import { constructGame, animationFloorOf, type AnimationFloor } from '../engine/element/game.js';
-import { isDevThrowEnabled } from '../utils/dev.js';
+import { acceptsSubmission } from '../engine/utils/enumerate-moves.js';
 import type { RandomState } from '../utils/random.js';
 import type { MessageEntry } from '../engine/index.js';
 
@@ -165,6 +165,8 @@ export interface ActionExecutionResult {
 export interface PendingStepResult {
   success: boolean;
   error?: string;
+  /** Why a step failed, coded as the session route codes it (#1169). */
+  errorCode?: ErrorCode;
   /** True once the final selection was supplied and the action executed. */
   actionComplete?: boolean;
   /** `ActionResult.data` from the completed action. Only set when `actionComplete`. */
@@ -196,15 +198,59 @@ export interface PendingStepResult {
 function checkpointWithLiveLog(
   checkpoint: ActionCheckpoint,
   log: MessageEntry[],
-  evicted: number,
+  live: LogEviction,
 ): { state: ActionCheckpoint['state']; messageLog: MessageEntry[] } {
-  const state = { ...checkpoint.state, messagesEvicted: evicted };
+  // Every count is replaced, absent ones included: the per-seat offsets (#903)
+  // describe the live log's front exactly as the total does.
+  const state = {
+    ...checkpoint.state,
+    messagesEvicted: live.messagesEvicted,
+    messagesEvictedPublic: live.messagesEvictedPublic,
+    messagesEvictedTo: live.messagesEvictedTo,
+  };
   if (checkpoint.messageCount === undefined) return { state, messageLog: log };
+  const evicted = live.messagesEvicted ?? 0;
   // The watermark counts entries EVER WRITTEN; `evicted` says how many of those
   // are no longer in the log. The difference is the boundary's position in the
   // log as it stands now — negative when every line from that boundary has
   // since been evicted, which honestly restores nothing rather than guessing.
   return { state, messageLog: log.slice(0, Math.max(0, checkpoint.messageCount - evicted)) };
+}
+
+/**
+ * The refusal for a flow that halted after `actionName` committed, its cause logged once (#1120).
+ * Every live completion route reports through here, since the message carries the cause only in
+ * dev and nothing logs a halt when it is created, which keeps a bot's search copies quiet (#31).
+ * Coded as a crash in the rules is, on every route (#1143).
+ */
+function reportHalt(actionName: string, halt: FlowHaltedError): ActionExecutionResult {
+  console.error(`[BoardSmith] The flow failed after action '${actionName}' was committed:`, halt.cause);
+  return { success: false, error: halt.message, errorCode: ErrorCode.ENGINE_ERROR };
+}
+
+/**
+ * The code of an action that failed: a crash in its rules (#847) is ENGINE_ERROR, as a halt is,
+ * so no caller reads it as the rules refusing; anything else is the rules refusing (#1143).
+ */
+function failureCode(result: ActionResult | undefined): ErrorCode {
+  return result?.rulesError ? ErrorCode.ENGINE_ERROR : ErrorCode.ACTION_EXECUTION_ERROR;
+}
+
+/** A refused pick's code: a crash in the rules is ENGINE_ERROR, as on every other route (#1142). */
+export function pickFailureCode(refused: { rulesError?: boolean }): ErrorCode {
+  return refused.rulesError ? ErrorCode.ENGINE_ERROR : ErrorCode.INVALID_PICK;
+}
+
+/** The kept history entries before action `actionIndex`, which a checkpoint there restores with. */
+function historyBefore(snapshot: GameStateSnapshot, actionIndex: number): HistoryEntry[] {
+  const base = snapshot.actionHistoryBase ?? 0;
+  if (actionIndex < base) {
+    throw new Error(
+      `This snapshot has a checkpoint at action ${actionIndex} but its history starts at action ${base}. ` +
+      'The runner keeps both itself, so this is a BoardSmith bug; please report it.',
+    );
+  }
+  return snapshot.actionHistory.slice(0, actionIndex - base);
 }
 
 export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptions> {
@@ -214,8 +260,22 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   /** Game type identifier */
   readonly gameType: string;
 
-  /** The game's history: every action taken, and every seat the host closed at a deadline */
+  /**
+   * The game's history: every action taken, and every seat the host closed at
+   * a deadline. Entry `i` is action `actionHistoryBase + i`.
+   */
   readonly actionHistory: HistoryEntry[] = [];
+
+  /**
+   * How many actions `checkpoints: { actionHistory: 'undo' }` has dropped from
+   * the front of `actionHistory`. Public like `executeBarrierIndex`.
+   */
+  actionHistoryBase = 0;
+
+  /** How many actions this game has recorded, dropped ones included: every action index counts from here. */
+  get actionCount(): number {
+    return this.actionHistoryBase + this.actionHistory.length;
+  }
 
   /**
    * The RETAINED WINDOW of per-action authoritative undo checkpoints: the
@@ -333,7 +393,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     const completions = this.game.getIrreversibleCommitCount();
     if (completions !== this.lastSeenIrreversibleCommits) {
       this.lastSeenIrreversibleCommits = completions;
-      this.executeBarrierIndex = this.actionHistory.length;
+      this.executeBarrierIndex = this.actionCount;
     }
   }
 
@@ -363,6 +423,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       max: options.checkpoints?.max ?? Number.POSITIVE_INFINITY,
       enabled: options.checkpoints?.enabled ?? true,
       history: options.checkpoints?.history ?? 'turn',
+      actionHistory: options.checkpoints?.actionHistory ?? 'all',
     };
     this.undoPolicy_ = {
       fenceRandomRewind: options.undo?.fenceRandomRewind ?? false,
@@ -438,9 +499,21 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // FIRST so it still happens for a game that has checkpointing disabled:
     // the barrier fences undo, it is not part of undo's payload.
     this.recordExecuteBarrierAdvance();
+
+    // Under `'turn'` history nothing is kept before the oldest point a seat's
+    // undo can still restore. No undo restores further back than the current
+    // action-step frame's start (`computeUndoInfo`, `simultaneousUndoBoundary`
+    // in session/utils.ts), and with no frame open no undo is possible at all.
+    // Nor does any undo cross a `.notUndoable()` action or an irreversible
+    // `execute()` (`undoFloor`, which `assertUndoAllowed` refuses by), so it
+    // starts after the last of those when it lies inside the frame.
+    const len = this.actionCount;
+    const undoReach = this.checkpointPolicy_.history === 'full'
+      ? undefined
+      : this.undoFloor(len - (this.getFlowState()?.moveCount ?? 0));
+    this.dropUnreadHistory(undoReach);
     if (!this.checkpointPolicy_.enabled) return;
 
-    const len = this.actionHistory.length;
     const headOffset = len - this.checkpointBaseIndex;
     if (headOffset < 0) {
       // The head is BELOW the retained window -- the history was rewound past
@@ -457,17 +530,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     this.actionCheckpoints[headOffset] = createActionCheckpoint(this.game);
 
     // Then drop from the FRONT. Oldest-first is what makes the retained window
-    // the most recent actions -- the ones undo can actually reach. Under
-    // `'turn'` history everything before the oldest point a seat's undo can
-    // still restore goes. No undo restores further back than the current
-    // action-step frame's start (`computeUndoInfo`, `simultaneousUndoBoundary`
-    // in session/utils.ts), and with no frame open no undo is possible at all.
-    // Nor does any undo cross a `.notUndoable()` action or an irreversible
-    // `execute()` (`undoFloor`, which `assertUndoAllowed` refuses by), so the window starts after the last
-    // of those when it lies inside the frame. `max` caps either policy.
-    const keepFrom = this.checkpointPolicy_.history === 'full'
-      ? this.checkpointBaseIndex
-      : this.undoFloor(len - (this.getFlowState()?.moveCount ?? 0));
+    // the most recent actions -- the ones undo can actually reach: under
+    // `'turn'` history, from the undo reach above. `max` caps either policy.
+    const keepFrom = undoReach ?? this.checkpointBaseIndex;
     const excess = Math.max(
       keepFrom - this.checkpointBaseIndex,
       this.actionCheckpoints.length - this.checkpointPolicy_.max,
@@ -479,6 +544,20 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   }
 
   /**
+   * Under `checkpoints: { actionHistory: 'undo' }`, drop the history entries no
+   * undo reads: those before the one just ahead of `undoReach` (#997). That
+   * entry stays: it is what fences undo there, and an undo it refuses names it.
+   * A host keeping full history has no reach, and keeps everything.
+   */
+  private dropUnreadHistory(undoReach: number | undefined): void {
+    if (undoReach === undefined || this.checkpointPolicy_.actionHistory !== 'undo') return;
+    const drop = undoReach - 1 - this.actionHistoryBase;
+    if (drop <= 0) return;
+    this.actionHistory.splice(0, drop);
+    this.actionHistoryBase += drop;
+  }
+
+  /**
    * The oldest action count at or after `from` that an undo may restore: the
    * action after the last `.notUndoable()` entry since `from`, or
    * `executeBarrierIndex`, whichever is later, and never before `from`. The one
@@ -487,8 +566,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * (session/utils.ts) refuses any target below `undoFloor(target)`.
    */
   undoFloor(from: number): number {
-    for (let i = this.actionHistory.length - 1; i >= from; i--) {
-      if (this.actionHistory[i].undoable === false) return Math.max(i + 1, this.executeBarrierIndex);
+    // Dropped entries never decide it: the one that fences undo is always kept (`dropUnreadHistory`).
+    for (let i = this.actionHistory.length - 1; i >= from - this.actionHistoryBase && i >= 0; i--) {
+      if (this.actionHistory[i].undoable === false) return Math.max(i + 1 + this.actionHistoryBase, this.executeBarrierIndex);
     }
     return Math.max(from, this.executeBarrierIndex);
   }
@@ -546,7 +626,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
 
   /** Index in `actionCheckpoints` of the checkpoint for the current action count. */
   private get headOffset(): number {
-    return this.actionHistory.length - this.checkpointBaseIndex;
+    return this.actionCount - this.checkpointBaseIndex;
   }
 
   /**
@@ -566,32 +646,37 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    *
    * The per-action checkpoint window's head entry IS that state: it is captured
    * at the current action count and the failed action recorded nothing, so no
-   * extra serialization is needed for this. Only the element tree, sequence
-   * counter, RNG position and message log are restored — the flow engine
-   * deliberately stayed put on the failure, and its position is already right.
-   * The elements it holds are pointed at the rebuilt tree (#679).
+   * extra serialization is needed for this. The element tree, sequence counter,
+   * RNG position, message log and flow are restored together from it, so the
+   * open step's awaiting seats come back with the elements (#972) and the flow
+   * holds the rebuilt tree's elements (#679).
    *
-   * @returns undefined when the rollback succeeded, or a sentence to append to
-   *   the player-facing error when there was no checkpoint to restore. A game
-   *   running with `checkpoints: { enabled: false }` has nothing to roll back
-   *   to, and saying so is far better than reporting that nothing happened
-   *   when something did.
+   * @returns the player-facing error to report: `error` followed by
+   *   `NOTHING_CHANGED` when the rollback succeeded, or, when there was no
+   *   checkpoint to restore (only a game running with
+   *   `checkpoints: { enabled: false }`, since `ensureHeadCheckpoint` captures
+   *   one otherwise, #802), by a sentence saying the game may still hold the
+   *   action's partial changes (#808, #989).
    */
-  private rollbackToPreActionState(): string | undefined {
+  private rollbackToPreActionState(error: string | undefined): string {
+    const kept = error === undefined ? '' : `${error} `;
     const checkpoint = this.actionCheckpoints[this.headOffset];
     if (!checkpoint) {
-      return 'The game could not be rolled back, so its state may be inconsistent — ' +
-        'per-action checkpoints are disabled for this session.';
+      return kept +
+        'The action failed part way through, and the game may still hold its partial changes, ' +
+        'because per-action checkpoints are turned off for this session so it could not be undone. ' +
+        'Check the board before playing on, or restart the game from a save.';
     }
 
-    const { state, messageLog } = checkpointWithLiveLog(checkpoint, this.game.messages ?? [], this.game.messagesEvicted);
+    if (!checkpoint.flowState) throw new Error('The checkpoint before the failed action holds no flow state, so the action cannot be rolled back.');
+    const { state, messageLog } = checkpointWithLiveLog(checkpoint, this.game.messages ?? [], this.game.logEviction);
     this.game.loadSerializedState(state, { messageLog });
-    this.game.relinkFlowElements();
+    this.game.rollBackFlow(checkpoint.flowState);
     if (checkpoint.sequence !== undefined) {
       this.game._ctx.sequence = checkpoint.sequence;
     }
     this.game.setRandomState(checkpoint.randomState);
-    return undefined;
+    return kept + NOTHING_CHANGED;
   }
 
   /**
@@ -636,22 +721,32 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       };
     }
 
-    // Serialize the action before executing (captures current element refs)
-    const serializedAction = this.serializeForHistory(actionName, playerObj, args);
+    // The history entry is encoded before the move changes anything, so its
+    // refs are the positions the action acts on, and only from picks the
+    // action's checks accepted, since encoding reads its choice callbacks
+    // (#1128): the executor hands over the args its one check accepted.
+    const checkedOnCopy = this.checkOnCopy(actionName, playerObj, args);
+    if ('success' in checkedOnCopy) return checkedOnCopy;
+    const history = this.historyRecorder(actionName, playerObj, args, checkedOnCopy.entry);
 
     this.ensureHeadCheckpoint();
+    // A move refused before any action ran leaves the last move's result in place, so only a new one is this move's.
+    const earlier = this.game.getLastActionResult();
 
     // Execute through flow (pass player index for simultaneous actions)
     let flowState: FlowState;
     try {
-      flowState = this.game.continueFlow(actionName, args, playerIndex);
+      flowState = this.game.continueFlow(actionName, args, playerIndex, history.onAccepted);
     } catch (error) {
+      // An offered pick that cannot be encoded is the game's fault, thrown before anything changed (#1070).
+      if (error === history.failure) throw error;
       // FlowHaltedError means the flow threw AFTER the action committed its
       // state changes. Record the committed action so actionHistory stays
       // consistent with applied game state (WR-02) — dropping it would make
       // replay/undo/snapshot diverge from what actually happened.
       if (error instanceof FlowHaltedError) {
-        this.actionHistory.push(serializedAction);
+        this.actionHistory.push(this.recorded(actionName, history.entry));
+        return reportHalt(actionName, error);
       }
       // #47: an engine policy error's message was written to be read and goes
       // through; anything else is an arbitrary runtime error whose text would
@@ -661,32 +756,33 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       }
       return {
         success: false,
-        error: error instanceof PlayerFacingError
-          ? error.message
-          : isDevThrowEnabled()
-            ? `${rulesErrorSentence(actionName)} (${error instanceof Error ? error.message : String(error)})`
-            : rulesErrorSentence(actionName),
+        error: error instanceof PlayerFacingError ? error.message : withDevDetail(rulesErrorSentence(actionName), error),
         errorCode: ErrorCode.ENGINE_ERROR,
       };
     }
 
     // Check if the action failed (flow state contains error)
     if (flowState.actionError) {
+      // Read before the rollback, which restores a flow with no last action.
+      const last = this.game.getLastActionResult();
+      const failed = last === earlier ? undefined : last;
       // #44: a clean refusal mutated nothing, but a THROW out of execute(), or
       // a repeating selection refused after onEach ran for some picks (#325),
       // may have applied part of its changes before it stopped — leaving the tree
       // half-moved while the player is told nothing happened, and persisting
       // that disagreement at the next snapshot. Undo it.
-      const rollback = flowState.actionPartiallyApplied ? this.rollbackToPreActionState() : undefined;
       return {
         success: false,
-        error: rollback === undefined ? flowState.actionError : `${flowState.actionError} ${rollback}`,
-        errorCode: ErrorCode.ACTION_EXECUTION_ERROR,
+        error: flowState.actionPartiallyApplied
+          ? this.rollbackToPreActionState(flowState.actionError)
+          : flowState.actionError,
+        errorCode: failureCode(failed),
         flowState,
       };
     }
 
     // Record in history
+    const serializedAction = this.recorded(actionName, history.entry);
     this.actionHistory.push(serializedAction);
 
     // The action's own return value to the acting seat. Read straight off the
@@ -703,11 +799,89 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   }
 
   /**
+   * What only a check on a copy of the game can settle before the move: the
+   * history entry of a repeating action the copy accepts, since its picks
+   * change the game while they are checked (#1101), and the refusal of picks
+   * that cannot be encoded as sent and that the game does not take (#1070).
+   * No entry for any other submission, which costs no extra check.
+   */
+  private checkOnCopy(
+    actionName: string,
+    player: Player,
+    args: Record<string, unknown>
+  ): ActionExecutionResult | { entry: SerializedAction | undefined } {
+    const action = this.game.getAction(actionName);
+    const repeating = action !== undefined && this.game.getActionExecutor().hasRepeatingSelections(action);
+    const unencodable = this.unencodableRefusal(actionName, player, action, args);
+    if (!repeating && !unencodable) return { entry: undefined };
+    if (!acceptsSubmission(this.game, actionName, player.seat, args)) return unencodable ?? { entry: undefined };
+    return { entry: repeating ? this.serializeForHistory(actionName, player, args) : undefined };
+  }
+
+  /**
+   * The refusal of a submission the game does not take whose picks cannot be
+   * encoded at all: that is the caller's bad input (#1070). Its picks are
+   * encoded as sent, so no game callback runs on them.
+   */
+  private unencodableRefusal(
+    actionName: string,
+    player: Player,
+    action: ActionDefinition | undefined,
+    args: Record<string, unknown>
+  ): ActionExecutionResult | undefined {
+    try {
+      serializeAction(actionName, player, action ? this.game.getActionExecutor().picksOf(action, args) : args, this.game);
+      return undefined;
+    } catch (error) {
+      if (!(error instanceof Error)) throw error;
+      return { success: false, error: error.message, errorCode: ErrorCode.INVALID_PICK };
+    }
+  }
+
+  /**
+   * A move's history entry: `entry` when it is already known, or else encoded
+   * by `onAccepted` from the args the action's checks accepted, with `failure`
+   * the error it threw when they cannot be encoded.
+   */
+  private historyRecorder(actionName: string, player: Player, args: Record<string, unknown>, entry: SerializedAction | undefined) {
+    const history = {
+      entry,
+      failure: undefined as unknown,
+      onAccepted: (resolved: Record<string, unknown>): void => {
+        try {
+          history.entry = this.serializeForHistory(actionName, player, args, resolved);
+        } catch (error) {
+          history.failure = error;
+          throw error;
+        }
+      },
+    };
+    return history;
+  }
+
+  /**
+   * The history entry of an action that ran. Only a repeating action, checked
+   * on a copy first, can run without one: when the copy refused what the game
+   * then took.
+   */
+  private recorded(actionName: string, serializedAction: SerializedAction | undefined): SerializedAction {
+    if (!serializedAction) {
+      throw new Error(
+        `Action '${actionName}' ran, but the same picks were refused when they were checked on a copy of the game, ` +
+          `so the move has no history entry. Its rules read something the game's state does not hold, such as a ` +
+          `module-level variable or which game object they were handed: keep everything they read in the game's state.`,
+      );
+    }
+    return serializedAction;
+  }
+
+  /**
    * Resolve + serialize an action's args into a history entry.
    *
    * Raw element IDs are first resolved to GameElement objects so they serialize
    * with branch paths (or stable IDs) that survive game restoration, instead of
-   * being passed through as raw numbers. This is the single place the
+   * being passed through as raw numbers; `resolved`, when given, holds the args
+   * the action's checks already resolved and accepted. This is the single place the
    * `actionHistory` entry shape is produced, shared by:
    *   - `performAction` (single-step actions), and
    *   - `executeCollectedAction` (multi-step / repeating-selection actions).
@@ -716,12 +890,15 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * undo, and bot history treat them the same.
    *
    * Does NOT push to history — callers decide when to record (e.g. only after a
-   * successful execute).
+   * successful execute). `branchesBefore` is a pending action's
+   * `branchesBeforePicks`.
    */
   private serializeForHistory(
     actionName: string,
     player: Player,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
+    resolved?: Record<string, unknown>,
+    branchesBefore?: Readonly<Record<number, string | null>>
   ): SerializedAction {
     const actionDef = (this.game as any)._actions?.get(actionName);
     const isUndoable = actionDef?.undoable;
@@ -729,9 +906,12 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     let argsToSerialize = args;
     if (actionDef) {
       // Only the picks: a follow-up's other args are bound again by the engine
-      // when the entry is replayed (#662).
+      // when the entry is replayed (#662). A skipped pick is absent (#627).
       const executor = new ActionExecutor(this.game);
-      argsToSerialize = executor.resolveArgs(actionDef, executor.picksOf(actionDef, args), player);
+      const sent = executor.picksOf(actionDef, args);
+      argsToSerialize = resolved
+        ? Object.fromEntries(Object.keys(sent).filter((name) => name in resolved).map((name) => [name, resolved[name]]))
+        : executor.resolveArgs(actionDef, sent, player);
     }
 
     return serializeAction(
@@ -739,7 +919,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       player,
       argsToSerialize,
       this.game,
-      isUndoable
+      isUndoable,
+      branchesBefore
     );
   }
 
@@ -747,27 +928,41 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * Execute a fully-collected pending action, the one completion step shared by
    * this runner's `completePendingAction` and `PendingActionManager`'s: record
    * it and advance the flow when it succeeds, and roll the game back when it
-   * failed after changing something, as `performAction` does (#44, #801).
+   * failed after changing something, as `performAction` does (#44, #801). A
+   * flow that halts after the action is refused, as in `performAction`, rather than thrown (#1120).
    */
-  executeCollectedAction(
-    executor: ActionExecutor,
-    action: ActionDefinition,
-    player: Player,
-    pendingState: PendingActionState,
-    playerPosition: number
-  ): ActionResult {
+  executeCollectedAction(pendingState: PendingActionState, playerPosition: number): ActionExecutionResult {
+    const action = this.game.getAction(pendingState.actionName);
+    const player = this.game.getPlayer(playerPosition);
+    if (!action || !player) {
+      throw new Error(`Cannot complete '${pendingState.actionName}' for seat ${playerPosition}: the game has no such action or seat.`);
+    }
+    const executor = this.game.getActionExecutor();
+    const branchesBefore = pendingState.branchesBeforePicks;
+    if (!branchesBefore) {
+      // A pending state saved by an engine older than #1144 lacks the record.
+      throw new PlayerFacingError(
+        'This action was started before the game was updated and cannot be finished. Cancel it and take it again.'
+      );
+    }
     this.ensureHeadCheckpoint();
-    // Serialized before executing, so the recorded refs are the positions the action acts on.
-    const serializedAction = this.serializeForHistory(action.name, player, pendingState.collectedArgs);
+    // Serialized before executing, and with each pick where it was before the picks' callbacks moved it (#1144).
+    const serializedAction = this.serializeForHistory(action.name, player, pendingState.collectedArgs, undefined, branchesBefore);
     const actionResult = executor.executePendingAction(action, player, pendingState);
 
     if (actionResult.success) {
       this.actionHistory.push(serializedAction);
-      this.game.continueFlowAfterPendingAction(actionResult, playerPosition);
+      try {
+        this.game.continueFlowAfterPendingAction(actionResult, playerPosition);
+      } catch (error) {
+        if (!(error instanceof FlowHaltedError)) throw error;
+        return reportHalt(action.name, error);
+      }
       return actionResult;
     }
-    const rollback = actionResult.partiallyApplied ? this.rollbackToPreActionState() : undefined;
-    return rollback === undefined ? actionResult : { ...actionResult, error: `${actionResult.error} ${rollback}` };
+    const failed = { ...actionResult, errorCode: failureCode(actionResult) };
+    if (!actionResult.partiallyApplied) return failed;
+    return { ...failed, error: this.rollbackToPreActionState(actionResult.error) };
   }
 
   /**
@@ -775,15 +970,6 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   getFlowState(): FlowState | undefined {
     return this.game.getFlowState() ?? undefined;
-  }
-
-  /**
-   * Get a structured, human- and machine-readable description of the current
-   * flow position. Thin passthrough mirroring the `getFlowState()` passthrough
-   * above — never throws, never returns `undefined` (see `Game.getFlowDebugInfo()`).
-   */
-  getFlowDebugInfo(): FlowDebugInfo {
-    return this.game.getFlowDebugInfo();
   }
 
   /**
@@ -802,7 +988,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     if (!this.game.getPlayer(playerPosition)) return undefined;
 
     const executor = this.game.getActionExecutor();
-    const pendingState = executor.createPendingActionState(actionName, playerPosition);
+    const pendingState = executor.createPendingActionState(actionName, playerPosition, true);
     // A held follow-up's published args are the engine's, bound before any
     // client pick, so every pick's callbacks see them.
     this.bindFollowUpArgs(pendingState, playerPosition);
@@ -1043,59 +1229,64 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   ): PendingStepResult {
     const pendingState = this.pendingActions.get(playerPosition);
     if (!pendingState) {
-      return { success: false, error: 'No pending action for this player. Call startPendingAction first.' };
+      return { success: false, error: 'No pending action for this player. Call startPendingAction first.', errorCode: ErrorCode.PICK_NOT_FOUND };
     }
 
     const refusal = this.refusalToPick(pendingState.actionName, playerPosition, pendingState);
-    if (refusal) return { success: false, error: refusal.error };
+    if (refusal) return { success: false, ...refusal };
     this.markStalePicks(pendingState, playerPosition);
 
+    const taken = this.takePick(pendingState, playerPosition, selectionName, value);
+    if (!taken.success) return { success: false, error: taken.error, errorCode: taken.errorCode };
+    if (taken.complete) return this.completePendingAction(pendingState, playerPosition);
+    return { success: true, actionComplete: false };
+  }
+
+  /**
+   * Take one pick of a seat's open pick-by-pick action, the step both routes
+   * share (`processSelectionStep` here and `PendingActionManager`'s): check it
+   * is the pick the action is at, make it, and say whether the action is now
+   * complete. It does not run the action: the caller does, with
+   * `executeCollectedAction`.
+   */
+  takePick(pendingState: PendingActionState, playerPosition: number, selectionName: string, value: unknown) {
     const action = this.game.getAction(pendingState.actionName);
     if (!action) {
-      return { success: false, error: `Action not found: ${pendingState.actionName}` };
+      return { success: false as const, error: `Action not found: ${pendingState.actionName}`, errorCode: ErrorCode.ACTION_NOT_FOUND };
     }
-
     const player = this.game.getPlayer(playerPosition);
     if (!player) {
-      return { success: false, error: `Player not found: ${playerPosition}` };
+      return { success: false as const, error: `Player not found: ${playerPosition}`, errorCode: ErrorCode.INVALID_PLAYER };
     }
-
-    const executor = this.game.getActionExecutor();
     const selection = action.selections[pendingState.currentSelectionIndex];
     if (!selection) {
-      return { success: false, error: 'No current selection' };
+      return { success: false as const, error: 'No current selection', errorCode: ErrorCode.PICK_NOT_FOUND };
     }
-
     if (selection.name !== selectionName) {
       return {
-        success: false,
-        error: `Expected selection at index ${pendingState.currentSelectionIndex}, got ${selectionName}`,
+        success: false as const,
+        error: `Expected selection at index ${pendingState.currentSelectionIndex}, got ${selectionName} at index ${action.selections.findIndex(s => s.name === selectionName)}`,
+        errorCode: ErrorCode.PICK_NOT_FOUND,
       };
     }
 
-    if (executor.isRepeatingSelection(selection)) {
+    const executor = this.game.getActionExecutor();
+    const repeating = executor.isRepeatingSelection(selection);
+    let step: Omit<ReturnType<ActionExecutor['processRepeatingStep']>, 'error' | 'rulesError'> = { done: true };
+    if (repeating) {
       const result = executor.processRepeatingStep(action, player, pendingState, value);
       if (result.error) {
-        return { success: false, error: result.error };
+        return { success: false as const, error: result.error, errorCode: pickFailureCode(result), nextChoices: result.nextChoices };
       }
-      if (result.done && executor.isPendingActionComplete(action, pendingState)) {
-        return this.completePendingAction(executor, action, player, pendingState, playerPosition);
-      }
-      this.notePickTaken(pendingState, playerPosition);
-      return { success: true, actionComplete: false };
+      step = result;
+    } else {
+      const result = executor.processSelectionStep(action, player, pendingState, selectionName, value);
+      if (!result.success) return { success: false as const, error: result.error, errorCode: pickFailureCode(result) };
     }
 
-    const stepResult = executor.processSelectionStep(action, player, pendingState, selectionName, value);
-    if (!stepResult.success) {
-      return { success: false, error: stepResult.error };
-    }
-
-    if (executor.isPendingActionComplete(action, pendingState)) {
-      return this.completePendingAction(executor, action, player, pendingState, playerPosition);
-    }
-
-    this.notePickTaken(pendingState, playerPosition);
-    return { success: true, actionComplete: false };
+    const complete = step.done && executor.isPendingActionComplete(action, pendingState);
+    if (!complete) this.notePickTaken(pendingState, playerPosition);
+    return { success: true as const, complete, repeating, done: step.done, nextChoices: step.nextChoices, warnings: step.warnings };
   }
 
   /**
@@ -1106,18 +1297,16 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * side effects.
    */
   private completePendingAction(
-    executor: ActionExecutor,
-    action: ActionDefinition,
-    player: Player,
     pendingState: PendingActionState,
     playerPosition: number
   ): PendingStepResult & { actionComplete: true } {
-    const actionResult = this.executeCollectedAction(executor, action, player, pendingState, playerPosition);
+    const actionResult = this.executeCollectedAction(pendingState, playerPosition);
     this.pendingActions.delete(playerPosition);
 
     return {
       success: actionResult.success,
       error: actionResult.error,
+      errorCode: actionResult.errorCode,
       actionComplete: true,
       data: actionResult.data,
       message: actionResult.message,
@@ -1172,10 +1361,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   getSnapshot(): GameStateSnapshot {
     this.captureCheckpoint();
-    const base = createSnapshot(this.game, this.gameType, this.actionHistory, this.seed);
     return {
-      ...base,
-      actionCheckpoints: this.checkpointWindow(),
+      ...createRunnerSnapshot(this.game, this.gameType, this.actionHistory, this.seed, this.checkpointWindow()),
+      ...(this.actionHistoryBase > 0 && { actionHistoryBase: this.actionHistoryBase }),
       executeBarrierIndex: this.executeBarrierIndex,
       restoreEpoch: this.restoreEpoch,
       gameInstanceId: this.gameInstanceId,
@@ -1213,12 +1401,19 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   /**
    * Replay a game from its history: every action is performed again, and every
    * seat the host closed at a deadline is closed again, in order. Throws, naming the
-   * entry, when the rules no longer accept one.
+   * entry, when the rules no longer accept one, and when the history no longer
+   * starts at action 0 (`checkpoints: { actionHistory: 'undo' }`).
    */
   static replay<G extends Game>(
     options: GameRunnerOptions<G>,
-    history: HistoryEntry[]
+    { actionHistory: history, actionHistoryBase }: Pick<GameStateSnapshot, 'actionHistory' | 'actionHistoryBase'>
   ): GameRunner<G> {
+    if (actionHistoryBase) {
+      throw new Error(
+        `Cannot replay this game: its history starts at action ${actionHistoryBase}, because the game keeps only ` +
+        `the history undo needs (checkpoints: { actionHistory: 'undo' }). Replay needs every action from the start.`,
+      );
+    }
     const runner = new GameRunner(options);
     runner.start();
 
@@ -1246,7 +1441,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * Restore a game from a snapshot — fully STATE-AUTHORITATIVE, NO replay.
    *
    * The snapshot already carries the complete authoritative state: the element
-   * tree (`snapshot.state` = `game.toJSON()`), the flow engine state
+   * tree (`snapshotTree(snapshot)` = `game.toJSON()`), the flow engine state
    * (`snapshot.flowState`), the element sequence counter (`snapshot.sequence`),
    * and — since RNG-state capture was added — the seeded RNG position
    * (`snapshot.randomState`). We reconstruct the game directly from those rather
@@ -1275,11 +1470,12 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       undo?: UndoPolicy;
     }
   ): GameRunner<G> {
+    const tree = snapshotTree(snapshot);
     // Use full gameOptions from snapshot if available, falling back to basic options
     // This ensures custom options like playerConfigs are preserved
     const gameOptions = snapshot.gameOptions ?? {
-      playerCount: snapshot.state.settings.playerCount as number,
-      playerNames: snapshot.state.settings.playerNames as string[],
+      playerCount: tree.settings.playerCount as number,
+      playerNames: tree.settings.playerNames as string[],
       seed: snapshot.seed,
     };
 
@@ -1305,14 +1501,14 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // Preserve action history for the undo op (which reads runner.actionHistory).
     // It is intentionally NOT replayed.
     runner.actionHistory.push(...snapshot.actionHistory);
+    // Absent: nothing was dropped, the honest reading of a snapshot that does not say.
+    runner.actionHistoryBase = snapshot.actionHistoryBase ?? 0;
 
     // Carry the retained checkpoint window forward so the next getSnapshot keeps
     // the retained entries intact while refreshing the head one.
     //
-    // A snapshot with no window -- or one whose `actionCheckpoints` is not a
-    // window at all, which is what a snapshot written by an engine predating
-    // the window looks like -- starts an EMPTY window at the CURRENT action
-    // count, not at 0. Starting at 0 would make the next capture write into
+    // A snapshot with no window (written with checkpoints disabled) starts an
+    // EMPTY window at the CURRENT action count, not at 0. Starting at 0 would make the next capture write into
     // slot `actionHistory.length` of an empty array, leaving a hole per
     // preceding action: `null`s that serialize, cost bytes forever, and read
     // back as "a checkpoint that is missing" rather than "a checkpoint that
@@ -1333,12 +1529,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // emitted window honest evidence of the policy actually in force, which is
     // the only evidence there is (the policy itself is never persisted).
     const window = snapshot.actionCheckpoints;
-    const usable =
-      runner.checkpointPolicy_.enabled &&
-      window &&
-      Array.isArray(window.entries) &&
-      typeof window.baseIndex === 'number';
-    runner.checkpointBaseIndex = usable ? window.baseIndex : snapshot.actionHistory.length;
+    const usable = runner.checkpointPolicy_.enabled && window !== undefined;
+    runner.checkpointBaseIndex = usable ? window.baseIndex : runner.actionCount;
     runner.actionCheckpoints = usable ? [...window.entries] : [];
 
     // UNDO-02: adopt the durable execute()-barrier from the snapshot. Absent
@@ -1360,7 +1552,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     if (snapshot.gameInstanceId !== undefined) runner.gameInstanceId = snapshot.gameInstanceId;
 
     // Adopt the authoritative element tree. loadSerializedState fully clears and
-    // rebuilds the tree from snapshot.state on its own (see Game.loadSerializedState),
+    // rebuilds the tree from `tree` on its own (see Game.loadSerializedState),
     // so it stands alone with no prior replay.
     //
     // `animationFloor` (UNDO-04): absent for a normal full restore (adopt
@@ -1369,11 +1561,11 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // move the live animation-event id sequence backwards. Do not thread a
     // floor through any other caller of `fromSnapshot` -- see game.ts's
     // `loadSerializedState` doc comment / RESEARCH.md §C.
-    // The message log is NOT in `snapshot.state` (it is a snapshot sibling —
+    // The message log is NOT in the tree (it is a snapshot sibling —
     // see `GameStateSnapshot.messageLog`), so it must be handed over explicitly.
     // `loadSerializedState` assigns it unconditionally, so a snapshot without a
     // log restores an empty one rather than leaving whatever this instance held.
-    runner.game.loadSerializedState(snapshot.state, {
+    runner.game.loadSerializedState(tree, {
       ...options,
       messageLog: snapshot.messageLog ?? [],
     });
@@ -1433,7 +1625,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    *
    * The restored runner carries the checkpoint prefix `[0..actionIndex]` forward
    * so subsequent undos/rewinds from it still resolve authoritatively, and its
-   * `actionHistory` is the matching prefix `[0..actionIndex)`.
+   * `actionHistory` is the kept part of the matching prefix `[0..actionIndex)`.
    *
    * Returns `null` when no checkpoint exists at `actionIndex`. Callers that
    * report the failure should ask `describeCheckpointAbsence` why — an entry
@@ -1457,7 +1649,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // game already was. This is what makes the fix self-serving from this
     // single call site -- no undo/rewind executor needs to remember to pass
     // it. See game.ts's `loadSerializedState` doc comment / RESEARCH.md §C.
-    const animationFloor = animationFloorOf(snapshot.state);
+    const liveTree = snapshotTree(snapshot);
+    const animationFloor = animationFloorOf(liveTree);
 
     // UNDO-02: clamp the barrier to the restore point. A barrier set AHEAD of
     // `actionIndex` (e.g. from an execute() node that ran after the point
@@ -1480,30 +1673,30 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // A checkpoint predating the watermark has no recorded boundary, so the
     // honest restore is the whole log rather than a guess.
     const fullLog = snapshot.messageLog ?? [];
-    // `messagesEvicted` rides in the snapshot's own state, which is where the
-    // log's position bookkeeping lives.
-    const evicted = (snapshot.state as { messagesEvicted?: number }).messagesEvicted ?? 0;
-    const { state, messageLog } = checkpointWithLiveLog(checkpoint, fullLog, evicted);
+    // The eviction counts ride in the snapshot's tree, which is where the log's
+    // position bookkeeping lives.
+    const { state, messageLog } = checkpointWithLiveLog(checkpoint, fullLog, liveTree);
 
     return GameRunner.fromSnapshot<G>(
       {
         version: snapshot.version,
         gameType: snapshot.gameType,
-        state,
         messageLog,
         flowState: checkpoint.flowState,
         winners: checkpoint.winners,
-        actionHistory: snapshot.actionHistory.slice(0, actionIndex),
+        actionHistory: historyBefore(snapshot, actionIndex),
+        actionHistoryBase: snapshot.actionHistoryBase,
         seed: snapshot.seed,
         sequence: checkpoint.sequence,
         randomState: checkpoint.randomState,
         gameOptions: snapshot.gameOptions,
         // The retained window, truncated at the restore point: entries AHEAD of
         // `actionIndex` describe a timeline this runner no longer has. The base
-        // is unchanged -- everything already pruned stays pruned.
+        // is unchanged -- everything already pruned stays pruned. Its newest
+        // entry is the restored tree: `checkpoint` with the live eviction count.
         actionCheckpoints: {
           baseIndex: window!.baseIndex,
-          entries: window!.entries.slice(0, actionIndex - window!.baseIndex + 1),
+          entries: [...window!.entries.slice(0, actionIndex - window!.baseIndex), { ...checkpoint, state }],
         },
         executeBarrierIndex,
         // The restore itself, recorded durably. This is the ONE site that
@@ -1557,7 +1750,7 @@ export function restoreEarlierSnapshot<G extends Game>(
     { ...earlier, restoreEpoch: (live.restoreEpoch ?? 0) + 1 },
     GameClass,
     {
-      animationFloor: animationFloorOf(live.state),
+      animationFloor: animationFloorOf(snapshotTree(live)),
       checkpoints: options?.checkpoints,
       randomness: options?.randomness,
       undo: options?.undo,

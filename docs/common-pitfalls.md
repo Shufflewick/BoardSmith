@@ -560,8 +560,8 @@ A `loop` iteration is only incremented when an action completes **without return
 ### The Problem
 
 Undo reach is measured per action-step **frame**. `moveCount` lives on the
-frame, and `computeUndoInfo` anchors the rewind at
-`actionHistory.length - moveCount`. A `loop` around an `actionStep`, or a
+frame, and `computeUndoInfo` anchors the rewind at the action count minus
+`moveCount`. A `loop` around an `actionStep`, or a
 `sequence` of several action steps, opens a NEW frame for every action -- so a
 seat that is prompted again straight after its own action starts from zero and
 cannot take back what it just did, even mid-turn.
@@ -1632,7 +1632,10 @@ deck edits) are gated separately: the host refuses them unless it runs with
 `debug: true` (default `false`). In `boardsmith dev` the
 Debug panel and its tools are on only while one person (one browser) holds
 every human seat; once a second person sits down they are off for everyone
-until `boardsmith dev --debug` forces them on.
+until `boardsmith dev --debug` forces them on. With `--debug`, every seated
+person can see every face-down card and every other player's hand: the Decks
+tab's `debugDeckView` and `debugDeckViewAt` ops return the table with nothing
+hidden, live and at a past action (#898, #1071).
 
 4. **Check the sequence counter** - if it's much higher than element count, elements are being created and removed (normal but worth investigating)
 

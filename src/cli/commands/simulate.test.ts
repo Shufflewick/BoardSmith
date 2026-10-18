@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stripVTControlCharacters } from 'node:util';
 import {
   runSimulation,
   runReplay,
@@ -85,7 +86,7 @@ describe('runSimulation', () => {
     expect(result.failing).toHaveLength(1);
     const [g] = result.failing;
     expect(g.status).toBe('error');
-    expect(g.error).toBe('Game exceeded the maximum action count.');
+    expect(g.error).toMatch(/^Game did not finish within the maximum of 1 action\. Raise maxActions/);
   }, 60_000);
 
   it('plays a project policy written as a class, keeping its prototype and `this`', async () => {
@@ -170,6 +171,10 @@ describe('parsePlayerCounts: --players (#556)', () => {
     expect(() => parsePlayerCounts('2,3,2', game)).toThrow(/--players names 2 more than once/);
   });
 
+  it.each(['0', '-1', '1.5', '1e3', '12abc', ''])('refuses a count of "%s" by name (#1047)', (raw) => {
+    expect(() => parsePlayerCounts(`2,${raw}`, {})).toThrow(`--players takes a positive whole number, got "${raw}".`);
+  });
+
   it('needs a list when the game declares no player range', () => {
     expect(() => parsePlayerCounts(undefined, {})).toThrow(/minPlayers.*--players/);
     expect(parsePlayerCounts('1', {})).toEqual([1]);
@@ -214,6 +219,14 @@ describe('resolveSimulationGameOptions (issue 141)', () => {
   });
 });
 
+// --players is checked against the game's declared range, so after the rules are bundled. That
+// run happens here, where no test timeout applies (#1127).
+const playersProject = tempTree('boardsmith-simulate-players-');
+writeFileSync(join(playersProject, 'boardsmith.json'), JSON.stringify({ name: 'fixture' }));
+mkdirSync(join(playersProject, 'src', 'rules'), { recursive: true });
+writeFileSync(join(playersProject, 'src', 'rules', 'index.ts'), 'export const gameDefinition = {};\n');
+const nonPositivePlayers = await simulateOutput(playersProject, { games: '1', players: '0', seed: undefined });
+
 describe('simulateCommand', () => {
   let projectDir: string;
   let originalCwd: string;
@@ -223,8 +236,8 @@ describe('simulateCommand', () => {
     originalCwd = process.cwd();
     originalExitCode = process.exitCode;
     // A minimal fixture project: valid boardsmith.json + a stub rules/index.ts.
-    // simulateCommand's --games/--players validation runs (and returns) before
-    // it ever bundles rulesIndexPath, so the stub file's contents don't matter.
+    // simulateCommand's --games validation runs (and returns) before it ever
+    // bundles rulesIndexPath, so the stub file's contents don't matter.
     projectDir = tempTree('boardsmith-simulate-cli-');
     writeFileSync(join(projectDir, 'boardsmith.json'), JSON.stringify({ name: 'fixture' }));
     mkdirSync(join(projectDir, 'src', 'rules'), { recursive: true });
@@ -243,10 +256,22 @@ describe('simulateCommand', () => {
     expect(process.exitCode).toBe(1);
   });
 
-  it('IN-01: exits non-zero with an actionable message on a non-positive --players flag', async () => {
-    process.exitCode = 0;
-    await simulateCommand({ games: '1', players: '0', seed: undefined });
-    expect(process.exitCode).toBe(1);
+  it.each(['0', '-1', '1.5', '1e3', '12abc', ''])('refuses --games "%s" by name (#1047)', async (raw) => {
+    const printed = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await simulateCommand({ games: raw, players: '2', seed: undefined });
+      expect(process.exitCode).toBe(1);
+      expect(printed.mock.calls.map(([line]) => stripVTControlCharacters(String(line)))).toEqual([
+        `--games takes a positive whole number, got "${raw}".`,
+      ]);
+    } finally {
+      printed.mockRestore();
+    }
+  });
+
+  it('IN-01: exits non-zero with an actionable message on a non-positive --players flag', () => {
+    expect(nonPositivePlayers.exitCode).toBe(1);
+    expect(nonPositivePlayers.output).toContain('--players takes a positive whole number, got "0".');
   });
 });
 
@@ -578,7 +603,7 @@ describe('boardsmith simulate --jobs (#556)', () => {
   it("reports a failing game's real message, replayed in dev mode, and a replay command carrying its variant", () => {
     expect(failingInWorker.exitCode).toBe(1);
     // The game's own line, not the engine's log: a worker's production mode leaves the throw's text out of it.
-    expect(failingInWorker.output).toMatch(/^Game 0 stuck \(seed w-2-0\).*\n {2}.*failed with: .*\(a score of \d+ is over the limit of 4\)/m);
+    expect(failingInWorker.output).toMatch(/^Game 0 stuck \(seed w-2-0\).*\n {2}Action 'add' rejected the move .*, chosen by policy 'random': .*\(a score of \d+ is over the limit of 4\)/m);
     expect(failingInWorker.output).toContain('Replay: boardsmith simulate --replay w-2-0 --players 2 --game-option limit=4');
     expect(failingInWorker.output).not.toMatch(/Replay: .*limit=100/);
     // Two variants, each on two workers playing one game.

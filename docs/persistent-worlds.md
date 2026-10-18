@@ -71,7 +71,8 @@ under `boardsmith dev`, and publish.
 `boardsmith dev --reset` deletes the local world and runs genesis again. Nothing
 else does: a persistent world that erased itself when its host stopped would be
 a session, and closing the laptop is the one thing an author has to be able to
-do.
+do. It refuses while another `boardsmith dev` holds the world, and names that
+run: one run holds a world from start to stop, rule reloads included.
 
 Updating BoardSmith does not erase it either. The local store stamps the layout
 it was written under, and an open that finds an older layout this BoardSmith
@@ -953,11 +954,13 @@ while telling the player nothing they can act on. The engine cannot tell the two
 apart, so it asks you to. `PlayerFacingError` is how you say *this message was
 written to be read*; the log names it whenever a sentence is dropped.
 
-This is deliberately **not** a `WorldRefusal`. That table is the *platform's*
-vocabulary and its codes drive a host's park ladder, so giving a game's own
-refusal one would relabel every bug in a bundle's rules as one of the platform's
-words (#169, #191). A game's refusal travels unclassified, as it always has --
-what changed is only that it travels with its sentence intact.
+The two leave the world differently. For a seated or a clock action, the replaced
+error is a `WorldRefusal` with the game-owned code `rules-error`, so a host or a
+tool can tell a crash from a refusal without reading the sentence (#847, #1045). A game's own
+refusal (a `PlayerFacingError`, or `{ success: false, error }`) is deliberately
+**not** a `WorldRefusal`: that table's codes drive a host's park ladder, and a
+refusal says nothing about the world's health (#169, #191). It travels
+unclassified, as it always has, with its sentence intact.
 
 The bar for the message is the one `PlayerFacingError` itself states: it must
 name what to do next, and must never carry a stack trace, a file path, an
@@ -1013,7 +1016,7 @@ ctx.world.emit(roomPartition(here.key), { said: seat, text });
 world contains. A scope is either:
 
 - the reserved string **`"world"`**, meaning everybody seated in this world; or
-- **the name of a partition this world currently has loaded**.
+- **the name of a partition the action declared** in `needs()`.
 
 The engine resolves the scope into the seats that can see it, and the host's job
 is a membership test against the seat behind each attached socket. You express
@@ -1024,14 +1027,15 @@ lets see it (its owner, or the seats it is visible to) whose `world.view` names
 it: events follow partition fog, so a room your view does not name is a room you
 are not told about. The view is judged after the command runs, against only the
 partitions that command declared, so what else happens to be loaded never
-decides who hears. A view must name more as more is loaded, never less. If a
+decides who hears. A view must name more as more is loaded, never less, and a
+look refuses one that does not with `view-dropped-partition`. If a
 seat's view could only say whether it names the scope by reading a partition the
 command did not declare, the command is refused with `undecided-audience`:
 declare that partition in the action, or narrow who can see the scope with an
 owner or `addVisibleTo`. A scope that is neither the reserved word nor a
-loaded partition is refused with `unknown-scope`: an event addressed to a place
-nobody can be in reaches nobody, and it is better refused than delivered silently
-to no one.
+partition the action declared is refused with `undeclared-partition`, at the
+`emit` line, whether or not that partition happens to be loaded: what an earlier
+command or a wake left resident never decides whether a command is refused.
 
 Nothing reads inside `payload`. It is yours.
 
@@ -1502,7 +1506,10 @@ looking at?" is answered by world state and genuinely has to be asked again -- s
 it keeps a ceiling of **four** rounds, and a view that names something new every
 round is walking the world and is refused with `declaration-unsettled`. Round one
 sees `undefined` for every partition; keep naming what you already asked for,
-because what is named on the final round is what gets loaded. A view whose first
+because what is named on the final round is what gets loaded. That is checked:
+a view that drops a name it named on an earlier round of the same look is refused
+for that seat with `view-dropped-partition`, naming the partition, because who
+hears an event is judged by that rule (see `emit` below). A view whose first
 round asks for nothing is never asked again, so the steady state costs one round.
 
 It sees the same read-only projection an action's declaration does, and an
@@ -2707,6 +2714,21 @@ is asked nothing and shown no sequence number; they are told what became of the
 order, because "the colony you founded was already founded" is something they are
 entitled to know before pressing anything.
 
+Each order is written down with the seat that sent it, and a page recovers only
+its own seat's orders, because the host keeps receipts per player: another
+seat's order would have no receipt there and would run again as the wrong
+player. Tabs open on the same world share the book and re-read it before every
+change, so one tab never erases another's orders.
+
+The page does not wait for a reload to ask, either. When a command gets no
+answer in time, the page sends the same order once more straight away. If that
+is also unanswered, the player is told to reload the page to check, because the
+reload asks about the same order. In a browser that refuses storage the page
+keeps no record across a reload, so the player is told to look at the world
+before pressing again instead. A reply that turns up after the page stopped
+waiting is still the order's answer: it strikes the order out, and answers the
+player if the second send is still waiting.
+
 **So do not build any of this into your game.** A `seq` selection on an action, a
 game-owned receipt ledger, or a rule that keeps a consumed candidate alive so a
 retry can reach it are all the same mistake: transport bookkeeping in a place the
@@ -2734,7 +2756,7 @@ your game.
 | `clock-only-command` | A player sent a seatless action -- one built with `worldClockAction()`, which the clock reaches and nobody else does -- or a scheduled event came due naming a seated action, which has no player to act for. Since `schedule-seated-action`, a seated action is refused at the `schedule()` line, so this second case answers only an event queued before that check, in a world that already holds one. |
 | `world-full` | A seating would exceed the bundle's own `maxPlayers`. Seats are assigned once and never handed on. |
 | `seat-conflict` | A seating named a player who already holds a different seat, or a seat another player already holds. |
-| `world-catching-up` | A world declaring `ordering: "chronological"` was still behind the instant this command arrived at, so it was not applied. Sending it again is safe and is the intended response: an order's durable identity makes the repeat run exactly once, and the world is already catching up. |
+| `world-catching-up` | A world declaring `ordering: "chronological"` was still behind the instant this command arrived at, so it was not applied. Sending it again is safe and is the intended response: an order's durable identity makes the repeat run exactly once, and the world is already catching up. When what it is behind on is a scheduled event that refused, the message names that event (by its `.prompt()` if the clock action declares one, otherwise by its action name) and says the world is waiting on it, since a refused event is retried but may never go through. |
 | `rate-limited` | A connection sent frames faster than the host accepts. Well-formed traffic, refused at the door. |
 | `invalid-order` | A player command arrived with no usable order identity: no id, an id past 128 characters, or no mint instant. Every player command carries one -- see [an order that survives a lost reply](#an-order-that-survives-a-lost-reply). |
 | `order-outcome-unknown` | A repeat arrived for an order minted before this world's receipt floor, so nothing can say whether it committed. Refused rather than run, because running it is the second spend the identity exists to prevent. |
@@ -2746,14 +2768,15 @@ thing next time.
 
 | Code | What happened |
 | --- | --- |
+| `rules-error` | A seated or clock action's `execute` or `onSelect` threw something that is not a `PlayerFacingError`, so the player was told the action "could not be completed because of an error in the game's rules" and nothing it changed was kept. The rules saying no (a `PlayerFacingError`, a failed `validate`, `{ success: false, error }`) carries no code. |
 | `bundle-not-a-world` | The manifest declares `"backend": "world"` and the compiled rules export no `world.actions`, no `world.view`, no `world.maxPlayers`, a `world.maxPlayers` the host will not seat, a `world.stateVersion` that is not a whole number from 0 up, or a `world.migration` that is not usable (no `from`, a `from` at or past this version, a hook -- `partition`, `event`, `derive`, `create` or `finalize` -- that is not a function, a `survey` that is not `{ initial, root, maxBytes }`, or a migration declaring both `survey` and `finalize`). |
 | `world-migration-unavailable` | A world's recorded `stateVersion` and its bundle's differ, and no migration in that bundle can cross the gap: none declared, one declared from a different version, or a bundle older than the world. Also a `create` or `derive` hook whose answer is not `name -> element`, or that names a partition the world already holds; a hook that allocated a top-level element and never answered it as a partition root (#246); a survey digest past `survey.maxBytes` or past the host's own ceiling, whether it was folded on this call or carried into it as bytes (#255); and a paged survey migration run with no `pass`, or a transform pass handed no digest. The world is not changed. |
 | `invalid-world-action` | A world action the platform cannot offer or cannot bound: an action not built with `worldAction()`, an unbounded `from`/`filter`/`elementClass` element form, an element selection with no `elements:`, a candidate outside what the step declared, a selection past `maxCandidatesPerSelection`, a dependent or repeating selection, a seatless action that asks a question, or a round declared before a step the action does not have. |
 | `not-in-a-world` | An action built with `worldAction()` reached `ctx.world` with no world running it -- registered on a table, or reached after the dispatch that bound its facilities finished. |
-| `undeclared-partition` | `execute` read a partition the action's own walk did not declare. |
+| `undeclared-partition` | `execute` read, or emitted an event in, a partition the action's own walk did not declare. |
 | `declaration-unsettled` | A `world.view` named something new on every round. **A view only**, since an action's walk has no ceiling to trip. |
+| `view-dropped-partition` | A `world.view` stopped naming a partition it named on an earlier round of the same look, once more was loaded. Refused for that seat only. Keep naming it alongside what the loaded partitions add. |
 | `declaration-write` | A declaration, a view or a migration's `survey.root` tried to write through the read-only projection. Do it in `execute`, or in the migration's `partition` hook. |
-| `unknown-scope` | An event was addressed to something that is neither `"world"` nor a loaded partition. |
 | `undecided-audience` | A seat's `world.view` could only say whether it names an event's scope by reading a partition the command did not declare. Declare it in the action, or narrow who can see the scope in the tree. |
 | `partition-missing` | A declaration named a partition this world's store does not have, and `world.createPartition` did not build one for that name either. Usually a typo, or a partition nothing has created yet. |
 | `invalid-partition-name` | A partition name a store may not hold: empty, over 128 characters, outside `A-Za-z0-9._:@/-`, one of `__proto__`, `constructor`, `prototype`, or `notice`, the scope a seat's notices are delivered live on. |
@@ -2789,7 +2812,8 @@ thing next time.
 **`platform`**: a host's own bookkeeping broke. Not yours to fix, and
 deterministic, so a host with a park ladder parks on it:
 `partition-not-resident`, `partition-vanished`, `checkpoint-unknown-partition`,
-`allocation-undeclared`, `allocation-stale`, `vacancy-unheld`, `unknown-child-op`,
+`allocation-undeclared`, `allocation-stale`, `vacancy-unheld`, `roster-double-holder`
+(the roster a host built the world from has two players in one seat), `unknown-child-op`,
 `child-generations-exhausted`, `world-engine-unavailable`, `engine-mismatch`,
 `world-state-unreadable`, `notice-box-answered-wrong` (a host answered a declared
 notice-box read about a different seat, or not at all).
@@ -3128,3 +3152,23 @@ sockets are open, when it checkpoints, and the two controls a watching person
 needs, and the library owns everything else. That is what makes "the same world
 here and in production" a property of the code rather than a promise on this
 page.
+
+**What a store answers about the schedule.** `ResidentWorld` never reads the
+whole event queue to run it (#953). A store behind it (`WorldStore`,
+`src/world/host/store.ts`) answers five questions, each in `(due, seq)` order
+where order matters:
+
+| Query | Asked by |
+|---|---|
+| `nextDue(at, taken)`: the first event due by `at` that this drain has not taken | the drain, once per entry; a chronological catch-up's "anything due?" |
+| `earliestEvent(after?)`: the first event, or the first due after `after` | the re-arm (`rearmAt` gets both), "fire due events now" |
+| `pendingOf(owner)`: that owner's unkeyed count and its key-to-id map, without arguments | a dispatch's schedule allowance, and a keyed upsert's displacement |
+| `pendingCount()`: every pending event | the allowance's world ceiling |
+| `pendingEvents()`: every event, decoded | a migration, which rewrites them all, and the dev chrome's queue panel |
+
+On a store keyed by `(due, seq)` with an owner index, which is how the
+platform keeps its queue, each of the first four is a short index read. The
+`boardsmith dev` SQLite store reads `nextDue` and `earliestEvent` through its
+`(due, seq)` index but scans the table for `pendingOf` and the count, reading
+ids and keys and never arguments. The fifth is the one that decodes every row,
+and nothing in a drain asks it.

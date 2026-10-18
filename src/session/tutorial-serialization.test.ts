@@ -40,6 +40,7 @@ import {
   type GameOptions,
 } from '../engine/index.js';
 import { GameRunner } from '../runtime/index.js';
+import { snapshotTree } from '../engine/utils/index.js';
 import type { TutorialDefinition, TutorialProgress } from '../engine/tutorial/types.js';
 
 // ---------------------------------------------------------------------------
@@ -184,7 +185,7 @@ describe('tutorialProgress serialization round-trip', () => {
     const snapshotJson = JSON.parse(JSON.stringify(snapshot));
 
     // tutorialDefinition must NOT appear in the serialized game state
-    const stateJson = JSON.stringify(snapshotJson.state);
+    const stateJson = JSON.stringify(snapshotTree(snapshotJson));
     expect(stateJson).not.toContain('tutorialDefinition');
 
     // Restoring without the definition leaves tutorialDefinition undefined
@@ -293,12 +294,12 @@ describe('tutorialProgress MCTS clone', () => {
     // Simulate MCTS restoreGame: create fresh instance, loadSerializedState
     // (mirrors mcts-bot.ts:1201-1234 exactly)
     const cloneOptions = snapshotJson.gameOptions ?? {
-      playerCount: snapshotJson.state.settings.playerCount as number,
-      playerNames: snapshotJson.state.settings.playerNames as string[],
+      playerCount: snapshotTree(snapshotJson).settings.playerCount as number,
+      playerNames: snapshotTree(snapshotJson).settings.playerNames as string[],
       seed: snapshotJson.seed,
     };
     const clone = new TutorialGame(cloneOptions);
-    clone.loadSerializedState(snapshotJson.state);
+    clone.loadSerializedState(snapshotTree(snapshotJson));
 
     // Clone must carry the root's progress
     expect(clone.tutorialProgress).toBeInstanceOf(Map);
@@ -317,13 +318,13 @@ describe('tutorialProgress MCTS clone', () => {
     // MCTS restoreGame uses the options from the snapshot (no tutorial in gameOptions
     // since tutorial is excluded from serialized state)
     const cloneOptions = snapshotJson.gameOptions ?? {
-      playerCount: snapshotJson.state.settings.playerCount as number,
-      playerNames: snapshotJson.state.settings.playerNames as string[],
+      playerCount: snapshotTree(snapshotJson).settings.playerCount as number,
+      playerNames: snapshotTree(snapshotJson).settings.playerNames as string[],
       seed: snapshotJson.seed,
     };
 
     const clone = new TutorialGame(cloneOptions);
-    clone.loadSerializedState(snapshotJson.state);
+    clone.loadSerializedState(snapshotTree(snapshotJson));
 
     // Definition is NOT in the snapshot → must be undefined on the clone
     // (The bot never advances the tutorial — lifecycle is session-only — so
@@ -364,7 +365,7 @@ describe('tutorialDefinition threading', () => {
     // Verify toJSON exclusion by checking the serialized state:
     const snapshot = runner.getSnapshot();
     const snapshotJson = JSON.parse(JSON.stringify(snapshot));
-    const stateKeys = Object.keys(snapshotJson.state.attributes ?? {});
+    const stateKeys = Object.keys(snapshotTree(snapshotJson).attributes ?? {});
     expect(stateKeys).not.toContain('tutorialDefinition');
   });
 

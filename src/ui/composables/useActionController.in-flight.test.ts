@@ -408,3 +408,49 @@ describe("a follow-up's first fetch that answers after the follow-up was cancell
     expect(steps.fn).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('a reply that answers after the page changed seats (#1150)', () => {
+  const metadata: Record<string, EnrichedActionMetadata> = {
+    buy: { name: 'buy', prompt: 'Buy', selections: [] },
+    pay: { name: 'pay', prompt: 'Pay', selections: [] },
+  };
+
+  function seatedController() {
+    const reply = deferred<ControllerActionResult>();
+    const playerSeat = ref(1);
+    const controller = useActionController({
+      sendAction: vi.fn(() => reply.promise),
+      availableActions: ref(['buy', 'pay']),
+      actionMetadata: ref(metadata),
+      isMyTurn: ref(true),
+      playerSeat,
+    });
+    return { controller, playerSeat, reply };
+  }
+
+  it("is published under the seat that sent it, and its follow-up is not started for the next seat", async () => {
+    const { controller, playerSeat, reply } = seatedController();
+    const sent = controller.execute('buy');
+    playerSeat.value = 2;
+    await flush();
+    reply.resolve({ success: true, followUp: { action: 'pay' } });
+    await sent;
+    await flush();
+
+    expect(controller.currentAction.value).toBeNull();
+    expect(controller.lastActionResult.value?.seat).toBe(1);
+  });
+
+  it("does not show the sending seat's error to the next seat", async () => {
+    const { controller, playerSeat, reply } = seatedController();
+
+    const sent = controller.execute('buy');
+    playerSeat.value = 2;
+    await flush();
+    reply.resolve({ success: false, error: 'Not enough gold' });
+
+    expect(await sent).toEqual({ success: false, error: 'Not enough gold' });
+    expect(controller.lastError.value).toBeNull();
+    expect(controller.lastActionResult.value?.seat).toBe(1);
+  });
+});

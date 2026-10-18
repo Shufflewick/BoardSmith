@@ -13,23 +13,14 @@ import { computed, inject, type Ref, type ComputedRef } from 'vue';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
+import CardBack from './CardBack.vue';
 import { resolvePresentation } from '../presentation.js';
 import { isHiddenPlaceholder } from '../../../../engine/element/hidden-placeholder.js';
+import { seatDisplayName } from '../../../../engine/element/seat-defaults.js';
 import type { PresentationOverlay } from '../presentation.js';
 import { GAME_CONTEXT_KEYS, injectPlayerSeat } from '../../../composables/useGameContext.js';
-import { getSpriteStyle, type ImageInfo } from '../../../utils/image.js';
-
-// ---------------------------------------------------------------------------
-// Local GameElement interface — dependency-free, mirrors auto-ui-helpers.ts
-// ---------------------------------------------------------------------------
-interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
-  childCount?: number;
-}
+import { parseImageInfo, type ImageInfo } from '../../../utils/image.js';
+import type { GameElement } from '../auto-ui-helpers.js';
 
 const props = defineProps<{
   element: GameElement;
@@ -110,9 +101,11 @@ const playerInfo = computed(() => {
 
 const isOwned = computed(() => playerInfo.value?.seat === playerSeat);
 
-const playerName = computed(() => {
-  const player = playerInfo.value;
-  return player?.name || `Player ${(player?.seat ?? 0) + 1}`;
+// Whose hand this is, for the header and its accessible name alike.
+const ownerLabel = computed(() => {
+  if (isOwned.value) return 'Your Hand';
+  const seat = playerInfo.value?.seat;
+  return seat === undefined ? 'Hand' : `${seatDisplayName(seat, playerInfo.value?.name)}'s Hand`;
 });
 
 // ---------------------------------------------------------------------------
@@ -143,16 +136,8 @@ const childBackImage = computed((): ImageInfo | null => {
   // Check visible children for back image
   for (const child of (props.element.children ?? [])) {
     const images = child.attributes?.$images as Record<string, unknown> | undefined;
-    if (images?.back) {
-      const back = images.back;
-      if (typeof back === 'string') return { type: 'url', src: back };
-      if (typeof back === 'object' && back !== null) {
-        const s = back as { sprite?: string; x?: number; y?: number; width?: number; height?: number };
-        if (s.sprite && typeof s.x === 'number' && typeof s.y === 'number') {
-          return { type: 'sprite', sprite: s.sprite, x: s.x, y: s.y, width: s.width ?? 238, height: s.height ?? 333 };
-        }
-      }
-    }
+    const back = parseImageInfo(images?.back);
+    if (back) return back;
   }
   return defaultBackImage?.value ?? null;
 });
@@ -251,7 +236,7 @@ void isBoardSelected;
   <div
     v-bind="selectableAttrs"
     role="group"
-    :aria-label="`Your hand, ${childCountDisplay} cards`"
+    :aria-label="`${ownerLabel}, ${childCountDisplay} cards`"
     :class="[
       'hand-container',
       {
@@ -274,7 +259,7 @@ void isBoardSelected;
     <!-- Header: overlay label wins, then element.name, then ownership fallback (CF-2 + D-04) -->
     <div class="hand-header">
       <span class="hand-label">
-        {{ presentationEntry?.label ?? element.name ?? (isOwned ? 'Your Hand' : `${playerName}'s Hand`) }}
+        {{ presentationEntry?.label ?? element.name ?? ownerLabel }}
       </span>
       <span class="hand-count">({{ childCountDisplay }})</span>
     </div>
@@ -301,20 +286,13 @@ void isBoardSelected;
           />
         </template>
         <template v-else-if="element.childCount">
-          <div
+          <CardBack
             v-for="i in Math.ceil(element.childCount / 2)"
             :key="i"
-            class="hand-card card-back-small"
-            :class="{ 'has-image': !!childBackImage }"
+            :image="childBackImage"
+            class="hand-card"
             :style="{ '--card-index': i - 1, '--card-count': Math.ceil(element.childCount / 2), '--row': 'back' }"
-          >
-            <img v-if="childBackImage?.type === 'url'" :src="childBackImage.src" class="card-image" alt="Card back" />
-            <div
-              v-else-if="childBackImage?.type === 'sprite'"
-              class="card-image card-sprite"
-              :style="getSpriteStyle(childBackImage)"
-            ></div>
-          </div>
+          />
         </template>
       </div>
 
@@ -330,20 +308,13 @@ void isBoardSelected;
           />
         </template>
         <template v-else-if="element.childCount">
-          <div
+          <CardBack
             v-for="i in (handNeedsTwoRows ? Math.floor(element.childCount / 2) : element.childCount)"
             :key="i"
-            class="hand-card card-back-small"
-            :class="{ 'has-image': !!childBackImage }"
+            :image="childBackImage"
+            class="hand-card"
             :style="{ '--card-index': i - 1, '--card-count': handNeedsTwoRows ? Math.floor(element.childCount / 2) : element.childCount, '--row': 'front' }"
-          >
-            <img v-if="childBackImage?.type === 'url'" :src="childBackImage.src" class="card-image" alt="Card back" />
-            <div
-              v-else-if="childBackImage?.type === 'sprite'"
-              class="card-image card-sprite"
-              :style="getSpriteStyle(childBackImage)"
-            ></div>
-          </div>
+          />
         </template>
       </div>
     </div>
@@ -537,39 +508,5 @@ void isBoardSelected;
 .hand-cards-wrapper.has-fan .hand-card:hover {
   transform: rotate(0deg) translateY(-15px) scale(1.05);
   z-index: 100 !important;
-}
-
-/* Hidden card placeholder — shared card-back token (THEME-05) */
-.card-back-small {
-  width: var(--card-w);
-  height: var(--card-h);
-  background: var(--bsg-card-back);
-  border-radius: var(--bsg-r-sm);
-  border: 1px solid var(--bsg-line-2);
-  box-shadow: var(--bsg-shadow-sm);
-  flex-shrink: 0;
-}
-
-.card-back-small.has-image {
-  background: transparent;
-  border: none;
-}
-
-.card-image {
-  width: var(--card-w);
-  height: var(--card-h);
-  border-radius: var(--bsg-r-sm);
-  box-shadow: var(--bsg-shadow-sm);
-  flex-shrink: 0;
-  object-fit: contain;
-}
-
-.card-sprite {
-  width: var(--card-w);
-  height: var(--card-h);
-  border-radius: var(--bsg-r-sm);
-  box-shadow: var(--bsg-shadow-sm);
-  flex-shrink: 0;
-  background-repeat: no-repeat;
 }
 </style>

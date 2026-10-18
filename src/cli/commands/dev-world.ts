@@ -10,7 +10,7 @@
  * already there before anybody opens a browser.
  *
  * WHAT IT SHARES WITH THE TABLE RUN, deliberately and by import rather than by
- * copy: the Vite server, `importRuntimeBundle`'s one-engine rules bundle, the
+ * copy: the Vite server, `buildRuntimeBundle`'s one-engine rules bundle, the
  * "no SPA fallback, a missing asset is a 404" rule (issue 134), the
  * `noServer` WebSocket upgrade that leaves Vite's HMR socket alone, and the
  * iframe shape -- the outer page is dev chrome and the game's
@@ -34,22 +34,21 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import open from 'open';
 import type { Plugin as VitePlugin } from 'vite';
 
 import { worldBudgets } from '../../world/index.js';
 import type { WorldMigrationOutcome } from '../../world/host/index.js';
-import type { LocalWorldHost } from '../dev-host/world-host.js';
 import { createRulesReloadQueue, type RulesReloadQueue } from '../dev-host/rules-reload-queue.js';
+import { startRulesWorker, type RulesWorker } from '../dev-host/rules-worker.js';
 import { createWorldConnections } from '../dev-host/world-connections.js';
-import { createNodeWorldClock, type WorldHostClock } from '../dev-host/node-world-clock.js';
-import { worldStorePath, type LocalWorldStore, type openWorldStore } from '../dev-host/world-store.js';
+import type { OpenedWorld, WorldCalls, WorldEvent, WorldFacts } from '../dev-host/world-rules-worker.js';
+import { takeWorldLock, worldStorePath, type WorldLock } from '../dev-host/world-store.js';
 import { announceHost, teardownInOrder, type HeldResource, type HostHoldings } from '../dev-host/shutdown.js';
 import type { WorldDevConfig } from '../dev-host/world-config-types.js';
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
-import type { GameDefinition } from '../../session/index.js';
-import { importRuntimeBundle, toPosix } from './game-runtime.js';
+import { buildRuntimeBundle, cliSourceFile, toPosix } from './game-runtime.js';
 import {
   claimWebSocketPath,
   answerAlive,
@@ -174,48 +173,54 @@ function boardsmithWorldDevPlugin(args: {
  * of the bundle's, so every offer walk crossed the resident world through a
  * proxy -- 15-30 seconds a command with two seats attached. `createWorld` now
  * refuses that pairing by name, and this is the road that never makes it: the
- * table road's `loadGameRuntime` takes `executeOp` from the rules' bundle for
- * the same reason, and the platform splices a world bundle around one engine.
+ * table road takes `executeOp` from the rules' bundle for the same reason, and
+ * the platform splices a world bundle around one engine. The store comes out of
+ * the bundle too, because its budget refusals are `WorldRefusal`s the host
+ * tells apart by class.
  *
- * The store comes out of the bundle too, because its budget refusals are
- * `WorldRefusal`s the host tells apart by class.
+ * The bundle runs in a worker (#885, `../dev-host/rules-worker.ts`): the world,
+ * its store and its clock live there, and this process sends it the pages'
+ * messages. A reload throws the old worker away, so no rules bundle is ever
+ * imported into this process.
  */
 export interface WorldRuntime {
-  readonly gameDefinition: GameDefinition;
-  readonly LocalWorldHost: typeof LocalWorldHost;
-  readonly openWorldStore: typeof openWorldStore;
+  /** What the host reads of the rules' `gameDefinition`. */
+  readonly gameDefinition: WorldFacts;
+  readonly worker: RulesWorker;
 }
 
-/** Bundle and load a world project's rules with the host that runs them. The
- *  import is cache-busted, so calling it again re-reads the author's edits. */
+/** Bundle a world project's rules with the host that runs them; answers the bundle's path, for {@link startWorldRuntime}. */
+export function bundleWorldRules(rulesPath: string, tempDir: string, context: 'monorepo' | 'standalone'): Promise<string> {
+  const worker = JSON.stringify(toPosix(cliSourceFile('dev-host/world-rules-worker.ts')));
+  return buildRuntimeBundle({
+    rulesPath,
+    tempDir,
+    name: 'world-runtime',
+    context,
+    exports: [`import { serveWorld } from ${worker};`, 'serveWorld(gameDefinition);'],
+  });
+}
+
+/** Start a worker on a bundle from {@link bundleWorldRules}. A world has no lobby to start it with options. */
+export async function startWorldRuntime(bundlePath: string): Promise<WorldRuntime> {
+  const { worker, ready } = await startRulesWorker(bundlePath, undefined);
+  return { gameDefinition: ready as WorldFacts, worker };
+}
+
+/** Bundle a world project's rules and start them. */
 export async function loadWorldRuntime(
   rulesPath: string,
   tempDir: string,
   context: 'monorepo' | 'standalone',
 ): Promise<WorldRuntime> {
-  const devHostDir = resolveDevHostDir(__dirname, 'world-host.ts');
-  const module = await importRuntimeBundle({
-    rulesPath,
-    tempDir,
-    name: 'world-runtime',
-    context,
-    // A world has no lobby to start it with options, so it declares none.
-    gameOptions: undefined,
-    exports: [
-      `export { LocalWorldHost } from ${JSON.stringify(toPosix(join(devHostDir, 'world-host.ts')))};`,
-      `export { openWorldStore } from ${JSON.stringify(toPosix(join(devHostDir, 'world-store.ts')))};`,
-    ],
-  });
-  return {
-    gameDefinition: module.gameDefinition,
-    LocalWorldHost: module.LocalWorldHost as typeof LocalWorldHost,
-    openWorldStore: module.openWorldStore as typeof openWorldStore,
-  };
+  return startWorldRuntime(await bundleWorldRules(rulesPath, tempDir, context));
 }
 
 interface WorldDevServerOptions {
   readonly cwd: string;
   readonly uiPath: string;
+  /** The rules folder `runtime` was loaded from; a save under it reloads the world (#882). */
+  readonly rulesDir: string;
   /** The rules and the host that runs them, from one bundle (#283). */
   readonly runtime: WorldRuntime;
   readonly displayName: string;
@@ -236,10 +241,10 @@ interface WorldDevServerOptions {
    * A world runs the rules this process loaded at startup, and an author's
    * saved edits reach only the browser -- so a rule edit used to leave the new
    * UI acting on the old rules, and the world committed the result. This is how
-   * the host gets the new ones: `loadWorldRuntime` cache-busts its own import,
-   * so calling it again is a genuine re-read of the edited source. It answers
-   * the whole runtime and not only the rules, because a rebuilt bundle is a new
-   * copy of the engine and the host has to be the one built beside it (#283).
+   * the host gets the new ones: `loadWorldRuntime` bundles the edited source
+   * into a new worker. It answers the whole runtime and not only the rules,
+   * because a rebuilt bundle is a new copy of the engine and the host has to be
+   * the one built beside it (#283).
    */
   readonly reloadRules: () => Promise<WorldRuntime>;
 }
@@ -280,22 +285,30 @@ function closesWorld(run: WorldRun): HeldResource {
 
 /** Open the project's world on `runtime`, and reload it through `reloadRules` on every save. */
 export async function openWorldRun(
-  options: Pick<WorldDevServerOptions, 'cwd' | 'displayName' | 'runtime' | 'reloadRules'> & {
-    /**
-     * The clock every world host this run opens reads and arms. The Node clock
-     * unless given; a test passes one it drives by hand.
-     */
-    readonly clock?: WorldHostClock;
-  },
+  options: Pick<WorldDevServerOptions, 'cwd' | 'displayName' | 'runtime' | 'reloadRules' | 'port'>,
 ): Promise<WorldRun> {
-  const clock = options.clock ?? createNodeWorldClock();
   // THE ONE PLACE THE BUDGETS ARE DECIDED, and they are the library's defaults
   // rather than numbers this file invents. A laptop running different ceilings
   // from production makes a game's local behaviour a poor guide to its
   // published behaviour, which is the whole reason #165 made them parameters.
   const budgets = worldBudgets();
-  const store = options.runtime.openWorldStore(worldStorePath(options.cwd), budgets);
-  const launchedBefore = store.isLaunched();
+  // HELD FOR THE WHOLE RUN, IN THIS PROCESS (#1040), so neither a reload nor a rules worker that stops on its own lets another run in.
+  const lock = takeWorldLock(worldStorePath(options.cwd), { port: options.port });
+  try {
+    return await openWorld(options, budgets, lock);
+  } catch (error) {
+    lock.release();
+    throw error;
+  }
+}
+
+/** The body of {@link openWorldRun}, under the run's lock; its `close` releases it. */
+async function openWorld(
+  options: Parameters<typeof openWorldRun>[0],
+  budgets: ReturnType<typeof worldBudgets>,
+  lock: WorldLock,
+): Promise<WorldRun> {
+  const storePath = worldStorePath(options.cwd);
 
   // A RULE EDIT IS A COORDINATED WORLD RELOAD (#201).
   //
@@ -321,103 +334,147 @@ export async function openWorldRun(
         // rebuild have run and been answered. Vite has hot-reloaded its UI to
         // match rules the world only now has.
         connections.forgetAll({ type: 'world_reload' });
-        console.log(chalk.green('  Reloaded. The world is durable and running the new rules.\n'));
+        console.log(styleText('green', '  Reloaded. The world is durable and running the new rules.\n'));
         return;
       }
       connections.broadcast({ type: 'world_rules_reload', ...notice });
     },
   });
 
-  // THE PAGES OUTLIVE THE HOST: a rule edit replaces `worldHost` below, and the
-  // sockets stay where they are, so the connections ask for the current one.
-  const connections = createWorldConnections(() => worldHost, queue);
-  const hostOver = ({ gameDefinition: definition, LocalWorldHost }: WorldRuntime, over: LocalWorldStore) =>
-    new LocalWorldHost({
-      definition: definition as unknown as ConstructorParameters<
-        typeof LocalWorldHost
-      >[0]['definition'],
-      worldName: options.displayName,
-      // ONE SEED FOREVER, derived from the project rather than from the run: the
-      // same world has to come back on every wake, and a fresh seed per run
-      // would make a rebuilt world a different world.
-      seed: `world:${definition.gameType}`,
-      budgets,
-      store: over,
-      send: connections.send,
-      isOpen: connections.isOpen,
-      clock,
-      // The world's own alarm and a departure's grace wait in the queue with
-      // the pages' commands while an edit rebuilds (#387).
-      hostWork: queue,
-    });
-
-  // MUTABLE, because a rule edit replaces the whole world host (#201): the
-  // rules, the store handle and the resident tree go together, or the two
-  // halves are a world made of two versions.
-  let worldHost: LocalWorldHost = hostOver(options.runtime, store);
-  reportMigration(await worldHost.start());
-
-  /** The rules `worldHost` runs, so a reload the new rules refuse can reopen on them (#381). */
+  /** The rules the world runs on, in their worker. A reload the new rules refuse reopens on these (#381). */
   let running: WorldRuntime = options.runtime;
+  /** The pages whose sockets are open, which every world this run opens is told. */
+  let pages: readonly string[] = [];
+  const call = <T extends keyof WorldCalls, R = void>(rules: WorldRuntime, type: T, payload: WorldCalls[T]) =>
+    rules.worker.call<R>(type, payload);
 
-  /** A host over this world on `rules`, started; nothing is left open when that fails. */
-  async function openOn(rules: WorldRuntime): Promise<LocalWorldHost> {
-    const over = rules.openWorldStore(worldStorePath(options.cwd), budgets);
-    let host: LocalWorldHost;
-    try {
-      host = hostOver(rules, over);
-    } catch (error) {
-      over.close();
-      throw error;
-    }
-    try {
-      reportMigration(await host.start());
-    } catch (error) {
-      await host.close();
-      throw error;
-    }
-    return host;
+  // THE PAGES OUTLIVE THE WORLD'S WORKER: a rule edit replaces `running`
+  // below, and the sockets stay where they are, so the connections ask for the
+  // current one.
+  const connections = createWorldConnections(
+    () => ({
+      handleMessage: (clientId, message) => call(running, 'message', { clientId, message }),
+      disconnect: (clientId) => call(running, 'disconnect', { clientId }),
+    }),
+    queue,
+    (openPages) => {
+      pages = openPages;
+      if (running.worker.alive) call(running, 'pages', openPages).catch(reportWorldFailure);
+    },
+  );
+
+  /** The world opened in `rules`' worker, its frames to the pages and its own work to the queue. */
+  async function openIn(rules: WorldRuntime): Promise<OpenedWorld> {
+    rules.worker.listen((event) => {
+      const told = event as WorldEvent;
+      if ('send' in told) {
+        connections.sendFrame(told.send.clientId, told.send.frame, told.send.requestId);
+        return;
+      }
+      // Work for a world whose worker was replaced or stopped is dropped: that world is closed.
+      queue.hold(() => (rules.worker.alive ? call(rules, 'runHeld', told.hold) : undefined));
+    });
+    const opened = await call<'open', OpenedWorld>(rules, 'open', {
+      storePath,
+      port: options.port,
+      worldName: options.displayName,
+      budgets,
+      pages,
+    });
+    // A page that came or went while it opened was told to the world it replaces.
+    await call(rules, 'pages', pages);
+    reportMigration(opened);
+    return opened;
   }
 
+  const first = await openIn(running);
+  let closed: Promise<void> | null = null;
+
   //   1. STOP THE OLD WORLD. `close` checkpoints whatever the resident tree
-  //      holds, so nothing a command left in memory is lost with the isolate.
-  //   2. OPEN THE SAME WORLD AGAIN, on the new rules. Genesis does not re-run
-  //      (`start` runs it only for a world that has never launched), and a
-  //      `stateVersion` bump is migrated or refused there (#200) -- the same
-  //      path a fresh `boardsmith dev` takes.
-  //   3. IF THE NEW RULES REFUSE IT, OPEN IT AGAIN ON THE RULES IT HAD (#381).
-  //      The refusal happens before anything is written, so the world on disk
-  //      is exactly where the old host checkpointed it, and it goes on running.
-  //   4. SEAT EVERY PAGE WHERE IT WAS, so the commands held for this reload
+  //      holds, so nothing a command left in memory is lost with the worker.
+  //      A worker that stopped on its own (a rule threw from a timer) took its
+  //      world with it: there is nothing to close, and the save is what opens
+  //      the world again, from its last checkpoint.
+  //   2. OPEN THE SAME WORLD AGAIN, on the new rules, in their worker. Genesis
+  //      does not re-run (`start` runs it only for a world that has never
+  //      launched), and a `stateVersion` bump is migrated or refused there
+  //      (#200) -- the same path a fresh `boardsmith dev` takes.
+  //   3. IF THE NEW RULES REFUSE IT, OPEN IT AGAIN ON THE RULES IT HAD (#381),
+  //      in the worker that still holds them. The refusal happens before
+  //      anything is written, so the world on disk is exactly where the old
+  //      host checkpointed it, and it goes on running.
+  //   4. STOP THE WORKER THE WORLD NO LONGER RUNS IN (#885).
+  //   5. SEAT EVERY PAGE WHERE IT WAS, so the commands held for this reload
   //      (#379) are still their seats' commands. The queue runs them next (or
   //      refuses them with the reason, after step 3), and only then tells the
   //      pages to start again.
   async function reloadWorld(rules: WorldRuntime): Promise<void> {
-    const pages = worldHost.attachments();
-    await worldHost.close();
+    let seated: Array<[string, number]> = [];
+    try {
+      if (running.worker.alive) {
+        seated = await call<'attachments', Array<[string, number]>>(running, 'attachments', undefined);
+        await call(running, 'close', undefined);
+      }
+    } catch (error) {
+      // The new rules never ran, so their worker goes with the failure.
+      await rules.worker.close();
+      throw error;
+    }
     let refusal: Error | null = null;
     try {
-      worldHost = await openOn(rules);
-      running = rules;
+      await openIn(rules);
     } catch (error) {
+      await rules.worker.close();
+      const reason = error instanceof Error ? error.message : String(error);
+      if (!running.worker.alive) {
+        throw new Error(
+          `Those rules cannot run this world, and the rules it had stopped running, so no world is open. ` +
+            `Nothing was changed on disk. Save a rules file to open it again: ${reason}`,
+        );
+      }
       refusal = new Error(
         'Those rules cannot run this world, so it is still running the ones it had, and nothing ' +
-          `was changed on disk: ${error instanceof Error ? error.message : String(error)}`,
+          `was changed on disk: ${reason}`,
       );
-      worldHost = await openOn(running);
+      await openIn(running);
     }
-    for (const [clientId, seat] of pages) await worldHost.handleMessage(clientId, { type: 'attach', seat });
+    if (refusal === null) {
+      const replaced = running;
+      running = rules;
+      await replaced.worker.close();
+    }
+    for (const [clientId, seat] of seated) {
+      await call(running, 'message', { clientId, message: { type: 'attach', seat } });
+    }
     if (refusal !== null) throw refusal;
   }
 
   return {
     connections,
     queue,
-    seatCount: worldHost.seatCount,
-    storePath: store.path,
-    launchedBefore,
-    close: () => worldHost.close(),
+    seatCount: first.seatCount,
+    storePath: first.storePath,
+    launchedBefore: first.launchedBefore,
+    // Closing twice is closing once, as `LocalWorldHost.close` is (#197).
+    close: () =>
+      (closed ??= (async () => {
+        try {
+          // A worker that stopped on its own has no world left to close.
+          if (running.worker.alive) await call(running, 'close', undefined);
+        } finally {
+          try {
+            await running.worker.close();
+          } finally {
+            lock.release();
+          }
+        }
+      })()),
   };
+}
+
+/** A world call nobody waits on failed; the terminal says so, as `world-connections.ts` does for a page's message. */
+function reportWorldFailure(error: unknown): void {
+  console.error(styleText('red', `[boardsmith dev] ${error instanceof Error ? error.message : String(error)}`));
 }
 
 /**
@@ -495,10 +552,10 @@ export async function startWorldDevServer(
     launched: run.launchedBefore,
     storePath: run.storePath,
   })) {
-    console.log(chalk.dim(`  ${line}`));
+    console.log(styleText('dim', `  ${line}`));
   }
   for (const file of created) {
-    console.log(chalk.dim(`  Wrote ${file} -- a world project needs an entry, and this one had none.`));
+    console.log(styleText('dim', `  Wrote ${file} -- a world project needs an entry, and this one had none.`));
   }
 
   const worldSocket = claimWebSocketPath(WORLD_WS_PATH, run.connections.accept);
@@ -545,7 +602,7 @@ export async function startWorldDevServer(
 
   // A RULE EDIT IS A COORDINATED WORLD RELOAD (#201), heard here and carried
   // out by the run's queue (see `openWorldRun`).
-  reloadOnRulesEdit({ vite, rulesDir: join(options.cwd, 'src', 'rules'), cwd: options.cwd, queue: run.queue });
+  reloadOnRulesEdit({ vite, rulesDir: options.rulesDir, cwd: options.cwd, queue: run.queue });
 
   const hostUrl = served.localUrl;
   announceHost({
@@ -554,11 +611,11 @@ export async function startWorldDevServer(
     join: 'others can join this world',
     networkUrls: served.networkUrls,
     say: (line) => console.log(line),
-    green: chalk.green,
-    cyan: chalk.cyan,
+    green: (text: string) => styleText('green', text),
+    cyan: (text: string) => styleText('cyan', text),
   });
   if (options.openBrowser) await open(hostUrl);
-  console.log(chalk.green('\n  Ready! Press Ctrl+C to stop.\n'));
+  console.log(styleText('green', '\n  Ready! Press Ctrl+C to stop.\n'));
 
   // ONE ORDERLY STOP, WHOEVER ASKS (#231). A signal and a programmatic caller
   // reach the same run, so the two can never run the teardown twice, and the
@@ -578,7 +635,7 @@ function reportMigration(started: { migrated?: WorldMigrationOutcome }): void {
   if (started.migrated === undefined) return;
   const { from, to, partitions, created, events } = started.migrated;
   console.log(
-    chalk.green(
+    styleText('green',
       `  Migrated this world from state version ${from} to ${to}: ` +
         `${partitions} partition(s), ${created} new partition root(s) and ` +
         `${events} queued event(s), in one durable step.`,

@@ -2,8 +2,9 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Game, Player, Action, actionStep, loop, type GameOptions } from '../engine/index.js';
 import type { Annotation } from '../engine/index.js';
 import type { BotStrategy } from '../bot/types.js';
+import type { GameStateSnapshot } from '../runtime/index.js';
 import { executeOp, type GameDefinitionLike, type ExecutableOp, type Op, type OpResult } from './stateless-ops.js';
-import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
+import { SnapshotSessionHost, type SeatOp, type SnapshotSessionAdapters } from './snapshot-session-host.js';
 import { BotGame, botGameDef, botGameOptions } from './testing/fixtures/bot-game-fixture.js';
 import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
 import { stubExecuteOp, succeeded } from './op-result.test-helper.js';
@@ -338,7 +339,7 @@ describe('SnapshotSessionHost', () => {
       expect(calls[0]).toMatch(/will not try again until the game changes/);
     });
 
-    it.each(['undo', 'debugRewind'] as const)(
+    it.each(['undo', 'debugRewind', 'restoreEarlier'] as const)(
       'pumps the bot after a %s, so a restore landing on a bot seat does not stall the table',
       async (opType) => {
         // A restore can put the game on a bot seat's turn. Nothing else wakes
@@ -371,7 +372,10 @@ describe('SnapshotSessionHost', () => {
         await host.start();
         botCallCount = 0; // start() pumps once on its own — measure only the restore.
 
-        await host.handleOp(1, { type: opType, player: 1, actionIndex: 0 } as Op);
+        // restoreEarlier is host-only (#1102): the host sends it through its own entry point.
+        if (opType === 'restoreEarlier') await host.restoreEarlier({} as GameStateSnapshot);
+        else if (opType === 'undo') await host.handleOp(1, { type: 'undo', player: 1 });
+        else await host.handleOp(1, { type: 'debugRewind', actionIndex: 0 });
         await host.settled();
 
         expect(botCallCount).toBeGreaterThan(0);
@@ -503,43 +507,67 @@ describe('SnapshotSessionHost', () => {
       expect(botCallCount).toBeGreaterThanOrEqual(1);
     });
 
-    it('caps the bot pump at MAX_BOT_MOVES (500) and logs when a runaway bundle never stops', async () => {
-      const base = {
-        success: true,
-        snapshot: { flowState: {}, winners: [], actionHistory: [] },
-        playerViews: [],
-      };
-
-      let botCallCount = 0;
+    /** Adapters for an all-bot table whose bot seat 2 always finds a move; the game ends after `movesToEnd` of them. */
+    function allBotTable(movesToEnd: number, extra: Partial<SnapshotSessionAdapters> = {}) {
+      const counts = { botMoves: 0 };
+      const snapshotAt = (complete: boolean) => ({ flowState: { complete }, winners: [], actionHistory: [] });
       const adapters: SnapshotSessionAdapters = {
         playerCount: 2,
-        // A buggy bundle whose bot ALWAYS finds a move — would loop forever
-        // without the cap.
         executeOp: stubExecuteOp(async (_snap, _pend, op) => {
           if (op.type === 'botSuggest') return { success: true, botPlayer: 2, suggestedAction: 'go', suggestedArgs: {} };
-          if (op.type === 'action' && op.player === 2) {
-            botCallCount++;
-            return { ...base };
-          }
-          return { ...base };
+          if (op.type === 'action' && op.player === 2) counts.botMoves++;
+          return { success: true, snapshot: snapshotAt(counts.botMoves >= movesToEnd), playerViews: [] };
         }),
         record: () => {}, push: () => {},
+        ...extra,
       };
+      return { adapters, counts };
+    }
 
-      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
+    it('lets an all-bot game that needs more than 500 bot moves finish (#815)', async () => {
+      const { adapters, counts } = allBotTable(1_200);
       const host = new SnapshotSessionHost(adapters);
       host.setBotSeats([{ seat: 2 }]);
       await host.start();
 
-      // Must terminate (not hang) and stop exactly at the cap.
       await host.runBotTurns();
 
-      expect(botCallCount).toBe(500);
-      expect(errSpy).toHaveBeenCalledWith(
-        '[SnapshotSessionHost] bot pump hit MAX_BOT_MOVES cap (500); stopping to avoid runaway.',
-      );
+      expect(counts.botMoves).toBe(1_200);
+      expect(host.isComplete).toBe(true);
+    });
 
+    it('stops a bot run that never ends at 20000 moves, reports it once, and lets timers run meanwhile (#815)', async () => {
+      const reported: unknown[] = [];
+      const { adapters, counts } = allBotTable(Infinity, { onBackgroundError: (error) => reported.push(error) });
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
+      await host.start();
+
+      let movesWhenTimerRan: number | null = null;
+      setTimeout(() => { movesWhenTimerRan = counts.botMoves; }, 0);
+      await host.handleOp(1, { type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host) });
+      await host.settled();
+
+      expect(counts.botMoves).toBe(20_000);
+      expect(reported).toHaveLength(1);
+      expect(String(reported[0])).toMatch(/20000 moves in a row without the game ending/);
+      // The run yields to the event loop between stretches, so the host's other work is not starved.
+      expect(movesWhenTimerRan).not.toBeNull();
+      expect(movesWhenTimerRan!).toBeLessThan(20_000);
+      errSpy.mockRestore();
+    });
+
+    it('hands a never-ending bot run to the caller of runBotTurns, not onBackgroundError (#815)', async () => {
+      const reported: unknown[] = [];
+      const { adapters } = allBotTable(Infinity, { onBackgroundError: (error) => reported.push(error) });
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
+      await host.start();
+
+      await expect(host.runBotTurns()).rejects.toThrow(/20000 moves in a row/);
+      expect(reported).toHaveLength(0);
       errSpy.mockRestore();
     });
   });
@@ -567,7 +595,7 @@ describe('SnapshotSessionHost', () => {
     }
 
     it('a refused close, stale or player-sent, leaves the seat\'s picks in the new round intact, live and saved', async () => {
-      const closes: Array<(oldKey: string) => Op> = [
+      const closes: Array<(oldKey: string) => SeatOp> = [
         (oldKey) => ({ type: 'expireSeat', player: 1, idleAction: 'pick', args: {}, boundaryKey: oldKey }),
         (oldKey) => ({ type: 'action', actionName: 'pick', player: 1, args: { color: 'green', size: 'L' }, boundaryKey: oldKey }),
         // Refused for its arguments rather than its key.
@@ -1089,6 +1117,40 @@ describe('SnapshotSessionHost', () => {
       await host.handleOp(1, { type: 'demoStop' });
       await waitFor(() => lastBroadcastState(broadcastLog, 1).isDemoRunning === undefined);
       expect(lastBroadcastState(broadcastLog, 1).demoControls).toBeUndefined();
+    });
+
+    it('refuses a demo delay that is not a whole number of milliseconds up to an hour, by name (#818)', async () => {
+      const { adapters, broadcastLog } = makeAdapters(botGameDef, botGameOptions, {});
+      const host = new SnapshotSessionHost(adapters);
+      host.setBotSeats([{ seat: 2 }]);
+      await host.start();
+
+      for (const delay of [-1, 1.5, Number.NaN, 3_600_001, '500']) {
+        const res = await host.handleOp(1, { type: 'demoStart', delay } as never);
+        expect(res).toEqual({
+          success: false,
+          error: `The demo delay must be a whole number of milliseconds from 0 to 3600000, but it is ${typeof delay === 'number' ? delay : JSON.stringify(delay)}.`,
+          category: 'protocol',
+        });
+      }
+      // Had a refused start begun the demo, this one would be ignored and the
+      // echoed delay would be the refused value.
+      await host.handleOp(1, { type: 'demoStart', delay: 3_600_000 });
+      const waitFor = async (pred: () => boolean) => {
+        for (let i = 0; i < 100; i++) {
+          if (pred()) return;
+          await new Promise((r) => setTimeout(r, 10));
+        }
+        throw new Error('condition not met in time');
+      };
+      await waitFor(() => lastBroadcastState(broadcastLog, 1).demoControls !== undefined);
+      expect(lastBroadcastState(broadcastLog, 1).demoControls?.delay).toBe(3_600_000);
+
+      const res = await host.handleOp(1, { type: 'demoControl', control: 'play', delay: -5 });
+      expect(res.success).toBe(false);
+      expect(res.error).toContain('-5');
+      expect(lastBroadcastState(broadcastLog, 1).demoControls?.delay).toBe(3_600_000);
+      await host.handleOp(1, { type: 'demoStop' });
     });
 
     // ── Test (5): hint + heatmap coexist on the same seat ────────────────────

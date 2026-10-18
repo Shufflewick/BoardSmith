@@ -30,7 +30,6 @@ export {
   GAME_ROOT_FIELD_AUDIENCE,
   GAME_SELF_SERIALIZED_FIELDS,
   isEngineRootField,
-  engineRootFieldAudience,
   ENGINE_OWNED_GAME_OPTION_KEYS,
   animationFloorOf,
 } from './element/index.js';
@@ -175,6 +174,7 @@ export type {
   ActionContext,
   ActionDefinition,
   ActionResult,
+  ExecuteResult,
   FollowUpAction,
   FollowUpOffer,
   ValidationResult,

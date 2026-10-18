@@ -72,6 +72,8 @@ const props = withDefaults(defineProps<{
   // ── The log ────────────────────────────────────────────────────────────────
   /** The lines the log shows, oldest first. */
   messages: HistoryMessage[];
+  /** The line number of `messages[0]`, once a game prunes its log (#903). See `GameHistory`. */
+  messageOffset?: number;
   /** What the log says when it is empty, if "No activity yet" would be a lie.
    *  A world's log is a live tail, not a history. */
   logEmptyText?: string;
@@ -99,6 +101,8 @@ const props = withDefaults(defineProps<{
   actionsPending?: boolean;
   /** Whether the panel is showing each action's help text. */
   isActionHelpVisible?: boolean;
+  /** True while the board shows its error message in place of the board; the default panel then lists every pick (#1153). */
+  boardFailed: boolean;
   /** The identity token at the head of the action bar. Never absent while the
    *  bar is up: an anchor that comes and goes between phases reads as broken. */
   panelToken?: { name: string; seat: number; color?: string } | null;
@@ -180,8 +184,9 @@ defineSlots<{
   /** The controls menu, at the far left of the action bar. Its contents are the
    *  adapter's: a table's carries undo, hints and the tutorial. */
   controls(): unknown;
-  /** Replace the action panel wholesale. */
-  'action-panel'(): unknown;
+  /** Replace the action panel wholesale. `boardFailed` is true while the board shows
+   *  its error message, so a pick cannot be handed to the board. */
+  'action-panel'(props: { boardFailed: boolean }): unknown;
   /** Whatever the adapter puts after the panel — a table's time-travel banner. */
   'actionbar-extra'(): unknown;
   /**
@@ -247,6 +252,9 @@ const actionBarCollapsed = computed(() => props.actionBarMinimized && !barOpened
 
 /** Whether the game is waiting on THIS seat, for the collapsed bar's mark. */
 const barWaitsOnMe = computed(() => props.mayAct && !props.completed);
+
+/** The board's error message is drawn at the region's own size, never the board's zoom (#1158). */
+const containerZoom = computed(() => (props.boardFailed ? 1 : props.zoomLevel));
 
 /** The toggle's label, carrying the attention state for screen readers too. */
 const barToggleLabel = computed(() => {
@@ -321,6 +329,16 @@ const historyPanel = ref<InstanceType<typeof GameHistory> | null>(null);
 
 defineExpose({ boardRegionEl, zoomContainerEl, historyPanel });
 
+const sideScrollEl = ref<HTMLElement | null>(null);
+
+// The phone drawer is display:none while shut, so lines drawn then could not scroll the log (#1122).
+watch(() => props.mobileExpanded, (open) => {
+  if (!open || !sideScrollEl.value) return;
+  historyPanel.value?.scrollToNewest();
+  // The log is the drawer's last block, so its newest line shows at the drawer's bottom.
+  sideScrollEl.value.scrollTop = sideScrollEl.value.scrollHeight;
+}, { flush: 'post' });
+
 /** The toggle's label, carrying the unread count for screen readers too. */
 const mobileToggleLabel = computed(() => {
   if (props.mobileExpanded) return 'Hide players and log';
@@ -391,7 +409,7 @@ const mobileToggleLabel = computed(() => {
 
         <!-- No header band: host branding (ShufflewickPub pull-down tab) overlays
              the top in production, and the ⋯ controls live in the action bar. -->
-        <div class="side-scroll">
+        <div ref="sideScrollEl" class="side-scroll">
           <PlayersPanel
             :players="players"
             :player-seat="playerSeat"
@@ -428,6 +446,7 @@ const mobileToggleLabel = computed(() => {
             v-if="isCompact || !railed"
             ref="historyPanel"
             :messages="messages"
+            :message-offset="messageOffset"
             :empty-text="logEmptyText"
             class="sidebar-history"
             data-testid="bs-log"
@@ -463,16 +482,10 @@ const mobileToggleLabel = computed(() => {
             aria-hidden="true"
           ></span>
 
-          <!-- The adapter's own overlays. A direct child of .boardregion, so like
-               every overlay here they can cover the board but NEVER the action bar
-               or the header (those are siblings outside .boardregion). -->
-          <slot name="board-overlays"></slot>
-
-
           <div
             class="game-shell__zoom-container"
             ref="zoomContainerEl"
-            :style="{ '--zoom-level': zoomLevel }"
+            :style="{ '--zoom-level': containerZoom }"
           >
             <!-- ONE render path for the board: the registry's default UI, or the
                  dev switcher's selection. There is no second slot for naming a
@@ -482,6 +495,13 @@ const mobileToggleLabel = computed(() => {
             <slot name="board"></slot>
           </div>
         </main>
+        <!-- The adapter's own overlays, in one layer over the visible board:
+             beside .boardregion, not in it, so they never scroll away with a
+             board wider than the region, and out of flow, so their content never
+             takes the board's space (#1068). Like every overlay here they can
+             cover the board but NEVER the action bar or the header (those are
+             outside .board-viewport). -->
+        <div class="board-overlays"><slot name="board-overlays"></slot></div>
         <!-- Game modal host: the sanctioned full-board-region overlay layer for
              custom UIs. A game Teleports a blocking modal here
              (`<Teleport to="#bs-game-modal">`) to cover the board area.
@@ -573,7 +593,7 @@ const mobileToggleLabel = computed(() => {
                  That focusable list is the keyboard/SR safety net (A11Y C-2):
                  custom UIs whose board isn't keyboard-operable still expose an
                  operable control. -->
-            <slot name="action-panel">
+            <slot name="action-panel" :board-failed="boardFailed">
               <ActionPanel
                 data-testid="bs-action-panel"
                 :available-actions="availableActions"
@@ -589,6 +609,7 @@ const mobileToggleLabel = computed(() => {
                 :current-player-name="currentPlayerName"
                 :current-player-color="currentPlayerColor"
                 :awaiting-players="awaitingPlayers"
+                :board-failed="boardFailed"
                 @undo="emit('undo')"
               />
             </slot>
@@ -627,8 +648,9 @@ const mobileToggleLabel = computed(() => {
     </div>
 
     <!-- The adapter's debug surface: one placement, one keyboard shortcut, one
-         transport, and a tab set the adapter declares. -->
-    <div v-if="$slots.debug" data-testid="bs-debug">
+         transport, and a tab set the adapter declares. A dialog's focus trap leaves
+         it usable (data-bs-outside-modal): the end of a game is when it is needed (#1106). -->
+    <div v-if="$slots.debug" data-testid="bs-debug" data-bs-outside-modal>
       <slot name="debug"></slot>
     </div>
   </div>
@@ -1207,6 +1229,18 @@ const mobileToggleLabel = computed(() => {
      Any fixed-position elements inside will behave like absolute positioning
      relative to this container - they cannot cover the navbar or ActionPanel. */
   contain: layout;
+}
+
+/* The adapter's overlays (see the template). Clicks pass through the empty
+   layer to the board; what an adapter puts in it takes them as usual. */
+.board-overlays {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+/* :where() keeps this below any child's own pointer-events rule, whatever order the styles load in. */
+:where(.board-overlays) > :deep(*) {
+  pointer-events: auto;
 }
 
 /* Sanctioned full-board-region overlay layer for custom-UI modals (see the

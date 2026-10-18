@@ -4,8 +4,10 @@ import { GameElement, hasZoneVisibility, withheldFromSeat, WITHHELD_PILE_BRANCH 
 import { Player } from '../player/player.js';
 import { devWarn, isDevMode } from '../../utils/dev.js';
 import { PlayerFacingError } from '../errors.js';
+import { withDevDetail } from '../action/rules-error.js';
 import { changing, flowStateRead } from '../element/state-version.js';
 import type { ActionResult, FollowUpAction } from '../action/types.js';
+import type { AcceptedArgs } from '../action/action.js';
 import type {
   FlowNode,
   FlowContext,
@@ -28,7 +30,7 @@ import type {
   PlayerAwaitingState,
 } from './types.js';
 import { resolveTimeLimit } from './step-time-limit.js';
-import { flowChildCount, resolveFlowChild } from './flow-navigation.js';
+import { flowChildCount, resolveFlowChild, SWITCH_DEFAULT_KEY } from './flow-navigation.js';
 
 /**
  * What running one flow node reports: whether the flow now waits for input.
@@ -135,11 +137,13 @@ function encodeFlowValue(value: unknown): unknown {
  *
  * @param idRemap - CR-02 (159): the `originalId -> syntheticId` map
  *   `Game.toJSONForPlayer` produces for a per-seat REDACTED clone (e.g. the MCTS
- *   bot's search sandbox). A fungible hidden-zone child is anonymized to a
- *   synthetic id there, so a marker holding its ORIGINAL id resolves through the
- *   remap to the (still-redacted) placeholder. Failing that, a marker that
- *   recorded its outermost concealing ancestor (WR-01, #726) resolves to that
- *   ancestor, which every viewer already sees.
+ *   bot's search sandbox), passed exactly when restoring one, even if empty.
+ *   A fungible hidden-zone child is anonymized to a synthetic id there, so a
+ *   marker holding its ORIGINAL id resolves through the remap to the
+ *   (still-redacted) placeholder. Failing that, a marker that recorded its
+ *   outermost concealing ancestor (WR-01, #726) resolves to that ancestor,
+ *   which every viewer already sees. Without it (a full restore) neither
+ *   fallback applies (#947).
  * @param name - The flow slot holding the marker, for the error.
  * @throws When nothing resolves: the element is gone from the game, and handing
  *   the rules a marker object where they expect an element would fail later
@@ -153,11 +157,14 @@ function resolveFlowElement(
 ): GameElement {
   const live = game.getElementById(marker.__flowElementId);
   if (live && live.constructor.name === marker.className) return live;
-  const syntheticId = idRemap?.get(marker.__flowElementId);
-  const resolved =
-    (syntheticId !== undefined ? game.getElementById(syntheticId) : undefined) ??
-    (marker.__hiddenContainerId !== undefined ? game.getElementById(marker.__hiddenContainerId) : undefined);
-  if (resolved) return resolved;
+  // A full restore holds every element the marker was written against, so a miss there is a real mismatch (#947).
+  if (idRemap) {
+    const syntheticId = idRemap.get(marker.__flowElementId);
+    const resolved =
+      (syntheticId !== undefined ? game.getElementById(syntheticId) : undefined) ??
+      (marker.__hiddenContainerId !== undefined ? game.getElementById(marker.__hiddenContainerId) : undefined);
+    if (resolved) return resolved;
+  }
   throw new Error(
     `Flow ${name} references element id ${marker.__flowElementId} (${marker.className}), but it no longer ` +
     `exists in the game: it is neither in the tree nor in game.pile. An element the flow holds must stay in ` +
@@ -286,12 +293,14 @@ interface ExecutionFrame<G extends Game = Game> {
  */
 export class FlowHaltedError extends PlayerFacingError {
   constructor(cause: unknown) {
-    const message = cause instanceof Error ? cause.message : String(cause);
-    super(
-      `Game halted: the flow failed after the action was committed — ${message}. ` +
-      `This is a flow-definition bug, not a retryable player error; the game cannot continue until the flow definition is fixed.`
-    );
+    super(withDevDetail(
+      'Game halted: the flow failed after the action was committed. ' +
+      'This is a flow-definition bug, not a retryable player error; the game cannot continue until the flow definition is fixed.',
+      cause,
+    ));
     this.name = 'FlowHaltedError';
+    // The message carries the cause only in dev, so whoever reports the halt logs it from here (#1120).
+    this.cause = cause;
   }
 }
 
@@ -501,8 +510,9 @@ export class FlowEngine<G extends Game = Game> {
    * @param actionName The action to perform
    * @param args The action arguments
    * @param playerIndex Optional player index for simultaneous actions (if not provided, uses current player)
+   * @param onAccepted Handed the action's args once its checks accept them (`PerformOptions.onAccepted`)
    */
-  resume(actionName: string, args: Record<string, unknown>, playerIndex?: number): FlowState {
+  resume(actionName: string, args: Record<string, unknown>, playerIndex?: number, onAccepted?: AcceptedArgs): FlowState {
     if (!this.awaitingInput) {
       throw new Error('Flow is not awaiting input');
     }
@@ -511,7 +521,7 @@ export class FlowEngine<G extends Game = Game> {
 
     // Handle simultaneous action step
     if (currentFrame?.node.type === 'simultaneous-action-step') {
-      return this.resumeSimultaneousAction(actionName, args, playerIndex, currentFrame);
+      return this.resumeSimultaneousAction(actionName, args, playerIndex, currentFrame, onAccepted);
     }
 
     const player = this.currentPlayer!;
@@ -519,7 +529,7 @@ export class FlowEngine<G extends Game = Game> {
     // The acting seat's own follow-up, taken as one whole action.
     const followUp = currentFrame && this.heldFollowUp(currentFrame, player.seat);
     if (followUp?.action === actionName) {
-      return this.resumeAfterExternalAction(this.performFollowUp(followUp, player, args), player.seat);
+      return this.resumeAfterExternalAction(this.performFollowUp(followUp, player, args, onAccepted), player.seat);
     }
 
     // Enforce flow-level allow-list for regular action steps.
@@ -530,7 +540,7 @@ export class FlowEngine<G extends Game = Game> {
 
     // Execute the action (regular action step), then settle its result exactly
     // as a result executed elsewhere (a completed pending action) is settled.
-    return this.resumeAfterExternalAction(this.game.performAction(actionName, player, args), player.seat);
+    return this.resumeAfterExternalAction(this.game.performAction(actionName, player, args, { onAccepted }), player.seat);
   }
 
   /**
@@ -539,8 +549,13 @@ export class FlowEngine<G extends Game = Game> {
    * published with are the ones it runs with: a follow-up is pre-filled.
    * `args` are the client's, and may name only picks (#662).
    */
-  private performFollowUp(followUp: FollowUpAction, player: PlayerOf<G>, args: Record<string, unknown>): ActionResult {
-    return this.game.performAction(followUp.action, player, args, { followUp });
+  private performFollowUp(
+    followUp: FollowUpAction,
+    player: PlayerOf<G>,
+    args: Record<string, unknown>,
+    onAccepted: AcceptedArgs | undefined,
+  ): ActionResult {
+    return this.game.performAction(followUp.action, player, args, { followUp, onAccepted });
   }
 
   /**
@@ -934,6 +949,10 @@ export class FlowEngine<G extends Game = Game> {
    * set: that seat was admitted under the filter and may be partway through the
    * step, so a filter that changes mid-step only governs who joins.
    *
+   * Inside an action's own code (its execute, onSelect or onEach) the acting
+   * seat is left as it is: settling that action re-checks it by the same rules,
+   * on every route the action takes (#973).
+   *
    * No-op when no simultaneous step is open: there is no stale list to correct.
    *
    * Called from outside game code, it then ends the step when `allDone` holds,
@@ -968,6 +987,8 @@ export class FlowEngine<G extends Game = Game> {
     for (const player of players) {
       if (seat !== undefined && player.seat !== seat) continue;
 
+      // The seat whose action is running is settled by that action, by the same rules (#973).
+      if (player.seat === this.game._ctx._actingSeat) continue;
       const existing = this.awaitingPlayers.find((p) => p.playerIndex === player.seat);
       // A seat that already committed this step stays committed. Re-deriving
       // its list would be the one change a refresh must never make.
@@ -1049,7 +1070,8 @@ export class FlowEngine<G extends Game = Game> {
     actionName: string,
     args: Record<string, unknown>,
     playerIndex: number | undefined,
-    frame: ExecutionFrame<G>
+    frame: ExecutionFrame<G>,
+    onAccepted: AcceptedArgs | undefined,
   ): FlowState {
     const config = frame.node.config as SimultaneousActionStepConfig;
 
@@ -1127,8 +1149,8 @@ export class FlowEngine<G extends Game = Game> {
       throw new Error(`Invalid player position: ${actingPlayerIndex}`);
     }
     const result = takesFollowUp
-      ? this.performFollowUp(followUp, player, args)
-      : this.game.performAction(actionName, player, args);
+      ? this.performFollowUp(followUp, player, args, onAccepted)
+      : this.game.performAction(actionName, player, args, { onAccepted });
     return this.settleSimultaneousAction(frame, playerState, player, result);
   }
 
@@ -1351,7 +1373,6 @@ export class FlowEngine<G extends Game = Game> {
     let currentNode = this.definition.root;
     for (let i = 0; i < position.path.length; i++) {
       const index = position.path[i];
-      const iterationKey = `__iter_${i}`;
       // Inverse of getPosition's encodeFlowValue on frame data: an
       // element-valued entry (a `forEach` item included) comes back as a LIVE
       // element of this game, under whatever field name the engine wrote it to.
@@ -1361,9 +1382,6 @@ export class FlowEngine<G extends Game = Game> {
         idRemap,
         'step data',
       ) as Record<string, unknown>;
-      if (restoredFrameData.iteration === undefined) {
-        restoredFrameData.iteration = position.iterations[iterationKey] ?? 0;
-      }
 
       this.stack.push({
         node: currentNode,
@@ -1387,27 +1405,6 @@ export class FlowEngine<G extends Game = Game> {
     this.turnRun = position.turnRun ? { ...position.turnRun } : undefined;
 
     this.restoreActionStepTracking();
-  }
-
-  /**
-   * Point every element the flow holds (variables, frame data, the current
-   * player) at the same element of the game's current tree, after the tree was
-   * rebuilt in place under a flow that stays where it is: a failed action
-   * rolled back (#679). The position does not change.
-   *
-   * @throws When an element the flow holds is not in the rebuilt tree, naming
-   *   the flow variable or step data that holds it.
-   */
-  relinkElements(): void {
-    this.variables = relinkFlowValue(encodeFlowValue(this.variables), this.game, undefined, 'variable') as Record<string, unknown>;
-    for (const frame of this.stack) {
-      if (frame.data) {
-        frame.data = relinkFlowValue(encodeFlowValue(frame.data), this.game, undefined, 'step data') as Record<string, unknown>;
-      }
-    }
-    if (this.currentPlayer) {
-      this.currentPlayer = this.game.getPlayer(this.currentPlayer.seat) as PlayerOf<G>;
-    }
   }
 
   /**
@@ -1511,9 +1508,13 @@ export class FlowEngine<G extends Game = Game> {
           };
         }
         if (i < path.length - 1) {
+          const branchKey = frameData?.[`__frame_${i}`]?.branchKey;
+          const branch = currentNode.type === 'switch' && typeof branchKey === 'string'
+            ? (branchKey === SWITCH_DEFAULT_KEY ? 'the default case' : `case ${JSON.stringify(branchKey)}`)
+            : 'a branch';
           return {
             valid: false,
-            error: `the save is inside a branch of ${currentNode.type} "${nodeName}" that the current rules no longer have. ` +
+            error: `the save is inside ${branch} of ${currentNode.type} "${nodeName}" that the current rules no longer have. ` +
               'Restore it under the rules it was saved with, or start a new game',
             validPath,
           };
@@ -1582,7 +1583,7 @@ export class FlowEngine<G extends Game = Game> {
         // and `executeForEach`'s `forEachItems` do today -- so a hand-written
         // special case per field name is a hole waiting for the fourteenth
         // site. Plain values (`moveCount`, `iteration`,
-        // `eligibleSeats: number[]`, `branchIndex`) pass through untouched, which
+        // `eligibleSeats: number[]`, `branchIndex`, `branchKey`) pass through untouched, which
         // is what `turnSequence`/`dueSeats` (seat-activity.ts) and
         // `resolveFlowChild` read back out. Do NOT "simplify" this to a
         // spread: that is the asymmetry this replaced.
@@ -1820,9 +1821,7 @@ export class FlowEngine<G extends Game = Game> {
     context: FlowContext<G>
   ): StepResult {
     const iteration = (frame.data?.iteration as number) ?? 0;
-    const times = Math.max(0, config.times);
-
-    if (iteration >= times) {
+    if (iteration >= config.times) {
       frame.completed = true;
       return { awaitingInput: false };
     }
@@ -2072,8 +2071,9 @@ export class FlowEngine<G extends Game = Game> {
     const [heldSeat] = Object.keys(this.heldFollowUps(frame)).map(Number);
     if (heldSeat !== undefined) return this.awaitHeldSeat(frame, config, context, heldSeat);
 
-    // Check skip condition
-    if (config.skipIf?.(context)) {
+    // skipIf is settled on entry only, so a later move cannot skip past minMoves.
+    const entering = frame.data?.moveCount === undefined;
+    if (entering && config.skipIf?.(context)) {
       this.currentActionConfig = undefined;
       this.moveCount = 0;
       frame.completed = true;
@@ -2084,17 +2084,16 @@ export class FlowEngine<G extends Game = Game> {
     // at 0: `turnScope` decides whether this entry continues the run the same
     // seat is already on, which is what gives undo its reach across the frame
     // boundary a loop iteration or a sibling step creates.
-    if (frame.data?.moveCount === undefined) {
-      const entryPlayer = config.player ? config.player(context) : context.player;
-      if (!entryPlayer) {
-        throw new Error('ActionStep requires a player');
-      }
+    // The entry's player is used for this pass too, so `player` is asked once per pass.
+    let player: PlayerOf<G> | undefined;
+    if (entering) {
+      player = this.actionStepPlayer(config, context);
       // Resolved BEFORE the assignment: `entryRun` may also mark the
       // frame, and a spread evaluated first would discard that mark.
-      const start = this.entryRun(config, entryPlayer, frame);
+      const start = this.entryRun(config, player, frame);
       frame.data = { ...frame.data, moveCount: start.moves, actionCount: start.actions };
     }
-    const moveCount = frame.data.moveCount as number;
+    const moveCount = (frame.data as { moveCount: number }).moveCount;
 
     // Save previous player on first entry so we can restore after a player: override completes.
     // This prevents a player override from leaking into subsequent sibling steps.
@@ -2113,11 +2112,7 @@ export class FlowEngine<G extends Game = Game> {
 
     const minMovesMet = !config.minMoves || moveCount >= config.minMoves;
 
-    // Determine player
-    const player = config.player ? config.player(context) : context.player;
-    if (!player) {
-      throw new Error('ActionStep requires a player');
-    }
+    player ??= this.actionStepPlayer(config, context);
 
     // Current while its conditions are checked, so `ctx.player.isCurrent()` holds for it.
     this.currentPlayer = player;
@@ -2148,6 +2143,15 @@ export class FlowEngine<G extends Game = Game> {
 
     // Don't mark completed yet - we'll continue after input
     return { awaitingInput: true };
+  }
+
+  /** The seat an action step prompts: its `player`, or the flow's current player. */
+  private actionStepPlayer(config: ActionStepConfig<G>, context: FlowContext<G>): PlayerOf<G> {
+    const player = config.player ? config.player(context) : context.player;
+    if (!player) {
+      throw new Error('ActionStep requires a player');
+    }
+    return player;
   }
 
   /**
@@ -2290,8 +2294,7 @@ export class FlowEngine<G extends Game = Game> {
     frame.data = {
       ...frame.data,
       branchPushed: true,
-      branchKey: hasCase ? stringValue : '__default',
-      branchIndex: hasCase ? Object.keys(config.cases).indexOf(stringValue) : Object.keys(config.cases).length,
+      branchKey: hasCase ? stringValue : SWITCH_DEFAULT_KEY,
     };
 
     return { awaitingInput: false };
