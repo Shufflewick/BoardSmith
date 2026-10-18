@@ -16,8 +16,12 @@ import { readIfExists } from './read-if-exists.js';
  * (the sign-off, the verified hash, the ledgers, the run log). Each run still does the full suite,
  * typecheck, build and validate for the commit it is on; this cache spares only the mutants.
  *
- * An outcome is stored under a key made of everything the whole-suite run under that mutant could
- * depend on:
+ * An outcome is stored under a key made of everything the run under that mutant could depend on.
+ * That run is of the test files that loaded the mutant's file in the unmutated run of the whole
+ * suite (#981), and which files those are is decided by the same things the key holds (the
+ * repository's files, what is installed, and the BoardSmith that records it), so an outcome is
+ * never reused for a different choice of test files. Format 5 marks outcomes from such runs; one
+ * from a whole-suite run is not read. The key holds:
  *
  * - the mutant: the game folder within the repository, its file, and the file's whole mutated text;
  * - every file of the REPOSITORY in the commit, by content, except the game's `BOOKKEEPING_RECORDS`.
@@ -69,7 +73,7 @@ import { readIfExists } from './read-if-exists.js';
  * by its end (#932, #940): outcomes from a mixed run would be stored under a key they do not fit.
  */
 
-const CACHE_FORMAT = 4;
+const CACHE_FORMAT = 5;
 
 /** How many outcomes the shared cache keeps: many runs' worth, at about 80 bytes each. */
 export const MAX_STORED_OUTCOMES = 20_000;

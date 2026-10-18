@@ -222,7 +222,7 @@ describe('mutation verification cancellation (#712)', () => {
         await delay(10);
       }
       vi.advanceTimersByTime(30_000);
-      expect((await running).summary).toEqual({ files: 1, mutants: 1, killed: 0, survived: 0, timedOut: 1, equivalent: 0 });
+      expect((await running).summary).toEqual({ files: 1, mutants: 1, killed: 0, survived: 0, timedOut: 1, equivalent: 0, unreached: 0 });
       expect(processGroup(owned.leader)).toEqual([]);
       expect(await fs.readdir(join(project, '.boardsmith'))).toEqual([]);
     } finally {

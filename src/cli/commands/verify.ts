@@ -17,7 +17,8 @@
  *                 and presses every board control, and any page error, console error, failed
  *                 request or failed action fails it
  *   6. mutation   every code line under `src/` changed since the base, broken one small change at a
- *                 time; the whole suite must fail for each (`runDiffMutationCheck`). An outcome from
+ *                 time; for each, a test that loads its file must fail, and a change in a file no
+ *                 test loads fails the check too (`runDiffMutationCheck`, #981). An outcome from
  *                 an earlier run of the same code and tests is reused (`lib/mutant-cache.ts`), so a
  *                 re-verify after a bookkeeping-only commit runs no mutant again. The cache is shared
  *                 by every worktree, so a merge reuses what a worktree ran when the merged tree is
@@ -390,7 +391,7 @@ async function validateCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
   }
 }
 
-const NO_MUTANTS = Object.freeze({ files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, equivalent: 0, reused: 0 });
+const NO_MUTANTS = Object.freeze({ files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, equivalent: 0, unreached: 0, reused: 0 });
 
 /** Why no mutant is tried at all (nothing measured, nothing changed, a red suite), or undefined. */
 function mutationNotTried(ctx: VerifyContext, since: string): VerifyCheckOutcome | undefined {
@@ -420,9 +421,36 @@ function mutationNotTried(ctx: VerifyContext, since: string): VerifyCheckOutcome
   return undefined;
 }
 
-/** What a finished mutation run says: a red suite under the runner, survivors, or every mutant caught. */
-function mutationVerdict(since: string, run: Awaited<ReturnType<typeof runDiffMutationCheck>>): VerifyCheckOutcome {
-  const { summary, reused, survivors, notGreen, equivalence } = run;
+type DiffMutationRun = Awaited<ReturnType<typeof runDiffMutationCheck>>;
+
+/** What to say of the mutants no test caught (`of` places their count) and of those in a file no test loads, and what to do. */
+function unresolvedMutants(of: string, survivors: DiffMutationRun['survivors'], unreached: DiffMutationRun['unreached']) {
+  const said: string[] = [];
+  const next: string[] = [];
+  if (survivors.length > 0) {
+    said.push(`${survivors.length} ${of} survived: every test that loads its file still passed with the code changed`);
+    next.push(
+      'For each survivor, add or tighten a test so it fails when that line is changed that way, then run `boardsmith verify` again. ' +
+        'For a demonstrated equivalent under an explicit valid-input contract, use `boardsmith mutation-equivalence <id> --contract <text> --proof <text>` with the same --base, review the ledger and commit it with `git commit -S`.',
+    );
+  }
+  if (unreached.length > 0) {
+    said.push(`${unreached.length} ${of} were in a file no test loads, so no test could notice the change`);
+    next.push('For each file no test loads, add a test that imports it and checks what the changed lines do, then run `boardsmith verify` again.');
+  }
+  return {
+    summary: said.join('; '),
+    next: next.join(' '),
+    findings: [
+      ...survivors.map((s) => ({ file: s.file, line: s.line, detail: `${s.description}: no test failed`, ...(s.id ? { mutantId: s.id } : {}) })),
+      ...unreached.map((u) => ({ file: u.file, line: u.line, detail: `${u.description}: no test loads ${u.file}` })),
+    ],
+  };
+}
+
+/** What a finished mutation run says: a red suite under the runner, survivors or mutants no test loads, or every mutant caught. */
+function mutationVerdict(since: string, run: DiffMutationRun): VerifyCheckOutcome {
+  const { summary, reused, survivors, unreached, notGreen, equivalence } = run;
   const counts = { ...summary, reused };
   const reuse = reused > 0 ? ` ${reused} reused from an earlier run of this same code and these same tests.` : '';
   if (notGreen) {
@@ -436,19 +464,9 @@ function mutationVerdict(since: string, run: Awaited<ReturnType<typeof runDiffMu
   if (summary.mutants === 0) {
     return { passed: true, summary: `No line changed since ${since} holds code a mutant can change.`, counts };
   }
-  if (survivors.length > 0) {
-    return {
-      passed: false,
-      summary:
-        `${survivors.length} of ${plural(summary.mutants, 'mutant')} of the lines changed since ${since} survived: ` +
-        `the whole suite still passed with the code changed.${reuse}`,
-      next:
-        'For each one, add or tighten a test so it fails when that line is changed that way, then run `boardsmith verify` again. ' +
-        'For a demonstrated equivalent under an explicit valid-input contract, use `boardsmith mutation-equivalence <id> --contract <text> --proof <text>` with the same --base, review the ledger and commit it with `git commit -S`.',
-      counts,
-      findings: survivors.map((s) => ({ file: s.file, line: s.line, detail: `${s.description}: no test failed`, ...(s.id ? { mutantId: s.id } : {}) })),
-      ...(equivalence ? { equivalence } : {}),
-    };
+  if (survivors.length > 0 || unreached.length > 0) {
+    const unresolved = unresolvedMutants(`of ${plural(summary.mutants, 'mutant')} of the lines changed since ${since}`, survivors, unreached);
+    return { passed: false, ...unresolved, summary: `${unresolved.summary}.${reuse}`, counts, ...(equivalence ? { equivalence } : {}) };
   }
   const dispositions = `${summary.killed} killed by tests, ${summary.equivalent} reviewed equivalent, ${summary.timedOut} timed out`;
   return {
@@ -459,7 +477,7 @@ function mutationVerdict(since: string, run: Awaited<ReturnType<typeof runDiffMu
   };
 }
 
-/** 6. Every mutant of a changed code line must make the whole suite fail. */
+/** 6. Every mutant of a changed code line must make a test that loads its file fail. */
 async function mutationCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
   const since = `${ctx.base.ref} (${short(ctx.base.commit)})`;
   const notTried = mutationNotTried(ctx, since);

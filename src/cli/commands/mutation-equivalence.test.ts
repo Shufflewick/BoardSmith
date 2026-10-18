@@ -53,7 +53,7 @@ describe('signed equivalent-mutant dispositions (#713)', () => {
     const nextCache = await openMutantCache(project);
     const result = await runDiffMutationCheck({ projectDir: project, added, cache: nextCache, log: () => {} });
 
-    expect(result.summary).toEqual({ files: 1, mutants: 3, killed: 2, survived: 0, timedOut: 0, equivalent: 1 });
+    expect(result.summary).toEqual({ files: 1, mutants: 3, killed: 2, survived: 0, timedOut: 0, equivalent: 1, unreached: 0 });
     expect(result.survivors).toEqual([]);
     expect(result.reused).toBe(2);
     expect(result).toMatchObject({ equivalents: [{ id, reviewer: 'reviewer@example.test', reviewCommit: git('rev-parse', 'HEAD') }] });

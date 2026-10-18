@@ -46,6 +46,7 @@ import {
 import { codeRegions } from './test-step-sfc.js';
 import type { ChunkTestFile, TestStepFinding } from './test-step-check.js';
 import { COVERAGE_SETUP, coverageEnv, readCoverage, testKeyOf, type FileCoverage } from './test-step-coverage.js';
+import { GLOBAL_SETUP_MARK, REACH_SETUP, reachEnv, readReach } from './test-step-reach.js';
 import type { MutantCache } from '../lib/mutant-cache.js';
 import { readEquivalenceReview, type EquivalenceBasis, type EquivalenceReview, type EquivalentMutant } from '../lib/mutation-equivalences.js';
 import { sha256Hex } from '../lib/hash.js';
@@ -239,6 +240,9 @@ const PIN_MUTANT_CAP = 100;
 /** The coverage setup file's name in the run's scratch directory (`test-step-coverage.ts`). */
 const COVERAGE_SETUP_NAME = 'coverage-setup.mjs';
 
+/** The setup file's name in the run's scratch directory that records which test files load which files (`test-step-reach.ts`). */
+const REACH_SETUP_NAME = 'reach-setup.mjs';
+
 /** The generated modules that carry the mutant into every project of the run (`overlayModule`, `workspaceModule`). */
 const OVERLAY_NAME = 'overlay.mjs';
 const WORKSPACE_NAME = 'workspace.mjs';
@@ -326,6 +330,7 @@ export const overlay = () => ({
   test: {
     includeTaskLocation: true,
     ...(process.env.BOARDSMITH_COVERAGE ? { setupFiles: [${JSON.stringify(join(workDir, COVERAGE_SETUP_NAME))}] } : {}),
+    ...(process.env.BOARDSMITH_REACH ? { setupFiles: [${JSON.stringify(join(workDir, REACH_SETUP_NAME))}] } : {}),
   },
 });
 
@@ -364,7 +369,8 @@ export default hookProjects(entries, dirname(path), ${vitestMajor >= 3 ? 'dirnam
  * `hookProjects`, its workspace file replaced by `workspaceModule`, and the reporter that writes
  * `REPORT_NAME` (replacing the project's reporters, whose output goes nowhere here). The reporter
  * refuses a run with a project whose Vite server lacks the mutant loader, since its tests would run
- * the original code. It records each test's name the way vitest's JSON reporter does (its describe
+ * the original code, and on a run that records what each test file loads, marks one with a global
+ * setup (`GLOBAL_SETUP_MARK`). It records each test's name the way vitest's JSON reporter does (its describe
  * titles and its own, joined by spaces), since `testKeyOf` matches that name to the coverage run's.
  */
 function wrapperConfig(workDir: string, projectDir: string, projectConfig: string | undefined): string {
@@ -387,6 +393,9 @@ const testsIn = (tasks) => tasks.flatMap((task) => (task.type === 'suite' ? test
 const reporter = {
   onInit(ctx) {
     this.ctx = ctx;
+    if (process.env.BOARDSMITH_REACH && [ctx.config, ...ctx.projects.map((project) => project.config)].some((config) => config.globalSetup?.length > 0)) {
+      writeFileSync(process.env.BOARDSMITH_REACH + '/${GLOBAL_SETUP_MARK}', '');
+    }
     const unhooked = ctx.projects.filter((project) => !(project.vite ?? project.server).config.plugins.some((p) => p.name === 'boardsmith-mutant'));
     if (unhooked.length === 0) return;
     const refused = unhooked.map((project) => {
@@ -510,8 +519,8 @@ interface FailedFile {
   reason: string | undefined;
 }
 
-/** Which tests a run runs: the named chunk test files, or everything the project's config collects. */
-type RunScope = ChunkTestFile[] | 'whole-suite';
+/** Which tests a run runs: the named test files, or everything the project's config collects. */
+type RunScope = ReadonlyArray<Pick<ChunkTestFile, 'absPath'>> | 'whole-suite';
 
 interface Runner {
   /** The run's own directory (`withCommandBuildDir`), which holds its generated files. */
@@ -519,14 +528,15 @@ interface Runner {
   /** Waits for the active process group to stop and disappear; refuses any later run. */
   stop(): Promise<void>;
   /**
-   * With `bail`, a whole-suite mutant stops after a confirmed test failure, including running workers. With
-   * `coverage`, each test file writes which game code it ran into that directory (`readCoverage`).
+   * With `bail`, a mutant's run stops after a confirmed test failure, including running workers. With
+   * `coverage`, each test file writes which game code it ran into that directory (`readCoverage`);
+   * with `reach`, which project files its worker loaded (`readReach`).
    */
   run(
     scope: RunScope,
     mutant: { absPath: string; source: string } | null,
     timeoutMs: number,
-    options?: { bail?: boolean; coverage?: string },
+    options?: { bail?: boolean; coverage?: string; reach?: string },
   ): Promise<RunResult>;
 }
 
@@ -534,7 +544,7 @@ interface Runner {
  * Runs vitest to its end, or kills it and every worker it started once `timeoutMs` passes (a mutant
  * can turn a loop infinite). Resolves with its exit code, or false when it was killed. Not
  * `runVitestRecorded` (lib/vitest-run.ts): a mutant run needs that timeout and the kill of the
- * whole process group, and prints nothing. A whole-suite mutant also stops on the reporter's
+ * whole process group, and prints nothing. A mutant run with `bail` also stops on the reporter's
  * confirmed failure, after its partial report is written, and waits for its process group to disappear.
  */
 function runVitest(
@@ -688,6 +698,7 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
   const reportPath = join(workDir, REPORT_NAME);
   const configPath = await writeRunConfig(projectDir, workDir, await installedVitestMajor(projectDir));
   await fs.writeFile(join(workDir, COVERAGE_SETUP_NAME), COVERAGE_SETUP);
+  await fs.writeFile(join(workDir, REACH_SETUP_NAME), REACH_SETUP);
 
   const byRealPath = new Map(testFiles.map((f) => [realpathSync(f.absPath), f.path]));
   let active: ReturnType<typeof runVitest> | undefined;
@@ -708,7 +719,9 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
       const env = { ...process.env };
       delete env.BOARDSMITH_MUTANT;
       delete env.BOARDSMITH_COVERAGE;
+      delete env.BOARDSMITH_REACH;
       if (options.coverage) Object.assign(env, coverageEnv(options.coverage, projectDir));
+      if (options.reach) Object.assign(env, reachEnv(options.reach, projectDir));
       if (mutant) {
         await fs.writeFile(mutantPath, JSON.stringify({ file: realpathSync(mutant.absPath), source: mutant.source }));
         env.BOARDSMITH_MUTANT = mutantPath;
@@ -725,7 +738,7 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
       const started = Date.now();
       checkStopped();
       active = runVitest(vitestBin, args, {
-        cwd: projectDir, env, timeoutMs, stopOnFailure: scope === 'whole-suite' && mutant !== null && options.bail === true,
+        cwd: projectDir, env, timeoutMs, stopOnFailure: mutant !== null && options.bail === true,
       });
       const finished = await active.finished;
       active = undefined;
@@ -1168,7 +1181,7 @@ export async function runMutationCheck(
 // runDiffMutationCheck: `boardsmith verify`'s mutation check (#452)
 // -------------------------------------------------------------------------------------------
 
-/** A mutant the whole suite passed under: a change to the code no test noticed. */
+/** A mutant every test that loads its file passed under, or one in a file no test loads. */
 interface SurvivingMutant {
   id?: string;
   file: string;
@@ -1190,9 +1203,11 @@ interface DiffMutationInput {
 }
 
 interface DiffMutationResult {
-  summary: MutationSummary & { equivalent: number };
+  summary: MutationSummary & { equivalent: number; unreached: number };
   reused: number;
   survivors: SurvivingMutant[];
+  /** Mutants in a file no test loads, so no test could catch them: neither killed nor survived. */
+  unreached: SurvivingMutant[];
   equivalents: Array<SurvivingMutant & { id: string; reviewer: string; reviewCommit: string }>;
   equivalence?: EquivalenceBasis;
   notGreen?: string[];
@@ -1212,44 +1227,58 @@ function redParts(result: RunResult & { kind: 'ran' }): string[] {
   return red;
 }
 
-type DiffOutcome = 'killed' | 'survived' | 'timed-out';
+type DiffOutcome = 'killed' | 'survived' | 'timed-out' | 'unreached';
 
 /** The summary count each outcome adds to. */
-const COUNTED: Readonly<Record<DiffOutcome, 'killed' | 'survived' | 'timedOut'>> = Object.freeze({
+const COUNTED: Readonly<Record<DiffOutcome, 'killed' | 'survived' | 'timedOut' | 'unreached'>> = Object.freeze({
   killed: 'killed',
   survived: 'survived',
   'timed-out': 'timedOut',
+  unreached: 'unreached',
 });
 
-/** A whole-suite runner whose unmutated run passed, and the time limit a mutant's run gets. */
+/** A runner whose unmutated run of the whole suite passed, and the time limit a mutant's run gets. */
 interface GreenRunner {
   runner: Runner;
   timeoutMs: number;
+  /** The absolute paths of the test files that load the project file `file` (`readReach`). */
+  testsLoading(file: string): string[];
 }
 
 /**
- * Runs the whole suite once unmutated. Returns the runner when it passed; otherwise names what
- * failed, since a mutant proves nothing on a red suite.
+ * Runs the whole suite once unmutated, recording which project files each test file loads
+ * (`test-step-reach.ts`). Returns the runner when it passed; otherwise names what failed, since a
+ * mutant proves nothing on a red suite.
  */
-async function greenRunner(runner: Runner): Promise<GreenRunner | { notGreen: string[] }> {
-  const baseline = await runner.run('whole-suite', null, 10 * 60_000);
+async function greenRunner(runner: Runner, projectDir: string, log: (line: string) => void): Promise<GreenRunner | { notGreen: string[] }> {
+  const reachDir = join(runner.workDir, 'reach');
+  await fs.mkdir(reachDir);
+  const baseline = await runner.run('whole-suite', null, 10 * 60_000, { reach: reachDir });
   if (baseline.kind !== 'ran') throw new Error('The unmutated test run did not finish within 10 minutes.');
-  if (!suiteNoticed(baseline)) return { runner, timeoutMs: Math.max(30_000, baseline.ms * 10) };
-  return { notGreen: redParts(baseline) };
+  if (suiteNoticed(baseline)) return { notGreen: redParts(baseline) };
+  const { testsLoading, unrecorded } = await readReach(reachDir, projectDir, baseline.filesRun);
+  if (unrecorded.length > 0) {
+    log(`${unrecorded.length} of ${baseline.filesRun.size} test files run for every mutant, since what they load could not be told apart: ${unrecorded.join(', ')}`);
+  }
+  return { runner, timeoutMs: Math.max(30_000, baseline.ms * 10), testsLoading };
 }
 
-async function runMutant({ runner, timeoutMs }: GreenRunner, mutant: LocatedMutant): Promise<DiffOutcome> {
-  const result = await runner.run('whole-suite', mutant, timeoutMs, { bail: true });
+/** Runs `mutant` against every test file that loads its file, stopping at the first failure; `unreached` when none does. */
+async function runMutant({ runner, timeoutMs, testsLoading }: GreenRunner, mutant: LocatedMutant): Promise<DiffOutcome> {
+  const tests = testsLoading(mutant.file);
+  if (tests.length === 0) return 'unreached';
+  const result = await runner.run(tests.map((absPath) => ({ absPath })), mutant, timeoutMs, { bail: true });
   if (result.kind === 'timed-out') return 'timed-out';
   return suiteNoticed(result) ? 'killed' : 'survived';
 }
 
 /** The preparation command observes a real survivor, without accepting a cached or reviewed verdict. */
-export async function observeMutant(projectDir: string, mutant: LocatedMutant): Promise<DiffOutcome> {
+export async function observeMutant(project: string, mutant: LocatedMutant): Promise<DiffOutcome> {
+  const projectDir = realpathSync(project);
   let runner: Runner | undefined;
   return withCommandBuildDir(projectDir, 'verify-mutation', async (workDir) => {
     runner = await createRunner(projectDir, [], workDir);
-    const started = await greenRunner(runner);
+    const started = await greenRunner(runner, projectDir, () => {});
     if ('notGreen' in started) throw new Error(`The complete baseline is not green: ${started.notGreen.join('; ')}. Fix it before preparing equivalence.`);
     return runMutant(started, mutant);
   }, () => runner?.stop());
@@ -1262,11 +1291,13 @@ function sameMutation(record: EquivalentMutant, mutant: LocatedMutant, original:
 }
 
 /**
- * Mutates the changed lines one change at a time and runs the whole suite against each mutant,
- * stopping a run at its first failure. Unlike the chunk check, nothing here is scoped to a chunk's
- * test files or claims: any test anywhere may catch a mutant, and a mutant none catches is reported
- * by file and line. A mutant that makes the suite run past its time limit (an infinite loop) is
- * counted as timed out, not as a survivor, since the suite did not pass.
+ * Mutates the changed lines one change at a time and runs, against each mutant, every test file
+ * that loaded its file in the unmutated run (`test-step-reach.ts`, #981), stopping a run at its first
+ * failure. Unlike the chunk check, nothing here is scoped to a chunk's test files or claims: any test
+ * anywhere may catch a mutant, and a mutant none catches is reported by file and line. A mutant in a
+ * file no test loads is reported as unreached, since no test could catch it. A mutant that makes its
+ * run go past its time limit (an infinite loop) is counted as timed out, not as a survivor, since the
+ * tests did not pass.
  *
  * A mutant whose outcome `cache` holds is not run again (`reused` counts them). When any mutant
  * must run, the whole suite first runs once unmutated and must pass: `notGreen` then names what
@@ -1276,7 +1307,7 @@ export async function runDiffMutationCheck(
   input: DiffMutationInput,
 ): Promise<DiffMutationResult> {
   const projectDir = realpathSync(input.projectDir);
-  const summary = { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, equivalent: 0 };
+  const summary = { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, equivalent: 0, unreached: 0 };
   const mutants = await collectMutants(projectDir, input.added, summary);
   const review = mutants.length > 0 ? await readEquivalenceReview(projectDir) : undefined;
   const candidates = new Set(review?.records.map((r) => r.id));
@@ -1286,15 +1317,16 @@ export async function runDiffMutationCheck(
   let runner: Runner | undefined;
   return withCommandBuildDir(projectDir, 'verify-mutation', async (workDir) => {
     runner = await createRunner(projectDir, [], workDir);
-    const started = await greenRunner(runner);
-    if ('notGreen' in started) return { summary, reused: 0, survivors: [], equivalents: [], notGreen: started.notGreen };
+    const started = await greenRunner(runner, projectDir, input.log);
+    if ('notGreen' in started) return { summary, reused: 0, survivors: [], unreached: [], equivalents: [], notGreen: started.notGreen };
     return tallyMutants(input, mutants, known, started, summary, review);
   }, () => runner?.stop());
 }
 
 /**
  * Counts each mutant's outcome into `summary`: the one `known` holds for it, or else the outcome of
- * running it on `run`, which every mutant `known` does not hold needs. Returns the survivors.
+ * running it on `run`, which every mutant `known` does not hold needs. Returns the survivors and
+ * the mutants no test reaches.
  */
 async function tallyMutants(
   input: DiffMutationInput,
@@ -1304,7 +1336,7 @@ async function tallyMutants(
   summary: DiffMutationResult['summary'],
   review: EquivalenceReview | undefined,
 ): Promise<DiffMutationResult> {
-  const result: DiffMutationResult = { summary, reused: known.filter((k) => k !== undefined).length, survivors: [], equivalents: [] };
+  const result: DiffMutationResult = { summary, reused: known.filter((k) => k !== undefined).length, survivors: [], unreached: [], equivalents: [] };
   for (const [i, mutant] of mutants.entries()) {
     const stored = known[i];
     const label = `mutant ${i + 1}/${mutants.length}: ${mutant.file}:${mutant.line} ${mutant.description}`;
@@ -1313,6 +1345,7 @@ async function tallyMutants(
     summary.mutants++;
     summary[COUNTED[outcome]]++;
     if (outcome === 'survived') await countSurvivor(input, mutant, review, result);
+    if (outcome === 'unreached') result.unreached.push({ file: mutant.file, line: mutant.line, description: mutant.description });
   }
   if (result.equivalents.length > 0 && review) result.equivalence = { ...review.basis, ids: result.equivalents.map((m) => m.id) };
   return result;
@@ -1321,12 +1354,12 @@ async function tallyMutants(
 /**
  * Runs `mutant` and keeps its outcome, unless what the tests run with changed since the run began,
  * before it ran or while it ran: then the run is mixed and stops here, keeping nothing of it (#932, #940).
- * A timed-out mutant is not kept.
+ * A timed-out mutant is not kept, nor an unreached one, which no run decided.
  */
 async function runUnlessContextChanged(input: DiffMutationInput, run: GreenRunner, mutant: LocatedMutant, done: number): Promise<DiffOutcome> {
   await requireSameContext(input, `after ${done} mutants had run or been reused`);
   const outcome = await runMutant(run, mutant);
-  if (outcome === 'timed-out') return outcome;
+  if (outcome === 'timed-out' || outcome === 'unreached') return outcome;
   await requireSameContext(input, `while mutant ${done + 1} ran, so its outcome is not kept`);
   input.cache.set(mutant, outcome);
   await input.saveProgress?.();
