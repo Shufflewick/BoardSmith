@@ -18,6 +18,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ref, nextTick, defineComponent, h } from 'vue';
 import { mount } from '@vue/test-utils';
+import { Game, Card, Deck, Hand, Space, Player, type GameOptions } from '../../engine/index.js';
 
 // jsdom lacks matchMedia; modules that read it at import time would throw.
 vi.stubGlobal(
@@ -309,7 +310,7 @@ describe('useFlyingElements', () => {
         hand.children = [card(7)];
       });
 
-      expect(flights).toEqual([{ element: '-2', from: 'pond', to: 'hand' }]);
+      expect(flights).toEqual([{ element: '7', from: 'pond', to: 'hand' }]);
     });
 
     it('does not fly a card that appears when no source lost one', async () => {
@@ -364,7 +365,76 @@ describe('useFlyingElements', () => {
         hand.children = [card(7)];
       });
 
-      expect(flights).toEqual([{ element: '-2', from: 'opponent', to: 'hand' }]);
+      expect(flights).toEqual([{ element: '7', from: 'opponent', to: 'hand' }]);
+    });
+  });
+
+  describe('autoWatch between face-down piles, from real seat views (#1097)', () => {
+    /** Seat 1 holds an open hand and watches seat 2's and seat 3's face-down hands and a bag whose size it cannot see; a probe card moves between two open spaces. */
+    class TwoHandsGame extends Game<TwoHandsGame, Player> {
+      constructor(options: GameOptions) {
+        super(options);
+        for (const seat of [1, 2, 3]) {
+          const hand = this.create(Hand, `hand-${seat}`);
+          hand.player = this.getPlayer(seat)!;
+          hand.contentsVisibleToOwner();
+          for (let i = 0; i < 3; i++) hand.create(Card, `card-${seat}-${i}`);
+        }
+        this.create(Space, 'books');
+        const bag = this.create(Deck, 'bag');
+        bag.contentsHidden();
+        for (let i = 0; i < 3; i++) bag.create(Card, `bag-${i}`);
+        this.create(Space, 'probe-a').create(Card, 'probe');
+        this.create(Space, 'probe-b');
+      }
+    }
+
+    /** The flights seat 1's auto-watch shows when `from` gives its first card to `to`, under `routes`. */
+    async function flightsWhenGiven(from: string, to: string, routes: { from: string; to: string }[]) {
+      const game = new TwoHandsGame({ playerCount: 3, seed: 'bs1097' });
+      const gameViewRef = ref<AutoWatchGameElement | null>(null);
+      const inView = (name: string) => () => gameViewRef.value?.children?.find((c) => c.name === name);
+      const sized = () => {
+        const el = makeContainer();
+        vi.spyOn(el, 'getBoundingClientRect').mockReturnValue(makeRect({ width: 60, height: 84 }));
+        return ref(el);
+      };
+      useFlyingElements({
+        autoWatch: {
+          gameView: () => gameViewRef.value,
+          containers: ['hand-1', 'hand-2', 'hand-3', 'bag', 'probe-a', 'probe-b'].map((name) => ({ ref: sized(), name, element: inView(name) })),
+          getElementData: () => ({}),
+          countBasedRoutes: routes,
+        },
+      });
+      enableAnimationTestMode();
+      gameViewRef.value = game.toJSONForPlayer(1);
+      await nextTick();
+
+      game.first(from)!.first(Card)!.putInto(game.first(to)!);
+      game.first(Card, 'probe')!.putInto(game.first(Space, 'probe-b')!);
+      gameViewRef.value = game.toJSONForPlayer(1);
+      await nextTick();
+      await waitFor(() => getAnimationTrace().some((t) => t.to === 'probe-b'));
+      return getAnimationTrace().filter((t) => t.to !== 'probe-b').map(({ from, to }) => ({ from, to }));
+    }
+
+    it('flies nothing between two face-down hands when the first loses a card elsewhere', async () => {
+      expect(await flightsWhenGiven('hand-2', 'books', [])).toEqual([]);
+    });
+
+    it('flies a card the seat receives from the face-down hand that gave it, not a later one', async () => {
+      const routes = [{ from: 'hand-2', to: 'hand-1' }, { from: 'hand-3', to: 'hand-1' }];
+      expect(await flightsWhenGiven('hand-2', 'hand-1', routes)).toEqual([{ from: 'hand-2', to: 'hand-1' }]);
+    });
+
+    it('flies one card between two face-down hands along a count-based route', async () => {
+      const routes = [{ from: 'hand-2', to: 'hand-3' }];
+      expect(await flightsWhenGiven('hand-2', 'hand-3', routes)).toEqual([{ from: 'hand-2', to: 'hand-3' }]);
+    });
+
+    it('flies nothing along a route out of a pile whose size the seat cannot see', async () => {
+      expect(await flightsWhenGiven('bag', 'hand-1', [{ from: 'bag', to: 'hand-1' }])).toEqual([]);
     });
   });
 
