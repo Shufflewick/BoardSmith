@@ -17,8 +17,9 @@
  * parameter (including what a call passes it), destructuring default, name
  * destructured at any depth from a literal or a variable, by declaration or
  * assignment, class field, object property, or the return of a function
- * declaration, method or getter. An array `push`ed a duration holds one, and so does
- * each element a for-of or an element callback (`forEach`, `map`, ...) takes from it (#1130). A property is judged by its own value, not by
+ * declaration, method or getter. An array `push`ed a duration holds one, and
+ * so does each element a for-of or an element callback (`forEach`, `map`, ...)
+ * takes from it (#1130). A property is judged by its own value, not by
  * what else its object holds; an array element taken from a variable rather
  * than a literal takes the whole array. TypeScript's checker resolves
  * each name to the declaration it refers to, so shadowing follows the
@@ -141,7 +142,7 @@ function scanForBudgets(source, fileName = 'scanned.ts') {
    * The names `node` gives values to, and those values: a declaration, parameter, field, property or default (each
    * name of a pattern its own part), what a function declaration, method or getter returns, what a call passes to the
    * function's parameters, `x = v`, or `x += v` (whose value is the whole expression, so `x -= performance.now()` is a
-   * subtraction).
+   * subtraction), what `arr.push(v)` gives `arr`, and the elements a for-of or an element callback takes from an array.
    */
   const assignmentsAt = (node) => {
     const value = declaredValue(node);
