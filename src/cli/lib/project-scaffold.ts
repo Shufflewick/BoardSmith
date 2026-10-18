@@ -266,6 +266,16 @@ export function generateTsConfig(): string {
   return JSON.stringify(config, null, 2);
 }
 
+/** `text` escaped for HTML text or a quoted attribute: a display name is the author's free text. */
+export function escapeHtml(text: string): string {
+  return text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
 /**
  * Generate index.html
  */
@@ -275,7 +285,7 @@ export function generateIndexHtml(config: TableUiConfig): string {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>${config.displayName}</title>
+    <title>${escapeHtml(config.displayName)}</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body { height: 100%; }

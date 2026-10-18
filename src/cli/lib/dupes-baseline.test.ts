@@ -230,3 +230,12 @@ describe('#232: what the reports tell a person to do', () => {
     expect(report).not.toContain('--rekey-dupes');
   });
 });
+
+describe('the accepted record is in the same order on every machine (#853)', () => {
+  it('orders groups with the same content by file path code unit, not by locale', () => {
+    const upper = group(OTHER, [{ file: 'src/B.ts', start: 1 }, { file: 'src/C.ts', start: 1 }]);
+    const lower = group(OTHER, [{ file: 'src/a.ts', start: 1 }, { file: 'src/c.ts', start: 1 }]);
+    const files = acceptedFromScan(scan(lower, upper)).accepted.map((entry) => entry.files[0]);
+    expect(files).toEqual(['src/B.ts', 'src/a.ts']);
+  });
+});

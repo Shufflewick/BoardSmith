@@ -13,6 +13,7 @@ import {
   generateUiIndexTs,
   generatePackageJson,
   tableUiFiles,
+  generateIndexHtml,
   generateA11yExampleTestTs,
   generateTsConfig,
   boardsmithDependencySpec,
@@ -40,6 +41,18 @@ const config: ProjectConfig = {
   description: 'A test game',
   playerCount: { min: 2, max: 4 },
 };
+
+describe('generateIndexHtml', () => {
+  it('escapes the display name in the document title (#853)', () => {
+    expect(generateIndexHtml({ displayName: 'Cats & Dogs </title>' })).toContain(
+      '<title>Cats &amp; Dogs &lt;/title&gt;</title>',
+    );
+  });
+
+  it('escapes quotes too, so the name is safe in an attribute (#853)', () => {
+    expect(generateIndexHtml({ displayName: `Bob's "Game"` })).toContain('<title>Bob&#39;s &quot;Game&quot;</title>');
+  });
+});
 
 describe('generateAppVue', () => {
   it('renders the board from the UI registry, never a board slot', () => {

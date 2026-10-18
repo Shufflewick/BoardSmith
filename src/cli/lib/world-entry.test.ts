@@ -39,6 +39,11 @@ describe('a world project always has an entry', () => {
     expect(readFileSync(join(cwd, WORLD_ENTRY_MAIN), 'utf-8')).toContain('"Gloamhall"');
   });
 
+  it('escapes the world\'s name in the document title (#853)', async () => {
+    await ensureWorldEntry(cwd, 'Cats & Dogs </title>');
+    expect(readFileSync(join(cwd, WORLD_ENTRY_HTML), 'utf-8')).toContain('<title>Cats &amp; Dogs &lt;/title&gt;</title>');
+  });
+
   it('never overwrites what the author wrote', async () => {
     writeFileSync(join(cwd, WORLD_ENTRY_HTML), '<!-- mine -->');
     mkdirSync(join(cwd, 'src'), { recursive: true });

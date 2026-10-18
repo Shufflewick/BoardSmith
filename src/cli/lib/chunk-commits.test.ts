@@ -70,6 +70,13 @@ describe('the chunk\'s history (#426)', () => {
     const refused = await chunkPins(dir, 'combat')(initial);
     expect(!refused.ok && refused.problem).toMatch(/No commit for chunk "combat" yet.*chunk-combat\/step-<name>/);
   });
+
+  it('names the prefix it looks for as the one it really requires (#853)', async () => {
+    const dir = await repo();
+    const initial = await commit(dir, 'initial', { 'src/a.ts': 'one\n' });
+    const refused = await chunkPins(dir, 'combat')(initial);
+    expect(!refused.ok && refused.problem).toContain('none of its commit messages starts with "chunk-combat/".');
+  });
 });
 
 describe('the chunk\'s history while a merge is in progress (#435)', () => {
