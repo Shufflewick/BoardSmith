@@ -266,9 +266,7 @@ throws the old worker away, which frees its whole heap.
 **A worker thread, not a child process.** The table host already calls its
 rules one op at a time, asynchronously, with the snapshot in and the result
 out: exactly the `executeOp` adapter above, which the platform also runs over
-a wire. A worker passes those snapshots by structured clone inside one
-process, with no serialising to a pipe, so a long game's snapshot (dev keeps
-every checkpoint) costs a copy, not an encode and a parse. Bots run inside
+a wire. Bots run inside
 `executeOp`, so MCTS runs in the worker too, off the thread that serves the
 pages. A worker starts in milliseconds, `terminate()` stops even a rule stuck
 in a loop, and a rule's `process.exit()` ends only its worker. A child process
@@ -276,7 +274,12 @@ would add a Node start-up and an IPC encode per op, and isolate nothing a
 worker does not.
 
 **What crosses the boundary.** Only plain data, so nothing from the bundle
-ever enters the host's module graph:
+ever enters the host's module graph. Every answer the worker hands back is
+encoded as the wire's JSON (`toWireJson`, `wire-json.ts`, the encoder every
+dev socket send uses), so the host holds exactly what a page would receive: a
+game element in a choice is its `toJSON`, as it is in production, and never a
+live object that structured clone refuses. That costs an encode and a parse
+per op, including the op's snapshot; parity with the wire is worth it.
 
 - **Table road** (`dev-table-runtime.ts`, `table-rules-worker.ts`): the worker
   holds the `gameDefinition`, `executeOp` and the reload step

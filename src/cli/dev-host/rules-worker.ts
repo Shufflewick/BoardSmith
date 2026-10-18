@@ -15,6 +15,8 @@ import { parentPort, Worker, workerData } from 'node:worker_threads';
 
 import { styleText } from 'node:util';
 
+import { toWireJson } from './wire-json.js';
+
 /** Host -> worker: one call. */
 interface Call {
   readonly id: number;
@@ -22,11 +24,15 @@ interface Call {
   readonly payload: unknown;
 }
 
-/** Worker -> host. */
+/**
+ * Worker -> host. A ready answer and a call's answer cross as the wire's JSON,
+ * so the host holds exactly what a page would receive, never a live game
+ * element (#885). `value` is absent for a call that answers nothing.
+ */
 type FromWorker =
-  | { readonly ready: unknown }
+  | { readonly ready: string }
   | { readonly failed: string }
-  | { readonly id: number; readonly value: unknown }
+  | { readonly id: number; readonly value?: string }
   | { readonly id: number; readonly error: string }
   | { readonly event: unknown };
 
@@ -59,14 +65,15 @@ export function serveRules<D>(
     if (!gameDefinition) throw new Error('Rules module must export a gameDefinition');
     const served = start(gameDefinition, workerData, (event) => post({ event }));
     handlers = served.handlers;
-    post({ ready: served.ready });
+    post({ ready: toWireJson(served.ready) });
   } catch (error) {
     post({ failed: messageOf(error) });
     return;
   }
   port.on('message', async ({ id, type, payload }: Call) => {
     try {
-      post({ id, value: await handlers[type]!(payload) });
+      const answer: unknown = await handlers[type]!(payload);
+      post(answer === undefined ? { id } : { id, value: toWireJson(answer) });
     } catch (error) {
       post({ id, error: messageOf(error) });
     }
@@ -135,7 +142,7 @@ export async function startRulesWorker(bundlePath: string, data: unknown): Promi
       settled();
     };
     worker.on('message', (message: FromWorker) => {
-      if ('ready' in message) resolve(message.ready);
+      if ('ready' in message) resolve(JSON.parse(message.ready));
       else if ('failed' in message) reject(new Error(message.failed));
       else if ('event' in message) {
         if (listener === null) throw new Error('A rules worker sent an event before anything listened for it.');
@@ -144,7 +151,7 @@ export async function startRulesWorker(bundlePath: string, data: unknown): Promi
         const call = pending.get(message.id)!;
         pending.delete(message.id);
         if ('error' in message) call.reject(new Error(message.error));
-        else call.resolve(message.value);
+        else call.resolve(message.value === undefined ? undefined : JSON.parse(message.value));
         settled();
       }
     });

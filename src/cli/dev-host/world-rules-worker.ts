@@ -11,6 +11,7 @@ import type { WorldBudgets } from '../../world/index.js';
 import type { WorldMigrationOutcome } from '../../world/host/index.js';
 import { serveRules } from './rules-worker.js';
 import { LocalWorldHost, type WorldDevRequest } from './world-host.js';
+import { toWireJson } from './wire-json.js';
 import { openWorldStore } from './world-store.js';
 
 /** What the host reads of a world's `gameDefinition`. */
@@ -85,7 +86,7 @@ export function serveWorld(rules: GameDefinition | undefined): void {
             store,
             send: (clientId, message) => {
               const { requestId } = message as { requestId?: unknown };
-              const frame = JSON.stringify(message);
+              const frame = toWireJson(message);
               emit({ send: { clientId, frame, ...(typeof requestId === 'string' ? { requestId } : {}) } } satisfies WorldEvent);
             },
             isOpen: (clientId) => open.has(clientId),

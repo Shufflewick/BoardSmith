@@ -25,6 +25,7 @@ import { WebSocket } from 'ws';
 
 import type { RulesReloadQueue } from './rules-reload-queue.js';
 import { parseSocketMessage } from './socket-message.js';
+import { toWireJson } from './wire-json.js';
 import type { LocalWorldHost, WorldDevRequest } from './world-host.js';
 
 /**
@@ -111,11 +112,11 @@ export function createWorldConnections(
       const origin = requestOrigin.get(hostRequestId);
       requestOrigin.delete(hostRequestId);
       if (origin === undefined || pageLoad.get(origin.clientId) !== origin.loadId) return;
-      openSocket(origin.clientId)?.send(JSON.stringify({ ...(JSON.parse(frame) as object), requestId: origin.requestId }));
+      openSocket(origin.clientId)?.send(toWireJson({ ...(JSON.parse(frame) as object), requestId: origin.requestId }));
     },
 
     broadcast(message) {
-      for (const clientId of clients.keys()) openSocket(clientId)?.send(JSON.stringify(message));
+      for (const clientId of clients.keys()) openSocket(clientId)?.send(toWireJson(message));
     },
 
     accept(socket) {
@@ -154,7 +155,7 @@ export function createWorldConnections(
               : {
                   refuse: (text: string) => {
                     if (hostRequestId !== null) requestOrigin.delete(hostRequestId);
-                    if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(refusal(text)));
+                    if (socket.readyState === WebSocket.OPEN) socket.send(toWireJson(refusal(text)));
                   },
                 }),
           })
@@ -192,7 +193,7 @@ export function createWorldConnections(
     forgetAll(farewell) {
       for (const [clientId, socket] of clients) {
         if (farewell !== undefined && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify(farewell));
+          socket.send(toWireJson(farewell));
         }
         clients.delete(clientId);
         pageLoad.delete(clientId);

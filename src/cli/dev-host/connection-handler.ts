@@ -5,6 +5,7 @@ import type { ClientInbound, HostOutbound, MultiplayerHost } from './multiplayer
 import type { RulesReloadQueue } from './rules-reload-queue.js';
 import { parseSocketMessage } from './socket-message.js';
 import { DEV_HOST_WS_PATH } from './socket-path.js';
+import { toWireJson } from './wire-json.js';
 
 /**
  * The messages that run the table's rules, and so are refused rather than run
@@ -88,7 +89,7 @@ export function createDevHostConnectionHandler(opts: DevHostConnectionOptions): 
 
   return (socket: WebSocket) => {
     const send = (message: HostOutbound) => {
-      if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(message));
+      if (socket.readyState === socket.OPEN) socket.send(toWireJson(message));
     };
     const dispatch = (clientId: string, msg: ClientInbound) => {
       const refusal = (message: string): HostOutbound => ({

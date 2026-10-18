@@ -80,6 +80,22 @@ function worldRules(step: number): string {
   ].join('\n');
 }
 
+/** A one-seat table whose `take` chooses from the game's own elements, as `boardsmith init`'s sample does. */
+const STONES_RULES = [
+  "import { Action, Game, Piece, Player, Space, actionStep, loop, type GameOptions } from 'boardsmith';",
+  'class Stone extends Piece<StoneGame> {}',
+  'export class StoneGame extends Game<StoneGame, Player> {',
+  '  constructor(options: GameOptions) {',
+  '    super(options);',
+  '    this.registerElements([Space, Stone]);',
+  "    this.create(Space, 'pile').create(Stone, 'flint');",
+  "    this.registerAction(Action.create('take').chooseFrom('stone', { choices: () => [...this.all(Stone)] }).execute(() => {}));",
+  "    this.setFlow({ root: loop({ name: 'turns', maxIterations: 50, do: actionStep({ name: 'a', actions: ['take'] }) }) });",
+  '  }',
+  '}',
+  "export const gameDefinition = { gameClass: StoneGame, gameType: 'rules-worker-stones', minPlayers: 1, maxPlayers: 1 };",
+].join('\n');
+
 const SAVED = 'src/rules/index.ts';
 const RELOADS = 3;
 
@@ -108,6 +124,24 @@ async function servedTable() {
 }
 
 describe('#885: the table road', () => {
+  it('answers a choice of the game\'s own elements in the shape the wire delivers it', async () => {
+    const runtime = await tableProject('bs-rules-worker-stones-', STONES_RULES).load();
+    closing.push(() => runtime.close());
+    const table = await openTable(runtime, clients, { makeSeed: () => 'rules-worker' });
+
+    const answer = (await table.ask('resolve_choices', { actionName: 'take', selectionName: 'stone', args: {} })) as {
+      success: boolean;
+      error?: string;
+      choices?: Array<{ value: unknown }>;
+    };
+
+    expect(answer.error).toBeUndefined();
+    expect(answer.success).toBe(true);
+    // A page reads the element as its JSON, so a worker hands back exactly that.
+    expect(answer.choices?.[0]?.value).toEqual(JSON.parse(JSON.stringify(answer.choices?.[0]?.value)));
+    expect(JSON.stringify(answer.choices)).toContain('flint');
+  }, 60_000);
+
   it('runs the rules in one worker however often they reload, and never in this process', async () => {
     const before = liveRulesWorkers();
     const table = await servedTable();
