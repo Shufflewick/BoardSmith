@@ -6,10 +6,16 @@
  * its own `toJSON()` (name, attributes, real id) into every seat's payload:
  * one natural line, `animate('drew', { card })`, defeated a hidden hand. A
  * reference to an element the seat cannot see names the outermost container
- * that conceals it, so it gives away no place inside it either.
+ * that conceals it, so it gives away no place inside it either. The same rule
+ * holds for every reference a seat receives, in attributes, settings and
+ * message data, in table and world views alike (#1043).
  */
 import { describe, it, expect } from 'vitest';
-import { Game, Card, Deck, Hand, Space, Player, type ElementJSON, type GameOptions } from '../index.js';
+import { Game, Card, Deck, Hand, Piece, Space, Player, type ElementJSON, type GameOptions, type GameElement } from '../index.js';
+
+class Marker extends Piece<DrawGame> {
+  target?: GameElement;
+}
 
 class DrawGame extends Game<DrawGame, Player> {
   hand!: Hand;
@@ -32,10 +38,16 @@ class DrawGame extends Game<DrawGame, Player> {
     this.vault.create(Card, 'vault-2');
     this.discard = this.create(Space, 'discard');
     this.discard.create(Card, 'Seven of Hearts');
+    this.discard.create(Marker, 'marker');
   }
 }
 
-const makeGame = () => new DrawGame({ playerCount: 2, seed: 'bs752', elementIdKey: '0000000000000752' });
+const makeGame = (worldMode = false) =>
+  new DrawGame({
+    playerCount: 2,
+    seed: 'bs752',
+    ...(worldMode ? { worldMode, elementIdKey: '000000000000000000001043' } : { elementIdKey: '0000000000000752' }),
+  });
 
 type SeatEvent = { type: string; data: Record<string, unknown> };
 
@@ -142,4 +154,55 @@ describe('animate() data is redacted per seat (#752)', () => {
     restored.loadSerializedState(game.toJSON());
     expect(restored.pendingAnimationEvents[0].data.card).toBe(drawn(restored));
   });
+});
+
+describe('every element reference a seat receives is redacted the same way (#1043)', () => {
+  /** Each payload kind: put a reference to `target` in it, and read it back from one seat's payload. */
+  const payloads: [string, (game: DrawGame, target: GameElement, seat: number | null) => unknown][] = [
+    ['an element attribute', (game, target, seat) => {
+      game.discard.first(Marker)!.target = target;
+      const discard = seatView(game, seat).children!.find((node) => node.name === 'discard')!;
+      return discard.children!.find((node) => node.name === 'marker')!.attributes!.target;
+    }],
+    ['a setting', (game, target, seat) => {
+      game.settings.spotlight = target;
+      return (seatView(game, seat) as unknown as { settings: Record<string, unknown> }).settings.spotlight;
+    }],
+    ['message data', (game, target, seat) => {
+      game.message('{{card}} moved', { card: target });
+      return game.serializeMessageLog(seat)[0].data!.card;
+    }],
+    ['animation data', (game, target, seat) => {
+      game.animate('moved', { card: target });
+      return seatData(game, seat).card;
+    }],
+  ];
+
+  /** A hidden element, the seat that cannot see it, and the outermost container concealing it. */
+  const hidden: [string, (game: DrawGame) => GameElement, number | null, (game: DrawGame) => GameElement][] = [
+    ['a card in a count-only deck', (game) => game.deck.last(Card)!, 1, (game) => game.deck],
+    ['a card nested in a contentsHidden() zone', (game) => game.vault.first(Card, 'Crown')!, 2, (game) => game.vault],
+    ["a card in seat 1's owner-only hand", (game) => game.hand.last(Card)!, 2, (game) => game.hand],
+    ["a card in seat 1's owner-only hand, for the spectator", (game) => game.hand.last(Card)!, null, (game) => game.hand],
+  ];
+
+  const ref = (game: DrawGame, element: GameElement) =>
+    game.worldMode ? { __elementId: element.id } : { __elementRef: element.branch() };
+
+  for (const [view, worldMode] of [['table', false], ['world', true]] as const) {
+    describe(`${view} view`, () => {
+      for (const [payload, read] of payloads) {
+        it.each(hidden)(`names only the concealer of %s in ${payload}`, (_label, pick, seat, concealer) => {
+          const game = makeGame(worldMode);
+          expect(read(game, pick(game), seat)).toEqual(ref(game, concealer(game)));
+        });
+
+        it(`keeps the real reference in ${payload} for a seat that can see the element`, () => {
+          const game = makeGame(worldMode);
+          const target = game.hand.last(Card)!;
+          expect(read(game, target, 1)).toEqual(ref(game, target));
+        });
+      }
+    });
+  }
 });

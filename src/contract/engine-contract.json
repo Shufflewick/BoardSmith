@@ -1,5 +1,5 @@
 {
-  "revision": 231,
+  "revision": 232,
   "surfaceHash": "5f7f005d097568f4",
   "payloadHash": "0e2d27db00239080",
   "formatHash": "3aff5d1f34f52ec0",
@@ -1791,6 +1791,14 @@
       "payloadHash": "0e2d27db00239080",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A pick-by-pick action's history entry now names each pick where it was before the action, even when an earlier pick's onSelect or onEach moved it or shifted its neighbours, so replay, undo labels and debug history read it right (#1144). PendingActionState and SerializedPendingActionState gain branchesBeforePicks, which the platform's persisted pendingStates must carry through unchanged; it stays out of seat views (a seat's pendingAction and the debugFlowState answer), since it names where face-down cards and pile members were. Completing a pending action saved by an older engine without it is refused with \"This action was started before the game was updated and cannot be finished. Cancel it and take it again.\", so tables with a multi-step action in progress should stay on the revision that wrote them. A later pick of an element the same action's onSelect or onEach created now throws, naming the pick, instead of recording a ref replay cannot resolve."
+    },
+    {
+      "revision": 232,
+      "date": "2026-10-18",
+      "surfaceHash": "5f7f005d097568f4",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A seat's view and its message log now name a hidden element by the outermost container concealing it, in every element reference: element attributes, settings, message data and animation data, in table and world views (#1043). Before, attributes, settings and message data carried the hidden element's real branch, and world views its real id, in every payload kind including animation data. A seat that can see the element still gets its real reference. No payload shape changes; a client or bot that decodes such a reference now resolves it to the concealing zone instead of the hidden card."
     }
   ]
 }
