@@ -3384,13 +3384,17 @@ export class Game<
   }
 
   /**
-   * Point every element the running flow holds at the same element of the
-   * current tree, after `loadSerializedState` rebuilt the tree in place under a
-   * flow that stays where it is (a failed action's rollback, #679). A flow
-   * restored with `restoreFlowState` relinks itself.
+   * Put the running flow back to `state`, after `loadSerializedState` rebuilt
+   * the tree in place to the same moment (a failed action's rollback, #679,
+   * #972): the open step's awaiting seats come back with the elements, and
+   * every element the flow holds is relinked to the rebuilt tree. The flow
+   * engine itself is kept, so its count of irreversible steps carries on.
    */
-  relinkFlowElements(): void {
-    this._flowEngine?.relinkElements();
+  rollBackFlow(state: FlowState): void {
+    const result = this._flowEngine?.restoreFullState(state);
+    if (!result?.success) {
+      throw new Error(`The flow could not be rolled back to its state before the failed action: ${result?.error ?? 'no flow is running'}.`);
+    }
   }
 
   /**

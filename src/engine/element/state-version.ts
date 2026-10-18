@@ -118,3 +118,18 @@ export function changing<T>(ctx: ElementContext, run: () => T): T {
     stateChanged(ctx);
   }
 }
+
+/**
+ * `changing` for an action's own code (its execute, onSelect or onEach), run
+ * for `seat`: a refresh of the open simultaneous step then leaves that seat
+ * for the action's settling to decide (#973).
+ */
+export function actingFor<T>(ctx: ElementContext, seat: number, run: () => T): T {
+  const outer = ctx._actingSeat;
+  ctx._actingSeat = seat;
+  try {
+    return changing(ctx, run);
+  } finally {
+    ctx._actingSeat = outer;
+  }
+}

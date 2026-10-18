@@ -74,6 +74,11 @@ export type ElementContext = {
    */
   _changingDepth: number;
   /**
+   * Internal (#973): the seat whose action's own code is running (`actingFor`
+   * in `state-version.ts`), if any. Not public API.
+   */
+  _actingSeat?: number;
+  /**
    * Internal (#631): how many reads of the flow's state there have been
    * (`flowStateRead` in `state-version.ts`), to tell whether a pick's callbacks
    * made one. Not public API.

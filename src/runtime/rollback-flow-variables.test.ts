@@ -3,8 +3,8 @@
  * are the restored elements, not the discarded ones (#679).
  *
  * `GameRunner.rollbackToPreActionState` rebuilds the element tree from the head
- * checkpoint, which makes new element objects. The flow engine stays where it
- * was, so anything it holds must be pointed at the new objects, as
+ * checkpoint, which makes new element objects. The flow is restored from the
+ * same checkpoint, so anything it holds must be pointed at the new objects, as
  * `GameRunner.fromSnapshot` does on a reload.
  */
 import { describe, it, expect } from 'vitest';
