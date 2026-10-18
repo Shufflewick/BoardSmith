@@ -9,7 +9,7 @@
  * learns to ignore lint output. The AST rule that gets this right already
  * exists as the ESLint plugin's `no-element-identity-comparison`.
  */
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { lintCommand, lintFile } from './lint.js';
@@ -18,6 +18,31 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 // The config tests only need to see which tool lint hands off to, not run a real linter.
 vi.mock('../lib/run-tool.js', () => ({ runTool: vi.fn(async () => 0) }));
+
+/**
+ * Points the home folder and every variable Stylelint's global config folder is
+ * read from into a fresh temp tree, so no test sees the developer's own config.
+ * Real path, because Stylelint compares HOME with the real cwd and macOS's temp
+ * folder is a symlink.
+ */
+function isolateHome(): string {
+  const home = realpathSync(tempTree('boardsmith-lint-home-'));
+  vi.stubEnv('HOME', home);
+  vi.stubEnv('XDG_CONFIG_HOME', join(home, '.config'));
+  vi.stubEnv('APPDATA', join(home, 'AppData', 'Roaming'));
+  return home;
+}
+
+/** Where Stylelint looks for its global config under `home` on this platform. */
+const stylelintGlobalDir = (home: string): string => (process.platform === 'darwin'
+  ? join(home, 'Library', 'Preferences', 'stylelint')
+  : process.platform === 'win32'
+    ? join(home, 'AppData', 'Roaming', 'stylelint', 'Config')
+    : join(home, '.config', 'stylelint'));
+
+let fakeHome: string;
+beforeEach(() => { fakeHome = isolateHome(); });
+afterEach(() => { vi.unstubAllEnvs(); });
 
 const rulesFor = (code: string): string[] =>
   lintFile('game.ts', code).map((issue) => issue.rule);
@@ -133,7 +158,6 @@ describe('lint finds a config wherever the linter itself would (#1094)', () => {
   const originalCwd = process.cwd();
   afterEach(() => {
     vi.restoreAllMocks();
-    vi.unstubAllEnvs();
     vi.mocked(runTool).mockClear();
     process.chdir(originalCwd);
   });
@@ -202,8 +226,7 @@ describe('lint finds a config wherever the linter itself would (#1094)', () => {
     writeFileSync(join(root, '.stylelintrc.json'), '{}');
     const home = join(root, 'home');
     mkdirSync(home);
-    // os.homedir() reads HOME, so this moves Stylelint's stopping point (and its global config folder) into the temp tree.
-    // Real path, because Stylelint compares HOME with the real cwd and macOS's temp folder is a symlink.
+    // os.homedir() reads HOME, so this moves Stylelint's stopping point into the temp tree.
     vi.stubEnv('HOME', realpathSync(home));
     gameIn(home);
 
@@ -212,17 +235,32 @@ describe('lint finds a config wherever the linter itself would (#1094)', () => {
   });
 
   it('lint --css runs Stylelint with a config in its global config folder', async () => {
-    const home = tempTree('boardsmith-lint-global-stylelint-');
-    vi.stubEnv('HOME', home);
-    vi.stubEnv('XDG_CONFIG_HOME', '');
-    const globalDir = process.platform === 'darwin'
-      ? join(home, 'Library', 'Preferences', 'stylelint')
-      : join(home, '.config', 'stylelint');
-    mkdirSync(globalDir, { recursive: true });
-    writeFileSync(join(globalDir, 'config.json'), '{}');
-    gameIn(home);
+    mkdirSync(stylelintGlobalDir(fakeHome), { recursive: true });
+    writeFileSync(join(stylelintGlobalDir(fakeHome), 'config.json'), '{}');
+    gameIn(fakeHome);
 
     await lintCommand({ css: true });
     expect(vi.mocked(runTool)).toHaveBeenCalledWith('stylelint', ['src/**/*.vue'], { cwd: process.cwd() });
+  });
+
+  it('a test cannot see the global Stylelint config of the home folder it started in', async () => {
+    // Stands in for the developer's own home, holding a global config the tests must not read.
+    const devHome = realpathSync(tempTree('boardsmith-lint-dev-home-'));
+    vi.stubEnv('HOME', devHome);
+    mkdirSync(stylelintGlobalDir(devHome), { recursive: true });
+    writeFileSync(join(stylelintGlobalDir(devHome), 'config.json'), '{}');
+    isolateHome();
+    gameIn(tempTree('boardsmith-lint-isolated-'));
+
+    await expect(lintCommand({ css: true })).rejects.toThrow('exit 1');
+    expect(vi.mocked(runTool)).not.toHaveBeenCalled();
+  });
+
+  it('lint --eslint runs ESLint for a project with only an .eslintrc.json, so ESLint explains how to migrate (#624)', async () => {
+    const game = gameIn(tempTree('boardsmith-lint-eslintrc-'));
+    writeFileSync(join(game, '.eslintrc.json'), '{}');
+
+    await lintCommand({ eslint: true });
+    expect(vi.mocked(runTool)).toHaveBeenCalledWith('eslint', ['src/'], { cwd: process.cwd() });
   });
 });
