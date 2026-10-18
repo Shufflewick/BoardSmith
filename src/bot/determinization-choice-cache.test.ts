@@ -59,7 +59,7 @@ describe('determinization and reused choices (#631)', () => {
     const snapshot = createSnapshot(game, 'safe', [], undefined, { forSeat: 1, reseed: 'sandbox' });
     const sandbox = new SafeGame(snapshot.gameOptions as GameOptions);
     sandbox.loadSerializedState(snapshotTree(snapshot));
-    sandbox.restoreFlowState(snapshot.flowState!);
+    sandbox.restoreFlowState(snapshot.flowState!, snapshot.hiddenIdRemap);
     const codes = () =>
       sandbox.getActionExecutor().getChoices(sandbox.getAction('dial')!.selections[0], sandbox.getPlayer(1)!, {}, 'dial').map((c) => c.value);
     expect(codes()).toEqual([]);

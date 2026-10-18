@@ -1,5 +1,5 @@
 {
-  "revision": 234,
+  "revision": 235,
   "surfaceHash": "1519c6e27c9683db",
   "payloadHash": "0e2d27db00239080",
   "formatHash": "3aff5d1f34f52ec0",
@@ -1815,6 +1815,14 @@
       "payloadHash": "0e2d27db00239080",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A crash in the rules is now coded the same on every route an action takes (#1141, #1142, #1143). A throw that is not a PlayerFacingError out of execute(), or out of a pick's onSelect, onEach or until, now carries errorCode ENGINE_ERROR, as a flow halt does, on a single-step action (was ACTION_EXECUTION_ERROR), a pick-by-pick pending pick, including the picks sent with its first step (was INVALID_PICK), and a multi-step action's completion (was no code; a halt there was uncoded too). A multi-step completion that execute() refuses now carries ACTION_EXECUTION_ERROR, as on a single-step action (it had no code before). A whole submission of a repeating pick that crashes is marked rulesError and told the shared crash sentence with no 'Pick N of' prefix. Any throw out of onSelect, a PlayerFacingError included, in a single-step action or a whole submission now marks the result partiallyApplied, so the runner rolls the game back to its state before the action, the throwing onSelect's own changes and earlier picks' changes included, and a bot's search counts that try as a failure after changes and discards it, where a PlayerFacingError there was a plain refusal before. game.getLastActionResult() is unchanged: during a move it still returns the previous move's result. Hosts that tell a crash from a refusal by ENGINE_ERROR, such as a bot's refused-move retry, now see these as crashes."
+    },
+    {
+      "revision": 235,
+      "date": "2026-10-18",
+      "surfaceHash": "1519c6e27c9683db",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "Restoring a saved game no longer relinks a flow variable or step data whose element is missing to the hand, deck or other zone concealing it; it throws the \"no longer exists\" error naming the flow slot, as it does for any other missing element (#947). That relink now happens only when restoring a seat's redacted copy (the bot's search game), and every redacted snapshot carries hiddenIdRemap, empty when nothing was renumbered. A saved state whose flow names an element its tree lacks (for example after a class rename) is now refused on load instead of resuming against the wrong element."
     }
   ]
 }

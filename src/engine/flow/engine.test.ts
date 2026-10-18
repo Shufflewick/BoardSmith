@@ -706,6 +706,29 @@ describe('FlowEngine', () => {
       );
     });
 
+    it('throws on a full restore when an item missing from a concealing zone is gone, rather than relinking to the zone (#947)', () => {
+      game.registerAction(Action.create('step').execute(() => ({ success: true })));
+      const hand = game.create(Hand, 'hand', { player: game.getPlayer(1)! });
+      hand.setZoneVisibility('owner');
+      const [, card2] = hand.createMany(2, Card, 'card', (i) => ({ suit: 'H', rank: String(i + 1), value: i + 1 }));
+      const flow: FlowDefinition = {
+        root: forEach({
+          collection: (ctx) => [...ctx.game.all(Card)],
+          as: 'card',
+          do: actionStep({ actions: ['step'] }),
+        }),
+      };
+      game.setFlow(flow);
+      const state = new FlowEngine(game, flow).start();
+
+      hand._t.children.splice(hand._t.children.indexOf(card2), 1);
+      card2._t.parent = undefined;
+
+      expect(() => game.restoreFlowState(state)).toThrowError(
+        new RegExp(`Flow step data 'forEachItems\\[1\\]' references element id ${card2.id} \\(Card\\), but it no longer exists`),
+      );
+    });
+
     it('should throw on collection items that are neither GameElements nor JSON primitives', () => {
       const flow: FlowDefinition = {
         root: forEach({

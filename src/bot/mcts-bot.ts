@@ -1450,7 +1450,9 @@ export class MCTSBot<G extends Game = Game> {
     // a marker by getPosition; restoreFlowState relinks it to the freshly
     // loaded tree. `hiddenIdRemap` (CR-02, 159) is only ever present on a
     // redacted (`forSeat`) snapshot: it lets a marker that pointed at a
-    // now-anonymized hidden-zone child relink to its redacted placeholder. A
+    // now-anonymized hidden-zone child relink to its redacted placeholder, and
+    // passing it is what allows a missing element to relink to its concealing
+    // zone at all (#947); a restore with no map refuses instead. A
     // DESCENDANT clone's snapshot is written from the already-redacted search
     // game, whose markers hold its own ids, so it needs no remap.
     if (snapshot.flowState) {
