@@ -626,6 +626,7 @@ describe("#978: a built-in collection keyed by a player or element", () => {
     ranks = new Map<Player, string>();
     flagged = new Set<Ship>();
     marks = new WeakMap<Ship, string>();
+    commands = new Map<Player, Ship>();
   }
 
   async function ledgerEngine(action: ActionDefinition) {
@@ -642,6 +643,7 @@ describe("#978: a built-in collection keyed by a player or element", () => {
     game.ranks.set(game.players[0]!, "captain");
     game.flagged.add(dory);
     game.marks.set(dory, "flagship");
+    game.commands.set(game.players[0]!, dory);
     return engine;
   }
 
@@ -707,10 +709,20 @@ describe("#978: a built-in collection keyed by a player or element", () => {
     }
   });
 
+  it("keeps forEach's thisArg for a callback that reads this", async () => {
+    let seen = "";
+    const engine = await ledgerEngine(quoting("tally", (game: LedgerGame) => {
+      game.flagged.forEach(function (this: { tag: string }) { seen = this.tag; }, { tag: "kept" });
+    }));
+    await engine.resolveQuote("player-a", "tally", { ship: "dory" }, STAMP);
+    expect(seen).toBe("kept");
+  });
+
   it("hands forEach and iteration read-only entries", async () => {
     for (const write of [
       (game: LedgerGame) => game.flagged.forEach((ship) => { ship.hold = 1; }),
       (game: LedgerGame) => { for (const ship of game.flagged) ship.hold = 1; },
+      (game: LedgerGame, player: Player) => { game.commands.get(player)!.hold = 1; },
     ]) {
       const engine = await ledgerEngine(quoting("rewrite", write));
       await expect(

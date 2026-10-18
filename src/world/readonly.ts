@@ -330,8 +330,11 @@ function projectingCallback(argument: object): unknown {
   // A CLASS IS A FINDER'S SUBJECT AND NOT ITS CALLBACK. Wrapping one would hand
   // the door an arrow function where it expects a constructor.
   if (isClass(argument)) return argument;
-  const call = argument as (...a: unknown[]) => unknown;
-  return (...inner: unknown[]) => call(...inner.map((one) => readOnlyProjection(one)));
+  const call = argument as (this: unknown, ...a: unknown[]) => unknown;
+  // A function, not an arrow, so a caller's thisArg (as forEach takes) reaches the predicate, projected too.
+  return function (this: unknown, ...inner: unknown[]) {
+    return call.apply(readOnlyProjection(this), inner.map((one) => readOnlyProjection(one)));
+  };
 }
 
 /** A finder written as `{ player }` or `{ name }`, with anything projected in
