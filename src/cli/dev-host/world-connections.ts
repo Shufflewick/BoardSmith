@@ -122,20 +122,18 @@ export function createWorldConnections(
     accept(socket) {
       let clientId: string | null = null;
       let loadId: string | null = null;
+      const identify = (hello: Record<string, unknown>): void => {
+        clientId = typeof hello.clientId === 'string' ? hello.clientId : `anon-${Math.random().toString(36).slice(2)}`;
+        // A caller that names no page load (a scripted client) is one per socket.
+        loadId = typeof hello.loadId === 'string' ? hello.loadId : randomUUID();
+        clients.set(clientId, socket);
+        pageLoad.set(clientId, loadId);
+        changed();
+      };
       socket.on('message', (raw) => {
         const message = parseSocketMessage(raw);
         if (message === null) return;
-        if (message.type === 'hello') {
-          clientId =
-            typeof message.clientId === 'string'
-              ? message.clientId
-              : `anon-${Math.random().toString(36).slice(2)}`;
-          // A caller that names no page load (a scripted client) is one per socket.
-          loadId = typeof message.loadId === 'string' ? message.loadId : randomUUID();
-          clients.set(clientId, socket);
-          pageLoad.set(clientId, loadId);
-          changed();
-        }
+        if (message.type === 'hello') identify(message);
         if (clientId === null || loadId === null) return; // a client identifies itself first
         const from = clientId;
         const asked = message as unknown as WorldDevRequest;
@@ -147,28 +145,23 @@ export function createWorldConnections(
           requestOrigin.set(hostRequestId, { clientId: from, loadId, requestId: asked.requestId });
           request = { ...asked, requestId: hostRequestId };
         }
+        const refuse =
+          refusal === null
+            ? undefined
+            : (text: string) => {
+                if (hostRequestId !== null) requestOrigin.delete(hostRequestId);
+                if (socket.readyState === WebSocket.OPEN) socket.send(toWireJson(refusal(text)));
+              };
         void queue
-          .admit({
-            run: () => host().handleMessage(from, request),
-            ...(refusal === null
-              ? {}
-              : {
-                  refuse: (text: string) => {
-                    if (hostRequestId !== null) requestOrigin.delete(hostRequestId);
-                    if (socket.readyState === WebSocket.OPEN) socket.send(toWireJson(refusal(text)));
-                  },
-                }),
-          })
+          .admit({ run: () => host().handleMessage(from, request), ...(refuse === undefined ? {} : { refuse }) })
           .catch((error: unknown) => {
-            if (hostRequestId !== null) requestOrigin.delete(hostRequestId);
             // The message, not the error object, exactly as `reloadWorld` in
             // `dev-world.ts` does it (#240).
-            console.error(
-              styleText('red',
-                `[boardsmith dev] world message '${pageText(message.type)}' failed: ` +
-                  `${error instanceof Error ? error.message : String(error)}`,
-              ),
-            );
+            const reason = error instanceof Error ? error.message : String(error);
+            // A page still waiting is told why, as the table road tells it (#1060): its rules' worker may have stopped.
+            if (hostRequestId === null || requestOrigin.has(hostRequestId)) refuse?.(reason);
+            if (hostRequestId !== null) requestOrigin.delete(hostRequestId);
+            console.error(styleText('red', `[boardsmith dev] world message '${pageText(message.type)}' failed: ${reason}`));
           });
       });
       socket.on('close', () => {
