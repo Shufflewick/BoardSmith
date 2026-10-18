@@ -43,6 +43,8 @@ import {
 import { refused } from '../op-result.test-helper.js';
 
 type HostOptions = Parameters<typeof executeOp>[5];
+/** What this driver sends: it calls the executor directly, as a host does, so it sends the host's own ops too. */
+type DriverOp = HeadlessOp | Extract<ExecutableOp, { type: 'start' | 'botSuggest' }>;
 
 /**
  * A stateless session: every op rebuilds its runner from a snapshot that has
@@ -60,7 +62,7 @@ function statelessSession(
     get snapshot() {
       return snapshot;
     },
-    async send(op: HeadlessOp) {
+    async send(op: DriverOp) {
       // This driver IS the client: it composed `op` against the snapshot it is
       // holding, in this same tick, so that snapshot's boundary is the true
       // answer — not a default. A caller that supplies its own key keeps it.

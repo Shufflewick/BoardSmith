@@ -729,3 +729,95 @@ describe('#1098 determinization: a container the seat can count keeps its count'
     );
   });
 });
+
+// #1108: the sandbox keeps what the seat's view says about elements it cannot
+// see. Seat 1 is denied seat 2's hand (`hideContentsFrom`), so it is sent one
+// face-down placeholder per card; a count-only box on the table is sent with
+// how many it holds; a face-down card covers a token nobody is sent.
+class PeekGame extends Game<PeekGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([HandCard, Space]);
+    const hand = this.create(Space<PeekGame>, 'hand-2');
+    hand.hideContentsFrom(1);
+    hand.create(HandCard, 'card-1', { rank: 1 });
+    hand.create(HandCard, 'card-2', { rank: 2 });
+    const table = this.create(Space<PeekGame>, 'table');
+    const box = table.create(Space<PeekGame>, 'box');
+    box.setVisibility('count-only');
+    for (const rank of [3, 4, 5]) box.create(HandCard, `card-${rank}`, { rank });
+    table.create(HandCard, 'covered', { rank: 6 }).hideFromAll();
+    this.setFlow({ root: actionStep({ actions: [], player: (ctx) => ctx.game.getPlayer(1)! }) });
+  }
+
+  get hand(): Space<PeekGame> {
+    return this.first(Space<PeekGame>, 'hand-2')!;
+  }
+
+  // By position: a seat's placeholders carry no name.
+  get box(): Space<PeekGame> {
+    return this.first(Space<PeekGame>, 'table')!.first(Space<PeekGame>)!;
+  }
+
+  get covered(): HandCard {
+    return this.first(Space<PeekGame>, 'table')!.first(HandCard, (card) => card.parent!.name === 'table')!;
+  }
+}
+
+const peekOptions = { playerCount: 2, seed: 'peek', elementIdKey: '0000000000001108' };
+
+function peekSandboxForSeat1(truth = new PeekGame(peekOptions)): PeekGame {
+  const sandbox = new PeekGame(peekOptions);
+  sandbox.loadSerializedState(truth.toJSONForPlayer(1));
+  return sandbox;
+}
+
+describe('#1108 determinization: the sandbox keeps what the seat view says about hidden elements', () => {
+  it('refuses a sampler that adds a card to a hand hidden from the seat, which it can still count', () => {
+    const sandbox = peekSandboxForSeat1();
+
+    expect(() => applyDeterminization(sandbox, 1, () => {
+      sandbox.hand.create(HandCard, 'extra', { rank: 7 });
+    }, () => 0.5)).toThrow(
+      `Space#${sandbox.hand.id} "hand-2" held 2 elements and now holds 3. The seat can count what that ` +
+      `container holds even where it cannot see them, so a sampler may not change how many it holds.`,
+    );
+  });
+
+  it('refuses a sampler that fills a count-only box with more cards than the seat counted', () => {
+    const sandbox = peekSandboxForSeat1();
+
+    expect(() => applyDeterminization(sandbox, 1, () => {
+      for (const rank of [3, 4, 5, 6, 7]) sandbox.box.create(HandCard, `supposed-${rank}`, { rank });
+    }, () => 0.5)).toThrow(
+      `Space#${sandbox.box.id} held 3 elements and now holds 5. The seat can count what that ` +
+      `container holds even where it cannot see them, so a sampler may not change how many it holds.`,
+    );
+  });
+
+  it('accepts a sampler that fills a count-only box and a face-down card the seat cannot see into', () => {
+    const sandbox = peekSandboxForSeat1();
+
+    applyDeterminization(sandbox, 1, () => {
+      for (const rank of [3, 4, 5]) sandbox.box.create(HandCard, `supposed-${rank}`, { rank });
+      sandbox.covered.create(HandCard, 'under', { rank: 8 });
+    }, () => 0.5);
+
+    expect(sandbox.box.count(HandCard)).toBe(3);
+  });
+
+  it('builds the same sandbox from two truths the seat cannot tell apart', () => {
+    const truth = (ranks: number[], under: number) => {
+      const game = new PeekGame(peekOptions);
+      for (const [i, card] of game.hand.all(HandCard).entries()) card.rank = ranks[i];
+      for (const card of game.box.all(HandCard)) card.rank = ranks[0] + 10;
+      for (let i = 0; i < under; i++) game.covered.create(HandCard, `under-${i}`, { rank: i });
+      return game;
+    };
+
+    const one = peekSandboxForSeat1(truth([1, 2], 0));
+    const other = peekSandboxForSeat1(truth([8, 9], 4));
+
+    expect(other.toJSON()).toEqual(one.toJSON());
+  });
+});

@@ -16,7 +16,7 @@
  * shell has. docs/bot-system.md, "Measuring bot speed", says how to read it.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { cpus, homedir, loadavg, tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -127,6 +127,7 @@ async function main() {
         tempDir,
         name: 'bench',
         context: 'monorepo',
+        gameOptions: config.gameOptions,
         exports: [`export { runBench } from ${JSON.stringify(join(HERE, 'probe.mjs'))};`],
       });
       const playerCount = setup.playerCount ?? bundle.gameDefinition.minPlayers;
@@ -157,7 +158,8 @@ async function main() {
 }
 
 // Run only as a script: scripts/bench-sim/run.mjs imports checkout from here.
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+// argv[1] keeps a symlinked path (node_modules/boardsmith) while import.meta.url is the real one.
+if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     await main();
   } catch (error) {
