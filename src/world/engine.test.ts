@@ -1936,7 +1936,7 @@ describe("#191 — a refusal written for a player reaches one", () => {
       expect(crash).toBeInstanceOf(WorldRefusal);
       expect(crash).toMatchObject({ code: "rules-error", owner: "game" });
       // A deployed isolate: the shared sentence and nothing of what was thrown.
-      expect((crash as Error).message).toBe(`${rulesErrorSentence("clockTear")} Nothing was changed.`);
+      expect((crash as Error).message).toBe(rulesErrorSentence("clockTear"));
 
       const refusal = await fired("clockRefuseInWords");
       expect(refusal).not.toBeInstanceOf(WorldRefusal);
@@ -1946,7 +1946,7 @@ describe("#191 — a refusal written for a player reaches one", () => {
     }
     // In dev the author reads what was thrown, after the sentence.
     expect(((await fired("clockTear")) as Error).message).toBe(
-      `${rulesErrorSentence("clockTear")} Nothing was changed. (this handler fails halfway, deliberately)`,
+      `${rulesErrorSentence("clockTear")} (this handler fails halfway, deliberately)`,
     );
   });
 
