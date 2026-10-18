@@ -1,4 +1,4 @@
-import { ESCALATION_LADDER, type WorkRole, nextRole } from './agent-roles.js';
+import { ESCALATION_LADDER, type WorkRole, nextRole, rolesDispatchedAs } from './agent-roles.js';
 import { type LedgerEntry, entryField, parseLedgerEntries } from './ledger-entries.js';
 import { VERIFY_RESULT_FORMAT, type VerifyResult } from './verify-result.js';
 
@@ -12,7 +12,8 @@ import { VERIFY_RESULT_FORMAT, type VerifyResult } from './verify-result.js';
  *   - Work: what was dispatched (`build-chunk`, a step name, `re-investigate`, a short name for a
  *     bulk edit), with the unit for work done once per unit (`transcribe rulebook.pdf pp. 1-8`)
  *   - Role: mechanical | bounded | judgement | second-opinion (reviewers are recorded in rounds)
- *   - Agent: the agent type actually dispatched
+ *   - Agent: the agent type actually dispatched; refused when the project's `agents` mapping
+ *     dispatches it as other roles and not this one (#1001)
  *   - Retry of: none, `Dispatch M` (a dispatch whose Outcome is `failed`), or `Review Round K`
  *     (a round whose Outcome is `changes requested`)
  *   - Designer answer: only on a dispatch that does work again after it failed twice at the top
@@ -214,7 +215,10 @@ class RunLogChecker {
   /** The latest dispatch of each work at each role, which the next one at that role may resume. */
   private readonly latestAtRole = new Map<string, Dispatch>();
 
-  constructor(private readonly verifyOnFile: VerifyLookup) {}
+  constructor(
+    private readonly verifyOnFile: VerifyLookup,
+    private readonly projectConfig: Record<string, unknown>,
+  ) {}
 
   private report(entry: string, kind: RunLogRoleFinding['kind'], details: string[]): void {
     this.findings.push(...details.map((detail) => ({ entry, kind, detail })));
@@ -252,8 +256,12 @@ class RunLogChecker {
     const work = valueOf(entry, 'Work');
     if (work === undefined) out.push(missing(name, entry, 'Work', 'what was dispatched: build-chunk, a step name, or a short name for a bulk edit'));
     const role = readRole(name, entry, out);
-    if (valueOf(entry, 'Agent') === undefined) {
+    const agent = valueOf(entry, 'Agent');
+    if (agent === undefined) {
       out.push(missing(name, entry, 'Agent', 'the agent type actually dispatched, as `boardsmith agent <role>` printed it'));
+    } else if (role !== undefined) {
+      const fit = agentRoleProblem(name, role, agent, rolesDispatchedAs(this.projectConfig, agent));
+      if (fit !== undefined) out.push(fit);
     }
     const retry = valueOf(entry, 'Retry of') ?? 'none';
     const of = /^(?:Dispatch|Review Round) \S+$/.exec(retry)?.[0];
@@ -414,6 +422,19 @@ function readRole(name: string, entry: LedgerEntry, out: string[]): DispatchRole
   return undefined;
 }
 
+/**
+ * Why `agent` does not fit `role`: the project dispatches it as other roles and not this one. An
+ * agent mapped to no role is let through, so a remap never invalidates an old run log (#710).
+ */
+function agentRoleProblem(name: string, role: DispatchRole, agent: string, mapped: string[]): string | undefined {
+  if (mapped.length === 0 || mapped.includes(role)) return undefined;
+  return (
+    `${name} has "Role: ${role}" but "Agent: ${agent}", the agent this project dispatches as the ${mapped.join(' and ')} ` +
+    `role${mapped.length > 1 ? 's' : ''}, not as ${role}. Record the role the work was dispatched as, or, if ${role} was ` +
+    `right, run \`boardsmith agent ${role}\` and dispatch the agent it prints.`
+  );
+}
+
 /** Why the entry a "Retry of" names is not a failure that can be retried. */
 function notAFailure(by: string, source: string, entry: Dispatch | Round): string {
   const only = 'Only a failed dispatch, or a review round that asked for changes, is retried.';
@@ -546,13 +567,14 @@ export function reviewScope(text: string, logName: string): { since?: { round: s
   return { since, roles };
 }
 
-/** Every problem with the role, agent, retry and review-round records of one run log. */
+/** Every problem with the role, agent, retry and review-round records of one run log; `projectConfig` is boardsmith.json. */
 export function checkRunLogRoles(
   text: string,
   verifyOnFile: VerifyLookup,
+  projectConfig: Record<string, unknown>,
   recordedAt: (line: number) => number | null = () => null,
 ): RunLogRoleFinding[] {
-  const checker = new RunLogChecker(verifyOnFile);
+  const checker = new RunLogChecker(verifyOnFile, projectConfig);
   for (const entry of runLogEntries(text)) {
     if (entry.kind === 'Dispatch' && historicalDispatch(entry, recordedAt)) checker.historicalDispatch(entry);
     else if (entry.kind === 'Dispatch') checker.dispatch(entry);

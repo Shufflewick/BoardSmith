@@ -113,7 +113,9 @@ verify brief, slice paths + the numbered claims list, and no investigator ration
 No review step starts until the chunk's fast checks, `boardsmith verify --chunk <slug>`, have
 passed for the commit under review (`routing.md` "No Review Before Verify"). Before the round's dispatch the orchestrator commits
 the chunk's work (`chunk-<slug>/step-investigate`), runs `npx boardsmith verify --chunk <slug>`,
-then `npx boardsmith review-gate <slug>`. A refusal means no reviewer is dispatched: fix what
+then `npx boardsmith review-gate <slug>`. The chunk has no tests yet (`spec` writes them), and
+verify asks for none while its commits are only investigate, redteam and ask steps
+(`state-machine.md` "Git Protocol"). A refusal means no reviewer is dispatched: fix what
 verify names and run both again. Open, the brief it prints fills `{verifyResult}` in all three
 prompts, and the round is recorded as a `### Review Round N` entry (`Step: redteam`,
 `Reviewed: Dispatch M` for the `investigate` or `re-investigate` dispatch that last wrote the
@@ -152,7 +154,7 @@ this file does not restate the max-1-round bound or the refuted-twice rule, it a
   once at the same role. If the claims already used that retry on a `claim-quote-check` refusal,
   the refutation goes to the designer instead. Its run log entry is `Work: re-investigate`,
   `Retry of: Review Round N` naming this round. Round 2 is a review
-  like round 1: commit the re-investigation, and it waits for `npx boardsmith verify --chunk
+  like round 1: commit the re-investigation (`chunk-<slug>/step-investigate`), and it waits for `npx boardsmith verify --chunk
   <slug>` and `npx boardsmith review-gate <slug>` exactly as "Gate Before Dispatch" says, and is
   recorded as its own `### Review Round N` entry in the run log. Re-investigation appends a superseding claim; it never
   renumbers or edits the original (see `build/investigate.md` "Re-Investigate Round Behavior").

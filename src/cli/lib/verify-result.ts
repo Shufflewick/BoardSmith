@@ -281,5 +281,10 @@ export async function verifiedProblem(projectDir: string, chunk?: string): Promi
   if (result === 'unreadable') {
     return `The \`boardsmith verify\` result for ${short(state.commit)} could not be read. Run \`boardsmith verify\` again.`;
   }
-  return kindProblem(result, chunk) ?? (await currentResultProblem(projectDir, result, state.commit));
+  return resultVouchProblem(projectDir, result, state.commit, chunk);
+}
+
+/** Why `result`, read for `commit`, is not a passing verify of the kind `chunk` asks for (`kindProblem`), or undefined when it is. */
+export async function resultVouchProblem(projectDir: string, result: VerifyResult, commit: string, chunk?: string): Promise<string | undefined> {
+  return kindProblem(result, chunk) ?? (await currentResultProblem(projectDir, result, commit));
 }

@@ -7,6 +7,7 @@ class Pawn extends Piece<GridGame> {}
 class Square extends GridCell<GridGame> {
   rank!: number;
   file!: number;
+  secret?: string;
 }
 
 class Board extends Grid<GridGame> {
@@ -136,5 +137,27 @@ describe('GridCell', () => {
     const restoredSquare = board.first(Square, { rank: 2, file: 2 })!;
     expect(restoredSquare).toBeInstanceOf(GridCell);
     expect(restoredSquare.all(Pawn)).toHaveLength(1);
+  });
+});
+
+describe('a grid cell hidden from a seat (#1055)', () => {
+  const cellsInView = (game: GridGame) => game.toJSONForPlayer(1).children!.find((c) => c.name === 'board')!.children!;
+
+  it('keeps its own coordinates and nothing else of its own', () => {
+    const game = new GridGame({ playerCount: 2 });
+    const cell = game.board.first(Square, { rank: 2, file: 3 })!;
+    cell.secret = 'treasure';
+    cell.hideFromAll();
+    const view = cellsInView(game).find((c) => c.id === cell.id)!;
+    expect(view.attributes).toEqual({ __hidden: true, $layout: 'list', rank: 2, file: 3 });
+  });
+
+  it('keeps its coordinates as an anonymous placeholder of a count-only grid', () => {
+    const game = new GridGame({ playerCount: 2 });
+    for (const cell of game.board.all(Square)) cell.secret = 'treasure';
+    game.board.contentsCountOnly();
+    const placeholders = cellsInView(game);
+    expect(placeholders).toHaveLength(9);
+    expect(placeholders.every((c) => c.id < 0 && Object.keys(c.attributes!).sort().join() === '$layout,__hidden,file,rank')).toBe(true);
   });
 });

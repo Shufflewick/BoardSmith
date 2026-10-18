@@ -459,7 +459,8 @@ function dispatchProblems(
  * returns the committer time (epoch seconds) of the commit that recorded line `n`, or null when that
  * line is not committed yet; such a line is held to `nowSeconds` instead. A clock read taken when
  * the line was written can never be later than the commit that recorded it. `verifyOnFile` looks up
- * the verify result on this machine for the commit a review round names.
+ * the verify result on this machine for the commit a review round names. `projectConfig` is the
+ * project's boardsmith.json, whose `agents` block says which role each agent is dispatched as.
  */
 export function checkRunLog(
   text: string,
@@ -467,6 +468,7 @@ export function checkRunLog(
   commitTimeOfLine: (line: number) => number | null,
   nowSeconds: number,
   verifyOnFile: VerifyLookup,
+  projectConfig: Record<string, unknown>,
 ): LedgerFinding[] {
   const entries = runLogEntries(text).filter((e) => e.kind === 'Dispatch');
   const findings = duplicateFindings(groupById(entries), 'Dispatch', ledger);
@@ -487,7 +489,7 @@ export function checkRunLog(
     finishProblems(name, entry, dispatched, clock, out);
     findings.push(...out.map((detail) => ({ ledger, entry: name, kind: 'run-timestamp' as const, detail })));
   }
-  findings.push(...checkRunLogRoles(text, verifyOnFile, commitTimeOfLine).map((f) => ({ ledger, ...f })));
+  findings.push(...checkRunLogRoles(text, verifyOnFile, projectConfig, commitTimeOfLine).map((f) => ({ ledger, ...f })));
   return findings;
 }
 
@@ -616,6 +618,20 @@ async function verifyResultsOnFile(projectDir: string, commits: string[]): Promi
     }
   }
   return (commit) => found.get(commit);
+}
+
+/** The project's boardsmith.json; a project without one has no `agents` block, so every role is its bs- default. */
+async function readProjectConfig(projectDir: string): Promise<Record<string, unknown>> {
+  const text = await readIfExists(pathJoin(projectDir, 'boardsmith.json'), (path) => fs.readFile(path, 'utf-8'));
+  if (text === undefined) return {};
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch (error) {
+    throw new Error(
+      `boardsmith.json in ${projectDir} is not valid JSON (${(error as Error).message}), so the run logs' agents cannot be ` +
+        'checked against their roles. Fix it, then run ledger-check again.',
+    );
+  }
 }
 
 /** The skills that keep a run log of their own dispatches, by the work package it is named for. */
@@ -1005,13 +1021,14 @@ export async function ledgerCheck(projectDir: string): Promise<LedgerCheckResult
   }
   // An untracked run log has no commit times: every line of it reads as not committed yet.
   const trackedLogs = await trackedFiles(projectDir, logs.map((log) => `${DESIGN_DIR}/${log}`));
+  const config = await readProjectConfig(projectDir);
   for (const log of logs) {
     const text = (await readLedger(projectDir, log))!;
     result.checked.push(log);
     const rel = `${DESIGN_DIR}/${log}`;
     const commits = trackedLogs.has(rel) ? await lineCommits(projectDir, rel) : [];
     const verifyOnFile = await verifyResultsOnFile(projectDir, reviewRoundCommits(text));
-    result.findings.push(...checkRunLog(text, log, (line) => commits[line]?.time ?? null, Math.floor(Date.now() / 1000), verifyOnFile));
+    result.findings.push(...checkRunLog(text, log, (line) => commits[line]?.time ?? null, Math.floor(Date.now() / 1000), verifyOnFile, config));
   }
 
   const crossChunk = await readLedger(projectDir, CROSS_CHUNK_MD);

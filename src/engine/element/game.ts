@@ -581,6 +581,17 @@ const SAFE_LAYOUT_KEYS = new Set([
   '$hexSize',
 ]);
 
+/** A Grid cell's numeric coordinates, the only own attributes a hidden cell keeps (#1055). */
+function gridCellCoordinates(attrs: Record<string, unknown>, parent: GameElement | undefined): Record<string, unknown> {
+  // A cell's place on the board is layout the seat already sees; AutoUI cannot draw the grid without it.
+  if (!(parent instanceof Grid)) return {};
+  const coordinates: Record<string, unknown> = {};
+  for (const key of [parent.$rowCoord, parent.$colCoord]) {
+    if (key !== undefined && typeof attrs[key] === 'number') coordinates[key] = attrs[key];
+  }
+  return coordinates;
+}
+
 /**
  * Redact identity-bearing image refs from the attributes of an element that
  * the viewer is not permitted to fully see.  Returns a new object containing
@@ -593,9 +604,10 @@ const SAFE_LAYOUT_KEYS = new Set([
  *   unknown $-keys → dropped (fail-safe)
  *   non-$ keys → dropped (callers seed __hidden/childCount themselves)
  *   SAFE_LAYOUT_KEYS → copied through as-is
+ *   a Grid cell's two coordinate attributes (named by the parent's $rowCoord/$colCoord) → copied through (#1055)
  */
-function redactHiddenElementAttrs(attrs: Record<string, unknown>): Record<string, unknown> {
-  const safe: Record<string, unknown> = {};
+function redactHiddenElementAttrs(attrs: Record<string, unknown>, parent: GameElement | undefined): Record<string, unknown> {
+  const safe = gridCellCoordinates(attrs, parent);
 
   for (const [key, value] of Object.entries(attrs)) {
     if (key === '$image') continue; // identity-bearing single-sided image — drop
@@ -4900,7 +4912,7 @@ export class Game<
         placeholders.push({
           className: childJson.className,
           id: syntheticId,
-          attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(childJson.attributes ?? {}) },
+          attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(childJson.attributes ?? {}, element) },
         });
       }
       return placeholders;
@@ -4919,7 +4931,7 @@ export class Game<
         return {
           className: json.className,
           id: json.id,
-          attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(json.attributes ?? {}) },
+          attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(json.attributes ?? {}, element._t.parent) },
           childCount: element._t.children.length,
           // What this seat was shown, no roster (#411), so a restore knows it cannot see in (#1108).
           visibility: { mode: 'count-only', explicit: true },
@@ -4962,7 +4974,7 @@ export class Game<
           // can render face-down on first paint, consistent with the zone
           // branches below. redactHiddenElementAttrs drops $image and narrows
           // $images to { back } only, so $images.face still never leaks.
-          attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(json.attributes ?? {}) },
+          attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(json.attributes ?? {}, element._t.parent) },
           visibility: { mode: 'hidden', explicit: true },
         };
       }

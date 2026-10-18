@@ -70,6 +70,18 @@ export async function findChunkCommits(projectDir: string, slug: string): Promis
   return new Set((await chunkLog(projectDir, slug)).map((c) => c.hash));
 }
 
+/** The full-ceremony steps before `spec`, the step that writes a chunk's tests (state-machine.md "Step Names"). */
+const BEFORE_SPEC = new Set(['step-investigate', 'step-redteam', 'step-ask']);
+
+/**
+ * Whether every commit of the chunk is a step before `spec`, so it has no tests of its own yet
+ * (#995). Read from its `chunk-<slug>/step-<name>` commits, the record of which steps it finished.
+ */
+export async function chunkBeforeSpec(projectDir: string, slug: string): Promise<boolean> {
+  const prefix = `chunk-${slug}/`;
+  return (await chunkLog(projectDir, slug)).every((c) => BEFORE_SPEC.has(c.subject.slice(prefix.length).split(/[\s:]/)[0]));
+}
+
 /** The first parent of the oldest of `commits` (newest first): the code as it stood before the chunk. */
 const baseOf = (commits: Awaited<ReturnType<typeof chunkLog>>) => commits[commits.length - 1].parents[0];
 

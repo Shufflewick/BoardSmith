@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { commitAll, initRepo, recordPassingVerify, writeFiles } from '../lib/verify-result.test-helper.js';
+import { type VerifyResult, verifyResultPath, writeVerifyResult } from '../lib/verify-result.js';
 import { LIGHT_REVIEW_LINES, SMALL_CHANGE_LINES, reviewGate, reviewGateCommand, reviewLevel } from './review-gate.js';
 
 // Each test, and the `beforeEach` that starts its repository, runs real `git` processes. A hang
@@ -170,6 +171,40 @@ describe('an open gate hands the reviewer the verify result', () => {
     await expect(reviewGate({ projectDir: project, slug: 'deal' })).rejects.toThrow(
       /design\/run-log\/deal\.md: Review Round 1 says it reviewed abcdef123456, which is not a commit before the one under review/,
     );
+  });
+});
+
+describe("the round's Verify commit must have a passing result on file (#1001)", () => {
+  it('refuses a round whose commit has no verify result here, and says how to record one', async () => {
+    await writeFiles(project, { 'src/rules.ts': code(3, 'a') });
+    await recordPassingVerify(project, { chunk: 'deal' });
+    await writeFiles(project, { 'src/rules.ts': code(3, 'b') });
+    const unverified = commitAll(project, 'chunk-deal/step-repair');
+    await writeFiles(project, { 'src/rules.ts': code(3, 'c') });
+    await runLog(round(1, unverified), dispatch(1, 'bounded'));
+    await recordPassingVerify(project, { chunk: 'deal', message: 'chunk-deal/step-repair-2' });
+
+    const refused = reviewGate({ projectDir: project, slug: 'deal' });
+
+    await expect(refused).rejects.toThrow(
+      `design/run-log/deal.md: Review Round 1 says it reviewed ${unverified.slice(0, 12)}, but this checkout has no passing ` +
+        `\`boardsmith verify --chunk deal\` result for that commit, so review-gate never opened for it.`,
+    );
+    await expect(reviewGate({ projectDir: project, slug: 'deal' })).rejects.toThrow(
+      `git checkout ${unverified.slice(0, 12)}\`, run \`npx boardsmith verify --chunk deal\``,
+    );
+  });
+
+  it("refuses a round whose commit's result failed, naming the failed check", async () => {
+    await writeFiles(project, { 'src/rules.ts': code(3, 'a') });
+    const failed = await recordPassingVerify(project, { chunk: 'deal' });
+    const result = JSON.parse(await fs.readFile(verifyResultPath(project, failed), 'utf-8')) as VerifyResult;
+    await writeVerifyResult(project, { ...result, passed: false, checks: [{ name: 'test', passed: false, summary: '1 test failed' }, result.checks[1]] });
+    await writeFiles(project, { 'src/rules.ts': code(3, 'b') });
+    await runLog(round(1, failed), dispatch(1, 'bounded'));
+    await recordPassingVerify(project, { chunk: 'deal', message: 'chunk-deal/step-repair' });
+
+    await expect(reviewGate({ projectDir: project, slug: 'deal' })).rejects.toThrow(/Review Round 1 says it reviewed .*- test: 1 test failed/s);
   });
 });
 

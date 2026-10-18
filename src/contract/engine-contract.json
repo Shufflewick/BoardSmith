@@ -1,5 +1,5 @@
 {
-  "revision": 244,
+  "revision": 245,
   "surfaceHash": "7f205bf27a6fcb74",
   "payloadHash": "0e2d27db00239080",
   "formatHash": "3aff5d1f34f52ec0",
@@ -1890,6 +1890,14 @@
     },
     {
       "revision": 244,
+      "date": "2026-10-18",
+      "surfaceHash": "01f74ea669294216",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A grid cell hidden from a seat keeps its coordinates in the seat view, so AutoUI can draw boards with hidden cells (#1055)"
+    },
+    {
+      "revision": 245,
       "date": "2026-10-18",
       "surfaceHash": "7f205bf27a6fcb74",
       "payloadHash": "0e2d27db00239080",

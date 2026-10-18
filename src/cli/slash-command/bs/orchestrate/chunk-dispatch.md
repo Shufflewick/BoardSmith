@@ -118,7 +118,9 @@ five; the last two are dispatches it is never asked about:
    `judgement` role's agent (`build/audit.md` "The Cross-Chunk Lens"), against the main checkout
    before anything else.
 6. **Clean up.** After a chunk merges, `git worktree remove .boardsmith/worktrees/<slug>` and
-   `git branch -d chunk/<slug>`. When the last chunk of the batch has merged, set the session lock
+   `git branch -d chunk/<slug>`. Removing the worktree loses nothing review-gate needs:
+   `chunk-merge` has already copied the chunk's verify results (`.boardsmith/verify/`) into the
+   main checkout, where the cross-chunk lens's review-gate finds each review round's result. When the last chunk of the batch has merged, set the session lock
    back to the next chunk the run dispatches.
 
 ## The Brief (every field required)
