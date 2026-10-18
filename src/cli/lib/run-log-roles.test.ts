@@ -40,8 +40,8 @@ function round(n: number, fields: Record<string, string>): string {
 const J = { Role: 'judgement', Agent: 'bs-judgement' };
 const M = { Role: 'mechanical', Agent: 'bs-mechanical' };
 const noVerifyFiles: VerifyLookup = () => undefined;
-const details = (text: string, lookup: VerifyLookup = noVerifyFiles) =>
-  checkRunLogRoles(text, lookup).map((f) => `${f.entry}: ${f.detail}`);
+const details = (text: string, lookup: VerifyLookup = noVerifyFiles, config: Record<string, unknown> = {}) =>
+  checkRunLogRoles(text, lookup, config).map((f) => `${f.entry}: ${f.detail}`);
 const log = (...entries: string[]) => entries.join('\n');
 /** The findings `details` should give, in order, each as a pattern it must match. */
 const matching = (...patterns: RegExp[]) => patterns.map((p) => expect.stringMatching(p));
@@ -71,16 +71,16 @@ const beforeRouting = () => Date.parse('2026-09-27T00:00:00Z') / 1000;
 describe('historical dispatches (#710)', () => {
   it('keeps unrecorded routing outside a modern dispatch\'s retry count', () => {
     const text = log(historical(1, 'failed'), historical(2, 'closed'), dispatch(3, {}));
-    expect(checkRunLogRoles(text, noVerifyFiles, beforeRouting)).toEqual([]);
+    expect(checkRunLogRoles(text, noVerifyFiles, {}, beforeRouting)).toEqual([]);
   });
 
   it.each([1, 2, 3])('requires pre-routing git provenance for original line %s, not a backdated dispatch time', (changedLine) => {
     const cutoff = Date.parse('2026-10-01T02:32:39Z') / 1000;
     for (const recorded of [null, cutoff, cutoff + 1]) {
-      const findings = checkRunLogRoles(historical(), noVerifyFiles, (line) => line === changedLine ? recorded : beforeRouting());
+      const findings = checkRunLogRoles(historical(), noVerifyFiles, {}, (line) => line === changedLine ? recorded : beforeRouting());
       expect(findings.map((f) => f.detail)).toEqual(matching(/no "- Work:"/, /no "- Role:"/, /no "- Agent:"/));
     }
-    expect(checkRunLogRoles(historical(), noVerifyFiles, () => cutoff - 1)).toEqual([]);
+    expect(checkRunLogRoles(historical(), noVerifyFiles, {}, () => cutoff - 1)).toEqual([]);
   });
 
   it('requires current metadata without git provenance, including an untracked old-template entry', () => {
@@ -88,12 +88,12 @@ describe('historical dispatches (#710)', () => {
   });
 
   it.each(['', '- Pipeline: '])('requires the original nonempty Pipeline field (%s)', (pipeline) => {
-    const findings = checkRunLogRoles(historical().replace('- Pipeline: build-chunk', pipeline), noVerifyFiles, beforeRouting);
+    const findings = checkRunLogRoles(historical().replace('- Pipeline: build-chunk', pipeline), noVerifyFiles, {}, beforeRouting);
     expect(findings.map((f) => f.detail)).toEqual(matching(/no "- Work:"/, /no "- Role:"/, /no "- Agent:"/));
   });
 
   it.each(['Work', 'Role', 'Agent', 'Retry of', 'Designer answer'])('does not exempt an incomplete modern record containing %s', (field) => {
-    const findings = checkRunLogRoles(`${historical()}- ${field}: bounded\n`, noVerifyFiles, beforeRouting);
+    const findings = checkRunLogRoles(`${historical()}- ${field}: bounded\n`, noVerifyFiles, {}, beforeRouting);
     expect(findings.length).toBeGreaterThan(0);
   });
 
@@ -101,7 +101,7 @@ describe('historical dispatches (#710)', () => {
     ['retry', historical(1, 'failed'), dispatch(2, { 'Retry of': 'Dispatch 1' })],
     ['review', historical(), round(1, {})],
   ])('refuses a modern %s that would infer routing from a historical entry', (_kind, old, modern) => {
-    const findings = checkRunLogRoles(log(old, modern), noVerifyFiles, beforeRouting);
+    const findings = checkRunLogRoles(log(old, modern), noVerifyFiles, {}, beforeRouting);
     expect(findings.map((f) => f.detail)).toEqual([
       expect.stringMatching(/Dispatch 1.*historical.*routing.*unknown.*new dispatch/i),
     ]);
@@ -127,6 +127,27 @@ describe('dispatch entries', () => {
       /^Dispatch 2: .*"Role: senior", which is not a role that does work: mechanical, bounded, judgement or second-opinion/,
       /^Dispatch 3: .*"Role: review".*Review Round/,
     ));
+  });
+
+  it('refuse an Agent this project dispatches as a different role, and not as the one recorded (#1001)', () => {
+    const text = log(
+      dispatch(1, { Work: 'rename', ...M, Agent: 'bs-bounded' }),
+      dispatch(2, { Work: 'rename', ...M, Agent: 'senior' }),
+    );
+    expect(details(text, noVerifyFiles, { agents: { judgement: 'senior' } })).toEqual(matching(
+      /^Dispatch 1: .*has "Role: mechanical" but "Agent: bs-bounded", the agent this project dispatches as the bounded role, not as mechanical\. .*`boardsmith agent mechanical`/,
+      /^Dispatch 2: .*has "Role: mechanical" but "Agent: senior", the agent this project dispatches as the judgement role/,
+    ));
+  });
+
+  it('let through an Agent no role is mapped to, and one a remap has since freed, so old run logs stay valid (#710, #1001)', () => {
+    const text = log(dispatch(1, { Work: 'rename', ...M, Agent: 'claude' }), dispatch(2, { Work: 'repair', ...J }));
+    expect(details(text, noVerifyFiles, { agents: { judgement: 'senior' } })).toEqual([]);
+  });
+
+  it('accept an Agent mapped to several roles when the recorded role is one of them (#1001)', () => {
+    const text = log(dispatch(1, { Work: 'rename', ...M, Agent: 'senior' }));
+    expect(details(text, noVerifyFiles, { agents: { mechanical: 'senior', judgement: 'senior' } })).toEqual([]);
   });
 
   it('give second-opinion, the role of verify-game\'s second enumerator, its one retry, and send its second failure to the designer', () => {

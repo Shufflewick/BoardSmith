@@ -211,6 +211,15 @@ describe('chunkMerge: the combined tree is checked, not the branch alone', () =>
     expect(status()).toBe('');
   });
 
+  it("copies the chunk's verify results from its worktree into the main checkout, so review-gate can find them after the worktree goes (#1001)", async () => {
+    const worktree = await buildOnBranch('trading', 150);
+    const [result] = await fs.readdir(join(worktree, '.boardsmith/verify'));
+
+    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck })).refusals).toEqual([]);
+
+    expect(await read(main, `.boardsmith/verify/${result}`)).toBe(await read(worktree, `.boardsmith/verify/${result}`));
+  });
+
   it('refuses a merge whose combined tree breaks a constraint each branch passed alone, and leaves main as it was', async () => {
     const trading = await buildOnBranch('trading', 300);
     const quests = await buildOnBranch('quests', 300);

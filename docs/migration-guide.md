@@ -1,5 +1,22 @@
 # Migration Guide
 
+## `review-gate` needs the verify result of the round it scopes from; `ledger-check` fits Agent to Role (#1001)
+
+`boardsmith review-gate <slug>` now refuses unless the commit the latest
+finished review round names in `Verify:` has a passing
+`boardsmith verify --chunk <slug>` result in `.boardsmith/verify/` of the
+checkout it runs in. `chunk-merge` copies a chunk's results from its worktree
+into the main checkout, but a chunk merged before this change, or a fresh
+clone, has none: with a clean tree, `git checkout <that commit>`, run
+`npx boardsmith verify --chunk <slug>`, check out your branch again, and rerun
+the gate.
+
+`boardsmith ledger-check` now refuses a dispatch whose `Agent` the project's
+`agents` mapping (or the bs- defaults) dispatches as other roles and not the
+recorded `Role`, such as `Role: mechanical` with `Agent: bs-judgement`. An
+agent no role is mapped to now is let through, so remapping `agents` leaves
+old run logs valid. Fix the `Role` to the role the work was dispatched as.
+
 ## `shuffle()` clears the visibility of what it shuffles (#962)
 
 `space.shuffle()` now clears the own visibility of every element in the space

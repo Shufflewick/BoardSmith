@@ -487,7 +487,10 @@ review prompt carries: that only the chunk's tests and typecheck ran, and that
 the full suite, build, validate, the smoke test and the mutation check run at
 publish, so no reviewer spends its time running checks. It reads what is under
 review from the chunk's run log: the change since the last review round, sized
-as mechanical only when every dispatch logged since was. A
+as mechanical only when every dispatch logged since was. That round's commit must
+have a passing `verify --chunk <slug>` result in this checkout (`chunk-merge`
+copies a chunk's results out of its worktree); in a fresh clone, check out that
+commit and run `boardsmith verify --chunk <slug>` on it. A
 step that fails its verify, whose work a check such as `claim-quote-check`
 refuses, or whose reviewer asks for changes, is retried once at the same role
 with the failure output. A second failure at that role moves it one role up

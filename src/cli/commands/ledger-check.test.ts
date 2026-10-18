@@ -182,12 +182,12 @@ describe('checkRunLog', () => {
       dispatch(1, '2026-09-23T10:00:00Z', 'closed', '2026-09-23T11:00:00Z'),
       dispatch(2, '2026-09-23T11:05:00Z', 'pending', 'pending'),
     ].join('\n');
-    expect(checkRunLog(text, LOG, () => epoch('2026-09-23T12:00:00Z'), NOW, noVerifyFiles)).toEqual([]);
+    expect(checkRunLog(text, LOG, () => epoch('2026-09-23T12:00:00Z'), NOW, noVerifyFiles, {})).toEqual([]);
   });
 
   it('fails a finish earlier than its dispatch (sotf Dispatch 73)', () => {
     const text = dispatch(73, '2026-09-23T10:03:30Z', 'closed', '2026-09-22T12:30:00Z');
-    const findings = checkRunLog(text, LOG, uncommitted, NOW, noVerifyFiles);
+    const findings = checkRunLog(text, LOG, uncommitted, NOW, noVerifyFiles, {});
     expect(findings).toHaveLength(1);
     expect(findings[0].entry).toBe('Dispatch 73');
     expect(findings[0].detail).toMatch(/earlier than its Dispatched at/);
@@ -199,14 +199,14 @@ describe('checkRunLog', () => {
     const finishedLine = lines.findIndex((l) => l.startsWith('- Finished at:')) + 1;
     const commitTime = (line: number) =>
       line === finishedLine ? epoch('2026-09-23T10:30:00Z') : epoch('2026-09-23T12:00:00Z');
-    const findings = checkRunLog(text, LOG, commitTime, NOW, noVerifyFiles);
+    const findings = checkRunLog(text, LOG, commitTime, NOW, noVerifyFiles, {});
     expect(findings).toHaveLength(1);
     expect(findings[0].detail).toMatch(/Finished at .* is later than the commit/);
   });
 
   it('fails an uncommitted timestamp that is in the future', () => {
     const text = dispatch(1, '2026-09-25T10:00:00Z', 'pending', 'pending');
-    expect(checkRunLog(text, LOG, uncommitted, NOW, noVerifyFiles).map((f) => f.kind)).toEqual(['run-timestamp']);
+    expect(checkRunLog(text, LOG, uncommitted, NOW, noVerifyFiles, {}).map((f) => f.kind)).toEqual(['run-timestamp']);
   });
 
   it('fails a dispatch earlier than the one logged before it', () => {
@@ -214,7 +214,7 @@ describe('checkRunLog', () => {
       dispatch(1, '2026-09-23T10:00:00Z', 'closed', '2026-09-23T11:00:00Z'),
       dispatch(2, '2026-09-22T09:00:00Z', 'pending', 'pending'),
     ].join('\n');
-    const findings = checkRunLog(text, LOG, uncommitted, NOW, noVerifyFiles);
+    const findings = checkRunLog(text, LOG, uncommitted, NOW, noVerifyFiles, {});
     expect(findings.map((f) => f.entry)).toEqual(['Dispatch 2']);
   });
 
@@ -224,7 +224,7 @@ describe('checkRunLog', () => {
       dispatch(2, '2026-09-23T10:10:00Z', 'pending', '2026-09-23T10:20:00Z'),
       dispatch(3, 'Sept 23, 10:30', 'pending', 'pending'),
     ].join('\n');
-    expect(checkRunLog(text, LOG, uncommitted, NOW, noVerifyFiles).map((f) => f.entry)).toEqual([
+    expect(checkRunLog(text, LOG, uncommitted, NOW, noVerifyFiles, {}).map((f) => f.entry)).toEqual([
       'Dispatch 1',
       'Dispatch 2',
       'Dispatch 3',
@@ -233,7 +233,7 @@ describe('checkRunLog', () => {
 
   it('fails a missing Finished at field', () => {
     const text = '### Dispatch 1\n- Dispatched at: 2026-09-23T10:00:00Z\n- Outcome: pending\n';
-    expect(checkRunLog(text, LOG, uncommitted, NOW, noVerifyFiles)[0].detail).toMatch(/Finished at/);
+    expect(checkRunLog(text, LOG, uncommitted, NOW, noVerifyFiles, {})[0].detail).toMatch(/Finished at/);
   });
 
   it('holds each dispatch to a role and an agent type, and each review round to a passing verify (#454)', () => {
@@ -252,7 +252,7 @@ describe('checkRunLog', () => {
       '- Outcome: pending',
       '',
     ].join('\n');
-    expect(checkRunLog(text, LOG, uncommitted, NOW, noVerifyFiles).map((f) => `${f.ledger}:${f.entry}:${f.kind}`)).toEqual([
+    expect(checkRunLog(text, LOG, uncommitted, NOW, noVerifyFiles, {}).map((f) => `${f.ledger}:${f.entry}:${f.kind}`)).toEqual([
       `${LOG}:Dispatch 1:run-role`,
       `${LOG}:Dispatch 1:run-role`,
       `${LOG}:Review Round 1:review-round`,
@@ -265,7 +265,7 @@ describe('checkRunLog', () => {
       dispatch(1, '2026-09-23T10:00:00Z', 'closed', '2026-09-23T11:00:00Z'),
       dispatch(1, '2026-09-23T11:05:00Z', 'pending', 'pending'),
     ].join('\n');
-    expect(checkRunLog(text, LOG, uncommitted, NOW, noVerifyFiles).map((f) => f.kind)).toEqual(['duplicate-number']);
+    expect(checkRunLog(text, LOG, uncommitted, NOW, noVerifyFiles, {}).map((f) => f.kind)).toEqual(['duplicate-number']);
   });
 });
 
@@ -321,6 +321,24 @@ describe('ledgerCheck — the whole project', () => {
     logSpy.mockRestore();
     errSpy.mockRestore();
     process.exitCode = undefined;
+  });
+
+  it("refuses a dispatch whose Agent boardsmith.json maps to another role, reading the project's own mapping (#1001)", async () => {
+    const dir = await project({
+      'run-log/core-loop.md': dispatch(1, '2026-09-23T10:00:00Z', 'closed', '2026-09-23T11:00:00Z').replace('bs-judgement', 'senior'),
+    });
+    await fs.writeFile(join(dir, 'boardsmith.json'), JSON.stringify({ agents: { review: 'senior' } }));
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    const result = await ledgerCheck(dir);
+    expect(located(result.findings)).toEqual(['run-log/core-loop.md:run-role']);
+    expect(result.findings[0].detail).toMatch(/"Agent: senior", the agent this project dispatches as the review role, not as judgement/);
+  });
+
+  it('refuses a boardsmith.json that is not JSON, saying which file to fix (#1001)', async () => {
+    const dir = await project({ 'run-log/core-loop.md': dispatch(1, '2026-09-23T10:00:00Z', 'closed', '2026-09-23T11:00:00Z') });
+    await fs.writeFile(join(dir, 'boardsmith.json'), '{ "agents": ');
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    await expect(ledgerCheck(dir)).rejects.toThrow(/boardsmith\.json in .* is not valid JSON .*Fix it/);
   });
 
   it('compares each chunk run log\'s times against the commit that recorded each line', async () => {
