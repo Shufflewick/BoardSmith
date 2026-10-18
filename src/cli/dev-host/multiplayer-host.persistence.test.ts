@@ -236,7 +236,7 @@ describe('boardsmith dev — the persistence store (#41 item 2)', () => {
   });
 });
 
-describe('boardsmith dev — saving the store (#1179)', () => {
+describe('boardsmith dev: saving the store (#1179)', () => {
   it('saves once when the finishing move commits, and not again for a read-only debug request', async () => {
     const store = new PersistenceStore();
     const commit = vi.spyOn(store, 'commit');
