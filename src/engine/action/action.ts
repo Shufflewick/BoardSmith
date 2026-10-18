@@ -1,4 +1,4 @@
-import { NOTHING_CHANGED, rulesErrorSentence } from './rules-error.js';
+import { rulesErrorSentence } from './rules-error.js';
 import type { GameElement } from '../element/game-element.js';
 import { isElement } from '../element/game-element.js';
 import type { Player } from '../player/player.js';
@@ -7,6 +7,7 @@ import type {
   ActionDefinition,
   ActionContext,
   ActionResult,
+  ExecuteResult,
   Selection,
   ChoiceSelection,
   ElementSelection,
@@ -94,7 +95,7 @@ function failedExecute(actionName: string, error: unknown): ActionResult {
   // An engine policy refusal was written to be read — its message IS the
   // actionable next step. Anything else is an arbitrary runtime error, and
   // goes no further than this log.
-  const generic = `${rulesErrorSentence(actionName)} ${NOTHING_CHANGED}`;
+  const generic = rulesErrorSentence(actionName);
   // A PlayerFacingError's text was written to be read, so it always travels.
   // Anything else travels only in a positively-labelled dev/test environment,
   // where the reader is the author who needs it and there is no player to leak
@@ -104,6 +105,26 @@ function failedExecute(actionName: string, error: unknown): ActionResult {
     ? `${generic} (${error instanceof Error ? error.message : String(error)})`
     : generic;
   return { success: false, error: message, partiallyApplied: true, rulesError: true };
+}
+
+const ENGINE_ONLY_FLAGS = ['rulesError', 'partiallyApplied', 'notSimulable'] as const;
+
+/**
+ * Drop the flags only the engine may set from what `execute()` returned (#1016).
+ * The type already forbids them; this catches plain JS and casts, so a game
+ * cannot code its own refusal as a crash and change what a host decides.
+ */
+function withoutEngineFlags(actionName: string, returned: ExecuteResult): ActionResult {
+  const smuggled = ENGINE_ONLY_FLAGS.filter((flag) => returned[flag] !== undefined);
+  if (smuggled.length === 0) return returned;
+  console.error(
+    `[BoardSmith] Action '${actionName}' returned ${smuggled.join(', ')} from execute(). ` +
+      'Only the engine sets these, so they were dropped. Refuse with ' +
+      "{ success: false, error: 'why' }; a crash is reported by throwing.",
+  );
+  const result: ActionResult = { ...returned };
+  for (const flag of smuggled) delete result[flag];
+  return result;
 }
 
 /**
@@ -129,7 +150,8 @@ function failedExecute(actionName: string, error: unknown): ActionResult {
  * Not `partiallyApplied`. The author believed they were refusing cleanly, and a clean
  * refusal mutated nothing, so there is nothing for the runner to roll back.
  */
-function acceptExecuteResult(actionName: string, result: ActionResult): ActionResult {
+function acceptExecuteResult(actionName: string, returned: ExecuteResult): ActionResult {
+  const result = withoutEngineFlags(actionName, returned);
   if (result.success) return result;
   if (typeof result.error === 'string' && result.error.trim() !== '') return result;
 
@@ -1366,12 +1388,6 @@ export class ActionExecutor {
     args: Record<string, unknown>,
     options?: PerformOptions,
   ): ActionResult {
-    // The condition sees no picks, as availability and each step see it; the picks are checked one at a time below (#772).
-    const context = { game: this.game, player, args: this.resolveNonPickArgs(action, args, this.game) };
-    if (!options?.followUp && action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
-      return { success: false, error: 'Action is not available' };
-    }
-
     const pendingState = this.createPendingActionState(action.name, player.seat);
     Object.assign(pendingState.collectedArgs, options?.followUp?.args);
     let applied = false;
@@ -1584,16 +1600,14 @@ export class ActionExecutor {
     return this.hasValidSelectionPath(action.selections, player, resolved, 0, action.name);
   }
 
-  isActionAvailable(action: ActionDefinition, player: Player): boolean {
-    const context: ActionContext = {
-      game: this.game,
-      player,
-      args: {},
-    };
+  /** Whether the action's condition offers it to `player`, with empty args as availability sees it. */
+  conditionHolds(action: ActionDefinition, player: Player): boolean {
+    return !action.condition
+      || evaluateCondition(action.condition, { game: this.game, player, args: {} }, `action '${action.name}'`);
+  }
 
-    if (action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
-      return false;
-    }
+  isActionAvailable(action: ActionDefinition, player: Player): boolean {
+    if (!this.conditionHolds(action, player)) return false;
 
     // Its own `.disabled()` reason keeps it offered, greyed, even with no enabled pick, so the reason reaches the player (#1090).
     if (this.game.getActionDisabledReason(action, player) !== null) return true;

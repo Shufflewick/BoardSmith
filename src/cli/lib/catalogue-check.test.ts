@@ -35,6 +35,17 @@ describe('which games are checked (#591)', () => {
     expect(statusOf(await checkCatalogue({ tree: fx.tree, catalogueRoot: linked }))).toEqual({ hex: 'passed' });
   });
 
+  it('passes over a link to a folder that is gone, and refuses an entry it cannot look at', async () => {
+    const fx = fixture();
+    await makeTree(fx.tree);
+    await makeGame(fx, 'hex');
+    symlinkSync(join(fx.catalogue, 'gone'), join(fx.catalogue, 'dangling'));
+    expect(statusOf(await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue }))).toEqual({ hex: 'passed' });
+
+    symlinkSync('loop', join(fx.catalogue, 'loop'));
+    await expect(checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue })).rejects.toThrow(`Could not read ${join(fx.catalogue, 'loop')} (ELOOP)`);
+  });
+
   it('fails with the clone command when the catalogue is not on this machine', async () => {
     const fx = fixture();
     await makeTree(fx.tree);

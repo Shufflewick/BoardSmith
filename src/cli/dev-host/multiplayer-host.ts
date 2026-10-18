@@ -33,6 +33,7 @@ import { createNodeWorldClock, type WorldHostClock } from './node-world-clock.js
 import { runsAtOnce, type HostWorkGate } from '../../session/host-work-gate.js';
 import { heldClock, type RulesReloadNotice } from './rules-reload-queue.js';
 import { dueSeats, type SeatActivityState } from '../../engine/index.js';
+import { seatDisplayName } from '../../engine/element/seat-defaults.js';
 import type { GameStateSnapshot } from '../../engine/utils/index.js';
 import { selectDesignerGameOptions, type GameOptionSelection } from '../../session/game-option-selection.js';
 import type { GameOptionDefinition } from '../../session/types.js';
@@ -167,7 +168,11 @@ export type ClientInbound =
   | { type: 'leave' }
   /** Start a new game, dealt from `seed` when it names one (#460), else from a fresh seed. */
   | { type: 'restart'; seed?: string }
-  | { type: 'server_request'; requestId: string; op: string; payload: Record<string, unknown> }
+  /**
+   * `loadId` is the page load whose socket sent it, stamped by the connection
+   * handler (#1041), never taken from the page's own message.
+   */
+  | { type: 'server_request'; requestId: string; op: string; payload: Record<string, unknown>; loadId?: string }
   | { type: 'follow'; enabled: boolean }
   | { type: 'getState'; requestId?: string }
   | { type: 'getLobby'; requestId?: string }
@@ -468,7 +473,13 @@ export class MultiplayerHost {
    * requests from `req-0`, so two pages' ids collide (#878). Cleared when the
    * response is delivered.
    */
-  private readonly requestOrigin = new Map<string, { clientId: string; requestId: string }>();
+  private readonly requestOrigin = new Map<string, { clientId: string; loadId?: string; requestId: string }>();
+  /**
+   * The page load each client's socket now belongs to (#1041). A reloaded page
+   * keeps its client id and numbers requests from `req-0` again, so a reply is
+   * delivered only while the load that asked still holds the socket.
+   */
+  private readonly pageLoad = new Map<string, string>();
   private nextRequest = 0;
   /**
    * D13/DEVHOST-01: the currently applied gameOption selection, seeded from
@@ -510,12 +521,32 @@ export class MultiplayerHost {
     this.clock = heldClock(opts.clock ?? createNodeWorldClock(), opts.hostWork ?? runsAtOnce);
     this.executeOp = opts.executeOp;
     for (let seat = 1; seat <= opts.playerCount; seat++) {
-      this.seats.set(seat, { seat, clientId: null, name: `Player ${seat}`, connected: false });
+      this.seats.set(seat, { seat, clientId: null, name: seatDisplayName(seat), connected: false });
     }
     this.appliedGameOptions = opts.baseGameOptions ?? selectDesignerGameOptions(opts.declaredGameOptions, {});
   }
 
   // ── Connection lifecycle ──────────────────────────────────────────────────
+
+  /**
+   * The client's socket now belongs to page load `loadId`. Called the moment
+   * the connection handler routes the client to a new socket, not through the
+   * rules reload queue, so it is never behind a reply the queue still holds.
+   */
+  // fallow-ignore-next-line unused-class-member
+  bindPageLoad(clientId: string, loadId: string): void {
+    this.pageLoad.set(clientId, loadId);
+  }
+
+  /**
+   * The client's socket closed and no newer socket holds it: its page load is
+   * gone. Called by the connection handler outside the rules reload queue, for
+   * the same reason as `bindPageLoad`.
+   */
+  // fallow-ignore-next-line unused-class-member
+  forgetPageLoad(clientId: string): void {
+    this.pageLoad.delete(clientId);
+  }
 
   /**
    * A client connection identified itself. The game is always live: the FIRST
@@ -676,13 +707,13 @@ export class MultiplayerHost {
   }
 
   private async handleRestart(clientId: string, seed: string | undefined): Promise<void> {
-    // Defensive hardening only (T-157-06) — NOT the D11 fix. A FINISHED game
-    // already passes here: LobbyPhase has no 'complete' value, so completion
-    // never flips `phase` off 'playing'. The `|| !this.session` clause guards
-    // the genuinely no-game/mid-setup case (phase somehow 'playing' with no
-    // live session), which the bare phase check alone would not catch.
-    if (this.phase !== 'playing' || !this.session) {
-      this.send(clientId, { type: 'error', message: this.starting ? STARTING : 'No game in progress to restart.' });
+    if (this.starting) {
+      this.send(clientId, { type: 'error', message: STARTING });
+      return;
+    }
+    // With no game, only a seated client may start one: it holds a seat because its start failed (#1039).
+    if (!this.session && !this.clientSeat.has(clientId)) {
+      this.send(clientId, { type: 'error', message: 'No game in progress to restart.' });
       return;
     }
     const refused = seed === undefined ? undefined : this.dealRefusal(seed);
@@ -816,7 +847,7 @@ export class MultiplayerHost {
     if (newCount === current) return;
     if (newCount > current) {
       for (let seat = current + 1; seat <= newCount; seat++) {
-        this.seats.set(seat, { seat, clientId: null, name: `Player ${seat}`, connected: false });
+        this.seats.set(seat, { seat, clientId: null, name: seatDisplayName(seat), connected: false });
       }
     } else {
       for (let seat = current; seat > newCount; seat--) {
@@ -959,7 +990,7 @@ export class MultiplayerHost {
     const seat = this.seatOf(clientId, msg.requestId);
     if (seat === undefined) return;
     const hostRequestId = String(this.nextRequest++);
-    this.requestOrigin.set(hostRequestId, { clientId, requestId: msg.requestId });
+    this.requestOrigin.set(hostRequestId, { clientId, loadId: msg.loadId, requestId: msg.requestId });
     try {
       await this.session.handleServerRequest(seat, hostRequestId, msg.op, msg.payload);
     } catch (err) {
@@ -1065,7 +1096,7 @@ export class MultiplayerHost {
     if (info.clientId && info.clientId !== clientId) this.clientSeat.delete(info.clientId);
     this.endGrace(seat);
     info.clientId = clientId;
-    info.name = name?.trim() || `Player ${seat}`;
+    info.name = seatDisplayName(seat, name?.trim());
     info.color = color ?? this.opts.colorPalette?.[seat - 1]?.value;
     info.connected = true;
     this.clientSeat.set(clientId, seat);
@@ -1289,7 +1320,7 @@ export class MultiplayerHost {
       // games: they treat the bot seat as a human, build an interactive turn, and
       // the dev host's MCTS bot then finds "No available moves" and locks up.
       playerConfigs: Array.from({ length: playerCount }, (_, i) => ({
-        name: this.seats.get(i + 1)?.name ?? `Player ${i + 1}`,
+        name: seatDisplayName(i + 1, this.seats.get(i + 1)?.name),
         isBot: !humanSeats.has(i + 1),
         botLevel: this.opts.botLevel,
         ...perSeatOptions[i],
@@ -1311,6 +1342,7 @@ export class MultiplayerHost {
       seedSnapshot: this.opts.seedSnapshot,
       fullHistory: true,
     };
+    let startRefused = false;
     const executeOp: ExecuteOpAdapter = async (snapshot, pendingState, op) => {
       const raw = await this.executeOp(
         op.type === 'start' ? startGameOptions : baseOptions,
@@ -1322,6 +1354,7 @@ export class MultiplayerHost {
         // by `debugOn()`, the same answer the session gets below.
         { ...hostOptions, debug: this.debugOn() },
       );
+      if (op.type === 'start' && !raw.success) startRefused = true;
       return this.commitAtGameOver(raw);
     };
 
@@ -1350,7 +1383,10 @@ export class MultiplayerHost {
       this.starting = false;
       this.phase = 'lobby';
       const reason = err instanceof Error ? err.message : String(err);
-      const message = `The game could not start (${reason}). Fix the problem, then reload this page to start a game.`;
+      const message = `The game could not start (${reason}). Fix the problem, then press "New game" or reload this page.`;
+      // A start-op failure, a crash in the game's setup included, arrives as a message only; a throw from the host keeps its stack.
+      if (startRefused || !(err instanceof Error)) console.error(`[boardsmith dev] ${message}`);
+      else console.error(`[boardsmith dev] ${message}`, err.stack);
       for (const clientId of this.connected) this.send(clientId, { type: 'error', message });
       return;
     }
@@ -1553,7 +1589,7 @@ export class MultiplayerHost {
     const info = this.seats.get(seat);
     if (info) {
       info.clientId = null;
-      info.name = `Player ${seat}`;
+      info.name = seatDisplayName(seat);
       info.color = undefined;
       info.connected = false;
     }
@@ -1564,7 +1600,7 @@ export class MultiplayerHost {
     if (hostRequestId === null) return;
     const origin = this.requestOrigin.get(hostRequestId);
     this.requestOrigin.delete(hostRequestId);
-    if (origin && this.connected.has(origin.clientId)) {
+    if (origin && this.connected.has(origin.clientId) && this.pageLoad.get(origin.clientId) === origin.loadId) {
       this.send(origin.clientId, { type: 'server_response', requestId: origin.requestId, result });
     }
   }

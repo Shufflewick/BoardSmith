@@ -126,6 +126,51 @@ function completesAction(op: Op, res: OpResult): boolean {
 type MutatingOp = Exclude<ExecutableOp, { type: ReadOnlyOpType | 'hint' | 'heatmapToggle' }>;
 
 /**
+ * Who sends each op, enumerated ONCE (#1102). A `host` op is composed only by
+ * the session host itself, which runs it through `executeOp` directly, so
+ * `handleOp` refuses it from a seat: `start` would begin
+ * the game again, `restoreEarlier` replaces the game with the sender's
+ * snapshot, and `botSuggest` answers with a bot seat's move, which may be
+ * hidden from the sender. `expireSeat` and `convertSeatToBot` are host
+ * decisions too, but hosts send them through `handleOp`, and each is refused
+ * when it names a seat other than the caller (#738, #950). The `Record` makes
+ * every new op choose.
+ */
+const OP_SENDER: Record<Op['type'], 'seat' | 'host'> = {
+  start: 'host',
+  action: 'seat',
+  expireSeat: 'seat',
+  selectionStep: 'seat',
+  resolveChoices: 'seat',
+  cancelAction: 'seat',
+  undo: 'seat',
+  botSuggest: 'host',
+  debugHistory: 'seat',
+  debugStateAt: 'seat',
+  debugStateDiff: 'seat',
+  debugActionTraces: 'seat',
+  debugFlowState: 'seat',
+  debugCustomData: 'seat',
+  debugRewind: 'seat',
+  debugReorder: 'seat',
+  debugTransfer: 'seat',
+  debugShuffle: 'seat',
+  debugDeckView: 'seat',
+  restoreEarlier: 'host',
+  startTutorial: 'seat',
+  exitTutorial: 'seat',
+  hint: 'seat',
+  heatmapToggle: 'seat',
+  demoStart: 'seat',
+  demoStop: 'seat',
+  demoControl: 'seat',
+  convertSeatToBot: 'seat',
+};
+const HOST_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set(
+  (Object.keys(OP_SENDER) as Op['type'][]).filter((type) => OP_SENDER[type] === 'host'),
+);
+
+/**
  * Consecutive persist() failures before `persistenceHealthy` flips false
  * (ERR-03).
  */
@@ -1051,6 +1096,16 @@ export class SnapshotSessionHost {
   }
 
   /**
+   * Replace the game with `snapshot`, an earlier or arranged position of this
+   * game, as a restore every seat sees, and wake the bots when it is a bot
+   * seat's turn. Host-only: `handleOp` refuses `restoreEarlier` from a seat
+   * (#1102). Resolves once published; the bots' replies follow ({@link settled}).
+   */
+  async restoreEarlier(snapshot: GameStateSnapshot): Promise<OpResultFor<'restoreEarlier'>> {
+    return (await this.applyMutatingOp(null, { type: 'restoreEarlier', snapshot })) as OpResultFor<'restoreEarlier'>;
+  }
+
+  /**
    * Run `op` for `seat` and answer with that op's own result. Read-only ops
    * (a choices query, the read-only debug ops) do NOT mutate or broadcast.
    * State-mutating ops broadcast and persist the new state, THEN resolve,
@@ -1067,6 +1122,16 @@ export class SnapshotSessionHost {
     // #481: debug ops need debugging on.
     const debugRefused = debugOpRefusal(op, this.adapters.debug === true);
     if (debugRefused) return debugRefused;
+    // #1100, #1102: start, restoreEarlier and botSuggest would let a seat restart the game, replace it, or read a bot's hidden move.
+    if (HOST_ONLY_OP_TYPES.has(op.type)) {
+      return {
+        success: false,
+        error:
+          `Seat ${seat} sent '${op.type}', and was refused: only the host itself sends it, ` +
+          'through host.start(), host.restoreEarlier(snapshot) or host.runBotTurns(), never through handleOp.',
+        category: 'protocol',
+      };
+    }
     // #738: picks are kept under `seat`, so an op acting as another player would mix two seats.
     // #950: hint, heatmapToggle and convertSeatToBot name theirs as `seat`.
     const named = 'player' in op ? op.player : 'seat' in op ? op.seat : seat;
@@ -1189,7 +1254,7 @@ export class SnapshotSessionHost {
    * than a client waits for the answer to a move that has already landed. What
    * they change reaches every seat as an ordinary publish.
    */
-  private async applyMutatingOp(seat: number, op: MutatingOp): Promise<OpResult> {
+  private async applyMutatingOp(seat: number | null, op: MutatingOp): Promise<OpResult> {
     const res = await this.enqueue(() => this.commitMutatingOp(seat, op));
     if (!res.success) return res;
     const actionCompleted = completesAction(op, res);
@@ -1201,7 +1266,7 @@ export class SnapshotSessionHost {
     // anyway. A rewind or a restore can target ANY point, which is what made it reachable.)
     const wakesBots = actionCompleted || op.type === 'undo' || op.type === 'debugRewind' || op.type === 'restoreEarlier';
     if (!wakesBots) return res;
-    const tracked: Promise<void> = this.afterMove(`seat ${seat}'s ${op.type}`, actionCompleted).finally(() =>
+    const tracked: Promise<void> = this.afterMove(`${seat === null ? 'the host' : `seat ${seat}`}'s ${op.type}`, actionCompleted).finally(() =>
       this.backgroundWork.delete(tracked),
     );
     this.backgroundWork.add(tracked);
@@ -1269,7 +1334,7 @@ export class SnapshotSessionHost {
   }
 
   /** Execute `op`, then hold, publish and persist what it made. Runs inside the one-at-a-time section. */
-  private async commitMutatingOp(seat: number, op: MutatingOp): Promise<OpResult> {
+  private async commitMutatingOp(seat: number | null, op: MutatingOp): Promise<OpResult> {
     // An op that closes the seat (the seat's own action, or the host closing a
     // seat at a deadline) runs without the seat's in-progress selection: it does not
     // continue those picks. They are dropped only once the close SUCCEEDS. A
@@ -1277,15 +1342,19 @@ export class SnapshotSessionHost {
     // the round it named is over (a stale submission), in which case the picks
     // belong to the new round and must survive.
     const closing = closesSeat(op);
-    const res = await this.adapters.executeOp(this.snapshot, closing ? null : this.pendingStates.get(seat) ?? null, op);
+    const res = await this.adapters.executeOp(
+      this.snapshot,
+      closing || seat === null ? null : this.pendingStates.get(seat) ?? null,
+      op,
+    );
     if (!res.success) return res;
-    if (closing) this.pendingStates.delete(seat);
+    if (closing && seat !== null) this.pendingStates.delete(seat);
     // Only a selection step leaves the seat mid-action; every other op ends it.
     const pending = 'pendingState' in res ? res.pendingState : null;
 
     // Clear hint for the acting seat on successful action/selectionStep (completion):
     // a hint answers the position the seat was in, which its move just changed.
-    if (completesAction(op, res)) {
+    if (seat !== null && completesAction(op, res)) {
       const seatTransient = this.transientTeachingState.get(seat);
       if (seatTransient?.hint) {
         const { hint: _h, ...rest } = seatTransient;
@@ -1297,9 +1366,9 @@ export class SnapshotSessionHost {
       }
     }
 
-    if (op.type === 'undo' || op.type === 'debugRewind') this.#forgetReplacedTree();
+    if (op.type === 'undo' || op.type === 'debugRewind' || op.type === 'restoreEarlier') this.#forgetReplacedTree();
 
-    await this.apply(res, seat, pending);
+    await this.apply(res, seat ?? undefined, pending);
     return res;
   }
 

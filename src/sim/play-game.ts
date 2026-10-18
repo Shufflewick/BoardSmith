@@ -5,7 +5,8 @@
  *
  * @module
  */
-import type { Game, FlowState } from '../engine/index.js';
+import type { Game, FlowState, PublishedFollowUp } from '../engine/index.js';
+import { followUpForSeat } from '../engine/index.js';
 import { dueSeatOffers, describeRefused } from '../engine/flow/seat-activity.js';
 import { refuseChangeSince } from '../engine/element/state-version.js';
 import { encodeValue } from '../engine/element/game-element.js';
@@ -99,10 +100,12 @@ export interface SingleGameResult {
 function enabledSeats(
   game: Game,
   flowState: FlowState
-): { seats: Array<{ seat: number; actionNames: string[] }>; refused: string[] } {
+): { seats: Array<{ seat: number; actionNames: string[]; followUp?: PublishedFollowUp }>; refused: string[] } {
   const offers = dueSeatOffers(flowState, game);
   return {
-    seats: offers.filter((offer) => offer.canMove).map(({ seat, enabled }) => ({ seat, actionNames: enabled })),
+    seats: offers
+      .filter((offer) => offer.canMove)
+      .map(({ seat, enabled }) => ({ seat, actionNames: enabled, followUp: followUpForSeat(flowState, seat) })),
     refused: describeRefused(offers),
   };
 }
@@ -361,6 +364,7 @@ export async function playGame<G extends Game>(
         game: testGame.game,
         seat: actor.seat,
         actions: actor.actionNames,
+        followUp: actor.followUp,
         random: seatRandom[actor.seat - 1],
         definition,
       });

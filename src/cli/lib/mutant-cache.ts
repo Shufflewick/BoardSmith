@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { boardsmithPackageRoot } from './boardsmith-version.js';
 import { gitOutput as git } from './git-output.js';
+import { readIfExists } from './read-if-exists.js';
 
 /**
  * The outcomes of `boardsmith verify`'s mutants, kept so a re-verify runs only the mutants whose
@@ -98,14 +99,6 @@ function ancestors(dir: string): string[] {
   return dirs;
 }
 
-async function readIfPresent(path: string): Promise<Buffer | undefined> {
-  try {
-    return await fs.readFile(path);
-  } catch {
-    return undefined;
-  }
-}
-
 /**
  * The BoardSmith package a game's tests load: the first `node_modules/boardsmith` in the game
  * folder or a folder above it, as Node resolves the import, with links followed. Undefined when
@@ -114,7 +107,7 @@ async function readIfPresent(path: string): Promise<Buffer | undefined> {
 export async function gameBoardsmithRoot(projectDir: string): Promise<string | undefined> {
   for (const dir of ancestors(await fs.realpath(projectDir))) {
     const candidate = join(dir, 'node_modules', 'boardsmith');
-    if ((await readIfPresent(join(candidate, 'package.json'))) !== undefined) return fs.realpath(candidate);
+    if ((await readIfExists(join(candidate, 'package.json'), fs.readFile)) !== undefined) return fs.realpath(candidate);
   }
   return undefined;
 }
@@ -216,7 +209,7 @@ async function ignoredUnder(root: string, parts: string[]): Promise<string[]> {
  * A pattern that reaches the whole package, and a target outside it, cannot be bounded, and throw.
  */
 async function ignoredEntryPointsHash(root: string): Promise<string> {
-  const manifest = await readIfPresent(join(root, 'package.json'));
+  const manifest = await readIfExists(join(root, 'package.json'), fs.readFile);
   const pkg = (manifest === undefined ? {} : JSON.parse(manifest.toString('utf-8'))) as Record<string, unknown>;
   const targets = entryTargets([pkg.main, pkg.module, pkg.exports]);
   if (targets.length === 0) targets.push('index.js');
@@ -225,7 +218,7 @@ async function ignoredEntryPointsHash(root: string): Promise<string> {
   const hashPath = async (path: string) => {
     if (hashed.has(path)) return;
     const full = join(root, path);
-    const stat = await fs.stat(full).catch(() => undefined);
+    const stat = await readIfExists(full, fs.stat);
     hashed.set(path, stat === undefined ? 'absent' : stat.isDirectory() ? await folderContentHash(full) : sha256Hex(await fs.readFile(full)));
   };
   const scopes = targets.map((target) => entryScope(root, target));
@@ -290,7 +283,7 @@ async function repositoryTreeHash(projectDir: string, treeRef: string): Promise<
 async function installedPackagesHash(projectDir: string): Promise<string> {
   const records: string[] = [];
   for (const dir of ancestors(await fs.realpath(projectDir))) {
-    const record = await readIfPresent(join(dir, 'node_modules', '.package-lock.json'));
+    const record = await readIfExists(join(dir, 'node_modules', '.package-lock.json'), fs.readFile);
     if (record === undefined) continue;
     const digest = sha256Hex(record);
     if (!records.includes(digest)) records.push(digest);
@@ -407,7 +400,7 @@ async function linkedPackagesHash(projectDir: string): Promise<string> {
     for (const dir of ancestors(from)) {
       if (scanned.has(dir)) continue;
       scanned.add(dir);
-      const record = await readIfPresent(join(dir, 'node_modules', '.package-lock.json'));
+      const record = await readIfExists(join(dir, 'node_modules', '.package-lock.json'), fs.readFile);
       if (record !== undefined && !gameFolders.has(dir)) named.set(`record ${dir}`, sha256Hex(record));
       for (const link of await installedLinks(join(dir, 'node_modules'))) await visitLink(link);
     }
