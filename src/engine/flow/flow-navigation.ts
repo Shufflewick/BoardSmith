@@ -15,8 +15,9 @@ import type { FlowNode, SwitchConfig } from './types.js';
  * - `loop` / `repeat` / `each-player` / `for-each` / `phase`: the index is the
  *   iteration count; the only child is `config.do`.
  * - `if` / `switch`: the index stays 0; the branch taken is on the frame's
- *   data as `branchIndex` (and `branchKey` for a switch, which survives cases
- *   being reordered).
+ *   data, as `branchIndex` for an `if` and as `branchKey` (the case's key, or
+ *   `'__default'`) for a switch, so a switch whose cases were reordered or
+ *   removed resolves the case the save was in, or none (#966).
  */
 
 /**
@@ -50,25 +51,18 @@ export function flowChildCount<G extends Game>(node: FlowNode<G>): number {
   return flowChildren(node).length;
 }
 
-function switchBranchIndex<G extends Game>(config: SwitchConfig<G>, branchKey: string): number | undefined {
+/** The case a switch frame took, by its saved key; -1 when the rules no longer have it. */
+function switchBranchIndex<G extends Game>(config: SwitchConfig<G>, branchKey: unknown): number {
   const caseKeys = Object.keys(config.cases);
   if (branchKey === '__default') {
-    return config.default ? caseKeys.length : undefined;
+    return config.default ? caseKeys.length : -1;
   }
-  const index = caseKeys.indexOf(branchKey);
-  return index >= 0 ? index : undefined;
+  return typeof branchKey === 'string' ? caseKeys.indexOf(branchKey) : -1;
 }
 
-/** The branch an `if`/`switch` frame took, from its frame data. */
-function takenBranch<G extends Game>(
-  node: Extract<FlowNode<G>, { type: 'if' | 'switch' }>,
-  frameData: Record<string, unknown> | undefined,
-): number | undefined {
-  if (node.type === 'switch' && typeof frameData?.branchKey === 'string') {
-    const index = switchBranchIndex(node.config, frameData.branchKey);
-    if (index !== undefined) return index;
-  }
-  return typeof frameData?.branchIndex === 'number' ? frameData.branchIndex : undefined;
+/** The branch an `if` frame took: 0 for then, 1 for else. */
+function ifBranchIndex(frameData: Record<string, unknown> | undefined, frameIndex: number): number {
+  return typeof frameData?.branchIndex === 'number' ? frameData.branchIndex : frameIndex;
 }
 
 function navigationIndex<G extends Game>(
@@ -80,8 +74,9 @@ function navigationIndex<G extends Game>(
     case 'sequence':
       return Math.max(0, frameIndex - 1);
     case 'if':
+      return ifBranchIndex(frameData, frameIndex);
     case 'switch':
-      return takenBranch(node, frameData) ?? frameIndex;
+      return switchBranchIndex(node.config, frameData?.branchKey);
     case 'action-step':
     case 'simultaneous-action-step':
     case 'execute':

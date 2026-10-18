@@ -1523,9 +1523,13 @@ export class FlowEngine<G extends Game = Game> {
           };
         }
         if (i < path.length - 1) {
+          const branchKey = frameData?.[`__frame_${i}`]?.branchKey;
+          const branch = currentNode.type === 'switch' && typeof branchKey === 'string'
+            ? (branchKey === '__default' ? 'the default case' : `case ${JSON.stringify(branchKey)}`)
+            : 'a branch';
           return {
             valid: false,
-            error: `the save is inside a branch of ${currentNode.type} "${nodeName}" that the current rules no longer have. ` +
+            error: `the save is inside ${branch} of ${currentNode.type} "${nodeName}" that the current rules no longer have. ` +
               'Restore it under the rules it was saved with, or start a new game',
             validPath,
           };
@@ -1594,7 +1598,7 @@ export class FlowEngine<G extends Game = Game> {
         // and `executeForEach`'s `forEachItems` do today -- so a hand-written
         // special case per field name is a hole waiting for the fourteenth
         // site. Plain values (`moveCount`, `iteration`,
-        // `eligibleSeats: number[]`, `branchIndex`) pass through untouched, which
+        // `eligibleSeats: number[]`, `branchIndex`, `branchKey`) pass through untouched, which
         // is what `turnSequence`/`dueSeats` (seat-activity.ts) and
         // `resolveFlowChild` read back out. Do NOT "simplify" this to a
         // spread: that is the asymmetry this replaced.
@@ -2306,7 +2310,6 @@ export class FlowEngine<G extends Game = Game> {
       ...frame.data,
       branchPushed: true,
       branchKey: hasCase ? stringValue : '__default',
-      branchIndex: hasCase ? Object.keys(config.cases).indexOf(stringValue) : Object.keys(config.cases).length,
     };
 
     return { awaitingInput: false };
