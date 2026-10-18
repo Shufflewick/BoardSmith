@@ -172,6 +172,8 @@ describe('useActionController picks', () => {
       await controller.start('repeatAction');
       await controller.fill('items', 1);
       await controller.fill('items', 2);
+      // Each round is its own question: drafts and focus key on how many picks came before.
+      expect(controller.repeatingState.value?.accumulated).toHaveLength(2);
       await controller.fill('items', 0);
 
       expect(controller.getCollectedPick('items')).toEqual({ value: [1, 2, 0], display: 'One, Two, Done', skipped: false });
