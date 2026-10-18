@@ -275,13 +275,19 @@ build`, `boardsmith validate`, the in-browser smoke test and a mutation check,
 in that order, and keeps going after a failure so you see every problem at once.
 The mutation check
 breaks each line of code under `src/` that changed since the main branch (or
-since `--base`), one small change at a time, and runs the whole suite against
-each: a change no test notices is reported by file and line, because the tests
-cannot distinguish that mutant from the original.
+since `--base`), one small change at a time, and runs against each the test
+files that load the changed file: a change no test notices is reported by file
+and line, because the tests cannot distinguish that mutant from the original,
+and a change in a file no test loads is reported as such.
 Before trying a fresh mutant, it completes the unmodified suite and requires
-it to pass. Once Vitest confirms that a mutant made a test fail, the mutation
-check stops that run's workers, including tests already running. A surviving
-mutant still runs the whole suite to completion.
+it to pass, noting which project files each test file loads, however it loads
+them (a static or dynamic import, `import.meta.glob`, a path built at run
+time). A test file whose loads cannot be told apart runs for every mutant: one
+that shares its worker with other test files (`isolate: false`), and every
+test file when the config has a `globalSetup`. Once Vitest confirms that a
+mutant made a test fail, the mutation check stops that run's workers,
+including tests already running. A surviving mutant still runs every test file
+that loads its file to completion.
 
 A game with Vitest projects (`test.projects` in its config, or a workspace:
 `test.workspace`, or `vitest.workspace.ts` beside its config) gets each mutant

@@ -53,7 +53,7 @@ describe('signed equivalent-mutant dispositions (#713)', () => {
     const nextCache = await openMutantCache(project);
     const result = await runDiffMutationCheck({ projectDir: project, added, cache: nextCache, log: () => {} });
 
-    expect(result.summary).toEqual({ files: 1, mutants: 3, killed: 2, survived: 0, timedOut: 0, equivalent: 1 });
+    expect(result.summary).toEqual({ files: 1, mutants: 3, killed: 2, survived: 0, timedOut: 0, equivalent: 1, unreached: 0 });
     expect(result.survivors).toEqual([]);
     expect(result.reused).toBe(2);
     expect(result).toMatchObject({ equivalents: [{ id, reviewer: 'reviewer@example.test', reviewCommit: git('rev-parse', 'HEAD') }] });
@@ -160,6 +160,17 @@ describe('signed equivalent-mutant dispositions (#713)', () => {
     fixture.git('add', 'tests/classify.test.ts');
     fixture.git('commit', '-qm', 'an unrelated baseline failure');
     await expect(prepare()).rejects.toThrow(/complete baseline is not green.*unrelated regression/);
+    await expect(fs.access(join(fixture.project, EQUIVALENCE_LEDGER))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('refuses a mutant in a file no test loads, naming the file', async () => {
+    const fixture = await equivalenceProject({ 'src/unloaded.ts': 'export function fee(price: number): number {\n  return price * 2;\n}\n' });
+    // Node's permission model refuses node:inspector, so under it no test file has a record and every one runs for every mutant.
+    vi.stubEnv('NODE_OPTIONS', '');
+    const mutant = generateMutants('src/unloaded.ts', 'export function fee(price: number): number {\n  return price * 2;\n}\n', new Set([2]))[0];
+    const id = (await openMutantCache(fixture.project)).fingerprint(mutant)!;
+    await expect(mutationEquivalenceCommand(id, { project: fixture.project, base: fixture.base, contract: CONTRACT, proof: PROOF }))
+      .rejects.toThrow('The selected mutant is in src/unloaded.ts, which no test loads. Only a normally completed survivor can receive an equivalence review.');
     await expect(fs.access(join(fixture.project, EQUIVALENCE_LEDGER))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 

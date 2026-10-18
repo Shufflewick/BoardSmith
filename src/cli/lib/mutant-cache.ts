@@ -16,8 +16,12 @@ import { readIfExists } from './read-if-exists.js';
  * (the sign-off, the verified hash, the ledgers, the run log). Each run still does the full suite,
  * typecheck, build and validate for the commit it is on; this cache spares only the mutants.
  *
- * An outcome is stored under a key made of everything the whole-suite run under that mutant could
- * depend on:
+ * An outcome is stored under a key made of everything the run under that mutant could depend on.
+ * That run is of the test files that loaded the mutant's file in the unmutated run of the whole
+ * suite (#981), and which files those are is decided by the same things the key holds (the
+ * repository's files, what is installed, and the BoardSmith that records it), so an outcome is
+ * never reused for a different choice of test files. Format 5 marks outcomes from such runs; one
+ * from a whole-suite run is not read. The key holds:
  *
  * - the mutant: the game folder within the repository, its file, and the file's whole mutated text;
  * - every file of the REPOSITORY in the commit, by content, except the game's `BOOKKEEPING_RECORDS`.
@@ -61,15 +65,15 @@ import { readIfExists } from './read-if-exists.js';
  * new outcomes, which costs only running those mutants again; each save writes all of the run's
  * outcomes again, so the next one puts back what an overlapping save dropped.
  * `boardsmith verify` saves after each mutant it runs, so an interrupted run keeps every finished
- * outcome (#940). A save is about 10ms for a full file (1.6MB), next to a mutant's whole-suite run
- * of seconds. It saves only while the tree is clean, since the key is computed from the commit and
+ * outcome (#940). A save is about 10ms for a full file (1.6MB), next to a mutant's run of the test
+ * files that load its file, which takes seconds. It saves only while the tree is clean, since the key is computed from the commit and
  * would not describe files edited mid-run. It also captures the execution context
  * (`captureExecutionContext`) once when it starts, keys the cache by that capture, and refuses the
  * rest of the run, keeping nothing more, when the context changed before or while a mutant ran, or
  * by its end (#932, #940): outcomes from a mixed run would be stored under a key they do not fit.
  */
 
-const CACHE_FORMAT = 4;
+const CACHE_FORMAT = 5;
 
 /** How many outcomes the shared cache keeps: many runs' worth, at about 80 bytes each. */
 export const MAX_STORED_OUTCOMES = 20_000;
