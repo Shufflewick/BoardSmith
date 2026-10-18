@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { gitSucceeds } from '../lib/git-output.js';
 import { readIfExists } from '../lib/read-if-exists.js';
+import { ingestHookState, installIngestHook } from '../lib/ingest-hook.js';
 import { join, relative, resolve } from 'node:path';
 import { styleText } from 'node:util';
 import {
@@ -51,6 +52,10 @@ import {
  * whose only evidence of value is that someone wrote it is not this command's to throw away. Moves
  * use `git mv` for tracked paths so history survives, and a plain rename otherwise. A move whose
  * destination already exists is reported as a conflict and skipped — `doctor` never clobbers.
+ *
+ * THE INGEST PRE-COMMIT HOOK (#1009). A missing hook (a fresh clone) or a stale BoardSmith one is a
+ * finding `--fix` installs. A hook BoardSmith did not write, or one it cannot read, is only a note:
+ * every bs- skill gates on doctor's exit code, and a designer's own hook must not block them.
  */
 
 /** What kind of thing `doctor` found out of place. */
@@ -70,6 +75,8 @@ export type DoctorFindingKind =
   | 'test-run-collects-worktrees'
   /** The config is not built with `defineGameViteConfig` and has settings of its own; only a person should carry them over. */
   | 'test-config-needs-edit'
+  /** `.git/hooks/pre-commit` is missing or an older BoardSmith ingest hook; `--fix` writes the current one. */
+  | 'ingest-hook-not-current'
   /** Both the root and the `design/` copy exist — a human has to decide which one is real. */
   | 'move-conflict';
 
@@ -89,6 +96,8 @@ export interface DoctorResult {
   projectDir: string;
   findings: DoctorFinding[];
   counts: { moved: number; pending: number; conflicts: number };
+  /** What doctor left alone and why, without failing the run. */
+  notes: string[];
   /** True when the project is already in the current layout and nothing needs doing. */
   healthy: boolean;
 }
@@ -313,6 +322,31 @@ async function sortConfigs(projectDir: string): Promise<{ built: string | undefi
   return { built, outdated };
 }
 
+const HOOK_PATH = '.git/hooks/pre-commit';
+
+/** The ingest hook as a finding when `--fix` can bring it up to date, or as a note when it is not ours to touch. */
+async function ingestHookCheck(projectDir: string): Promise<{ findings: DoctorFinding[]; notes: string[] }> {
+  const state = await ingestHookState(projectDir);
+  const byHand = 'or run boardsmith ingest-gaps yourself after transcription.';
+  if (state === 'foreign') {
+    return { findings: [], notes: [
+      `Left ${HOOK_PATH} alone: BoardSmith did not write it, so the ingest hook is not installed. To use BoardSmith's, ` +
+        `move your commands elsewhere, delete ${HOOK_PATH} and run boardsmith doctor --fix; ${byHand}`,
+    ] };
+  }
+  if (state === 'unreadable') {
+    return { findings: [], notes: [
+      `Left ${HOOK_PATH} alone: could not read ${HOOK_PATH}, so doctor cannot tell whether BoardSmith wrote it. ` +
+        `Check that you can read it, then run boardsmith doctor again; ${byHand}`,
+    ] };
+  }
+  if (state !== 'missing' && state !== 'stale') return { findings: [], notes: [] };
+  const detail = state === 'missing'
+    ? 'no ingest pre-commit hook is installed, so commits do not run the ingest synthesis.'
+    : 'the ingest pre-commit hook is an older version than this BoardSmith writes.';
+  return { findings: [{ kind: 'ingest-hook-not-current', from: HOOK_PATH, to: HOOK_PATH, fixed: false, detail }], notes: [] };
+}
+
 /**
  * Resolve every finding `--fix` is allowed to resolve. `design/` and the scratch dir are created
  * lazily, so a healthy project that needs no moves does not grow empty directories.
@@ -327,6 +361,10 @@ async function fixAll(projectDir: string, findings: DoctorFinding[]): Promise<vo
 
 /** Resolve one finding `--fix` is allowed to resolve. */
 async function fix(projectDir: string, f: DoctorFinding): Promise<void> {
+  if (f.kind === 'ingest-hook-not-current') {
+    if ((await installIngestHook(projectDir)) === 'installed') return;
+    throw new Error(`Could not write ${HOOK_PATH}. Check that you can write to .git/hooks, then run boardsmith doctor --fix again.`);
+  }
   if (f.kind === 'test-config-missing' || f.kind === 'test-run-collects-worktrees') {
     const { built, outdated } = await sortConfigs(projectDir);
     for (const config of outdated) await fs.rm(join(projectDir, config));
@@ -362,16 +400,18 @@ export async function doctorCommand(
     );
   }
 
+  const hook = await ingestHookCheck(projectDir);
   const findings: DoctorFinding[] = [
     ...(await strandedDesignFindings(projectDir)),
     ...(await strandedScratchFindings(projectDir)),
     ...(await gitignoreFindings(projectDir)),
     ...(await testScopeFindings(projectDir)),
+    ...hook.findings,
   ];
 
   if (options.fix) await fixAll(projectDir, findings);
 
-  const result = summarize(projectDir, findings);
+  const result = summarize(projectDir, findings, hook.notes);
   const { pending, conflicts } = result.counts;
 
   // A project needing work exits non-zero so a skill or a CI step notices without parsing output.
@@ -387,11 +427,11 @@ export async function doctorCommand(
 }
 
 /** The result `doctor` returns: its findings and how many were fixed, remain, or need a person. */
-function summarize(projectDir: string, findings: DoctorFinding[]): DoctorResult {
+function summarize(projectDir: string, findings: DoctorFinding[], notes: string[]): DoctorResult {
   const moved = findings.filter((f) => f.fixed).length;
   const conflicts = findings.filter((f) => NEEDS_A_PERSON.has(f.kind)).length;
   const pending = findings.length - moved - conflicts;
-  return { projectDir, findings, counts: { moved, pending, conflicts }, healthy: findings.length === 0 };
+  return { projectDir, findings, counts: { moved, pending, conflicts }, notes, healthy: findings.length === 0 };
 }
 
 /** A config finding as a report line: what is missing or outdated, and until fixed, what to do. */
@@ -411,6 +451,10 @@ function reportLine(f: DoctorFinding, rel: (p: string) => string): string {
     case 'test-config-missing':
     case 'test-run-collects-worktrees':
       return configLine(f, rel);
+    case 'ingest-hook-not-current':
+      return f.fixed
+        ? `${styleText('green', 'installed')} ${f.from} ${styleText('dim', '->')} the current ingest hook`
+        : `${styleText('yellow', 'hook    ')} ${f.from}\n          ${f.detail}`;
     case 'scratch-dir-not-ignored':
       return `${f.fixed ? styleText('green', 'ignored ') : styleText('yellow', 'untracked')} ${rel(f.from)} ${styleText('dim', '->')} adds ${GITIGNORE_ENTRY}`;
     default:
@@ -421,6 +465,7 @@ function reportLine(f: DoctorFinding, rel: (p: string) => string): string {
 function printReport(result: DoctorResult, fixed: boolean): void {
   const rel = (p: string) => relative(process.cwd(), join(result.projectDir, p)) || p;
 
+  for (const note of result.notes) console.log(`${styleText('dim', 'note    ')} ${note}`);
   if (result.healthy) {
     console.log(styleText('green', `✓ layout is current — ${DESIGN_DIR}/ holds every design artifact`));
     return;
