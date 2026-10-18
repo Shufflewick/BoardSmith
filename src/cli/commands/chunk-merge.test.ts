@@ -374,6 +374,34 @@ describe("chunkMerge: the merged chunk's tests and typecheck, never the whole su
     expect([head(), status()]).toEqual([before, '']);
   });
 
+  it('leaves out a test file the chunk deleted, running only the ones it added or changed', async () => {
+    await write(main, { 'tests/old-quests.test.ts': '// replaced by quests\n' });
+    git(main, 'add', '-A');
+    git(main, 'commit', '-q', '-m', 'old quests test');
+    const quests = await buildOnBranch('quests', 100);
+    git(quests, 'rm', '-q', 'tests/old-quests.test.ts');
+    git(quests, 'commit', '-q', '-m', 'chunk-quests/close: drop the old test');
+    const runs: string[][] = [];
+    const recording: TestRunner = (dir, files) => {
+      runs.push([...files]);
+      return budgetRunner(dir, files);
+    };
+    expect((await chunkMerge(main, 'quests', { runTests: recording, typeCheck })).refusals).toEqual([]);
+    expect(runs).toEqual([['tests/budget.test.ts'], ['tests/quests.test.ts']]);
+  });
+
+  it("refuses, leaving main as it was, when one of the chunk's tests did not run", async () => {
+    const before = head();
+    const skipsOne: TestRunner = async (dir, files) => {
+      const run = await budgetRunner(dir, files);
+      return 'refused' in run ? run : { ...run, ran: files.filter((f) => f !== 'tests/trading.test.ts') };
+    };
+    const { result, typeChecked } = await mergeRecording(skipsOne);
+    expect(result.refusals.join('\n')).toMatch(/trading's tests did not all run on the combined tree: tests\/trading\.test\.ts did not run/);
+    expect(typeChecked).toEqual([]);
+    expect([head(), status()]).toEqual([before, '']);
+  });
+
   it('refuses a chunk with no test of its own, as its gates do, and passes an exempt one on typecheck alone', async () => {
     const quests = await buildOnBranch('quests', 100);
     git(quests, 'rm', '-q', 'tests/quests.test.ts');
@@ -384,7 +412,7 @@ describe("chunkMerge: the merged chunk's tests and typecheck, never the whole su
       return budgetRunner(dir, files);
     };
     const refused = await chunkMerge(main, 'quests', { runTests: recording, typeCheck });
-    expect(refused.refusals.join('\n')).toMatch(/Chunk "quests" added or changed no test file since its base/);
+    expect(refused.refusals.join('\n')).toMatch(/Chunk "quests" added or changed no test file since its base[\s\S]*Then run chunk-merge again\./);
 
     const chunkPath = 'design/chunks/quests/CHUNK.md';
     await write(quests, {

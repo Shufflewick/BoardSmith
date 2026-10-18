@@ -433,7 +433,7 @@ async function combinedTreeProblems(ctx: MergeContext, alongside: string[], { ru
   const changed = (await git(ctx.projectDir, ['diff', '--relative', '--name-only', '-z', base, ctx.branchCommit])).split('\0').filter(Boolean);
   const tests = await chunkTests(ctx.projectDir, ctx.slug, base, changed);
   if (!Array.isArray(tests)) {
-    if (!tests.passed) return [`${tests.summary} ${tests.next ?? ''}`.trim()];
+    if (!tests.passed) return [`${tests.summary} ${tests.next ?? ''} Then run chunk-merge again.`];
   } else {
     const run = await runTests(ctx.projectDir, tests);
     if ('refused' in run) return [run.refused];
