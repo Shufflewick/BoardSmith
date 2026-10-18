@@ -23,6 +23,7 @@ function panel() {
       },
     },
     props: {
+      boardFailed: false,
       availableActions: ['endSurvivor', 'lookAround'],
       actionMetadata: {
         endSurvivor: {

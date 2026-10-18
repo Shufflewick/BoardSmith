@@ -54,6 +54,7 @@
       :action-metadata="play.actionMetadata.value"
       :disabled-actions="play.disabledActions.value"
       :actions-pending="host.offersPending.value"
+      :board-failed="boardFailed"
       :panel-token="panelToken"
       :prompt="actionController.currentPick.value?.prompt"
       :connection="connectionIndicator"
@@ -83,7 +84,7 @@
              `<Teleport to="#bs-game-modal">` always finds the host `PlayShell`
              renders. `GameShell` holds a table's board back for exactly this
              reason; the guarantee is the SHELL's, so both give it. -->
-        <BoardErrorBoundary v-if="boardHostReady && boardComponent" :state="boardProps.gameView" :board="boardComponent">
+        <BoardErrorBoundary v-if="boardHostReady && boardComponent" ref="boardBoundary" :state="boardProps.gameView" :board="boardComponent">
           <component :is="boardComponent" v-bind="boardProps" />
         </BoardErrorBoundary>
         <!-- Only reachable if the registry's default entry resolved to no
@@ -277,6 +278,9 @@ function trackCompact(event: MediaQueryListEvent | MediaQueryList): void {
  * document and the documented pattern works.
  */
 const boardHostReady = ref(false);
+const boardBoundary = ref<InstanceType<typeof BoardErrorBoundary> | null>(null);
+// No boundary mounted means no board, so nothing has failed.
+const boardFailed = computed(() => boardBoundary.value?.failed ?? false);
 const chromeDrawn = computed(() => host.view.value !== null && host.phase.value !== 'refused');
 watch(
   chromeDrawn,

@@ -79,6 +79,7 @@ async function travelTable(seed: string) {
   const Host = defineComponent({
     setup: () => () =>
       h(ActionPanel, {
+        boardFailed: false,
         availableActions: seatState.value.availableActions ?? [],
         actionMetadata: wiring.actionMetadata.value,
         isMyTurn: true,

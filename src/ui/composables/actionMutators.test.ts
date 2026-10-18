@@ -183,6 +183,7 @@ function mountTable(opts: ParityOptions) {
       });
       return () =>
         h(ActionPanel, {
+          boardFailed: false,
           availableActions: availableActions.value,
           actionMetadata: metadata.value,
           disabledActions: disabledActions.value,

@@ -27,6 +27,7 @@ describe('ActionPanel Action Panel suppression (LIBX-01)', () => {
         },
       },
       props: {
+        boardFailed: false,
         availableActions: ['hiddenAction', 'visibleAction'],
         actionMetadata: {
           hiddenAction: {
@@ -62,6 +63,7 @@ describe('ActionPanel Action Panel suppression (LIBX-01)', () => {
         },
       },
       props: {
+        boardFailed: false,
         availableActions: ['hiddenAction'],
         actionMetadata: {
           hiddenAction: {

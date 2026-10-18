@@ -36,6 +36,7 @@ function mountPanel(actions: Meta[], extra: Partial<ActionPanelProps> = {}) {
     global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
     attachTo: document.body,
     props: {
+      boardFailed: false,
       availableActions: actions.map((a) => a.name),
       actionMetadata: metadata,
       isMyTurn: true,

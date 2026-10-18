@@ -84,6 +84,7 @@ function panelOver(
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
       attachTo: document.body,
       props: {
+        boardFailed: false,
         availableActions: ['boost'],
         actionMetadata: metadata,
         isMyTurn: true,
@@ -216,7 +217,7 @@ describe('the price of the draft is on the bar before Done (#248)', () => {
     const wrapper = mount(ActionPanel, {
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
       attachTo: document.body,
-      props: { availableActions: ['plain'], actionMetadata: { plain }, isMyTurn: true },
+      props: { boardFailed: false, availableActions: ['plain'], actionMetadata: { plain }, isMyTurn: true },
     });
     await settled();
 

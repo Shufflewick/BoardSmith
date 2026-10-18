@@ -144,8 +144,11 @@ const props = defineProps<{
    * Absent and `false` both mean the list on screen is the whole answer.
    */
   actionsPending?: boolean;
-  /** True while the board shows its error message in place of the board (#1153): the panel hands no pick to it. */
-  boardFailed?: boolean;
+  /**
+   * True while the shell's BoardErrorBoundary shows its message in place of the
+   * board (#1153): there is no board to choose on, so the panel hands no pick to it.
+   */
+  boardFailed: boolean;
 }>();
 
 const emit = defineEmits<{

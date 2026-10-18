@@ -173,6 +173,7 @@ describe('GoFish ask interaction tests', () => {
         provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller },
       },
       props: {
+        boardFailed: false,
         availableActions: ['ask'],
         isMyTurn: true,
         autoFill: false,      // controller already handled auto-fill above

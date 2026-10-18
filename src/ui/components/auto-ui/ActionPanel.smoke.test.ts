@@ -26,6 +26,7 @@ describe('ActionPanel smoke test', () => {
         },
       },
       props: {
+        boardFailed: false,
         availableActions: [],
         isMyTurn: true,
       },

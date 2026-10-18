@@ -1397,6 +1397,7 @@ defineExpose({
          `gatedIsMyTurn`. -->
     <PlayShell
       ref="playShell"
+      :board-failed="boardFailed"
       :players="panelPlayers"
       :player-seat="playerSeat"
       :due-seats="dueSeatsNow"

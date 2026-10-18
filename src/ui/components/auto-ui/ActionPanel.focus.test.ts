@@ -56,7 +56,7 @@ function mountPanel() {
   const wrapper = mount(ActionPanel, {
     attachTo: document.body,
     global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
-    props: { availableActions: ['enterWorld'], isMyTurn: true },
+    props: { boardFailed: false, availableActions: ['enterWorld'], isMyTurn: true },
   });
   return { wrapper, controller, sendAction };
 }
@@ -189,7 +189,7 @@ describe('a six-selection action, the shape the report measured', () => {
     const wrapper = mount(ActionPanel, {
       attachTo: document.body,
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
-      props: { availableActions: ['create'], isMyTurn: true },
+      props: { boardFailed: false, availableActions: ['create'], isMyTurn: true },
     });
     await nextTick();
 
@@ -349,7 +349,7 @@ describe('a step whose choices are still loading (#653)', () => {
     const wrapper = mount(ActionPanel, {
       attachTo: document.body,
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
-      props: { availableActions: ['enterWorld'], isMyTurn: true },
+      props: { boardFailed: false, availableActions: ['enterWorld'], isMyTurn: true },
     });
     await nextTick();
 
