@@ -1,10 +1,13 @@
-import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { describe, it, expect, vi } from 'vitest';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_COLOR_PALETTE } from '../../engine/index.js';
 import {
-  DevFlagError,
+  assertWorldProjectForReset,
   devCommand,
+  parseSeedFile,
   parseBotSeats,
   resolveEffectivePlayerCount,
   validateBotSeats,
@@ -20,6 +23,21 @@ import {
 } from './dev.js';
 import { describeTableReload, tableShapeChange } from './dev-table-runtime.js';
 import { createColorOption, type OpSuccess } from '../../session/index.js';
+import { hostHoldings } from '../dev-host/shutdown.js';
+
+// Counts the shared cleanup runs, so a refusal can be shown to go through it.
+const cleanups = vi.hoisted(() => ({ runs: 0 }));
+vi.mock('../dev-host/shutdown.js', async (importOriginal) => {
+  const shutdown = await importOriginal<typeof import('../dev-host/shutdown.js')>();
+  return {
+    ...shutdown,
+    hostHoldings: (...args: Parameters<typeof hostHoldings>) => {
+      const holdings = shutdown.hostHoldings(...args);
+      const run = holdings.run;
+      return { ...holdings, run: () => { cleanups.runs += 1; return run(); } };
+    },
+  };
+});
 
 /**
  * PROC-02 regressions for CLIX-01/CLIX-02/CLIX-04/CLIX-06 (135-06-PLAN.md).
@@ -32,13 +50,22 @@ import { createColorOption, type OpSuccess } from '../../session/index.js';
 
 const NOT_POSITIVE_WHOLE = ['0', '-1', '1.5', '1e3', '12abc', ''];
 
+/** What `refuse` throws, checked to be exactly `message` on a plain Error, the one style `cli.ts` prints as one line. */
+function expectRefusal(refuse: () => unknown, message: string): void {
+  let refusal: unknown;
+  try { refuse(); } catch (error) { refusal = error; }
+  expect(refusal).toBeInstanceOf(Error);
+  expect((refusal as Error).constructor).toBe(Error);
+  expect((refusal as Error).message).toBe(message);
+}
+
 /** devCommand rejects with exactly `message`, as a plain Error `cli.ts` prints as one line. */
 async function expectDevRefusal(options: Parameters<typeof devCommand>[0], message: string): Promise<void> {
   const listening = { SIGINT: process.listeners('SIGINT'), SIGTERM: process.listeners('SIGTERM') };
   try {
     const refusal = await devCommand(options).then(() => undefined, (error: unknown) => error);
     expect(refusal).toBeInstanceOf(Error);
-    expect(refusal).not.toBeInstanceOf(DevFlagError);
+    expect((refusal as Error).constructor).toBe(Error);
     expect((refusal as Error).message).toBe(message);
   } finally {
     // devCommand installs its Ctrl+C handlers first and never removes them; a test run must not keep them.
@@ -70,6 +97,84 @@ describe('dev refuses a count flag that is not a positive whole number (#1047)',
   });
 });
 
+describe('every dev flag refusal is a plain one-line Error naming the flag, what it takes and what it got (#1126)', () => {
+  it('--port a browser blocks is refused, through the shared cleanup, without exiting the process', async () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new Error(`process.exit(${code}) was called`);
+    });
+    const before = cleanups.runs;
+    try {
+      await expectDevRefusal(
+        { port: '6000' },
+        '--port takes a port browsers allow, got "6000", which browsers block for security. ' +
+          'Try 5173, 3000, 8080, or another port above 1024 that is not on that list.',
+      );
+      expect(exit).not.toHaveBeenCalled();
+      expect(cleanups.runs).toBe(before + 1);
+    } finally {
+      exit.mockRestore();
+    }
+  });
+
+  it('--seed with no file there', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'bs-seed-')), 'missing.json');
+    expectRefusal(() => parseSeedFile(path), `--seed takes a recorded game state JSON file, got "${path}", which does not exist.`);
+  });
+
+  it('--seed naming something that cannot be read as a file', () => {
+    const path = mkdtempSync(join(tmpdir(), 'bs-seed-'));
+    let reason = '';
+    try { readFileSync(path, 'utf-8'); } catch (error) { reason = (error as Error).message; }
+    expectRefusal(() => parseSeedFile(path), `--seed takes a recorded game state JSON file, got "${path}", which could not be read: ${reason}.`);
+  });
+
+  it('--seed naming a file that is not JSON', () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'bs-seed-')), 'seed.json');
+    writeFileSync(path, 'not json');
+    let reason = '';
+    try { JSON.parse('not json'); } catch (error) { reason = (error as Error).message; }
+    expectRefusal(() => parseSeedFile(path), `--seed takes a recorded game state JSON file, got "${path}", which is not valid JSON: ${reason}.`);
+  });
+
+  it('--preset naming a preset the game does not declare', () => {
+    expectRefusal(
+      () => resolvePreset([{ name: 'advanced', options: {} }, { name: 'quick', options: {} }], 'nope'),
+      '--preset takes a preset this game declares (advanced, quick), got "nope".',
+    );
+  });
+
+  it('--preset on a game that declares none', () => {
+    expectRefusal(() => resolvePreset(undefined, 'nope'), '--preset takes a preset this game declares (it declares none), got "nope".');
+  });
+
+  it.each(['expert', '0', '-5', '100001'])('--bot-level "%s"', (level) => {
+    expectRefusal(() => validateBotLevel(level), `--bot-level takes easy, medium, hard or an iteration count from 1 to 100000, got "${level}".`);
+  });
+
+  it('--reset on a project with no world', () => {
+    expectRefusal(
+      () => assertWorldProjectForReset(false),
+      '--reset takes a project that declares "backend": "world" in boardsmith.json, got one that does not, so there is no world to delete. ' +
+        'A table game keeps its cross-session state in .boardsmith-dev-store.json; delete that file directly if that is what you meant.',
+    );
+  });
+
+  it('--bot naming a seat the game does not have', () => {
+    expectRefusal(() => validateBotSeats([3, 5], 2), '--bot takes seats from 1 to 2 for this game, got "3,5".');
+  });
+
+  it('--lan together with --host', () => {
+    expectRefusal(
+      () => resolveHost({ lan: true, host: '127.0.0.1' }),
+      '--lan takes no --host, since it is shorthand for --host 0.0.0.0, got --host 127.0.0.1. Pass one or the other.',
+    );
+  });
+
+  it('--game-option without "="', () => {
+    expectRefusal(() => parseGameOptionFlags(['difficulty']), '--game-option takes "key=value", got "difficulty".');
+  });
+});
+
 describe('validateBotLevel (--bot-level names a real preset or a real count)', () => {
   it.each(['easy', 'medium', 'hard'])('accepts the preset %s', (level) => {
     expect(() => validateBotLevel(level)).not.toThrow();
@@ -79,16 +184,6 @@ describe('validateBotLevel (--bot-level names a real preset or a real count)', (
     expect(() => validateBotLevel('750')).not.toThrow();
   });
 
-  it('rejects expert, which reads like a preset but never was one', () => {
-    expect(() => validateBotLevel('expert')).toThrow(DevFlagError);
-    expect(() => validateBotLevel('expert')).toThrow(/--bot-level/);
-    expect(() => validateBotLevel('expert')).toThrow(/easy, medium, hard/);
-  });
-
-  it('rejects a nonsensical count rather than starting at some other strength', () => {
-    expect(() => validateBotLevel('0')).toThrow(DevFlagError);
-    expect(() => validateBotLevel('-5')).toThrow(DevFlagError);
-  });
 });
 
 describe('parseBotSeats (CLIX-06: fail-fast --bot parsing, no silent filtering)', () => {
@@ -105,9 +200,7 @@ describe('parseBotSeats (CLIX-06: fail-fast --bot parsing, no silent filtering)'
 describe('resolveEffectivePlayerCount (CLIX-06: error, not clamp, on out-of-range --players)', () => {
   // One style for every --players refusal (#1119): the shared number check's wording, as a plain Error.
   it.each([[6, 2, 4], [1, 2, 4]])('refuses --players %i for a %i-%i game in the shared style', (count, min, max) => {
-    const refusal = (() => { try { resolveEffectivePlayerCount(count, min, max); } catch (error) { return error; } })();
-    expect(refusal).not.toBeInstanceOf(DevFlagError);
-    expect((refusal as Error).message).toBe(`--players takes a whole number from ${min} to ${max} for this game, got "${count}".`);
+    expectRefusal(() => resolveEffectivePlayerCount(count, min, max), `--players takes a whole number from ${min} to ${max} for this game, got "${count}".`);
   });
 
   it('returns playerCount unchanged when it is within [minPlayers, maxPlayers]', () => {
@@ -124,8 +217,7 @@ describe('validateBotSeats (CLIX-06/F34: validated against the effective post-re
     // Pitfall 3 regression: a seat that would have passed against a raw
     // pre-clamp playerCount must still be rejected once validated against
     // the effective (post-resolution) count.
-    expect(() => validateBotSeats([5], 2)).toThrow(DevFlagError);
-    expect(() => validateBotSeats([5], 2)).toThrow(/1 to 2/);
+    expectRefusal(() => validateBotSeats([5], 2), '--bot takes seats from 1 to 2 for this game, got "5".');
   });
 });
 
@@ -158,13 +250,11 @@ describe('resolveHost (CLIX-04: default 127.0.0.1, --lan/--host 0.0.0.0 opts int
     // Pre-fix, `--lan --host 127.0.0.1` bound local-only and dropped the
     // security-relevant --lan without any notice — the same silent-ignore
     // class of defect this phase removed from --bot/--players.
-    expect(() => resolveHost({ lan: true, host: '127.0.0.1' })).toThrow(DevFlagError);
-    expect(() => resolveHost({ lan: true, host: '127.0.0.1' })).toThrow(/--lan/);
-    expect(() => resolveHost({ lan: true, host: '127.0.0.1' })).toThrow(/--host/);
+    expect(() => resolveHost({ lan: true, host: '127.0.0.1' })).toThrow(/^--lan takes no --host/);
   });
 
   it('errors even when --lan and --host agree — pass one or the other', () => {
-    expect(() => resolveHost({ lan: true, host: '0.0.0.0' })).toThrow(DevFlagError);
+    expect(() => resolveHost({ lan: true, host: '0.0.0.0' })).toThrow(/^--lan takes no --host/);
   });
 });
 
@@ -276,12 +366,6 @@ describe('parseGameOptionFlags (D13/DEVHOST-01: repeatable `--game-option key=va
     expect(parseGameOptionFlags(['note=a=b'])).toEqual({ note: 'a=b' });
   });
 
-  it('throws an actionable DevFlagError on an entry missing "="', () => {
-    expect(() => parseGameOptionFlags(['difficulty'])).toThrow(DevFlagError);
-    expect(() => parseGameOptionFlags(['difficulty'])).toThrow(/--game-option/);
-    expect(() => parseGameOptionFlags(['difficulty'])).toThrow(/"difficulty"/);
-  });
-
   it('returns an empty record when no flags were passed', () => {
     expect(parseGameOptionFlags(undefined)).toEqual({});
     expect(parseGameOptionFlags([])).toEqual({});
@@ -308,11 +392,8 @@ describe('resolvePreset (D13: applying a preset returns its options bundle + opt
     expect(resolvePreset(presets, 'quick').playerCount).toBeUndefined();
   });
 
-  it('throws an actionable DevFlagError naming the unknown preset and the declared names', () => {
-    expect(() => resolvePreset(presets, 'nope')).toThrow(DevFlagError);
-    expect(() => resolvePreset(presets, 'nope')).toThrow(/"nope"/);
-    expect(() => resolvePreset(presets, 'nope')).toThrow(/advanced/);
-    expect(() => resolvePreset(presets, 'nope')).toThrow(/quick/);
+  it('refuses an unknown preset, naming the declared ones', () => {
+    expectRefusal(() => resolvePreset(presets, 'nope'), '--preset takes a preset this game declares (advanced, quick), got "nope".');
   });
 });
 
