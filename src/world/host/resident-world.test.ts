@@ -167,15 +167,15 @@ describe('#793: ResidentWorld', () => {
     await world.clockCommand('arm', {});
     advance(3 * MINUTE);
 
-    const refusal = world.run(() =>
-      world.command({ player: worldSeatPlayer(1), order: { id: 'o1', at: OPENED }, action: 'poke', args: {} }),
-    );
-    await expect(refusal).rejects.toMatchObject({ code: 'world-catching-up' });
-    const message = (await refusal.catch((error: Error) => error)).message;
-    expect(message).toContain('"boom"');
-    expect(message).not.toMatch(/in a moment/);
+    const refusal: unknown = await world
+      .run(() =>
+        world.command({ player: worldSeatPlayer(1), order: { id: 'o1', at: OPENED }, action: 'poke', args: {} }),
+      )
+      .catch((error: unknown) => error);
+    expect(refusal).toMatchObject({ code: 'world-catching-up', message: expect.stringContaining('"boom"') });
+    expect((refusal as Error).message).not.toMatch(/in a moment/);
     // The game's own error text is for the author's notice, not the player.
-    expect(message).not.toContain('refused on purpose');
+    expect((refusal as Error).message).not.toContain('refused on purpose');
   });
 
   it('still says "in a moment" when the world is only catching up (#939)', async () => {
