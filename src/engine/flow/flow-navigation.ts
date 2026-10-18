@@ -51,10 +51,13 @@ export function flowChildCount<G extends Game>(node: FlowNode<G>): number {
   return flowChildren(node).length;
 }
 
+/** The key a switch frame saves for its default branch; switchOn() refuses it as a case name. */
+export const SWITCH_DEFAULT_KEY = '__default';
+
 /** The case a switch frame took, by its saved key; -1 when the rules no longer have it. */
 function switchBranchIndex<G extends Game>(config: SwitchConfig<G>, branchKey: unknown): number {
   const caseKeys = Object.keys(config.cases);
-  if (branchKey === '__default') {
+  if (branchKey === SWITCH_DEFAULT_KEY) {
     return config.default ? caseKeys.length : -1;
   }
   return typeof branchKey === 'string' ? caseKeys.indexOf(branchKey) : -1;
