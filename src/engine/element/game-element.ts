@@ -296,22 +296,25 @@ export function forEachInSubtree(element: GameElement, visit: (element: GameElem
 }
 
 /**
- * Give every child of `pile` a fresh placeholder token (#715), which no
- * element's id or token has been, so every placeholder a seat knew them by
- * names nothing. Called when a card enters or leaves a pile some seat cannot
- * see into, and when a space is shuffled: the ids are sent in pile order, so
- * any id that stayed would show where a card went in, which one left, or where
- * one was moved to within the pile. Only the children: what sits below one is
- * a pile of its own, which this move did not touch, and a seat that cannot see
- * into `pile` is sent nothing below its children. A token is minted from the
- * creation counter, as an id is, so each card reissued spends one of the
- * game's 2^32 creations (a world's 2^48).
+ * Give every child of `pile`, and everything under it, a fresh placeholder
+ * token (#715), which no element's id or token has been, so every placeholder
+ * a seat knew them by names nothing. Called when a card enters or leaves a pile
+ * some seat cannot see into, and when a space is shuffled: the ids are sent in
+ * pile order, so any id that stayed would show where a card went in, which one
+ * left, or where one was moved to within the pile. Whole subtrees, because a
+ * pick names a hidden element at any depth by its own token (`seatIdOf`), so a
+ * kept token on something inside a card would show where the card went, as a
+ * kept grant would (#962). A token is minted from the creation counter, as an
+ * id is, so each element reissued spends one of the game's 2^32 creations (a
+ * world's 2^48).
  */
 export function reissuePlaceholders(pile: GameElement): void {
   for (const child of pile._t.children) {
-    child._t.placeholderToken = child._ctx.ids.mint(child._ctx.sequence++);
-    // A nested partition root's token is that partition's write.
-    markTouchedPartition(child);
+    forEachInSubtree(child, (reissued) => {
+      reissued._t.placeholderToken = reissued._ctx.ids.mint(reissued._ctx.sequence++);
+      // A nested partition root's token is that partition's write.
+      markTouchedPartition(reissued);
+    });
   }
 }
 

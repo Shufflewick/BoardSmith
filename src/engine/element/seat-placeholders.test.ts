@@ -90,6 +90,21 @@ describe('every card in a hidden pile is reissued when one enters or leaves it (
     expect(idsFor2(deck).filter((id) => before.includes(id))).toEqual([]);
   });
 
+  it('reissues what the cards hold too, which a pick names at any depth, across a shuffle and a move', () => {
+    const { game, deck, hand } = setup();
+    const markers = deck.all(Card).map((card) => card.create(Card, `marker-${card.name}`));
+    const markerIds = () => markers.map((marker) => seatIdOf(marker, 2));
+    const atStart = markerIds();
+    expect(atStart.every((id) => id < 0)).toBe(true);
+
+    deck.shuffle();
+    const shuffled = markerIds();
+    expect(shuffled.filter((id) => atStart.includes(id))).toEqual([]);
+
+    game.first(Card, 'AS')!.putInto(hand(1));
+    expect(markerIds().filter((id) => shuffled.includes(id))).toEqual([]);
+  });
+
   it('keeps the ids of a pile nothing entered or left while cards move elsewhere', () => {
     const { game, hand, table } = setup();
     const card = game.first(Card, 'AS')!;

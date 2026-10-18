@@ -257,8 +257,10 @@ so the board and the action panel always agree on which card is which.
 - **Stable while its pile is untouched, and the seat's own.** A card keeps
   its placeholder until its pile is shuffled (`shuffle()`, which also clears
   grants, #962) or a card enters or leaves the pile; then every card in that
-  pile gets a new one. A pile here is a place some seat cannot see into: a
-  hidden, count-only or owner-only zone, or anything under a hidden element. A
+  pile gets a new one, everything the cards hold included, since a pick names
+  a hidden element at any depth. A pile here is a place some seat cannot see
+  into: a hidden, count-only or owner-only zone, or anything under a hidden
+  element. A
   move into such a pile reissues the whole destination pile, a move out of one
   reissues every card left in the source, and a move within one reissues it
   too, since the placeholders are sent in pile order and a kept id would show
@@ -297,8 +299,9 @@ so the board and the action panel always agree on which card is which.
   (`showOnlyTo`, `hideFrom`) on a table the seat can see keeps its real id, so
   a flip animates. A seat may name it by that id.
 - **What it costs.** One number on each element that has been shuffled or
-  reissued since it was created, and one creation-counter value per card in
-  each hidden pile a move touches (`docs/state-size.md` bounds it). A seat
+  reissued since it was created, and one creation-counter value per element
+  in each hidden pile a move touches, what the cards hold included
+  (`docs/state-size.md` bounds it). A seat
   shown any placeholder now gets a view of its own when one update goes out to
   many seats (`projectionSignaturesFor`), where before seats with the same
   visibility shared one encoded view.
