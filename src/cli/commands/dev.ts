@@ -699,8 +699,10 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   const rulesPath = resolveRulesDir(cwd, config);
 
   if (!existsSync(uiPath)) {
-    console.error(styleText('red', `Error: UI path not found: ${uiPath}`));
-    process.exit(1);
+    throw new Error(
+      `The UI directory ${uiPath} does not exist. "paths.ui" in boardsmith.json names it; ` +
+        'create that directory, or point "paths.ui" at the directory that holds your index.html.',
+    );
   }
 
   const rulesIndexPath = requireRulesIndex(rulesPath);
