@@ -9,7 +9,7 @@
  * reference the seat can follow keeps its branch.
  */
 import type { Game } from './game.js';
-import { hasZoneVisibility, type GameElement } from './game-element.js';
+import { hasZoneVisibility, ownVisibilityAllows, type GameElement } from './game-element.js';
 import { canPlayerSee } from './visibility.js';
 
 /** `value` with every `{ __elementRef }` in it rewritten for the seat at `position` (-1 for a spectator). */
@@ -35,7 +35,7 @@ export function outermostConcealer(element: GameElement, position: number): Game
   for (let ancestor = element.parent; ancestor; ancestor = ancestor.parent) ancestors.unshift(ancestor);
   return ancestors.find((ancestor) => {
     // Searched outermost first, so every ancestor above this one is visible (#1123).
-    if (!ancestor._ownVisibilityAllows(position)) return true;
+    if (!ownVisibilityAllows(ancestor, position)) return true;
     const zone = hasZoneVisibility(ancestor) ? ancestor.getZoneVisibility() : undefined;
     return zone !== undefined && !canPlayerSee(zone, position, ancestor.getEffectiveOwner()?.seat);
   });

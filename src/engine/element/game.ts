@@ -9,6 +9,7 @@ import {
   isPlayerElement,
   isPlayerIdentityAttribute,
   lookUpId,
+  ownVisibilityAllows,
   PILE_BRANCH,
   WITHHELD_PILE_BRANCH,
   readDynamicAttribute,
@@ -4815,7 +4816,7 @@ export class Game<
     // #758: a child of a concealed zone whose own grant reaches this seat goes out whole.
     const grantedChild = (element: GameElement, i: number, childJson: ElementJSON): ElementJSON | null => {
       const child = element._t.children[i];
-      return child?._ownVisibilityAllows(visibilityPosition) ? filterElement(childJson, child) : null;
+      return child && ownVisibilityAllows(child, visibilityPosition) ? filterElement(childJson, child) : null;
     };
 
     // A CONCEALED ZONE'S CHILDREN AS ANONYMOUS PLACEHOLDERS, for the count-only
@@ -4856,7 +4857,7 @@ export class Game<
       // Handle count-only mode: show count but not contents
       // Preserve element name and safe $-prefixed system attributes (like $type) for AutoUI
       // rendering; redact identity-bearing image refs ($image, $images.face).
-      if (visibility.mode === 'count-only' && !element._ownVisibilityAllows(visibilityPosition)) {
+      if (visibility.mode === 'count-only' && !ownVisibilityAllows(element, visibilityPosition)) {
         // Drop `name` — for a leaf element (e.g. a Card named "AS") the name is
         // identity-bearing. Seed __hidden so the SEC-02 regression guard
         // (collectAllHiddenAttrs) sweeps this surface too.
@@ -4869,7 +4870,7 @@ export class Game<
       }
 
       // Its ancestors were all visible, or this walk would not have reached it (#1123).
-      if (!element._ownVisibilityAllows(visibilityPosition)) {
+      if (!ownVisibilityAllows(element, visibilityPosition)) {
         // Return a hidden placeholder.
         //
         // INTENTIONAL ASYMMETRY (WR-02, iteration 2): unlike the zone branches
