@@ -9,7 +9,7 @@
  *   C. An absent `color` prop still renders without throwing (safe default
  *      ink; must not call the throwing parser with undefined).
  *   D. A CSS named color ('crimson') and hsl() color render without throwing
- *      (164-CR-02: createColorOption() accepts any CSS color string).
+ *      (164-CR-02: colorPalette accepts any CSS color string).
  *   E. A genuinely unparseable color degrades to the safe default ink
  *      (no render-path crash) and emits one actionable dev warning, rather
  *      than throwing inside the computed.
@@ -45,7 +45,7 @@ describe('PlayerToken contrast ink', () => {
     expect(() => mount(PlayerToken, { props: { name: 'Carol', seat: 2 } })).not.toThrow();
   });
 
-  it('renders without throwing for a CSS named color (createColorOption() allows any CSS color, 164-CR-02)', () => {
+  it('renders without throwing for a CSS named color (colorPalette allows any CSS color, 164-CR-02)', () => {
     const wrapper = mount(PlayerToken, {
       props: { name: 'Dave', seat: 3, color: 'crimson' },
     });

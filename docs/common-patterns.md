@@ -313,6 +313,12 @@ seen by the hand's owner and the peeking seat. `showToAll`, `showOnlyTo`,
 `hideFromAll` and `setVisibility` replace the zone's rule and move with the
 card as a whole. `card.clearVisibility()` drops all of it.
 
+`shuffle()` drops all of it too, for every element in the shuffled space and
+everything inside them, so a seat that peeked at a card cannot follow it to its
+new position (#962). The shuffled space's own visibility and its zone rule
+(`contentsHidden()` and the like) stay as they were. To keep a card revealed
+after a shuffle, apply its grant again once the shuffle is done.
+
 ### Hiding a Space Itself
 
 The same methods are on every element, so a `Space` can declare its own

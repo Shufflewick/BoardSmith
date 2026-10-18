@@ -14,8 +14,8 @@
  * };
  * ```
  *
- * Custom colours belong in boardsmith.json's `colorPalette`: that is the list the
- * live lobby uses, and `boardsmith dev` refuses a code-declared list that differs (#814).
+ * Custom colours belong only in boardsmith.json's `colorPalette`: that is the list
+ * the live lobby uses (#814, #994).
  */
 
 import { DEFAULT_COLOR_PALETTE, DEFAULT_COLOR_LABELS } from '../engine/element/seat-defaults.js';
@@ -38,9 +38,10 @@ export interface ColorOptionDefinition {
 }
 
 /**
- * Create a color player option with the engine palette or custom colors
+ * Create a color player option with the engine palette. A game's own colours
+ * belong in boardsmith.json's `colorPalette`, the one list dev and the live
+ * lobby both use (#994).
  *
- * @param colors - Custom color choices (optional, defaults to the engine's DEFAULT_COLOR_PALETTE, named)
  * @param label - Label for the option (optional, defaults to 'Color')
  * @returns A player option definition for use in gameDefinition.playerOptions
  *
@@ -50,19 +51,11 @@ export interface ColorOptionDefinition {
  *   color: createColorOption(), // The engine palette
  * }
  * ```
- *
- * A custom `colors` list must equal boardsmith.json's `colorPalette`, the list the
- * live lobby uses; `boardsmith dev` refuses one that differs (#814).
  */
-export function createColorOption(
-  colors?: readonly ColorChoice[],
-  label = 'Color'
-): ColorOptionDefinition {
+export function createColorOption(label = 'Color'): ColorOptionDefinition {
   return {
     type: 'color' as const,
     label,
-    choices: colors
-      ? [...colors]
-      : DEFAULT_COLOR_PALETTE.map((value) => ({ value, label: DEFAULT_COLOR_LABELS[value]! })),
+    choices: DEFAULT_COLOR_PALETTE.map((value) => ({ value, label: DEFAULT_COLOR_LABELS[value]! })),
   };
 }
