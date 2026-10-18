@@ -692,6 +692,8 @@ describe('wallClockBudgets', () => {
     expect(wallClockBudgets(`${records}\nrs.forEach((r) => expect(r.name).toBe('a'));`)).toEqual([]);
     expect(wallClockBudgets(`${records}\nfor (const r of rs) expect(r.ms).toBeLessThan(5);`)).toHaveLength(1);
     expect(wallClockBudgets('const ds = [];\nds.push(Date.now() - s);\nexpect(ds.length).toBe(1);')).toEqual([]);
+    // A `length` the file itself declares is judged by its own value, not taken for a count.
+    expect(wallClockBudgets('const o = { length: Date.now() - s };\nexpect(o.length).toBeLessThan(5);')).toHaveLength(1);
   });
 
   it('judges the same array name per scope, durations in one function and counts in another (#1157)', () => {
