@@ -1,5 +1,5 @@
 {
-  "revision": 230,
+  "revision": 231,
   "surfaceHash": "5f7f005d097568f4",
   "payloadHash": "0e2d27db00239080",
   "formatHash": "3aff5d1f34f52ec0",
@@ -1783,6 +1783,14 @@
       "payloadHash": "0e2d27db00239080",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "Games may set checkpoints: { actionHistory: 'undo' } to keep only the action history undo reads, so a step of repeatable not-undoable moves has a fixed saved size; such snapshots carry actionHistoryBase, the number of dropped entries, GameRunner gains actionHistoryBase and actionCount, and GameRunner.replay takes the snapshot's history and refuses one that does not start at action 0 (#997). An undo refusal now names what set the undo limit (the not-undoable action just below it, or else the irreversible step). An older engine ignores the setting and keeps every entry, so a game using it needs this revision."
+    },
+    {
+      "revision": 231,
+      "date": "2026-10-18",
+      "surfaceHash": "5f7f005d097568f4",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A pick-by-pick action's history entry now names each pick where it was before the action, even when an earlier pick's onSelect or onEach moved it or shifted its neighbours, so replay, undo labels and debug history read it right (#1144). PendingActionState and SerializedPendingActionState gain branchesBeforePicks, which the platform's persisted pendingStates must carry through unchanged; completing a pending action saved by an older engine without it throws and asks the player to cancel it and take it again, so tables with a multi-step action in progress must stay on the revision that wrote them. A later pick of an element the same action's onSelect or onEach created now throws, naming the pick, instead of recording a ref replay cannot resolve."
     }
   ]
 }
