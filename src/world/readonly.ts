@@ -395,7 +395,9 @@ function projectedProperty(
         function (this: unknown, ...args: unknown[]) {
           return readOnlyProjection(Reflect.apply(call, projection, args));
         }
-    : () => (...args: unknown[]) => readOnlyProjection(Reflect.apply(call, target, args));
+    : // The real collection is keyed by real objects, and its forEach hands back live entries (#978).
+      // shortcut: a plain function used as a key is wrapped as a callback and misses; name the key methods if a game needs one.
+      () => (...args: unknown[]) => readOnlyProjection(Reflect.apply(call, target, throughTheDoor(args)));
   return receiver === projection ? cachedWrapper(target, call, build) : build();
 }
 
