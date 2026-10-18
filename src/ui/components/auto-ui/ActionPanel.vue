@@ -144,6 +144,8 @@ const props = defineProps<{
    * Absent and `false` both mean the list on screen is the whole answer.
    */
   actionsPending?: boolean;
+  /** True while the board shows its error message in place of the board (#1153): the panel hands no pick to it. */
+  boardFailed?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -914,6 +916,7 @@ const anchoredChoices = computed(() => _splitChoices.value.anchored);
  * candidate must be reachable on the board before the panel will yield.
  */
 const deferPickToBoard = computed(() => {
+  if (props.boardFailed) return false;
   const type = currentPick.value?.type;
   if (type === 'choice') return shouldDeferChoicePickToBoard(offeredChoices.value);
   return shouldDeferElementPickToBoard(type, offeredElements.value);

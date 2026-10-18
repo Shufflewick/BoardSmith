@@ -246,3 +246,80 @@ describe('BoardErrorBoundary in production', () => {
     expect(alert.text()).not.toContain('secret internals');
   });
 });
+
+describe('GameShell board error boundary and a pick handed to the board (#1153)', () => {
+  /** 50 cells, each drawn on the board, so the panel hands the pick to the board. */
+  const validElements = Array.from({ length: 50 }, (_, i) => ({
+    id: i + 1,
+    display: `cell-${i + 1}`,
+    refs: [{ role: 'target', ref: { id: i + 1, notation: `c${i + 1}` } }],
+  }));
+
+  /** Seat 1's only action, `place`, asks for one cell, so auto mode opens the pick. */
+  function cellPickFrame(broken: boolean): Record<string, unknown> {
+    const selections = [{ name: 'cell', type: 'element', prompt: 'Select a cell' }];
+    const seatFrame = frame(broken, 'unused') as { view: { flowState: Record<string, unknown>; state: Record<string, unknown> } };
+    seatFrame.view.flowState.availableActions = ['place'];
+    Object.assign(seatFrame.view.state, { availableActions: ['place'], actionMetadata: { place: { name: 'place', prompt: 'Place', selections } } });
+    return seatFrame;
+  }
+
+  type Posted = { type?: string; op?: string; requestId?: string };
+
+  /** Answer every cell fetch not yet answered, as a live server does. */
+  async function answerFetches(posted: Posted[], answered: Set<string>): Promise<void> {
+    for (const request of posted) {
+      if (request.op !== 'resolve_choices' || answered.has(request.requestId!)) continue;
+      answered.add(request.requestId!);
+      fromHost({ type: 'server_response', requestId: request.requestId, result: { success: true, validElements } });
+    }
+    await flushPromises();
+  }
+
+  async function mountCellPick() {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const posted = enterIframe() as Posted[];
+    const answered = new Set<string>();
+    const wrapper = mountPlatformShell({ board: ThrowingBoard });
+    mounted.push(wrapper);
+    await nextTick();
+    fromHost({ type: 'init', seat: 1 });
+    fromHost(cellPickFrame(true));
+    await flushPromises();
+    await answerFetches(posted, answered);
+    const panel = () => wrapper.find('#bs-actionbar .action-panel-root');
+    const nextFrame = async (broken: boolean) => {
+      fromHost(cellPickFrame(broken));
+      await flushPromises();
+      await answerFetches(posted, answered);
+    };
+    return { wrapper, posted, panel, nextFrame };
+  }
+
+  it('lists the candidates in the panel while the board shows its error, and a listed one can be picked', async () => {
+    const { wrapper, posted, panel } = await mountCellPick();
+    expect(wrapper.find('[data-testid="bs-board-error"]').exists()).toBe(true);
+    expect(panel().text()).toContain('Select a cell');
+
+    expect(panel().find('.board-handoff-btn').exists(), 'there is no board to choose on').toBe(false);
+    const cells = panel().findAll('.element-btn');
+    expect(cells).toHaveLength(50);
+
+    await cells[6].trigger('click');
+    await flushPromises();
+    const sent = posted.find((m) => m.type === 'server_request' && m.op === 'action');
+    expect(sent, 'picking a listed cell sends the action').toBeDefined();
+    expect(JSON.stringify(sent)).toContain('"cell":7');
+  });
+
+  it('hands the pick back to the board when the board draws again', async () => {
+    const { wrapper, panel, nextFrame } = await mountCellPick();
+    expect(panel().findAll('.element-btn')).toHaveLength(50);
+
+    await nextFrame(false);
+    expect(wrapper.find('.good-board').exists()).toBe(true);
+    expect(panel().findAll('.element-btn')).toHaveLength(0);
+    expect(panel().find('.board-handoff-btn').text()).toBe('Choose on the board (50)');
+  });
+});
