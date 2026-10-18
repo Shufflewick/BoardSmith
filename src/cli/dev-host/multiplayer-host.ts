@@ -946,6 +946,11 @@ export class MultiplayerHost {
       this.send(clientId, { type: 'error', message: `Seat ${msg.seat} is taken.` });
       return;
     }
+    // The page's frame is unchecked JSON, and a refusal here leaves no seat half assigned (#887).
+    if (![msg.name, msg.color].every((text) => text === undefined || typeof text === 'string')) {
+      this.send(clientId, { type: 'error', message: `Seat ${msg.seat} was not taken: its name and color must be text.` });
+      return;
+    }
     this.assignSeat(clientId, msg.seat, msg.name, msg.color);
     if (this.followShared()) await this.endFollow(FOLLOW_SHARED);
     this.send(clientId, { type: 'joined', seat: msg.seat });

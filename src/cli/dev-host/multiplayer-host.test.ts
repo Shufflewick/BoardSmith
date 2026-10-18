@@ -182,6 +182,16 @@ describe('MultiplayerHost (always-live)', () => {
     expect(lastOfType('B', 'error')).toBeTruthy();
   });
 
+  it.each([{ name: 42 }, { color: {} }])('#887: refuses a join with %o, and leaves the seat open', async (bad) => {
+    const { host, lastOfType } = makeHost();
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('B', { type: 'hello' });
+    await host.handleMessage('B', { type: 'join', seat: 2, ...(bad as any) });
+    expect(lastOfType('B', 'error').message).toBe('Seat 2 was not taken: its name and color must be text.');
+    await host.handleMessage('B', { type: 'getLobby', requestId: 'check' });
+    expect(lastOfType('B', 'lobby').seats.find((s: any) => s.seat === 2)).toMatchObject({ held: false, connected: false });
+  });
+
   it('routes an in-game action to the session and responds to the actor', async () => {
     const { host, to, has, clear } = makeHost();
     await host.handleMessage('A', { type: 'hello' });
