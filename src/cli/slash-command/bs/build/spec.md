@@ -212,7 +212,7 @@ The reason cell must not be empty, and the only other rows allowed beside it are
 rows; anything else is refused. The row is written that way
 so `boardsmith verify --chunk <slug>` can read it too: an exempt chunk that adds or changes no test file
 passes its fast checks on typecheck alone, while any other chunk with no test of its own fails
-them (`state-machine.md` "Git Protocol"). It is the same "name the exemption explicitly rather than
+them from its `chunk-<slug>/step-spec` commit on (`state-machine.md` "Git Protocol"). It is the same "name the exemption explicitly rather than
 silently omitting" discipline `build/test.md` items 3(i) and 4 already use. A chunk trivial enough
 to be genuinely exempt is usually a chunk that should have been tagged `light` at proposal time
 (`state-machine.md` "Step Names (exact, light path — trivial chunks)").

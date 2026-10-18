@@ -14,6 +14,14 @@
  * a view captures a real one with `getPlayerView` or `renderAsSeat` instead of
  * hand-building it.
  *
+ * A game attribute can be a plain record shaped `{ seat, name }`, which by shape
+ * alone is the short form (#1181). So a tree `getPlayerView` captured is marked
+ * engine-made and not checked. The mark is the tree object's membership of a
+ * WeakSet: rebuilding the `{ player, state }` wrapper around the same tree keeps
+ * it, while any copy of the tree itself (spread, JSON round trip,
+ * `structuredClone`) is a new object and is checked like a hand-built one. An
+ * edit made in place to a captured tree is not re-checked.
+ *
  * @module
  */
 
@@ -27,6 +35,14 @@ import type { ElementJSON } from '../engine/index.js';
  * game object that merely happens to have a seat.
  */
 const PLAYER_REF_FIELDS = new Set(['seat', 'color', 'name']);
+
+// A WeakSet rather than a property, so no copy of a tree can carry the mark to a hand-built one.
+const engineViews = new WeakSet<object>();
+
+/** Mark a tree the engine wrote for a seat, so the fixture check trusts it. */
+export function markEngineView(view: ElementJSON): void {
+  engineViews.add(view);
+}
 
 function isDriftedPlayerRef(value: object): boolean {
   if (Array.isArray(value)) return false;
@@ -71,6 +87,7 @@ function findDrift(value: unknown, path: string, seen: Set<unknown>): string | u
  * @throws Error naming the element and the attribute path that drifted
  */
 export function assertViewFixtureShape(view: ElementJSON, label = 'view fixture'): void {
+  if (engineViews.has(view)) return;
   walkNodes(view, label);
 }
 

@@ -124,9 +124,11 @@ export function hostHoldings(limitMs: number = STOP_LIMIT_MS): HostHoldings {
       try {
         const value = await opened;
         groups.push([...held(value)]);
+        // eslint-disable-next-line @typescript-eslint/return-await -- awaiting the never-settling `stopped` would keep the finally from ever running
         if (stopping) return stopped;
         return value;
       } catch (error) {
+        // eslint-disable-next-line @typescript-eslint/return-await -- awaiting the never-settling `stopped` would keep the finally from ever running
         if (stopping) return stopped;
         throw error;
       } finally {

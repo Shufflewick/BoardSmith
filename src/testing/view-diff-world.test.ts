@@ -22,6 +22,7 @@ import { describe, it, expect } from 'vitest';
 import { createTestWorld } from './test-world.js';
 import { diffPlayerViews, type ViewDiffResult } from './view-diff.js';
 import { codewordOf, keeperOf, vaultBundle } from './test-world.test-helper.js';
+import type { Game } from '../engine/index.js';
 
 /**
  * THE GUARANTEE THAT MATTERS IN A WORLD: each seat's room is absent from the
@@ -78,6 +79,30 @@ describe('diffPlayerViews across two seats of a world', () => {
     expectEachRoomAbsentFromTheOtherFrame(
       diffPlayerViews({ player: 1, state: a.state }, { player: 2, state: b.state }),
     );
+
+    await world.close();
+  });
+});
+
+describe('a world frame the engine made is trusted (#1181)', () => {
+  it('passes a captured frame whose game attribute is shaped { seat, name }', async () => {
+    const bundle = vaultBundle();
+    const genesis = bundle.world.genesis!;
+    // A plain record the game owns that, by shape alone, looks like a player reference.
+    const withHost = (game: Game) => {
+      const roots = genesis(game);
+      Object.assign(roots.commons!, { host: { seat: 1, name: 'Alice' } });
+      return roots;
+    };
+    const world = await createTestWorld({
+      definition: { ...bundle, world: { ...bundle.world, genesis: withHost } },
+    });
+    const a = await world.getPlayerView(1);
+    const b = await world.getPlayerView(2);
+
+    expect(() =>
+      diffPlayerViews({ player: 1, state: a.state }, { player: 2, state: b.state }),
+    ).not.toThrow();
 
     await world.close();
   });

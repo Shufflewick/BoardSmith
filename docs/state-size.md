@@ -65,7 +65,12 @@ state a ceiling that had moved by a factor of four.
   forever. Measured on an 8-seat game with a 6.5 KB model and three narration
   lines per action: 75 KB of log at 325 actions. The same game before the log
   moved out of the tree was 1671 KB, of which the model was under 8% — the log
-  was the snapshot.
+  was the snapshot. Those figures predate #1165, which also stores each line's
+  finished text with the seats that read it (`readings`): a line every seat
+  reads alike grows by its text's length plus about 55 bytes, and each seat
+  group that reads a hidden element differently adds one more copy. Measured
+  at 8 seats: a plain line with no data went from 63 to 168 bytes, and a
+  hidden draw from 146 to 267.
 
   Read `measureSnapshotSize().messageLogBytes` rather than inferring the log's
   share from the remainder, and note that `projectSnapshotSize` infers the log's
@@ -80,6 +85,12 @@ state a ceiling that had moved by a factor of four.
   per-entry identity would have made the fix for a size ceiling cost bytes per
   line. Splicing `game.messages` directly is not equivalent — it moves entries
   past a boundary the checkpoint no longer describes.
+
+  `keepLast` counts **per audience** (#1067): each seat, and spectators,
+  keeps its own last N lines and is shown no older ones, so what a seat sees
+  after the cut is the same whatever private lines other seats got. The log
+  then evicts from the front up to the earliest line any audience still keeps,
+  so it may hold more than N lines.
 
   ```typescript
   // At a round boundary, in the game's own upkeep:
@@ -103,16 +114,20 @@ state a ceiling that had moved by a factor of four.
   by audience, in two more root fields: `messagesEvictedPublic` (lines with no
   audience) and `messagesEvictedTo` (each seat's evicted private lines, a set
   per line so a seat named twice counts once). A seat's offset is the public
-  count plus its own entry, which is the same rule `messageTo()` filtering
-  uses; it reaches the client as `messageOffset` beside `messages`, absent
+  count plus its own entry, plus the lines it may see that the log still holds
+  but `keepLast` cut it from (#1067), which is the same rule `messageTo()`
+  filtering uses; it reaches the client as `messageOffset` beside `messages`, absent
   while zero, so `messages[i]` is that seat's line `messageOffset + i`. The
   shell's log and its unread badge count by that line number, so a log at its
   cap still shows and counts new lines (the badge never counts more lines than
   the log still holds). Storage is one number plus one per seat
-  ever addressed privately, never one per line. All three counts are restore
-  only: no seat's view carries them. A checkpoint restore (undo, a failed
-  action's rollback) takes the live counts, as it takes `messagesEvicted`
-  (#803), because the restored log is a slice of the live one. An undo can
+  ever addressed privately, never one per line. Each audience's cut, while it
+  is past the log's front, is one more root field, `messagesShownFrom` (an
+  absolute position by seat, `0` the spectator). All four are restore only: no
+  seat's view carries them. A checkpoint restore (undo, a failed action's
+  rollback) takes the live values, as it takes `messagesEvicted` (#803),
+  because the restored log is a slice of the live one; a cut past the restored
+  log's end is moved back to it, so lines written after the undo are shown. An undo can
   therefore reuse line numbers it took back, which the log treats as a
   different log and the badge as unread.
 - **A removed element is still in the saved state.** `remove()` moves an element to

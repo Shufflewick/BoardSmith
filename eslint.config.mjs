@@ -18,7 +18,7 @@ export default [
     languageOptions: {
       parser,
       parserOptions: {
-        project: false,
+        projectService: true,
       },
     },
     plugins: {
@@ -26,6 +26,7 @@ export default [
     },
     rules: {
       '@typescript-eslint/no-shadow': 'error',
+      '@typescript-eslint/return-await': ['error', 'error-handling-correctness-only'],
     },
   },
 ];

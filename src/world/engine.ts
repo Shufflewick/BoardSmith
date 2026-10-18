@@ -2588,8 +2588,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
             // applies the action's `disabled` rule server-side. A world that
             // called `execute` directly would be a second, quieter action
             // system, and the greyed-out button would stop being a closed door.
-            // The seat's placeholder ids read into real ones where its command enters (#715).
-            this.game.performAction(command.name, this.playerFor(seat), picksFromSeat(this.game, command.name, command.args, seat));
+            this.performSeated(command.name, seat, command.args);
       if (!result.success) {
         // THE GAME'S OWN SENTENCE, BACK ON THE ROAD IT CAME IN ON.
         // `executeAction` catches a throw out of the rules and answers
@@ -3030,6 +3029,24 @@ export class BoardSmithWorldEngine implements WorldEngine {
         return box;
       },
     };
+  }
+
+  /**
+   * A seated action through the engine's own executor. A throw from a
+   * condition, `validate` or `choices` escapes `performAction`, and is coded
+   * as the crash `execute` throwing would be (#1015).
+   */
+  private performSeated(
+    name: string,
+    seat: number,
+    args: Readonly<Record<string, unknown>>,
+  ): ActionResult {
+    try {
+      // The seat's placeholder ids read into real ones where its command enters (#715).
+      return this.game.performAction(name, this.playerFor(seat), picksFromSeat(this.game, name, args, seat));
+    } catch (error) {
+      return failedExecute(name, error, `A rule of action '${name}' outside execute()`);
+    }
   }
 
   /**
