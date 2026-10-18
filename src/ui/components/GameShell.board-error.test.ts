@@ -97,6 +97,28 @@ describe('GameShell board error boundary (#1149)', () => {
     expect(go()?.text()).toContain('Go third');
   });
 
+  it('tells a game\'s own action-panel slot whether the board failed, and that it recovered (#1160)', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    enterIframe();
+    const wrapper = mountPlatformShell({
+      board: ThrowingBoard,
+      slots: { 'action-panel': ({ boardFailed }) => h('div', { class: 'own-panel' }, `boardFailed=${String(boardFailed)}`) },
+    });
+    mounted.push(wrapper);
+    await nextTick();
+    fromHost({ type: 'init', seat: 1 });
+    fromHost(frame(true, 'Go'));
+    await flushPromises();
+    const ownPanel = () => wrapper.find('#bs-actionbar .own-panel').text();
+    expect(ownPanel()).toBe('boardFailed=true');
+
+    fromHost(frame(false, 'Go'));
+    await flushPromises();
+    expect(wrapper.find('.good-board').exists()).toBe(true);
+    expect(ownPanel()).toBe('boardFailed=false');
+  });
+
   it('clears the error when the dev host switches to another board, without waiting for a new state', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});

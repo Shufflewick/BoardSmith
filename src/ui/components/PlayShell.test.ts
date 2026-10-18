@@ -65,6 +65,16 @@ function mountShell(props: Record<string, unknown> = {}, slots: Record<string, u
   });
 }
 
+describe('the action-panel slot (#1160)', () => {
+  it('tells a game panel used directly through PlayShell whether the board failed', async () => {
+    const panel = (props: { boardFailed: boolean }) => h('p', { class: 'own-panel' }, `boardFailed=${props.boardFailed}`);
+    const wrapper = mountShell({ boardFailed: true }, { 'action-panel': panel });
+    expect(wrapper.find('.own-panel').text()).toBe('boardFailed=true');
+    await wrapper.setProps({ boardFailed: false });
+    expect(wrapper.find('.own-panel').text()).toBe('boardFailed=false');
+  });
+});
+
 describe('the layout', () => {
   it('draws the sidebar, the board region and the action bar', () => {
     const wrapper = mountShell();
