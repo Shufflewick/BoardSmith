@@ -37,8 +37,8 @@ async function scaffoldedTableOnBranch(init: { sim?: boolean } = {}): Promise<st
 /**
  * THE ACCEPTANCE FIXTURE (#453): the world `boardsmith init --world` scaffolds, whose board reads a
  * table's whole game context with `useGameContext()`. A world's shell never provides a table's
- * `gameState`, `dueSeats`, `timeTravelDiff` or `turnDeadline`, so the board throws the moment it
- * renders in a real world. Its unit test mounts the board with a context built by hand, table keys
+ * `gameState`, `dueSeats`, `timeTravelDiff`, `platformRequest` or `turnDeadline`, so the board
+ * throws the moment it renders in a real world. Its unit test mounts the board with a context built by hand, table keys
  * and all, the way a board test once passed while its board crashed in play.
  */
 const TABLE_KEY_WORLD_BOARD = `<script setup lang="ts">
@@ -161,7 +161,7 @@ describe('boardsmith verify on a whole game, as a user runs it', () => {
     expect(result.checks.filter((c) => !c.passed).map((c) => c.name)).toEqual(['smoke']);
     expect(check(result, 'test').counts).toMatchObject({ failed: 0 });
     expect(check(result, 'smoke').summary).toMatch(
-      /useGameContext\(\) reads a table's whole game context, and this component is inside a world's shell.*gameState, dueSeats, timeTravelDiff, turnDeadline/s,
+      /useGameContext\(\) reads a table's whole game context, and this component is inside a world's shell.*gameState, dueSeats, timeTravelDiff, platformRequest, turnDeadline/s,
     );
     expect(await verifiedProblem(dir)).toMatch(/smoke: /);
   });
