@@ -131,11 +131,12 @@ function flushRaf() {
 function mountAutoZoom(opts: {
   boardEl: Ref<HTMLElement | null>;
   regionEl: Ref<HTMLElement | null>;
+  boardUi?: Ref<unknown>;
 }) {
   let api!: ReturnType<typeof useAutoZoom>;
   const wrapper = mount(defineComponent({
     setup() {
-      api = useAutoZoom({ ...opts, boardFailed: ref(false) });
+      api = useAutoZoom({ boardUi: ref('default'), ...opts, boardFailed: ref(false) });
       return () => h('div');
     },
   }));
@@ -239,6 +240,30 @@ describe('useAutoZoom', () => {
     observer.fire(); // no-op: disconnected
     flushRaf();
     expect(api.zoomLevel.value).toBe(1.0);
+    wrapper.unmount();
+  });
+
+  it('fits a newly selected UI afresh, even after startup has settled (#1161)', async () => {
+    // The dev UI switcher swaps the board inside the SAME zoom container, so no
+    // new element announces it: the first board's fit must not carry over.
+    const board = fakeBoard(400, 300);
+    const boardEl = ref<HTMLElement | null>(board.el);
+    const regionEl = ref<HTMLElement | null>(fakeRegion(800, 600).el);
+    const boardUi = ref<unknown>('Causeway');
+    const { api, wrapper } = mountAutoZoom({ boardEl, regionEl, boardUi });
+    await nextTick();
+    flushRaf();
+    vi.advanceTimersByTime(SETTLE_MS);
+    expect(api.zoomLevel.value).toBe(2.0);
+    expect(observerFor(board.el)!.disconnected).toBe(true);
+
+    // The new UI renders 0x0 first, then lays out larger than the old one.
+    board.setSize(0, 0);
+    boardUi.value = 'Auto';
+    await nextTick();
+    board.setSize(1600, 1200);
+    FakeResizeObserver.instances.filter((o) => o.observed.includes(board.el)).forEach((o) => o.fire());
+    expect(api.zoomLevel.value).toBe(0.5);
     wrapper.unmount();
   });
 

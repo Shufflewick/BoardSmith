@@ -95,13 +95,16 @@ export function computeFitZoom(
 export function useAutoZoom(options: {
   /** The zoom container (`.game-shell__zoom-container`) — sized to the board's natural content. */
   boardEl: Ref<HTMLElement | null>;
+  /** Which board UI is showing. Switching it swaps the board inside the same
+   *  zoom container, so it restarts startup fitting as a new element does (#1161). */
+  boardUi: Readonly<Ref<unknown>>;
   /** The scrollable board region (`.boardregion`) the board must fit inside. */
   regionEl: Ref<HTMLElement | null>;
   /** True while BoardErrorBoundary shows its message in place of the board.
    *  No fit measures the message, so the board never inherits its zoom (#1154). */
   boardFailed: Readonly<Ref<boolean>>;
 }) {
-  const { boardEl, regionEl, boardFailed } = options;
+  const { boardEl, boardUi, regionEl, boardFailed } = options;
 
   const zoomLevel = ref(1.0);
 
@@ -167,8 +170,8 @@ export function useAutoZoom(options: {
   }
 
   // The board lives under a v-if (game screen); a new element means a new
-  // game / remount, so startup fitting begins again for it.
-  watch(boardEl, (el) => {
+  // game / remount, and a new UI means a new board, so startup fitting begins again.
+  watch([boardEl, boardUi], ([el]) => {
     endStartup();
     startupDone = false;
     if (el && typeof ResizeObserver !== 'undefined') {
