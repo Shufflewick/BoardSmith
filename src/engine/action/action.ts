@@ -55,15 +55,24 @@ const NO_LONGER_AVAILABLE =
   'That choice is no longer available. Things changed while you were choosing, so please choose again.';
 
 /**
- * Turn a throw out of an action's `execute()` into a failure result: the shared
+ * Turn a throw out of game code that changes the game (`execute()`, and a
+ * pick's `onSelect`, `onEach` and `until`) into a failure result: the shared
  * crash handling of {@link gameCodeThrew}, marked `partiallyApplied`, so the
  * runner knows the action may have applied part of its changes before it
- * stopped and rolls the game back (#44). A clean refusal carries no such mark,
- * because it mutated nothing.
+ * stopped and rolls the game back (#44, #1142). A clean refusal carries no such
+ * mark, because it mutated nothing. `where` names the hook in the log.
  */
-export function failedExecute(actionName: string, error: unknown): ActionResult {
-  return { ...gameCodeThrew(actionName, `Action '${actionName}' execution`, error), partiallyApplied: true };
+export function failedExecute(actionName: string, error: unknown, where = `Action '${actionName}' execution`): ActionResult {
+  return { ...gameCodeThrew(actionName, where, error), partiallyApplied: true };
 }
+
+/** A pick's `hook` threw: {@link failedExecute}, its log naming the hook and the pick (#1120). */
+function pickHookThrew(action: ActionDefinition, hook: string, selection: Selection, error: unknown): ActionResult {
+  return failedExecute(action.name, error, `${hook} of '${selection.name}' in action '${action.name}'`);
+}
+
+/** What one fed pick says: why it was refused, whether the game changed, and whether the rules crashed (#1141). */
+type FedPick = { error?: string; applied: boolean; rulesError?: boolean };
 
 /**
  * Turn a throw out of game code an action runs (`execute`, `onSelect`, a
@@ -1332,7 +1341,7 @@ export class ActionExecutor {
               }
             }
           }
-          return gameCodeThrew(action.name, `onSelect of '${selection.name}' in action '${action.name}'`, error);
+          return pickHookThrew(action, 'onSelect', selection, error);
         }
       }
     }
@@ -1378,7 +1387,9 @@ export class ActionExecutor {
     options?: PerformOptions,
   ): ActionResult {
     const fed = this.feedThroughSelectionSteps(action, player, args, options);
-    if ('error' in fed) return { success: false, error: fed.error, ...(fed.applied && { partiallyApplied: true }) };
+    if ('error' in fed) {
+      return { success: false, error: fed.error, rulesError: fed.rulesError, ...(fed.applied && { partiallyApplied: true }) };
+    }
     const result = this.executePendingAction(action, player, fed.pendingState);
     return !result.success && fed.applied ? { ...result, partiallyApplied: true } : result;
   }
@@ -1396,7 +1407,7 @@ export class ActionExecutor {
     player: Player,
     args: Record<string, unknown>,
     options?: PerformOptions,
-  ): { pendingState: PendingActionState; applied: boolean } | { error: string; applied: boolean } {
+  ): { pendingState: PendingActionState; applied: boolean } | { error: string; applied: boolean; rulesError?: boolean } {
     // The condition first, with no picks, as the offer checks it; the picks are checked one at a time below (#772, #1129).
     if (!options?.followUp && !this.conditionHolds(action, player)) {
       return { error: 'Action is not available', applied: false };
@@ -1411,7 +1422,7 @@ export class ActionExecutor {
       applied ||= step.applied;
       if (step.error !== undefined) {
         this.fireOnCancelCallbacks(action, pendingState);
-        return { error: step.error, applied };
+        return { error: step.error, applied, rulesError: step.rulesError };
       }
     }
     return { pendingState, applied };
@@ -1428,10 +1439,10 @@ export class ActionExecutor {
     pendingState: PendingActionState,
     selection: Selection,
     value: unknown
-  ): { error?: string; applied: boolean } {
+  ): FedPick {
     if (!this.isRepeatingSelection(selection)) {
       const step = this.processSelectionStep(action, player, pendingState, selection.name, value);
-      return { error: step.success ? undefined : step.error, applied: false };
+      return { error: step.success ? undefined : step.error, applied: step.partiallyApplied === true, rulesError: step.rulesError };
     }
     if (value === undefined || value === null) {
       if (!selection.optional) return { error: `Missing required selection: ${selection.name}`, applied: false };
@@ -1457,7 +1468,8 @@ export class ActionExecutor {
    * (`passBoundPick`): `submitted` is not read for it. A key of `submitted`
    * that names no pick is refused (#662), and so is a `selectionName` that names none (#776).
    *
-   * Returns why a pick was refused, or `undefined` when every pick was made.
+   * Returns why a pick was refused, and whether the rules crashed (#1142), or
+   * `undefined` when every pick was made.
    */
   makePicksBefore(
     action: ActionDefinition,
@@ -1465,18 +1477,18 @@ export class ActionExecutor {
     pendingState: PendingActionState,
     selectionName: string,
     submitted: Record<string, unknown>
-  ): string | undefined {
+  ): { error: string; rulesError?: boolean } | undefined {
     const refusal = this.undeclaredArgsRefusal(action, submitted);
-    if (refusal) return refusal;
+    if (refusal) return { error: refusal };
     const target = action.selections.findIndex(s => s.name === selectionName);
     if (target === -1) {
-      return `'${action.name}' has no pick named '${selectionName}'. It takes: ${action.selections.map(s => s.name).join(', ')}.`;
+      return { error: `'${action.name}' has no pick named '${selectionName}'. It takes: ${action.selections.map(s => s.name).join(', ')}.` };
     }
     while (pendingState.currentSelectionIndex < target) {
       if (this.passBoundPick(action, pendingState)) continue;
       const selection = action.selections[pendingState.currentSelectionIndex];
-      const { error } = this.feedSelection(action, player, pendingState, selection, submitted[selection.name]);
-      if (error !== undefined) return error;
+      const { error, rulesError } = this.feedSelection(action, player, pendingState, selection, submitted[selection.name]);
+      if (error !== undefined) return { error, rulesError };
     }
     return undefined;
   }
@@ -1529,7 +1541,7 @@ export class ActionExecutor {
     pendingState: PendingActionState,
     selection: Selection,
     picks: unknown[]
-  ): { error?: string; applied: boolean } {
+  ): FedPick {
     const index = pendingState.currentSelectionIndex;
     let applied = false;
     for (const [pickIndex, pick] of picks.entries()) {
@@ -1538,6 +1550,8 @@ export class ActionExecutor {
       }
       const step = this.feedRepeatPick(action, player, pendingState, selection, pick);
       applied ||= step.applied;
+      // The shared crash sentence stands alone, as on every other route.
+      if (step.rulesError) return { ...step, applied };
       if (step.error) return { error: `Pick ${pickIndex + 1} of "${selection.name}": ${step.error}`, applied };
     }
     if (pendingState.repeating) {
@@ -1558,13 +1572,13 @@ export class ActionExecutor {
     pendingState: PendingActionState,
     selection: Selection,
     pick: unknown
-  ): { error?: string; applied: boolean } {
+  ): FedPick {
     const iterationsBefore = pendingState.repeating?.iterationCount ?? 0;
     const step = this.processRepeatingStep(action, player, pendingState, this.repeatPickValue(selection, pick));
     // A pick that got past validation has run onSelect/onEach, even when they
     // then failed, so the game may have changed.
     const applied = !step.error || (pendingState.repeating?.iterationCount ?? 0) > iterationsBefore;
-    return { error: step.error, applied };
+    return { error: step.error, applied, rulesError: step.rulesError };
   }
 
   private repeatShapeError(selection: Selection, value: unknown): string {
@@ -2029,7 +2043,7 @@ export class ActionExecutor {
     player: Player,
     pendingState: PendingActionState,
     value: unknown
-  ): { done: boolean; nextChoices?: ChoiceWithRefs[]; error?: string; warnings?: WarningEntry[] } {
+  ): { done: boolean; nextChoices?: ChoiceWithRefs[]; error?: string; rulesError?: boolean; warnings?: WarningEntry[] } {
     if (this.passBoundPick(action, pendingState)) return { done: true };
     const selection = action.selections[pendingState.currentSelectionIndex];
     if (!selection) {
@@ -2107,7 +2121,8 @@ export class ActionExecutor {
         // Fail loud: a throwing onSelect aborts the action. Fire onCancel for
         // selections whose onSelect already fired, then return an error.
         this.fireOnCancelCallbacks(action, pendingState);
-        return { done: false, error: gameCodeThrew(action.name, `onSelect of '${selection.name}' in action '${action.name}'`, error).error };
+        const crashed = pickHookThrew(action, 'onSelect', selection, error);
+        return { done: false, error: crashed.error, rulesError: crashed.rulesError };
       }
     }
 
@@ -2120,7 +2135,8 @@ export class ActionExecutor {
       try {
         this.runPickCallback(pendingState, () => repeatConfig.onEach!(context, chosen));
       } catch (error) {
-        return { done: true, error: gameCodeThrew(action.name, `onEach of '${selection.name}' in action '${action.name}'`, error).error };
+        const crashed = pickHookThrew(action, 'onEach', selection, error);
+        return { done: true, error: crashed.error, rulesError: crashed.rulesError };
       }
     }
 
@@ -2140,7 +2156,8 @@ export class ActionExecutor {
       try {
         isDone = repeatConfig.until(context, chosen);
       } catch (error) {
-        return { done: true, error: gameCodeThrew(action.name, `until of '${selection.name}' in action '${action.name}'`, error).error };
+        const crashed = pickHookThrew(action, 'until', selection, error);
+        return { done: true, error: crashed.error, rulesError: crashed.rulesError };
       }
     }
 
@@ -2226,7 +2243,7 @@ export class ActionExecutor {
     pendingState: PendingActionState,
     selectionName: string,
     value: unknown
-  ): { success: boolean; error?: string } {
+  ): ActionResult {
     const selectionIndex = action.selections.findIndex(s => s.name === selectionName);
     if (selectionIndex === -1) {
       return { success: false, error: `Selection ${selectionName} not found` };
@@ -2243,7 +2260,7 @@ export class ActionExecutor {
     // If it's a repeating selection, delegate to processRepeatingStep
     if (this.isRepeatingSelection(selection)) {
       const result = this.processRepeatingStep(action, player, pendingState, value);
-      return { success: !result.error, error: result.error };
+      return { success: !result.error, error: result.error, rulesError: result.rulesError };
     }
 
     // Skipping an optional selection: a null/undefined value means "no choice".
@@ -2285,7 +2302,7 @@ export class ActionExecutor {
       } catch (error) {
         // Compensate: run onCancel for selections whose onSelect already fired.
         this.fireOnCancelCallbacks(action, pendingState);
-        return { success: false, error: gameCodeThrew(action.name, `onSelect of '${selection.name}' in action '${action.name}'`, error).error };
+        return pickHookThrew(action, 'onSelect', selection, error);
       }
     }
 
