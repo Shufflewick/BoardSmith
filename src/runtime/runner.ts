@@ -153,6 +153,8 @@ export interface ActionExecutionResult {
   data?: Record<string, unknown>;
   /** `ActionResult.message` returned by the action's `execute()` (BUG-012). */
   message?: string;
+  /** From `executeCollectedAction`: its `execute()` failed part way, so `runPickOp` says what it undid. */
+  partiallyApplied?: boolean;
 }
 
 /**
@@ -173,6 +175,8 @@ export interface PendingStepResult {
   data?: Record<string, unknown>;
   /** `ActionResult.message` from the completed action. Only set when `actionComplete`. */
   message?: string;
+  /** The action failed part way through its `execute()`, so `runPickOp` says what it undid. */
+  partiallyApplied?: boolean;
 }
 
 /**
@@ -695,16 +699,21 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * open action stay as they were before it, and here the game is put back to
    * the head checkpoint, refreshed as the op begins. An op that recorded the
    * action (one whose flow then halted) is not undone, nor is one that changed
-   * the game with checkpoints turned off. `undone` says the game is as before
-   * the op; the caller then puts the seat's pending action back as it was.
+   * the game with checkpoints turned off, whose error then says the game may
+   * still hold its changes. `undone` says the game is as before the op; the
+   * caller then puts the seat's pending action back as it was.
    */
-  runPickOp<R extends { success: boolean }>(run: () => R): { result: R; undone: boolean } {
+  runPickOp<R extends { success: boolean; error?: string; partiallyApplied?: boolean }>(run: () => R): { result: R; undone: boolean } {
     const recorded = this.actionCount;
     this.captureCheckpoint();
     const version = this.game._ctx._stateVersion;
     const result = run();
     if (result.success || this.actionCount !== recorded) return { result, undone: false };
-    return { result, undone: this.game._ctx._stateVersion === version || this.restoreHeadCheckpoint() };
+    if (this.game._ctx._stateVersion === version) return { result, undone: true };
+    const restored = this.restoreHeadCheckpoint();
+    // Told as `performAction` tells it: a partly run execute() says it was undone, and a change kept always says so.
+    const told = restored && !result.partiallyApplied ? result : { ...result, error: this.undoneError(result.error, restored) };
+    return { result: told, undone: restored };
   }
 
   /**
@@ -987,10 +996,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       }
       return actionResult;
     }
-    const failed = { ...actionResult, errorCode: failureCode(actionResult) };
-    if (!actionResult.partiallyApplied) return failed;
-    // The op this runs in (`runPickOp`) puts the game back.
-    return { ...failed, error: this.undoneError(actionResult.error, this.actionCheckpoints[this.headOffset] !== undefined) };
+    return { ...actionResult, errorCode: failureCode(actionResult) };
   }
 
   /**
@@ -1020,8 +1026,6 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // A held follow-up's published args are the engine's, bound before any
     // client pick, so every pick's callbacks see them.
     this.bindFollowUpArgs(pendingState, playerPosition);
-    // Before any pick runs, so a failure also undoes what the picks changed.
-    this.ensureHeadCheckpoint();
     this.pendingActions.set(playerPosition, pendingState);
     return pendingState;
   }
@@ -1343,6 +1347,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       actionComplete: true,
       data: actionResult.data,
       message: actionResult.message,
+      partiallyApplied: actionResult.partiallyApplied,
     };
   }
 

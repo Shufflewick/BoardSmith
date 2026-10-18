@@ -161,17 +161,31 @@ describe('a failed pick-by-pick op keeps nothing (#1169)', () => {
     expect(seat.pending()).toBeUndefined();
   });
 
-  it('says a failed op could not be undone when checkpoints are off, and closes the action as before', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {});
-    const seat = sessionRoute('pairCrash', runner(false));
-    await seat.pick('first', 'a');
+  for (const [name, route] of Object.entries(routes)) {
+    it(`says a failed completing op could not be undone when checkpoints are off, and closes the action as before, on the ${name} route`, async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const seat = route('pairCrash', runner(false));
+      await seat.pick('first', 'a');
 
-    const failed = await seat.pick('second', 'b') as { error?: string };
+      const failed = await seat.pick('second', 'b') as { error?: string };
 
-    expect(failed.error).toMatch(/may still hold its partial changes/);
-    expect(moved(seat.game)).toEqual(['one', 'two']);
-    expect(seat.pending()).toBeUndefined();
-  });
+      expect(failed.error).toMatch(/may still hold its partial changes/);
+      expect(moved(seat.game)).toEqual(['one', 'two']);
+      expect(seat.pending()).toBeUndefined();
+    });
+
+    it(`says a pick callback's move could not be undone when checkpoints are off, on the ${name} route`, async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const seat = route('gather', runner(false));
+      await seat.pick('items', 'one');
+
+      const failed = await seat.pick('items', 'two') as { error?: string };
+
+      expect(failed).toMatchObject({ success: false, errorCode: ErrorCode.ENGINE_ERROR });
+      expect(failed.error).toMatch(/may still hold its partial changes/);
+      expect(moved(seat.game)).toEqual(['one', 'two']);
+    });
+  }
 
   it('hands a long-lived PickHandler back the pending action as it was before the failed op', async () => {
     const r = runner();

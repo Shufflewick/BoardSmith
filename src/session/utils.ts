@@ -121,7 +121,7 @@ export function serializePendingActionState(s: PendingActionState): SerializedPe
  * copied as `serializePendingActionState` copies it, so a step never changes
  * the form an in-memory caller handed in (#1169).
  */
-export function deserializePendingState(s: Record<string, unknown>): PendingActionState {
+export function deserializePendingState(s: SerializedPendingActionState | Record<string, unknown>): PendingActionState {
   const { onSelectFired, ...state } = serializePendingActionState(s as unknown as PendingActionState);
   return { ...state, onSelectFired: onSelectFired ? new Set(onSelectFired) : undefined };
 }

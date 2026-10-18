@@ -38,6 +38,8 @@ export interface PickStepResult {
   data?: Record<string, unknown>;
   /** `ActionResult.message` from the completed multi-step action (BUG-012). */
   message?: string;
+  /** The action failed part way through its `execute()`, so `runPickOp` says what it undid. */
+  partiallyApplied?: boolean;
   /** The follow-up the completed action chained to, with its action's metadata. */
   followUp?: FollowUpOffer;
   /**
@@ -117,7 +119,7 @@ export class PendingActionManager<G extends Game = Game> {
     if (pendingState) this.#runner.markStalePicks(pendingState, playerPosition);
 
     // A failed step keeps nothing: the game and this pending action are as before it (#1169).
-    const before = pendingState && { ...serializePendingActionState(pendingState) };
+    const before = pendingState && serializePendingActionState(pendingState);
     const { result, undone } = this.#runner.runPickOp(
       () => this.#takeStep(playerPosition, pendingState, selectionName, value, actionName, initialArgs),
     );
@@ -227,7 +229,8 @@ export class PendingActionManager<G extends Game = Game> {
    * made as its own step would be, in order (#658). A pick a held follow-up
    * answered is the engine's and is not taken from the client, and an arg
    * that names no pick is refused (#662). A refusal cancels the action,
-   * running `onCancel` for any `onSelect` that ran.
+   * running `onCancel` for any `onSelect` that ran: `runPickOp` then undoes the
+   * step whole, and with checkpoints off this is the only undo the step gets.
    */
   #makeInitialPicks(
     pendingState: PendingActionState,
@@ -263,6 +266,7 @@ export class PendingActionManager<G extends Game = Game> {
       // the ops layer on the same footing as a single-step one (BUG-017).
       data: actionResult.data,
       message: actionResult.message,
+      partiallyApplied: actionResult.partiallyApplied,
     };
   }
 }

@@ -22,6 +22,9 @@ class Token extends Piece<ShiftGame> {}
 class ShiftGame extends Game<ShiftGame, Player> {
   from!: Space;
   to!: Space;
+  /** Whether `jostle`'s onEach has thrown yet: it throws once, after its move. */
+  jostled = false;
+
   constructor(options: GameOptions) {
     super(options);
     this.from = this.create(Space, 'from');
@@ -64,6 +67,8 @@ class ShiftGame extends Game<ShiftGame, Player> {
           repeat: {
             onEach: (ctx, token) => {
               (token as Token).putInto(ctx.game.to);
+              if (ctx.game.jostled) return;
+              ctx.game.jostled = true;
               throw new Error('jostle threw after its move');
             },
             until: (ctx) => (ctx.args.tokens as unknown[]).length === 2,
@@ -235,6 +240,17 @@ describe('a pending action records its picks where they were before the action (
     succeeded(await pickOn(host, 'stow', 'crate', 'third'));
     succeeded(await pickOn(host, 'stow', 'next', 'second'));
     expect(host.snapshot!.actionHistory.map((entry) => 'name' in entry && entry.name)).toEqual(['stow']);
+  });
+
+  it('records what a pick callback moved before it threw, where the move stays with checkpoints off', () => {
+    const live = new GameRunner({ ...options, checkpoints: { enabled: false } });
+    live.start();
+
+    live.startPendingAction('jostle', 1);
+    expect(live.processSelectionStep(1, 'tokens', idOf(live.game, 'first')).error).toMatch(/"jostle" action could not be/);
+    expect(live.processSelectionStep(1, 'tokens', idOf(live.game, 'second')).error).toBeUndefined();
+
+    expect(live.actionHistory).toEqual([{ name: 'jostle', player: 1, args: argsBefore(['tokens', 'tokens']) }]);
   });
 
   it('undoes a pick callback that moved a token and threw, and its note of where the token was (#1169)', () => {
