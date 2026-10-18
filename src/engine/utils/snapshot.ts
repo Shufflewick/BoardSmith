@@ -188,7 +188,7 @@ interface SnapshotFields {
    * correct redacted placeholder instead of leaving a dead serialized marker.
    * Present on every redacted snapshot, even when empty, because its presence
    * is what lets a restore relink a missing element to its concealing ancestor
-   * (#947). Always absent on the default (un-redacted) `createSnapshot` path —
+   * (#947). Always absent on the default (un-redacted) `createSnapshot` path:
    * those callers keep real ids throughout, so no remap is ever needed.
    */
   hiddenIdRemap?: Map<number, number>;
