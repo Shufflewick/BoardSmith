@@ -1,4 +1,4 @@
-import { GameElement } from './game-element.js';
+import { GameElement, forEachInSubtree } from './game-element.js';
 import { childrenChanged } from './cell-index.js';
 import { changing } from './state-version.js';
 import type { ElementClass, ElementAttributes, ElementContext, ElementJSON } from './types.js';
@@ -430,6 +430,12 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
    * Uses the game's seeded random number generator for deterministic shuffling
    * (same seed = same shuffle order). Typically used on decks during setup.
    *
+   * Shuffling clears the own visibility (`addVisibleTo`, `showToAll`,
+   * `showOnlyTo`, and the rest `clearVisibility()` clears) of every element
+   * below this space, so nobody can follow a card through the shuffle (#962).
+   * The space's own visibility and its zone visibility are unchanged. Re-apply
+   * a grant after shuffling to keep a card revealed.
+   *
    * @example
    * ```typescript
    * // Shuffle the deck during game setup
@@ -469,6 +475,8 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
         this._t.children[i],
       ];
     }
+    // Descendants too: a grant on anything inside a moved card would show where the card went.
+    for (const child of this._t.children) forEachInSubtree(child, (element) => element.clearVisibility());
     childrenChanged(this);
   }
 

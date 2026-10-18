@@ -1,5 +1,15 @@
 # Migration Guide
 
+## `shuffle()` clears the visibility of what it shuffles (#962)
+
+`space.shuffle()` now clears the own visibility of every element in the space
+and everything inside them, the same as calling `clearVisibility()` on each:
+grants from `addVisibleTo`, `showToAll`, `showOnlyTo`, `hideFrom` and
+`setVisibility` are gone after a shuffle, so a seat that peeked at a card no
+longer sees it at its new position. The space's own visibility and its zone
+rule (`contentsHidden()` and the like) are unchanged. A game that wants a card
+to stay revealed after shuffling applies its grant again after the shuffle.
+
 ## `boardsmith test --selection` is removed (#986)
 
 `boardsmith test` no longer takes `--selection <path>`, the authored-test
