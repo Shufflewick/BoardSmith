@@ -111,6 +111,32 @@ describe('crash and halt coding across routes', () => {
     expect(initial).toMatchObject({ success: false, errorCode: ErrorCode.ENGINE_ERROR });
   });
 
+  it('codes a pending pick the same on the session-free route as on the session route (#1169)', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const runnerRoute = (picks: Array<[string, unknown]>, action?: string) => {
+      const { runner } = setup();
+      if (action) runner.startPendingAction(action, 1);
+      return picks.map(([name, value]) => runner.processSelectionStep(1, name, value)).at(-1)!;
+    };
+    const sessionRoute = async (picks: Array<[string, unknown]>, action?: string) => {
+      const { manager } = setup();
+      const results = [];
+      for (const [i, [name, value]] of picks.entries()) results.push(await manager.processSelectionStep(1, name, value, i === 0 ? action : undefined));
+      return results.at(-1)!;
+    };
+    const cases: Array<[Array<[string, unknown]>, string | undefined, ErrorCode]> = [
+      [[['first', 'a'], ['second', 'b']], 'moveThenThrow', ErrorCode.ENGINE_ERROR],
+      [[['items', 'a']], 'gather', ErrorCode.ENGINE_ERROR],
+      [[['x', 'a']], 'refuse', ErrorCode.ACTION_EXECUTION_ERROR],
+      [[['x', 'nope']], 'refuse', ErrorCode.INVALID_PICK],
+      [[['x', 'a']], undefined, ErrorCode.PICK_NOT_FOUND],
+    ];
+    for (const [picks, action, code] of cases) {
+      expect(await sessionRoute(picks, action)).toMatchObject({ success: false, errorCode: code });
+      expect(runnerRoute(picks, action)).toMatchObject({ success: false, errorCode: code });
+    }
+  });
+
   it('leaves the game as it was when an onSelect changes it and then throws (#1142)', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const { runner, game } = setup();

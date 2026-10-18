@@ -6,6 +6,7 @@
 
 import type { PendingActionState, Game, FollowUpOffer } from '../engine/index.js';
 import type { GameRunner } from '../runtime/index.js';
+import { pickFailureCode } from '../runtime/runner.js';
 import {
   ErrorCode,
   type WarningEntry,
@@ -46,11 +47,6 @@ export interface PickStepResult {
    * there are none — never fabricated.
    */
   warnings?: WarningEntry[];
-}
-
-/** A refused pick's code: a crash in the rules is ENGINE_ERROR, as on every other route (#1142). */
-function pickFailureCode(refused: { rulesError?: boolean }): ErrorCode {
-  return refused.rulesError ? ErrorCode.ENGINE_ERROR : ErrorCode.INVALID_PICK;
 }
 
 /**

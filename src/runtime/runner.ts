@@ -166,6 +166,8 @@ export interface ActionExecutionResult {
 export interface PendingStepResult {
   success: boolean;
   error?: string;
+  /** Why a step failed, coded as the session route codes it (#1169). */
+  errorCode?: ErrorCode;
   /** True once the final selection was supplied and the action executed. */
   actionComplete?: boolean;
   /** `ActionResult.data` from the completed action. Only set when `actionComplete`. */
@@ -233,6 +235,11 @@ function reportHalt(actionName: string, halt: FlowHaltedError): ActionExecutionR
  */
 function failureCode(result: ActionResult | undefined): ErrorCode {
   return result?.rulesError ? ErrorCode.ENGINE_ERROR : ErrorCode.ACTION_EXECUTION_ERROR;
+}
+
+/** A refused pick's code: a crash in the rules is ENGINE_ERROR, as on every other route (#1142). */
+export function pickFailureCode(refused: { rulesError?: boolean }): ErrorCode {
+  return refused.rulesError ? ErrorCode.ENGINE_ERROR : ErrorCode.INVALID_PICK;
 }
 
 /** The kept history entries before action `actionIndex`, which a checkpoint there restores with. */
@@ -1232,40 +1239,41 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   ): PendingStepResult {
     const pendingState = this.pendingActions.get(playerPosition);
     if (!pendingState) {
-      return { success: false, error: 'No pending action for this player. Call startPendingAction first.' };
+      return { success: false, error: 'No pending action for this player. Call startPendingAction first.', errorCode: ErrorCode.PICK_NOT_FOUND };
     }
 
     const refusal = this.refusalToPick(pendingState.actionName, playerPosition, pendingState);
-    if (refusal) return { success: false, error: refusal.error };
+    if (refusal) return { success: false, ...refusal };
     this.markStalePicks(pendingState, playerPosition);
 
     const action = this.game.getAction(pendingState.actionName);
     if (!action) {
-      return { success: false, error: `Action not found: ${pendingState.actionName}` };
+      return { success: false, error: `Action not found: ${pendingState.actionName}`, errorCode: ErrorCode.ACTION_NOT_FOUND };
     }
 
     const player = this.game.getPlayer(playerPosition);
     if (!player) {
-      return { success: false, error: `Player not found: ${playerPosition}` };
+      return { success: false, error: `Player not found: ${playerPosition}`, errorCode: ErrorCode.INVALID_PLAYER };
     }
 
     const executor = this.game.getActionExecutor();
     const selection = action.selections[pendingState.currentSelectionIndex];
     if (!selection) {
-      return { success: false, error: 'No current selection' };
+      return { success: false, error: 'No current selection', errorCode: ErrorCode.PICK_NOT_FOUND };
     }
 
     if (selection.name !== selectionName) {
       return {
         success: false,
         error: `Expected selection at index ${pendingState.currentSelectionIndex}, got ${selectionName}`,
+        errorCode: ErrorCode.PICK_NOT_FOUND,
       };
     }
 
     if (executor.isRepeatingSelection(selection)) {
       const result = executor.processRepeatingStep(action, player, pendingState, value);
       if (result.error) {
-        return { success: false, error: result.error };
+        return { success: false, error: result.error, errorCode: pickFailureCode(result) };
       }
       if (result.done && executor.isPendingActionComplete(action, pendingState)) {
         return this.completePendingAction(executor, action, player, pendingState, playerPosition);
@@ -1276,7 +1284,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
 
     const stepResult = executor.processSelectionStep(action, player, pendingState, selectionName, value);
     if (!stepResult.success) {
-      return { success: false, error: stepResult.error };
+      return { success: false, error: stepResult.error, errorCode: pickFailureCode(stepResult) };
     }
 
     if (executor.isPendingActionComplete(action, pendingState)) {
@@ -1307,6 +1315,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     return {
       success: actionResult.success,
       error: actionResult.error,
+      errorCode: actionResult.errorCode,
       actionComplete: true,
       data: actionResult.data,
       message: actionResult.message,
