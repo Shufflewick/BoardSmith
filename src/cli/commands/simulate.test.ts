@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stripVTControlCharacters } from 'node:util';
 import {
   runSimulation,
   runReplay,
@@ -170,6 +171,10 @@ describe('parsePlayerCounts: --players (#556)', () => {
     expect(() => parsePlayerCounts('2,3,2', game)).toThrow(/--players names 2 more than once/);
   });
 
+  it.each(['0', '-1', '1.5', '1e3', '12abc', ''])('refuses a count of "%s" by name (#1047)', (raw) => {
+    expect(() => parsePlayerCounts(`2,${raw}`, {})).toThrow(`--players takes a positive whole number, got "${raw}".`);
+  });
+
   it('needs a list when the game declares no player range', () => {
     expect(() => parsePlayerCounts(undefined, {})).toThrow(/minPlayers.*--players/);
     expect(parsePlayerCounts('1', {})).toEqual([1]);
@@ -251,9 +256,22 @@ describe('simulateCommand', () => {
     expect(process.exitCode).toBe(1);
   });
 
+  it.each(['0', '-1', '1.5', '1e3', '12abc', ''])('refuses --games "%s" by name (#1047)', async (raw) => {
+    const printed = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await simulateCommand({ games: raw, players: '2', seed: undefined });
+      expect(process.exitCode).toBe(1);
+      expect(printed.mock.calls.map(([line]) => stripVTControlCharacters(String(line)))).toEqual([
+        `--games takes a positive whole number, got "${raw}".`,
+      ]);
+    } finally {
+      printed.mockRestore();
+    }
+  });
+
   it('IN-01: exits non-zero with an actionable message on a non-positive --players flag', () => {
     expect(nonPositivePlayers.exitCode).toBe(1);
-    expect(nonPositivePlayers.output).toContain('--players takes positive whole numbers');
+    expect(nonPositivePlayers.output).toContain('--players takes a positive whole number, got "0".');
   });
 });
 

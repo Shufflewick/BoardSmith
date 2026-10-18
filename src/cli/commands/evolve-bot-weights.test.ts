@@ -8,7 +8,9 @@
  * games in worker threads. What is under test is where the rules come from:
  * the path the evolver is given, that the file exists and loads while the
  * evolution runs, and that it is gone afterwards with the rest of
- * `.boardsmith/` untouched.
+ * `.boardsmith/` untouched. And that bot.ts is rewritten only when the
+ * evolution's confirmation accepted the new weights, with the confirmation's
+ * win rates rather than the search's best score (#870).
  *
  * Both runs happen while the file is collected, where no test timeout applies
  * (#354, #355, #363, #417): a run bundles the rules and loads the bot trainer's
@@ -31,6 +33,8 @@ interface EvolverCall {
   bundleExportedGameClass: boolean;
 }
 const evolverCalls: EvolverCall[] = [];
+/** What the next evolution's confirmation reports. */
+let nextConfirmation: { games: number; originalWinRate: number; candidateWinRate: number; accepted: boolean };
 
 vi.mock('../../bot-trainer/index.js', async (importOriginal) => {
   const original = await importOriginal<typeof import('../../bot-trainer/index.js')>();
@@ -55,7 +59,14 @@ vi.mock('../../bot-trainer/index.js', async (importOriginal) => {
         bundleExistedDuringEvolution,
         bundleExportedGameClass,
       });
-      return { initialFitness: 0.5, bestFitness: 0.5, objectives };
+      // The search's lucky best score: 0.7, far above either confirmed rate.
+      const evolved = objectives.map((o) => ({ ...o, weight: o.weight + 1 }));
+      return {
+        initialFitness: 0.5,
+        bestFitness: 0.7,
+        objectives: nextConfirmation.accepted ? evolved : objectives,
+        confirmation: nextConfirmation,
+      };
     }
   }
   return { ...original, WeightEvolver: RecordingEvolver };
@@ -88,6 +99,10 @@ interface EvolveRun {
   evolverCalls: EvolverCall[];
   /** What the command threw, or undefined when it finished. */
   error: unknown;
+  /** Everything the command logged. */
+  output: string;
+  /** bot.ts after the run. */
+  bot: string;
 }
 
 /** Runs the command from inside `dir`, then moves the cwd back. */
@@ -98,29 +113,35 @@ async function evolveIn(dir: string, options: Parameters<typeof evolveBotWeights
   process.chdir(dir);
   const projectDir = process.cwd();
   let error: unknown;
+  let output = '';
   try {
     await evolveBotWeightsCommand(options);
   } catch (thrown) {
     error = thrown;
   } finally {
     process.chdir(originalCwd);
+    output = log.mock.calls.map((call) => call.join(' ')).join('\n');
     log.mockRestore();
   }
-  return { projectDir, evolverCalls: [...evolverCalls], error };
+  return { projectDir, evolverCalls: [...evolverCalls], error, output, bot: readFileSync(join(dir, 'src', 'rules', 'bot.ts'), 'utf-8') };
 }
 
-const evolvedDir = projectWith(
+const fixtureRules = (): string =>
   [
     `import { DeadEndGame } from ${JSON.stringify(fixture)};`,
     `import { objectives } from './bot.js';`,
     `export const gameDefinition = { gameClass: DeadEndGame, gameType: 'dead-end', displayName: 'Fixture',`,
     `  minPlayers: 3, maxPlayers: 4, bot: { objectives } };`,
-  ].join('\n'),
-);
+  ].join('\n');
+const evolvedDir = projectWith(fixtureRules());
 const scratchFile = join(scratchDir(evolvedDir), 'keep.txt');
 mkdirSync(scratchDir(evolvedDir), { recursive: true });
 writeFileSync(scratchFile, 'keep me\n');
+nextConfirmation = { games: 400, originalWinRate: 0.5, candidateWinRate: 0.52, accepted: false };
 const evolved = await evolveIn(evolvedDir, { generations: '1', population: '1', mcts: '1', workers: '1' });
+
+nextConfirmation = { games: 400, originalWinRate: 0.5, candidateWinRate: 0.6, accepted: true };
+const improved = await evolveIn(projectWith(fixtureRules()), { generations: '1', population: '1', mcts: '1', workers: '1' });
 
 const brokenDir = projectWith('export const gameDefinition = ;\n');
 const broken = await evolveIn(brokenDir, { generations: '1', population: '1' });
@@ -160,6 +181,23 @@ describe('evolve-bot-weights bundles the rules into its own build directory (#39
     expect(noBot.error).toBeInstanceOf(Error);
     expect((noBot.error as Error).message).toMatch(/no bot\.objectives/);
     expect(noBot.evolverCalls).toHaveLength(0);
+  });
+});
+
+describe('evolve-bot-weights keeps bot.ts unless the confirmation accepts the new weights (#870)', () => {
+  it('leaves bot.ts byte for byte and reports no improvement when the confirmation rejects the pick', () => {
+    expect(evolved.error).toBeUndefined();
+    expect(evolved.bot).toBe(BOT);
+    expect(evolved.output).toContain('No improvement confirmed');
+    expect(evolved.output).toContain('52.0% against the original 50.0% over 400 fresh games each');
+    expect(evolved.output).not.toMatch(/Improvement: /);
+  });
+
+  it('writes the accepted weights, with the confirmation rates, not the search score, as the improvement', () => {
+    expect(improved.error).toBeUndefined();
+    expect(improved.bot).toContain('weight: 6');
+    expect(improved.output).toContain('Improvement: +10.0% (60.0% against the original 50.0% over 400 fresh games each)');
+    expect(improved.output).not.toContain('+20.0%');
   });
 });
 

@@ -38,6 +38,9 @@ const cfg = props.config;
 // A world seat matters more than a table one: it is where a player's holdings
 // are, and seats are never handed on. `dev-client-id.ts` carries the reasoning.
 const clientId = loadDevClientId(WORLD_CLIENT_KEY, 'w');
+// This page load, named in every hello: the frame numbers its requests from 0
+// on each load, so the host answers only the load that asked (#1099).
+const loadId = `l-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
 
 interface PendingEvent {
   id: string;
@@ -124,7 +127,7 @@ function connect(): void {
   ws = new WebSocket(`${proto}://${location.host}${WS_PATH}`);
   ws.addEventListener('open', () => {
     connected.value = true;
-    wsSend({ type: 'hello', clientId });
+    wsSend({ type: 'hello', clientId, loadId });
   });
   ws.addEventListener('message', (event) => {
     const message = JSON.parse(event.data as string) as Record<string, unknown>;

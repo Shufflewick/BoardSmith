@@ -5,7 +5,7 @@
  *
  * @module
  */
-import type { Game, FlowState } from '../engine/index.js';
+import type { Game, FlowState, PublishedFollowUp } from '../engine/index.js';
 import { dueSeats, availableActionsForSeat, followUpForSeat } from '../engine/index.js';
 import { refuseChangeSince } from '../engine/element/state-version.js';
 import { encodeValue } from '../engine/element/game-element.js';
@@ -109,15 +109,16 @@ function offeredSeats(flowState: FlowState): Array<{ seat: number; actionNames: 
 function enabledSeats(
   game: Game,
   flowState: FlowState
-): { seats: Array<{ seat: number; actionNames: string[] }>; refused: string[] } {
-  const seats: Array<{ seat: number; actionNames: string[] }> = [];
+): { seats: Array<{ seat: number; actionNames: string[]; followUp?: PublishedFollowUp }>; refused: string[] } {
+  const seats: Array<{ seat: number; actionNames: string[]; followUp?: PublishedFollowUp }> = [];
   const refused: string[] = [];
   for (const { seat, actionNames } of offeredSeats(flowState)) {
     const disabled = game.getDisabledActions(seat);
     const enabled = actionNames.filter((name) => !(name in disabled));
     const blocked = actionNames.filter((name) => name in disabled);
     refused.push(...blocked.map((name) => `player ${seat}'s '${name}' (${disabled[name].replace(/\.$/, '')})`));
-    if (enabled.length > 0 || followUpForSeat(flowState, seat)) seats.push({ seat, actionNames: enabled });
+    const followUp = followUpForSeat(flowState, seat);
+    if (enabled.length > 0 || followUp) seats.push({ seat, actionNames: enabled, followUp });
   }
   return { seats, refused };
 }
@@ -376,6 +377,7 @@ export async function playGame<G extends Game>(
         game: testGame.game,
         seat: actor.seat,
         actions: actor.actionNames,
+        followUp: actor.followUp,
         random: seatRandom[actor.seat - 1],
         definition,
       });

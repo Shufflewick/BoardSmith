@@ -25,19 +25,11 @@
  *  - Reduced motion: instant display, no animation.
  */
 
-import {
-  ref,
-  computed,
-  inject,
-  onMounted,
-  onUnmounted,
-  watchEffect,
-  nextTick,
-  type Ref,
-} from 'vue';
+import { ref, computed, inject, type Ref } from 'vue';
 import type { HeatmapEntry } from '../../../session/types.js';
 import { buildSelector, NOTHING_TO_SHOW } from './overlay-utils.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
+import { useOverlayTracking } from '../../composables/useOverlayTracking.js';
 
 // ── Inject ────────────────────────────────────────────────────────────────────
 
@@ -164,75 +156,11 @@ function chipStyle(chip: ResolvedChip): Record<string, string> {
   };
 }
 
-// ── Observers & lifecycle ─────────────────────────────────────────────────────
-
-let resizeObserver: ResizeObserver | null = null;
-let observedElements: Element[] = [];
-// The element the scroll listener is on, so it is removed from that one, not a re-queried one.
-let scrollRegion: Element | null = null;
-
-function rebuildObservers() {
-  if (!overlayRoot.value) return;
-
-  const boardRegion =
-    overlayRoot.value.closest('.boardregion') ??
-    document.querySelector('.boardregion');
-
-  if (resizeObserver) {
-    resizeObserver.disconnect();
-    observedElements = [];
-  }
-  scrollRegion?.removeEventListener('scroll', onScroll);
-
-  resizeObserver = new ResizeObserver(() => {
-    void nextTick(measure);
-  });
-
-  if (boardRegion) {
-    resizeObserver.observe(boardRegion);
-    observedElements.push(boardRegion);
-
-    for (const entry of entries.value) {
-      const selector = buildSelector({ kind: 'element', ref: entry.cellRef });
-      if (!selector) continue;
-      const el = document.querySelector(selector);
-      if (el && !observedElements.includes(el)) {
-        resizeObserver.observe(el);
-        observedElements.push(el);
-      }
-    }
-
-    boardRegion.addEventListener('scroll', onScroll, { passive: true });
-  }
-  scrollRegion = boardRegion;
-}
-
-function onScroll() {
-  void nextTick(measure);
-}
-
-watchEffect(() => {
-  const _ = entries.value;
-  void nextTick(() => {
-    measure();
-    rebuildObservers();
-  });
-});
-
-onMounted(() => {
-  measure();
-  rebuildObservers();
-});
-
-onUnmounted(() => {
-  if (resizeObserver) {
-    resizeObserver.disconnect();
-    resizeObserver = null;
-  }
-
-  scrollRegion?.removeEventListener('scroll', onScroll);
-  scrollRegion = null;
-  observedElements = [];
+useOverlayTracking({
+  root: overlayRoot,
+  content: entries,
+  targetOf: (entry) => ({ kind: 'element', ref: entry.cellRef }),
+  measure,
 });
 </script>
 

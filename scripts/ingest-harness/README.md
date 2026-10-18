@@ -52,7 +52,7 @@ npx boardsmith harness-ingest
 # Or invoke each step individually. `stage` prints the folder it created; pass it to the others:
 npx boardsmith harness-ingest stage                        # fresh throwaway project + current skill text install
 npx boardsmith harness-ingest drive --work-dir <that dir>  # real headless agent session against it
-npx boardsmith harness-ingest assert --work-dir <that dir> # report the ten checks, exit 0 only if all pass and the session completed
+npx boardsmith harness-ingest assert --work-dir <that dir> # report the eleven checks, exit 0 only if all pass and the session completed
 
 # Options (see --help for the full list and defaults):
 npx boardsmith harness-ingest --work-dir /tmp/my-harness-run --model sonnet
@@ -60,8 +60,9 @@ npx boardsmith harness-ingest --work-dir /tmp/my-harness-run --model sonnet
 
 Without `--work-dir`, `stage` creates a new folder under the system temp dir
 (`bs-ingest-harness-XXXXXX`), so two runs never share or delete each other's folder. With it,
-`stage` refuses a folder that already exists unless it holds a `.harness-stage-state.json` from an
-earlier `stage`, so it cannot delete a checkout or a home folder (#917). A `stage` that stopped
+`stage` refuses a folder that already exists unless it holds a `.harness-stage-state.json` that an
+earlier `stage` wrote for that same folder (#917). It always refuses your home folder, the BoardSmith
+checkout, any folder that holds either, and any folder with a `.git` at its top, so a copied state file cannot get one deleted (#1065). A `stage` that stopped
 partway leaves a folder `drive` and `assert` refuse; run `stage --work-dir <that dir>` again.
 
 `stage`, `drive`, and `assert` share state via `{workDir}/.harness-stage-state.json` — `drive` and
@@ -89,9 +90,9 @@ is written.
 ### `assert`
 
 Locates the single project directory the run produced, calls `checkIngestArtifacts()` (the
-deterministic checker from `check.mjs`) for the nine produced-artifact checks, re-verifies the
-reference repo's git cleanliness/HEAD as gate item (g), prints a ten-row table, and exits 0 only
-when all ten pass and `drive` recorded a completed session. A run that hit the turn cap or whose
+deterministic checker from `check.mjs`) for the ten produced-artifact checks, re-verifies the
+reference repo's git cleanliness/HEAD as gate item (g), prints an eleven-row table, and exits 0 only
+when all eleven pass and `drive` recorded a completed session. A run that hit the turn cap or whose
 session exited non-zero prints `OVERALL: FAIL` and exits 1, whatever the checks say (#918).
 
 ## Acceptance bar

@@ -323,6 +323,16 @@ const historyPanel = ref<InstanceType<typeof GameHistory> | null>(null);
 
 defineExpose({ boardRegionEl, zoomContainerEl, historyPanel });
 
+const sideScrollEl = ref<HTMLElement | null>(null);
+
+// The phone drawer is display:none while shut, so lines drawn then could not scroll the log (#1122).
+watch(() => props.mobileExpanded, (open) => {
+  if (!open || !sideScrollEl.value) return;
+  historyPanel.value?.scrollToNewest();
+  // The log is the drawer's last block, so its newest line shows at the drawer's bottom.
+  sideScrollEl.value.scrollTop = sideScrollEl.value.scrollHeight;
+}, { flush: 'post' });
+
 /** The toggle's label, carrying the unread count for screen readers too. */
 const mobileToggleLabel = computed(() => {
   if (props.mobileExpanded) return 'Hide players and log';
@@ -393,7 +403,7 @@ const mobileToggleLabel = computed(() => {
 
         <!-- No header band: host branding (ShufflewickPub pull-down tab) overlays
              the top in production, and the ⋯ controls live in the action bar. -->
-        <div class="side-scroll">
+        <div ref="sideScrollEl" class="side-scroll">
           <PlayersPanel
             :players="players"
             :player-seat="playerSeat"
@@ -630,8 +640,9 @@ const mobileToggleLabel = computed(() => {
     </div>
 
     <!-- The adapter's debug surface: one placement, one keyboard shortcut, one
-         transport, and a tab set the adapter declares. -->
-    <div v-if="$slots.debug" data-testid="bs-debug">
+         transport, and a tab set the adapter declares. A dialog's focus trap leaves
+         it usable (data-bs-outside-modal): the end of a game is when it is needed (#1106). -->
+    <div v-if="$slots.debug" data-testid="bs-debug" data-bs-outside-modal>
       <slot name="debug"></slot>
     </div>
   </div>
