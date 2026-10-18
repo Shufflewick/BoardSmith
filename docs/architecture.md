@@ -274,6 +274,15 @@ nothing a worker does not. The world's run-long lock (#1040) is held by the
 dev process, not the worker, so a world whose worker stops on its own is still
 refused to a second `boardsmith dev`.
 
+**Busy rules are a busy dev host (#609).** The smoke walk counts time only
+while `boardsmith dev` answers `/__boardsmith-alive`. With the rules in a
+worker, the host's own thread would answer while the rules are still busy, as
+a loaded machine keeps them, and the walk would time out a game that was only
+slow. So the host answers once every rules worker has answered a message sent
+behind whatever it was already doing (`rulesAnswered`); a worker that stops
+counts as having answered, and rules that never finish freeze the walk's
+clock, which it reports after a minute.
+
 **Where a crash happened.** The worker starts from a two-line bootstrap that
 turns source maps on and then imports the bundle, which carries an inline map,
 so a rule's error names the author's file and line. Not `execArgv:

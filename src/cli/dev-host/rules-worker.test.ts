@@ -14,7 +14,7 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { tableRulesReloadQueue } from '../commands/dev-table-runtime.js';
 import { loadWorldRuntime, openWorldRun } from '../commands/dev-world.js';
 import { rulesProject } from './rules-project.test-helper.js';
-import { liveRulesWorkers } from './rules-worker.js';
+import { liveRulesWorkers, rulesAnswered } from './rules-worker.js';
 import { openSocketPage, serveSockets } from './socket-page.test-helper.js';
 import { openTable, tableProject } from './table-host.test-helper.js';
 import { createDevHostClientMemory } from './test-client-memory.js';
@@ -400,5 +400,22 @@ describe('#885: the world road', () => {
     await expect(
       openWorldRun({ cwd: world.cwd, displayName: 'Camp', port: 5174, runtime, reloadRules: async () => runtime }),
     ).rejects.toThrow(new RegExp(`already open in another \\\`boardsmith dev\\\` \\(pid ${process.pid}, port 5173\\)`));
+  }, 60_000);
+});
+
+describe('#609: the dev host answers only when its rules do', () => {
+  // The smoke walk does not count time the dev host spends not answering. Rules busy in their
+  // worker, as a loaded machine keeps them, answer late, so the host must too.
+  it('answers once the rules worker has answered what was sent it first', async () => {
+    const { rulesPath, tempDir } = rulesProject('bs-rules-worker-alive-', worldRules(1));
+    const runtime = await loadWorldRuntime(rulesPath, tempDir, 'monorepo');
+    closing.push(() => runtime.worker.close());
+    const order: string[] = [];
+
+    const call = runtime.worker.call('attachments').finally(() => order.push('call'));
+    const answered = rulesAnswered().then(() => order.push('answered'));
+    await Promise.allSettled([call, answered]);
+
+    expect(order).toEqual(['call', 'answered']);
   }, 60_000);
 });

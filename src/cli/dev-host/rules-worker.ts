@@ -24,6 +24,9 @@ interface Call {
   readonly payload: unknown;
 }
 
+/** Host -> worker: answer once you get to this, so the host can tell busy rules from idle ones (#609). */
+const ASK_ALIVE = 'alive';
+
 /**
  * Worker -> host. A ready answer and a call's answer cross as the wire's JSON,
  * so the host holds exactly what a page would receive, never a live game
@@ -34,7 +37,8 @@ type FromWorker =
   | ({ readonly failed: string } & Stacked)
   | { readonly id: number; readonly value?: string }
   | ({ readonly id: number; readonly error: string } & Stacked)
-  | { readonly event: unknown };
+  | { readonly event: unknown }
+  | { readonly alive: true };
 
 /** Where in the rules an error was thrown, for the terminal only: a page is never sent it. */
 interface Stacked {
@@ -92,7 +96,9 @@ export function serveRules<D>(
     post({ failed: messageOf(error), ...stackOf(error) });
     return;
   }
-  port.on('message', async ({ id, type, payload }: Call) => {
+  port.on('message', async (message: Call | typeof ASK_ALIVE) => {
+    if (message === ASK_ALIVE) return post({ alive: true });
+    const { id, type, payload } = message;
     try {
       const answer: unknown = await handlers[type]!(payload);
       post(answer === undefined ? { id } : { id, value: toWireJson(answer) });
@@ -104,8 +110,17 @@ export function serveRules<D>(
 
 // ── The host side ─────────────────────────────────────────────────────────────
 
-/** Every rules worker this process has started and that has not exited. */
-const live = new Set<Worker>();
+/** Every rules worker this process has started and that has not exited, and how to wait for it to answer. */
+const live = new Map<Worker, () => Promise<void>>();
+
+/**
+ * Resolves once every running rules worker has answered (#609). The smoke walk does not count time
+ * `boardsmith dev` spends not answering; rules busy in their worker, as a loaded machine keeps
+ * them, answer late, so the dev host does too. A worker that stops counts as having answered.
+ */
+export async function rulesAnswered(): Promise<void> {
+  await Promise.all([...live.values()].map((answered) => answered()));
+}
 
 /** How many rules workers are running in this process. */
 export function liveRulesWorkers(): number {
@@ -140,8 +155,20 @@ export async function startRulesWorker(bundlePath: string, data: unknown): Promi
     `process.setSourceMapsEnabled(true);\n` +
     `import(${JSON.stringify(pathToFileURL(bundlePath).href)}).catch((error) => process.nextTick(() => { throw error; }));`;
   const worker = new Worker(boot, { eval: true, workerData: data });
-  live.add(worker);
-  worker.once('exit', () => live.delete(worker));
+  /** Who waits for the worker to answer: all of them at its next answer, or when it stops. */
+  const waiting: Array<() => void> = [];
+  const answered = (): void => {
+    for (const done of waiting.splice(0)) done();
+  };
+  live.set(worker, () => {
+    const once = new Promise<void>((resolve) => waiting.push(resolve));
+    worker.postMessage(ASK_ALIVE);
+    return once;
+  });
+  worker.once('exit', () => {
+    live.delete(worker);
+    answered();
+  });
 
   const pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
   let nextId = 0;
@@ -174,7 +201,8 @@ export async function startRulesWorker(bundlePath: string, data: unknown): Promi
       settled();
     };
     worker.on('message', (message: FromWorker) => {
-      if ('ready' in message) resolve(JSON.parse(message.ready));
+      if ('alive' in message) answered();
+      else if ('ready' in message) resolve(JSON.parse(message.ready));
       else if ('failed' in message) reject(fromWorker(message.failed, message));
       else if ('event' in message) {
         if (listener === null) throw new Error('A rules worker sent an event before anything listened for it.');
