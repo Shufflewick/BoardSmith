@@ -99,7 +99,7 @@ async function play(gameDefinition, setup, visit) {
  */
 function presetBot(gameDefinition, runner, seat, level) {
   const { gameClass, gameType, bot: strategy } = gameDefinition;
-  return createBot(runner.game, gameClass, gameType, seat, runner.actionHistory, level, strategy);
+  return createBot(runner.game, gameClass, gameType, seat, level, strategy);
 }
 
 /** Every preset with its timeout, then the fixed search, each from `seat`'s turn in `runner`'s game. */
@@ -114,7 +114,7 @@ async function searchPosition(gameDefinition, runner, seat) {
   // time goes. The wrappers cost time of their own, most of it on element
   // lookups, so a change that cuts lookups would otherwise look faster than it is.
   const fixedBot = () => createBot(
-    runner.game, gameDefinition.gameClass, gameDefinition.gameType, seat, runner.actionHistory,
+    runner.game, gameDefinition.gameClass, gameDefinition.gameType, seat,
     FIXED_STEPS, gameDefinition.bot, { seed: SEED },
   );
   const fixed = await measureSearch(targets, () => fixedBot().play(), { profile: false });

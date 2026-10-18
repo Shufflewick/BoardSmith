@@ -94,7 +94,6 @@ describe('MCTSBot restoreGame with execute block', () => {
       ExecuteFinishGame,
       'execute-finish',
       2,
-      history,
       { iterations: 1, playoutDepth: 1 }
     );
 
@@ -102,49 +101,6 @@ describe('MCTSBot restoreGame with execute block', () => {
     const restoredGame = (bot as any).restoreGame(snapshot);
     expect(restoredGame).toBeDefined();
     expect(restoredGame.isFinished()).toBe(true);
-  });
-
-  it('playSingle searches authoritatively even when trailing history is stale', async () => {
-    // Play a complete game to get the full action history
-    const finishedGame = createExecuteFinishGame();
-    const history: any[] = [];
-
-    while (!finishedGame.isFinished()) {
-      const flowState = finishedGame.getFlowState()!;
-      if (!flowState.awaitingInput) break;
-      const player = flowState.currentPlayer!;
-      finishedGame.continueFlow('play', { option: 'a' }, player);
-      history.push({ name: 'play', player, args: { option: 'a' } });
-    }
-
-    expect(finishedGame.isFinished()).toBe(true);
-
-    // Create a "live" game that's still in progress (only 1 action played) and
-    // pass it the FULL (finished-game) history. captureSnapshot() captures the
-    // LIVE in-progress state plus that stale trailing history.
-    //
-    // Under authoritative restore, restoreGame() adopts the snapshot's tree +
-    // snapshot.flowState directly and IGNORES the action history — so the clone
-    // is the live in-progress game, never the finished one. There is no replay
-    // and therefore nothing to "diverge": the bot simply searches and returns a
-    // legal move. (The old replay-based restore re-ran the stale history, hit
-    // the game-ending execute block mid-replay, and threw "flow diverged".)
-    const liveGame = createExecuteFinishGame();
-    liveGame.continueFlow('play', { option: 'a' }, liveGame.getFlowState()!.currentPlayer!);
-    expect(liveGame.getFlowState()!.awaitingInput).toBe(true);
-
-    const bot = new MCTSBot(
-      liveGame,
-      ExecuteFinishGame,
-      'execute-finish',
-      2,
-      history, // Stale trailing history — authoritatively ignored on restore
-      { iterations: 1, playoutDepth: 1, async: false }
-    );
-
-    const move = (await bot.play())!;
-    expect(move.action).toBe('play');
-    expect(['a', 'b', 'c']).toContain(move.args.option);
   });
 
   it('restoreGame preserves direct tree mutations not recorded in action history', () => {
@@ -194,7 +150,6 @@ describe('MCTSBot restoreGame with execute block', () => {
       MutationGame,
       'mutation',
       2,
-      [],
       { iterations: 1, playoutDepth: 1 },
     );
 

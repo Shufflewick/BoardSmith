@@ -64,7 +64,6 @@ export function declaredResultBot(game: DeclaredResultGame, seed: string, config
     DeclaredResultGame,
     'declared-result',
     1,
-    [],
     { async: false, timeout: Infinity, seed, ...config },
   );
 }

@@ -255,7 +255,7 @@ describe('enumeration budget across an action\'s selections (#691)', () => {
   it('the MCTS bot searches and plays a sample of an action over the budget, the same move for the same seed', async () => {
     const play = async () => {
       const game = started('species');
-      const bot = new MCTSBot(game, BudgetGame, 'budget', 1, [], { iterations: 5, playoutDepth: 1, seed: 'species-bot' });
+      const bot = new MCTSBot(game, BudgetGame, 'budget', 1, { iterations: 5, playoutDepth: 1, seed: 'species-bot' });
       const rootMoves: unknown[] = (bot as any).movesFor(game, game.getFlowState()!, 1, { sample: false });
       expect(rootMoves).toHaveLength(20);
       return bot.play();
@@ -334,7 +334,7 @@ describe('the two older caps go through the same budget (#692)', () => {
 
   it('the MCTS bot plays a sampled repeating move, the same for the same seed', async () => {
     const play = () =>
-      new MCTSBot(started('chain12'), BudgetGame, 'budget', 1, [], { iterations: 5, playoutDepth: 1, seed: 'chain-bot' }).play();
+      new MCTSBot(started('chain12'), BudgetGame, 'budget', 1, { iterations: 5, playoutDepth: 1, seed: 'chain-bot' }).play();
     const move = await play();
     expect(move?.action).toBe('chain12');
     expect(await play()).toEqual(move);

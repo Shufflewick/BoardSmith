@@ -120,7 +120,7 @@ function newRunner() {
 
 async function searchFor(runner: ReturnType<typeof newRunner>, strategy?: BotStrategy, parallel = 1) {
   const bot = new MCTSBot(
-    runner.game, CutGame, 'cut', 1, runner.actionHistory,
+    runner.game, CutGame, 'cut', 1,
     { iterations: ITERATIONS, playoutDepth: 4, async: false, timeout: Infinity, seed: 'cut-bot', parallel },
     strategy,
   );
@@ -236,7 +236,7 @@ async function searchRefusing(refused: string[], parallel = 1) {
   const game = new GameClass({ playerCount: 2, seed: 'refusing' });
   game.startFlow();
   const bot = new MCTSBot(
-    game, GameClass, 'refusing', 1, [],
+    game, GameClass, 'refusing', 1,
     { iterations: ITERATIONS, playoutDepth: 4, async: false, timeout: Infinity, seed: 'refusing-bot', parallel },
   );
   return bot.play();

@@ -47,7 +47,7 @@ describe('parallel MCTS time budget (#634)', () => {
     const step = 10;
     const clock = installFakeClock(step);
     const timeout = DIFFICULTY_PRESETS.hard.timeout!;
-    const bot = new MCTSBot(newGame(), ChoiceGame, 'choice', 1, [], { ...DIFFICULTY_PRESETS.hard, async: false });
+    const bot = new MCTSBot(newGame(), ChoiceGame, 'choice', 1, { ...DIFFICULTY_PRESETS.hard, async: false });
 
     const start = clock.now();
     const move = await bot.play();
@@ -77,7 +77,7 @@ describe('parallel MCTS with fewer iterations than sub-searches (#876)', () => {
       perSearch.push(this.config.iterations);
       return runSearch.call(this);
     });
-    const bot = new MCTSBot(newGame(), ChoiceGame, 'choice', 1, [], {
+    const bot = new MCTSBot(newGame(), ChoiceGame, 'choice', 1, {
       iterations: 3, parallel: 4, seed: 'bs876', timeout: Infinity, async: false,
     });
 

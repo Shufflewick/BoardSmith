@@ -63,7 +63,7 @@ describe('MCTS element-tree rollback (F-01)', () => {
     expect(game.deck.all(Piece).length).toBe(3);
     expect(game.handA.all(Piece).length).toBe(0);
 
-    const bot = new MCTSBot(game, DrawGame, 'draw', 1, [], {
+    const bot = new MCTSBot(game, DrawGame, 'draw', 1, {
       iterations: 1,
       playoutDepth: 0,
       async: false,
@@ -100,7 +100,7 @@ describe('MCTS element-tree rollback (F-01)', () => {
 
   it('full search over a draw game returns legal moves without corrupting state', async () => {
     const game = createDrawGame();
-    const bot = new MCTSBot(game, DrawGame, 'draw', 1, [], {
+    const bot = new MCTSBot(game, DrawGame, 'draw', 1, {
       iterations: 40,
       playoutDepth: 4,
       async: false,

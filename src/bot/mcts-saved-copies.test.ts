@@ -169,7 +169,7 @@ async function search(
   options: { budget?: number; config?: Partial<BotConfig>; botStrategy?: BotStrategy } = {},
 ): Promise<{ move: BotMove | null; stats: unknown; probe: SearchProbe; budget: number }> {
   const seat = game.getFlowState()!.currentPlayer ?? 1;
-  const bot = new MCTSBot(game, GameClass, 'stone-game', seat, [], {
+  const bot = new MCTSBot(game, GameClass, 'stone-game', seat, {
     iterations: 150,
     timeout: Infinity,
     async: false,

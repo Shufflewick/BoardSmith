@@ -21,7 +21,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Space } from '../index.js';
-import { createPlayerView, createSnapshot } from '../utils/snapshot.js';
+import { createPlayerView, createSnapshot, createSeatSnapshot } from '../utils/snapshot.js';
 import { snapshotTree } from '../utils/index.js';
 
 class LogGame extends Game<LogGame, Player> {
@@ -53,7 +53,7 @@ function newGame(playerCount = 3): LogGame {
  * withheld" from "I am reading nothing at all" is not a guard.
  */
 const payloadMessages = (game: LogGame, seat: number | null): string[] => {
-  const snapshot = createSnapshot(game, 'LogGame', [], undefined, { forSeat: seat, reseed: 'sandbox' });
+  const snapshot = createSeatSnapshot(game, 'LogGame', undefined, { forSeat: seat, reseed: 'sandbox' });
   if (snapshot.messageLog === undefined) {
     throw new Error(
       'createSnapshot produced no messageLog. The audience gate has moved off this ' +
