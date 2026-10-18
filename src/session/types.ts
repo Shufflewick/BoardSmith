@@ -10,6 +10,7 @@ import type { FlowState, Game, GameClass, AnimationEvent, PendingActionState } f
 import type { PlayerStateView } from '../engine/utils/index.js';
 import type { BotStrategy } from '../bot/index.js';
 import type { TutorialDefinition, TutorialStepView, Annotation } from '../engine/tutorial/types.js';
+import type { FollowUpOffer } from '../engine/action/types.js';
 import type { CheckpointPolicy, UndoPolicy, GameMetrics } from '../engine/index.js';
 import type { WorldDefinition } from '../world/definition.js';
 import type {
@@ -47,26 +48,7 @@ import { ErrorCode } from '../types/protocol.js';
 export { ErrorCode };
 
 // Re-export debug tracing types from engine for convenience
-export type { PickTrace, ConditionDetail } from '../engine/index.js';
-
-// Re-export repeating selection types from engine
-export type { PendingActionState, RepeatingSelectionState, RepeatConfig } from '../engine/index.js';
-
-import type { RefWithRole, FollowUpOffer } from '../engine/action/types.js';
-export type { RefWithRole };
-
-// Re-export tutorial types for consumers of the session surface
-export type {
-  TutorialDefinition,
-  TutorialStep,
-  TutorialGate,
-  TutorialGateAllowList,
-  TutorialGateCondition,
-  TutorialAdvanceCondition,
-  TutorialGateContext,
-  TutorialProgress,
-  TutorialStepView,
-} from '../engine/tutorial/types.js';
+export type { PickTrace } from '../engine/index.js';
 
 // ============================================
 // Game Class Types
