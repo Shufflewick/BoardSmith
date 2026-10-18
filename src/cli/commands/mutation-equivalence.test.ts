@@ -163,6 +163,17 @@ describe('signed equivalent-mutant dispositions (#713)', () => {
     await expect(fs.access(join(fixture.project, EQUIVALENCE_LEDGER))).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
+  it('refuses a mutant in a file no test loads, naming the file', async () => {
+    const fixture = await equivalenceProject({ 'src/unloaded.ts': 'export function fee(price: number): number {\n  return price * 2;\n}\n' });
+    // Node's permission model refuses node:inspector, so under it no test file has a record and every one runs for every mutant.
+    vi.stubEnv('NODE_OPTIONS', '');
+    const mutant = generateMutants('src/unloaded.ts', 'export function fee(price: number): number {\n  return price * 2;\n}\n', new Set([2]))[0];
+    const id = (await openMutantCache(fixture.project)).fingerprint(mutant)!;
+    await expect(mutationEquivalenceCommand(id, { project: fixture.project, base: fixture.base, contract: CONTRACT, proof: PROOF }))
+      .rejects.toThrow('The selected mutant is in src/unloaded.ts, which no test loads. Only a normally completed survivor can receive an equivalence review.');
+    await expect(fs.access(join(fixture.project, EQUIVALENCE_LEDGER))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it('refuses a timed-out candidate instead of preparing an equivalent approval', async () => {
     const fixture = await equivalenceProject({
       'tests/classify.test.ts': `import { it, expect } from 'vitest';

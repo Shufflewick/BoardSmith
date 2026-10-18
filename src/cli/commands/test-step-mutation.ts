@@ -1269,6 +1269,7 @@ async function runMutant({ runner, timeoutMs, testsLoading }: GreenRunner, mutan
   if (tests.length === 0) return 'unreached';
   const result = await runner.run(tests.map((absPath) => ({ absPath })), mutant, timeoutMs, { bail: true });
   if (result.kind === 'timed-out') return 'timed-out';
+  // The runner has no chunk files, so the report names no file here: the verdict rests on vitest's exit code.
   return suiteNoticed(result) ? 'killed' : 'survived';
 }
 

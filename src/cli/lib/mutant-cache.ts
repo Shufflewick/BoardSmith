@@ -65,8 +65,8 @@ import { readIfExists } from './read-if-exists.js';
  * new outcomes, which costs only running those mutants again; each save writes all of the run's
  * outcomes again, so the next one puts back what an overlapping save dropped.
  * `boardsmith verify` saves after each mutant it runs, so an interrupted run keeps every finished
- * outcome (#940). A save is about 10ms for a full file (1.6MB), next to a mutant's whole-suite run
- * of seconds. It saves only while the tree is clean, since the key is computed from the commit and
+ * outcome (#940). A save is about 10ms for a full file (1.6MB), next to a mutant's run of the test
+ * files that load its file, which takes seconds. It saves only while the tree is clean, since the key is computed from the commit and
  * would not describe files edited mid-run. It also captures the execution context
  * (`captureExecutionContext`) once when it starts, keys the cache by that capture, and refuses the
  * rest of the run, keeping nothing more, when the context changed before or while a mutant ran, or

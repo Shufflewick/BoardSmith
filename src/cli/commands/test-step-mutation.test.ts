@@ -1033,6 +1033,35 @@ export default defineConfig({ test: { include: ['tests/**/*.test.ts'], globalSet
       expect(result.unreached).toEqual([]);
       expect(result.summary).toMatchObject({ mutants: 2, killed: 2 });
     }, 120_000);
+
+    it('runs a mutant against a test file that reaches its file only through another file', async () => {
+      const { result, ran } = await selectionCheck(VITEST_CONFIG, {
+        'src/x.ts': "import { double } from './a';\nexport const quadruple = (n: number): number => double(double(n));\n",
+        'tests/a.test.ts': `${notesRun('a')}import { quadruple } from '../src/x';
+it('quadruples', () => { expect(quadruple(2)).toBe(8); });
+`,
+      }, new Map([['src/a.ts', lines(2)]]));
+      expect(result.notGreen).toBeUndefined();
+      expect(ran).toEqual(['a.ts a']);
+      expect(result.summary).toMatchObject({ survived: 0, timedOut: 0, unreached: 0, killed: result.summary.mutants });
+    }, 120_000);
+
+    it('runs a mutant against the test files whose project setup file loads its file', async () => {
+      const { result, ran } = await selectionCheck(`import { defineConfig } from 'vitest/config';
+export default defineConfig({ test: { include: ['tests/**/*.test.ts'], setupFiles: ['./setup.ts'] } });
+`, {
+        'src/seed.ts': 'export function seed(): number {\n  return 7;\n}\n',
+        'setup.ts': "import { seed } from './src/seed';\n(globalThis as { seed?: number }).seed = seed();\n",
+        'tests/seed.test.ts': `${notesRun('seed')}it('starts from the seed', () => { expect((globalThis as { seed?: number }).seed).toBe(7); });\n`,
+      }, new Map([['src/seed.ts', lines(2)], ['src/a.ts', lines(2)]]));
+      expect(result.notGreen).toBeUndefined();
+      // seed.ts is loaded before the recording setup file runs, which is merged after the project's own.
+      expect(result.unreached).toEqual([]);
+      expect(result.summary).toMatchObject({ files: 2, survived: 0, timedOut: 0, unreached: 0, killed: result.summary.mutants });
+      // The setup file did not turn selection off: a.ts's mutants still ran only against a.test.ts.
+      expect(ran.filter((r) => r.startsWith('a.ts '))).toEqual(['a.ts a']);
+      expect(ran).toContain('seed.ts seed');
+    }, 120_000);
   });
 
   it('runs nothing when no changed line can be mutated', async () => {
