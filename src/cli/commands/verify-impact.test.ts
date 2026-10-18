@@ -897,6 +897,12 @@ describe('contradictory — nextRulingNumber / appendRuling — over a self-cont
   });
 });
 
+/** Every JSON record in a run's RUN.md ledger, in order. */
+async function runLedgerRecords(project: string, runId: string): Promise<Array<Record<string, unknown>>> {
+  const ledgerText = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'RUN.md'), 'utf-8');
+  return parseLedgerBody(ledgerText, 'RUN.md').lines.map((line) => line.record as unknown as Record<string, unknown>);
+}
+
 describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires human prose, UNADJUDICATED writes no ruling, idempotent per pair', () => {
   let adjDir: string;
 
@@ -914,6 +920,22 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
     await fs.writeFile(join(project, DESIGN_DIR, 'RULINGS.md'), text);
     return { project, runId, pairId };
   }
+
+  it('keeps every record when an adjudication and classify record calls run in parallel (#999)', async () => {
+    const { project, runId, pairId } = await contradictoryProjectWithRulings();
+    const evidence = ['one', 'two', 'three', 'four', 'five'];
+
+    await Promise.all([
+      verifyImpactAdjudicateCommand({ project, runId, pairId, outcome: 'UNADJUDICATED', json: true }),
+      ...evidence.map((e) =>
+        verifyClassifyRecordCommand({ project, runId, pairId, label: 'contradictory', evidence: e, json: true }),
+      ),
+    ]);
+
+    const records = await runLedgerRecords(project, runId);
+    expect(records.filter((r) => r.kind === 'adjudication').map((r) => r.outcome)).toEqual(['UNADJUDICATED']);
+    expect(records.map((r) => String(r.evidence).split(' | ')[0])).toEqual(expect.arrayContaining(evidence));
+  });
 
   it('unadjudicated: outcome "resolved" with no --decision rejects with a message naming the missing field', async () => {
     const { project, runId, pairId } = await contradictoryProjectWithRulings();
@@ -1470,6 +1492,23 @@ describe('contradictory / marker — verifyImpactApplyCommand', () => {
     const printed = logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
     expect(printed).toContain('verify-impact-adjudicate');
     logSpy.mockRestore();
+  });
+
+  it('keeps every record when apply and classify record calls run in parallel (#999)', async () => {
+    const { project, runId, pairId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+    const evidence = Array.from({ length: 12 }, (_, i) => `record ${i}`);
+    // One record after another, so the ledger is being written for the whole of apply's run.
+    async function recordInTurn(): Promise<void> {
+      for (const e of evidence) {
+        await verifyClassifyRecordCommand({ project, runId, pairId, label: 'sharper', evidence: e, json: true });
+      }
+    }
+
+    await Promise.all([verifyImpactApplyCommand({ project, runId, json: true }), recordInTurn()]);
+
+    const records = await runLedgerRecords(project, runId);
+    expect(records.filter((r) => r.kind === 'impact').map((r) => r.slug)).toEqual(['movement']);
+    expect(records.map((r) => String(r.evidence).split(' | ')[0])).toEqual(expect.arrayContaining(evidence));
   });
 
   it('unadjudicated: a contradiction recorded UNADJUDICATED does not block — the chunk is marked stale with Adjudication: UNADJUDICATED', async () => {
