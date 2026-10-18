@@ -228,6 +228,27 @@ never rode the wire for a placeholder. What the placeholder does carry stays
 known and unforgeable, so a search can still see that a card is in a
 particular hand without seeing what it is.
 
+**A grant reaches through a concealed zone's hidden children (#961).** A card
+whose own visibility shows it to a seat (`addVisibleTo`, `showOnlyTo`,
+`showToAll`) is sent to that seat even when it sits below a hidden child of a
+hidden, count-only or owner-only zone, such as a card in a box in a
+`contentsHidden()` deck. It arrives as a child of that zone, after the zone's
+placeholders (a `contentsHidden()` zone has none), and the containers between
+are not sent at all: no id, name or count, so the seat cannot tell which child
+holds it. A card directly in the zone keeps its own place among the
+placeholders (#758). Below a hidden child, only an element's OWN grant counts:
+a rule it inherits from a zone in between (`contentsVisible()`,
+`hideContentsFrom(3)` on a box in the deck) sends nothing, since that box is
+hidden from the seat. A granted element there with a zone rule of its own
+applies it to its contents as usual: a granted `Deck` arrives with its
+placeholders and `childCount`, a granted box with `contentsVisible()` with its
+contents. One with no zone rule of its own carries only its own granted
+contents, since the rule they inherit sits on a hidden box.
+`isVisibleTo(seat)` follows the same rule, so it is true exactly when the
+seat's view carries the element. Outside a concealed zone, nothing below an
+element hidden from the seat is sent, granted or not. A shuffle clears every
+grant below what it moves (#962).
+
 **A card in a zone a seat cannot see is named to that seat by a placeholder id
 (#715).** The board view, the pick candidates and the reading of what the seat
 sends back all take it from one place (`src/engine/element/seat-placeholders.ts`),

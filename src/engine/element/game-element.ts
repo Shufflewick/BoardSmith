@@ -1309,13 +1309,13 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   /**
-   * Whether the seat's view carries this element (#1062): its own visibility
-   * allows the seat, and so does every ancestor's, since nothing below an
-   * element hidden from the seat is ever sent to it.
+   * Whether the seat's view carries this element (#1062, #961): its own
+   * visibility allows the seat, and so does every ancestor's, except the
+   * hidden ones between it and a concealed zone the seat can see, since a
+   * granted element below a zone's hidden child is sent inside that zone.
    */
   isVisibleTo(player: Player | number): boolean {
-    const seat = typeof player === 'number' ? player : player.seat;
-    return ownVisibilityAllows(this, seat) && (this._t.parent?.isVisibleTo(seat) ?? true);
+    return deepestRevealed(this, typeof player === 'number' ? player : player.seat) === this;
   }
 
   /**
@@ -2212,13 +2212,68 @@ export interface ZoneVisibilityOwner {
 
 /**
  * Whether the element's own visibility allows the seat, ancestors aside
- * (#1123). Only for a walk that never descends below an element hidden from
- * the seat, where every ancestor is already known visible; anywhere else,
- * `isVisibleTo` is the answer. Not re-exported from the engine.
+ * (#1123). Only for a walk from the top that already knows what its
+ * ancestors leave open (`deepestRevealed`); anywhere else, `isVisibleTo` is
+ * the answer. Not re-exported from the engine.
  */
 export function ownVisibilityAllows(element: GameElement, seat: number): boolean {
   // The owner is this element's, or the nearest ancestor's (inherited visibility).
   return canPlayerSee(element.getEffectiveVisibility(), seat, element.getEffectiveOwner()?.seat);
+}
+
+/** Whether `element` is a zone whose contents the seat cannot see. */
+export function hidesContents(element: GameElement, seat: number): boolean {
+  const zone = hasZoneVisibility(element) ? element.getZoneVisibility() : undefined;
+  return zone !== undefined && !canPlayerSee(zone, seat, element.getEffectiveOwner()?.seat);
+}
+
+/**
+ * Whether the element's OWN setting shows it to the seat (#961): an explicit
+ * visibility that allows the seat, or the seat in its own `addVisibleTo`
+ * grant. A rule inherited from a zone above it never counts.
+ */
+export function ownGrantAllows(element: GameElement, seat: number): boolean {
+  const own = element._visibility;
+  if (!own) return false;
+  return own.explicit ? canPlayerSee(own, seat, element.getEffectiveOwner()?.seat) : own.addPlayers?.includes(seat) === true;
+}
+
+/**
+ * The deepest of `element` and its ancestors that the seat's view carries, or
+ * undefined when not even the topmost is. The one rule `redactTreeForSeat`
+ * applies, walked from the top. Where contents are shown, a hidden element
+ * closes everything under it. A concealed zone's child is carried when its
+ * visibility allows the seat (#758). Below a hidden child of a concealed zone,
+ * only an element's own grant carries it (#961), since an open zone rule
+ * there sits on a container the seat cannot see. A granted element there with
+ * a zone rule of its own applies that rule to its contents, as usual.
+ */
+export function deepestRevealed(element: GameElement, seat: number): GameElement | undefined {
+  const chain: GameElement[] = [];
+  for (let at: GameElement | undefined = element; at; at = at._t.parent) chain.unshift(at);
+  let revealed: GameElement | undefined;
+  let state: RevealWalk = 'open';
+  for (const at of chain) {
+    const allowed = state === 'below-hidden' ? ownGrantAllows(at, seat) : ownVisibilityAllows(at, seat);
+    if (allowed) {
+      revealed = at;
+      state = walkBelow(at, seat, state);
+    } else if (state === 'open') {
+      break;
+    } else {
+      state = 'below-hidden';
+    }
+  }
+  return revealed;
+}
+
+type RevealWalk = 'open' | 'in-concealed-zone' | 'below-hidden';
+
+/** The walk's state for the contents of `at`, an element the seat's view carries. */
+function walkBelow(at: GameElement, seat: number, state: RevealWalk): RevealWalk {
+  // With no zone rule of its own, a granted element's contents inherit one from a hidden container above.
+  if (state === 'below-hidden' && !(hasZoneVisibility(at) && at.getZoneVisibility())) return state;
+  return hidesContents(at, seat) ? 'in-concealed-zone' : 'open';
 }
 
 /**

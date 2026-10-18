@@ -2000,6 +2000,9 @@ export async function computePayloadHash(): Promise<string> {
   secretPile.create(FixtureCard, 'secret-0', { suit: 'D', rank: 'A' });
   // A card's own grant gets through its hidden zone to that seat alone (#758).
   secretPile.create(FixtureCard, 'secret-1', { suit: 'D', rank: '2' }).addVisibleTo(1);
+  // A grant one level below a hidden child reaches that seat inside the pile, the child left out (#961).
+  const secretBox = secretPile.create(Space, 'secret-box');
+  secretBox.create(FixtureCard, 'secret-2', { suit: 'D', rank: '3' }).addVisibleTo(1);
 
   // Owner-visible hands: the asymmetry between "my hand" and "their hand" is
   // the hidden-information guarantee the platform relies on most.
