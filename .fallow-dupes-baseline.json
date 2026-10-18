@@ -31,8 +31,8 @@
     "src/cli/commands/verify-classify.ts:1600-1607|src/cli/commands/verify-classify.ts:815-822",
     "src/ui/composables/useFLIP.ts:334-342|src/ui/composables/useFLIP.ts:480-487",
     "src/ui/components/auto-ui/renderers/DieRenderer.vue:81-98|src/ui/components/auto-ui/renderers/PieceRenderer.vue:75-88",
-    "src/engine/element/game.ts:3684-3690|src/engine/element/game.ts:3714-3720",
-    "src/engine/element/game.ts:3756-3760|src/engine/element/game.ts:3788-3792",
+    "src/engine/element/game.ts:3693-3699|src/engine/element/game.ts:3723-3729",
+    "src/engine/element/game.ts:3765-3769|src/engine/element/game.ts:3797-3801",
     "src/ui/components/auto-ui/renderers/CardRenderer.vue:52-68|src/ui/components/auto-ui/renderers/HandRenderer.vue:45-63",
     "src/ui/components/auto-ui/renderers/CardRenderer.vue:548-558|src/ui/components/auto-ui/renderers/HandRenderer.vue:538-548"
   ],
