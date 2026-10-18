@@ -166,7 +166,7 @@ export function createWorldConnections(
             console.error(
               styleText('red',
                 `[boardsmith dev] world message '${pageText(message.type)}' failed: ` +
-                  `${error instanceof Error ? error.message : String(error)}`,
+                  `${pageText(error instanceof Error ? error.message : String(error))}`,
               ),
             );
           });
@@ -185,7 +185,7 @@ export function createWorldConnections(
           // did (#387): it can start a departure's clock command.
           queue
             .admit({ run: () => host().disconnect(gone) })
-            .catch((error: unknown) => console.error(styleText('red', `[boardsmith dev] a page leaving the world failed: ${error instanceof Error ? error.message : String(error)}`)));
+            .catch((error: unknown) => console.error(styleText('red', `[boardsmith dev] a page leaving the world failed: ${pageText(error instanceof Error ? error.message : String(error))}`)));
         }
       });
     },

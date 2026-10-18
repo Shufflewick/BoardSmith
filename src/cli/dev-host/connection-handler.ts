@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { styleText } from 'node:util';
 import type { WebSocket } from 'ws';
 import { claimWebSocketPath } from '../commands/dev-server.js';
 import type { ClientInbound, HostOutbound, MultiplayerHost } from './multiplayer-host.js';
@@ -26,6 +27,15 @@ interface DevHostConnectionOptions {
   queue: Pick<RulesReloadQueue, 'admit'>;
   /** Called when an async message dispatch rejects; receives the failing message type, escaped and capped for a log (#1089). */
   onError: (err: unknown, msgType: string) => void;
+}
+
+/**
+ * How `boardsmith dev` reports a table message that failed: the message, not
+ * the error, since a stack trace in its log is a leak (#240), escaped because a
+ * page can influence it (#1132).
+ */
+export function logMessageFailure(err: unknown, msgType: string): void {
+  console.error(styleText('red', `[boardsmith dev] message '${msgType}' failed: ${pageText(err instanceof Error ? err.message : String(err))}`));
 }
 
 /**

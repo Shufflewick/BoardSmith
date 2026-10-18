@@ -9,7 +9,10 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
-import { createDevHostConnectionHandler } from './connection-handler.js';
+import type { ExecutableOp, ExecuteOpAdapter, OpResult } from '../../session/index.js';
+import { boundaryKeyOfHost } from '../../session/testing/boundary-stamp.js';
+import { createDevSession } from './bridge.js';
+import { createDevHostConnectionHandler, logMessageFailure } from './connection-handler.js';
 import { pageText } from './socket-message.js';
 import { openSocketPage, serveSockets } from './socket-page.test-helper.js';
 import { createWorldConnections } from './world-connections.js';
@@ -80,5 +83,79 @@ describe('#1089: pageText', () => {
 
   it('escapes DEL and both ends of C1', () => {
     expect(pageText('\u007f\u0080\u009f')).toBe('\\u007f\\u0080\\u009f');
+  });
+});
+
+/**
+ * #1132: THE ERROR MESSAGE PRINTED AFTER A PAGE'S MESSAGE TYPE IS ESCAPED TOO,
+ * so no text can forge a second terminal line or reorder one with a bidi override.
+ */
+const forging = new Error('boom\n[boardsmith dev] forged\u202eline');
+const forgingEscaped = 'boom\\u000a[boardsmith dev] forged\\u202eline';
+const failingForging = { admit: () => Promise.reject(forging) };
+
+/** The console.error line that names `marker`, once one is printed. */
+function nextErrorLine(marker: string): Promise<string> {
+  return new Promise((resolve) =>
+    vi.spyOn(console, 'error').mockImplementation((...parts: unknown[]) => {
+      const line = parts.join(' ');
+      if (line.includes(marker)) resolve(line);
+    }),
+  );
+}
+
+describe('#1132: an error message in the dev server log', () => {
+  it('table host: the failure line escapes the error message', () => {
+    const logged = nextErrorLine('failed');
+    logMessageFailure(forging, 'server_request');
+    return expect(logged).resolves.toContain(`message 'server_request' failed: ${forgingEscaped}`);
+  });
+
+  it('world host: a failed message and a failed departure escape the error message', async () => {
+    const lines: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((line: string) => lines.push(line));
+    const server = await serveSockets(createWorldConnections(() => ({}) as LocalWorldHost, failingForging, () => {}).accept);
+    closers.push(server.close);
+    const socket = new WebSocket(`ws://127.0.0.1:${server.port}`);
+    await new Promise((resolve) => socket.once('open', resolve));
+    socket.send(JSON.stringify({ type: 'hello', clientId: 'p1' }));
+    socket.send(JSON.stringify({ type: 'page' }));
+    await vi.waitFor(() => expect(lines.some((l) => l.includes(`world message 'page' failed: ${forgingEscaped}`))).toBe(true));
+    socket.close();
+    // Matched by its text: the #1089 test's socket can report its own departure here.
+    await vi.waitFor(() => expect(lines.some((l) => l.includes(`leaving the world failed: ${forgingEscaped}`))).toBe(true));
+  });
+
+  it('bridge: a failed server_request escapes the error message', async () => {
+    const lines: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...parts: unknown[]) => lines.push(parts.join(' ')));
+    const session = createDevSession({
+      debug: () => false,
+      playerCount: 1,
+      executeOp: (async (_snap: unknown, _pend: unknown, op: ExecutableOp) => {
+        if (op.type !== 'start') throw forging;
+        return {
+          success: true,
+          snapshot: { flowState: {}, winners: [], actionHistory: [] },
+          playerViews: [],
+          spectatorView: undefined,
+          flowDebugInfo: {},
+        } as unknown as OpResult;
+      }) as ExecuteOpAdapter,
+      postGameState: () => {},
+      postServerResponse: () => {},
+    });
+    await session.start();
+    await session.handleServerRequest(1, 'r', 'action', { actionName: 'pass', args: {}, boundaryKey: boundaryKeyOfHost(session.host) });
+
+    expect(lines.find((l) => l.includes("server_request 'action' failed"))).toContain(forgingEscaped);
+  });
+});
+
+describe('#1132: pageText', () => {
+  it('escapes every bidi override and isolate character', () => {
+    expect(pageText('\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069')).toBe(
+      '\\u202a\\u202b\\u202c\\u202d\\u202e\\u2066\\u2067\\u2068\\u2069',
+    );
   });
 });
