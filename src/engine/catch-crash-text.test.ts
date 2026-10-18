@@ -188,6 +188,15 @@ describe('FlowHaltedError (#1120)', () => {
     expect(log.mock.calls.filter((call) => call.includes(cause))).toHaveLength(1);
   });
 
+  it('the runner logs a NotSimulableError cause too, since a live game that halts on one has really halted', () => {
+    const cause = new NotSimulableError('needs the hidden map');
+    const runner = new GameRunner({ GameClass: haltingGame(() => cause), gameType: 'halt', gameOptions: { playerCount: 2, seed: 'halt' } });
+    runner.start();
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(runner.performAction('go', 1, {}).success).toBe(false);
+    expect(log.mock.calls.filter((call) => call.includes(cause))).toHaveLength(1);
+  });
+
   it('creating a halt logs nothing, so a search copy that halts on hidden state stays quiet (#31)', () => {
     const HaltingGame = haltingGame(() => new NotSimulableError('needs the hidden map'));
     const game = new HaltingGame({ playerCount: 2, seed: 'halt' });
