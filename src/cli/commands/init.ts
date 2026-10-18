@@ -32,6 +32,7 @@ import { ingestArchiveCommand, rulebookArchivePaths } from './ingest-archive.js'
 import { installIngestHook } from '../lib/ingest-hook.js';
 import { assertGameName } from '../lib/user-name.js';
 import { gitOutput } from '../lib/git-output.js';
+import { boardsmithInstallKind, boardsmithPackageRoot } from '../lib/boardsmith-version.js';
 
 export interface InitOptions {
   /**
@@ -366,6 +367,15 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
   // class, and `assertGameName` is the one place that decides what can be all
   // four (#240).
   assertGameName(name);
+
+  // The game links to the BoardSmith running init (#849), and npm clears its _npx cache (#1007).
+  const boardsmithRoot = boardsmithPackageRoot();
+  if (boardsmithInstallKind(boardsmithRoot) === 'npx-cache') {
+    throw new Error(
+      `This BoardSmith is running from npm's _npx cache (${boardsmithRoot}), which npm clears, and the new game would ` +
+        'link to it. Install BoardSmith, or clone it and run `npm link` in the clone, then run `boardsmith init` again.',
+    );
+  }
 
   // REQUIRE an explicit rulebook decision. This is the twelfth mechanism tried for the ingest
   // archive and the first that does not depend on the session reading anything.
