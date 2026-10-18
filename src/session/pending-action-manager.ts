@@ -140,9 +140,7 @@ export class PendingActionManager<G extends Game = Game> {
       return { success: false, error: taken.error, errorCode: taken.errorCode, nextChoices: taken.nextChoices };
     }
 
-    // A pick's onSelect or onEach may have changed the game. A repeat's last
-    // pick is recorded before its action runs, so a failed action keeps what
-    // that onEach did (whether it should is #1169).
+    // A repeat's last pick is saved before its action runs, so a failed action keeps that onEach's changes (#1169 decides).
     if (taken.repeating || !taken.complete) this.#runner.captureCheckpoint();
     if (taken.complete) return this.#completePendingAction(pendingState, playerPosition);
 
