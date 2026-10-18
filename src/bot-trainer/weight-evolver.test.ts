@@ -285,7 +285,7 @@ describe('WeightEvolver confirms the search pick on fresh games before keeping i
 
   it('keeps the original, and reports no improvement, when every candidate is as strong as it', async () => {
     fitnessOf = noisy(() => 0.5);
-    // One seed outside the rule's allowed 1 in 20 false accepts; the 100-run test below checks the rate
+    // A seed that is not one of the ~1 in 20 runs the rule may wrongly accept; the 100-run test below checks the rate
     const result = await evolver({ ...defaultSearch, seed: 'equal-a' }).evolve(original);
 
     expect(result.bestFitness, 'the search should have been fooled by a lucky candidate').toBeGreaterThan(result.initialFitness);

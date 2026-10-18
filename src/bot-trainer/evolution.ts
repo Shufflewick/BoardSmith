@@ -28,7 +28,7 @@ function gaussian(rng: () => number): number {
 /** Probability to flip sign during mutation */
 const SIGN_FLIP_PROBABILITY = 0.1;
 
-/** Authored weights are whole numbers, so a weight under one unit is nudged as if it were 1 and a zero weight can still move */
+/** A weight below 1 (including one written back with a decimal) moves by a fixed sigma, not in proportion, so zero can still move */
 const NUDGE_FLOOR = 1;
 
 /** Probability to use crossover (vs pure mutation) when generating offspring */

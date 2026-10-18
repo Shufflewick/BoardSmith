@@ -76,9 +76,10 @@ The game's `gameDefinition` must set `bot.objectives` to the objectives function
 Each mutation nudges every weight by a random amount in proportion to its own
 size, so a weight of 50 and a weight of 2 each move by about the same fraction
 (#1029). Only the ratios between weights matter to the bot, so a fixed nudge
-would barely move the large weights and swamp the small ones. A weight smaller
-than 1 is nudged as if it were 1, so a zero weight can still move: authored
-weights are whole numbers, so 1 is the smallest step a game writes.
+would barely move the large weights and swamp the small ones. A weight below 1,
+including one an earlier run wrote back with a decimal such as 0.3, is
+deliberately nudged by a fixed amount (sigma) instead of in proportion, so that
+a zero weight can still move.
 
 `WeightEvolverConfig.evolutionSigma` is the size of that nudge as a fraction of
 the weight, 0.2 by default (about 20%, which is what the old fixed nudge of 1
