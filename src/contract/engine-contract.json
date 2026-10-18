@@ -1,5 +1,5 @@
 {
-  "revision": 239,
+  "revision": 240,
   "surfaceHash": "d045fa6967c06929",
   "payloadHash": "0e2d27db00239080",
   "formatHash": "3aff5d1f34f52ec0",
@@ -1855,6 +1855,14 @@
       "payloadHash": "0e2d27db00239080",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "engineRootFieldAudience is removed from the boardsmith root (nothing called it; isEngineRootField and GAME_ROOT_FIELD_AUDIENCE remain), and GameRunner.getFlowDebugInfo is removed (call runner.game.getFlowDebugInfo()). No game uses either, so no rebuild is needed; no saved-state or payload shape changes."
+    },
+    {
+      "revision": 240,
+      "date": "2026-10-18",
+      "surfaceHash": "d045fa6967c06929",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "shuffle() clears the visibility grants of everything in the shuffled space, so a seat that peeked at a card cannot follow it (#962)"
     }
   ]
 }
