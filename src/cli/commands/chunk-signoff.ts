@@ -204,14 +204,14 @@ function readUi(chunkText: string, slug: string): string {
 }
 
 async function readSketch(projectDir: string): Promise<string> {
-  try {
-    return await fs.readFile(designPath(projectDir, SKETCH_MD), 'utf-8');
-  } catch {
+  const text = await readIfExists(designPath(projectDir, SKETCH_MD), (p) => fs.readFile(p, 'utf-8'));
+  if (text === undefined) {
     throw new Error(
       `No ${SKETCH_MD} in this project's design/ folder. Run this from the game project, or ` +
         `pass --project <dir>.`,
     );
   }
+  return text;
 }
 
 function sketchEntryRange(sketch: string, slug: string): { start: number; end: number } | undefined {
@@ -927,9 +927,9 @@ function recordFromOptions(options: SignoffOptions, ctx: SignoffContext, when: s
 
 /** A chunk's CHUNK.md, or a refusal naming the slug fix when there is none. */
 async function readChunkText(dir: string, slug: string): Promise<string> {
-  return fs.readFile(chunkMdPath(dir, slug), 'utf-8').catch(() => {
-    throw new Error(`No chunk found at ${relChunkMdPath(slug)} in ${dir}.\n${SLUG_REMEDY}`);
-  });
+  const text = await readIfExists(chunkMdPath(dir, slug), (p) => fs.readFile(p, 'utf-8'));
+  if (text === undefined) throw new Error(`No chunk found at ${relChunkMdPath(slug)} in ${dir}.\n${SLUG_REMEDY}`);
+  return text;
 }
 
 async function readBuiltChunk(dir: string, slug: string): Promise<string> {
@@ -1117,7 +1117,7 @@ export async function recordWaiver(options: WaiverOptions): Promise<string> {
 
   const ledgerPath = designPath(dir, WAIVERS_MD);
   return withLedgerLock(ledgerPath, async () => {
-    const existing = await fs.readFile(ledgerPath, 'utf-8').catch(() => WAIVERS_HEADER);
+    const existing = (await readIfExists(ledgerPath, (p) => fs.readFile(p, 'utf-8'))) ?? WAIVERS_HEADER;
     const next = parseWaivers(existing).reduce((max, w) => Math.max(max, Number(w.id.slice(1))), 0) + 1;
     const id = `W${next}`;
     const entry = [

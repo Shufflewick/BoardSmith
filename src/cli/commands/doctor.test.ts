@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { join } from 'node:path';
-import { doctorCommand } from './doctor.js';
+import { appendGitignoreEntry, doctorCommand } from './doctor.js';
 import { DESIGN_DIR, SCRATCH_DIR } from '../lib/project-paths.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { GAME_VITE_CONFIG, GAME_VITE_CONFIG_FILE } from '../lib/test-run-scope.js';
@@ -304,6 +304,30 @@ describe('boardsmith doctor', () => {
     await doctorCommand({ project: projectDir, fix: true });
 
     expect(await read(join(projectDir, '.gitignore'))).toMatch(/^\.boardsmith\/$/m);
+  });
+
+  it('refuses, naming the file, when .gitignore cannot be read, and leaves it as it was (#1110)', async () => {
+    const projectDir = await project({ '.gitignore': 'node_modules/\n' });
+    const gitignore = join(projectDir, '.gitignore');
+    await fs.chmod(gitignore, 0o200);
+    try {
+      await expect(doctorCommand({ project: projectDir, fix: true })).rejects.toThrow(`Could not read ${gitignore} (EACCES)`);
+    } finally {
+      await fs.chmod(gitignore, 0o644);
+    }
+    expect(await read(gitignore)).toBe('node_modules/\n');
+  });
+
+  it('the ignore-rule writer itself refuses an unreadable .gitignore and leaves it as it was (#1110)', async () => {
+    const projectDir = await project({ '.gitignore': 'node_modules/\n' });
+    const gitignore = join(projectDir, '.gitignore');
+    await fs.chmod(gitignore, 0o200);
+    try {
+      await expect(appendGitignoreEntry(projectDir)).rejects.toThrow(`Could not read ${gitignore} (EACCES)`);
+    } finally {
+      await fs.chmod(gitignore, 0o644);
+    }
+    expect(await read(gitignore)).toBe('node_modules/\n');
   });
 
   it('a project whose .gitignore already covers .boardsmith/ is healthy', async () => {

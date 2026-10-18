@@ -539,3 +539,12 @@ describe('verifyRulingRecheckCommand', () => {
     }
   });
 });
+
+describe('verify-ruling-recheck: an unreadable RULINGS.md (#1110)', () => {
+  it('names the file rather than calling it missing', async () => {
+    const project = tempTree('bs-ruling-recheck-unreadable-');
+    const rulings = join(project, DESIGN_DIR, 'RULINGS.md');
+    await fs.mkdir(rulings, { recursive: true });
+    await expect(verifyRulingRecheckCommand({ project, json: true })).rejects.toThrow(`Could not read ${rulings} (EISDIR)`);
+  });
+});

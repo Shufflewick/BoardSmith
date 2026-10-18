@@ -5,6 +5,7 @@ import {
 } from '../lib/project-paths.js';
 import type { Role } from '../lib/agent-roles.js';
 import { promises as fs } from 'node:fs';
+import { readIfExists } from '../lib/read-if-exists.js';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { styleText } from 'node:util';
 import { atomicWriteFile } from './verify-run.js';
@@ -1341,13 +1342,11 @@ export async function readSliceArgument(
         `Pass a path of the form "rulebook/<file>.md", relative to ${DESIGN_DIR}/.`,
     );
   }
-  try {
-    return await fs.readFile(sliceAbsPath, 'utf-8');
-  } catch {
-    throw new Error(
-      `${command} could not read --slice-path "${slicePath}" (looked for it at ${sliceAbsPath}).`,
-    );
+  const text = await readIfExists(sliceAbsPath, (p) => fs.readFile(p, 'utf-8'));
+  if (text === undefined) {
+    throw new Error(`${command} found no --slice-path "${slicePath}" (looked for it at ${sliceAbsPath}).`);
   }
+  return text;
 }
 
 // -------------------------------------------------------------------------------------------
@@ -1358,12 +1357,8 @@ async function readRequiredJsonFile(
   filePath: string,
   flagLabel: string,
 ): Promise<SubagentJsonParseResult> {
-  let text: string;
-  try {
-    text = await fs.readFile(filePath, 'utf-8');
-  } catch {
-    throw new Error(`verify-derive-record could not read ${flagLabel} at "${filePath}".`);
-  }
+  const text = await readIfExists(filePath, (p) => fs.readFile(p, 'utf-8'));
+  if (text === undefined) throw new Error(`verify-derive-record found no ${flagLabel} at "${filePath}".`);
   return parseSubagentJsonInput(text, flagLabel, filePath);
 }
 

@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import { gitSucceeds } from '../lib/git-output.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 import { join, relative, resolve } from 'node:path';
 import { styleText } from 'node:util';
 import {
@@ -117,23 +118,14 @@ const GITIGNORE_EQUIVALENTS: ReadonlySet<string> = new Set(['.boardsmith/', '.bo
  * `git check-ignore`, because doctor also runs on projects that are not git repositories yet.
  */
 async function gitignoreCovers(projectDir: string): Promise<boolean> {
-  try {
-    const text = await fs.readFile(join(projectDir, '.gitignore'), 'utf-8');
-    return text.split('\n').some((line) => GITIGNORE_EQUIVALENTS.has(line.trim()));
-  } catch {
-    return false;
-  }
+  const text = await readIfExists(join(projectDir, '.gitignore'), (p) => fs.readFile(p, 'utf-8'));
+  return text !== undefined && text.split('\n').some((line) => GITIGNORE_EQUIVALENTS.has(line.trim()));
 }
 
 /** Append the ignore rule, preserving whatever the designer already put in `.gitignore`. */
-async function appendGitignoreEntry(projectDir: string): Promise<void> {
+export async function appendGitignoreEntry(projectDir: string): Promise<void> {
   const path = join(projectDir, '.gitignore');
-  let existing = '';
-  try {
-    existing = await fs.readFile(path, 'utf-8');
-  } catch {
-    // No .gitignore yet — write one.
-  }
+  const existing = (await readIfExists(path, (p) => fs.readFile(p, 'utf-8'))) ?? '';
   const prefix = existing === '' || existing.endsWith('\n') ? existing : `${existing}\n`;
   await fs.writeFile(
     path,

@@ -1571,3 +1571,12 @@ describe('## Verified Against — additional source hashes (#305)', () => {
     ]);
   });
 });
+
+describe('chunk-check: an unreadable CHUNK.md (#1110)', () => {
+  it('names the file rather than calling it missing', async () => {
+    const project = tempTree('bs-chunk-provenance-unreadable-');
+    const chunk = join(project, DESIGN_DIR, 'chunks', 'punch', 'CHUNK.md');
+    await fs.mkdir(chunk, { recursive: true });
+    await expect(recordVerifiedAgainst('punch', { project })).rejects.toThrow(`Could not read ${chunk} (EISDIR)`);
+  });
+});

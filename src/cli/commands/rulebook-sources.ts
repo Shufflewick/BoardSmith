@@ -1,5 +1,6 @@
 import { designRulebookDir } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
+import { readIfExists } from '../lib/read-if-exists.js';
 import { join, resolve } from 'node:path';
 import { styleText } from 'node:util';
 
@@ -281,11 +282,9 @@ async function readNamedSlices(projectDir: string, slices: string[]): Promise<Ma
           `(${NON_SLICE_FILES.join(' and ')} are not slices of one document).`,
       );
     }
-    try {
-      texts.set(name, await fs.readFile(join(rulebookDir, name), 'utf-8'));
-    } catch {
-      throw new Error(`No slice rulebook/${name} in ${projectDir}. Nothing was written.`);
-    }
+    const text = await readIfExists(join(rulebookDir, name), (p) => fs.readFile(p, 'utf-8'));
+    if (text === undefined) throw new Error(`No slice rulebook/${name} in ${projectDir}. Nothing was written.`);
+    texts.set(name, text);
   }
   return texts;
 }

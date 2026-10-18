@@ -50,6 +50,7 @@
 
 import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
+import { readIfExists } from '../lib/read-if-exists.js';
 import { join, resolve, sep } from 'node:path';
 import { styleText } from 'node:util';
 import { type InterpretationLine, interpretationLines, parseSupersededClaims } from './build-manifest.js';
@@ -682,9 +683,7 @@ export async function claimQuoteCheckCommand(
   }
 
   const shownChunk = shownChunkPath(slug);
-  try {
-    await fs.access(chunkMdPath(projectDir, slug));
-  } catch {
+  if ((await readIfExists(chunkMdPath(projectDir, slug), (p) => fs.stat(p))) === undefined) {
     console.error(
       styleText('red', `No CHUNK.md at ${shownChunk}. Check the slug, or pass --project <dir> for a different project.`),
     );

@@ -1,6 +1,7 @@
 import { designChunksDir, designRulebookDir } from '../lib/project-paths.js';
 import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
+import { readIfExists } from '../lib/read-if-exists.js';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { styleText } from 'node:util';
 import { atomicWriteFile } from './verify-run.js';
@@ -1278,12 +1279,8 @@ async function readSubagentJsonFile(
   flagLabel: string,
   command: string,
 ): Promise<SubagentJsonParseResult> {
-  let text: string;
-  try {
-    text = await fs.readFile(filePath, 'utf-8');
-  } catch {
-    throw new Error(`${command} could not read ${flagLabel} at "${filePath}".`);
-  }
+  const text = await readIfExists(filePath, (p) => fs.readFile(p, 'utf-8'));
+  if (text === undefined) throw new Error(`${command} found no ${flagLabel} at "${filePath}".`);
   return parseSubagentJsonInput(text, flagLabel, filePath);
 }
 
