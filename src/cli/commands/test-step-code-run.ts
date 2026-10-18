@@ -27,6 +27,7 @@
  * module included, is the game's code.
  */
 import { posix } from 'node:path';
+import { isSameOrInside, mayBeSameOrInside } from '../lib/path-inside.js';
 import { findDispatches, parseSource, walk, type AstNode } from './test-step-ast.js';
 
 /** Modules a scan never needs: they mount components or run a game. */
@@ -153,10 +154,8 @@ function globReachesCode(pattern: string, file: string): boolean {
   // a name like `notes..md` also contains one and is reported, the safe side.
   if (joined.includes('..')) return true;
   const fixed = joined.split(/[*?[{(]/)[0];
-  const dir = fixed.slice(0, fixed.lastIndexOf('/') + 1).toLowerCase();
-  // A case-insensitive disk (macOS, Windows) matches `SRC/` and `ſrc/` to `src/`; no fold of non-ASCII is sure.
-  if (/[^\x00-\x7f]/.test(dir)) return true;
-  return CODE_DIRS.some((code) => dir.startsWith(code) || code.startsWith(dir));
+  const dir = fixed.slice(0, fixed.lastIndexOf('/') + 1);
+  return CODE_DIRS.some((code) => mayBeSameOrInside(code, dir) || mayBeSameOrInside(dir, code));
 }
 
 /**
@@ -318,7 +317,7 @@ function isLiteralConstant(module: InertModule, name: string, seen = new Set<str
 
 /** Whether an import takes only literal constants and types from a module that runs nothing on load. */
 function importsOnlyThemeConstants(node: AstNode, modulePath: string, context: CodeRunContext): boolean {
-  if (node.type !== 'ImportDeclaration' || !modulePath.startsWith(THEME_CONSTANTS_DIR)) return false;
+  if (node.type !== 'ImportDeclaration' || !isSameOrInside(THEME_CONSTANTS_DIR, modulePath)) return false;
   const specifiers = node.specifiers as Statement[];
   if (specifiers.length === 0 || specifiers.some((s) => s.type !== 'ImportSpecifier')) return false;
   const text = context.text(modulePath);
@@ -362,10 +361,10 @@ function codeRunByRelativeImport(
   if (query === 'raw') return undefined;
   const target = posix.normalize(posix.join(posix.dirname(file), pathPart));
   const resolved = resolveScript(target, context) ?? target;
-  if (resolved.startsWith('src/')) {
+  if (mayBeSameOrInside('src', resolved)) {
     return importsOnlyThemeConstants(node, resolved, context) ? undefined : `imports ${resolved} from the game's src/`;
   }
-  const text = resolved.startsWith('tests/') && !visited.has(resolved) ? context.text(resolved) : undefined;
+  const text = mayBeSameOrInside('tests', resolved) && !visited.has(resolved) ? context.text(resolved) : undefined;
   const inner = text === undefined ? undefined : codeRunIn(text, resolved, context, visited);
   return inner && `imports ${resolved}, which ${inner.what}`;
 }

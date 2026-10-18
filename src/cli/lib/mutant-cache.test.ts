@@ -24,9 +24,9 @@ const installRecord = (...packages: string[]) => JSON.stringify({ packages: Obje
  * A committed game project with a rule, its test, the design records the bs- skills keep, an
  * installed BoardSmith, and npm's record of the install. `node_modules` is out of git, as in a game.
  */
-async function project(): Promise<string> {
+async function project(name = 'game'): Promise<string> {
   const tree = tempTree('bs-mutant-cache-');
-  const dir = join(tree, 'game');
+  const dir = join(tree, name);
   await write(dir, {
     '.gitignore': '.boardsmith/\nnode_modules/\n',
     'package-lock.json': '{ "lockfileVersion": 3 }\n',
@@ -295,8 +295,8 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
      * The game from `project()`, depending on `dep` as `"dep": "file:../dep"` installs it: a link in
      * `node_modules` to a sibling folder, which npm's install record names but whose content it does not.
      */
-    async function withSibling(sibling: { git: boolean }): Promise<{ dir: string; dep: string }> {
-      const dir = await project();
+    async function withSibling(sibling: { git: boolean }, name?: string): Promise<{ dir: string; dep: string }> {
+      const dir = await project(name);
       const dep = join(dirname(dir), 'dep');
       await write(dep, { 'package.json': JSON.stringify({ name: 'dep', version: '1.0.0' }), 'src/fee.ts': 'export const rate = 2;\n' });
       if (sibling.git) {
@@ -332,6 +332,11 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
         const { dir, dep } = await withSibling({ git: false });
         expect(await afterChange(dir, dep, change, undefined)).toEqual({ change: Object.keys(change)[0], outcome: undefined });
       }
+    });
+
+    it('runs the mutant again when a sibling package changed beside a repository whose folder name is not ASCII (#1053)', async () => {
+      const { dir, dep } = await withSibling({ git: false }, 'jeux-vidéo');
+      expect(await afterChange(dir, dep, { 'src/fee.ts': 'export const rate = 3;\n' }, undefined)).toEqual({ change: 'src/fee.ts', outcome: undefined });
     });
 
     it("runs the mutant again when the linked package's own install, or a package it links to in turn, changed", async () => {

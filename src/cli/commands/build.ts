@@ -1,6 +1,6 @@
 import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync, mkdirSync, cpSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { isAbsolute, join, relative, sep } from 'node:path';
+import { join, relative } from 'node:path';
 import { build as viteBuild } from 'vite';
 import { styleText } from 'node:util';
 import ora from 'ora';
@@ -9,6 +9,7 @@ import { getProjectContext, loadGameDefinition, rulesEntrySource } from './game-
 import { buildCli, CLI_ENTRY, CLI_OUTFILE } from '../lib/build-cli.js';
 import { resolveUserPath } from '../lib/user-path.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
+import { isSameOrInside } from '../lib/path-inside.js';
 import { requireGameProjectManifests, requireRulesIndex, requireTableUi, resolveRulesDir, tableUiState } from '../lib/game-project.js';
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
 import { listFiles } from '../lib/source-files.js';
@@ -387,18 +388,13 @@ export function outDirRefusal(projectDir: string, outDir: string): string | unde
     return 'it is a symlink, and emptying it would remove only the link and send the build somewhere new.';
   }
   const real = realpathSync.native(outDir);
-  if (isSameOrInside(realpathSync.native(projectDir), real)) return 'it is the project folder or a folder holding it.';
+  if (isSameOrInside(real, realpathSync.native(projectDir))) return 'it is the project folder or a folder holding it.';
   if (real === realpathSync.native(homedir())) return 'it is your home folder.';
   if (!statSync(real).isDirectory()) return 'it is a file, not a folder.';
   if (readdirSync(real).length > 0 && !existsSync(join(real, 'rules', 'rules.js'))) {
     return 'it is not empty and has no rules/rules.js, so it does not look like an earlier build output.';
   }
   return undefined;
-}
-
-function isSameOrInside(path: string, folder: string): boolean {
-  const fromFolder = relative(folder, path);
-  return !isAbsolute(fromFolder) && fromFolder !== '..' && !fromFolder.startsWith(`..${sep}`);
 }
 
 /** Deletes `outDir`, so no file an earlier build wrote ships in this one (#842), or throws why not. */

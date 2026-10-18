@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { promises as fs } from 'node:fs';
+import { existsSync, promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { DESIGN_DIR, MERGE_SIGNOFFS_MD, WAIVERS_MD } from '../lib/project-paths.js';
@@ -585,6 +585,18 @@ describe('an edit to a shared file is accounted for by the chunk that made it (#
     await fs.writeFile(join(project, DESIGN_DIR, 'ASSETS.md'), '# Assets\n- a row close added\n');
     expect(await checkSignoff(project, 'deal')).toEqual([]);
     expect(Object.keys(parseSignoff(await readChunk(project, 'deal')).record!.code)).toEqual(['src/deal.ts']);
+  });
+
+  // Skipping is strict: only the exact design/ folder is left out, so a miscased name stays signed code (#1053).
+  it.skipIf(!existsSync(process.cwd().toUpperCase()))('a file named Design/ASSETS.md, in other letter case, is code the sign-off covers (#1053)', async () => {
+    const project = await makeProject([{ slug: 'deal', manifest: { 'src/deal.ts': 'v1' } }]);
+    await fs.writeFile(join(project, DESIGN_DIR, 'ASSETS.md'), '# Assets\n');
+    const text = await readChunk(project, 'deal');
+    await fs.writeFile(chunkPath(project, 'deal'), text.replace('| src/deal.ts | written |', '| src/deal.ts | written |\n| Design/ASSETS.md | written |'));
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    expect(Object.keys(parseSignoff(await readChunk(project, 'deal')).record!.code)).toEqual(['Design/ASSETS.md', 'src/deal.ts']);
+    await fs.writeFile(join(project, DESIGN_DIR, 'ASSETS.md'), '# Assets\n- changed after sign-off\n');
+    expect((await checkSignoff(project, 'deal')).join('\n')).toContain('Design/ASSETS.md');
   });
 
   it('a sign-off with the old single whole-file hash is refused, naming the one-time transition', async () => {
