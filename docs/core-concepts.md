@@ -873,7 +873,7 @@ players. Declare it in `boardsmith.json` like any option and mark it
 
 #### Player Options
 
-Per-player settings that appear for each player slot in the lobby. They can be declared here or in your `gameDefinition.playerOptions`; `boardsmith dev` and the published manifest both offer the two sets merged by key. A key declared in both must be declared the same in both, or `boardsmith dev` and `boardsmith build` refuse it, naming the key and both declarations. A `color` option is never published: the lobby builds colour from `colorPalette` below.
+Per-player settings that appear for each player slot in the lobby. They can be declared here or in your `gameDefinition.playerOptions`; `boardsmith dev` and the published manifest both offer the two sets merged by key. A key declared in both must be declared the same in both, or `boardsmith dev` and `boardsmith build` refuse it, naming the key and both declarations. A `color` option is never published: the lobby builds colour from `colorPalette` below. Each option must be one the platform's lobby can show: type `number`, `select`, `boolean` or `exclusive`, with a `default`; a `select` or `exclusive` also needs `choices` as `{ "value", "label" }` pairs. Dev and build refuse any other, by name.
 
 ```json
 {

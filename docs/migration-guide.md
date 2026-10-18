@@ -22,6 +22,21 @@ live lobby never saw them. A key declared in both places must be declared the
 same in both, or dev and build refuse it, naming the key; keep each option in
 one place.
 
+A player option the platform's manifest cannot carry is now refused by both
+`boardsmith dev` and `boardsmith build`, naming the option and what it needs.
+The platform takes only `number`, `select`, `boolean` and `exclusive` options;
+a `select` or `exclusive` needs a string `default` and `choices` given as
+`{ "value", "label" }` pairs, and a `select`'s default must be one of them. A
+`text` option, or an exclusive with no choices, is refused. MERC's `isDictator`
+is an example (Shufflewick/MERC#72):
+
+```typescript
+// Before: refused, it has no choices
+isDictator: { type: 'exclusive', label: 'Dictator', default: 'last' }
+// After
+isDictator: { type: 'exclusive', label: 'Dictator', default: 'last', choices: [{ value: 'dictator', label: 'Dictator' }] }
+```
+
 ## `boardsmith test --selection` is removed (#986)
 
 `boardsmith test` no longer takes `--selection <path>`, the authored-test

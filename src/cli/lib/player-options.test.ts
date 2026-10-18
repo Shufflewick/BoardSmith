@@ -1,29 +1,55 @@
 /**
  * A game's player options are the union of what its gameDefinition and its
  * boardsmith.json declare, by key, and a key the two declare differently is
- * refused (#992).
+ * refused (#992). Each merged option must be one the platform's manifest can
+ * carry, since dev and the live lobby must offer the same list.
  */
 import { describe, it, expect } from 'vitest';
 import { mergePlayerOptions } from './player-options.js';
+import { createColorOption, type PlayerOptionDefinition } from '../../session/index.js';
 
-const role = { type: 'exclusive' as const, label: 'Dictator', default: 'last' as const };
-const botLevel = { type: 'select', label: 'Difficulty', choices: ['easy', 'hard'] };
+// ExclusivePlayerOption has no `choices` yet, though the platform needs them, so fixtures are cast.
+const code = (options: Record<string, unknown>) => options as Record<string, PlayerOptionDefinition>;
+const role = {
+  type: 'exclusive',
+  label: 'Dictator',
+  default: 'last',
+  choices: [{ value: 'dictator', label: 'Dictator' }],
+};
+const botLevel = {
+  type: 'select',
+  label: 'Difficulty',
+  default: 'easy',
+  choices: [{ value: 'easy', label: 'Easy' }, { value: 'hard', label: 'Hard' }],
+};
 
 describe('mergePlayerOptions', () => {
   it('keeps the options each side declares', () => {
-    expect(mergePlayerOptions({ role }, [{ id: 'botLevel', ...botLevel }])).toEqual({ role, botLevel });
+    expect(mergePlayerOptions(code({ role }), [{ id: 'botLevel', ...botLevel }])).toEqual({ role, botLevel });
   });
 
   it('keeps a key declared the same in both once', () => {
-    expect(mergePlayerOptions({ role }, [{ id: 'role', ...role }])).toEqual({ role });
+    expect(mergePlayerOptions(code({ role }), [{ id: 'role', ...role }])).toEqual({ role });
+  });
+
+  it('does not count an undefined field or a different field order as a difference', () => {
+    const reordered = { id: 'role', choices: role.choices, default: 'last', label: 'Dictator', type: 'exclusive' };
+    expect(mergePlayerOptions(code({ role: { ...role, description: undefined } }), [reordered])).toEqual({
+      role: { type: 'exclusive', label: 'Dictator', default: 'last', choices: role.choices },
+    });
   });
 
   it('refuses a key declared differently in both, naming the key and both declarations', () => {
-    const merge = () => mergePlayerOptions({ role }, [{ id: 'role', ...role, label: 'Tyrant' }]);
+    const merge = () => mergePlayerOptions(code({ role }), [{ id: 'role', ...role, label: 'Tyrant' }]);
     expect(merge).toThrow(/player option "role"/);
     expect(merge).toThrow(/"label":"Dictator"/);
     expect(merge).toThrow(/"label":"Tyrant"/);
     expect(merge).toThrow(/Declare "role" in one place/);
+  });
+
+  it('leaves colour out, which the lobby builds from colorPalette, so a colour in both is not refused', () => {
+    const fromConfig = { id: 'color', type: 'color', label: 'Colour', choices: [] };
+    expect(mergePlayerOptions({ color: createColorOption() }, [fromConfig])).toEqual({});
   });
 
   it('reads an option keyed by "name" as boardsmith.json allows', () => {
@@ -36,5 +62,50 @@ describe('mergePlayerOptions', () => {
 
   it('refuses a boardsmith.json "playerOptions" that is not a list', () => {
     expect(() => mergePlayerOptions(undefined, { botLevel })).toThrow(/"playerOptions" must be a list/);
+  });
+});
+
+describe('mergePlayerOptions refuses an option the platform\'s manifest cannot carry', () => {
+  const refused = (option: Record<string, unknown>) => () =>
+    mergePlayerOptions(code({ odd: option }), undefined);
+
+  it('names a type the lobby has no control for, and the types it has', () => {
+    expect(refused({ type: 'text', label: 'Name' })).toThrow(
+      /Player option "odd" has type "text".*"number", "select", "boolean" or "exclusive"/s,
+    );
+  });
+
+  it('needs an exclusive option to list its choices, whatever its default', () => {
+    expect(refused({ type: 'exclusive', label: 'Dictator', default: 'last' })).toThrow(
+      /"odd" needs "choices": a non-empty list of \{ "value", "label" \} strings/,
+    );
+    expect(refused({ type: 'exclusive', label: 'Dictator', default: 2, choices: role.choices })).toThrow(
+      /"odd" needs a string "default"/,
+    );
+  });
+
+  it('needs a select option\'s choices to be value and label pairs, and its default to be one of them', () => {
+    expect(refused({ ...botLevel, choices: ['easy', 'hard'] })).toThrow(/"odd" needs "choices"/);
+    expect(refused({ ...botLevel, default: undefined })).toThrow(/"odd" needs a string "default"/);
+    expect(refused({ ...botLevel, default: 'medium' })).toThrow(/"odd" has default "medium".*easy, hard/s);
+  });
+
+  it('needs a number option\'s default to be a number inside its range, and a boolean\'s to be a boolean', () => {
+    expect(refused({ type: 'number', label: 'Seats' })).toThrow(/"odd" needs a number "default"/);
+    expect(refused({ type: 'number', label: 'Seats', default: 9, min: 1, max: 4 })).toThrow(
+      /"odd" has default 9, outside 1 to 4/,
+    );
+    expect(refused({ type: 'number', label: 'Seats', default: 2, step: 0 })).toThrow(/"odd" needs a "step" above 0/);
+    expect(refused({ type: 'boolean', label: 'Ready' })).toThrow(/"odd" needs a true or false "default"/);
+  });
+
+  it('needs a label', () => {
+    expect(refused({ ...botLevel, label: '' })).toThrow(/"odd" needs a "label"/);
+  });
+
+  it('reports every option it cannot carry in one error', () => {
+    const merge = () =>
+      mergePlayerOptions({ a: { type: 'text', label: 'A' } }, [{ id: 'b', type: 'select', label: 'B' }]);
+    expect(merge).toThrow(/"a".*"b"/s);
   });
 });

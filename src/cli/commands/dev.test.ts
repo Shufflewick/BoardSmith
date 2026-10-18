@@ -398,21 +398,28 @@ describe('resolveColorOption: dev offers exactly the colours production does (#8
 });
 
 describe('dev and the live lobby offer the same player options (#992)', () => {
-  const role = { type: 'exclusive' as const, label: 'Dictator', default: 'last' as const };
-  const botLevel = { id: 'botLevel', type: 'select', label: 'Difficulty', choices: ['easy', 'hard'] };
-  const gameDefinition: GameDefinition = {
+  const role = { type: 'exclusive' as const, label: 'Dictator', default: 'last', choices: [{ value: 'd', label: 'D' }] };
+  const botLevel = {
+    id: 'botLevel',
+    type: 'select',
+    label: 'Difficulty',
+    default: 'easy',
+    choices: [{ value: 'easy', label: 'Easy' }],
+  };
+  // ExclusivePlayerOption has no `choices` yet, though the platform needs them.
+  const gameDefinition = {
     gameClass: class FixtureGame extends Game<FixtureGame, Player> {},
     gameType: 'fixture',
     minPlayers: 2,
     maxPlayers: 4,
     playerOptions: { role },
-  };
+  } as GameDefinition;
   const config = { playerOptions: [botLevel] };
 
   it('keeps the gameDefinition\'s player options beside boardsmith.json\'s, and adds the colour option', () => {
     expect(resolveDevPlayerOptions(gameDefinition, config)).toEqual({
       role,
-      botLevel: { type: 'select', label: 'Difficulty', choices: ['easy', 'hard'] },
+      botLevel: { type: 'select', label: 'Difficulty', default: 'easy', choices: [{ value: 'easy', label: 'Easy' }] },
       color: resolveColorOption(gameDefinition, {}),
     });
   });
@@ -431,6 +438,17 @@ describe('dev and the live lobby offer the same player options (#992)', () => {
     expect(() =>
       resolveDevPlayerOptions(gameDefinition, { playerOptions: [{ id: 'role', ...role, label: 'Tyrant' }] }),
     ).toThrow(/player option "role"/);
+  });
+
+  it.each([
+    ['an exclusive option with no choices', { type: 'exclusive', label: 'Dictator', default: 'last' }, /"choices"/],
+    ['a select with plain string choices', { type: 'select', label: 'Side', default: 'a', choices: ['a', 'b'] }, /"choices"/],
+    ['a select with no default', { type: 'select', label: 'Side', choices: [{ value: 'a', label: 'A' }] }, /"default"/],
+    ['a text option', { type: 'text', label: 'Name' }, /type "text"/],
+  ])('refuses %s, which the live lobby could not offer', (_, option, problem) => {
+    const odd = { ...gameDefinition, playerOptions: { odd: option } } as GameDefinition;
+    expect(() => resolveDevPlayerOptions(odd, {})).toThrow(/Player option "odd"/);
+    expect(() => resolveDevPlayerOptions(odd, {})).toThrow(problem);
   });
 });
 

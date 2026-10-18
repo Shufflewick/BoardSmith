@@ -139,29 +139,43 @@ describe('deriveManifest', () => {
   });
 
   it('publishes the player options the gameDefinition declares beside boardsmith.json\'s, without colour (#992)', () => {
-    const botLevel = { id: 'botLevel', type: 'select', label: 'Difficulty', choices: ['easy', 'hard'] };
-    const gameDefinition: GameDefinition = {
-      ...makeGameDefinition(2, 4),
-      playerOptions: {
-        role: { type: 'exclusive', label: 'Dictator', default: 'last' },
-        color: createColorOption(),
-      },
+    const botLevel = {
+      id: 'botLevel',
+      type: 'select',
+      label: 'Difficulty',
+      default: 'easy',
+      choices: [{ value: 'easy', label: 'Easy' }],
     };
+    const role = { type: 'exclusive' as const, label: 'Dictator', default: 'last', choices: [{ value: 'd', label: 'D' }] };
+    // ExclusivePlayerOption has no `choices` yet, though the platform needs them.
+    const gameDefinition = {
+      ...makeGameDefinition(2, 4),
+      playerOptions: { role, color: createColorOption() },
+    } as GameDefinition;
     expect(derive({ name: 'fixture', playerOptions: [botLevel] }, gameDefinition).playerOptions).toEqual([
-      { id: 'role', type: 'exclusive', label: 'Dictator', default: 'last' },
+      { id: 'role', ...role },
       botLevel,
     ]);
     expect(derive({ name: 'fixture' })).not.toHaveProperty('playerOptions');
   });
 
   it('refuses a player option the gameDefinition and boardsmith.json declare differently (#992)', () => {
-    const gameDefinition: GameDefinition = {
-      ...makeGameDefinition(2, 4),
-      playerOptions: { role: { type: 'exclusive', label: 'Dictator' } },
-    };
+    const select = { type: 'select' as const, label: 'Side', default: 'a', choices: [{ value: 'a', label: 'A' }] };
+    const gameDefinition: GameDefinition = { ...makeGameDefinition(2, 4), playerOptions: { side: select } };
     expect(() =>
-      derive({ name: 'fixture', playerOptions: [{ id: 'role', type: 'exclusive', label: 'Tyrant' }] }, gameDefinition),
-    ).toThrow(/player option "role"/);
+      derive({ name: 'fixture', playerOptions: [{ id: 'side', ...select, label: 'Team' }] }, gameDefinition),
+    ).toThrow(/player option "side"/);
+  });
+
+  it.each([
+    ['an exclusive option with no choices', { type: 'exclusive', label: 'Dictator', default: 'last' }, /"choices"/],
+    ['a select with plain string choices', { type: 'select', label: 'Side', default: 'a', choices: ['a', 'b'] }, /"choices"/],
+    ['a select with no default', { type: 'select', label: 'Side', choices: [{ value: 'a', label: 'A' }] }, /"default"/],
+    ['a text option', { type: 'text', label: 'Name' }, /type "text"/],
+  ])('refuses to publish %s the gameDefinition declares, which the platform cannot carry (#992)', (_, option, problem) => {
+    const gameDefinition = { ...makeGameDefinition(2, 4), playerOptions: { odd: option } } as GameDefinition;
+    expect(() => derive({ name: 'fixture' }, gameDefinition)).toThrow(/Player option "odd"/);
+    expect(() => derive({ name: 'fixture' }, gameDefinition)).toThrow(problem);
   });
 
   it('leaves the "agents" role mapping out of the manifest: it says how the game is built, not what is published (#454)', () => {

@@ -245,8 +245,7 @@ export function deriveManifest(
     asyncPlay: _asyncPlay, joinInProgress: _joinInProgress, agents: _agents,
     platforms: _platforms, publisher: _publisher, gameOptions, playerOptions, ...rest
   } = config;
-  // The lobby takes colour from `colorPalette`, so a `color` option is not published (#814).
-  const { color: _color, ...publishedPlayerOptions } = mergePlayerOptions(gameDefinition.playerOptions, playerOptions);
+  const publishedPlayerOptions = mergePlayerOptions(gameDefinition.playerOptions, playerOptions);
 
   return {
     ...rest,
