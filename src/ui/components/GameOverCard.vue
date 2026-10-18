@@ -2,14 +2,16 @@
 /**
  * GameOverCard — Slate result overlay (IA-07, D10)
  *
- * Overlays the board inside .boardregion behind a Slate scrim when the game
+ * Overlays the visible board behind a Slate scrim when the game
  * is complete. Shows winners from the validated winnerSeats × players list;
  * a genuine draw (isDraw=true) labels "Draw"; winner data that is merely
  * unavailable (dev-WS degrade, isDraw=false with no seats) stays "Game Over".
  * The card never renders winner tokens when there are no winners (D10).
  *
- * Scrim is positioned absolute inside .boardregion — it cannot cover browser
- * chrome or the .actionbar (which is a sibling of .stage, not a child).
+ * Scrim is positioned absolute over .board-viewport, outside the board's
+ * scroller, so a board wider than the region never scrolls it away (#1068).
+ * It cannot cover browser chrome or the .actionbar (which is a sibling of
+ * .stage, not a child).
  *
  * Focus is trapped inside the card on mount (A11Y-07). The card is dismissable
  * (D10): a close button and Escape both emit 'dismiss'. Dismissing does not
@@ -112,7 +114,7 @@ const titleText = computed(() => {
 </template>
 
 <style scoped>
-/* Scrim: absolute inside .boardregion so it overlays the board but cannot
+/* Scrim: absolute over .board-viewport so it overlays the visible board but cannot
    reach the .actionbar (sibling of .stage) or browser chrome (T-100-06-02). */
 .game-over-scrim {
   position: absolute;

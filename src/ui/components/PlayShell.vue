@@ -476,12 +476,6 @@ const mobileToggleLabel = computed(() => {
             aria-hidden="true"
           ></span>
 
-          <!-- The adapter's own overlays. A direct child of .boardregion, so like
-               every overlay here they can cover the board but NEVER the action bar
-               or the header (those are siblings outside .boardregion). -->
-          <slot name="board-overlays"></slot>
-
-
           <div
             class="game-shell__zoom-container"
             ref="zoomContainerEl"
@@ -495,6 +489,12 @@ const mobileToggleLabel = computed(() => {
             <slot name="board"></slot>
           </div>
         </main>
+        <!-- The adapter's own overlays. Beside .boardregion, not in it, so they
+             cover the visible board and never scroll away with a board wider
+             than the region (#1068); like every overlay here they can cover the
+             board but NEVER the action bar or the header (those are outside
+             .board-viewport). -->
+        <slot name="board-overlays"></slot>
         <!-- Game modal host: the sanctioned full-board-region overlay layer for
              custom UIs. A game Teleports a blocking modal here
              (`<Teleport to="#bs-game-modal">`) to cover the board area.

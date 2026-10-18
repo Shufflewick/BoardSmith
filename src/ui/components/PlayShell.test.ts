@@ -167,9 +167,13 @@ describe('what is the adapter\'s and not the shell\'s', () => {
     expect(mountShell().find('[data-testid="bs-debug"]').exists()).toBe(false);
   });
 
-  it('hosts the adapter\'s own board overlays above the board', () => {
+  // Inside the scroller, the game-over scrim scrolled away with a board wider than the region (#1068).
+  it('hosts the adapter\'s own board overlays over the board, outside its scroller', () => {
     const wrapper = mountShell({}, { 'board-overlays': () => h('div', { class: 'game-over' }) });
-    expect(wrapper.find('[data-testid="bs-board"] .game-over').exists()).toBe(true);
+    const overlay = wrapper.get('.game-over').element;
+    const board = wrapper.get('[data-testid="bs-board"]').element;
+    expect(board.contains(overlay)).toBe(false);
+    expect(overlay.parentElement).toBe(board.parentElement);
   });
 });
 

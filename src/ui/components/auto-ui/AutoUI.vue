@@ -34,7 +34,7 @@ const emit = defineEmits<{
 <template>
   <div class="auto-ui">
     <!-- Game board: always rendered — the result card (GameOverCard.vue) is
-         GameShell's responsibility and overlays inside .boardregion above this. -->
+         GameShell's responsibility and overlays over .board-viewport above this. -->
     <AutoRenderer
       :game-view="gameView"
       :player-seat="playerSeat"
