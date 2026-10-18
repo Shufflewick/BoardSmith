@@ -569,16 +569,6 @@
         "count": 1
       }
     },
-    "src/ui/components/helpers/HintOverlay.vue": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
-    "src/ui/components/helpers/TutorialOverlay.vue": {
-      "complexity_moderate": {
-        "count": 2
-      }
-    },
     "src/ui/components/helpers/ZoomPreviewOverlay.vue": {
       "complexity_high": {
         "count": 1
