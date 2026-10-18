@@ -145,7 +145,8 @@ export async function startRulesWorker(bundlePath: string, data: unknown): Promi
   const boot =
     `process.setSourceMapsEnabled(true);\n` +
     `import(${JSON.stringify(pathToFileURL(bundlePath).href)}).catch((error) => process.nextTick(() => { throw error; }));`;
-  const worker = new Worker(boot, { eval: true, workerData: data });
+  // The reader is the author, so a rules crash shows them its own text (#1121); this process's env is left alone.
+  const worker = new Worker(boot, { eval: true, workerData: data, env: { ...process.env, NODE_ENV: 'development' } });
   /** Who waits for the worker to answer: all of them at its next answer, or when it stops. */
   const waiting: Array<() => void> = [];
   const answered = (): void => {
