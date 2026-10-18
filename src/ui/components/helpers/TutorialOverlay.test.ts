@@ -377,6 +377,30 @@ describe('TutorialOverlay', () => {
       const style = (bubble.element as HTMLElement).style;
       expect(style.top).not.toBe('');
     });
+    it('a targeted bubble whose target is not found honours placement="bottom" (#927)', async () => {
+      const fixture = document.createElement('div');
+      fixture.className = 'boardregion';
+      document.body.appendChild(fixture);
+      // Board at viewport (0,100), 400x400: bottom 500, so a bottom bubble sits at 500 - 80 - 8.
+      vi.spyOn(fixture, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 100, 400, 400));
+      const wrapper = mount(TutorialOverlay, {
+        global: {
+          provide: {
+            [GAME_CONTEXT_KEYS.gameState as symbol]: makeGameState([
+              { text: 'Missing target', target: { kind: 'element', ref: { notation: 'z9' } }, placement: 'bottom' },
+            ]),
+          },
+          stubs: { Teleport: true },
+        },
+        attachTo: fixture,
+      });
+      await nextTick();
+
+      expect(wrapper.find('.bsg-tutorial-ring').exists()).toBe(false);
+      const style = (wrapper.find('.bsg-board-message--annotation').element as HTMLElement).style;
+      expect(style.top).toBe('412px');
+      wrapper.unmount();
+    });
   });
 
   // ── XSS safety ─────────────────────────────────────────────────────────────

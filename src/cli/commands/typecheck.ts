@@ -1,4 +1,4 @@
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { requireBoardsmithWorkspace } from '../lib/project-context.js';
 import { runTool } from '../lib/run-tool.js';
 
@@ -12,10 +12,10 @@ import { runTool } from '../lib/run-tool.js';
  * the repository's tsconfig.json covers.
  */
 export async function runTypecheck(cwd: string): Promise<number> {
-  console.log(chalk.cyan('\nType-checking with vue-tsc...\n'));
+  console.log(styleText('cyan', '\nType-checking with vue-tsc...\n'));
   const code = await runTool('vue-tsc', ['--noEmit', '-p', 'tsconfig.json'], { cwd });
   if (code !== 0) {
-    console.error(chalk.red('\nThe type check failed. Fix the errors above, then run `boardsmith typecheck` again.\n'));
+    console.error(styleText('red', '\nThe type check failed. Fix the errors above, then run `boardsmith typecheck` again.\n'));
   }
   return code;
 }
@@ -25,5 +25,5 @@ export async function typecheckCommand(): Promise<void> {
   requireBoardsmithWorkspace(cwd);
   const code = await runTypecheck(cwd);
   if (code !== 0) process.exit(code);
-  console.log(chalk.green('No type errors.\n'));
+  console.log(styleText('green', 'No type errors.\n'));
 }

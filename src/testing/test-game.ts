@@ -17,6 +17,7 @@ import {
   type AnnotatedChoice,
   type ElementJSON,
 } from '../engine/index.js';
+import { seatDisplayName } from '../engine/element/seat-defaults.js';
 import {
   GameRunner,
   type ActionExecutionResult,
@@ -198,7 +199,7 @@ export class TestGame<G extends Game = Game> {
     // command history. Pass an explicit `seed` option to vary the run.
     const seed = options.seed ?? 'test-seed';
     const playerNames = options.playerNames ??
-      Array.from({ length: options.playerCount }, (_, i) => `Player ${i + 1}`);
+      Array.from({ length: options.playerCount }, (_, i) => seatDisplayName(i + 1));
 
     // Separate known TestGame fields from extra game-specific options so the
     // extras can be forwarded to the game constructor unchanged.
@@ -521,10 +522,12 @@ export class TestGame<G extends Game = Game> {
    * between the two subjects.
    *
    * Nothing here names an identity field. It is the full `toJSON()` of every
-   * element, and what counts as identity is decided by the gate.
+   * element, and what counts as identity is decided by the gate. The pile sits
+   * outside the tree, so its elements are added on their own (#1063).
    */
   unredactedElements(): readonly ElementJSON[] {
-    return [this.game, ...this.game.all(GameElement)].map((element) => element.toJSON());
+    const { game } = this;
+    return [game, ...game.all(GameElement), ...game.pile.all(GameElement)].map((element) => element.toJSON());
   }
 
   /**

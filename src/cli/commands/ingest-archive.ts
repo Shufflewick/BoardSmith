@@ -5,7 +5,7 @@ import { resolveUserPath } from '../lib/user-path.js';
 import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { DERIVED_LINE_RE } from './derived-line-pattern.js';
 import {
   ADDITIONAL_SOURCES_BEGIN,
@@ -395,7 +395,7 @@ export async function ingestGapsCommand(
   }
   if (!quiet) {
     console.log(
-      chalk.green(
+      styleText('green',
         `✓ Filled ${heading} — ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} from ${names.length} slice${names.length === 1 ? '' : 's'}`,
       ),
     );
@@ -518,16 +518,16 @@ export async function relabelDerivedLines(
   const result = { relabelled: changed.length, changes: changed };
   if (options.quiet) return result;
   if (!changed.length) {
-    console.log(chalk.green('✓ No Derived (p. line carries presentation-only vocabulary'));
+    console.log(styleText('green', '✓ No Derived (p. line carries presentation-only vocabulary'));
     return result;
   }
   console.log(
-    chalk.green(
+    styleText('green',
       `✓ Relabelled ${changed.length} line${changed.length === 1 ? '' : 's'} Derived → Visual`,
     ),
   );
   for (const c of changed) {
-    console.log(`  ${chalk.gray(`${c.file}:${c.line}`)} matched "${c.matched}"`);
+    console.log(`  ${styleText('gray', `${c.file}:${c.line}`)} matched "${c.matched}"`);
   }
   return result;
 }
@@ -749,42 +749,42 @@ export async function ingestArchiveCommand(
   }
 
   if (recordedAsAdditionalSource) {
-    console.log(chalk.green('✓ Archived ADDITIONAL source rulebook (a different primary source is already recorded)'));
-    console.log(`  ${chalk.gray('path:')} ${relArchivePath}`);
-    console.log(`  ${chalk.gray('sha256:')} ${sourceHash}`);
+    console.log(styleText('green', '✓ Archived ADDITIONAL source rulebook (a different primary source is already recorded)'));
+    console.log(`  ${styleText('gray', 'path:')} ${relArchivePath}`);
+    console.log(`  ${styleText('gray', 'sha256:')} ${sourceHash}`);
     console.log(
-      `  ${chalk.gray('index:')} rulebook/INDEX.md's "${ADDITIONAL_SOURCES_HEADING}" section updated (primary Source:/Source hash: untouched)`,
+      `  ${styleText('gray', 'index:')} rulebook/INDEX.md's "${ADDITIONAL_SOURCES_HEADING}" section updated (primary Source:/Source hash: untouched)`,
     );
   } else {
-    console.log(chalk.green('✓ Archived source rulebook'));
-    console.log(`  ${chalk.gray('path:')} ${relArchivePath}`);
-    console.log(`  ${chalk.gray('sha256:')} ${sourceHash}`);
+    console.log(styleText('green', '✓ Archived source rulebook'));
+    console.log(`  ${styleText('gray', 'path:')} ${relArchivePath}`);
+    console.log(`  ${styleText('gray', 'sha256:')} ${sourceHash}`);
     // Only report the header as updated when it was actually brought to the four-line contract —
     // the unconditional "provenance header updated" message is what hid this defect (T-173-03).
     if (wroteIndex) {
       console.log(
-        `  ${chalk.gray('index:')} rulebook/INDEX.md written with provenance header + section scaffolding`,
+        `  ${styleText('gray', 'index:')} rulebook/INDEX.md written with provenance header + section scaffolding`,
       );
     } else if (headerBroughtToContract) {
       console.log(
-        `  ${chalk.gray('index:')} rulebook/INDEX.md provenance header updated (existing sections untouched)`,
+        `  ${styleText('gray', 'index:')} rulebook/INDEX.md provenance header updated (existing sections untouched)`,
       );
     } else {
       console.log(
-        `  ${chalk.gray('index:')} rulebook/INDEX.md was NOT updated — its provenance header was already at contract`,
+        `  ${styleText('gray', 'index:')} rulebook/INDEX.md was NOT updated — its provenance header was already at contract`,
       );
     }
   }
   for (const extra of additionalSources) {
-    console.log(chalk.green('✓ Archived additional source'));
-    console.log(`  ${chalk.gray('path:')} ${extra.archivedPath}`);
-    console.log(`  ${chalk.gray('sha256:')} ${extra.sourceHash}`);
-    console.log(`  ${chalk.gray('index:')} recorded in rulebook/INDEX.md's "${ADDITIONAL_SOURCES_HEADING}" section`);
+    console.log(styleText('green', '✓ Archived additional source'));
+    console.log(`  ${styleText('gray', 'path:')} ${extra.archivedPath}`);
+    console.log(`  ${styleText('gray', 'sha256:')} ${extra.sourceHash}`);
+    console.log(`  ${styleText('gray', 'index:')} recorded in rulebook/INDEX.md's "${ADDITIONAL_SOURCES_HEADING}" section`);
   }
   if (recordedAsAdditionalSource) return;
   console.log();
-  console.log(chalk.gray('Fill the scaffolded sections from the transcription summaries.'));
-  console.log(chalk.gray('Keep every heading exactly as written — downstream tooling parses them.'));
+  console.log(styleText('gray', 'Fill the scaffolded sections from the transcription summaries.'));
+  console.log(styleText('gray', 'Keep every heading exactly as written — downstream tooling parses them.'));
 }
 
 /** The line-bounds of one matched `^Label:` line (multiline-anchored), or `undefined` if absent. */

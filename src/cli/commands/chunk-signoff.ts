@@ -1,7 +1,7 @@
 import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
 import { isAbsolute, posix, relative, resolve, sep } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import {
   GATE_TRANSITION_MD,
   SKETCH_MD,
@@ -26,8 +26,9 @@ import { atomicWriteFile } from './verify-run.js';
 import { withLedgerLock } from '../lib/ledger-lock.js';
 import { checkConstraints } from './constraint-check.js';
 import { verifiedProblem } from '../lib/verify-result.js';
-import { escapeRegExp } from '../lib/regexp.js';
+import { escapeRegExp } from '../../utils/regexp.js';
 import { gitOutput as git } from '../lib/git-output.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 
 /**
  * `boardsmith chunk-signoff` / `boardsmith chunk-waiver` / `checkSignoff()`: who may say a chunk
@@ -274,7 +275,7 @@ export async function chunkCodeFiles(projectDir: string, chunkText: string): Pro
       continue;
     }
     if (isInside(design, abs)) continue;
-    const content = await fs.readFile(abs).catch(() => undefined);
+    const content = await readIfExists(abs, fs.readFile);
     files[path] = content ? sha256Hex(content) : MISSING;
   }
   return files;
@@ -461,7 +462,7 @@ function splitList(raw: string): string[] {
 }
 
 async function readWaivers(projectDir: string): Promise<Waiver[]> {
-  const text = await fs.readFile(designPath(projectDir, WAIVERS_MD), 'utf-8').catch(() => '');
+  const text = (await readIfExists(designPath(projectDir, WAIVERS_MD), (path) => fs.readFile(path, 'utf-8'))) ?? '';
   return parseWaivers(text);
 }
 
@@ -660,7 +661,7 @@ async function readProjectState(dir: string): Promise<ProjectState> {
 async function readChunkStates(dir: string): Promise<ChunkState[]> {
   const states: ChunkState[] = [];
   for (const slug of await chunkSlugs(dir)) {
-    const text = await fs.readFile(chunkMdPath(dir, slug), 'utf-8').catch(() => undefined);
+    const text = await readIfExists(chunkMdPath(dir, slug), (path) => fs.readFile(path, 'utf-8'));
     if (text === undefined) continue;
     states.push({
       slug,
@@ -1147,17 +1148,17 @@ export async function chunkSignoffCommand(
   options: Omit<SignoffOptions, 'now'>,
 ): Promise<void> {
   const record = await recordSignoff(slug, options);
-  console.log(chalk.green(`✓ ${slug} signed off (${record.basis}); Status: ${derivedStatus(record)}`));
+  console.log(styleText('green', `✓ ${slug} signed off (${record.basis}); Status: ${derivedStatus(record)}`));
 }
 
 /** `boardsmith chunk-reopen <slug>`. Throws (clean one-line message via cli.ts) on refusal. */
 export async function chunkReopenCommand(slug: string, options: Omit<ReopenOptions, 'now'>): Promise<void> {
   await recordReopen(slug, options);
-  console.log(chalk.green(`✓ ${slug} reopened; its sign-off is void and Status: built`));
+  console.log(styleText('green', `✓ ${slug} reopened; its sign-off is void and Status: built`));
 }
 
 /** `boardsmith chunk-waiver`. Prints the new waiver's id. */
 export async function chunkWaiverCommand(options: Omit<WaiverOptions, 'now'>): Promise<void> {
   const id = await recordWaiver(options);
-  console.log(chalk.green(`✓ Waiver ${id} recorded for ${options.chunks}, until ${options.expires}`));
+  console.log(styleText('green', `✓ Waiver ${id} recorded for ${options.chunks}, until ${options.expires}`));
 }

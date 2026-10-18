@@ -27,6 +27,7 @@ function fakeHost(over: Partial<Record<string, unknown>> = {}) {
     presence: ref<readonly number[] | null>([2, 4]),
     players: ref<readonly WorldPlayer[]>([]),
     events: ref<readonly WorldNarration[]>([]),
+    linesDropped: ref(0),
     heardFromHost: ref(true),
     hostSilent: ref(false),
     acting: ref(false),

@@ -144,6 +144,32 @@ describe('useFocusTrap', () => {
     expect(document.activeElement).toBe(dialog.querySelector('#only'));
   });
 
+  // Each case is an element that matches the focusable selector but cannot take focus (#1024).
+  describe.each([
+    ['hidden attribute', '<button hidden>X</button>'],
+    ['display: none', '<button style="display: none">X</button>'],
+    ['display: none on an ancestor', '<div style="display: none"><button>X</button></div>'],
+    ['visibility: hidden on an ancestor', '<div style="visibility: hidden"><button>X</button></div>'],
+    ['inert ancestor', '<div inert><button>X</button></div>'],
+    ['disabled fieldset', '<fieldset disabled><input></fieldset>'],
+  ])('skips an element that cannot take focus (%s)', (_label, unfocusable) => {
+    it('Tab from the last focusable one wraps to the first', async () => {
+      const dialog = appendDialog(`${unfocusable}<button id="b1">First</button><button id="b2">Last</button>${unfocusable}`);
+      const { open, handleKeydown } = trap(ref(dialog), { onClose: vi.fn() });
+
+      open();
+      await nextTick();
+      expect(document.activeElement).toBe(dialog.querySelector('#b1'));
+
+      (dialog.querySelector('#b2') as HTMLButtonElement).focus();
+      handleKeydown(makeKeyEvent('Tab'));
+      expect(document.activeElement).toBe(dialog.querySelector('#b1'));
+
+      handleKeydown(makeKeyEvent('Tab', /* shiftKey= */ true));
+      expect(document.activeElement).toBe(dialog.querySelector('#b2'));
+    });
+  });
+
   // -------------------------------------------------------------------------
   // Escape key — escapeToClose option
   // -------------------------------------------------------------------------
@@ -319,6 +345,16 @@ describe('useFocusTrap', () => {
 
     close();
     for (const el of [t.board, t.actionPanel, t.other]) expect(el.hasAttribute('inert'), el.id).toBe(false);
+  });
+
+  it('a background element marked data-bs-outside-modal stays live while the rest goes inert (#1106)', () => {
+    const t = buildAppTree();
+    t.board.setAttribute('data-bs-outside-modal', '');
+    const { open } = trap(ref(t.dialog), { onClose: vi.fn() });
+
+    open();
+    expect(t.board.hasAttribute('inert')).toBe(false);
+    for (const el of [t.actionPanel, t.other]) expect(el.hasAttribute('inert'), el.id).toBe(true);
   });
 
   it('close() leaves elements that were already inert before open() inert (#863)', () => {
