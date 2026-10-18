@@ -315,3 +315,44 @@ describe('DevHost — debugging availability', () => {
     expect(availability(postSpy)).toEqual([false]);
   });
 });
+
+// #1151: the page replays its cached init and game_state to a reloaded or
+// retrying game frame. An init for another seat with no game_state after it
+// must not leave the old seat's view to be replayed under the new seat.
+describe('DevHost — replay after a seat change with no state', () => {
+  const replayed = (spy: ReturnType<typeof vi.fn>) =>
+    spy.mock.calls.map((c) => c[0] as Record<string, unknown>).filter((m) => m.type === 'init' || m.type === 'game_state');
+
+  async function seatTwoWithoutState() {
+    const wrapper = await mountAndActivate();
+    const ws = mockWsInstance!;
+    ws.simulateMessage({ type: 'game_state', view: { seat: 1 }, isComplete: false, winners: [], isDraw: false });
+    ws.simulateMessage({ type: 'init', seat: 2 });
+    await wrapper.vm.$nextTick();
+    return { wrapper, postSpy: spyOnIframePostMessage(wrapper) };
+  }
+
+  it('a frame reload replays seat 2 alone, never with seat 1 view', async () => {
+    const { wrapper, postSpy } = await seatTwoWithoutState();
+    await wrapper.find('iframe').trigger('load');
+    expect(replayed(postSpy)).toEqual([expect.objectContaining({ type: 'init', seat: 2 })]);
+  });
+
+  it('a Retry replays seat 2 alone, never with seat 1 view', async () => {
+    const { wrapper, postSpy } = await seatTwoWithoutState();
+    window.dispatchEvent(new MessageEvent('message', { source: (wrapper.find('iframe').element as HTMLIFrameElement).contentWindow, data: { source: 'shufflewick-game', type: 'request-state' } }));
+    await wrapper.vm.$nextTick();
+    expect(replayed(postSpy)).toEqual([expect.objectContaining({ type: 'init', seat: 2 })]);
+  });
+
+  it('a frame reload after seat 2 state arrives replays seat 2 with its own view', async () => {
+    const { wrapper, postSpy } = await seatTwoWithoutState();
+    mockWsInstance!.simulateMessage({ type: 'game_state', view: { seat: 2 }, isComplete: false, winners: [], isDraw: false });
+    postSpy.mockClear();
+    await wrapper.find('iframe').trigger('load');
+    expect(replayed(postSpy)).toEqual([
+      expect.objectContaining({ type: 'init', seat: 2 }),
+      expect.objectContaining({ type: 'game_state', view: { seat: 2 } }),
+    ]);
+  });
+});
