@@ -306,6 +306,18 @@ describe('boardsmith doctor', () => {
     expect(await read(join(projectDir, '.gitignore'))).toMatch(/^\.boardsmith\/$/m);
   });
 
+  it('refuses, naming the file, when .gitignore cannot be read, and leaves it as it was (#1110)', async () => {
+    const projectDir = await project({ '.gitignore': 'node_modules/\n' });
+    const gitignore = join(projectDir, '.gitignore');
+    await fs.chmod(gitignore, 0o200);
+    try {
+      await expect(doctorCommand({ project: projectDir, fix: true })).rejects.toThrow(`Could not read ${gitignore} (EACCES)`);
+    } finally {
+      await fs.chmod(gitignore, 0o644);
+    }
+    expect(await read(gitignore)).toBe('node_modules/\n');
+  });
+
   it('a project whose .gitignore already covers .boardsmith/ is healthy', async () => {
     const projectDir = await project({ '.gitignore': 'node_modules/\n.boardsmith/\n' });
 
