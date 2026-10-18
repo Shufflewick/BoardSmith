@@ -42,7 +42,7 @@ import { gitOutput as git, gitSucceeds } from './git-output.js';
 import { sha256Hex } from './hash.js';
 import { uncommittedContentHash } from './mutant-cache.js';
 import { withDirRemovedAfter } from './command-build-dir.js';
-import { readIfExists } from './read-if-exists.js';
+import { readIfExists, readIfExistsSync } from './read-if-exists.js';
 
 /** Where the catalogue is on a machine set up the usual way. */
 export const DEFAULT_CATALOGUE_ROOT = join(homedir(), 'BoardSmithGames');
@@ -185,7 +185,8 @@ async function catalogueLinks(repo: CatalogueRepo, byDir: Map<string, CatalogueR
   for (const name of await packageNames(modules)) {
     if (name === 'boardsmith') continue;
     // A link whose folder is gone links nothing.
-    const target = await readIfExists(join(modules, name), (p) => fs.realpath(p));
+    // realpathSync, as the catalogue's own keys are made: fs.realpath can spell a folder's case differently.
+    const target = readIfExistsSync(join(modules, name), (p) => realpathSync(p));
     const linked = target === undefined ? undefined : byDir.get(target);
     if (linked !== undefined) links.set(name, linked);
   }

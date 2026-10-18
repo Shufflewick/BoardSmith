@@ -133,12 +133,13 @@ export async function appendGitignoreEntry(projectDir: string): Promise<void> {
   );
 }
 
+/** Whether anything stands at `path`, a link that cannot be followed included, so a move never lands on it. */
 async function exists(path: string): Promise<boolean> {
   try {
-    await fs.stat(path);
+    await fs.lstat(path);
     return true;
   } catch {
-    // A health check: something it cannot look at is not a finding, and a fix that needs it fails on its own.
+    // A health check: a path it cannot look at all (an unsearchable folder above it) is not a finding.
     return false;
   }
 }

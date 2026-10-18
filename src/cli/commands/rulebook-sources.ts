@@ -292,36 +292,24 @@ export async function readLiveSlices(
   projectDir: string,
 ): Promise<{ path: string; text: string }[]> {
   const rulebookDir = designRulebookDir(projectDir);
-  let names: string[];
-  try {
-    const entries = await fs.readdir(rulebookDir, { withFileTypes: true });
-    names = entries
-      .filter(
-        (e) =>
-          e.isFile() &&
-          e.name.endsWith('.md') &&
-          e.name !== 'INDEX.md' &&
-          e.name !== '00-visual-survey.md',
-      )
-      .map((e) => e.name)
-      .sort();
-  } catch (err) {
-    // (WR-02/WR-10): this is the ONE "no rulebook/" message in the module — only ENOENT means
-    // "does not exist"; any other errno (EACCES, ENOTDIR, ...) is a real, different condition and
-    // must say so, never be reported as a missing directory.
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') {
-      throw new Error(
-        `No rulebook/ directory in ${projectDir}.\n` +
-          `Pass --project <dir> to target the bs-project this check should read.`,
-      );
-    }
+  const entries = await readIfExists(rulebookDir, (p) => fs.readdir(p, { withFileTypes: true }));
+  if (entries === undefined) {
+    // (WR-10): this is the ONE "no rulebook/" message; a rulebook/ that cannot be read is named by readIfExists.
     throw new Error(
-      `rulebook/ exists at ${rulebookDir} but could not be read (${code ?? 'unknown error'}).\n` +
-        `Pass --project <dir> to target the bs-project this check should read, and confirm the ` +
-        `directory is accessible.`,
+      `No rulebook/ directory in ${projectDir}.\n` +
+        `Pass --project <dir> to target the bs-project this check should read.`,
     );
   }
+  const names = entries
+    .filter(
+      (e) =>
+        e.isFile() &&
+        e.name.endsWith('.md') &&
+        e.name !== 'INDEX.md' &&
+        e.name !== '00-visual-survey.md',
+    )
+    .map((e) => e.name)
+    .sort();
   return Promise.all(
     names.map(async (name) => ({
       path: `rulebook/${name}`,

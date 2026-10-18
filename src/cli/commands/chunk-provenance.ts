@@ -2,6 +2,7 @@ import {
   chunkMdPath,
   designDir,
   designRulebookDir,
+  readChunkMdIfExists,
   relChunkMdPath,
   requireChunkSlugs,
   DESIGN_DIR,
@@ -1180,12 +1181,8 @@ export async function chunkProvenanceStatusCommand(
   const counts = { full: 0, codeConformanceOnly: 0, unknown: 0 };
 
   for (const slug of slugs) {
-    let chunkText: string;
-    try {
-      chunkText = await fs.readFile(chunkMdPath(projectDir, slug), 'utf-8');
-    } catch {
-      continue; // a chunks/<slug> dir with no CHUNK.md is not this command's problem to report
-    }
+    const chunkText = await readChunkMdIfExists(projectDir, slug);
+    if (chunkText === undefined) continue; // a chunks/<slug> dir with no CHUNK.md is not this command's problem to report
 
     const status = readStatus(chunkText) ?? 'unknown';
 

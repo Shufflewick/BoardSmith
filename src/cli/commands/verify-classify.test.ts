@@ -914,12 +914,22 @@ describe('verify-classify names what it cannot read instead of calling it missin
     }
   });
 
+  it('a --run-id run is read even when another run cannot be', async () => {
+    const { project, runId } = await recordedSevenRun();
+    const other = await verifyRunInitCommand({ project, runId: '2099-01-01T00-00-00Z', json: true });
+    const otherLedger = join(project, other.ledgerPath);
+    await fs.rm(otherLedger);
+    await fs.symlink(otherLedger, otherLedger);
+    const result = await verifyClassifyPairsCommand({ project, runId, json: true });
+    expect(result.pairs.length).toBeGreaterThan(0);
+  });
+
   it('names a rulebook/ it cannot list rather than saying there is none', async () => {
     const { project, runId } = await recordedSevenRun();
     const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.chmod(rulebookDir, 0o300);
     try {
-      await expect(verifyClassifyPairsCommand({ project, runId, json: true })).rejects.toThrow(`rulebook/ exists at ${rulebookDir} but could not be read (EACCES)`);
+      await expect(verifyClassifyPairsCommand({ project, runId, json: true })).rejects.toThrow(`Could not read ${rulebookDir} (EACCES)`);
     } finally {
       await fs.chmod(rulebookDir, 0o755);
     }

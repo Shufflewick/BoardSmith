@@ -2008,7 +2008,7 @@ describe('verifyDeriveCheckCommand', () => {
     await fs.mkdir(rulebookDir, { recursive: true });
     await fs.chmod(rulebookDir, 0o000);
     try {
-      await expect(verifyDeriveCheckCommand({ project })).rejects.toThrow(/could not be read/);
+      await expect(verifyDeriveCheckCommand({ project })).rejects.toThrow(`Could not read ${rulebookDir} (EACCES)`);
       try {
         await verifyDeriveCheckCommand({ project });
       } catch (err) {

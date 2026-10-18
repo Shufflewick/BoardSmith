@@ -147,6 +147,19 @@ describe('what each game is checked against (#591)', () => {
     expect([checkoutState(legacy), checkoutState(world)]).toEqual(before);
   });
 
+  it('links a catalogue game when the catalogue is named in other letter case than on disk (#1174)', async () => {
+    const fx = fixture();
+    await makeTree(fx.tree);
+    await makeGame(fx, 'legacy');
+    await makeGame(fx, 'legacy-world', { links: ['legacy'] });
+    // On a disk that ignores case this names the same folder; links must resolve as the catalogue's keys do.
+    const otherCase = join(fx.catalogue, '..', 'games');
+
+    const run = await checkCatalogue({ tree: fx.tree, catalogueRoot: otherCase });
+
+    expect(statusOf(run)).toEqual({ legacy: 'passed', 'legacy-world': 'passed' });
+  });
+
   it('fails a game with no install, saying how to install it', async () => {
     const fx = fixture();
     await makeTree(fx.tree);

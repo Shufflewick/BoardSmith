@@ -2,9 +2,9 @@ import {
   DESIGN_DIR,
   RULEBOOK_DIR,
   chunkSlugs,
-  designChunksDir,
   designDir,
   designRulebookDir,
+  readChunkMdIfExists,
 } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
 import { basename, isAbsolute, join, relative, resolve } from 'node:path';
@@ -36,7 +36,7 @@ import {
   atomicWriteFile,
   ledgerFilePath,
   latestRunId,
-  listRunIds,
+  exists,
   missingRunMessage,
   readLedgerOrThrow,
   readRunLedgerState,
@@ -479,10 +479,9 @@ async function rulebookSliceFilenames(projectDir: string): Promise<string[]> {
 
 /** Each chunk's `CHUNK.md` text, in `chunkSlugs` order; a chunk directory without one is skipped. */
 async function readChunkTexts(projectDir: string): Promise<Array<{ slug: string; chunkText: string }>> {
-  const chunksDir = designChunksDir(projectDir);
   const chunks: Array<{ slug: string; chunkText: string }> = [];
   for (const slug of await chunkSlugs(projectDir)) {
-    const chunkText = await readIfExists(join(chunksDir, slug, 'CHUNK.md'), (p) => fs.readFile(p, 'utf-8'));
+    const chunkText = await readChunkMdIfExists(projectDir, slug);
     // No CHUNK.md in this directory: not a chunk to scan.
     if (chunkText !== undefined) chunks.push({ slug, chunkText });
   }
@@ -654,8 +653,8 @@ async function resolveRunId(projectDir: string, runId?: string): Promise<string>
           `2026-07-28T22-18-00Z — the exact value \`boardsmith verify-run-init\` printed.`,
       );
     }
-    const existing = await listRunIds(projectDir);
-    if (!existing.includes(runId)) throw new Error(await missingRunMessage(projectDir, runId));
+    // Only the named run: another run that cannot be read is no reason to refuse this one.
+    if (!(await exists(ledgerFilePath(projectDir, runId)))) throw new Error(await missingRunMessage(projectDir, runId));
     return runId;
   }
   const latest = await latestRunId(projectDir);

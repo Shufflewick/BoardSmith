@@ -177,7 +177,7 @@ function expectedInstallPaths(targetDir: string): string[] {
  * installed an earlier version would keep the stale skill until they thought to pass `--force`.
  */
 async function isFullyInstalled(targetDir: string, sourceHash: string): Promise<boolean> {
-  // Any failure below means "install again", which rewrites the piece or fails naming it.
+  // In these two checks any failure means "install again", which rewrites the piece or fails naming it.
   for (const path of expectedInstallPaths(targetDir)) {
     try {
       await fs.access(path);
