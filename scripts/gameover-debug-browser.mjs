@@ -17,37 +17,20 @@
  * `node scripts/gameover-debug-browser.mjs`; a missing Chromium says to run
  * `boardsmith install-browser`.
  */
-import { assert, check, runBrowserRegression, summarise, waitUntil } from './browser-harness.mjs';
+import {
+  assert, check, openTableSample, playTableSampleToTheEnd, runBrowserRegression, summarise, waitUntil,
+} from './browser-harness.mjs';
 
 const WIDTHS = [1440, 390];
-
-/**
- * Play the first card offered until the game-over card shows. The draw needs no
- * choice, so it runs itself; clicks go through the DOM because driving is not under test.
- */
-function playToTheEnd(frame) {
-  return frame.locator('body').evaluate(async (body) => {
-    const doc = body.ownerDocument;
-    for (let step = 0; step < 2000; step++) {
-      if (doc.querySelector('.game-over-card')) return true;
-      doc.querySelector('[data-testid="bs-actionbar"] .choice-btn')?.click();
-      await new Promise((settle) => setTimeout(settle, 100));
-    }
-    return false;
-  });
-}
 
 await runBrowserRegression({ script: 'gameover-debug-browser.mjs', table: true }, async ({ launch, hostUrl }) => {
   const browser = await launch();
   try {
     const context = await browser.newContext({ viewport: { width: WIDTHS[0], height: 900 } });
     const page = await context.newPage();
-    await page.goto(hostUrl);
-    await page.locator('.dev-host__frame').waitFor({ timeout: 60_000 });
-    const frame = page.frameLocator('.dev-host__frame');
-    await frame.locator('[data-testid="bs-actionbar"] .choice-btn').first().waitFor({ timeout: 60_000 });
+    const frame = await openTableSample(page, hostUrl);
 
-    const ended = await playToTheEnd(frame);
+    const ended = await playTableSampleToTheEnd(frame);
     await check('the game plays to its end and shows the game-over card', async () => {
       assert(ended, 'the game-over card never appeared');
     });

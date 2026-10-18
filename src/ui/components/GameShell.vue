@@ -1432,7 +1432,7 @@ defineExpose({
            `state.hint`, `state.heatmap` -- so none of them is the shell's. -->
       <template #board-overlays>
         <!-- Game Over result card: overlays the board behind a Slate scrim (IA-07, D10).
-             Scrim is absolute inside .boardregion — cannot cover the .actionbar sibling
+             Scrim is absolute over .board-viewport, outside the board's scroller, so it stays over the visible board (#1068); cannot cover the .actionbar sibling
              or browser chrome (T-100-06-02). winnerSeats degrades to [] in dev-WS mode;
              isDraw distinguishes that degrade from a genuine draw.
              It appears when `gameOverRevealed` says the ending is on screen -- the same answer
@@ -1461,7 +1461,7 @@ defineExpose({
         </template>
         <!-- Tutorial annotation overlay: mounts once here so it appears over BOTH
              the registry's board component (default or dev-switcher selection)
-             path. Position is absolute inside .boardregion (inset: 0, z-index: 20).
+             path. Its bubbles teleport to body (AnnotationLayer, position: fixed, z-index: 20).
              Sits above the turn prompt (z-5) and below GameOverCard scrim (z-50).
              No props — injects gameState and renders only when tutorial.content
              is present (v-if internal). Not inside zoom-container so it measures

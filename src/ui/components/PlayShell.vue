@@ -478,12 +478,6 @@ const mobileToggleLabel = computed(() => {
             aria-hidden="true"
           ></span>
 
-          <!-- The adapter's own overlays. A direct child of .boardregion, so like
-               every overlay here they can cover the board but NEVER the action bar
-               or the header (those are siblings outside .boardregion). -->
-          <slot name="board-overlays"></slot>
-
-
           <div
             class="game-shell__zoom-container"
             ref="zoomContainerEl"
@@ -497,6 +491,13 @@ const mobileToggleLabel = computed(() => {
             <slot name="board"></slot>
           </div>
         </main>
+        <!-- The adapter's own overlays, in one layer over the visible board:
+             beside .boardregion, not in it, so they never scroll away with a
+             board wider than the region, and out of flow, so their content never
+             takes the board's space (#1068). Like every overlay here they can
+             cover the board but NEVER the action bar or the header (those are
+             outside .board-viewport). -->
+        <div class="board-overlays"><slot name="board-overlays"></slot></div>
         <!-- Game modal host: the sanctioned full-board-region overlay layer for
              custom UIs. A game Teleports a blocking modal here
              (`<Teleport to="#bs-game-modal">`) to cover the board area.
@@ -1224,6 +1225,18 @@ const mobileToggleLabel = computed(() => {
      Any fixed-position elements inside will behave like absolute positioning
      relative to this container - they cannot cover the navbar or ActionPanel. */
   contain: layout;
+}
+
+/* The adapter's overlays (see the template). Clicks pass through the empty
+   layer to the board; what an adapter puts in it takes them as usual. */
+.board-overlays {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+/* :where() keeps this below any child's own pointer-events rule, whatever order the styles load in. */
+:where(.board-overlays) > :deep(*) {
+  pointer-events: auto;
 }
 
 /* Sanctioned full-board-region overlay layer for custom-UI modals (see the

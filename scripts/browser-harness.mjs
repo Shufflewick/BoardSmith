@@ -98,6 +98,32 @@ export async function waitForAction(page, name) {
   await surfaceOf(page).locator(`[data-bs-action="${name}"]`).waitFor({ timeout: 30_000 });
 }
 
+/** The table sample's game frame on `page`, once its Action Panel offers a choice. */
+export async function openTableSample(page, hostUrl) {
+  await page.goto(hostUrl);
+  await page.locator('.dev-host__frame').waitFor({ timeout: 60_000 });
+  const frame = page.frameLocator('.dev-host__frame');
+  await frame.locator('[data-testid="bs-actionbar"] .choice-btn').first().waitFor({ timeout: 60_000 });
+  return frame;
+}
+
+/**
+ * Play the table sample's first offered choice until the game-over card shows;
+ * true once it does. The draw needs no choice, so it runs itself; clicks go
+ * through the DOM because driving is not under test.
+ */
+export function playTableSampleToTheEnd(frame) {
+  return frame.locator('body').evaluate(async (body) => {
+    const doc = body.ownerDocument;
+    for (let step = 0; step < 2000; step++) {
+      if (doc.querySelector('.game-over-card')) return true;
+      doc.querySelector('[data-testid="bs-actionbar"] .choice-btn')?.click();
+      await new Promise((settle) => setTimeout(settle, 100));
+    }
+    return false;
+  });
+}
+
 /**
  * Open the world in a fresh browser context and run `body` against it.
  *
