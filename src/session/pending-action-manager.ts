@@ -12,7 +12,7 @@ import {
   type WarningEntry,
   type ChoiceWithRefs,
 } from './types.js';
-import { actionForSeat, offerFollowUp } from './utils.js';
+import { actionForSeat, deserializePendingState, offerFollowUp, serializePendingActionState } from './utils.js';
 
 /**
  * Result from processing a pick step.
@@ -110,12 +110,30 @@ export class PendingActionManager<G extends Game = Game> {
     actionName?: string,
     initialArgs?: Record<string, unknown>
   ): Promise<PickStepResult> {
-    let pendingState = this.#pendingActions.get(playerPosition);
+    const pendingState = this.#pendingActions.get(playerPosition);
 
     const refused = this.#refuseUnofferedAction(playerPosition, pendingState, actionName);
     if (refused) return refused;
     if (pendingState) this.#runner.markStalePicks(pendingState, playerPosition);
 
+    // A failed step keeps nothing: the game and this pending action are as before it (#1169).
+    const before = pendingState && { ...serializePendingActionState(pendingState) };
+    const { result, undone } = this.#runner.runPickOp(
+      () => this.#takeStep(playerPosition, pendingState, selectionName, value, actionName, initialArgs),
+    );
+    if (undone && before) this.#pendingActions.set(playerPosition, deserializePendingState(before));
+    if (undone && !before) this.#pendingActions.delete(playerPosition);
+    return result;
+  }
+
+  #takeStep(
+    playerPosition: number,
+    pendingState: PendingActionState | undefined,
+    selectionName: string,
+    value: unknown,
+    actionName: string | undefined,
+    initialArgs: Record<string, unknown> | undefined,
+  ): PickStepResult {
     // Auto-create pending action if it doesn't exist and actionName is provided
     if (!pendingState && actionName) {
       const startResult = this.startPendingAction(actionName, playerPosition);
@@ -140,9 +158,8 @@ export class PendingActionManager<G extends Game = Game> {
       return { success: false, error: taken.error, errorCode: taken.errorCode, nextChoices: taken.nextChoices };
     }
 
-    // A repeat's last pick is saved before its action runs, so a failed action keeps that onEach's changes (#1169 decides).
-    if (taken.repeating || !taken.complete) this.#runner.captureCheckpoint();
     if (taken.complete) return this.#completePendingAction(pendingState, playerPosition);
+    this.#runner.captureCheckpoint();
 
     return {
       success: true,
@@ -227,7 +244,7 @@ export class PendingActionManager<G extends Game = Game> {
     return { success: false, error: refused.error, errorCode: pickFailureCode(refused) };
   }
 
-  async #completePendingAction(pendingState: PendingActionState, playerPosition: number): Promise<PickStepResult> {
+  #completePendingAction(pendingState: PendingActionState, playerPosition: number): PickStepResult {
     // The UNIQUE completion path for multi-step / repeating-selection actions
     // on the session layer; the runner records, advances or rolls back.
     const actionResult = this.#runner.executeCollectedAction(pendingState, playerPosition);

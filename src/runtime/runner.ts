@@ -652,23 +652,33 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * open step's awaiting seats come back with the elements (#972) and the flow
    * holds the rebuilt tree's elements (#679).
    *
-   * @returns the player-facing error to report: `error` followed by
-   *   `NOTHING_CHANGED` when the rollback succeeded, or, when there was no
-   *   checkpoint to restore (only a game running with
-   *   `checkpoints: { enabled: false }`, since `ensureHeadCheckpoint` captures
-   *   one otherwise, #802), by a sentence saying the game may still hold the
-   *   action's partial changes (#808, #989).
+   * @returns the player-facing error to report (`undoneError`).
    */
   private rollbackToPreActionState(error: string | undefined): string {
-    const kept = error === undefined ? '' : `${error} `;
-    const checkpoint = this.actionCheckpoints[this.headOffset];
-    if (!checkpoint) {
-      return kept +
-        'The action failed part way through, and the game may still hold its partial changes, ' +
-        'because per-action checkpoints are turned off for this session so it could not be undone. ' +
-        'Check the board before playing on, or restart the game from a save.';
-    }
+    return this.undoneError(error, this.restoreHeadCheckpoint());
+  }
 
+  /**
+   * The player-facing error of an action that failed part way: `error`
+   * followed by `NOTHING_CHANGED` when the game was `restored`, or, when there
+   * was no checkpoint to restore (only a game running with
+   * `checkpoints: { enabled: false }`, since `ensureHeadCheckpoint` captures
+   * one otherwise, #802), by a sentence saying the game may still hold the
+   * action's partial changes (#808, #989).
+   */
+  private undoneError(error: string | undefined, restored: boolean): string {
+    const kept = error === undefined ? '' : `${error} `;
+    if (restored) return kept + NOTHING_CHANGED;
+    return kept +
+      'The action failed part way through, and the game may still hold its partial changes, ' +
+      'because per-action checkpoints are turned off for this session so it could not be undone. ' +
+      'Check the board before playing on, or restart the game from a save.';
+  }
+
+  /** Put the game back to the head checkpoint, if there is one, and say whether it did. */
+  private restoreHeadCheckpoint(): boolean {
+    const checkpoint = this.actionCheckpoints[this.headOffset];
+    if (!checkpoint) return false;
     if (!checkpoint.flowState) throw new Error('The checkpoint before the failed action holds no flow state, so the action cannot be rolled back.');
     const { state, messageLog } = checkpointWithLiveLog(checkpoint, this.game.messages ?? [], this.game.logEviction);
     this.game.loadSerializedState(state, { messageLog });
@@ -677,7 +687,25 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       this.game._ctx.sequence = checkpoint.sequence;
     }
     this.game.setRandomState(checkpoint.randomState);
-    return kept + NOTHING_CHANGED;
+    return true;
+  }
+
+  /**
+   * Run one op of a seat's pick-by-pick action so that, if it fails, it keeps
+   * nothing (#1169): a host saves nothing for a failed op, so the game and the
+   * open action stay as they were before it, and here the game is put back to
+   * the head checkpoint, refreshed as the op begins. An op that recorded the
+   * action (one whose flow then halted) is not undone, nor is one that changed
+   * the game with checkpoints turned off. `undone` says the game is as before
+   * the op; the caller then puts the seat's pending action back as it was.
+   */
+  runPickOp<R extends { success: boolean }>(run: () => R): { result: R; undone: boolean } {
+    const recorded = this.actionCount;
+    this.captureCheckpoint();
+    const version = this.game._ctx._stateVersion;
+    const result = run();
+    if (result.success || this.actionCount !== recorded) return { result, undone: false };
+    return { result, undone: this.game._ctx._stateVersion === version || this.restoreHeadCheckpoint() };
   }
 
   /**
@@ -928,9 +956,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   /**
    * Execute a fully-collected pending action, the one completion step shared by
    * this runner's `completePendingAction` and `PendingActionManager`'s: record
-   * it and advance the flow when it succeeds, and roll the game back when it
-   * failed after changing something, as `performAction` does (#44, #801). A
-   * flow that halts after the action is refused, as in `performAction`, rather than thrown (#1120).
+   * it and advance the flow when it succeeds. Run it inside `runPickOp`, which
+   * puts the game back when it fails (#44, #801, #1169). A flow that halts
+   * after the action is refused, as in `performAction`, rather than thrown (#1120).
    */
   executeCollectedAction(pendingState: PendingActionState, playerPosition: number): ActionExecutionResult {
     const action = this.game.getAction(pendingState.actionName);
@@ -946,7 +974,6 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
         'This action was started before the game was updated and cannot be finished. Cancel it and take it again.'
       );
     }
-    this.ensureHeadCheckpoint();
     // Serialized before executing, and with each pick where it was before the picks' callbacks moved it (#1144).
     const serializedAction = this.serializeForHistory(action.name, player, pendingState.collectedArgs, undefined, branchesBefore);
     const actionResult = executor.executePendingAction(action, player, pendingState);
@@ -963,7 +990,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     }
     const failed = { ...actionResult, errorCode: failureCode(actionResult) };
     if (!actionResult.partiallyApplied) return failed;
-    return { ...failed, error: this.rollbackToPreActionState(actionResult.error) };
+    // The op this runs in (`runPickOp`) puts the game back.
+    return { ...failed, error: this.undoneError(actionResult.error, this.actionCheckpoints[this.headOffset] !== undefined) };
   }
 
   /**
@@ -1229,8 +1257,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * it in `actionHistory` via `executeCollectedAction`) once every selection
    * has been supplied.
    *
-   * Clears the tracked pending state once the action completes, whether it
-   * succeeds or fails to execute.
+   * Clears the tracked pending state once the action is recorded. A step that
+   * fails keeps nothing: the game and the pending action are as before it (#1169).
    */
   processSelectionStep(
     playerPosition: number,
@@ -1246,10 +1274,15 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     if (refusal) return { success: false, ...refusal };
     this.markStalePicks(pendingState, playerPosition);
 
-    const taken = this.takePick(pendingState, playerPosition, selectionName, value);
-    if (!taken.success) return { success: false, error: taken.error, errorCode: taken.errorCode };
-    if (taken.complete) return this.completePendingAction(pendingState, playerPosition);
-    return { success: true, actionComplete: false };
+    const before = this.getPendingAction(playerPosition)!;
+    const { result, undone } = this.runPickOp((): PendingStepResult => {
+      const taken = this.takePick(pendingState, playerPosition, selectionName, value);
+      if (!taken.success) return { success: false, error: taken.error, errorCode: taken.errorCode };
+      if (taken.complete) return this.completePendingAction(pendingState, playerPosition);
+      return { success: true, actionComplete: false };
+    });
+    if (undone) this.pendingActions.set(playerPosition, before);
+    return result;
   }
 
   /**
