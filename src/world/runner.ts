@@ -1031,6 +1031,19 @@ function viewRefusalsOf(failures: ReadonlyArray<readonly [string, unknown]>): Re
   return refused;
 }
 
+/** A view that stopped naming partitions once `loaded` arrived (#936). */
+function viewDroppedPartition(dropped: readonly string[], loaded: readonly string[]): WorldRefusal {
+  const quote = (names: readonly string[]) => names.map((name) => `"${name}"`).join(", ");
+  return worldRefusal(
+    "view-dropped-partition",
+    `This world's \`world.view\` named ${quote(dropped)} in one round of a look and dropped ` +
+      `${dropped.length === 1 ? "it" : "them"} in the next, after ${quote(loaded)} loaded. A view may name more ` +
+      `partitions as more is loaded, never fewer, because who hears an event is judged against ` +
+      `only what a command declared. Keep naming ${quote(dropped)} alongside what the loaded ` +
+      `partitions add.`,
+  );
+}
+
 /**
  * The store the engine reads through INSIDE the child.
  *
@@ -1161,6 +1174,9 @@ export function createWorldRunner(
    */
   migrationHooks: WorldMigrationHooks = {},
 ): WorldRunnerHandle {
+  /** What each player's view named on the last round of the look in
+   *  progress, or the refusal its view earned on an earlier round (#936). */
+  const viewRounds = new Map<string, readonly string[] | WorldRefusal>();
   return stopsOnStaleStamp({
     /**
      * Which partitions the parent must send for this command.
@@ -1489,7 +1505,12 @@ export function createWorldRunner(
       const resident = residentNames(engine);
       const needs = new Set<string>();
       const failures: Array<readonly [string, unknown]> = [];
+      const loaded = Object.keys(supplied);
       for (const player of players) {
+        // A look's first round is the only one handed nothing, so it starts
+        // the comparison afresh: between looks a command may move the player.
+        if (loaded.length === 0) viewRounds.delete(player);
+        const earlier = viewRounds.get(player);
         // PER PLAYER, INSIDE ONE CALL (#310). `viewPartitions` runs the
         // bundle's own `world.view` for that seat and reads the seat off the
         // roster, so it throws for a seat the game cannot describe and for a
@@ -1502,13 +1523,27 @@ export function createWorldRunner(
         // seat that threw reaching for an absent partition may well succeed on
         // the round after the one that loaded it.
         try {
-          for (const name of engine.viewPartitions(player)) {
+          if (earlier instanceof WorldRefusal) throw earlier;
+          const named = engine.viewPartitions(player);
+          // NAMES MORE AS MORE IS LOADED, NEVER FEWER (#936): #717 judges who
+          // hears an event by that rule, so a drop is refused for the rest of
+          // the look rather than projected.
+          const dropped = earlier?.filter((name) => !named.includes(name)) ?? [];
+          if (dropped.length > 0) {
+            const refusal = viewDroppedPartition(dropped, loaded);
+            viewRounds.set(player, refusal);
+            throw refusal;
+          }
+          viewRounds.set(player, named);
+          for (const name of named) {
             if (!store.holds(name) && !resident.has(name)) needs.add(name);
           }
         } catch (error) {
           failures.push([player, error]);
         }
       }
+      // Nothing more to load ends the look, and with it the comparison.
+      if (needs.size === 0) for (const player of players) viewRounds.delete(player);
       return { needs: [...needs], refused: viewRefusalsOf(failures) };
     },
 

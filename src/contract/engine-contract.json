@@ -1,6 +1,6 @@
 {
-  "revision": 233,
-  "surfaceHash": "1519c6e27c9683db",
+  "revision": 234,
+  "surfaceHash": "14ea9277318a0e32",
   "payloadHash": "0e2d27db00239080",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1807,6 +1807,14 @@
       "payloadHash": "0e2d27db00239080",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "BoardSmithWorldEngine now refuses at construction a roster in which two players hold one seat, with the new platform-owned refusal roster-double-holder naming the seat and both players (#980); a store written before #796 may hold such rows, and the host resolves it by removing one holder from its stored roster."
+    },
+    {
+      "revision": 234,
+      "date": "2026-10-18",
+      "surfaceHash": "14ea9277318a0e32",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A world.view that stops naming a partition it named on an earlier round of the same look, once more is loaded, is now refused for that seat with the new game-owned world refusal view-dropped-partition, naming the partition and telling the author to keep naming it (#936). #717's event audience relies on a view naming more as more is loaded, never fewer. The check runs in the runner's declareViews over names it already computes: no extra view calls and no new data across the runner/host boundary, so hosts need no change; a look's first round (nothing supplied) starts the comparison afresh. Platform: re-vendor. No payload or stored format changed."
     }
   ]
 }
