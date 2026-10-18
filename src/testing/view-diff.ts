@@ -39,7 +39,7 @@
  */
 
 import type { ElementJSON, Game } from '../engine/index.js';
-import { isHiddenPlaceholder } from '../engine/element/hidden-placeholder.js';
+import { isHiddenPlaceholder, isPositionalPlaceholderId } from '../engine/element/hidden-placeholder.js';
 import type { TestGame } from './test-game.js';
 import { TestWorld } from './test-world.js';
 import { assertViewFixtureShape } from './view-fixture.js';
@@ -177,12 +177,6 @@ interface ChildPair {
   index: number;
 }
 
-/** An id the engine anonymized (a hidden zone's fungible child) is negative and
- *  fresh on every serialization, so it identifies nothing. */
-function isAnonymized(node: ElementJSON): boolean {
-  return node.id < 0;
-}
-
 /**
  * Pair two seats' children of the same parent (#267).
  *
@@ -206,13 +200,13 @@ function pairChildren(
   const takenB = new Set<number>();
   const byIdB = new Map<number, number>();
   childrenB.forEach((child, index) => {
-    if (!isAnonymized(child) && !byIdB.has(child.id)) byIdB.set(child.id, index);
+    if (!isPositionalPlaceholderId(child.id) && !byIdB.has(child.id)) byIdB.set(child.id, index);
   });
 
   const pairs: ChildPair[] = [];
   const leftoverA: ChildPair[] = [];
   childrenA.forEach((child, index) => {
-    const at = isAnonymized(child) ? undefined : byIdB.get(child.id);
+    const at = isPositionalPlaceholderId(child.id) ? undefined : byIdB.get(child.id);
     if (at === undefined) {
       leftoverA.push({ a: child, index });
       return;
