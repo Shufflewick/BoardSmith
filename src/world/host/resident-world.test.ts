@@ -87,8 +87,9 @@ function host(options: {
   clock?: WorldHostClock;
   store?: ReturnType<typeof createMemoryWorldStore>;
   onNotice?: (message: string) => void;
+  budgets?: ReturnType<typeof worldBudgets>;
 } = {}) {
-  const budgets = worldBudgets();
+  const budgets = options.budgets ?? worldBudgets();
   let now = OPENED;
   const clock = options.clock ?? {
     now: () => now,
@@ -157,6 +158,42 @@ describe('#793: ResidentWorld', () => {
       ),
     ).rejects.toMatchObject({ code: 'world-catching-up' });
     expect(notices.filter((m) => m.includes('"boom" refused'))).toHaveLength(1);
+  });
+
+  it('names the stuck event when a due event that refuses is what the world is behind on (#939)', async () => {
+    const { world, advance } = host({ ordering: 'chronological' });
+    await world.start();
+    world.seat(worldSeatPlayer(1), 1);
+    await world.clockCommand('arm', {});
+    advance(3 * MINUTE);
+
+    const refusal = world.run(() =>
+      world.command({ player: worldSeatPlayer(1), order: { id: 'o1', at: OPENED }, action: 'poke', args: {} }),
+    );
+    await expect(refusal).rejects.toMatchObject({ code: 'world-catching-up' });
+    const message = (await refusal.catch((error: Error) => error)).message;
+    expect(message).toContain('"boom"');
+    expect(message).not.toMatch(/in a moment/);
+    // The game's own error text is for the author's notice, not the player.
+    expect(message).not.toContain('refused on purpose');
+  });
+
+  it('still says "in a moment" when the world is only catching up (#939)', async () => {
+    const { world, advance } = host({
+      ordering: 'chronological',
+      budgets: worldBudgets({ drainBatch: 1, catchUpRounds: 1 }),
+    });
+    await world.start();
+    world.seat(worldSeatPlayer(1), 1);
+    await world.clockCommand('stamp', {});
+    await world.clockCommand('stamp', {});
+    advance(3 * MINUTE);
+
+    await expect(
+      world.run(() =>
+        world.command({ player: worldSeatPlayer(1), order: { id: 'o1', at: OPENED }, action: 'poke', args: {} }),
+      ),
+    ).rejects.toMatchObject({ code: 'world-catching-up', message: expect.stringMatching(/in a moment/) });
   });
 
   it('plans a clock-issued command\'s schedules from the instant its handler was told', async () => {

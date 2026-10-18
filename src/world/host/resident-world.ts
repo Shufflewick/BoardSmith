@@ -308,9 +308,10 @@ export class ResidentWorld {
    */
   #revision = 0;
   #closed = false;
-  /** When overdue work may next be tried, set by a batch an event refused in
-   *  and cleared by one none did. Read by every re-arm, so they all agree. */
-  #retryAt: number | undefined;
+  /** The event a batch saw refuse and when overdue work may next be tried,
+   *  cleared by a batch none refused in. Read by every re-arm, so they all
+   *  agree, and by the catch-up refusal, which names the event (#939). */
+  #refused: { action: string; retryAt: number } | undefined;
   /** The world lock. Every entry point queues behind it. */
   #lock: Promise<unknown> = Promise.resolve();
 
@@ -892,11 +893,18 @@ export class ResidentWorld {
       // gamble. The `finally` below re-arms, so the catch-up is already
       // continuing while the player reads the refusal.
       if (await this.#catchUpBefore(arrivedAt)) {
+        // A REFUSED EVENT MAY NEVER GO THROUGH (#721, #939), so the player is
+        // told which one and is not promised "a moment".
         throw worldRefusal(
           "world-catching-up",
-          "This world is still catching up on events that were due before your command " +
-            "arrived, and its rules say a command must not overtake them. Nothing was changed. " +
-            "Send it again in a moment -- it will run exactly once when the world is level.",
+          this.#refused === undefined
+            ? "This world is still catching up on events that were due before your command " +
+                "arrived, and its rules say a command must not overtake them. Nothing was changed. " +
+                "Send it again in a moment -- it will run exactly once when the world is level."
+            : `This world is waiting on its scheduled event "${this.#refused.action}", which could ` +
+                "not run and is still queued, and its rules say a command must not overtake it. " +
+                "Nothing was changed. The world keeps retrying that event; your command can run, " +
+                "exactly once, after it goes through.",
         );
       }
       // THE CATCH-UP CAN END THE WORLD, and then this command is refused like
@@ -1140,7 +1148,7 @@ export class ResidentWorld {
    *
    * `rearmAt` is the library's answer, so every host arms for the same instant:
    * the earliest pending event, or now when something is already overdue --
-   * overload degrades to latency, never refusal -- or `#retryAt` when the last
+   * overload degrades to latency, never refusal -- or `#refused.retryAt` when the last
    * batch saw an event refuse, so a broken handler is not retried at once.
    */
   rearm(): void {
@@ -1156,7 +1164,7 @@ export class ResidentWorld {
 
   /** The instant `rearm` arms for, which is what a host shows as "next due". */
   nextWakeAt(): number | null {
-    return rearmAt(this.#store.pendingEvents(), this.now(), this.#retryAt);
+    return rearmAt(this.#store.pendingEvents(), this.now(), this.#refused?.retryAt);
   }
 
   /**
@@ -1168,7 +1176,7 @@ export class ResidentWorld {
    * delay produces a busy host rather than a wedged one.
    */
   async #drain(): Promise<void> {
-    this.#retryAt = undefined;
+    this.#refused = undefined;
     await this.#drainBatch(this.now(), new Set());
     this.rearm();
   }
@@ -1263,7 +1271,7 @@ export class ResidentWorld {
       return { ended: this.completed, displaced };
     });
     if (outcome.kind === "refused") {
-      this.#retryAt = this.now() + RETRY_WAIT_MS;
+      this.#refused = { action: event.action, retryAt: this.now() + RETRY_WAIT_MS };
       // A DUE EVENT THAT REFUSED IS SAID OUT LOUD AND LEFT QUEUED, at the
       // occurrence that refused -- which is where the last occurrence that ran
       // already re-armed it, so there is nothing more to write. Its effects
@@ -1333,7 +1341,7 @@ export class ResidentWorld {
       // to be overtaken, and the absence of a guarantee is not a lesser one.
       return false;
     }
-    this.#retryAt = undefined;
+    this.#refused = undefined;
     const spent = new Set<string>();
     for (let round = 0; round < this.#budgets.catchUpRounds; round++) {
       if (!this.#anythingDueAt(arrivedAt)) return false;
