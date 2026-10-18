@@ -1,5 +1,19 @@
 # Migration Guide
 
+## Hidden elements in message text and unloaded world references are withheld (#1165, #1166)
+
+`game.message()` text now names an element a seat cannot see by the outermost
+container concealing it, as element references already did (#1043): a public
+`'{{player}} drew {{card}}'` reads "drew Hand" for a seat that cannot see the
+card, and the card's name only for a seat that can. A test that read another
+seat's log for a hidden card's name now reads the container's name.
+
+In world mode, a seat's view no longer carries the real id of an element in a
+partition not loaded on this instance. The reference arrives as
+`{ __elementRef: 'pile/removed' }`, the reference that names nothing, which
+decodes to `undefined`. A world UI that followed such an id must treat it as
+unknown.
+
 ## `boardsmith test --selection` is removed (#986)
 
 `boardsmith test` no longer takes `--selection <path>`, the authored-test

@@ -6,6 +6,7 @@ import {
   encodeValue,
   forEachInSubtree,
   hasZoneVisibility,
+  isElement,
   isPlayerElement,
   isPlayerIdentityAttribute,
   lookUpId,
@@ -17,7 +18,7 @@ import {
   registerCreatedElementClass,
 } from './game-element.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE } from './hidden-placeholder.js';
-import { concealRefsForSeat } from './concealed-refs.js';
+import { concealRefsForSeat, outermostConcealer } from './concealed-refs.js';
 import { childrenChanged } from './cell-index.js';
 import { oncePerState, stateChanged } from './state-version.js';
 import { Piece } from './piece.js';
@@ -4051,7 +4052,8 @@ export class Game<
    *
    * @param text - Message text, optionally with `{{key}}` placeholders
    * @param data - Optional data for template substitution. GameElement and Player
-   *               values are automatically converted to their display names.
+   *               values are automatically converted to their display names; a
+   *               seat that cannot see an element reads its outermost concealer's (#1165).
    *
    * @example
    * ```typescript
@@ -4303,6 +4305,10 @@ export class Game<
    * flattened away at the last hop.
    */
   getFormattedMessageEntries(seat?: number | null): FormattedMessage[] {
+    const position = seat ?? -1;
+    // The element the seat may read about: an element it cannot see is named by its concealer, as references are (#1165).
+    const shown = (value: unknown): unknown =>
+      isElement(value) ? (outermostConcealer(value, position) ?? value) : Array.isArray(value) ? value.map(shown) : value;
     return this.messages
       .filter((m) => this.canSeeMessage(m, seat))
       .map(({ text, data, type }) => {
@@ -4310,7 +4316,7 @@ export class Game<
         if (data) {
           for (const [key, value] of Object.entries(data)) {
             // An element (a Player is one) is written by its own toString(). split/join keeps `$` codes in values literal.
-            processed = processed.split(`{{${key}}}`).join(String(value));
+            processed = processed.split(`{{${key}}}`).join(String(shown(value)));
           }
         }
         return type === undefined ? { text: processed } : { text: processed, type };

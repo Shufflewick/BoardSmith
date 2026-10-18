@@ -2523,6 +2523,15 @@ shared record: every player and every spectator receives it.
 game.message('{{player}} played {{card}}', { player: ctx.player, card });
 ```
 
+An element in the data is written by its name, worked out for each seat when
+its log is built. A seat that cannot see the element reads the name of the
+outermost container that conceals it, the same container an element reference
+names (#1165): `game.message('{{player}} drew {{card}}', { player, card })`
+reads "Alice drew Ace of Spades" for Alice and "Alice drew Hand" for everyone
+else once the card is in her owner-only hand. A list of elements is read the
+same way, element by element. Pass the element, not its name: a string reaches
+every seat as written.
+
 **The log is always on.** There is no prop, slot, or flag a game can set to
 remove it — it is what makes a game reviewable, and the copy/clear controls in
 the ⋯ menu depend on it being mounted. The only thing that ever hides it is the

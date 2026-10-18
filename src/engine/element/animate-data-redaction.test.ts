@@ -246,6 +246,21 @@ describe('every element reference a seat receives is redacted the same way (#104
     });
   }
 
+  it.each([1, 2, null])('withholds a world reference to an element in a partition not loaded here, from seat %s (#1166)', (seat) => {
+    const game = makeGame(true);
+    const card = game.hand.last(Card)!;
+    game.discard.first(Marker)!.target = card;
+    const discardJson = JSON.parse(JSON.stringify(game.discard.toJSON())) as ElementJSON;
+    game.evictSubtree(game.hand.id);
+    game.evictSubtree(game.discard.id);
+    game.adoptSubtree(game.id, discardJson);
+
+    const view = seatView(game, seat);
+    const discard = view.children!.find((node) => node.name === 'discard')!;
+    expect(discard.children!.find((node) => node.name === 'marker')!.attributes!.target).toEqual({ __elementRef: WITHHELD_PILE_BRANCH });
+    expect(JSON.stringify(view)).not.toContain(`"__elementId":${card.id}`);
+  });
+
   it('marks no world partition reached while building views', () => {
     const game = makeGame(true);
     for (const zone of [game.discard, game.vault, game.hand]) game.definePartition(zone.id);
@@ -258,4 +273,36 @@ describe('every element reference a seat receives is redacted the same way (#104
     game.toJSONForPlayers([1, 2, null]);
     expect([...game._ctx._reachedPartitions!.partitions]).toEqual([]);
   });
+});
+
+describe('message text names a hidden element by its outermost concealer (#1165)', () => {
+  const textFor = (game: DrawGame, seat: number | null) => game.getFormattedMessageEntries(seat)[0].text;
+
+  for (const [view, worldMode] of [['table', false], ['world', true]] as const) {
+    describe(`${view} mode`, () => {
+      it.each([
+        ['a card in a count-only deck', (game: DrawGame) => game.deck.last(Card)!, 1, 'deck'],
+        ['a card nested in a contentsHidden() zone', (game: DrawGame) => game.vault.first(Card, 'Crown')!, 2, 'vault'],
+        ["a card in seat 1's owner-only hand", (game: DrawGame) => game.hand.last(Card)!, 2, 'hand-p1'],
+        ["a card in seat 1's owner-only hand, for the spectator", (game: DrawGame) => game.hand.last(Card)!, null, 'hand-p1'],
+      ])('reads the concealer for %s', (_label, pick, seat, concealer) => {
+        const game = makeGame(worldMode);
+        game.message('{{player}} drew {{card}}', { player: game.getPlayer(1)!, card: pick(game) });
+        expect(textFor(game, seat)).toBe(`Player 1 drew ${concealer}`);
+      });
+
+      it('reads the card for a seat that can see it', () => {
+        const game = makeGame(worldMode);
+        game.message('{{player}} drew {{card}}', { player: game.getPlayer(1)!, card: game.hand.last(Card)! });
+        expect(textFor(game, 1)).toBe('Player 1 drew Ace of Spades');
+      });
+
+      it('reads each element of a list the same way', () => {
+        const game = makeGame(worldMode);
+        game.message('played {{cards}}', { cards: [game.hand.last(Card)!, game.discard.first(Card)!] });
+        expect(textFor(game, 2)).toBe('played hand-p1,Seven of Hearts');
+        expect(textFor(game, 1)).toBe('played Ace of Spades,Seven of Hearts');
+      });
+    });
+  }
 });

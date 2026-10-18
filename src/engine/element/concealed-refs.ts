@@ -7,11 +7,13 @@
  * size, a card's slot in an opponent's hand) or its identity, so the seat's
  * copy names the outermost container that conceals it instead, the rule flow
  * variables follow (#726). A reference the seat can follow is kept as written.
+ * A world reference to an element in a partition not loaded here is withheld
+ * like one to the pile, since its containers cannot be checked (#1166).
  * One rule for every payload a seat receives: its tree (attributes, settings,
  * animation data) and its message log.
  */
 import type { Game } from './game.js';
-import { hasZoneVisibility, ownVisibilityAllows, type GameElement } from './game-element.js';
+import { hasZoneVisibility, ownVisibilityAllows, WITHHELD_PILE_BRANCH, type GameElement } from './game-element.js';
 import { canPlayerSee } from './visibility.js';
 
 /**
@@ -40,9 +42,10 @@ export function concealRefsForSeat<T>(value: T, game: Game, position: number): T
 /** The concealer's reference, in the form `value` was written in, when `value` is a reference the seat cannot follow. */
 function concealedRef(value: object, game: Game, position: number): object | undefined {
   const { __elementRef: branch, __elementId: id } = value as { __elementRef?: unknown; __elementId?: unknown };
-  // shortcut: a world reference to an element not resident here (an index miss) is left as written; its ancestors are not loaded.
   const element =
     typeof branch === 'string' ? inTreeAt(game, branch) : typeof id === 'number' ? game._ctx._elementsById.get(id) : undefined;
+  // A world element whose partition is not loaded here cannot be checked, so no seat learns which it is (#1166).
+  if (typeof id === 'number' && !element) return { __elementRef: WITHHELD_PILE_BRANCH };
   const concealer = element && outermostConcealer(element, position);
   if (!concealer) return undefined;
   return typeof branch === 'string' ? { __elementRef: concealer.branch() } : { __elementId: concealer.id };

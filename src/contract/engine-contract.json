@@ -1,5 +1,5 @@
 {
-  "revision": 239,
+  "revision": 240,
   "surfaceHash": "d045fa6967c06929",
   "payloadHash": "0e2d27db00239080",
   "formatHash": "3aff5d1f34f52ec0",
@@ -1855,6 +1855,14 @@
       "payloadHash": "0e2d27db00239080",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "engineRootFieldAudience is removed from the boardsmith root (nothing called it; isEngineRootField and GAME_ROOT_FIELD_AUDIENCE remain), and GameRunner.getFlowDebugInfo is removed (call runner.game.getFlowDebugInfo()). No game uses either, so no rebuild is needed; no saved-state or payload shape changes."
+    },
+    {
+      "revision": 240,
+      "date": "2026-10-18",
+      "surfaceHash": "d045fa6967c06929",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A seat's message text now names an element it cannot see by the outermost container concealing it, as element references do, so a public '{{player}} drew {{card}}' reads the hand or deck rather than the card for other seats and spectators (#1165). In world mode, a seat's view no longer carries the real id of an element in a partition not loaded on this instance: the reference is written as { __elementRef: 'pile/removed' }, the reference that names nothing, for every seat (#1166). No payload shape changes; a world client that followed such an id now decodes it to undefined."
     }
   ]
 }
