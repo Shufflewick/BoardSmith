@@ -17,6 +17,81 @@ recorded `Role`, such as `Role: mechanical` with `Agent: bs-judgement`. An
 agent no role is mapped to now is let through, so remapping `agents` leaves
 old run logs valid. Fix the `Role` to the role the work was dispatched as.
 
+## Hidden elements in message text and unloaded world references are withheld (#1165, #1166)
+
+`game.message()` text is now worked out for each seat when the message is
+written, from what that seat could see then, and never changes afterwards. An
+element the seat cannot see is named by the nearest container whose name it
+can see, as element references name its concealer (#1043): a public
+`'{{player}} drew {{card}}'` reads "drew Hand" for a seat that cannot see the
+card, and the card's name only for a seat that can. A test that read another
+seat's log for a hidden card's name now reads the container's name.
+
+Each `MessageEntry` in `game.messages` gains `readings`, the text each seat
+reads, and `text` stays the template. A message log saved by an older engine
+has no `readings` and is refused when formatted, with a message saying to start
+a new game; finish or restart games saved before this change.
+
+In world mode, a seat's view no longer carries the real id of an element in a
+partition not loaded on this instance. The reference arrives as
+`{ __elementRef: 'pile/removed' }`, the reference that names nothing, which
+decodes to `undefined`. A world UI that followed such an id must treat it as
+unknown.
+
+## A crash in a world action's condition, `validate` or `choices` is `rules-error` (#1015)
+
+A seated world action whose condition, `validate` or `choices` throws something
+other than a `PlayerFacingError` now makes `applyCommand` (and `TestWorld.take`)
+throw a `WorldRefusal` with the game-owned code `rules-error` and the shared
+crash sentence, as a throw from `execute` already did. Before, the thrown error
+itself escaped, and a plain `Error` looked the same as the rules saying no. A
+host that treated an uncoded throw from these callbacks as a refusal now sees a
+crash; a refusal (a `PlayerFacingError`, a `validate` returning a string,
+`{ success: false, error }`) is still uncoded. Throw a `PlayerFacingError` where
+the callback means to refuse.
+
+## `createColorOption` takes no colours, and code player options are published (#994, #992)
+
+`createColorOption(colors, label)` is now `createColorOption(label)`. It always
+offers the engine's `DEFAULT_COLOR_PALETTE`. Move a custom list into
+`boardsmith.json`'s `colorPalette`, the one list dev and the live lobby use, and
+delete the `color` option from your `gameDefinition`; dev builds it from that
+palette:
+
+```typescript
+// Before
+playerOptions: { color: createColorOption([{ value: '#ff0000', label: 'Fire' }]) }
+// After: no `color` player option in code, and boardsmith.json has
+// "colorPalette": [{ "id": "fire", "hex": "#ff0000", "label": "Fire" }]
+```
+
+The player options your `gameDefinition` declares are now merged with
+`boardsmith.json`'s `playerOptions` by key, in `boardsmith dev` and in the
+manifest `boardsmith build` publishes. Before, dev dropped the code ones and the
+live lobby never saw them. A key declared in both places must be declared the
+same in both, or dev and build refuse it, naming the key; keep each option in
+one place. An id `boardsmith.json` declares twice is refused, and so is a
+`color` entry in its `playerOptions`: move those colours to `colorPalette`.
+
+A player option the platform's manifest cannot carry is now refused by both
+`boardsmith dev` and `boardsmith build`, naming the option and what it needs.
+The platform takes only `number`, `select`, `boolean` and `exclusive` options;
+a `select` or `exclusive` needs a string `default` and `choices` given as
+`{ "value", "label" }` pairs, and a `select`'s default must be one of them. A
+`text` option, or an exclusive with no choices, is refused. The code types
+match: `ExclusivePlayerOption` now requires `choices` and a string `default`
+(no seat number), and `StandardPlayerOption` is a `select` with a required
+`default` and `{ value, label }` choices, with no `text` or plain-string form.
+A `color` option is typed as `ColorOptionDefinition`. MERC's `isDictator` is an
+example (Shufflewick/MERC#72):
+
+```typescript
+// Before: refused, it has no choices
+isDictator: { type: 'exclusive', label: 'Dictator', default: 'last' }
+// After
+isDictator: { type: 'exclusive', label: 'Dictator', default: 'last', choices: [{ value: 'dictator', label: 'Dictator' }] }
+```
+
 ## `shuffle()` clears the visibility of what it shuffles (#962)
 
 `space.shuffle()` now clears the own visibility of every element in the space

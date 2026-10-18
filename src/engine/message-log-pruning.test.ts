@@ -94,7 +94,7 @@ describe('the log tracks what it has evicted', () => {
     // that grows, so the fix for a size ceiling must not be paid per line.
     const game = new ChattyGame({ playerCount: 2, seed: 'chat', elementIdKey: '00000000000000b3' });
     game.message('a line');
-    expect(Object.keys(game.messages[0]).sort()).toEqual(['data', 'text']);
+    expect(Object.keys(game.messages[0]).sort()).toEqual(['data', 'readings', 'text']);
   });
 
   it('keeps counting across a restore', () => {

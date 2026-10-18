@@ -372,7 +372,10 @@ shorthand that names no id it can map: a dash then a plain number after a provis
   That is the chunk's fast checks, and the only verify chunk work runs: the test files the chunk
   added or changed since its verify base, picked by the command itself, and typecheck. A chunk
   that added or changed no test file fails it, unless its Spec Manifest marks it exempt
-  (`build/spec.md` "Exemptions"): an exempt chunk passes on typecheck alone. The full checks (the whole suite, build, validate,
+  (`build/spec.md` "Exemptions"): an exempt chunk passes on typecheck alone. Before `spec`, the
+  step that writes the chunk's tests, no test of its own is asked for: while every
+  `chunk-<slug>/` commit is `step-investigate`, `step-redteam` or `step-ask`, the chunk passes on
+  typecheck alone too (#995). The full checks (the whole suite, build, validate,
   the smoke test and the mutation check) run once, before the game is published
   (`boardsmith publish` refuses without a full `boardsmith verify` for the commit), not per chunk.
 

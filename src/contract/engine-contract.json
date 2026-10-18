@@ -1,6 +1,6 @@
 {
-  "revision": 241,
-  "surfaceHash": "d045fa6967c06929",
+  "revision": 243,
+  "surfaceHash": "01f74ea669294216",
   "payloadHash": "0e2d27db00239080",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1871,6 +1871,22 @@
       "payloadHash": "0e2d27db00239080",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "shuffle() clears the visibility grants of everything in the shuffled space, so a seat that peeked at a card cannot follow it (#962)"
+    },
+    {
+      "revision": 242,
+      "date": "2026-10-18",
+      "surfaceHash": "e64b3fa05ccd478a",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A seated world action whose condition, validate or choices throws something that is not a PlayerFacingError now makes applyCommand throw WorldRefusal('rules-error') with the shared crash sentence, as a throw from execute already did; before, the thrown error escaped uncoded and a plain Error looked like the rules saying no. A refusal (a PlayerFacingError, a validate returning a string, { success: false, error }) is still uncoded. The rules-error refusal's description says so; no saved-state or payload shape changes (#1015)."
+    },
+    {
+      "revision": 243,
+      "date": "2026-10-18",
+      "surfaceHash": "01f74ea669294216",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A seat's message text is now fixed when the message is written, from what that seat could see then, and never changes afterwards (#1165): an element the seat cannot see is named by the nearest container whose name it can see (its outermost concealer, or that concealer's parent when the concealer hides itself, and the game's name at the top), an element hidden by its own visibility included. MessageEntry gains readings: { text, seats }[], one entry per distinct text with the seats that read it (0 is the spectator); text stays the template. A seat's serializeMessageLog copy keeps only its own reading. A message log saved by an older engine has no readings, and formatting it throws a message saying to start a new game, so live tables should stay on the revision that wrote them. In world mode, a seat's view no longer carries the real id of an element in a partition not loaded on this instance: the reference is written as { __elementRef: 'pile/removed' }, the reference that names nothing, for every seat (#1166)."
     }
   ]
 }

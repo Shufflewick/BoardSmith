@@ -6,7 +6,13 @@ import { WebSocket } from 'ws';
 import { styleText } from 'node:util';
 import open from 'open';
 
-import { createColorOption, type ColorChoice, type ColorOptionDefinition, type GameDefinition } from '../../session/index.js';
+import {
+  createColorOption,
+  type ColorChoice,
+  type ColorOptionDefinition,
+  type GameDefinition,
+  type PlayerOptionDefinition,
+} from '../../session/index.js';
 import type { GameStateSnapshot } from '../../engine/utils/index.js';
 import { MultiplayerHost } from '../dev-host/multiplayer-host.js';
 import type { TableDefinition } from '../dev-host/table-rules-worker.js';
@@ -21,6 +27,7 @@ import { loadTableRuntime, tableRulesReloadQueue, type TableRuntime } from './de
 import { gateOf } from '../dev-host/rules-reload-queue.js';
 import { RulesError } from '../dev-host/rules-worker.js';
 import { findUnknownKeys } from '../lib/config-schema.js';
+import { mergePlayerOptions, type ConfigOptionDefinition } from '../lib/player-options.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex, requireTableUi } from '../lib/game-project.js';
 import { resolveWorldMode } from '../lib/world-project.js';
 import { resolveUserPath } from '../lib/user-path.js';
@@ -232,17 +239,6 @@ export function formatUnknownKeyWarnings(config: Record<string, unknown>): strin
   );
 }
 
-/** Option definition in boardsmith.json array format (id/name is a field, not a key) */
-interface ConfigOptionDefinition {
-  id?: string;
-  name?: string;
-  type: string;
-  label: string;
-  description?: string;
-  default?: unknown;
-  [key: string]: unknown;
-}
-
 interface BoardSmithConfig {
   name: string;
   displayName?: string;
@@ -286,14 +282,15 @@ interface BoardSmithConfig {
  * color picker.
  */
 function normalizeColorPalette(
-  palette: Array<string | Record<string, unknown>>
+  palette: ReadonlyArray<string | object>
 ): Array<{ value: string; label: string }> {
   const result: Array<{ value: string; label: string }> = [];
-  for (const entry of palette) {
-    if (typeof entry === 'string') {
-      result.push({ value: entry, label: entry });
+  for (const item of palette) {
+    if (typeof item === 'string') {
+      result.push({ value: item, label: item });
       continue;
     }
+    const entry = item as Record<string, unknown>;
     const hex = (entry.value ?? entry.hex ?? entry.color) as string | undefined;
     if (hex === undefined) {
       console.warn(
@@ -321,7 +318,8 @@ export function resolveColorOption(
   gameDefinition: Pick<GameDefinition, 'playerOptions' | 'colorPalette'>,
   config: { colorPalette?: Array<string | Record<string, unknown>> },
 ): ColorOptionDefinition {
-  const option = createColorOption(config.colorPalette && normalizeColorPalette(config.colorPalette));
+  const option = createColorOption();
+  if (config.colorPalette) option.choices = normalizeColorPalette(config.colorPalette);
   const source = config.colorPalette ? 'boardsmith.json\'s "colorPalette"' : 'the engine\'s default palette';
   for (const [where, palette] of Object.entries(codeColorPalettes(gameDefinition))) {
     if (palette && !samePalette(normalizeColorPalette(palette), option.choices)) {
@@ -333,6 +331,21 @@ export function resolveColorOption(
     }
   }
   return option;
+}
+
+/**
+ * The player options dev offers: the game's merged code and boardsmith.json
+ * options, which the published manifest carries too (#992), and the colour
+ * option, which the live lobby builds from the same `colorPalette`.
+ */
+export function resolveDevPlayerOptions(
+  gameDefinition: Pick<GameDefinition, 'playerOptions' | 'colorPalette'>,
+  config: Pick<BoardSmithConfig, 'playerOptions' | 'colorPalette'>,
+): Record<string, PlayerOptionDefinition> & { color: ColorOptionDefinition } {
+  return {
+    ...mergePlayerOptions(gameDefinition.playerOptions, config.playerOptions),
+    color: resolveColorOption(gameDefinition, config),
+  };
 }
 
 /** The colour lists a game declares in code, by where it declares them. */
@@ -392,22 +405,6 @@ export function resolvePreset(presets: GamePreset[] | undefined, name: string): 
   const resolved: ResolvedPreset = { options: { ...preset.options } };
   if (preset.players?.length) resolved.playerCount = preset.players.length;
   return resolved;
-}
-
-/**
- * Convert boardsmith.json array-format options to the object-keyed format
- * that GameDefinition uses. The array format uses { name, type, ... } entries,
- * while the object format uses { [name]: { type, ... } }.
- */
-function configOptionsToRecord<T>(options: ConfigOptionDefinition[]): Record<string, T> {
-  const result: Record<string, unknown> = {};
-  for (const opt of options) {
-    const { id, name, ...rest } = opt;
-    const key = id ?? name;
-    if (!key) continue;
-    result[key] = rest;
-  }
-  return result as Record<string, T>;
 }
 
 /** Flatten object-keyed option definitions to the dev host's id-carrying list. */
@@ -815,20 +812,15 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
     // undeclared option is refused here, at load, rather than when picked.
     assertPresetsSelectable(gameOptions, presets);
 
-    let playerOptions = config.playerOptions
-      ? configOptionsToRecord<import('../../session/types.js').PlayerOptionDefinition>(config.playerOptions)
-      : undefined;
-
-    const color = resolveColorOption(gameDefinition, config);
-    colorPalette = color.choices;
-    playerOptions = { ...playerOptions, color };
+    const playerOptions = resolveDevPlayerOptions(gameDefinition, config);
+    colorPalette = playerOptions.color.choices;
 
     gameDefinition = {
       ...gameDefinition,
       minPlayers,
       maxPlayers,
       presets,
-      ...(playerOptions && { playerOptions }),
+      playerOptions,
     };
 
     console.log(styleText('dim', `  Loaded game: ${gameDefinition.displayName || gameDefinition.gameType}`));

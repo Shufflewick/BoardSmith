@@ -369,6 +369,18 @@ const view = testGame.getPlayerView(2).state;
 `diffPlayerViews` refuses a view pair that carries the short form, naming the
 element and attribute, so a drifted fixture handed to it fails there.
 
+A game attribute can itself be a plain record shaped `{ seat, name }`, which
+looks exactly like the short form. So a tree that `testGame.getPlayerView(seat)`
+or `world.getPlayerView(seat)` captured is trusted as engine-made and not
+checked (#1181). The trust belongs to that tree object, not to its contents:
+
+- Rebuilding the wrapper around it (`{ ...view }`, or
+  `{ player: 1, state: view.state }`) keeps the trust.
+- Copying the tree itself (a spread of `view.state`, a JSON round trip,
+  `structuredClone`) makes a new tree, which is checked like a hand-built one.
+- Editing a captured tree in place is not re-checked, so change the game and
+  capture again rather than editing the view.
+
 ---
 
 ## 6. Flow Loop Conditions (`maxIterations` is required)
@@ -823,7 +835,8 @@ See [Using actionTempState()](./actions-and-flow.md#using-actiontempstate-for-te
 ## 9. Element Storage: Arrays vs Children (CRITICAL)
 
 > **Lint guard:** the `no-element-array-state` ESLint rule flags a
-> `GameElement[]`-typed class field on a non-element class, and flags
+> `GameElement[]`-typed class field on any class, element classes such as
+> the `Sector` below included, and flags
 > assigning `game.all(...)`/`.first(...)`/etc. results onto a `this.*`
 > property. It reports only (no auto-fix, since "store IDs" vs "query at
 > point of use" is a judgment call) — see the correct patterns below.

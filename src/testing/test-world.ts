@@ -47,6 +47,7 @@ import {
   type WorldStore,
 } from '../world/host/index.js';
 import { createMemoryWorldStore } from './memory-world-store.js';
+import { markEngineView } from './view-fixture.js';
 
 /** The instant a test world starts at, unless a test names another. A fixed
  *  number rather than `Date.now()`, because a world's `now` is an input to
@@ -298,15 +299,18 @@ export class TestWorld {
         if (offer.disabled !== undefined) disabledActions[offer.name] = offer.disabled;
       }
       const view = bodyFor(player);
+      // THE SAME UNWRAP `useWorldPlay` DOES. The frame is an envelope and the
+      // tree is one field of it; a harness that handed a board the envelope
+      // would be handing it something no board has ever received. A host
+      // hands the body over as `unknown` (the world contract does not know the
+      // engine), and the engine's `viewFor` wrote this tree with
+      // `toJSONForPlayer`, so it is typed as that root here, once.
+      const state = (view as { state?: unknown } | null)?.state as SeatViewJSON;
+      // A frame with no tree is left unmarked; it fails as a missing tree wherever it is used.
+      if (state !== null && typeof state === 'object') markEngineView(state);
       return {
         view,
-        // THE SAME UNWRAP `useWorldPlay` DOES. The frame is an envelope and the
-        // tree is one field of it; a harness that handed a board the envelope
-        // would be handing it something no board has ever received. A host
-        // hands the body over as `unknown` (the world contract does not know the
-        // engine), and the engine's `viewFor` wrote this tree with
-        // `toJSONForPlayer`, so it is typed as that root here, once.
-        state: (view as { state?: unknown } | null)?.state as SeatViewJSON,
+        state,
         offers,
         availableActions: offers.map((offer) => offer.name),
         disabledActions,

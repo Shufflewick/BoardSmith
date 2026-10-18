@@ -47,7 +47,7 @@
 import { existsSync, promises as fs, readFileSync } from 'node:fs';
 import { join, relative, resolve as pathResolve } from 'node:path';
 import { styleText } from 'node:util';
-import { chunkVerifyBase } from '../lib/chunk-commits.js';
+import { chunkBeforeSpec, chunkVerifyBase } from '../lib/chunk-commits.js';
 import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { type MutantCache, captureExecutionContext, executionContextChange, openMutantCache } from '../lib/mutant-cache.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
@@ -320,10 +320,17 @@ export async function chunkTests(projectDir: string, chunk: string, base: string
 }
 
 /**
- * A chunk that added or changed no test file: it passes on typecheck alone only when its Spec
- * Manifest marks it exempt (`build/spec.md` "Exemptions"); any other chunk must add or change a test.
+ * A chunk that added or changed no test file: it passes on typecheck alone while it has only reached
+ * the steps before spec (#995), or when its Spec Manifest marks it exempt (`build/spec.md`
+ * "Exemptions"); any other chunk must add or change a test.
  */
 async function noChunkTests(projectDir: string, chunk: string, base: string): Promise<VerifyCheckOutcome> {
+  if (await chunkBeforeSpec(projectDir, chunk)) {
+    return {
+      passed: true,
+      summary: `No test ran: chunk "${chunk}" has only reached the steps before spec (investigate, redteam, ask), and spec writes its tests.`,
+    };
+  }
   const text = await readIfExists(chunkMdPath(projectDir, chunk), (path) => fs.readFile(path, 'utf-8'));
   const exemption = text === undefined ? undefined : parseSpecManifest(text).exemption;
   if (exemption !== undefined) {
@@ -338,7 +345,7 @@ async function noChunkTests(projectDir: string, chunk: string, base: string): Pr
     passed: false,
     summary: `Chunk "${chunk}" added or changed no test file since its base (${short(base)}), so no test of its own ran.`,
     next:
-      `Write the chunk's tests (its test step), or mark a chunk with no new game behavior exempt in its Spec Manifest ` +
+      `Write the chunk's tests (its spec step), or mark a chunk with no new game behavior exempt in its Spec Manifest ` +
       `(build/spec.md "Exemptions"), commit, then run \`boardsmith verify --chunk ${chunk}\` again.`,
   };
 }

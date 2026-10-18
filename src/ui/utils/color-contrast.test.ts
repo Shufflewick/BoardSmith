@@ -58,7 +58,7 @@ describe('contrastInk', () => {
     }
   });
 
-  // CR-02: createColorOption() accepts ANY CSS color string with no format
+  // CR-02: colorPalette accepts ANY CSS color string with no format
   // restriction — named colors and hsl() are legal, common author choices.
   describe('named colors and hsl() (CR-02)', () => {
     it('accepts a standard CSS named color and picks the correct ink', () => {
