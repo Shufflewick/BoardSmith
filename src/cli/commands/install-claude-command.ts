@@ -17,7 +17,7 @@ import { homedir } from 'node:os';
 import { execSync } from 'node:child_process';
 import { styleText } from 'node:util';
 import { ROLES, defaultAgentType } from '../lib/agent-roles.js';
-import { boardsmithPackageRoot } from '../lib/boardsmith-version.js';
+import { boardsmithInstallKind, boardsmithPackageRoot } from '../lib/boardsmith-version.js';
 import { filesContentHash } from '../lib/hash.js';
 import { listFiles } from '../lib/source-files.js';
 import { readIfExists } from '../lib/read-if-exists.js';
@@ -27,7 +27,7 @@ interface InstallOptions {
   local?: boolean; // Install to ./.claude/skills instead of global
   /**
    * Skip the global `npm link` step — used by tests to avoid a global side-effect.
-   * Default unset/false, so real installs still link.
+   * Default unset/false, so a source checkout still links (an installed copy never does, #942).
    */
   skipLink?: boolean;
 }
@@ -324,7 +324,11 @@ export async function installClaudeCommand(options: InstallOptions = {}): Promis
   }
 
   // Link BoardSmith globally so `npx boardsmith` works anywhere
-  if (!options.skipLink) {
+  if (!options.skipLink && boardsmithInstallKind(boardsmithRoot) !== 'checkout') {
+    // Linking an installed copy would point the global command into one game's node_modules (#942).
+    console.log(styleText('yellow', `Skipped linking BoardSmith globally: ${boardsmithRoot} is an installed copy, not a source checkout.`));
+    console.log(styleText('gray', 'To run `boardsmith` from anywhere, install BoardSmith globally, or run `npm link` in a clone of BoardSmith.'));
+  } else if (!options.skipLink) {
     console.log(styleText('gray', 'Linking BoardSmith globally...'));
     try {
       execSync('npm link --force', { cwd: boardsmithRoot, stdio: 'pipe' });
