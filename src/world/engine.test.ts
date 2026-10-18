@@ -1966,7 +1966,7 @@ describe("#191 — a refusal written for a player reaches one", () => {
   });
 });
 
-describe("#1015 — a crash before execute is coded rules-error too", () => {
+describe("#1015: a crash before execute is coded rules-error too", () => {
   const SENTENCE = "That room is closed until dawn.";
   const crash = () => {
     throw new Error("a rule read past the end of the board, deliberately");
@@ -2034,6 +2034,56 @@ describe("#1015 — a crash before execute is coded rules-error too", () => {
     const inWords = await thrown(world, "validateRefusesInWords");
     expect(inWords).not.toBeInstanceOf(WorldRefusal);
     expect((inWords as Error).message).toBe(SENTENCE);
+  });
+
+  it("rolls back what an earlier pick changed when a later pick's validate crashes", async () => {
+    // A world selection has no onSelect, so the earlier pick's validate is what writes.
+    const writeThenCrash = worldAction<WorldFixtureGame>("writeThenCrash")
+      .needs(() => [ROOM_ONE])
+      .chooseFrom("first", {
+        choices: ["room-one"],
+        validate: (_value, _args, ctx) => {
+          ctx.game.room("room-one").visits += 100;
+          return true;
+        },
+      })
+      .chooseFrom("second", { choices: ["room-one"], validate: crash })
+      .execute(() => {});
+    const world = new BoardSmithWorldEngine({
+      game: newWorldGame(),
+      seats: new Map([["player-a", 1]]),
+      store: new CountingStore(genesis()),
+      actions: [touch, writeThenCrash],
+      view: () => [],
+    });
+    await world.applyCommand("player-a", { name: "touch", args: {} }, STAMP);
+
+    const error = await world
+      .applyCommand("player-a", { name: "writeThenCrash", args: { first: "room-one", second: "room-one" } }, STAMP)
+      .then(() => null, (thrown: unknown) => thrown);
+
+    expect(error).toMatchObject({ code: "rules-error" });
+    expect(visitsIn(await world.serializePartitions([ROOM_ONE]))).toBe(1);
+  });
+
+  it("keeps a world facility's own code for a refusal raised inside a condition", async () => {
+    const peekNextDoor = worldAction<WorldFixtureGame>("peekNextDoor")
+      .needs(() => [ROOM_ONE])
+      .condition({ "next door is open": ({ world }) => world.partition(ROOM_TWO) !== undefined })
+      .execute(() => {});
+    const world = new BoardSmithWorldEngine({
+      game: newWorldGame(),
+      seats: new Map([["player-a", 1]]),
+      store: new CountingStore(genesis()),
+      actions: [peekNextDoor],
+      view: () => [],
+    });
+
+    const error = await world
+      .applyCommand("player-a", { name: "peekNextDoor", args: {} }, STAMP)
+      .then(() => null, (thrown: unknown) => thrown);
+
+    expect(error).toMatchObject({ code: "undeclared-partition" });
   });
 });
 
