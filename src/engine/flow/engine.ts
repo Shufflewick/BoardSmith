@@ -286,9 +286,6 @@ interface ExecutionFrame<G extends Game = Game> {
  * applied game state and replay/undo/snapshot become inconsistent.
  */
 export class FlowHaltedError extends PlayerFacingError {
-  /** What the flow threw. The message carries it only in dev, so whoever reports the halt logs it (#1120). */
-  override readonly cause: unknown;
-
   constructor(cause: unknown) {
     super(withDevDetail(
       'Game halted: the flow failed after the action was committed. ' +
@@ -296,6 +293,7 @@ export class FlowHaltedError extends PlayerFacingError {
       cause,
     ));
     this.name = 'FlowHaltedError';
+    // The message carries the cause only in dev, so whoever reports the halt logs it from here (#1120).
     this.cause = cause;
   }
 }
