@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { loop, noop, turnLoop, stateAwareLoop } from './builders.js';
+import { loop, noop, turnLoop, stateAwareLoop, switchOn } from './builders.js';
 
 describe('loop() — PIT-01 construction-time maxIterations guard', () => {
   it('throws an actionable error when maxIterations is omitted', () => {
@@ -115,5 +115,17 @@ describe('turnLoop()/stateAwareLoop() — LIBX-02 / F-16 unbounded passthrough',
   it('stateAwareLoop still defaults to a bounded 100 cap when unbounded is not set', () => {
     const node = stateAwareLoop({ actions: ['play'] });
     expect((node.config as { maxIterations?: number }).maxIterations).toBe(100);
+  });
+});
+
+describe('switchOn() refuses a case named "__default" (#1176)', () => {
+  it('names the case and tells the author to rename it', () => {
+    expect(() => switchOn({ name: 'phase', on: () => 'x', cases: { __default: noop() } })).toThrow(
+      /switchOn "phase" has a case named "__default".*Rename the case/,
+    );
+  });
+
+  it('accepts ordinary case names and a default branch', () => {
+    expect(() => switchOn({ on: () => 'x', cases: { draw: noop(), 1: noop() }, default: noop() })).not.toThrow();
   });
 });

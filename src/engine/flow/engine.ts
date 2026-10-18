@@ -30,7 +30,7 @@ import type {
   PlayerAwaitingState,
 } from './types.js';
 import { resolveTimeLimit } from './step-time-limit.js';
-import { flowChildCount, resolveFlowChild } from './flow-navigation.js';
+import { flowChildCount, resolveFlowChild, SWITCH_DEFAULT_KEY } from './flow-navigation.js';
 
 /**
  * What running one flow node reports: whether the flow now waits for input.
@@ -1510,7 +1510,7 @@ export class FlowEngine<G extends Game = Game> {
         if (i < path.length - 1) {
           const branchKey = frameData?.[`__frame_${i}`]?.branchKey;
           const branch = currentNode.type === 'switch' && typeof branchKey === 'string'
-            ? (branchKey === '__default' ? 'the default case' : `case ${JSON.stringify(branchKey)}`)
+            ? (branchKey === SWITCH_DEFAULT_KEY ? 'the default case' : `case ${JSON.stringify(branchKey)}`)
             : 'a branch';
           return {
             valid: false,
@@ -2294,7 +2294,7 @@ export class FlowEngine<G extends Game = Game> {
     frame.data = {
       ...frame.data,
       branchPushed: true,
-      branchKey: hasCase ? stringValue : '__default',
+      branchKey: hasCase ? stringValue : SWITCH_DEFAULT_KEY,
     };
 
     return { awaitingInput: false };
