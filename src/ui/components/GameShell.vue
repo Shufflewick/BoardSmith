@@ -273,9 +273,12 @@ function updateCompact(mql: MediaQueryList | MediaQueryListEvent) {
 // / menu "Fit".
 const boardregionEl = computed(() => playShell.value?.boardRegionEl ?? null);
 const zoomContainerEl = computed(() => playShell.value?.zoomContainerEl ?? null);
+const boardBoundary = ref<InstanceType<typeof BoardErrorBoundary> | null>(null);
 const { zoomLevel, setZoom, fitZoom } = useAutoZoom({
   boardEl: zoomContainerEl,
   regionEl: boardregionEl,
+  // No boundary mounted means no board, so nothing has failed.
+  boardFailed: computed(() => boardBoundary.value?.failed ?? false),
 });
 
 // Connection health (IA-01): driven by the host's postMessage heartbeat.
@@ -1556,7 +1559,7 @@ defineExpose({
              Action Panel and the game context are handed, so none of them can
              disagree (#520, #516). -->
         <template v-if="shellMounted">
-        <BoardErrorBoundary v-if="selectedUiComponent" :state="gameView" :board="selectedUiComponent">
+        <BoardErrorBoundary v-if="selectedUiComponent" ref="boardBoundary" :state="gameView" :board="selectedUiComponent">
           <component
             :is="selectedUiComponent"
             v-bind="boardProps"

@@ -97,8 +97,11 @@ export function useAutoZoom(options: {
   boardEl: Ref<HTMLElement | null>;
   /** The scrollable board region (`.boardregion`) the board must fit inside. */
   regionEl: Ref<HTMLElement | null>;
+  /** True while BoardErrorBoundary shows its message in place of the board.
+   *  No fit measures the message, so the board never inherits its zoom (#1154). */
+  boardFailed: Readonly<Ref<boolean>>;
 }) {
-  const { boardEl, regionEl } = options;
+  const { boardEl, regionEl, boardFailed } = options;
 
   const zoomLevel = ref(1.0);
 
@@ -113,11 +116,12 @@ export function useAutoZoom(options: {
 
 
   /** Measure and apply the fitted zoom. Returns true when both boxes were
-   *  measurable (a fit was computed), false when layout isn't ready yet. */
+   *  measurable (a fit was computed), false when layout isn't ready yet or the
+   *  board's error message stands in for it. */
   function measureAndFit(): boolean {
     const board = boardEl.value;
     const region = regionEl.value;
-    if (!board || !region) return false;
+    if (!board || !region || boardFailed.value) return false;
 
     const appliedZoom = parseFloat(getComputedStyle(board).zoom) || 1;
     const rect = board.getBoundingClientRect();
@@ -212,6 +216,11 @@ export function useAutoZoom(options: {
     // teardownRefit's cancelAnimationFrame(pendingFrame) always covers it.
     scheduleRefit();
   }, { immediate: true, flush: 'post' });
+
+  // A region change skipped while the message showed is caught up when the board returns.
+  watch(boardFailed, (failed) => {
+    if (!failed) scheduleRefit();
+  }, { flush: 'post' });
 
   onUnmounted(() => {
     endStartup();

@@ -101,7 +101,7 @@ function mountShell(board: Component | null) {
     setup() {
       const boardregionEl = ref<HTMLElement | null>(null);
       const zoomContainerEl = ref<HTMLElement | null>(null);
-      api = useAutoZoom({ boardEl: zoomContainerEl, regionEl: boardregionEl });
+      api = useAutoZoom({ boardEl: zoomContainerEl, regionEl: boardregionEl, boardFailed: ref(false) });
       return () => h('main', { class: 'boardregion', ref: boardregionEl }, [
         h('div', { class: 'zoom-container', ref: zoomContainerEl },
           current.value ? [h(current.value)] : []),
