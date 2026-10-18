@@ -176,3 +176,16 @@ describe('#879: a frame that is not a message', () => {
     expect((await seatsSeenBy(page)).find((s) => s.seat === 1)).toMatchObject({ mine: true, connected: true });
   });
 });
+
+describe('#887: a second hello on one socket naming a different client', () => {
+  it('lets the first client go, so its seat starts the reconnect grace like any departure', async () => {
+    const run = await startRun();
+    const { page, runId } = await seatedPage(run, 'A');
+    const welcomed = page.next((f) => f.type === 'welcome');
+    page.send({ type: 'hello', clientId: 'B', runId });
+    await welcomed;
+
+    expect((await seatsSeenBy(page)).find((s) => s.seat === 1)).toMatchObject({ mine: false, connected: false });
+    expect(run.graces.armed()).toEqual([10_000]);
+  });
+});

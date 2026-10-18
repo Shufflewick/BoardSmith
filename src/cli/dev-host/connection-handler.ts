@@ -119,13 +119,29 @@ export function createDevHostConnectionHandler(opts: DevHostConnectionOptions): 
     let loadId = '';
 
     type Inbound = { type?: string; clientId?: unknown; [key: string]: unknown };
+    // Only tear down if THIS socket still owns the clientId mapping. A stale
+    // close from a superseded (reloaded) socket must not disconnect the
+    // reconnected client — that would orphan every future broadcast/response
+    // to its seat (DEF-C).
+    const release = () => {
+      if (clientId && clients.get(clientId) === socket) {
+        const gone = clientId;
+        clients.delete(gone);
+        mpHost.forgetPageLoad(gone);
+        queue.admit({ run: async () => mpHost.disconnect(gone) }).catch((err: unknown) => onError(err, 'disconnect'));
+      }
+    };
+
     const identify = (msg: Inbound) => {
       if (msg.runId !== undefined && msg.runId !== runId) {
         send({ type: 'stale_run' });
         return;
       }
       send({ type: 'welcome', runId });
-      clientId = typeof msg.clientId === 'string' ? msg.clientId : `anon-${Math.random().toString(36).slice(2)}`;
+      const next = typeof msg.clientId === 'string' ? msg.clientId : `anon-${Math.random().toString(36).slice(2)}`;
+      // A socket that changes identity leaves as its old client, so that seat is covered (#887).
+      if (next !== clientId) release();
+      clientId = next;
       clients.set(clientId, socket);
       // A caller that names no page load (a scripted client) is one per socket.
       loadId = typeof msg.loadId === 'string' ? msg.loadId : randomUUID();
@@ -143,17 +159,6 @@ export function createDevHostConnectionHandler(opts: DevHostConnectionOptions): 
       dispatch(clientId, (msg.type === 'server_request' ? { ...msg, loadId } : msg) as ClientInbound);
     });
 
-    socket.on('close', () => {
-      // Only tear down if THIS socket still owns the clientId mapping. A stale
-      // close from a superseded (reloaded) socket must not disconnect the
-      // reconnected client — that would orphan every future broadcast/response
-      // to its seat (DEF-C).
-      if (clientId && clients.get(clientId) === socket) {
-        const gone = clientId;
-        clients.delete(gone);
-        mpHost.forgetPageLoad(gone);
-        queue.admit({ run: async () => mpHost.disconnect(gone) }).catch((err: unknown) => onError(err, 'disconnect'));
-      }
-    });
+    socket.on('close', release);
   };
 }
