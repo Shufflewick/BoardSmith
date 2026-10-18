@@ -34,7 +34,7 @@ import { setupDragDropOrchestration } from '../composables/useDragDropTargets';
 import { useTableSeat, provideTableSeat } from '../composables/useTableSeat.js';
 import { tableBoardProps, type DisplayedGameState } from '../board-props.js';
 import { useBoardFocusHandoff } from '../composables/useBoardFocusHandoff';
-import { maybePostDevtoolsUpdate } from './GameShell.devtools.js';
+import { exposeDevtoolsSnapshot } from './GameShell.devtools.js';
 import { useZoomPreview } from '../composables/useZoomPreview';
 import { useAutoZoom, SETTLE_MS } from '../composables/useAutoZoom';
 import { useToast } from '../composables/useToast';
@@ -810,42 +810,24 @@ setupDragDropOrchestration({
 // not wired anything up, so "Choose on the board" can never leave focus on <body>.
 useBoardFocusHandoff(boardInteraction, zoomContainerEl);
 
-// ── DEV-02: devtools postMessage bridge ──────────────────────────────────────
-// In a host, dev builds only: broadcast reactive state to window.parent
-// so the `boardsmith dev` host page can expose window.__BOARDSMITH_DEVTOOLS.
-// The entire watch registration is guarded by isDevBuild so production builds
-// dead-code-eliminate this block (import.meta.env.DEV is false in production).
-if (isDevBuild) {
-  watch(
-    [
-      availableActions,
-      actionMetadata,
-      playerSeat,
-      () => boardInteraction.currentAction,
-      () => boardInteraction.currentPickIndex,
-      () => boardInteraction.validElements.length,
-      state,
-    ],
-    () => {
-      maybePostDevtoolsUpdate(
-        { isDevBuild, inHost },
-        {
-          seat: playerSeat.value,
-          state: state.value?.state ?? null,
-          availableActions: availableActions.value,
-          actionMetadata: actionMetadata.value,
-          boardInteraction: {
-            currentAction: boardInteraction.currentAction,
-            currentPickIndex: boardInteraction.currentPickIndex,
-            validElements: boardInteraction.validElements,
-          },
-          flowDebugInfo: state.value?.state?.flowDebugInfo,
-          pendingAction: state.value?.state?.pendingAction,
-        },
-      );
+// ── DEV-02: devtools bridge ─────────────────────────────────────────────────
+// In a host, dev builds only: the `boardsmith dev` host page calls this reader
+// when window.__BOARDSMITH_DEVTOOLS is read, so no state is built per push (#960).
+// Guarded by isDevBuild so production builds dead-code-eliminate it.
+if (isDevBuild && inHost) {
+  onUnmounted(exposeDevtoolsSnapshot(window, () => ({
+    seat: playerSeat.value,
+    state: state.value?.state ?? null,
+    availableActions: availableActions.value,
+    actionMetadata: actionMetadata.value,
+    boardInteraction: {
+      currentAction: boardInteraction.currentAction,
+      currentPickIndex: boardInteraction.currentPickIndex,
+      validElements: boardInteraction.validElements,
     },
-    { deep: false },
-  );
+    flowDebugInfo: state.value?.state?.flowDebugInfo,
+    pendingAction: state.value?.state?.pendingAction,
+  })));
 }
 
 // Zoom preview (Alt+hover to enlarge cards) - uses event delegation for all cards

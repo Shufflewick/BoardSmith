@@ -1,8 +1,9 @@
 /**
  * GameShell devtools bridge helper (DEV-02).
  *
- * Extracted from GameShell.vue so the payload-building and guard logic can be
- * unit-tested without mounting the full component.
+ * GameShell puts a reader on its own (iframe) window, and the dev host calls it
+ * when `window.__BOARDSMITH_DEVTOOLS` is read, so nothing is built per push (#960).
+ * The dev host serves the iframe from its own origin, so it can call the reader.
  *
  * SECURITY: these helpers are only called inside an `if (isDevBuild)` block in
  * GameShell.vue, so production builds dead-code-eliminate this entire module.
@@ -12,12 +13,10 @@ import type { BoardTarget } from '../composables/useBoardInteraction.js';
 import type { SerializedFlowDebugInfo, SerializedPendingActionState } from '../../session/types.js';
 
 // ---------------------------------------------------------------------------
-// Message shape
+// Snapshot shape
 // ---------------------------------------------------------------------------
 
-export interface DevtoolsStateMessage {
-  source: 'shufflewick-game';
-  type: 'boardsmith:devtools-state-update';
+export interface DevtoolsSnapshot {
   seat: number;
   state: unknown | null;
   availableActions: string[];
@@ -55,14 +54,12 @@ export interface DevtoolsParams {
 }
 
 /**
- * Build the devtools postMessage payload from current reactive state values.
+ * Build the devtools snapshot from current reactive state values.
  * validElements are filtered to exclude disabled entries and mapped to id-only
  * numbers, matching the BoardsmithDevtools.getBoardInteractionState() shape.
  */
-export function buildDevtoolsPayload(params: DevtoolsParams): DevtoolsStateMessage {
+export function buildDevtoolsPayload(params: DevtoolsParams): DevtoolsSnapshot {
   return {
-    source: 'shufflewick-game',
-    type: 'boardsmith:devtools-state-update',
     seat: params.seat,
     state: params.state,
     availableActions: params.availableActions,
@@ -80,22 +77,23 @@ export function buildDevtoolsPayload(params: DevtoolsParams): DevtoolsStateMessa
 }
 
 // ---------------------------------------------------------------------------
-// Guard + post (used by GameShell watcher; injectable for testing)
+// The reader on the game window, and the dev host's read of it
 // ---------------------------------------------------------------------------
 
-/**
- * Build and post the devtools state update message to window.parent, if and
- * only if both `isDevBuild` and `inHost` are true.
- *
- * The `postMessage` parameter defaults to `window.parent.postMessage` and is
- * injectable so tests can spy on calls without touching the real DOM.
- */
-export function maybePostDevtoolsUpdate(
-  guard: { isDevBuild: boolean; inHost: boolean },
-  params: DevtoolsParams,
-  postMessage: (message: unknown, targetOrigin: string) => void = (msg, origin) =>
-    window.parent.postMessage(msg, origin),
-): void {
-  if (!guard.isDevBuild || !guard.inHost) return;
-  postMessage(buildDevtoolsPayload(params), '*');
+declare global {
+  interface Window {
+    /** Set by a dev-build GameShell in a host; read by the dev host (#960). */
+    __boardsmithDevtoolsSnapshot?: () => DevtoolsSnapshot;
+  }
+}
+
+/** Put the snapshot reader on the game's window. Returns the function that takes it off. */
+export function exposeDevtoolsSnapshot(win: Window, read: () => DevtoolsParams): () => void {
+  win.__boardsmithDevtoolsSnapshot = () => buildDevtoolsPayload(read());
+  return () => { delete win.__boardsmithDevtoolsSnapshot; };
+}
+
+/** The current snapshot of the game in `win`, or null when no shell is mounted there. */
+export function readDevtoolsSnapshot(win: Window | null | undefined): DevtoolsSnapshot | null {
+  return win?.__boardsmithDevtoolsSnapshot?.() ?? null;
 }

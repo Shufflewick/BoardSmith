@@ -1,22 +1,15 @@
 // @vitest-environment jsdom
 /**
- * Tests for the GameShell devtools bridge helper (DEV-02).
+ * Tests for the GameShell devtools bridge (DEV-02).
  *
- * GameShell.vue adds a dev-only watcher that posts
- * `boardsmith:devtools-state-update` to window.parent. The payload-building and
- * guard logic is extracted into `GameShell.devtools.ts` so it can be unit-tested
- * without mounting the full GameShell component.
- *
- * Three behaviors under test:
- *   1. When isDevBuild=true and inHost=true, maybePostDevtoolsUpdate calls
- *      postMessage with the expected message shape (source, type, payload keys).
- *   2. The boardInteraction field maps validElements to a number[] of IDs,
- *      EXCLUDING any entries whose disabled field is set.
- *   3. When isDevBuild=false OR inHost=false, no postMessage is sent.
+ * The shell builds no devtools state per push (#960). It exposes a reader on its
+ * own window, and the dev host calls it when `window.__BOARDSMITH_DEVTOOLS` is read.
  */
 
-import { describe, it, expect, vi } from 'vitest';
-import { buildDevtoolsPayload, maybePostDevtoolsUpdate } from './GameShell.devtools.js';
+import { describe, it, expect, afterEach } from 'vitest';
+import { nextTick } from 'vue';
+import { buildDevtoolsPayload, readDevtoolsSnapshot } from './GameShell.devtools.js';
+import { enterIframe, leaveIframe, mountPlatformShell } from './GameShell.platform-mount.test-helper.js';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -40,64 +33,52 @@ const BASE_PARAMS = {
 };
 
 // ---------------------------------------------------------------------------
-// Test 1: correct message shape when dev + platform
+// Test 1: on demand (#960). No post per push; the dev host reads when asked.
 // ---------------------------------------------------------------------------
 
-describe('maybePostDevtoolsUpdate', () => {
-  it('calls postMessage with source and type when isDevBuild=true and inHost=true', () => {
-    const mockPost = vi.fn();
-    maybePostDevtoolsUpdate({ isDevBuild: true, inHost: true }, BASE_PARAMS, mockPost);
+function pushState(availableActions: string[]): void {
+  window.dispatchEvent(new MessageEvent('message', {
+    source: window.parent,
+    data: {
+      source: 'shufflewick',
+      type: 'game_state',
+      view: {
+        flowState: { currentPlayer: 1, awaitingInput: true, availableActions },
+        state: { view: {}, players: [{ name: 'P1', seat: 1 }], currentPlayer: 1, isMyTurn: true, availableActions },
+      },
+    },
+  }));
+}
 
-    expect(mockPost).toHaveBeenCalledOnce();
-    const [msg, origin] = mockPost.mock.calls[0];
-    expect(msg.source).toBe('shufflewick-game');
-    expect(msg.type).toBe('boardsmith:devtools-state-update');
-    expect(origin).toBe('*');
+describe('GameShell devtools snapshot is read on demand (#960)', () => {
+  afterEach(leaveIframe);
+
+  it('posts no devtools state on a push, and a read returns the current state', async () => {
+    const posted = enterIframe();
+    const wrapper = mountPlatformShell();
+    await nextTick();
+    window.dispatchEvent(new MessageEvent('message', {
+      source: window.parent, data: { source: 'shufflewick', type: 'init', seat: 1 },
+    }));
+    await nextTick();
+    const postedBeforePushes = posted.length;
+    pushState(['ask']);
+    await nextTick();
+    pushState(['ask', 'goFish']);
+    await nextTick();
+
+    expect(posted.slice(postedBeforePushes)).toEqual([]);
+    const snapshot = readDevtoolsSnapshot(window);
+    expect(snapshot?.seat).toBe(1);
+    expect(snapshot?.availableActions).toEqual(['ask', 'goFish']);
+
+    wrapper.unmount();
+    expect(readDevtoolsSnapshot(window)).toBeNull();
   });
 
-  it('includes all required payload keys: seat, state, availableActions, actionMetadata, boardInteraction', () => {
-    const mockPost = vi.fn();
-    maybePostDevtoolsUpdate({ isDevBuild: true, inHost: true }, BASE_PARAMS, mockPost);
-
-    const msg = mockPost.mock.calls[0][0];
-    expect(msg.seat).toBe(1);
-    expect(msg.state).toEqual({ phase: 'play', turn: 2 });
-    expect(msg.availableActions).toEqual(['ask', 'goFish']);
-    expect(msg.actionMetadata).toEqual({ ask: { label: 'Ask' } });
-    expect(msg.boardInteraction).toBeDefined();
-    expect(msg.boardInteraction.activeAction).toBe('ask');
-    expect(msg.boardInteraction.currentSelectionStep).toBe(0);
-    expect(Array.isArray(msg.boardInteraction.validElements)).toBe(true);
-  });
-
-  it('forwards flowDebugInfo and pendingAction (FLOW-01/03) additively', () => {
-    const mockPost = vi.fn();
-    const flowDebugInfo = {
-      phase: 'play',
-      step: 'ask-turn',
-      path: [0, 1],
-      awaiting: { currentPlayer: 1 },
-      description: 'phase play -> step ask-turn, waiting on seat 1',
-    };
-    const pendingAction = { actionName: 'ask', playerPosition: 1, collectedArgs: {} } as any;
-    maybePostDevtoolsUpdate(
-      { isDevBuild: true, inHost: true },
-      { ...BASE_PARAMS, flowDebugInfo, pendingAction },
-      mockPost,
-    );
-
-    const msg = mockPost.mock.calls[0][0];
-    expect(msg.flowDebugInfo).toEqual(flowDebugInfo);
-    expect(msg.pendingAction).toEqual(pendingAction);
-  });
-
-  it('flowDebugInfo/pendingAction are undefined (not errors) when absent', () => {
-    const mockPost = vi.fn();
-    maybePostDevtoolsUpdate({ isDevBuild: true, inHost: true }, BASE_PARAMS, mockPost);
-
-    const msg = mockPost.mock.calls[0][0];
-    expect(msg.flowDebugInfo).toBeUndefined();
-    expect(msg.pendingAction).toBeUndefined();
+  it('reads null from a frame with no shell in it', () => {
+    expect(readDevtoolsSnapshot(null)).toBeNull();
+    expect(readDevtoolsSnapshot(window)).toBeNull();
   });
 });
 
@@ -136,29 +117,5 @@ describe('buildDevtoolsPayload boardInteraction.validElements', () => {
     };
     const payload = buildDevtoolsPayload(params);
     expect(payload.boardInteraction.validElements).toEqual([]);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Test 3: guard — no postMessage when isDevBuild=false OR inHost=false
-// ---------------------------------------------------------------------------
-
-describe('maybePostDevtoolsUpdate guard', () => {
-  it('does NOT call postMessage when isDevBuild=false', () => {
-    const mockPost = vi.fn();
-    maybePostDevtoolsUpdate({ isDevBuild: false, inHost: true }, BASE_PARAMS, mockPost);
-    expect(mockPost).not.toHaveBeenCalled();
-  });
-
-  it('does NOT call postMessage when inHost=false', () => {
-    const mockPost = vi.fn();
-    maybePostDevtoolsUpdate({ isDevBuild: true, inHost: false }, BASE_PARAMS, mockPost);
-    expect(mockPost).not.toHaveBeenCalled();
-  });
-
-  it('does NOT call postMessage when both are false', () => {
-    const mockPost = vi.fn();
-    maybePostDevtoolsUpdate({ isDevBuild: false, inHost: false }, BASE_PARAMS, mockPost);
-    expect(mockPost).not.toHaveBeenCalled();
   });
 });

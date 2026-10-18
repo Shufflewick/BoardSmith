@@ -16,6 +16,7 @@ import type { DevHostConfig } from './config-types.js';
 import Toast from '../../ui/components/Toast.vue';
 import { useToast } from '../../ui/composables/useToast.js';
 import { applyTheme } from '../../ui/theme.js';
+import { readDevtoolsSnapshot } from '../../ui/components/GameShell.devtools.js';
 import { loadDevClientId, TABLE_CLIENT_KEY } from './dev-client-id.js';
 import { DEV_HOST_WS_PATH } from './socket-path.js';
 import { useMenuDismiss } from './use-menu-dismiss.js';
@@ -62,10 +63,6 @@ const followActive = ref(false);
 // the currently-selected one. Handled inside GameShell; no effect in production.
 const uiOptions = ref<string[]>([]);
 const selectedUi = ref('');
-
-// DEV-02: snapshot of the latest devtools state broadcast from the game iframe.
-// Read methods on window.__BOARDSMITH_DEVTOOLS close over this ref.
-const devtoolsSnapshot = ref<Record<string, unknown> | null>(null);
 
 const nameInput = ref('');
 const colorInput = ref<string | undefined>(undefined);
@@ -405,11 +402,6 @@ function onWindowMessage(event: MessageEvent): void {
     debugOpen.value = !!data.open;
     return;
   }
-  // DEV-02: game iframe broadcasts its current devtools state snapshot.
-  if (data.type === 'boardsmith:devtools-state-update') {
-    devtoolsSnapshot.value = data as Record<string, unknown>;
-    return;
-  }
   // The game advertises its available UIs; populate the switcher dropdown.
   if (data.type === 'dev-ui-list' && Array.isArray(data.uis)) {
     uiOptions.value = data.uis as string[];
@@ -561,18 +553,15 @@ onMounted(() => {
   // Gated by import.meta.env.DEV — Vite dead-code-eliminates this block in
   // production builds so the global is never assigned outside the dev host.
   if (import.meta.env.DEV) {
+    // Each read asks the game iframe for its current state (#960).
+    const snapshot = () => readDevtoolsSnapshot(iframeRef.value?.contentWindow);
     window.__BOARDSMITH_DEVTOOLS = {
-      getState: (_seat?: number) => (devtoolsSnapshot.value?.state as any) ?? null,
-      getAvailableActions: (_seat?: number) =>
-        (devtoolsSnapshot.value?.availableActions as string[]) ?? [],
-      getActionMetadata: (_seat?: number) =>
-        devtoolsSnapshot.value?.actionMetadata as Record<string, unknown> | undefined,
-      getBoardInteractionState: () =>
-        (devtoolsSnapshot.value?.boardInteraction as any) ?? null,
-      getFlowDebugInfo: (_seat?: number) =>
-        (devtoolsSnapshot.value?.flowDebugInfo as any) ?? null,
-      getPendingAction: (_seat?: number) =>
-        (devtoolsSnapshot.value?.pendingAction as any) ?? null,
+      getState: (_seat?: number) => snapshot()?.state ?? null,
+      getAvailableActions: (_seat?: number) => snapshot()?.availableActions ?? [],
+      getActionMetadata: (_seat?: number) => snapshot()?.actionMetadata,
+      getBoardInteractionState: () => snapshot()?.boardInteraction ?? null,
+      getFlowDebugInfo: (_seat?: number) => snapshot()?.flowDebugInfo ?? null,
+      getPendingAction: (_seat?: number) => snapshot()?.pendingAction ?? null,
     };
   }
 });
