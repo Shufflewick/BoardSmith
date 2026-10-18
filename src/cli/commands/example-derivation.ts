@@ -872,10 +872,10 @@ function resolveNameReference(rules: RulesProgram, file: ts.SourceFile, referenc
   return symbol && aliasTarget(rules, symbol);
 }
 
-/** A compiler message with each quoted absolute path made machine-independent: project-relative, from `node_modules/`, or neither. */
-function portableMessage(rules: RulesProgram, message: string): string {
-  return message.replace(/(["'])(\/[^"']*)\1/g, (_quoted, quote: string, path: string) => {
-    const root = rules.projectRoots.find((r) => path.startsWith(`${r}/`));
+/** A compiler message with each quoted absolute path (POSIX or drive-letter) made machine-independent: project-relative, from `node_modules/`, or neither. */
+export function portableMessage(projectRoots: readonly string[], message: string): string {
+  return message.replace(/(["'])((?:[A-Za-z]:)?\/[^"']*)\1/g, (_quoted, quote: string, path: string) => {
+    const root = projectRoots.find((r) => path.startsWith(`${r}/`));
     const inPackages = path.lastIndexOf('/node_modules/');
     const portable = root
       ? path.slice(root.length + 1)
@@ -921,7 +921,7 @@ function diagnosticReason(rules: RulesProgram, file: ts.SourceFile, diagnostic: 
   const start = diagnostic.start;
   const statement = start === undefined ? undefined : file.statements.find((s) => s.pos <= start && start < s.end);
   const names = statement ? declaredNames(statement).join(', ') : '';
-  return `${names ? `${names}: ` : ''}${portableMessage(rules, ts.flattenDiagnosticMessageText(diagnostic.messageText, ' '))}`;
+  return `${names ? `${names}: ` : ''}${portableMessage(rules.projectRoots, ts.flattenDiagnosticMessageText(diagnostic.messageText, ' '))}`;
 }
 
 /** `file`'s declaration text, printed statement by statement under the names each declares. */
