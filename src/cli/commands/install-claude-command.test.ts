@@ -321,7 +321,7 @@ describe('installClaudeCommand — retires bs-generate-bot (issue #16)', () => {
   });
 });
 
-describe('installClaudeCommand — a retired skill it cannot look at is still removed (#1174)', () => {
+describe('installClaudeCommand: a retired skill it cannot look at is still removed (#1174)', () => {
   const skills = installedSkillsTree('bs-install-retired-loop-');
 
   it('a plain reinstall removes a leftover bs-generate-bot that links to itself', async () => {

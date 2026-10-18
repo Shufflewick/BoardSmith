@@ -37,7 +37,7 @@ import {
   extractVerifiedCommitHash,
   resolveManifestPath,
 } from './build-manifest.js';
-import { CHUNK_MD, designChunksDir, requireChunkSlugs } from '../lib/project-paths.js';
+import { readChunkMdIfExists, requireChunkSlugs } from '../lib/project-paths.js';
 import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { readIfExists } from '../lib/read-if-exists.js';
 
@@ -163,7 +163,6 @@ export async function driftCheckCommand(
   await assertGitRepo(projectDir);
   const head = await resolveHead(projectDir);
 
-  const chunksDir = designChunksDir(projectDir);
   const slugs = await requireChunkSlugs(projectDir);
 
   const findings: Finding[] = [];
@@ -199,7 +198,7 @@ export async function driftCheckCommand(
   }
 
   for (const slug of slugs) {
-    const chunkText = await readIfExists(join(chunksDir, slug, CHUNK_MD), (p) => fs.readFile(p, 'utf-8'));
+    const chunkText = await readChunkMdIfExists(projectDir, slug);
     if (chunkText === undefined) continue; // a chunks/<slug> dir with no CHUNK.md is not this command's problem to report
 
     const manifest = parseBuildManifest(chunkText);

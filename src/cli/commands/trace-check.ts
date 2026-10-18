@@ -27,10 +27,9 @@ import {
   resolveManifestPath,
 } from './build-manifest.js';
 import {
-  CHUNK_MD,
   RULINGS_MD,
-  designChunksDir,
   designPath,
+  readChunkMdIfExists,
   requireChunkSlugs,
 } from '../lib/project-paths.js';
 import { ENTRY_NUMBER } from '../lib/ledger-entries.js';
@@ -234,7 +233,6 @@ export async function traceCheckCommand(
   options: { project?: string; json?: boolean } = {},
 ): Promise<TraceCheckResult> {
   const projectDir = pathResolve(options.project ?? process.cwd());
-  const chunksDir = designChunksDir(projectDir);
   const slugs = await requireChunkSlugs(projectDir);
 
   const findings: Finding[] = [];
@@ -248,7 +246,7 @@ export async function traceCheckCommand(
   const claimCoverage: Record<string, Set<number>> = {};
 
   for (const slug of slugs) {
-    const chunkText = await readIfExists(join(chunksDir, slug, CHUNK_MD), (p) => fs.readFile(p, 'utf-8'));
+    const chunkText = await readChunkMdIfExists(projectDir, slug);
     if (chunkText === undefined) continue; // a chunks/<slug> dir with no CHUNK.md is not this command's problem to report
 
     liveClaims[slug] = parseInterpretationClaims(chunkText);

@@ -23,6 +23,7 @@ import {
 import {
   NON_SLICE_FILES,
   parseSliceSource,
+  readLiveSlices,
   readRecordedSourcePaths,
   sliceDocuments,
 } from './rulebook-sources.js';
@@ -686,33 +687,7 @@ async function computeRunPairs(
 }> {
   const warnings: string[] = [];
 
-  const rulebookDir = designRulebookDir(projectDir);
-  const entries = await readIfExists(rulebookDir, (p) => fs.readdir(p, { withFileTypes: true }));
-  if (entries === undefined) {
-    throw new Error(
-      `No rulebook/ directory in ${projectDir}.\n` +
-        `A verify pass compares against an existing rulebook — nothing to pair here.`,
-    );
-  }
-  const ruleFileNames = entries
-    .filter(
-      // ingest-archive.ts's own exclusion: 00-visual-survey.md is presentation-by-design (the
-      // UI-ask handoff artifact), never a rule slice a classifier compares. INDEX.md is the
-      // archive manifest, not a slice either.
-      (e) =>
-        e.isFile() &&
-        e.name.endsWith('.md') &&
-        e.name !== 'INDEX.md' &&
-        e.name !== '00-visual-survey.md',
-    )
-    .map((e) => e.name)
-    .sort();
-  const liveSlices = await Promise.all(
-    ruleFileNames.map(async (name) => ({
-      path: `rulebook/${name}`,
-      text: await fs.readFile(join(rulebookDir, name), 'utf-8'),
-    })),
-  );
+  const liveSlices = await readLiveSlices(projectDir);
 
   const stagingDir = stagingSlicesDir(projectDir, runId);
   const { recorded, classifications, recordedSinceClassified, completeRanges } = await readRunLedgerState(projectDir, runId);

@@ -919,7 +919,7 @@ describe('verify-classify names what it cannot read instead of calling it missin
     const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
     await fs.chmod(rulebookDir, 0o300);
     try {
-      await expect(verifyClassifyPairsCommand({ project, runId, json: true })).rejects.toThrow(`Could not read ${rulebookDir} (EACCES)`);
+      await expect(verifyClassifyPairsCommand({ project, runId, json: true })).rejects.toThrow(`rulebook/ exists at ${rulebookDir} but could not be read (EACCES)`);
     } finally {
       await fs.chmod(rulebookDir, 0o755);
     }
