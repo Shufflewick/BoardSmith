@@ -1038,11 +1038,12 @@ export class ResidentWorld {
             ...answers,
           }),
         planning: (owner) => {
-          const { keyed } = this.#store.pendingOf(owner);
+          // Read on the first keyed request only: most dispatches schedule nothing keyed.
+          let keyed: ReadonlyMap<string, string> | undefined;
           return Promise.resolve({
             nextSeq: this.#store.nextSeq(),
             mintId: this.#mintId,
-            replaces: (key: string) => keyed.get(key),
+            replaces: (key: string) => (keyed ??= this.#store.pendingOf(owner).keyed).get(key),
           });
         },
       },

@@ -3166,6 +3166,9 @@ where order matters:
 | `pendingCount()`: every pending event | the allowance's world ceiling |
 | `pendingEvents()`: every event, decoded | a migration, which rewrites them all, and the dev chrome's queue panel |
 
-Each of the first four is a short index read on a store keyed by `(due, seq)`
-with an owner index, which is how the platform keeps its queue; the fifth is
-the one that decodes every row, and nothing in a drain asks it.
+On a store keyed by `(due, seq)` with an owner index, which is how the
+platform keeps its queue, each of the first four is a short index read. The
+`boardsmith dev` SQLite store reads `nextDue` and `earliestEvent` through its
+`(due, seq)` index but scans the table for `pendingOf` and the count, reading
+ids and keys and never arguments. The fifth is the one that decodes every row,
+and nothing in a drain asks it.
