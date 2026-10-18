@@ -22,12 +22,12 @@
     "src/session/testing/fixtures/collect-fixture.ts:66-83|src/session/testing/fixtures/collect-turns-fixture.ts:68-81",
     "src/session/testing/fixtures/simultaneous-fixture.ts:56-71|src/session/testing/fixtures/simultaneous-fixture.ts:83-93",
     "src/ui/components/PlayShell.vue:774-786|src/ui/components/PlayShell.vue:968-980",
-    "src/engine/element/game-element.ts:1096-1102|src/engine/element/game-element.ts:1157-1163",
+    "src/engine/element/game-element.ts:1112-1118|src/engine/element/game-element.ts:1173-1179",
     "src/cli/commands/verify-classify.ts:1568-1575|src/cli/commands/verify-classify.ts:783-790",
     "src/ui/composables/useFLIP.ts:331-339|src/ui/composables/useFLIP.ts:477-484",
     "src/ui/components/auto-ui/renderers/DieRenderer.vue:70-87|src/ui/components/auto-ui/renderers/PieceRenderer.vue:63-76",
-    "src/engine/element/game.ts:3693-3699|src/engine/element/game.ts:3723-3729",
-    "src/engine/element/game.ts:3765-3769|src/engine/element/game.ts:3797-3801",
+    "src/engine/element/game.ts:3694-3700|src/engine/element/game.ts:3724-3730",
+    "src/engine/element/game.ts:3766-3770|src/engine/element/game.ts:3798-3802",
     "src/ui/components/auto-ui/renderers/CardRenderer.vue:42-58|src/ui/components/auto-ui/renderers/HandRenderer.vue:35-53"
   ],
   "clone_fingerprints": [

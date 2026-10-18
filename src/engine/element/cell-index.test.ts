@@ -250,8 +250,10 @@ function operations(game: CellGame, step: number, random: () => number) {
   const { grid, cellClass, keys } = pick(gridsOf(game));
   const inGrid = [...grid.all(cellClass as never)] as (Square | Hex)[];
   const held = [...game.holding.all(cellClass as never)] as (Square | Hex)[];
+  // A world refuses to move a partition root (#1170), and the world run below makes evicted cells roots.
+  const movable = inGrid.filter((cell) => game.partitionRoot(cell.id) === undefined);
   return [
-    () => inGrid.length > 0 && pick(inGrid).reparent(game.holding),
+    () => movable.length > 0 && pick(movable).reparent(game.holding),
     () => {
       if (held.length === 0) return;
       const cell = pick(held) as unknown as Record<string, number> & (Square | Hex);
