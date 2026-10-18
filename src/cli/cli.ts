@@ -147,7 +147,6 @@ export function createProgram(): Command {
     .description('Run this workspace\'s tests (the game\'s, or BoardSmith\'s own after a type check)')
     .option('-w, --watch', 'Watch mode - re-run tests on changes')
     .option('--coverage', 'Generate coverage report')
-    .option('--selection <path>', 'Run only the exact file and full test names in an authored-test selection')
     .option('--browser', "BoardSmith's own repository only: run the browser regressions (scripts/*-browser.mjs) in Chromium instead of the default suite, without the type check the default run does first")
     .option('--verdict-file <path>', 'When the run does not pass, also write why to <path> (for a merge gate to repeat)')
     .action(testCommand);
