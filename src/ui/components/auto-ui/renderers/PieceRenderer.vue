@@ -70,6 +70,11 @@ const isDisabled = computed(() => {
   return boardInteraction.isDisabledElement(elementIdentity()) !== false;
 });
 
+const isDragged = computed(() => {
+  if (!boardInteraction) return false;
+  return boardInteraction.isDraggedElement(elementIdentity());
+});
+
 const standsOn = inject(STANDS_ON_KEY, () => undefined);
 
 // What a drag starts from: the piece if it is a candidate, else the candidate
@@ -81,10 +86,12 @@ const dragIdentity = computed(() => {
   return square && boardInteraction.isSelectableElement(square) ? square : null;
 });
 
-const isDragged = computed(() => {
-  if (!boardInteraction) return false;
+const canDrag = computed(() => dragIdentity.value !== null);
+
+// A drag carrying the square is this piece's drag too.
+const showsDragging = computed(() => {
   const square = standsOn();
-  return boardInteraction.isDraggedElement(elementIdentity()) || (!!square && boardInteraction.isDraggedElement(square));
+  return isDragged.value || (!!square && !!boardInteraction?.isDraggedElement(square));
 });
 
 // aria-label: piece name/notation + current interaction state
@@ -169,12 +176,12 @@ watch(effectivePieceImage, () => {
         'is-board-highlighted': isHighlighted,
         'is-board-selected': isBoardSelected,
         'is-disabled': isDisabled,
-        'is-draggable': dragIdentity !== null,
-        'is-dragging': isDragged,
+        'is-draggable': canDrag,
+        'is-dragging': showsDragging,
       },
     ]"
     :data-animatable="true"
-    :draggable="dragIdentity !== null"
+    :draggable="canDrag"
     v-bind="selectableAttrs"
     :aria-label="ariaLabel"
     :aria-pressed="isBoardSelected || undefined"
