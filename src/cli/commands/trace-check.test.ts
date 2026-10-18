@@ -520,3 +520,26 @@ describe('traceCheckCommand — --json / human report', () => {
     expect(printedLines.some((line) => /\+\d+ more — run --json for the full list/.test(line))).toBe(true);
   });
 });
+
+describe('trace-check test discovery skips what the other source walks skip (#1048)', () => {
+  it('leaves out test files under node_modules and dot folders in tests/', async () => {
+    const project = await makeProject();
+    await makeChunk(project, 'jab', { claims: [1], manifestRows: [] });
+    await writeTestFile(project, 'tests/kept.test.ts', '// claim 1\n');
+    await writeTestFile(project, 'tests/node_modules/pkg/vendored.test.ts', '// claim 1\n');
+    await writeTestFile(project, 'tests/.cache/stale.test.ts', '// claim 1\n');
+
+    const result = await traceCheckCommand({ project });
+
+    const unassociated = result.findings.filter((f) => f.kind === 'unassociated-test').map((f) => f.subject);
+    expect(unassociated).toEqual(['tests/kept.test.ts']);
+  });
+
+  it('names a tests path that is a file instead of failing with a bare system error', async () => {
+    const project = await makeProject();
+    await makeChunk(project, 'jab', { claims: [1], manifestRows: [] });
+    await writeTestFile(project, 'tests', 'not a folder\n');
+
+    await expect(traceCheckCommand({ project })).rejects.toThrow(`${join(project, 'tests')} is a file, not a folder.`);
+  });
+});

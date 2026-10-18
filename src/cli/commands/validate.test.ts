@@ -1179,6 +1179,8 @@ describe('remote image sources must be declared before they are used (#370)', ()
     for (const [rel, contents] of [
       ['dist/ui/assets/app.css', `.board { background: url(${REMOTE}); }`],
       ['dist/rules/rules.js', `const sprite = "${REMOTE}";`],
+      // Build output has nothing to skip, so a dot folder is read too (#1048).
+      ['dist/ui/.vite/chunk.js', `const sprite = "${REMOTE}";`],
     ] as const) {
       const cwd = project({ 'boardsmith.json': '{}', [rel]: contents });
       const result = await validateAssetPaths(cwd);

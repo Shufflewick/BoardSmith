@@ -91,7 +91,7 @@ describe('library answer', () => {
     }
   });
 
-  it('refuses empty, missing, skipped and unexecuted authored declarations', async () => {
+  it('refuses empty, missing, unreadable, skipped and unexecuted authored declarations', async () => {
     const sandbox = fixtureSandbox('bs-authored-refusals-', { tools: ['git'] });
     const project = join(sandbox.root, 'library');
     await writeFiles(project, {
@@ -109,9 +109,11 @@ it('unexecuted case', () => { kill(pid, 'SIGTERM'); });
     git(project, 'add', 'package.json', 'tsconfig.json', 'vitest.config.ts', 'src/engine/authored.test.ts');
     git(project, 'commit', '-qm', 'Files before refusal checks');
     const base = git(project, 'rev-parse', 'HEAD').trim();
+    await fs.mkdir(join(project, 'locked'), { mode: 0o000 });
     const selections = [
       { tests: [], problem: /non-empty tests list/ },
       { tests: [{ file: 'src/engine/missing.test.ts', names: ['missing case'] }], problem: /existing regular test file/ },
+      { tests: [{ file: 'locked/inner.test.ts', names: ['inner case'] }], problem: /Could not read .*locked\/inner\.test\.ts \(EACCES\)/ },
       { tests: [{ file: 'src/engine/authored.test.ts', names: ['missing case'] }], problem: /declared tests did not pass/ },
       { tests: [{ file: 'src/engine/authored.test.ts', names: ['skipped case'] }], problem: /declared tests did not pass/ },
       { tests: [{ file: 'src/engine/authored.test.ts', names: ['unexecuted case'] }], problem: /never reported a result|before it finished|exited/ },
@@ -127,6 +129,7 @@ it('unexecuted case', () => { kill(pid, 'SIGTERM'); });
       }
     } finally {
       vi.unstubAllEnvs();
+      await fs.chmod(join(project, 'locked'), 0o755);
     }
   });
 });

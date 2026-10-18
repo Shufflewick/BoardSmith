@@ -45,6 +45,7 @@
 
 import { checkpointCount } from '../engine/index.js';
 import type { GameStateSnapshot } from '../engine/utils/index.js';
+import { parsePositiveWholeNumber } from '../utils/positive-whole-number.js';
 
 /** Byte length of a value's JSON encoding (UTF-8 bytes, not UTF-16 units). */
 function jsonByteLength(value: unknown): number {
@@ -182,11 +183,10 @@ export function projectSnapshotSize(
  * ```
  */
 export function assertStateBudget(measurement: SnapshotSizeMeasurement, budgetBytes: number): void {
-  if (!Number.isSafeInteger(budgetBytes) || budgetBytes <= 0) {
-    throw new Error(
-      `assertStateBudget needs the host's state budget as a positive whole number of bytes, but was given ${budgetBytes}. ` +
-        'Check where the test reads the budget from.',
-    );
+  try {
+    parsePositiveWholeNumber("assertStateBudget's budgetBytes", String(budgetBytes));
+  } catch (error) {
+    throw new Error(`${(error as Error).message} Check where the test reads the budget from.`);
   }
   if (measurement.totalBytes <= budgetBytes) return;
   const bytes = (n: number) => `${n.toLocaleString('en-US')} bytes`;

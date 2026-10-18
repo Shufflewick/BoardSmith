@@ -20,6 +20,7 @@ import {
   Piece,
   Player,
   Action,
+  PlayerFacingError,
   loop,
   eachPlayer,
   actionStep,
@@ -29,6 +30,8 @@ import {
 import { GameRunner } from './runner.js';
 import { PendingActionManager } from '../session/pending-action-manager.js';
 import { TestGame } from '../testing/test-game.js';
+
+const AUTHOR_REFUSAL = 'The bell has rung. Nothing was changed. Replan next round.';
 
 class Token extends Piece<HalfwayGame, Player> {}
 class Zone extends Space<HalfwayGame, Player> {}
@@ -89,6 +92,15 @@ class HalfwayGame extends Game<HalfwayGame, Player> {
         .execute(() => {
           throw new Error('rules bug after a moving pick');
         }),
+      // A refusal written for the player, thrown after moving a token, whose own
+      // text happens to hold the runner's sentence (#989).
+      Action.create('moveThenRefuse')
+        .prompt('Move, then refuse')
+        .execute((_args, ctx) => {
+          const game = ctx.game as HalfwayGame;
+          game.source.first(Token)!.putInto(game.target);
+          throw new PlayerFacingError(AUTHOR_REFUSAL);
+        }),
       Action.create('cleanMove')
         .prompt('Move one')
         .execute((_args, ctx) => {
@@ -106,7 +118,7 @@ class HalfwayGame extends Game<HalfwayGame, Player> {
         root: loop({
           while: (ctx) => (ctx.get<number>('round') ?? 1) <= 20,
           maxIterations: 50,
-          do: eachPlayer({ do: actionStep({ actions: ['halfMove', 'animateThenFail', 'pickThenFail', 'movingPickThenFail', 'cleanMove', 'refuse'] }) }),
+          do: eachPlayer({ do: actionStep({ actions: ['halfMove', 'animateThenFail', 'pickThenFail', 'movingPickThenFail', 'moveThenRefuse', 'cleanMove', 'refuse'] }) }),
         }),
         setup: (ctx) => ctx.set('round', 1),
       }
@@ -126,10 +138,18 @@ function makeRunner(checkpoints?: { enabled: boolean }) {
 }
 
 describe('an execute() that throws half-way through', () => {
-  it('reports failure', () => {
+  it('reports failure, and says nothing was changed only once the runner has rolled it back (#989)', () => {
     const runner = makeRunner();
     const result = runner.performAction('halfMove', 1, {});
     expect(result.success).toBe(false);
+    expect(result.error).toMatch(/could not be completed.* Nothing was changed\.$/);
+  });
+
+  it('adds the sentence after a PlayerFacingError once rolled back (#989)', () => {
+    const runner = makeRunner();
+    const result = runner.performAction('moveThenRefuse', 1, {});
+    expect(result.error).toBe(`${AUTHOR_REFUSAL} Nothing was changed.`);
+    expect(runner.game.target.all(Token)).toHaveLength(0);
   });
 
   it('leaves the element tree exactly as it was', () => {
@@ -200,6 +220,12 @@ describe('an execute() that throws half-way with no checkpoint to roll back to (
     expect(result.success).toBe(false);
     expect(runner.game.target.all(Token)).toHaveLength(3);
     expectPartialChangesReported(result.error);
+  });
+
+  it('leaves a PlayerFacingError\'s own text whole and adds the warning (#989)', () => {
+    const runner = runnerWithoutCheckpoints();
+    const result = runner.performAction('moveThenRefuse', 1, {});
+    expect(result.error).toMatch(new RegExp(`^${AUTHOR_REFUSAL} The action failed part way`));
   });
 
   it('says the same on the pick-by-pick path', () => {

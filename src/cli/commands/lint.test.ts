@@ -11,7 +11,7 @@
  */
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { mkdirSync, realpathSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { lintCommand, lintFile } from './lint.js';
 import { runTool } from '../lib/run-tool.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
@@ -262,5 +262,34 @@ describe('lint finds a config wherever the linter itself would (#1094)', () => {
 
     await lintCommand({ eslint: true });
     expect(vi.mocked(runTool)).toHaveBeenCalledWith('eslint', ['src/'], { cwd: process.cwd() });
+  });
+});
+
+describe('the pitfall hints read every game source file the sandbox scan reads (#1005)', () => {
+  const originalCwd = process.cwd();
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.chdir(originalCwd);
+  });
+
+  it('fires in .tsx and .mts files, and skips node_modules and dot folders', async () => {
+    const dir = tempTree('boardsmith-lint-sources-');
+    writeFileSync(join(dir, 'boardsmith.json'), '{}');
+    const game = 'export class G extends Game {\n}\n';
+    for (const rel of ['src/rules/a.tsx', 'src/rules/b.mts', 'src/node_modules/c.ts', 'src/.cache/d.ts']) {
+      mkdirSync(join(dir, dirname(rel)), { recursive: true });
+      writeFileSync(join(dir, rel), game);
+    }
+    process.chdir(dir);
+    const out: string[] = [];
+    vi.spyOn(console, 'log').mockImplementation((...args) => { out.push(args.join(' ')); });
+
+    await lintCommand({ pitfalls: true });
+
+    const text = out.join('\n');
+    expect(text).toContain(join('src', 'rules', 'a.tsx'));
+    expect(text).toContain(join('src', 'rules', 'b.mts'));
+    expect(text).not.toContain('c.ts');
+    expect(text).not.toContain('d.ts');
   });
 });

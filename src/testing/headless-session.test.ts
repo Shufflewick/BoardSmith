@@ -258,7 +258,8 @@ describe('a restore that lands on a bot seat\'s turn (#915)', () => {
     await session.send(2, { type: 'action', actionName: 'add', player: 2, args: {} });
     session.makeSeatBot(2);
 
-    const result = await session.send(1, { type: 'restoreEarlier', snapshot: botsTurn });
+    const result = await session.host.restoreEarlier(botsTurn!);
+    await session.host.settled();
 
     expect(result.success).toBe(true);
     expect(session.readGame().tallies).toEqual([1, 1]);

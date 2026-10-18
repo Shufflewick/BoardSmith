@@ -8,7 +8,7 @@
  * Supports three rendering modes:
  * 1. **Card images**: When `faceImage`/`backImage` are provided
  * 2. **Text cards**: When `rank`/`suit` are provided (default card face)
- * 3. **Player pieces**: When `playerSeat` is set (circular pieces with player colors)
+ * 3. **Player pieces**: When `playerSeat` is set (circular pieces in the seat's colour)
  *
  * ## Usage
  *
@@ -17,12 +17,6 @@
  *   <div class="game-board">
  *     <!-- Basic: uses default rendering -->
  *     <FlyingCardsOverlay :flying-cards="flyingCards" />
- *
- *     <!-- With player colors for piece games -->
- *     <FlyingCardsOverlay
- *       :flying-cards="flyingCards"
- *       :player-colors="['#e74c3c', '#2c3e50']"
- *     />
  *
  *     <!-- Custom rendering via slot -->
  *     <FlyingCardsOverlay :flying-cards="flyingCards">
@@ -35,27 +29,24 @@
  * ```
  */
 import type { FlyingCard } from '../../composables/useFlyingElements.js';
-import type { CSSProperties } from 'vue';
+import { inject, type CSSProperties } from 'vue';
+import { DEFAULT_COLOR_PALETTE } from '../../../engine/element/seat-defaults.js';
+import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
+import { seatDisplay } from '../../seat-display.js';
 import { isUrlImage, isSpriteImage, getImageSrc, getSpriteStyle } from '../../utils/image.js';
 import { getSuitSymbol as defaultSuitSymbol, getSuitColor as defaultSuitColor } from '../../composables/useCardDisplay.js';
 
-const props = defineProps<{
+defineProps<{
   /** Array of flying cards from useFlyingElements composable */
   flyingCards: readonly FlyingCard[];
   /** Optional custom card renderer slot data */
   getSuitSymbol?: (suit: string) => string;
   /** Optional custom suit color */
   getSuitColor?: (suit: string) => string;
-  /**
-   * Player colors for piece rendering (indexed by playerSeat).
-   * When set, elements with playerSeat but no images render as colored pieces.
-   * Default: ['#e74c3c', '#2c3e50'] (red, dark gray)
-   */
-  playerColors?: string[];
 }>();
 
-// Default player colors (can be overridden via prop)
-const defaultPlayerColors = ['#e74c3c', '#2c3e50', '#27ae60', '#f39c12', '#9b59b6', '#3498db'];
+// The shell's players, for each seat's resolved colour; none outside a shell.
+const players = inject(GAME_CONTEXT_KEYS.players, undefined);
 
 /**
  * Determine rendering mode for a flying card:
@@ -71,12 +62,10 @@ function getRenderMode(cardData: Record<string, unknown>): 'image' | 'card' | 'p
   return 'default';
 }
 
-/**
- * Get player color for piece rendering
- */
+/** The seat's colour, or the one the engine gives that seat by default (seat 1 is the palette's first). */
 function getPlayerColor(playerSeat: number): string {
-  const colors = props.playerColors || defaultPlayerColors;
-  return colors[playerSeat % colors.length] || defaultPlayerColors[0];
+  return seatDisplay(players?.value ?? [], playerSeat).color
+    ?? DEFAULT_COLOR_PALETTE[(playerSeat - 1) % DEFAULT_COLOR_PALETTE.length];
 }
 
 /**
