@@ -598,13 +598,22 @@ async function onASmallerScreen(browser, hostUrl, viewport) {
       await check(`${size}: a refusal in ${editor} is in view inside the bar when it appears`, async () => {
         await startAction(page, action, editor);
         await surface.locator(`${editor} textarea, ${editor} input`).first().fill(value);
+        // Bringing the message into view must scroll only the bar, never the page or the board.
+        const scrolled = async () => [
+          await page.evaluate(() => document.scrollingElement.scrollTop),
+          ...(await surface.locator('html').evaluate(() =>
+            [document.scrollingElement.scrollTop, document.querySelector('.boardregion')?.scrollTop ?? 0])),
+        ];
+        const before = await scrolled();
         await surface.locator(`${editor} .done-button`).click();
         await surface.locator(`${editor} .selection-error`).waitFor({ timeout: 10_000 });
         const bar = await barGeometry(surface, [`${editor} .selection-error`]);
+        const after = await scrolled();
         // Closed before asserting, so the next editor's check starts from rest.
         await surface.locator('.cancel-btn').click();
         await surface.locator(editor).waitFor({ state: 'detached', timeout: 10_000 });
         assert(bar.outside.length === 0, `not in view inside the bar: ${bar.outside.join(', ')}`);
+        assert(after.join() === before.join(), `page, frame and board scroll moved from ${before} to ${after}`);
       });
     }
   });
