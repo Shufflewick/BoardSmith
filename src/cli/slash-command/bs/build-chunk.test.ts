@@ -2235,6 +2235,16 @@ describe('#452: the done gate is `boardsmith verify`', () => {
     expect(flatRead('build/final-acceptance.md')).toMatch(/no test file, its `## Spec Manifest` carries the one `\| exempt/);
   });
 
+  // #995 ruling: verify --chunk asks for no test of the chunk's own before spec, the step that writes its tests.
+  it('says the steps before spec need no test of the chunk\'s own, and redteam\'s gate relies on it', () => {
+    const protocol = flatRead('state-machine.md').split('## Git Protocol')[1].split(' ## ')[0];
+    expect(protocol).toMatch(/Before `spec`.{0,120}no test of its own is asked for.{0,80}`step-investigate`, `step-redteam` or `step-ask`.{0,60}typecheck alone/);
+    const gate = flatRead('build/redteam.md').split('## Gate Before Dispatch')[1].split(' ## ')[0];
+    expect(gate).toMatch(/verify asks for none while its commits are only investigate, redteam and ask steps/);
+    expect(flatRead('build/redteam.md')).toMatch(/commit the re-investigation \(`chunk-<slug>\/step-investigate`\)/);
+    expect(flatRead('build/spec.md')).toMatch(/no test of its own fails them from its `chunk-<slug>\/step-spec` commit on/);
+  });
+
   // #985: chunk work has one verify, the fast checks; the opt-in authored-test selection is gone.
   it('no chunk step names the removed focused selection path', () => {
     for (const file of ['state-machine.md', 'routing.md', 'build-chunk.md', 'build-game.md', 'build/test.md', 'build/repair.md',
