@@ -79,12 +79,11 @@ type ScanDuplicateExports = (cwd: string) => Promise<{ code: number; stdout: str
 /** The dead-code baseline `.fallowrc.json` names, which this sweep subtracts. */
 const DEAD_CODE_BASELINE_FILE = '.fallow-dead-code-baseline.json';
 
-/**
- * Marks a fingerprint in an issue body. Deliberately one lowercase
- * alphanumeric token: GitHub's issue search splits on punctuation, so a key
- * spelled with `|` or `-` could not be searched for exactly.
- */
+/** Marks a fingerprint in an issue body, as one lowercase alphanumeric token. */
 export const SWEEP_FINGERPRINT_PREFIX = 'bsdupexport';
+
+/** The repo label on every issue the sweep files, which is how it finds them again (#1184). */
+export const SWEEP_LABEL = 'duplicate-export-sweep';
 
 const scanWithFallow: ScanDuplicateExports = (cwd) =>
   runToolCapturingStdout(
@@ -115,7 +114,7 @@ export function baselineKey(finding: DuplicateExportFinding): string {
 }
 
 /**
- * A searchable identity for one finding.
+ * A stable identity for one finding, written into the issue it files.
  *
  * Hashed from the baseline key, so it follows the debt rather than the lines
  * it sits on: code moving above a declaration does not change it, and a third
@@ -273,51 +272,78 @@ export async function sweepDuplicateExports(
 
 const execFileAsync = promisify(execFile);
 
+/** Runs `gh` with these arguments and answers its stdout. Injected in tests. */
+type RunGh = (args: string[]) => Promise<string>;
+
+/**
+ * `gh` itself, spawned directly rather than through `runTool`, which runs only
+ * the tools boardsmith pins or a workspace's own `node_modules/.bin`: `gh` is
+ * a system binary, found on PATH.
+ */
+const ghIn = (cwd: string): RunGh => async (args) => {
+  try {
+    const { stdout } = await execFileAsync('gh', args, { cwd, maxBuffer: 16 * 1024 * 1024 });
+    return stdout;
+  } catch (error) {
+    throw new Error(
+      `Could not run \`gh ${args.join(' ')}\`: ${(error as Error).message}\n`
+      + 'Install the GitHub CLI and sign in with `gh auth login`, or run '
+      + '`boardsmith audit --sweep` without --file-issue to just read the findings.',
+    );
+  }
+};
+
 /**
  * The GitHub issue tracker, through the `gh` CLI.
  *
- * Spawned directly rather than through `runTool`, which runs only the tools
- * boardsmith pins or a workspace's own `node_modules/.bin`: `gh` is a system
- * binary, found on PATH.
+ * `find` lists the issues carrying {@link SWEEP_LABEL} and matches the
+ * fingerprint in their bodies, rather than searching: GitHub's search index
+ * lags, so two close runs could each miss the other's issue and file it twice
+ * (#1184), while a label listing is current at once.
  *
- * `find` searches BOTH open and closed issues. A closed issue is a human's
- * ruling on this exact finding, and re-filing it every run is the auto-filer
- * that spams; the sweep still reports the finding, it just does not open a
- * second ticket for it.
+ * It lists BOTH open and closed issues. A closed issue is a human's ruling on
+ * this exact finding, and re-filing it every run is the auto-filer that spams;
+ * the sweep still reports the finding, it just does not open a second ticket.
  */
-export function githubIssueTracker(cwd: string): IssueTracker {
-  const gh = async (args: string[]): Promise<string> => {
-    try {
-      const { stdout } = await execFileAsync('gh', args, { cwd, maxBuffer: 16 * 1024 * 1024 });
-      return stdout;
-    } catch (error) {
+export function githubIssueTracker(cwd: string, gh: RunGh = ghIn(cwd)): IssueTracker {
+  let labelChecked: Promise<void> | undefined;
+  // Without the label every listing is empty, so every run would re-file every finding.
+  const requireLabel = async () => {
+    const labels = JSON.parse(await gh(['label', 'list', '--json', 'name', '--limit', '1000'])) as {
+      name: string;
+    }[];
+    if (!labels.some((label) => label.name === SWEEP_LABEL)) {
       throw new Error(
-        `Could not run \`gh ${args.join(' ')}\`: ${(error as Error).message}\n`
-        + 'Install the GitHub CLI and sign in with `gh auth login`, or run '
-        + '`boardsmith audit --sweep` without --file-issue to just read the findings.',
+        `This repository has no \`${SWEEP_LABEL}\` label, which the sweep uses to find the `
+        + 'issues it already filed. Create it once with:\n'
+        + `  gh label create ${SWEEP_LABEL} --description "Filed by boardsmith audit --sweep" --color ededed\n`
+        + 'then run the sweep again.',
       );
     }
   };
 
   return {
     find: async (fingerprint) => {
+      await (labelChecked ??= requireLabel());
+      // shortcut: reads at most 1000 sweep issues, raise the limit if the label ever holds more.
       const stdout = await gh([
         'issue',
         'list',
+        '--label',
+        SWEEP_LABEL,
         '--state',
         'all',
-        '--search',
-        `${fingerprint} in:body`,
         '--json',
-        'number,state',
+        'number,state,body',
         '--limit',
-        '1',
+        '1000',
       ]);
-      const [issue] = JSON.parse(stdout) as FiledIssue[];
-      return issue;
+      const issue = (JSON.parse(stdout) as (FiledIssue & { body: string })[]).find((candidate) =>
+        candidate.body.includes(fingerprint));
+      return issue && { number: issue.number, state: issue.state };
     },
     create: async (title, body) => {
-      const stdout = await gh(['issue', 'create', '--title', title, '--body', body]);
+      const stdout = await gh(['issue', 'create', '--title', title, '--body', body, '--label', SWEEP_LABEL]);
       const number = /\/issues\/(\d+)/.exec(stdout.trim())?.[1];
       if (!number) {
         throw new Error(

@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   SWEEP_FINGERPRINT_PREFIX,
+  SWEEP_LABEL,
   baselineKey,
   fingerprintOf,
+  githubIssueTracker,
   issueBody,
   issueTitle,
   sweepDuplicateExports,
@@ -201,5 +203,60 @@ describe('the issue it files', () => {
     expect(body).toContain('.fallow-dead-code-baseline.json');
     expect(body).toContain(baselineKey(elementRef));
     expect(body).toContain(fingerprintOf(baselineKey(elementRef)));
+  });
+});
+
+describe('githubIssueTracker', () => {
+  const fingerprint = fingerprintOf(baselineKey(elementRef));
+
+  /** A `gh` that answers label and issue listings from fixed data, and records every call. */
+  function fakeGh(labels: string[], issues: { number: number; state: string; body: string }[]) {
+    const calls: string[][] = [];
+    const gh = async (args: string[]) => {
+      calls.push(args);
+      if (args[0] === 'label') return JSON.stringify(labels.map((name) => ({ name })));
+      if (args[1] === 'list') return JSON.stringify(issues);
+      return 'https://github.com/Shufflewick/BoardSmith/issues/777\n';
+    };
+    return { gh, calls };
+  }
+
+  /**
+   * GitHub's search index lags, so two close runs could each miss the other's
+   * issue and file it twice (#1184). A label listing is current at once.
+   */
+  it('finds a filed issue by listing the sweep label, open and closed, not by searching', async () => {
+    const { gh, calls } = fakeGh([SWEEP_LABEL], [
+      { number: 12, state: 'OPEN', body: 'something else' },
+      { number: 34, state: 'CLOSED', body: `text <!-- ${fingerprint} -->` },
+    ]);
+    const found = await githubIssueTracker('/repo', gh).find(fingerprint);
+
+    expect(found).toEqual({ number: 34, state: 'CLOSED' });
+    const list = calls.find((args) => args[0] === 'issue')!;
+    expect(list).toEqual(expect.arrayContaining(['--label', SWEEP_LABEL, '--state', 'all']));
+    expect(list).not.toContain('--search');
+  });
+
+  it('finds nothing when no labelled issue carries the fingerprint', async () => {
+    const { gh } = fakeGh([SWEEP_LABEL], [{ number: 12, state: 'OPEN', body: 'something else' }]);
+    expect(await githubIssueTracker('/repo', gh).find(fingerprint)).toBeUndefined();
+  });
+
+  it('labels every issue it files', async () => {
+    const { gh, calls } = fakeGh([SWEEP_LABEL], []);
+    const number = await githubIssueTracker('/repo', gh).create('title', 'body');
+
+    expect(number).toBe(777);
+    const create = calls.find((args) => args[1] === 'create')!;
+    expect(create).toEqual(expect.arrayContaining(['--label', SWEEP_LABEL]));
+  });
+
+  /** A missing label would make every listing empty, so every run would re-file everything. */
+  it('fails loud, naming the command to create it, when the repository has no sweep label', async () => {
+    const { gh } = fakeGh(['bug'], []);
+    await expect(githubIssueTracker('/repo', gh).find(fingerprint)).rejects.toThrow(
+      `gh label create ${SWEEP_LABEL}`,
+    );
   });
 });
