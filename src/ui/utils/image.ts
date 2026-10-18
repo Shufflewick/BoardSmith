@@ -10,7 +10,7 @@
  *
  * const info = parseImageInfo(cardData.faceImage);
  * if (info?.type === 'sprite') {
- *   const style = getSpriteStyle(cardData.faceImage, 60, 84);
+ *   const style = getSpriteStyle(cardData.faceImage);
  * }
  * ```
  */
@@ -113,39 +113,49 @@ export function getImageSrc(image: unknown): string {
 }
 
 /**
- * Get CSS background styles for displaying a sprite at specified dimensions.
- * Scales by the sprite's own width and height, so the sprite fills the display size. The element's own size is left to the caller's CSS.
+ * Get CSS background styles for displaying a sprite.
+ * With no size, the styles are relative to the element, so one sprite cell fills whatever box the caller's CSS gives it.
+ * With a size, they are in pixels for an element of exactly that size. The element's own size is always left to the caller's CSS.
  *
  * @param image - Image data (should be sprite type)
- * @param displayWidth - Target display width (default: 60)
- * @param displayHeight - Target display height (default: 84)
+ * @param displayWidth - Display width in pixels, given together with displayHeight
+ * @param displayHeight - Display height in pixels
  * @returns CSS properties for the sprite element
  *
  * @example
  * ```vue
- * <div :style="getSpriteStyle(cardData.faceImage, 60, 84)" />
+ * <div class="card" :style="getSpriteStyle(cardData.faceImage)" />
  * ```
  */
+export function getSpriteStyle(image: unknown): CSSProperties;
+export function getSpriteStyle(image: unknown, displayWidth: number, displayHeight: number): CSSProperties;
 export function getSpriteStyle(
   image: unknown,
-  displayWidth: number = 60,
-  displayHeight: number = 84
+  displayWidth?: number,
+  displayHeight?: number
 ): CSSProperties {
   const info = parseImageInfo(image);
+  if (info?.type !== 'sprite') return {};
 
-  if (info?.type === 'sprite') {
-    const scaleX = displayWidth / info.width;
-    const scaleY = displayHeight / info.height;
-
+  const base = { backgroundImage: `url(${info.sprite})`, backgroundRepeat: 'no-repeat' };
+  if (displayWidth === undefined || displayHeight === undefined) {
+    // A percentage position p puts the image at (box - image) * p, so the cell's offset over the sheet's spare width gives it.
+    const percent = (offset: number, cell: number, sheet: number) =>
+      sheet === cell ? 0 : (offset / (sheet - cell)) * 100;
     return {
-      backgroundImage: `url(${info.sprite})`,
-      backgroundPosition: `${-info.x * scaleX}px ${-info.y * scaleY}px`,
-      backgroundSize: `${info.sheetWidth * scaleX}px ${info.sheetHeight * scaleY}px`,
-      backgroundRepeat: 'no-repeat',
+      ...base,
+      backgroundPosition: `${percent(info.x, info.width, info.sheetWidth)}% ${percent(info.y, info.height, info.sheetHeight)}%`,
+      backgroundSize: `${(info.sheetWidth / info.width) * 100}% ${(info.sheetHeight / info.height) * 100}%`,
     };
   }
 
-  return {};
+  const scaleX = displayWidth / info.width;
+  const scaleY = displayHeight / info.height;
+  return {
+    ...base,
+    backgroundPosition: `${-info.x * scaleX}px ${-info.y * scaleY}px`,
+    backgroundSize: `${info.sheetWidth * scaleX}px ${info.sheetHeight * scaleY}px`,
+  };
 }
 
 /**

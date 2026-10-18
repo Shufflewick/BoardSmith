@@ -135,8 +135,32 @@ describe('getSpriteStyle', () => {
     expect(style.backgroundRepeat).toBe('no-repeat');
   });
 
-  it('scales for a 60x84 card by default', () => {
-    expect(getSpriteStyle(SPRITE)).toEqual(getSpriteStyle(SPRITE, 60, 84));
+  it('with no size, fits one sprite cell to whatever box the element has (#1019)', () => {
+    // Resolve the percentages the way CSS does for a box, and compare with the pixel style for that box.
+    const resolve = (style: ReturnType<typeof getSpriteStyle>, boxW: number, boxH: number) => {
+      const [sw, sh] = String(style.backgroundSize).split(' ').map((v) => parseFloat(v) / 100);
+      const [px, py] = String(style.backgroundPosition).split(' ').map((v) => parseFloat(v) / 100);
+      return { size: [sw * boxW, sh * boxH], position: [(boxW - sw * boxW) * px, (boxH - sh * boxH) * py] };
+    };
+    for (const [boxW, boxH] of [[60, 84], [72, 100.8], [96, 134.4]]) {
+      const fitted = resolve(getSpriteStyle(SPRITE), boxW, boxH);
+      const pixels = getSpriteStyle(SPRITE, boxW, boxH);
+      expect(fitted.size.map((v) => v.toFixed(3))).toEqual(
+        String(pixels.backgroundSize).split(' ').map((v) => parseFloat(v).toFixed(3)));
+      // `+ 0` turns -0 into 0, so a first-column offset compares equal as a string.
+      expect(fitted.position.map((v) => (v + 0).toFixed(3))).toEqual(
+        String(pixels.backgroundPosition).split(' ').map((v) => (parseFloat(v) + 0).toFixed(3)));
+    }
+  });
+
+  it('with no size, puts the last cell of a sheet at the far edge', () => {
+    const corner = { sprite: '/grid.png', x: 200, y: 140, width: 100, height: 140, sheetWidth: 300, sheetHeight: 280 };
+    expect(getSpriteStyle(corner)).toMatchObject({ backgroundSize: '300% 200%', backgroundPosition: '100% 100%' });
+  });
+
+  it('with no size, puts a sprite on a one-cell-wide sheet at the left edge', () => {
+    const column = { sprite: '/col.png', x: 0, y: 140, width: 100, height: 140, sheetWidth: 100, sheetHeight: 700 };
+    expect(getSpriteStyle(column)).toMatchObject({ backgroundSize: '100% 500%', backgroundPosition: '0% 25%' });
   });
 
   it('accepts an already parsed sprite', () => {

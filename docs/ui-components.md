@@ -341,6 +341,9 @@ This is a change of surface, not of content, and three things keep it honest:
   the size of the choice before walking into it.
 - If even ONE candidate lacks a board ref the panel keeps every button, because
   deferring would leave that candidate reachable from neither surface.
+- While the board shows its error message in place of the board (it threw while
+  drawing), there is no board to choose on, so the panel lists every candidate;
+  it hands the pick back once the board draws again (#1153).
 - **Focus goes with the choice** (see "Board keyboard handoff" below). Without
   that the player who pressed the control would be standing on something that
   just unmounted.
