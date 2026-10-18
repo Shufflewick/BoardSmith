@@ -902,6 +902,19 @@ describe('contradictory — nextRulingNumber / appendRuling — over a self-cont
     expect(appendedBlock).not.toMatch(/supersede[sd]?/i);
   });
 
+  it('appendRuling reuses an identical ruling on file, but never one a later ruling superseded (#839)', async () => {
+    const entry = { decision: 'Ties go to the dealer.', citation: 'rulebook/a.md, p.1', rationale: 'Asked.' };
+    await fs.writeFile(join(dir, DESIGN_DIR, 'RULINGS.md'), `# Rulings\n\n${renderRuling({ number: 1, ...entry })}`);
+    expect((await appendRuling(dir, entry)).number).toBe(1);
+
+    await fs.writeFile(
+      join(dir, DESIGN_DIR, 'RULINGS.md'),
+      `# Rulings\n\n${renderRuling({ number: 1, ...entry })}\n` +
+        renderRuling({ number: 2, decision: 'This supersedes Ruling 1.', citation: 'rulebook/a.md, p.1', rationale: 'Changed.' }),
+    );
+    expect((await appendRuling(dir, entry)).number).toBe(3);
+  });
+
   it('appendRuling throws an actionable error when RULINGS.md does not exist, and never creates one', async () => {
     await expect(
       appendRuling(dir, { decision: 'x', citation: 'y', rationale: 'z' }),

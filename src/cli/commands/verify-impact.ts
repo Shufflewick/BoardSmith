@@ -753,8 +753,8 @@ export function renderRuling(input: {
  * `existingText + separator + newBlock` through `atomicWriteFile` (`verify-run.ts`) — the ONE
  * atomic write path this repo has, never a second `fs.writeFile`. A caller-side test proves this
  * is truly append-only by asserting the new file content `startsWith` the original byte-for-byte.
- * An entry whose three fields match a ruling already in the file returns that ruling's number and
- * writes nothing, so adjudicate's retry after a crash appends no duplicate.
+ * An entry whose three fields match a ruling already in the file that nothing supersedes returns
+ * that ruling's number and writes nothing, so adjudicate's retry after a crash appends no duplicate.
  *
  * `RULINGS.md`'s absence is a TOOL FAILURE, not a case to paper over: a bs-built project always
  * has one (scaffolded at `init` time), so a missing file here means this command is being run
@@ -792,7 +792,7 @@ export async function appendRuling(
     const block = renderRuling({ number, ...entry });
     // A retry after a crash between this write and the caller's ledger write finds its ruling already here.
     const body = block.slice(block.indexOf('\n') + 1).trim();
-    const written = parseRulings(rulingsText).find((r) => r.body.trim() === body);
+    const written = parseRulings(rulingsText).find((r) => r.body.trim() === body && r.supersededBy === undefined);
     if (written) return { number: allocatedNumber('Ruling', written.id), path: relRulingsPath };
     const separator = rulingsText.endsWith('\n\n') ? '' : rulingsText.endsWith('\n') ? '\n' : '\n\n';
     const newText = rulingsText + separator + block;
