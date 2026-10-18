@@ -250,6 +250,8 @@ describe('tree-shaking bundle proof (real Vite/Rollup build)', () => {
       //     survives minification and appears in the bundle even though AutoUI itself
       //     is tree-shaken out. AutoRenderer has no such false-positive risk.
       expect(bundle, 'AutoRenderer must not appear in custom-UI bundle').not.toContain('AutoRenderer');
+      // The devtools reader hands full game state to any script in the frame; dev builds only (#960).
+      expect(bundle, 'the devtools snapshot reader must not ship').not.toContain('__boardsmithDevtoolsSnapshot');
 
       // ...and neither may its CSS. The JS assertion above passed for months while
       // the auto-UI stylesheet shipped in every custom-UI game, because

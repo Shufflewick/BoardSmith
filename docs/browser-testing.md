@@ -30,10 +30,10 @@ debug tools. Each connected seat renders inside a `GameShell` **iframe** — the
 the bridge:
 
 - `window.__BOARDSMITH_DEVTOOLS` lives on the **outer page's `window`**, not
-  inside the iframe. It's a cache that DevHost keeps up to date by listening
-  for `postMessage({ type: 'boardsmith:devtools-state-update', ... })` pushed
-  from the iframe on every state change — so reads are synchronous, no
-  `await` needed.
+  inside the iframe. Each read calls a reader the game's `GameShell` puts on the
+  iframe's window (the iframe is served from the same origin), so it returns the
+  game's current state, synchronously, with no `await`. Nothing is built or
+  posted when the game updates and nobody reads (#960).
 - `boardsmith:action-resolved` is dispatched inside `useActionController`,
   which runs **inside the game iframe** — so you listen for it on
   `iframe.contentWindow`, not on the outer `window`.
@@ -124,11 +124,12 @@ interface BoardsmithDevtools {
 }
 ```
 
-All four methods are synchronous reads against a cached snapshot — there is
-no round trip to the server or the iframe when you call them. If
-`window.__BOARDSMITH_DEVTOOLS` is `undefined`, you're either in a production
-build or the page hasn't finished its first snapshot push yet (reconnect or
-wait a tick).
+Every method returns a copy of the game iframe's current state, built
+when you call it, so changing it changes nothing in the game. There is no round
+trip to the server. If
+`window.__BOARDSMITH_DEVTOOLS` is `undefined`, you're in a production build or
+the dev host page hasn't mounted yet. If the methods return `null` or `[]`, the
+game iframe hasn't mounted `GameShell` yet, or has no state yet.
 
 ## 3. `boardsmith:action-resolved`
 
