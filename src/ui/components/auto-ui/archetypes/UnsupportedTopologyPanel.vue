@@ -17,7 +17,6 @@
  */
 
 // import.meta.env.DEV is statically replaced by Vite — false in production bundles.
-// This is the correct dev-build signal (not 'platformRequest' which is always provided).
 const isDev = import.meta.env.DEV;
 </script>
 

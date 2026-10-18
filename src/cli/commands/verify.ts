@@ -74,6 +74,7 @@ import { runSmoke } from './smoke.js';
 import { runDiffMutationCheck } from './test-step-mutation.js';
 import { buildProject } from './build.js';
 import { type TypeCheckRun, typeCheckProject, validateProject } from './validate.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 
 const short = (commit: string) => commit.slice(0, 12);
 
@@ -314,7 +315,7 @@ function chunkTestFiles(ctx: VerifyContext): string[] {
  * Manifest marks it exempt (`build/spec.md` "Exemptions"); any other chunk must add or change a test.
  */
 async function noChunkTests(projectDir: string, chunk: string, base: string): Promise<VerifyCheckOutcome> {
-  const text = await fs.readFile(chunkMdPath(projectDir, chunk), 'utf-8').catch(() => undefined);
+  const text = await readIfExists(chunkMdPath(projectDir, chunk), (path) => fs.readFile(path, 'utf-8'));
   const exemption = text === undefined ? undefined : parseSpecManifest(text).exemption;
   if (exemption !== undefined) {
     return {

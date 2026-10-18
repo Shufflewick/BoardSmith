@@ -252,6 +252,14 @@ describe('validate.ts checkMetadataIssues', () => {
     expect(issues[0]).toContain('defineGameUIs');
   });
 
+  // Issue 930: nothing ever read `scoreboard`, so a leftover one is refused with a pointed message.
+  it("rejects a leftover 'scoreboard' key and says to remove it", () => {
+    const issues = checkMetadataIssues({ ...validConfig(), scoreboard: { stats: ['score'] } });
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain("Unknown key 'scoreboard'");
+    expect(issues[0]).toContain('Remove this key from boardsmith.json');
+  });
+
   it('passes a config carrying the editor $schema key (CR-02 regression)', () => {
     const issues = checkMetadataIssues({
       $schema: 'https://boardsmith.io/schemas/boardsmith.schema.json',
@@ -1171,6 +1179,8 @@ describe('remote image sources must be declared before they are used (#370)', ()
     for (const [rel, contents] of [
       ['dist/ui/assets/app.css', `.board { background: url(${REMOTE}); }`],
       ['dist/rules/rules.js', `const sprite = "${REMOTE}";`],
+      // Build output has nothing to skip, so a dot folder is read too (#1048).
+      ['dist/ui/.vite/chunk.js', `const sprite = "${REMOTE}";`],
     ] as const) {
       const cwd = project({ 'boardsmith.json': '{}', [rel]: contents });
       const result = await validateAssetPaths(cwd);
@@ -1187,6 +1197,21 @@ describe('remote image sources must be declared before they are used (#370)', ()
     const result = await validateAssetPaths(cwd);
     const lines = (result.details ?? []).filter((line) => line.includes(REMOTE));
     expect(lines).toHaveLength(1);
+  });
+});
+
+describe('absolute asset paths are found in subfolders too (#1111)', () => {
+  it.each([
+    ['data/sub/x.json', '{ "image": "/cards/ace.png" }'],
+    ['dist/ui/assets/chunks/board.js', 'const src = "/cards/ace.png";'],
+  ])('reports one in %s', async (rel, contents) => {
+    const cwd = tempTree('bs-abs-paths-');
+    mkdirSync(join(cwd, 'public', 'cards'), { recursive: true });
+    mkdirSync(join(cwd, rel, '..'), { recursive: true });
+    writeFileSync(join(cwd, rel), contents);
+    const result = await validateAssetPaths(cwd);
+    expect(result.passed).toBe(false);
+    expect((result.details ?? []).join('\n')).toContain(`${rel}: absolute path "/cards/..." found`);
   });
 });
 

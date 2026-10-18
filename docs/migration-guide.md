@@ -1,5 +1,11 @@
 # Migration Guide
 
+## boardsmith.json has no `scoreboard` key any more (#930)
+
+Nothing ever read `scoreboard`; only `boardsmith new` wrote it. `boardsmith
+validate` now refuses it as an unknown key. Delete it from your
+`boardsmith.json`.
+
 ## `simulateTutorial` starts a tutorial as the server does (#914)
 
 `simulateTutorial` now starts a tutorial through the same function as the

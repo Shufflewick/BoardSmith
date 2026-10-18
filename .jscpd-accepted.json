@@ -8,22 +8,6 @@
       ]
     },
     {
-      "content": "6559950e6f08c86c",
-      "lines": 15,
-      "files": [
-        "src/ui/components/helpers/HintOverlay.vue",
-        "src/ui/components/helpers/TutorialOverlay.vue"
-      ]
-    },
-    {
-      "content": "8d4c7f2a0c6d2db3",
-      "lines": 23,
-      "files": [
-        "src/ui/components/helpers/HintOverlay.vue",
-        "src/ui/components/helpers/TutorialOverlay.vue"
-      ]
-    },
-    {
       "content": "9cf21eb20be13d4e",
       "lines": 20,
       "files": [

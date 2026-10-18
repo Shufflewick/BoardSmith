@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, relative, sep } from 'node:path';
+import { listFiles } from './source-files.js';
 
 /**
  * A content hash over the installer-owned `bs-` skills tree (171-CONTEXT.md decision 7).
@@ -90,23 +91,8 @@ export async function hashSkillsTree(projectDir: string): Promise<string> {
 /** Root-relative POSIX paths of every file under `bs-`-prefixed top-level entries of `root`. */
 async function collectBsPrefixedFiles(root: string): Promise<string[]> {
   const topLevel = await fs.readdir(root, { withFileTypes: true });
-  const owned = topLevel.filter((entry) => entry.isDirectory() && entry.name.startsWith('bs-'));
-
-  const files: string[] = [];
-  for (const entry of owned) {
-    await walk(join(root, entry.name), root, files);
-  }
-  return files;
-}
-
-async function walk(dir: string, root: string, out: string[]): Promise<void> {
-  const entries = await fs.readdir(dir, { withFileTypes: true });
-  for (const entry of entries) {
-    const fullPath = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      await walk(fullPath, root, out);
-    } else if (entry.isFile()) {
-      out.push(relative(root, fullPath).split(sep).join('/'));
-    }
-  }
+  return topLevel
+    .filter((entry) => entry.isDirectory() && entry.name.startsWith('bs-'))
+    .flatMap((entry) => listFiles(join(root, entry.name), { sourceTree: false }))
+    .map((path) => relative(root, path).split(sep).join('/'));
 }

@@ -241,7 +241,7 @@ export function createHeadlessSession<G extends Game = Game>(
     async arrange(edit: (game: G) => void): Promise<void> {
       const runner = runnerFromSnapshot(currentSnapshot(), { ...def, randomness: 'allowed' });
       edit(runner.game as G);
-      const result = await host.handleOp(1, { type: 'restoreEarlier', snapshot: runner.getSnapshot() });
+      const result = await host.restoreEarlier(runner.getSnapshot());
       if (!result.success) throw new Error(`The arranged position could not be restored: ${result.error}`);
       // The restore wakes the bots like a move does; a test reads the table after they replied.
       await host.settled();

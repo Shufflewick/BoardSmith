@@ -15,13 +15,14 @@
  * eleven suites that needed them used to hand-copy (#238).
  */
 import { describe, it, expect, beforeAll } from 'vitest';
-import { rmSync, existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
+import { rmSync, existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync, cpSync, symlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { installClaudeCommand, uninstallClaudeCommand, SKILL_NAMES } from './install-claude-command.js';
+import { installClaudeCommand, uninstallClaudeCommand, SKILL_NAMES, skillSourceFiles } from './install-claude-command.js';
 import { installedSkillsTree, uninstalledSkillsTree } from './installed-skills.test-helper.js';
 import { readBoardsmithVersion } from '../lib/boardsmith-version.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..', '..', '..');
@@ -623,5 +624,28 @@ describe('installClaudeCommand — SKILL_NAMES has one source of truth (structur
           `single source of truth, derived from SKILL_ENTRY_POINTS.`
       ).toEqual(expected);
     }
+  });
+});
+
+describe('skillSourceFiles — what the source hash reads (#1048)', () => {
+  function sources(): string {
+    const dir = join(tempTree('bs-skill-sources-'), 'slash-command');
+    cpSync(join(REPO_ROOT, 'src', 'cli', 'slash-command'), dir, { recursive: true });
+    return dir;
+  }
+
+  it('reads every file in the shared folders, dot files included, and leaves test files out', () => {
+    const dir = sources();
+    writeFileSync(join(dir, 'bs', 'build', 'notes.test.ts'), '');
+    writeFileSync(join(dir, 'bs', 'build', '.keep.md'), '');
+    const files = skillSourceFiles(dir);
+    expect(files).toContain(join('bs', 'build', '.keep.md'));
+    expect(files).not.toContain(join('bs', 'build', 'notes.test.ts'));
+  });
+
+  it('stops on a link to a folder, naming it, instead of walking into it', () => {
+    const dir = sources();
+    symlinkSync(join(dir, 'bs'), join(dir, 'bs', 'build', 'loop'));
+    expect(() => skillSourceFiles(dir)).toThrow(`${join(dir, 'bs', 'build', 'loop')} is a link to a folder`);
   });
 });

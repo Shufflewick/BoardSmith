@@ -13,6 +13,7 @@
 import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
 import GameOverCard from './GameOverCard.vue';
+import PlayerToken from './PlayerToken.vue';
 
 const PLAYERS = [
   { seat: 0, name: 'Alice', color: '#e74c3c' },
@@ -258,5 +259,27 @@ describe('GameOverCard — A11Y-07 modal semantics', () => {
     });
 
     expect(wrapper.find('[role="dialog"]').attributes('aria-modal')).not.toBe('false');
+  });
+});
+
+describe('GameOverCard — a winner looks as they do in the players panel (#904, #1044)', () => {
+  const SEATED = [
+    { seat: 1, name: 'Player 1', color: '#e74c3c' },
+    { seat: 2, name: '', color: '#3498db' },
+  ];
+
+  it('draws the winner with PlayerToken, so the shape comes from the seat, not the list position', () => {
+    const wrapper = mount(GameOverCard, { props: { winnerSeats: [1], players: SEATED } });
+    const token = wrapper.findComponent(PlayerToken);
+    expect(token.exists()).toBe(true);
+    expect(token.props('seat')).toBe(1);
+    expect(token.classes()).toContain('sh-square');
+    expect(token.find('.ini').text()).toBe('1');
+  });
+
+  it('names a winner with no name by their seat, as every other surface does', () => {
+    const wrapper = mount(GameOverCard, { props: { winnerSeats: [2], players: SEATED } });
+    expect(wrapper.find('#game-over-title').text()).toBe('Player 2 wins');
+    expect(wrapper.findComponent(PlayerToken).find('.ini').text()).toBe('2');
   });
 });

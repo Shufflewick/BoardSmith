@@ -49,7 +49,7 @@
  */
 import { computed, effectScope, watch, type ComputedRef } from 'vue';
 import { deadEndPickMessage } from '../../engine/element/pick-candidates.js';
-import type { WorldSeatHost } from './useWorldHost.js';
+import { isLogLine, type WorldSeatHost } from './useWorldHost.js';
 import type { WorldActionOffer } from './worldProtocol.js';
 import type {
   EnrichedActionMetadata,
@@ -80,6 +80,8 @@ export interface WorldPlay {
   disabledActions: ComputedRef<Record<string, string>>;
   /** The lines the game asked the shell to say. */
   messages: ComputedRef<HistoryMessage[]>;
+  /** The line number of `messages[0]`, so a trimmed tail is still an append (#1066). */
+  messageOffset: ComputedRef<number>;
   /** Take an action. Single-shot: every selection's value at once. */
   sendAction: (actionName: string, args: Record<string, unknown>) => Promise<ControllerActionResult>;
   /**
@@ -199,9 +201,7 @@ export function useWorldPlay(host: WorldSeatHost): WorldPlay {
    * no `text` puts no line in the log rather than an invented one.
    */
   const messages = computed<HistoryMessage[]>(() =>
-    host.events.value
-      .filter((event) => typeof event.text === 'string' && event.text.length > 0)
-      .map((event) => ({ text: event.text as string, type: event.type })),
+    host.events.value.filter(isLogLine).map((event) => ({ text: event.text, type: event.type })),
   );
 
   async function sendAction(
@@ -349,6 +349,7 @@ export function useWorldPlay(host: WorldSeatHost): WorldPlay {
     actionMetadata,
     disabledActions,
     messages,
+    messageOffset: computed(() => host.linesDropped.value),
     sendAction,
     fetchPickChoices,
     fetchActionQuote,
