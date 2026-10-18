@@ -67,6 +67,11 @@ function addSearchSteps(total: SearchSteps, sub: SearchSteps): void {
   total.choseAtRandom &&= sub.choseAtRandom;
 }
 
+/** An object literal, not a class instance: the only objects whose fields a move's args are walked through. */
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && Object.getPrototypeOf(v) === Object.prototype;
+}
+
 /**
  * MCTS (Monte-Carlo Tree Search) Bot
  *
@@ -1144,22 +1149,24 @@ export class MCTSBot<G extends Game = Game> {
    * objects go stale. Feeding a stale (foreign-tree) element into
    * `continueFlow` -> `Piece.putInto` would splice a wrong-instance object into
    * the live tree and duplicate its id. Element ids are stable across restore,
-   * so we canonicalize by id here. Non-element args (scalars, plain choice
-   * objects, even ones carrying an `id`, #873) pass through untouched;
-   * already-live elements resolve to themselves (no-op).
+   * so we canonicalize by id here, wherever the element sits: inside arrays and
+   * plain objects too, since the engine matches a plain choice against the
+   * current world's offer by its JSON (#1038). Everything else, including a
+   * plain choice's own `id` (#873), passes through untouched; already-live
+   * elements resolve to themselves (no-op).
    */
   private rebindArgs(args: Record<string, unknown>): Record<string, unknown> {
     const game = this.searchGame;
     if (!game) return args;
-    const rebindOne = (v: unknown): unknown => {
+    const rebind = (v: unknown): unknown => {
       if (isElement(v)) return game.getElementById(v.id) ?? v;
+      if (Array.isArray(v)) return v.map(rebind);
+      if (isPlainObject(v)) {
+        return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, rebind(x)]));
+      }
       return v;
     };
-    const out: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(args)) {
-      out[k] = Array.isArray(v) ? v.map(rebindOne) : rebindOne(v);
-    }
-    return out;
+    return Object.fromEntries(Object.entries(args).map(([k, v]) => [k, rebind(v)]));
   }
 
   // ============================================================================
@@ -1176,8 +1183,8 @@ export class MCTSBot<G extends Game = Game> {
     const keyOf = (v: unknown): unknown => {
       if (isElement(v)) return { elementId: v.id };
       if (Array.isArray(v)) return v.map(keyOf);
-      if (typeof v === 'object' && v !== null && Object.getPrototypeOf(v) === Object.prototype) {
-        return Object.fromEntries(Object.entries(v as object).map(([k, x]) => [k, keyOf(x)]));
+      if (isPlainObject(v)) {
+        return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, keyOf(x)]));
       }
       return v;
     };
