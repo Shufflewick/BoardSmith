@@ -51,6 +51,19 @@ describe('installIngestHook', () => {
     expect(await fs.readFile(hookPath, 'utf-8')).toContain('echo mine');
   });
 
+  it('leaves alone a hook it cannot read, rather than taking it for no hook (#1110)', async () => {
+    const p = await gitProject();
+    const hookPath = join(p, '.git', 'hooks', 'pre-commit');
+    await fs.writeFile(hookPath, '#!/bin/sh\necho mine\n');
+    await fs.chmod(hookPath, 0o200);
+    try {
+      expect(await installIngestHook(p)).toBe('skipped-existing');
+    } finally {
+      await fs.chmod(hookPath, 0o755);
+    }
+    expect(await fs.readFile(hookPath, 'utf-8')).toBe('#!/bin/sh\necho mine\n');
+  });
+
   it('is idempotent — reinstalling over its own hook is fine', async () => {
     const p = await gitProject();
     await installIngestHook(p);
