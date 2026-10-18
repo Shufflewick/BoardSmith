@@ -23,11 +23,12 @@
  */
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { browserScripts } from './browser-harness.mjs';
+import { browserScripts, recordWorldFrames } from './browser-harness.mjs';
 import { BROWSER_SUITE_CONFIG } from '../src/cli/commands/test.ts';
 
 const SCRIPTS = dirname(fileURLToPath(import.meta.url));
@@ -120,20 +121,28 @@ describe('#231: the fixture world stops the host before it removes the project',
 
   const table = readFileSync(join(REPO, 'src', 'cli', 'commands', 'fixture-table.test-helper.ts'), 'utf8');
 
-  it.each([
-    ['withFixtureWorld', lifetime, 'await stop()', 'rmSync(fixture'],
-    ['withFixtureTable', table, 'await started.finish(', 'rmSync(parent'],
-  ])('%s awaits the stop inside the guard that removes the project', (name, source, stopCall, removeCall) => {
-    const body = source.slice(source.indexOf(`async function ${name}`));
-    const stop = body.indexOf(stopCall);
-    const remove = body.indexOf(removeCall);
-    expect(stop, `${name} must await the host stop`).toBeGreaterThan(-1);
-    expect(remove, `${name} must remove the fixture`).toBeGreaterThan(-1);
+  it('withFixtureTable awaits the stop inside the guard that removes the project', () => {
+    const body = table.slice(table.indexOf('async function withFixtureTable'));
+    const stop = body.indexOf('await started.finish(');
+    const remove = body.indexOf('rmSync(parent');
+    expect(stop, 'withFixtureTable must await the host stop').toBeGreaterThan(-1);
+    expect(remove, 'withFixtureTable must remove the fixture').toBeGreaterThan(-1);
     expect(
       stop,
       'the stop must be awaited BEFORE the fixture is removed, or the removal races ' +
         'the host it never stopped (#231)',
     ).toBeLessThan(remove);
+  });
+
+  it('withFixtureWorld holds the project before the host, so its holdings close the host first', () => {
+    // Holdings close last-held first (shutdown.ts), on a signal too (#922).
+    const body = lifetime.slice(lifetime.indexOf('async function withFixtureWorld'));
+    const remove = body.indexOf('rmSync(fixture');
+    const host = body.indexOf('startWorldHost(fixture');
+    expect(remove, 'withFixtureWorld must hold the fixture removal').toBeGreaterThan(-1);
+    expect(host, 'withFixtureWorld must start the host').toBeGreaterThan(-1);
+    expect(remove, 'the project must be held BEFORE the host, or it is removed under it (#231)').toBeLessThan(host);
+    expect(body).toContain('await holdings.run()');
   });
 });
 
@@ -211,5 +220,34 @@ describe('#231: the world dev host hands back an awaitable stop', () => {
     // signalled one still does.
     expect(at('(opened) => [closesWorld(opened)]')).toBeLessThan(at('(opened) => [...pages, ...opened.resources]'));
     expect(source).not.toMatch(/process\.exit\(/);
+  });
+});
+
+describe('#922: one recorder for the world socket\'s frames', () => {
+  /** A page that opens one socket to `url` and returns it, to emit frames on. */
+  function pageWithSocket(page, url) {
+    const ws = Object.assign(new EventEmitter(), { url: () => url });
+    page.emit('websocket', ws);
+    return ws;
+  }
+
+  it('parses the frames each way and keeps one that is not a JSON object as text, rather than crashing', () => {
+    const page = new EventEmitter();
+    const frames = recordWorldFrames(page);
+    const world = pageWithSocket(page, 'ws://127.0.0.1:5173/__boardsmith/world');
+    const vite = pageWithSocket(page, 'ws://127.0.0.1:5173/?token=vite-hmr');
+    world.emit('framesent', { payload: '{"type":"pick","requestId":1}' });
+    world.emit('framesent', { payload: 'ping' });
+    world.emit('framereceived', { payload: 'null' });
+    world.emit('framereceived', { payload: '{"type":"world_pick_result","requestId":1}' });
+    vite.emit('framesent', { payload: '{"type":"vite"}' });
+    expect(frames.sent).toEqual([{ type: 'pick', requestId: 1 }, { unparsed: 'ping' }]);
+    expect(frames.received).toEqual([{ unparsed: 'null' }, { type: 'world_pick_result', requestId: 1 }]);
+  });
+
+  it.each(browserScripts())('%s records socket frames through recordWorldFrames', (name) => {
+    expect(read(name), `${name} listens for socket frames itself; use recordWorldFrames`).not.toMatch(
+      /framesent|framereceived/,
+    );
   });
 });
