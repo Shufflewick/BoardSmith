@@ -441,6 +441,12 @@ function configLine(f: DoctorFinding, rel: (p: string) => string): string {
   return `${styleText('yellow', f.kind === 'test-config-missing' ? 'missing ' : 'outdated')} ${where}\n          ${f.detail}`;
 }
 
+/** The ingest hook finding as a report line: installed, or what is wrong with it. */
+function hookLine(f: DoctorFinding): string {
+  if (f.fixed) return `${styleText('green', 'installed')} ${f.from} ${styleText('dim', '->')} the current ingest hook`;
+  return `${styleText('yellow', 'hook    ')} ${f.from}\n          ${f.detail}`;
+}
+
 /** One finding as a report line; `rel` makes a project path relative to where doctor was run. */
 function reportLine(f: DoctorFinding, rel: (p: string) => string): string {
   switch (f.kind) {
@@ -452,9 +458,7 @@ function reportLine(f: DoctorFinding, rel: (p: string) => string): string {
     case 'test-run-collects-worktrees':
       return configLine(f, rel);
     case 'ingest-hook-not-current':
-      return f.fixed
-        ? `${styleText('green', 'installed')} ${f.from} ${styleText('dim', '->')} the current ingest hook`
-        : `${styleText('yellow', 'hook    ')} ${f.from}\n          ${f.detail}`;
+      return hookLine(f);
     case 'scratch-dir-not-ignored':
       return `${f.fixed ? styleText('green', 'ignored ') : styleText('yellow', 'untracked')} ${rel(f.from)} ${styleText('dim', '->')} adds ${GITIGNORE_ENTRY}`;
     default:
