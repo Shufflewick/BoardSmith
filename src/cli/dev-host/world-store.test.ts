@@ -566,16 +566,6 @@ describe('the local world store', () => {
       expect(store.activityOf(3).at).toBeNull();
     });
 
-    it('never moves a watermark backwards', () => {
-      // A drained event runs at its NOMINAL due, which is in the past, and the
-      // host must not be able to age a live player by replaying one. The store
-      // is the last line: the watermark is a high-water mark by construction.
-      store.activitySince(5_000);
-      store.writeCheckpoint(cp({}), { activity: { seat: 1, at: 20_000 } });
-      store.writeCheckpoint(cp({}), { activity: { seat: 1, at: 9_000 } });
-      expect(store.activityOf(1).at).toBe(20_000);
-    });
-
     it('is still there for the next host to open this world', () => {
       // The whole point of it being durable: hibernation, a rules reload and a
       // cold restart all build a new host over this store, and an idleness
@@ -1057,5 +1047,22 @@ describe.each([
   it('decodes the arguments of the event it answers', async () => {
     await store.writeCheckpoint(cp({}), { schedule: [event({ id: 'first', due: 50, seq: 9, args: { n: 1 } })] });
     expect(store.nextDue(50, new Set())?.args).toEqual({ n: 1 });
+  });
+});
+
+describe.each([
+  ['the local store', () => openWorldStore(worldStorePath(tempTree('bs-world-store-')), BUDGETS)],
+  ['the memory store', () => createMemoryWorldStore('key', BUDGETS)],
+])("a seat's activity watermark (#916): %s", (_name, open: () => WorldStore) => {
+  it('never moves backwards', async () => {
+    // A drained event runs at its NOMINAL due, which is in the past, and the
+    // host must not be able to age a live player by replaying one. The store
+    // is the last line: the watermark is a high-water mark by construction.
+    const store = open();
+    store.activitySince(5_000);
+    await store.writeCheckpoint(cp({}), { activity: { seat: 1, at: 20_000 } });
+    await store.writeCheckpoint(cp({}), { activity: { seat: 1, at: 9_000 } });
+    expect(store.activityOf(1).at).toBe(20_000);
+    store.close();
   });
 });

@@ -1,4 +1,5 @@
 import { sha256Hex } from '../lib/hash.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 import { promises as fs } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { computeVerificationScope, documentFailure, type VerificationScope } from './chunk-provenance.js';
@@ -1027,13 +1028,8 @@ const CANDIDATE_SOURCE_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg', '.txt'];
  * while any candidate is present.
  */
 async function detectRootSourceCandidates(projectDir: string): Promise<string[]> {
-  let entries: Array<{ name: string; isFile(): boolean }>;
-  try {
-    entries = await fs.readdir(resolve(projectDir), { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  return entries
+  const entries = await readIfExists(resolve(projectDir), (p) => fs.readdir(p, { withFileTypes: true }));
+  return (entries ?? [])
     .filter(
       (e) =>
         e.isFile() &&

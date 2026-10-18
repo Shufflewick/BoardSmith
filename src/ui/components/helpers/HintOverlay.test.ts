@@ -323,6 +323,27 @@ describe('HintOverlay placement (#927)', () => {
     wrapper.unmount();
   });
 
+  it('keeps the left edge of a bubble next to a target at the left edge on screen (#907)', async () => {
+    const fixture = document.createElement('div');
+    fixture.className = 'boardregion';
+    fixture.innerHTML = '<div data-bs-el-id="907"></div>';
+    document.body.appendChild(fixture);
+    vi.spyOn(fixture, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 100, 400, 400));
+    // Centre x = 10: half a 300px bubble centred there would start at -140.
+    vi.spyOn(fixture.querySelector('[data-bs-el-id="907"]')!, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 120, 20, 20));
+    const wrapper = mount(HintOverlay, {
+      global: { provide: { [GAME_CONTEXT_KEYS.gameState as symbol]: makeGameState({ text: 'Suggested move', target: { kind: 'element', ref: { id: 907 } } }) }, stubs: { Teleport: true } },
+      attachTo: fixture,
+    });
+    await nextTick();
+    expect(bubbleStyle(wrapper).left).toBe('10px');
+    // Shift left by half the bubble's width, but never past 8px from the viewport edge.
+    expect(bubbleStyle(wrapper).transform).toBe('translateX(max(-50%, -2px))');
+    // The caret still points at the target, kept clear of the card's rounded corner.
+    expect(bubbleStyle(wrapper).getPropertyValue('--caret-left')).toBe('min(50%, 12px)');
+    wrapper.unmount();
+  });
+
   it('keeps an untargeted bubble without placement below the board', async () => {
     const wrapper = mountOnBoard({ text: 'Suggested: c5 to a3' });
     await nextTick();

@@ -7,8 +7,8 @@ import { styleText } from 'node:util';
 import { atomicWriteFile } from './verify-run.js';
 import { withLedgerLock } from '../lib/ledger-lock.js';
 import { readFencedJsonLedger, type FencedJsonLedgerFile } from '../lib/fenced-json-ledger.js';
+import { readLiveSlices } from './rulebook-sources.js';
 import {
-  readLiveSlices,
   readSliceArgument,
   parseSubagentJsonInput,
   type SubagentJsonParseResult,

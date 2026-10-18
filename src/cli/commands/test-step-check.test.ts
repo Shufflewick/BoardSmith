@@ -385,6 +385,33 @@ export const pass = Action.create('pass');
 it('claim 1 and 2', () => { testGame.doAction(1, 'bid'); testGame.doAction(1, 'pass'); });
 `;
 
+  describe('names a file it cannot read rather than passing over it (#1174)', () => {
+    const PASSING = { 'src/rules/auction.ts': RULES, 'tests/auction.test.ts': DISPATCHES_BOTH };
+    const ROW = '| tests/auction.test.ts | 1, 2 | yes |\n';
+
+    it("a Spec Manifest row's test file, rather than calling it missing", async () => {
+      await build({ 'src/rules/auction.ts': RULES }, ROW);
+      const testFile = join(project, 'tests', 'auction.test.ts');
+      await fs.mkdir(testFile, { recursive: true });
+      await expect(checkTestStep(project, 'auction')).rejects.toThrow(`Could not read ${testFile} (EISDIR)`);
+    });
+
+    for (const [what, path] of [
+      ['an implementation file', 'src/rules/game.ts'],
+      ['a test harness file', 'tests/helper.ts'],
+      ['a project script', 'scripts/tool.mjs'],
+    ]) {
+      it(`${what} git lists`, async () => {
+        await build(PASSING, ROW);
+        const abs = join(project, path);
+        await fs.mkdir(dirname(abs), { recursive: true });
+        await fs.rm(abs, { force: true });
+        await fs.symlink(abs, abs);
+        await expect(checkTestStep(project, 'auction')).rejects.toThrow(`Could not read ${abs} (ELOOP)`);
+      });
+    }
+  });
+
   // git quotes a non-ASCII path unless asked not to, and a quoted path matches no file read elsewhere (#531).
   it('reads a chunk file with a non-ASCII name by its real path', async () => {
     await build({ 'src/rules/enchère.ts': RULES, 'tests/auction.test.ts': DISPATCHES_BOTH }, '| tests/auction.test.ts | 1, 2 | yes |\n');

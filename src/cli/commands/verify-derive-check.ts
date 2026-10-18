@@ -12,6 +12,7 @@ import { atomicWriteFile } from './verify-run.js';
 import { withLedgerLock } from '../lib/ledger-lock.js';
 import { readFencedJsonLedger } from '../lib/fenced-json-ledger.js';
 import { isPresentationLine } from './verify-classify.js';
+import { readLiveSlices } from './rulebook-sources.js';
 import { DERIVED_LINE_RE, annotationLineStartRe } from './derived-line-pattern.js';
 import {
   createEnumeratedFact,
@@ -84,7 +85,7 @@ export const DERIVE_CHECK_ROLES = Object.freeze({
  */
 
 // -------------------------------------------------------------------------------------------
-// readLiveSlices / annotationBody / quoteLinesOnly / enumerateDerivedLines — MOVED wholesale from
+// annotationBody / quoteLinesOnly / enumerateDerivedLines — MOVED wholesale from
 // the retired blind-derivation module (177.1-CONTEXT.md decision 6; the module itself, and every
 // symbol not moved here, was deleted outright in 177.1-07). These are the design-agnostic parts
 // the CHECK-04 closure note already named as carrying forward unchanged: the live-tree read, the
@@ -94,56 +95,6 @@ export const DERIVE_CHECK_ROLES = Object.freeze({
 // was specific to the retired design and no longer exists anywhere in the tree.
 // -------------------------------------------------------------------------------------------
 
-/**
- * Reads the LIVE `rulebook/*.md` tree directly — the same source `verify-classify.ts`'s
- * `computeRunPairs` already reads (excluding `INDEX.md`, the archive manifest, and
- * `00-visual-survey.md`, `ingest-archive.ts`'s presentation-by-design UI-ask handoff artifact).
- * This is the correct "which files are slices" definition for a source-free, run-less check
- * (decision 14): CHECK-04 targets live slices with NO staged prerequisite and never constructs a
- * `.verify/<runId>/` staging path — proven behaviorally by
- * `verifyDeriveCheckCommand`'s own `.verify/` decoy test.
- */
-export async function readLiveSlices(
-  projectDir: string,
-): Promise<{ path: string; text: string }[]> {
-  const rulebookDir = designRulebookDir(projectDir);
-  let names: string[];
-  try {
-    const entries = await fs.readdir(rulebookDir, { withFileTypes: true });
-    names = entries
-      .filter(
-        (e) =>
-          e.isFile() &&
-          e.name.endsWith('.md') &&
-          e.name !== 'INDEX.md' &&
-          e.name !== '00-visual-survey.md',
-      )
-      .map((e) => e.name)
-      .sort();
-  } catch (err) {
-    // (WR-02/WR-10): this is the ONE "no rulebook/" message in the module — only ENOENT means
-    // "does not exist"; any other errno (EACCES, ENOTDIR, ...) is a real, different condition and
-    // must say so, never be reported as a missing directory.
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') {
-      throw new Error(
-        `No rulebook/ directory in ${projectDir}.\n` +
-          `Pass --project <dir> to target the bs-project this check should read.`,
-      );
-    }
-    throw new Error(
-      `rulebook/ exists at ${rulebookDir} but could not be read (${code ?? 'unknown error'}).\n` +
-        `Pass --project <dir> to target the bs-project this check should read, and confirm the ` +
-        `directory is accessible.`,
-    );
-  }
-  return Promise.all(
-    names.map(async (name) => ({
-      path: `rulebook/${name}`,
-      text: await fs.readFile(join(rulebookDir, name), 'utf-8'),
-    })),
-  );
-}
 
 /**
  * Leading blockquote markers, list bullets, and ordered-list markers, repeatable (a line can be

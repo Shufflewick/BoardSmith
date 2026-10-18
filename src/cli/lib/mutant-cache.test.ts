@@ -461,6 +461,17 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
       expect((await openMutantCache(dir)).unavailable).toMatch(/Could not read .*dep\/main\.js \(ELOOP\)/);
     });
 
+    it("does not cache, and names the folder, when a linked package's node_modules cannot be read (#1174)", async () => {
+      const { dir, dep } = await withSibling({ git: false });
+      // Searchable but not listable: its install record reads as absent, its links cannot be listed.
+      await fs.mkdir(join(dep, 'node_modules'), { mode: 0o300 });
+      try {
+        expect((await openMutantCache(dir)).unavailable).toMatch(/Could not read .*dep\/node_modules \(EACCES\)/);
+      } finally {
+        await fs.chmod(join(dep, 'node_modules'), 0o755);
+      }
+    });
+
     it('does not cache at all, and says why, when a linked folder cannot be read', async () => {
       const { dir, dep } = await withSibling({ git: false });
       await record(dir, 'killed');

@@ -5,6 +5,7 @@ import { boardsmithPackageRoot, readBoardsmithVersion } from './boardsmith-versi
 import { gitOutput as git } from './git-output.js';
 import { openMutantCache } from './mutant-cache.js';
 import { equivalenceBasisProblem, type EquivalenceBasis } from './mutation-equivalences.js';
+import { readIfExists } from './read-if-exists.js';
 
 /**
  * The result `boardsmith verify` writes, and the one question every done claim asks of it (#452).
@@ -157,12 +158,8 @@ export async function writeVerifyResult(projectDir: string, result: VerifyResult
 
 /** The result for `commit`, undefined when there is none, or 'unreadable' when the file is not JSON. */
 export async function readVerifyResult(projectDir: string, commit: string): Promise<VerifyResult | 'unreadable' | undefined> {
-  let text: string;
-  try {
-    text = await fs.readFile(verifyResultPath(projectDir, commit), 'utf-8');
-  } catch {
-    return undefined;
-  }
+  const text = await readIfExists(verifyResultPath(projectDir, commit), (p) => fs.readFile(p, 'utf-8'));
+  if (text === undefined) return undefined;
   try {
     return JSON.parse(text) as VerifyResult;
   } catch {

@@ -331,6 +331,22 @@ describe('driftCheckCommand', () => {
     expect(finding?.detail).toContain('deleted.txt');
   });
 
+  it('names a manifest file it cannot look at rather than reporting it deleted (#1174)', async () => {
+    const { repoDir, firstSha } = await twoCommitRepo();
+    await makeChunk(repoDir, 'loop-chunk', { hash: firstSha, manifestRows: [{ files: 'loop.txt', status: 'NEW' }] });
+    await fs.symlink('loop.txt', join(repoDir, 'loop.txt'));
+    await expect(driftCheckCommand({ project: repoDir })).rejects.toThrow(`Could not read ${join(repoDir, 'loop.txt')} (ELOOP)`);
+  });
+
+  it('names a CHUNK.md it cannot read rather than passing over the chunk (#1174)', async () => {
+    const { repoDir, firstSha } = await twoCommitRepo();
+    await makeChunk(repoDir, 'odd', { hash: firstSha });
+    const chunkMd = join(repoDir, DESIGN_DIR, 'chunks', 'odd', 'CHUNK.md');
+    await fs.rm(chunkMd);
+    await fs.mkdir(chunkMd);
+    await expect(driftCheckCommand({ project: repoDir })).rejects.toThrow(`Could not read ${chunkMd} (EISDIR)`);
+  });
+
   it('a hash git cannot resolve as an ancestor of HEAD reports drift-unknown rather than failing the whole run', async () => {
     const { repoDir } = await twoCommitRepo();
     await makeChunk(repoDir, 'bad-hash-chunk', {

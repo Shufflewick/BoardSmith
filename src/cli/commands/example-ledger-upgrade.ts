@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import { relative, resolve } from 'node:path';
 import { styleText } from 'node:util';
 import { readFencedJsonLedger } from '../lib/fenced-json-ledger.js';
-import { readLiveSlices } from './verify-derive-check.js';
+import { readLiveSlices } from './rulebook-sources.js';
 import { buildExampleExtractionPayload, isCitationHeaderLine } from './example-derivation.js';
 import {
   exampleReplayLedgerFile,

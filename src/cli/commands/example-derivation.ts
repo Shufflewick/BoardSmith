@@ -10,6 +10,7 @@ import {
 } from './verify-derive-check.js';
 import { DERIVED_LINE_RE } from './derived-line-pattern.js';
 import { isSameOrInside } from '../lib/path-inside.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 
 /**
  * `example-derivation.ts` — the ONE shared module both the build side (TEST-01, `build/test.md`)
@@ -517,11 +518,7 @@ function toProjectRelativeModule(rules: RulesProgram, fileName: string): string 
 }
 
 async function isFile(path: string): Promise<boolean> {
-  try {
-    return (await fs.stat(path)).isFile();
-  } catch {
-    return false;
-  }
+  return (await readIfExists(path, fs.stat))?.isFile() ?? false;
 }
 
 /** The game's own compiler options, read from its `tsconfig.json` as `tsc` reads them. */

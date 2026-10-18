@@ -3,7 +3,8 @@
  * The fixtures are in `catalogue-fixture.test-helper.ts`.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { mkdirSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { commitAll, git, initRepo, writeFiles } from './verify-result.test-helper.js';
@@ -74,6 +75,35 @@ describe('which games are checked (#591)', () => {
   });
 });
 
+describe('a file the catalogue check cannot read is named, never read as missing (#1174)', () => {
+  it("names the tree's package.json when it cannot be read, rather than calling the tree something else", async () => {
+    const fx = fixture();
+    await makeTree(fx.tree);
+    rmSync(join(fx.tree, 'package.json'));
+    mkdirSync(join(fx.tree, 'package.json'));
+    await expect(checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue })).rejects.toThrow(/Could not read .*package\.json \(EISDIR\)/);
+  });
+
+  it("names the tree's install record when it cannot be read, rather than keying the cache as if there were none", async () => {
+    const fx = fixture();
+    await makeTree(fx.tree);
+    await makeGame(fx, 'hex');
+    mkdirSync(join(fx.tree, 'node_modules', '.package-lock.json'), { recursive: true });
+    await expect(checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue })).rejects.toThrow(/Could not read .*node_modules\/\.package-lock\.json \(EISDIR\)/);
+  });
+
+  it("names a link in a game's install it cannot follow, and still passes over one whose folder is gone", async () => {
+    const fx = fixture();
+    await makeTree(fx.tree);
+    const hex = await makeGame(fx, 'hex');
+    symlinkSync(join(hex, 'gone'), join(hex, 'node_modules', 'dangling'));
+    expect(statusOf(await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue }))).toEqual({ hex: 'passed' });
+
+    symlinkSync('loop', join(hex, 'node_modules', 'loop'));
+    await expect(checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue })).rejects.toThrow(`Could not read ${join(hex, 'node_modules', 'loop')} (ELOOP)`);
+  });
+});
+
 describe('what each game is checked against (#591)', () => {
   it("validates the game's committed main against the tree it is given, leaving the shared checkout as it was", async () => {
     const fx = fixture();
@@ -116,6 +146,20 @@ describe('what each game is checked against (#591)', () => {
 
     expect(statusOf(run)).toEqual({ legacy: 'passed', 'legacy-world': 'passed' });
     expect([checkoutState(legacy), checkoutState(world)]).toEqual(before);
+  });
+
+  // Only a disk that ignores letter case finds the fixture's Games/ folder as games/.
+  it.skipIf(!existsSync(tmpdir().toUpperCase()))('links a catalogue game when the catalogue is named in other letter case than on disk (#1174)', async () => {
+    const fx = fixture();
+    await makeTree(fx.tree);
+    await makeGame(fx, 'legacy');
+    await makeGame(fx, 'legacy-world', { links: ['legacy'] });
+    // On a disk that ignores case this names the same folder; links must resolve as the catalogue's keys do.
+    const otherCase = join(fx.catalogue, '..', 'games');
+
+    const run = await checkCatalogue({ tree: fx.tree, catalogueRoot: otherCase });
+
+    expect(statusOf(run)).toEqual({ legacy: 'passed', 'legacy-world': 'passed' });
   });
 
   it('fails a game with no install, saying how to install it', async () => {

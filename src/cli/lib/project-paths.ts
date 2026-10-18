@@ -1,6 +1,7 @@
 import { existsSync, promises as fs } from 'node:fs';
 import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { readIfExists } from './read-if-exists.js';
 
 /**
  * Where a bs-built game project keeps everything the `bs-` skills author.
@@ -85,6 +86,11 @@ export async function requireChunkSlugs(projectDir: string): Promise<string[]> {
 /** Absolute path to one chunk's `CHUNK.md`. */
 export function chunkMdPath(projectDir: string, slug: string): string {
   return join(designChunksDir(projectDir), slug, CHUNK_MD);
+}
+
+/** A chunk's `CHUNK.md` text, or undefined when its folder holds none; one that cannot be read is thrown, naming it. */
+export function readChunkMdIfExists(projectDir: string, slug: string): Promise<string | undefined> {
+  return readIfExists(chunkMdPath(projectDir, slug), (p) => fs.readFile(p, 'utf-8'));
 }
 
 /** A chunk's `CHUNK.md` path relative to the design directory — the form used in messages. */

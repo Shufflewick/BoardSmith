@@ -437,6 +437,12 @@ describe('publish requires a full, passing boardsmith verify for the commit on a
     }
   });
 
+  it('names an unreadable published.json rather than measuring from the first commit (#1174)', async () => {
+    const { dir } = await game();
+    mkdirSync(join(dir, '.boardsmith', 'published.json'), { recursive: true });
+    await expect(publishGate(dir)).rejects.toThrow(`Could not read ${join(dir, '.boardsmith', 'published.json')} (EISDIR)`);
+  });
+
   it('refuses a repository whose only commit is the one being published: there is nothing to measure', async () => {
     const dir = join(tempTree('bs984-'), 'game');
     await writeFiles(dir, { '.gitignore': '.boardsmith/\n', 'src/rules.ts': 'export const x = 1;\n' });

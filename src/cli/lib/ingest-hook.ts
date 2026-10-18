@@ -107,6 +107,7 @@ export async function installIngestHook(
   try {
     await fs.access(join(projectPath, '.git'));
   } catch {
+    // Whatever stops it, the hook cannot go in, and init reports that without failing.
     return 'skipped-no-git';
   }
 

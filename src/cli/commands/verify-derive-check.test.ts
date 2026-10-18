@@ -2053,7 +2053,7 @@ describe('verifyDeriveCheckCommand', () => {
     await fs.mkdir(rulebookDir, { recursive: true });
     await fs.chmod(rulebookDir, 0o000);
     try {
-      await expect(verifyDeriveCheckCommand({ project })).rejects.toThrow(/could not be read/);
+      await expect(verifyDeriveCheckCommand({ project })).rejects.toThrow(`Could not read ${rulebookDir} (EACCES)`);
       try {
         await verifyDeriveCheckCommand({ project });
       } catch (err) {
@@ -2114,8 +2114,8 @@ describe('verifyDeriveCheckCommand', () => {
     expect(stripped).not.toMatch(/process\.exitCode\s*=/);
   });
 
-  it('grep-count: exactly one "No rulebook/ directory" message exists in the module (WR-10)', () => {
-    const src = readFileSync(join(__dirname, 'verify-derive-check.ts'), 'utf-8').replace(
+  it('grep-count: exactly one "No rulebook/ directory" message exists in the module that reads the live slices (WR-10)', () => {
+    const src = readFileSync(join(__dirname, 'rulebook-sources.ts'), 'utf-8').replace(
       /^\s*\*.*$/gm,
       '',
     );

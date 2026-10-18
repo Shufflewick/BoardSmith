@@ -629,6 +629,17 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
     expect(result.checked).toContain('chunks/world-shell/CHUNK.md');
   });
 
+  it('names a cited file it cannot look at rather than calling it missing (#1174)', async () => {
+    const dir = await tree({
+      'design/DECISIONS.md': '### Decision 257\n- Decision: food holds; see `.boardsmith/scratch/loop.mjs`.\n',
+    });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    const loop = join(dir, '.boardsmith/scratch/loop.mjs');
+    await fs.mkdir(join(loop, '..'), { recursive: true });
+    await fs.symlink(loop, loop);
+    await expect(ledgerCheck(dir)).rejects.toThrow(`Could not read ${loop} (ELOOP)`);
+  });
+
   it('fails a verified chunk that cites a missing file, an untracked file, or a path outside the project', async () => {
     const dir = await tree({
       'design/chunks/world-shell/CHUNK.md': chunk(
