@@ -1204,7 +1204,7 @@ function choiceSpokenName(choice: ChoiceWithRefs): string {
 
 /** What one built entry reads as: the label of the button that adds it. */
 function orderedEntryDisplay(value: unknown): string {
-  return labelOfPick(value, filteredChoices.value);
+  return labelOfPick(value, offeredChoices.value);
 }
 
 /** "Added: 2/3", or "Added: 2" when the list has no upper bound. */
@@ -1819,8 +1819,8 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             </li>
           </ol>
           <div ref="orderedChoiceRow" class="choice-buttons ordered-list-choices">
-            <!-- #313: the candidates are on the board (so none is in filteredChoices);
-                 the entries above stay here. -->
+            <!-- #313 / #935: the candidates are on the board, so the handoff replaces
+                 the Add buttons (id refs stay in filteredChoices); the entries above stay here. -->
             <button
               v-if="deferPickToBoard"
               class="choice-btn board-handoff-btn"
@@ -1833,19 +1833,21 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
                  gesture (#252). Announced on its own, "University" says neither
                  what pressing it does nor that pressing it again repeats it, and
                  a row of buttons all reading "Add University" is unreadable. -->
-            <button
-              v-for="choice in filteredChoices"
-              :key="choiceValueKey(choice.value)"
-              class="choice-btn ordered-list-add"
-              :aria-label="`Add ${choiceSpokenName(choice)}`"
-              v-disabled-reason="orderedListAddDisabledReason(choice.disabled)"
-              :aria-disabled="isDisabled(orderedListAddDisabledReason(choice.disabled)) || undefined"
-              @click="addListEntry(currentPick.name, choice.value)"
-              @mouseenter="handleChoiceHover(choice)"
-              @mouseleave="handleChoiceLeave"
-            >
-              {{ choice.display }}
-            </button>
+            <template v-else>
+              <button
+                v-for="choice in filteredChoices"
+                :key="choiceValueKey(choice.value)"
+                class="choice-btn ordered-list-add"
+                :aria-label="`Add ${choiceSpokenName(choice)}`"
+                v-disabled-reason="orderedListAddDisabledReason(choice.disabled)"
+                :aria-disabled="isDisabled(orderedListAddDisabledReason(choice.disabled)) || undefined"
+                @click="addListEntry(currentPick.name, choice.value)"
+                @mouseenter="handleChoiceHover(choice)"
+                @mouseleave="handleChoiceLeave"
+              >
+                {{ choice.display }}
+              </button>
+            </template>
             <DoneButton
               :disabled-reason="orderedListDoneDisabledReason"
               @click="confirmMultiSelect"

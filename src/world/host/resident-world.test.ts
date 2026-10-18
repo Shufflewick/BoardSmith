@@ -87,8 +87,9 @@ function host(options: {
   clock?: WorldHostClock;
   store?: ReturnType<typeof createMemoryWorldStore>;
   onNotice?: (message: string) => void;
+  budgets?: ReturnType<typeof worldBudgets>;
 } = {}) {
-  const budgets = worldBudgets();
+  const budgets = options.budgets ?? worldBudgets();
   let now = OPENED;
   const clock = options.clock ?? {
     now: () => now,
@@ -157,6 +158,44 @@ describe('#793: ResidentWorld', () => {
       ),
     ).rejects.toMatchObject({ code: 'world-catching-up' });
     expect(notices.filter((m) => m.includes('"boom" refused'))).toHaveLength(1);
+  });
+
+  it('names the stuck event when a due event that refuses is what the world is behind on (#939)', async () => {
+    const { world, advance } = host({ ordering: 'chronological' });
+    await world.start();
+    world.seat(worldSeatPlayer(1), 1);
+    await world.clockCommand('arm', {});
+    advance(3 * MINUTE);
+
+    const refusal: unknown = await world
+      .run(() =>
+        world.command({ player: worldSeatPlayer(1), order: { id: 'o1', at: OPENED }, action: 'poke', args: {} }),
+      )
+      .catch((error: unknown) => error);
+    expect(refusal).toMatchObject({ code: 'world-catching-up', message: expect.stringContaining('"boom"') });
+    expect((refusal as Error).message).not.toMatch(/in a moment/);
+    // Nothing is kept, so the player must be told to resend.
+    expect((refusal as Error).message).toMatch(/send your command again/);
+    // The game's own error text is for the author's notice, not the player.
+    expect((refusal as Error).message).not.toContain('refused on purpose');
+  });
+
+  it('still says "in a moment" when the world is only catching up (#939)', async () => {
+    const { world, advance } = host({
+      ordering: 'chronological',
+      budgets: worldBudgets({ drainBatch: 1, catchUpRounds: 1 }),
+    });
+    await world.start();
+    world.seat(worldSeatPlayer(1), 1);
+    await world.clockCommand('stamp', {});
+    await world.clockCommand('stamp', {});
+    advance(3 * MINUTE);
+
+    await expect(
+      world.run(() =>
+        world.command({ player: worldSeatPlayer(1), order: { id: 'o1', at: OPENED }, action: 'poke', args: {} }),
+      ),
+    ).rejects.toMatchObject({ code: 'world-catching-up', message: expect.stringMatching(/in a moment/) });
   });
 
   it('plans a clock-issued command\'s schedules from the instant its handler was told', async () => {

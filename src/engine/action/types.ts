@@ -885,7 +885,7 @@ export interface ExecuteResult {
 export interface ActionResult extends Omit<ExecuteResult, 'partiallyApplied' | 'notSimulable' | 'rulesError'> {
   /**
    * Set by the engine when the action failed AFTER it may have changed the
-   * game: `execute()` threw (#44), or a whole submission of a repeating
+   * game: `execute()` or a pick's callback threw (#44, #1142), or a whole submission of a repeating
    * selection was refused after `onEach` had already run for some of its picks
    * (#325).
    *
@@ -904,8 +904,9 @@ export interface ActionResult extends Omit<ExecuteResult, 'partiallyApplied' | '
    */
   notSimulable?: boolean;
   /**
-   * Set when the failure was a crash in the rules: `execute()` or an
-   * `onSelect` threw something that is not a {@link PlayerFacingError} (#847).
+   * Set when the failure was a crash in the rules: `execute()` or a pick's
+   * `onSelect`, `onEach` or `until` threw something that is not a
+   * {@link PlayerFacingError} (#847, #1141).
    * A refusal never carries it, whatever its words, so a caller can tell the
    * rules saying no from the rules breaking. Never set by game code.
    */

@@ -654,11 +654,11 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
 });
 
 /** Mount the panel inside a host that provides a real board interaction. */
-function mountWithBoard(controller: Record<string, unknown>, bi: BoardInteraction) {
+function mountWithBoard(controller: Record<string, unknown>, bi: BoardInteraction, panelProps: Record<string, unknown> = {}) {
   const Host = defineComponent({
     setup() {
       provideBoardInteraction(bi);
-      return () => h(ActionPanel, { availableActions: [], isMyTurn: true });
+      return () => h(ActionPanel, { availableActions: [], isMyTurn: true, ...panelProps });
     },
   });
   return mount(Host, {
@@ -868,6 +868,8 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
     expect(wrapper.findAll('.ordered-list-add')).toHaveLength(0);
     // The list is still readable and each entry still removable from the panel.
     expect(wrapper.findAll('.ordered-list-entry')).toHaveLength(2);
+    // #935: notation refs leave the panel's own list empty, so the label comes from the offered choices.
+    expect(wrapper.findAll('.ordered-list-label').map(l => l.text())).toEqual(['Space 3', 'Space 3']);
     expect(wrapper.findAll('.ordered-list-remove')).toHaveLength(2);
     expect(wrapper.find('.done-button').exists()).toBe(true);
   });
@@ -1007,13 +1009,19 @@ describe('ActionPanel large element-id-anchored choice picks (#341)', () => {
     }));
   }
 
-  function mountPiecePick(choices: ChoiceWithRefs[]) {
+  function mountPiecePick(
+    choices: ChoiceWithRefs[],
+    pick: Record<string, unknown> = {},
+    overrides: Record<string, unknown> = {},
+    panelProps: Record<string, unknown> = {},
+  ) {
     const controller = stubActionController({
       currentAction: ref('recruit'),
-      currentPick: ref({ name: 'piece', type: 'choice', prompt: 'Choose a piece to recruit' }),
+      currentPick: ref({ name: 'piece', type: 'choice', prompt: 'Choose a piece to recruit', ...pick }),
       currentChoices: ref(choices),
+      ...overrides,
     });
-    return mountWithBoard(controller, createBoardInteraction());
+    return mountWithBoard(controller, createBoardInteraction(), panelProps);
   }
 
   it('renders one board handoff control instead of 3,720 buttons', () => {
@@ -1025,6 +1033,26 @@ describe('ActionPanel large element-id-anchored choice picks (#341)', () => {
     expect(handoff.attributes('aria-label')).toContain('3720 options');
     expect(wrapper.findAll('.choice-btn:not(.board-handoff-btn)')).toHaveLength(0);
     expect(wrapper.text()).toContain('Choose a piece to recruit');
+  });
+
+  // #935: id refs are not split out as anchored, so the Add buttons must be hidden by the handoff itself.
+  it('shows only the handoff, not every Add button, for an ordered list handed to the board', () => {
+    const wrapper = mountPiecePick(pieces(50), { orderedList: { min: 1, max: 4 } }, {
+      multiSelectDraft: ref({ selectionName: 'piece', values: ['p3'] }),
+    });
+
+    expect(wrapper.find('.board-handoff-btn').exists()).toBe(true);
+    expect(wrapper.findAll('.ordered-list-add')).toHaveLength(0);
+    expect(wrapper.find('.ordered-list-label').text()).toBe('Piece 3');
+    expect(wrapper.findAll('.ordered-list-remove')).toHaveLength(1);
+    expect(wrapper.find('.done-button').exists()).toBe(true);
+  });
+
+  it('lists every Add button for that ordered list while the board shows its error message (#1153)', () => {
+    const wrapper = mountPiecePick(pieces(50), { orderedList: { min: 1, max: 4 } }, {}, { boardFailed: true });
+
+    expect(wrapper.find('.board-handoff-btn').exists()).toBe(false);
+    expect(wrapper.findAll('.ordered-list-add')).toHaveLength(50);
   });
 
   it('keeps every button when two candidates name the same element', () => {
