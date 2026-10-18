@@ -421,6 +421,7 @@ function refusedCommit(reason: string): OpFailure {
 }
 
 const NO_GAME = 'No game is running. Reload this page to start one.';
+const STARTING = 'A game is starting. Try again once it has started.';
 const FOLLOW_EXPOSES = 'Someone else holds a seat, and following would show you their hand and let you play for them.';
 const FOLLOW_SHARED = `Follow active seat ended. ${FOLLOW_EXPOSES}`;
 
@@ -682,7 +683,7 @@ export class MultiplayerHost {
     // the genuinely no-game/mid-setup case (phase somehow 'playing' with no
     // live session), which the bare phase check alone would not catch.
     if (this.phase !== 'playing' || !this.session) {
-      this.send(clientId, { type: 'error', message: 'No game in progress to restart.' });
+      this.send(clientId, { type: 'error', message: this.starting ? STARTING : 'No game in progress to restart.' });
       return;
     }
     const refused = seed === undefined ? undefined : this.dealRefusal(seed);
@@ -729,7 +730,7 @@ export class MultiplayerHost {
   ): Promise<void> {
     // The start in flight would ignore this one, so a change here would describe a game that never starts (#886).
     if (this.starting) {
-      this.send(clientId, { type: 'error', message: 'A game is starting. Try again once it has started.' });
+      this.send(clientId, { type: 'error', message: STARTING });
       return;
     }
     let bundle: Record<string, unknown> = {};
@@ -840,7 +841,7 @@ export class MultiplayerHost {
     }
     // Enable.
     if (this.phase !== 'playing' || !this.session) {
-      this.send(clientId, { type: 'error', message: 'Start a game before enabling follow-active-seat.' });
+      this.send(clientId, { type: 'error', message: this.starting ? STARTING : 'Start a game before enabling follow-active-seat.' });
       return;
     }
     if (!this.clientSeat.has(clientId)) {
@@ -949,7 +950,7 @@ export class MultiplayerHost {
     msg: Extract<ClientInbound, { type: 'server_request' }>,
   ): Promise<void> {
     if (this.phase !== 'playing' || !this.session) {
-      this.send(clientId, { type: 'error', message: NO_GAME, requestId: msg.requestId ?? null });
+      this.send(clientId, { type: 'error', message: this.noGame(), requestId: msg.requestId ?? null });
       return;
     }
     if (this.stranded !== null) {
@@ -971,6 +972,11 @@ export class MultiplayerHost {
     } finally {
       this.requestOrigin.delete(hostRequestId);
     }
+  }
+
+  /** Why there is no game to act in: one is starting, or none is running. */
+  private noGame(): string {
+    return this.starting ? STARTING : NO_GAME;
   }
 
   /**
@@ -1001,7 +1007,7 @@ export class MultiplayerHost {
     msg: Extract<ClientInbound, { type: 'getState' }>,
   ): void {
     if (this.phase !== 'playing' || !this.session) {
-      this.send(clientId, { type: 'error', message: NO_GAME, requestId: msg.requestId ?? null });
+      this.send(clientId, { type: 'error', message: this.noGame(), requestId: msg.requestId ?? null });
       return;
     }
     const seat = this.seatOf(clientId, msg.requestId);
@@ -1236,6 +1242,8 @@ export class MultiplayerHost {
     this.disarm();
     this.window = null;
     this.session?.dispose();
+    // A disposed session answers moves with success and no new state (#1042).
+    this.session = null;
     const { playerCount } = this.opts;
     // BUG-12: "covered by a human" is `heldByHuman` — the SAME rule
     // `rebuildBotSeats` uses — never the weaker "has ever been claimed"
@@ -1341,8 +1349,6 @@ export class MultiplayerHost {
       await session.start();
     } catch (err) {
       this.starting = false;
-      // A restart disposed the old session above, so nothing is left to play (#880).
-      this.session = null;
       this.phase = 'lobby';
       const reason = err instanceof Error ? err.message : String(err);
       const message = `The game could not start (${reason}). Fix the problem, then reload this page to start a game.`;

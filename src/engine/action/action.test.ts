@@ -1165,7 +1165,8 @@ describe('Action Executor', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('"test" action could not be completed');
-      expect(result.error).toContain('Nothing was changed');
+      // Only the runner knows whether the action was rolled back, so only it may say so (#989).
+      expect(result.error).not.toContain('Nothing was changed');
     });
 
     it('always carries a PlayerFacingError\'s own message, which was written to be read', () => {
@@ -1186,6 +1187,25 @@ describe('Action Executor', () => {
       expect(executor.executeAction(threw, game.getPlayer(1)!, {}).partiallyApplied).toBe(true);
       // A clean refusal mutated nothing, so it carries no such mark.
       expect(executor.executeAction(refused, game.getPlayer(1)!, {}).partiallyApplied).toBeUndefined();
+    });
+
+    it('marks a crash in the rules, and only a crash, as rulesError (#847)', () => {
+      const player = game.getPlayer(1)!;
+      const threw = Action.create('threw').execute(() => {
+        throw new TypeError('boom');
+      });
+      const onSelectThrew = Action.create('onSelectThrew')
+        .chooseFrom('pick', { choices: ['a'], onSelect: () => { throw new TypeError('boom'); } })
+        .execute(() => {});
+      const playerFacing = Action.create('playerFacing').execute(() => {
+        throw new PlayerFacingError('Not today.');
+      });
+      const refused = Action.create('refused').execute(() => ({ success: false, error: 'no' }));
+
+      expect(executor.executeAction(threw, player, {}).rulesError).toBe(true);
+      expect(executor.executeAction(onSelectThrew, player, { pick: 'a' }).rulesError).toBe(true);
+      expect(executor.executeAction(playerFacing, player, {}).rulesError).toBeUndefined();
+      expect(executor.executeAction(refused, player, {}).rulesError).toBeUndefined();
     });
 
     it('refuses a `{ success: false }` that named no error, and says which field to set (#90)', () => {

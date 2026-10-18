@@ -15,7 +15,8 @@ import { ErrorCode, type ChoiceWithRefs, type ValidElement } from '../types/prot
 import { dueSeats, canSeatAct, availableActionsForSeat, flowBoundaryKey, toPublicFlowState } from '../engine/index.js';
 import type { BoundaryKeyState } from '../engine/index.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState, WarningEntry } from './types.js';
-import { validateTutorialDefinition, initialProgress, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
+import { validateTutorialDefinition, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
+import { learnerSeatRefusal, startTutorial } from '../engine/tutorial/start.js';
 import { executeDebugCommand, type GameCommand } from './debug-command.js';
 import {
   GameRunner,
@@ -35,7 +36,6 @@ import { PickHandler } from './pick-handler.js';
 import { missingFieldError } from './parse-executor-op.js';
 import { runnerFromSnapshot } from './runner-from-snapshot.js';
 import { declaredGameOptionsOf } from './game-option-selection.js';
-import { changing } from '../engine/element/state-version.js';
 import {
   offerFollowUp,
   buildPlayerState,
@@ -138,7 +138,8 @@ export type ExecutorOp =
    * A bot's search: the move one due bot seat among `seats` would make, found
    * WITHOUT making it. Read-only: the game is left as it was. A host makes the
    * move as an ordinary `action` op for that seat, once it has checked the game
-   * still stands where the search began (#635).
+   * still stands where the search began (#635). Host-internal:
+   * `SnapshotSessionHost.handleOp` refuses it (#1100).
    */
   | { type: 'botSuggest'; seats: Array<{ seat: number; level?: string }> };
 
@@ -167,13 +168,17 @@ export type DevOp =
   | { type: 'debugReorder'; cardId: number; targetIndex: number }
   | { type: 'debugTransfer'; cardId: number; targetDeckId: number; position: 'first' | 'last' }
   | { type: 'debugShuffle'; deckId: number }
+  // debugDeckView: the whole table with nothing hidden, so the Decks tab can
+  // list a face-down deck's real cards by the ids its edits send (#898).
+  | { type: 'debugDeckView' }
   /**
    * restoreEarlier: go back to a WHOLE earlier snapshot of this game that the
    * host kept itself -- a demo stepping back one move. Run against the CURRENT
    * snapshot, and a restore in every sense a client sees
    * (`restoreEarlierSnapshot`): the restore epoch advances, so seats drop stale
    * element ids and reset their animation watermark. Only the host composes it
-   * (`SnapshotSessionHost`'s demo); no client message maps to it.
+   * (`SnapshotSessionHost`'s demo, and the headless session's `arrange`); no
+   * client message maps to it.
    */
   | { type: 'restoreEarlier'; snapshot: unknown }
   | { type: 'startTutorial'; player: number }
@@ -278,6 +283,7 @@ const DEBUG_OP_TYPE_MAP: Record<DebugOpType, true> = {
   debugReorder: true,
   debugTransfer: true,
   debugShuffle: true,
+  debugDeckView: true,
 };
 export const DEBUG_OP_TYPES: ReadonlySet<Op['type']> = new Set(Object.keys(DEBUG_OP_TYPE_MAP) as DebugOpType[]);
 
@@ -294,6 +300,7 @@ export type ReadOnlyOpType =
   | 'debugActionTraces'
   | 'debugFlowState'
   | 'debugCustomData'
+  | 'debugDeckView'
   | 'botSuggest';
 
 const READ_ONLY_OP_TYPE_MAP: Record<ReadOnlyOpType, true> = {
@@ -304,6 +311,7 @@ const READ_ONLY_OP_TYPE_MAP: Record<ReadOnlyOpType, true> = {
   debugActionTraces: true,
   debugFlowState: true,
   debugCustomData: true,
+  debugDeckView: true,
   botSuggest: true,
 };
 export const READ_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set(Object.keys(READ_ONLY_OP_TYPE_MAP) as ReadOnlyOpType[]);
@@ -437,6 +445,8 @@ export interface OpSuccessFields {
   debugReorder: Record<never, never>;
   debugTransfer: Record<never, never>;
   debugShuffle: Record<never, never>;
+  /** The game as `toJSON()` writes it: every element, none hidden from any seat. */
+  debugDeckView: { view: ReturnType<Game['toJSON']> };
   restoreEarlier: Record<never, never>;
   startTutorial: Record<never, never>;
   exitTutorial: Record<never, never>;
@@ -1180,29 +1190,8 @@ async function handleHeatmapToggle(
 }
 
 /**
- * Why `player` cannot start a tutorial for `learnerSeat` on a table of
- * `playerCount` seats, or `undefined` when it can. Only the learner seat starts
- * a tutorial, and the learner seat must be one the table has.
- */
-function learnerSeatRefusal(learnerSeat: number, player: number, playerCount: number): string | undefined {
-  if (learnerSeat > playerCount) {
-    return `This tutorial is for seat ${learnerSeat}, but this table has ${playerCount} seats, so no one can start it. ` +
-      `Start it on a table of at least ${learnerSeat} players, or set the tutorial's learnerSeat to a seat this table has.`;
-  }
-  if (player !== learnerSeat) {
-    return `This tutorial is for seat ${learnerSeat}, so seat ${player} cannot start it. Start it from seat ${learnerSeat}.`;
-  }
-  return undefined;
-}
-
-/**
- * Start a tutorial for `op.player`: apply the tutorial's setup, put the flow
- * back at its beginning with the tutorial's learner seat to move (#546, #552),
- * activate the first step and run the auto-advance pump. Refused, with the
- * game left as it was, when `op.player` is not the learner seat or the table
- * has no such seat, when the game is over, or when the restarted flow still
- * would not prompt the learner: a tutorial the learner cannot act in is a dead
- * table.
+ * Start a tutorial for `op.player` through {@link startTutorial}, the same
+ * start `simulateTutorial` uses (#914). A refusal leaves the game as it was.
  */
 function handleStartTutorial(
   def: RunnerDef,
@@ -1221,42 +1210,12 @@ function handleStartTutorial(
   }
   // IN-01: validate definition BEFORE constructing the runner (fail-loud before expensive work).
   validateTutorialDefinition(def.tutorial);
-  const { learnerSeat } = def.tutorial;
-  const seatRefusal = learnerSeatRefusal(learnerSeat, op.player, gameOptions.playerCount);
+  const seatRefusal = learnerSeatRefusal(def.tutorial.learnerSeat, op.player, gameOptions.playerCount);
   if (seatRefusal) return errorResult(seatRefusal, 'protocol');
   const runner = runnerFromSnapshot(snapshot, def);
-  // #552: a finished game stays finished. The restart below could bring its
-  // flow back to life while its phase still read 'finished'.
-  if (runner.game.phase === 'finished') {
-    return errorResult(
-      'The tutorial cannot start because this game is over. Start a new game, then start the tutorial.',
-      'protocol',
-    );
-  }
-  // R-01: apply the tutorial's setup callback before setting initial progress so
-  // the board is in the deterministic tutorial position before any advanceWhen
-  // predicates fire. setup is optional; games without a preset omit it.
-  const setup = def.tutorial.setup;
-  if (setup) changing(runner.game._ctx, () => setup(runner.game as Game));
-  // #546, #552: a tutorial begins on the learner's turn, so restart the flow
-  // with the learner seat to move. This runs none of the game's opening again.
-  runner.game.restartFlowForTutorial(learnerSeat);
   // A refusal discards this runner, so the caller's snapshot is untouched.
-  const due = dueSeats(runner.getFlowState());
-  if (!due.includes(op.player)) {
-    const toMove = due.length > 0 ? `seat ${due.join(', ')} is` : 'no seat is';
-    return errorResult(
-      `The tutorial cannot start for seat ${op.player}: when the game restarts for the tutorial, ` +
-        `${toMove} to move, not seat ${op.player}. The game's flow gives the opening turn to a set seat, ` +
-        `so set the tutorial's learnerSeat to the seat that moves first.`,
-      'protocol',
-    );
-  }
-  runner.game.tutorialProgress.set(op.player, initialProgress(def.tutorial));
-  // CR-01: pump auto-advance immediately after setting initial progress so steps
-  // with always-true advanceWhen predicates (e.g. capture-tip) advance before
-  // the learner's first action, matching the simulate-tutorial parity invariant.
-  autoAdvanceTutorial(runner.game as Game, op.player);
+  const refusal = startTutorial(runner.game as Game, def.tutorial, op.player);
+  if (refusal) return errorResult(refusal, 'protocol');
   return { success: true, ...stateEnvelope(runner, gameOptions.playerCount) };
 }
 
@@ -1519,6 +1478,19 @@ function handleDebugCustomData(
   };
 }
 
+function handleDebugDeckView(
+  def: RunnerDef,
+  gameOptions: { playerCount: number; [key: string]: unknown },
+  snapshot: GameStateSnapshot,
+): OpResultFor<'debugDeckView'> {
+  const runner = runnerFromSnapshot(snapshot, def);
+  return {
+    success: true,
+    ...stateEnvelope(runner, gameOptions.playerCount),
+    view: (runner.game as Game).toJSON(),
+  };
+}
+
 function handleDebugRewind(
   def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
@@ -1736,6 +1708,8 @@ async function runOp(
         return handleDebugFlowState(def, gameOptions, snap, pendingState, op);
       case 'debugCustomData':
         return handleDebugCustomData(def, gameOptions, snap, op);
+      case 'debugDeckView':
+        return handleDebugDeckView(def, gameOptions, snap);
       case 'debugRewind':
         return handleDebugRewind(def, gameOptions, snap, op);
       case 'restoreEarlier':

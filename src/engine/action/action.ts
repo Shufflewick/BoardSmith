@@ -94,17 +94,16 @@ function failedExecute(actionName: string, error: unknown): ActionResult {
   // An engine policy refusal was written to be read — its message IS the
   // actionable next step. Anything else is an arbitrary runtime error, and
   // goes no further than this log.
-  const generic = `${rulesErrorSentence(actionName)} Nothing was changed.`;
+  const generic = rulesErrorSentence(actionName);
   // A PlayerFacingError's text was written to be read, so it always travels.
   // Anything else travels only in a positively-labelled dev/test environment,
   // where the reader is the author who needs it and there is no player to leak
   // to. In production it goes no further than the log above.
-  const message = error instanceof PlayerFacingError
-    ? error.message
-    : isDevThrowEnabled()
-      ? `${generic} (${error instanceof Error ? error.message : String(error)})`
-      : generic;
-  return { success: false, error: message, partiallyApplied: true };
+  if (error instanceof PlayerFacingError) return { success: false, error: error.message, partiallyApplied: true };
+  const message = isDevThrowEnabled()
+    ? `${generic} (${error instanceof Error ? error.message : String(error)})`
+    : generic;
+  return { success: false, error: message, partiallyApplied: true, rulesError: true };
 }
 
 /**
@@ -1225,6 +1224,8 @@ export class ActionExecutor {
     args: Record<string, unknown>,
     options?: PerformOptions,
   ): { args: Record<string, unknown> } | { error: string } {
+    // A held follow-up's args over the client's.
+    args = { ...args, ...options?.followUp?.args };
     // A follow-up is offered by the chain, not its condition. The condition
     // sees no picks, as availability and each pick-by-pick step see it.
     const resolved = this.resolveNonPickArgs(action, args, this.game);
@@ -1289,8 +1290,7 @@ export class ActionExecutor {
       return this.executeThroughSelectionSteps(action, player, args, options);
     }
 
-    // A held follow-up's args over the client's.
-    const checked = this.checkSubmission(action, player, { ...args, ...options?.followUp?.args }, options);
+    const checked = this.checkSubmission(action, player, args, options);
     if ('error' in checked) return { success: false, error: checked.error };
     const resolvedArgs = checked.args;
 
@@ -1320,6 +1320,7 @@ export class ActionExecutor {
           return {
             success: false,
             error: `onSelect for selection '${selection.name}' in action '${action.name}' threw: ${message}`,
+            rulesError: true,
           };
         }
       }

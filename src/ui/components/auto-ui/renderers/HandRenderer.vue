@@ -18,7 +18,7 @@ import { isHiddenPlaceholder } from '../../../../engine/element/hidden-placehold
 import { seatDisplayName } from '../../../../engine/element/seat-defaults.js';
 import type { PresentationOverlay } from '../presentation.js';
 import { GAME_CONTEXT_KEYS, injectPlayerSeat } from '../../../composables/useGameContext.js';
-import { getSpriteStyle, type ImageInfo } from '../../../utils/image.js';
+import { getSpriteStyle, parseImageInfo, type ImageInfo } from '../../../utils/image.js';
 
 // ---------------------------------------------------------------------------
 // Local GameElement interface — dependency-free, mirrors auto-ui-helpers.ts
@@ -146,16 +146,8 @@ const childBackImage = computed((): ImageInfo | null => {
   // Check visible children for back image
   for (const child of (props.element.children ?? [])) {
     const images = child.attributes?.$images as Record<string, unknown> | undefined;
-    if (images?.back) {
-      const back = images.back;
-      if (typeof back === 'string') return { type: 'url', src: back };
-      if (typeof back === 'object' && back !== null) {
-        const s = back as { sprite?: string; x?: number; y?: number; width?: number; height?: number };
-        if (s.sprite && typeof s.x === 'number' && typeof s.y === 'number') {
-          return { type: 'sprite', sprite: s.sprite, x: s.x, y: s.y, width: s.width ?? 238, height: s.height ?? 333 };
-        }
-      }
-    }
+    const back = parseImageInfo(images?.back);
+    if (back) return back;
   }
   return defaultBackImage?.value ?? null;
 });

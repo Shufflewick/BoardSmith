@@ -16,8 +16,9 @@
 import { ref, computed, watch, inject, nextTick, useId, onMounted, onBeforeUnmount } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
-import { formatActionName, getDisplayFromValue, labelOfPick, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
+import { choiceBoardTarget, formatActionName, getDisplayFromValue, labelOfPick, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
 import { createActionMutators } from '../../composables/actionMutators.js';
+import { escapeRegExp } from '../../../utils/regexp.js';
 import type {
   UseActionControllerReturn,
   EnrichedPickMetadata,
@@ -1193,6 +1194,19 @@ function restoreFocusAfterRemoval(index: number): void {
   )?.focus();
 }
 
+/**
+ * What a choice's control reads out: its display, plus its board square when it has one (#934)
+ * and the display does not already name that square as a whole word (#1105).
+ */
+function choiceSpokenName(choice: ChoiceWithRefs): string {
+  // The square the board picks, not the source every destination of one piece shares (#1084).
+  const notation = choiceBoardTarget(choice)?.notation;
+  if (!notation) return choice.display;
+  // A leading '-' is part of a coordinate, so "1,2" is not named by "-1,2".
+  const named = new RegExp(`(?<![\\w-])${escapeRegExp(notation)}(?!\\w)`).test(choice.display);
+  return named ? choice.display : `${choice.display} (${notation})`;
+}
+
 /** What one built entry reads as: the label of the button that adds it. */
 function orderedEntryDisplay(value: unknown): string {
   return labelOfPick(value, filteredChoices.value);
@@ -1828,7 +1842,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               v-for="choice in filteredChoices"
               :key="choiceValueKey(choice.value)"
               class="choice-btn ordered-list-add"
-              :aria-label="`Add ${choice.display}`"
+              :aria-label="`Add ${choiceSpokenName(choice)}`"
               v-disabled-reason="orderedListAddDisabledReason(choice.disabled)"
               :aria-disabled="isDisabled(orderedListAddDisabledReason(choice.disabled)) || undefined"
               @click="addListEntry(currentPick.name, choice.value)"
@@ -1873,6 +1887,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               <input
                 type="checkbox"
                 :checked="isMultiSelectValueSelected(choice.value)"
+                :aria-label="choiceSpokenName(choice)"
                 :aria-disabled="isDisabled(multiSelectDisabledReason(choice.disabled, choice.value)) || undefined"
                 @click="toggleMultiSelectValue(currentPick.name, choice.value, choice.display)"
               />
@@ -2086,7 +2101,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             :key="choiceValueKey(choice.value)"
             class="choice-btn anchored-choice-btn"
             v-disabled-reason="choice.disabled"
-            :aria-label="`${choice.display}${choice.refs?.find(r => r.ref.notation)?.ref.notation ? ' (' + choice.refs.find(r => r.ref.notation)!.ref.notation + ')' : ''}`"
+            :aria-label="choiceSpokenName(choice)"
             @click="executeChoice(currentPick.name, choice)"
             @mouseenter="handleChoiceHover(choice)"
             @mouseleave="handleChoiceLeave"

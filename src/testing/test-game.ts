@@ -522,10 +522,12 @@ export class TestGame<G extends Game = Game> {
    * between the two subjects.
    *
    * Nothing here names an identity field. It is the full `toJSON()` of every
-   * element, and what counts as identity is decided by the gate.
+   * element, and what counts as identity is decided by the gate. The pile sits
+   * outside the tree, so its elements are added on their own (#1063).
    */
   unredactedElements(): readonly ElementJSON[] {
-    return this.game.all(GameElement).map((element) => element.toJSON());
+    const { game } = this;
+    return [game, ...game.all(GameElement), ...game.pile.all(GameElement)].map((element) => element.toJSON());
   }
 
   /**

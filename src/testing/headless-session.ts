@@ -236,12 +236,15 @@ export function createHeadlessSession<G extends Game = Game>(
      * Set up a position between moves: `edit` changes a copy of the game, and
      * the table then restores that copy as a debug restore does, so every
      * seat is published the new position and the next move plays from it.
+     * When the position is a bot seat's turn, the bot has moved before this resolves.
      */
     async arrange(edit: (game: G) => void): Promise<void> {
       const runner = runnerFromSnapshot(currentSnapshot(), { ...def, randomness: 'allowed' });
       edit(runner.game as G);
-      const result = await host.handleOp(1, { type: 'restoreEarlier', snapshot: runner.getSnapshot() });
+      const result = await host.restoreEarlier(runner.getSnapshot());
       if (!result.success) throw new Error(`The arranged position could not be restored: ${result.error}`);
+      // The restore wakes the bots like a move does; a test reads the table after they replied.
+      await host.settled();
     },
   };
 }

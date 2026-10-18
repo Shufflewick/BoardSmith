@@ -101,7 +101,7 @@ describe('FlyingCardsOverlay', () => {
     it('draws a sprite face as a positioned background, not an <img>', () => {
       overlay([flyingCard('a', {
         rank: 'A', suit: 'H',
-        faceImage: { sprite: '/cards.png', x: 238, y: 0, width: 238, height: 333 },
+        faceImage: { sprite: '/cards.png', x: 238, y: 0, width: 238, height: 333, sheetWidth: 3094, sheetHeight: 1665 },
       })]);
       expect(document.querySelector('.card-front .card-sprite')).not.toBeNull();
       expect(document.querySelector('.card-front img')).toBeNull();

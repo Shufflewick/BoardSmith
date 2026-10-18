@@ -27,7 +27,7 @@ const VIEW = {
       id: 2,
       className: 'MainDeck',
       name: 'Draw',
-      $type: 'deck',
+      attributes: { $type: 'deck' },
       children: [
         { id: 10, className: 'Card', name: 'Ace', notation: 'AS' },
         { id: 11, className: 'Card', name: 'King' },
@@ -69,6 +69,7 @@ interface Vm {
   fetchHistory: () => Promise<void>;
   logEntries: unknown[];
   logsError: string | null;
+  logsLoading: boolean;
   fetchLogs: () => Promise<void>;
   selectedActionIndex: number | null;
   historicalState: unknown;
@@ -85,46 +86,11 @@ interface Vm {
   requestRewind: (i: number) => void;
   cancelRewind: () => void;
   confirmRewind: () => Promise<void>;
-  deckManipulationError: string | null;
-  moveCardToTop: (id: number) => Promise<void>;
-  reorderCard: (id: number, target: number) => Promise<void>;
-  transferCard: (id: number, deck: number, pos?: 'first' | 'last') => Promise<void>;
-  shuffleDeck: (id: number) => Promise<void>;
-  moveCardUp: (deck: unknown, id: number) => void;
-  moveCardDown: (deck: unknown, id: number) => void;
-  transferDialogOpen: boolean;
-  transferDialogCardId: number | null;
-  transferDialogTargetDeckId: number | null;
-  transferDialogPosition: 'first' | 'last';
-  openTransferDialog: (cardId: number, sourceDeckId: number) => void;
-  closeTransferDialog: () => void;
-  confirmTransfer: () => Promise<void>;
-  availableTargetContainers: Array<{ id: number }>;
-  groupedElements: Record<string, Array<{ id: number }>>;
-  filteredElementGroups: Record<string, Array<{ id: number }>>;
-  elementSearchQuery: string;
-  selectedElementId: number | null;
-  selectedElement: unknown;
-  selectElement: (el: { id: number }) => void;
-  getElementDisplayName: (el: unknown) => string;
-  discoveredDecks: Array<{ id: number; name: string; cards: Array<{ id: number }> }>;
-  discoveredCardContainers: Array<{ id: number; cardCount: number }>;
-  filteredDecks: Array<{ id: number }>;
-  deckSearchQuery: string;
-  isDeckExpanded: (id: number) => boolean;
-  toggleDeck: (id: number) => void;
-  selectDeckCard: (deckId: number, cardId: number) => void;
-  selectedCard: unknown;
-  getCardDisplayName: (card: unknown) => string;
   customDebugData: unknown;
+  fetchCustomDebug: () => Promise<void>;
   restartConfirming: boolean;
   handleRestartClick: () => void;
   switchToPlayer: (p: number) => void;
-  formatActionName: (n: string) => string;
-  formatActionArgs: (a: Record<string, unknown>) => string;
-  formatTimestamp: (t?: number) => string;
-  formatConditionValue: (v: unknown) => string;
-  cardMatchesSearch: (card: unknown, q: string) => boolean;
   expandedPaths: Set<string>;
   toggleExpand: (p: string) => void;
   expandAll: () => void;
@@ -135,8 +101,6 @@ interface Vm {
   downloadState: () => void;
   copyAvailableActions: () => Promise<void>;
   copyUnavailableActions: () => Promise<void>;
-  copyDeckToClipboard: (d: unknown) => Promise<void>;
-  copyElementToClipboard: (e: unknown) => Promise<void>;
   formattedState: string;
   showRawState: boolean;
   panelExpanded: boolean;
@@ -273,18 +237,6 @@ describe('DebugPanel action traces', () => {
     await vm.fetchActionTraces();
     expect(vm.tracesError).toBe('socket gone');
     expect(vm.tracesLoading).toBe(false);
-  });
-
-  it('ignores a second fetch while one is in flight', async () => {
-    let release: (v: Record<string, unknown>) => void = () => {};
-    const { platformRequest, vm } = track(
-      mountPanel(() => new Promise<Record<string, unknown>>((r) => { release = r; }))
-    );
-    const first = vm.fetchActionTraces();
-    await vm.fetchActionTraces();
-    expect(callsFor(platformRequest, 'debug:action-traces')).toHaveLength(1);
-    release({ success: true, traces: [] });
-    await first;
   });
 
   it('partitions traces into truly-available, flow-restricted and failed, each sorted', async () => {
@@ -784,4 +736,127 @@ describe('DebugPanel clipboard and download', () => {
     expect(navigator.clipboard.writeText).toHaveBeenLastCalledWith(JSON.stringify([traces[1]], null, 2));
   });
 
+});
+
+describe('DebugPanel refetch while a fetch is in flight (#901, #1073)', () => {
+  /** A host whose answers to `op` wait until the test releases or rejects them, in any order. */
+  function deferredHost(op: string) {
+    const pending: Array<(answer: Record<string, unknown>) => void> = [];
+    const failures: Array<(err: Error) => void> = [];
+    const handler: Op = (sent) =>
+      sent === op
+        ? new Promise((resolve, reject) => { pending.push(resolve); failures.push(reject); })
+        : Promise.resolve({ success: true });
+    return { handler, pending, failures };
+  }
+
+  it('asks for the traces again and shows the newest answer, whatever order they arrive in', async () => {
+    const { handler, pending } = deferredHost('debug:action-traces');
+    const { vm } = track(mountPanel(handler));
+    const first = vm.fetchActionTraces();
+    const second = vm.fetchActionTraces();
+    expect(pending).toHaveLength(2);
+
+    pending[1]!({ success: true, traces: [{ actionName: 'newest', available: true, selections: [] }] });
+    await second;
+    pending[0]!({ success: true, traces: [{ actionName: 'older', available: true, selections: [] }] });
+    await first;
+    expect((vm.actionTraces as Array<{ actionName: string }>).map((t) => t.actionName)).toEqual(['newest']);
+    expect(vm.tracesLoading).toBe(false);
+  });
+
+  it('asks for the logs again and shows the newest answer, whatever order they arrive in', async () => {
+    const { handler, pending } = deferredHost('debug:logs');
+    const { vm } = track(mountPanel(handler));
+    const first = vm.fetchLogs();
+    const second = vm.fetchLogs();
+    expect(pending).toHaveLength(2);
+
+    pending[1]!({ success: true, entries: [{ severity: 'info', message: 'newest', source: 's', timestamp: 2 }] });
+    await second;
+    pending[0]!({ success: true, entries: [{ severity: 'info', message: 'older', source: 's', timestamp: 1 }] });
+    await first;
+    expect((vm.logEntries as Array<{ message: string }>).map((e) => e.message)).toEqual(['newest']);
+    expect(vm.logsLoading).toBe(false);
+  });
+
+  it('asks for the flow state again and shows the newest answer, whatever order they arrive in', async () => {
+    const { handler, pending } = deferredHost('debug:flow-state');
+    const { vm } = track(mountPanel(handler));
+    const first = vm.fetchFlowState();
+    const second = vm.fetchFlowState();
+    expect(pending).toHaveLength(2);
+
+    pending[1]!({ success: true, flowDebugInfo: { description: 'newest' } });
+    await second;
+    pending[0]!({ success: true, flowDebugInfo: { description: 'older' } });
+    await first;
+    expect(vm.flowStateInfo).toEqual({ description: 'newest' });
+  });
+
+  it('asks for the custom debug data again and shows the newest answer, whatever order they arrive in', async () => {
+    const { handler, pending } = deferredHost('debug:custom-data');
+    const { vm } = track(mountPanel(handler));
+    const first = vm.fetchCustomDebug();
+    const second = vm.fetchCustomDebug();
+    expect(pending).toHaveLength(2);
+
+    pending[1]!({ success: true, customDebug: { seed: 2 } });
+    await second;
+    pending[0]!({ success: true, customDebug: { seed: 1 } });
+    await first;
+    expect(vm.customDebugData).toEqual({ seed: 2 });
+  });
+
+  it('leaves the traces error empty when an older request fails after the newest succeeded', async () => {
+    const { handler, pending, failures } = deferredHost('debug:action-traces');
+    const { vm } = track(mountPanel(handler));
+    const first = vm.fetchActionTraces();
+    const second = vm.fetchActionTraces();
+
+    pending[1]!({ success: true, traces: [] });
+    await second;
+    failures[0]!(new Error('older failed'));
+    await first;
+    expect(vm.tracesError).toBeNull();
+  });
+
+  it('leaves the logs error empty when an older request fails after the newest succeeded', async () => {
+    const { handler, pending, failures } = deferredHost('debug:logs');
+    const { vm } = track(mountPanel(handler));
+    const first = vm.fetchLogs();
+    const second = vm.fetchLogs();
+
+    pending[1]!({ success: true, entries: [] });
+    await second;
+    failures[0]!(new Error('older failed'));
+    await first;
+    expect(vm.logsError).toBeNull();
+  });
+
+  it('keeps the newest flow state when an older request fails late', async () => {
+    const { handler, pending, failures } = deferredHost('debug:flow-state');
+    const { vm } = track(mountPanel(handler));
+    const first = vm.fetchFlowState();
+    const second = vm.fetchFlowState();
+
+    pending[1]!({ success: true, flowDebugInfo: { description: 'newest' } });
+    await second;
+    failures[0]!(new Error('older failed'));
+    await first;
+    expect(vm.flowStateInfo).toEqual({ description: 'newest' });
+  });
+
+  it('keeps the newest custom debug data when an older request fails late', async () => {
+    const { handler, pending, failures } = deferredHost('debug:custom-data');
+    const { vm } = track(mountPanel(handler));
+    const first = vm.fetchCustomDebug();
+    const second = vm.fetchCustomDebug();
+
+    pending[1]!({ success: true, customDebug: { seed: 2 } });
+    await second;
+    failures[0]!(new Error('older failed'));
+    await first;
+    expect(vm.customDebugData).toEqual({ seed: 2 });
+  });
 });

@@ -69,7 +69,7 @@ The rules `boardsmith build` publishes carry the whole list on their `gameDefini
 - `ExecutorOp` - The ops a platform executor runs: `start`, `action`, `expireSeat`, `selectionStep`, `resolveChoices`, `cancelAction`, `undo`, `botSuggest`
 - `DevOp` - Ops `executeOp` runs only inside `boardsmith dev` (the `debug*` family, `restoreEarlier`, tutorial, `hint`, `heatmapToggle`)
 - `HostOp` - Lifecycle ops `SnapshotSessionHost.handleOp` handles itself and `executeOp` never sees (`demoStart`, `demoStop`, `demoControl`, `convertSeatToBot`)
-- `Op` - `ExecutorOp | DevOp | HostOp`, what `handleOp` takes
+- `Op` - `ExecutorOp | DevOp | HostOp`, what `handleOp` takes. `handleOp` refuses the host-only ops `start`, `restoreEarlier` and `botSuggest` (#1100, #1102): the host sends them itself through `executeOp`, and `SnapshotSessionHost.start()`, `SnapshotSessionHost.restoreEarlier(snapshot)` and `SnapshotSessionHost.runBotTurns()` are the host's entry points for them. A restore drops every seat's half-made picks and hints, as a rewind does
 - `OpResultFor<T>` - What an op of type `T` answers: its own success shape, or the shared `OpFailure`
 - `OpResult` - What any op answers; narrow it with `OpResultFor`
 - `OpFailure` - Every refusal: `{ success: false, error, errorCode?, category }`
@@ -173,7 +173,9 @@ changes nothing at the table.
 
 To set up a position between moves, use `arrange`. It edits a copy and then
 restores that copy as a debug restore does, so every seat is published the new
-position and the next move plays from it.
+position and the next move plays from it. Every seat's half-made picks and
+hints are dropped, as a rewind drops them. When that position is a bot seat's
+turn, the bot has moved before `arrange` resolves, as with `send`.
 
 ```typescript
 // `round` stands for any property your game class declares; the copy is typed

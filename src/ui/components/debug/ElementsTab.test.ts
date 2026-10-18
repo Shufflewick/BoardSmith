@@ -19,7 +19,7 @@ const VIEW = {
       id: 2,
       className: 'MainDeck',
       name: 'Draw',
-      $type: 'deck',
+      attributes: { $type: 'deck' },
       children: [
         { id: 10, className: 'Card', name: 'Ace', notation: 'AS' },
         { id: 11, className: 'Card', name: 'King' },
@@ -114,5 +114,27 @@ describe('ElementsTab', () => {
       view: { id: 90, className: 'Board', children: [{ id: 91, className: 'Token' }] },
     });
     expect(Object.keys(vm.groupedElements).sort()).toEqual(['Board', 'Token']);
+  });
+});
+
+describe('ElementsTab selection when the element leaves the view (#901)', () => {
+  const withoutPiece = { ...VIEW, children: VIEW.children.filter((child) => child.id !== 4) };
+
+  it('clears the selection and the board highlight once the selected element is gone', async () => {
+    const { wrapper, vm } = track(mountElements());
+    vm.selectElement(vm.groupedElements.Piece[0]);
+    await wrapper.setProps({ view: withoutPiece });
+    expect(vm.selectedElementId).toBeNull();
+    expect(wrapper.emitted('highlight-element')).toEqual([[4], [null]]);
+  });
+
+  it('keeps the selection while the tab is not on screen, and clears it if the element is gone when it returns', async () => {
+    const { wrapper, vm } = track(mountElements());
+    vm.selectElement(vm.groupedElements.Piece[0]);
+    await wrapper.setProps({ view: undefined });
+    expect(vm.selectedElementId).toBe(4);
+    await wrapper.setProps({ view: withoutPiece });
+    expect(vm.selectedElementId).toBeNull();
+    expect(wrapper.emitted('highlight-element')).toEqual([[4], [null]]);
   });
 });

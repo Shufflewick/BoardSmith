@@ -750,6 +750,7 @@ export function buildPlayerState(
     // still eligible to see/undo its own actions.
     actionsThisTurn: canUndoEligible ? actionsThisTurn : 0,
     messages: playerView.messages.length > 0 ? playerView.messages : undefined,
+    messageOffset: playerView.messageOffset,
     // Unconditional: how many restores this timeline has had -- see
     // PlayerGameState.restoreEpoch.
     restoreEpoch: runner.restoreEpoch,

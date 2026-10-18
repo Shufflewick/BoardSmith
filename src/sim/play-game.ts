@@ -6,7 +6,7 @@
  * @module
  */
 import type { Game, FlowState } from '../engine/index.js';
-import { dueSeats, availableActionsForSeat } from '../engine/index.js';
+import { dueSeats, availableActionsForSeat, followUpForSeat } from '../engine/index.js';
 import { refuseChangeSince } from '../engine/element/state-version.js';
 import { encodeValue } from '../engine/element/game-element.js';
 import { endOfGameRecords, type GameMetrics, type MetricRecord, type MetricSink } from '../engine/metrics.js';
@@ -96,8 +96,9 @@ function offeredSeats(flowState: FlowState): Array<{ seat: number; actionNames: 
 }
 
 /**
- * The seats that can act right now, each with its ENABLED actions, plus why
- * every refused action is refused.
+ * The seats that can act right now (with an ENABLED action or a held
+ * follow-up, #911), each with its enabled actions, plus why every refused
+ * action is refused.
  *
  * An action's `.disabled()` rule (and a tutorial gate) keeps it in the flow's
  * available actions so the panel can grey it out and say why, while the
@@ -116,7 +117,7 @@ function enabledSeats(
     const enabled = actionNames.filter((name) => !(name in disabled));
     const blocked = actionNames.filter((name) => name in disabled);
     refused.push(...blocked.map((name) => `player ${seat}'s '${name}' (${disabled[name].replace(/\.$/, '')})`));
-    if (enabled.length > 0) seats.push({ seat, actionNames: enabled });
+    if (enabled.length > 0 || followUpForSeat(flowState, seat)) seats.push({ seat, actionNames: enabled });
   }
   return { seats, refused };
 }
