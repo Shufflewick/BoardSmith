@@ -177,7 +177,6 @@ interface ChildPair {
   index: number;
 }
 
-
 /**
  * Pair two seats' children of the same parent (#267).
  *
