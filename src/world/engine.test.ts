@@ -2921,6 +2921,13 @@ describe("ShufflewickPub #411/#413 -- one body for every seat that holds the sam
       .toHaveLength(AUDIENCE.length);
   });
 
+  /** The room-one node anywhere in a seat's body. */
+  const roomIn = (node: unknown): ElementJSON | undefined => {
+    if (typeof node !== "object" || node === null) return undefined;
+    if ((node as ElementJSON).name === "room-one") return node as ElementJSON;
+    return Object.values(node).map(roomIn).find((found) => found !== undefined);
+  };
+
   it("sends a granted token nested below a hidden one inside the room, and nothing of the one between (#961)", async () => {
     const engine = scopedWorld((room) => {
       room.contentsHidden();
@@ -2934,14 +2941,25 @@ describe("ShufflewickPub #411/#413 -- one body for every seat that holds the sam
       if (seat.refused) throw new Error(`${player} was refused`);
       return answered.bodies[seat.at];
     };
-    const roomIn = (node: unknown): ElementJSON | undefined => {
-      if (typeof node !== "object" || node === null) return undefined;
-      if ((node as ElementJSON).name === "room-one") return node as ElementJSON;
-      return Object.values(node).map(roomIn).find((found) => found !== undefined);
-    };
     expect(roomIn(bodyOf("p1"))!.children!.map((child) => child.name)).toEqual(["nested-gem"]);
     expect(JSON.stringify(bodyOf("p1"))).not.toContain("nested-crate");
     expect(roomIn(bodyOf("p2"))!.children).toBeUndefined();
+  });
+
+  it("puts a nested grant after a count-only room's placeholders, which still number its own children (#961)", async () => {
+    const engine = scopedWorld((room) => {
+      room.contentsCountOnly();
+      room.create(Token, "nested-crate").create(Token, "nested-gem").addVisibleTo(1);
+    });
+
+    const answered = await engine.viewsFor(["p1"]);
+
+    const seat = answered.seats[0]!;
+    if (seat.refused) throw new Error("p1 was refused");
+    const room = roomIn(answered.bodies[seat.at])!;
+    expect(room.childCount).toBe(2);
+    expect(room.children!.map((child) => child.name)).toEqual([undefined, undefined, "nested-gem"]);
+    expect(room.children!.slice(0, 2).every((child) => child.id < 0)).toBe(true);
   });
 
   it("tells no seat who else was granted the room", async () => {

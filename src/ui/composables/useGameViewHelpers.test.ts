@@ -285,6 +285,11 @@ describe('getElementCount', () => {
     expect(getElementCount(DECK)).toBe(40);
   });
 
+  it("prefers childCount over children, which may also carry a granted card nested below a child (#961)", () => {
+    const deck = { ...element(10, 'Deck', {}, [element(-1, 'Box'), element(-2, 'Box'), card(11, 'A', 'S')]), childCount: 2 };
+    expect(getElementCount(deck)).toBe(2);
+  });
+
   it('is 0 for an empty element with no childCount', () => {
     expect(getElementCount(element(9, 'Empty'))).toBe(0);
   });
@@ -292,11 +297,6 @@ describe('getElementCount', () => {
   it('is 0 for a missing element', () => {
     expect(getElementCount(null)).toBe(0);
     expect(getElementCount(undefined)).toBe(0);
-  });
-
-  it('prefers the visible children when both are present', () => {
-    const partly = { ...HAND_ONE, childCount: 99 } as GameViewElement;
-    expect(getElementCount(partly)).toBe(2);
   });
 });
 

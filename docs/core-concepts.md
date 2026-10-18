@@ -236,10 +236,14 @@ hidden, count-only or owner-only zone, such as a card in a box in a
 placeholders (a `contentsHidden()` zone has none), and the containers between
 are not sent at all: no id, name or count, so the seat cannot tell which child
 holds it. A card directly in the zone keeps its own place among the
-placeholders (#758). `isVisibleTo(seat)` follows the same rule, so it is true
-exactly when the seat's view carries the element. Outside a concealed zone,
-nothing below an element hidden from the seat is sent, granted or not. A
-shuffle clears every grant below what it moves (#962).
+placeholders (#758). Below a hidden child, only an element's OWN grant counts:
+a rule it inherits from a zone in between (`contentsVisible()`,
+`hideContentsFrom(3)` on a box in the deck) sends nothing, since that box is
+hidden from the seat. A granted element there carries only its own granted
+contents, and a grant below it arrives inside it. `isVisibleTo(seat)` follows
+the same rule, so it is true exactly when the seat's view carries the element.
+Outside a concealed zone, nothing below an element hidden from the seat is
+sent, granted or not. A shuffle clears every grant below what it moves (#962).
 
 **A pick offers a hidden element the way the board shows it (#715).** A
 `chooseElement` or `chooseFrom` candidate the asking seat cannot see goes out

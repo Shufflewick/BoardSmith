@@ -2192,24 +2192,39 @@ export function hidesContents(element: GameElement, seat: number): boolean {
 }
 
 /**
+ * Whether the element's OWN setting shows it to the seat (#961): an explicit
+ * visibility that allows the seat, or the seat in its own `addVisibleTo`
+ * grant. A rule inherited from a zone above it never counts.
+ */
+export function ownGrantAllows(element: GameElement, seat: number): boolean {
+  const own = element._visibility;
+  if (!own) return false;
+  return own.explicit ? canPlayerSee(own, seat, element.getEffectiveOwner()?.seat) : own.addPlayers?.includes(seat) === true;
+}
+
+/**
  * The deepest of `element` and its ancestors that the seat's view carries, or
  * undefined when not even the topmost is. The one rule `redactTreeForSeat`
- * applies, walked from the top: below a visible element whose contents are
- * shown, a hidden element closes everything under it; below a concealed zone,
- * a hidden element stays hidden and anything under it whose own visibility
- * allows the seat is carried, inside that zone (#961).
+ * applies, walked from the top. Where contents are shown, a hidden element
+ * closes everything under it. A concealed zone's child is carried when its
+ * visibility allows the seat (#758). Below a hidden child of a concealed zone,
+ * only an element's own grant carries it (#961), since an open zone rule
+ * there sits on a container the seat cannot see.
  */
 export function deepestRevealed(element: GameElement, seat: number): GameElement | undefined {
   const chain: GameElement[] = [];
   for (let at: GameElement | undefined = element; at; at = at._t.parent) chain.unshift(at);
   let revealed: GameElement | undefined;
-  let concealing = false;
+  let state: 'open' | 'in-concealed-zone' | 'below-hidden' = 'open';
   for (const at of chain) {
-    if (ownVisibilityAllows(at, seat)) {
+    const allowed = state === 'below-hidden' ? ownGrantAllows(at, seat) : ownVisibilityAllows(at, seat);
+    if (allowed) {
       revealed = at;
-      concealing = hidesContents(at, seat);
-    } else if (!concealing) {
+      if (state !== 'below-hidden') state = hidesContents(at, seat) ? 'in-concealed-zone' : 'open';
+    } else if (state === 'open') {
       break;
+    } else {
+      state = 'below-hidden';
     }
   }
   return revealed;

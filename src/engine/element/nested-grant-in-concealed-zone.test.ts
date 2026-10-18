@@ -6,6 +6,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { Game, Piece, Player, Deck, Hand, Space, type ElementJSON, type GameElement, type GameOptions } from '../index.js';
+import type { VisibilityState } from './visibility.js';
 import { isHiddenPlaceholder } from './hidden-placeholder.js';
 import { nameableFor } from './concealed-refs.js';
 
@@ -126,7 +127,7 @@ describe('a granted element nested below a concealed child (#961)', () => {
     expect(JSON.stringify(game.toJSONForPlayer(3))).not.toMatch(/outer|inner/);
   });
 
-  it('sends a granted container with its own visible contents, and nothing below a grant twice', () => {
+  it("sends a granted container with only its own granted contents, as an open zone rule below a hidden one grants nothing", () => {
     const { game, deck } = setup();
     deck.contentsHidden();
     const crate = deck.create(Box, 'crate');
@@ -134,11 +135,41 @@ describe('a granted element nested below a concealed child (#961)', () => {
     chest.showToAll();
     chest.contentsVisible();
     const coin = chest.create(Card, 'coin');
+    const ring = chest.create(Card, 'ring');
+    ring.addVisibleTo(2);
 
     const children = zoneIn(game, 2, 'deck').children!;
     expect(children.map((c) => c.id)).toEqual([chest.id]);
-    expect(children[0]!.children!.map((c) => c.id)).toEqual([coin.id]);
-    expect(coin.isVisibleTo(2)).toBe(true);
+    expect(children[0]!.children!.map((c) => c.id)).toEqual([ring.id]);
+    expect('childCount' in children[0]!).toBe(false);
+    expect(coin.isVisibleTo(2)).toBe(false);
+    expect(ring.isVisibleTo(2)).toBe(true);
+    expect(nameableFor(coin, game, 2)).toBe(chest);
+  });
+
+  it("does not send a card with no grant of its own below a hidden box whose contents are visible", () => {
+    const { game, deck } = setup();
+    const crate = deck.create(Box, 'crate');
+    crate.contentsVisible();
+    const card = crate.create(Card, 'card');
+
+    for (const seat of SEATS) {
+      expect(idsIn(game.toJSONForPlayer(seat))).not.toContain(card.id);
+      expect(card.isVisibleTo(seat ?? -1)).toBe(false);
+    }
+  });
+
+  it("does not send another seat a card in seat 1's hand below a box that hides its contents only from seat 3", () => {
+    const { game, hand } = setup();
+    const crate = hand.create(Box, 'crate');
+    crate.hideContentsFrom(3);
+    const card = crate.create(Card, 'card');
+
+    for (const seat of [2, 3, null]) {
+      expect(idsIn(game.toJSONForPlayer(seat))).not.toContain(card.id);
+      expect(card.isVisibleTo(seat ?? -1)).toBe(false);
+    }
+    expect(card.isVisibleTo(1)).toBe(true);
   });
 
   it('is not sent below an individually hidden card outside any concealed zone', () => {
@@ -189,6 +220,39 @@ describe('a granted element nested below a concealed child (#961)', () => {
   });
 });
 
+/** Whether a visibility rule on `element` shows the seat, written out apart from the engine's. */
+function shows(rule: VisibilityState, element: GameElement, seat: number): boolean {
+  if (rule.addPlayers?.includes(seat)) return true;
+  if (rule.exceptPlayers?.includes(seat)) return false;
+  return rule.mode === 'all' || (rule.mode === 'owner' && element.getEffectiveOwner()?.seat === seat);
+}
+
+/** Whether an ancestor of `element` is shown to the seat as a placeholder or not at all. */
+function hiddenAncestor(element: GameElement, seat: number): boolean {
+  for (let at = element._t.parent; at; at = at._t.parent) {
+    if (!shows(at.getEffectiveVisibility(), at, seat)) return true;
+  }
+  return false;
+}
+
+/** Whether `element`'s parent is a zone whose contents the seat may not see. */
+function inConcealedZone(element: GameElement, seat: number): boolean {
+  const parent = element._t.parent;
+  const zone = parent && 'getZoneVisibility' in parent ? (parent as Box).getZoneVisibility() : undefined;
+  return zone !== undefined && !shows(zone, parent!, seat);
+}
+
+/** Whether the element's own setting, not one it inherits, shows it to the seat. */
+function ownGrant(element: GameElement, seat: number): boolean {
+  const own = element._visibility;
+  return own !== undefined && (own.explicit ? shows(own, element, seat) : own.addPlayers?.includes(seat) === true);
+}
+
+function forEachNode(node: ElementJSON, visit: (node: ElementJSON) => void): void {
+  visit(node);
+  for (const child of node.children ?? []) forEachNode(child, visit);
+}
+
 describe('isVisibleTo matches the seat view on random trees (#961)', () => {
   /** A seeded generator, so a failure names a tree that can be rebuilt. */
   function random(seed: number): () => number {
@@ -236,11 +300,22 @@ describe('isVisibleTo matches the seat view on random trees (#961)', () => {
       grow(game, 1);
       for (const seat of SEATS) {
         const view = game.toJSONForPlayer(seat);
+        const ids = new Set(idsIn(view));
         for (const element of elements) {
-          expect(element.isVisibleTo(seat ?? -1), `${element.name} for seat ${seat}, seed ${seed}`).toBe(
-            revealedIn(view, element),
-          );
+          const where = `${element.name} for seat ${seat}, seed ${seed}`;
+          expect(element.isVisibleTo(seat ?? -1), where).toBe(revealedIn(view, element));
+          // Checked without the rule under test: a hidden ancestor lets through only the element's own grant.
+          if (hiddenAncestor(element, seat ?? -1) && !ownGrant(element, seat ?? -1)) expect(ids.has(element.id), where).toBe(false);
+          // A hidden container keeps its real id only as a placeholder in a parent whose contents the seat sees.
+          const hidden = !shows(element.getEffectiveVisibility(), element, seat ?? -1);
+          if (hidden && (inConcealedZone(element, seat ?? -1) || hiddenAncestor(element, seat ?? -1))) {
+            expect(ids.has(element.id), where).toBe(false);
+          }
         }
+        forEachNode(view, (node) => {
+          const element = game.getElementById(node.id);
+          if (node.childCount !== undefined) expect(node.childCount).toBe(element!._t.children.length);
+        });
       }
     }
   });

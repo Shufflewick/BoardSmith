@@ -1,7 +1,7 @@
 {
   "revision": 244,
   "surfaceHash": "01f74ea669294216",
-  "payloadHash": "0e2d27db00239080",
+  "payloadHash": "fd5c5b50c786a8f1",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
@@ -1892,9 +1892,9 @@
       "revision": 244,
       "date": "2026-10-18",
       "surfaceHash": "01f74ea669294216",
-      "payloadHash": "0e2d27db00239080",
+      "payloadHash": "fd5c5b50c786a8f1",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "A seat's view now carries an element whose own visibility shows it to that seat even when it sits below a hidden child of a hidden, count-only or owner-only zone (#961): it arrives as a child of that zone, after the zone's placeholders, with the containers between left out. isVisibleTo(seat) is true for such an element and message text names it for that seat (a granted card directly in a concealed zone too). A count-only or owner-only zone's children may outnumber its direct children; childCount is unchanged."
+      "summary": "A seat's view now carries an element whose own grant (addVisibleTo, showOnlyTo, showToAll) shows it to that seat even when it sits below a hidden child of a hidden, count-only or owner-only zone (#961): it arrives as a child of its nearest sent ancestor (the zone, after its placeholders), the containers between are left out, and below such a hidden child only an element's own grant counts, never a zone rule it inherits. isVisibleTo(seat) and message text follow the same rule (a granted card directly in a concealed zone is now named by message text too). A count-only or owner-only zone's children may outnumber its direct children; childCount is unchanged, and getElementCount now prefers it."
     }
   ]
 }

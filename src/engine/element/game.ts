@@ -10,6 +10,7 @@ import {
   isPlayerElement,
   isPlayerIdentityAttribute,
   lookUpId,
+  ownGrantAllows,
   ownVisibilityAllows,
   PILE_BRANCH,
   WITHHELD_PILE_BRANCH,
@@ -4813,15 +4814,22 @@ export class Game<
     // is past the safe integers and neighbouring placeholders round to one.
     let nextPlaceholderId = -1;
 
-    // #758, #961: below a concealed zone, each element whose own grant reaches this seat goes out whole,
-    // the hidden ones above it left out; `deepestRevealed` is the same rule for `isVisibleTo`.
-    const grantedWithin = (element: GameElement, json: ElementJSON): ElementJSON[] =>
+    // #961: below a hidden child of a concealed zone only an element's own grant
+    // sends it, as a child of its nearest sent ancestor, and the hidden ones
+    // between are left out. `deepestRevealed` is the same rule for `isVisibleTo`.
+    const grantedBelowHidden = (element: GameElement, json: ElementJSON): ElementJSON[] =>
       (json.children ?? []).flatMap((childJson, i) => {
         const child = element._t.children[i]!;
-        return ownVisibilityAllows(child, visibilityPosition)
-          ? [filterElement(childJson, child)]
-          : grantedWithin(child, childJson);
+        return ownGrantAllows(child, visibilityPosition)
+          ? [filterElement(childJson, child, true)]
+          : grantedBelowHidden(child, childJson);
       });
+
+    // `json` sent with only the given children, and no `children` key when there are none.
+    const withOnly = (json: ElementJSON, children: ElementJSON[]): ElementJSON => {
+      const { children: _omittedRealChildren, ...rest } = json;
+      return children.length > 0 ? { ...rest, children } : rest;
+    };
 
     // A CONCEALED ZONE'S CHILDREN AS ANONYMOUS PLACEHOLDERS, for the count-only
     // and owner-only zone branches below. Each keeps its class and only the
@@ -4832,7 +4840,8 @@ export class Game<
     // count-only CONTAINER branch keeps its distinct shape (no __hidden, has
     // childCount). CR-02 (159): original -> placeholder id is recorded in
     // `idRemap`, so an element-typed flow variable pointing at an anonymized
-    // child can still be relinked to its placeholder on restore.
+    // child can still be relinked to its placeholder on restore. A child whose
+    // visibility reaches this seat goes out whole in its place (#758).
     //
     // A granted element below one of the children follows all the placeholders
     // (#961), so it tells nothing of which child holds it or where.
@@ -4845,7 +4854,7 @@ export class Game<
           placeholders.push(filterElement(childJson, childElement));
           continue;
         }
-        nested.push(...grantedWithin(childElement, childJson));
+        nested.push(...grantedBelowHidden(childElement, childJson));
         const syntheticId = nextPlaceholderId--;
         idRemap?.set(childElement.id, syntheticId);
         placeholders.push({
@@ -4857,7 +4866,7 @@ export class Game<
       return [...placeholders, ...nested];
     };
 
-    const filterElement = (json: ElementJSON, element: GameElement): ElementJSON => {
+    const filterElement = (json: ElementJSON, element: GameElement, belowHidden = false): ElementJSON => {
       const visibility = element.getEffectiveVisibility();
 
       // Handle count-only mode: show count but not contents
@@ -5024,6 +5033,9 @@ export class Game<
         };
       }
 
+      // #961: what this granted element holds is sent only by its own grants, as a hidden ancestor's open rule grants nothing.
+      if (belowHidden) return withOnly(ownJson, grantedBelowHidden(element, json));
+
       // Check zone visibility for children (if this is a Space)
       const zoneVisibility = hasZoneVisibility(element) ? element.getZoneVisibility() : undefined;
 
@@ -5055,14 +5067,16 @@ export class Game<
           // ownJson (not json) still carries the container's own attributes,
           // whitelist-redacted per CR-01 -- but ownJson.children is the RAW,
           // unfiltered child array (json.children), so it must be explicitly
-          // destructured OUT here. Setting `children: undefined` is not
+          // destructured OUT (`withOnly`). Setting `children: undefined` is not
           // enough: the `in` operator (and Object.keys) still sees an
           // explicitly-undefined key, which the true-concealment contract
           // (no `children` key at all) forbids.
-          const { children: _omittedRealChildren, ...concealedJson } = ownJson;
-          // #758: a granted child is still sent, alone, so the zone's size stays secret.
-          const granted = grantedWithin(element, json);
-          return granted.length > 0 ? { ...concealedJson, children: granted } : concealedJson;
+          // #758, #961: granted elements are still sent, alone, so the zone's size stays secret.
+          const granted = (json.children ?? []).flatMap((childJson, i) => {
+            const child = element._t.children[i]!;
+            return ownVisibilityAllows(child, visibilityPosition) ? [filterElement(childJson, child)] : grantedBelowHidden(child, childJson);
+          });
+          return withOnly(ownJson, granted);
         } else if (zoneVisibility.mode === 'count-only') {
           // Count-only mode: create anonymized placeholders for children.
           // This allows the UI to render the correct number and type of elements
