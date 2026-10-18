@@ -929,14 +929,6 @@ export async function validateBundleSize(cwd: string, worldMode: boolean): Promi
   return { name: 'Bundle Size', passed: true, message: '', details: notes };
 }
 
-/** Files in `dir` with the given extension, or none if `dir` does not exist. */
-function listFilesWithExtension(dir: string, extension: string): string[] {
-  if (!existsSync(dir)) return [];
-  return readdirSync(dir)
-    .filter((entry) => entry.endsWith(extension))
-    .map((entry) => join(dir, entry));
-}
-
 /**
  * One issue per offending file: the first `"/<publicDir>/"` reference it
  * contains is enough to tell the author the path style is wrong.
@@ -1086,9 +1078,9 @@ export async function validateAssetPaths(cwd: string): Promise<ValidationResult>
   // `sprite: '/cards/deck-sprite.svg'` (ShufflewickPub #260).
   const filesToScan = publicDirs.length > 0
     ? [
-        ...listFilesWithExtension(join(cwd, 'dist', 'ui', 'assets'), '.js'),
-        ...listFilesWithExtension(join(cwd, 'dist', 'rules'), '.js'),
-        ...listFilesWithExtension(join(cwd, 'data'), '.json'),
+        ...listFiles(join(cwd, 'dist', 'ui', 'assets'), { sourceTree: false, suffixes: ['.js'] }),
+        ...listFiles(join(cwd, 'dist', 'rules'), { sourceTree: false, suffixes: ['.js'] }),
+        ...listFiles(join(cwd, 'data'), { sourceTree: false, suffixes: ['.json'] }),
       ]
     : [];
 
@@ -1098,10 +1090,7 @@ export async function validateAssetPaths(cwd: string): Promise<ValidationResult>
   // project has a `public/` tree: a game whose artwork lives entirely off-bundle
   // has no `public/` directory at all, which is exactly the case this catches.
   const remoteIssues = findUndeclaredImageSources(cwd, [
-    // RECURSIVELY, unlike the absolute-path scan above: Vite emits the built UI
-    // into `dist/ui/assets/`, so a flat listing of `dist/ui` opens the entry
-    // HTML and misses every stylesheet and chunk the game's artwork is actually
-    // named in.
+    // All of `dist/ui`, not only `assets/`: the entry HTML can name artwork too.
     ...listFiles(join(cwd, 'dist', 'ui'), { sourceTree: false, suffixes: ['.js', '.css', '.html'] }),
     ...listFiles(join(cwd, 'dist', 'rules'), { sourceTree: false, suffixes: ['.js'] }),
     ...listFiles(join(cwd, 'data'), { sourceTree: false, suffixes: ['.json'] }),

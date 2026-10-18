@@ -1200,6 +1200,21 @@ describe('remote image sources must be declared before they are used (#370)', ()
   });
 });
 
+describe('absolute asset paths are found in subfolders too (#1111)', () => {
+  it.each([
+    ['data/sub/x.json', '{ "image": "/cards/ace.png" }'],
+    ['dist/ui/assets/chunks/board.js', 'const src = "/cards/ace.png";'],
+  ])('reports one in %s', async (rel, contents) => {
+    const cwd = tempTree('bs-abs-paths-');
+    mkdirSync(join(cwd, 'public', 'cards'), { recursive: true });
+    mkdirSync(join(cwd, rel, '..'), { recursive: true });
+    writeFileSync(join(cwd, rel), contents);
+    const result = await validateAssetPaths(cwd);
+    expect(result.passed).toBe(false);
+    expect((result.details ?? []).join('\n')).toContain(`${rel}: absolute path "/cards/..." found`);
+  });
+});
+
 /**
  * #423: engine r112 changed `walkDeclaration`, and a game whose test called it
  * the old way failed validate with only the compiler's words. The failure now
