@@ -1634,6 +1634,9 @@ export class ActionExecutor {
   isActionAvailable(action: ActionDefinition, player: Player): boolean {
     if (!this.conditionHolds(action, player)) return false;
 
+    // Its own `.disabled()` reason keeps it offered, greyed, even with no enabled pick, so the reason reaches the player (#1090).
+    if (this.game.getActionDisabledReason(action, player) !== null) return true;
+
     // Check if there's at least one valid path through all selections.
     // Pass action.name so tutorial gate disabled reasons are included when
     // filtering enabled choices — hasValidSelectionPath checks disabled===false.
@@ -1683,7 +1686,7 @@ export class ActionExecutor {
     // whether the action is offered is decided by the very walk that offers it,
     // so a trace can never name a reason the offer does not act on.
     this.traceSelectionPath(action.selections, player, trace.selections);
-    trace.available = this.hasValidSelectionPath(action.selections, player, {}, 0, action.name);
+    trace.available = this.isActionAvailable(action, player);
     return trace;
   }
 
