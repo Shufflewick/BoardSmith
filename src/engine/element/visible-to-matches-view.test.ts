@@ -3,8 +3,9 @@
  * element below something hidden from the seat is never sent, so it is not
  * visible to that seat, whatever its own visibility says.
  */
-import { describe, it, expect } from 'vitest';
-import { Game, Piece, Player, Space, type ElementJSON, type GameElement, type GameOptions } from '../index.js';
+import { describe, it, expect, vi } from 'vitest';
+import { outermostConcealer } from './concealed-refs.js';
+import { Game, Piece, Player, Space, type ElementJSON, GameElement, type GameOptions } from '../index.js';
 import { isHiddenPlaceholder } from './hidden-placeholder.js';
 
 class Card extends Piece<TestGame> {}
@@ -27,7 +28,7 @@ function revealedIn(game: TestGame, seat: number | null, element: GameElement): 
 }
 
 type Own = 'none' | 'hideFromAll' | 'showToAll';
-type Zone = 'none' | 'contentsHidden';
+type Zone = 'none' | 'contentsHidden' | 'contentsCountOnly';
 
 function applyOwn(element: GameElement, own: Own): void {
   if (own !== 'none') element[own]();
@@ -57,7 +58,7 @@ describe('isVisibleTo matches the seat view (#1062)', () => {
   });
 
   const owns: Own[] = ['none', 'hideFromAll', 'showToAll'];
-  const levels = owns.flatMap((own) => (['none', 'contentsHidden'] as Zone[]).map((zone) => ({ own, zone })));
+  const levels = owns.flatMap((own) => (['none', 'contentsHidden', 'contentsCountOnly'] as Zone[]).map((zone) => ({ own, zone })));
   const cases = levels.flatMap((outer) =>
     levels.flatMap((middle) => levels.flatMap((inner) => owns.map((leaf) => ({ boxes: [outer, middle, inner], leaf })))),
   );
@@ -70,7 +71,7 @@ describe('isVisibleTo matches the seat view (#1062)', () => {
     for (const [i, level] of boxes.entries()) {
       const box: Box = parent.create(Box, `box${i}`);
       applyOwn(box, level.own);
-      if (level.zone === 'contentsHidden') box.contentsHidden();
+      if (level.zone !== 'none') box[level.zone]();
       elements.push(box);
       parent = box;
     }
@@ -79,7 +80,7 @@ describe('isVisibleTo matches the seat view (#1062)', () => {
     return { game, elements: [...elements, card] };
   }
 
-  it('agrees for every seat across hideFromAll, contentsHidden and showToAll, three spaces deep', () => {
+  it('agrees for every seat across hideFromAll, contentsHidden, contentsCountOnly and showToAll, three spaces deep', () => {
     for (const c of cases) {
       const { game, elements } = build(c);
       for (const element of elements) {
@@ -89,6 +90,42 @@ describe('isVisibleTo matches the seat view (#1062)', () => {
           );
         }
       }
+    }
+  });
+});
+
+describe("a seat view checks each element's own visibility once (#1123)", () => {
+  /** Ten nested boxes holding a card. */
+  function deepTree(): { game: TestGame; card: Card } {
+    const game = new TestGame({ playerCount: 2 });
+    let parent: Game | Box = game;
+    for (let depth = 0; depth < 10; depth++) parent = parent.create(Box, `box${depth}`);
+    return { game, card: parent.create(Card, 'card') };
+  }
+
+  it("building one seat's view of a deep tree reads each element's visibility a fixed number of times, whatever its depth", () => {
+    const { game } = deepTree();
+    const rule = vi.spyOn(GameElement.prototype, 'getEffectiveVisibility');
+    try {
+      game.toJSONForPlayer(1);
+      // The game, its two players, the ten boxes and the card: twice each, once
+      // for the view's own read and once for the visibility rule.
+      expect(new Set(rule.mock.contexts).size).toBe(14);
+      expect(rule).toHaveBeenCalledTimes(28);
+    } finally {
+      rule.mockRestore();
+    }
+  });
+
+  it("finding what conceals a deep element reads each ancestor's visibility once", () => {
+    const { card } = deepTree();
+    const rule = vi.spyOn(GameElement.prototype, 'getEffectiveVisibility');
+    try {
+      expect(outermostConcealer(card, 1)).toBeUndefined();
+      // The game root and the ten boxes, once each.
+      expect(rule).toHaveBeenCalledTimes(11);
+    } finally {
+      rule.mockRestore();
     }
   });
 });

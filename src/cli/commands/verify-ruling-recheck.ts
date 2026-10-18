@@ -16,7 +16,7 @@ import {
   atomicWriteFile,
   exists,
   ledgerFilePath,
-  listRunIds,
+  latestRunId,
   missingRunMessage,
   readLedgerOrThrow,
   RUN_ID_RE,
@@ -241,8 +241,8 @@ export async function resolveFreshTranscription(
 
   let resolvedRunId = runId;
   if (resolvedRunId === undefined) {
-    const runIds = await listRunIds(projectDir);
-    if (runIds.length === 0) {
+    resolvedRunId = await latestRunId(projectDir);
+    if (resolvedRunId === undefined) {
       return {
         scopeLimited: true,
         reason:
@@ -251,7 +251,6 @@ export async function resolveFreshTranscription(
         missingPath: relative(projectDir, join(designRulebookDir(projectDir), '.verify')),
       };
     }
-    resolvedRunId = runIds[runIds.length - 1];
   }
 
   const stagingDir = stagingSlicesDir(projectDir, resolvedRunId);

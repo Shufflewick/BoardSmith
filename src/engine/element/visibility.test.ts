@@ -282,12 +282,15 @@ describe('redactVisibilityForSeat', () => {
     }
   });
 
-  it('keeps a count-only zone count-only for the reader it denies', () => {
-    // `canPlayerSee` refuses 'hidden' and 'count-only' alike, but the
-    // serializer shows a count for one and nothing at all for the other, and
-    // the children were written from the LIVE mode before this ran.
-    const full = state({ mode: 'count-only', exceptPlayers: [1] });
-    expect(redactVisibilityForSeat(full, 1)).toEqual({ mode: 'count-only', explicit: true });
+  it.each([
+    ['all', 'count-only'],
+    ['owner', 'count-only'],
+    ['count-only', 'count-only'],
+    ['hidden', 'hidden'],
+  ] as const)("tells a reader denied by a '%s' zone that it is '%s' (#1108)", (mode, told) => {
+    // A denied reader is sent one placeholder per child unless the zone is 'hidden', which sends nothing.
+    const full = state({ mode, exceptPlayers: [1] });
+    expect(redactVisibilityForSeat(full, 1)).toEqual({ mode: told, explicit: true });
   });
 
   it('carries the explicit flag through, so inheritance still resolves', () => {

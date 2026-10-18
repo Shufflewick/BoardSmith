@@ -13,12 +13,13 @@ import { computed, inject, type Ref, type ComputedRef } from 'vue';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
+import CardBack from './CardBack.vue';
 import { resolvePresentation } from '../presentation.js';
 import { isHiddenPlaceholder } from '../../../../engine/element/hidden-placeholder.js';
 import { seatDisplayName } from '../../../../engine/element/seat-defaults.js';
 import type { PresentationOverlay } from '../presentation.js';
 import { GAME_CONTEXT_KEYS, injectPlayerSeat } from '../../../composables/useGameContext.js';
-import { getSpriteStyle, parseImageInfo, type ImageInfo } from '../../../utils/image.js';
+import { parseImageInfo, type ImageInfo } from '../../../utils/image.js';
 
 // ---------------------------------------------------------------------------
 // Local GameElement interface — dependency-free, mirrors auto-ui-helpers.ts
@@ -296,20 +297,13 @@ void isBoardSelected;
           />
         </template>
         <template v-else-if="element.childCount">
-          <div
+          <CardBack
             v-for="i in Math.ceil(element.childCount / 2)"
             :key="i"
-            class="hand-card card-back-small"
-            :class="{ 'has-image': !!childBackImage }"
+            :image="childBackImage"
+            class="hand-card"
             :style="{ '--card-index': i - 1, '--card-count': Math.ceil(element.childCount / 2), '--row': 'back' }"
-          >
-            <img v-if="childBackImage?.type === 'url'" :src="childBackImage.src" class="card-image" alt="Card back" />
-            <div
-              v-else-if="childBackImage?.type === 'sprite'"
-              class="card-image card-sprite"
-              :style="getSpriteStyle(childBackImage)"
-            ></div>
-          </div>
+          />
         </template>
       </div>
 
@@ -325,20 +319,13 @@ void isBoardSelected;
           />
         </template>
         <template v-else-if="element.childCount">
-          <div
+          <CardBack
             v-for="i in (handNeedsTwoRows ? Math.floor(element.childCount / 2) : element.childCount)"
             :key="i"
-            class="hand-card card-back-small"
-            :class="{ 'has-image': !!childBackImage }"
+            :image="childBackImage"
+            class="hand-card"
             :style="{ '--card-index': i - 1, '--card-count': handNeedsTwoRows ? Math.floor(element.childCount / 2) : element.childCount, '--row': 'front' }"
-          >
-            <img v-if="childBackImage?.type === 'url'" :src="childBackImage.src" class="card-image" alt="Card back" />
-            <div
-              v-else-if="childBackImage?.type === 'sprite'"
-              class="card-image card-sprite"
-              :style="getSpriteStyle(childBackImage)"
-            ></div>
-          </div>
+          />
         </template>
       </div>
     </div>
@@ -532,39 +519,5 @@ void isBoardSelected;
 .hand-cards-wrapper.has-fan .hand-card:hover {
   transform: rotate(0deg) translateY(-15px) scale(1.05);
   z-index: 100 !important;
-}
-
-/* Hidden card placeholder — shared card-back token (THEME-05) */
-.card-back-small {
-  width: var(--card-w);
-  height: var(--card-h);
-  background: var(--bsg-card-back);
-  border-radius: var(--bsg-r-sm);
-  border: 1px solid var(--bsg-line-2);
-  box-shadow: var(--bsg-shadow-sm);
-  flex-shrink: 0;
-}
-
-.card-back-small.has-image {
-  background: transparent;
-  border: none;
-}
-
-.card-image {
-  width: var(--card-w);
-  height: var(--card-h);
-  border-radius: var(--bsg-r-sm);
-  box-shadow: var(--bsg-shadow-sm);
-  flex-shrink: 0;
-  object-fit: contain;
-}
-
-.card-sprite {
-  width: var(--card-w);
-  height: var(--card-h);
-  border-radius: var(--bsg-r-sm);
-  box-shadow: var(--bsg-shadow-sm);
-  flex-shrink: 0;
-  background-repeat: no-repeat;
 }
 </style>

@@ -332,6 +332,24 @@ describe('verifyRunRecordCommand / verifyRunStatusCommand — ledger', () => {
     expect(status.runId).toBe(newer.runId);
   });
 
+  it('with no --run-id, a later run-id folder with no RUN.md is not the default run, and is named for removal once (#1003)', async () => {
+    const project = await liveProject();
+    const real = await verifyRunInitCommand({ project, runId: '2026-01-01T00-00-00Z', json: true });
+    const fake = '2099-01-01T00-00-00Z';
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook', '.verify', fake), { recursive: true });
+    const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const status = await verifyRunStatusCommand({ project, json: true });
+      expect(status.runId).toBe(real.runId);
+      const notices = stderr.mock.calls.map((c) => String(c[0])).filter((m) => m.includes(fake));
+      expect(notices).toHaveLength(1);
+      expect(notices[0]).toContain(`${DESIGN_DIR}/rulebook/.verify/${fake}/ has no RUN.md`);
+      expect(notices[0]).toMatch(/Remove that folder; it is not a verify run/);
+    } finally {
+      stderr.mockRestore();
+    }
+  });
+
   it('L7: a torn final in-fence line reads as that unit NOT recorded (crash safety), with a warning, no throw', async () => {
     const { project, runId } = await initAndStage();
     await verifyRunRecordCommand({ project, runId, unit: '03-setup', slice: '03-setup.md', json: true });

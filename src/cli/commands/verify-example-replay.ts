@@ -1420,6 +1420,8 @@ const UNEXECUTABLE_REASONS: Readonly<Record<string, string>> = Object.freeze({
     'the example depends on component state the game does not model yet.',
   'image-derived-indeterminate':
     'the example comes from an image and is not specific enough to assert an outcome from.',
+  'missing-api-declaration':
+    'the translation payload did not carry the declaration of an API symbol or type this example needs.',
 });
 
 const TRANSLATOR_VERDICT_HINTS: readonly string[] = ['agrees', 'disagrees', 'unexecutable'];
