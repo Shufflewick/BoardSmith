@@ -29,6 +29,7 @@ import {
   type SeatOp,
 } from '../../session/index.js';
 import { record, getEntries } from './log-capture.js';
+import { pageText } from './socket-message.js';
 import type { WarningEntry } from '../../types/protocol.js';
 
 /** The structured warnings a successful op carried (a pick or a choices query), or none. */
@@ -474,7 +475,7 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
       const message = err instanceof Error ? err.message : String(err);
       // The message, which is already extracted above for the ring buffer and
       // the response: the error object printed its stack too (#240).
-      console.error(`[boardsmith dev] server_request '${wireOp}' failed:`, message);
+      console.error(`[boardsmith dev] server_request '${wireOp}' failed: ${pageText(message)}`);
       record('error', message, wireOp);
       opts.postServerResponse(seat, requestId, { success: false, error: message });
     }
