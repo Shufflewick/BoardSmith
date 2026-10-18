@@ -34,7 +34,7 @@ interface GameHistoryProps {
   /**
    * The line number of `messages[0]`: how many of this seat's lines the game
    * has pruned from the front of its log (#903). Without it a sliding window
-   * reads as a different log on every trim. A world's tail leaves it unset.
+   * reads as a different log on every trim.
    */
   messageOffset?: number;
   /**
