@@ -6,7 +6,8 @@ import type { ChildProcess } from 'node:child_process';
  */
 export function collectOutput(child: ChildProcess): () => string {
   let output = '';
-  child.stdout?.on('data', (chunk) => (output += chunk));
-  child.stderr?.on('data', (chunk) => (output += chunk));
+  // A stream's own decoder holds a character split across chunks until its last byte arrives.
+  child.stdout?.setEncoding('utf-8').on('data', (chunk: string) => (output += chunk));
+  child.stderr?.setEncoding('utf-8').on('data', (chunk: string) => (output += chunk));
   return () => output;
 }
