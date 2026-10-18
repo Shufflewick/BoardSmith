@@ -207,6 +207,8 @@ interface VerifyContext {
   mutantCache: () => Promise<MutantCache>;
   /** What changed in the execution context since the run began, or undefined while nothing has (#932). */
   contextChange: () => Promise<string | undefined>;
+  /** Saves the mutant outcomes found so far, while the tree is still clean at the commit the run began on (#940). */
+  saveMutantProgress: () => Promise<void>;
   earlier: ReadonlyMap<VerifyCheckName, VerifyCheckResult>;
   log: (line: string) => void;
   /**
@@ -468,6 +470,7 @@ async function mutationCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
     cache: await ctx.mutantCache(),
     log: ctx.log,
     contextChange: ctx.contextChange,
+    saveProgress: ctx.saveMutantProgress,
   });
   return mutationVerdict(since, run);
 }
@@ -611,6 +614,10 @@ export async function runVerify(options: {
     if (cache.unavailable !== undefined) log(`${cache.unavailable}; every mutant runs.`);
     return cache;
   }));
+  const saveMutantProgress = async () => {
+    if (mutantCache === undefined) return;
+    if (cleanAt(await checkoutState(projectDir), head)) await (await mutantCache).save();
+  };
   let typeCheck: Promise<TypeCheckRun> | undefined;
   const checks = await runChecks(options.checks ?? VERIFY_CHECKS, {
     projectDir,
@@ -621,6 +628,7 @@ export async function runVerify(options: {
     changed: await changedSince(projectDir, base.commit),
     mutantCache: openCache,
     contextChange,
+    saveMutantProgress,
     log,
   }, options.chunk === undefined ? VERIFY_CHECK_NAMES : CHUNK_VERIFY_CHECK_NAMES);
 
@@ -628,12 +636,11 @@ export async function runVerify(options: {
   if (change !== undefined) {
     throw new Error(
       `What the tests run with changed while \`boardsmith verify\` ran: ${change}. Checks after the change ran against ` +
-        'different code, so no result was recorded and no mutant outcome was saved. Run `boardsmith verify` again in a ' +
+        'different code, so no result was recorded and no mutant outcome found after the change was saved. Run `boardsmith verify` again in a ' +
         'checkout whose BoardSmith and installed packages stay unchanged until it finishes, such as a separate BoardSmith worktree nothing else edits.',
     );
   }
-  const after = await checkoutState(projectDir);
-  const cleanTree = !('problem' in after) && after.clean && after.commit === head;
+  const cleanTree = cleanAt(await checkoutState(projectDir), head);
   // The cache keys outcomes by the commit's files; a run whose files changed under it keeps none.
   if (cleanTree && mutantCache !== undefined) await (await mutantCache).save();
   const result = buildVerifyResult({
@@ -645,6 +652,11 @@ export async function runVerify(options: {
     boardsmithCommit,
   });
   return { result, path: await recordResult(projectDir, result) };
+}
+
+/** Whether the checkout is clean and still at `head`, the commit the run verifies. */
+function cleanAt(state: Awaited<ReturnType<typeof checkoutState>>, head: string): boolean {
+  return !('problem' in state) && state.clean && state.commit === head;
 }
 
 /** The closing line: whether the run counts, and if not, what to do. */

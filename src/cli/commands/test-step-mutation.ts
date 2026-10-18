@@ -1185,6 +1185,8 @@ interface DiffMutationInput {
   log: (line: string) => void;
   /** What changed in the execution context since the run began, checked before each mutant runs, so a mixed run stops early (#932). */
   contextChange?: () => Promise<string | undefined>;
+  /** Saves the outcomes found so far, called after each mutant that ran in an unchanged context, so an interrupted run keeps them (#940). */
+  saveProgress?: () => Promise<void>;
 }
 
 interface DiffMutationResult {
@@ -1308,7 +1310,6 @@ async function tallyMutants(
     const label = `mutant ${i + 1}/${mutants.length}: ${mutant.file}:${mutant.line} ${mutant.description}`;
     input.log(stored === undefined ? label : `${label} (reused: ${stored})`);
     const outcome = stored ?? (await runUnlessContextChanged(input, run!, mutant, i));
-    if (stored === undefined && outcome !== 'timed-out') input.cache.set(mutant, outcome);
     summary.mutants++;
     summary[COUNTED[outcome]]++;
     if (outcome === 'survived') await countSurvivor(input, mutant, review, result);
@@ -1317,11 +1318,24 @@ async function tallyMutants(
   return result;
 }
 
-/** Runs `mutant`, unless what the tests run with changed since the run began: then the run is mixed and stops here (#932). */
+/**
+ * Runs `mutant` and keeps its outcome, unless what the tests run with changed since the run began,
+ * before it ran or while it ran: then the run is mixed and stops here, keeping nothing of it (#932, #940).
+ * A timed-out mutant is not kept.
+ */
 async function runUnlessContextChanged(input: DiffMutationInput, run: GreenRunner, mutant: LocatedMutant, done: number): Promise<DiffOutcome> {
+  await requireSameContext(input, `after ${done} mutants had run or been reused`);
+  const outcome = await runMutant(run, mutant);
+  if (outcome === 'timed-out') return outcome;
+  await requireSameContext(input, `while mutant ${done + 1} ran, so its outcome is not kept`);
+  input.cache.set(mutant, outcome);
+  await input.saveProgress?.();
+  return outcome;
+}
+
+async function requireSameContext(input: DiffMutationInput, when: string): Promise<void> {
   const change = await input.contextChange?.();
-  if (change !== undefined) throw new Error(`what the tests run with changed after ${done} mutants had run or been reused: ${change}`);
-  return runMutant(run, mutant);
+  if (change !== undefined) throw new Error(`what the tests run with changed ${when}: ${change}`);
 }
 
 /** A signed proof can classify only the exact generated change that actually survived. */
