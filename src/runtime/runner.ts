@@ -640,10 +640,10 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    *
    * The per-action checkpoint window's head entry IS that state: it is captured
    * at the current action count and the failed action recorded nothing, so no
-   * extra serialization is needed for this. Only the element tree, sequence
-   * counter, RNG position and message log are restored — the flow engine
-   * deliberately stayed put on the failure, and its position is already right.
-   * The elements it holds are pointed at the rebuilt tree (#679).
+   * extra serialization is needed for this. The element tree, sequence counter,
+   * RNG position, message log and flow are restored together from it, so the
+   * open step's awaiting seats come back with the elements (#972) and the flow
+   * holds the rebuilt tree's elements (#679).
    *
    * @returns the player-facing error to report: `error` followed by
    *   `NOTHING_CHANGED` when the rollback succeeded, or, when there was no
@@ -662,9 +662,10 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
         'Check the board before playing on, or restart the game from a save.';
     }
 
+    if (!checkpoint.flowState) throw new Error('The checkpoint before the failed action holds no flow state, so the action cannot be rolled back.');
     const { state, messageLog } = checkpointWithLiveLog(checkpoint, this.game.messages ?? [], this.game.logEviction);
     this.game.loadSerializedState(state, { messageLog });
-    this.game.relinkFlowElements();
+    this.game.rollBackFlow(checkpoint.flowState);
     if (checkpoint.sequence !== undefined) {
       this.game._ctx.sequence = checkpoint.sequence;
     }

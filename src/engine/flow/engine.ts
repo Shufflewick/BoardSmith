@@ -949,6 +949,10 @@ export class FlowEngine<G extends Game = Game> {
    * set: that seat was admitted under the filter and may be partway through the
    * step, so a filter that changes mid-step only governs who joins.
    *
+   * Inside an action's own code (its execute, onSelect or onEach) the acting
+   * seat is left as it is: settling that action re-checks it by the same rules,
+   * on every route the action takes (#973).
+   *
    * No-op when no simultaneous step is open: there is no stale list to correct.
    *
    * Called from outside game code, it then ends the step when `allDone` holds,
@@ -983,6 +987,8 @@ export class FlowEngine<G extends Game = Game> {
     for (const player of players) {
       if (seat !== undefined && player.seat !== seat) continue;
 
+      // The seat whose action is running is settled by that action, by the same rules (#973).
+      if (player.seat === this.game._ctx._actingSeat) continue;
       const existing = this.awaitingPlayers.find((p) => p.playerIndex === player.seat);
       // A seat that already committed this step stays committed. Re-deriving
       // its list would be the one change a refresh must never make.
@@ -1399,27 +1405,6 @@ export class FlowEngine<G extends Game = Game> {
     this.turnRun = position.turnRun ? { ...position.turnRun } : undefined;
 
     this.restoreActionStepTracking();
-  }
-
-  /**
-   * Point every element the flow holds (variables, frame data, the current
-   * player) at the same element of the game's current tree, after the tree was
-   * rebuilt in place under a flow that stays where it is: a failed action
-   * rolled back (#679). The position does not change.
-   *
-   * @throws When an element the flow holds is not in the rebuilt tree, naming
-   *   the flow variable or step data that holds it.
-   */
-  relinkElements(): void {
-    this.variables = relinkFlowValue(encodeFlowValue(this.variables), this.game, undefined, 'variable') as Record<string, unknown>;
-    for (const frame of this.stack) {
-      if (frame.data) {
-        frame.data = relinkFlowValue(encodeFlowValue(frame.data), this.game, undefined, 'step data') as Record<string, unknown>;
-      }
-    }
-    if (this.currentPlayer) {
-      this.currentPlayer = this.game.getPlayer(this.currentPlayer.seat) as PlayerOf<G>;
-    }
   }
 
   /**
