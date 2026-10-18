@@ -142,6 +142,12 @@ const props = defineProps<{
    * Absent and `false` both mean the list on screen is the whole answer.
    */
   actionsPending?: boolean;
+  /**
+   * True while the shell's BoardErrorBoundary shows its message in place of the
+   * board (#1153): there is no board to choose on, so the panel hands no pick to it.
+   * Optional because games mount the panel in their own tests; both shells always pass it.
+   */
+  boardFailed?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -912,6 +918,7 @@ const anchoredChoices = computed(() => _splitChoices.value.anchored);
  * candidate must be reachable on the board before the panel will yield.
  */
 const deferPickToBoard = computed(() => {
+  if (props.boardFailed) return false;
   const type = currentPick.value?.type;
   if (type === 'choice') return shouldDeferChoicePickToBoard(offeredChoices.value);
   return shouldDeferElementPickToBoard(type, offeredElements.value);

@@ -592,6 +592,38 @@ describe('WorldShell — the shared chrome (#170)', () => {
     wrapper.unmount();
   });
 
+  it('lists a large pick in the panel while the board shows its error, and hands it back when the board draws (#1153)', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const Fragile = defineComponent({
+      props: { gameView: { type: null, required: true } },
+      setup: (props) => () => {
+        if ((props.gameView as { said?: string })?.said === 'boom') throw new Error('no room here');
+        return h('p', { class: 'fragile' }, 'drawn');
+      },
+    });
+    // 50 rooms, each drawn on the board, so the panel would hand the pick to the board.
+    const rooms = Array.from({ length: 50 }, (_, i) => ({
+      value: `r${i}`,
+      display: `Room ${i}`,
+      refs: [{ ref: { notation: `r${i}` }, role: 'target' }],
+    }));
+    const walk = { name: 'walk', prompt: 'Walk', selections: [{ name: 'room', type: 'choice', prompt: 'Which room?', choices: rooms }] };
+    const wrapper = mount(WorldShell, { props: { uis: defineGameUIs({ Fragile: defaultUI(Fragile) }), displayName: 'Gloamhall' } });
+    await drawn(wrapper, stateFrame({ actions: [walk], view: { phase: 'watching', state: { said: 'boom' } } }));
+    const panel = () => wrapper.find('[data-testid="bs-action-panel"]');
+    await panel().findAll('button').find((b) => b.text().includes('Walk'))!.trigger('click');
+    await flushPromises();
+    expect(wrapper.find('[data-testid="bs-board-error"]').exists()).toBe(true);
+    expect(panel().find('.board-handoff-btn').exists(), 'there is no board to choose on').toBe(false);
+    expect(panel().findAll('.anchored-choice-btn')).toHaveLength(50);
+
+    await drawn(wrapper, stateFrame({ actions: [walk], revision: 2 }));
+    expect(wrapper.find('.fragile').exists()).toBe(true);
+    expect(panel().findAll('.anchored-choice-btn')).toHaveLength(0);
+    expect(panel().find('.board-handoff-btn').text()).toBe('Choose on the board (50)');
+    wrapper.unmount();
+  });
+
   it('renders the default UI and never a devUI() entry: a world has no dev UI switcher (#896)', async () => {
     const DevBoard = defineComponent({ setup: () => () => h('p', { class: 'dev-board' }, 'dev') });
     const wrapper = mount(WorldShell, {

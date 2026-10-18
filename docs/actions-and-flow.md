@@ -1289,7 +1289,8 @@ offers the identical enumeration, arrow keys move between candidates and Enter
 chooses, so the keyboard path is continuous. It is not a filter and not a hidden
 option; nothing is dropped. If even one candidate has no board ref the panel
 keeps every button, because deferring would leave that candidate reachable from
-neither surface.
+neither surface. For the same reason the panel lists every candidate while the
+board shows its error message in place of the board.
 
 This holds for `chooseFrom` as well as element picks. For a `chooseFrom`, a
 candidate's board ref is the one `boardRefs` gives it with role `target` (or its
