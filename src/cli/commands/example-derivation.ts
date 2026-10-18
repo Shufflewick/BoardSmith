@@ -701,7 +701,7 @@ function bindsModuleOrDefault(declaration: ts.Declaration): boolean {
 function declaredSymbol(rules: RulesProgram, symbol: ts.Symbol): ListedName | undefined {
   if (!(symbol.flags & ts.SymbolFlags.Value)) return undefined;
   const declaration = symbol.valueDeclaration ?? symbol.declarations![0];
-  if (!isSameOrInside(rules.srcDir, declaration.getSourceFile().fileName)) return undefined;
+  if (!declaration.getSourceFile().fileName.startsWith(rules.srcDir)) return undefined;
   const kind: GameApiSymbol['kind'] =
     symbol.flags & ts.SymbolFlags.Class ? 'class' : symbol.flags & ts.SymbolFlags.Function ? 'function' : 'const';
   return {
@@ -965,7 +965,7 @@ function declarationOf(rules: RulesProgram, symbol: ts.Symbol): { declaration: A
 /** The entry for a type declared under `src/`, or none for a value, or a package's or the standard library's type. */
 function typeEntry(rules: RulesProgram, symbol: ts.Symbol): Omit<GameApiType, 'declaration'> | undefined {
   const declaration = symbol.declarations?.[0];
-  if (!declaration || !isSameOrInside(rules.srcDir, declaration.getSourceFile().fileName)) return undefined;
+  if (!declaration?.getSourceFile().fileName.startsWith(rules.srcDir)) return undefined;
   const { flags } = symbol;
   const kind: GameApiType['kind'] | undefined =
     flags & ts.SymbolFlags.Class
