@@ -355,3 +355,78 @@ describe("each seat's own eviction offset (#903)", () => {
     expect([0, 1, 2].map((seat) => offsetOf(runner.game, seat))).toEqual([1, 3, 1]);
   });
 });
+
+/**
+ * keepLast counts per audience (#1067): each seat, and the spectator, keeps its
+ * own last N lines. A whole-log count let a seat infer how many private lines
+ * other seats got from how many of its own lines survived.
+ */
+describe('keepLast counts per audience (#1067)', () => {
+  const newGame = () => new ChattyGame({ playerCount: 2, seed: 'chat', elementIdKey: '00000000000000b3' });
+  const seen = (game: Game, seat: number) => {
+    const view = createPlayerView(game, seat);
+    return { messages: view.messages, messageOffset: view.messageOffset };
+  };
+
+  function prunedLog(whispers: boolean): Game {
+    const game = newGame();
+    for (let i = 1; i <= 5; i++) {
+      game.message(`public ${i}`);
+      if (whispers) game.messageTo(1, `secret ${i}`);
+    }
+    game.pruneMessages({ keepLast: 3 });
+    return game;
+  }
+
+  it("leaves a seat's log the same whether or not another seat got private lines", () => {
+    expect(seen(prunedLog(true), 2)).toEqual(seen(prunedLog(false), 2));
+    expect(seen(prunedLog(true), 0)).toEqual(seen(prunedLog(false), 0));
+    expect(seen(prunedLog(true), 2).messages.map((m) => m.text)).toEqual(['public 3', 'public 4', 'public 5']);
+  });
+
+  it('keeps each audience its own last N lines, and stores only lines some audience keeps', () => {
+    const game = prunedLog(true);
+    expect(seen(game, 1)).toEqual({
+      messages: ['secret 4', 'public 5', 'secret 5'].map((text) => ({ text })),
+      messageOffset: 7,
+    });
+    expect(game.messages.map((m) => m.text)).toEqual(['public 3', 'secret 3', 'public 4', 'secret 4', 'public 5', 'secret 5']);
+  });
+
+  it("numbers a seat's later lines on from what it was shown", () => {
+    const game = prunedLog(true);
+    game.message('public 6');
+    expect(seen(game, 1).messages.map((m) => m.text)).toEqual(['secret 4', 'public 5', 'secret 5', 'public 6']);
+    expect(seen(game, 2).messages.map((m) => m.text)).toEqual(['public 3', 'public 4', 'public 5', 'public 6']);
+    expect(seen(game, 2).messageOffset).toBe(2);
+  });
+
+  it('keeps what each seat is shown across a restore', () => {
+    const game = prunedLog(true);
+    const restored = newGame();
+    restored.loadSerializedState(game.toJSON(), { messageLog: [...game.messages] });
+    for (const seat of [0, 1, 2]) expect(seen(restored, seat)).toEqual(seen(game, seat));
+    expect(JSON.stringify(createPlayerView(game, 2))).not.toContain('messagesShownFrom');
+  });
+
+  it('shows a seat the lines written after an undo that took back where it was cut', () => {
+    const runner = new GameRunner({
+      GameClass: ChattyGame,
+      gameType: 'chatty',
+      gameOptions: { playerCount: 2, playerNames: ['A', 'B'], seed: 'chat' },
+      checkpoints: { history: 'full' },
+    });
+    runner.start();
+    for (const [action, seat] of [['speak', 1], ['speak', 2], ['whisper', 1], ['whisper', 2]] as const) {
+      expect(runner.performAction(action, seat, {}).success).toBe(true);
+      runner.captureCheckpoint();
+    }
+    // 'line 1', 'line 2', 'whisper to 1', 'whisper to 2': seat 2 is cut at its whisper, two lines past the undo.
+    runner.game.pruneMessages({ keepLast: 1 });
+
+    const undone = GameRunner.fromCheckpoint(runner.getSnapshot(), 2, ChattyGame);
+    expect(undone!.game.messages.map((m) => m.text)).toEqual(['line 2']);
+    undone!.game.message('after the undo');
+    expect(seen(undone!.game, 2).messages.map((m) => m.text)).toEqual(['after the undo']);
+  });
+});
