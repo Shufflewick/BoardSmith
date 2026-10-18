@@ -861,29 +861,30 @@ export async function verifyImpactAdjudicateCommand(options: {
     }
   }
 
-  const classifyStatus = await readClassifyStatus(projectDir, options.runId);
-  const runId = classifyStatus.runId;
+  // Resolved before the lock, so a missing run is refused with its own message, not ENOENT on the lock file.
+  const { runId } = await readClassifyStatus(projectDir, options.runId);
 
-  if (classifyStatus.outOfDatePairs.includes(pairId)) {
-    throw new Error(
-      `Pair "${pairId}"'s classification in run ${runId} is out of date: its staged slices changed after ` +
-        `it was classified.\nClassify it again with \`boardsmith verify-classify-record --run-id ${runId} ` +
-        `--pair-id ${pairId}\`, then adjudicate it.`,
-    );
-  }
-  const classification = classifyStatus.classified.find((c) => c.pairId === pairId);
-  if (!classification || classification.ruleDelta !== 'contradictory') {
-    throw new Error(
-      `Pair "${pairId}" has no recorded "contradictory" classification in run ${runId}.\n` +
-        `Run \`boardsmith verify-impact-gate --run-id ${runId}\` to list pending contradictions.`,
-    );
-  }
-
-  const quotedPass1 = classification.quotedPass1 ?? NO_VERBATIM_READING;
-  const quotedPass2 = classification.quotedPass2 ?? NO_VERBATIM_READING;
-
-  // The idempotence check reads the ledger too, so the lock spans the read, the ruling and the append.
+  // The classification and idempotence checks read the ledger too, so the lock spans them, the ruling and the append.
   const rulingNumber = await withLedgerLock(ledgerFilePath(projectDir, runId), async () => {
+    const classifyStatus = await readClassifyStatus(projectDir, runId);
+    if (classifyStatus.outOfDatePairs.includes(pairId)) {
+      throw new Error(
+        `Pair "${pairId}"'s classification in run ${runId} is out of date: its staged slices changed after ` +
+          `it was classified.\nClassify it again with \`boardsmith verify-classify-record --run-id ${runId} ` +
+          `--pair-id ${pairId}\`, then adjudicate it.`,
+      );
+    }
+    const classification = classifyStatus.classified.find((c) => c.pairId === pairId);
+    if (!classification || classification.ruleDelta !== 'contradictory') {
+      throw new Error(
+        `Pair "${pairId}" has no recorded "contradictory" classification in run ${runId}.\n` +
+          `Run \`boardsmith verify-impact-gate --run-id ${runId}\` to list pending contradictions.`,
+      );
+    }
+
+    const quotedPass1 = classification.quotedPass1 ?? NO_VERBATIM_READING;
+    const quotedPass2 = classification.quotedPass2 ?? NO_VERBATIM_READING;
+
     const { ledgerFile, relLedgerPath, ledgerText, adjudications } = await readRunLedger(projectDir, runId);
     const existing = adjudications.find((a) => a.pairId === pairId);
 

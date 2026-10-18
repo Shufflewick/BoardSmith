@@ -102,11 +102,9 @@ export function afterTurns(n: number): TutorialAdvanceCondition {
 
       // The outermost loop's counter is the round number: 1 at game start, so
       // subtracting 1 normalises to 0 before the learner has acted. Inner loops
-      // (a multi-step turn) are ignored. A restored position stamps 0 on every
-      // non-loop frame (#971), and a loop with frames above it has always begun
-      // its body, so the outermost loop is the shallowest counter above 0
-      // (getPosition emits the counters shallowest first).
-      const roundsStarted = Object.values(iterations).find((count) => count > 0) ?? 0;
+      // (a multi-step turn) are ignored. getPosition emits the counters
+      // shallowest first.
+      const roundsStarted = Object.values(iterations)[0] ?? 0;
 
       // Within the current round: the learner has already acted if it is now
       // another player's turn (playerIndex changed away from the learner's seat).

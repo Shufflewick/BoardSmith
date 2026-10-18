@@ -1,5 +1,5 @@
 {
-  "revision": 232,
+  "revision": 233,
   "surfaceHash": "5f7f005d097568f4",
   "payloadHash": "0e2d27db00239080",
   "formatHash": "3aff5d1f34f52ec0",
@@ -1794,6 +1794,14 @@
     },
     {
       "revision": 232,
+      "date": "2026-10-18",
+      "surfaceHash": "5f7f005d097568f4",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A seat's view and its message log now name a hidden element by the outermost container concealing it, in every element reference: element attributes, settings, message data and animation data, in table and world views (#1043). Before, attributes, settings and message data carried the hidden element's real branch, and world views its real id, in every payload kind including animation data. A seat that can see the element still gets its real reference. A world seat view now also writes a reference to an element in game.pile as the withheld pile reference that names nothing, as a table view does, instead of its real id; a world reference to an element in a partition not loaded on the instance is still sent as written. Building a view marks no partition reached. No payload shape changes; a client or bot that decodes such a reference now resolves it to the concealing zone instead of the hidden card."
+    },
+    {
+      "revision": 233,
       "date": "2026-10-18",
       "surfaceHash": "5f7f005d097568f4",
       "payloadHash": "0e2d27db00239080",

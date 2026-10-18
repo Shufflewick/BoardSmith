@@ -265,6 +265,106 @@ describe('lint finds a config wherever the linter itself would (#1094)', () => {
   });
 });
 
+describe('lint finds a config the linter reads from a linted file\'s own folder (#1136)', () => {
+  const originalCwd = process.cwd();
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.mocked(runTool).mockClear();
+    process.chdir(originalCwd);
+  });
+
+  /** A game with `files` written under it, lint's output silenced and exit turned into a throw. */
+  function gameWith(files: Record<string, string>): string {
+    const game = tempTree('boardsmith-lint-src-config-');
+    writeFileSync(join(game, 'boardsmith.json'), '{}');
+    for (const [rel, text] of Object.entries(files)) {
+      mkdirSync(join(game, dirname(rel)), { recursive: true });
+      writeFileSync(join(game, rel), text);
+    }
+    process.chdir(game);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(process, 'exit').mockImplementation((code) => { throw new Error(`exit ${code}`); });
+    return game;
+  }
+
+  it.each(['src', 'src/ui', 'src/.generated'])('lint --eslint runs ESLint with a config only in %s', async (folder) => {
+    gameWith({ [`${folder}/eslint.config.mjs`]: 'export default [];', [`${folder}/a.ts`]: 'export {};' });
+
+    await lintCommand({ eslint: true });
+    expect(vi.mocked(runTool)).toHaveBeenCalledWith('eslint', ['src/'], { cwd: process.cwd() });
+  });
+
+  it.each(['src', 'src/ui'])('lint --css runs Stylelint with a config only in %s', async (folder) => {
+    gameWith({ [`${folder}/.stylelintrc.json`]: '{}', 'src/ui/Board.vue': '<template><div /></template>' });
+
+    await lintCommand({ css: true });
+    expect(vi.mocked(runTool)).toHaveBeenCalledWith('stylelint', ['src/**/*.vue'], { cwd: process.cwd() });
+  });
+
+  it('lint --css ignores a config in a folder holding no .vue file, which Stylelint never reads', async () => {
+    gameWith({ 'src/server/.stylelintrc.json': '{}', 'src/server/a.ts': 'export {};', 'src/ui/Board.vue': '<template><div /></template>' });
+
+    await expect(lintCommand({ css: true })).rejects.toThrow('exit 1');
+    expect(vi.mocked(runTool)).not.toHaveBeenCalled();
+  });
+});
+
+describe('lint refuses a Stylelint install whose config search it does not copy (#1136)', () => {
+  const originalCwd = process.cwd();
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.mocked(runTool).mockClear();
+    process.chdir(originalCwd);
+  });
+
+  /** A game whose installed Stylelint manifest is `manifest`, or a folder in its place when undefined. */
+  function gameWithStylelintManifest(manifest: string | undefined): string {
+    const game = tempTree('boardsmith-lint-stylelint-major-');
+    writeFileSync(join(game, 'boardsmith.json'), '{}');
+    writeFileSync(join(game, '.stylelintrc.json'), '{}');
+    const path = join(game, 'node_modules', 'stylelint', 'package.json');
+    mkdirSync(manifest === undefined ? path : dirname(path), { recursive: true });
+    if (manifest !== undefined) writeFileSync(path, manifest);
+    process.chdir(game);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    return path;
+  }
+
+  const gameOnStylelint = (version: string): string =>
+    gameWithStylelintManifest(JSON.stringify({ name: 'stylelint', version }));
+
+  it.each([
+    ['a folder', undefined, /Could not read .*EISDIR/],
+    ['malformed JSON', '{"version": ', /not a JSON object with a "version".*npm install -D stylelint@17/s],
+    ['a manifest with no version', '{"name": "stylelint"}', /not a JSON object with a "version".*npm install -D stylelint@17/s],
+  ])('stops with a message naming the Stylelint manifest when it is %s', async (_label, manifest, message) => {
+    const path = gameWithStylelintManifest(manifest);
+
+    const run = lintCommand({ css: true });
+    // lint names the file from the real cwd, and macOS's temp folder is a symlink.
+    await expect(run).rejects.toThrow(join(realpathSync(dirname(path)), 'package.json'));
+    await expect(run).rejects.toThrow(message);
+    expect(vi.mocked(runTool)).not.toHaveBeenCalled();
+  });
+
+  it('stops on Stylelint 16 and says how to install 17', async () => {
+    gameOnStylelint('16.9.0');
+
+    const run = lintCommand({ css: true });
+    await expect(run).rejects.toThrow(/Stylelint 16\.9\.0.*written for Stylelint 17/s);
+    await expect(run).rejects.toThrow('npm install -D stylelint@17');
+    expect(vi.mocked(runTool)).not.toHaveBeenCalled();
+  });
+
+  it('runs on Stylelint 17', async () => {
+    gameOnStylelint('17.13.0');
+
+    await lintCommand({ css: true });
+    expect(vi.mocked(runTool)).toHaveBeenCalledWith('stylelint', ['src/**/*.vue'], { cwd: process.cwd() });
+  });
+});
+
 describe('the pitfall hints read every game source file the sandbox scan reads (#1005)', () => {
   const originalCwd = process.cwd();
   afterEach(() => {

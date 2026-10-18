@@ -65,6 +65,16 @@ function mountShell(props: Record<string, unknown> = {}, slots: Record<string, u
   });
 }
 
+describe('the action-panel slot (#1160)', () => {
+  it('tells a game panel used directly through PlayShell whether the board failed', async () => {
+    const panel = (props: { boardFailed: boolean }) => h('p', { class: 'own-panel' }, `boardFailed=${props.boardFailed}`);
+    const wrapper = mountShell({ boardFailed: true }, { 'action-panel': panel });
+    expect(wrapper.find('.own-panel').text()).toBe('boardFailed=true');
+    await wrapper.setProps({ boardFailed: false });
+    expect(wrapper.find('.own-panel').text()).toBe('boardFailed=false');
+  });
+});
+
 describe('the layout', () => {
   it('draws the sidebar, the board region and the action bar', () => {
     const wrapper = mountShell();
@@ -76,6 +86,14 @@ describe('the layout', () => {
   it('puts the game\'s board in the board slot, inside the zoom container', () => {
     const wrapper = mountShell();
     expect(wrapper.find('.game-shell__zoom-container .my-board').exists()).toBe(true);
+  });
+
+  it('draws the board error message unzoomed, and the board at its zoom again once it draws (#1158)', async () => {
+    const wrapper = mountShell({ zoomLevel: 1.27, boardFailed: true });
+    const zoom = () => (wrapper.get('.game-shell__zoom-container').element as HTMLElement).style.getPropertyValue('--zoom-level');
+    expect(zoom()).toBe('1');
+    await wrapper.setProps({ boardFailed: false });
+    expect(zoom()).toBe('1.27');
   });
 
   it('keeps the modal host outside the board scroller and zoom container', () => {

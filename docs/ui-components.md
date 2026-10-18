@@ -263,6 +263,22 @@ function onSquareClick(squareId: number) {
 </script>
 ```
 
+#### Replacing the action panel
+
+The `action-panel` slot replaces the built-in Action Panel wholesale. It receives
+`boardFailed`: true while the board shows its error message instead of drawing,
+false otherwise. The built-in panel lists a large pick's candidates while it is
+true, rather than handing the pick to a board that is not there; your panel
+should do the same.
+
+```vue
+<GameShell :uis="uis">
+  <template #action-panel="{ boardFailed }">
+    <MyActionPanel :list-every-choice="boardFailed" />
+  </template>
+</GameShell>
+```
+
 ### AutoUI
 
 Automatic UI generation from game state. A production-ready UI for any game — ideal for simple games or as a starting point before investing in a custom UI.
@@ -1509,7 +1525,7 @@ game.animate('score-reveal', { playerId: player.id, total: 42 });
 - An element the seat can see keeps its own path.
 - An element the seat cannot see is named by the outermost container that conceals it from that seat: a card in another player's hand arrives as the hand, a card in a count-only deck as the deck, a card anywhere inside a `contentsHidden()` zone as the zone. The seat learns which container, never the element's name, real id or place inside it, so a shuffle or a hidden zone's size stays hidden.
 - An element in `game.pile` arrives as a reference that names nothing in the seat's view.
-- World mode is the exception: there a reference is written as `{ __elementId }` with the element's real id for every seat (#956).
+- In world mode a reference is written as `{ __elementId }`, and the same rules apply: an element the seat cannot see arrives as its concealer's id, and an element in the pile as the same reference that names nothing. A reference to an element in a partition not loaded on this instance is sent as written. These rules cover every element reference a seat receives, in element attributes, settings and message data too (#1043).
 
 A raw id such as `card.id` reaches every seat unchanged, so it gives away which card a hidden one is.
 
