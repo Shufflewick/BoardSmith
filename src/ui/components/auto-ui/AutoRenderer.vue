@@ -203,6 +203,8 @@ useAutoRendererAnimations(animationEvents, { fly });
   </div>
 </template>
 
+<style scoped src="../sr-only.css"></style>
+
 <style scoped>
 .auto-renderer {
   position: relative;
@@ -252,19 +254,6 @@ useAutoRendererAnimations(animationEvents, { fly });
   .skeleton-bar {
     animation: none;
   }
-}
-
-/* Screen-reader only helper (no raw hex — uses inherit) */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 /* Retry affordance */
