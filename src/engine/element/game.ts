@@ -2405,6 +2405,8 @@ export class Game<
    * this step is left alone. The step's `players` filter is re-evaluated and
    * only seats it includes are admitted; a seat already awaited stays even if
    * the filter has since dropped it. No-op when no simultaneous step is open.
+   * Inside a seat's own action (its `execute`, `onSelect` or `onEach`) that
+   * seat is left for the action's settling to decide (#973).
    *
    * When every seat is then done (the step's `allDone`), the step ends: at
    * once when called from outside game code, and when the running action

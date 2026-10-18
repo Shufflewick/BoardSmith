@@ -139,3 +139,49 @@ describe("a pick-by-pick action whose onEach makes its own seat done and refresh
     expect(runner.game.afterRound).toBe(1);
   });
 });
+
+/** An irreversible step, then a simultaneous step that never ends on its own. */
+class FencedGame extends Game<FencedGame, Player> {
+  taps = 0;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerActions(
+      Action.create<FencedGame>('tap').prompt('Tap').execute((_a, ctx) => {
+        ctx.game.taps++;
+      }),
+      Action.create<FencedGame>('tapThenFail').prompt('Tap, then fail').execute((_a, ctx) => {
+        ctx.game.taps++;
+        throw new Error('rules bug after the tap');
+      }),
+    );
+    this.setFlow({
+      root: sequence(
+        execute<FencedGame>(() => {}, { irreversible: true }),
+        simultaneousActionStep({ name: 'tapping', actions: ['tap', 'tapThenFail'], allDone: () => false }),
+      ),
+    });
+  }
+}
+
+describe('a rollback inside the turn after an irreversible step (#972)', () => {
+  it('leaves the undo fence where the irreversible step put it', () => {
+    const runner = new GameRunner({
+      GameClass: FencedGame,
+      gameType: 'fenced',
+      gameOptions: { playerCount: 2, playerNames: ['A', 'B'], seed: 'fenced' },
+    });
+    runner.start();
+    runner.getSnapshot();
+    const fence = runner.executeBarrierIndex;
+
+    expect(runner.performAction('tap', 1, {}).success).toBe(true);
+    runner.getSnapshot();
+    expect(runner.performAction('tapThenFail', 1, {}).success).toBe(false);
+    expect(runner.performAction('tap', 1, {}).success).toBe(true);
+    runner.getSnapshot();
+
+    expect(runner.game.taps).toBe(2);
+    expect(runner.executeBarrierIndex).toBe(fence);
+  });
+});
