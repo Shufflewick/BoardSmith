@@ -123,7 +123,7 @@ async function gitignoreCovers(projectDir: string): Promise<boolean> {
 }
 
 /** Append the ignore rule, preserving whatever the designer already put in `.gitignore`. */
-async function appendGitignoreEntry(projectDir: string): Promise<void> {
+export async function appendGitignoreEntry(projectDir: string): Promise<void> {
   const path = join(projectDir, '.gitignore');
   const existing = (await readIfExists(path, (p) => fs.readFile(p, 'utf-8'))) ?? '';
   const prefix = existing === '' || existing.endsWith('\n') ? existing : `${existing}\n`;
