@@ -618,7 +618,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   if (UNSAFE_PORTS.has(port)) {
     throw new Error(
       `--port takes a port browsers allow, got "${options.port}", which browsers block for security. ` +
-        'Try 5173, 3000, 8080, or another port above 1024 that is not on that list.',
+        'Try 5173, 3000, 8080, or another port above 1024 that browsers do not block.',
     );
   }
 

@@ -107,7 +107,7 @@ describe('every dev flag refusal is a plain one-line Error naming the flag, what
       await expectDevRefusal(
         { port: '6000' },
         '--port takes a port browsers allow, got "6000", which browsers block for security. ' +
-          'Try 5173, 3000, 8080, or another port above 1024 that is not on that list.',
+          'Try 5173, 3000, 8080, or another port above 1024 that browsers do not block.',
       );
       expect(exit).not.toHaveBeenCalled();
       expect(cleanups.runs).toBe(before + 1);
