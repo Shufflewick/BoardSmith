@@ -193,18 +193,16 @@ describe('the size rule: only a small mechanical change may skip or lighten revi
     expect(reviewLevel(['mechanical'], LIGHT_REVIEW_LINES + 1).level).toBe('full');
   });
 
-  it('sizes the change since the last round as mechanical when the run log says every dispatch since was mechanical (#829)', async () => {
+  it("sizes the change since the last round as mechanical, leaving the run log's own entries out (#829, #1000)", async () => {
     await writeFiles(project, { 'src/rules.ts': code(3, 'a') });
     const before = await recordPassingVerify(project, { chunk: 'deal' });
-    await writeFiles(project, { 'src/rules.ts': code(3, 'b') });
+    await writeFiles(project, { 'src/rules.ts': code(2, 'a') + "export const v2 = 'b';\n" });
     await runLog(round(1, before), dispatch(1, 'mechanical'));
     await recordPassingVerify(project, { chunk: 'deal', message: 'chunk-deal/rename' });
 
-    const logLines = (await fs.readFile(join(project, 'design/run-log/deal.md'), 'utf-8')).split('\n').length - 1;
     const gate = await reviewGate({ projectDir: project, slug: 'deal' });
-    // The run log's own lines are part of the change, so this small change is light, not none.
-    expect(gate.open && gate.changedLines).toBe(6 + logLines);
-    expect(gate.open && gate.level).toBe('light');
+    expect(gate.open && gate.changedLines).toBe(2);
+    expect(gate.open && gate.level).toBe('none');
   });
 
   it('reviews in full when any dispatch since the last round was not mechanical, or the run log has none (#829)', async () => {

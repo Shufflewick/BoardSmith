@@ -206,7 +206,7 @@ function expectEvolvedInRealWorkers({ status, output }: { status: number | null;
   expect(output).not.toContain('Benchmark worker');
   expect(status, output).toBe(0);
   expect(output).toContain('Evolution complete');
-  expect(output).toContain('Initial win rate:');
+  expect(output).toContain('Search: original ');
 }
 
 describe('evolve-bot-weights benchmarks in real workers, on the engine the game is built with (#401, #697)', () => {
@@ -224,7 +224,8 @@ describe('evolve-bot-weights --seed is reproducible whatever the worker count (#
   function decided(bin: string, flags: string[]): string {
     const run = evolveWith(bin, flags, gameProject(NIM_RULES, NIM_BOT));
     expectEvolvedInRealWorkers(run);
-    const results = run.output.slice(run.output.indexOf('=== Evolution Results'), run.output.indexOf('=== Done'));
+    // A run that keeps the original ends at the line naming its temp bot.ts, and prints no "=== Done".
+    const results = run.output.slice(run.output.indexOf('=== Evolution Results'), run.output.search(/=== Done|No improvement confirmed, so/));
     return `${results}\n${run.botTs.replace(/^\/\/ Weight Evolution \(.*\):$/m, '')}`;
   }
 
@@ -232,7 +233,7 @@ describe('evolve-bot-weights --seed is reproducible whatever the worker count (#
     const bin = join(REPO_ROOT, 'bin', 'boardsmith.js');
     const flags = ['--population', '4', '--mcts', '10', '--seed', 'repeatable'];
     const onOne = decided(bin, flags);
-    expect(onOne).toContain('Optimized weights:');
+    expect(onOne).toContain('Search: original ');
     expect(decided(bin, flags)).toBe(onOne);
     expect(decided(bin, [...flags, '--workers', '3'])).toBe(onOne);
   }, 300_000);

@@ -7,6 +7,7 @@ import { PlayerFacingError } from '../errors.js';
 import { withDevDetail } from '../action/rules-error.js';
 import { changing, flowStateRead } from '../element/state-version.js';
 import type { ActionResult, FollowUpAction } from '../action/types.js';
+import type { AcceptedArgs } from '../action/action.js';
 import type {
   FlowNode,
   FlowContext,
@@ -504,8 +505,9 @@ export class FlowEngine<G extends Game = Game> {
    * @param actionName The action to perform
    * @param args The action arguments
    * @param playerIndex Optional player index for simultaneous actions (if not provided, uses current player)
+   * @param onAccepted Handed the action's args once its checks accept them (`PerformOptions.onAccepted`)
    */
-  resume(actionName: string, args: Record<string, unknown>, playerIndex?: number): FlowState {
+  resume(actionName: string, args: Record<string, unknown>, playerIndex?: number, onAccepted?: AcceptedArgs): FlowState {
     if (!this.awaitingInput) {
       throw new Error('Flow is not awaiting input');
     }
@@ -514,7 +516,7 @@ export class FlowEngine<G extends Game = Game> {
 
     // Handle simultaneous action step
     if (currentFrame?.node.type === 'simultaneous-action-step') {
-      return this.resumeSimultaneousAction(actionName, args, playerIndex, currentFrame);
+      return this.resumeSimultaneousAction(actionName, args, playerIndex, currentFrame, onAccepted);
     }
 
     const player = this.currentPlayer!;
@@ -522,7 +524,7 @@ export class FlowEngine<G extends Game = Game> {
     // The acting seat's own follow-up, taken as one whole action.
     const followUp = currentFrame && this.heldFollowUp(currentFrame, player.seat);
     if (followUp?.action === actionName) {
-      return this.resumeAfterExternalAction(this.performFollowUp(followUp, player, args), player.seat);
+      return this.resumeAfterExternalAction(this.performFollowUp(followUp, player, args, onAccepted), player.seat);
     }
 
     // Enforce flow-level allow-list for regular action steps.
@@ -533,7 +535,7 @@ export class FlowEngine<G extends Game = Game> {
 
     // Execute the action (regular action step), then settle its result exactly
     // as a result executed elsewhere (a completed pending action) is settled.
-    return this.resumeAfterExternalAction(this.game.performAction(actionName, player, args), player.seat);
+    return this.resumeAfterExternalAction(this.game.performAction(actionName, player, args, { onAccepted }), player.seat);
   }
 
   /**
@@ -542,8 +544,13 @@ export class FlowEngine<G extends Game = Game> {
    * published with are the ones it runs with: a follow-up is pre-filled.
    * `args` are the client's, and may name only picks (#662).
    */
-  private performFollowUp(followUp: FollowUpAction, player: PlayerOf<G>, args: Record<string, unknown>): ActionResult {
-    return this.game.performAction(followUp.action, player, args, { followUp });
+  private performFollowUp(
+    followUp: FollowUpAction,
+    player: PlayerOf<G>,
+    args: Record<string, unknown>,
+    onAccepted: AcceptedArgs | undefined,
+  ): ActionResult {
+    return this.game.performAction(followUp.action, player, args, { followUp, onAccepted });
   }
 
   /**
@@ -1052,7 +1059,8 @@ export class FlowEngine<G extends Game = Game> {
     actionName: string,
     args: Record<string, unknown>,
     playerIndex: number | undefined,
-    frame: ExecutionFrame<G>
+    frame: ExecutionFrame<G>,
+    onAccepted: AcceptedArgs | undefined,
   ): FlowState {
     const config = frame.node.config as SimultaneousActionStepConfig;
 
@@ -1130,8 +1138,8 @@ export class FlowEngine<G extends Game = Game> {
       throw new Error(`Invalid player position: ${actingPlayerIndex}`);
     }
     const result = takesFollowUp
-      ? this.performFollowUp(followUp, player, args)
-      : this.game.performAction(actionName, player, args);
+      ? this.performFollowUp(followUp, player, args, onAccepted)
+      : this.game.performAction(actionName, player, args, { onAccepted });
     return this.settleSimultaneousAction(frame, playerState, player, result);
   }
 

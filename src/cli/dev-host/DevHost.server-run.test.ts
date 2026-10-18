@@ -100,7 +100,7 @@ describe('DevHost — the dev-server run this page joined (#416)', () => {
   it('a fresh page load names no run in its hello', async () => {
     await openPage();
     latest().connect();
-    expect(latest().hellos()).toEqual([{ type: 'hello', clientId: expect.any(String) }]);
+    expect(latest().hellos()).toEqual([{ type: 'hello', clientId: expect.any(String), loadId: expect.any(String) }]);
   });
 
   it('names the run it joined when its socket reconnects', async () => {
@@ -111,7 +111,8 @@ describe('DevHost — the dev-server run this page joined (#416)', () => {
 
     const second = reconnect();
     expect(second).not.toBe(first);
-    expect(second.hellos()).toEqual([{ type: 'hello', clientId: first.hellos()[0].clientId, runId: 'run-1' }]);
+    const { clientId, loadId } = first.hellos()[0];
+    expect(second.hellos()).toEqual([{ type: 'hello', clientId, loadId, runId: 'run-1' }]);
   });
 
   it('remembers the run it joined for the next page load when its socket drops', async () => {
@@ -169,5 +170,21 @@ describe('DevHost — the dev-server run this page joined (#416)', () => {
 
     expect(third.hellos()[0].runId).toBe('run-1');
     expect(wrapper.find('[data-testid="server-restarted"]').exists()).toBe(true);
+  });
+});
+
+describe('DevHost — the page load its requests belong to (#1041)', () => {
+  it('names the same load when its socket reconnects, and a new one on the next page load', async () => {
+    await openPage();
+    latest().connect();
+    const first = latest().hellos()[0];
+    expect(reconnect().hellos()[0].loadId).toBe(first.loadId);
+
+    document.body.innerHTML = '';
+    await openPage();
+    latest().connect();
+    const reloaded = latest().hellos()[0];
+    expect(reloaded.clientId).toBe(first.clientId);
+    expect(reloaded.loadId).not.toBe(first.loadId);
   });
 });

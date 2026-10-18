@@ -53,6 +53,7 @@ import {
   summarise,
   surfaceOf,
   waitForAction,
+  waitUntil,
 } from './browser-harness.mjs';
 
 // ── The fixture world ────────────────────────────────────────────────────────
@@ -162,18 +163,30 @@ export const gameDefinition: GameDefinition = {
  *
  * The measurement only means something if there is board under the bar to
  * begin with: a board that ends above the bar would show a growing usable area
- * with nothing in it.
+ * with nothing in it. Its one button starts `tend` through the shared action
+ * controller, so a question can start while the bar is down (#922).
  */
 const BOARD = `import { defineComponent, h } from 'vue';
 
 export default defineComponent({
   name: 'GardenBoard',
-  setup() {
+  props: {
+    actionController: { type: Object, required: true },
+  },
+  setup(props) {
+    const controller = props.actionController as { start(name: string, options?: Record<string, unknown>): Promise<unknown> };
     return () =>
       h('div', {
         'data-fixture': 'garden',
         style: 'width: 900px; height: 1600px; background: linear-gradient(#dfe7d8, #b7c9a8);',
-      }, 'garden');
+      }, [
+        'garden',
+        h('button', {
+          'data-fixture': 'start-tend',
+          style: 'display: block; margin: 40px;',
+          onClick: () => void controller.start('tend', {}),
+        }, 'Tend from the board'),
+      ]);
   },
 });
 `;
@@ -332,11 +345,21 @@ async function drive({ launch, hostUrl }) {
 
         await surface.locator('[data-fixture="garden"]').click({ position: { x: 5, y: 5 } });
         await page.waitForTimeout(200);
-        // Nothing on this board starts an action, so the bar must still be down:
-        // it opens for a QUESTION, not for a click.
+        // The click lands on empty board, which starts nothing, so the bar must
+        // still be down: it opens for a QUESTION, not for a click.
         const afterClick = await measure(page);
         assert(afterClick.start === null,
           'the bar came up for a board click that asked nothing');
+
+        // The next question, started from the board with the bar still down.
+        await surface.locator('[data-fixture="start-tend"]').click();
+        const nextQuestion = await waitUntil(
+          () => measure(page),
+          (shot) => shot.choice !== null && shot.choice.height > 0,
+          5_000,
+        );
+        assert(nextQuestion.choice !== null && nextQuestion.choice.height > 0,
+          'a new question started with the bar down, and its choice controls stayed hidden');
       });
 
       await context.close();

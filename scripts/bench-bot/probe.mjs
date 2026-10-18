@@ -13,6 +13,7 @@ import { dueSeats, availableActionsForSeat } from '../../src/engine/index.ts';
 import { enumerateActionMoves } from '../../src/engine/utils/enumerate-moves.ts';
 import { ElementCollection } from '../../src/engine/element/element-collection.ts';
 import { SeededRandom } from '../../src/utils/random.ts';
+import { declaredGameOptionsOf } from '../../src/session/game-option-selection.ts';
 import { isDevMode } from '../../src/utils/dev.ts';
 import { measureSearch } from './profile.mjs';
 import { pickPositions, FIXED_STEPS } from './report.mjs';
@@ -41,7 +42,8 @@ function legalMoves(game, flowState, seat) {
 }
 
 /**
- * A started game, the same one every time: seeded, and with a fixed element id key.
+ * A started game, the same one every time: seeded, with a fixed element id key,
+ * and with every option boardsmith.json declares, as every host starts one.
  *
  * @param setup `{ playerCount, options }` for the game's constructor.
  */
@@ -50,6 +52,7 @@ export function startGame(gameDefinition, setup) {
     GameClass: gameDefinition.gameClass,
     gameType: gameDefinition.gameType,
     gameOptions: { ...setup.options, playerCount: setup.playerCount, seed: SEED, elementIdKey: ELEMENT_ID_KEY },
+    declaredGameOptions: declaredGameOptionsOf(gameDefinition),
   });
   runner.start();
   return runner;

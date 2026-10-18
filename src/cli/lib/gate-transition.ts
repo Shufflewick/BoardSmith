@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import { GATE_TRANSITION_MD, designPath } from './project-paths.js';
+import { readIfExists } from './read-if-exists.js';
 
 /**
  * `design/GATE-TRANSITION.md` (#397): the one-time record of the chunks a project had verified
@@ -109,7 +110,7 @@ function parseGateTransition(text: string): GateTransition {
 
 /** The project's transition record, or `undefined` when it has never run. */
 export async function readGateTransition(projectDir: string): Promise<GateTransition | undefined> {
-  const text = await fs.readFile(designPath(projectDir, GATE_TRANSITION_MD), 'utf-8').catch(() => undefined);
+  const text = await readIfExists(designPath(projectDir, GATE_TRANSITION_MD), (path) => fs.readFile(path, 'utf-8'));
   return text === undefined ? undefined : parseGateTransition(text);
 }
 

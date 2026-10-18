@@ -9,6 +9,7 @@ import {
   isPlayerElement,
   isPlayerIdentityAttribute,
   lookUpId,
+  ownVisibilityAllows,
   PILE_BRANCH,
   WITHHELD_PILE_BRANCH,
   readDynamicAttribute,
@@ -51,7 +52,7 @@ import {
   type VisibilityState,
 } from './visibility.js';
 import type { ActionDefinition, ActionResult, ActionTrace, ActionDebugInfo, PickTrace, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
-import { ActionExecutor, type PerformOptions } from '../action/action.js';
+import { ActionExecutor, type AcceptedArgs, type PerformOptions } from '../action/action.js';
 import { hasActionTemp, settingsForSeat } from '../action/helpers.js';
 import type { FlowDefinition, FlowState, FlowDebugInfo } from '../flow/types.js';
 import type { TutorialDefinition, TutorialProgress } from '../tutorial/types.js';
@@ -2525,6 +2526,9 @@ export class Game<
    * the panel, `performAction` refuses with it, and `enumerateActionMoves`
    * leaves out what it refuses (#690), so an enumerated move is never answered
    * "Action X is disabled".
+   *
+   * Ask it only once the action's condition holds: a false condition guards
+   * the disabled rule, which may read what only that condition makes safe (#1129).
    */
   getActionRefusalReason(action: ActionDefinition, player: P): string | null {
     return getActionLevelDisabledReasons(this, player.seat, [action.name])[action.name]
@@ -2661,6 +2665,11 @@ export class Game<
       return { success: false, error: `Unknown action: ${actionName}` };
     }
 
+    // The condition first, as the offer checks it: a false condition guards every rule after it (#1129).
+    if (!options?.followUp && !this._actionExecutor.conditionHolds(action, player)) {
+      return { success: false, error: 'Action is not available' };
+    }
+
     // Enforce action-level disabling at execution, not just in the projection
     // layer: a greyed-out button must also be a closed door (HR-01).
     const disabledReason = this.getActionRefusalReason(action, player);
@@ -2671,9 +2680,18 @@ export class Game<
       };
     }
 
-    // A refused action is not a new batch, so only an action that runs clears the buffer.
-    this._animationEvents = [];
-    return this._actionExecutor.executeAction(action, player, args, options);
+    // A refused action is not a new batch, so the buffer is cleared only once
+    // the checks accept the submission (#1128). A repeating pick changes the
+    // game while it is checked, so that action's batch starts before its picks.
+    if (this._actionExecutor.hasRepeatingSelections(action)) {
+      this._animationEvents = [];
+      return this._actionExecutor.executeAction(action, player, args, options);
+    }
+    const onAccepted = (accepted: Record<string, unknown>): void => {
+      options?.onAccepted?.(accepted);
+      this._animationEvents = [];
+    };
+    return this._actionExecutor.executeAction(action, player, args, { ...options, onAccepted });
   }
 
   // ============================================
@@ -3218,13 +3236,14 @@ export class Game<
    * @param actionName Action name to perform
    * @param args Action arguments
    * @param playerIndex Optional player index for simultaneous actions
+   * @param onAccepted Handed the action's args once its checks accept them (`PerformOptions.onAccepted`)
    */
-  continueFlow(actionName: string, args: Record<string, unknown>, playerIndex?: number): FlowState {
+  continueFlow(actionName: string, args: Record<string, unknown>, playerIndex?: number, onAccepted?: AcceptedArgs): FlowState {
     if (!this._flowEngine) {
       throw new Error('Flow not started');
     }
 
-    const state = this._flowEngine.resume(actionName, args, playerIndex);
+    const state = this._flowEngine.resume(actionName, args, playerIndex, onAccepted);
 
     this.#applyFlowCompletion(state);
 
@@ -4752,7 +4771,7 @@ export class Game<
     // #758: a child of a concealed zone whose own grant reaches this seat goes out whole.
     const grantedChild = (element: GameElement, i: number, childJson: ElementJSON): ElementJSON | null => {
       const child = element._t.children[i];
-      return child?.isVisibleTo(visibilityPosition) ? filterElement(childJson, child) : null;
+      return child && ownVisibilityAllows(child, visibilityPosition) ? filterElement(childJson, child) : null;
     };
 
     // A CONCEALED ZONE'S CHILDREN AS ANONYMOUS PLACEHOLDERS, for the count-only
@@ -4793,7 +4812,7 @@ export class Game<
       // Handle count-only mode: show count but not contents
       // Preserve element name and safe $-prefixed system attributes (like $type) for AutoUI
       // rendering; redact identity-bearing image refs ($image, $images.face).
-      if (visibility.mode === 'count-only' && !element.isVisibleTo(visibilityPosition)) {
+      if (visibility.mode === 'count-only' && !ownVisibilityAllows(element, visibilityPosition)) {
         // Drop `name` — for a leaf element (e.g. a Card named "AS") the name is
         // identity-bearing. Seed __hidden so the SEC-02 regression guard
         // (collectAllHiddenAttrs) sweeps this surface too.
@@ -4802,11 +4821,13 @@ export class Game<
           id: json.id,
           attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(json.attributes ?? {}) },
           childCount: element._t.children.length,
+          // What this seat was shown, no roster (#411), so a restore knows it cannot see in (#1108).
+          visibility: { mode: 'count-only', explicit: true },
         };
       }
 
-      // Check if element is visible to this player
-      if (!element.isVisibleTo(visibilityPosition)) {
+      // Its ancestors were all visible, or this walk would not have reached it (#1123).
+      if (!ownVisibilityAllows(element, visibilityPosition)) {
         // Return a hidden placeholder.
         //
         // INTENTIONAL ASYMMETRY (WR-02, iteration 2): unlike the zone branches
@@ -4842,6 +4863,7 @@ export class Game<
           // branches below. redactHiddenElementAttrs drops $image and narrows
           // $images to { back } only, so $images.face still never leaks.
           attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(json.attributes ?? {}) },
+          visibility: { mode: 'hidden', explicit: true },
         };
       }
 

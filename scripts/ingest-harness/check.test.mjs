@@ -313,6 +313,27 @@ describe('gaps-reconciliation (e2) — partial fills inside intact fences', () =
   });
 });
 
+describe('header-block (d) — an empty header value', () => {
+  function withHeaderLine(label, replacement) {
+    const tmp = tempTree('bs-d-');
+    fs.cpSync(CONFORMING_DIR, tmp, { recursive: true });
+    const indexPath = path.join(tmp, 'rulebook', 'INDEX.md');
+    const text = fs.readFileSync(indexPath, 'utf8');
+    fs.writeFileSync(indexPath, text.replace(new RegExp(`^${label}.*$`, 'm'), replacement));
+    return checkIngestArtifacts({
+      projectDir: tmp,
+      sourceFileName: 'rules.pdf',
+      expectedSourceHash: CONFORMING_SOURCE_HASH,
+    });
+  }
+
+  it.each(['Edition:', 'Source hash:'])('fails an empty "%s" instead of reading the next line as its value', (label) => {
+    const check = findCheck(withHeaderLine(label, label), 'header-block');
+    expect(check.pass).toBe(false);
+    expect(check.detail).toContain(`"${label}" line missing or has an empty value`);
+  });
+});
+
 describe('stated check counts', () => {
   // #1077: the README and run.mjs spell the counts out in prose, and they went stale when a check joined.
   const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen'];

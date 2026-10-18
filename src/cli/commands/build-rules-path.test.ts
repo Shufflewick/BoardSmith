@@ -175,3 +175,19 @@ describe('boardsmith build empties its output folder, and only a build output fo
     expect(readFileSync(join(out, 'todo.txt'), 'utf-8')).toBe('keep me');
   });
 });
+
+describe('boardsmith build refuses a linked folder in public/ (#1114)', () => {
+  it('names the link and leaves the earlier dist/ untouched, since publish cannot follow it once copied to dist/', async () => {
+    const dir = customRulesProject(false);
+    mkdirSync(join(dir, 'art'));
+    mkdirSync(join(dir, 'public'));
+    symlinkSync(join(dir, 'art'), join(dir, 'public', 'cards'), 'dir');
+    // An earlier build's output, which a refusal must leave as it was.
+    mkdirSync(join(dir, 'dist', 'rules'), { recursive: true });
+    writeFileSync(join(dir, 'dist', 'rules', 'rules.js'), 'earlier build');
+    await expect(buildProject(dir, {})).rejects.toThrow(
+      `${join(dir, 'public', 'cards')} is a link to a folder, and links are followed only to files. Replace the link with a copy of what it should point to.`,
+    );
+    expect(readFileSync(join(dir, 'dist', 'rules', 'rules.js'), 'utf-8')).toBe('earlier build');
+  });
+});

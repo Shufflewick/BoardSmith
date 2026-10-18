@@ -23,6 +23,7 @@ import { requireGameProject, resolveRulesDir, requireRulesIndex, requireTableUi 
 import { resolveWorldMode } from '../lib/world-project.js';
 import { resolveUserPath } from '../lib/user-path.js';
 import { makeCommandBuildDir } from '../lib/command-build-dir.js';
+import { parsePositiveWholeNumber } from '../../utils/positive-whole-number.js';
 import { loadWorldRuntime, startWorldDevServer, type WorldRuntime } from './dev-world.js';
 import {
   answerAlive,
@@ -33,11 +34,10 @@ import {
   serveDevDocuments,
   serveVite,
 } from './dev-server.js';
-import { parseBotLevel } from '../../bot/index.js';
+import { DIFFICULTY_PRESETS, MAX_BOT_ITERATIONS, parseBotLevel } from '../../bot/index.js';
 
 import type { DevHostConfig, DevOptionDef } from '../dev-host/config-types.js';
 import {
-  GameOptionSelectionError,
   assertPresetsSelectable,
   declaredGameOptionsOf,
   selectDesignerGameOptions,
@@ -67,12 +67,6 @@ interface DevOptions {
   reset?: boolean;
 }
 
-/** Thrown by the pure dev.ts flag/host validators below; `devCommand` catches
- * it, prints an actionable `styleText` error, and exits non-zero. Kept as a
- * distinct class (not a bare Error) so devCommand's catch can distinguish an
- * intentional validation failure from an unexpected bug. */
-export class DevFlagError extends Error {}
-
 /**
  * Refuse `--reset` on a project that has no world to reset.
  *
@@ -82,25 +76,10 @@ export class DevFlagError extends Error {}
  */
 export function assertWorldProjectForReset(worldMode: boolean): void {
   if (worldMode) return;
-  throw new DevFlagError(
-    'Error: --reset deletes a PERSISTENT WORLD\'s local store, and this project does not declare ' +
-      '"backend": "world" in boardsmith.json, so it has no world to delete. A table game\'s ' +
-      'cross-session state lives in .boardsmith-dev-store.json; delete that file directly if ' +
-      'that is what you meant.',
+  throw new Error(
+    '--reset takes a project that declares "backend": "world" in boardsmith.json, got one that does not, so there is no world to delete. ' +
+      'A table game keeps its cross-session state in .boardsmith-dev-store.json; delete that file directly if that is what you meant.',
   );
-}
-
-/**
- * Fail-fast positive-integer parser for `--port`/`--players` (CLIX-06),
- * copying the `simulate.ts:145-153` idiom. Pure (no process.exit) so it is
- * directly unit-testable without a real dev server (PROC-02).
- */
-export function parsePositiveInt(flagName: string, raw: string): number {
-  const value = Number(raw);
-  if (!Number.isInteger(value) || value < 1) {
-    throw new DevFlagError(`Error: --${flagName} must be a positive integer, got "${raw}"`);
-  }
-  return value;
 }
 
 /**
@@ -110,24 +89,21 @@ export function parsePositiveInt(flagName: string, raw: string): number {
  * path and reason — on a missing file or invalid JSON; there is deliberately
  * NO silent fallback to a fresh start (CLAUDE.md hard rule: no fallbacks that
  * mask real problems). Pure (no process.exit) so it is directly unit-testable,
- * mirroring `parsePositiveInt`/`parseBotSeats`.
+ * mirroring `parseBotSeats`.
  */
 export function parseSeedFile(path: string): GameStateSnapshot {
-  if (!existsSync(path)) {
-    throw new DevFlagError(`Error: --seed file not found: ${path}`);
-  }
+  const refuse = (problem: string): Error => new Error(`--seed takes a recorded game state JSON file, got "${path}", which ${problem}.`);
+  if (!existsSync(path)) throw refuse('does not exist');
   let raw: string;
   try {
     raw = readFileSync(path, 'utf-8');
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new DevFlagError(`Error: --seed file could not be read at ${path}: ${reason}`);
+    throw refuse(`could not be read: ${error instanceof Error ? error.message : String(error)}`);
   }
   try {
     return JSON.parse(raw) as GameStateSnapshot;
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new DevFlagError(`Error: --seed file at ${path} is not valid JSON: ${reason}`);
+    throw refuse(`is not valid JSON: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -139,32 +115,20 @@ export function parseSeedFile(path: string): GameStateSnapshot {
 export function validateBotLevel(level: string): void {
   try {
     parseBotLevel(level);
-  } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error);
-    throw new DevFlagError(`Error: --bot-level is invalid. ${reason}`);
+  } catch {
+    const presets = Object.keys(DIFFICULTY_PRESETS).join(', ');
+    throw new Error(`--bot-level takes ${presets} or an iteration count from 1 to ${MAX_BOT_ITERATIONS}, got "${level}".`);
   }
 }
 
 /**
  * Fail-fast `--bot` seat parser (CLIX-06). Player positions are 1-indexed and
  * comma-separated per flag occurrence (`--bot 1,2` or repeated `--bot 1 --bot 2`).
- * Unlike the old `.filter(n => !isNaN(n))` behavior, a non-numeric entry now
- * throws instead of being silently dropped.
+ * An entry that is not a positive whole number throws instead of being dropped.
  */
 export function parseBotSeats(raw: string[] | undefined): number[] {
   if (!raw) return [];
-  const seats: number[] = [];
-  for (const group of raw) {
-    for (const part of group.split(',')) {
-      const trimmed = part.trim();
-      const value = Number(trimmed);
-      if (!Number.isInteger(value)) {
-        throw new DevFlagError(`Error: --bot must be a comma-separated list of positive integers, got "${trimmed}"`);
-      }
-      seats.push(value);
-    }
-  }
-  return seats;
+  return raw.flatMap((group) => group.split(',').map((part) => parsePositiveWholeNumber('--bot', part.trim())));
 }
 
 /**
@@ -173,9 +137,7 @@ export function parseBotSeats(raw: string[] | undefined): number[] {
  */
 export function resolveEffectivePlayerCount(playerCount: number, minPlayers: number, maxPlayers: number): number {
   if (playerCount < minPlayers || playerCount > maxPlayers) {
-    throw new DevFlagError(
-      `Error: --players ${playerCount} is out of range for this game (must be between ${minPlayers} and ${maxPlayers}).`,
-    );
+    throw new Error(`--players takes a whole number from ${minPlayers} to ${maxPlayers} for this game, got "${playerCount}".`);
   }
   return playerCount;
 }
@@ -184,13 +146,13 @@ export function resolveEffectivePlayerCount(playerCount: number, minPlayers: num
  * D14/DEVHOST-02: `--players` defaults to the game's `minPlayers` (not a
  * hardcoded '2') so a bare `boardsmith dev` on a solo game (minPlayers=1,
  * maxPlayers=1) starts instead of erroring (default 2 > max 1). An EXPLICIT
- * `--players` is unaffected: it still runs through `parsePositiveInt` +
+ * `--players` is unaffected: it still runs through `parsePositiveWholeNumber` +
  * `resolveEffectivePlayerCount`, which still throws on an out-of-range value
  * naming the bound — this only changes what happens when the flag is unset.
  */
 export function resolvePlayerCount(rawPlayers: string | undefined, minPlayers: number, maxPlayers: number): number {
   if (rawPlayers === undefined) return minPlayers;
-  return resolveEffectivePlayerCount(parsePositiveInt('players', rawPlayers), minPlayers, maxPlayers);
+  return resolveEffectivePlayerCount(parsePositiveWholeNumber('--players', rawPlayers), minPlayers, maxPlayers);
 }
 
 /**
@@ -201,11 +163,7 @@ export function resolvePlayerCount(rawPlayers: string | undefined, minPlayers: n
 export function validateBotSeats(botPlayers: number[], effectivePlayerCount: number): void {
   const invalidBotPlayers = botPlayers.filter(p => p < 1 || p > effectivePlayerCount);
   if (invalidBotPlayers.length > 0) {
-    throw new DevFlagError(
-      `Error: Invalid bot player position(s): ${invalidBotPlayers.join(', ')}\n` +
-        `Player positions are 1-indexed (1 to ${effectivePlayerCount}).\n` +
-        `Example: --bot 2 for a 2-player game means player 2 is bot.`,
-    );
+    throw new Error(`--bot takes seats from 1 to ${effectivePlayerCount} for this game, got "${invalidBotPlayers.join(',')}".`);
   }
 }
 
@@ -239,9 +197,8 @@ export function shouldOpenBrowser(options: { open?: boolean }): boolean {
 
 export function resolveHost(options: { host?: string; lan?: boolean }): { host: string; isNonLocal: boolean } {
   if (options.lan && options.host !== undefined) {
-    throw new DevFlagError(
-      `Error: --lan and --host ${options.host} conflict; pass one or the other.\n` +
-        `--lan is shorthand for --host 0.0.0.0 (serve to your whole network).`,
+    throw new Error(
+      `--lan takes no --host, since it is shorthand for --host 0.0.0.0, got --host ${options.host}. Pass one or the other.`,
     );
   }
   const host = options.host ?? (options.lan ? '0.0.0.0' : '127.0.0.1');
@@ -396,7 +353,7 @@ function samePalette(a: ColorChoice[], b: ColorChoice[]): boolean {
  * D13/DEVHOST-01: parse repeatable `--game-option key=value` flags into a flat
  * record, splitting each entry on the FIRST "=" (a value may itself contain
  * "="). Fail-loud (T-161-03) on an entry missing "=" instead of silently
- * dropping it — matches the `parsePositiveInt`/`parseBotSeats` idiom.
+ * dropping it — matches the `parseBotSeats` idiom.
  */
 export function parseGameOptionFlags(raw: string[] | undefined): Record<string, string> {
   if (!raw) return {};
@@ -404,9 +361,7 @@ export function parseGameOptionFlags(raw: string[] | undefined): Record<string, 
   for (const entry of raw) {
     const eq = entry.indexOf('=');
     if (eq === -1) {
-      throw new DevFlagError(
-        `Error: --game-option must be "key=value", got "${entry}" (missing "=").`,
-      );
+      throw new Error(`--game-option takes "key=value", got "${entry}".`);
     }
     result[entry.slice(0, eq)] = entry.slice(eq + 1);
   }
@@ -425,13 +380,13 @@ export interface ResolvedPreset {
  * `configure` message's `preset` field). Applying a preset is a shortcut for
  * setting its underlying options — returns the WHOLE bundle (never a partial
  * pick) plus the preset's player count when it declares `players`. Throws an
- * actionable `DevFlagError` naming the unknown preset and the declared names.
+ * Error naming the unknown preset and the declared names.
  */
 export function resolvePreset(presets: GamePreset[] | undefined, name: string): ResolvedPreset {
   const preset = (presets ?? []).find((p) => p.name === name);
   if (!preset) {
-    const known = (presets ?? []).map((p) => p.name).join(', ') || '(none declared)';
-    throw new DevFlagError(`Error: --preset "${name}" is not declared by this game. Declared presets: ${known}.`);
+    const known = (presets ?? []).map((p) => p.name).join(', ') || 'it declares none';
+    throw new Error(`--preset takes a preset this game declares (${known}), got "${name}".`);
   }
   const resolved: ResolvedPreset = { options: { ...preset.options } };
   if (preset.players?.length) resolved.playerCount = preset.players.length;
@@ -635,13 +590,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
     // this run made, and anything opened after it. Without this every failed
     // start left one more `dev-tmp-*` directory behind.
     await holdings.run().catch((stopError: Error) => console.error(styleText('red', stopError.message)));
-    // A flag or host setting the game refuses is the author's to fix: say what
-    // is wrong and exit non-zero. Anything else is rethrown for `cli.ts` to
-    // render as one line.
-    if (error instanceof DevFlagError || error instanceof GameOptionSelectionError) {
-      console.error(styleText('red', error.message));
-      process.exit(1);
-    }
+    // `cli.ts` prints the refusal as one line and exits non-zero.
     throw error;
   }
 }
@@ -652,9 +601,9 @@ export async function devCommand(options: DevOptions): Promise<void> {
 // fallow-ignore-next-line complexity
 async function startDev(options: DevOptions, holdings: HostHoldings): Promise<void> {
 
-  // Fail-fast on non-numeric --port/--players/--bot (CLIX-06) — actionable
-  // errors before any server work, matching simulate.ts's Number.isInteger idiom.
-  const port = parsePositiveInt('port', options.port);
+  // Fail-fast on non-numeric --port/--players/--bot (CLIX-06): actionable errors before any server work.
+  const port = parsePositiveWholeNumber('--port', options.port);
+  if (port > 65535) throw new Error(`--port takes a port number from 1 to 65535, got "${options.port}".`);
   const botPlayers = parseBotSeats(options.bot);
   // NOTE: --players is resolved AFTER gameDefinition loads (D14) — its default
   // is the game's minPlayers, not a literal, so it cannot be parsed this early.
@@ -667,9 +616,10 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   const cwd = process.cwd();
 
   if (UNSAFE_PORTS.has(port)) {
-    console.error(styleText('red', `Error: Port ${port} is blocked by browsers for security reasons.`));
-    console.error(styleText('dim', 'Try a different port like 5173, 3000, 8080, or any port above 1024 that isn\'t restricted.'));
-    process.exit(1);
+    throw new Error(
+      `--port takes a port browsers allow, got "${options.port}", which browsers block for security. ` +
+        'Try 5173, 3000, 8080, or another port above 1024 that browsers do not block.',
+    );
   }
 
   // A TAKEN PORT IS REFUSED BEFORE ANYTHING IS OPENED (#345): before `--reset`

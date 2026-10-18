@@ -852,12 +852,13 @@ describe('the local world store', () => {
   });
 
   describe('reset', () => {
-    it('removes the whole store, sidecars included', () => {
+    it('removes the whole store, sidecars included, and keeps only the lock a run holds', () => {
       store.recordDirty(['room/a']);
       store.close();
       expect(readdirSync(worldStoreDir(root)).length).toBeGreaterThan(0);
       expect(resetWorldStore(root)).toBe(true);
-      expect(existsSync(worldStoreDir(root))).toBe(false);
+      expect(readdirSync(worldStoreDir(root))).toEqual(['world.db.lock']);
+      expect(resetWorldStore(root)).toBe(false);
       // Reopened so `afterEach` has a handle to close.
       store = openWorldStore(worldStorePath(root), BUDGETS);
     });
@@ -909,7 +910,7 @@ describe('the local world store', () => {
 
     it('is refused on a project that declares no world, rather than quietly doing nothing', () => {
       expect(() => assertWorldProjectForReset(true)).not.toThrow();
-      expect(() => assertWorldProjectForReset(false)).toThrow(/does not declare "backend": "world"/);
+      expect(() => assertWorldProjectForReset(false)).toThrow(/^--reset takes a project that declares "backend": "world"/);
     });
   });
 
