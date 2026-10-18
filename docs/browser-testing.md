@@ -124,8 +124,9 @@ interface BoardsmithDevtools {
 }
 ```
 
-Every method is a synchronous read of the game iframe's current state, built
-when you call it. There is no round trip to the server. If
+Every method returns a copy of the game iframe's current state, built
+when you call it, so changing it changes nothing in the game. There is no round
+trip to the server. If
 `window.__BOARDSMITH_DEVTOOLS` is `undefined`, you're in a production build or
 the dev host page hasn't mounted yet. If the methods return `null` or `[]`, the
 game iframe hasn't mounted `GameShell` yet, or has no state yet.

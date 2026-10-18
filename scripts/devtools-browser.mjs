@@ -38,6 +38,11 @@ await runBrowserRegression({ script: 'devtools-browser.mjs', table: true }, asyn
       assert(actions.length > 0, 'getAvailableActions() returned no actions while the Action Panel offers a choice');
     });
 
+    await check('a read hands the dev host page its own arrays, not the game frame\'s', async () => {
+      const ownArray = await page.evaluate(() => window.__BOARDSMITH_DEVTOOLS.getAvailableActions() instanceof Array);
+      assert(ownArray, 'getAvailableActions() returned an array from the game frame, so `instanceof Array` is false');
+    });
+
     await frame.locator('[data-testid="bs-actionbar"] .choice-btn').first().click();
     const after = await waitUntil(() => readDevtools(page), (seen) => seen !== before);
     await check('after a move the devtools global reads the new state', async () => {

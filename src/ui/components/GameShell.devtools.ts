@@ -89,11 +89,18 @@ declare global {
 
 /** Put the snapshot reader on the game's window. Returns the function that takes it off. */
 export function exposeDevtoolsSnapshot(win: Window, read: () => DevtoolsParams): () => void {
-  win.__boardsmithDevtoolsSnapshot = () => buildDevtoolsPayload(read());
-  return () => { delete win.__boardsmithDevtoolsSnapshot; };
+  const reader = () => buildDevtoolsPayload(read());
+  win.__boardsmithDevtoolsSnapshot = reader;
+  // A hot reload sets the new shell's reader before the old shell unmounts.
+  return () => { if (win.__boardsmithDevtoolsSnapshot === reader) delete win.__boardsmithDevtoolsSnapshot; };
 }
 
-/** The current snapshot of the game in `win`, or null when no shell is mounted there. */
+/**
+ * A copy of the current snapshot of the game in `win`, or null when no shell is
+ * mounted there. A copy, so the caller cannot change the shell's state, and its
+ * objects belong to the caller's window.
+ */
 export function readDevtoolsSnapshot(win: Window | null | undefined): DevtoolsSnapshot | null {
-  return win?.__boardsmithDevtoolsSnapshot?.() ?? null;
+  const snapshot = win?.__boardsmithDevtoolsSnapshot?.();
+  return snapshot ? structuredClone(snapshot) : null;
 }

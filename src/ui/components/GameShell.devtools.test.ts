@@ -76,6 +76,32 @@ describe('GameShell devtools snapshot is read on demand (#960)', () => {
     expect(readDevtoolsSnapshot(window)).toBeNull();
   });
 
+  it('keeps a newer shell\'s reader when an older shell unmounts after it, as a hot reload does', async () => {
+    enterIframe();
+    const older = mountPlatformShell();
+    const newer = mountPlatformShell();
+    await nextTick();
+    older.unmount();
+    expect(readDevtoolsSnapshot(window)).not.toBeNull();
+    newer.unmount();
+    expect(readDevtoolsSnapshot(window)).toBeNull();
+  });
+
+  it('hands out a copy, so changing a read result does not change the next read', async () => {
+    enterIframe();
+    const wrapper = mountPlatformShell();
+    await nextTick();
+    pushState(['ask']);
+    await nextTick();
+    const first = readDevtoolsSnapshot(window)!;
+    first.availableActions.push('cheat');
+    (first.state as { currentPlayer: number }).currentPlayer = 99;
+    const second = readDevtoolsSnapshot(window)!;
+    expect(second.availableActions).toEqual(['ask']);
+    expect((second.state as { currentPlayer: number }).currentPlayer).toBe(1);
+    wrapper.unmount();
+  });
+
   it('reads null from a frame with no shell in it', () => {
     expect(readDevtoolsSnapshot(null)).toBeNull();
     expect(readDevtoolsSnapshot(window)).toBeNull();
