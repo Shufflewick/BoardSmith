@@ -16,6 +16,9 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { h, nextTick } from 'vue';
 import PlayShell from './PlayShell.vue';
 import Toast from './Toast.vue';
@@ -173,7 +176,20 @@ describe('what is the adapter\'s and not the shell\'s', () => {
     const overlay = wrapper.get('.game-over').element;
     const board = wrapper.get('[data-testid="bs-board"]').element;
     expect(board.contains(overlay)).toBe(false);
-    expect(overlay.parentElement).toBe(board.parentElement);
+    expect(overlay.parentElement!.parentElement).toBe(board.parentElement);
+  });
+
+  // In the row-flex viewport, in-flow overlay content (a world banner) took width from the board (#1068).
+  it('lays the board overlays in one layer over the board, so their content never takes the board\'s space', () => {
+    const wrapper = mountShell({}, { 'board-overlays': () => h('p', { class: 'banner' }) });
+    const layer = wrapper.get('.banner').element.parentElement!;
+    expect(layer.classList.contains('board-overlays')).toBe(true);
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'PlayShell.vue'), 'utf-8');
+    const rule = css.match(/\n\.board-overlays \{([^}]*)\}/)?.[1] ?? '';
+    expect(rule).toMatch(/position:\s*absolute;/);
+    expect(rule).toMatch(/inset:\s*0;/);
+    expect(rule).toMatch(/pointer-events:\s*none;/);
+    expect(css).toMatch(/\n\.board-overlays > :deep\(\*\) \{\s*pointer-events:\s*auto;/);
   });
 });
 

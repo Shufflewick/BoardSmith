@@ -43,6 +43,15 @@ await runBrowserRegression({ script: 'gameover-scrolled-board-browser.mjs', tabl
       assert(scrolled.left > 0, 'the board region did not scroll');
     });
 
+    await check('the empty overlay layer lets a pointer through to the board', async () => {
+      const hit = await region.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const top = el.ownerDocument.elementFromPoint(r.x + r.width / 2, r.y + r.height / 3);
+        return el.contains(top) ? null : top?.className || top?.tagName;
+      });
+      assert(hit === null, `a pointer over the board lands on "${hit}" instead`);
+    });
+
     const ended = await playTableSampleToTheEnd(frame);
     await check('the game plays to its end and shows the game-over card', async () => {
       assert(ended, 'the game-over card never appeared');
@@ -64,6 +73,11 @@ await runBrowserRegression({ script: 'gameover-scrolled-board-browser.mjs', tabl
         `the card is not wholly on the visible board: ${JSON.stringify(seen)} px of room on each side (a negative side is cut off)`,
       );
       assert(Math.abs(seen.left - seen.right) <= 1, `the card is off centre: ${seen.left}px of room on its left, ${seen.right}px on its right`);
+    });
+
+    await check('the game-over card takes a real click on its close button', async () => {
+      await frame.locator('.game-over-card .goc-close').click({ timeout: 5_000 });
+      await frame.locator('.game-over-card').waitFor({ state: 'detached', timeout: 5_000 });
     });
   } finally {
     await browser.close();

@@ -332,8 +332,10 @@ defineExpose({ host });
   padding: 1rem;
 }
 
-/* LOST sits over the board region, marking the last view as no longer live. */
-.world-shell__lost {
+/* Both banners sit over the top of the board: LOST marks the last view as no
+   longer live, RECOVERING says an order from the last page is being asked about. */
+.world-shell__lost,
+.world-shell__recovering {
   position: absolute;
   top: 0;
   left: 0;
@@ -341,8 +343,11 @@ defineExpose({ host });
   z-index: 20;
   margin: 0;
   padding: 0.75rem 1rem;
-  background: color-mix(in srgb, var(--bsg-warn) 25%, var(--bsg-surface));
+  background: var(--bsg-surface);
   color: var(--bsg-ink);
+}
+.world-shell__lost {
+  background: color-mix(in srgb, var(--bsg-warn) 25%, var(--bsg-surface));
 }
 
 .empty-game-area {

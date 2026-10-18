@@ -1030,7 +1030,9 @@ the announcement, or the other way round.
 Two separate questions decide what a game's ending looks like.
 
 **Who draws it.** By default the shell draws its `GameOverCard`. Fill the
-`#game-over` slot to draw your own card in its place, or set
+`#game-over` slot to draw your own card in its place (the shell puts it in a
+layer positioned over the visible board, so it stays in view however the board
+is scrolled; a `position: absolute; inset: 0` wrapper fills that layer), or set
 `providesOwnGameOverUi` on GameShell when your board draws the ending itself.
 Then no card is drawn, but the shell still announces the result. Either form
 works in a template: `provides-own-game-over-ui` or `providesOwnGameOverUi`.
