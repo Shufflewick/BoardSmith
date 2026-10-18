@@ -168,16 +168,30 @@ for (const [prototype, names] of BUILTIN_READ_NAMES) {
   }
 }
 
-/** One property, read through the projection; on a built-in object a listed
- *  getter (`size`, `length`) gets the real object as its receiver, as a listed method does. */
+/** One property, read through the projection; on a built-in object only a listed
+ *  getter (`size`, `length`) runs, with the real object as its receiver, as a listed method does. */
 function readProperty(subject: object, property: string | symbol, receiver: unknown, safeReceiver: boolean): unknown {
   if (safeReceiver) return Reflect.get(subject, property, receiver);
   for (let holder: object | null = subject; holder !== null; holder = Object.getPrototypeOf(holder)) {
     const held = Reflect.getOwnPropertyDescriptor(holder, property);
     if (held === undefined) continue;
-    return Reflect.get(subject, property, held.get !== undefined && BUILTIN_READS.has(held.get) ? subject : receiver);
+    if (held.get === undefined) return Reflect.get(subject, property, receiver);
+    if (!BUILTIN_READS.has(held.get)) refuseBuiltinCall(subject, property);
+    return Reflect.apply(held.get, subject, []);
   }
   return undefined;
+}
+
+/** A built-in method or getter the read list does not name: it might be a write, so it is not run. */
+function refuseBuiltinCall(subject: object, property: string | symbol): never {
+  const kind = Object.prototype.toString.call(subject).slice("[object ".length, -1);
+  throw worldRefusal(
+    "declaration-write",
+    `A read-only view of this world cannot call "${String(property)}" on a ${kind}: it is not one of the ` +
+      "built-in reads a world callback may call, and anything else might change the object. Use a read " +
+      "such as get, has, keys, values, entries, forEach or size, or, if the call changes state, move it " +
+      "into the command's run().",
+  );
 }
 
 /**
@@ -418,7 +432,7 @@ function projectedProperty(
 
   // ANYTHING BUT A KNOWN READ IS REFUSED BEFORE IT IS CACHED, so the refusal
   // names the property it was reached by rather than whichever name got there first.
-  if (!safeReceiver && !BUILTIN_READS.has(call)) refuseWrite(property);
+  if (!safeReceiver && !BUILTIN_READS.has(call)) refuseBuiltinCall(target, property);
 
   // ONE WRAPPER PER FUNCTION, not one per read (#374). Only when the receiver is
   // this projection: reached along a prototype chain from some other object, the

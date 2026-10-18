@@ -707,7 +707,7 @@ describe("#978: a built-in collection keyed by a player or element", () => {
       const engine = await ledgerEngine(quoting("rewrite", write));
       await expect(
         engine.resolveQuote("player-a", "rewrite", { ship: "dory" }, STAMP),
-      ).rejects.toThrow(/A read-only view of this world tried to write/);
+      ).rejects.toThrow(/cannot call "(set|delete)" on a (Map|Set|WeakMap): it is not one of the built-in reads/);
     }
   });
 
@@ -722,7 +722,7 @@ describe("#978: a built-in collection keyed by a player or element", () => {
       const engine = await ledgerEngine(quoting("rewrite", write), game);
       await expect(
         engine.resolveQuote("player-a", "rewrite", { ship: "dory" }, STAMP),
-      ).rejects.toThrow(/A read-only view of this world tried to write/);
+      ).rejects.toThrow(/cannot call "(fill|sort|stamp)" on a (Uint8Array|Map): it is not one of the built-in reads/);
       expect([...game.tallies]).toEqual([3, 1, 2]);
       expect(game.ranks.get(game.players[0]!)).toBe("captain");
     }

@@ -7,7 +7,7 @@
 // without one of these cases -- assignment is the obvious one, and a mutating
 // METHOD writing through its own `this` is the one a `set` trap alone misses.
 import { describe, expect, it } from "vitest";
-import { Game, Piece, Player, Space } from "../engine/index.js";
+import { Game, PersistentMap, Piece, Player, Space } from "../engine/index.js";
 import type { GameOptions } from "../engine/index.js";
 import { readOnlyProjection } from "./readonly.js";
 import { WorldRefusal } from "./refusals.js";
@@ -395,14 +395,14 @@ describe("readOnlyProjection over built-in objects (#1171)", () => {
     const live = new Uint8Array([3, 1, 2]);
     const projection = readOnlyProjection(live);
 
-    for (const write of [
-      () => projection.fill(0),
-      () => projection.copyWithin(0, 1),
-      () => projection.reverse(),
-      () => projection.sort(),
-      () => projection.set([9]),
-    ]) {
-      expect(write).toThrow(/A read-only view of this world tried to write/);
+    for (const [name, write] of [
+      ["fill", () => projection.fill(0)],
+      ["copyWithin", () => projection.copyWithin(0, 1)],
+      ["reverse", () => projection.reverse()],
+      ["sort", () => projection.sort()],
+      ["set", () => projection.set([9])],
+    ] as const) {
+      expect(write).toThrow(`cannot call "${name}" on a Uint8Array: it is not one of the built-in reads a world callback may call`);
     }
     expect([...live]).toEqual([3, 1, 2]);
   });
@@ -421,7 +421,7 @@ describe("readOnlyProjection over built-in objects (#1171)", () => {
       const live = new Map<string, number>();
       const projection = readOnlyProjection(live) as unknown as { getOrInsert(key: string, value: number): number };
 
-      expect(() => projection.getOrInsert("gold", 5)).toThrow(/tried to write "getOrInsert"/);
+      expect(() => projection.getOrInsert("gold", 5)).toThrow(/cannot call "getOrInsert" on a Map: it is not one of the built-in reads.*move it into the command's run\(\)/);
       expect(live.size).toBe(0);
     } finally {
       if (!shipped) delete prototype.getOrInsert;
@@ -453,7 +453,38 @@ describe("readOnlyProjection over built-in objects (#1171)", () => {
     expect([date.getTime(), date.toISOString(), date.getUTCFullYear(), JSON.stringify(date), +date]).toEqual([
       0, "1970-01-01T00:00:00.000Z", 1970, '"1970-01-01T00:00:00.000Z"', 0,
     ]);
-    expect(() => date.setTime(5)).toThrow(/tried to write "setTime"/);
+    expect(() => date.setTime(5)).toThrow(/cannot call "setTime" on a Date/);
+  });
+
+  it("REFUSES a subclass's own get, which runs on the real Map and could write", () => {
+    class Tally extends Map<string, number> {
+      override get(key: string) {
+        if (!this.has(key)) this.set(key, 0);
+        return super.get(key);
+      }
+    }
+    const live = new Tally();
+
+    expect(() => readOnlyProjection(live).get("gold")).toThrow(/cannot call "get" on a Map/);
+    expect(live.size).toBe(0);
+  });
+
+  it("REFUSES a getter it does not list with the same readable refusal, not a runtime TypeError", () => {
+    const projection = readOnlyProjection(new Uint8Array(2));
+
+    expect(() => projection.buffer).toThrow(/cannot call "buffer" on a Uint8Array/);
+  });
+
+  it("still answers a PersistentMap's reads", () => {
+    const { game } = world();
+    const live = new PersistentMap<string, number>(game, "scores");
+    live.set("north", 3);
+    const projection = readOnlyProjection(live);
+
+    expect([projection.size, projection.get("north"), [...projection.entries()], [...projection]]).toEqual([
+      1, 3, [["north", 3]], [["north", 3]],
+    ]);
+    expect(() => projection.set("south", 1)).toThrow(/cannot call "set" on a PersistentMap/);
   });
 
   it("still answers every TypedArray read", () => {
