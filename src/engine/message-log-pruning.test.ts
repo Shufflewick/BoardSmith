@@ -15,9 +15,11 @@
  * state-diff ops restore from a checkpoint — so a history view of a pruned seat
  * showed a fabricated log.
  *
- * The repair is a per-entry identity the checkpoint references instead of a
- * position, so eviction from anywhere leaves every earlier boundary naming
- * exactly the lines that existed at it.
+ * The repair keeps the watermark an ABSOLUTE count of lines ever written and
+ * has the game count the lines it has evicted. Eviction is front-only, so a
+ * restore subtracts that count to find the boundary in the log as it now
+ * stands, and every earlier boundary still names exactly the lines that
+ * existed at it and survive.
  */
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Action, loop, eachPlayer, actionStep, type FlowContext, type GameOptions } from './index.js';
@@ -40,6 +42,12 @@ class ChattyGame extends Game<ChattyGame, Player> {
       }),
     );
     this.registerAction(
+      Action.create<ChattyGame>('note').prompt('Note').execute((_a, ctx) => {
+        (ctx.game as ChattyGame).message('note');
+      }),
+    );
+    this.registerAction(Action.create<ChattyGame>('pass').prompt('Pass').execute(() => {}));
+    this.registerAction(
       Action.create<ChattyGame>('fumble').prompt('Fumble').execute((_a, ctx) => {
         (ctx.game as ChattyGame).message('fumbled');
         throw new Error('fumble always fails part-way');
@@ -49,7 +57,7 @@ class ChattyGame extends Game<ChattyGame, Player> {
       root: loop({
         while: (ctx: FlowContext) => (ctx.get<number>('round') ?? 1) <= 20,
         maxIterations: 60,
-        do: eachPlayer({ do: actionStep({ actions: ['speak', 'whisper', 'fumble'] }) }),
+        do: eachPlayer({ do: actionStep({ actions: ['speak', 'whisper', 'note', 'pass', 'fumble'] }) }),
       }),
       setup: (ctx) => ctx.set('round', 1),
     });
@@ -428,5 +436,32 @@ describe('keepLast counts per audience (#1067)', () => {
     expect(undone!.game.messages.map((m) => m.text)).toEqual(['line 2']);
     undone!.game.message('after the undo');
     expect(seen(undone!.game, 2).messages.map((m) => m.text)).toEqual(['after the undo']);
+  });
+
+  it('does not show a seat lines from before its cut when an undo leaves it fewer than N and it is pruned again', () => {
+    // Seat 1 whispers or passes; seat 2's lines are the same either way.
+    function prunedTwice(seatOne: 'whisper' | 'pass') {
+      const runner = new GameRunner({
+        GameClass: ChattyGame,
+        gameType: 'chatty',
+        gameOptions: { playerCount: 2, playerNames: ['A', 'B'], seed: 'chat' },
+        checkpoints: { history: 'full' },
+      });
+      runner.start();
+      for (const [action, seat] of [[seatOne, 1], ['note', 2], [seatOne, 1], ['whisper', 2], [seatOne, 1], ['whisper', 2]] as const) {
+        expect(runner.performAction(action, seat, {}).success).toBe(true);
+        runner.captureCheckpoint();
+      }
+      // Seat 2 is cut at its first whisper; spectators keep the note, so it stays stored.
+      runner.game.pruneMessages({ keepLast: 2 });
+      // Back past seat 2's cut, then one new line, fewer than N.
+      const undone = GameRunner.fromCheckpoint(runner.getSnapshot(), 3, ChattyGame)!;
+      expect(undone.performAction('note', 2, {}).success).toBe(true);
+      undone.game.pruneMessages({ keepLast: 2 });
+      return seen(undone.game, 2);
+    }
+
+    expect(prunedTwice('whisper')).toEqual({ messages: [{ text: 'note' }], messageOffset: 1 });
+    expect(prunedTwice('whisper')).toEqual(prunedTwice('pass'));
   });
 });
