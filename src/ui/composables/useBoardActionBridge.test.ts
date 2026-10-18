@@ -837,8 +837,7 @@ describe('useBoardActionBridge dragged piece for a filterBy pick (#965)', () => 
 
   function bridgeWith(firstPick: EnrichedPickMetadata, pieceValue: unknown) {
     const board = createBoardInteraction();
-    const { controller } = makeController({ pick: destinationPick, action: 'move', validElements });
-    controller.currentArgs.value = { piece: pieceValue };
+    const { controller } = makeController({ pick: destinationPick, action: 'move', validElements, args: { piece: pieceValue } });
     useBoardActionBridge({
       controller,
       boardInteraction: board,
