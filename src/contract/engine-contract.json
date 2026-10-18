@@ -1,5 +1,5 @@
 {
-  "revision": 240,
+  "revision": 242,
   "surfaceHash": "5d61a0cfe45f7954",
   "payloadHash": "0e2d27db00239080",
   "formatHash": "3aff5d1f34f52ec0",
@@ -1858,6 +1858,22 @@
     },
     {
       "revision": 240,
+      "date": "2026-10-18",
+      "surfaceHash": "d045fa6967c06929",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "World mode refuses a command that moves a partition root anywhere other than directly under the game (#1170): reparent(), putInto() or remove() on a root throws, so the command is refused as a game-owned rules-error and nothing it changed is kept. Before, such a move succeeded in the live instance and the root silently came back directly under the game at the next wake. Moving a root's contents, and reordering roots among the game's children, still work. No saved-state or payload shape changes, and no game needs a rebuild."
+    },
+    {
+      "revision": 241,
+      "date": "2026-10-18",
+      "surfaceHash": "d045fa6967c06929",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "shuffle() clears the visibility grants of everything in the shuffled space, so a seat that peeked at a card cannot follow it (#962)"
+    },
+    {
+      "revision": 242,
       "date": "2026-10-18",
       "surfaceHash": "5d61a0cfe45f7954",
       "payloadHash": "0e2d27db00239080",

@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { promises as fs } from 'node:fs';
+import { promises as fs, mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { readBoardsmithVersion } from './boardsmith-version.js';
+import { boardsmithInstallKind, readBoardsmithVersion } from './boardsmith-version.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * `readBoardsmithVersion()` exists because `src/cli/cli.ts:27` hardcoded `.version('0.0.1')` and
@@ -49,5 +50,42 @@ describe('readBoardsmithVersion', () => {
     const { readBoardsmithVersion: fresh } = await import('./boardsmith-version.js');
     denyNextRead.on = true;
     expect(() => fresh()).toThrow(/Could not read .*package\.json \(EACCES\)/);
+  });
+});
+
+describe('boardsmithInstallKind (#942, #1007)', () => {
+  /** A BoardSmith package folder at `parts` under a fresh temp tree, with a `.git` when it is a clone. */
+  const packageAt = (parts: string[], options: { git: boolean }) => {
+    const dir = join(tempTree('bs-install-kind-'), ...parts);
+    mkdirSync(join(dir, 'src'), { recursive: true });
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'boardsmith', version: '0.0.0' }));
+    if (options.git) mkdirSync(join(dir, '.git'));
+    return dir;
+  };
+
+  it('calls a git clone outside node_modules a source checkout', () => {
+    expect(boardsmithInstallKind(packageAt(['BoardSmith'], { git: true }))).toBe('checkout');
+  });
+
+  it('calls a worktree, whose .git is a file, a source checkout', () => {
+    const dir = packageAt(['BoardSmith'], { git: false });
+    writeFileSync(join(dir, '.git'), 'gitdir: elsewhere\n');
+    expect(boardsmithInstallKind(dir)).toBe('checkout');
+  });
+
+  it('calls a copy in a game\'s node_modules an installed copy, even with a .git', () => {
+    expect(boardsmithInstallKind(packageAt(['my-game', 'node_modules', 'boardsmith'], { git: true }))).toBe('installed');
+  });
+
+  it('calls an unpacked package with no .git an installed copy', () => {
+    expect(boardsmithInstallKind(packageAt(['boardsmith'], { git: false }))).toBe('installed');
+  });
+
+  it('calls a copy in npm\'s _npx cache the npx cache', () => {
+    expect(boardsmithInstallKind(packageAt(['.npm', '_npx', 'a1b2', 'node_modules', 'boardsmith'], { git: false }))).toBe('npx-cache');
+  });
+
+  it('calls this repository a source checkout', () => {
+    expect(boardsmithInstallKind(REPO_ROOT)).toBe('checkout');
   });
 });

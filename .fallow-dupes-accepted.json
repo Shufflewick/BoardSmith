@@ -46,6 +46,13 @@
       ]
     },
     {
+      "content": "566a38c20382665b",
+      "lines": 17,
+      "files": [
+        "src/session/stateless-ops.ts"
+      ]
+    },
+    {
       "content": "64c9b55ecd6a877d",
       "lines": 21,
       "files": [
@@ -87,14 +94,6 @@
       ]
     },
     {
-      "content": "8c5df45e8e5c36f7",
-      "lines": 17,
-      "files": [
-        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
-        "src/ui/components/auto-ui/renderers/PieceRenderer.vue"
-      ]
-    },
-    {
       "content": "8f23a79b3b91febe",
       "lines": 15,
       "files": [
@@ -118,13 +117,6 @@
         "src/ui/components/auto-ui/renderers/DieRenderer.vue",
         "src/ui/components/auto-ui/renderers/PieceRenderer.vue",
         "src/ui/components/auto-ui/renderers/SpaceRenderer.vue"
-      ]
-    },
-    {
-      "content": "9aa734fbe4f4d143",
-      "lines": 18,
-      "files": [
-        "src/session/stateless-ops.ts"
       ]
     },
     {

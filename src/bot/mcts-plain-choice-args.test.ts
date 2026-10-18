@@ -49,7 +49,7 @@ describe('a chooseFrom of plain objects with an id', () => {
     for (const seed of seeds) {
       const game = new PlainChoiceGame({ playerCount: 2, seed });
       game.startFlow();
-      const bot = new MCTSBot(game, PlainChoiceGame, 'plain', 1, [], { async: false, timeout: Infinity, seed, iterations: 50 });
+      const bot = new MCTSBot(game, PlainChoiceGame, 'plain', 1, { async: false, timeout: Infinity, seed, iterations: 50 });
       const move = await bot.play();
       picked.push((move!.args.target as { name: string }).name);
     }
@@ -61,7 +61,7 @@ describe('an element from another copy of the engine', () => {
   it('is still rebound to the search game, though it fails instanceof', () => {
     const game = new PlainChoiceGame({ playerCount: 2, seed: 'copy' });
     game.startFlow();
-    const bot = new MCTSBot(game, PlainChoiceGame, 'plain', 1, [], { async: false, timeout: Infinity, seed: 'copy' });
+    const bot = new MCTSBot(game, PlainChoiceGame, 'plain', 1, { async: false, timeout: Infinity, seed: 'copy' });
     const b = bot as any;
     b.searchGame = b.restoreGame(b.captureSnapshot());
 

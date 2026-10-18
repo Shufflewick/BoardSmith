@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Action, Game, Piece, Player, Space, actionStep, loop, simultaneousActionStep, type GameOptions } from '../engine/index.js';
-import { createSnapshot } from './index.js';
+import { createSeatSnapshot } from './index.js';
 import { GameRunner } from './runner.js';
 import { TestGame } from '../testing/test-game.js';
 
@@ -98,7 +98,7 @@ function runner(): GameRunner<PurchaseGame> {
 }
 
 function seatTwoCopy(): GameRunner<PurchaseGame> {
-  const snapshot = createSnapshot(runner().game, 'history-serialize-order', [], 'history-serialize-order', {
+  const snapshot = createSeatSnapshot(runner().game, 'history-serialize-order', 'history-serialize-order', {
     forSeat: 2, reseed: 'history-serialize-order-seat-two',
   });
   return GameRunner.fromSnapshot(snapshot, PurchaseGame);

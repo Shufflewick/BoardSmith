@@ -68,11 +68,11 @@ type Runner = ReturnType<typeof newRunner>;
 const botFor = (
   runner: Runner,
   seat = 1,
-  difficulty: Parameters<typeof createBot>[5] = 20,
+  difficulty: Parameters<typeof createBot>[4] = 20,
   botStrategy?: unknown,
-  reproducible?: Parameters<typeof createBot>[7],
+  reproducible?: Parameters<typeof createBot>[6],
 ) => createBot(
-  runner.game, RaceGame, 'race', seat, runner.actionHistory, difficulty, botStrategy as never, reproducible,
+  runner.game, RaceGame, 'race', seat, difficulty, botStrategy as never, reproducible,
 );
 
 describe('createBot', () => {

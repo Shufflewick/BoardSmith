@@ -258,6 +258,7 @@ function handleDrop(event: DragEvent, cell: GameElement) {
               v-for="child in (cell.children ?? [])"
               :key="child.id"
               :element="child"
+              :stands-on="cellIdentity(cell)"
             />
           </div>
         </div>

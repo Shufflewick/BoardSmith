@@ -1,6 +1,6 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, parse } from 'node:path';
+import { dirname, join, parse, sep } from 'node:path';
 import { readIfExistsSync } from './read-if-exists.js';
 
 /**
@@ -64,4 +64,15 @@ export function readBoardsmithVersion(): string {
 /** The root of the BoardSmith package this CLI runs from: a checkout, or an installed copy. */
 export function boardsmithPackageRoot(): string {
   return findPackage().dir;
+}
+
+/**
+ * What kind of BoardSmith install `root` is: a source checkout, an installed copy, or npm's `_npx`
+ * cache, which npm clears. `boardsmith claude` links only a checkout (#942); init refuses the cache (#1007).
+ */
+export function boardsmithInstallKind(root: string): 'checkout' | 'installed' | 'npx-cache' {
+  const segments = root.split(sep);
+  if (segments.includes('_npx')) return 'npx-cache';
+  // A source checkout is a git clone or worktree (the published package ships no .git) outside any node_modules folder.
+  return !segments.includes('node_modules') && existsSync(join(root, '.git')) ? 'checkout' : 'installed';
 }

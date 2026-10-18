@@ -11,7 +11,7 @@
  * `~/.claude/skills`, is inside the temp tree and nothing else is writable.
  */
 import { describe, it, expect } from 'vitest';
-import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,13 +30,20 @@ const bundle = await build({
 });
 const bundleText = bundle.outputFiles[0].text;
 
-/** A game with boardsmith installed in its node_modules, and a stale skill in the sandbox's HOME. */
-function installedLayout(prefix: string, options: { shipsSource: boolean }) {
+/**
+ * A game with boardsmith installed in its node_modules (or, with `checkout`, a BoardSmith clone),
+ * and a stale skill in the sandbox's HOME. `npm` is a stub that records its arguments in `npmCalls`.
+ */
+function installedLayout(prefix: string, options: { shipsSource: boolean; checkout?: boolean; link?: boolean }) {
   const sandbox = fixtureSandbox(prefix);
   const game = join(sandbox.root, 'my-game');
-  const pkg = join(game, 'node_modules', 'boardsmith');
+  const pkg = options.checkout ? join(sandbox.root, 'BoardSmith') : join(game, 'node_modules', 'boardsmith');
   mkdirSync(join(pkg, 'dist'), { recursive: true });
+  if (options.checkout) mkdirSync(join(pkg, '.git'));
+  mkdirSync(game, { recursive: true });
   writeFileSync(join(game, 'package.json'), JSON.stringify({ name: 'my-boardsmith-game' }));
+  const npmCalls = join(sandbox.root, 'npm-calls');
+  writeFileSync(join(sandbox.root, 'bin', 'npm'), `#!/bin/sh\necho "$*" >> '${npmCalls}'\n`, { mode: 0o755 });
   writeFileSync(join(pkg, 'package.json'), JSON.stringify({ name: 'boardsmith', version: '0.0.0' }));
   writeFileSync(join(pkg, 'dist', 'cli.js'), bundleText);
   if (options.shipsSource) symlinkSync(join(REPO_ROOT, 'src'), join(pkg, 'src'));
@@ -51,12 +58,18 @@ function installedLayout(prefix: string, options: { shipsSource: boolean }) {
       [
         '--input-type=module',
         '-e',
-        'const m = await import(process.argv[1]); await m.installClaudeCommand({ force: true, skipLink: true });',
+        'const m = await import(process.argv[1]); await m.installClaudeCommand({ force: true, skipLink: process.argv[2] !== "link" });',
         join(pkg, 'dist', 'cli.js'),
+        options.link ? 'link' : 'no-link',
       ],
-      { cwd: game, env: sandbox.env, encoding: 'utf8' },
+      {
+        cwd: game,
+        // The link step runs `npm`, here the stub, so the permission model must let node start a process.
+        env: options.link ? { ...sandbox.env, NODE_OPTIONS: `${sandbox.env.NODE_OPTIONS} --allow-child-process` } : sandbox.env,
+        encoding: 'utf8',
+      },
     );
-  return { run, staleSkill };
+  return { run, staleSkill, npmCalls };
 }
 
 describe('installClaudeCommand from an installed copy (#723)', () => {
@@ -80,5 +93,27 @@ describe('installClaudeCommand from an installed copy (#723)', () => {
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain('skill sources');
     expect(readFileSync(staleSkill, 'utf8')).toBe('stale');
+  });
+});
+
+describe('the global link from boardsmith claude (#942)', () => {
+  it('is skipped from an installed copy, saying why and what to do instead', () => {
+    const { run, npmCalls } = installedLayout('bs-942-installed-', { shipsSource: true, link: true });
+
+    const result = run();
+
+    expect(result.status).toBe(0);
+    expect(existsSync(npmCalls)).toBe(false);
+    expect(result.stdout).toContain('Skipped linking BoardSmith globally');
+    expect(result.stdout).toContain('npm link');
+  });
+
+  it('is made from a source checkout', () => {
+    const { run, npmCalls } = installedLayout('bs-942-checkout-', { shipsSource: true, checkout: true, link: true });
+
+    const result = run();
+
+    expect(result.status).toBe(0);
+    expect(readFileSync(npmCalls, 'utf8')).toBe('link --force\n');
   });
 });

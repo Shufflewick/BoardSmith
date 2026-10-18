@@ -127,8 +127,7 @@ function makeBot(game: HiddenInfoGame, seed: string, guesserSeat = 1) {
     game,
     HiddenInfoGame,
     'hidden-info',
-    guesserSeat, // bot plays the guesser seat
-    [],
+    guesserSeat,
     { iterations: 40, playoutDepth: 0, seed, async: false, usePNS: false },
     {
       // The bot "wins" (achieved=1) when its guess matches the hidden card's
@@ -366,8 +365,7 @@ describe('MCTSBot simultaneous-step soundness (bot-02 / T-159-07)', () => {
       game,
       SimultaneousGame,
       'simultaneous',
-      1, // bot plays seat 1, listed first in awaitingPlayers
-      [],
+      1,
       { iterations: 1, playoutDepth: 0, seed: `sim-${pick}`, async: false },
     );
 
@@ -415,7 +413,7 @@ describe('MCTSBot simultaneous-step soundness with 3 co-deciders (F-07)', () => 
     });
     game.startFlow();
 
-    const bot: any = new MCTSBot(game, SimultaneousGame, 'simultaneous', 1, [], {
+    const bot: any = new MCTSBot(game, SimultaneousGame, 'simultaneous', 1, {
       iterations: 1,
       playoutDepth: 0,
       seed: `sim3-${pick1}${pick2}`,
@@ -479,8 +477,7 @@ describe('MCTSBot root-decision redaction (bot-02 / CR-01)', () => {
       game,
       HiddenInfoGame,
       'hidden-info',
-      1, // bot plays the guesser seat
-      [],
+      1,
       { iterations: 5, playoutDepth: 0, seed: 'cr01-threat-1', async: false, usePNS: false },
       {
         threatResponseMoves: (g) => {
@@ -515,7 +512,6 @@ describe('MCTSBot root-decision redaction (bot-02 / CR-01)', () => {
       HiddenInfoGame,
       'hidden-info',
       1,
-      [],
       { iterations: 5, playoutDepth: 0, seed: 'cr01-uct-1', async: false, usePNS: false },
       {
         uctConstant: (g) => {
@@ -618,7 +614,6 @@ describe('MCTSBot flow-variable relinking on redacted restore (bot-02 / CR-02)',
       HiddenFlowVarGame,
       'hidden-flow-var',
       1,
-      [],
       { iterations: 5, playoutDepth: 0, seed: 'cr02-1', async: false, usePNS: false },
     );
 
@@ -716,7 +711,6 @@ describe('MCTSBot flow-variable relinking over a TRUE-hidden zone (WR-01 / 163-R
       TrueHiddenFlowVarGame,
       'true-hidden-flow-var',
       1,
-      [],
       { iterations: 5, playoutDepth: 0, seed: 'wr01-1', async: false, usePNS: false },
     );
 
@@ -836,7 +830,7 @@ describe('MCTSBot flow-variable relinking below a concealing ancestor (#726)', (
   ])('a forEach-bound flow variable on %s relinks to that ancestor on redacted restore', (_label, GameClass) => {
     const game = new GameClass({ playerCount: 2, playerNames: ['P1', 'P2'], seed: 'bs726' });
     game.startFlow();
-    const bot: any = new MCTSBot(game, GameClass, 'concealed-ancestor-flow-var', 1, [], {
+    const bot: any = new MCTSBot(game, GameClass, 'concealed-ancestor-flow-var', 1, {
       iterations: 5, playoutDepth: 0, seed: 'bs726', async: false, usePNS: false,
     });
 

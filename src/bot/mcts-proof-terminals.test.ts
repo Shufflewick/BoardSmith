@@ -138,7 +138,6 @@ function botFor<G extends Game>(
     GameClass,
     GameClass.name,
     1,
-    [],
     { async: false, timeout: Infinity, seed, ...config },
     strategy,
   );

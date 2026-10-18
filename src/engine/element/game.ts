@@ -1053,7 +1053,7 @@ export class Game<
    * `to` is the message's AUDIENCE — the seats allowed to receive it. Absent
    * means everyone, which is what `message()` writes and what nearly every game
    * should be writing. Only `messageTo()` sets it. The audience is enforced
-   * server-side, in `createSnapshot`'s `forSeat` path and `getFormattedMessages`,
+   * server-side, in `createSeatSnapshot` and `getFormattedMessages`,
    * so an unaddressed seat never receives the bytes; this array itself is the
    * unfiltered truth and must stay that way (undo restores from it, so a
    * filtered copy here would silently destroy other seats' history).
@@ -1698,9 +1698,10 @@ export class Game<
    * - **A move.** `moveToInternal` marks BOTH endpoints, source and
    *   destination, because a cross-partition move dirties a destination the
    *   command's reads never hydrated. The move record is also the only carrier
-   *   for a re-parented partition ROOT: a whole partition that changes parent
-   *   keeps its own serialized bytes identical (a subtree does not serialize
-   *   its parent), so the comparison below cannot see it.
+   *   for a partition ROOT reordered under the game (the one root move
+   *   `moveToInternal` allows, #1170): its own serialized bytes stay identical
+   *   (a subtree does not serialize its parent), so the comparison below
+   *   cannot see it.
    * - **An attribute change**, detected by comparing each resident partition's
    *   serialized form against the baseline captured at
    *   `definePartition`/`adoptSubtree`/the previous take. There is no write

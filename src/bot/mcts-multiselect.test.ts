@@ -181,7 +181,7 @@ describe('dynamic (function-valued) multiSelect enumeration', () => {
 
   it('a concrete-config function multiSelect is exercised end-to-end through MCTSBot instead of throwing "No available moves"', async () => {
     const game = startGame(ConcretePairGame);
-    const bot = new MCTSBot(game, ConcretePairGame, 'concrete-pair', 1, [], {
+    const bot = new MCTSBot(game, ConcretePairGame, 'concrete-pair', 1, {
       iterations: 4,
       playoutDepth: 1,
       seed: 'multiselect-bot-test',
@@ -205,7 +205,7 @@ describe('dynamic (function-valued) multiSelect enumeration', () => {
 
   it('a throwing function multiSelect fails loud instead of silently skipping to zero moves', async () => {
     const game = startGame(ThrowingResolutionGame);
-    const bot = new MCTSBot(game, ThrowingResolutionGame, 'throwing', 1, [], {
+    const bot = new MCTSBot(game, ThrowingResolutionGame, 'throwing', 1, {
       iterations: 1,
       playoutDepth: 1,
       seed: 'multiselect-throw-test',
@@ -218,7 +218,7 @@ describe('dynamic (function-valued) multiSelect enumeration', () => {
 
   it('a throwing function multiSelect surfaces an actionable message with no leaked internals', async () => {
     const game = startGame(ThrowingResolutionGame);
-    const bot = new MCTSBot(game, ThrowingResolutionGame, 'throwing', 1, [], {
+    const bot = new MCTSBot(game, ThrowingResolutionGame, 'throwing', 1, {
       iterations: 1,
       playoutDepth: 1,
       seed: 'multiselect-throw-leak-test',
@@ -243,7 +243,7 @@ describe('dynamic (function-valued) multiSelect enumeration', () => {
     const moves = enumerateLegalMoves(game, 1);
     expect(moves).toHaveLength(7);
 
-    const bot = new MCTSBot(game, VariableRangeGame, 'variable-range', 1, [], {
+    const bot = new MCTSBot(game, VariableRangeGame, 'variable-range', 1, {
       iterations: 4,
       playoutDepth: 1,
       seed: 'multiselect-variable-test',

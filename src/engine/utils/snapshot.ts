@@ -18,7 +18,7 @@ type SnapshotTree = ReturnType<Game['toJSON']>;
  *
  * - `actionCheckpoints`: a runner that keeps checkpoints refreshes the newest
  *   one to the current state on every snapshot, so that entry IS the tree.
- * - `state`: everything else (checkpoints disabled, `createSnapshot`'s clones).
+ * - `state`: everything else (checkpoints disabled, `createSnapshot`, `createSeatSnapshot`).
  *
  * Read the tree only through {@link snapshotTree}.
  */
@@ -72,8 +72,8 @@ interface SnapshotFields {
    *
    * AUDIENCE: this is the UNFILTERED log on every persistence path, and must
    * stay that way — a filtered copy would silently destroy other seats' history
-   * on the next restore. The one exception is `createSnapshot`'s `forSeat`
-   * redacted-clone path (the MCTS search sandbox), which filters it through the
+   * on the next restore. The one exception is `createSeatSnapshot`'s
+   * redacted clone (the MCTS search sandbox), which filters it through the
    * same `messageTo` audience gate that redacts the tree.
    */
   messageLog?: MessageEntry[];
@@ -182,13 +182,13 @@ interface SnapshotFields {
   /**
    * CR-02 (159): `originalId -> syntheticId` remap for fungible hidden-zone
    * children anonymized by `toJSONForPlayer` (populated only when `state` was
-   * built via the `opts.forSeat` redacted path below). Carried alongside
+   * built by `createSeatSnapshot`). Carried alongside
    * `state`/`flowState` so `restoreGame`/`restoreFlowState` can relink an
    * element-typed flow variable that pointed at a now-hidden element to its
    * correct redacted placeholder instead of leaving a dead serialized marker.
    * Present on every redacted snapshot, even when empty, because its presence
    * is what lets a restore relink a missing element to its concealing ancestor
-   * (#947). Always absent on the default (un-redacted) `createSnapshot` path:
+   * (#947). Always absent on the un-redacted `createSnapshot` path:
    * those callers keep real ids throughout, so no remap is ever needed.
    */
   hiddenIdRemap?: Map<number, number>;
@@ -487,7 +487,7 @@ export function actionCountOf(snapshot: Pick<GameStateSnapshot, 'actionHistory' 
   return (snapshot.actionHistoryBase ?? 0) + snapshot.actionHistory.length;
 }
 
-/** Everything a snapshot holds except the tree. `opts` as in `createSnapshot`. */
+/** Everything a snapshot holds except the tree. `opts`: the seat of `createSeatSnapshot`, or undefined for the truth. */
 function snapshotFields(
   game: Game,
   gameType: string,
@@ -501,7 +501,7 @@ function snapshotFields(
     // The log is a snapshot sibling, not part of the tree. It carries the SAME
     // audience gate as the tree: on the default path the unfiltered truth (a
     // persisted snapshot that dropped other seats' lines would destroy their
-    // history on restore), and on the `forSeat` redacted-clone path only what
+    // history on restore), and on the seat's redacted clone only what
     // that seat may see. Without the second half, the MCTS search sandbox — a
     // clone built precisely so a bot cannot reason over hidden information —
     // would hold every seat's private log.
@@ -516,36 +516,46 @@ function snapshotFields(
 }
 
 /**
- * Create a complete game state snapshot, carrying its tree as `state`.
+ * Create a complete game state snapshot, carrying its tree as `state`: the
+ * unfiltered authoritative truth (GameRunner and every persistence path).
  */
 export function createSnapshot(
   game: Game,
   gameType: string,
   actionHistory: HistoryEntry[] = [],
   seed?: string,
-  /** `forSeat`: build a REDACTED clone for this seat — `null` for the spectator
-   *  (public information only). Omit for the unfiltered authoritative truth.
-   *  `reseed`: the clone's own random seed (see `snapshotRandom`). */
-  opts?: { forSeat: number | null; reseed: string }
 ): GameStateSnapshot {
-  // CR-02 (159): only populated on the `forSeat` redacted path — collects the
-  // originalId -> syntheticId remap `toJSONForPlayer` produces for anonymized
-  // hidden-zone children, so a caller restoring this snapshot can relink an
-  // element-typed flow variable pointing at a now-hidden element (see
-  // `hiddenIdRemap`'s doc on `GameStateSnapshot`).
-  const hiddenIdRemap = opts?.forSeat !== undefined ? new Map<number, number>() : undefined;
+  return { ...snapshotFields(game, gameType, actionHistory, seed, undefined), state: game.toJSON() };
+}
 
+/**
+ * A snapshot redacted for one seat: what that seat may see and nothing else.
+ * It carries no action history (#1167), which would name hidden elements by their real place.
+ */
+export type SeatSnapshot = Omit<SnapshotFields, 'actionHistory' | 'actionHistoryBase'> & { actionHistory: []; state: SnapshotTree };
+
+/**
+ * Create a REDACTED clone of the game for `seat.forSeat` (`null` for the
+ * spectator: public information only), the MCTS bot's search sandbox (bot-02).
+ * Reuses `toJSONForPlayer`'s redaction rather than inventing one.
+ * `seat.reseed`: the clone's own random seed (see `snapshotRandom`).
+ */
+export function createSeatSnapshot(
+  game: Game,
+  gameType: string,
+  seed: string | undefined,
+  seat: { forSeat: number | null; reseed: string },
+): SeatSnapshot {
+  // CR-02 (159): collects the originalId -> syntheticId remap `toJSONForPlayer`
+  // produces for anonymized hidden-zone children, so a caller restoring this
+  // snapshot can relink an element-typed flow variable pointing at a now-hidden
+  // element (see `hiddenIdRemap`'s doc on `GameStateSnapshot`).
+  const hiddenIdRemap = new Map<number, number>();
   return {
-    ...snapshotFields(game, gameType, actionHistory, seed, opts),
-    // Default: full un-redacted truth (existing callers, e.g. GameRunner, must
-    // keep seeing the authoritative tree). Opt-in `forSeat` (bot-02): callers
-    // that need a per-seat REDACTED clone (the MCTS bot's search sandbox) pass
-    // their seat and get `toJSONForPlayer`'s existing redaction instead of
-    // inventing a new one. Never flip this default for all callers.
-    state: opts?.forSeat !== undefined
-      ? game.toJSONForPlayer(opts.forSeat, hiddenIdRemap)
-      : game.toJSON(),
-    ...(hiddenIdRemap && { hiddenIdRemap }),
+    ...snapshotFields(game, gameType, [], seed, seat),
+    actionHistory: [],
+    state: game.toJSONForPlayer(seat.forSeat, hiddenIdRemap),
+    hiddenIdRemap,
   };
 }
 
