@@ -3152,3 +3152,20 @@ sockets are open, when it checkpoints, and the two controls a watching person
 needs, and the library owns everything else. That is what makes "the same world
 here and in production" a property of the code rather than a promise on this
 page.
+
+**What a store answers about the schedule.** `ResidentWorld` never reads the
+whole event queue to run it (#953). A store behind it (`WorldStore`,
+`src/world/host/store.ts`) answers five questions, each in `(due, seq)` order
+where order matters:
+
+| Query | Asked by |
+|---|---|
+| `nextDue(at, taken)`: the first event due by `at` that this drain has not taken | the drain, once per entry; a chronological catch-up's "anything due?" |
+| `earliestEvent(after?)`: the first event, or the first due after `after` | the re-arm (`rearmAt` gets both), "fire due events now" |
+| `pendingOf(owner)`: that owner's unkeyed count and its key-to-id map, without arguments | a dispatch's schedule allowance, and a keyed upsert's displacement |
+| `pendingCount()`: every pending event | the allowance's world ceiling |
+| `pendingEvents()`: every event, decoded | a migration, which rewrites them all, and the dev chrome's queue panel |
+
+Each of the first four is a short index read on a store keyed by `(due, seq)`
+with an owner index, which is how the platform keeps its queue; the fifth is
+the one that decodes every row, and nothing in a drain asks it.
