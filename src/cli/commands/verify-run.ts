@@ -3,6 +3,7 @@ import {
 } from '../lib/project-paths.js';
 import { randomBytes } from 'node:crypto';
 import { sha256Hex } from '../lib/hash.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 import { withLedgerLock } from '../lib/ledger-lock.js';
 import { promises as fs } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -1008,12 +1009,7 @@ export async function verifyRunInitCommand(
 
   let created: boolean;
   let ranges: ManifestRange[];
-  let existingText: string | undefined;
-  try {
-    existingText = await fs.readFile(ledgerFile, 'utf-8');
-  } catch {
-    existingText = undefined;
-  }
+  const existingText = await readIfExists(ledgerFile, (p) => fs.readFile(p, 'utf-8'));
   if (existingText !== undefined) {
     created = false;
     // Resume: the manifest was decided at first init and is never re-derived — whatever

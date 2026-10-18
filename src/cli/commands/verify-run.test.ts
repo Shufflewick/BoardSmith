@@ -136,6 +136,23 @@ describe('verifyRunInitCommand — staging + run allocation', () => {
     expect(stagedStillThere).toBe('staged content\n');
   });
 
+  it('refuses, naming the file, when the run ledger cannot be read, and leaves it as it was (#1110)', async () => {
+    const project = await liveProject();
+    const first = await verifyRunInitCommand({ project, json: true });
+    const ledgerAbs = join(project, first.ledgerPath);
+    const before = await fs.readFile(ledgerAbs, 'utf-8');
+    await fs.chmod(ledgerAbs, 0o200);
+    try {
+      await expect(verifyRunInitCommand({ project, runId: first.runId, json: true })).rejects.toThrow(
+        `Could not read ${ledgerAbs} (EACCES)`,
+      );
+      await fs.chmod(ledgerAbs, 0o644);
+      expect(await fs.readFile(ledgerAbs, 'utf-8')).toBe(before);
+    } finally {
+      await fs.chmod(ledgerAbs, 0o644);
+    }
+  });
+
   it('S4: stagingSlicesDir resolves under <projectDir>/rulebook/.verify/', async () => {
     const project = await liveProject();
     const runId = '2026-07-28T22-18-00Z';
