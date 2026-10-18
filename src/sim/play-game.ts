@@ -6,7 +6,8 @@
  * @module
  */
 import type { Game, FlowState, PublishedFollowUp } from '../engine/index.js';
-import { dueSeats, availableActionsForSeat, followUpForSeat } from '../engine/index.js';
+import { followUpForSeat } from '../engine/index.js';
+import { dueSeatOffers, describeRefused } from '../engine/flow/seat-activity.js';
 import { refuseChangeSince } from '../engine/element/state-version.js';
 import { encodeValue } from '../engine/element/game-element.js';
 import { endOfGameRecords, type GameMetrics, type MetricRecord, type MetricSink } from '../engine/metrics.js';
@@ -85,17 +86,6 @@ export interface SingleGameResult {
 
 
 /**
- * The seats a flow state is waiting on, each with the actions it offers them,
- * answered by the engine's one rule for who may act (`dueSeats`). @internal
- */
-function offeredSeats(flowState: FlowState): Array<{ seat: number; actionNames: string[] }> {
-  return dueSeats(flowState).map((seat) => ({
-    seat,
-    actionNames: availableActionsForSeat(flowState, seat),
-  }));
-}
-
-/**
  * The seats that can act right now (with an ENABLED action or a held
  * follow-up, #911), each with its enabled actions, plus why every refused
  * action is refused.
@@ -103,24 +93,21 @@ function offeredSeats(flowState: FlowState): Array<{ seat: number; actionNames: 
  * An action's `.disabled()` rule (and a tutorial gate) keeps it in the flow's
  * available actions so the panel can grey it out and say why, while the
  * server refuses it. A refused action is not a move, so it is left out here,
- * through `game.getDisabledActions`, the same channel the panel reads (#318).
+ * through the engine's `dueSeatOffers`, the rule the bot pump and benchmark
+ * read too (#318, #1133).
  * @internal
  */
 function enabledSeats(
   game: Game,
   flowState: FlowState
 ): { seats: Array<{ seat: number; actionNames: string[]; followUp?: PublishedFollowUp }>; refused: string[] } {
-  const seats: Array<{ seat: number; actionNames: string[]; followUp?: PublishedFollowUp }> = [];
-  const refused: string[] = [];
-  for (const { seat, actionNames } of offeredSeats(flowState)) {
-    const disabled = game.getDisabledActions(seat);
-    const enabled = actionNames.filter((name) => !(name in disabled));
-    const blocked = actionNames.filter((name) => name in disabled);
-    refused.push(...blocked.map((name) => `player ${seat}'s '${name}' (${disabled[name].replace(/\.$/, '')})`));
-    const followUp = followUpForSeat(flowState, seat);
-    if (enabled.length > 0 || followUp) seats.push({ seat, actionNames: enabled, followUp });
-  }
-  return { seats, refused };
+  const offers = dueSeatOffers(flowState, game);
+  return {
+    seats: offers
+      .filter((offer) => offer.canMove)
+      .map(({ seat, enabled }) => ({ seat, actionNames: enabled, followUp: followUpForSeat(flowState, seat) })),
+    refused: describeRefused(offers),
+  };
 }
 
 /**

@@ -11,12 +11,15 @@ export interface ListFilesOptions {
   suffixes?: readonly string[];
 }
 
-/** A link counts as the file it points to; any other link is skipped in a source tree and an error elsewhere. */
+/**
+ * A link counts as the file it points to. A link to a folder is an error: the build follows it (#1112).
+ * A link to nothing is skipped in a source tree and an error elsewhere.
+ */
 function isFileOrLinkToFile(entry: Dirent, path: string, sourceTree: boolean): boolean {
   if (!entry.isSymbolicLink()) return entry.isFile();
   const target = statSync(path, { throwIfNoEntry: false });
   if (target?.isFile()) return true;
-  if (sourceTree) return false;
+  if (sourceTree && !target) return false;
   throw new Error(
     `${path} is a link to ${target ? 'a folder' : 'nothing'}, and links are followed only to files. ` +
       'Replace the link with a copy of what it should point to.',
@@ -39,7 +42,7 @@ function readEntries(dir: string): Dirent[] {
 
 /**
  * Every file under `dir`, depth first, or none if `dir` does not exist (#1048). A link to a file
- * counts as that file; a link to a folder is never followed, so a link loop cannot trap the walk.
+ * counts as that file; a link to a folder stops the walk, so a link loop cannot trap it.
  * Not `readdirSync`'s own `recursive` option: on Node 22 that follows folder links, loops included.
  */
 export function listFiles(dir: string, { sourceTree, suffixes }: ListFilesOptions): string[] {

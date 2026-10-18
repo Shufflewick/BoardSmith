@@ -46,6 +46,7 @@
 import {
   assert,
   check,
+  recordWorldFrames,
   runBrowserRegression,
   summarise,
   surfaceOf,
@@ -362,11 +363,7 @@ async function drive({ launch, hostUrl }) {
 async function oneSeatWalksTheMenu({ browser, hostUrl }) {
   const context = await browser.newContext();
   const page = await context.newPage();
-  const sent = [];
-  page.on('websocket', (ws) => {
-    if (!ws.url().includes('/__boardsmith/world')) return;
-    ws.on('framesent', ({ payload }) => sent.push(String(payload)));
-  });
+  const { sent } = recordWorldFrames(page);
   await page.goto(hostUrl);
   await waitForAction(page, 'construct');
   // THE HANDSHAKE IS NOT NAVIGATION. `hello` goes up when the frame
@@ -412,7 +409,7 @@ async function oneSeatWalksTheMenu({ browser, hostUrl }) {
     const during = sent.slice(sentBeforeNavigating);
     assert(
       during.length === 0,
-      `navigating the menu sent ${during.length} frame(s): ${during.join(' | ')}`,
+      `navigating the menu sent ${during.length} frame(s): ${during.map((frame) => JSON.stringify(frame)).join(' | ')}`,
     );
   });
 

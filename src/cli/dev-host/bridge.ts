@@ -26,6 +26,7 @@ import {
   type SnapshotSessionAdapters,
   type PublishMeta,
   type BotSeat,
+  type SeatOp,
 } from '../../session/index.js';
 import { record, getEntries } from './log-capture.js';
 import type { WarningEntry } from '../../types/protocol.js';
@@ -187,7 +188,7 @@ export function translateOp(
   wireOp: string,
   seat: number,
   payload: Record<string, unknown>,
-): Op | DebugLogsMarker | undefined {
+): SeatOp | DebugLogsMarker | undefined {
   switch (wireOp) {
     case 'action':
       return {
