@@ -64,9 +64,9 @@ import { readIfExists } from './read-if-exists.js';
  * outcome (#940). A save is about 10ms for a full file (1.6MB), next to a mutant's whole-suite run
  * of seconds. It saves only while the tree is clean, since the key is computed from the commit and
  * would not describe files edited mid-run. It also captures the execution context
- * (`captureExecutionContext`) once when it starts, keys the cache by that capture, saves only
- * while the context is unchanged, and refuses the rest of the run when the context changed by its
- * end or before a mutant runs (#932): outcomes from a mixed run would be stored under a key they do not fit.
+ * (`captureExecutionContext`) once when it starts, keys the cache by that capture, and refuses the
+ * rest of the run, keeping nothing more, when the context changed before or while a mutant ran, or
+ * by its end (#932, #940): outcomes from a mixed run would be stored under a key they do not fit.
  */
 
 const CACHE_FORMAT = 4;

@@ -207,7 +207,7 @@ interface VerifyContext {
   mutantCache: () => Promise<MutantCache>;
   /** What changed in the execution context since the run began, or undefined while nothing has (#932). */
   contextChange: () => Promise<string | undefined>;
-  /** Saves the mutant outcomes found so far, while the context and the tree are still as the run began (#940). */
+  /** Saves the mutant outcomes found so far, while the tree is still clean at the commit the run began on (#940). */
   saveMutantProgress: () => Promise<void>;
   earlier: ReadonlyMap<VerifyCheckName, VerifyCheckResult>;
   log: (line: string) => void;
@@ -610,7 +610,7 @@ export async function runVerify(options: {
     return cache;
   }));
   const saveMutantProgress = async () => {
-    if (mutantCache === undefined || (await contextChange()) !== undefined) return;
+    if (mutantCache === undefined) return;
     if (cleanAt(await checkoutState(projectDir), head)) await (await mutantCache).save();
   };
   let typeCheck: Promise<TypeCheckRun> | undefined;

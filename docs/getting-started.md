@@ -307,10 +307,11 @@ reused or kept for that run, and `boardsmith verify` says why.
 Those outcomes are kept in the repository's git directory, shared by the main
 checkout and every worktree. Each one is saved as soon as its mutant finishes, so
 a run that is interrupted, or stopped by a time limit, loses only the mutant it
-was running when it stopped, and the next run reuses the rest. A merge reuses them only when the merged tree is
-the tree the worktree verified: main has not moved since, or the branch merged
-main before its last verify. Otherwise every mutant runs again at the merge. So
-for a cheap merge, merge main into the branch first and verify there. Older
+was running when it stopped, and the next run reuses the rest. A merge reuses
+them only when the merged tree is the tree the worktree verified: main has not
+moved since, or the branch merged main before its last verify. Otherwise every
+mutant runs again at the merge. So for a cheap merge, merge main into the branch
+first and verify there. Older
 BoardSmith kept these outcomes in `.boardsmith/verify/mutants.json`; that file
 is no longer read and can be deleted.
 
