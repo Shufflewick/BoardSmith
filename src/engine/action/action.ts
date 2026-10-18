@@ -1222,7 +1222,9 @@ export class ActionExecutor {
   }
 
   /**
-   * Validate all arguments for an action
+   * Validate all arguments for an action. A repeating selection's picks are
+   * not made here, since their `onEach` changes the game: `acceptsSubmission`
+   * (utils/enumerate-moves) judges those on a copy (#1101).
    */
   validateAction(
     action: ActionDefinition,
@@ -1388,6 +1390,32 @@ export class ActionExecutor {
     args: Record<string, unknown>,
     options?: PerformOptions,
   ): ActionResult {
+    const fed = this.feedThroughSelectionSteps(action, player, args, options);
+    if ('error' in fed) return { success: false, error: fed.error, ...(fed.applied && { partiallyApplied: true }) };
+    const result = this.executePendingAction(action, player, fed.pendingState);
+    return !result.success && fed.applied ? { ...result, partiallyApplied: true } : result;
+  }
+
+  /**
+   * A whole submission's picks made through the selection steps, as
+   * {@link executeThroughSelectionSteps} makes them before `execute`: the
+   * pending action they complete, or why they were refused. `applied` says
+   * whether a callback that can change the game (`onSelect`, `onEach`) ran, so
+   * the game is not as it was. Ask {@link pendingActionRefusal} of the pending
+   * action for the action-level gate.
+   */
+  feedThroughSelectionSteps(
+    action: ActionDefinition,
+    player: Player,
+    args: Record<string, unknown>,
+    options?: PerformOptions,
+  ): { pendingState: PendingActionState; applied: boolean } | { error: string; applied: boolean } {
+    // The condition sees no picks, as availability and each step see it; the picks are checked one at a time below (#772).
+    const context = { game: this.game, player, args: this.resolveNonPickArgs(action, args, this.game) };
+    if (!options?.followUp && action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
+      return { error: 'Action is not available', applied: false };
+    }
+
     const pendingState = this.createPendingActionState(action.name, player.seat);
     Object.assign(pendingState.collectedArgs, options?.followUp?.args);
     let applied = false;
@@ -1397,12 +1425,10 @@ export class ActionExecutor {
       applied ||= step.applied;
       if (step.error !== undefined) {
         this.fireOnCancelCallbacks(action, pendingState);
-        return { success: false, error: step.error, ...(applied && { partiallyApplied: true }) };
+        return { error: step.error, applied };
       }
     }
-
-    const result = this.executePendingAction(action, player, pendingState);
-    return !result.success && applied ? { ...result, partiallyApplied: true } : result;
+    return { pendingState, applied };
   }
 
   /**
