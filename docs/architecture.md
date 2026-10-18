@@ -266,12 +266,18 @@ throws the old worker away, which frees its whole heap.
 **A worker thread, not a child process.** The table host already calls its
 rules one op at a time, asynchronously, with the snapshot in and the result
 out: exactly the `executeOp` adapter above, which the platform also runs over
-a wire. Bots run inside
-`executeOp`, so MCTS runs in the worker too, off the thread that serves the
-pages. A worker starts in milliseconds, `terminate()` stops even a rule stuck
-in a loop, and a rule's `process.exit()` ends only its worker. A child process
-would add a Node start-up and an IPC encode per op, and isolate nothing a
-worker does not.
+a wire. Bots run inside `executeOp`, so MCTS runs in the worker too, off the
+thread that serves the pages. A worker starts in milliseconds, `terminate()`
+stops even a rule stuck in a loop, and a rule's `process.exit()` ends only its
+worker. A child process would add a Node start-up per reload and isolate
+nothing a worker does not. The world's run-long lock (#1040) is held by the
+dev process, not the worker, so a world whose worker stops on its own is still
+refused to a second `boardsmith dev`.
+
+**Where a crash happened.** The worker runs with source maps on, and the
+bundle carries an inline map, so a rule's error names the author's file and
+line. The worker sends an error's stack beside its message; the terminal
+prints it, and a page is only ever sent the message.
 
 **What crosses the boundary.** Only plain data, so nothing from the bundle
 ever enters the host's module graph. Every answer the worker hands back is

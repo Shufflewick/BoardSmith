@@ -223,7 +223,8 @@ export async function loadGameDefinition(
 
 /** Where {@link importRuntimeBundle} writes the bundle it names `name` in `tempDir`. */
 export function runtimeBundlePath(tempDir: string, name: string): string {
-  return join(tempDir, `${name}-bundle.mjs`);
+  // The real path, so Node resolves the source map's relative sources from where esbuild wrote them (macOS links /tmp and /var).
+  return join(realpathSync(tempDir), `${name}-bundle.mjs`);
 }
 
 /**
@@ -361,6 +362,9 @@ export async function buildRuntimeBundle(args: RuntimeBundleArgs): Promise<strin
     format: 'esm',
     platform: 'node',
     outfile: bundlePath,
+    // A stack from the rules names the author's line; mappings only, since every save's bundle is a new file.
+    sourcemap: 'inline',
+    sourcesContent: false,
     logLevel: 'silent',
     plugins: [
       ...(redirects.size > 0 ? [redirectPlugin(redirects, redirected)] : []),

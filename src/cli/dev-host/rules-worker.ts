@@ -31,13 +31,29 @@ interface Call {
  */
 type FromWorker =
   | { readonly ready: string }
-  | { readonly failed: string }
+  | ({ readonly failed: string } & Stacked)
   | { readonly id: number; readonly value?: string }
-  | { readonly id: number; readonly error: string }
+  | ({ readonly id: number; readonly error: string } & Stacked)
   | { readonly event: unknown };
+
+/** Where in the rules an error was thrown, for the terminal only: a page is never sent it. */
+interface Stacked {
+  readonly stack?: string;
+}
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function stackOf(error: unknown): Stacked {
+  return error instanceof Error && error.stack !== undefined ? { stack: error.stack } : {};
+}
+
+/** The worker's error as the host holds it: its message, and its stack from inside the worker. */
+function fromWorker(message: string, { stack }: Stacked): Error {
+  const error = new Error(message);
+  if (stack !== undefined) error.stack = stack;
+  return error;
 }
 
 // ── The worker side, run inside the bundle ────────────────────────────────────
@@ -67,7 +83,7 @@ export function serveRules<D>(
     handlers = served.handlers;
     post({ ready: toWireJson(served.ready) });
   } catch (error) {
-    post({ failed: messageOf(error) });
+    post({ failed: messageOf(error), ...stackOf(error) });
     return;
   }
   port.on('message', async ({ id, type, payload }: Call) => {
@@ -75,7 +91,7 @@ export function serveRules<D>(
       const answer: unknown = await handlers[type]!(payload);
       post(answer === undefined ? { id } : { id, value: toWireJson(answer) });
     } catch (error) {
-      post({ id, error: messageOf(error) });
+      post({ id, error: messageOf(error), ...stackOf(error) });
     }
   });
 }
@@ -111,7 +127,8 @@ export interface RulesWorker {
  * `ready` answer; a bundle that fails to load is stopped, and its reason thrown.
  */
 export async function startRulesWorker(bundlePath: string, data: unknown): Promise<{ worker: RulesWorker; ready: unknown }> {
-  const worker = new Worker(bundlePath, { workerData: data });
+  // Source maps on, so a stack from the rules names the author's file and line, not the bundle's.
+  const worker = new Worker(bundlePath, { workerData: data, execArgv: [...process.execArgv, '--enable-source-maps'] });
   live.add(worker);
   worker.once('exit', () => live.delete(worker));
 
@@ -132,30 +149,34 @@ export async function startRulesWorker(bundlePath: string, data: unknown): Promi
 
   let loaded = false;
   const ready = new Promise<unknown>((resolve, reject) => {
-    const stop = (why: string): void => {
+    const stop = (why: string, stacked: Stacked = {}): void => {
       // Nothing may be waiting on a worker that stops between calls, so say so here.
-      if (loaded && stopped === null) console.error(styleText('red', `[boardsmith dev] Your rules stopped running: ${why}`));
+      if (loaded && stopped === null) {
+        const said = styleText('red', `[boardsmith dev] Your rules stopped running: ${why}`);
+        if (stacked.stack === undefined) console.error(said);
+        else console.error(said, `\n${stacked.stack}`);
+      }
       stopped ??= why;
-      reject(new Error(why));
+      reject(fromWorker(why, stacked));
       for (const call of pending.values()) call.reject(new Error(stopped));
       pending.clear();
       settled();
     };
     worker.on('message', (message: FromWorker) => {
       if ('ready' in message) resolve(JSON.parse(message.ready));
-      else if ('failed' in message) reject(new Error(message.failed));
+      else if ('failed' in message) reject(fromWorker(message.failed, message));
       else if ('event' in message) {
         if (listener === null) throw new Error('A rules worker sent an event before anything listened for it.');
         listener(message.event);
       } else {
         const call = pending.get(message.id)!;
         pending.delete(message.id);
-        if ('error' in message) call.reject(new Error(message.error));
+        if ('error' in message) call.reject(fromWorker(message.error, message));
         else call.resolve(message.value === undefined ? undefined : JSON.parse(message.value));
         settled();
       }
     });
-    worker.on('error', (error) => stop(messageOf(error)));
+    worker.on('error', (error) => stop(messageOf(error), stackOf(error)));
     worker.on('exit', (code) => {
       if (closing === null) stop(`the rules worker exited with code ${code}`);
     });

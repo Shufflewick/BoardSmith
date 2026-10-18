@@ -137,8 +137,8 @@ describe('#885: the table road', () => {
 
     expect(answer.error).toBeUndefined();
     expect(answer.success).toBe(true);
-    // A page reads the element as its JSON, so a worker hands back exactly that.
-    expect(answer.choices?.[0]?.value).toEqual(JSON.parse(JSON.stringify(answer.choices?.[0]?.value)));
+    // A page reads the element as its JSON, so a worker hands back exactly that: plain data, no class.
+    expect(Object.getPrototypeOf(answer.choices?.[0]?.value)).toBe(Object.prototype);
     expect(JSON.stringify(answer.choices)).toContain('flint');
   }, 60_000);
 
@@ -156,6 +156,16 @@ describe('#885: the table road', () => {
     expect(table.count()).toBe(1 + 1 + RELOADS);
     expect(liveRulesWorkers() - before).toBe(1);
     expect(evaluatedHere()).toBeUndefined();
+  }, 60_000);
+
+  it('refuses rules that throw while loading with a stack at the rules file\'s own line', async () => {
+    const project = tableProject('bs-rules-worker-load-throw-', `throw new Error('rules exploded while loading');\nexport const gameDefinition = {};`);
+    const refused = await project.load().then(
+      () => null,
+      (error: Error) => error,
+    );
+    expect(refused?.message).toContain('rules exploded while loading');
+    expect(refused?.stack).toMatch(/src[\\/]rules[\\/]index\.ts:1:\d+/);
   }, 60_000);
 
   it('stops the worker of an edit that builds but throws while loading, and plays on the rules it had', async () => {
@@ -345,6 +355,13 @@ describe('#885: the world road', () => {
     // 1 checkpointed before the worker stopped, then 2 on the rules the save started.
     await vi.waitFor(() => expect(world.logs()).toBe(3));
     expect(liveRulesWorkers() - before).toBe(1);
+  }, 60_000);
+
+  it('prints where in the rules a crash from a timer happened, at the rules file\'s own line', async () => {
+    const before = liveRulesWorkers();
+    const world = await servedWorld();
+    const said = await sparked(world, before);
+    expect(said.mock.calls.flat().join('\n')).toMatch(/a spark from a timer[\s\S]*src[\\/]rules[\\/]index\.ts:\d+:\d+/);
   }, 60_000);
 
   it('says no world is open when the rules stopped and the edit cannot run it, stops that edit, and opens it on the next save', async () => {

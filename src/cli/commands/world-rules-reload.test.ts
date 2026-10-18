@@ -310,6 +310,19 @@ describe('#1040: a second run started during a reload', () => {
     expect(console.log).toHaveBeenCalledWith(expect.stringContaining('Reloaded. The world is durable'));
   }, 30_000);
 
+  it('lets go of the world when it fails to start', async () => {
+    const cwd = tempTree('bs-world-start-lock-');
+    const launched = await openWorldRun({ cwd, displayName: 'Camp', port: 5173, runtime: await beforeEdit(), reloadRules: beforeEdit });
+    await launched.close();
+    const unopenable = await unopenableEdit();
+    closing.push(() => unopenable.worker.close());
+
+    await expect(
+      openWorldRun({ cwd, displayName: 'Camp', port: 5173, runtime: unopenable, reloadRules: unopenableEdit }),
+    ).rejects.toThrow('stateVersion');
+    takeWorldLock(worldStorePath(cwd)).release();
+  }, 30_000);
+
   it('lets go of the world when closing it fails', async () => {
     const cwd = tempTree('bs-world-close-lock-');
     const failingClose = intercepted(await beforeEdit(), async (type, payload, call) => {
