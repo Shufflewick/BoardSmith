@@ -2216,13 +2216,12 @@ export function deepestRevealed(element: GameElement, seat: number): GameElement
   const chain: GameElement[] = [];
   for (let at: GameElement | undefined = element; at; at = at._t.parent) chain.unshift(at);
   let revealed: GameElement | undefined;
-  let state: 'open' | 'in-concealed-zone' | 'below-hidden' = 'open';
+  let state: RevealWalk = 'open';
   for (const at of chain) {
     const allowed = state === 'below-hidden' ? ownGrantAllows(at, seat) : ownVisibilityAllows(at, seat);
     if (allowed) {
       revealed = at;
-      const ownZoneRule = hasZoneVisibility(at) && at.getZoneVisibility() !== undefined;
-      if (state !== 'below-hidden' || ownZoneRule) state = hidesContents(at, seat) ? 'in-concealed-zone' : 'open';
+      state = walkBelow(at, seat, state);
     } else if (state === 'open') {
       break;
     } else {
@@ -2230,6 +2229,15 @@ export function deepestRevealed(element: GameElement, seat: number): GameElement
     }
   }
   return revealed;
+}
+
+type RevealWalk = 'open' | 'in-concealed-zone' | 'below-hidden';
+
+/** The walk's state for the contents of `at`, an element the seat's view carries. */
+function walkBelow(at: GameElement, seat: number, state: RevealWalk): RevealWalk {
+  // With no zone rule of its own, a granted element's contents inherit one from a hidden container above.
+  if (state === 'below-hidden' && !(hasZoneVisibility(at) && at.getZoneVisibility())) return state;
+  return hidesContents(at, seat) ? 'in-concealed-zone' : 'open';
 }
 
 /**

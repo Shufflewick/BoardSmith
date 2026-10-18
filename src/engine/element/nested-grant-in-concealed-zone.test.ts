@@ -351,6 +351,15 @@ describe('isVisibleTo matches the seat view on random trees (#961)', () => {
     if (hidden && (inConcealedZone(element, seat) || !revealedIn(view, element._t.parent!))) expect(ids.has(element.id), where).toBe(false);
   }
 
+  /** A node's `childCount`, where sent, is its element's real number of children. */
+  function checkChildCount(game: TestGame, node: ElementJSON, seat: number, where: string): void {
+    const element = game.getElementById(node.id);
+    const zone = element instanceof Space && !isHiddenPlaceholder(node) ? element.getZoneVisibility() : undefined;
+    // A count-only zone the view carries but the seat cannot see into always says how many it holds.
+    const mustCount = zone?.mode === 'count-only' && !shows(zone, element!, seat);
+    if (mustCount || node.childCount !== undefined) expect(node.childCount, where).toBe(element!._t.children.length);
+  }
+
   it('for every element and seat, across 200 trees four levels deep', () => {
     for (let seed = 1; seed <= 200; seed++) {
       const { game, elements } = randomTree(seed);
@@ -358,13 +367,7 @@ describe('isVisibleTo matches the seat view on random trees (#961)', () => {
         const view = game.toJSONForPlayer(seat);
         const ids = new Set(idsIn(view));
         for (const element of elements) checkElement(view, ids, element, seat ?? -1, `${element.name} for seat ${seat}, seed ${seed}`);
-        forEachNode(view, (node) => {
-          const element = node.id === game.id ? game : game.getElementById(node.id);
-          if (node.childCount !== undefined) expect(node.childCount).toBe(element!._t.children.length);
-          // A count-only zone the view carries but the seat cannot see into always says how many it holds.
-          const zone = element && !isHiddenPlaceholder(node) && 'getZoneVisibility' in element ? (element as Box).getZoneVisibility() : undefined;
-          if (zone?.mode === 'count-only' && !shows(zone, element!, seat ?? -1)) expect(node.childCount, `${node.name}, seed ${seed}`).toBe(element!._t.children.length);
-        });
+        forEachNode(view, (node) => checkChildCount(game, node, seat ?? -1, `${node.name} for seat ${seat}, seed ${seed}`));
       }
     }
   });
