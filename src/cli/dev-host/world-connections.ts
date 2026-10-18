@@ -23,7 +23,7 @@ import { styleText } from 'node:util';
 import { WebSocket } from 'ws';
 
 import type { RulesReloadQueue } from './rules-reload-queue.js';
-import { parseSocketMessage } from './socket-message.js';
+import { pageText, parseSocketMessage } from './socket-message.js';
 import type { LocalWorldHost, WorldDevRequest } from './world-host.js';
 
 /**
@@ -158,7 +158,7 @@ export function createWorldConnections(
             // `dev-world.ts` does it (#240).
             console.error(
               styleText('red',
-                `[boardsmith dev] world message '${String(message.type)}' failed: ` +
+                `[boardsmith dev] world message '${pageText(message.type)}' failed: ` +
                   `${error instanceof Error ? error.message : String(error)}`,
               ),
             );

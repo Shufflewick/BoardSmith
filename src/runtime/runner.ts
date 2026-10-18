@@ -26,7 +26,8 @@ import {
 import {
   serializeAction,
   deserializeAction,
-  createSnapshot,
+  createRunnerSnapshot,
+  snapshotTree,
   createPlayerView,
   createAllPlayerViews,
   type GameStateSnapshot,
@@ -1271,10 +1272,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   getSnapshot(): GameStateSnapshot {
     this.captureCheckpoint();
-    const base = createSnapshot(this.game, this.gameType, this.actionHistory, this.seed);
     return {
-      ...base,
-      actionCheckpoints: this.checkpointWindow(),
+      ...createRunnerSnapshot(this.game, this.gameType, this.actionHistory, this.seed, this.checkpointWindow()),
       executeBarrierIndex: this.executeBarrierIndex,
       restoreEpoch: this.restoreEpoch,
       gameInstanceId: this.gameInstanceId,
@@ -1345,7 +1344,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * Restore a game from a snapshot — fully STATE-AUTHORITATIVE, NO replay.
    *
    * The snapshot already carries the complete authoritative state: the element
-   * tree (`snapshot.state` = `game.toJSON()`), the flow engine state
+   * tree (`snapshotTree(snapshot)` = `game.toJSON()`), the flow engine state
    * (`snapshot.flowState`), the element sequence counter (`snapshot.sequence`),
    * and — since RNG-state capture was added — the seeded RNG position
    * (`snapshot.randomState`). We reconstruct the game directly from those rather
@@ -1374,11 +1373,12 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       undo?: UndoPolicy;
     }
   ): GameRunner<G> {
+    const tree = snapshotTree(snapshot);
     // Use full gameOptions from snapshot if available, falling back to basic options
     // This ensures custom options like playerConfigs are preserved
     const gameOptions = snapshot.gameOptions ?? {
-      playerCount: snapshot.state.settings.playerCount as number,
-      playerNames: snapshot.state.settings.playerNames as string[],
+      playerCount: tree.settings.playerCount as number,
+      playerNames: tree.settings.playerNames as string[],
       seed: snapshot.seed,
     };
 
@@ -1408,10 +1408,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // Carry the retained checkpoint window forward so the next getSnapshot keeps
     // the retained entries intact while refreshing the head one.
     //
-    // A snapshot with no window -- or one whose `actionCheckpoints` is not a
-    // window at all, which is what a snapshot written by an engine predating
-    // the window looks like -- starts an EMPTY window at the CURRENT action
-    // count, not at 0. Starting at 0 would make the next capture write into
+    // A snapshot with no window (written with checkpoints disabled) starts an
+    // EMPTY window at the CURRENT action count, not at 0. Starting at 0 would make the next capture write into
     // slot `actionHistory.length` of an empty array, leaving a hole per
     // preceding action: `null`s that serialize, cost bytes forever, and read
     // back as "a checkpoint that is missing" rather than "a checkpoint that
@@ -1432,11 +1430,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // emitted window honest evidence of the policy actually in force, which is
     // the only evidence there is (the policy itself is never persisted).
     const window = snapshot.actionCheckpoints;
-    const usable =
-      runner.checkpointPolicy_.enabled &&
-      window &&
-      Array.isArray(window.entries) &&
-      typeof window.baseIndex === 'number';
+    const usable = runner.checkpointPolicy_.enabled && window !== undefined;
     runner.checkpointBaseIndex = usable ? window.baseIndex : snapshot.actionHistory.length;
     runner.actionCheckpoints = usable ? [...window.entries] : [];
 
@@ -1459,7 +1453,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     if (snapshot.gameInstanceId !== undefined) runner.gameInstanceId = snapshot.gameInstanceId;
 
     // Adopt the authoritative element tree. loadSerializedState fully clears and
-    // rebuilds the tree from snapshot.state on its own (see Game.loadSerializedState),
+    // rebuilds the tree from `tree` on its own (see Game.loadSerializedState),
     // so it stands alone with no prior replay.
     //
     // `animationFloor` (UNDO-04): absent for a normal full restore (adopt
@@ -1468,11 +1462,11 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // move the live animation-event id sequence backwards. Do not thread a
     // floor through any other caller of `fromSnapshot` -- see game.ts's
     // `loadSerializedState` doc comment / RESEARCH.md §C.
-    // The message log is NOT in `snapshot.state` (it is a snapshot sibling —
+    // The message log is NOT in the tree (it is a snapshot sibling —
     // see `GameStateSnapshot.messageLog`), so it must be handed over explicitly.
     // `loadSerializedState` assigns it unconditionally, so a snapshot without a
     // log restores an empty one rather than leaving whatever this instance held.
-    runner.game.loadSerializedState(snapshot.state, {
+    runner.game.loadSerializedState(tree, {
       ...options,
       messageLog: snapshot.messageLog ?? [],
     });
@@ -1556,7 +1550,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // game already was. This is what makes the fix self-serving from this
     // single call site -- no undo/rewind executor needs to remember to pass
     // it. See game.ts's `loadSerializedState` doc comment / RESEARCH.md §C.
-    const animationFloor = animationFloorOf(snapshot.state);
+    const liveTree = snapshotTree(snapshot);
+    const animationFloor = animationFloorOf(liveTree);
 
     // UNDO-02: clamp the barrier to the restore point. A barrier set AHEAD of
     // `actionIndex` (e.g. from an execute() node that ran after the point
@@ -1579,15 +1574,14 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // A checkpoint predating the watermark has no recorded boundary, so the
     // honest restore is the whole log rather than a guess.
     const fullLog = snapshot.messageLog ?? [];
-    // The eviction counts ride in the snapshot's own state, which is where the
-    // log's position bookkeeping lives.
-    const { state, messageLog } = checkpointWithLiveLog(checkpoint, fullLog, snapshot.state);
+    // The eviction counts ride in the snapshot's tree, which is where the log's
+    // position bookkeeping lives.
+    const { state, messageLog } = checkpointWithLiveLog(checkpoint, fullLog, liveTree);
 
     return GameRunner.fromSnapshot<G>(
       {
         version: snapshot.version,
         gameType: snapshot.gameType,
-        state,
         messageLog,
         flowState: checkpoint.flowState,
         winners: checkpoint.winners,
@@ -1598,10 +1592,11 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
         gameOptions: snapshot.gameOptions,
         // The retained window, truncated at the restore point: entries AHEAD of
         // `actionIndex` describe a timeline this runner no longer has. The base
-        // is unchanged -- everything already pruned stays pruned.
+        // is unchanged -- everything already pruned stays pruned. Its newest
+        // entry is the restored tree: `checkpoint` with the live eviction count.
         actionCheckpoints: {
           baseIndex: window!.baseIndex,
-          entries: window!.entries.slice(0, actionIndex - window!.baseIndex + 1),
+          entries: [...window!.entries.slice(0, actionIndex - window!.baseIndex), { ...checkpoint, state }],
         },
         executeBarrierIndex,
         // The restore itself, recorded durably. This is the ONE site that
@@ -1655,7 +1650,7 @@ export function restoreEarlierSnapshot<G extends Game>(
     { ...earlier, restoreEpoch: (live.restoreEpoch ?? 0) + 1 },
     GameClass,
     {
-      animationFloor: animationFloorOf(live.state),
+      animationFloor: animationFloorOf(snapshotTree(live)),
       checkpoints: options?.checkpoints,
       randomness: options?.randomness,
       undo: options?.undo,
