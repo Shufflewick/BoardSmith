@@ -110,8 +110,12 @@ watch(
 // the v-for index: this list is ordered by turn order, so an index-derived
 // shape would disagree with every seat-ordered consumer of the same token.
 
+// Sets, so a 500-seat world is not scanned once per row (#907).
+const dueSet = computed(() => new Set(props.dueSeats ?? []));
+const presentSet = computed(() => (Array.isArray(props.presentSeats) ? new Set(props.presentSeats) : null));
+
 function isPlayerActive(seat: number): boolean {
-  return props.dueSeats?.includes(seat) ?? false;
+  return dueSet.value.has(seat);
 }
 
 /**
@@ -157,8 +161,7 @@ const stripStatus = computed(() => {
  */
 function isSeatPresent(player: Player): boolean | undefined {
   if (player.connected !== undefined) return player.connected;
-  if (!Array.isArray(props.presentSeats)) return undefined;
-  return props.presentSeats.includes(player.seat);
+  return presentSet.value?.has(player.seat);
 }
 
 /**
@@ -192,6 +195,7 @@ const visiblePlayers = computed<Player[]>(() => {
 
 /** How many seats the cap left out. Zero when nothing was cut. */
 const hiddenCount = computed(() => props.players.length - visiblePlayers.value.length);
+const overflowText = computed(() => `and ${hiddenCount.value} ${hiddenCount.value === 1 ? 'other' : 'others'}`);
 
 defineSlots<{
   /** Custom stats for each player — rendered at the end of the info column. */
@@ -228,7 +232,7 @@ defineSlots<{
     </div>
     <!-- Turn-status sentence naming every acting seat -->
     <span v-if="stripStatus" class="strip-status">{{ stripStatus }}</span>
-    <span v-if="hiddenCount > 0" class="players-overflow">and {{ hiddenCount }} others</span>
+    <span v-if="hiddenCount > 0" class="players-overflow">{{ overflowText }}</span>
   </div>
 
   <!-- ── Standard mode: full per-player cards ──────────────────────────────── -->
@@ -287,7 +291,7 @@ defineSlots<{
 
     <!-- WHAT THE CAP LEFT OUT (#170 R1). A bounded list that does not say it is
          bounded is a list that quietly lies about how many people are here. -->
-    <p v-if="hiddenCount > 0" class="players-overflow">and {{ hiddenCount }} others</p>
+    <p v-if="hiddenCount > 0" class="players-overflow">{{ overflowText }}</p>
   </div>
 </template>
 

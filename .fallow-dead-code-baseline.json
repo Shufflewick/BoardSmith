@@ -67,8 +67,6 @@
     "src/ui/components/auto-ui/ActionPanel.vue:ChoiceWithRefs",
     "src/ui/components/auto-ui/ActionPanel.vue:ElementRef",
     "src/ui/components/auto-ui/ActionPanel.vue:Pick",
-    "src/ui/components/helpers/Button.vue:ButtonVariant",
-    "src/ui/components/helpers/Button.vue:ButtonSize",
     "src/ui/composables/useActionController.ts:ResolvedAction"
   ],
   "private_type_leaks": [],
