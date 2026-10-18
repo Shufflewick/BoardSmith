@@ -1,5 +1,5 @@
 {
-  "revision": 233,
+  "revision": 234,
   "surfaceHash": "1519c6e27c9683db",
   "payloadHash": "0e2d27db00239080",
   "formatHash": "3aff5d1f34f52ec0",
@@ -1807,6 +1807,14 @@
       "payloadHash": "0e2d27db00239080",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "BoardSmithWorldEngine now refuses at construction a roster in which two players hold one seat, with the new platform-owned refusal roster-double-holder naming the seat and both players (#980); a store written before #796 may hold such rows, and the host resolves it by removing one holder from its stored roster."
+    },
+    {
+      "revision": 234,
+      "date": "2026-10-18",
+      "surfaceHash": "1519c6e27c9683db",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A save made inside a switchOn case is restored by that case's key alone (#966): it resumes in the same case when the rules reorder the cases or remove others, and a save inside a case the current rules no longer have is now refused, naming the case and the switch, instead of resuming in whichever case took its position. Saved switch frames no longer carry branchIndex; an older save's branchIndex is ignored and it restores by its branchKey, which every switch frame has always carried. No surface, payload or stored format change."
     }
   ]
 }
