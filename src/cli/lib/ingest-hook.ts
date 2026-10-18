@@ -100,7 +100,7 @@ exit 0
  */
 export async function installIngestHook(
   projectPath: string,
-): Promise<'installed' | 'skipped-existing' | 'skipped-no-git'> {
+): Promise<'installed' | 'skipped-existing' | 'skipped-unreadable' | 'skipped-no-git'> {
   const hooksDir = join(projectPath, '.git', 'hooks');
   const hookPath = join(hooksDir, 'pre-commit');
 
@@ -114,7 +114,7 @@ export async function installIngestHook(
   try {
     existing = await readIfExists(hookPath, (p) => fs.readFile(p, 'utf-8'));
   } catch {
-    return 'skipped-existing'; // Something we cannot read stands there: not ours to replace, and init must not fail.
+    return 'skipped-unreadable'; // Something we cannot read stands there: not ours to replace, and init must not fail.
   }
   // Never clobber a hook we did not write — a designer's own hook wins.
   if (existing !== undefined && !existing.includes('BoardSmith ingest synthesis')) return 'skipped-existing';

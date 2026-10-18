@@ -57,7 +57,7 @@ describe('installIngestHook', () => {
     await fs.writeFile(hookPath, '#!/bin/sh\necho mine\n');
     await fs.chmod(hookPath, 0o200);
     try {
-      expect(await installIngestHook(p)).toBe('skipped-existing');
+      expect(await installIngestHook(p)).toBe('skipped-unreadable');
     } finally {
       await fs.chmod(hookPath, 0o755);
     }

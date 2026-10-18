@@ -857,6 +857,22 @@ describe('initCommand --into-existing — scaffold into the repository you are i
     expect(readFileSync(join(repo, '.git', 'hooks', 'pre-commit'), 'utf-8')).toBe(own);
     expect(existsSync(join(repo, 'boardsmith.json'))).toBe(true);
   });
+
+  it('says a pre-commit hook it cannot read was left alone because it could not be read (#1110)', async () => {
+    const repo = researchRepo('bs-init-304-hook-');
+    const hook = join(repo, '.git', 'hooks', 'pre-commit');
+    writeFileSync(hook, '#!/bin/sh\necho mine\n');
+    chmodSync(hook, 0o200);
+    process.chdir(repo);
+    const log = vi.mocked(console.log);
+    try {
+      await initCommand('sample-game', { withoutRulebook: true, intoExisting: true });
+    } finally {
+      chmodSync(hook, 0o755);
+    }
+    expect(log.mock.calls.flat().join('\n')).toContain('could not read .git/hooks/pre-commit');
+    expect(readFileSync(hook, 'utf-8')).toBe('#!/bin/sh\necho mine\n');
+  });
 });
 
 /**

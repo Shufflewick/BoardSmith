@@ -308,6 +308,10 @@ async function installHookAndReport(projectPath: string): Promise<void> {
     console.log(
       styleText('dim', '  (left your existing .git/hooks/pre-commit alone — run `boardsmith ingest-gaps` manually after transcription)'),
     );
+  } else if (result === 'skipped-unreadable') {
+    console.log(
+      styleText('yellow', '  Left .git/hooks/pre-commit alone: could not read .git/hooks/pre-commit, so the ingest hook is not installed. Check that you can read it, or run `boardsmith ingest-gaps` manually after transcription.'),
+    );
   } else if (result === 'skipped-no-git') {
     console.log(
       styleText('yellow', '  Could not install the ingest pre-commit hook into .git/hooks — run `boardsmith ingest-gaps` manually after transcription.'),
