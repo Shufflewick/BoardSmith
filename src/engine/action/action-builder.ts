@@ -491,6 +491,9 @@ export class Action<
    * Mark this action as non-undoable.
    * Use for actions that reveal hidden info, involve randomness, or shouldn't be undone.
    * When executed, undo is disabled for the rest of the turn.
+   * Each use is still recorded in the action history; a game whose seats may
+   * repeat one without limit keeps only what undo reads with
+   * `checkpoints: { actionHistory: 'undo' }` (docs/state-size.md).
    */
   notUndoable(): this {
     this.definition.undoable = false;

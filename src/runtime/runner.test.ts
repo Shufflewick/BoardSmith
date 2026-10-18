@@ -615,7 +615,7 @@ describe('GameRunner', () => {
           gameType: 'test-game',
           gameOptions: { playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'replay-test' },
         },
-        runner1.actionHistory
+        runner1
       );
 
       // Should have same state

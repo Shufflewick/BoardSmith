@@ -542,7 +542,7 @@ describe('a host deadline that passed for a seat', () => {
 
       const replayed = GameRunner.replay(
         { GameClass: raidClass(shape, false, timed), gameType: 'raid', gameOptions },
-        history(after),
+        { actionHistory: history(after) },
       );
 
       expect(replayed.actionHistory).toEqual(history(after));
@@ -610,7 +610,7 @@ describe('a host deadline that passed for a seat', () => {
     it(`${shape}: a replay refuses an expiry for a seat that holds no follow-up`, () => {
       expect(() => GameRunner.replay(
         { GameClass: raidClass(shape, false, true), gameType: 'raid', gameOptions },
-        [{ kind: 'seatExpiry', player: 1, undoable: false }],
+        { actionHistory: [{ kind: 'seatExpiry', player: 1, undoable: false }] },
       )).toThrow(/Replay failed at seat 1's expiry: Seat 1 holds no follow-up/);
     });
   }

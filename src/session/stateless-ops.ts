@@ -432,8 +432,12 @@ export interface OpSuccessFields {
   };
   cancelAction: Record<never, never>;
   undo: Record<never, never>;
-  /** The game's action history, oldest first. */
-  debugHistory: { actionHistory: DebugHistoryEntry[] };
+  /**
+   * The game's kept action history, oldest first. Entry `i` is action
+   * `actionHistoryBase + i`; the base is absent while no action was dropped
+   * (`checkpoints: { actionHistory: 'undo' }`, #997).
+   */
+  debugHistory: { actionHistory: DebugHistoryEntry[]; actionHistoryBase?: number };
   debugStateAt: { historicalState: unknown };
   debugStateDiff: { diff: ElementDiff };
   debugActionTraces: { traces: unknown[]; flowContext: unknown };
@@ -1347,6 +1351,7 @@ function handleDebugHistory(
     success: true,
     ...stateEnvelope(runner, gameOptions.playerCount),
     actionHistory: [...runner.actionHistory],
+    ...(runner.actionHistoryBase > 0 && { actionHistoryBase: runner.actionHistoryBase }),
   };
 }
 
@@ -1357,7 +1362,7 @@ function handleDebugStateAt(
   op: Extract<Op, { type: 'debugStateAt' }>,
 ): OpResultFor<'debugStateAt'> {
   const current = runnerFromSnapshot(snapshot, def);
-  const historyLength = current.actionHistory.length;
+  const historyLength = current.actionCount;
   if (op.actionIndex < 0 || op.actionIndex > historyLength) {
     return errorResult(
       `Invalid action index: ${op.actionIndex}. History has ${historyLength} actions.`,
@@ -1380,7 +1385,7 @@ function handleDebugStateDiff(
   op: Extract<Op, { type: 'debugStateDiff' }>,
 ): OpResultFor<'debugStateDiff'> {
   const current = runnerFromSnapshot(snapshot, def);
-  const historyLength = current.actionHistory.length;
+  const historyLength = current.actionCount;
   if (op.fromIndex < 0 || op.fromIndex > historyLength) {
     return errorResult(`Invalid fromIndex: ${op.fromIndex}`, 'protocol');
   }
@@ -1498,7 +1503,7 @@ function handleDebugRewind(
   op: Extract<Op, { type: 'debugRewind' }>,
 ): OpResultFor<'debugRewind'> {
   const current = runnerFromSnapshot(snapshot, def);
-  const historyLength = current.actionHistory.length;
+  const historyLength = current.actionCount;
   if (op.actionIndex < 0) {
     return errorResult(
       `Invalid action index: ${op.actionIndex}. History has ${historyLength} actions.`,

@@ -27,7 +27,7 @@ function stubBridge(over: Partial<DebugBridge> = {}): DebugBridge {
     actionTraces: vi.fn(async () => ({ traces: [], flowContext: null })),
     flowState: vi.fn(async () => null),
     customDebug: vi.fn(async () => null),
-    history: vi.fn(async () => []),
+    history: vi.fn(async () => ({ actionHistory: [], actionHistoryBase: 0 })),
     logs: vi.fn(async () => []),
     stateAt: vi.fn(),
     stateDiff: vi.fn(async () => null),

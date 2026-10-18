@@ -5,9 +5,9 @@ import type { Op } from '../stateless-ops.js';
 
 /**
  * UNDO-01 regression: `.notUndoable()` must be enforced SERVER-SIDE, not just
- * hidden by the client's advisory `canUndo` flag. `computeUndoInfo` computes
- * `hasNonUndoableAction`, and the undo op (`stateless-ops.ts`) must refuse
- * on it rather than rewind past a non-undoable action. Driven through the
+ * hidden by the client's advisory `canUndo` flag. The undo op
+ * (`stateless-ops.ts`) must refuse by `GameRunner.undoFloor` rather than
+ * rewind past a non-undoable action. Driven through the
  * `SnapshotSessionHost` every host uses.
  *
  * Negative control: an ordinary undoable action in the SAME fixture must

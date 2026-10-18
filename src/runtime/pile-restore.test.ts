@@ -206,7 +206,7 @@ describe('a history whose arg is a removed element (#655)', () => {
     const { runner, cutId } = playedRunner();
     const replayed = GameRunner.replay(
       { GameClass: PileGame, gameType: 'pile', gameOptions: options },
-      roundTrip(runner.actionHistory),
+      { actionHistory: roundTrip(runner.actionHistory) },
     );
 
     expect(replayed.game.inspected).toBe(replayed.game.pile.atId(cutId));

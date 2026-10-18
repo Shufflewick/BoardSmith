@@ -45,6 +45,7 @@
 
 import { checkpointCount } from '../engine/index.js';
 import type { GameStateSnapshot } from '../engine/utils/index.js';
+import { actionCountOf } from '../engine/utils/snapshot.js';
 import { parsePositiveWholeNumber } from '../utils/positive-whole-number.js';
 
 /** Byte length of a value's JSON encoding (UTF-8 bytes, not UTF-16 units). */
@@ -65,6 +66,12 @@ export interface SnapshotSizeMeasurement {
   /** `snapshot.actionHistory` — grows with the game, but per action, not per tree. */
   actionHistoryBytes: number;
   /**
+   * Whether the game has dropped actions from the front of its history
+   * (`checkpoints: { actionHistory: 'undo' }`). Its history then stays about
+   * the size it is, and `projectSnapshotSize` holds that term flat.
+   */
+  actionHistoryTrimmed: boolean;
+  /**
    * `snapshot.messageLog` — the message log, stored once per snapshot.
    *
    * Broken out because it is the term most likely to dominate a narration-heavy
@@ -74,8 +81,8 @@ export interface SnapshotSizeMeasurement {
    */
   messageLogBytes: number;
   /**
-   * How many actions the measured game had actually taken
-   * (`snapshot.actionHistory.length`).
+   * How many actions the measured game had actually taken, dropped history
+   * entries included.
    *
    * The denominator for every per-action rate in `projectSnapshotSize`. Using
    * `checkpointCount` instead is wrong under a `checkpoints: { max }` policy,
@@ -100,8 +107,9 @@ export function measureSnapshotSize(snapshot: GameStateSnapshot): SnapshotSizeMe
     checkpointBytes,
     checkpointCount: count,
     actionHistoryBytes: jsonByteLength(snapshot.actionHistory),
+    actionHistoryTrimmed: (snapshot.actionHistoryBase ?? 0) > 0,
     messageLogBytes: jsonByteLength(snapshot.messageLog),
-    observedActionCount: snapshot.actionHistory.length,
+    observedActionCount: actionCountOf(snapshot),
     bytesPerCheckpoint: count === 0 ? 0 : Math.round(checkpointBytes / count),
   };
 }
@@ -122,7 +130,8 @@ export function measureSnapshotSize(snapshot: GameStateSnapshot): SnapshotSizeMe
  * with it.
  *
  * The result is NOT flat in `actionCount` even then. Two terms still grow
- * linearly: the action history, and the message log. Capping checkpoints
+ * linearly: the action history (unless the game keeps only what undo reads,
+ * `checkpoints: { actionHistory: 'undo' }`), and the message log. Capping checkpoints
  * removed the log's multiplier, not the log's growth — a game that narrates
  * every action accumulates that text forever, and on a long enough game it
  * becomes the dominant term on its own. That is a real remaining limit, not a
@@ -162,11 +171,13 @@ export function projectSnapshotSize(
   // checkpoint count — under a `max` policy those differ by orders of magnitude
   // and dividing by the wrong one silently inflates the projection.
   const observed = Math.max(1, measurement.observedActionCount);
-  const historyPerAction = measurement.actionHistoryBytes / observed;
+  const historyBytes = measurement.actionHistoryTrimmed
+    ? measurement.actionHistoryBytes
+    : (measurement.actionHistoryBytes / observed) * actionCount;
   const logBytes =
     options?.messageLogBytes ?? (measurement.messageLogBytes / observed) * actionCount;
 
-  return Math.round(fixed + retained * perCheckpoint + actionCount * historyPerAction + logBytes);
+  return Math.round(fixed + retained * perCheckpoint + historyBytes + logBytes);
 }
 
 /**

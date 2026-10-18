@@ -12,6 +12,7 @@ import type {
 import { closesSeat, debugOpRefusal, isReadOnlyOp, type DebugHistoryEntry } from './stateless-ops.js';
 import type { Annotation, FlowState } from '../engine/index.js';
 import type { GameStateSnapshot } from '../engine/utils/index.js';
+import { actionCountOf } from '../engine/utils/snapshot.js';
 import type { HistoryEntry } from '../engine/action/types.js';
 import { dueSeats, type SeatActivityState } from '../engine/flow/seat-activity.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-key.js';
@@ -934,7 +935,7 @@ export class SnapshotSessionHost {
     host.pendingStates = host.restorablePendingStates(state.pendingStates);
     host._snapshot = snapshot;
     // Moves made before this host held the game arrived at times it never saw.
-    host.arrivalTimes = new Array<undefined>(snapshot.actionHistory.length).fill(undefined);
+    host.arrivalTimes = new Array<undefined>(actionCountOf(snapshot)).fill(undefined);
     host.botSeats = state.botSeats.map((s) => ({ ...s }));
     if (state.playerViews) host.lastPlayerViews = state.playerViews;
     if (state.spectatorView !== undefined) host.lastSpectatorView = state.spectatorView;
@@ -1039,7 +1040,7 @@ export class SnapshotSessionHost {
    */
   private async apply(res: StateEnvelope, seat?: number, pending: Record<string, unknown> | null = null): Promise<void> {
     this._snapshot = this.checkedSnapshot(res.snapshot, 'op');
-    this.noteArrivals(this._snapshot.actionHistory.length);
+    this.noteArrivals(actionCountOf(this._snapshot));
     // FLOW-01/03: every state-mutating op's stateEnvelope() carries a fresh
     // flowDebugInfo (shared serializeFlowDebugInfo — same shape as the
     // debug:flow-state op). Carry it forward
@@ -1058,7 +1059,7 @@ export class SnapshotSessionHost {
   }
 
   /**
-   * Bring {@link arrivalTimes} to a history of `length` entries: drop the times
+   * Bring {@link arrivalTimes} to a game of `length` actions: drop the times
    * of entries an undo or rewind removed, and stamp each new entry with now.
    */
   private noteArrivals(length: number): void {
@@ -1067,10 +1068,10 @@ export class SnapshotSessionHost {
     while (this.arrivalTimes.length < length) this.arrivalTimes.push(now);
   }
 
-  /** `history` with each entry's arrival time, where this host recorded one. */
-  private withArrivalTimes(history: HistoryEntry[]): DebugHistoryEntry[] {
+  /** `history`, whose first entry is action `base`, with each entry's arrival time, where this host recorded one. */
+  private withArrivalTimes(history: HistoryEntry[], base: number): DebugHistoryEntry[] {
     return history.map((entry, index) => {
-      const timestamp = this.arrivalTimes[index];
+      const timestamp = this.arrivalTimes[base + index];
       return timestamp === undefined ? entry : { ...entry, timestamp };
     });
   }
@@ -1238,7 +1239,7 @@ export class SnapshotSessionHost {
     if (isReadOnlyOp(op)) {
       const res = await this.adapters.executeOp(this.snapshot, this.pendingStates.get(seat) ?? null, op);
       if (op.type === 'debugHistory' && res.success && 'actionHistory' in res) {
-        return { ...res, actionHistory: this.withArrivalTimes(res.actionHistory) };
+        return { ...res, actionHistory: this.withArrivalTimes(res.actionHistory, res.actionHistoryBase ?? 0) };
       }
       return res;
     }

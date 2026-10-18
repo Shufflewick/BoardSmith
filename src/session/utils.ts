@@ -197,33 +197,35 @@ export function offerFollowUp(game: Game, flowState: FlowState | undefined, seat
  * action-step frame, so undo is (correctly) bounded to that frame and cannot
  * reach back across the phase boundary into the prior one.
  *
- * @param actionHistory - The action history to scan
+ * Whether anything in that span cannot be undone is `GameRunner.undoFloor`'s
+ * to decide, which {@link assertUndoAllowed} asks.
+ *
+ * @param history - The game's history as the runner keeps it; only its length counts
  * @param currentPlayer - The current player's position
  * @param moveCount - Move count from FlowState (actions taken in the current
  *   action-step frame). `undefined` means no action step is currently active.
  */
 export function computeUndoInfo(
-  actionHistory: Array<{ player: number; undoable?: boolean }>,
+  history: KeptHistory,
   currentPlayer: number | undefined,
   moveCount?: number
-): { turnStartActionIndex: number; actionsThisTurn: number; hasNonUndoableAction: boolean } {
-  if (currentPlayer === undefined || actionHistory.length === 0 || moveCount === undefined) {
-    return { turnStartActionIndex: actionHistory.length, actionsThisTurn: 0, hasNonUndoableAction: false };
+): { turnStartActionIndex: number; actionsThisTurn: number } {
+  const count = history.actionHistoryBase + history.actionHistory.length;
+  if (currentPlayer === undefined || count === 0 || moveCount === undefined) {
+    return { turnStartActionIndex: count, actionsThisTurn: 0 };
   }
+  // moveCount is how many actions were taken in the current action-step frame.
+  return { turnStartActionIndex: Math.max(0, count - moveCount), actionsThisTurn: moveCount };
+}
 
-  // moveCount tells us how many actions were taken in the current action-step
-  // frame. Only check the last 'moveCount' actions for non-undoable actions.
-  let hasNonUndoableAction = false;
-  const turnStartActionIndex = Math.max(0, actionHistory.length - moveCount);
-
-  for (let i = actionHistory.length - 1; i >= turnStartActionIndex; i--) {
-    if (actionHistory[i].undoable === false) {
-      hasNonUndoableAction = true;
-      break;
-    }
-  }
-
-  return { turnStartActionIndex, actionsThisTurn: moveCount, hasNonUndoableAction };
+/**
+ * A game's action history as the runner keeps it: entry `i` is action
+ * `actionHistoryBase + i`, because `checkpoints: { actionHistory: 'undo' }`
+ * drops the entries no undo reads (#997). A `GameRunner` is one.
+ */
+export interface KeptHistory {
+  readonly actionHistory: ReadonlyArray<{ player: number; undoable?: boolean }>;
+  readonly actionHistoryBase: number;
 }
 
 /**
@@ -315,12 +317,15 @@ function isSimultaneousParticipant(flowState: UndoFlowState | undefined, seat: n
  * undo.
  */
 export function simultaneousUndoBoundary(
-  actionHistory: Array<{ player: number }>,
+  history: KeptHistory,
   moveCount: number | undefined,
   seat: number,
 ): { turnStartActionIndex: number; actionsThisTurn: number } | undefined {
+  const { actionHistory, actionHistoryBase: base } = history;
   if (moveCount === undefined || actionHistory.length === 0) return undefined;
 
+  // The run is followed only as far as the history is kept. A run reaching
+  // past it crosses the kept entry that fences undo, so it is refused either way.
   const windowStart = Math.max(0, actionHistory.length - moveCount);
 
   // F-05 (SIM-02): anchor on the START OF THE TRAILING RUN of this seat's own
@@ -339,7 +344,7 @@ export function simultaneousUndoBoundary(
     runStart -= 1;
   }
 
-  return { turnStartActionIndex: runStart, actionsThisTurn: actionHistory.length - runStart };
+  return { turnStartActionIndex: base + runStart, actionsThisTurn: actionHistory.length - runStart };
 }
 
 /**
@@ -366,24 +371,25 @@ export function simultaneousUndoBoundary(
  * eligible but simply hasn't acted yet.
  */
 function computeUndoEligibility(
-  actionHistory: Array<{ player: number; undoable?: boolean }>,
+  history: KeptHistory,
   flowState: UndoFlowState | undefined,
   seat: number,
 ): { eligible: boolean; turnStartActionIndex: number; actionsThisTurn: number } {
+  const count = history.actionHistoryBase + history.actionHistory.length;
   const isSimultaneousStep = (flowState?.awaitingPlayers?.length ?? 0) > 0;
 
   if (isSimultaneousStep) {
     if (!isSimultaneousParticipant(flowState, seat)) {
-      return { eligible: false, turnStartActionIndex: actionHistory.length, actionsThisTurn: 0 };
+      return { eligible: false, turnStartActionIndex: count, actionsThisTurn: 0 };
     }
 
     // Participant, but either hasn't acted yet this step OR its own action
     // is not undo-safe (a co-decider acted afterward, T-160-04) -- reported
     // as "no actions to undo" (actionsThisTurn 0), NOT "not your turn": the
     // seat unambiguously IS part of this step.
-    const boundary = simultaneousUndoBoundary(actionHistory, flowState?.moveCount, seat);
+    const boundary = simultaneousUndoBoundary(history, flowState?.moveCount, seat);
     if (!boundary) {
-      return { eligible: true, turnStartActionIndex: actionHistory.length, actionsThisTurn: 0 };
+      return { eligible: true, turnStartActionIndex: count, actionsThisTurn: 0 };
     }
 
     return { eligible: true, ...boundary };
@@ -393,7 +399,7 @@ function computeUndoEligibility(
   // `buildPlayerState` has always used, with the seat-identity check kept
   // separate from `actionsThisTurn` exactly as it always was.
   const { turnStartActionIndex, actionsThisTurn } = computeUndoInfo(
-    actionHistory,
+    history,
     flowState?.currentPlayer,
     flowState?.moveCount,
   );
@@ -493,7 +499,9 @@ export function assertUndoAllowed(args: {
 
   if (runner.undoFloor(turnStartActionIndex) > turnStartActionIndex) {
     // The floor decides; the history is read only to name what blocks the undo.
-    const blocking = runner.actionHistory.slice(turnStartActionIndex).find((entry) => entry.undoable === false);
+    const blocking = runner.actionHistory
+      .slice(Math.max(0, turnStartActionIndex - runner.actionHistoryBase))
+      .find((entry) => entry.undoable === false);
     // A seat the host closed at a deadline is not the seat's own move to take back.
     if (blocking && isSeatExpiry(blocking)) {
       throw new UndoRefusedError(
@@ -578,7 +586,7 @@ export function decideUndo(runner: GameRunner, seat: number): UndoDecision {
   }
   const flowState = runner.getFlowState();
   const { eligible, turnStartActionIndex, actionsThisTurn } = computeUndoEligibility(
-    runner.actionHistory,
+    runner,
     flowState,
     seat,
   );
@@ -643,7 +651,7 @@ export function buildPlayerState(
   // the boundary from THAT seat's own action(s), not the turn-wide moveCount.
   // See computeUndoEligibility's doc comment.
   const { eligible: canUndoEligible, actionsThisTurn } = computeUndoEligibility(
-    runner.actionHistory,
+    runner,
     flowState,
     playerPosition
   );
