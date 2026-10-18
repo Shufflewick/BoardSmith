@@ -748,6 +748,12 @@ describe('wallClockBudgets', () => {
     expect(wallClockBudgets(`${helpers}\nconst t0 = Date.now();\nrun([1, 2], check);`)).toEqual([]);
   });
 
+  it('follows a duration an element callback pushes into another array (#1168)', () => {
+    // The callback's parameter is resolved after the push that reads it is recorded.
+    const source = 'const ds = [];\nds.push(Date.now() - s);\nconst out = [];\nds.forEach((x) => out.push(x));\nexpect(out[0]).toBeLessThan(5);';
+    expect(wallClockBudgets(source)).toHaveLength(1);
+  });
+
   it('judges a length passed in an object by its own value, and a length read from a whole array as a count (#1168)', () => {
     const helper = 'function f(o) { expect(o.length).toBeLessThan(5); }';
     for (const file of ['x.test.ts', 'x.test.mjs']) {
