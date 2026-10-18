@@ -1546,6 +1546,22 @@ describe('verifyDeriveRecordCommand', () => {
     expect(message).not.toMatch(/\.ts:\d+/);
   });
 
+  it('an enumerator file of {} is refused with a message naming the flag and its missing list (#839)', async () => {
+    const slicePath = 'rulebook/01-x.md';
+    const project = await setupProvenanceProject(slicePath, 'x\n');
+    const reconciler: ReconcilerReturn = { both: [], aOnly: [], bOnly: [], derivedLineProposals: [] };
+
+    await expect(
+      verifyDeriveRecordCommand({
+        project,
+        slicePath,
+        enumeratorA: await writeJson('empty-a.json', {}),
+        enumeratorB: await writeJson('empty-b.json', { facts: [] }),
+        reconciler: await writeJson('empty-r.json', reconciler),
+      }),
+    ).rejects.toThrow(/--enumerator-a file ".*empty-a\.json" has no "facts" list/);
+  });
+
   it('a missing required flag throws a clear message naming the flag', async () => {
     await expect(
       verifyDeriveRecordCommand({

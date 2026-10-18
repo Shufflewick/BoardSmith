@@ -1356,13 +1356,25 @@ export async function readSliceArgument(
 // verifyDeriveRecordCommand — the write surface, retargeted onto reconcileSlice (177.1-03 Task 3)
 // -------------------------------------------------------------------------------------------
 
+/** Reads a subagent's JSON return, refusing one that lacks any of the `lists` it must carry. */
 async function readRequiredJsonFile(
   filePath: string,
   flagLabel: string,
+  lists: readonly string[],
 ): Promise<SubagentJsonParseResult> {
   const text = await readIfExists(filePath, (p) => fs.readFile(p, 'utf-8'));
   if (text === undefined) throw new Error(`verify-derive-record found no ${flagLabel} at "${filePath}".`);
-  return parseSubagentJsonInput(text, flagLabel, filePath);
+  const parsed = parseSubagentJsonInput(text, flagLabel, filePath);
+  const value = parsed.value as Record<string, unknown> | null;
+  for (const list of lists) {
+    if (typeof value !== 'object' || value === null || !Array.isArray(value[list])) {
+      throw new Error(
+        `The ${flagLabel} file "${filePath}" has no "${list}" list.\n` +
+          `Pass the subagent's return unchanged; it must be a JSON object with "${lists.join('", "')}" lists.`,
+      );
+    }
+  }
+  return parsed;
 }
 
 export interface VerifyDeriveRecordOptions {
@@ -1428,9 +1440,14 @@ export async function verifyDeriveRecordCommand(
 
   const { slicePath, text: sliceText } = await readSliceArgument(projectDir, options.slicePath, 'verify-derive-record');
 
-  const enumeratorAParsed = await readRequiredJsonFile(options.enumeratorA, '--enumerator-a');
-  const enumeratorBParsed = await readRequiredJsonFile(options.enumeratorB, '--enumerator-b');
-  const reconcilerParsed = await readRequiredJsonFile(options.reconciler, '--reconciler');
+  const enumeratorAParsed = await readRequiredJsonFile(options.enumeratorA, '--enumerator-a', ['facts']);
+  const enumeratorBParsed = await readRequiredJsonFile(options.enumeratorB, '--enumerator-b', ['facts']);
+  const reconcilerParsed = await readRequiredJsonFile(options.reconciler, '--reconciler', [
+    'both',
+    'aOnly',
+    'bOnly',
+    'derivedLineProposals',
+  ]);
   const enumeratorA = enumeratorAParsed.value as EnumeratorReturn;
   const enumeratorB = enumeratorBParsed.value as EnumeratorReturn;
   const reconciler = reconcilerParsed.value as ReconcilerReturn;
