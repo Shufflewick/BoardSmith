@@ -707,13 +707,13 @@ export class MultiplayerHost {
   }
 
   private async handleRestart(clientId: string, seed: string | undefined): Promise<void> {
-    // Defensive hardening only (T-157-06) — NOT the D11 fix. A FINISHED game
-    // already passes here: LobbyPhase has no 'complete' value, so completion
-    // never flips `phase` off 'playing'. The `|| !this.session` clause guards
-    // the genuinely no-game/mid-setup case (phase somehow 'playing' with no
-    // live session), which the bare phase check alone would not catch.
-    if (this.phase !== 'playing' || !this.session) {
-      this.send(clientId, { type: 'error', message: this.starting ? STARTING : 'No game in progress to restart.' });
+    if (this.starting) {
+      this.send(clientId, { type: 'error', message: STARTING });
+      return;
+    }
+    // With no game, only a seated client may start one: it holds a seat because its start failed (#1039).
+    if (!this.session && !this.clientSeat.has(clientId)) {
+      this.send(clientId, { type: 'error', message: 'No game in progress to restart.' });
       return;
     }
     const refused = seed === undefined ? undefined : this.dealRefusal(seed);
@@ -1342,6 +1342,7 @@ export class MultiplayerHost {
       seedSnapshot: this.opts.seedSnapshot,
       fullHistory: true,
     };
+    let startRefused = false;
     const executeOp: ExecuteOpAdapter = async (snapshot, pendingState, op) => {
       const raw = await this.executeOp(
         op.type === 'start' ? startGameOptions : baseOptions,
@@ -1353,6 +1354,7 @@ export class MultiplayerHost {
         // by `debugOn()`, the same answer the session gets below.
         { ...hostOptions, debug: this.debugOn() },
       );
+      if (op.type === 'start' && !raw.success) startRefused = true;
       return this.commitAtGameOver(raw);
     };
 
@@ -1381,7 +1383,10 @@ export class MultiplayerHost {
       this.starting = false;
       this.phase = 'lobby';
       const reason = err instanceof Error ? err.message : String(err);
-      const message = `The game could not start (${reason}). Fix the problem, then reload this page to start a game.`;
+      const message = `The game could not start (${reason}). Fix the problem, then press "New game" or reload this page.`;
+      // A start-op failure, a crash in the game's setup included, arrives as a message only; a throw from the host keeps its stack.
+      if (startRefused || !(err instanceof Error)) console.error(`[boardsmith dev] ${message}`);
+      else console.error(`[boardsmith dev] ${message}`, err.stack);
       for (const clientId of this.connected) this.send(clientId, { type: 'error', message });
       return;
     }
