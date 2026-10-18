@@ -1,6 +1,6 @@
 {
-  "revision": 239,
-  "surfaceHash": "d045fa6967c06929",
+  "revision": 240,
+  "surfaceHash": "e64b3fa05ccd478a",
   "payloadHash": "0e2d27db00239080",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1855,6 +1855,14 @@
       "payloadHash": "0e2d27db00239080",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "engineRootFieldAudience is removed from the boardsmith root (nothing called it; isEngineRootField and GAME_ROOT_FIELD_AUDIENCE remain), and GameRunner.getFlowDebugInfo is removed (call runner.game.getFlowDebugInfo()). No game uses either, so no rebuild is needed; no saved-state or payload shape changes."
+    },
+    {
+      "revision": 240,
+      "date": "2026-10-18",
+      "surfaceHash": "e64b3fa05ccd478a",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A seated world action whose condition, validate or choices throws something that is not a PlayerFacingError now makes applyCommand throw WorldRefusal('rules-error') with the shared crash sentence, as a throw from execute already did; before, the thrown error escaped uncoded and a plain Error looked like the rules saying no. A refusal (a PlayerFacingError, a validate returning a string, { success: false, error }) is still uncoded. The rules-error refusal's description says so; no saved-state or payload shape changes (#1015)."
     }
   ]
 }

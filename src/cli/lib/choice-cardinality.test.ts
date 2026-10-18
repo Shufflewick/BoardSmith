@@ -280,9 +280,9 @@ describe('auditWorldChoiceCardinality', () => {
     );
   });
 
-  it('stops and names the move when a selection callback crashes on it (#847)', async () => {
+  it('stops and names the move when a selection callback crashes on it with a plain Error, never counting it as a no (#847, #1015)', async () => {
     await expect(auditWorldChoiceCardinality(cardinalityWorld(['sift', 'shout']), { seed: 'audit' })).rejects.toThrow(
-      /seat \d's 'sift' with \{"how":"finely"\} threw TypeError: the sieve is undefined/,
+      /seat \d's 'sift' with \{"how":"finely"\} crashed in the game's rules.*the sieve is undefined/,
     );
   });
 

@@ -1966,6 +1966,77 @@ describe("#191 — a refusal written for a player reaches one", () => {
   });
 });
 
+describe("#1015 — a crash before execute is coded rules-error too", () => {
+  const SENTENCE = "That room is closed until dawn.";
+  const crash = () => {
+    throw new Error("a rule read past the end of the board, deliberately");
+  };
+  const conditionCrash = worldAction<WorldFixtureGame>("conditionCrash")
+    .needs(() => [ROOM_ONE])
+    .condition({ "the board is readable": crash })
+    .execute(() => {});
+  const validateCrash = worldAction<WorldFixtureGame>("validateCrash")
+    .needs(() => [ROOM_ONE])
+    .chooseFrom("aim", { choices: ["room-one"], validate: crash })
+    .execute(() => {});
+  const choicesCrash = worldAction<WorldFixtureGame>("choicesCrash")
+    .needs(() => [ROOM_ONE])
+    .chooseFrom("aim", { choices: crash })
+    .execute(() => {});
+  const validateRefuses = worldAction<WorldFixtureGame>("validateRefuses")
+    .needs(() => [ROOM_ONE])
+    .chooseFrom("aim", { choices: ["room-one"], validate: () => SENTENCE })
+    .execute(() => {});
+  const validateRefusesInWords = worldAction<WorldFixtureGame>("validateRefusesInWords")
+    .needs(() => [ROOM_ONE])
+    .chooseFrom("aim", {
+      choices: ["room-one"],
+      validate: () => {
+        throw new PlayerFacingError(SENTENCE);
+      },
+    })
+    .execute(() => {});
+
+  const engine = () =>
+    new BoardSmithWorldEngine({
+      game: newWorldGame(),
+      seats: new Map([["player-a", 1]]),
+      store: new CountingStore(genesis()),
+      actions: [conditionCrash, validateCrash, choicesCrash, validateRefuses, validateRefusesInWords],
+      view: () => [],
+    });
+  const thrown = (world: BoardSmithWorldEngine, name: string) =>
+    world.applyCommand("player-a", { name, args: name === "conditionCrash" ? {} : { aim: "room-one" } }, STAMP).then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+  it.each(["conditionCrash", "validateCrash", "choicesCrash"])(
+    "codes a plain Error thrown from %s rules-error, with the shared sentence and not the thrown text",
+    async (name) => {
+      devThrow.enabled = false;
+      try {
+        const error = await thrown(engine(), name);
+        expect(error).toBeInstanceOf(WorldRefusal);
+        expect(error).toMatchObject({ code: "rules-error", owner: "game" });
+        expect((error as Error).message).toBe(rulesErrorSentence(name));
+      } finally {
+        devThrow.enabled = true;
+      }
+    },
+  );
+
+  it("leaves the rules saying no uncoded, in the game's own words", async () => {
+    const world = engine();
+    const refused = await thrown(world, "validateRefuses");
+    expect(refused).not.toBeInstanceOf(WorldRefusal);
+    expect((refused as Error).message).toContain(SENTENCE);
+    const inWords = await thrown(world, "validateRefusesInWords");
+    expect(inWords).not.toBeInstanceOf(WorldRefusal);
+    expect((inWords as Error).message).toBe(SENTENCE);
+  });
+});
+
 describe("#374 — a declaration reaches a partition BY NAME, not by walking the tree", () => {
   // The offer path re-runs every declaration on every refresh. A declaration
   // that can only find a resident root by asking the GAME for it -- the
