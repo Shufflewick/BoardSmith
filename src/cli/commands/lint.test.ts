@@ -288,7 +288,7 @@ describe('lint finds a config the linter reads from a linted file\'s own folder 
     return game;
   }
 
-  it.each(['src', 'src/ui'])('lint --eslint runs ESLint with a config only in %s', async (folder) => {
+  it.each(['src', 'src/ui', 'src/.generated'])('lint --eslint runs ESLint with a config only in %s', async (folder) => {
     gameWith({ [`${folder}/eslint.config.mjs`]: 'export default [];', [`${folder}/a.ts`]: 'export {};' });
 
     await lintCommand({ eslint: true });
@@ -318,15 +318,35 @@ describe('lint refuses a Stylelint install whose config search it does not copy 
     process.chdir(originalCwd);
   });
 
-  function gameOnStylelint(version: string): void {
+  /** A game whose installed Stylelint manifest is `manifest`, or a folder in its place when undefined. */
+  function gameWithStylelintManifest(manifest: string | undefined): string {
     const game = tempTree('boardsmith-lint-stylelint-major-');
     writeFileSync(join(game, 'boardsmith.json'), '{}');
     writeFileSync(join(game, '.stylelintrc.json'), '{}');
-    mkdirSync(join(game, 'node_modules', 'stylelint'), { recursive: true });
-    writeFileSync(join(game, 'node_modules', 'stylelint', 'package.json'), JSON.stringify({ name: 'stylelint', version }));
+    const path = join(game, 'node_modules', 'stylelint', 'package.json');
+    mkdirSync(manifest === undefined ? path : dirname(path), { recursive: true });
+    if (manifest !== undefined) writeFileSync(path, manifest);
     process.chdir(game);
     vi.spyOn(console, 'log').mockImplementation(() => {});
+    return path;
   }
+
+  const gameOnStylelint = (version: string): string =>
+    gameWithStylelintManifest(JSON.stringify({ name: 'stylelint', version }));
+
+  it.each([
+    ['a folder', undefined, /Could not read .*EISDIR/],
+    ['malformed JSON', '{"version": ', /not a JSON object with a "version".*npm install -D stylelint@17/s],
+    ['a manifest with no version', '{"name": "stylelint"}', /not a JSON object with a "version".*npm install -D stylelint@17/s],
+  ])('stops with a message naming the Stylelint manifest when it is %s', async (_label, manifest, message) => {
+    const path = gameWithStylelintManifest(manifest);
+
+    const run = lintCommand({ css: true });
+    // lint names the file from the real cwd, and macOS's temp folder is a symlink.
+    await expect(run).rejects.toThrow(join(realpathSync(dirname(path)), 'package.json'));
+    await expect(run).rejects.toThrow(message);
+    expect(vi.mocked(runTool)).not.toHaveBeenCalled();
+  });
 
   it('stops on Stylelint 16 and says how to install 17', async () => {
     gameOnStylelint('16.9.0');

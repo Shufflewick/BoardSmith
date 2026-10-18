@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, promises as fs, readdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { styleText } from 'node:util';
@@ -6,6 +6,7 @@ import { ESLint } from 'eslint';
 import { scanSandboxViolations } from '../lib/sandbox-scan.js';
 import { SOURCE_EXTENSIONS, collectSourceFiles } from '../lib/source-files.js';
 import { requireBoardsmithWorkspace } from '../lib/project-context.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 import { runTool } from '../lib/run-tool.js';
 import { selectChecks } from '../lib/select-checks.js';
 
@@ -391,16 +392,26 @@ interface LintCheck {
 // silently skipped check (#624).
 const LEGACY_ESLINT_CONFIGS = ['.eslintrc.js', '.eslintrc.cjs', '.eslintrc.json'];
 
+/** `dir` and every folder under it, hidden ones included as ESLint lints them, except node_modules. */
+function foldersUnder(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  const below = readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && entry.name !== 'node_modules')
+    .flatMap((entry) => foldersUnder(join(dir, entry.name)));
+  return [dir, ...below];
+}
+
 /**
  * Asks boardsmith's own ESLint, the copy lint runs, whether it finds a config
- * from this project, or from any source file under src/, upward.
+ * from this project, or from any folder under src/, upward.
  */
 async function hasEslintConfig(cwd: string): Promise<boolean> {
   if (LEGACY_ESLINT_CONFIGS.some((name) => existsSync(join(cwd, name)))) return true;
   const eslint = new ESLint({ cwd });
   if ((await eslint.findConfigFile()) !== undefined) return true;
-  for (const file of collectSourceFiles(join(cwd, 'src'))) {
-    if ((await eslint.findConfigFile(file)) !== undefined) return true;
+  for (const dir of foldersUnder(join(cwd, 'src'))) {
+    // ESLint's lookup starts in the folder holding the path, so any name inside `dir` asks from `dir`.
+    if ((await eslint.findConfigFile(join(dir, '__placeholder__'))) !== undefined) return true;
   }
   return false;
 }
@@ -456,10 +467,23 @@ function hasStylelintKey(pkgPath: string): boolean {
 }
 
 /** The search above is Stylelint 17's, so another installed major is refused rather than guessed at. */
-function requireStylelint17(cwd: string): void {
+async function requireStylelint17(cwd: string): Promise<void> {
   const manifest = join(cwd, 'node_modules', 'stylelint', 'package.json');
-  if (!existsSync(manifest)) return;
-  const { version } = JSON.parse(readFileSync(manifest, 'utf-8')) as { version: string };
+  const text = await readIfExists(manifest, (path) => fs.readFile(path, 'utf-8'));
+  if (text === undefined) return;
+  let pkg: unknown;
+  try {
+    pkg = JSON.parse(text);
+  } catch {
+    pkg = undefined;
+  }
+  const version = typeof pkg === 'object' && pkg !== null ? (pkg as Record<string, unknown>).version : undefined;
+  if (typeof version !== 'string') {
+    throw new Error(
+      `${manifest} is not a JSON object with a "version", so boardsmith lint cannot tell which Stylelint is installed. ` +
+        'Reinstall Stylelint 17 with: npm install -D stylelint@17',
+    );
+  }
   if (version.split('.')[0] === '17') return;
   throw new Error(
     `This project has Stylelint ${version} installed. boardsmith lint's Stylelint config detection is written ` +
@@ -468,13 +492,16 @@ function requireStylelint17(cwd: string): void {
   );
 }
 
-/** Searches from the project and from each folder holding a .vue file lint passes Stylelint, as Stylelint does. */
-function hasStylelintConfig(cwd: string): boolean {
-  requireStylelint17(cwd);
-  const starts = new Set([cwd, ...collectSourceFiles(join(cwd, 'src'), ['vue']).map((file) => dirname(file))]);
-  const dirs = new Set([...starts].flatMap(stylelintSearchDirs));
-  const found = [...dirs].some((dir) =>
-    hasStylelintKey(join(dir, 'package.json')) || STYLELINT_CONFIGS.some((name) => isNonEmptyFile(join(dir, name))));
+/** Searches from the project, then from each folder holding a .vue file lint passes Stylelint, as Stylelint does. */
+async function hasStylelintConfig(cwd: string): Promise<boolean> {
+  await requireStylelint17(cwd);
+  const configIn = (dir: string): boolean =>
+    hasStylelintKey(join(dir, 'package.json')) || STYLELINT_CONFIGS.some((name) => isNonEmptyFile(join(dir, name)));
+  if (stylelintSearchDirs(cwd).some(configIn)) return true;
+  const vueDirs = new Set(collectSourceFiles(join(cwd, 'src'), ['vue']).map((file) => dirname(file)));
+  // Each .vue folder's search climbs back into the project, already checked above, so it stops there.
+  const below = (start: string): string[] => (start === cwd ? [] : [start, ...below(dirname(start))]);
+  const found = [...vueDirs].some((start) => below(start).some(configIn));
   return found || STYLELINT_GLOBAL_CONFIGS.some((name) => isNonEmptyFile(join(stylelintGlobalDir(), name)));
 }
 
@@ -499,7 +526,7 @@ export async function lintCommand(options: LintOptions): Promise<void> {
 
   const checks: LintCheck[] = [];
   const hasEslint = wants('eslint') && await hasEslintConfig(cwd);
-  const hasCssConfig = wants('css') && hasStylelintConfig(cwd);
+  const hasCssConfig = wants('css') && await hasStylelintConfig(cwd);
 
   if (options.eslint && !hasEslint) {
     console.error(styleText('red', '\nlint --eslint: this project has no ESLint config, so ESLint cannot run.'));
