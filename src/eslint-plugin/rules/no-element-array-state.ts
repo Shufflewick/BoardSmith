@@ -24,16 +24,13 @@ import { COLLECTION_CALL_NAMES, ENGINE_ELEMENT_CLASS_NAMES, collectSubclassNames
  *   (a) A `class X extends Y` declaration in the same file, where `Y` is
  *       an engine element class (ENGINE_ELEMENT_CLASS_NAMES in
  *       ./element-types.ts) or another known subclass (resolved transitively) --
- *       used to determine which type names are elements. A class whose chain
- *       reaches GameElement itself through same-file classes owns its children:
- *       a typed child array, check (b), is NOT flagged on it (check (c) still
- *       applies). Subclasses of the other engine classes get no such exemption:
- *       Game and Player subclasses are where games keep state, and whether
- *       Space/Piece subclasses should be exempt is undecided (#1035).
+ *       used to determine which type names are elements.
  *   (b) A `PropertyDefinition` (class field) whose type annotation is an
- *       array of a same-file-known GameElement/subclass type, declared in
- *       a class that does NOT itself extend GameElement/subclass -- flagged
- *       as `elementArrayField`.
+ *       array of a same-file-known GameElement/subclass type, in any class,
+ *       element classes included: an array never owns its elements, so a
+ *       Space or Piece subclass keeps them as children in the element tree
+ *       instead (docs/common-pitfalls.md §9, #1035) -- flagged as
+ *       `elementArrayField`.
  *   (c) An assignment `this.<prop> = <recv>.<method>(...)` (as a plain
  *       `AssignmentExpression`, or as a `PropertyDefinition` initializer)
  *       where `<method>` is a known collection-returning call name
@@ -110,7 +107,7 @@ const rule: Rule.RuleModule = {
     },
     messages: {
       elementArrayField:
-        'Storing `{{typeName}}[]` as a class field on a non-GameElement class goes stale when elements move in the tree. Query the element tree at point of use (e.g. `game.all({{typeName}})`) or store element IDs instead.',
+        'Storing `{{typeName}}[]` as a class field goes stale when elements move in the tree, because an array does not own its elements. Keep them as children in the element tree instead: move each into a Space with `putInto()` and query that Space at point of use (e.g. `zone.all({{typeName}})`), or store element IDs.',
       elementArrayAssignment:
         'Persisting the result of `{{methodName}}(...)` onto `this.{{propName}}` goes stale when elements move in the tree. Query the element tree at point of use instead of caching the result on a class property.',
     },
@@ -119,27 +116,21 @@ const rule: Rule.RuleModule = {
 
   create(context) {
     let elementTypeNames = new Set<string>();
-    let childOwnerNames = new Set<string>();
 
     return {
       Program(program) {
         elementTypeNames = collectSubclassNames(program, ENGINE_ELEMENT_CLASS_NAMES);
-        childOwnerNames = collectSubclassNames(program, ['GameElement']);
       },
 
       ClassDeclaration(classNode) {
-        const superClass = classNode.superClass as { type?: string; name?: string } | null | undefined;
-        const ownsChildren =
-          superClass?.type === 'Identifier' && !!superClass.name && childOwnerNames.has(superClass.name);
-
         const body = (classNode.body as { body?: unknown[] }).body ?? [];
         for (const member of body) {
           const propDef = member as Record<string, unknown>;
           if (propDef.type !== 'PropertyDefinition') continue;
 
-          // (b) GameElement[]-typed field. An element class owns its children, so it may.
+          // (b) GameElement[]-typed field.
           const typeName = resolveArrayElementTypeName((propDef as { typeAnnotation?: unknown }).typeAnnotation);
-          if (!ownsChildren && typeName && elementTypeNames.has(typeName)) {
+          if (typeName && elementTypeNames.has(typeName)) {
             context.report({
               node: propDef as unknown as Rule.Node,
               messageId: 'elementArrayField',
