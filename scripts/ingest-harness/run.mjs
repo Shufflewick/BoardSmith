@@ -6,7 +6,7 @@
  *
  * Stages a throwaway project with this repo's CURRENT WORKING TREE skill text installed
  * project-locally, drives a real headless `claude` session through `/bs-ingest-rules` against a
- * real rulebook PDF, and reports Plan 05's nine produced-artifact checks plus gate item (g)
+ * real rulebook PDF, and reports the ten produced-artifact checks from check.mjs plus gate item (g)
  * (the reference game's git-cleanliness invariant).
  *
  * This is an OPERATOR/AGENT-INVOKED tool, never CI. See README.md for the full determinism
@@ -40,7 +40,7 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, readdirSync, statSync, copyFileSync, appendFileSync, writeFileSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, readdirSync, statSync, copyFileSync, appendFileSync, writeFileSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -114,8 +114,8 @@ Subcommands:
            pins a session id and invokes /bs-ingest-rules, then each subsequent turn resumes that
            same session with a scripted designer answer, reproducing accumulated interactive
            context instead of one single-shot auto-answer instruction.
-  assert   Report the nine produced-artifact checks plus gate item (g), print a summary and the
-           turn-count diagnostic, exit 0 only if all ten pass.
+  assert   Report the ten produced-artifact checks plus gate item (g), print a summary and the
+           turn-count diagnostic, exit 0 only if all eleven pass.
 
 Options:
   --work-dir <dir>         Throwaway project root. 'stage' refuses an existing folder it did not
@@ -130,7 +130,7 @@ Options:
                            without seeing HARNESS-STEP3-COMPLETE is a reported FAILURE, never a
                            silent pass.
   --turns-only             Diagnostic mode: print only how many turns the most recent 'drive' run
-                           took (and whether it hit the cap) and exit — skips the nine
+                           took (and whether it hit the cap) and exit — skips the ten
                            produced-artifact checks entirely. Exit 1 unless the session completed
                            (a turn-cap hit or a non-zero session exit fails).
   --json                   Emit assert's result as a single JSON object on stdout
@@ -164,6 +164,56 @@ function readStageState(subcommand, workDir) {
 // stage
 // ---------------------------------------------------------------------------
 
+// Why a folder must never be deleted whatever it holds, or undefined.
+function protectedFolderReason(real) {
+  const home = realpathSync.native(os.homedir());
+  const checkout = realpathSync.native(REPO_ROOT);
+  // path.join keeps the root as '/' rather than '//'.
+  const holds = (dir) => dir.startsWith(path.join(real, path.sep));
+  if (real === home) return 'is your home folder';
+  if (holds(home)) return 'holds your home folder';
+  if (real === checkout) return 'is the BoardSmith checkout';
+  if (holds(checkout)) return 'holds the BoardSmith checkout';
+  if (existsSync(path.join(real, '.git'))) return 'has a .git at its top, so it is a repository, not a folder stage made';
+  return undefined;
+}
+
+// Why the folder's state file does not prove a stage wrote it there, or undefined.
+function stateFileReason(real) {
+  if (!existsSync(stateFilePath(real))) return 'already exists and has no .harness-stage-state.json, so this harness did not stage it';
+  let text;
+  try {
+    text = readFileSync(stateFilePath(real), 'utf8');
+  } catch {
+    return 'has a .harness-stage-state.json that could not be read, so this harness cannot tell it wrote it';
+  }
+  let state;
+  try {
+    state = JSON.parse(text);
+  } catch {
+    return 'has a .harness-stage-state.json that is not valid JSON, so this harness did not write it';
+  }
+  const stagedFor = state?.workDir;
+  if (typeof stagedFor !== 'string') {
+    return 'has a .harness-stage-state.json that does not name the folder it was written for, so this harness did not write it';
+  }
+  if (stagedFor !== real) return `has a .harness-stage-state.json that was written for ${stagedFor}, not this folder`;
+  return undefined;
+}
+
+// Deletes nothing it cannot prove an earlier stage made: a state file alone can be copied (#1065).
+function refuseUnlessStagedHere(workDir) {
+  // .native gives the on-disk case, so a recased path on a case-insensitive disk still matches.
+  const real = realpathSync.native(workDir);
+  const why = protectedFolderReason(real) ?? stateFileReason(real);
+  if (why) {
+    fail(
+      `--work-dir ${workDir} ${why}. Refusing to delete it. Pass a folder that does not exist yet, or leave ` +
+        `out --work-dir to stage into a fresh temp folder.`,
+    );
+  }
+}
+
 function prepareWorkDir(workDir) {
   if (workDir === undefined) {
     const created = mkdtempSync(path.join(os.tmpdir(), 'bs-ingest-harness-'));
@@ -172,13 +222,7 @@ function prepareWorkDir(workDir) {
     return created;
   }
   if (existsSync(workDir)) {
-    if (!existsSync(stateFilePath(workDir))) {
-      fail(
-        `--work-dir ${workDir} already exists and has no .harness-stage-state.json, so this harness did not ` +
-          `stage it. Refusing to delete it. Pass a folder that does not exist yet, or leave out --work-dir ` +
-          `to stage into a fresh temp folder.`,
-      );
-    }
+    refuseUnlessStagedHere(workDir);
     rmSync(workDir, { recursive: true, force: true });
   }
   mkdirSync(workDir, { recursive: true });
@@ -190,7 +234,7 @@ function stage(opts) {
   const { source, expectHash, referenceRepo } = opts;
   const workDir = prepareWorkDir(opts.workDir);
   // Marks the folder as ours at once, so a stage that fails partway can still be re-staged.
-  writeFileSync(stateFilePath(workDir), '{}');
+  writeFileSync(stateFilePath(workDir), JSON.stringify({ workDir: realpathSync.native(workDir) }));
 
   console.log(`[stage] installing current working tree's skill text into ${workDir} (--local --force)`);
   execFileSync('node', [path.join(REPO_ROOT, 'bin', 'boardsmith.js'), 'claude', '--local', '--force'], {
@@ -272,7 +316,7 @@ function stage(opts) {
   console.log(`[stage] sandboxed copy verified: ${stagedCopyPath} matches --expect-hash`);
 
   const state = {
-    workDir,
+    workDir: realpathSync.native(workDir),
     source,
     sourceFileName,
     stagedCopyPath,
@@ -399,7 +443,7 @@ function assertCmd(opts) {
     console.log(turnDiagnosticLine(state));
     console.log('');
     console.log(
-      '[assert] --turns-only: skipped the nine produced-artifact checks. A run that "completes"',
+      '[assert] --turns-only: skipped the ten produced-artifact checks. A run that "completes"',
     );
     console.log('in 1-2 turns has not reproduced interactive session shape at all.');
     process.exit(sessionCompleted(state) ? 0 : 1);

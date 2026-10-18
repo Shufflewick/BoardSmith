@@ -27,7 +27,7 @@ import { existsSync, promises as fs, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve as pathResolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { build } from 'esbuild';
 import { boardsmithPackageRoot } from '../lib/boardsmith-version.js';
 import { Started, startDev, tail } from '../lib/started-processes.js';
@@ -35,6 +35,7 @@ import { gitOutput as git } from '../lib/git-output.js';
 import { requireTableUi } from '../lib/game-project.js';
 import type { VerifyCheckOutcome } from '../lib/verify-result.js';
 import { SMOKE_ANNOTATION, SMOKE_SEEDS_ENV, SMOKE_SPEC_PATH, smokeSummary, type SmokeRecord } from '../../testing/browser-smoke-verdict.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 
 /** Where each run's copy of the project lives, inside the project's own `.boardsmith/`. */
 const SMOKE_DIR = join('.boardsmith', 'smoke');
@@ -100,7 +101,7 @@ export async function installBrowserCommand(): Promise<void> {
         `fix that (usually the network), then run ${INSTALL_BROWSER} again.`,
     );
   }
-  console.log(chalk.green('Chromium is installed. `boardsmith verify` can run the smoke test now.'));
+  console.log(styleText('green', 'Chromium is installed. `boardsmith verify` can run the smoke test now.'));
 }
 
 // -------------------------------------------------------------------------------------------
@@ -127,7 +128,7 @@ async function copyProject(projectDir: string, copy: string): Promise<void> {
   });
   for (const path of new Set(listed.split('\0').filter(Boolean))) {
     const from = join(projectDir, path);
-    const stat = await fs.lstat(from).catch(() => undefined);
+    const stat = await readIfExists(from, fs.lstat);
     if (stat === undefined) continue; // tracked, but deleted in the working tree
     const to = join(copy, path);
     await fs.mkdir(dirname(to), { recursive: true });
@@ -139,6 +140,7 @@ async function copyProject(projectDir: string, copy: string): Promise<void> {
 /** Removes a run's copy, and the smoke directory once no run is left in it. */
 async function removeCopy(projectDir: string, copy: string): Promise<void> {
   await fs.rm(copy, { recursive: true, force: true });
+  // Best effort: another run's copy still in the folder keeps it, which is what should happen.
   await fs.rmdir(join(projectDir, SMOKE_DIR)).catch(() => undefined);
 }
 
@@ -307,11 +309,19 @@ async function runWalk(
   const walk = started.spawn([join(playwrightTestDir(), 'cli.js'), 'test', '--config', configPath], copy, env);
   walk.child.stdout?.on('data', (chunk: Buffer) => chunk.toString().split('\n').filter(Boolean).forEach(log));
   const [code] = (await once(walk.child, 'exit')) as [number | null];
-  const report = await fs
-    .readFile(join(work, 'report.json'), 'utf-8')
-    .then((text) => JSON.parse(text) as PlaywrightReport)
-    .catch(() => undefined);
-  return verdict(report, code, walk.output());
+  return verdict(await readPlaywrightReport(join(work, 'report.json')), code, walk.output());
+}
+
+/** The report a walk wrote at `path`, or undefined when it wrote none or only part of one. */
+export async function readPlaywrightReport(path: string): Promise<PlaywrightReport | undefined> {
+  const text = await readIfExists(path, (file) => fs.readFile(file, 'utf-8'));
+  if (text === undefined) return undefined;
+  try {
+    return JSON.parse(text) as PlaywrightReport;
+  } catch {
+    // A walk cut short can leave its report half-written; the run's own output then says what happened.
+    return undefined;
+  }
 }
 
 /** Why the project has no smoke test to run, or undefined when it has one. */
@@ -370,12 +380,12 @@ export async function smokeCommand(options: { project?: string; seed?: string[] 
     throw new Error(`boardsmith smoke runs a game project, and ${projectDir} has no boardsmith.json. Run it in the game's directory, or pass --project <dir>.`);
   }
   requireTableUi(projectDir, JSON.parse(readFileSync(configPath, 'utf-8')));
-  const { outcome } = await runSmoke({ projectDir, log: (line) => console.error(chalk.dim(line)), seeds: options.seed });
+  const { outcome } = await runSmoke({ projectDir, log: (line) => console.error(styleText('dim', line)), seeds: options.seed });
   if (outcome.passed) {
-    console.log(chalk.green(outcome.summary));
+    console.log(styleText('green', outcome.summary));
     return;
   }
-  console.error(chalk.red(outcome.summary));
+  console.error(styleText('red', outcome.summary));
   if (outcome.next) console.error(outcome.next);
   process.exitCode = 1;
 }

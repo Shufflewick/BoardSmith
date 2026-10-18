@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import { join, posix, relative, resolve, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawn } from 'node:child_process';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import {
   CONSTRAINTS_MD,
   DESIGN_DIR,
@@ -15,9 +15,10 @@ import { assertBareName } from '../lib/user-name.js';
 import { testRunScopeProblem } from '../lib/test-run-scope.js';
 import { extractSection, parseRulings, stripHtmlComments } from './build-manifest.js';
 import { ENTRY_NUMBER, entryHeadingPattern } from '../lib/ledger-entries.js';
-import { escapeRegExp } from '../lib/regexp.js';
+import { escapeRegExp } from '../../utils/regexp.js';
 import { toolCommand } from '../lib/run-tool.js';
 import { shortQuoteProblem } from '../lib/quote-length.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 
 /**
  * `boardsmith constraint-check [slug]`: does the project hold its own hard constraints (#288)?
@@ -394,7 +395,7 @@ export const runVitest: TestRunner = async (projectDir, files) => {
       child.on('error', (error) => done({ ok: false, output: error.message }));
       child.on('close', (code) => done({ ok: code === 0, output: text }));
     });
-    const reportText = await fs.readFile(reportPath, 'utf-8').catch(() => undefined);
+    const reportText = await readIfExists(reportPath, (path) => fs.readFile(path, 'utf-8'));
     return { ok, output, ran: testFilesInReport(reportText, await fs.realpath(projectDir)) };
   } finally {
     await fs.rm(reportDir, { recursive: true, force: true });
@@ -512,13 +513,13 @@ function report(result: ConstraintCheckResult, slug: string | undefined, json: b
     return;
   }
   if (!ok) {
-    console.error(chalk.red(`${result.refusals.length} constraint problem(s):`));
+    console.error(styleText('red', `${result.refusals.length} constraint problem(s):`));
     for (const refusal of result.refusals) console.error(`  • ${refusal}`);
     return;
   }
   const tests = result.tests.length ? `; ${result.tests.length} measurement test file(s) passed.` : '.';
   console.log(
-    chalk.green(`✓ ${result.constraints.length} hard constraint(s) and ${result.structures.length} growing structure(s) hold${tests}`),
+    styleText('green', `✓ ${result.constraints.length} hard constraint(s) and ${result.structures.length} growing structure(s) hold${tests}`),
   );
 }
 
@@ -533,7 +534,7 @@ export async function constraintCheckCommand(
 ): Promise<void> {
   const problem = slugProblem(slug);
   if (problem !== undefined) {
-    console.error(chalk.red(problem));
+    console.error(styleText('red', problem));
     process.exitCode = 1;
     return;
   }

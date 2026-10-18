@@ -43,6 +43,8 @@ import type { GameState, PlayerState } from '../../client/types.js';
 import type { GameRootView } from '../types.js';
 import turnNotificationSound from '../assets/turn-notification.mp3';
 import { hostRefusal, usePlatformTransport } from '../composables/usePlatformTransport.js';
+import { seatDisplay } from '../seat-display.js';
+import { seatDisplayName } from '../../engine/element/seat-defaults.js';
 
 // Get or set the global "Show action help" preference.
 // Key: boardsmith_action_help; default ON (true) when absent.
@@ -583,6 +585,8 @@ const {
 // unfiltered. If this is ever empty when it should not be, fix
 // `buildPlayerState`/`getFormattedMessages`, do not reintroduce a second source.
 const gameMessages = computed(() => state.value?.state?.messages ?? []);
+// The seat's line number of its first line, once the game prunes its log (#903).
+const messageOffset = computed(() => state.value?.state?.messageOffset ?? 0);
 
 // ── Unread log entries at the compact tier (#22) ───────────────────────────
 //
@@ -597,22 +601,29 @@ const gameMessages = computed(() => state.value?.state?.messages ?? []);
 // by a game — a game-supplied number would be a second definition of "how much
 // log is there".
 
+/** How many lines this seat has been sent, pruned ones included: a line number, not the window's length (#903). */
+const logEnd = computed(() => messageOffset.value + gameMessages.value.length);
+
 /** How many entries had been written when the player last had the log open. */
 const logReadWatermark = ref(0);
 
+// Never more than the log holds: lines the game pruned unread are not behind the toggle.
 const unreadLogCount = computed(() =>
-  Math.max(0, gameMessages.value.length - logReadWatermark.value)
+  Math.min(gameMessages.value.length, Math.max(0, logEnd.value - logReadWatermark.value))
 );
 
 /**
  * Opening the log marks it read; so does new activity arriving while it is
  * already open, which is the case that would otherwise show a badge behind a
- * panel the player is looking at.
+ * panel the player is looking at. Line numbers start again in a new game, and
+ * are reused after an undo takes lines back, so both lower the watermark.
  */
 watch(
-  [mobileExpanded, () => gameMessages.value.length],
-  ([expanded, length]) => {
-    if (expanded) logReadWatermark.value = length;
+  [mobileExpanded, logEnd, () => state.value?.state.gameInstanceId],
+  ([expanded, end, game], previous) => {
+    if (expanded) logReadWatermark.value = end;
+    else if (previous?.[2] !== undefined && game !== previous[2]) logReadWatermark.value = 0;
+    else if (end < logReadWatermark.value) logReadWatermark.value = end;
   },
   { immediate: true }
 );
@@ -629,7 +640,8 @@ watch(
  * and a connection state to show.
  */
 const panelPlayers = computed(() => {
-  const all = players.value;
+  // A table names every seat; a world's names are its host's alone, so PlayersPanel adds none (#1044).
+  const all = players.value.map((p) => ({ ...p, name: seatDisplayName(p.seat, p.name) }));
   if (props.playerOrder === 'seat' || all.length < 2) return all;
 
   const sequence = Array.isArray(props.playerOrder)
@@ -661,8 +673,7 @@ const currentPlayerName = computed(() => {
   if (isSimultaneous.value) return '';
   const currentPos = state.value?.state?.currentPlayer;
   if (currentPos === undefined) return '';
-  const player = players.value.find(p => p.seat === currentPos);
-  return player?.name || `Player ${currentPos + 1}`;
+  return seatDisplay(players.value, currentPos).name;
 });
 // The OTHER seats a simultaneous step is still waiting on, for the Action
 // Panel's waiting line. The viewer is left out (D27): the panel shows the
@@ -673,10 +684,7 @@ const awaitingPlayerNames = computed(() => {
   if (!isSimultaneous.value) return [];
   return dueSeatsNow.value
     .filter((seat) => seat !== playerSeat.value)
-    .map((seat) => {
-      const player = players.value.find(pl => pl.seat === seat);
-      return { seat, name: player?.name || `Player ${seat + 1}`, color: typeof (player as any)?.color === 'string' ? (player as any).color : undefined };
-    });
+    .map((seat) => seatDisplay(players.value, seat));
 });
 
 // Active player (whose turn it is) for the action-bar turn token. D27:
@@ -690,9 +698,8 @@ const activePlayer = computed(() => {
   if (isSimultaneous.value) return null;
   const seat = state.value?.state?.currentPlayer;
   if (seat === undefined) return null;
-  const p = players.value.find(pl => pl.seat === seat) as { name?: string; color?: string } | undefined;
-  if (!p) return null;
-  return { name: p.name ?? `Player ${seat + 1}`, seat, color: p.color };
+  if (!players.value.some(pl => pl.seat === seat)) return null;
+  return seatDisplay(players.value, seat);
 });
 
 /**
@@ -725,14 +732,9 @@ const activePlayer = computed(() => {
  */
 const panelToken = computed(() => {
   if (isSimultaneous.value) {
-    const me = myPlayer.value as { name?: string; color?: string; seat?: number } | undefined;
+    const me = myPlayer.value;
     if (!me || me.seat === undefined) return null;
-    return {
-      kind: 'you' as const,
-      name: me.name ?? `Player ${me.seat + 1}`,
-      seat: me.seat,
-      color: me.color,
-    };
+    return { kind: 'you' as const, ...seatDisplay(players.value, me.seat) };
   }
   const active = activePlayer.value;
   return active ? { kind: 'active' as const, ...active } : null;
@@ -741,9 +743,7 @@ const panelToken = computed(() => {
 const currentPlayerColor = computed((): string | undefined => {
   const currentPos = state.value?.state?.currentPlayer;
   if (currentPos === undefined) return undefined;
-  const player = players.value.find(p => p.seat === currentPos) as Record<string, unknown> | undefined;
-  if (!player) return undefined;
-  return typeof player.color === 'string' ? player.color : undefined;
+  return seatDisplay(players.value, currentPos).color;
 });
 
 // Board-provided prompt (for dynamic prompts based on UI state)
@@ -1255,10 +1255,7 @@ watch(
     gameOverAnnounced = true;
     // Said from the same `winnerSeats`/`isDraw` the card draws, both read off
     // the host's validated frame, so the two can never name different results.
-    const winnerNames = winnerSeats.value.map((seat) => {
-      const p = players.value.find((pl) => pl.seat === seat);
-      return (p as any)?.name || `Player ${seat}`;
-    });
+    const winnerNames = winnerSeats.value.map((seat) => seatDisplay(players.value, seat).name);
     announcer.announce(announceGameOver(winnerNames, isDraw.value), { assertive: true });
   },
   { flush: 'post' },
@@ -1396,6 +1393,7 @@ defineExpose({
       :due-seats="dueSeatsNow"
       :show-turn-status="props.showTurnStatus"
       :messages="gameMessages"
+      :message-offset="messageOffset"
       :unread-log-count="unreadLogCount"
       :may-act="isMyTurn"
       :available-actions="gatedAvailableActions"

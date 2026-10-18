@@ -26,8 +26,7 @@ import type { SimulateTutorialResult } from './simulate-tutorial.js';
  * @example
  * ```typescript
  * const result = simulateTutorial(testGame, TUTORIAL_DEF, {
- *   seat: 1,
- *   scenario: FULL_WALKTHROUGH,
+ *   scenario: (game) => buildWalkthrough(game),
  * });
  * assertTutorialCompletes(result);  // throws if the scenario fell short
  * ```

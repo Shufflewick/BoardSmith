@@ -670,7 +670,7 @@ export function buildPlayerState(
       // Flatten attributes to root level so UI can access p.color, p.position directly
       const flattened: { name: string; seat: number; [key: string]: unknown } = {
         ...node,
-        name: node.name ?? player.name ?? `Player ${player.seat}`,
+        name: node.name ?? player.name,
         ...(node.attributes || {}),
         // Ensure seat is set (use player.seat, which is the 1-indexed position)
         seat: player.seat,
@@ -684,7 +684,7 @@ export function buildPlayerState(
     // The Player node itself was filtered out of this viewer's truthView
     // entirely (e.g. individually hidden) -- fall back to the minimal public
     // identity rather than leaking anything from the raw player object.
-    return { name: player.name ?? `Player ${player.seat}`, seat: player.seat };
+    return { name: player.name, seat: player.seat };
   });
 
   // D26/SPACE-05: `availableActions` (raw, from the flow's action-step
@@ -750,6 +750,7 @@ export function buildPlayerState(
     // still eligible to see/undo its own actions.
     actionsThisTurn: canUndoEligible ? actionsThisTurn : 0,
     messages: playerView.messages.length > 0 ? playerView.messages : undefined,
+    messageOffset: playerView.messageOffset,
     // Unconditional: how many restores this timeline has had -- see
     // PlayerGameState.restoreEpoch.
     restoreEpoch: runner.restoreEpoch,

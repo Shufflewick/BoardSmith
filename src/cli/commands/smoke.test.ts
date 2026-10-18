@@ -7,7 +7,7 @@
  */
 import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';
-import { existsSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -16,7 +16,7 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { REPO_ROOT } from '../spawn-cli.test-helper.js';
 import { writeFiles } from '../lib/verify-result.test-helper.js';
 import { SMOKE_SEEDS_ENV } from '../../testing/browser-smoke-verdict.js';
-import { browserProblem, playwrightChromium, playwrightConfig, runSmoke } from './smoke.js';
+import { browserProblem, playwrightChromium, playwrightConfig, readPlaywrightReport, runSmoke } from './smoke.js';
 import { chromium as boardsmithChromium } from '@playwright/test';
 import { isRunning, smokeProject } from './smoke-project.test-helper.js';
 import {
@@ -117,6 +117,17 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.counts).toMatchObject({ actions: 2 });
     expect(pids.length).toBeGreaterThanOrEqual(2);
     expect(execFileSync('git', ['status', '--porcelain'], { cwd: dir, encoding: 'utf-8' })).toBe('');
+  });
+
+  it('refuses a tracked file it cannot look at when it copies the game, rather than leaving it out of the copy', async () => {
+    const dir = await smokeProject(false, { 'notes/rules.md': 'house rules\n' });
+    chmodSync(join(dir, 'notes'), 0o000);
+    try {
+      await expect(runSmoke({ projectDir: dir, log: quiet })).rejects.toThrow(`Could not read ${join(dir, 'notes', 'rules.md')} (EACCES)`);
+    } finally {
+      chmodSync(join(dir, 'notes'), 0o755);
+    }
+    expect(existsSync(join(dir, '.boardsmith', 'smoke'))).toBe(false);
   });
 
   it("walks the world scaffold: the page attaches to a seat and takes the world's verb, with no error", async () => {
@@ -413,7 +424,7 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.passed).toBe(false);
     expect(outcome.summary).toContain(
       '- The panel offered "kindle", and taking it failed: The "kindle" action could not be completed because of an error in ' +
-        "the game's rules. Nothing was changed. (the hearth cracked)",
+        "the game's rules. (the hearth cracked) Nothing was changed.",
     );
     expect(outcome.summary).toMatch(/- The game showed an error: The "kindle" action could not be completed/);
     expect(steps.some((line) => line.endsWith('entering "2" for "kindle"'))).toBe(false);
@@ -918,5 +929,20 @@ describe('browserProblem', () => {
     const tree = tempTree('bs-smoke-browser-');
     await writeFiles(tree, { chrome: '' });
     expect(browserProblem({ version: '1.63.0', executable: join(tree, 'chrome') })).toBeUndefined();
+  });
+});
+
+describe('readPlaywrightReport (#1049)', () => {
+  it('reads no report when the walk wrote none, or wrote only part of one', async () => {
+    const dir = tempTree('bs-smoke-report-');
+    expect(await readPlaywrightReport(join(dir, 'report.json'))).toBeUndefined();
+    writeFileSync(join(dir, 'report.json'), '{"suites": [{"title": "smo');
+    expect(await readPlaywrightReport(join(dir, 'report.json'))).toBeUndefined();
+  });
+
+  it('refuses a report it cannot read, rather than reading it as no report', async () => {
+    const dir = tempTree('bs-smoke-report-');
+    mkdirSync(join(dir, 'report.json'));
+    await expect(readPlaywrightReport(join(dir, 'report.json'))).rejects.toThrow(`Could not read ${join(dir, 'report.json')} (EISDIR)`);
   });
 });

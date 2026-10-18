@@ -14,7 +14,7 @@
  * @module
  */
 import { ref, computed, type Ref, type ComputedRef } from 'vue';
-import type { DebugBridge, ElementDiff, HistoryEntry } from './useDebugBridge.js';
+import { newestWins, type DebugBridge, type ElementDiff, type HistoryEntry } from './useDebugBridge.js';
 import type { PlayerState } from '../../client/types.js';
 
 export interface DebugTimelineOptions {
@@ -113,18 +113,21 @@ export function useDebugTimeline(options: DebugTimelineOptions): DebugTimeline {
   const rewindError = ref<string | null>(null);
   const pendingRewindIndex = ref<number | null>(null);
 
-  async function fetchHistory(): Promise<void> {
-    if (historyLoading.value) return;
+  const historyTicket = newestWins();
 
+  async function fetchHistory(): Promise<void> {
+    const isNewest = historyTicket();
     historyLoading.value = true;
     historyError.value = null;
     try {
-      actionHistory.value = await bridge.history();
+      const entries = await bridge.history();
+      if (!isNewest()) return;
+      actionHistory.value = entries;
       historyLastFetched.value = Date.now();
     } catch (e) {
-      historyError.value = e instanceof Error ? e.message : 'Unknown error';
+      if (isNewest()) historyError.value = e instanceof Error ? e.message : 'Unknown error';
     } finally {
-      historyLoading.value = false;
+      if (isNewest()) historyLoading.value = false;
     }
   }
 

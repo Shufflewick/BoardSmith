@@ -17,7 +17,7 @@
 import { designRecordPath } from '../lib/project-paths.js';
 import { parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
 import { resolve as pathResolve } from 'node:path';
-import { escapeRegExp } from '../lib/regexp.js';
+import { escapeRegExp } from '../../utils/regexp.js';
 
 /** The locked finding-kind enum from 172-CONTEXT.md decision 7. Never a hand-written union. */
 export const FINDING_KINDS = Object.freeze([
@@ -108,8 +108,11 @@ export interface ParsedManifest {
   pathlessRowIndexes: number[];
 }
 
-/** Path-shaped tokens: a run of path characters ending in a dot-extension. */
-const PATH_TOKEN = /[A-Za-z0-9_./-]+\.[A-Za-z0-9]+/g;
+/**
+ * Path-shaped tokens: a run of path characters ending in a dot-extension. Letters, combining marks
+ * and digits of any script count, so `règles/a.ts` is read whole, never as `gles/a.ts` (#1113).
+ */
+const PATH_TOKEN = /[\p{L}\p{M}\p{N}_./-]+\.[\p{L}\p{M}\p{N}]+/gu;
 
 /**
  * Resolves a manifest-supplied relative path against `projectDir`, rejecting any escape.

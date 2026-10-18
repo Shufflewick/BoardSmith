@@ -52,7 +52,7 @@
 import { promises as fs } from 'node:fs';
 import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { join, posix, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { sha256Hex } from '../lib/hash.js';
 import {
   CROSS_CHUNK_MD,
@@ -83,6 +83,7 @@ import { besideAnyProblems, pairProblems, readSketchChunks } from './parallel-ch
 import { appendCrossChunkEntry, changedSide, crossReferences } from './cross-chunk.js';
 import { takeOsLock } from '../lib/os-lock.js';
 import { onlyTestCollectionChanged } from '../lib/test-config-edit.js';
+import { readIfExists, readListedText } from '../lib/read-if-exists.js';
 
 interface ChunkMergeOptions {
   /** The chunk's branch. Defaults to `chunk/<slug>`, the branch the dispatch contract names. */
@@ -204,7 +205,7 @@ async function resolveConflicts(ctx: MergeContext): Promise<string[]> {
     const inDesign = name.startsWith(`${ctx.prefix}${DESIGN_DIR}/`) && name.endsWith('.md');
     const path = join(top, name);
     // A rename/rename conflict leaves no file at the old path; like any conflict here, a person settles it.
-    const text = inDesign ? await fs.readFile(path, 'utf-8').catch(() => undefined) : undefined;
+    const text = inDesign ? await readIfExists(path, (file) => fs.readFile(file, 'utf-8')) : undefined;
     const outcome = text === undefined ? undefined : resolveDesignConflicts(text);
     // Unchanged text had no markers to resolve: a modify/delete conflict, which a person must settle.
     if (!outcome || outcome.unresolved > 0 || outcome.text === text) {
@@ -221,7 +222,7 @@ async function resolveConflicts(ctx: MergeContext): Promise<string[]> {
 async function keepMainLock(ctx: MergeContext): Promise<void> {
   const lock = /^Session Lock:.*$/m.exec(await showAt(ctx, 'HEAD', SKETCH_MD))?.[0];
   const path = designPath(ctx.projectDir, SKETCH_MD);
-  const sketch = await fs.readFile(path, 'utf-8').catch(() => undefined);
+  const sketch = await readIfExists(path, (file) => fs.readFile(file, 'utf-8'));
   if (lock === undefined || sketch === undefined) return;
   const kept = sketch.replace(/^Session Lock:.*$/m, lock);
   if (kept === sketch) return;
@@ -232,12 +233,6 @@ async function keepMainLock(ctx: MergeContext): Promise<void> {
 // ---------------------------------------------------------------------------------------------
 // Allocation: provisional ids become real numbers on the combined tree
 // ---------------------------------------------------------------------------------------------
-
-async function readText(path: string): Promise<string | undefined> {
-  const buffer = await fs.readFile(path).catch(() => undefined);
-  if (buffer === undefined || buffer.includes(0)) return undefined;
-  return buffer.toString('utf-8');
-}
 
 /** Why a provisional id cited in file `name` after allocation stops the merge, and the fix. */
 function citationRefusal(name: string, id: string): string {
@@ -285,7 +280,7 @@ async function allocate(
   const ledgers = NUMBERED_LEDGER_SPECS.map((spec) => ({ spec, path: `${ctx.prefix}${DESIGN_DIR}/${spec.file}` }));
   const files: Record<string, string> = {};
   for (const name of new Set([...ctx.changed, ...ledgers.map((l) => l.path)])) {
-    const text = await readText(join(top, name));
+    const text = await readListedText(join(top, name));
     if (text !== undefined) files[name] = text;
   }
   const { files: rewritten, mapping, problems } = allocateProvisional(files, ledgers);
@@ -381,7 +376,7 @@ function statusOf(chunkText: string): string {
 }
 
 async function verifiedProblem(ctx: MergeContext): Promise<string[]> {
-  const status = statusOf(await fs.readFile(chunkMdPath(ctx.projectDir, ctx.slug), 'utf-8').catch(() => ''));
+  const status = statusOf((await readIfExists(chunkMdPath(ctx.projectDir, ctx.slug), (path) => fs.readFile(path, 'utf-8'))) ?? '');
   if (status.startsWith(VERIFIED)) return [];
   return [
     `${ctx.slug} is "${status}", not verified. A chunk's branch is merged once the chunk has closed; ` +
@@ -442,7 +437,7 @@ interface SharedFile {
 }
 
 async function manifestPaths(projectDir: string, slug: string): Promise<Set<string>> {
-  const text = await fs.readFile(chunkMdPath(projectDir, slug), 'utf-8').catch(() => undefined);
+  const text = await readIfExists(chunkMdPath(projectDir, slug), (path) => fs.readFile(path, 'utf-8'));
   if (text === undefined) return new Set();
   return new Set(Object.keys(await chunkCodeFiles(projectDir, text)).map((p) => posix.normalize(p)));
 }
@@ -626,12 +621,12 @@ async function recordMergeSignoffs(ctx: MergeContext, shared: SharedFile[]): Pro
   const when = new Date().toISOString();
   const entries: MergeSignoff[] = [];
   for (const file of shared) {
-    const content = await fs.readFile(join(ctx.projectDir, file.path)).catch(() => undefined);
+    const content = await readIfExists(join(ctx.projectDir, file.path), fs.readFile);
     // A file the merge deleted has no code to vouch for; its chunks' manifests answer for that.
     if (content !== undefined) entries.push({ path: file.path, content: sha256Hex(content), chunks: file.chunks, merge, when });
   }
   const path = designPath(ctx.projectDir, MERGE_SIGNOFFS_MD);
-  const existing = await fs.readFile(path, 'utf-8').catch(() => undefined);
+  const existing = await readIfExists(path, (file) => fs.readFile(file, 'utf-8'));
   await fs.writeFile(path, appendMergeSignoffs(existing, entries));
   await git(ctx.projectDir, ['add', '--', path]);
 }
@@ -668,7 +663,7 @@ async function recordCrossChunk(ctx: MergeContext, alongside: string[]): Promise
   const mainDiff = await git(ctx.top, ['diff', '--unified=0', ctx.fork, 'HEAD']);
   const refs = crossReferences(changedSide(branchDiff), changedSide(mainDiff));
   const path = designPath(ctx.projectDir, CROSS_CHUNK_MD);
-  const existing = await fs.readFile(path, 'utf-8').catch(() => undefined);
+  const existing = await readIfExists(path, (file) => fs.readFile(file, 'utf-8'));
   await fs.writeFile(path, appendCrossChunkEntry(existing, { chunk: ctx.slug, alongside, refs }));
   await git(ctx.projectDir, ['add', '--', path]);
   return refs.sharedFiles.length + refs.sharedNames.length > 0 ? 'pending' : 'none';
@@ -819,11 +814,11 @@ export async function chunkMerge(projectDir: string, slug: string, options: Chun
 
 function report(slug: string, result: ChunkMergeResult): void {
   if (!result.merged) {
-    console.error(chalk.red(`${slug} was not merged. The main line is unchanged. Fix each of these, then run chunk-merge again:`));
+    console.error(styleText('red', `${slug} was not merged. The main line is unchanged. Fix each of these, then run chunk-merge again:`));
     for (const refusal of result.refusals) console.error(`  • ${refusal}`);
     return;
   }
-  console.log(chalk.green(`✓ ${slug} merged; every tree-wide check passed on the combined tree.`));
+  console.log(styleText('green', `✓ ${slug} merged; every tree-wide check passed on the combined tree.`));
   for (const [from, to] of Object.entries(result.allocated)) console.log(`  ${from} is now ${to}.`);
   for (const { path, chunks, why } of result.vouched) {
     const changed = {
@@ -852,7 +847,7 @@ export async function chunkMergeCommand(
   try {
     assertBareName('<slug>', slug, "Pass the slug of the chunk whose branch to merge, as SKETCH.md's Ordered Chunk List names it.");
   } catch (error) {
-    console.error(chalk.red((error as Error).message));
+    console.error(styleText('red', (error as Error).message));
     process.exitCode = 1;
     return;
   }

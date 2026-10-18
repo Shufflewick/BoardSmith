@@ -252,6 +252,14 @@ describe('validate.ts checkMetadataIssues', () => {
     expect(issues[0]).toContain('defineGameUIs');
   });
 
+  // Issue 930: nothing ever read `scoreboard`, so a leftover one is refused with a pointed message.
+  it("rejects a leftover 'scoreboard' key and says to remove it", () => {
+    const issues = checkMetadataIssues({ ...validConfig(), scoreboard: { stats: ['score'] } });
+    expect(issues).toHaveLength(1);
+    expect(issues[0]).toContain("Unknown key 'scoreboard'");
+    expect(issues[0]).toContain('Remove this key from boardsmith.json');
+  });
+
   it('passes a config carrying the editor $schema key (CR-02 regression)', () => {
     const issues = checkMetadataIssues({
       $schema: 'https://boardsmith.io/schemas/boardsmith.schema.json',
@@ -1064,7 +1072,7 @@ describe('validateRequiredFiles — a world has a different entry point (#168)',
 });
 
 describe("#196: what validation tells an author to do next", () => {
-  /** Chalk may or may not colour, depending on where the suite runs. */
+  /** styleText may or may not colour, depending on where the suite runs. */
   const plain = (isWorld: boolean, warnings = 0): string =>
     // eslint-disable-next-line no-control-regex
     successGuidance(isWorld, warnings).join('\n').replace(/\u001B\[[0-9;]*m/g, '');
