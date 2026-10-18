@@ -662,7 +662,7 @@ describe('initCommand — a failed init leaves nothing behind (#242)', () => {
 
     await expect(
       initCommand('mygame', { rulebook: join(parentDir, 'nonexistent', 'rules.pdf') }),
-    ).rejects.toThrow(/Rulebook not found or unreadable/);
+    ).rejects.toThrow(/Rulebook not found/);
 
     expect(existsSync(join(parentDir, 'mygame'))).toBe(false);
     expect(readdirSync(parentDir)).toEqual([]);
@@ -674,7 +674,7 @@ describe('initCommand — a failed init leaves nothing behind (#242)', () => {
 
     await expect(
       initCommand('mygame', { rulebook: join(parentDir, 'nonexistent', 'rules.pdf') }),
-    ).rejects.toThrow(/Rulebook not found or unreadable/);
+    ).rejects.toThrow(/Rulebook not found/);
 
     // The reported output said both `Created mygame successfully!` and
     // `Failed to create project`, in that order. A command that says both is
@@ -840,7 +840,7 @@ describe('initCommand --into-existing — scaffold into the repository you are i
 
     await expect(
       initCommand('sample-game', { rulebook: join(repo, 'missing', 'rules.pdf'), intoExisting: true }),
-    ).rejects.toThrow(/Rulebook not found or unreadable/);
+    ).rejects.toThrow(/Rulebook not found/);
 
     expect(snapshot(repo)).toEqual(before);
     expect(readdirSync(repo).sort()).toEqual(['.git', 'notes.md']);

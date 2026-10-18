@@ -328,10 +328,8 @@ export async function ingestGapsCommand(
   }
   const indexPath = join(rulebookDir, 'INDEX.md');
 
-  let index: string;
-  try {
-    index = await fs.readFile(indexPath, 'utf-8');
-  } catch {
+  const index = await readIfExists(indexPath, (p) => fs.readFile(p, 'utf-8'));
+  if (index === undefined) {
     throw new Error(
       `No rulebook/INDEX.md in ${projectDir}.\n` +
         `Run \`boardsmith init <name> --rulebook <path>\` first, or \`boardsmith ingest-archive <path>\` in an existing project.`,
@@ -555,12 +553,10 @@ async function readSourceToArchive(
   role: 'Rulebook' | 'Additional source',
 ): Promise<SourceToArchive> {
   const sourcePath = resolveUserPath(process.cwd(), userPath);
-  let bytes: Buffer;
-  try {
-    bytes = await fs.readFile(sourcePath);
-  } catch {
+  const bytes = await readIfExists(sourcePath, (p) => fs.readFile(p));
+  if (bytes === undefined) {
     throw new Error(
-      `${role} not found or unreadable: ${sourcePath}\n` +
+      `${role} not found: ${sourcePath}\n` +
         (role === 'Rulebook'
           ? 'Pass the path to the rulebook file (PDF, images, or text) as the first argument.'
           : 'Pass the path to a document the rules incorporate (PDF, images, or text) to --additional-source.'),
