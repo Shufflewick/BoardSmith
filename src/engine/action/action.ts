@@ -2121,8 +2121,8 @@ export class ActionExecutor {
         // Fail loud: a throwing onSelect aborts the action. Fire onCancel for
         // selections whose onSelect already fired, then return an error.
         this.fireOnCancelCallbacks(action, pendingState);
-        const { error: said, rulesError } = pickHookThrew(action, 'onSelect', selection, error);
-        return { done: false, error: said, rulesError };
+        const crashed = pickHookThrew(action, 'onSelect', selection, error);
+        return { done: false, error: crashed.error, rulesError: crashed.rulesError };
       }
     }
 
@@ -2135,8 +2135,8 @@ export class ActionExecutor {
       try {
         this.runPickCallback(pendingState, () => repeatConfig.onEach!(context, chosen));
       } catch (error) {
-        const { error: said, rulesError } = pickHookThrew(action, 'onEach', selection, error);
-        return { done: true, error: said, rulesError };
+        const crashed = pickHookThrew(action, 'onEach', selection, error);
+        return { done: true, error: crashed.error, rulesError: crashed.rulesError };
       }
     }
 
@@ -2156,8 +2156,8 @@ export class ActionExecutor {
       try {
         isDone = repeatConfig.until(context, chosen);
       } catch (error) {
-        const { error: said, rulesError } = pickHookThrew(action, 'until', selection, error);
-        return { done: true, error: said, rulesError };
+        const crashed = pickHookThrew(action, 'until', selection, error);
+        return { done: true, error: crashed.error, rulesError: crashed.rulesError };
       }
     }
 
