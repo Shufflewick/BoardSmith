@@ -88,6 +88,12 @@ export async function submitText(wrapper: VueWrapper, control: string, value: st
   await nextTick();
 }
 
+export async function submitNumber(wrapper: VueWrapper, value: number): Promise<void> {
+  await wrapper.find('.number-input input[type="number"]').setValue(value);
+  await wrapper.find('.number-input .done-button').trigger('click');
+  await nextTick();
+}
+
 const PANEL_CSS = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), 'ActionPanel.vue'),
   'utf-8',

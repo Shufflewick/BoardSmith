@@ -90,10 +90,9 @@
  */
 
 import { ref, readonly, computed, watch, nextTick, getCurrentScope, onScopeDispose } from 'vue';
-import { isDevMode, devWarn, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList } from './actionControllerHelpers.js';
+import { isDevMode, devWarn, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList, editorRuleRefusal } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
 import { findMatchingChoice, oneChoiceListRefusal, oneElementListRefusal } from '../../engine/action/choice-matching.js';
-import { textPickRefusal } from '../../engine/action/text-rules.js';
 
 // Re-export all types from the types module for consumers
 export type {
@@ -2039,8 +2038,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       );
     }
 
-    // The panel's own check, so a custom UI is refused the same text before it is sent (#1057).
-    return selection.type === 'text' ? textPickRefusal(selection, value) : null;
+    return editorRuleRefusal(selection, value);
   }
 
   async function fill(selectionName: string, value: unknown): Promise<PickValidationResult> {

@@ -1054,17 +1054,8 @@ export class ActionExecutor {
       }
 
       case 'number': {
-        const numSel = selection as NumberSelection;
-        const num = value as number;
-        if (typeof num !== 'number' || isNaN(num)) {
-          errors.push(`${selection.name} must be a number`);
-        } else {
-          // The bounds live in `number-rules.ts` because the Action Panel has to
-          // apply the same ones to tell a player why their number will be
-          // refused before they submit it (#237), exactly as the text case above
-          // does. Two copies of these three checks is two rule sets that drift.
-          errors.push(...numberRuleErrors(selection.name, num, numSel));
-        }
+        // The bounds live in `number-rules.ts` for the same reason (#237, #1057).
+        errors.push(...numberRuleErrors(selection.name, value, selection as NumberSelection));
         break;
       }
     }

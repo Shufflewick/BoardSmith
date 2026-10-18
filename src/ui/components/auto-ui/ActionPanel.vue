@@ -16,7 +16,7 @@
 import { ref, computed, watch, inject, nextTick, useId, onMounted, onBeforeUnmount } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
-import { choiceBoardTarget, formatActionName, getDisplayFromValue, labelOfPick, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
+import { choiceBoardTarget, editorRuleRefusal, formatActionName, getDisplayFromValue, labelOfPick, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
 import { createActionMutators } from '../../composables/actionMutators.js';
 import { escapeRegExp } from '../../../utils/regexp.js';
 import type {
@@ -45,8 +45,6 @@ import {
 // reaches for `MAX_FLAT_CHOICE_CANDIDATES`: the panel must apply the SAME
 // rules the server applies, and a second copy of them is a second rule set
 // (#229 for text, #237 for number).
-import { numberRuleErrors } from '../../../engine/action/number-rules.js';
-import { textPickRefusal } from '../../../engine/action/text-rules.js';
 import { choiceValueKey } from '../../../engine/action/choice-matching.js';
 import ActionHelpPopover from '../helpers/ActionHelpPopover.vue';
 // Type-only, so the log component's module (and its stylesheet) never enters
@@ -952,9 +950,9 @@ function skipOptionalSelection() {
 /**
  * Why the value in the open editor cannot be submitted, or null.
  *
- * The rules come from the engine's OWN validators -- `textPickRefusal` (#229)
- * and `numberRuleErrors` (#237) -- so what the panel refuses here and what the
- * server would refuse are the same rule in the same words, rather than two
+ * The rules come from the engine's OWN validators, through `editorRuleRefusal`
+ * (#229, #237, #1057), which `controller.fill` also uses -- so what the panel
+ * refuses here, what a custom UI is refused, and what the server would refuse are the same rule in the same words, rather than two
  * copies that drift. `validate` is deliberately not among them: a game's custom
  * validator closes over game state and never reaches a client, so the engine
  * stays the authority and this is the subset a client can honestly check.
@@ -966,15 +964,8 @@ function skipOptionalSelection() {
 function editorValueRefusal(): string | null {
   const pick = currentPick.value;
   if (!pick) return null;
-  if (pick.type === 'number') {
-    const val = numberInputValue.value;
-    if (val === null) return null;
-    return numberRuleErrors(pick.name, val, pick)[0] ?? null;
-  }
-  if (pick.type === 'text') {
-    return textPickRefusal(pick, textInputValue.value);
-  }
-  return null;
+  const value = pick.type === 'number' ? numberInputValue.value : textInputValue.value;
+  return value === null ? null : editorRuleRefusal(pick, value);
 }
 
 /**
