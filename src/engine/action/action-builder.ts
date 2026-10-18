@@ -153,6 +153,32 @@ function assertReadsEarlierPick(
   );
 }
 
+/** Whether a pick answers with an array: a chooseElements, a multiSelect or orderedList chooseFrom, or any repeating pick. */
+export function answersWithList(selection: Selection): boolean {
+  if (selection.type === 'text' || selection.type === 'number') return false;
+  if (selection.repeat !== undefined || selection.repeatUntil !== undefined) return true;
+  return selection.type === 'elements'
+    || (selection.type === 'choice' && (selection.multiSelect !== undefined || selection.orderedList !== undefined));
+}
+
+/**
+ * `filterBy` matches ONE earlier value against each choice's `key` (#1173), so
+ * a source that answers with a list has no meaning there. Refused where the
+ * action is declared; `dependsOn` is how a pick reads a list.
+ */
+function assertFiltersByOneValue(action: string, name: string, declared: readonly Selection[], filterBy: DependentFilter | undefined): void {
+  if (filterBy === undefined) return;
+  const source = declared.find((selection) => selection.name === filterBy.selectionName);
+  if (source === undefined || !answersWithList(source)) return;
+  throw new Error(
+    `Action "${action}": chooseFrom('${name}') filters by '${source.name}' (filterBy key '${filterBy.key}'), ` +
+    `but '${source.name}' answers with a list. filterBy keeps the choices whose '${filterBy.key}' equals ` +
+    `one earlier value, so it needs a pick of one value (chooseElement, or chooseFrom without multiSelect, ` +
+    `orderedList or repeat). To narrow the choices by a list, declare dependsOn: '${source.name}' instead ` +
+    `and read ctx.args.${source.name} in choices.`
+  );
+}
+
 /**
  * Every `chooseFrom` option except the repeat options ({@link RepeatingOptions})
  * and the disabled rule ({@link DisabledOptions}).
@@ -180,7 +206,7 @@ type ChooseFromOptions<G extends Game, A extends Record<string, unknown>, T, O, 
   validate?: (value: V, args: A, context: ActionContext<G, A>) => boolean | string;
   /** Get board element references for highlighting (source/target) */
   boardRefs?: (choice: ChoiceValue<T>, context: PickContext<G, C>) => ChoiceBoardRefs;
-  /** Filter choices based on a previous selection value */
+  /** Keep the choices whose `key` equals an earlier pick's value; that pick must answer with one value, not a list. */
   filterBy?: DependentFilter;
   /**
    * Name of a previous selection this choice depends on.
@@ -767,6 +793,7 @@ export class Action<
     assertPrepareHasDisabled('chooseFrom', name, options);
     assertReadsEarlierPick('chooseFrom', name, this.definition.selections, options.dependsOn, 'depends on');
     assertReadsEarlierPick('chooseFrom', name, this.definition.selections, options.filterBy?.selectionName, 'filters by');
+    assertFiltersByOneValue(this.definition.name, name, this.definition.selections, options.filterBy);
     // A SET AND A SEQUENCE ARE DIFFERENT QUESTIONS (#249), and a selection that
     // asked both would have to pick one silently: the set refuses the repeat the
     // list exists to allow. Refused at declaration time, where the author is
