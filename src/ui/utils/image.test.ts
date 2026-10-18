@@ -147,9 +147,15 @@ describe('getSpriteStyle', () => {
       const pixels = getSpriteStyle(SPRITE, boxW, boxH);
       expect(fitted.size.map((v) => v.toFixed(3))).toEqual(
         String(pixels.backgroundSize).split(' ').map((v) => parseFloat(v).toFixed(3)));
+      // `+ 0` turns -0 into 0, so a first-column offset compares equal as a string.
       expect(fitted.position.map((v) => (v + 0).toFixed(3))).toEqual(
         String(pixels.backgroundPosition).split(' ').map((v) => (parseFloat(v) + 0).toFixed(3)));
     }
+  });
+
+  it('with no size, puts the last cell of a sheet at the far edge', () => {
+    const corner = { sprite: '/grid.png', x: 200, y: 140, width: 100, height: 140, sheetWidth: 300, sheetHeight: 280 };
+    expect(getSpriteStyle(corner)).toMatchObject({ backgroundSize: '300% 200%', backgroundPosition: '100% 100%' });
   });
 
   it('with no size, puts a sprite on a one-cell-wide sheet at the left edge', () => {
