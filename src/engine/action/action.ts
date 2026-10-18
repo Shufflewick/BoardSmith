@@ -30,7 +30,7 @@ import type {
 } from './types.js';
 import { wrapFilterWithHelpfulErrors } from './helpers.js';
 import { isDevMode, devWarn, isDevThrowEnabled } from '../../utils/dev.js';
-import { Action } from './action-builder.js';
+import { Action, answersWithList } from './action-builder.js';
 import { PlayerFacingError, NotSimulableError } from '../errors.js';
 import { getActiveStep, getGateReasonForValue } from '../tutorial/gate.js';
 import { findMatchingChoice, isSerializedElement, oneChoiceListRefusal, oneElementListRefusal, trySmartResolveChoice, valuesEqual } from './choice-matching.js';
@@ -1897,9 +1897,7 @@ export class ActionExecutor {
     // A DECLARED dependency: re-ask the dependent step with each enabled answer
     // bound, exactly as the player's own answer will.
     // A pick that takes several values answers with an array, so bind one as the player's would be.
-    const takesArray = this.isRepeatingSelection(selection)
-      || selection.type === 'elements'
-      || (selection.type === 'choice' && (selection.multiSelect !== undefined || selection.orderedList !== undefined));
+    const takesArray = answersWithList(selection);
     for (const choice of enabledChoices) {
       const newArgs = { ...args, [selection.name]: takesArray ? [choice.value] : choice.value };
       if (this.hasValidSelectionPath(selections, player, newArgs, index + 1, actionName)) {

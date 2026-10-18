@@ -47,3 +47,38 @@ describe('dependsOn and filterBy name an earlier pick (#392)', () => {
     );
   });
 });
+
+/**
+ * #1173: filterBy matches ONE earlier value against each choice's key, so a
+ * source pick that answers with a list (chooseElements, multiSelect,
+ * orderedList, a repeating pick) has no meaning there. Refused where the
+ * action is declared, pointing to dependsOn.
+ */
+describe('filterBy names a pick of one value (#1173)', () => {
+  const filterByPieces = { filterBy: { key: 'from', selectionName: 'pieces' }, choices: [{ from: 1 }] };
+  const refusal = /Action "move": chooseFrom\('destination'\) filters by 'pieces' \(filterBy key 'from'\), but 'pieces' answers with a list\..*dependsOn: 'pieces'/s;
+
+  it('refuses filterBy on a chooseElements pick', () => {
+    expect(() => Action.create('move').chooseElements('pieces', { elements: [] }).chooseFrom('destination', filterByPieces))
+      .toThrow(refusal);
+  });
+
+  it('refuses filterBy on a multiSelect or orderedList chooseFrom', () => {
+    expect(() => Action.create('move').chooseFrom('pieces', { choices: [1, 2], multiSelect: 2 }).chooseFrom('destination', filterByPieces))
+      .toThrow(refusal);
+    expect(() => Action.create('move').chooseFrom('pieces', { choices: [1, 2], orderedList: 2 }).chooseFrom('destination', filterByPieces))
+      .toThrow(refusal);
+  });
+
+  it('refuses filterBy on a repeating chooseElement or chooseFrom', () => {
+    expect(() => Action.create('move').chooseElement('pieces', { elements: [], repeat: { until: () => true } }).chooseFrom('destination', filterByPieces))
+      .toThrow(refusal);
+    expect(() => Action.create('move').chooseFrom('pieces', { choices: [1, 2], repeatUntil: 2 }).chooseFrom('destination', filterByPieces))
+      .toThrow(refusal);
+  });
+
+  it('accepts filterBy on a chooseElement or a single chooseFrom', () => {
+    expect(() => Action.create('move').chooseElement('pieces', { elements: [] }).chooseFrom('destination', filterByPieces)).not.toThrow();
+    expect(() => Action.create('move').chooseFrom('pieces', { choices: [1, 2] }).chooseFrom('destination', filterByPieces)).not.toThrow();
+  });
+});

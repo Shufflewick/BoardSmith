@@ -800,6 +800,13 @@ A pick may only depend on (`dependsOn`) or filter by (`filterBy`) a pick
 declared **before** it, since picks are asked in declared order. The builder
 refuses a forward reference when the action is declared.
 
+`filterBy` keeps the choices whose `key` equals the one value an earlier pick
+gave, so it needs a pick of one value: a `chooseElement`, or a `chooseFrom`
+without `multiSelect`, `orderedList` or `repeat`. A pick that answers with a
+list (`chooseElements`, `multiSelect`, `orderedList`, any repeating pick) is
+refused as a `filterBy` source when the action is declared. To narrow choices
+by a list, declare `dependsOn` and read the list from `ctx.args` in `choices`.
+
 **What `dependsOn` does:**
 - During the availability check the engine iterates every choice for A
 - For each one it re-asks B with that value bound
