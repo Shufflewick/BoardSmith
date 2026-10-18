@@ -631,23 +631,23 @@ function shellContextFindings(scope: ChunkTestScope): TestStepFinding[] {
 /** A guard the chunk wrote, changed or changed a support file of, that runs the game's code (see the file comment). */
 function guardRunsCodeFindings(scope: ChunkTestScope): TestStepFinding[] {
   return scope.guards.flatMap(({ path, text }) => {
-      const run = findCodeRun(text, path, scope.context);
-      if (run === undefined) return [];
-      return [
-        {
-          kind: 'guard-runs-code' as const,
-          subject: `${path}:${run.line}`,
-          detail:
-            `Line ${run.line} of ${path} ${run.what}. A file under ${GUARD_TEST_DIR} holds scans only (tests that read ` +
-            "source as text, with `readFileSync`, an import ending `?raw`, or `import.meta.glob` with `query: '?raw'`): " +
-            'it is never mutation-tested, so a test ' +
-            'there that runs the game could pass whatever the code does. The one game module a scan may import is ' +
-            'literal constants under src/ui/, such as the theme colours a contrast check needs. Move this test to ' +
-            "the chunk's own test file and list that file in the Spec Manifest " +
-            '(build/test.md "The A11y Floor").',
-        },
-      ];
-    });
+    const run = findCodeRun(text, path, scope.context);
+    if (run === undefined) return [];
+    return [
+      {
+        kind: 'guard-runs-code' as const,
+        subject: `${path}:${run.line}`,
+        detail:
+          `Line ${run.line} of ${path} ${run.what}. A file under ${GUARD_TEST_DIR} holds scans only (tests that read ` +
+          "source as text, with `readFileSync`, an import ending `?raw`, or `import.meta.glob` with `query: '?raw'`): " +
+          'it is never mutation-tested, so a test ' +
+          'there that runs the game could pass whatever the code does. The one game module a scan may import is ' +
+          'literal constants under src/ui/, such as the theme colours a contrast check needs. Move this test to ' +
+          "the chunk's own test file and list that file in the Spec Manifest " +
+          '(build/test.md "The A11y Floor").',
+      },
+    ];
+  });
 }
 
 /**

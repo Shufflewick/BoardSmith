@@ -904,6 +904,21 @@ it('regression: a bid is defined', () => { expect(bid).toBeTruthy(); });
     expect(findings[0].detail).toContain(module);
   });
 
+  it('follows support files that import each other without looping (#1013)', async () => {
+    await write(project, {
+      'tests/support/a.ts': `import { b } from './b';\nexport const a = () => b;\n`,
+      'tests/support/b.ts': `import { a } from './a';\nexport const b = () => a;\n`,
+      'tests/guards/a11y-floor.test.ts': `import { a } from '../support/a';\na();\n`,
+    });
+    git(project, 'add', '-A');
+    git(project, 'commit', '-q', '-m', 'chunk-setup/step-close');
+    const findings = await findingsFor({
+      'src/rules/auction.ts': RULES,
+      'tests/support/b.ts': `import { a } from './a';\nimport { bid } from '../../src/rules/auction.js';\nexport const b = () => [a, bid];\n`,
+    });
+    expect(findings.map((f) => [f.kind, f.subject])).toEqual([['guard-runs-code', 'tests/guards/a11y-floor.test.ts:1']]);
+  });
+
   it('leaves alone an untouched guard whose support files the chunk did not change (#1013)', async () => {
     await write(project, {
       'tests/support/scan.ts': `import { start } from '../../src/rules/game.js';\nexport const files = () => start;\n`,
