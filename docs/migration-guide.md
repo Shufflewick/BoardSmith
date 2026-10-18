@@ -1,5 +1,17 @@
 # Migration Guide
 
+## A crash in a world action's condition, `validate` or `choices` is `rules-error` (#1015)
+
+A seated world action whose condition, `validate` or `choices` throws something
+other than a `PlayerFacingError` now makes `applyCommand` (and `TestWorld.take`)
+throw a `WorldRefusal` with the game-owned code `rules-error` and the shared
+crash sentence, as a throw from `execute` already did. Before, the thrown error
+itself escaped, and a plain `Error` looked the same as the rules saying no. A
+host that treated an uncoded throw from these callbacks as a refusal now sees a
+crash; a refusal (a `PlayerFacingError`, a `validate` returning a string,
+`{ success: false, error }`) is still uncoded. Throw a `PlayerFacingError` where
+the callback means to refuse.
+
 ## `createColorOption` takes no colours, and code player options are published (#994, #992)
 
 `createColorOption(colors, label)` is now `createColorOption(label)`. It always
