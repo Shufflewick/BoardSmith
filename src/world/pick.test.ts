@@ -614,3 +614,123 @@ describe("#1129 — a command checks the condition before the disabled rule", ()
     expect(calls).toEqual(["condition"]);
   });
 });
+
+/**
+ * #978: A MAP OR SET KEYED BY A REAL PLAYER OR ELEMENT ANSWERS THROUGH A PROJECTION.
+ *
+ * A world callback holds projections, and a built-in collection in game state is
+ * keyed by the real objects, so a lookup handed the projection used to miss.
+ */
+describe("#978: a built-in collection keyed by a player or element", () => {
+  class LedgerGame extends FleetGame {
+    ranks = new Map<Player, string>();
+    flagged = new Set<Ship>();
+    marks = new WeakMap<Ship, string>();
+    commands = new Map<Player, Ship>();
+  }
+
+  async function ledgerEngine(action: ActionDefinition) {
+    const game = new LedgerGame({ playerCount: 2, seed: "fleet", worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
+    const engine = new BoardSmithWorldEngine({
+      game,
+      seats: new Map([["player-a", 1]]),
+      store: new MapStore(genesis()),
+      actions: [action],
+      view: () => [FLEET],
+    });
+    await engine.hydrate([FLEET]);
+    const dory = game.ship("dory");
+    game.ranks.set(game.players[0]!, "captain");
+    game.flagged.add(dory);
+    game.marks.set(dory, "flagship");
+    game.commands.set(game.players[0]!, dory);
+    return engine;
+  }
+
+  const lookups = (game: LedgerGame, player: Player): string[] => {
+    const dory = game.ship("dory");
+    return [
+      String(game.ranks.get(player)),
+      String(game.ranks.has(player)),
+      String(game.flagged.has(dory)),
+      String(game.marks.get(dory)),
+    ];
+  };
+  const FOUND = ["captain", "true", "true", "flagship"];
+
+  const muster = worldAction<LedgerGame>("muster")
+    .needs(() => [FLEET])
+    .condition({ "is ranked": ({ game, player }) => game.ranks.has(player) })
+    .chooseFrom("ship", {
+      choices: ({ game, player }) => [...lookups(game, player), ...game.all(Ship).filter((ship) => game.flagged.has(ship)).map((ship) => ship.name!)],
+    })
+    .quote((_args, { game, player }) => lookups(game, player))
+    .execute(() => {});
+
+  it("finds the entry from an offer's condition and choices", async () => {
+    const engine = await ledgerEngine(muster);
+
+    const [offer] = await engine.offersFor("player-a", STAMP);
+
+    expect(offer!.name).toBe("muster");
+    expect(offer!.selections[0]!.choices?.map((choice) => choice.value)).toEqual([...FOUND, "dory"]);
+  });
+
+  it("finds the entry from a re-asked pick and a quote", async () => {
+    const engine = await ledgerEngine(muster);
+
+    const pick = await engine.resolvePick("player-a", "muster", "ship", {}, STAMP);
+    const quote = await engine.resolveQuote("player-a", "muster", { ship: "dory" }, STAMP);
+
+    expect(pick.choices?.map((choice) => choice.value)).toEqual([...FOUND, "dory"]);
+    expect(quote).toEqual(FOUND);
+  });
+
+  const quoting = (name: string, read: (game: LedgerGame, player: Player) => void) =>
+    worldAction<LedgerGame>(name)
+      .needs(() => [FLEET])
+      .chooseFrom("ship", { choices: () => ["dory"] })
+      .quote((_args, { game, player }) => {
+        read(game, player);
+        return null;
+      })
+      .execute(() => {});
+
+  it("still REFUSES a write to the collection itself", async () => {
+    for (const write of [
+      (game: LedgerGame, player: Player) => game.ranks.set(player, "mutineer"),
+      (game: LedgerGame) => game.flagged.delete(game.ship("dory")),
+      (game: LedgerGame) => game.marks.set(game.ship("skiff"), "decoy"),
+    ]) {
+      const engine = await ledgerEngine(quoting("rewrite", write));
+      await expect(
+        engine.resolveQuote("player-a", "rewrite", { ship: "dory" }, STAMP),
+      ).rejects.toThrow(/A read-only view of this world tried to write/);
+    }
+  });
+
+  it("keeps forEach's thisArg for a callback that reads this", async () => {
+    let seen = "";
+    const engine = await ledgerEngine(quoting("tally", (game: LedgerGame) => {
+      game.flagged.forEach(function (this: { tag: string }) { seen = this.tag; }, { tag: "kept" });
+    }));
+    await engine.resolveQuote("player-a", "tally", { ship: "dory" }, STAMP);
+    expect(seen).toBe("kept");
+  });
+
+  it("hands forEach and iteration read-only entries", async () => {
+    for (const write of [
+      (game: LedgerGame) => game.flagged.forEach((ship) => { ship.hold = 1; }),
+      (game: LedgerGame) => { for (const ship of game.flagged) ship.hold = 1; },
+      (game: LedgerGame, player: Player) => { game.commands.get(player)!.hold = 1; },
+    ]) {
+      const engine = await ledgerEngine(quoting("rewrite", write));
+      await expect(
+        engine.resolveQuote("player-a", "rewrite", { ship: "dory" }, STAMP),
+      ).rejects.toThrow(/A read-only view of this world tried to write/);
+      expect(await engine.serializePartitions([FLEET])).toMatchObject({
+        [FLEET]: expect.stringContaining('"hold":700') as unknown as string,
+      });
+    }
+  });
+});
