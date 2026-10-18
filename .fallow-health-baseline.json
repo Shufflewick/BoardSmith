@@ -507,7 +507,7 @@
       }
     },
     "src/ui/components/auto-ui/renderers/HandRenderer.vue": {
-      "complexity_high": {
+      "complexity_moderate": {
         "count": 1
       }
     },
