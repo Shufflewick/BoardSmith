@@ -627,10 +627,12 @@ describe("#978: a built-in collection keyed by a player or element", () => {
     flagged = new Set<Ship>();
     marks = new WeakMap<Ship, string>();
     commands = new Map<Player, Ship>();
+    tallies = new Uint8Array([3, 1, 2]);
   }
 
-  async function ledgerEngine(action: ActionDefinition) {
-    const game = new LedgerGame({ playerCount: 2, seed: "fleet", worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
+  const ledger = () => new LedgerGame({ playerCount: 2, seed: "fleet", worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
+
+  async function ledgerEngine(action: ActionDefinition, game = ledger()) {
     const engine = new BoardSmithWorldEngine({
       game,
       seats: new Map([["player-a", 1]]),
@@ -707,6 +709,39 @@ describe("#978: a built-in collection keyed by a player or element", () => {
         engine.resolveQuote("player-a", "rewrite", { ship: "dory" }, STAMP),
       ).rejects.toThrow(/A read-only view of this world tried to write/);
     }
+  });
+
+  it("REFUSES a TypedArray write and a collection method not known to be a read (#1171)", async () => {
+    for (const write of [
+      (game: LedgerGame) => game.tallies.fill(0),
+      (game: LedgerGame) => game.tallies.sort(),
+      (game: LedgerGame, player: Player) => (game.ranks as unknown as { stamp(key: Player): void }).stamp(player),
+    ]) {
+      const game = ledger();
+      Object.assign(game.ranks, { stamp(this: Map<Player, string>, key: Player) { this.set(key, "stamped"); } });
+      const engine = await ledgerEngine(quoting("rewrite", write), game);
+      await expect(
+        engine.resolveQuote("player-a", "rewrite", { ship: "dory" }, STAMP),
+      ).rejects.toThrow(/A read-only view of this world tried to write/);
+      expect([...game.tallies]).toEqual([3, 1, 2]);
+      expect(game.ranks.get(game.players[0]!)).toBe("captain");
+    }
+  });
+
+  it("still answers a collection's size, iteration and a TypedArray's reads (#1171)", async () => {
+    const engine = await ledgerEngine(
+      worldAction<LedgerGame>("count")
+        .needs(() => [FLEET])
+        .chooseFrom("ship", { choices: () => ["dory"] })
+        .quote((_args, { game }) => [
+          game.ranks.size, [...game.ranks.values()], game.flagged.size, [...game.flagged].map((ship) => ship.name),
+          game.tallies.length, game.tallies.at(-1), [...game.tallies.slice(1)], game.tallies.indexOf(1),
+        ].map(String))
+        .execute(() => {}),
+    );
+    expect(await engine.resolveQuote("player-a", "count", { ship: "dory" }, STAMP)).toEqual([
+      "1", "captain", "1", "dory", "3", "2", "1,2", "1",
+    ]);
   });
 
   it("keeps forEach's thisArg for a callback that reads this", async () => {

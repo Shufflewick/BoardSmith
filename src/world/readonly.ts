@@ -59,12 +59,10 @@
  * So `ENGINE_READ_DOORS` names the engine's own reads, and one read off a
  * projection runs against the REAL object with only its answer projected.
  *
- * AN ALLOWLIST, WHICH IS THE SAFE SIDE OF THE LEDGER. `BUILTIN_MUTATORS` below
- * names what must not run, and that shape is only acceptable over a closed
- * standard API: a method nobody remembered to name is a hole. This names what
- * MAY skip the traps, over an API that is still growing, so a method nobody
- * remembers to name is merely slow. That asymmetry is the whole reason this can
- * exist on `GameElement` where a mutator list could not.
+ * AN ALLOWLIST, WHICH IS THE SAFE SIDE OF THE LEDGER. This names what MAY
+ * skip the traps, so a method nobody remembers to name is merely slow. A list
+ * of what must NOT run would turn every method nobody named into a hole, which
+ * is why the built-in objects below are held to an allowlist too (#1171).
  *
  * ## And a CLOAKED TARGET, for the values a proxy may not wrap (#247)
  *
@@ -100,51 +98,84 @@
  * cloaked rather than only the frozen ones.
  */
 import { worldRefusal } from "./refusals.js";
-import { ElementCollection, Game, GameElement } from "../engine/index.js";
+import { ElementCollection, Game, GameElement, PersistentMap } from "../engine/index.js";
 
 /**
  * Objects whose methods may run with the projection as their receiver.
  *
  * Ordinary objects, class instances and arrays -- which is everything the
  * element tree is built from, and everything a mutating method could write
- * through. A `Map`, a `Set`, a `Date`, a `Promise` or an array ITERATOR carries
+ * through. A `Map`, a `Set`, a `Date`, a TypedArray or an iterator carries
  * internal slots that only its own instance has, so calling one through a
  * proxy throws "incompatible receiver" and the read a declaration was making
  * fails for no reason a bundle author could act on. Those are invoked against
- * the real object, and the mutators they DO have are named below.
+ * the real object, and only for the reads named below.
  */
 const RECEIVER_SAFE_TAGS = new Set(["[object Object]", "[object Array]", "[object Function]"]);
 
+const ITERATOR_PROTOTYPE = Object.getPrototypeOf(Object.getPrototypeOf([][Symbol.iterator]())) as object;
+
 /**
- * Built-in mutators, for the objects that cannot take the projection as their
- * receiver.
+ * THE READS A BUILT-IN OBJECT MAY ANSWER, AND NOTHING ELSE (#1171).
  *
- * A CLOSED list over a fixed standard API rather than a guess about an
- * evolving one, which is what makes naming them acceptable here and not on
- * `GameElement`. Nothing in the element tree is one of these; they appear only
- * as engine bookkeeping a declaration can reach by reading far enough.
+ * These run against the real object, so a write among them would land on the
+ * live world. Naming the writes instead missed TypedArray `fill` and `sort`,
+ * and would have let every write method a later standard adds (`getOrInsert`)
+ * straight through. Named here, a method nobody listed is refused.
+ *
+ * Taken off the prototypes by IDENTITY, as the engine's read doors are, so a
+ * subclass that overrides `get` runs a different function and is refused too.
+ * A getter is listed by its name, like a method.
  */
-const BUILTIN_MUTATORS = new Set([
-  "set",
-  "add",
-  "delete",
-  "clear",
-  "setTime",
-  "setDate",
-  "setFullYear",
-  "setHours",
-  "setMilliseconds",
-  "setMinutes",
-  "setMonth",
-  "setSeconds",
-  "setUTCDate",
-  "setUTCFullYear",
-  "setUTCHours",
-  "setUTCMilliseconds",
-  "setUTCMinutes",
-  "setUTCMonth",
-  "setUTCSeconds",
-]);
+const BUILTIN_READ_NAMES: ReadonlyArray<readonly [object, ReadonlyArray<string | symbol>]> = [
+  [Object.prototype, ["hasOwnProperty", "isPrototypeOf", "propertyIsEnumerable", "toLocaleString", "toString", "valueOf"]],
+  [Map.prototype, ["entries", "forEach", "get", "has", "keys", "size", "values"]],
+  [Set.prototype, ["entries", "forEach", "has", "keys", "size", "values"]],
+  [WeakMap.prototype, ["get", "has"]],
+  [WeakSet.prototype, ["has"]],
+  [PersistentMap.prototype, ["entries", "forEach", "get", "has", "keys", "size", "values", Symbol.iterator, Symbol.toStringTag]],
+  [
+    Object.getPrototypeOf(Uint8Array.prototype) as object,
+    [
+      "at", "byteLength", "byteOffset", "entries", "every", "filter", "find", "findIndex", "findLast",
+      "findLastIndex", "forEach", "includes", "indexOf", "join", "keys", "lastIndexOf", "length", "map",
+      "reduce", "reduceRight", "slice", "some", "subarray", "toLocaleString", "toReversed", "toSorted",
+      "toString", "values", "with", Symbol.toStringTag,
+    ],
+  ],
+  [
+    Date.prototype,
+    [
+      "getDate", "getDay", "getFullYear", "getHours", "getMilliseconds", "getMinutes", "getMonth", "getSeconds",
+      "getTime", "getTimezoneOffset", "getUTCDate", "getUTCDay", "getUTCFullYear", "getUTCHours",
+      "getUTCMilliseconds", "getUTCMinutes", "getUTCMonth", "getUTCSeconds", "toDateString", "toISOString",
+      "toJSON", "toLocaleDateString", "toLocaleString", "toLocaleTimeString", "toString", "toTimeString",
+      "toUTCString", "valueOf", Symbol.toPrimitive,
+    ],
+  ],
+  [ITERATOR_PROTOTYPE, [Symbol.iterator]],
+  [Object.getPrototypeOf(new Map().keys()) as object, ["next"]],
+  [Object.getPrototypeOf(new Set().keys()) as object, ["next"]],
+  [Object.getPrototypeOf([].keys()) as object, ["next"]],
+];
+
+const BUILTIN_READS = new WeakSet<object>();
+for (const [prototype, names] of BUILTIN_READ_NAMES) {
+  for (const name of names) {
+    const held = Object.getOwnPropertyDescriptor(prototype, name);
+    const read = held?.get ?? held?.value;
+    if (typeof read === "function") BUILTIN_READS.add(read);
+  }
+}
+
+/** The getter a property is read through, wherever on the chain it lives. */
+function getterOf(subject: object, property: string | symbol): unknown {
+  for (let holder: object | null = subject; holder !== null; holder = Object.getPrototypeOf(holder)) {
+    const held = Reflect.getOwnPropertyDescriptor(holder, property);
+    if (held !== undefined) return held.get;
+  }
+  return undefined;
+}
 
 /**
  * THE ENGINE'S OWN READS, BY NAME (ShufflewickPub #409).
@@ -366,8 +397,11 @@ function projectedProperty(
   property: string | symbol,
   receiver: unknown,
   projection: object,
+  safeReceiver: boolean,
 ): unknown {
-  const held = Reflect.get(target, property, receiver);
+  // A built-in getter (`size`, `length`) needs the real object as its receiver, as a built-in method does.
+  const builtinGetter = !safeReceiver && BUILTIN_READS.has(getterOf(target, property) as object);
+  const held = Reflect.get(target, property, builtinGetter ? target : receiver);
   if (typeof held !== "function" || isClass(held)) return readOnlyProjection(held);
   const call = held as (...a: unknown[]) => unknown;
 
@@ -381,10 +415,9 @@ function projectedProperty(
     return receiver === projection ? cachedWrapper(target, call, open) : open();
   }
 
-  // A MUTATOR IS REFUSED BEFORE IT IS CACHED, so the refusal names the property
-  // it was reached by rather than whichever name got there first.
-  const safeReceiver = takesProjectionAsReceiver(target);
-  if (!safeReceiver && BUILTIN_MUTATORS.has(property as string)) refuseWrite(property);
+  // ANYTHING BUT A KNOWN READ IS REFUSED BEFORE IT IS CACHED, so the refusal
+  // names the property it was reached by rather than whichever name got there first.
+  if (!safeReceiver && !BUILTIN_READS.has(call)) refuseWrite(property);
 
   // ONE WRAPPER PER FUNCTION, not one per read (#374). Only when the receiver is
   // this projection: reached along a prototype chain from some other object, the
@@ -503,6 +536,7 @@ export function readOnlyProjection<T>(value: T): T {
   if (typeof subject === "function" && isClass(subject)) return value;
 
   const cloak = cloakFor(subject);
+  const safeReceiver = takesProjectionAsReceiver(subject);
   // EVERY TRAP READS THE SUBJECT, not the cloak, so the only thing the cloak
   // changes is which object the language checks its invariants against. The
   // traps below are the ones whose default would have answered from the empty
@@ -510,7 +544,7 @@ export function readOnlyProjection<T>(value: T): T {
   const projection: object = new Proxy(cloak, {
     ...REFUSALS,
     get(_target, property, receiver) {
-      return projectedProperty(subject, property, receiver, projection);
+      return projectedProperty(subject, property, receiver, projection, safeReceiver);
     },
     has(_target, property) {
       return Reflect.has(subject, property);

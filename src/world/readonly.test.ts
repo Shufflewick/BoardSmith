@@ -389,3 +389,79 @@ describe("readOnlyProjection over classes (#285)", () => {
     expect(here.first(Token)).toBeDefined();
   });
 });
+
+describe("readOnlyProjection over built-in objects (#1171)", () => {
+  it("REFUSES every TypedArray write method, and the array is unchanged", () => {
+    const live = new Uint8Array([3, 1, 2]);
+    const projection = readOnlyProjection(live);
+
+    for (const write of [
+      () => projection.fill(0),
+      () => projection.copyWithin(0, 1),
+      () => projection.reverse(),
+      () => projection.sort(),
+      () => projection.set([9]),
+    ]) {
+      expect(write).toThrow(/A read-only view of this world tried to write/);
+    }
+    expect([...live]).toEqual([3, 1, 2]);
+  });
+
+  it("REFUSES a Map method it does not know to be a read, such as a future getOrInsert", () => {
+    const prototype = Map.prototype as unknown as Record<string, unknown>;
+    const shipped = Object.hasOwn(prototype, "getOrInsert");
+    if (!shipped) {
+      // Stands in for the TC39 method until the runtime ships it: it inserts when the key is missing.
+      prototype.getOrInsert = function (this: Map<unknown, unknown>, key: unknown, value: unknown) {
+        if (!this.has(key)) this.set(key, value);
+        return this.get(key);
+      };
+    }
+    try {
+      const live = new Map<string, number>();
+      const projection = readOnlyProjection(live) as unknown as { getOrInsert(key: string, value: number): number };
+
+      expect(() => projection.getOrInsert("gold", 5)).toThrow(/tried to write "getOrInsert"/);
+      expect(live.size).toBe(0);
+    } finally {
+      if (!shipped) delete prototype.getOrInsert;
+    }
+  });
+
+  it("still answers every Map and Set read", () => {
+    const map = readOnlyProjection(new Map([["a", 1], ["b", 2]]));
+    const set = readOnlyProjection(new Set(["x", "y"]));
+    const seen: string[] = [];
+    map.forEach((value, key) => seen.push(`${key}=${value}`));
+    set.forEach((value) => seen.push(value));
+
+    expect([map.get("a"), map.has("b"), map.size, [...map.keys()], [...map.values()]]).toEqual([1, true, 2, ["a", "b"], [1, 2]]);
+    expect([...map.entries()].map(([key, value]) => `${key}${value}`)).toEqual(["a1", "b2"]);
+    expect([...map].map(([key]) => key)).toEqual(["a", "b"]);
+    expect([set.has("x"), set.size, [...set], [...set.values()], [...set.keys()]]).toEqual([true, 2, ["x", "y"], ["x", "y"], ["x", "y"]]);
+    expect(seen).toEqual(["a=1", "b=2", "x", "y"]);
+    expect(String(map)).toBe("[object Map]");
+  });
+
+  it("still answers WeakMap, WeakSet and Date reads", () => {
+    const key = {};
+    const weakMap = readOnlyProjection(new WeakMap([[key, "held"]]));
+    const weakSet = readOnlyProjection(new WeakSet([key]));
+    const date = readOnlyProjection(new Date(0));
+
+    expect([weakMap.get(key), weakMap.has(key), weakSet.has(key)]).toEqual(["held", true, true]);
+    expect([date.getTime(), date.toISOString(), date.getUTCFullYear(), JSON.stringify(date), +date]).toEqual([
+      0, "1970-01-01T00:00:00.000Z", 1970, '"1970-01-01T00:00:00.000Z"', 0,
+    ]);
+    expect(() => date.setTime(5)).toThrow(/tried to write "setTime"/);
+  });
+
+  it("still answers every TypedArray read", () => {
+    const array = readOnlyProjection(new Int16Array([3, 1, 2]));
+
+    expect([array.length, array[0], array.at(-1), array.indexOf(1), array.includes(2), array.join("-")]).toEqual([3, 3, 2, 1, true, "3-1-2"]);
+    expect([[...array], [...array.slice(1)], [...array.map((value) => value * 2)], array.reduce((sum, value) => sum + value, 0)]).toEqual([
+      [3, 1, 2], [1, 2], [6, 2, 4], 6,
+    ]);
+  });
+});
