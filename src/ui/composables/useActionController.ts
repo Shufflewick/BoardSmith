@@ -90,7 +90,8 @@
  */
 
 import { ref, readonly, computed, watch, nextTick, getCurrentScope, onScopeDispose } from 'vue';
-import { isDevMode, devWarn, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList, editorRuleRefusal } from './actionControllerHelpers.js';
+import { devWarn } from '../../utils/dev.js';
+import { getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList, editorRuleRefusal } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
 import { findMatchingChoice, oneChoiceListRefusal, oneElementListRefusal } from '../../engine/action/choice-matching.js';
 
@@ -461,7 +462,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   const { enrichElementsList, enrichValidElements } = createEnrichment(gameView, currentArgs);
 
   // === Helpers ===
-  // Note: isDevMode, devWarn, getDisplayFromValue are imported from actionControllerHelpers.ts
+  // Note: getDisplayFromValue is imported from actionControllerHelpers.ts
   // Note: enrichElementsList, enrichValidElements are from useGameViewEnrichment.ts
 
   /** Clear all keys from the args object while preserving reactivity */
@@ -2782,5 +2783,3 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     showActionPanel,         // True when safe to show action UI (turn + no animations + no followUp)
   };
 }
-
-export default useActionController;
