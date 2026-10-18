@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import type { GameDefinition } from '../../session/index.js';
+import { createColorOption, type GameDefinition } from '../../session/index.js';
 import { Game, Player, type GameOptions } from '../../engine/index.js';
 import { buildOutputDir, deriveManifest, resolveUiBuild } from './build.js';
 import { fixedDeployDefinition } from '../../session/testing/fixtures/timed-step-fixture.js';
@@ -136,6 +136,32 @@ describe('deriveManifest', () => {
     expect(() => derive({ name: 'fixture', gameOptions: [{ id: 'rounds', type: 'number', label: 'Rounds' }] })).toThrow(
       /"rounds" with no default/,
     );
+  });
+
+  it('publishes the player options the gameDefinition declares beside boardsmith.json\'s, without colour (#992)', () => {
+    const botLevel = { id: 'botLevel', type: 'select', label: 'Difficulty', choices: ['easy', 'hard'] };
+    const gameDefinition: GameDefinition = {
+      ...makeGameDefinition(2, 4),
+      playerOptions: {
+        role: { type: 'exclusive', label: 'Dictator', default: 'last' },
+        color: createColorOption(),
+      },
+    };
+    expect(derive({ name: 'fixture', playerOptions: [botLevel] }, gameDefinition).playerOptions).toEqual([
+      { id: 'role', type: 'exclusive', label: 'Dictator', default: 'last' },
+      botLevel,
+    ]);
+    expect(derive({ name: 'fixture' })).not.toHaveProperty('playerOptions');
+  });
+
+  it('refuses a player option the gameDefinition and boardsmith.json declare differently (#992)', () => {
+    const gameDefinition: GameDefinition = {
+      ...makeGameDefinition(2, 4),
+      playerOptions: { role: { type: 'exclusive', label: 'Dictator' } },
+    };
+    expect(() =>
+      derive({ name: 'fixture', playerOptions: [{ id: 'role', type: 'exclusive', label: 'Tyrant' }] }, gameDefinition),
+    ).toThrow(/player option "role"/);
   });
 
   it('leaves the "agents" role mapping out of the manifest: it says how the game is built, not what is published (#454)', () => {

@@ -19,11 +19,14 @@ import {
   shouldOpenBrowser,
   resolvePlayerCount,
   resolveColorOption,
+  resolveDevPlayerOptions,
   parseGameOptionFlags,
   resolvePreset,
 } from './dev.js';
 import { describeTableReload, tableShapeChange } from './dev-table-runtime.js';
-import { createColorOption, type OpSuccess } from '../../session/index.js';
+import { createColorOption, type GameDefinition, type OpSuccess } from '../../session/index.js';
+import { deriveManifest } from './build.js';
+import { Game, Player } from '../../engine/index.js';
 import { hostHoldings } from '../dev-host/shutdown.js';
 
 // Counts the shared cleanup runs, so a refusal can be shown to go through it.
@@ -360,14 +363,18 @@ describe('resolveColorOption: dev offers exactly the colours production does (#8
   });
 
   it('refuses a code colour option that differs from the engine palette when boardsmith.json declares none', () => {
-    const declared = createColorOption([{ value: '#111111', label: 'Coal' }]);
+    const declared = { type: 'color' as const, label: 'Color', choices: [{ value: '#111111', label: 'Coal' }] };
     expect(() => resolveColorOption({ playerOptions: { color: declared } }, {})).toThrow(
       /engine's default palette/,
     );
   });
 
   it('accepts a code colour option equal to the palette production offers, hex case aside', () => {
-    const declared = createColorOption([{ value: '#111111', label: 'Coal' }, { value: '#eeeeee', label: 'Snow' }]);
+    const declared = {
+      type: 'color' as const,
+      label: 'Color',
+      choices: [{ value: '#111111', label: 'Coal' }, { value: '#eeeeee', label: 'Snow' }],
+    };
     expect(resolveColorOption({ playerOptions: { color: declared } }, configPalette).choices).toEqual(
       resolveColorOption({}, configPalette).choices,
     );
@@ -387,6 +394,43 @@ describe('resolveColorOption: dev offers exactly the colours production does (#8
     expect(() =>
       resolveColorOption({ colorPalette: [{ id: 'a', hex: '#222222', label: 'A' }] }, configPalette),
     ).toThrow(/colorPalette.*boardsmith\.json/s);
+  });
+});
+
+describe('dev and the live lobby offer the same player options (#992)', () => {
+  const role = { type: 'exclusive' as const, label: 'Dictator', default: 'last' as const };
+  const botLevel = { id: 'botLevel', type: 'select', label: 'Difficulty', choices: ['easy', 'hard'] };
+  const gameDefinition: GameDefinition = {
+    gameClass: class FixtureGame extends Game<FixtureGame, Player> {},
+    gameType: 'fixture',
+    minPlayers: 2,
+    maxPlayers: 4,
+    playerOptions: { role },
+  };
+  const config = { playerOptions: [botLevel] };
+
+  it('keeps the gameDefinition\'s player options beside boardsmith.json\'s, and adds the colour option', () => {
+    expect(resolveDevPlayerOptions(gameDefinition, config)).toEqual({
+      role,
+      botLevel: { type: 'select', label: 'Difficulty', choices: ['easy', 'hard'] },
+      color: resolveColorOption(gameDefinition, {}),
+    });
+  });
+
+  it('offers every option the published manifest does, so the live lobby shows the same list', () => {
+    const { color, ...dev } = resolveDevPlayerOptions(gameDefinition, config);
+    const manifest = deriveManifest({ backend: 'table', ...config }, { version: '1.0.0' }, gameDefinition, 7, {
+      tableUi: true,
+      worldUi: false,
+    });
+    expect(manifest.playerOptions).toEqual(Object.entries(dev).map(([id, option]) => ({ id, ...option })));
+    expect(color.type).toBe('color');
+  });
+
+  it('refuses a key the gameDefinition and boardsmith.json declare differently', () => {
+    expect(() =>
+      resolveDevPlayerOptions(gameDefinition, { playerOptions: [{ id: 'role', ...role, label: 'Tyrant' }] }),
+    ).toThrow(/player option "role"/);
   });
 });
 

@@ -1,5 +1,27 @@
 # Migration Guide
 
+## `createColorOption` takes no colours, and code player options are published (#994, #992)
+
+`createColorOption(colors, label)` is now `createColorOption(label)`. It always
+offers the engine's `DEFAULT_COLOR_PALETTE`. Move a custom list into
+`boardsmith.json`'s `colorPalette`, the one list dev and the live lobby use, and
+delete the `color` option from your `gameDefinition`; dev builds it from that
+palette:
+
+```typescript
+// Before
+playerOptions: { color: createColorOption([{ value: '#ff0000', label: 'Fire' }]) }
+// After: no `color` player option in code, and boardsmith.json has
+// "colorPalette": [{ "id": "fire", "hex": "#ff0000", "label": "Fire" }]
+```
+
+The player options your `gameDefinition` declares are now merged with
+`boardsmith.json`'s `playerOptions` by key, in `boardsmith dev` and in the
+manifest `boardsmith build` publishes. Before, dev dropped the code ones and the
+live lobby never saw them. A key declared in both places must be declared the
+same in both, or dev and build refuse it, naming the key; keep each option in
+one place.
+
 ## `boardsmith test --selection` is removed (#986)
 
 `boardsmith test` no longer takes `--selection <path>`, the authored-test
