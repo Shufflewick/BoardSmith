@@ -290,13 +290,8 @@ export function runRootDir(projectDir: string, runId: string): string {
 
 /** Every folder under `<projectDir>/rulebook/.verify/` named like a run id, oldest first, run or not. */
 async function runIdFolders(projectDir: string): Promise<string[]> {
-  let entries: Array<{ name: string; isDirectory(): boolean }>;
-  try {
-    entries = await fs.readdir(join(designRulebookDir(projectDir), '.verify'), { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  return entries
+  const entries = await readIfExists(join(designRulebookDir(projectDir), '.verify'), (p) => fs.readdir(p, { withFileTypes: true }));
+  return (entries ?? [])
     .filter((e) => e.isDirectory() && RUN_ID_RE.test(e.name))
     .map((e) => e.name)
     .sort();
@@ -939,10 +934,8 @@ export async function checkRecordedSlices(
       );
       continue;
     }
-    let bytes: Buffer;
-    try {
-      bytes = await fs.readFile(sliceAbs);
-    } catch {
+    const bytes = await readIfExists(sliceAbs, (p) => fs.readFile(p));
+    if (bytes === undefined) {
       missing.push(record);
       continue;
     }
@@ -1065,11 +1058,9 @@ export interface VerifyRunRangeActionResult {
 /** Whether anything stands at `path`, counting what cannot be looked at (no permission, a link loop) as there. */
 async function present(path: string): Promise<boolean> {
   try {
-    await fs.lstat(path);
+    return (await readIfExists(path, fs.lstat)) !== undefined;
+  } catch {
     return true;
-  } catch (error) {
-    const { code } = error as NodeJS.ErrnoException;
-    return code !== 'ENOENT' && code !== 'ENOTDIR';
   }
 }
 
@@ -1078,10 +1069,8 @@ async function present(path: string): Promise<boolean> {
  * command gives. Never suggests init with this id: a mistyped id would become a real, latest run (#833).
  */
 export async function missingRunMessage(projectDir: string, runId: string): Promise<string> {
-  const ledgerFile = ledgerFilePath(projectDir, runId);
-  if (await present(ledgerFile)) {
-    return `${relative(projectDir, ledgerFile)} could not be read. Check that it is a readable file.`;
-  }
+  // Throws, naming RUN.md, when something stands there that cannot be read: the message readLedgerOrThrow gives.
+  await exists(ledgerFilePath(projectDir, runId));
   const runDir = runRootDir(projectDir, runId);
   if (await present(runDir)) {
     const noRun = `${relative(projectDir, runDir)}/ has no RUN.md, so verify-run-init did not make it.\n`;
@@ -1105,13 +1094,9 @@ export async function missingRunMessage(projectDir: string, runId: string): Prom
   );
 }
 
+/** Whether anything is at `path`; one that cannot be looked at (no permission, a link loop) is thrown, naming it. */
 export async function exists(path: string): Promise<boolean> {
-  try {
-    await fs.access(path);
-    return true;
-  } catch {
-    return false;
-  }
+  return (await readIfExists(path, fs.stat)) !== undefined;
 }
 
 /** Reads the run's RUN.md, or throws `missingRunMessage` when the run does not exist. */

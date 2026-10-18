@@ -21,6 +21,9 @@ import {
   ledgerFilePath,
   readLedgerOrThrow,
   missingRunMessage,
+  latestRunId,
+  listRunIds,
+  checkRecordedSlices,
   type ClassificationRecord,
   type ImpactRecord,
   type AdjudicationRecord,
@@ -159,8 +162,15 @@ describe('verifyRunInitCommand — staging + run allocation', () => {
     const ledgerAbs = join(project, init.ledgerPath);
     await fs.rm(ledgerAbs);
     await fs.symlink(ledgerAbs, ledgerAbs);
-    await expect(readLedgerOrThrow(ledgerAbs, init.runId, project)).rejects.toThrow(`Could not read ${ledgerAbs} (ELOOP)`);
-    expect(await missingRunMessage(project, init.runId)).toBe(`${init.ledgerPath} could not be read. Check that it is a readable file.`);
+    // Every way to a run reads it the same way: by --run-id, as the latest run, or in the list (#1174).
+    for (const reading of [
+      () => readLedgerOrThrow(ledgerAbs, init.runId, project),
+      () => missingRunMessage(project, init.runId),
+      () => latestRunId(project),
+      () => listRunIds(project),
+    ]) {
+      await expect(reading()).rejects.toThrow(`Could not read ${ledgerAbs} (ELOOP)`);
+    }
   });
 
   it('says a run folder it cannot search could not be read, never that it is not a run (#1110)', async () => {
@@ -168,13 +178,27 @@ describe('verifyRunInitCommand — staging + run allocation', () => {
     const init = await verifyRunInitCommand({ project, json: true });
     const runDir = join(project, init.ledgerPath, '..');
     await fs.chmod(runDir, 0o000);
-    let message: string;
     try {
-      message = await missingRunMessage(project, init.runId);
+      for (const reading of [() => missingRunMessage(project, init.runId), () => latestRunId(project)]) {
+        await expect(reading()).rejects.toThrow(`Could not read ${join(project, init.ledgerPath)} (EACCES)`);
+      }
     } finally {
       await fs.chmod(runDir, 0o755);
     }
-    expect(message).toBe(`${init.ledgerPath} could not be read. Check that it is a readable file.`);
+  });
+
+  it('names a .verify/ folder it cannot list rather than saying there are no runs (#1174)', async () => {
+    const project = await liveProject();
+    const verifyDir = join(project, DESIGN_DIR, 'rulebook', '.verify');
+    await fs.symlink(verifyDir, verifyDir);
+    await expect(listRunIds(project)).rejects.toThrow(`Could not read ${verifyDir} (ELOOP)`);
+  });
+
+  it('names a recorded slice it cannot read rather than counting it as not recorded (#1174)', async () => {
+    const stagingDir = join(dir, 'staging');
+    await fs.mkdir(join(stagingDir, '03-setup.md'), { recursive: true });
+    const record = { unitId: '03-setup', slicePath: '03-setup.md', sha256: 'a'.repeat(64) } as Parameters<typeof checkRecordedSlices>[1][number];
+    await expect(checkRecordedSlices(stagingDir, [record], new Set())).rejects.toThrow(`Could not read ${join(stagingDir, '03-setup.md')} (EISDIR)`);
   });
 
   it('names an unreadable rulebook/ rather than calling it missing (#1110)', async () => {
