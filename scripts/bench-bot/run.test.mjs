@@ -12,12 +12,28 @@
  */
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { devProject } from '../../src/cli/commands/dev-project.test-helper.ts';
 
 const RUN = join(dirname(fileURLToPath(import.meta.url)), 'run.mjs');
 const game = await devProject(false);
+
+// The game declares an option and refuses to start without it, as cribbage
+// does with targetScore: the bench must start games as every host does, with
+// boardsmith.json's declared defaults filled (#1081).
+const configPath = join(game, 'boardsmith.json');
+const config = JSON.parse(readFileSync(configPath, 'utf8'));
+writeFileSync(configPath, JSON.stringify({ ...config, gameOptions: [{ id: 'rounds', type: 'number', label: 'Rounds', default: 3 }] }));
+const gamePath = join(game, 'src', 'rules', 'game.ts');
+writeFileSync(
+  gamePath,
+  readFileSync(gamePath, 'utf8').replace(
+    '    super(options);\n',
+    "    super(options);\n    if ((options as { rounds?: number }).rounds !== 3) throw new Error('The declared default of rounds was not filled.');\n",
+  ),
+);
 
 /** Run the bench on the scaffolded game and return what it printed. */
 function bench() {
@@ -46,6 +62,10 @@ describe('the bot benchmark', () => {
   it('runs to the end', () => {
     expect(first.output).not.toMatch(/Error/);
     expect(first.status).toBe(0);
+  });
+
+  it("starts the game with boardsmith.json's declared option defaults", () => {
+    expect(first.output).not.toContain('The declared default of rounds was not filled.');
   });
 
   it('measures in production mode though it was started without NODE_ENV', () => {
