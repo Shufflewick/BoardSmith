@@ -286,15 +286,17 @@ interface ExecutionFrame<G extends Game = Game> {
  * applied game state and replay/undo/snapshot become inconsistent.
  */
 export class FlowHaltedError extends PlayerFacingError {
+  /** What the flow threw. The message carries it only in dev, so whoever reports the halt logs it (#1120). */
+  override readonly cause: unknown;
+
   constructor(cause: unknown) {
-    // Logged here, the one place a halt is made, since its message is read by players and carries the cause only in dev (#1120).
-    console.error('[BoardSmith] The flow failed after the action was committed:', cause);
     super(withDevDetail(
       'Game halted: the flow failed after the action was committed. ' +
       'This is a flow-definition bug, not a retryable player error; the game cannot continue until the flow definition is fixed.',
       cause,
     ));
     this.name = 'FlowHaltedError';
+    this.cause = cause;
   }
 }
 

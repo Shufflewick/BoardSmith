@@ -60,7 +60,7 @@ const NO_LONGER_AVAILABLE =
  * because it mutated nothing.
  */
 export function failedExecute(actionName: string, error: unknown): ActionResult {
-  return { ...gameCodeThrew(actionName, error), partiallyApplied: true };
+  return { ...gameCodeThrew(actionName, `Action '${actionName}' execution`, error), partiallyApplied: true };
 }
 
 /**
@@ -69,9 +69,11 @@ export function failedExecute(actionName: string, error: unknown): ActionResult 
  * stack and all, is logged where the game runs and NOT put on the wire (#47). A
  * raw `TypeError: Cannot read properties of undefined (reading 'suit')`
  * reaching a player leaks implementation detail and tells them nothing they
- * can act on.
+ * can act on. A `PlayerFacingError` is a refusal, not a crash, and is not logged:
+ * move listing tries every value through these hooks, so a log per refusal
+ * floods it (#31, #1120). `where` names the hook in the log.
  */
-function gameCodeThrew(actionName: string, error: unknown): ActionResult {
+function gameCodeThrew(actionName: string, where: string, error: unknown): ActionResult {
   // #31: a game saying "I cannot resolve this from the information state I
   // have" is an expected answer inside a bot's redacted sandbox, not a crash.
   // Logging it printed a stack per rollout — measured at 198 MB in 15 seconds
@@ -79,7 +81,8 @@ function gameCodeThrew(actionName: string, error: unknown): ActionResult {
   if (error instanceof NotSimulableError) {
     return { success: false, error: error.message, notSimulable: true };
   }
-  console.error(`[BoardSmith] Action '${actionName}' execution failed:`, error);
+  if (error instanceof PlayerFacingError) return { success: false, error: error.message };
+  console.error(`[BoardSmith] ${where} failed:`, error);
   // WHERE THE SENTENCE WENT, said once and only where it is news (#191).
   //
   // A throw out of `execute` is one of two things and the log cannot tell them
@@ -87,26 +90,16 @@ function gameCodeThrew(actionName: string, error: unknown): ActionResult {
   // is a bug and its text must not reach a player, while "the hearth holds 3
   // logs and you offered 14" is a refusal the player can only discover by
   // trying, and a generic sentence is least useful for exactly that class.
-  //
-  // Not printed for a `PlayerFacingError`, which already did the right thing.
-  if (!(error instanceof PlayerFacingError)) {
-    console.error(
-      `[BoardSmith] The player is told a generic sentence instead of the one above. ` +
-        `If that throw was a REFUSAL you wrote for them to read, throw a PlayerFacingError ` +
-        `(or a subclass) -- its message travels verbatim. Anything else is replaced, so an ` +
-        `accidental error cannot leak implementation detail to a player.`,
-    );
-  }
-  // An engine policy refusal was written to be read — its message IS the
-  // actionable next step. Anything else is an arbitrary runtime error, and
-  // goes no further than this log.
-  const generic = rulesErrorSentence(actionName);
-  // A PlayerFacingError's text was written to be read, so it always travels.
-  // Anything else travels only in a positively-labelled dev/test environment,
+  console.error(
+    `[BoardSmith] The player is told a generic sentence instead of the one above. ` +
+      `If that throw was a REFUSAL you wrote for them to read, throw a PlayerFacingError ` +
+      `(or a subclass) -- its message travels verbatim. Anything else is replaced, so an ` +
+      `accidental error cannot leak implementation detail to a player.`,
+  );
+  // The thrown text travels only in a positively-labelled dev/test environment,
   // where the reader is the author who needs it and there is no player to leak
   // to. In production it goes no further than the log above.
-  if (error instanceof PlayerFacingError) return { success: false, error: error.message };
-  return { success: false, error: withDevDetail(generic, error), rulesError: true };
+  return { success: false, error: withDevDetail(rulesErrorSentence(actionName), error), rulesError: true };
 }
 
 /**
@@ -1319,7 +1312,7 @@ export class ActionExecutor {
               }
             }
           }
-          return gameCodeThrew(action.name, error);
+          return gameCodeThrew(action.name, `onSelect of '${selection.name}' in action '${action.name}'`, error);
         }
       }
     }
@@ -2076,7 +2069,7 @@ export class ActionExecutor {
         // Fail loud: a throwing onSelect aborts the action. Fire onCancel for
         // selections whose onSelect already fired, then return an error.
         this.fireOnCancelCallbacks(action, pendingState);
-        return { done: false, error: gameCodeThrew(action.name, error).error };
+        return { done: false, error: gameCodeThrew(action.name, `onSelect of '${selection.name}' in action '${action.name}'`, error).error };
       }
     }
 
@@ -2089,7 +2082,7 @@ export class ActionExecutor {
       try {
         changing(this.game._ctx, () => repeatConfig.onEach!(context, chosen));
       } catch (error) {
-        return { done: true, error: gameCodeThrew(action.name, error).error };
+        return { done: true, error: gameCodeThrew(action.name, `onEach of '${selection.name}' in action '${action.name}'`, error).error };
       }
     }
 
@@ -2109,7 +2102,7 @@ export class ActionExecutor {
       try {
         isDone = repeatConfig.until(context, chosen);
       } catch (error) {
-        return { done: true, error: gameCodeThrew(action.name, error).error };
+        return { done: true, error: gameCodeThrew(action.name, `until of '${selection.name}' in action '${action.name}'`, error).error };
       }
     }
 
@@ -2224,7 +2217,7 @@ export class ActionExecutor {
       } catch (error) {
         // Compensate: run onCancel for selections whose onSelect already fired.
         this.fireOnCancelCallbacks(action, pendingState);
-        return { success: false, error: gameCodeThrew(action.name, error).error };
+        return { success: false, error: gameCodeThrew(action.name, `onSelect of '${selection.name}' in action '${action.name}'`, error).error };
       }
     }
 

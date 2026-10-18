@@ -39,7 +39,7 @@ import type {
 import type { LogEviction, RandomnessPolicy } from '../engine/element/game.js';
 import { ErrorCode, type GameOptionDefinition } from '../types/protocol.js';
 import { fillGameOptionDefaults } from '../session/game-option-selection.js';
-import { PlayerFacingError } from '../engine/errors.js';
+import { NotSimulableError, PlayerFacingError } from '../engine/errors.js';
 import { constructGame, animationFloorOf, type AnimationFloor } from '../engine/element/game.js';
 import type { RandomState } from '../utils/random.js';
 import type { MessageEntry } from '../engine/index.js';
@@ -664,6 +664,10 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       // replay/undo/snapshot diverge from what actually happened.
       if (error instanceof FlowHaltedError) {
         this.actionHistory.push(serializedAction);
+        // Its message hides the cause outside dev, so the cause is logged here, where the halt is reported (#1120).
+        if (!(error.cause instanceof NotSimulableError)) {
+          console.error(`[BoardSmith] The flow failed after action '${actionName}' was committed:`, error.cause);
+        }
       }
       // #47: an engine policy error's message was written to be read and goes
       // through; anything else is an arbitrary runtime error whose text would
