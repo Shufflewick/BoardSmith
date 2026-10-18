@@ -93,7 +93,8 @@ export function textStoredBytes(value: string): number {
  * A value carrying a character no text may store is refused for that alone:
  * its length and its bytes are not what the player has to fix.
  */
-export function textRuleErrors(name: string, value: string, rules: TextRules): string[] {
+export function textRuleErrors(name: string, value: unknown, rules: TextRules): string[] {
+  if (typeof value !== 'string') return [`${name} must be a string`];
   if (hasUnstorableCharacters(value, rules.multiline === true)) {
     return [
       `${name} contains characters that can't be stored, such as invisible control characters. ` +
@@ -105,6 +106,25 @@ export function textRuleErrors(name: string, value: string, rules: TextRules): s
     bytesError(name, value, rules.maxBytes),
     rules.pattern && !rules.pattern.regex.test(value) ? rules.pattern.message : undefined,
   ].filter((error): error is string => error !== undefined);
+}
+
+/**
+ * Why a client refuses `value` for a text pick as the wire carries it, or null.
+ *
+ * The one check the Action Panel and `controller.fill` both make, so a custom UI
+ * is refused what the panel is refused, in the same words (#1057).
+ */
+export function textPickRefusal(
+  pick: Omit<TextRules, 'pattern'> & { name: string; pattern?: { source: string; flags: string; message: string } },
+  value: unknown,
+): string | null {
+  return textRuleErrors(pick.name, value, {
+    minLength: pick.minLength,
+    maxLength: pick.maxLength,
+    maxBytes: pick.maxBytes,
+    multiline: pick.multiline,
+    pattern: pick.pattern && wirePattern(pick.pattern),
+  })[0] ?? null;
 }
 
 function hasUnstorableCharacters(value: string, multiline: boolean): boolean {

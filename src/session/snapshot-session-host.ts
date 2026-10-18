@@ -20,7 +20,8 @@ import { ErrorCode } from '../types/protocol.js';
 import { describeMoveForNarration } from './move-summary.js';
 import { runsAtOnce, type HostWorkGate } from './host-work-gate.js';
 import { StatePushGate } from './state-push-gate.js';
-import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState } from './types.js';
+import type { HeatmapEntry, SerializedFlowDebugInfo } from './types.js';
+import { pendingActionForSeat } from './utils.js';
 
 export type { Op, OpResult } from './stateless-ops.js';
 // The adapter's half of #487: every host that pushes these views keeps one.
@@ -812,7 +813,7 @@ export class SnapshotSessionHost {
     // only — never shared across seats. A seat must never receive another
     // seat's accumulated pending-action args.
     const pendingAction = this.pendingStates.get(seat);
-    if (pendingAction) state.pendingAction = pendingAction as unknown as SerializedPendingActionState;
+    if (pendingAction) state.pendingAction = pendingActionForSeat(pendingAction);
     if (this.demoRunning) {
       state.isDemoRunning = true;
       // Playback-control state so clients can render the demo control bar.

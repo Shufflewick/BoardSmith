@@ -207,7 +207,7 @@ describe('#885: the table road', () => {
     const said = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     // The op that ends the worker is the call waiting on it.
-    expect(await table.act('quit')).toMatchObject({ success: false, error: expect.stringContaining('exited with code 3') });
+    expect(await table.act('quit')).toMatchObject({ success: false, error: expect.stringContaining('Your rules stopped running (the rules worker exited with code 3)') });
     expect(said.mock.calls.flat().join('\n')).toContain('Your rules stopped running: the rules worker exited with code 3');
     expect(await table.bump()).toMatchObject({
       success: false,

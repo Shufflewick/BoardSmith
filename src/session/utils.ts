@@ -117,6 +117,17 @@ export function serializePendingActionState(s: PendingActionState): SerializedPe
 }
 
 /**
+ * A seat's own pending action as its client is shown it: without
+ * `branchesBeforePicks`, which names where this action's callbacks moved
+ * elements from, face-down cards and the pile included (#1144, #655). It stays
+ * in the persisted pending state, which completing the action needs.
+ */
+export function pendingActionForSeat(pending: Record<string, unknown>): SerializedPendingActionState {
+  const { branchesBeforePicks: _persistedOnly, ...shown } = pending as unknown as SerializedPendingActionState;
+  return shown;
+}
+
+/**
  * Build metadata for a single action by name.
  * Used for followUp actions that aren't in the current available actions.
  * Does NOT check the action's condition (followUp actions bypass conditions).

@@ -27,12 +27,13 @@ export function serializeAction(
   player: Player,
   args: Record<string, unknown>,
   game: Game,
-  undoable?: boolean
+  undoable?: boolean,
+  branchesBefore?: Readonly<Record<number, string | null>>
 ): SerializedAction {
   const serialized: SerializedAction = {
     name: actionName,
     player: player.seat,
-    args: encodeValue(args, game._ctx, `action '${actionName}'`, 'args') as Record<string, unknown>,
+    args: encodeValue(args, game._ctx, `action '${actionName}'`, 'args', branchesBefore) as Record<string, unknown>,
   };
 
   // Only include undoable if explicitly false (default is true)
