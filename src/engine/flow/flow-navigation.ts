@@ -51,13 +51,18 @@ export function flowChildCount<G extends Game>(node: FlowNode<G>): number {
   return flowChildren(node).length;
 }
 
-function switchBranchIndex<G extends Game>(config: SwitchConfig<G>, branchKey: string): number | undefined {
+/** The case a switch frame took, by its saved key; -1 when the rules no longer have it. */
+function switchBranchIndex<G extends Game>(config: SwitchConfig<G>, branchKey: unknown): number {
   const caseKeys = Object.keys(config.cases);
   if (branchKey === '__default') {
-    return config.default ? caseKeys.length : undefined;
+    return config.default ? caseKeys.length : -1;
   }
-  const index = caseKeys.indexOf(branchKey);
-  return index >= 0 ? index : undefined;
+  return typeof branchKey === 'string' ? caseKeys.indexOf(branchKey) : -1;
+}
+
+/** The branch an `if` frame took: 0 for then, 1 for else. */
+function ifBranchIndex(frameData: Record<string, unknown> | undefined, frameIndex: number): number {
+  return typeof frameData?.branchIndex === 'number' ? frameData.branchIndex : frameIndex;
 }
 
 function navigationIndex<G extends Game>(
@@ -69,9 +74,9 @@ function navigationIndex<G extends Game>(
     case 'sequence':
       return Math.max(0, frameIndex - 1);
     case 'if':
-      return typeof frameData?.branchIndex === 'number' ? frameData.branchIndex : frameIndex;
+      return ifBranchIndex(frameData, frameIndex);
     case 'switch':
-      return typeof frameData?.branchKey === 'string' ? switchBranchIndex(node.config, frameData.branchKey) ?? -1 : -1;
+      return switchBranchIndex(node.config, frameData?.branchKey);
     case 'action-step':
     case 'simultaneous-action-step':
     case 'execute':
