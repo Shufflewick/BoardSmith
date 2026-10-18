@@ -2368,9 +2368,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // tree, so every seat still gets its own to cut down.
     const namedNames = new Set(named);
     const unnamedIds = new Set<number>();
-    const namedIds = new Set<number>();
     for (const [name, id] of this.residentIds) {
-      (namedNames.has(name) ? namedIds : unnamedIds).add(id);
+      if (!namedNames.has(name)) unnamedIds.add(id);
     }
     // AND THE ROSTER GOES WITH IT (#181, and ALL of it since ShufflewickPub
     // #408). The game root's player list is in no partition, so the prune above
@@ -2381,13 +2380,12 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // measured, no client reads it -- `useWorldPlay` takes `state` out of the
     // view and nothing else, and its `mine` comes from the seat the platform
     // put on the frame. Keeping it made every body in a fan-out different for
-    // no reader at all. What survives now is only a player a NAMED PARTITION
-    // was adopted underneath; see `pruneRoster` for why nothing dangles.
+    // no reader at all. No player survives; see `pruneRoster` for why nothing
+    // dangles.
     return {
       state: pruneRoster(
-        pruneUnnamedPartitions(state, unnamedIds, namedIds),
+        pruneUnnamedPartitions(state, unnamedIds),
         new Set(this.game.players.map((player) => player.id)),
-        namedIds,
       ),
       phase: this.game.phase,
     };
@@ -3517,22 +3515,6 @@ export class BoardSmithWorldEngine implements WorldEngine {
 }
 
 /**
- * Drop every resident partition the view's declaration did NOT name (#183).
- *
- * Runs on the OUTPUT of `toJSONForPlayer`, so the engine's fog of war has
- * already redacted everything it redacts; this only ever removes whole
- * subtrees, which is exactly what the same view would look like on an
- * instance where those partitions had never been loaded. Partition roots keep
- * their real ids through redaction (the engine's single-hidden-element and
- * count-only branches both preserve `json.id`), which is what makes an
- * id-keyed prune sound.
- *
- * A partition nested INSIDE an unnamed one is the one shape that must not be
- * lost: an unnamed subtree that contains a named partition is kept as a path
- * and recursed into rather than dropped, so the named partition survives
- * wherever the game put it.
- */
-/**
  * MAY THIS COMMAND REACH THIS PARTITION?
  *
  * A NAMED PREDICATE AND NOT AN INLINE CHECK, deliberately (#169). It was
@@ -3646,20 +3628,24 @@ function projectGroups(
   return { bodies, answerOf };
 }
 
-function pruneUnnamedPartitions(
-  json: ElementJSON,
-  unnamed: ReadonlySet<number>,
-  named: ReadonlySet<number>,
-): ElementJSON {
-  if (unnamed.size === 0 || json.children === undefined) return json;
-
-  const containsNamed = (node: ElementJSON): boolean =>
-    named.has(node.id) || (node.children?.some(containsNamed) ?? false);
-
-  json.children = json.children.filter(
-    (child) => !unnamed.has(child.id) || containsNamed(child),
-  );
-  for (const child of json.children) pruneUnnamedPartitions(child, unnamed, named);
+/**
+ * Drop every resident partition the view's declaration did NOT name (#183).
+ *
+ * Runs on the OUTPUT of `toJSONForPlayer`, so the engine's fog of war has
+ * already redacted everything it redacts; this only ever removes whole
+ * subtrees, which is exactly what the same view would look like on an
+ * instance where those partitions had never been loaded. Partition roots keep
+ * their real ids through redaction (the engine's single-hidden-element and
+ * count-only branches both preserve `json.id`), which is what makes an
+ * id-keyed prune sound.
+ *
+ * One level is all there is to prune: every partition root is a direct child
+ * of the game (#795 refuses a nested root at creation, #1170 refuses moving one),
+ * so no partition sits inside another and dropping an unnamed one never drops a
+ * named one.
+ */
+function pruneUnnamedPartitions(json: ElementJSON, unnamed: ReadonlySet<number>): ElementJSON {
+  if (unnamed.size > 0) json.children = json.children?.filter((child) => !unnamed.has(child.id));
   return json;
 }
 
@@ -3685,10 +3671,9 @@ function pruneUnnamedPartitions(
  * `docs/persistent-worlds.md`). A world's Player carries what its constructor
  * gave it and no more, which is exactly what the reference already inlined.
  *
- * ONE SHAPE SURVIVES: WHOEVER HOLDS A NAMED PARTITION. The same path rule the
- * partition prune keeps -- a partition adopted under a player element must
- * survive wherever the game put it, because dropping the player would drop the
- * room.
+ * NO PLAYER HOLDS A PARTITION. Every partition root is a direct child of the
+ * game (#795, #1170 refuse anything else), and so is every player, so the roster
+ * is one level of the root and dropping it never drops a room.
  *
  * THE VIEWER USED TO SURVIVE TOO, and no longer does (ShufflewickPub #408).
  * #181 kept it on the ground that the seat doing the looking is the one player
@@ -3703,24 +3688,8 @@ function pruneUnnamedPartitions(
  * what comes out is a function of the roster and the declaration, so two seats
  * that named the same partitions get the same bytes.
  */
-function pruneRoster(
-  json: ElementJSON,
-  roster: ReadonlySet<number>,
-  named: ReadonlySet<number>,
-): ElementJSON {
-  if (roster.size === 0) return json;
-
-  const holdsNamed = (node: ElementJSON): boolean =>
-    named.has(node.id) || (node.children?.some(holdsNamed) ?? false);
-
-  const prune = (node: ElementJSON): void => {
-    if (node.children === undefined) return;
-    node.children = node.children.filter(
-      (child) => !roster.has(child.id) || holdsNamed(child),
-    );
-    for (const child of node.children) prune(child);
-  };
-  prune(json);
+function pruneRoster(json: ElementJSON, roster: ReadonlySet<number>): ElementJSON {
+  if (roster.size > 0) json.children = json.children?.filter((child) => !roster.has(child.id));
   return json;
 }
 
