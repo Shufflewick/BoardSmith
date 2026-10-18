@@ -11,9 +11,10 @@
  * only what it cannot know: the view it is rendering, and how the panel copies
  * to the clipboard (which drives a panel-level toast).
  *
- * Live, it lists the host's unfiltered table (`debug:deck-view`, #898) rather
- * than the seat's view: a seat sees a face-down deck as stand-ins whose ids no
- * edit can name. Time travel shows the seat's snapshot, with edits off (#899).
+ * It lists the host's unfiltered table rather than the seat's view: a seat sees
+ * a face-down deck as stand-ins whose ids no edit can name. Live that is
+ * `debug:deck-view` (#898); while time travelling it is `debug:deck-view-at`
+ * for the action picked (#1071), with edits off (#899).
  *
  * `useDebugBridge()` resolves through injection, so the tab reaches the host
  * without the panel threading a transport down to it.
@@ -35,12 +36,12 @@ import DebugDialog from './DebugDialog.vue';
 import DebugSearchInput from './DebugSearchInput.vue';
 
 const props = defineProps<{
-  /** The player view being rendered -- live, or a historical one during time travel. */
+  /** The player view being rendered, undefined while the tab is hidden; each new one asks for the table again. */
   view: unknown;
   /** The panel's copy-with-toast, so a copy here reads the same as anywhere else. */
   copy: (value: unknown) => void | Promise<void>;
-  /** True while time travelling: an edit would act on the live game, not the snapshot shown (#899). */
-  isViewingHistory: boolean;
+  /** The action being viewed while time travelling, or null when live. In history an edit would act on the live game, not the table shown (#899). */
+  historyIndex: number | null;
 }>();
 
 const bridge = useDebugBridge();
@@ -49,35 +50,34 @@ const deckSearchQuery = ref('');
 const expandedDecks = ref<Set<number>>(new Set());
 const selectedDeckCard = ref<{ deckId: number; cardId: number } | null>(null);
 
-/** The host's last unfiltered table, and why the last request for it failed. */
-const liveTable = ref<unknown>(undefined);
-const liveTableError = ref<string | null>(null);
-const liveTableTicket = newestWins();
+const isViewingHistory = computed(() => props.historyIndex !== null);
 
-/** Ask the host for the live table; the newest request wins. */
-async function fetchLiveTable(): Promise<void> {
-  const isNewest = liveTableTicket();
+/** The host's last unfiltered table, and why the last request for it failed. */
+const shownView = ref<unknown>(undefined);
+const loadError = ref<string | null>(null);
+const tableTicket = newestWins();
+
+/** Ask the host for the table at the position shown; the newest request wins. */
+async function fetchTable(): Promise<void> {
+  const isNewest = tableTicket();
   try {
-    const table = await bridge.deckView();
+    const table = await bridge.deckView(props.historyIndex);
     if (!isNewest()) return;
-    liveTable.value = table;
-    liveTableError.value = null;
+    shownView.value = table;
+    loadError.value = null;
   } catch (err) {
-    if (isNewest()) liveTableError.value = err instanceof Error ? err.message : String(err);
+    if (isNewest()) loadError.value = err instanceof Error ? err.message : String(err);
   }
 }
 
-// A new view is a new live state, so ask again.
-watch(() => [props.view, props.isViewingHistory] as const, ([view, viewingHistory]) => {
-  if (view !== undefined && !viewingHistory) void fetchLiveTable();
+// A new view or a new position in history is a new table, so ask again.
+watch(() => [props.view, props.historyIndex] as const, ([view]) => {
+  if (view !== undefined) void fetchTable();
 }, { immediate: true });
 
-const shownView = computed(() => (props.isViewingHistory ? props.view : liveTable.value));
-const loadError = computed(() => (props.isViewingHistory ? null : liveTableError.value));
-
-/** What the tab is showing, said above the list: the snapshot, or every card. */
-const notice = computed(() => (props.isViewingHistory
-  ? { kind: 'deck-history-notice', text: "Viewing history: this is the seat's own view, so face-down cards are left out, and deck edits are off because they would change the live game. Go back to live to see every card and edit." }
+/** What the tab is showing, said above the list: every card, live or at the action picked. */
+const notice = computed(() => (isViewingHistory.value
+  ? { kind: 'deck-history-notice', text: 'Viewing history: every card as it stood then, face-down cards included. Deck edits are off because they would change the live game. Go back to live to edit.' }
   : { kind: 'deck-unfiltered-notice', text: 'Showing every card, face-down cards included. Debug only: no player sees this view.' }));
 
 const discoveredDecks = computed(() => discoverDecks(shownView.value));
@@ -135,10 +135,10 @@ const {
   openTransferDialog,
   closeTransferDialog,
   confirmTransfer,
-} = useDeckWorkbench({ bridge, cardContainers: discoveredCardContainers, afterEdit: fetchLiveTable });
+} = useDeckWorkbench({ bridge, cardContainers: discoveredCardContainers, afterEdit: fetchTable });
 
-const editsOff = computed(() => props.isViewingHistory || deckManipulationLoading.value);
-const transferDialogShown = computed(() => transferDialogOpen.value && !props.isViewingHistory);
+const editsOff = computed(() => isViewingHistory.value || deckManipulationLoading.value);
+const transferDialogShown = computed(() => transferDialogOpen.value && !isViewingHistory.value);
 </script>
 
 <template>

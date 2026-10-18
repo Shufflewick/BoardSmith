@@ -362,6 +362,16 @@ describe('DebugPanel tab-driven fetching', () => {
     expect(callsFor(platformRequest, 'debug:logs').length).toBeGreaterThan(1);
   });
 
+  it('asks for the unfiltered table at the action picked when the decks tab shows history (#1071)', async () => {
+    const { platformRequest, vm } = track(mountPanel(async (op) => (op === 'debug:state-at'
+      ? { success: true, state: { view: VIEW } }
+      : { success: true, view: VIEW })));
+    vm.activeTab = 'decks';
+    await vm.selectAction(1);
+    await flush();
+    expect(callsFor(platformRequest, 'debug:deck-view-at').at(-1)![1]).toEqual({ actionIndex: 1 });
+  });
+
   it('does not fetch for a tab that is not active when state changes', async () => {
     const { platformRequest, wrapper } = track(mountPanel(async () => ({ success: true })));
     await wrapper.setProps({ state: { ...STATE } });

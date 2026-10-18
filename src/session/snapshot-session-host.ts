@@ -165,6 +165,7 @@ const OP_SENDER = {
   debugTransfer: 'seat',
   debugShuffle: 'seat',
   debugDeckView: 'seat',
+  debugDeckViewAt: 'seat',
   restoreEarlier: 'host',
   startTutorial: 'seat',
   exitTutorial: 'seat',

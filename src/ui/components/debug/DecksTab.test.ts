@@ -45,8 +45,8 @@ interface Vm {
   [key: string]: any;
 }
 
-/** The host's answer to every op: the unfiltered table for `debug:deck-view`, plain success otherwise. */
-const answersWith = (table: unknown): Op => async (op) => (op === 'debug:deck-view' ? { success: true, view: table } : { success: true });
+/** The host's answer to every op: the unfiltered table for `debug:deck-view` and `debug:deck-view-at`, plain success otherwise. */
+const answersWith = (table: unknown): Op => async (op) => (op.startsWith('debug:deck-view') ? { success: true, view: table } : { success: true });
 
 /** The seat's view of VIEW's deck when its cards are face down: stand-ins, not cards. */
 const SEAT_VIEW = {
@@ -57,10 +57,10 @@ const SEAT_VIEW = {
   ],
 };
 
-async function mountDecks(handler?: Op, props: { view?: unknown; isViewingHistory?: boolean } = {}) {
+async function mountDecks(handler?: Op, props: { view?: unknown; historyIndex?: number | null } = {}) {
   const platformRequest = vi.fn<Op>(handler ?? answersWith(VIEW));
   const wrapper = mount(DecksTab, {
-    props: { view: VIEW, copy: async () => {}, isViewingHistory: false, ...props },
+    props: { view: VIEW, copy: async () => {}, historyIndex: null, ...props },
     global: { provide: { [GAME_CONTEXT_KEYS.platformRequest as symbol]: platformRequest } },
     attachTo: document.body,
   });
@@ -253,19 +253,22 @@ describe('DecksTab transfer dialog', () => {
 
 
 describe('DecksTab derivations', () => {
-  it('re-derives from a new view, which is what time travel hands it', async () => {
-    const { wrapper, vm } = track(await mountDecks(undefined, { isViewingHistory: true }));
+  it('re-derives from the table the host sends for the position picked', async () => {
+    const DISCARD = {
+      id: 90,
+      className: 'Board',
+      children: [
+        { id: 91, className: 'DiscardDeck', name: 'Discard', attributes: { $type: 'deck' }, children: [{ id: 92, className: 'Card' }] },
+      ],
+    };
+    const handler: Op = async (op, payload) => (op === 'debug:deck-view-at'
+      ? { success: true, view: payload.actionIndex === 1 ? DISCARD : VIEW }
+      : { success: true, view: VIEW });
+    const { wrapper, vm } = track(await mountDecks(handler, { historyIndex: 0 }));
     expect(vm.discoveredDecks.map((d: { id: number }) => d.id)).toEqual([2]);
 
-    await wrapper.setProps({
-      view: {
-        id: 90,
-        className: 'Board',
-        children: [
-          { id: 91, className: 'DiscardDeck', name: 'Discard', attributes: { $type: 'deck' }, children: [{ id: 92, className: 'Card' }] },
-        ],
-      },
-    });
+    await wrapper.setProps({ historyIndex: 1 });
+    await flushPromises();
 
     expect(vm.discoveredDecks.map((d: { id: number }) => d.id)).toEqual([91]);
   });
@@ -284,12 +287,13 @@ describe('DecksTab search and copy', () => {
   });
   it('copies a deck with its cards flattened into the payload', async () => {
     const copied: unknown[] = [];
-    const platformRequest = vi.fn<Op>(async () => ({ success: true }));
+    const platformRequest = vi.fn<Op>(answersWith(VIEW));
     const wrapper = mount(DecksTab, {
-      props: { view: VIEW, copy: (value: unknown) => { copied.push(value); }, isViewingHistory: true },
+      props: { view: VIEW, copy: (value: unknown) => { copied.push(value); }, historyIndex: null },
       global: { provide: { [GAME_CONTEXT_KEYS.platformRequest as symbol]: platformRequest } },
     });
     track({ wrapper });
+    await flushPromises();
     const vm = wrapper.vm as unknown as Vm;
 
     // The deck goes to the clipboard with its cards flattened in, so what is
@@ -304,7 +308,7 @@ describe('DecksTab search and copy', () => {
 describe('DecksTab while viewing history (#899)', () => {
   it('turns off every edit and the transfer dialog, and says why', async () => {
     const { wrapper, vm } = track(await mountDecks());
-    await wrapper.setProps({ isViewingHistory: true });
+    await wrapper.setProps({ historyIndex: 0 });
     vm.toggleDeck(2);
     vm.openTransferDialog(10, 2);
     await nextTick();
@@ -312,7 +316,7 @@ describe('DecksTab while viewing history (#899)', () => {
     const edits = wrapper.findAll('[aria-label="Shuffle deck"], .card-action-btn');
     expect(edits).toHaveLength(9);
     for (const edit of edits) expect(edit.attributes('disabled'), edit.attributes('aria-label')).toBeDefined();
-    expect(wrapper.find('.deck-history-notice').text()).toMatch(/viewing history.*face-down cards are left out.*edits are off/i);
+    expect(wrapper.find('.deck-history-notice').text()).toMatch(/viewing history.*face-down cards included.*edits are off/i);
     expect(document.body.textContent).not.toContain('Transfer Card');
   });
 });
@@ -363,11 +367,17 @@ describe('DecksTab unfiltered view (#898)', () => {
     expect(wrapper.find('.no-decks').exists()).toBe(false);
   });
 
-  it('shows the snapshot it is handed while viewing history, without asking the host', async () => {
-    const { wrapper, vm, platformRequest } = track(await mountDecks(answersWith(VIEW), { view: SEAT_VIEW, isViewingHistory: true }));
+  it("lists a face-down deck's real cards while viewing history, from the host's table at that position (#1071)", async () => {
+    const { wrapper, vm, platformRequest } = track(await mountDecks(answersWith(VIEW), { view: SEAT_VIEW, historyIndex: 3 }));
     expect(callsFor(platformRequest, 'debug:deck-view')).toHaveLength(0);
-    expect(vm.discoveredDecks[0].cards.map((c: { id: number }) => c.id)).toEqual([-1, -2]);
-    expect(wrapper.find('.deck-unfiltered-notice').exists()).toBe(false);
+    expect(callsFor(platformRequest, 'debug:deck-view-at')).toEqual([['debug:deck-view-at', { actionIndex: 3 }]]);
+    expect(vm.discoveredDecks[0].cards.map((c: { id: number }) => c.id)).toEqual([10, 11]);
+    expect(wrapper.find('.deck-history-notice').exists()).toBe(true);
+  });
+
+  it('shows why the host refused the past table, rather than an empty deck', async () => {
+    const { wrapper } = track(await mountDecks(async () => ({ success: false, error: 'Debugging is not turned on' }), { view: SEAT_VIEW, historyIndex: 0 }));
+    expect(wrapper.find('.deck-error').text()).toContain('Debugging is not turned on');
   });
 });
 

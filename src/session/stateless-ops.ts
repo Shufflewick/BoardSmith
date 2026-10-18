@@ -174,6 +174,9 @@ export type DevOp =
   // debugDeckView: the whole table with nothing hidden, so the Decks tab can
   // list a face-down deck's real cards by the ids its edits send (#898).
   | { type: 'debugDeckView' }
+  // debugDeckViewAt: the same unfiltered table as it stood after action
+  // `actionIndex`, for the Decks tab while time travelling (#1071).
+  | { type: 'debugDeckViewAt'; actionIndex: number }
   /**
    * restoreEarlier: go back to a WHOLE earlier snapshot of this game that the
    * host kept itself -- a demo stepping back one move. Run against the CURRENT
@@ -287,6 +290,7 @@ const DEBUG_OP_TYPE_MAP: Record<DebugOpType, true> = {
   debugTransfer: true,
   debugShuffle: true,
   debugDeckView: true,
+  debugDeckViewAt: true,
 };
 export const DEBUG_OP_TYPES: ReadonlySet<Op['type']> = new Set(Object.keys(DEBUG_OP_TYPE_MAP) as DebugOpType[]);
 
@@ -304,6 +308,7 @@ export type ReadOnlyOpType =
   | 'debugFlowState'
   | 'debugCustomData'
   | 'debugDeckView'
+  | 'debugDeckViewAt'
   | 'botSuggest';
 
 const READ_ONLY_OP_TYPE_MAP: Record<ReadOnlyOpType, true> = {
@@ -315,6 +320,7 @@ const READ_ONLY_OP_TYPE_MAP: Record<ReadOnlyOpType, true> = {
   debugFlowState: true,
   debugCustomData: true,
   debugDeckView: true,
+  debugDeckViewAt: true,
   botSuggest: true,
 };
 export const READ_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set(Object.keys(READ_ONLY_OP_TYPE_MAP) as ReadOnlyOpType[]);
@@ -454,6 +460,8 @@ export interface OpSuccessFields {
   debugShuffle: Record<never, never>;
   /** The game as `toJSON()` writes it: every element, none hidden from any seat. */
   debugDeckView: { view: ReturnType<Game['toJSON']> };
+  /** As `debugDeckView`, for the game as it stood after the action asked for. */
+  debugDeckViewAt: { view: ReturnType<Game['toJSON']> };
   restoreEarlier: Record<never, never>;
   startTutorial: Record<never, never>;
   exitTutorial: Record<never, never>;
@@ -1359,6 +1367,21 @@ function missingCheckpoint(def: RunnerDef, snapshot: GameStateSnapshot, actionIn
   return errorResult(`No checkpoint at action index ${actionIndex}: ${why}`, 'executor');
 }
 
+/** The live runner and the game as it stood after `actionIndex`, or why that position cannot be shown. */
+function runnersAt(
+  def: RunnerDef,
+  snapshot: GameStateSnapshot,
+  actionIndex: number,
+): { current: GameRunner; at: GameRunner } | OpFailure {
+  const current = runnerFromSnapshot(snapshot, def);
+  const historyLength = current.actionCount;
+  if (actionIndex < 0 || actionIndex > historyLength) {
+    return errorResult(`Invalid action index: ${actionIndex}. History has ${historyLength} actions.`, 'protocol');
+  }
+  const at = runnerFromCheckpoint(def, snapshot, actionIndex);
+  return at ? { current, at } : missingCheckpoint(def, snapshot, actionIndex);
+}
+
 function handleRestoreEarlier(
   def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
@@ -1396,20 +1419,12 @@ function handleDebugStateAt(
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'debugStateAt' }>,
 ): OpResultFor<'debugStateAt'> {
-  const current = runnerFromSnapshot(snapshot, def);
-  const historyLength = current.actionCount;
-  if (op.actionIndex < 0 || op.actionIndex > historyLength) {
-    return errorResult(
-      `Invalid action index: ${op.actionIndex}. History has ${historyLength} actions.`,
-      'protocol',
-    );
-  }
-  const at = runnerFromCheckpoint(def, snapshot, op.actionIndex);
-  if (!at) return missingCheckpoint(def, snapshot, op.actionIndex);
+  const runners = runnersAt(def, snapshot, op.actionIndex);
+  if ('success' in runners) return runners;
   return {
     success: true,
-    ...stateEnvelope(current, gameOptions.playerCount),
-    historicalState: buildPlayerState(at, [], op.player, { includeActionMetadata: false }),
+    ...stateEnvelope(runners.current, gameOptions.playerCount),
+    historicalState: buildPlayerState(runners.at, [], op.player, { includeActionMetadata: false }),
   };
 }
 
@@ -1528,6 +1543,21 @@ function handleDebugDeckView(
     success: true,
     ...stateEnvelope(runner, gameOptions.playerCount),
     view: (runner.game as Game).toJSON(),
+  };
+}
+
+function handleDebugDeckViewAt(
+  def: RunnerDef,
+  gameOptions: { playerCount: number; [key: string]: unknown },
+  snapshot: GameStateSnapshot,
+  op: Extract<Op, { type: 'debugDeckViewAt' }>,
+): OpResultFor<'debugDeckViewAt'> {
+  const runners = runnersAt(def, snapshot, op.actionIndex);
+  if ('success' in runners) return runners;
+  return {
+    success: true,
+    ...stateEnvelope(runners.current, gameOptions.playerCount),
+    view: (runners.at.game as Game).toJSON(),
   };
 }
 
@@ -1750,6 +1780,8 @@ async function runOp(
         return handleDebugCustomData(def, gameOptions, snap, op);
       case 'debugDeckView':
         return handleDebugDeckView(def, gameOptions, snap);
+      case 'debugDeckViewAt':
+        return handleDebugDeckViewAt(def, gameOptions, snap, op);
       case 'debugRewind':
         return handleDebugRewind(def, gameOptions, snap, op);
       case 'restoreEarlier':

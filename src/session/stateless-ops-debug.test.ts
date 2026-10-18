@@ -285,6 +285,33 @@ describe('debugDeckView (#898)', () => {
 
   it('is never run by a platform executor', () => {
     expect(parseExecutorOp({ type: 'debugDeckView' }).ok).toBe(false);
+    expect(parseExecutorOp({ type: 'debugDeckViewAt', actionIndex: 0 }).ok).toBe(false);
+  });
+});
+
+describe('debugDeckViewAt (#1071)', () => {
+  const debug = { debug: true, fullHistory: true };
+
+  it("lists a face-down deck's real cards as they stood at a past position", async () => {
+    const start = succeeded(await executeOp(hiddenPileDef, hiddenPileOptions, null, null, { type: 'start' }, debug));
+    const live = succeeded(await executeOp(hiddenPileDef, hiddenPileOptions, start.snapshot, null, { type: 'debugDeckView' }, debug));
+    const order = (findByClass(live.view as ViewNode, 'Deck')!.children as Array<ViewNode & { name: string }>);
+    const passed = succeeded(await executeOp(hiddenPileDef, hiddenPileOptions, start.snapshot, null, {
+      type: 'action', actionName: 'pass', player: 1, args: {}, boundaryKey: boundaryKeyOf(start.snapshot),
+    }, debug));
+    const reordered = succeeded(await executeOp(hiddenPileDef, hiddenPileOptions, passed.snapshot, null, {
+      type: 'debugReorder', cardId: order[0]!.id!, targetIndex: 2,
+    }, debug));
+
+    const res = succeeded(await executeOp(hiddenPileDef, hiddenPileOptions, reordered.snapshot, null, { type: 'debugDeckViewAt', actionIndex: 0 }, debug));
+    const cards = findByClass(res.view as ViewNode, 'Deck')!.children as Array<ViewNode & { name: string }>;
+    expect(cards.map((card) => [card.id, card.name])).toEqual(order.map((card) => [card.id, card.name]));
+  });
+
+  it('refuses a position outside the history', async () => {
+    const start = succeeded(await executeOp(hiddenPileDef, hiddenPileOptions, null, null, { type: 'start' }, debug));
+    const res = refused(await executeOp(hiddenPileDef, hiddenPileOptions, start.snapshot, null, { type: 'debugDeckViewAt', actionIndex: 5 }, debug));
+    expect(res.error).toMatch(/Invalid action index: 5/);
   });
 });
 
@@ -309,6 +336,7 @@ const EVERY_DEBUG_OP: OpOfType<DebugOpType>[] = [
   { type: 'debugTransfer', cardId: 1, targetDeckId: 1, position: 'first' },
   { type: 'debugShuffle', deckId: 1 },
   { type: 'debugDeckView' },
+  { type: 'debugDeckViewAt', actionIndex: 1 },
 ];
 
 /** The debug ops that report one seat's view. */

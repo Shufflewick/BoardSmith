@@ -6,7 +6,7 @@ function bridgeWith(handler: PlatformRequest) {
   return { bridge: createDebugBridge(platformRequest), platformRequest };
 }
 
-const ok: PlatformRequest = async (op) => (op === 'debug:deck-view' ? { success: true, view: { id: 1 } } : { success: true });
+const ok: PlatformRequest = async (op) => (op.startsWith('debug:deck-view') ? { success: true, view: { id: 1 } } : { success: true });
 
 describe('createDebugBridge without a host', () => {
   const bridge = createDebugBridge(null);
@@ -40,7 +40,8 @@ describe('debug bridge op names and payloads', () => {
     await bridge.reorderCard(10, 2);
     await bridge.transferCard(10, 7, 'last');
     await bridge.shuffleDeck(2);
-    await bridge.deckView();
+    await bridge.deckView(null);
+    await bridge.deckView(3);
 
     expect(platformRequest.mock.calls).toEqual([
       ['debug:action-traces', {}],
@@ -56,6 +57,7 @@ describe('debug bridge op names and payloads', () => {
       ['debug:transfer-card', { cardId: 10, targetDeckId: 7, position: 'last' }],
       ['debug:shuffle-deck', { deckId: 2 }],
       ['debug:deck-view', {}],
+      ['debug:deck-view-at', { actionIndex: 3 }],
     ]);
   });
 });
@@ -77,12 +79,14 @@ describe('debug bridge failure messages', () => {
     await expect(bridge.reorderCard(1, 0)).rejects.toThrow('Failed to reorder card');
     await expect(bridge.transferCard(1, 2, 'first')).rejects.toThrow('Failed to transfer card');
     await expect(bridge.shuffleDeck(1)).rejects.toThrow('Failed to shuffle deck');
-    await expect(bridge.deckView()).rejects.toThrow('Failed to fetch the decks');
+    await expect(bridge.deckView(null)).rejects.toThrow('Failed to fetch the decks');
+    await expect(bridge.deckView(1)).rejects.toThrow('Failed to fetch the decks');
   });
 
   it('refuses a deck view the host sent without its table', async () => {
     const { bridge } = bridgeWith(async () => ({ success: true }));
-    await expect(bridge.deckView()).rejects.toThrow('without the table');
+    await expect(bridge.deckView(null)).rejects.toThrow('without the table');
+    await expect(bridge.deckView(1)).rejects.toThrow('without the table');
   });
 
   it('lets a broken transport through untouched, so it is not mistaken for a refusal', async () => {
