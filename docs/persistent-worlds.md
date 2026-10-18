@@ -2807,7 +2807,8 @@ thing next time.
 **`platform`**: a host's own bookkeeping broke. Not yours to fix, and
 deterministic, so a host with a park ladder parks on it:
 `partition-not-resident`, `partition-vanished`, `checkpoint-unknown-partition`,
-`allocation-undeclared`, `allocation-stale`, `vacancy-unheld`, `unknown-child-op`,
+`allocation-undeclared`, `allocation-stale`, `vacancy-unheld`, `roster-double-holder`
+(the roster a host built the world from has two players in one seat), `unknown-child-op`,
 `child-generations-exhausted`, `world-engine-unavailable`, `engine-mismatch`,
 `world-state-unreadable`, `notice-box-answered-wrong` (a host answered a declared
 notice-box read about a different seat, or not at all).

@@ -583,6 +583,19 @@ export class BoardSmithWorldEngine implements WorldEngine {
     }
     this.game = options.game;
     this.seats = new Map(options.seats);
+    const holders = new Map<number, string>();
+    for (const [player, seat] of this.seats) {
+      const first = holders.get(seat);
+      if (first !== undefined) {
+        throw worldRefusal(
+          "roster-double-holder",
+          `The roster this world was built from has two players holding seat ${seat}: "${first}" ` +
+            `and "${player}". Both would command its holdings, so the world will not open. Remove ` +
+            `one of them from the stored roster, then open the world again.`,
+        );
+      }
+      holders.set(seat, player);
+    }
     this.store = options.store;
     this.view = options.view;
     this.vacateByClock = options.vacateByClock;

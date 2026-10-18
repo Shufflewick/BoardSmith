@@ -433,6 +433,10 @@ export const WORLD_REFUSALS = {
       "release of nobody, because a chair the two layers disagree about is " +
       "exactly the chair that must not be handed on",
   },
+  "roster-double-holder": {
+    owner: "platform",
+    why: "#980: a host built a world from a roster in which two players hold one seat. Before #796 `seat` let a second player take a held chair, so a store may still hold such rows. Both would command the seat's holdings while `holderOf` and the clock's vacate release only the first, so the engine refuses rather than pick one. PLATFORM-owned and deterministic: the roster is the host's own durable state, a bundle cannot repair it, and the same rows come back on every wake. The host resolves it by unseating one of the named players in its store",
+  },
   "partition-not-resident": {
     owner: "platform",
     why: "a partition was serialized or read without being adopted, which means the engine and the store disagree about what is loaded",
