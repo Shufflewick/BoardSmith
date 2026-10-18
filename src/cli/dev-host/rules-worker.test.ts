@@ -187,6 +187,19 @@ describe('#885: the table road', () => {
     expect(liveRulesWorkers() - before).toBe(1);
   }, 60_000);
 
+  it('refuses an edit that declares gameOptions in its gameDefinition with the reason alone, no stack of BoardSmith\'s', async () => {
+    const table = await servedTable();
+    await table.bump();
+    const said = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    table.save(tableRules(2).replace('maxPlayers: 1 };', 'maxPlayers: 1, gameOptions: {} };'));
+    await table.reload();
+
+    const output = said.mock.calls.flat().join('\n');
+    expect(output).toMatch(/Your edited rules did not load, so this table is still running the ones it had: This gameDefinition declares gameOptions/);
+    expect(output).not.toMatch(/^\s+at /m);
+  }, 60_000);
+
   it('says so when the rules end their own worker, refuses their calls, and comes back on the next save', async () => {
     const before = liveRulesWorkers();
     const table = await servedTable();
@@ -312,9 +325,12 @@ describe('#885: the world road', () => {
     world.save('export const notTheRules = 1;');
     await world.reload();
 
-    expect(said.mock.calls.flat().join('\n')).toMatch(
+    const output = said.mock.calls.flat().join('\n');
+    expect(output).toMatch(
       /Your edited rules did not load, so this world is still running the ones it had: Rules module must export a gameDefinition/,
     );
+    // BoardSmith's own refusal is not a crash in the rules, so no stack frame of BoardSmith's is shown.
+    expect(output).not.toMatch(/^\s+at /m);
     expect(await world.stoke()).toMatchObject({ ok: true });
     await vi.waitFor(() => expect(world.logs()).toBe(2));
     expect(liveRulesWorkers() - before).toBe(1);

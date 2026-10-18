@@ -290,10 +290,12 @@ so a rule's error names the author's file and line. Not `execArgv:
 dev process runs with, and it refuses V8 flags such as
 `--max-old-space-size`. The bootstrap rethrows a failed import as an uncaught
 error, so rules that throw while loading stop the worker even under
-`--unhandled-rejections=none`. The worker sends an error's stack beside its
-message (a `RulesError` on the host); the terminal prints it, at a crash, a
-failed first load and a failed reload, and a page is only ever sent the
-message.
+`--unhandled-rejections=none`. Only an error the worker did not catch, a crash
+in the rules as they load or run, keeps its stack (a `RulesError` on the
+host); the terminal prints it, and a page is only ever sent the message. What
+the worker catches is an answer, including BoardSmith's own refusals (no
+`gameDefinition`, `gameOptions` declared in it, a world the edit cannot run),
+so it crosses as its message alone and shows no BoardSmith stack (#240).
 
 **What crosses the boundary.** Only plain data, so nothing from the bundle
 ever enters the host's module graph. Every answer the worker hands back is

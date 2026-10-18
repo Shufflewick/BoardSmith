@@ -30,40 +30,31 @@ const ASK_ALIVE = 'alive';
 /**
  * Worker -> host. A ready answer and a call's answer cross as the wire's JSON,
  * so the host holds exactly what a page would receive, never a live game
- * element (#885). `value` is absent for a call that answers nothing.
+ * element (#885). `value` is absent for a call that answers nothing. A refusal
+ * (`failed`, `error`) is an answer, so it crosses as its message alone.
  */
 type FromWorker =
   | { readonly ready: string }
-  | ({ readonly failed: string } & Stacked)
+  | { readonly failed: string }
   | { readonly id: number; readonly value?: string }
-  | ({ readonly id: number; readonly error: string } & Stacked)
+  | { readonly id: number; readonly error: string }
   | { readonly event: unknown }
   | { readonly alive: true };
-
-/** Where in the rules an error was thrown, for the terminal only: a page is never sent it. */
-interface Stacked {
-  readonly stack?: string;
-}
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-function stackOf(error: unknown): Stacked {
-  return error instanceof Error && error.stack !== undefined ? { stack: error.stack } : {};
-}
-
-/** An error the rules threw in their worker. Its stack is theirs, at the author's own file and line. */
+/**
+ * A crash in the rules: an error their worker did not catch, thrown as they loaded or as they ran.
+ * Its stack is from inside the worker, at the author's own file and line, and goes to the terminal
+ * only. What BoardSmith refuses is caught and answered, so it is never one of these.
+ */
 export class RulesError extends Error {
   constructor(message: string, stack: string) {
     super(message);
     this.stack = stack;
   }
-}
-
-/** The worker's error as the host holds it: a {@link RulesError} when the worker sent where it was thrown. */
-function fromWorker(message: string, { stack }: Stacked): Error {
-  return stack === undefined ? new Error(message) : new RulesError(message, stack);
 }
 
 // ── The worker side, run inside the bundle ────────────────────────────────────
@@ -93,7 +84,7 @@ export function serveRules<D>(
     handlers = served.handlers;
     post({ ready: toWireJson(served.ready) });
   } catch (error) {
-    post({ failed: messageOf(error), ...stackOf(error) });
+    post({ failed: messageOf(error) });
     return;
   }
   port.on('message', async (message: Call | typeof ASK_ALIVE) => {
@@ -103,7 +94,7 @@ export function serveRules<D>(
       const answer: unknown = await handlers[type]!(payload);
       post(answer === undefined ? { id } : { id, value: toWireJson(answer) });
     } catch (error) {
-      post({ id, error: messageOf(error), ...stackOf(error) });
+      post({ id, error: messageOf(error) });
     }
   });
 }
@@ -187,15 +178,15 @@ export async function startRulesWorker(bundlePath: string, data: unknown): Promi
 
   let loaded = false;
   const ready = new Promise<unknown>((resolve, reject) => {
-    const stop = (why: string, stacked: Stacked = {}): void => {
+    const stop = (why: string, stack?: string): void => {
       // Nothing may be waiting on a worker that stops between calls, so say so here.
       if (loaded && stopped === null) {
         const said = styleText('red', `[boardsmith dev] Your rules stopped running: ${why}`);
-        if (stacked.stack === undefined) console.error(said);
-        else console.error(said, `\n${stacked.stack}`);
+        if (stack === undefined) console.error(said);
+        else console.error(said, `\n${stack}`);
       }
       stopped ??= why;
-      reject(fromWorker(why, stacked));
+      reject(stack === undefined ? new Error(why) : new RulesError(why, stack));
       for (const call of pending.values()) call.reject(new Error(stopped));
       pending.clear();
       settled();
@@ -203,19 +194,19 @@ export async function startRulesWorker(bundlePath: string, data: unknown): Promi
     worker.on('message', (message: FromWorker) => {
       if ('alive' in message) answered();
       else if ('ready' in message) resolve(JSON.parse(message.ready));
-      else if ('failed' in message) reject(fromWorker(message.failed, message));
+      else if ('failed' in message) reject(new Error(message.failed));
       else if ('event' in message) {
         if (listener === null) throw new Error('A rules worker sent an event before anything listened for it.');
         listener(message.event);
       } else {
         const call = pending.get(message.id)!;
         pending.delete(message.id);
-        if ('error' in message) call.reject(fromWorker(message.error, message));
+        if ('error' in message) call.reject(new Error(message.error));
         else call.resolve(message.value === undefined ? undefined : JSON.parse(message.value));
         settled();
       }
     });
-    worker.on('error', (error) => stop(messageOf(error), stackOf(error)));
+    worker.on('error', (error: unknown) => stop(messageOf(error), error instanceof Error ? error.stack : undefined));
     worker.on('exit', (code) => {
       if (closing === null) stop(`the rules worker exited with code ${code}`);
     });
