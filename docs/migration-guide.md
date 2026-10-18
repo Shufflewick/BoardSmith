@@ -10,6 +10,25 @@ longer sees it at its new position. The space's own visibility and its zone
 rule (`contentsHidden()` and the like) are unchanged. A game that wants a card
 to stay revealed after shuffling applies its grant again after the shuffle.
 
+## `createBot` and `new MCTSBot` take no action history; seat snapshots carry none (#1167)
+
+The bot never read the history it was given: it searches from the game's
+state. Its seat snapshot did carry that history, unredacted, so it named
+hidden elements by their real place. Drop the fifth argument:
+
+```typescript
+// Before
+createBot(game, MyGame, 'my-game', 2, runner.actionHistory, 'hard', strategy);
+new MCTSBot(game, MyGame, 'my-game', 2, [], config, strategy);
+// After
+createBot(game, MyGame, 'my-game', 2, 'hard', strategy);
+new MCTSBot(game, MyGame, 'my-game', 2, config, strategy);
+```
+
+`createSnapshot` no longer takes a `{ forSeat, reseed }` option. Use
+`createSeatSnapshot(game, gameType, seed, { forSeat, reseed })`, which takes no
+history and returns a `SeatSnapshot` whose `actionHistory` is always `[]`.
+
 ## `boardsmith test --selection` is removed (#986)
 
 `boardsmith test` no longer takes `--selection <path>`, the authored-test

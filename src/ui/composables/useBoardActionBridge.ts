@@ -28,6 +28,7 @@
  */
 import { computed, watch, nextTick, type Ref, type ComputedRef } from 'vue';
 import type { BoardInteraction, ElementRef } from './useBoardInteraction.js';
+import { matchesRef } from './useBoardInteraction.js';
 import type {
   UseActionControllerReturn,
   EnrichedPickMetadata,
@@ -115,12 +116,13 @@ function elementClickRef(ve: EnrichedValidElement): ElementRef {
 
 /**
  * Is the board element `target` this valid element, and may it be chosen? The
- * one match board clicks and drags use to start or fill a pick (#724).
+ * one match board clicks and drags use to start or fill a pick (#724): the
+ * element itself, or the element its click ref names by the open pick's own
+ * match (matchesRef), so a name-only ref starts what it would fill (#945).
  */
 export function isChoosableElement(ve: EnrichedValidElement, target: ElementRef): boolean {
   if (ve.disabled) return false;
-  if (target.id !== undefined && ve.id === target.id) return true;
-  return !!target.notation && elementClickRef(ve).notation === target.notation;
+  return ve.id === target.id || matchesRef(target, elementClickRef(ve));
 }
 
 /**

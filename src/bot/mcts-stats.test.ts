@@ -19,7 +19,7 @@ function createThreeChoiceGame(): ThreeChoiceGame {
 describe('MCTSBot.playWithStats()', () => {
   it('returns a move and a non-empty stats array for a 3-choice game', async () => {
     const game = createThreeChoiceGame();
-    const bot = new MCTSBot(game, ThreeChoiceGame, 'three-choice', 1, [], {
+    const bot = new MCTSBot(game, ThreeChoiceGame, 'three-choice', 1, {
       iterations: 50,
       async: false,
     });
@@ -34,7 +34,7 @@ describe('MCTSBot.playWithStats()', () => {
 
   it('returns stats where every value is within [0, 1]', async () => {
     const game = createThreeChoiceGame();
-    const bot = new MCTSBot(game, ThreeChoiceGame, 'three-choice', 1, [], {
+    const bot = new MCTSBot(game, ThreeChoiceGame, 'three-choice', 1, {
       iterations: 50,
       async: false,
     });
@@ -48,7 +48,7 @@ describe('MCTSBot.playWithStats()', () => {
 
   it('stats count matches the number of distinct root children evaluated', async () => {
     const game = createThreeChoiceGame();
-    const bot = new MCTSBot(game, ThreeChoiceGame, 'three-choice', 1, [], {
+    const bot = new MCTSBot(game, ThreeChoiceGame, 'three-choice', 1, {
       iterations: 100,
       async: false,
     });
@@ -69,12 +69,12 @@ describe('MCTSBot.playWithStats()', () => {
     const game2 = createThreeChoiceGame();
     const seed = 'refactor-check';
 
-    const playBot = new MCTSBot(game1, ThreeChoiceGame, 'three-choice', 1, [], {
+    const playBot = new MCTSBot(game1, ThreeChoiceGame, 'three-choice', 1, {
       iterations: 50,
       async: false,
       seed,
     });
-    const statsBot = new MCTSBot(game2, ThreeChoiceGame, 'three-choice', 1, [], {
+    const statsBot = new MCTSBot(game2, ThreeChoiceGame, 'three-choice', 1, {
       iterations: 50,
       async: false,
       seed,
@@ -88,7 +88,7 @@ describe('MCTSBot.playWithStats()', () => {
 
   it('a bot configured with parallel: 2 still returns non-empty stats', async () => {
     const game = createThreeChoiceGame();
-    const bot = new MCTSBot(game, ThreeChoiceGame, 'three-choice', 1, [], {
+    const bot = new MCTSBot(game, ThreeChoiceGame, 'three-choice', 1, {
       iterations: 50,
       async: false,
       parallel: 2, // playWithStats() must force single-search path
@@ -100,7 +100,7 @@ describe('MCTSBot.playWithStats()', () => {
 
   it('each stat has a valid BotMove with action and args', async () => {
     const game = createThreeChoiceGame();
-    const bot = new MCTSBot(game, ThreeChoiceGame, 'three-choice', 1, [], {
+    const bot = new MCTSBot(game, ThreeChoiceGame, 'three-choice', 1, {
       iterations: 100,
       async: false,
     });
@@ -120,7 +120,7 @@ describe('MCTSBot.playWithStats()', () => {
 
   it('the recommended move is present among the stats entries', async () => {
     const game = createThreeChoiceGame();
-    const bot = new MCTSBot(game, ThreeChoiceGame, 'three-choice', 1, [], {
+    const bot = new MCTSBot(game, ThreeChoiceGame, 'three-choice', 1, {
       iterations: 100,
       async: false,
     });

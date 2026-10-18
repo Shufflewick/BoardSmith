@@ -9,6 +9,7 @@ export {
 // State snapshots
 export {
   createSnapshot,
+  createSeatSnapshot,
   createPlayerView,
   createAllPlayerViews,
   type GameStateSnapshot,

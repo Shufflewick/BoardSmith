@@ -112,7 +112,7 @@ function searchPayoffMatrix() {
   });
   game.startFlow();
 
-  const bot = new MCTSBot(game, PayoffMatrixGame, 'payoff-matrix', 1, [], {
+  const bot = new MCTSBot(game, PayoffMatrixGame, 'payoff-matrix', 1, {
     iterations: 600,
     playoutDepth: 4,
     seed: 'payoff-matrix',

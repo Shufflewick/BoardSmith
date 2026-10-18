@@ -253,7 +253,7 @@ export function mcts(level: DifficultyLevel | number): Policy {
       if (definition.gameType === undefined) {
         throw new Error(`${name} needs the game definition's gameType. Simulate the whole game definition, not only its class.`);
       }
-      const bot = createBot(game, definition.gameClass, definition.gameType, seat, [], level, definition.bot, {
+      const bot = createBot(game, definition.gameClass, definition.gameType, seat, level, definition.bot, {
         seed: String(rng.next()),
       });
       const move = await bot.play();
