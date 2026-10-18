@@ -14,7 +14,7 @@ import {
   readRulingVerdicts,
   verifyRulingRecheckCommand,
 } from './verify-ruling-recheck.js';
-import { verifyRunInitCommand } from './verify-run.js';
+import { ledgerFilePath, verifyRunInitCommand } from './verify-run.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
@@ -383,6 +383,7 @@ describe('resolveFreshTranscription', () => {
       const stagingDir = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'slices');
       await fs.mkdir(stagingDir, { recursive: true });
       await fs.writeFile(join(stagingDir, '01-setup.md'), '## Setup\n\ntext\n');
+      await fs.writeFile(ledgerFilePath(project, runId), '# Verify Run\n');
     }
     const result = await resolveFreshTranscription(project);
     expect(result.scopeLimited).toBe(false);
