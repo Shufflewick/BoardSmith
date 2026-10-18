@@ -11,10 +11,12 @@ export function makeController(opts: {
   pick?: EnrichedPickMetadata | null;
   action?: string | null;
   validElements?: EnrichedValidElement[];
+  /** The picks already answered in the open action. */
+  args?: Record<string, unknown>;
 }) {
   const currentAction = ref<string | null>(opts.action ?? null);
   const currentPick = computed<EnrichedPickMetadata | null>(() => opts.pick ?? null);
-  const currentArgs = ref<Record<string, unknown>>({});
+  const currentArgs = ref<Record<string, unknown>>(opts.args ?? {});
   const isExecuting = ref(false);
   const actionCompletedTick = ref(0);
   const multiSelectDraft = ref(null);
