@@ -956,7 +956,7 @@ Or use your own class names alongside the library classes:
 - Can include `id`, `name`, or `notation` to identify the element.
 - Matching is **precedence-based**, not OR-based: if `id` is present it is the sole criterion (`name`/`notation` are ignored); otherwise `notation` is tried, then `name`. This prevents duplicate-named elements (e.g. several `'Militia'` pieces) from cross-talking — a ref carrying a precise `id` always resolves to exactly that element. Use `id` for unambiguous selection; reserve bare `name`/`notation` refs for when you genuinely want to match every element sharing that property.
 - A board click (`selectElement`) or drag (`startDrag`) starts an action by the same rule: it starts the first action whose first element pick has a candidate that is the ref's element, or whose board ref the element matches as above. So a name-only ref starts an action exactly when the candidate's board ref is that name (#945).
-- In the AutoUI, a piece standing on a candidate square (Checkers, Chess: the piece's board ref is its square's notation) is draggable, and its drag carries the square, so it starts that square's pick (#943).
+- In the AutoUI, while a pick is open, a piece standing on a square that is one of that pick's candidates is draggable, and its drag carries the square, so it chooses that square's candidate (#943). Checkers is the case: its move action opens on its own, and each piece's board ref is its square's notation. With no action open, no piece is draggable this way yet; fetching first-pick candidates for that case is #1192.
 
 #### Migration from Verbose Pattern
 
