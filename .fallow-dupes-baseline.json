@@ -21,7 +21,7 @@
     "src/ui/components/auto-ui/renderers/CardRenderer.vue:34-53|src/ui/components/auto-ui/renderers/HandRenderer.vue:27-46",
     "src/ui/components/auto-ui/renderers/CardRenderer.vue:238-254|src/ui/components/auto-ui/renderers/PieceRenderer.vue:102-113",
     "src/ui/components/auto-ui/renderers/HandRenderer.vue:92-103|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:62-73",
-    "src/cli/commands/verify-enumerate.ts:1293-1300|src/cli/commands/verify-enumerate.ts:1416-1423",
+    "src/cli/commands/verify-enumerate.ts:1299-1306|src/cli/commands/verify-enumerate.ts:1422-1429",
     "src/session/testing/fixtures/collect-fixture.ts:66-83|src/session/testing/fixtures/collect-turns-fixture.ts:68-81",
     "src/cli/commands/verify-classify.ts:698-716|src/cli/commands/verify-derive-check.ts:113-139",
     "src/session/testing/fixtures/simultaneous-fixture.ts:56-71|src/session/testing/fixtures/simultaneous-fixture.ts:83-93",
