@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { takeOsLock, type OsLock } from './os-lock.js';
@@ -100,5 +100,17 @@ describe('takeOsLock (#441)', () => {
     expect(refused).toContain(`chunk-merge of ghost, pid ${dead}, since earlier`);
     expect(refused).toContain(`But pid ${dead} is no longer running, so the lock is held by a process it left behind.`);
     expect(refused).toContain(`Find that process with \`lsof ${file}\`, stop it, then run chunk-merge again.`);
+  });
+
+  it('refuses with the reason when the holder note cannot be read, rather than saying no holder recorded itself', async () => {
+    const file = join(tempTree('bs-os-lock-'), 'merge.lock');
+    expect(typeof (await take(file, 'chunk-merge of trading'))).not.toBe('string');
+    rmSync(`${file}.holder`);
+    mkdirSync(`${file}.holder`);
+    try {
+      await expect(take(file, 'chunk-merge of quests')).rejects.toThrow(`Could not read ${file}.holder (EISDIR)`);
+    } finally {
+      rmSync(`${file}.holder`, { recursive: true });
+    }
   });
 });

@@ -18,7 +18,7 @@
  * live lobby uses, and `boardsmith dev` refuses a code-declared list that differs (#814).
  */
 
-import { DEFAULT_COLOR_PALETTE, DEFAULT_COLOR_LABELS } from '../engine/element/game.js';
+import { DEFAULT_COLOR_PALETTE, DEFAULT_COLOR_LABELS } from '../engine/element/seat-defaults.js';
 
 /**
  * Color choice for player options

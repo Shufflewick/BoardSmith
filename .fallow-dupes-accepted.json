@@ -24,14 +24,6 @@
       ]
     },
     {
-      "content": "30138a2100b37a20",
-      "lines": 11,
-      "files": [
-        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
-        "src/ui/components/auto-ui/renderers/HandRenderer.vue"
-      ]
-    },
-    {
       "content": "39398bdc869b7980",
       "lines": 40,
       "files": [
@@ -187,13 +179,6 @@
       "files": [
         "src/ui/components/auto-ui/renderers/HandRenderer.vue",
         "src/ui/components/auto-ui/renderers/SpaceRenderer.vue"
-      ]
-    },
-    {
-      "content": "b8843bcd1232e798",
-      "lines": 29,
-      "files": [
-        "src/ui/components/auto-ui/useAutoRendererAnimations.ts"
       ]
     },
     {

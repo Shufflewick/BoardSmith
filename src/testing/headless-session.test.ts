@@ -4,6 +4,7 @@ import { eachPlayerFixtureDefinition } from '../session/testing/fixtures/each-pl
 import { Game, Player, Action, actionStep, eachPlayer, loop, type GameOptions } from '../engine/index.js';
 import type { GameDefinitionLike } from '../session/stateless-ops.js';
 import { selectGameOptions } from '../session/game-option-selection.js';
+import type { GameStateSnapshot } from '../runtime/index.js';
 
 /**
  * Public-path tests for `createHeadlessSession` (boardsmith/testing).
@@ -237,6 +238,22 @@ describe('createHeadlessSession with teaching locked (#529)', () => {
     const result = await session.send(1, { type: 'startTutorial', player: 1 });
     expect(result.error).not.toBe(LOCKOUT);
     expect(session.playerState(1).teachingDisabled).not.toBe(true);
+  });
+});
+
+describe('host-only ops through send (#1109)', () => {
+  it('does not compile, and the host refuses them at run time', async () => {
+    const session = createHeadlessSession(tallyGameDef, { playerCount: 2, seed: 'host-only' });
+    await session.start();
+    const results = [
+      // @ts-expect-error start is host-only: use session.start()
+      await session.send(1, { type: 'start' }),
+      // @ts-expect-error restoreEarlier is host-only: use session.arrange()
+      await session.send(1, { type: 'restoreEarlier', snapshot: {} as GameStateSnapshot }),
+      // @ts-expect-error botSuggest is host-only: the session wakes bot seats itself
+      await session.send(1, { type: 'botSuggest', seats: [{ seat: 2 }] }),
+    ];
+    expect(results.map((r) => r.success)).toEqual([false, false, false]);
   });
 });
 

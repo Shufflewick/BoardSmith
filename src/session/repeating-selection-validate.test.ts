@@ -173,7 +173,8 @@ describe("a repeating selection's validate runs per pick, on every path (#352)",
     await host.start();
     const result = await submitWhole(host, ['ice', 'fire', 'stop']);
     expect(result.success).toBe(false);
-    expect(result.error).toBe(`Pick 2 of "rune": ${FIRE_AFTER_ICE}`);
+    // The runner rolled the earlier pick back, so it says so (#989).
+    expect(result.error).toBe(`Pick 2 of "rune": ${FIRE_AFTER_ICE} Nothing was changed.`);
     const after = game(host);
     expect(after.eachCalls).toEqual([]);
     expect(after.cast).toBeNull();
@@ -258,7 +259,7 @@ describe("a repeating chooseElement's validate (#352)", () => {
     runner.start();
     const id = (name: string) => runner.game.heap.first(Gem, name)!.id;
     const refused = runner.performAction('take', 1, { gems: [id('ruby'), id('onyx')] });
-    expect(refused.error).toBe('Pick 2 of "gems": Onyx is cursed.');
+    expect(refused.error).toBe('Pick 2 of "gems": Onyx is cursed. Nothing was changed.');
     const moves = enumerateLegalMoves(runner.game, 1).map((m) => (m.args.gems as Gem[]).map((g) => g.name).join(','));
     // Nothing moves a picked gem, so a gem may be picked twice; onyx never is.
     expect(moves.sort()).toEqual(['jade,jade', 'jade,ruby', 'ruby,jade', 'ruby,ruby']);

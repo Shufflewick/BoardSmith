@@ -187,7 +187,7 @@ describe('verifyRulingRecordCommand — the CLI write surface', () => {
     await verifyRulingRecordCommand({
       project,
       runId: RUN_ID,
-      number: 2,
+      number: '2',
       verdict: 'still-needed',
       reasoning: 'The fresh transcription never mentions this case.',
       json: true,
@@ -195,7 +195,7 @@ describe('verifyRulingRecordCommand — the CLI write surface', () => {
     await verifyRulingRecordCommand({
       project,
       runId: RUN_ID,
-      number: 4,
+      number: '4',
       verdict: 'contradicted',
       reasoning: 'The fresh transcription states the opposite outcome.',
       json: true,
@@ -216,7 +216,7 @@ describe('verifyRulingRecordCommand — the CLI write surface', () => {
     await verifyRulingRecordCommand({
       project,
       runId: RUN_ID,
-      number: 1,
+      number: '1',
       verdict: 'undetermined',
       reasoning: 'Recorded in an earlier pass.',
       json: true,
@@ -238,7 +238,7 @@ describe('verifyRulingRecordCommand — the CLI write surface', () => {
     await verifyRulingRecordCommand({
       project,
       runId: RUN_ID,
-      number: 1,
+      number: '1',
       verdict: 'still-needed',
       reasoning: 'a',
       json: true,
@@ -246,7 +246,7 @@ describe('verifyRulingRecordCommand — the CLI write surface', () => {
     const second = await verifyRulingRecordCommand({
       project,
       runId: RUN_ID,
-      number: 2,
+      number: '2',
       verdict: 'still-needed',
       reasoning: 'b',
       json: true,
@@ -264,7 +264,7 @@ describe('verifyRulingRecordCommand — the CLI write surface', () => {
       verifyRulingRecordCommand({
         project,
         runId: RUN_ID,
-        number: 1,
+        number: '1',
         verdict: 'probably-fine',
         reasoning: 'x',
         json: true,
@@ -280,7 +280,7 @@ describe('verifyRulingRecordCommand — the CLI write surface', () => {
       verifyRulingRecordCommand({
         project,
         runId: RUN_ID,
-        number: 1,
+        number: '1',
         verdict: 'still-needed',
         reasoning: '   ',
         json: true,
@@ -293,7 +293,7 @@ describe('verifyRulingRecordCommand — the CLI write surface', () => {
     const err = await verifyRulingRecordCommand({
       project,
       runId: RUN_ID,
-      number: 99,
+      number: '99',
       verdict: 'still-needed',
       reasoning: 'x',
       json: true,
@@ -303,13 +303,21 @@ describe('verifyRulingRecordCommand — the CLI write surface', () => {
     expect((err as Error).message).toMatch(/1, 2, 3/);
   });
 
+  it.each(['0', '-1', '1.5', '1e3', '12abc', ''])('refuses --number "%s" by name (#1047)', async (raw) => {
+    const project = await makeProject(3);
+    await expect(
+      verifyRulingRecordCommand({ project, runId: RUN_ID, number: raw, verdict: 'still-needed', reasoning: 'x', json: true }),
+    ).rejects.toThrow(`--number takes a positive whole number, got "${raw}".`);
+    expect(await readRulingVerdicts(project, RUN_ID)).toEqual([]);
+  });
+
   it('refuses a malformed run id with an actionable message', async () => {
     const project = await makeProject(3);
     await expect(
       verifyRulingRecordCommand({
         project,
         runId: 'yesterday',
-        number: 1,
+        number: '1',
         verdict: 'still-needed',
         reasoning: 'x',
         json: true,
@@ -324,7 +332,7 @@ describe('verifyRulingRecordCommand — the CLI write surface', () => {
     const err = await verifyRulingRecordCommand({
       project,
       runId: typo,
-      number: 1,
+      number: '1',
       verdict: 'still-needed',
       reasoning: 'x',
       json: true,
@@ -342,7 +350,7 @@ describe('verifyRulingRecordCommand — the CLI write surface', () => {
     const err = await verifyRulingRecordCommand({
       project,
       runId: fake,
-      number: 1,
+      number: '1',
       verdict: 'still-needed',
       reasoning: 'x',
       json: true,
@@ -363,7 +371,7 @@ describe('verifyRulingRecordCommand — the CLI write surface', () => {
     const err = await verifyRulingRecordCommand({
       project,
       runId: fake,
-      number: 1,
+      number: '1',
       verdict: 'still-needed',
       reasoning: 'x',
       json: true,
@@ -383,7 +391,7 @@ describe('verifyRulingRecordCommand — the CLI write surface', () => {
     const err = await verifyRulingRecordCommand({
       project,
       runId: odd,
-      number: 1,
+      number: '1',
       verdict: 'still-needed',
       reasoning: 'x',
       json: true,
@@ -401,7 +409,7 @@ describe('verifyRulingRecordCommand — the CLI write surface', () => {
     const err = await verifyRulingRecordCommand({
       project,
       runId: '2099-01-01T00-00-00Z',
-      number: 1,
+      number: '1',
       verdict: 'still-needed',
       reasoning: 'x',
       json: true,
@@ -419,7 +427,7 @@ describe('verifyRulingRecordCommand — the CLI write surface', () => {
     await verifyRulingRecordCommand({
       project,
       runId: RUN_ID,
-      number: 1,
+      number: '1',
       verdict: 'still-needed',
       reasoning: 'x',
       json: true,

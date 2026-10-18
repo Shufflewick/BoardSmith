@@ -14,7 +14,7 @@ import {
   readRulingVerdicts,
   verifyRulingRecheckCommand,
 } from './verify-ruling-recheck.js';
-import { verifyRunInitCommand } from './verify-run.js';
+import { ledgerFilePath, verifyRunInitCommand } from './verify-run.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
@@ -266,6 +266,16 @@ describe('resolveFreshTranscription', () => {
       expect(result.reason).toContain(`\`git restore ${slicesRel}\``);
     });
 
+    it('a link to a folder inside it: names the link instead of walking into it (#1048)', async () => {
+      await fs.symlink(runDir, join(slices, 'loop'));
+      const result = await resolveFreshTranscription(project, runId);
+      expect(result.scopeLimited).toBe(true);
+      if (!result.scopeLimited) return;
+      expectNeverCalledFake(result.reason);
+      expect(result.reason).toContain(`${slicesRel} could not be read: ${join(slices, 'loop')} is a link to a folder`);
+      expect(result.reason).not.toMatch(/permissions/);
+    });
+
     it('unreadable: says it could not be read, not that it is missing', async () => {
       await fs.chmod(slices, 0o000);
       try {
@@ -373,6 +383,7 @@ describe('resolveFreshTranscription', () => {
       const stagingDir = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'slices');
       await fs.mkdir(stagingDir, { recursive: true });
       await fs.writeFile(join(stagingDir, '01-setup.md'), '## Setup\n\ntext\n');
+      await fs.writeFile(ledgerFilePath(project, runId), '# Verify Run\n');
     }
     const result = await resolveFreshTranscription(project);
     expect(result.scopeLimited).toBe(false);

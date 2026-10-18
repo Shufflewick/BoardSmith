@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { fixtureSandbox } from '../../testing/fixture-sandbox.test-helper.js';
 import { spawnCli } from '../spawn-cli.test-helper.js';
 import { checkConstraints, constraintCheckCommand, runVitest, testFilesInReport, type TestRunner } from './constraint-check.js';
 import { linkGameModules } from '../../testing/installed-modules.test-helper.js';
@@ -449,6 +450,26 @@ describe('runVitest leaves chunk worktrees out of the run', () => {
     const run = await runVitest(project, ['tests/ok.test.ts', 'tests/skipped.test.ts']);
     expect(run).toMatchObject({ ok: true, ran: ['tests/ok.test.ts'] });
   }, 60_000);
+
+  it('refuses a run whose JSON report it cannot read, rather than saying no report was written (#1049)', async () => {
+    const sandbox = fixtureSandbox('bs-constraint-report-', { tools: [] });
+    const project = join(sandbox.root, 'game');
+    await fs.mkdir(join(project, 'node_modules', '.bin'), { recursive: true });
+    await fs.writeFile(join(project, GAME_VITE_CONFIG_FILE), GAME_VITE_CONFIG);
+    // A vitest that leaves a folder where its JSON report should be.
+    await fs.writeFile(
+      join(project, 'node_modules', '.bin', 'vitest'),
+      "#!/usr/bin/env node\nconst flag = process.argv.find((a) => a.startsWith('--outputFile.json='));\n" +
+        "import('node:fs').then((fs) => fs.mkdirSync(flag.slice('--outputFile.json='.length)));\n",
+      { mode: 0o755 },
+    );
+    for (const key of ['HOME', 'TMPDIR', 'PATH', 'NODE_OPTIONS'] as const) vi.stubEnv(key, sandbox.env[key]!);
+    try {
+      await expect(runVitest(project, [])).rejects.toThrow(/Could not read .*report\.json \(EISDIR\)/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 
   it('refuses a project with no vitest of its own, naming the install command, and never runs npx (#595)', async () => {
     const project = await makeProject({ ...WIP, ...GAME });

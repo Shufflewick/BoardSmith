@@ -1,7 +1,8 @@
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { styleText } from 'node:util';
 import { scanSandboxViolations } from '../lib/sandbox-scan.js';
+import { SOURCE_EXTENSIONS, collectSourceFiles } from '../lib/source-files.js';
 import { requireBoardsmithWorkspace } from '../lib/project-context.js';
 import { runTool } from '../lib/run-tool.js';
 import { selectChecks } from '../lib/select-checks.js';
@@ -122,30 +123,6 @@ const LINT_RULES = {
     negativePattern: /registerElements/,
   },
 };
-
-/**
- * Find all TypeScript files in a directory recursively
- */
-function findTypeScriptFiles(dir: string, files: string[] = []): string[] {
-  if (!existsSync(dir)) return files;
-
-  const entries = readdirSync(dir);
-  for (const entry of entries) {
-    const fullPath = join(dir, entry);
-
-    // Skip node_modules and hidden directories
-    if (entry === 'node_modules' || entry.startsWith('.')) continue;
-
-    const stat = statSync(fullPath);
-    if (stat.isDirectory()) {
-      findTypeScriptFiles(fullPath, files);
-    } else if (entry.endsWith('.ts') && !entry.endsWith('.d.ts')) {
-      files.push(fullPath);
-    }
-  }
-
-  return files;
-}
 
 /**
  * Lint a single file for BoardSmith-specific issues
@@ -287,12 +264,11 @@ function checkUnusedActions(filePath: string, content: string, allFiles: Map<str
 async function runPitfallLint(cwd: string): Promise<number> {
   console.log(styleText('cyan', '\nChecking for BoardSmith pitfalls...\n'));
 
-  // Find all TypeScript files
-  const srcDir = join(cwd, 'src');
-  const files = findTypeScriptFiles(srcDir);
+  // The hints are text patterns over script code, so .vue files are left to the sandbox scan.
+  const files = collectSourceFiles(join(cwd, 'src'), SOURCE_EXTENSIONS.filter((ext) => ext !== 'vue'));
 
   if (files.length === 0) {
-    console.log(styleText('yellow', 'No TypeScript files found in src/'));
+    console.log(styleText('yellow', 'No game source files found in src/'));
     return 0;
   }
 
@@ -419,18 +395,34 @@ const ESLINT_CONFIGS = [
   '.eslintrc.json',
 ];
 
+// Stylelint 17's own search list (`stylelint --help`), minus the parent-folder walk.
 const STYLELINT_CONFIGS = [
-  '.stylelintrc.cjs',
-  '.stylelintrc.js',
-  '.stylelintrc.json',
   '.stylelintrc',
-  'stylelint.config.js',
-  'stylelint.config.cjs',
-  'stylelint.config.mjs',
+  ...['cjs', 'mjs', 'js', 'ts', 'json', 'yaml', 'yml'].map((ext) => `.stylelintrc.${ext}`),
+  ...['cjs', 'mjs', 'js', 'ts'].map((ext) => `stylelint.config.${ext}`),
 ];
 
 function hasAnyConfig(cwd: string, candidates: string[]): boolean {
   return candidates.some((name) => existsSync(join(cwd, name)));
+}
+
+function hasStylelintConfig(cwd: string): boolean {
+  if (hasAnyConfig(cwd, STYLELINT_CONFIGS)) return true;
+  const pkgPath = join(cwd, 'package.json');
+  if (!existsSync(pkgPath)) return false;
+  let pkg: unknown;
+  try {
+    pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+  } catch {
+    pkg = undefined;
+  }
+  if (typeof pkg !== 'object' || pkg === null || Array.isArray(pkg)) {
+    throw new Error(
+      `${pkgPath} is not a valid JSON object. boardsmith lint reads it to find a Stylelint config ` +
+        `(a "stylelint" key). Fix the JSON in that file and run lint again.`,
+    );
+  }
+  return 'stylelint' in pkg;
 }
 
 /**
@@ -453,11 +445,19 @@ export async function lintCommand(options: LintOptions): Promise<void> {
   });
 
   const checks: LintCheck[] = [];
+  const hasCssConfig = wants('css') && hasStylelintConfig(cwd);
 
   if (options.eslint && !hasAnyConfig(cwd, ESLINT_CONFIGS)) {
     console.error(styleText('red', '\nlint --eslint: this project has no ESLint config, so ESLint cannot run.'));
     console.error(styleText('dim', 'Add an eslint.config.mjs to the project root that uses boardsmith/eslint-plugin, or drop --eslint.'));
     console.error(styleText('dim', 'How: https://github.com/Shufflewick/BoardSmith/blob/main/docs/api/eslint-plugin.md\n'));
+    process.exit(1);
+  }
+
+  if (options.css && !hasCssConfig) {
+    console.error(styleText('red', '\nlint --css: this project has no Stylelint config, so Stylelint cannot run.'));
+    console.error(styleText('dim', "Add a .stylelintrc.cjs to the project root with customSyntax: 'postcss-html' (so it reads the <style> blocks in .vue files), or drop --css."));
+    console.error(styleText('dim', 'The game also needs both packages installed: npm install -D stylelint postcss-html\n'));
     process.exit(1);
   }
 
@@ -467,7 +467,7 @@ export async function lintCommand(options: LintOptions): Promise<void> {
     checks.push({ name: 'ESLint', run: () => runTool('eslint', args, { cwd }) });
   }
 
-  if (wants('css') && hasAnyConfig(cwd, STYLELINT_CONFIGS)) {
+  if (hasCssConfig) {
     const args = ['src/**/*.vue'];
     if (options.fix) args.push('--fix');
     checks.push({ name: 'Stylelint', run: () => runTool('stylelint', args, { cwd }) });

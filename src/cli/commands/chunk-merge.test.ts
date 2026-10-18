@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { existsSync, promises as fs } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { takeOsLock } from '../lib/os-lock.js';
 import { chunkMerge, resolveDesignConflicts } from './chunk-merge.js';
@@ -539,6 +539,32 @@ describe('chunkMerge: references between chunks built together go to the audit',
   });
 });
 
+describe('chunkMerge: a file it cannot read is refused, never read as missing (#1049)', () => {
+  /** Replaces `rel` in `dir` with a link to itself, which no read gets through, and commits it. */
+  async function commitLoop(dir: string, rel: string): Promise<void> {
+    await fs.mkdir(dirname(join(dir, rel)), { recursive: true });
+    await fs.rm(join(dir, rel), { force: true });
+    await fs.symlink(basename(rel), join(dir, rel));
+    git(dir, 'add', '-A');
+    git(dir, 'commit', '-q', '-m', `${rel} links to itself`);
+  }
+
+  for (const [what, rel] of [
+    ['a file the branch changed', 'docs/loop.txt'],
+    ["the chunk's CHUNK.md", 'design/chunks/trading/CHUNK.md'],
+    ['the sketch whose session lock it keeps', 'design/SKETCH.md'],
+  ] as const) {
+    it(`refuses ${what}, naming it, and leaves main as it was`, async () => {
+      await commitLoop(await buildOnBranch('trading', 100), rel);
+      const before = head();
+
+      await expect(chunkMerge(main, 'trading', { runTests: budgetRunner })).rejects.toThrow(new RegExp(`Could not read \\S+/game/${rel} \\(ELOOP\\)`));
+      expect(head()).toBe(before);
+      expect(status()).toBe('');
+    });
+  }
+});
+
 describe('chunkMerge: preconditions', () => {
   it('refuses while another chunk-merge holds the lock, naming it, and merges once it is released (#441)', async () => {
     await buildOnBranch('trading', 100);
@@ -671,10 +697,10 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
     return budgetRunner(projectDir, files);
   };
 
-  /** A chunk whose Build Manifest names src/world.ts, with a quoted claim and its own test. */
-  async function sharedChunkMd(slug: string, claim: string): Promise<string> {
+  /** A chunk whose Build Manifest names the shared file (src/world.ts), with a quoted claim and its own test. */
+  async function sharedChunkMd(slug: string, claim: string, shared = 'src/world.ts'): Promise<string> {
     return (await chunkMd(slug))
-      .replace(`| src/${slug}.ts | written |`, `| src/${slug}.ts | written |\n| src/world.ts | written |`)
+      .replace(`| src/${slug}.ts | written |`, `| src/${slug}.ts | written |\n| ${shared} | written |`)
       .replace(/^1\. \*\*<!-- claim text -->\*\*\n.*\n.*\n/m, `${claim}\n`)
       .replace('<!-- | src/...test.ts | 1, 3, 4 | pending / yes | -->', `| tests/${slug}.test.ts | 1 | yes |`);
   }
@@ -692,13 +718,14 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
 
   async function buildShared(
     slug: 'trading' | 'quests',
-    options: { claim?: string; test?: string; worldFile?: string; chunkCheck?: boolean; extra?: Record<string, string> } = {},
+    options: { claim?: string; test?: string; worldFile?: string; shared?: string; chunkCheck?: boolean; extra?: Record<string, string> } = {},
   ): Promise<void> {
     const claim = options.claim ?? (slug === 'trading' ? TRADING_CLAIM : QUESTS_CLAIM);
+    const shared = options.shared ?? 'src/world.ts';
     const worktree = await buildOnBranch(slug, 100, {
-      [`design/chunks/${slug}/CHUNK.md`]: await sharedChunkMd(slug, claim),
+      [`design/chunks/${slug}/CHUNK.md`]: await sharedChunkMd(slug, claim, shared),
       [`tests/${slug}.test.ts`]: options.test ?? `// ${slug}'s own test\n`,
-      'src/world.ts': options.worldFile ?? (slug === 'trading' ? world(1, 0) : world(0, 1)),
+      [shared]: options.worldFile ?? (slug === 'trading' ? world(1, 0) : world(0, 1)),
       ...options.extra,
     });
     if (options.chunkCheck === false) return;
@@ -747,6 +774,17 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
       sharedEdits: [{ path: 'src/world.ts', coveredBy: 'quests, trading', how: 'merged' }],
     });
     expect(status()).toBe('');
+  });
+
+  it('vouches for a shared file whose name has non-ASCII letters, as the Build Manifests write it (#1113)', async () => {
+    await write(main, { 'src/règles.ts': world(0, 0) });
+    git(main, 'add', '-A');
+    git(main, 'commit', '-q', '-m', 'règles');
+    await buildShared('trading', { shared: 'src/règles.ts' });
+    await buildShared('quests', { shared: 'src/règles.ts' });
+    expect((await chunkMerge(main, 'trading', { runTests: ownTestsRunner })).refusals).toEqual([]);
+    expect((await chunkMerge(main, 'quests', { runTests: ownTestsRunner })).refusals).toEqual([]);
+    expect(await read(main, 'design/MERGE-SIGNOFFS.md')).toContain('### src/règles.ts');
   });
 
   /**
