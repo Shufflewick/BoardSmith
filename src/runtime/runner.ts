@@ -211,6 +211,7 @@ function checkpointWithLiveLog(
     messagesEvicted: live.messagesEvicted,
     messagesEvictedPublic: live.messagesEvictedPublic,
     messagesEvictedTo: live.messagesEvictedTo,
+    messagesShownFrom: live.messagesShownFrom,
   };
   if (checkpoint.messageCount === undefined) return { state, messageLog: log };
   const evicted = live.messagesEvicted ?? 0;

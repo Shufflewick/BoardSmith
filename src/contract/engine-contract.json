@@ -1,6 +1,6 @@
 {
-  "revision": 244,
-  "surfaceHash": "01f74ea669294216",
+  "revision": 245,
+  "surfaceHash": "7f205bf27a6fcb74",
   "payloadHash": "0e2d27db00239080",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1895,6 +1895,14 @@
       "payloadHash": "0e2d27db00239080",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A grid cell hidden from a seat keeps its coordinates in the seat view, so AutoUI can draw boards with hidden cells (#1055)"
+    },
+    {
+      "revision": 245,
+      "date": "2026-10-18",
+      "surfaceHash": "7f205bf27a6fcb74",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "game.pruneMessages({ keepLast: N }) now counts per audience (#1067): each seat, and spectators, keeps its own last N lines and is shown no older ones, so a seat's log after the cut no longer depends on how many private lines other seats got. The stored log is evicted from the front up to the earliest line any audience keeps, so it can hold more than N lines. A new restore-only root field, messagesShownFrom (LogEviction), records each audience's cut while it is past the log's front; no seat's view carries it, and messageOffset now also counts a seat's lines before its cut. A saved game without the field loads as before; no game needs a rebuild."
     }
   ]
 }

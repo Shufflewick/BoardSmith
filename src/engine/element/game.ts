@@ -307,6 +307,11 @@ export interface LogEviction {
   messagesEvictedPublic?: number;
   /** Evicted private lines, by each seat they were addressed to (#903). */
   messagesEvictedTo?: Record<string, number>;
+  /**
+   * Each audience's first shown line, as an absolute position, where `keepLast`
+   * cut it past the stored front (#1067); `0` is the spectator.
+   */
+  messagesShownFrom?: Record<string, number>;
 }
 
 /**
@@ -338,6 +343,7 @@ export function animationFloorOf(state: unknown): AnimationFloor {
  *   `messagesEvictedPublic` and `messagesEvictedTo` count the same evictions by
  *   audience (#903); the second holds every seat's private count, so a seat
  *   gets only its own total, as `PlayerStateView.messageOffset`.
+ *   `messagesShownFrom` holds where `keepLast` cut each audience (#1067).
  * - `animationEventSeq` counts EVERY seat's events, `animateTo` ones included,
  *   so a seat watching it rise would learn another seat played a private
  *   animation, and be pushed a changed view when nothing it may see changed
@@ -355,7 +361,7 @@ export function animationFloorOf(state: unknown): AnimationFloor {
  * here is measurable in bot search time.
  */
 function withoutRestoreOnlyFields(root: ReturnType<Game['toJSON']>) {
-  const { messagesEvicted: _evicted, messagesEvictedPublic: _public, messagesEvictedTo: _to, animationEventSeq: _seq, animationSeqBySeat: _seqBySeat, pile: _pile, ...seatView } = root;
+  const { messagesEvicted: _evicted, messagesEvictedPublic: _public, messagesEvictedTo: _to, messagesShownFrom: _shownFrom, animationEventSeq: _seq, animationSeqBySeat: _seqBySeat, pile: _pile, ...seatView } = root;
   return seatView;
 }
 
@@ -1137,6 +1143,13 @@ export class Game<
    */
   private _messagesEvictedPublic: number = 0;
   private _messagesEvictedTo: Map<number, number> = new Map();
+  /**
+   * Where `keepLast` cut each audience (`0` the spectator), as an absolute
+   * position, when that is past the stored front: each audience keeps its own
+   * last N lines (#1067), so the log holds lines one audience kept and another
+   * is no longer shown. Entries at or before the front are dropped.
+   */
+  private _messagesShownFrom: Map<number, number> = new Map();
 
   /** Original constructor options (for snapshot restoration) */
   private _constructorOptions: Record<string, unknown> = {};
@@ -4201,7 +4214,11 @@ export class Game<
    * Splicing `game.messages` by hand is not equivalent and never was — it moves
    * entries past a boundary the checkpoint no longer describes.
    *
-   * @param policy.keepLast - Keep the most recent N entries, dropping older ones.
+   * @param policy.keepLast - Each audience (each seat, and spectators) keeps
+   *   its own most recent N lines and is shown no older ones (#1067), so a
+   *   seat's log after the cut does not depend on other seats' private lines.
+   *   The log drops lines from the front up to the earliest line any audience
+   *   still keeps.
    * @param policy.dropWhile - Drop entries from the front while this returns
    *   true. Stops at the first entry it declines, so what remains is always a
    *   suffix of the log.
@@ -4225,15 +4242,46 @@ export class Game<
           `pruneMessages: keepLast must be a non-negative integer, got ${JSON.stringify(policy.keepLast)}.`,
         );
       }
-      if (this.messages.length > policy.keepLast) {
-        this.#evictFront(this.messages.length - policy.keepLast);
-      }
+      this.#keepLastPerAudience(policy.keepLast);
     }
     if (policy.dropWhile) {
       let drop = 0;
       while (drop < this.messages.length && policy.dropWhile(this.messages[drop])) drop++;
       this.#evictFront(drop);
     }
+  }
+
+  /** Cut each audience to its own last `n` lines, then evict what no audience keeps. */
+  #keepLastPerAudience(n: number): void {
+    let front = this.messageCount;
+    for (const key of [0, ...this.players.map((p) => p.seat)]) {
+      let from = this.messages.length;
+      for (let kept = 0; from > 0 && kept < n; ) {
+        if (this.canSeeMessage(this.messages[--from], key === 0 ? null : key)) kept++;
+      }
+      const shownFrom = Math.max(this._messagesEvicted + from, this._messagesShownFrom.get(key) ?? 0);
+      if (shownFrom > this._messagesEvicted) this._messagesShownFrom.set(key, shownFrom);
+      front = Math.min(front, shownFrom);
+    }
+    this.#evictFront(front - this._messagesEvicted);
+  }
+
+  /** Forget cuts the front has reached, so a log with none stores none. */
+  #dropCutsAtFront(): void {
+    for (const [key, from] of this._messagesShownFrom) {
+      if (from <= this._messagesEvicted) this._messagesShownFrom.delete(key);
+    }
+  }
+
+  /** The stored lines `seat` (null the spectator) is shown: its audience's, from its `keepLast` cut. */
+  #shownTo(seat: number | null | undefined): MessageEntry[] {
+    const from = this.#cutIndex(seat);
+    return this.messages.filter((m, i) => i >= from && this.canSeeMessage(m, seat));
+  }
+
+  /** The stored index of the first line `seat`'s audience may be shown. */
+  #cutIndex(seat: number | null | undefined): number {
+    return (this._messagesShownFrom.get(seat ?? 0) ?? this._messagesEvicted) - this._messagesEvicted;
   }
 
   /** Drop `count` entries from the front, keeping the eviction offset in step. */
@@ -4247,6 +4295,7 @@ export class Game<
     }
     this.messages = this.messages.slice(count);
     this._messagesEvicted += count;
+    this.#dropCutsAtFront();
   }
 
   /**
@@ -4269,14 +4318,16 @@ export class Game<
   }
 
   /**
-   * How many of the lines `seat` may see have been evicted: the absolute
-   * position, among that seat's own lines, of the first one it still receives
-   * (#903). Same audience rule as `canSeeMessage`.
+   * How many of the lines `seat` may see it no longer receives, evicted or
+   * before its `keepLast` cut: the absolute position, among that seat's own
+   * lines, of the first one it still receives (#903, #1067). Same audience
+   * rule as `canSeeMessage`.
    * @internal
    */
   messageOffsetFor(seat: number | null | undefined): number {
-    if (seat === null || seat === undefined) return this._messagesEvictedPublic;
-    return this._messagesEvictedPublic + (this._messagesEvictedTo.get(seat) ?? 0);
+    const cut = this.messages.slice(0, this.#cutIndex(seat)).filter((m) => this.canSeeMessage(m, seat)).length;
+    if (seat === null || seat === undefined) return this._messagesEvictedPublic + cut;
+    return this._messagesEvictedPublic + (this._messagesEvictedTo.get(seat) ?? 0) + cut;
   }
 
   /** Adopt the eviction counts `logEviction` wrote; absent ones are zero. */
@@ -4286,6 +4337,11 @@ export class Game<
     this._messagesEvictedTo = new Map(
       Object.entries(json.messagesEvictedTo ?? {}).map(([seat, n]) => [Number(seat), n] as const),
     );
+    // A checkpoint restore keeps the live cuts over a shorter log; a cut past its end would hide lines not yet written.
+    this._messagesShownFrom = new Map(
+      Object.entries(json.messagesShownFrom ?? {}).map(([key, from]) => [Number(key), Math.min(from, this.messageCount)] as const),
+    );
+    this.#dropCutsAtFront();
   }
 
   /**
@@ -4298,6 +4354,7 @@ export class Game<
       ...(this._messagesEvicted > 0 && { messagesEvicted: this._messagesEvicted }),
       ...(this._messagesEvictedPublic > 0 && { messagesEvictedPublic: this._messagesEvictedPublic }),
       ...(this._messagesEvictedTo.size > 0 && { messagesEvictedTo: Object.fromEntries(this._messagesEvictedTo) }),
+      ...(this._messagesShownFrom.size > 0 && { messagesShownFrom: Object.fromEntries(this._messagesShownFrom) }),
     };
   }
 
@@ -4337,8 +4394,7 @@ export class Game<
    */
   getFormattedMessageEntries(seat?: number | null): FormattedMessage[] {
     const key = seat ?? 0;
-    return this.messages
-      .filter((m) => this.canSeeMessage(m, seat))
+    return this.#shownTo(seat)
       .map((m) => {
         const text = this.readingFor(m, key);
         return m.type === undefined ? { text } : { text, type: m.type };
@@ -4631,8 +4687,7 @@ export class Game<
     if (forSeat === undefined) return encodeValue(this.messages, this._ctx, this.constructor.name, 'messages') as MessageEntry[];
     const key = forSeat ?? 0;
     // A seat's copy carries only its own text: another seat's names what this one cannot see.
-    const source = this.messages
-      .filter((m) => this.canSeeMessage(m, forSeat))
+    const source = this.#shownTo(forSeat)
       .map((m) => ({ ...m, readings: [{ text: this.readingFor(m, key), seats: [key] }] }));
     const encoded = serializeForSeat(this._ctx, () => encodeValue(source, this._ctx, this.constructor.name, 'messages'));
     return concealRefsForSeat(encoded, this, forSeat ?? -1) as MessageEntry[];
