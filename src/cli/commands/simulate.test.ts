@@ -86,7 +86,7 @@ describe('runSimulation', () => {
     expect(result.failing).toHaveLength(1);
     const [g] = result.failing;
     expect(g.status).toBe('error');
-    expect(g.error).toBe('Game exceeded the maximum action count.');
+    expect(g.error).toMatch(/^Game did not finish within the maximum of 1 action\. Raise maxActions/);
   }, 60_000);
 
   it('plays a project policy written as a class, keeping its prototype and `this`', async () => {

@@ -240,6 +240,31 @@ async function hashProject(root: string): Promise<string> {
   return hash.digest('hex');
 }
 
+describe('traceCheckCommand names what it cannot read instead of calling it missing (#1174)', () => {
+  it('names a CHUNK.md it cannot read rather than passing over the chunk', async () => {
+    const project = await makeProject();
+    const chunkMd = join(project, DESIGN_DIR, 'chunks', 'odd', 'CHUNK.md');
+    await fs.mkdir(chunkMd, { recursive: true });
+    await expect(traceCheckCommand({ project })).rejects.toThrow(`Could not read ${chunkMd} (EISDIR)`);
+  });
+
+  it('names a manifest-listed test file it cannot read rather than passing over it', async () => {
+    const project = await makeProject();
+    await makeChunk(project, 'jab', { claims: [1], manifestRows: [{ files: 'src/loop.test.ts', status: 'NEW' }] });
+    const loop = join(project, 'src', 'loop.test.ts');
+    await fs.mkdir(dirname(loop), { recursive: true });
+    await fs.symlink(loop, loop);
+    await expect(traceCheckCommand({ project })).rejects.toThrow(`Could not read ${loop} (ELOOP)`);
+  });
+
+  it('names a RULINGS.md it cannot read rather than finding no rulings', async () => {
+    const project = await makeProject();
+    const rulings = join(project, DESIGN_DIR, 'RULINGS.md');
+    await fs.mkdir(rulings);
+    await expect(traceCheckCommand({ project })).rejects.toThrow(`Could not read ${rulings} (EISDIR)`);
+  });
+});
+
 describe('traceCheckCommand', () => {
   it('a test file in no chunk manifest is unassociated-test, and its claim refs are recorded unresolved, never dropped', async () => {
     const project = await makeProject();

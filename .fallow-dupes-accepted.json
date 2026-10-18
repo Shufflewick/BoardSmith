@@ -1,14 +1,6 @@
 {
   "accepted": [
     {
-      "content": "021065be73155da2",
-      "lines": 27,
-      "files": [
-        "src/cli/commands/verify-classify.ts",
-        "src/cli/commands/verify-derive-check.ts"
-      ]
-    },
-    {
       "content": "1207ddfa1fa44b57",
       "lines": 8,
       "files": [

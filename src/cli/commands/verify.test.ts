@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
-import { existsSync, promises as fs, writeFileSync } from 'node:fs';
+import { promises as fs, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { fixtureSandbox } from '../../testing/fixture-sandbox.test-helper.js';
 import { linkGameModules } from '../../testing/installed-modules.test-helper.js';
 import { spawnCli } from '../spawn-cli.test-helper.js';
 import { GAME_VITE_CONFIG } from '../lib/test-run-scope.js';
@@ -25,6 +26,31 @@ async function repo(files: Record<string, string>): Promise<string> {
   commitAll(dir, 'base');
   return dir;
 }
+
+describe("the test check names vitest's report when it cannot read it (#1174)", () => {
+  it('rather than taking the suite for one that wrote no report', async () => {
+    const sandbox = fixtureSandbox('bs-verify-report-');
+    const dir = join(sandbox.root, 'game');
+    await write(dir, {
+      'vite.config.ts': GAME_VITE_CONFIG,
+      'tests/a.test.ts': "import { it } from 'vitest';\nit('runs', () => {});\n",
+      // A vitest that leaves a folder where its JSON report belongs.
+      'node_modules/.bin/vitest':
+        "#!/usr/bin/env node\nconst flag = '--outputFile.json=';\n" +
+        "require('node:fs').mkdirSync(process.argv.find((a) => a.startsWith(flag)).slice(flag.length));\n",
+    });
+    await fs.chmod(join(dir, 'node_modules/.bin/vitest'), 0o755);
+    const report = join(dir, '.boardsmith');
+    for (const key of ['HOME', 'TMPDIR', 'PATH', 'NODE_OPTIONS'] as const) vi.stubEnv(key, sandbox.env[key]!);
+    try {
+      await expect(VERIFY_CHECKS.test({ projectDir: dir, changed: { files: [] } } as unknown as Parameters<typeof VERIFY_CHECKS.test>[0])).rejects.toThrow(
+        new RegExp(`Could not read ${report}.*test-report\\.json \\(EISDIR\\)`),
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});
 
 describe('resolveBase: where the changes are measured from', () => {
   it('defaults to the merge base with main, not main\'s newer commits', async () => {
@@ -525,6 +551,29 @@ describe('boardsmith verify: a re-verify reuses mutant outcomes only while nothi
     expect(lines).toContainEqual(expect.stringMatching(/^the mutant cache is off for this run: could not read .*dep.*; every mutant runs\.$/));
   });
 
+  it('keeps the outcome of each mutant that finished when the run is cut short, so a retry runs only the rest (#940)', async () => {
+    const dir = await gameOnBranch(false);
+    let cutShort!: () => void;
+    const stopped = new Promise<void>((resolve) => { cutShort = resolve; });
+    const interrupted = {
+      ...CHECKS,
+      // Stands in for SIGINT at the third mutant's label: nothing of verify after this point ever runs.
+      mutation: async (ctx: Parameters<typeof CHECKS.mutation>[0]) => {
+        const log = (line: string) => { if (line.startsWith('mutant 3/')) throw new Error('interrupted'); };
+        await CHECKS.mutation({ ...ctx, log }).catch(() => {});
+        cutShort();
+        return new Promise<never>(() => {});
+      },
+    };
+    void runVerify({ projectDir: dir, checks: interrupted, log: () => {} });
+    await stopped;
+
+    const lines: string[] = [];
+    const retry = await runVerify({ projectDir: dir, checks: CHECKS, log: (l) => lines.push(l) });
+    expect(check(retry.result, 'mutation').counts).toMatchObject({ mutants: 3, killed: 3, reused: 2 });
+    expect(freshRuns(lines)).toBe(1);
+  });
+
   it('keeps no outcome from a run whose tree changed while it ran', async () => {
     const dir = await gameOnBranch(false);
     const dirtying = dirtiesTheTree(dir, CHECKS);
@@ -656,13 +705,22 @@ describe('boardsmith verify: a run counts only when what the tests run with stay
     expect(await readVerifyResult(dir, head)).toBeUndefined();
   });
 
-  it('stops before the next mutant once a linked package changes, and saves no mutant outcome', async () => {
+  /** A game on its branch with a package `dep` linked from outside the repository, at `rate = 2`. */
+  async function gameWithLinkedDep(): Promise<{ dir: string; dep: string }> {
     const dir = await gameOnBranch(false);
-    const head = git(dir, 'rev-parse', 'HEAD').trim();
     const dep = join(dirname(dir), 'dep');
     await write(dep, { 'index.js': 'export const rate = 2;\n' });
     await fs.mkdir(join(dirname(dir), 'node_modules'));
     await fs.symlink(dep, join(dirname(dir), 'node_modules', 'dep'), 'dir');
+    return { dir, dep };
+  }
+
+  const savedOutcomes = async (dir: string) =>
+    (JSON.parse(await fs.readFile(await mutantCachePath(dir), 'utf-8')) as { outcomes: unknown[] }).outcomes;
+
+  it('stops before the next mutant once a linked package changes, keeping only the outcome found before the change (#940)', async () => {
+    const { dir, dep } = await gameWithLinkedDep();
+    const head = git(dir, 'rev-parse', 'HEAD').trim();
     const lines: string[] = [];
     const log = (line: string) => {
       lines.push(line);
@@ -671,8 +729,41 @@ describe('boardsmith verify: a run counts only when what the tests run with stay
     await expect(runVerify({ projectDir: dir, checks: CHECKS, log })).rejects.toThrow(/the packages linked from outside the repository/);
     expect(lines.filter((l) => /^mutant \d+\/\d+: /.test(l))).toHaveLength(2);
     expect(await readVerifyResult(dir, head)).toBeUndefined();
-    expect(existsSync(await mutantCachePath(dir))).toBe(false);
+    expect(await savedOutcomes(dir)).toHaveLength(1);
   });
+
+  for (const changesBack of [false, true]) {
+    it(`keeps no outcome of a mutant during whose run a linked package changed${changesBack ? ', even once it changes back' : ''} (#940)`, async () => {
+      const { dir, dep } = await gameWithLinkedDep();
+      const head = git(dir, 'rev-parse', 'HEAD').trim();
+      let step: 'before' | 'labelled' | 'changed' | 'done' = 'before';
+      const log = (line: string) => { if (line.startsWith('mutant 2/')) step = 'labelled'; };
+      const checks = {
+        ...CHECKS,
+        // The package changes just after mutant 2's own check found it unchanged, so it changes while mutant 2 runs.
+        mutation: (ctx: Parameters<typeof CHECKS.mutation>[0]) => CHECKS.mutation({ ...ctx, contextChange: async () => {
+          const change = await ctx.contextChange();
+          if (step === 'labelled') {
+            writeFileSync(join(dep, 'index.js'), 'export const rate = 3;\n');
+            step = 'changed';
+          } else if (step === 'changed' && changesBack) {
+            writeFileSync(join(dep, 'index.js'), 'export const rate = 2;\n');
+            step = 'done';
+          }
+          return change;
+        } }),
+      };
+      const run = runVerify({ projectDir: dir, checks, log });
+      if (changesBack) {
+        const { result } = await run;
+        expect(check(result, 'mutation').passed).toBe(false);
+      } else {
+        await expect(run).rejects.toThrow(/the packages linked from outside the repository/);
+        expect(await readVerifyResult(dir, head)).toBeUndefined();
+      }
+      expect(await savedOutcomes(dir)).toHaveLength(1);
+    });
+  }
 });
 
 describe('the boardsmith verify command, as a user runs it', () => {

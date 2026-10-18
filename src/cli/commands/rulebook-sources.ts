@@ -132,15 +132,10 @@ export function sliceDocuments(sliceSource: string | undefined, recorded: readon
  */
 export async function readSliceSources(projectDir: string): Promise<Map<string, string | undefined>> {
   const rulebookDir = designRulebookDir(resolve(projectDir));
-  let names: string[];
-  try {
-    names = (await fs.readdir(rulebookDir, { withFileTypes: true }))
-      .filter((e) => e.isFile() && e.name.endsWith('.md') && !NON_SLICE_FILES.includes(e.name))
-      .map((e) => e.name)
-      .sort();
-  } catch {
-    return new Map();
-  }
+  const names = ((await readIfExists(rulebookDir, (p) => fs.readdir(p, { withFileTypes: true }))) ?? [])
+    .filter((e) => e.isFile() && e.name.endsWith('.md') && !NON_SLICE_FILES.includes(e.name))
+    .map((e) => e.name)
+    .sort();
   const sources = new Map<string, string | undefined>();
   for (const name of names) {
     sources.set(name, parseSliceSource(await fs.readFile(join(rulebookDir, name), 'utf-8')));
@@ -150,13 +145,8 @@ export async function readSliceSources(projectDir: string): Promise<Map<string, 
 
 /** The documents `rulebook/INDEX.md` records; `[]` when there is no INDEX.md. */
 export async function readRecordedSourcePaths(projectDir: string): Promise<string[]> {
-  try {
-    return recordedSourcePaths(
-      await fs.readFile(join(designRulebookDir(resolve(projectDir)), 'INDEX.md'), 'utf-8'),
-    );
-  } catch {
-    return [];
-  }
+  const text = await readIfExists(join(designRulebookDir(resolve(projectDir)), 'INDEX.md'), (p) => fs.readFile(p, 'utf-8'));
+  return text === undefined ? [] : recordedSourcePaths(text);
 }
 
 interface SliceSourceCheck {
@@ -287,4 +277,43 @@ async function readNamedSlices(projectDir: string, slices: string[]): Promise<Ma
     texts.set(name, text);
   }
   return texts;
+}
+
+/**
+ * Reads the LIVE `rulebook/*.md` tree directly, the source `verify-classify.ts`'s `computeRunPairs`
+ * pairs against and `verify-derive-check.ts` checks (excluding `INDEX.md`, the archive manifest, and
+ * `00-visual-survey.md`, `ingest-archive.ts`'s presentation-by-design UI-ask handoff artifact).
+ * This is the correct "which files are slices" definition for a source-free, run-less check
+ * (decision 14): CHECK-04 targets live slices with NO staged prerequisite and never constructs a
+ * `.verify/<runId>/` staging path — proven behaviorally by
+ * `verifyDeriveCheckCommand`'s own `.verify/` decoy test.
+ */
+export async function readLiveSlices(
+  projectDir: string,
+): Promise<{ path: string; text: string }[]> {
+  const rulebookDir = designRulebookDir(projectDir);
+  const entries = await readIfExists(rulebookDir, (p) => fs.readdir(p, { withFileTypes: true }));
+  if (entries === undefined) {
+    // (WR-10): this is the ONE "no rulebook/" message; a rulebook/ that cannot be read is named by readIfExists.
+    throw new Error(
+      `No rulebook/ directory in ${projectDir}.\n` +
+        `Pass --project <dir> to target the bs-project this check should read.`,
+    );
+  }
+  const names = entries
+    .filter(
+      (e) =>
+        e.isFile() &&
+        e.name.endsWith('.md') &&
+        e.name !== 'INDEX.md' &&
+        e.name !== '00-visual-survey.md',
+    )
+    .map((e) => e.name)
+    .sort();
+  return Promise.all(
+    names.map(async (name) => ({
+      path: `rulebook/${name}`,
+      text: await fs.readFile(join(rulebookDir, name), 'utf-8'),
+    })),
+  );
 }

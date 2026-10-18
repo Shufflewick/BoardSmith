@@ -7,8 +7,8 @@ import { styleText } from 'node:util';
 import { atomicWriteFile } from './verify-run.js';
 import { withLedgerLock } from '../lib/ledger-lock.js';
 import { readFencedJsonLedger, type FencedJsonLedgerFile } from '../lib/fenced-json-ledger.js';
+import { readLiveSlices } from './rulebook-sources.js';
 import {
-  readLiveSlices,
   readSliceArgument,
   parseSubagentJsonInput,
   type SubagentJsonParseResult,
@@ -1584,8 +1584,7 @@ export async function verifyExampleRecordCommand(
     throw new Error('verify-example-record requires --translations <file>.');
   }
 
-  const slicePath = options.slicePath;
-  const sliceText = await readSliceArgument(projectDir, slicePath, 'verify-example-record');
+  const { slicePath, text: sliceText } = await readSliceArgument(projectDir, options.slicePath, 'verify-example-record');
   const extraction = await readExtractorReturn(options.extraction, 'verify-example-record');
   const translations = await readTranslatorReturns(options.translations);
   const repairs = [...extraction.repairs, ...translations.repairs];
@@ -1785,8 +1784,7 @@ export async function verifyExampleTranslateCommand(
     throw new Error('verify-example-translate requires --extraction <file>.');
   }
 
-  const slicePath = options.slicePath;
-  const sliceText = await readSliceArgument(projectDir, slicePath, 'verify-example-translate');
+  const { slicePath, text: sliceText } = await readSliceArgument(projectDir, options.slicePath, 'verify-example-translate');
   const extraction = await readExtractorReturn(options.extraction, 'verify-example-translate');
   const { specsById, inconsistent } = readSliceExamples(slicePath, sliceText, extraction.examples);
 

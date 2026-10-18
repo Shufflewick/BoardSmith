@@ -40,7 +40,7 @@
  * Any finding exits non-zero. There is no flag that skips a check.
  */
 import { promises as fs } from 'node:fs';
-import { readIfExists } from '../lib/read-if-exists.js';
+import { readIfExists, readListedText } from '../lib/read-if-exists.js';
 import { join, relative, resolve as pathResolve, sep } from 'node:path';
 import { styleText } from 'node:util';
 import {
@@ -257,11 +257,8 @@ async function implementationNow(projectDir: string): Promise<SourceFile[]> {
   const listed = await git(projectDir, ['ls-files', '--cached', '--others', '--exclude-standard', '--', 'src']);
   const files: SourceFile[] = [];
   for (const path of listed.split('\n').filter(isImplementation)) {
-    try {
-      files.push({ path, text: await fs.readFile(join(projectDir, path), 'utf-8') });
-    } catch {
-      continue; // listed by git but deleted in the working tree
-    }
+    const text = await readListedText(join(projectDir, path));
+    if (text !== undefined) files.push({ path, text });
   }
   return files;
 }
@@ -271,11 +268,8 @@ async function testSupportSources(projectDir: string): Promise<SourceFile[]> {
   const listed = await git(projectDir, ['ls-files', '--cached', '--others', '--exclude-standard', '--', 'tests']);
   const sources: SourceFile[] = [];
   for (const path of listed.split('\n').filter((p) => /\.(ts|mts|js|mjs)$/.test(p))) {
-    try {
-      sources.push({ path, text: await fs.readFile(join(projectDir, path), 'utf-8') });
-    } catch {
-      continue; // listed by git but deleted in the working tree
-    }
+    const text = await readListedText(join(projectDir, path));
+    if (text !== undefined) sources.push({ path, text });
   }
   return sources;
 }
@@ -351,11 +345,8 @@ function manifestShapeFindings(manifest: SpecManifest, claims: ChunkClaims): Tes
 async function readRowFile(projectDir: string, row: SpecManifestRow): Promise<ChunkTestFile | undefined> {
   const absPath = resolveManifestPath(projectDir, row.testFile);
   if (absPath === 'escapes') return undefined;
-  try {
-    return { path: row.testFile, absPath, source: await fs.readFile(absPath, 'utf-8') };
-  } catch {
-    return undefined;
-  }
+  const source = await readIfExists(absPath, (p) => fs.readFile(p, 'utf-8'));
+  return source === undefined ? undefined : { path: row.testFile, absPath, source };
 }
 
 /** Whether each claim the row lists is in force and cited by a test in the file that runs. */
@@ -582,11 +573,8 @@ async function projectScripts(projectDir: string): Promise<SourceFile[]> {
   const scripts: SourceFile[] = [];
   const wanted = (p: string) => /\.[cm]?[jt]sx?$/.test(p) && !/(^|\/)node_modules\//.test(p);
   for (const path of lines(listed).filter(wanted)) {
-    try {
-      scripts.push({ path, text: await fs.readFile(join(projectDir, path), 'utf-8') });
-    } catch {
-      continue; // listed by git but deleted in the working tree
-    }
+    const text = await readListedText(join(projectDir, path));
+    if (text !== undefined) scripts.push({ path, text });
   }
   return scripts;
 }

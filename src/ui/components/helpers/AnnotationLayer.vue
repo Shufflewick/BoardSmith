@@ -48,6 +48,8 @@ interface ResolvedAnnotation {
 const GAP = 8; // var(--bsg-s2)
 const BUBBLE_HEIGHT_ESTIMATE = 80;
 const RING_OFFSET = 3; // px outside the target rect
+const EDGE_MARGIN = 8; // var(--bsg-s2): clearance from the viewport's left edge
+const CARET_INSET = 12; // keeps the caret off the card's rounded corner
 
 const overlayRoot = ref<HTMLElement | null>(null);
 const resolvedAnnotations = ref<ResolvedAnnotation[]>([]);
@@ -99,13 +101,18 @@ function resolve(ann: Annotation, boardRect: DOMRect | null): ResolvedAnnotation
   }
 
   // Next to the target: below it, or above when it would run off the bottom.
-  const left = `${Math.max(0, rect.left + rect.width / 2)}px`;
+  // Only CSS knows the bubble's width, so CSS clamps the shift that centres it (#907).
+  const centre = rect.left + rect.width / 2;
+  const left = `${centre}px`;
+  const transform = `translateX(max(-50%, ${EDGE_MARGIN - centre}px))`;
+  // The same shift, undone for the caret, so it still points at the target.
+  const caret = { '--caret-left': `min(50%, ${Math.max(CARET_INSET, centre - EDGE_MARGIN)}px)` };
   const below = rect.top + rect.height + GAP;
   if (below + BUBBLE_HEIGHT_ESTIMATE <= window.innerHeight) {
-    return { text: ann.text, ring, caretSide: 'top', anchorStyle: { left, top: `${below}px`, transform: 'translateX(-50%)' } };
+    return { text: ann.text, ring, caretSide: 'top', anchorStyle: { left, top: `${below}px`, transform, ...caret } };
   }
   const above = Math.max(0, rect.top - GAP - BUBBLE_HEIGHT_ESTIMATE);
-  return { text: ann.text, ring, caretSide: 'bottom', anchorStyle: { left, top: `${above}px`, transform: 'translateX(-50%)' } };
+  return { text: ann.text, ring, caretSide: 'bottom', anchorStyle: { left, top: `${above}px`, transform, ...caret } };
 }
 
 useOverlayTracking({

@@ -77,9 +77,16 @@ describe('array-valued attributes produce markers (#20)', () => {
   });
 
   it('skips a player reference — a seat number is on screen by design', () => {
-    const found = candidates({ player: { seat: 1, name: 'A' } });
+    // The shape the engine serializes a player-valued attribute as.
+    const found = candidates({ player: { __playerRef: 1, seat: 1, color: '#f00', name: 'A' } });
     expect(found.map((c) => c.value)).not.toContain('1');
     expect(found.map((c) => c.value)).not.toContain('A');
+  });
+
+  it('walks a game object that merely has a seat and a name (#916)', () => {
+    // Not a reference: its other values are the game's own state.
+    const found = candidates({ claim: { seat: 1, name: 'A', secret: 'wolf' } });
+    expect(found.map((c) => c.value)).toContain('wolf');
   });
 
   it('still skips $-prefixed layout metadata', () => {

@@ -133,11 +133,16 @@ export async function appendGitignoreEntry(projectDir: string): Promise<void> {
   );
 }
 
+/**
+ * Whether anything stands at `path`, a link that cannot be followed included, so a move never lands on it.
+ * At a source path that is deliberate too: a dangling link there is stranded and moved like any file.
+ */
 async function exists(path: string): Promise<boolean> {
   try {
-    await fs.stat(path);
+    await fs.lstat(path);
     return true;
   } catch {
+    // A health check: a path it cannot look at all (an unsearchable folder above it) is not a finding.
     return false;
   }
 }
@@ -221,6 +226,7 @@ async function strandedScratchFindings(projectDir: string): Promise<DoctorFindin
   try {
     rootEntries = await fs.readdir(projectDir, { withFileTypes: true });
   } catch {
+    // A health check: a root it cannot list has no stranded scripts to report.
     rootEntries = [];
   }
   const findings: DoctorFinding[] = [];

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { DESIGN_DIR } from '../lib/project-paths.js';
@@ -11,6 +11,7 @@ import {
 } from './verify-example-replay.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
+import { fixtureSandbox } from '../../testing/fixture-sandbox.test-helper.js';
 
 const SLICE_PATH = 'rulebook/02-punch.md';
 const SLICE_TEXT =
@@ -125,6 +126,26 @@ describe('verifyExampleRunCommand', () => {
     await recordExampleReplayVerdicts(project, [notRunRecord(2, PASSING)]);
     await fs.mkdir(join(project, 'tests', 'examples', 'punch.examples.test.ts'), { recursive: true });
     await expectRunRefused(project, /Could not read .*tests\/examples\/punch\.examples\.test\.ts \(EISDIR\)/);
+  });
+
+  it("names vitest's report when it cannot read it, rather than saying vitest wrote none (#1174)", async () => {
+    await recordExampleReplayVerdicts(project, [notRunRecord(2, PASSING)]);
+    await verifyExampleEmitCommand({ project, chunk: 'punch' });
+    // A vitest that leaves a folder where its report belongs.
+    const sandbox = fixtureSandbox('bs-example-run-report-');
+    await fs.rm(join(project, 'node_modules'));
+    await fs.mkdir(join(project, 'node_modules', '.bin'), { recursive: true });
+    await fs.writeFile(
+      join(project, 'node_modules', '.bin', 'vitest'),
+      "#!/usr/bin/env node\nconst flag = '--outputFile=';\nrequire('node:fs').mkdirSync(process.argv.find((a) => a.startsWith(flag)).slice(flag.length));\n",
+      { mode: 0o755 },
+    );
+    for (const key of ['HOME', 'TMPDIR', 'PATH', 'NODE_OPTIONS'] as const) vi.stubEnv(key, sandbox.env[key]!);
+    try {
+      await expectRunRefused(project, /Could not read .*report\.json \(EISDIR\)/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('refuses to run a file that no longer matches the ledger, writing nothing', async () => {

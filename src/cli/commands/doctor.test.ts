@@ -215,6 +215,19 @@ describe('boardsmith doctor', () => {
     expect(process.exitCode).toBe(1);
   });
 
+  it('reports a conflict, and moves nothing over it, when the design copy is a link it cannot follow (#1174)', async () => {
+    const projectDir = await project({ 'SKETCH.md': 'root copy\n' });
+    const designCopy = join(projectDir, DESIGN_DIR, 'SKETCH.md');
+    await fs.mkdir(join(projectDir, DESIGN_DIR), { recursive: true });
+    await fs.symlink(designCopy, designCopy);
+
+    const result = await doctorCommand({ project: projectDir, fix: true });
+
+    expect(result.findings.map((f) => f.kind)).toEqual(['move-conflict']);
+    expect(await read(join(projectDir, 'SKETCH.md'))).toBe('root copy\n');
+    expect(await fs.readlink(designCopy)).toBe(designCopy);
+  });
+
   it('is idempotent — a second --fix run finds nothing and exits zero', async () => {
     const projectDir = await project({
       'SKETCH.md': '# sketch\n',

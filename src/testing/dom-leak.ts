@@ -28,6 +28,7 @@ import type { default as AutoUIComponent } from '../ui/components/auto-ui/AutoUI
 import type { GameRootView } from '../ui/types.js';
 import { isEngineRootField, type AnimationEvent, type ElementJSON, type SeatViewJSON } from '../engine/index.js';
 import { PERSIST_KEY } from '../persistence/persistence.js';
+import { isSerializedReference } from '../engine/utils/serializer.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE, isHiddenPlaceholder } from '../engine/element/hidden-placeholder.js';
 import type { BoardInteraction } from '../ui/composables/useBoardInteraction.js';
 import type { TableSeat } from '../ui/composables/useTableSeat.js';
@@ -1225,7 +1226,7 @@ const MIN_NESTED_NUMERIC_MARKER_DIGITS = 3;
 /** {@link identityStringsIn}, for a value that is not itself a scalar. */
 function nestedIdentityStrings(value: unknown, seen: Set<unknown>): string[] {
   if (value === null || typeof value !== 'object') return [];
-  if (isReferenceLike(value)) return [];
+  if (isSerializedReference(value)) return [];
   // A game's state can hold a cycle (an element referencing its container);
   // walking one is not worth crashing the assertion that exists to protect it.
   if (seen.has(value)) return [];
@@ -1240,21 +1241,6 @@ function nestedIdentityStrings(value: unknown, seen: Set<unknown>): string[] {
     }
     return [scalar];
   });
-}
-
-/**
- * A serialized element/player reference, or a live Player. Either way its
- * contents are public handles rather than identity — see `identityStringsIn`.
- */
-function isReferenceLike(value: object): boolean {
-  return (
-    '__elementRef' in value ||
-    '__elementId' in value ||
-    '__playerRef' in value ||
-    // A live Player object reachable off an attribute (e.g. `player`): its seat
-    // and name are on screen by design.
-    ('seat' in value && 'name' in value)
-  );
 }
 
 /** Every attribute value (+ name) that survives on a FINAL tree node (excluding `__hidden`). */

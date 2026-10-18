@@ -1114,7 +1114,7 @@ function heldElsewhere(path: string): Error {
   try {
     held = JSON.parse(readFileSync(holderPath(path), 'utf8')) as typeof held;
   } catch {
-    // Unrecorded: the refusal below still stands, it just cannot name the run.
+    // Any failure only leaves the run unnamed: the refusal below stands either way.
   }
   const who =
     held.pid === undefined
