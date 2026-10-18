@@ -1202,7 +1202,7 @@ async function aimedElsewhere(answering: Answering): Promise<Control | undefined
           ? undefined
           : inPageTime(frame.page(), 'reading what the candidate stands for', () => pinned.target.getAttribute('data-bs-candidate', { timeout: LOOK_MS }));
       const first = await named(0.1, 0.1);
-      if (first !== undefined && first !== (await named(0.9, 0.9))) return asItStandsNow(pinned);
+      if (first !== undefined && first !== (await named(0.9, 0.9))) return await asItStandsNow(pinned);
       refused.add(candidate.key);
     }
     return undefined;
