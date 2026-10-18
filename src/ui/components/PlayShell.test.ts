@@ -78,6 +78,14 @@ describe('the layout', () => {
     expect(wrapper.find('.game-shell__zoom-container .my-board').exists()).toBe(true);
   });
 
+  it('draws the board error message unzoomed, and the board at its zoom again once it draws (#1158)', async () => {
+    const wrapper = mountShell({ zoomLevel: 1.27, boardFailed: true });
+    const zoom = () => (wrapper.get('.game-shell__zoom-container').element as HTMLElement).style.getPropertyValue('--zoom-level');
+    expect(zoom()).toBe('1');
+    await wrapper.setProps({ boardFailed: false });
+    expect(zoom()).toBe('1.27');
+  });
+
   it('keeps the modal host outside the board scroller and zoom container', () => {
     const wrapper = mountShell();
     const modal = wrapper.get('#bs-game-modal').element;
