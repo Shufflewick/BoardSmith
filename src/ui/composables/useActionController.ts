@@ -90,7 +90,7 @@
  */
 
 import { ref, readonly, computed, watch, nextTick, getCurrentScope, onScopeDispose } from 'vue';
-import { isDevMode, devWarn, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList } from './actionControllerHelpers.js';
+import { isDevMode, devWarn, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList, editorRuleRefusal } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
 import { findMatchingChoice, oneChoiceListRefusal, oneElementListRefusal } from '../../engine/action/choice-matching.js';
 
@@ -2010,6 +2010,37 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return { success: true };
   }
 
+  /** Why `fill` refuses this value for this pick before anything is sent, or null. */
+  function fillValueRefusal(selection: EnrichedPickMetadata, value: unknown): string | null {
+    const selectionName = selection.name;
+    // PIT OF SUCCESS: Reject a scalar for a multiSelect pick (UIX-02).
+    // Mirrors toggleMultiSelect's reverse guard:
+    // that guard rejects a non-multiSelect selection from toggleMultiSelect; this one
+    // rejects a multiSelect selection from fill() unless the value is already an array.
+    const multiSelectCfg = resolveMultiSelectConfig(selection);
+    if (multiSelectCfg && !Array.isArray(value)) {
+      return (
+        `fill('${selectionName}', ...) rejected: '${selectionName}' is a multiSelect selection ` +
+        `(min ${multiSelectCfg.min}, max ${multiSelectCfg.max ?? 'unlimited'}) and requires an array. ` +
+        `Use toggleMultiSelect()/confirmMultiSelect(), or pass an array directly to fill().`
+      );
+    }
+
+    // THE SAME GUARD FOR A LIST (#249). A list pick's value is a sequence, and a
+    // bare entry submitted as the whole answer is the mistake most likely to be
+    // made by a custom UI that has just learned the verb.
+    const orderedListCfg = resolveOrderedListConfig(selection);
+    if (orderedListCfg && !Array.isArray(value)) {
+      return (
+        `fill('${selectionName}', ...) rejected: '${selectionName}' is an ordered list ` +
+        `(min ${orderedListCfg.min}, max ${orderedListCfg.max ?? 'unlimited'}) and requires an array. ` +
+        `Use appendListEntry()/confirmMultiSelect(), or pass the whole array to fill().`
+      );
+    }
+
+    return editorRuleRefusal(selection, value);
+  }
+
   async function fill(selectionName: string, value: unknown): Promise<PickValidationResult> {
     // CR-02: EVERY fill() failure path must setError() — GameShell's UIX-01
     // watch is the only place a failed action surfaces (ActionPanel's direct
@@ -2046,31 +2077,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return { valid: false, error };
     }
 
-    // PIT OF SUCCESS: Reject a scalar for a multiSelect pick (UIX-02).
-    // Mirrors toggleMultiSelect's reverse guard (useActionController.ts ~1729-1734):
-    // that guard rejects a non-multiSelect selection from toggleMultiSelect; this one
-    // rejects a multiSelect selection from fill() unless the value is already an array.
-    const multiSelectCfg = resolveMultiSelectConfig(selection);
-    if (multiSelectCfg && !Array.isArray(value)) {
-      const error =
-        `fill('${selectionName}', ...) rejected: '${selectionName}' is a multiSelect selection ` +
-        `(min ${multiSelectCfg.min}, max ${multiSelectCfg.max ?? 'unlimited'}) and requires an array. ` +
-        `Use toggleMultiSelect()/confirmMultiSelect(), or pass an array directly to fill().`;
-      setError(error);
-      return { valid: false, error };
-    }
-
-    // THE SAME GUARD FOR A LIST (#249). A list pick's value is a sequence, and a
-    // bare entry submitted as the whole answer is the mistake most likely to be
-    // made by a custom UI that has just learned the verb.
-    const orderedListCfg = resolveOrderedListConfig(selection);
-    if (orderedListCfg && !Array.isArray(value)) {
-      const error =
-        `fill('${selectionName}', ...) rejected: '${selectionName}' is an ordered list ` +
-        `(min ${orderedListCfg.min}, max ${orderedListCfg.max ?? 'unlimited'}) and requires an array. ` +
-        `Use appendListEntry()/confirmMultiSelect(), or pass the whole array to fill().`;
-      setError(error);
-      return { valid: false, error };
+    const refusal = fillValueRefusal(selection, value);
+    if (refusal !== null) {
+      setError(refusal);
+      return { valid: false, error: refusal };
     }
 
     // Handle repeating selections
@@ -2185,14 +2195,15 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       // Check if this repeating selection is done but action continues
       if (result.done) {
         // Move accumulated values to args (server expects raw values, not {value, display} objects)
-        currentArgs.value[selection.name] = repeatingState.value.accumulated.map(a => a.value);
+        const { accumulated } = repeatingState.value;
+        currentArgs.value[selection.name] = accumulated.map(a => a.value);
+        actionSnapshot.value?.collectedPicks.set(selection.name, {
+          value: currentArgs.value[selection.name],
+          display: accumulated.map(a => a.display).join(', '),
+          skipped: false,
+        });
         repeatingState.value = null;
         return { valid: true };
-      }
-
-      // For selections with onEach, clear accumulated since items are processed immediately
-      if (selection.repeat?.hasOnEach) {
-        repeatingState.value.accumulated = [];
       }
 
       // More iterations needed - update choices if provided

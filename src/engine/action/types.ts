@@ -209,6 +209,14 @@ export interface PendingActionState {
    * `GameRunner.markStalePicks` writes it (#767).
    */
   stalePicks?: string[];
+  /**
+   * Where this action's own picks' `onSelect` and `onEach` moved elements from:
+   * element id to its branch before the first of them that changed it, or
+   * `null` for one they created. The history entry names each pick by it, so
+   * it says where the pick was before the action (#1144). Present only on a
+   * pending action a host records (`createPendingActionState(..., true)`).
+   */
+  branchesBeforePicks?: Record<number, string | null>;
 }
 
 /**

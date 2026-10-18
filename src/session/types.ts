@@ -523,6 +523,8 @@ export interface SerializedPendingActionState {
   conditionHeld?: boolean;
   picksOnOffer?: string[];
   stalePicks?: string[];
+  /** Persisted only: `pendingActionForSeat` leaves it out of what a seat is shown (#1144). */
+  branchesBeforePicks?: Record<number, string | null>;
 }
 
 /**

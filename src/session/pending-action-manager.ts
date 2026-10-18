@@ -85,7 +85,7 @@ export class PendingActionManager<G extends Game = Game> {
     if ('refusal' in found) return found.refusal;
 
     const executor = this.#runner.game.getActionExecutor();
-    const pendingState = executor.createPendingActionState(actionName, playerPosition);
+    const pendingState = executor.createPendingActionState(actionName, playerPosition, true);
     // A held follow-up's published args are the engine's, bound before any
     // client pick, so every pick's callbacks see them.
     this.#runner.bindFollowUpArgs(pendingState, playerPosition);

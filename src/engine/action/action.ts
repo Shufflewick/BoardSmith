@@ -1,6 +1,6 @@
 import { rulesErrorSentence, withDevDetail } from './rules-error.js';
 import type { GameElement } from '../element/game-element.js';
-import { isElement } from '../element/game-element.js';
+import { forEachInSubtree, isElement } from '../element/game-element.js';
 import type { Player } from '../player/player.js';
 import type { Game } from '../element/game.js';
 import type {
@@ -1048,32 +1048,15 @@ export class ActionExecutor {
     // Type-specific validation
     switch (selection.type) {
       case 'text': {
-        const textSel = selection as TextSelection;
-        const str = value as string;
-        if (typeof str !== 'string') {
-          errors.push(`${selection.name} must be a string`);
-        } else {
-          // The bounds live in `text-rules.ts` because the Action Panel has to
-          // apply the same ones to tell a player why their text will be refused
-          // before they submit it (#229). Two copies of these three checks is
-          // two rule sets that drift.
-          errors.push(...textRuleErrors(selection.name, str, textSel));
-        }
+        // The bounds live in `text-rules.ts` because the Action Panel and a
+        // custom UI's `fill` apply the same ones before submitting (#229, #1057).
+        errors.push(...textRuleErrors(selection.name, value, selection as TextSelection));
         break;
       }
 
       case 'number': {
-        const numSel = selection as NumberSelection;
-        const num = value as number;
-        if (typeof num !== 'number' || isNaN(num)) {
-          errors.push(`${selection.name} must be a number`);
-        } else {
-          // The bounds live in `number-rules.ts` because the Action Panel has to
-          // apply the same ones to tell a player why their number will be
-          // refused before they submit it (#237), exactly as the text case above
-          // does. Two copies of these three checks is two rule sets that drift.
-          errors.push(...numberRuleErrors(selection.name, num, numSel));
-        }
+        // The bounds live in `number-rules.ts` for the same reason (#237, #1057).
+        errors.push(...numberRuleErrors(selection.name, value, selection as NumberSelection));
         break;
       }
     }
@@ -2114,7 +2097,7 @@ export class ActionExecutor {
     if (isFirstIteration && selection.onSelect) {
       try {
         const ctx = this.createOnSelectContext();
-        changing(this.game._ctx, () => (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(chosen, ctx));
+        this.runPickCallback(pendingState, () => (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(chosen, ctx));
 
         if (!pendingState.onSelectFired) {
           pendingState.onSelectFired = new Set();
@@ -2135,7 +2118,7 @@ export class ActionExecutor {
     // Run onEach callback if present
     if (repeatConfig?.onEach) {
       try {
-        changing(this.game._ctx, () => repeatConfig.onEach!(context, chosen));
+        this.runPickCallback(pendingState, () => repeatConfig.onEach!(context, chosen));
       } catch (error) {
         return { done: true, error: gameCodeThrew(action.name, `onEach of '${selection.name}' in action '${action.name}'`, error).error };
       }
@@ -2192,15 +2175,45 @@ export class ActionExecutor {
   }
 
   /**
-   * Create initial pending action state for an action.
+   * Create initial pending action state for an action. `recorded` when a host
+   * records the action in its history: its picks' callbacks then note where
+   * they moved elements from, in `branchesBeforePicks` (#1144).
    */
-  createPendingActionState(actionName: string, playerPosition: number): PendingActionState {
+  createPendingActionState(actionName: string, playerPosition: number, recorded = false): PendingActionState {
     return {
       actionName,
       playerPosition,
       collectedArgs: {},
       currentSelectionIndex: 0,
+      ...(recorded && { branchesBeforePicks: {} }),
     };
+  }
+
+  /**
+   * Run a pick's `onSelect` or `onEach`. In a recorded pending action, note in
+   * `branchesBeforePicks` the branch each element had before the first such
+   * callback that moved it, and `null` for one it created, so the history
+   * entry can name every pick where it was before the action (#1144).
+   */
+  private runPickCallback(pendingState: PendingActionState, run: () => void): void {
+    const noted = pendingState.branchesBeforePicks;
+    // World mode records elements by id, which no move changes.
+    if (!noted || this.game._ctx._worldMode) {
+      changing(this.game._ctx, run);
+      return;
+    }
+    const before = branchesById(this.game);
+    try {
+      changing(this.game._ctx, run);
+    } finally {
+      // Also after a throw: what the callback moved before it threw stays moved.
+      const after = branchesById(this.game);
+      // Replaced, not changed in place, so a copy of the state taken earlier keeps what it had.
+      const moved = { ...noted };
+      for (const [id, branch] of before) if (!(id in moved) && after.get(id) !== branch) moved[id] = branch;
+      for (const id of after.keys()) if (!before.has(id) && !(id in moved)) moved[id] = null;
+      pendingState.branchesBeforePicks = moved;
+    }
   }
 
   /**
@@ -2262,7 +2275,7 @@ export class ActionExecutor {
     if (selection.onSelect) {
       try {
         const ctx = this.createOnSelectContext();
-        changing(this.game._ctx, () => (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(resolvedValue, ctx));
+        this.runPickCallback(pendingState, () => (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(resolvedValue, ctx));
 
         // Track that onSelect fired for this selection (for onCancel)
         if (!pendingState.onSelectFired) {
@@ -2386,4 +2399,11 @@ export class ActionExecutor {
     }
     return null;
   }
+}
+
+/** Every element's branch, by id, in the game's tree and its pile. */
+function branchesById(game: Game): Map<number, string> {
+  const branches = new Map<number, string>();
+  for (const root of [game, game.pile]) forEachInSubtree(root, (element) => branches.set(element.id, element.branch()));
+  return branches;
 }
