@@ -3071,6 +3071,25 @@ describe('Object-subset choice resolution (custom-UI partial choice objects)', (
     const resolved = executor.resolveArgs(action, { destination: bogus }, player);
     expect(executor.validateAction(action, player, resolved).valid).toBe(false);
   });
+
+  // #1131: an object with no own keys had no field to fail, so it named the only object choice.
+  for (const [kind, empty] of [['{}', {}], ['a Date', new Date(0)], ['a Map', new Map()], ['a Set', new Set()]] as const) {
+    it(`refuses ${kind} as the only object choice offered (#1131)`, () => {
+      const action = Action.create('pick')
+        .chooseFrom('item', { choices: [{ label: 'a' }] })
+        .execute(() => {});
+      const result = executor.executeAction(action, game.getPlayer(1)!, { item: empty });
+      expect(result.success).toBe(false);
+    });
+
+    it(`refuses ${kind} as an item of a multiSelect with one object choice (#1131)`, () => {
+      const action = Action.create('pick')
+        .chooseFrom('items', { choices: [1, { label: 'a' }], multiSelect: { min: 1 } })
+        .execute(() => {});
+      const result = executor.executeAction(action, game.getPlayer(1)!, { items: [1, empty] });
+      expect(result.success).toBe(false);
+    });
+  }
 });
 
 describe('repeating element selection with an unresolvable choice', () => {
