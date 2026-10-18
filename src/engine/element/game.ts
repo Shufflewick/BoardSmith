@@ -2525,6 +2525,9 @@ export class Game<
    * the panel, `performAction` refuses with it, and `enumerateActionMoves`
    * leaves out what it refuses (#690), so an enumerated move is never answered
    * "Action X is disabled".
+   *
+   * Ask it only once the action's condition holds: a false condition guards
+   * the disabled rule, which may read what only that condition makes safe (#1129).
    */
   getActionRefusalReason(action: ActionDefinition, player: P): string | null {
     return getActionLevelDisabledReasons(this, player.seat, [action.name])[action.name]
@@ -2659,6 +2662,11 @@ export class Game<
     const action = this._actions.get(actionName);
     if (!action) {
       return { success: false, error: `Unknown action: ${actionName}` };
+    }
+
+    // The condition first, as the offer checks it: a false condition guards every rule after it (#1129).
+    if (!options?.followUp && !this._actionExecutor.conditionHolds(action, player)) {
+      return { success: false, error: 'Action is not available' };
     }
 
     // Enforce action-level disabling at execution, not just in the projection

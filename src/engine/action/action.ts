@@ -1584,16 +1584,14 @@ export class ActionExecutor {
     return this.hasValidSelectionPath(action.selections, player, resolved, 0, action.name);
   }
 
-  isActionAvailable(action: ActionDefinition, player: Player): boolean {
-    const context: ActionContext = {
-      game: this.game,
-      player,
-      args: {},
-    };
+  /** Whether the action's condition offers it to `player`, with empty args as availability sees it. */
+  conditionHolds(action: ActionDefinition, player: Player): boolean {
+    return !action.condition
+      || evaluateCondition(action.condition, { game: this.game, player, args: {} }, `action '${action.name}'`);
+  }
 
-    if (action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
-      return false;
-    }
+  isActionAvailable(action: ActionDefinition, player: Player): boolean {
+    if (!this.conditionHolds(action, player)) return false;
 
     // Check if there's at least one valid path through all selections.
     // Pass action.name so tutorial gate disabled reasons are included when

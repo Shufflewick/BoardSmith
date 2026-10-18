@@ -1162,6 +1162,10 @@ Three things worth knowing:
 - **It runs at availability time, with empty args** — like `.condition()`. A
   rule that needs the resolved selections belongs in `.validate()`, which runs
   at submit time and returns the same `string`-or-not shape.
+- **The condition is checked first**, on offer and on submission alike. A
+  false `.condition()` refuses the action as unavailable before `.disabled()`
+  runs, so the condition can guard what the rule reads, such as an attribute
+  a seat's redacted copy may not know (#1129).
 - **A disabled action stays in `availableActions`** on purpose. That is what
   lets the panel draw it. The reason travels beside it in
   `PlayerGameState.disabledActions`, which is also where tutorial-gate reasons
