@@ -168,7 +168,7 @@ describe('#885: the table road', () => {
     expect(refused?.stack).toMatch(/src[\\/]rules[\\/]index\.ts:1:\d+/);
   }, 60_000);
 
-  it('stops the worker of an edit that builds but throws while loading, and plays on the rules it had', async () => {
+  it('stops the worker of an edit that builds but throws while loading, says where, and plays on the rules it had', async () => {
     const before = liveRulesWorkers();
     const table = await servedTable();
     await table.bump();
@@ -180,6 +180,8 @@ describe('#885: the table road', () => {
     expect(said.mock.calls.flat().join('\n')).toMatch(
       /Your edited rules did not load, so this table is still running the ones it had: .*rules exploded while loading/,
     );
+    // The terminal, never a page, is also shown where the edit threw.
+    expect(said.mock.calls.flat().join('\n')).toMatch(/src[\\/]rules[\\/]index\.ts:1:\d+/);
     await table.bump();
     expect(table.count()).toBe(2);
     expect(liveRulesWorkers() - before).toBe(1);

@@ -19,6 +19,7 @@ import type { PersistenceStore } from '../../persistence/index.js';
 import { getProjectContext, toPosix } from './game-runtime.js';
 import { loadTableRuntime, tableRulesReloadQueue, type TableRuntime } from './dev-table-runtime.js';
 import { gateOf } from '../dev-host/rules-reload-queue.js';
+import { RulesError } from '../dev-host/rules-worker.js';
 import { findUnknownKeys } from '../lib/config-schema.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex, requireTableUi } from '../lib/game-project.js';
 import { resolveWorldMode } from '../lib/world-project.js';
@@ -739,10 +740,12 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   // THROWN, NOT PRINTED (#240). Handing the error object to `console.error`
   // printed Node's own formatting of it -- every stack frame, and the absolute
   // path of both this CLI and the game being loaded -- and exited before
-  // `cli.ts`'s handler could render it as one clean line.
+  // `cli.ts`'s handler could render it as one clean line. The one stack it
+  // carries is one the rules threw (#885), which names the author's own line.
   const rulesFailed = (error: unknown): Error =>
     new Error(
-      `Failed to load this game's rules: ${error instanceof Error ? error.message : String(error)}`,
+      `Failed to load this game's rules: ${error instanceof Error ? error.message : String(error)}` +
+        (error instanceof RulesError ? `\n${error.stack}` : ''),
     );
 
   // A WORLD IS A DIFFERENT RUN, AND THIS IS WHERE THE ROADS PART (#167).

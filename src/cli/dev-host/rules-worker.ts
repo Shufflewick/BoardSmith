@@ -11,9 +11,9 @@
  * side ({@link startRulesWorker}) and the worker side ({@link serveRules}),
  * which a road's worker module calls from inside the bundle.
  */
-import { parentPort, Worker, workerData } from 'node:worker_threads';
-
+import { pathToFileURL } from 'node:url';
 import { styleText } from 'node:util';
+import { parentPort, Worker, workerData } from 'node:worker_threads';
 
 import { toWireJson } from './wire-json.js';
 
@@ -49,11 +49,17 @@ function stackOf(error: unknown): Stacked {
   return error instanceof Error && error.stack !== undefined ? { stack: error.stack } : {};
 }
 
-/** The worker's error as the host holds it: its message, and its stack from inside the worker. */
+/** An error the rules threw in their worker. Its stack is theirs, at the author's own file and line. */
+export class RulesError extends Error {
+  constructor(message: string, stack: string) {
+    super(message);
+    this.stack = stack;
+  }
+}
+
+/** The worker's error as the host holds it: a {@link RulesError} when the worker sent where it was thrown. */
 function fromWorker(message: string, { stack }: Stacked): Error {
-  const error = new Error(message);
-  if (stack !== undefined) error.stack = stack;
-  return error;
+  return stack === undefined ? new Error(message) : new RulesError(message, stack);
 }
 
 // ── The worker side, run inside the bundle ────────────────────────────────────
@@ -127,8 +133,13 @@ export interface RulesWorker {
  * `ready` answer; a bundle that fails to load is stopped, and its reason thrown.
  */
 export async function startRulesWorker(bundlePath: string, data: unknown): Promise<{ worker: RulesWorker; ready: unknown }> {
-  // Source maps on, so a stack from the rules names the author's file and line, not the bundle's.
-  const worker = new Worker(bundlePath, { workerData: data, execArgv: [...process.execArgv, '--enable-source-maps'] });
+  // Source maps on before the bundle loads, so a rules stack names the author's file and line. Not
+  // by `execArgv`: Node then checks every inherited flag, and refuses one like --max-old-space-size.
+  // A load that rejects is rethrown, so it fails the worker whatever --unhandled-rejections says.
+  const boot =
+    `process.setSourceMapsEnabled(true);\n` +
+    `import(${JSON.stringify(pathToFileURL(bundlePath).href)}).catch((error) => process.nextTick(() => { throw error; }));`;
+  const worker = new Worker(boot, { eval: true, workerData: data });
   live.add(worker);
   worker.once('exit', () => live.delete(worker));
 

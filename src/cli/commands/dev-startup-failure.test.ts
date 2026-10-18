@@ -32,6 +32,21 @@ describe('boardsmith dev that fails during startup (#543)', () => {
     expect(commandBuildDirs(cwd, 'dev'), `the build directory was left behind:\n${ended.output}`).toEqual([]);
   });
 
+  // #885: the rules run in a worker, which a flag Node refuses in workers must not stop, and
+  // a load that rejects must still fail when node is told to ignore unhandled rejections.
+  it('names the line the rules threw at while loading, under node flags a designer may run it with', async () => {
+    const cwd = await devProject(false);
+    writeFileSync(join(cwd, 'src', 'rules', 'index.ts'), "throw new Error('rules exploded while loading');\nexport const gameDefinition = {};\n");
+
+    const nodeFlags = ['--max-old-space-size=4096', '--unhandled-rejections=none'];
+    const ended = await spawnDev(cwd, await freePort(), [], nodeFlags).ended;
+
+    expect(ended.stuck, ended.output).toBe(false);
+    expect(ended.code, ended.output).toBe(1);
+    expect(ended.output).toContain("Failed to load this game's rules: rules exploded while loading");
+    expect(ended.output).toMatch(/src[\\/]rules[\\/]index\.ts:1:\d+/);
+  });
+
   it('removes its build directory when --players is outside the game’s seat range', async () => {
     const cwd = await devProject(false);
 

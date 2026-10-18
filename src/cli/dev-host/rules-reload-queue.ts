@@ -48,6 +48,7 @@ import { styleText } from 'node:util';
 
 import type { HostWorkGate } from '../../session/host-work-gate.js';
 import type { WorldHostClock } from './node-world-clock.js';
+import { RulesError } from './rules-worker.js';
 
 /** What a page is told about the host's rules while a save is reloading them. */
 export type RulesReloadNotice =
@@ -141,6 +142,11 @@ function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+/** Tell the terminal a reload failed, and where in the rules when they threw it. Pages get the message alone. */
+function say(message: string, error: unknown): void {
+  console.error(styleText('red', `  ${message}`), ...(error instanceof RulesError ? [`\n${error.stack}`] : []));
+}
+
 /**
  * The queue for one dev run.
  *
@@ -172,14 +178,14 @@ export function createRulesReloadQueue<R>(args: {
       rules = await args.load();
     } catch (error) {
       const message = `Your edited rules did not load, so this ${args.what} is still running the ones it had: ${messageOf(error)}`;
-      console.error(styleText('red', `  ${message}`));
+      say(message, error);
       return { ok: false, message };
     }
     try {
       await args.adopt(rules);
     } catch (error) {
       const message = messageOf(error);
-      console.error(styleText('red', `  ${message}`));
+      say(message, error);
       return { ok: false, message };
     }
     return { ok: true };

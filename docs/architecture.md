@@ -274,10 +274,17 @@ nothing a worker does not. The world's run-long lock (#1040) is held by the
 dev process, not the worker, so a world whose worker stops on its own is still
 refused to a second `boardsmith dev`.
 
-**Where a crash happened.** The worker runs with source maps on, and the
-bundle carries an inline map, so a rule's error names the author's file and
-line. The worker sends an error's stack beside its message; the terminal
-prints it, and a page is only ever sent the message.
+**Where a crash happened.** The worker starts from a two-line bootstrap that
+turns source maps on and then imports the bundle, which carries an inline map,
+so a rule's error names the author's file and line. Not `execArgv:
+['--enable-source-maps']`: passing `execArgv` makes Node check every flag the
+dev process runs with, and it refuses V8 flags such as
+`--max-old-space-size`. The bootstrap rethrows a failed import as an uncaught
+error, so rules that throw while loading stop the worker even under
+`--unhandled-rejections=none`. The worker sends an error's stack beside its
+message (a `RulesError` on the host); the terminal prints it, at a crash, a
+failed first load and a failed reload, and a page is only ever sent the
+message.
 
 **What crosses the boundary.** Only plain data, so nothing from the bundle
 ever enters the host's module graph. Every answer the worker hands back is
