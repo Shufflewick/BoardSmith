@@ -13,6 +13,7 @@ import { flushPromises, mount } from '@vue/test-utils';
 import { enterIframe, leaveIframe, mountPlatformShell, type BoardComponent } from './GameShell.platform-mount.test-helper.js';
 import GameShell from './GameShell.vue';
 import BoardErrorBoundary from './BoardErrorBoundary.vue';
+import ControlsMenu from './ControlsMenu.vue';
 import { defineGameUIs, defaultUI, devUI } from '../game-uis.js';
 import { SETTLE_MS } from '../composables/useAutoZoom.js';
 
@@ -168,7 +169,11 @@ describe('GameShell board error boundary and the zoom fit (#1154)', () => {
     mounted.push(wrapper);
     await nextTick();
     fromHost({ type: 'init', seat: 1 });
-    return () => (wrapper.find('.game-shell__zoom-container').element as HTMLElement).style.getPropertyValue('--zoom-level');
+    return {
+      zoom: () => (wrapper.find('.game-shell__zoom-container').element as HTMLElement).style.getPropertyValue('--zoom-level'),
+      /** The player's own zoom, as the controls menu sets it. */
+      zoomByHand: (level: number) => wrapper.findComponent(ControlsMenu).vm.$emit('update:zoom', level),
+    };
   }
 
   /** Later than any settle timer a fit before it started, so a finished startup is finished. */
@@ -176,7 +181,7 @@ describe('GameShell board error boundary and the zoom fit (#1154)', () => {
 
   it('a board that throws on its first state and draws on the second gets the zoom a normal first render gives', async () => {
     // Like many real boards, it draws nothing until the first state arrives.
-    const zoom = await mountBoard(defineComponent({
+    const { zoom } = await mountBoard(defineComponent({
       props: { gameView: { type: Object, default: null } },
       setup: (props) => () => (props.gameView ? h(ThrowingBoard, { gameView: props.gameView }) : null),
     }));
@@ -193,7 +198,7 @@ describe('GameShell board error boundary and the zoom fit (#1154)', () => {
 
   it('a board that throws after startup, while the region shrinks, comes back fitted to the new region, not to the message', async () => {
     // This board draws before any state (as Hex does), so startup ends on it.
-    const zoom = await mountBoard(ThrowingBoard);
+    const { zoom } = await mountBoard(ThrowingBoard);
     await relayout('board and region');
     await settle();
     expect(zoom()).toBe('1');
@@ -207,6 +212,24 @@ describe('GameShell board error boundary and the zoom fit (#1154)', () => {
     await flushPromises();
     await relayout('board');
     expect(zoom()).toBe('0.75');
+  });
+
+  it('a board that recovers after the player set the zoom by hand keeps the player\'s zoom', async () => {
+    const { zoom, zoomByHand } = await mountBoard(ThrowingBoard);
+    await relayout('board and region');
+    await settle();
+
+    fromHost(frame(true, 'Go first'));
+    await flushPromises();
+    zoomByHand(1.5);
+    await nextTick();
+    Object.assign(region, { width: 600, height: 450 });
+    await relayout('board and region');
+
+    fromHost(frame(false, 'Go second'));
+    await flushPromises();
+    await relayout('board');
+    expect(zoom()).toBe('1.5');
   });
 });
 
