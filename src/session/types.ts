@@ -523,6 +523,7 @@ export interface SerializedPendingActionState {
   conditionHeld?: boolean;
   picksOnOffer?: string[];
   stalePicks?: string[];
+  branchesBeforePicks?: Record<number, string | null>;
 }
 
 /**

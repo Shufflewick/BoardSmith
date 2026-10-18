@@ -1826,12 +1826,26 @@ function setOwnKey(target: Record<string, unknown>, key: string, value: unknown)
  * @param subject - What holds the value, for error messages (a class name, or
  *   `action 'play'`).
  * @param path - The property path to `value`, for error messages.
+ * @param branchesBefore - A pending action's `branchesBeforePicks`: an element
+ *   listed is written at the branch it had there (#1144).
  */
-export function encodeValue(value: unknown, ctx: ElementContext | undefined, subject: string, path: string): unknown {
-  return encodeAt(value, ctx, subject, path, new Set(), 0);
+export function encodeValue(
+  value: unknown,
+  ctx: ElementContext | undefined,
+  subject: string,
+  path: string,
+  branchesBefore?: Readonly<Record<number, string | null>>,
+): unknown {
+  return encodeAt(value, ctx, subject, path, new Set(), 0, branchesBefore);
 }
 
-function encodeElementRef(value: GameElement, ctx: ElementContext | undefined): object {
+function encodeElementRef(
+  value: GameElement,
+  ctx: ElementContext | undefined,
+  subject: string,
+  path: string,
+  branchesBefore: Readonly<Record<number, string | null>> | undefined,
+): object {
   // #149: the one shared structural answer to "is this a player?" -- a
   // numeric `seat` is not it, because a per-seat board carries one too and
   // would then serialize as a `__playerRef` to a seat with no such player.
@@ -1850,7 +1864,16 @@ function encodeElementRef(value: GameElement, ctx: ElementContext | undefined): 
   if (withheldFromSeat(value)) {
     return { __elementRef: WITHHELD_PILE_BRANCH };
   }
-  return { __elementRef: value.branch() };
+  const before = branchesBefore?.[value.id];
+  if (before === null) {
+    throw new Error(
+      `Cannot record ${subject}: '${path}' is "${value.name ?? value.constructor.name}", which an earlier pick's ` +
+        `onSelect or onEach created, so it did not exist when the action began. History names each pick where it ` +
+        `was before the action, so a pick cannot take an element the same action's callbacks create: create it in ` +
+        `execute, or offer it in a later action.`
+    );
+  }
+  return { __elementRef: before ?? value.branch() };
 }
 
 function encodeAt(
@@ -1860,6 +1883,7 @@ function encodeAt(
   path: string,
   ancestors: Set<object>,
   depth: number,
+  branchesBefore: Readonly<Record<number, string | null>> | undefined,
 ): unknown {
   if (value === null || value === undefined || typeof value !== 'object') {
     return value;
@@ -1869,7 +1893,7 @@ function encodeAt(
   // with `isElement`, not `instanceof`: an action argument can come from a
   // game bundled with its own copy of the engine.
   if (isElement(value)) {
-    return encodeElementRef(value, ctx);
+    return encodeElementRef(value, ctx, subject, path, branchesBefore);
   }
 
   if (ancestors.has(value)) {
@@ -1886,7 +1910,8 @@ function encodeAt(
     );
   }
 
-  const encode = (child: unknown, childPath: string) => encodeAt(child, ctx, subject, childPath, ancestors, depth + 1);
+  const encode = (child: unknown, childPath: string) =>
+    encodeAt(child, ctx, subject, childPath, ancestors, depth + 1, branchesBefore);
   ancestors.add(value);
   try {
     if (Array.isArray(value)) {

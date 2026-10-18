@@ -869,13 +869,15 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * undo, and bot history treat them the same.
    *
    * Does NOT push to history — callers decide when to record (e.g. only after a
-   * successful execute).
+   * successful execute). `branchesBefore` is a pending action's
+   * `branchesBeforePicks`.
    */
   private serializeForHistory(
     actionName: string,
     player: Player,
     args: Record<string, unknown>,
-    resolved?: Record<string, unknown>
+    resolved?: Record<string, unknown>,
+    branchesBefore?: Readonly<Record<number, string | null>>
   ): SerializedAction {
     const actionDef = (this.game as any)._actions?.get(actionName);
     const isUndoable = actionDef?.undoable;
@@ -896,7 +898,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       player,
       argsToSerialize,
       this.game,
-      isUndoable
+      isUndoable,
+      branchesBefore
     );
   }
 
@@ -914,9 +917,16 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     pendingState: PendingActionState,
     playerPosition: number
   ): ActionResult {
+    const branchesBefore = pendingState.branchesBeforePicks;
+    if (!branchesBefore) {
+      throw new Error(
+        `The pending action '${action.name}' cannot be recorded: its state does not say where its picks' onSelect ` +
+          `and onEach moved elements from, as one saved by an older BoardSmith does not. Cancel it and take it again.`
+      );
+    }
     this.ensureHeadCheckpoint();
-    // Serialized before executing, so the recorded refs are the positions the action acts on.
-    const serializedAction = this.serializeForHistory(action.name, player, pendingState.collectedArgs);
+    // Serialized before executing, and with each pick where it was before the picks' callbacks moved it (#1144).
+    const serializedAction = this.serializeForHistory(action.name, player, pendingState.collectedArgs, undefined, branchesBefore);
     const actionResult = executor.executePendingAction(action, player, pendingState);
 
     if (actionResult.success) {
@@ -965,7 +975,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     if (!this.game.getPlayer(playerPosition)) return undefined;
 
     const executor = this.game.getActionExecutor();
-    const pendingState = executor.createPendingActionState(actionName, playerPosition);
+    const pendingState = executor.createPendingActionState(actionName, playerPosition, true);
     // A held follow-up's published args are the engine's, bound before any
     // client pick, so every pick's callbacks see them.
     this.bindFollowUpArgs(pendingState, playerPosition);
