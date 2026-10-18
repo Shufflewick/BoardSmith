@@ -121,8 +121,11 @@ describe('GameShell board error boundary (#1149)', () => {
   });
 });
 
+/** A second UI, twice the size of a drawn ThrowingBoard. */
+const BigBoard = defineComponent({ name: 'BigBoard', setup: () => () => h('div', { class: 'big-board' }, 'big') });
+
 describe('GameShell board error boundary and the zoom fit (#1154)', () => {
-  // jsdom has no layout: the message is 400x300, a drawn board 800x600, an empty one 0x0, and the region `region`.
+  // jsdom has no layout: the message is 400x300, a drawn board 800x600, a big one 1600x1200, an empty one 0x0, and the region `region`.
   const region = { width: 800, height: 600 };
   const observers: Array<{ target: Element; fire: () => void }> = [];
   const priorObserver = globalThis.ResizeObserver;
@@ -152,6 +155,7 @@ describe('GameShell board error boundary and the zoom fit (#1154)', () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
       if (!this.classList.contains('game-shell__zoom-container')) return { width: 0, height: 0 } as DOMRect;
       if (this.querySelector('[data-testid="bs-board-error"]')) return { width: 400, height: 300 } as DOMRect;
+      if (this.querySelector('.big-board')) return { width: 1600, height: 1200 } as DOMRect;
       return (this.querySelector('.good-board') ? { width: 800, height: 600 } : { width: 0, height: 0 }) as DOMRect;
     });
     const isRegion = (el: HTMLElement) => el.dataset.testid === 'bs-board';
@@ -164,8 +168,11 @@ describe('GameShell board error boundary and the zoom fit (#1154)', () => {
     vi.stubGlobal('ResizeObserver', priorObserver);
   });
 
+  /** `board` is the default UI; the dev switcher offers BigBoard as 'Big'. */
   async function mountBoard(board: BoardComponent) {
-    const wrapper = mountPlatformShell({ board });
+    // Shaped like an ES module, which is what defineAsyncComponent unwraps `default` from.
+    const bigModule = { __esModule: true, default: BigBoard };
+    const wrapper = mount(GameShell, { props: { uis: defineGameUIs({ Stub: defaultUI(board), Big: devUI(async () => bigModule) }) } });
     mounted.push(wrapper);
     await nextTick();
     fromHost({ type: 'init', seat: 1 });
@@ -173,6 +180,12 @@ describe('GameShell board error boundary and the zoom fit (#1154)', () => {
       zoom: () => (wrapper.find('.game-shell__zoom-container').element as HTMLElement).style.getPropertyValue('--zoom-level'),
       /** The player's own zoom, as the controls menu sets it. */
       zoomByHand: (level: number) => wrapper.findComponent(ControlsMenu).vm.$emit('update:zoom', level),
+      /** The dev host's UI switcher picks BigBoard, which lays out once it has loaded. */
+      switchToBig: async () => {
+        fromHost({ type: 'dev-ui-select', name: 'Big' });
+        await flushPromises();
+        await relayout('board');
+      },
     };
   }
 
@@ -230,6 +243,40 @@ describe('GameShell board error boundary and the zoom fit (#1154)', () => {
     await flushPromises();
     await relayout('board');
     expect(zoom()).toBe('1.5');
+  });
+
+  it('a UI picked after startup has settled is fitted afresh, not left at the first UI\'s zoom (#1161)', async () => {
+    const { zoom, switchToBig } = await mountBoard(ThrowingBoard);
+    await relayout('board and region');
+    await settle();
+    expect(zoom()).toBe('1');
+
+    await switchToBig();
+    expect(zoom()).toBe('0.5');
+  });
+
+  it('a UI picked while the board shows its error message is fitted to the new board, not the message (#1161)', async () => {
+    const { zoom, switchToBig } = await mountBoard(ThrowingBoard);
+    await relayout('board and region');
+    await settle();
+    fromHost(frame(true, 'Go first'));
+    await flushPromises();
+    expect(zoom()).toBe('1');
+
+    await switchToBig();
+    expect(zoom()).toBe('0.5');
+  });
+
+  it('a UI picked after the player set the zoom by hand is fitted afresh, as a new board is (#1161)', async () => {
+    const { zoom, zoomByHand, switchToBig } = await mountBoard(ThrowingBoard);
+    await relayout('board and region');
+    await settle();
+    zoomByHand(1.5);
+    await nextTick();
+    expect(zoom()).toBe('1.5');
+
+    await switchToBig();
+    expect(zoom()).toBe('0.5');
   });
 });
 

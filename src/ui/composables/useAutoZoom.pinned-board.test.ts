@@ -101,7 +101,7 @@ function mountShell(board: Component | null) {
     setup() {
       const boardregionEl = ref<HTMLElement | null>(null);
       const zoomContainerEl = ref<HTMLElement | null>(null);
-      api = useAutoZoom({ boardEl: zoomContainerEl, regionEl: boardregionEl, boardFailed: ref(false) });
+      api = useAutoZoom({ boardEl: zoomContainerEl, boardUi: current, regionEl: boardregionEl, boardFailed: ref(false) });
       return () => h('main', { class: 'boardregion', ref: boardregionEl }, [
         h('div', { class: 'zoom-container', ref: zoomContainerEl },
           current.value ? [h(current.value)] : []),
@@ -217,7 +217,7 @@ describe('B20-5: the game wires nothing — GameShell states no axis of its own'
     'utf-8',
   );
 
-  it('passes useAutoZoom only the two geometry options', () => {
+  it('passes useAutoZoom no axis, pin or panel option', () => {
     const start = gameShellSource.indexOf('useAutoZoom({');
     expect(start).toBeGreaterThan(-1);
     const call = gameShellSource.slice(start, gameShellSource.indexOf('});', start));

@@ -68,7 +68,7 @@ function mountShell() {
     setup() {
       const boardregionEl = ref<HTMLElement | null>(null);
       const zoomContainerEl = ref<HTMLElement | null>(null);
-      api = useAutoZoom({ boardEl: zoomContainerEl, regionEl: boardregionEl, boardFailed: ref(false) });
+      api = useAutoZoom({ boardEl: zoomContainerEl, boardUi: ref('default'), regionEl: boardregionEl, boardFailed: ref(false) });
       return () => h('div', { class: 'game-shell__game' }, [
         h('main', { class: 'boardregion', ref: boardregionEl }, [
           h('div', { class: 'game-shell__zoom-container', ref: zoomContainerEl }),
@@ -228,6 +228,7 @@ describe('#13: the fitted zoom is reproducible — the Action Panel cannot reach
       setup() {
         useAutoZoom({
           boardEl,
+          boardUi: ref('default'),
           regionEl,
           boardFailed: ref(false),
           // @ts-expect-error — the fit CANNOT read the Action Panel: there is no

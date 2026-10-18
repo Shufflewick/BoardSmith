@@ -278,6 +278,7 @@ const boardBoundary = ref<InstanceType<typeof BoardErrorBoundary> | null>(null);
 const boardFailed = computed(() => boardBoundary.value?.failed ?? false);
 const { zoomLevel, setZoom, fitZoom } = useAutoZoom({
   boardEl: zoomContainerEl,
+  boardUi: selectedUiComponent,
   regionEl: boardregionEl,
   boardFailed,
 });
