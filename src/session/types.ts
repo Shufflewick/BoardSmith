@@ -169,7 +169,8 @@ export interface GameDefinition {
    *
    * ```ts
    * checkpoints: { max: 20 }   // also never more than 20; a longer turn's undo is refused
-   * checkpoints: { enabled: false }   // no undo, no time-travel, flat size
+   * checkpoints: { enabled: false }   // no undo, no time-travel
+   * checkpoints: { actionHistory: 'undo' }   // keep only the action history undo reads
    * ```
    *
    * See `docs/state-size.md`.

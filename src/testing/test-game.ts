@@ -434,7 +434,9 @@ export class TestGame<G extends Game = Game> {
   }
 
   /**
-   * Get the history of all actions performed.
+   * Get the history of all actions performed: under a game's
+   * `checkpoints: { actionHistory: 'undo' }`, only the kept ones, which start
+   * at action `runner.actionHistoryBase`.
    *
    * @returns Array of action history entries
    */

@@ -180,6 +180,34 @@ describe('projectSnapshotSize', () => {
   });
 });
 
+describe('a game that keeps only the history undo reads (#997)', () => {
+  function playKept(actions: number) {
+    const runner = new GameRunner({
+      GameClass: BudgetGame,
+      gameType: 'budget-game',
+      gameOptions: { playerCount: 2, seed: 'budget' },
+      checkpoints: { actionHistory: 'undo' },
+    });
+    runner.start();
+    for (let i = 0; i < actions; i++) {
+      runner.performAction('pass', (i % 2) + 1, {});
+      runner.getSnapshot();
+    }
+    return runner.getSnapshot();
+  }
+
+  it('counts the dropped actions and projects the history flat', () => {
+    const early = measureSnapshotSize(playKept(10));
+    expect(early.observedActionCount).toBe(10);
+    expect(early.actionHistoryTrimmed).toBe(true);
+
+    const actual = measureSnapshotSize(playKept(100)).totalBytes;
+    const projected = projectSnapshotSize(early, 100, { maxCheckpoints: 1 });
+    expect(projected).toBeGreaterThan(actual * 0.95);
+    expect(projected).toBeLessThan(actual * 1.05);
+  });
+});
+
 describe('assertStateBudget (#504)', () => {
   const size = measureSnapshotSize(play(20));
 

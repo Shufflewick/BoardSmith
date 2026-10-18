@@ -49,10 +49,11 @@ async function historyAfterEachSeatMoves() {
   return { actionHistory: history.actionHistory, players: views[0]!.state.players };
 }
 
-function mountHistory({ actionHistory, players }: Awaited<ReturnType<typeof historyAfterEachSeatMoves>>) {
+function mountHistory({ actionHistory, actionHistoryBase = 0, players }: Awaited<ReturnType<typeof historyAfterEachSeatMoves>> & { actionHistoryBase?: number }) {
   return mount(HistoryTab, {
     props: {
       actionHistory,
+      actionHistoryBase,
       players,
       historyLoading: false,
       historyError: null,
@@ -104,6 +105,44 @@ describe('HistoryTab step back (#900)', () => {
   it('is disabled at the first position', async () => {
     const wrapper = mountHistory({ actionHistory: history, players: [] });
     await wrapper.setProps({ selectedActionIndex: 0, isViewingHistory: true });
+    expect(wrapper.findAll('.timeline-controls button')[0]!.attributes('disabled')).toBeDefined();
+  });
+});
+
+describe('HistoryTab when the game dropped the start of its history (#997)', () => {
+  // A game keeping only the history undo reads, played through a session as a hosted table runs it.
+  async function keptHistory() {
+    const kept: GameDefinitionLike = { ...def, checkpoints: { actionHistory: 'undo' } };
+    const session = createHeadlessSession(kept, { playerCount: 3, playerNames: ['Alice', 'Bob', 'Cleo'], seed: 'history-kept' });
+    await session.start();
+    for (const seat of [1, 2, 3, 1, 2]) {
+      const moved = await session.send(seat, { type: 'action', actionName: 'pass', player: seat, args: {} });
+      if (!moved.success) throw new Error(moved.error);
+    }
+    const history = await session.send(1, { type: 'debugHistory' });
+    if (!history.success) throw new Error(history.error);
+    return history;
+  }
+
+  it('numbers the kept actions by their place in the game and says how many earlier ones were not kept', async () => {
+    const history = await keptHistory();
+    expect(history.actionHistoryBase).toBe(4);
+    const wrapper = mountHistory({ actionHistory: history.actionHistory, actionHistoryBase: history.actionHistoryBase, players: [] });
+
+    expect(wrapper.find('.history-count').text()).toBe('5 actions, the first 4 not kept');
+    expect(wrapper.findAll('.history-index').map((index) => index.text())).toEqual(['5']);
+    expect(wrapper.find('.timeline-position').text()).toBe('5 / 5');
+    const slider = wrapper.find('.timeline-slider');
+    expect([slider.attributes('min'), slider.attributes('max')]).toEqual(['4', '5']);
+
+    await wrapper.find('.history-item').trigger('click');
+    expect(wrapper.emitted('select-action')).toEqual([[5]]);
+  });
+
+  it('cannot step back past the first kept action', async () => {
+    const history = await keptHistory();
+    const wrapper = mountHistory({ actionHistory: history.actionHistory, actionHistoryBase: history.actionHistoryBase, players: [] });
+    await wrapper.setProps({ selectedActionIndex: 4, isViewingHistory: true });
     expect(wrapper.findAll('.timeline-controls button')[0]!.attributes('disabled')).toBeDefined();
   });
 });

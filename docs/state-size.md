@@ -168,9 +168,10 @@ deployment of hundreds of placements, say) therefore keeps one checkpoint, not
 one per action. A `fullHistory` host keeps them all as before.
 
 The remaining growth is the action history, which is bytes per action rather
-than a tree per action, and the message log.
+than a tree per action, and the message log. A game can bound the history too:
+see [Bounding the action history](#bounding-the-action-history).
 
-Two settings on the game definition change that:
+Two settings on the game definition change how many checkpoints are kept:
 
 ```ts
 export const gameDefinition = {
@@ -216,6 +217,49 @@ Every state a seat is sent is built after the checkpoint for the op that
 produced it is recorded, including the state returned to the seat that just
 made a pick, so `canUndo` reads the window as the op left it, not as it was one
 step earlier (#385).
+
+### Bounding the action history
+
+By default the snapshot keeps every action in `actionHistory`, so a step in
+which a seat may repeat a move without limit (move or turn a piece until it
+checks in, say) grows the saved game by one entry per move, with no bound. To
+keep only the history undo reads, set:
+
+```ts
+checkpoints: { actionHistory: 'undo' }
+```
+
+On a hosted table the history then starts at the entry just before the
+oldest point any seat's undo may restore, the same point the checkpoint window
+starts at, and the earlier entries are dropped. That entry is kept because it
+is what blocks undo there, and an undo it refuses names it. A step made only
+of `.notUndoable()` moves keeps one entry, however many moves are made, so the
+saved game stays a fixed size.
+
+- **Restore.** The latest state restores exactly. A snapshot is restored
+  whole, and the history is never replayed to rebuild it.
+- **Undo.** Unchanged. Every entry undo reads is kept, so the same undo is
+  offered and refused, with the same words, as with the whole history: a
+  refusal names what set the limit, the not-undoable action just below it or
+  else the irreversible step, and that entry is always kept.
+- **Action indices.** Unchanged. `snapshot.actionHistoryBase` says how many
+  entries were dropped, so entry `i` is action `actionHistoryBase + i`.
+  `runner.actionCount` counts the dropped ones too. The checkpoint window,
+  `executeBarrierIndex`, the debug ops and the session host's arrival times
+  all number actions this way.
+- **Session host.** It keeps arrival times only for the kept entries, so its
+  memory is bounded as well.
+- **Debug History tab.** It lists only the kept actions, numbered by their
+  place in the game, and its header says how many earlier ones were not kept.
+- **Replay.** `GameRunner.replay` refuses a history that does not start at
+  action 0, and names this setting. It needs every action from the start.
+- **`boardsmith dev`** keeps full history, so it keeps every action anyway,
+  and time travel and replay work there as usual.
+
+`projectSnapshotSize` holds the history term flat for a snapshot that has
+dropped entries, at the size it measured. That assumes the measurement is
+typical: measure where the kept history is longest (late in the longest turn
+or step) for an upper bound.
 
 ## Measuring your own game
 
