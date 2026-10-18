@@ -835,7 +835,8 @@ See [Using actionTempState()](./actions-and-flow.md#using-actiontempstate-for-te
 ## 9. Element Storage: Arrays vs Children (CRITICAL)
 
 > **Lint guard:** the `no-element-array-state` ESLint rule flags a
-> `GameElement[]`-typed class field on a non-element class, and flags
+> `GameElement[]`-typed class field on any class, element classes such as
+> the `Sector` below included, and flags
 > assigning `game.all(...)`/`.first(...)`/etc. results onto a `this.*`
 > property. It reports only (no auto-fix, since "store IDs" vs "query at
 > point of use" is a judgment call) — see the correct patterns below.

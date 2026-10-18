@@ -19,16 +19,6 @@ const ruleTester = new RuleTester({
 
 ruleTester.run('no-element-array-state', rule, {
   valid: [
-    // Element-tree owner: a GameElement subclass storing a child array is
-    // the correct, intended pattern -- not flagged.
-    {
-      code: `
-        class Piece extends GameElement {}
-        class Board extends GameElement {
-          children: Piece[] = [];
-        }
-      `,
-    },
     // Point-of-use local: a collection-returning call assigned to a local
     // variable and used/discarded within a method, never persisted onto a
     // class property, is the correct pattern -- not flagged.
@@ -57,31 +47,6 @@ ruleTester.run('no-element-array-state', rule, {
         }
       `,
     },
-    // Scope-hygiene regression (WR-03): a same-named field (`items`)
-    // appears in two different classes -- one an element-tree owner
-    // (correctly storing a Piece[] child array), one a plain string field
-    // in an unrelated class. Since this rule checks each PropertyDefinition
-    // by its own type annotation (not a file-wide bare-name set), the
-    // unrelated `items: string[]` field must not be flagged just because
-    // another class in the file has a same-named GameElement[] field.
-    {
-      code: `
-        class Piece extends GameElement {}
-        class Board extends GameElement {
-          items: Piece[] = [];
-        }
-        class Inventory {
-          items: string[] = [];
-        }
-      `,
-    },
-    // A GameElement imported under another name still owns its children (#1036).
-    {
-      code: `
-        import { GameElement as BaseElement } from 'boardsmith';
-        class Board extends BaseElement { pieces: Piece[] = []; }
-      `,
-    },
     // A renamed import from anywhere but boardsmith is not an engine class (#1036).
     {
       code: `
@@ -92,6 +57,22 @@ ruleTester.run('no-element-array-state', rule, {
     },
   ],
   invalid: [
+    // Scope-hygiene regression (WR-03): a same-named field (`items`) in two
+    // classes. This rule checks each PropertyDefinition by its own type
+    // annotation, not a file-wide bare-name set, so only the Piece[] field
+    // is flagged, never the unrelated `items: string[]`.
+    {
+      code: `
+        class Piece extends GameElement {}
+        class Board extends GameElement {
+          items: Piece[] = [];
+        }
+        class Inventory {
+          items: string[] = [];
+        }
+      `,
+      errors: [{ messageId: 'elementArrayField', line: 4 }],
+    },
     // GameElement[]-typed class field in a non-GameElement class.
     {
       code: `
@@ -204,6 +185,14 @@ ruleTester.run('no-element-array-state', rule, {
       `,
       errors: [{ messageId: 'elementArrayField' as const }],
     },
+    // An array does not own its elements, whatever class holds it: the docs/common-pitfalls.md §9 smell (#1035).
+    ...['Space', 'Piece', 'GameElement'].map((base) => ({
+      code: `
+        class Equipment extends Piece {}
+        class Sector extends ${base} { stash: Equipment[] = []; }
+      `,
+      errors: [{ messageId: 'elementArrayField' as const }],
+    })),
     // Check (c) applies in a direct GameElement subclass too (#1036).
     {
       code: `class Board extends GameElement { captured = this.all(Card); }`,
