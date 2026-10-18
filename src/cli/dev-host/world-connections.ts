@@ -122,20 +122,18 @@ export function createWorldConnections(
     accept(socket) {
       let clientId: string | null = null;
       let loadId: string | null = null;
+      const identify = (hello: Record<string, unknown>): void => {
+        clientId = typeof hello.clientId === 'string' ? hello.clientId : `anon-${Math.random().toString(36).slice(2)}`;
+        // A caller that names no page load (a scripted client) is one per socket.
+        loadId = typeof hello.loadId === 'string' ? hello.loadId : randomUUID();
+        clients.set(clientId, socket);
+        pageLoad.set(clientId, loadId);
+        changed();
+      };
       socket.on('message', (raw) => {
         const message = parseSocketMessage(raw);
         if (message === null) return;
-        if (message.type === 'hello') {
-          clientId =
-            typeof message.clientId === 'string'
-              ? message.clientId
-              : `anon-${Math.random().toString(36).slice(2)}`;
-          // A caller that names no page load (a scripted client) is one per socket.
-          loadId = typeof message.loadId === 'string' ? message.loadId : randomUUID();
-          clients.set(clientId, socket);
-          pageLoad.set(clientId, loadId);
-          changed();
-        }
+        if (message.type === 'hello') identify(message);
         if (clientId === null || loadId === null) return; // a client identifies itself first
         const from = clientId;
         const asked = message as unknown as WorldDevRequest;
