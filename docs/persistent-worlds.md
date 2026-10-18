@@ -1027,7 +1027,8 @@ lets see it (its owner, or the seats it is visible to) whose `world.view` names
 it: events follow partition fog, so a room your view does not name is a room you
 are not told about. The view is judged after the command runs, against only the
 partitions that command declared, so what else happens to be loaded never
-decides who hears. A view must name more as more is loaded, never less. If a
+decides who hears. A view must name more as more is loaded, never less, and a
+look refuses one that does not with `view-dropped-partition`. If a
 seat's view could only say whether it names the scope by reading a partition the
 command did not declare, the command is refused with `undecided-audience`:
 declare that partition in the action, or narrow who can see the scope with an
@@ -1505,7 +1506,10 @@ looking at?" is answered by world state and genuinely has to be asked again -- s
 it keeps a ceiling of **four** rounds, and a view that names something new every
 round is walking the world and is refused with `declaration-unsettled`. Round one
 sees `undefined` for every partition; keep naming what you already asked for,
-because what is named on the final round is what gets loaded. A view whose first
+because what is named on the final round is what gets loaded. That is checked:
+a view that drops a name it named on an earlier round of the same look is refused
+for that seat with `view-dropped-partition`, naming the partition, because who
+hears an event is judged by that rule (see `emit` below). A view whose first
 round asks for nothing is never asked again, so the steady state costs one round.
 
 It sees the same read-only projection an action's declaration does, and an
@@ -2771,6 +2775,7 @@ thing next time.
 | `not-in-a-world` | An action built with `worldAction()` reached `ctx.world` with no world running it -- registered on a table, or reached after the dispatch that bound its facilities finished. |
 | `undeclared-partition` | `execute` read, or emitted an event in, a partition the action's own walk did not declare. |
 | `declaration-unsettled` | A `world.view` named something new on every round. **A view only**, since an action's walk has no ceiling to trip. |
+| `view-dropped-partition` | A `world.view` stopped naming a partition it named on an earlier round of the same look, once more was loaded. Refused for that seat only. Keep naming it alongside what the loaded partitions add. |
 | `declaration-write` | A declaration, a view or a migration's `survey.root` tried to write through the read-only projection. Do it in `execute`, or in the migration's `partition` hook. |
 | `undecided-audience` | A seat's `world.view` could only say whether it names an event's scope by reading a partition the command did not declare. Declare it in the action, or narrow who can see the scope in the tree. |
 | `partition-missing` | A declaration named a partition this world's store does not have, and `world.createPartition` did not build one for that name either. Usually a typo, or a partition nothing has created yet. |

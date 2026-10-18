@@ -1,6 +1,6 @@
 {
-  "revision": 235,
-  "surfaceHash": "1519c6e27c9683db",
+  "revision": 236,
+  "surfaceHash": "14ea9277318a0e32",
   "payloadHash": "0e2d27db00239080",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1823,6 +1823,14 @@
       "payloadHash": "0e2d27db00239080",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "Restoring a saved game no longer relinks a flow variable or step data whose element is missing to the hand, deck or other zone concealing it; it throws the \"no longer exists\" error naming the flow slot, as it does for any other missing element (#947). That relink now happens only when restoring a seat's redacted copy (the bot's search game), and every redacted snapshot carries hiddenIdRemap, empty when nothing was renumbered. A saved state whose flow names an element its tree lacks (for example after a class rename) is now refused on load instead of resuming against the wrong element."
+    },
+    {
+      "revision": 236,
+      "date": "2026-10-18",
+      "surfaceHash": "14ea9277318a0e32",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A world.view that stops naming a partition it named on an earlier round of the same look, once more is loaded, is now refused for that seat with the new game-owned world refusal view-dropped-partition, naming the partition and telling the author to keep naming it (#936). #717's event audience relies on a view naming more as more is loaded, never fewer. The check runs in the runner's declareViews over names it already computes: no extra view calls and no new data across the runner/host boundary, so hosts need no change; a look's first round (nothing supplied) starts the comparison afresh. Platform: re-vendor. No payload or stored format changed."
     }
   ]
 }
