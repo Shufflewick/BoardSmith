@@ -861,3 +861,48 @@ describe('useBoardActionBridge dragged piece for a filterBy pick (#965)', () => 
     expect(board.draggableSelectedElement).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// #945 -- a click starts an action by the same match the open pick uses
+// ---------------------------------------------------------------------------
+
+describe('useBoardActionBridge refs a click starts an action by (#945)', () => {
+  function wireTwoActions(validElements: EnrichedValidElement[]) {
+    const board = createBoardInteraction();
+    const { controller, start } = makeController({ pick: null, action: null, validElements });
+    useBoardActionBridge({
+      controller,
+      boardInteraction: board,
+      isMyTurn: ref(true),
+      autoEndTurn: ref(false),
+      actionMetadata: ref({
+        assign: { name: 'assign', selections: [{ name: 'squad', type: 'element', validElements }] },
+        pass: { name: 'pass', selections: [] },
+      }),
+      availableActions: ref(['assign', 'pass']),
+      disabledActions: ref(undefined),
+      isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
+    });
+    return { board, start };
+  }
+
+  it('starts the action from a name-only ref when the candidate is anchored by that name', async () => {
+    const { board, start } = wireTwoActions([
+      { id: 5, refs: [{ ref: { name: 'Squad A' }, role: 'highlight' }] },
+      { id: 6, refs: [{ ref: { name: 'Squad B' }, role: 'highlight' }] },
+    ]);
+
+    board.selectElement({ name: 'Squad B' });
+    await nextTick();
+    expect(start).toHaveBeenCalledWith('assign', { args: { squad: 6 } });
+  });
+
+  it('does not start from a name when the candidate is anchored by its id, as the open pick would not take it', async () => {
+    const { board, start } = wireTwoActions([
+      { id: 5, refs: [{ ref: { id: 5 }, role: 'highlight' }] },
+    ]);
+    board.selectElement({ name: 'Squad A' });
+    await nextTick();
+    expect(start).not.toHaveBeenCalled();
+  });
+});

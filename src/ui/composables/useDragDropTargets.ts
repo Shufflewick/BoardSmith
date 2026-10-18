@@ -35,6 +35,7 @@ import type {
   UseActionControllerReturn,
   EnrichedPickMetadata,
   EnrichedActionMetadata,
+  EnrichedValidElement,
 } from './useActionControllerTypes.js';
 import { isChoosableElement } from './useBoardActionBridge.js';
 import { devWarn } from '../../utils/dev.js';
@@ -116,9 +117,13 @@ export function setupDragDropOrchestration(options: DragDropOrchestrationOptions
     return true;
   }
 
-  /** Is the dragged element one of the (enabled) valid elements for this pick? */
-  function pickAcceptsDragged(pick: EnrichedPickMetadata, dragged: ElementRef): boolean {
-    return actionController.getValidElements(pick).some(el => isChoosableElement(el, dragged));
+  /**
+   * The enabled candidate of a single element pick that the drag is, if any. Its
+   * id, not the dragged ref's, fills the pick: a piece drags on its square's behalf (#943).
+   */
+  function draggedCandidate(pick: EnrichedPickMetadata | null, dragged: ElementRef): EnrichedValidElement | undefined {
+    if (pick?.type !== 'element') return undefined;
+    return actionController.getValidElements(pick).find(el => isChoosableElement(el, dragged));
   }
 
   /** Mirror the controller's current pick into board-interaction state so AutoUI boards react. */
@@ -174,8 +179,9 @@ export function setupDragDropOrchestration(options: DragDropOrchestrationOptions
         // drag-to-start path below. This is what makes "drag the source card, drop
         // it on the destination zone" work when a custom UI arms the action first
         // (e.g. via an action button) before the drag begins.
-        if (pick?.type === 'element' && dragged.id !== undefined && pickAcceptsDragged(pick, dragged)) {
-          await actionController.fill(pick.name, dragged.id);
+        const chosen = draggedCandidate(pick, dragged);
+        if (pick && chosen) {
+          await actionController.fill(pick.name, chosen.id);
           // Filling may have been the action's final input (auto-executed) — done.
           if (!actionController.currentAction.value) return;
           syncCurrentActionPick(actionName);
