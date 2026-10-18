@@ -574,6 +574,17 @@ const SAFE_LAYOUT_KEYS = new Set([
   '$hexSize',
 ]);
 
+/** A Grid cell's numeric coordinates, the only own attributes a hidden cell keeps (#1055). */
+function gridCellCoordinates(attrs: Record<string, unknown>, parent: GameElement | undefined): Record<string, unknown> {
+  // A cell's place on the board is layout the seat already sees; AutoUI cannot draw the grid without it.
+  if (!(parent instanceof Grid)) return {};
+  const coordinates: Record<string, unknown> = {};
+  for (const key of [parent.$rowCoord, parent.$colCoord]) {
+    if (key !== undefined && typeof attrs[key] === 'number') coordinates[key] = attrs[key];
+  }
+  return coordinates;
+}
+
 /**
  * Redact identity-bearing image refs from the attributes of an element that
  * the viewer is not permitted to fully see.  Returns a new object containing
@@ -589,13 +600,7 @@ const SAFE_LAYOUT_KEYS = new Set([
  *   a Grid cell's two coordinate attributes (named by the parent's $rowCoord/$colCoord) → copied through (#1055)
  */
 function redactHiddenElementAttrs(attrs: Record<string, unknown>, parent: GameElement | undefined): Record<string, unknown> {
-  const safe: Record<string, unknown> = {};
-  // A cell's place on the board is layout the seat already sees; AutoUI cannot draw the grid without it (#1055).
-  if (parent instanceof Grid) {
-    for (const key of [parent.$rowCoord, parent.$colCoord]) {
-      if (key !== undefined && typeof attrs[key] === 'number') safe[key] = attrs[key];
-    }
-  }
+  const safe = gridCellCoordinates(attrs, parent);
 
   for (const [key, value] of Object.entries(attrs)) {
     if (key === '$image') continue; // identity-bearing single-sided image — drop
