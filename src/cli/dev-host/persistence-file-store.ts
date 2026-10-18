@@ -45,13 +45,16 @@ export function loadDevStore(path: string): {
   save: () => Promise<void>;
 } {
   const store = new PersistenceStore(readState(path));
+  const write = async () => {
+    mkdirSync(dirname(path), { recursive: true });
+    // Written whole or not at all, so a crash mid-save cannot tear the developer's store (#887).
+    await atomicWriteFile(path, `${JSON.stringify(store.toState(), null, 2)}\n`);
+  };
+  let last: Promise<void> = Promise.resolve();
   return {
     store,
-    save: async () => {
-      mkdirSync(dirname(path), { recursive: true });
-      // Written whole or not at all, so a crash mid-save cannot tear the developer's store (#887).
-      await atomicWriteFile(path, `${JSON.stringify(store.toState(), null, 2)}\n`);
-    },
+    // One after another, so an older snapshot never lands last; each caller still sees its own failure.
+    save: () => (last = last.catch(() => undefined).then(write)),
   };
 }
 
