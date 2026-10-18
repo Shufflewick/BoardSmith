@@ -901,6 +901,16 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       }
     }
 
+    // World mode (#1170): the store restores a partition directly under the
+    // game, so a root moved anywhere else would silently snap back at the next wake.
+    if (this._ctx?._partitionRoots?.has(this._t.id) && destination !== this._ctx.game) {
+      throw new Error(
+        `"${this.name ?? this.constructor.name}" (id: ${this._t.id}) is a world partition root, ` +
+        `and a partition's root must stay directly under the game. Move what is inside it ` +
+        `instead (its pieces and spaces, with putInto() or reparent()), and leave the root where it is.`
+      );
+    }
+
     const oldParent = this._t.parent;
 
     // D22 (163-01): a sealed Space rejects a child being spliced OUT of it.
@@ -933,8 +943,8 @@ export class GameElement<G extends Game = any, P extends Player = any> {
         this._ctx._touchedPartitions = touched;
       }
       // Walking from `this` rather than from `oldParent` also covers the case
-      // where `this` IS a partition root: a whole partition that changes
-      // parent has dirtied itself.
+      // where `this` IS a partition root reordered among the game's children
+      // (the only root move the #1170 guard above lets through).
       markNearestPartition(this, partitionRoots, touched);
       markNearestPartition(destination, partitionRoots, touched);
     }

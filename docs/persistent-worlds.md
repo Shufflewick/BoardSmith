@@ -454,6 +454,16 @@ like the one that looks around the room. See
 result is an ordinary `ActionDefinition`, which is why it needs no world-only
 registry, panel or board bridge.
 
+### A partition root stays directly under the game (#1170)
+
+A partition's root is created directly under the game, and that is where the
+store puts it back on every wake: a checkpoint writes the root's subtree, not
+where it sits. So an action may not move a root anywhere else. `reparent()`,
+`putInto()` or `remove()` on a partition root throws unless the destination is
+the game itself (reordering roots among the game's children is fine), and the
+command is refused as a `rules-error` with nothing it changed kept. To move a
+room's contents, move what is inside it (its pieces and spaces), not the room.
+
 ### The ordered declaration walk
 
 The flat command table answered "what do I need?" with one
@@ -2768,7 +2778,7 @@ thing next time.
 
 | Code | What happened |
 | --- | --- |
-| `rules-error` | A seated or clock action's `execute` or `onSelect` threw something that is not a `PlayerFacingError`, so the player was told the action "could not be completed because of an error in the game's rules" and nothing it changed was kept. The rules saying no (a `PlayerFacingError`, a failed `validate`, `{ success: false, error }`) carries no code. |
+| `rules-error` | A seated or clock action's `execute` or `onSelect` threw something that is not a `PlayerFacingError` (including a move of a partition root away from the game, #1170), so the player was told the action "could not be completed because of an error in the game's rules" and nothing it changed was kept. The rules saying no (a `PlayerFacingError`, a failed `validate`, `{ success: false, error }`) carries no code. |
 | `bundle-not-a-world` | The manifest declares `"backend": "world"` and the compiled rules export no `world.actions`, no `world.view`, no `world.maxPlayers`, a `world.maxPlayers` the host will not seat, a `world.stateVersion` that is not a whole number from 0 up, or a `world.migration` that is not usable (no `from`, a `from` at or past this version, a hook -- `partition`, `event`, `derive`, `create` or `finalize` -- that is not a function, a `survey` that is not `{ initial, root, maxBytes }`, or a migration declaring both `survey` and `finalize`). |
 | `world-migration-unavailable` | A world's recorded `stateVersion` and its bundle's differ, and no migration in that bundle can cross the gap: none declared, one declared from a different version, or a bundle older than the world. Also a `create` or `derive` hook whose answer is not `name -> element`, or that names a partition the world already holds; a hook that allocated a top-level element and never answered it as a partition root (#246); a survey digest past `survey.maxBytes` or past the host's own ceiling, whether it was folded on this call or carried into it as bytes (#255); and a paged survey migration run with no `pass`, or a transform pass handed no digest. The world is not changed. |
 | `invalid-world-action` | A world action the platform cannot offer or cannot bound: an action not built with `worldAction()`, an unbounded `from`/`filter`/`elementClass` element form, an element selection with no `elements:`, a candidate outside what the step declared, a selection past `maxCandidatesPerSelection`, a dependent or repeating selection, a seatless action that asks a question, or a round declared before a step the action does not have. |
