@@ -469,6 +469,8 @@ export interface GameApiType {
   name: string;
   kind: 'class' | 'interface' | 'type' | 'enum';
   module: string;
+  /** False for a type its module does not export under this name: it is constructed by shape, never imported. */
+  exported: boolean;
   declaration: ApiDeclaration;
 }
 
@@ -495,6 +497,8 @@ type ListedName = Omit<GameApiSymbol, 'declaration'> & { declared?: ts.Symbol };
 interface RulesProgram {
   projectDir: string;
   srcDir: string;
+  /** The project directory as given and as its real path. */
+  projectRoots: string[];
   options: ts.CompilerOptions;
   program: ts.Program;
   checker: ts.TypeChecker;
@@ -587,6 +591,7 @@ async function createRulesProgram(projectDir: string): Promise<RulesProgram> {
   return {
     projectDir: compilerProjectDir,
     srcDir,
+    projectRoots,
     options,
     program,
     checker: program.getTypeChecker(),
@@ -866,8 +871,22 @@ function resolveNameReference(rules: RulesProgram, file: ts.SourceFile, referenc
   return symbol && aliasTarget(rules, symbol);
 }
 
+/** A compiler message with each quoted absolute path made machine-independent: project-relative, from `node_modules/`, or neither. */
+function portableMessage(rules: RulesProgram, message: string): string {
+  return message.replace(/(["'])(\/[^"']*)\1/g, (_quoted, quote: string, path: string) => {
+    const root = rules.projectRoots.find((r) => path.startsWith(`${r}/`));
+    const inPackages = path.lastIndexOf('/node_modules/');
+    const portable = root
+      ? path.slice(root.length + 1)
+      : inPackages >= 0
+        ? path.slice(inPackages + 1)
+        : 'a module outside the project';
+    return `${quote}${portable}${quote}`;
+  });
+}
+
 /**
- * Has the compiler write `file`'s declaration file, in memory. When it cannot (a declaration whose
+ * Has the compiler write `file`'s declaration file, in memory (a hand-written `.d.ts` is its own). When it cannot (a declaration whose
  * type the module cannot name), it writes none for the whole module, so every name there is
  * unavailable, with the compiler's own reasons.
  */
@@ -875,15 +894,13 @@ function moduleDeclarations(rules: RulesProgram, file: ts.SourceFile): ModuleDec
   const cached = rules.declarations.get(file.fileName);
   if (cached) return cached;
   const module = toProjectRelativeModule(rules, file.fileName);
-  let text: string | undefined;
-  const { diagnostics } = rules.program.emit(file, (_name, written) => (text = written), undefined, true);
+  let text: string | undefined = file.isDeclarationFile ? file.text : undefined;
+  const { diagnostics } = file.isDeclarationFile
+    ? { diagnostics: [] }
+    : rules.program.emit(file, (_name, written) => (text = written), undefined, true);
   let result: ModuleDeclarations;
   if (diagnostics.length > 0) {
-    const reasons = diagnostics.map((d) => {
-      const statement = file.statements.find((s) => d.start !== undefined && s.pos <= d.start && d.start < s.end);
-      const names = statement ? declaredNames(statement).join(', ') : '';
-      return `${names ? `${names}: ` : ''}${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`;
-    });
+    const reasons = diagnostics.map((d) => diagnosticReason(rules, file, d));
     result = {
       unavailable:
         `the TypeScript compiler cannot write declarations for ${module} (${reasons.join('; ')}). ` +
@@ -892,27 +909,40 @@ function moduleDeclarations(rules: RulesProgram, file: ts.SourceFile): ModuleDec
   } else if (text === undefined) {
     result = { unavailable: `the TypeScript compiler wrote no declarations for ${module}.` };
   } else {
-    const dts = ts.createSourceFile('declarations.d.ts', text, ts.ScriptTarget.Latest, true);
-    const byName = new Map<string, PrintedDeclaration[]>();
-    for (const statement of dts.statements) {
-      const names = declaredNames(statement);
-      if (names.length === 0) continue;
-      const node = forTranslator(statement);
-      const found: NameReference[] = [];
-      const typeParameters = new Set<string>();
-      collectNameReferences(node, found, typeParameters);
-      const printed: PrintedDeclaration = {
-        text: DECLARATION_PRINTER.printNode(ts.EmitHint.Unspecified, node, dts),
-        references: found
-          .filter((r) => r.from !== undefined || !typeParameters.has(r.parts[0]))
-          .flatMap((r) => resolveNameReference(rules, file, r) ?? []),
-      };
-      for (const name of names) byName.set(name, [...(byName.get(name) ?? []), printed]);
-    }
-    result = { byName };
+    result = { byName: printedByName(rules, file, text) };
   }
   rules.declarations.set(file.fileName, result);
   return result;
+}
+
+/** A declaration diagnostic, led by the names of the statement it is about. */
+function diagnosticReason(rules: RulesProgram, file: ts.SourceFile, diagnostic: ts.Diagnostic): string {
+  const start = diagnostic.start;
+  const statement = start === undefined ? undefined : file.statements.find((s) => s.pos <= start && start < s.end);
+  const names = statement ? declaredNames(statement).join(', ') : '';
+  return `${names ? `${names}: ` : ''}${portableMessage(rules, ts.flattenDiagnosticMessageText(diagnostic.messageText, ' '))}`;
+}
+
+/** `file`'s declaration text, printed statement by statement under the names each declares. */
+function printedByName(rules: RulesProgram, file: ts.SourceFile, text: string): Map<string, PrintedDeclaration[]> {
+  const dts = ts.createSourceFile('declarations.d.ts', text, ts.ScriptTarget.Latest, true);
+  const byName = new Map<string, PrintedDeclaration[]>();
+  for (const statement of dts.statements) {
+    const names = declaredNames(statement);
+    if (names.length === 0) continue;
+    const node = forTranslator(statement);
+    const found: NameReference[] = [];
+    const typeParameters = new Set<string>();
+    collectNameReferences(node, found, typeParameters);
+    const printed: PrintedDeclaration = {
+      text: DECLARATION_PRINTER.printNode(ts.EmitHint.Unspecified, node, dts),
+      references: found
+        .filter((r) => r.from !== undefined || !typeParameters.has(r.parts[0]))
+        .flatMap((r) => resolveNameReference(rules, file, r) ?? []),
+    };
+    for (const name of names) byName.set(name, [...(byName.get(name) ?? []), printed]);
+  }
+  return byName;
 }
 
 /** `symbol`'s declaration, and the symbols its text mentions. */
@@ -946,11 +976,18 @@ function typeEntry(rules: RulesProgram, symbol: ts.Symbol): Omit<GameApiType, 'd
           : flags & ts.SymbolFlags.TypeAlias
             ? 'type'
             : undefined;
-  return kind && { name: symbol.name, kind, module: toProjectRelativeModule(rules, declaration.getSourceFile().fileName) };
+  if (!kind) return undefined;
+  const module = rules.checker.getSymbolAtLocation(declaration.getSourceFile());
+  const exported =
+    module !== undefined &&
+    rules.checker.getExportsOfModule(module).some((s) => s.name === symbol.name && aliasTarget(rules, s) === symbol);
+  return { name: symbol.name, kind, module: toProjectRelativeModule(rules, declaration.getSourceFile().fileName), exported };
 }
 
+// Code-unit order, not localeCompare: the same tree must give the same payload on every machine.
+const byCodeUnits = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 const byModuleThenName = (a: { module: string; name: string }, b: { module: string; name: string }): number =>
-  a.module.localeCompare(b.module) || a.name.localeCompare(b.name);
+  byCodeUnits(a.module, b.module) || byCodeUnits(a.name, b.name);
 
 /**
  * The types the printed declarations mention, then the types those mention, until none is new:
@@ -1090,16 +1127,21 @@ export function buildExampleTranslationPayload(
   api: GameApiSurface,
 ): string {
   let budget = TRANSLATION_DECLARATION_BUDGET;
+  /** Each unavailable reason printed so far, with the entry it was printed under. */
+  const reasonsPrinted = new Map<string, string>();
   const entryLines = (entry: GameApiSymbol | GameApiType): string[] => {
-    const header = `- ${entry.name} (${entry.kind}, ${entry.module})`;
+    const header = `- ${entry.name} (${entry.kind}, ${entry.module}${'exported' in entry && !entry.exported ? ', not exported' : ''})`;
     const { declaration } = entry;
-    if ('unavailable' in declaration) return [header, `    declaration unavailable: ${declaration.unavailable}`];
-    if (declaration.text.length > budget) {
+    const firstWithReason = 'unavailable' in declaration ? reasonsPrinted.get(declaration.unavailable) : undefined;
+    if (firstWithReason) return [header, `    declaration unavailable: the same reason as ${firstWithReason} above.`];
+    const body = 'text' in declaration ? declaration.text : `declaration unavailable: ${declaration.unavailable}`;
+    if (body.length > budget) {
       budget = 0;
       return [header, `    declaration omitted: the ${TRANSLATION_DECLARATION_BUDGET}-character declaration budget is spent.`];
     }
-    budget -= declaration.text.length;
-    return [header, ...declaration.text.split('\n').map((line) => `    ${line}`)];
+    budget -= body.length;
+    if ('unavailable' in declaration) reasonsPrinted.set(declaration.unavailable, entry.name);
+    return [header, ...body.split('\n').map((line) => `    ${line}`)];
   };
   const symbolLines = api.exportedSymbols.flatMap(entryLines);
   const typeLines = api.referencedTypes.flatMap(entryLines);
@@ -1137,7 +1179,7 @@ export function buildExampleTranslationPayload(
     '',
     `Types those declarations reference, declared under src/ (${api.referencedTypes.length} type(s), ` +
       `nearest first). A type from a package or the standard library is named above but not ` +
-      `declared here:`,
+      `declared here. A type marked "not exported" cannot be imported: build a value of its shape:`,
     ...typeLines,
     '',
     `Declarations are printed in the order above until ${TRANSLATION_DECLARATION_BUDGET} characters ` +

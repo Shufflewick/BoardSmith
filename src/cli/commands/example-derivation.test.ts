@@ -16,7 +16,7 @@ import {
 } from './example-derivation.js';
 import { DERIVE_CHECK_LEDGER_BEGIN } from './verify-derive-check.js';
 import { readFile } from 'node:fs/promises';
-import { promises as fs } from 'node:fs';
+import { promises as fs, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { generateTsConfig } from '../lib/project-scaffold.js';
@@ -898,6 +898,7 @@ async function writeDeclarationsFixtureProject(root: string): Promise<string> {
       "export * from './damage.js';",
       "export * from './sim/movement.js';",
       "export * from './broken.js';",
+      "export * from './leaky.js';",
       "export * as movement from './sim/movement.js';",
     ],
     'elements.ts': [
@@ -905,8 +906,11 @@ async function writeDeclarationsFixtureProject(root: string): Promise<string> {
       // A one-member alias, as Windup Warfare's UnitType is: the checker keeps no alias on its type.
       "export type Terrain = 'Mud';",
       'export enum Facing { North, East = 5 }',
-      'export interface UnitStats { hp: number; facing: Facing; armor: Armor }',
+      'export interface UnitStats { hp: number; facing: Facing; armor: Armor; late: Late }',
       'interface Armor { plates: number }',
+      // Exported by a later list, so its declaration statement has no `export`.
+      'interface Late { at: number }',
+      'export { Late };',
       'export class Unit {',
       '  private secret = 1;',
       '  protected guarded = 2;',
@@ -937,7 +941,10 @@ async function writeDeclarationsFixtureProject(root: string): Promise<string> {
     'sim/movement.ts': ['export const TICK_SECONDS = 0.05;'],
     // `thing`'s inferred type is a class with a private member that broken.ts cannot name.
     'hidden.ts': ['class Hidden {', '  private x = 1;', '}', 'export function make() {', '  return new Hidden();', '}'],
-    'broken.ts': ["import { make } from './hidden.js';", 'export const thing = make();'],
+    'broken.ts': ["import { make } from './hidden.js';", 'export const thing = make();', 'export const thing2 = make();'],
+    // `leaked`'s inferred type is an interface stash.ts does not export: the compiler's message names that module's path.
+    'stash.ts': ['interface Stashed { n: number }', 'export function makeStash(): Stashed {', '  return { n: 1 };', '}'],
+    'leaky.ts': ["import { makeStash } from './stash.js';", 'export const leaked = makeStash();'],
   });
   return root;
 }
@@ -981,6 +988,7 @@ describe('collectGameApiSurface — carries the declarations a translator needs 
       name: 'UnitType',
       kind: 'type',
       module: 'src/rules/elements.ts',
+      exported: true,
       declaration: { text: "export type UnitType = 'Crawler' | 'Scuttler';" },
     });
 
@@ -1016,13 +1024,17 @@ describe('collectGameApiSurface — carries the declarations a translator needs 
   });
 
   it('follows referenced types transitively, nearest first, each once, and none already listed', () => {
-    expect(surface.referencedTypes.map((t) => `${t.name} (${t.kind})`)).toEqual([
+    expect(surface.referencedTypes.map((t) => `${t.name} (${t.kind}${t.exported ? '' : ', not exported'})`)).toEqual([
       'Terrain (type)',
       'UnitStats (interface)',
       'UnitType (type)',
       'Spare (interface)',
-      'Armor (interface)',
+      'Armor (interface, not exported)',
+      'Late (interface)',
     ]);
+    const payload = buildExampleTranslationPayload(DECLARATIONS_SPEC, surface);
+    expect(payload).toContain('- Armor (interface, src/rules/elements.ts, not exported)\n    interface Armor {');
+    expect(payload).toContain('- Late (interface, src/rules/elements.ts)\n    interface Late {');
   });
 
   it('never carries an implementation body or a comment', () => {
@@ -1049,6 +1061,43 @@ describe('collectGameApiSurface — carries the declarations a translator needs 
     expect(payload).toMatch(
       /- thing \(const, src\/rules\/broken\.ts\)\n {4}declaration unavailable: the TypeScript compiler cannot write declarations/,
     );
+    // A module-wide reason is printed once.
+    expect(payload).toContain(
+      '- thing2 (const, src/rules/broken.ts)\n    declaration unavailable: the same reason as thing above.',
+    );
+  });
+
+  it("names modules in the compiler's reasons relative to the project, never by an absolute path", async () => {
+    const { unavailable } = symbolNamed(surface, 'leaked').declaration as { unavailable: string };
+    expect(unavailable).toContain("leaked: Exported variable 'leaked' has or is using name 'Stashed' from external module \"src/rules/stash\"");
+    const payload = buildExampleTranslationPayload(DECLARATIONS_SPEC, surface);
+    for (const root of [projectDir, realpathSync(projectDir)]) expect(payload).not.toContain(root);
+  });
+
+  it('lists names in a fixed character order, whatever the locale', async () => {
+    await writeRulesFiles(join(projectDir, 'src', 'rules'), {
+      'index.ts': ['export const beta = 1;', 'export const alpha = 2;', 'export const Alpha = 3;'],
+    });
+
+    const ordered = await collectGameApiSurface(projectDir);
+
+    expect(ordered.exportedSymbols.map((s) => s.name)).toEqual(['Alpha', 'alpha', 'beta']);
+  });
+
+  it('prints a hand-written declaration file under src/ as it is written, without its comments', async () => {
+    await writeRulesFiles(join(projectDir, 'src', 'rules'), {
+      'index.ts': ["export * from './ambient.js';"],
+      'ambient.d.ts': ['/** A doc comment. */', 'export declare const AMBIENT: 3;'],
+    });
+
+    const ambient = await collectGameApiSurface(projectDir);
+
+    expect(symbolNamed(ambient, 'AMBIENT')).toEqual({
+      name: 'AMBIENT',
+      kind: 'const',
+      module: 'src/rules/ambient.d.ts',
+      declaration: { text: 'export declare const AMBIENT: 3;' },
+    });
   });
 
   it('is byte-identical across two runs', async () => {
@@ -1215,6 +1264,23 @@ describe('buildExampleTranslationPayload — the declaration budget (#1087)', ()
     return { name, kind: 'const', module: 'src/rules/big.ts', declaration: { text: 'x'.repeat(length) } };
   }
 
+  it('counts an unavailable reason against the budget', () => {
+    const api: GameApiSurface = {
+      projectDir: SYNTHETIC_PROJECT_DIR,
+      testDir: join(SYNTHETIC_PROJECT_DIR, 'tests'),
+      exportedSymbols: [
+        symbol('first', TRANSLATION_DECLARATION_BUDGET - 10),
+        { name: 'second', kind: 'const', module: 'src/rules/big.ts', declaration: { unavailable: 'r'.repeat(50) } },
+      ],
+      referencedTypes: [],
+    };
+
+    const payload = buildExampleTranslationPayload(DECLARATIONS_SPEC, api);
+
+    expect(payload).toMatch(/- second \(const, src\/rules\/big\.ts\)\n {4}declaration omitted: /);
+    expect(payload).not.toContain('r'.repeat(50));
+  });
+
   it('prints declarations in order until the budget is spent, then marks every later one omitted', () => {
     const api: GameApiSurface = {
       projectDir: SYNTHETIC_PROJECT_DIR,
@@ -1225,7 +1291,7 @@ describe('buildExampleTranslationPayload — the declaration budget (#1087)', ()
         symbol('third', 1),
       ],
       referencedTypes: [
-        { name: 'Later', kind: 'type', module: 'src/rules/big.ts', declaration: { text: 'type Later = 1;' } },
+        { name: 'Later', kind: 'type', module: 'src/rules/big.ts', exported: true, declaration: { text: 'type Later = 1;' } },
       ],
     };
 

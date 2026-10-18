@@ -65,7 +65,9 @@ guess, so do not second-guess it either.
 Two markers replace a declaration:
 
 - `declaration unavailable: <reason>` — the compiler could not write one (the reason is its own
-  message), or the name binds a whole module or a default export.
+  message, with module paths given relative to the project), or the name binds a whole module or
+  a default export. A reason already printed for an earlier entry reads `the same reason as
+  <name> above`.
 - `declaration omitted: ...` — the payload's declaration budget was spent before this entry.
   Declarations are printed in listing order, then type order, until the budget is spent.
 
@@ -116,9 +118,9 @@ never an invented `isRun([5, 6, 7])`-shaped function that does not appear in the
 Whichever branch applies, use ONLY symbols that actually appear in the supplied
 `exportedSymbols` listing. The listing is mechanical, not curated for this example — not every
 symbol in it is relevant, but nothing outside it is usable. A type in the referenced-types
-section may be imported with `import type` from the module it is listed at when it is exported
-there (its declaration starts with `export`); a type whose declaration has no `export` is
-constructed by its shape, never imported.
+section may be imported with `import type` from the module it is listed at, under the name it is
+listed with, unless its entry is marked `not exported`: such a type is built by its shape, never
+imported.
 
 ---
 
