@@ -1578,14 +1578,17 @@ describe('contradictory / marker — verifyImpactApplyCommand', () => {
     // One record after another, so the ledger is being written for the whole of apply's run.
     async function recordInTurn(): Promise<void> {
       for (const e of evidence) {
-        await verifyClassifyRecordCommand({ project, runId, pairId, label: 'sharper', evidence: e, json: true });
+        // Quoted, so each re-classification stays "sharper" and apply's verdict does not depend on order (#1172).
+        await verifyClassifyRecordCommand({
+          project, runId, pairId, label: 'sharper', evidence: e, quotedPass1: 'Lower.', quotedPass2: 'Higher.', json: true,
+        });
       }
     }
 
     await Promise.all([verifyImpactApplyCommand({ project, runId, json: true }), recordInTurn()]);
 
     const records = await runLedgerRecords(project, runId);
-    expect(records.filter((r) => r.kind === 'impact').map((r) => r.slug)).toEqual(['movement']);
+    expect(records.filter((r) => r.kind === 'impact').map((r) => [r.slug, r.ruleDelta])).toEqual([['movement', 'sharper']]);
     expect(records.map((r) => String(r.evidence).split(' | ')[0])).toEqual(expect.arrayContaining(evidence));
   });
 
