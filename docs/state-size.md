@@ -65,7 +65,10 @@ state a ceiling that had moved by a factor of four.
   forever. Measured on an 8-seat game with a 6.5 KB model and three narration
   lines per action: 75 KB of log at 325 actions. The same game before the log
   moved out of the tree was 1671 KB, of which the model was under 8% — the log
-  was the snapshot.
+  was the snapshot. Those figures predate #1165, which stores each line's text
+  as every seat reads it (`readings`): about 55 bytes more for a line every
+  seat reads alike, and one more copy for each seat that reads a hidden
+  element differently.
 
   Read `measureSnapshotSize().messageLogBytes` rather than inferring the log's
   share from the remainder, and note that `projectSnapshotSize` infers the log's

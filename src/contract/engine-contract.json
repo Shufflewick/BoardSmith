@@ -1,6 +1,6 @@
 {
   "revision": 240,
-  "surfaceHash": "d045fa6967c06929",
+  "surfaceHash": "5d61a0cfe45f7954",
   "payloadHash": "0e2d27db00239080",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1859,10 +1859,10 @@
     {
       "revision": 240,
       "date": "2026-10-18",
-      "surfaceHash": "d045fa6967c06929",
+      "surfaceHash": "5d61a0cfe45f7954",
       "payloadHash": "0e2d27db00239080",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "A seat's message text now names an element it cannot see by the outermost container concealing it, as element references do, so a public '{{player}} drew {{card}}' reads the hand or deck rather than the card for other seats and spectators (#1165). In world mode, a seat's view no longer carries the real id of an element in a partition not loaded on this instance: the reference is written as { __elementRef: 'pile/removed' }, the reference that names nothing, for every seat (#1166). No payload shape changes; a world client that followed such an id now decodes it to undefined."
+      "summary": "A seat's message text is now fixed when the message is written, from what that seat could see then, and never changes afterwards (#1165): an element the seat cannot see is named by the nearest container whose name it can see (its outermost concealer, or that concealer's parent when the concealer hides itself, and the game's name at the top), an element hidden by its own visibility included. MessageEntry gains readings: { text, seats }[], one entry per distinct text with the seats that read it (0 is the spectator); text stays the template. A seat's serializeMessageLog copy keeps only its own reading. A message log saved by an older engine has no readings, and formatting it throws a message saying to start a new game, so live tables should stay on the revision that wrote them. In world mode, a seat's view no longer carries the real id of an element in a partition not loaded on this instance: the reference is written as { __elementRef: 'pile/removed' }, the reference that names nothing, for every seat (#1166)."
     }
   ]
 }

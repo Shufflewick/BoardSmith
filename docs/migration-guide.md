@@ -2,11 +2,18 @@
 
 ## Hidden elements in message text and unloaded world references are withheld (#1165, #1166)
 
-`game.message()` text now names an element a seat cannot see by the outermost
-container concealing it, as element references already did (#1043): a public
+`game.message()` text is now worked out for each seat when the message is
+written, from what that seat could see then, and never changes afterwards. An
+element the seat cannot see is named by the nearest container whose name it
+can see, as element references name its concealer (#1043): a public
 `'{{player}} drew {{card}}'` reads "drew Hand" for a seat that cannot see the
 card, and the card's name only for a seat that can. A test that read another
 seat's log for a hidden card's name now reads the container's name.
+
+Each `MessageEntry` in `game.messages` gains `readings`, the text each seat
+reads, and `text` stays the template. A message log saved by an older engine
+has no `readings` and is refused when formatted, with a message saying to start
+a new game; finish or restart games saved before this change.
 
 In world mode, a seat's view no longer carries the real id of an element in a
 partition not loaded on this instance. The reference arrives as

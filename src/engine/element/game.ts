@@ -18,7 +18,7 @@ import {
   registerCreatedElementClass,
 } from './game-element.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE } from './hidden-placeholder.js';
-import { concealRefsForSeat, outermostConcealer } from './concealed-refs.js';
+import { concealRefsForSeat, nameableFor } from './concealed-refs.js';
 import { childrenChanged } from './cell-index.js';
 import { oncePerState, stateChanged } from './state-version.js';
 import { Piece } from './piece.js';
@@ -612,8 +612,16 @@ function redactHiddenElementAttrs(attrs: Record<string, unknown>): Record<string
 
 /** One entry in a game's message log. `to` is the AUDIENCE — see `Game.messages`. */
 export interface MessageEntry {
+  /** The template, with its `{{key}}` placeholders. */
   text: string;
   data?: Record<string, unknown>;
+  /**
+   * The text each recipient reads, worked out when the line was written from
+   * what that seat could see then, so it never changes afterwards (#1165). One
+   * entry per distinct text, with the seats that read it (`0` is the
+   * spectator). A seat's saved log keeps only its own.
+   */
+  readings: { text: string; seats: number[] }[];
   /** Seats allowed to receive this line. Absent means everyone. */
   to?: number[];
   /**
@@ -4142,9 +4150,17 @@ export class Game<
     to?: number[],
     type?: string,
   ): void {
+    const readings: MessageEntry['readings'] = [];
+    for (const seat of to ?? [0, ...this.players.map((p) => p.seat)]) {
+      const reading = this.readMessageAs(text, data, seat === 0 ? -1 : seat);
+      const same = readings.find((r) => r.text === reading);
+      if (same) same.seats.push(seat);
+      else readings.push({ text: reading, seats: [seat] });
+    }
     this.messages.push({
       text,
       data,
+      readings,
       ...(to ? { to } : {}),
       ...(type !== undefined ? { type } : {}),
     });
@@ -4305,22 +4321,38 @@ export class Game<
    * flattened away at the last hop.
    */
   getFormattedMessageEntries(seat?: number | null): FormattedMessage[] {
-    const position = seat ?? -1;
-    // The element the seat may read about: an element it cannot see is named by its concealer, as references are (#1165).
-    const shown = (value: unknown): unknown =>
-      isElement(value) ? (outermostConcealer(value, position) ?? value) : Array.isArray(value) ? value.map(shown) : value;
+    const key = seat ?? 0;
     return this.messages
       .filter((m) => this.canSeeMessage(m, seat))
-      .map(({ text, data, type }) => {
-        let processed = text;
-        if (data) {
-          for (const [key, value] of Object.entries(data)) {
-            // An element (a Player is one) is written by its own toString(). split/join keeps `$` codes in values literal.
-            processed = processed.split(`{{${key}}}`).join(String(shown(value)));
-          }
-        }
-        return type === undefined ? { text: processed } : { text: processed, type };
+      .map((m) => {
+        const text = this.readingFor(m, key);
+        return m.type === undefined ? { text } : { text, type: m.type };
       });
+  }
+
+  /** The text `seat` (`0` the spectator) reads for `message`, fixed when it was written. */
+  private readingFor(message: MessageEntry, seat: number): string {
+    const reading = message.readings?.find((r) => r.seats.includes(seat));
+    if (!reading) {
+      throw new Error(
+        `The game log line "${message.text}" has no text for ${seat === 0 ? 'spectators' : `seat ${seat}`}: it was saved ` +
+          `by an engine older than #1165, or this is another seat's copy of the log. Start a new game to clear it.`
+      );
+    }
+    return reading.text;
+  }
+
+  /** `text` with its placeholders filled in as the seat at `position` may read them now. */
+  private readMessageAs(text: string, data: Record<string, unknown> | undefined, position: number): string {
+    // An element the seat cannot see is named by the nearest container it can (#1165).
+    const shown = (value: unknown): unknown =>
+      isElement(value) ? nameableFor(value, this, position) : Array.isArray(value) ? value.map(shown) : value;
+    let processed = text;
+    for (const [key, value] of Object.entries(data ?? {})) {
+      // An element (a Player is one) is written by its own toString(). split/join keeps `$` codes in values literal.
+      processed = processed.split(`{{${key}}}`).join(String(shown(value)));
+    }
+    return processed;
   }
 
   // ============================================
@@ -4582,7 +4614,11 @@ export class Game<
    */
   serializeMessageLog(forSeat?: number | null): MessageEntry[] {
     if (forSeat === undefined) return encodeValue(this.messages, this._ctx, this.constructor.name, 'messages') as MessageEntry[];
-    const source = this.messages.filter((m) => this.canSeeMessage(m, forSeat));
+    const key = forSeat ?? 0;
+    // A seat's copy carries only its own text: another seat's names what this one cannot see.
+    const source = this.messages
+      .filter((m) => this.canSeeMessage(m, forSeat))
+      .map((m) => ({ ...m, readings: [{ text: this.readingFor(m, key), seats: [key] }] }));
     const encoded = serializeForSeat(this._ctx, () => encodeValue(source, this._ctx, this.constructor.name, 'messages'));
     return concealRefsForSeat(encoded, this, forSeat ?? -1) as MessageEntry[];
   }

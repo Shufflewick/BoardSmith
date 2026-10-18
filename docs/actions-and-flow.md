@@ -2523,14 +2523,18 @@ shared record: every player and every spectator receives it.
 game.message('{{player}} played {{card}}', { player: ctx.player, card });
 ```
 
-An element in the data is written by its name, worked out for each seat when
-its log is built. A seat that cannot see the element reads the name of the
-outermost container that conceals it, the same container an element reference
-names (#1165): `game.message('{{player}} drew {{card}}', { player, card })`
-reads "Alice drew Ace of Spades" for Alice and "Alice drew Hand" for everyone
-else once the card is in her owner-only hand. A list of elements is read the
-same way, element by element. Pass the element, not its name: a string reaches
-every seat as written.
+An element in the data is written by its name. Each seat's text is worked out
+when the message is written, from what that seat could see then, and it never
+changes afterwards, however the element moves later (#1165). A seat that cannot
+see the element reads the name of the container hiding it, the same container
+an element reference names; when that container hides its own name too, the
+seat reads the nearest container above it, and the game's name at the top.
+`game.message('{{player}} drew {{card}}', { player, card })`, written once the
+card is in Alice's owner-only hand, reads "Alice drew Ace of Spades" for Alice
+and "Alice drew Hand" for everyone else, even after she plays it face up. A
+card hidden by its own visibility (`hideFromAll()`, `showOnlyTo()`) is named by
+its container the same way. A list of elements is read element by element.
+Pass the element, not its name: a string reaches every seat as written.
 
 **The log is always on.** There is no prop, slot, or flag a game can set to
 remove it — it is what makes a game reviewable, and the copy/clear controls in

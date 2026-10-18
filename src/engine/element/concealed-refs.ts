@@ -74,3 +74,22 @@ export function outermostConcealer(element: GameElement, position: number): Game
     return zone !== undefined && !canPlayerSee(zone, position, ancestor.getEffectiveOwner()?.seat);
   });
 }
+
+/**
+ * The element whose name the seat at `position` may read for `element` (#1165):
+ * the element itself, or when the seat cannot see it, the nearest container
+ * above what hides it whose name the seat can see, and the game at the top. An
+ * element not in the game's tree here (an unloaded world partition) cannot be
+ * checked, so it is the game too.
+ */
+export function nameableFor(element: GameElement, game: Game, position: number): GameElement {
+  let top = element;
+  while (top._t.parent) top = top._t.parent;
+  if (top !== game && top !== game.pile) return game;
+  const hider = outermostConcealer(element, position) ?? (ownVisibilityAllows(element, position) ? undefined : element);
+  if (!hider) return element;
+  // Everything above the outermost concealer is visible, so only a concealer hidden by its own visibility moves up.
+  const named = ownVisibilityAllows(hider, position) ? hider : hider._t.parent;
+  // The pile is in no seat's view, so its name is not one a seat can see.
+  return named && named !== game.pile ? named : game;
+}

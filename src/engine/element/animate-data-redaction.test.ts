@@ -303,6 +303,64 @@ describe('message text names a hidden element by its outermost concealer (#1165)
         expect(textFor(game, 2)).toBe('played hand-p1,Seven of Hearts');
         expect(textFor(game, 1)).toBe('played Ace of Spades,Seven of Hearts');
       });
+
+      it('reads the container for an element hidden by its own visibility', () => {
+        const game = makeGame(worldMode);
+        const card = game.discard.first(Card)!;
+        card.showOnlyTo(1);
+        game.message('{{card}} placed face down', { card });
+        expect(textFor(game, 1)).toBe('Seven of Hearts placed face down');
+        expect(textFor(game, 2)).toBe('discard placed face down');
+        card.hideFromAll();
+        game.message('{{card}} placed face down', { card });
+        expect(game.getFormattedMessageEntries(1)[1].text).toBe('discard placed face down');
+      });
+
+      it('reads the nearest visible container when the concealer hides its own name, and the game at the top', () => {
+        const game = makeGame(worldMode);
+        const envelope = game.create(Space, 'Envelope: Colonel Mustard');
+        envelope.hideFromAll();
+        game.message('The solution was sealed: {{card}}', { card: envelope.create(Card, 'Rope') });
+        expect(textFor(game, 2)).toBe(`The solution was sealed: ${String(game)}`);
+      });
+
+      it('keeps the text it was written with after the element moves', () => {
+        const game = makeGame(worldMode);
+        const drawn = game.hand.last(Card)!;
+        const played = game.discard.first(Card)!;
+        game.message('{{player}} drew {{card}}', { player: game.getPlayer(1)!, card: drawn });
+        game.message('{{card}} played', { card: played });
+        drawn.putInto(game.discard);
+        played.putInto(game.deck);
+        game.deck.shuffle();
+        expect(game.getFormattedMessageEntries(2).map((m) => m.text)).toEqual(['Player 1 drew hand-p1', 'Seven of Hearts played']);
+      });
+
+      it("keeps each seat's text through a save and restore, and gives a seat's saved log only its own text", () => {
+        const game = makeGame(worldMode);
+        game.message('{{player}} drew {{card}}', { player: game.getPlayer(1)!, card: game.hand.last(Card)! });
+        const restored = makeGame(worldMode);
+        restored.loadSerializedState(restored.toJSON(), { messageLog: JSON.parse(JSON.stringify(game.serializeMessageLog())) });
+        expect(textFor(restored, 1)).toBe('Player 1 drew Ace of Spades');
+        expect(textFor(restored, 2)).toBe('Player 1 drew hand-p1');
+        expect(JSON.stringify(game.serializeMessageLog(2))).not.toContain('Ace of Spades');
+      });
     });
   }
+
+  it('keeps the text it was written with after the element is evicted with its partition (world)', () => {
+    const game = makeGame(true);
+    const casket = game.vault.first(Space, 'casket')!;
+    game.definePartition(casket.id);
+    game.message('{{player}} hid {{card}}', { player: game.getPlayer(1)!, card: casket.first(Card, 'Crown')! });
+    game.evictSubtree(casket.id);
+    expect(textFor(game, 2)).toBe('Player 1 hid vault');
+  });
+});
+
+it('refuses, by name, a saved log line with no text for the seat (#1165)', () => {
+  const game = makeGame();
+  game.loadSerializedState(game.toJSON(), { messageLog: [{ text: '{{card}} drew' } as never] });
+  expect(() => game.getFormattedMessageEntries(2)).toThrow(/"\{\{card\}\} drew" has no text for seat 2.*Start a new game/);
+  expect(() => game.serializeMessageLog(2)).toThrow(/has no text for seat 2/);
 });
