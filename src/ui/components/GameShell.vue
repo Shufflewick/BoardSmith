@@ -14,6 +14,7 @@ import { turnSequence, orderSeatsByTurn, type SeatActivityState } from '../../en
 import type { BoundaryKeyState } from '../../engine/flow/boundary-key.js';
 import { audioService } from '../../client/audio.js';
 import ActionPanel from './auto-ui/ActionPanel.vue';
+import BoardErrorBoundary from './BoardErrorBoundary.vue';
 import ControlsMenu from './ControlsMenu.vue';
 import DebugPanel from './DebugPanel.vue';
 import PlayShell, { type PlayConnection } from './PlayShell.vue';
@@ -1555,12 +1556,13 @@ defineExpose({
              Action Panel and the game context are handed, so none of them can
              disagree (#520, #516). -->
         <template v-if="shellMounted">
-        <component
-          v-if="selectedUiComponent"
-          :is="selectedUiComponent"
-          v-bind="boardProps"
-          @retry="handleRetry"
-        />
+        <BoardErrorBoundary v-if="selectedUiComponent" :state="gameView" :board="selectedUiComponent">
+          <component
+            :is="selectedUiComponent"
+            v-bind="boardProps"
+            @retry="handleRetry"
+          />
+        </BoardErrorBoundary>
         <!-- Only reachable if the registry's default entry resolved to no
              component — a broken uis.ts. Name the fix, don't render blank. -->
         <div v-else class="empty-game-area">

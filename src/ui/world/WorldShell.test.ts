@@ -571,6 +571,27 @@ describe('WorldShell — the shared chrome (#170)', () => {
     wrapper.unmount();
   });
 
+  it('shows a board that throws in place of the board, keeps the panel, and draws it again on the next view (#1149)', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const Fragile = defineComponent({
+      props: { gameView: { type: null, required: true } },
+      setup: (props) => () => {
+        if ((props.gameView as { said?: string })?.said === 'boom') throw new Error('no room here');
+        return h('p', { class: 'fragile' }, 'drawn');
+      },
+    });
+    const wrapper = mount(WorldShell, { props: { uis: defineGameUIs({ Fragile: defaultUI(Fragile) }), displayName: 'Gloamhall' } });
+    await drawn(wrapper, stateFrame({ view: { phase: 'watching', state: { said: 'boom' } } }));
+    expect(wrapper.find('[data-testid="bs-board-error"]').text()).toContain('no room here');
+    expect(consoleError).toHaveBeenCalledTimes(1);
+    expect(wrapper.find('[data-testid="bs-action-panel"]').text().toLowerCase()).toContain('look');
+    await drawn(wrapper, stateFrame({ revision: 2 }));
+    expect(wrapper.find('[data-testid="bs-board-error"]').exists()).toBe(false);
+    expect(wrapper.find('.fragile').exists()).toBe(true);
+    consoleError.mockRestore();
+    wrapper.unmount();
+  });
+
   it('renders the default UI and never a devUI() entry: a world has no dev UI switcher (#896)', async () => {
     const DevBoard = defineComponent({ setup: () => () => h('p', { class: 'dev-board' }, 'dev') });
     const wrapper = mount(WorldShell, {

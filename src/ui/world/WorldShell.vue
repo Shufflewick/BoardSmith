@@ -83,11 +83,9 @@
              `<Teleport to="#bs-game-modal">` always finds the host `PlayShell`
              renders. `GameShell` holds a table's board back for exactly this
              reason; the guarantee is the SHELL's, so both give it. -->
-        <component
-          v-if="boardHostReady && boardComponent"
-          :is="boardComponent"
-          v-bind="boardProps"
-        />
+        <BoardErrorBoundary v-if="boardHostReady && boardComponent" :state="boardProps.gameView" :board="boardComponent">
+          <component :is="boardComponent" v-bind="boardProps" />
+        </BoardErrorBoundary>
         <!-- Only reachable if the registry's default entry resolved to no
              component — a broken uis.ts. Name the fix, don't render blank.
              It waits for the same tick, so a shell that has not finished
@@ -112,6 +110,7 @@ import { useWorldHost } from './useWorldHost.js';
 import { provideWorldSeat, useWorldSeat } from './useWorldSeat.js';
 import PlayShell, { type PlayConnection } from '../components/PlayShell.vue';
 import Toast from '../components/Toast.vue';
+import BoardErrorBoundary from '../components/BoardErrorBoundary.vue';
 import DisabledReasonTooltip from '../components/helpers/DisabledReasonTooltip.vue';
 import type { GameUIRegistry } from '../game-uis.js';
 import { worldBoardProps } from '../board-props.js';
