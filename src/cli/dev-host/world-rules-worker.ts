@@ -49,7 +49,8 @@ export interface OpenedWorld {
  * structured clone refuses and JSON reads like any other.
  */
 export type WorldEvent =
-  | { readonly send: { readonly clientId: string; readonly frame: string } }
+  // `requestId` is the answer's, as the host was given it, so the host can map it back to the page load that asked (#1099).
+  | { readonly send: { readonly clientId: string; readonly frame: string; readonly requestId?: string } }
   | { readonly hold: number };
 
 /** Serve the world to the host; `rules` is the bundle's `gameDefinition`. */
@@ -82,7 +83,11 @@ export function serveWorld(rules: GameDefinition | undefined): void {
             seed: `world:${definition.gameType}`,
             budgets,
             store,
-            send: (clientId, message) => emit({ send: { clientId, frame: JSON.stringify(message) } } satisfies WorldEvent),
+            send: (clientId, message) => {
+              const { requestId } = message as { requestId?: unknown };
+              const frame = JSON.stringify(message);
+              emit({ send: { clientId, frame, ...(typeof requestId === 'string' ? { requestId } : {}) } } satisfies WorldEvent);
+            },
             isOpen: (clientId) => open.has(clientId),
             // The world's own alarm and a departure's grace wait in the host's
             // reload queue with the pages' commands while an edit rebuilds (#387).

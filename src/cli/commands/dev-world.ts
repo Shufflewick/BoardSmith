@@ -368,7 +368,7 @@ async function openWorld(
     rules.worker.listen((event) => {
       const told = event as WorldEvent;
       if ('send' in told) {
-        connections.sendFrame(told.send.clientId, told.send.frame);
+        connections.sendFrame(told.send.clientId, told.send.frame, told.send.requestId);
         return;
       }
       // Work for a world whose worker was replaced or stopped is dropped: that world is closed.
