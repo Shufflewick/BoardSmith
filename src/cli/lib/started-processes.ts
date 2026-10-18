@@ -75,10 +75,13 @@ export class Started {
 
   /** Stops everything, runs `cleanUp`, then lets the signals go, raising again one that came. */
   async finish(cleanUp: () => Promise<void>): Promise<void> {
-    await this.stopAll();
-    await cleanUp();
-    process.off('SIGINT', this.onSignal);
-    process.off('SIGTERM', this.onSignal);
+    try {
+      await this.stopAll();
+      await cleanUp();
+    } finally {
+      process.off('SIGINT', this.onSignal);
+      process.off('SIGTERM', this.onSignal);
+    }
     if (this.interruptedBy !== undefined) process.kill(process.pid, this.interruptedBy);
   }
 }
