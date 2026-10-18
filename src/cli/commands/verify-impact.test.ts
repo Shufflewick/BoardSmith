@@ -1736,3 +1736,14 @@ describe('cli.ts — verify-impact-* registration', () => {
     }
   });
 });
+
+describe('appendRuling: an unreadable RULINGS.md (#1110)', () => {
+  it('names the file rather than calling it missing', async () => {
+    const project = tempTree('bs-verify-impact-unreadable-');
+    const rulings = join(project, DESIGN_DIR, 'RULINGS.md');
+    await fs.mkdir(rulings, { recursive: true });
+    await expect(appendRuling(project, { decision: 'd', citation: 'c', rationale: 'r' })).rejects.toThrow(
+      `Could not read ${rulings} (EISDIR)`,
+    );
+  });
+});

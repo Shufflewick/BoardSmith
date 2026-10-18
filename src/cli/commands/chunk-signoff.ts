@@ -204,14 +204,14 @@ function readUi(chunkText: string, slug: string): string {
 }
 
 async function readSketch(projectDir: string): Promise<string> {
-  try {
-    return await fs.readFile(designPath(projectDir, SKETCH_MD), 'utf-8');
-  } catch {
+  const text = await readIfExists(designPath(projectDir, SKETCH_MD), (p) => fs.readFile(p, 'utf-8'));
+  if (text === undefined) {
     throw new Error(
       `No ${SKETCH_MD} in this project's design/ folder. Run this from the game project, or ` +
         `pass --project <dir>.`,
     );
   }
+  return text;
 }
 
 function sketchEntryRange(sketch: string, slug: string): { start: number; end: number } | undefined {

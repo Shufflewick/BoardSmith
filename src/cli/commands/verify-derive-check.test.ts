@@ -18,6 +18,7 @@ import {
   reconcileSlice,
   parseSubagentJsonInput,
   verifyDeriveRecordCommand,
+  readSliceArgument,
   verifyDeriveCheckCommand,
   annotationBody,
   quoteLinesOnly,
@@ -2075,5 +2076,33 @@ describe('verifyDeriveCheckCommand', () => {
     );
     const matches = src.match(/No rulebook\/ directory/g) ?? [];
     expect(matches).toHaveLength(1);
+  });
+});
+
+describe('verify-derive-record: unreadable inputs (#1110)', () => {
+  it('names an unreadable --slice-path rather than calling it missing', async () => {
+    const project = tempTree('bs-derive-unreadable-');
+    const slice = join(project, DESIGN_DIR, 'rulebook', '01-setup.md');
+    await fs.mkdir(slice, { recursive: true });
+    await expect(readSliceArgument(project, 'rulebook/01-setup.md', 'verify-derive-record')).rejects.toThrow(
+      `Could not read ${slice} (EISDIR)`,
+    );
+  });
+
+  it('names an unreadable --enumerator-a rather than calling it missing', async () => {
+    const project = tempTree('bs-derive-unreadable-');
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, 'rulebook', '01-setup.md'), '# Setup\n');
+    const folder = join(project, 'enumerator-a.json');
+    await fs.mkdir(folder);
+    await expect(
+      verifyDeriveRecordCommand({
+        project,
+        slicePath: 'rulebook/01-setup.md',
+        enumeratorA: folder,
+        enumeratorB: join(project, 'b.json'),
+        reconciler: join(project, 'r.json'),
+      }),
+    ).rejects.toThrow(`Could not read ${folder} (EISDIR)`);
   });
 });

@@ -2126,3 +2126,21 @@ describe('CHECK-06 — one derivation implementation (SC-3)', () => {
     expect(mutatedMatches.length).not.toBe(realMatches.length);
   });
 });
+
+describe('verify-example-record: an unreadable --extraction (#1110)', () => {
+  it('names the file rather than calling it missing', async () => {
+    const project = tempTree('bs-example-unreadable-');
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, 'rulebook', '01-setup.md'), '# Setup\n');
+    const folder = join(project, 'extraction.json');
+    await fs.mkdir(folder);
+    await expect(
+      verifyExampleRecordCommand({
+        project,
+        slicePath: 'rulebook/01-setup.md',
+        extraction: folder,
+        translations: join(project, 'translations.json'),
+      }),
+    ).rejects.toThrow(`Could not read ${folder} (EISDIR)`);
+  });
+});

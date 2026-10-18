@@ -695,3 +695,14 @@ describe('a design or code file the sign-off cannot read is refused, never read 
     );
   });
 });
+
+describe('chunk-waiver: an unreadable SKETCH.md (#1110)', () => {
+  it('names the file rather than calling it missing', async () => {
+    const project = tempTree('bs-chunk-signoff-unreadable-');
+    const sketch = join(project, DESIGN_DIR, 'SKETCH.md');
+    await fs.mkdir(sketch, { recursive: true });
+    await expect(
+      recordWaiver({ project, chunks: 'world-shell', by: 'Jane Designer', expires: '2026-09-30', reason: 'shell', now: NOW }),
+    ).rejects.toThrow(`Could not read ${sketch} (EISDIR)`);
+  });
+});

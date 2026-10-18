@@ -40,6 +40,7 @@
  * Any finding exits non-zero. There is no flag that skips a check.
  */
 import { promises as fs } from 'node:fs';
+import { readIfExists } from '../lib/read-if-exists.js';
 import { join, relative, resolve as pathResolve, sep } from 'node:path';
 import { styleText } from 'node:util';
 import {
@@ -287,14 +288,14 @@ export interface ChunkTestFile {
 }
 
 async function readChunk(projectDir: string, slug: string): Promise<string> {
-  try {
-    return await fs.readFile(chunkMdPath(projectDir, slug), 'utf-8');
-  } catch {
+  const text = await readIfExists(chunkMdPath(projectDir, slug), (p) => fs.readFile(p, 'utf-8'));
+  if (text === undefined) {
     throw new Error(
       `No ${relChunkMdPath(slug)} in ${projectDir}.\n` +
         'Check the chunk slug (it is the directory name under design/chunks/), or pass --project <dir>.',
     );
   }
+  return text;
 }
 
 /** The claims a chunk owes tests for, and the ones it no longer does. */

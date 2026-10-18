@@ -8,6 +8,7 @@ import {
   relChunkMdPath,
 } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
+import { readIfExists } from '../lib/read-if-exists.js';
 import { join, relative, resolve } from 'node:path';
 import { styleText } from 'node:util';
 import { findHeadingIndex, parseRulings } from './build-manifest.js';
@@ -768,9 +769,8 @@ export async function appendRuling(
   const relRulingsPath = join(DESIGN_DIR, RULINGS_MD);
 
   async function readRulings(): Promise<string> {
-    try {
-      return await fs.readFile(rulingsPath, 'utf-8');
-    } catch {
+    const text = await readIfExists(rulingsPath, (p) => fs.readFile(p, 'utf-8'));
+    if (text === undefined) {
       throw new Error(
         `No ${relRulingsPath} found in ${dir}.\n` +
           `A bs-built project always has one, scaffolded at \`boardsmith init\` time — this command\n` +
@@ -778,6 +778,7 @@ export async function appendRuling(
           `${relRulingsPath} before recording an adjudication resolution.`,
       );
     }
+    return text;
   }
 
   // The lock file sits beside RULINGS.md, so a missing one is refused before the lock is taken.

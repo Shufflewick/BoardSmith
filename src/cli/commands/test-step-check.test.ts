@@ -1168,3 +1168,12 @@ it('claim 2 — tautology', () => { const high = 3; expect(high).toBe(3); });
     expect(process.exitCode).toBe(1);
   });
 });
+
+describe('test-step-check: an unreadable CHUNK.md (#1110)', () => {
+  it('names the file rather than calling it missing', async () => {
+    const project = tempTree('bs-test-step-unreadable-');
+    const chunk = join(project, 'design', 'chunks', 'punch', 'CHUNK.md');
+    await fs.mkdir(chunk, { recursive: true });
+    await expect(checkTestStep(project, 'punch')).rejects.toThrow(`Could not read ${chunk} (EISDIR)`);
+  });
+});
