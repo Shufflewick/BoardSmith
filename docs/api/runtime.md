@@ -163,8 +163,8 @@ runner.performAction('draw', 1, {});
 runner.performAction('play', 1, { card: 'card-1' });
 runner.performAction('draw', 2, {});
 
-// Read the recorded action history (a public readonly field)
-console.log(`${runner.actionHistory.length} actions played`);
+// The action count, entries dropped by `checkpoints: { actionHistory: 'undo' }` included
+console.log(`${runner.actionCount} actions played`);
 
 // Capture the current state as a snapshot
 const snapshot = runner.getSnapshot();

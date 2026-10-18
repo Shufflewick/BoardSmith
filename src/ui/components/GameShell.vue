@@ -201,8 +201,11 @@ function postDevUiList(): void {
 const state = shallowRef<GameState | null>(null);
 const isMyTurn = computed(() => state.value?.state.isMyTurn ?? false);
 
-// The seat this page renders, from the host's `init` message.
+// The seat this page renders, from the host's `init` message. It changes only
+// with a view of that seat: a board shown the new seat over the last seat's view
+// reads private data that is not there (#1135).
 const playerSeat = ref<number>(-1); // -1 means no seat assigned yet (spectator)
+let seatFromHost = -1;
 // Host anti-cheat: teaching features disabled for this session.
 // Set from the platform init postMessage (data.teachingDisabled) for first-render
 // before any broadcast. The broadcast-preferred computed below (teachingDisabledProp)
@@ -1041,7 +1044,7 @@ if (inHost) {
     if (!data || data.source !== 'shufflewick') return;
 
     if (data.type === 'init') {
-      playerSeat.value = data.seat;
+      seatFromHost = data.seat;
       // D-02 / LOCK-01 criterion 1: consume teachingDisabled for first-render gating
       // before any broadcast arrives. The broadcast-preferred computed (teachingDisabledProp)
       // will override this with the authoritative session value on first state update.
@@ -1086,10 +1089,11 @@ if (inHost) {
       // Hand-mapping individual fields here is what caused the recurring
       // "works in dev, broken in the iframe" bugs, so there is deliberately no
       // per-field reconstruction.
+      playerSeat.value = seatFromHost;
       state.value = {
         flowState: view.flowState,
         state: view.state,
-        playerSeat: playerSeat.value,
+        playerSeat: seatFromHost,
         isSpectator: false,
       } as any;
 

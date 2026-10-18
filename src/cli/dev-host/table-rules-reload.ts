@@ -22,6 +22,7 @@
  */
 import { GameRunner } from '../../runtime/index.js';
 import type { GameStateSnapshot } from '../../engine/utils/index.js';
+import { actionCountOf } from '../../engine/utils/snapshot.js';
 import { executeOp, type GameDefinitionLike, type OpResultFor, type RulesReload } from '../../session/index.js';
 
 type HostOptions = { teachingDisabled?: boolean };
@@ -47,7 +48,7 @@ export async function reloadTableRules(
   if (restored.success) return { kind: 'restored', result: restored };
 
   const restoreError = restored.error;
-  const moves = snapshot.actionHistory.length;
+  const moves = actionCountOf(snapshot);
   const failed = (replayError: string): RulesReload => ({
     kind: 'failed',
     reason:
@@ -69,7 +70,7 @@ export async function reloadTableRules(
         checkpoints: { ...definition.checkpoints, history: 'full' },
         undo: definition.undo,
       },
-      snapshot.actionHistory,
+      snapshot,
     ).getSnapshot();
   } catch (error) {
     return failed(error instanceof Error ? error.message : String(error));

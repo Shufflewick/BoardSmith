@@ -45,6 +45,15 @@ export interface SerializedSeatExpiry {
 /** One entry of the history the host reports: an action, or a seat the host closed. */
 export type HistoryEntry = SerializedAction | SerializedSeatExpiry;
 
+/**
+ * The history the host reports. Entry `i` is action `actionHistoryBase + i`:
+ * a game keeping only what undo reads drops the actions before it (#997).
+ */
+export interface DebugHistory {
+  actionHistory: HistoryEntry[];
+  actionHistoryBase: number;
+}
+
 /** Why one action is or is not offered, as traced by the host. */
 export interface ActionTrace {
   actionName: string;
@@ -135,8 +144,8 @@ export interface DebugBridge {
    * debugging is on, #547).
    */
   customDebug(): Promise<Record<string, unknown> | null>;
-  /** Every action played so far, oldest first. */
-  history(): Promise<HistoryEntry[]>;
+  /** The actions the game keeps, oldest first, and the action the first of them is. */
+  history(): Promise<DebugHistory>;
   /** Captured server-side log lines. */
   logs(): Promise<LogEntry[]>;
   /** This seat's view of the state as it stood after action `actionIndex`. */
@@ -223,7 +232,11 @@ export function createDebugBridge(platformRequest: PlatformRequest | null): Debu
 
     async history() {
       const data = await send('debug:history', {}, 'Failed to fetch history');
-      return (data.actionHistory as HistoryEntry[]) || [];
+      return {
+        actionHistory: (data.actionHistory as HistoryEntry[]) || [],
+        // Absent: the game dropped nothing.
+        actionHistoryBase: (data.actionHistoryBase as number | undefined) ?? 0,
+      };
     },
 
     async logs() {

@@ -335,7 +335,7 @@ describe('PendingActionManager', () => {
       // Before completion, computeUndoInfo sees nothing to undo (no moveCount
       // passed here -- and, 155-03, an absent moveCount is undo-unavailable
       // regardless of player/history contents; there's no fallback to reach).
-      expect(computeUndoInfo(runner.actionHistory, 1).actionsThisTurn).toBe(0);
+      expect(computeUndoInfo(runner, 1).actionsThisTurn).toBe(0);
       expect(runner.actionHistory).toHaveLength(0);
 
       await manager.processSelectionStep(1, 'color', 'red', 'pick');

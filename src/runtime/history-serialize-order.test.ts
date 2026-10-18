@@ -230,7 +230,7 @@ describe('history records where the picks were before the move (#1128)', () => {
     expect(live.actionHistory[0]).toMatchObject({
       args: { crate: { __elementRef: before.crate }, next: { __elementRef: before.next } },
     });
-    const replayed = GameRunner.replay(stowOptions, live.actionHistory);
+    const replayed = GameRunner.replay(stowOptions, live);
     const places = (game: StowGame) => [game.yard, game.shed].map((space) => space.all(Crate).map((crate) => crate.name));
     expect(places(live.game)).toEqual([['third'], ['first', 'second']]);
     expect(places(replayed.game)).toEqual(places(live.game));

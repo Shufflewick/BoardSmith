@@ -16,7 +16,7 @@ import {
 } from './example-derivation.js';
 import { DERIVE_CHECK_LEDGER_BEGIN } from './verify-derive-check.js';
 import { readFile } from 'node:fs/promises';
-import { promises as fs, realpathSync } from 'node:fs';
+import { existsSync, promises as fs, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { generateTsConfig } from '../lib/project-scaffold.js';
@@ -598,6 +598,12 @@ describe('collectGameApiSurface — re-exports through subfolders, at any depth 
     await expect(collectGameApiSurface(projectDir)).rejects.toThrow(
       /src\/rules\/world\/index\.ts re-exports '\.\.\/\.\.\/\.\.\/tests\/helpers\.js', which is outside src\//,
     );
+  });
+
+  it.skipIf(!existsSync(process.cwd().toUpperCase()))('refuses a re-export that names src/ in other letter case, since the surface reads only src/ as spelled (#1053)', async () => {
+    await fs.writeFile(join(projectDir, 'src', 'rules', 'world', 'index.ts'), "export * from '../../../SRC/rules/sim/dice/roll.js';\n");
+
+    await expect(collectGameApiSurface(projectDir)).rejects.toThrow(/re-exports '\.\.\/\.\.\/\.\.\/SRC\/rules\/sim\/dice\/roll\.js', which is outside src\//);
   });
 });
 

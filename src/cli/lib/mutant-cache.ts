@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { sha256Hex } from './hash.js';
 import { promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
+import { isSameOrInside } from './path-inside.js';
 import { boardsmithPackageRoot } from './boardsmith-version.js';
 import { gitOutput as git } from './git-output.js';
 import { readIfExists } from './read-if-exists.js';
@@ -291,12 +292,6 @@ async function installedPackagesHash(projectDir: string): Promise<string> {
   return sha256Hex(records.join('\0'));
 }
 
-/** True when `path` is `dir` or lies inside it. */
-function within(dir: string, path: string): boolean {
-  const rel = relative(dir, path);
-  return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
-}
-
 /**
  * Every file under `dir` by path and content, with a link inside it named by where it points, so
  * a folder git does not track is fingerprinted, and so is a build output git ignores. `node_modules`
@@ -391,7 +386,7 @@ async function linkedPackagesHash(projectDir: string): Promise<string> {
       named.set(`missing ${link}`, points);
       return;
     }
-    if (named.has(target) || within(repository, target) || target.split(sep).includes('node_modules')) return;
+    if (named.has(target) || isSameOrInside(repository, target) || target.split(sep).includes('node_modules')) return;
     named.set(target, await linkedFolderName(target, link));
     await scan(target);
   }

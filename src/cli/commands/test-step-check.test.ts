@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi, type MockInstance } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { promises as fs } from 'node:fs';
+import { existsSync, promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
   checkTestStep,
@@ -19,6 +19,7 @@ import {
 } from './test-step-ast.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { scriptRegions } from './test-step-sfc.js';
+import { findCodeRun } from './test-step-code-run.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 
 // -------------------------------------------------------------------------------------------
@@ -537,6 +538,15 @@ it('no bare asset <img>', () => { expect(scanAssetReachability(process.cwd())).t
     expect(findings[0].detail).toContain('build/test.md');
   });
 
+  it.skipIf(!existsSync(process.cwd().toUpperCase()))('reports a guard file the Spec Manifest names in other letter case (#1053)', async () => {
+    await build(
+      { 'src/rules/auction.ts': RULES, 'tests/auction.test.ts': DISPATCHES_BOTH, 'tests/guards/a11y-floor.test.ts': GUARD },
+      '| tests/auction.test.ts | 1, 2 | yes |\n| TESTS/Guards/a11y-floor.test.ts | a11y | yes |\n',
+    );
+    const findings = (await checkTestStep(project, 'auction')).findings;
+    expect(findings.map((f) => `${f.kind} ${f.subject}`)).toEqual(['guard-in-manifest TESTS/Guards/a11y-floor.test.ts']);
+  });
+
   it('accepts a guard file the chunk wrote that the Spec Manifest does not list (#443)', async () => {
     const manifestFiles = await passingManifestFiles(
       { 'src/rules/auction.ts': RULES, 'tests/auction.test.ts': DISPATCHES_BOTH, 'tests/guards/a11y-floor.test.ts': GUARD },
@@ -628,6 +638,8 @@ export function hexToRgb(hex: string): number[] { return [parseInt(hex.slice(1, 
     ['globs with a brace set holding a ) that climbs into src/ (#841)', `const g = import.meta.glob("../../docs/{x),../src}/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '../../docs/{x),../src}/rules/*.ts'],
     ['globs src/ spelled in upper case, which a case-insensitive disk matches (#841)', `const g = import.meta.glob("../../SRC/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '../../SRC/rules/*.ts'],
     ['globs src/ spelled with a long s, which a case-insensitive disk folds to s (#841)', `const g = import.meta.glob("../../ſrc/rules/*.ts", { eager: true });\nvoid g;\n`, 1, '../../ſrc/rules/*.ts'],
+    ['imports src/ spelled in upper case, which a case-insensitive disk loads (#1053)', `import { bid } from '../../SRC/rules/auction';\nvoid bid;\n`, 1, 'SRC/rules/auction'],
+    ['imports src/ spelled with a long s, which a case-insensitive disk folds to s (#1053)', `import { bid } from '../../ſrc/rules/auction';\nvoid bid;\n`, 1, 'ſrc/rules/auction'],
     ['globs with a pattern this check cannot read (#841)', `const PATTERN = '../../src/rules/*.ts';\nconst rules = import.meta.glob(PATTERN, { eager: true });\nvoid rules;\n`, 2, 'a pattern this check cannot read'],
   ])('reports a guard that %s from the game\'s src/ (#485)', async (_what, guard, line, module) => {
     const findings = await findingsFor({
@@ -680,6 +692,15 @@ it('contrast', () => { expect(PALETTE[scheme].text).not.toBe(ACCENT_COLOR); });
 `,
     });
     expect(findings).toEqual([]);
+  });
+
+  // Only the exact src/ui/ is trusted; on a case-sensitive disk a folder SRC/ui can sit beside it (#1053).
+  it('reports a guard that imports literal theme constants from SRC/ui, in other letter case (#1053)', () => {
+    const scripts = new Map([['src/ui/theme.ts', THEME], ['SRC/ui/theme.ts', THEME]]);
+    const context = { text: (path: string) => scripts.get(path), wrappers: new Map() };
+    const run = (from: string) => findCodeRun(`import { PALETTE } from '${from}';\nvoid PALETTE;\n`, 'tests/guards/a.test.ts', context);
+    expect(run('../../src/ui/theme.js')).toBeUndefined();
+    expect(run('../../SRC/ui/theme.js')).toEqual({ line: 1, what: "imports SRC/ui/theme.ts from the game's src/" });
   });
 
   it.each([

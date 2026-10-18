@@ -9,6 +9,7 @@ import {
   DERIVE_CHECK_LEDGER_END,
 } from './verify-derive-check.js';
 import { DERIVED_LINE_RE } from './derived-line-pattern.js';
+import { isSameOrInside } from '../lib/path-inside.js';
 
 /**
  * `example-derivation.ts` — the ONE shared module both the build side (TEST-01, `build/test.md`)
@@ -575,9 +576,9 @@ async function createRulesProgram(projectDir: string): Promise<RulesProgram> {
   const refused = (fileName: string) =>
     projectRoots.some(
       (root) =>
-        fileName.startsWith(`${root}/`) &&
-        !fileName.startsWith(`${root}/src/`) &&
-        !fileName.startsWith(`${root}/node_modules/`),
+        isSameOrInside(root, fileName) &&
+        !isSameOrInside(join(root, 'src'), fileName) &&
+        !isSameOrInside(join(root, 'node_modules'), fileName),
     );
   const host = ts.createCompilerHost(options, true);
   const readSourceFile = host.getSourceFile.bind(host);
@@ -639,7 +640,7 @@ function resolveSpecifier(
   }
   if (resolvedModule.isExternalLibraryImport) return { kind: 'package' };
   const file = rules.program.getSourceFile(resolvedModule.resolvedFileName);
-  if (!resolvedModule.resolvedFileName.startsWith(rules.srcDir) || !file) {
+  if (!isSameOrInside(rules.srcDir, resolvedModule.resolvedFileName) || !file) {
     throw new Error(
       `${importerModule} re-exports '${specifier.text}', which is outside src/.\n` +
         `The worked-example API surface lists only the game's own rules under src/. Move that ` +

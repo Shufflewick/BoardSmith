@@ -92,8 +92,19 @@ interface SnapshotFields {
    */
   winners: number[];
 
-  /** Action history: every action taken and every seat the host closed at a deadline, for undo and replay */
+  /**
+   * Action history: every action taken and every seat the host closed at a
+   * deadline, for undo and replay. Entry `i` is action `actionHistoryBase + i`.
+   */
   actionHistory: HistoryEntry[];
+
+  /**
+   * How many actions were dropped from the front of `actionHistory`, under a
+   * game's `checkpoints: { actionHistory: 'undo' }`. Absent while none were:
+   * the history then starts at action 0. Every action index (the checkpoint
+   * window, `executeBarrierIndex`, undo targets) counts these too.
+   */
+  actionHistoryBase?: number;
 
   /** Random seed for deterministic replay */
   seed?: string;
@@ -218,10 +229,21 @@ export interface CheckpointPolicy {
   max?: number;
   /**
    * Capture checkpoints at all. `false` disables undo and debug time-travel
-   * entirely, and is the only way to make a game's snapshot size independent
-   * of its action count. Default: `true`.
+   * entirely. Default: `true`.
    */
   enabled?: boolean;
+  /**
+   * How much of the action history to keep. Default: `'all'`.
+   *
+   * `'undo'` keeps only what undo reads: the actions from the oldest point any
+   * seat's undo may restore, and the one before it, which fences undo there.
+   * A step of `.notUndoable()` moves that a seat may repeat without limit then
+   * keeps one entry, so the saved game stays a fixed size. Undo is unchanged.
+   * The cost: `GameRunner.replay` refuses a history that no longer starts at
+   * action 0, and the debug History tab lists only the kept actions. A host
+   * keeping full history (`boardsmith dev`) keeps every action anyway.
+   */
+  actionHistory?: 'all' | 'undo';
 }
 
 /**
@@ -456,6 +478,11 @@ function snapshotFlowState(game: Game, opts: { forSeat?: number | null } | undef
 function snapshotRandom(game: Game, seat: { reseed: string } | undefined): Pick<GameStateSnapshot, 'randomState' | 'gameOptions'> {
   if (seat === undefined) return { randomState: game.getRandomState(), gameOptions: game.getConstructorOptions() };
   return { randomState: new SeededRandom(seat.reseed).getState(), gameOptions: { ...game.getConstructorOptions(), seed: seat.reseed } };
+}
+
+/** How many actions a snapshot's game has recorded, those dropped from its history included (#997). */
+export function actionCountOf(snapshot: Pick<GameStateSnapshot, 'actionHistory' | 'actionHistoryBase'>): number {
+  return (snapshot.actionHistoryBase ?? 0) + snapshot.actionHistory.length;
 }
 
 /** Everything a snapshot holds except the tree. `opts` as in `createSnapshot`. */

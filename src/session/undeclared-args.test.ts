@@ -272,7 +272,7 @@ describe('a selection step carries only declared picks (#662)', () => {
     }
     const replayed = GameRunner.replay(
       { GameClass: DuelGame, gameType: 'duel', gameOptions: { playerCount: 1, playerNames: ['Alice'], seed: 'test' } },
-      runner.actionHistory,
+      runner,
     );
     expect((replayed.game as DuelGame).runs).toEqual(game.runs);
   });

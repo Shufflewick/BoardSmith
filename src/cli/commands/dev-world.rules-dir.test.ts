@@ -7,14 +7,14 @@
  * real host and its real Vite watcher, in a `boardsmith init --world` project.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { appendFileSync, renameSync } from 'node:fs';
+import { appendFileSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { loadWorldRuntime, startWorldDevServer } from './dev-world.js';
 import { makeCommandBuildDir } from '../lib/command-build-dir.js';
 import { hostHoldings } from '../dev-host/shutdown.js';
 import { freePort } from '../lib/free-port.js';
-import { devProject } from './dev-project.test-helper.js';
+import { devProject, spawnDev } from './dev-project.test-helper.js';
 
 // Each run bundles the project's rules, which under full-suite parallelism can
 // exceed Vitest's default. A hang guard, not a budget.
@@ -65,5 +65,31 @@ describe('#882: the world host reloads on a save in the rules folder it loads fr
   it('the default `src/rules`', async () => {
     const cwd = await devProject(true);
     await reloadsOnSave(cwd, join(cwd, 'src', 'rules'));
+  });
+});
+
+describe('#1037: `boardsmith dev` on a world project watches the rules folder its config names', () => {
+  it('reloads the world on a save in `paths.rules`', async () => {
+    const cwd = await devProject(true);
+    renameSync(join(cwd, 'src', 'rules'), join(cwd, 'game-rules'));
+    const configPath = join(cwd, 'boardsmith.json');
+    const config = JSON.parse(readFileSync(configPath, 'utf-8'));
+    writeFileSync(configPath, JSON.stringify({ ...config, paths: { ...config.paths, rules: 'game-rules' } }, null, 2));
+    const run = spawnDev(cwd, await freePort());
+    try {
+      await vi.waitFor(() => expect(run.output()).toContain('Ready!'), { timeout: 60_000, interval: 200 });
+      const reloaded = `${join('game-rules', 'index.ts')} changed -- reloading the world's rules`;
+      // A save made before the watcher is ready is not one it can miss on purpose, so keep saving.
+      await vi.waitFor(
+        () => {
+          if (!run.output().includes(reloaded)) appendFileSync(join(cwd, 'game-rules', 'index.ts'), '\n// saved\n');
+          expect(run.output()).toContain(reloaded);
+        },
+        { timeout: 30_000, interval: 500 },
+      );
+    } finally {
+      run.child.kill('SIGINT');
+      await run.ended;
+    }
   });
 });

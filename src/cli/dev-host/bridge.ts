@@ -366,7 +366,8 @@ const SHAPERS: { [T in Op['type']]: (result: OpResultFor<T>) => Reply } = {
   demoControl: outcomeOnly,
   convertSeatToBot: outcomeOnly,
   restoreEarlier: outcomeOnly,
-  debugHistory: (r) => (r.success ? { success: true, actionHistory: r.actionHistory } : refusal(r)),
+  debugHistory: (r) =>
+    r.success ? { success: true, actionHistory: r.actionHistory, actionHistoryBase: r.actionHistoryBase } : refusal(r),
   // DebugPanel reads `data.state`; the op carries it as `historicalState`.
   debugStateAt: (r) => (r.success ? { success: true, state: r.historicalState } : refusal(r)),
   debugStateDiff: (r) => (r.success ? { success: true, diff: r.diff } : refusal(r)),

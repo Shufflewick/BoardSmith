@@ -143,6 +143,12 @@ describe('dev host bridge', () => {
       expect(r).toEqual({ success: true, followUp: { action: 'next' } });
     });
 
+    it('returns the kept history and the action it starts at for debugHistory (#997)', () => {
+      const entry = { name: 'pass', player: 1, args: {} };
+      const r = shapeResult('debugHistory', { success: true, ...ENVELOPE, actionHistory: [entry], actionHistoryBase: 7 });
+      expect(r).toEqual({ success: true, actionHistory: [entry], actionHistoryBase: 7 });
+    });
+
     it('returns only the pick answer for resolveChoices (#450)', () => {
       const r = shapeResult('resolveChoices', { success: true, choices: [{ value: 'red', display: 'Red' }, { value: 'blue', display: 'Blue' }] });
       expect(r).toEqual({
