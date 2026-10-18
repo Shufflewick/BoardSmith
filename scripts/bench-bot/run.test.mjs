@@ -27,13 +27,14 @@ const configPath = join(game, 'boardsmith.json');
 const config = JSON.parse(readFileSync(configPath, 'utf8'));
 writeFileSync(configPath, JSON.stringify({ ...config, gameOptions: [{ id: 'rounds', type: 'number', label: 'Rounds', default: 3 }] }));
 const gamePath = join(game, 'src', 'rules', 'game.ts');
-writeFileSync(
-  gamePath,
-  readFileSync(gamePath, 'utf8').replace(
-    '    super(options);\n',
-    "    super(options);\n    if ((options as { rounds?: number }).rounds !== 3) throw new Error('The declared default of rounds was not filled.');\n",
-  ),
+const scaffolded = readFileSync(gamePath, 'utf8');
+const guarded = scaffolded.replace(
+  '    super(options);\n',
+  "    super(options);\n    if ((options as { rounds?: number }).rounds !== 3) throw new Error('The declared default of rounds was not filled.');\n",
 );
+// Without the guard the default test below would pass without checking anything.
+if (guarded === scaffolded) throw new Error('The scaffolded game.ts no longer has a `super(options);` line to guard; update this test.');
+writeFileSync(gamePath, guarded);
 
 /** Run the bench on the scaffolded game and return what it printed. */
 function bench() {
