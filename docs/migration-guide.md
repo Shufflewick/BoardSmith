@@ -3,21 +3,22 @@
 ## A grant below a concealed zone's hidden child reaches its seat (#961)
 
 A card whose own visibility shows it to a seat now reaches that seat even when
-it sits below a hidden child of a hidden, count-only or owner-only zone (a card
-in a box in a `contentsHidden()` deck). The seat's view carries it as a child
-of that zone, after the zone's placeholders, and leaves out the containers in
-between. Only the card's own grant counts there, never a zone rule set on a
-container between. `isVisibleTo(seat)` is now true for such a card, where it was false,
-and message text names the card itself for that seat. A granted card directly
-in a concealed zone is now named by message text too, where it was named by
-the zone.
+it sits below a hidden child of a hidden, count-only or owner-only zone (a
+card in a box in a `contentsHidden()` deck). The seat's view carries it as a
+child of that zone, after the zone's placeholders, and leaves out the
+containers in between. Only the card's own grant counts there, never a zone
+rule set on a container between; a granted container's own zone rule still
+applies to its contents. `isVisibleTo(seat)` is now true for such a card,
+where it was false, and message text names the card itself for that seat. A
+granted card directly in a concealed zone is now named by message text too,
+where it was named by the zone.
 
 A UI that reads a count-only or owner-only zone's `children` may now find more
 entries than the zone has direct children; `childCount` still counts only the
-direct children, and `getElementCount` now returns `childCount` whenever it is
-set, where it used to prefer `children.length`. References to the card in attributes and animation data still
-name the zone, since the card's real place would show where the hidden
-containers are.
+direct children, and `getElementCount` now returns `childCount` whenever it
+is set, where it used to prefer `children.length`. References to the card in
+attributes and animation data still name the zone, since the card's real place
+would show where the hidden containers are.
 
 ## Hidden elements in message text and unloaded world references are withheld (#1165, #1166)
 

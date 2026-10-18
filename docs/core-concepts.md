@@ -239,11 +239,15 @@ holds it. A card directly in the zone keeps its own place among the
 placeholders (#758). Below a hidden child, only an element's OWN grant counts:
 a rule it inherits from a zone in between (`contentsVisible()`,
 `hideContentsFrom(3)` on a box in the deck) sends nothing, since that box is
-hidden from the seat. A granted element there carries only its own granted
-contents, and a grant below it arrives inside it. `isVisibleTo(seat)` follows
-the same rule, so it is true exactly when the seat's view carries the element.
-Outside a concealed zone, nothing below an element hidden from the seat is
-sent, granted or not. A shuffle clears every grant below what it moves (#962).
+hidden from the seat. A granted element there with a zone rule of its own
+applies it to its contents as usual: a granted `Deck` arrives with its
+placeholders and `childCount`, a granted box with `contentsVisible()` with its
+contents. One with no zone rule of its own carries only its own granted
+contents, since the rule they inherit sits on a hidden box.
+`isVisibleTo(seat)` follows the same rule, so it is true exactly when the
+seat's view carries the element. Outside a concealed zone, nothing below an
+element hidden from the seat is sent, granted or not. A shuffle clears every
+grant below what it moves (#962).
 
 **A pick offers a hidden element the way the board shows it (#715).** A
 `chooseElement` or `chooseFrom` candidate the asking seat cannot see goes out

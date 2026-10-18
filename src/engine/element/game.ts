@@ -5033,11 +5033,11 @@ export class Game<
         };
       }
 
-      // #961: what this granted element holds is sent only by its own grants, as a hidden ancestor's open rule grants nothing.
-      if (belowHidden) return withOnly(ownJson, grantedBelowHidden(element, json));
-
       // Check zone visibility for children (if this is a Space)
       const zoneVisibility = hasZoneVisibility(element) ? element.getZoneVisibility() : undefined;
+
+      // #961: with no zone rule of its own, a granted element's contents would inherit a hidden ancestor's, so only their own grants send them.
+      if (belowHidden && !zoneVisibility) return withOnly(ownJson, grantedBelowHidden(element, json));
 
       // SPACE-03 / F-09: a per-seat visibility GRANT (`addZoneVisibleTo`, i.e.
       // `zoneVisibility.addPlayers`) must reveal the zone's real contents to the

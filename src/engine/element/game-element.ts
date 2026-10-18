@@ -2209,7 +2209,8 @@ export function ownGrantAllows(element: GameElement, seat: number): boolean {
  * closes everything under it. A concealed zone's child is carried when its
  * visibility allows the seat (#758). Below a hidden child of a concealed zone,
  * only an element's own grant carries it (#961), since an open zone rule
- * there sits on a container the seat cannot see.
+ * there sits on a container the seat cannot see. A granted element there with
+ * a zone rule of its own applies that rule to its contents, as usual.
  */
 export function deepestRevealed(element: GameElement, seat: number): GameElement | undefined {
   const chain: GameElement[] = [];
@@ -2220,7 +2221,8 @@ export function deepestRevealed(element: GameElement, seat: number): GameElement
     const allowed = state === 'below-hidden' ? ownGrantAllows(at, seat) : ownVisibilityAllows(at, seat);
     if (allowed) {
       revealed = at;
-      if (state !== 'below-hidden') state = hidesContents(at, seat) ? 'in-concealed-zone' : 'open';
+      const ownZoneRule = hasZoneVisibility(at) && at.getZoneVisibility() !== undefined;
+      if (state !== 'below-hidden' || ownZoneRule) state = hidesContents(at, seat) ? 'in-concealed-zone' : 'open';
     } else if (state === 'open') {
       break;
     } else {

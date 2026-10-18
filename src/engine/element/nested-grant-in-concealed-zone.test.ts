@@ -9,6 +9,8 @@ import { Game, Piece, Player, Deck, Hand, Space, type ElementJSON, type GameElem
 import type { VisibilityState } from './visibility.js';
 import { isHiddenPlaceholder } from './hidden-placeholder.js';
 import { nameableFor } from './concealed-refs.js';
+import { getElementCount } from '../../ui/composables/useGameViewHelpers.js';
+import type { GameViewElement } from '../../ui/types.js';
 
 class Card extends Piece<TestGame> {}
 class Box extends Space<TestGame> {}
@@ -127,7 +129,7 @@ describe('a granted element nested below a concealed child (#961)', () => {
     expect(JSON.stringify(game.toJSONForPlayer(3))).not.toMatch(/outer|inner/);
   });
 
-  it("sends a granted container with only its own granted contents, as an open zone rule below a hidden one grants nothing", () => {
+  it("applies a granted container's own zone rule to its contents", () => {
     const { game, deck } = setup();
     deck.contentsHidden();
     const crate = deck.create(Box, 'crate');
@@ -140,11 +142,46 @@ describe('a granted element nested below a concealed child (#961)', () => {
 
     const children = zoneIn(game, 2, 'deck').children!;
     expect(children.map((c) => c.id)).toEqual([chest.id]);
+    expect(children[0]!.children!.map((c) => c.id)).toEqual([coin.id, ring.id]);
+    expect(coin.isVisibleTo(2)).toBe(true);
+    expect(nameableFor(coin, game, 2)).toBe(coin);
+  });
+
+  it("sends a granted container with no zone rule of its own only its granted contents, as the rule they inherit sits on a hidden box", () => {
+    const { game, deck } = setup();
+    deck.contentsHidden();
+    const crate = deck.create(Box, 'crate');
+    crate.contentsVisible();
+    const chest = crate.create(Box, 'chest');
+    chest.showToAll();
+    const coin = chest.create(Card, 'coin');
+    const ring = chest.create(Card, 'ring');
+    ring.addVisibleTo(2);
+
+    const children = zoneIn(game, 2, 'deck').children!;
+    expect(children.map((c) => c.id)).toEqual([chest.id]);
     expect(children[0]!.children!.map((c) => c.id)).toEqual([ring.id]);
-    expect('childCount' in children[0]!).toBe(false);
     expect(coin.isVisibleTo(2)).toBe(false);
     expect(ring.isVisibleTo(2)).toBe(true);
     expect(nameableFor(coin, game, 2)).toBe(chest);
+  });
+
+  it('sends a granted count-only deck below a hidden child with its placeholders and childCount', () => {
+    const { game } = setup();
+    const vault = game.create(Box, 'vault');
+    vault.contentsHidden();
+    const crate = vault.create(Box, 'crate');
+    const pile = crate.create(Deck, 'pile');
+    pile.showToAll();
+    const cards = [1, 2, 3].map((n) => pile.create(Card, `card${n}`));
+
+    const json = zoneIn(game, 2, 'vault').children![0]!;
+    expect(json.id).toBe(pile.id);
+    expect(json.childCount).toBe(3);
+    expect(json.children!.map(isHiddenPlaceholder)).toEqual([true, true, true]);
+    expect(getElementCount(json as GameViewElement)).toBe(3);
+    expect(pile.isVisibleTo(2)).toBe(true);
+    expect(cards.map((card) => card.isVisibleTo(2))).toEqual([false, false, false]);
   });
 
   it("does not send a card with no grant of its own below a hidden box whose contents are visible", () => {
@@ -227,12 +264,14 @@ function shows(rule: VisibilityState, element: GameElement, seat: number): boole
   return rule.mode === 'all' || (rule.mode === 'owner' && element.getEffectiveOwner()?.seat === seat);
 }
 
-/** Whether an ancestor of `element` is shown to the seat as a placeholder or not at all. */
-function hiddenAncestor(element: GameElement, seat: number): boolean {
+/** `element`'s ancestors, nearest first, up to the one whose zone rule it inherits, or to the top when none has one. */
+function ancestorsToRule(element: GameElement): GameElement[] {
+  const chain: GameElement[] = [];
   for (let at = element._t.parent; at; at = at._t.parent) {
-    if (!shows(at.getEffectiveVisibility(), at, seat)) return true;
+    chain.push(at);
+    if ('getZoneVisibility' in at && (at as Box).getZoneVisibility() !== undefined) break;
   }
-  return false;
+  return chain;
 }
 
 /** Whether `element`'s parent is a zone whose contents the seat may not see. */
@@ -303,11 +342,13 @@ describe('isVisibleTo matches the seat view on random trees (#961)', () => {
   /** What the seat's view must and must not carry for one element. */
   function checkElement(view: ElementJSON, ids: Set<number>, element: GameElement, seat: number, where: string): void {
     expect(element.isVisibleTo(seat), where).toBe(revealedIn(view, element));
-    // Checked without the rule under test: a hidden ancestor lets through only the element's own grant.
-    if (hiddenAncestor(element, seat) && !ownGrant(element, seat)) expect(ids.has(element.id), where).toBe(false);
+    // Checked without the rule under test: without its own grant, an element is shown only by a rule the seat can see, on an ancestor the view carries with all between.
+    if (revealedIn(view, element) && !ownGrant(element, seat)) {
+      for (const ancestor of ancestorsToRule(element)) expect(revealedIn(view, ancestor), `${where}, via ${ancestor.name}`).toBe(true);
+    }
     // A hidden container keeps its real id only as a placeholder in a parent whose contents the seat sees.
     const hidden = !shows(element.getEffectiveVisibility(), element, seat);
-    if (hidden && (inConcealedZone(element, seat) || hiddenAncestor(element, seat))) expect(ids.has(element.id), where).toBe(false);
+    if (hidden && (inConcealedZone(element, seat) || !revealedIn(view, element._t.parent!))) expect(ids.has(element.id), where).toBe(false);
   }
 
   it('for every element and seat, across 200 trees four levels deep', () => {
@@ -318,7 +359,11 @@ describe('isVisibleTo matches the seat view on random trees (#961)', () => {
         const ids = new Set(idsIn(view));
         for (const element of elements) checkElement(view, ids, element, seat ?? -1, `${element.name} for seat ${seat}, seed ${seed}`);
         forEachNode(view, (node) => {
-          if (node.childCount !== undefined) expect(node.childCount).toBe(game.getElementById(node.id)!._t.children.length);
+          const element = node.id === game.id ? game : game.getElementById(node.id);
+          if (node.childCount !== undefined) expect(node.childCount).toBe(element!._t.children.length);
+          // A count-only zone the view carries but the seat cannot see into always says how many it holds.
+          const zone = element && !isHiddenPlaceholder(node) && 'getZoneVisibility' in element ? (element as Box).getZoneVisibility() : undefined;
+          if (zone?.mode === 'count-only' && !shows(zone, element!, seat ?? -1)) expect(node.childCount, `${node.name}, seed ${seed}`).toBe(element!._t.children.length);
         });
       }
     }
