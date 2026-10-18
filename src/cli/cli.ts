@@ -481,12 +481,13 @@ export function createProgram(): Command {
   // `doctor` is the layout's migration path (issue #6): every design artifact belongs under
   // `design/`, every throwaway script under `.boardsmith/scratch/`. Report-by-default so a bare run
   // is safe to script, non-zero when anything is out of place so a skill notices without parsing
-  // output, and idempotent so every bs- skill can open with it.
+  // output, and idempotent so every bs- skill can open with it. It also keeps the ingest pre-commit
+  // hook current (#1009); a hook it did not write gets a note that leaves the exit code alone.
   program
     .command('doctor')
-    .description("Check a game project's layout (design/ artifacts, stray scratch files) and optionally repair it")
+    .description("Check a game project's layout (design/ artifacts, stray scratch files) and its ingest pre-commit hook, and optionally repair them; a pre-commit hook BoardSmith did not write is left alone with a note")
     .option('--project <dir>', 'Project directory (defaults to cwd)')
-    .option('--fix', 'Move misplaced files into place instead of only reporting them')
+    .option('--fix', 'Move misplaced files into place and install a missing or outdated ingest hook, instead of only reporting them')
     .option('--json', 'Emit JSON instead of human-readable output')
     .option('--quiet', 'Suppress the human-readable report')
     .action(discardResult(doctorCommand));

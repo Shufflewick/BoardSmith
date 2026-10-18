@@ -73,6 +73,17 @@ metrics in `src/rules/metrics.ts`. See [boardsmith/sim](./api/sim.md), and
 [the balance simulator worked example](./balance-simulator.md) for a game grown
 from a simulator to a playable game one stage at a time.
 
+`init` also installs a git `pre-commit` hook that runs the rulebook ingest
+synthesis (`boardsmith ingest-gaps`) on every commit. A fresh clone has no hook,
+and a BoardSmith upgrade can change it, so `boardsmith doctor` reports a missing
+or outdated hook and `boardsmith doctor --fix` writes the current one, along
+with the rest of the project layout it checks. A `pre-commit` hook BoardSmith
+did not write, or one doctor cannot read, is left alone: doctor prints a note
+and its exit code does not change. To use BoardSmith's hook instead, move your
+own commands elsewhere, delete `.git/hooks/pre-commit` and run
+`boardsmith doctor --fix`, or run `boardsmith ingest-gaps` yourself after
+transcription.
+
 #### Starting as a simulator, with no UI yet
 
 To balance the rules before building anything to look at, pass `--sim`:
