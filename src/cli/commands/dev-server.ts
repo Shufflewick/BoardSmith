@@ -55,6 +55,7 @@ import { boardsmithSourceEntries } from './game-runtime.js';
 import type { HeldResource } from '../dev-host/shutdown.js';
 import { portRefusal } from '../dev-host/port.js';
 import { DEV_HOST_ALIVE_PATH } from '../../testing/browser-smoke-clock.js';
+import { rulesAnswered } from '../dev-host/rules-worker.js';
 
 /**
  * The one thing this module needs of an HTTP server: that it emits `upgrade`.
@@ -184,16 +185,19 @@ function requestPath(req: Connect.IncomingMessage): string {
 }
 
 /**
- * Answers {@link DEV_HOST_ALIVE_PATH} at once, with nothing (#609). The smoke walk asks it every
- * tick to tell a dev host that is answering, whose time counts, from one too busy or starved to
- * answer, whose time does not. Registered in the `configureServer` BODY, ahead of Vite's own
+ * Answers {@link DEV_HOST_ALIVE_PATH} with nothing, once its rules workers have answered (#609).
+ * The smoke walk asks it every tick to tell a dev host that is answering, whose time counts, from
+ * one too busy or starved to answer, whose time does not; the rules run in workers (#885), so the
+ * host is busy while they are. Registered in the `configureServer` BODY, ahead of Vite's own
  * middlewares, so the answer costs nothing but the dev host's attention.
  */
 export function answerAlive(server: ViteDevServer): void {
   server.middlewares.use((req, res, next) => {
     if (requestPath(req) !== DEV_HOST_ALIVE_PATH) return next();
-    res.statusCode = 204;
-    res.end();
+    void rulesAnswered().then(() => {
+      res.statusCode = 204;
+      res.end();
+    });
   });
 }
 

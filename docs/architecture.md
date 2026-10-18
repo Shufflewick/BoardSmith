@@ -254,6 +254,99 @@ Runtime Isolation below).
    an executor     (e.g. KV)         WebSocket fan-out)
 ```
 
+### The `boardsmith dev` rules worker (#885)
+
+`boardsmith dev` bundles the author's rules with the engine, and bundles them
+again on every save. Node never unloads an ES module, so importing each new
+bundle into the CLI process kept every old one alive: about 2 MB per save on
+Hex, gigabytes over a long session. So the dev host never imports a rules
+bundle. Each bundle runs in its own `worker_threads` worker, and a reload
+throws the old worker away, which frees its whole heap.
+
+**A worker thread, not a child process.** The table host already calls its
+rules one op at a time, asynchronously, with the snapshot in and the result
+out: exactly the `executeOp` adapter above, which the platform also runs over
+a wire. Bots run inside `executeOp`, so MCTS runs in the worker too, off the
+thread that serves the pages. A worker starts in milliseconds, `terminate()`
+stops even a rule stuck in a loop, and a rule's `process.exit()` ends only its
+worker. A child process would add a Node start-up per reload and isolate
+nothing a worker does not. The world's run-long lock (#1040) is held by the
+dev process, not the worker, so a world whose worker stops on its own is still
+refused to a second `boardsmith dev`.
+
+**Busy rules are a busy dev host (#609).** The smoke walk counts time only
+while `boardsmith dev` answers `/__boardsmith-alive`. With the rules in a
+worker, the host's own thread would answer while the rules are still busy, as
+a loaded machine keeps them, and the walk would time out a game that was only
+slow. So the host answers once every rules worker has answered a message sent
+behind whatever it was already doing (`rulesAnswered`); a worker that stops
+counts as having answered, and rules that never finish freeze the walk's
+clock, which it reports after a minute.
+
+**Where a crash happened.** The worker starts from a two-line bootstrap that
+turns source maps on and then imports the bundle, which carries an inline map,
+so a rule's error names the author's file and line. Not `execArgv:
+['--enable-source-maps']`: passing `execArgv` makes Node check every flag the
+dev process runs with, and it refuses V8 flags such as
+`--max-old-space-size`. The bootstrap rethrows a failed import as an uncaught
+error, so rules that throw while loading stop the worker even under
+`--unhandled-rejections=none`. Only an error the worker did not catch, a crash
+in the rules as they load or run, keeps its stack (a `RulesError` on the
+host); the terminal prints it, and a page is only ever sent the message. What
+the worker catches is an answer, including BoardSmith's own refusals (no
+`gameDefinition`, `gameOptions` declared in it, a world the edit cannot run),
+so it crosses as its message alone and shows no BoardSmith stack (#240).
+
+**What crosses the boundary.** Only plain data, so nothing from the bundle
+ever enters the host's module graph. Every answer the worker hands back is
+encoded as the wire's JSON (`toWireJson`, `wire-json.ts`, the encoder every
+dev socket send uses), so the host holds exactly what a page would receive: a
+game element in a choice is its `toJSON`, as it is in production, and never a
+live object that structured clone refuses. That costs an encode and a parse
+per op, including the op's snapshot; parity with the wire is worth it.
+
+- **Table road** (`dev-table-runtime.ts`, `table-rules-worker.ts`): the worker
+  holds the `gameDefinition`, `executeOp` and the reload step
+  (`reloadTableRules`). It answers once with the definition's facts the host
+  reads (game type, display name, seat range, presets, player options, colour
+  palette, persistence, declared game options), then takes `executeOp` and
+  `carry` calls: the op, the snapshot and the pending selections in, the
+  op's result out. The session, the lobby, the sockets and the timers stay in
+  the host.
+- **World road** (`dev-world.ts`, `world-rules-worker.ts`): the worker holds
+  the whole world: the store, `LocalWorldHost`, its resident tree and its
+  clock. The host keeps the sockets and the reload queue. It sends each page's
+  message and departure, and which pages are open (the world host's
+  `isOpen`); the worker sends back the frames for each page, and hands the
+  work it starts itself (an alarm, a departure's grace) to the reload queue,
+  which tells it when to run that work (#387). Because the clock lives with
+  the world, `openWorldRun` takes no clock: a world's time is the worker's.
+
+**A reload, on either road:** bundle the edit, start a new worker on it and
+wait for it to load and check the rules (a rules module with no
+`gameDefinition`, or one that throws while loading, fails here). A failure
+stops the new worker and leaves the old one running, exactly as a bundle that
+does not build does. Then the state moves the way it always has: a table's
+snapshot is carried onto the new worker's rules (`carry`); a world is closed
+in the old worker and opened in the new one, and reopened in the old one if
+the new rules refuse it (#381). Only then is the old worker stopped, after
+any call still running on it has answered.
+
+A worker that stops on its own (a rule calls `process.exit()`, or throws from
+a timer) is reported in the terminal, every call still waiting on it rejects
+with the reason, and every later call says the rules stopped and that saving a
+rules file or restarting `boardsmith dev` starts them again. The next save does
+start them again, on either road: a table carries the snapshot its host still
+holds onto the new worker, and a world, whose worker took its open world with
+it, is opened in the new worker from its last checkpoint. A world's frames for
+its pages cross as JSON, the form the wire takes, because a view can hold
+values the world's read-only projection answered, which structured clone
+refuses.
+
+The one-shot commands (`simulate`, `validate`, `build`, `add-ui`,
+`evolve-bot-weights`) still import their bundle once into their own process:
+they load it once and exit, so nothing builds up.
+
 ## Package Responsibilities
 
 | Package | Responsibility | Key Exports |

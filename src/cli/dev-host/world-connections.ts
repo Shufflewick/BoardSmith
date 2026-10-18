@@ -7,9 +7,10 @@
  * regression test for #284 drives the literal code the server runs, over real
  * sockets, with no hand-mirrored copy to drift.
  *
- * ONE SOURCE OF TRUTH FOR "IS THIS PAGE STILL HERE". `send` and `isOpen` read
- * the same map and the same `readyState`, so the host can never believe in a
- * page its own frames are no longer reaching, or skip one they still reach.
+ * ONE SOURCE OF TRUTH FOR "IS THIS PAGE STILL HERE". The world runs in its
+ * rules' worker (#885) and answers `isOpen` from the pages this tells it are
+ * open, the same map `sendFrame` sends through, so the world can never believe
+ * in a page its frames are no longer reaching, or skip one they still reach.
  *
  * A REQUEST ID BELONGS TO ONE PAGE LOAD (#1099), as on the table host (#1041).
  * A reloaded page keeps its client id and numbers its requests from 0 again,
@@ -24,6 +25,7 @@ import { WebSocket } from 'ws';
 
 import type { RulesReloadQueue } from './rules-reload-queue.js';
 import { pageText, parseSocketMessage } from './socket-message.js';
+import { toWireJson } from './wire-json.js';
 import type { LocalWorldHost, WorldDevRequest } from './world-host.js';
 
 /**
@@ -49,12 +51,14 @@ function refusalOf(message: WorldDevRequest): ((text: string) => Record<string, 
 }
 
 interface WorldConnections {
-  /** One frame to one page, dropped when that page's socket is not open. */
-  send(clientId: string, message: unknown): void;
+  /**
+   * One frame, already encoded as JSON, to one page; dropped when that page's
+   * socket is not open. An answer names the request id the host was given, and
+   * goes only to the page load that asked (#1099).
+   */
+  sendFrame(clientId: string, frame: string, hostRequestId?: string): void;
   /** One frame to every open page. */
   broadcast(message: unknown): void;
-  /** Whether this page's socket is open right now -- the host's `isOpen`. */
-  isOpen(clientId: string): boolean;
   /** Take one newly upgraded socket: its messages go to the current host, and
    *  its close is that page's departure. */
   accept(socket: WebSocket): void;
@@ -77,10 +81,17 @@ interface WorldConnections {
  * page's departure (#387).
  */
 export function createWorldConnections(
-  host: () => LocalWorldHost,
+  host: () => Pick<LocalWorldHost, 'handleMessage' | 'disconnect'>,
   queue: Pick<RulesReloadQueue, 'admit'>,
+  /**
+   * Told which pages are open whenever that changes, before anything the change
+   * sends the host: the world, in its rules' worker, answers `isOpen` from it
+   * (#284, #885).
+   */
+  pagesChanged: (open: readonly string[]) => void,
 ): WorldConnections {
   const clients = new Map<string, WebSocket>();
+  const changed = (): void => pagesChanged([...clients.keys()]);
   /** The page load each client's socket now belongs to. */
   const pageLoad = new Map<string, string>();
   /** Each request the host has not answered yet, by the id the host was given. */
@@ -93,24 +104,19 @@ export function createWorldConnections(
   };
 
   return {
-    send(clientId, message) {
-      const hostRequestId = (message as { requestId?: unknown }).requestId;
-      if (typeof hostRequestId !== 'string') {
-        openSocket(clientId)?.send(JSON.stringify(message));
+    sendFrame(clientId, frame, hostRequestId) {
+      if (hostRequestId === undefined) {
+        openSocket(clientId)?.send(frame);
         return;
       }
       const origin = requestOrigin.get(hostRequestId);
       requestOrigin.delete(hostRequestId);
       if (origin === undefined || pageLoad.get(origin.clientId) !== origin.loadId) return;
-      openSocket(origin.clientId)?.send(JSON.stringify({ ...(message as object), requestId: origin.requestId }));
+      openSocket(origin.clientId)?.send(toWireJson({ ...(JSON.parse(frame) as object), requestId: origin.requestId }));
     },
 
     broadcast(message) {
-      for (const clientId of clients.keys()) openSocket(clientId)?.send(JSON.stringify(message));
-    },
-
-    isOpen(clientId) {
-      return openSocket(clientId) !== undefined;
+      for (const clientId of clients.keys()) openSocket(clientId)?.send(toWireJson(message));
     },
 
     accept(socket) {
@@ -128,6 +134,7 @@ export function createWorldConnections(
           loadId = typeof message.loadId === 'string' ? message.loadId : randomUUID();
           clients.set(clientId, socket);
           pageLoad.set(clientId, loadId);
+          changed();
         }
         if (clientId === null || loadId === null) return; // a client identifies itself first
         const from = clientId;
@@ -148,7 +155,7 @@ export function createWorldConnections(
               : {
                   refuse: (text: string) => {
                     if (hostRequestId !== null) requestOrigin.delete(hostRequestId);
-                    if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(refusal(text)));
+                    if (socket.readyState === WebSocket.OPEN) socket.send(toWireJson(refusal(text)));
                   },
                 }),
           })
@@ -173,6 +180,7 @@ export function createWorldConnections(
           clients.delete(gone);
           pageLoad.delete(gone);
           for (const [id, origin] of requestOrigin) if (origin.clientId === gone) requestOrigin.delete(id);
+          changed();
           // A departure waits for a pending reload like the page's messages
           // did (#387): it can start a departure's clock command.
           queue
@@ -185,12 +193,13 @@ export function createWorldConnections(
     forgetAll(farewell) {
       for (const [clientId, socket] of clients) {
         if (farewell !== undefined && socket.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify(farewell));
+          socket.send(toWireJson(farewell));
         }
         clients.delete(clientId);
         pageLoad.delete(clientId);
       }
       requestOrigin.clear();
+      changed();
     },
   };
 }

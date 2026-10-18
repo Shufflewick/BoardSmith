@@ -59,7 +59,7 @@ describe('#1089: a page-chosen message type in the dev server log', () => {
         if (line.includes('xxxx')) resolve(line);
       }),
     );
-    const server = await serveSockets(createWorldConnections(() => ({}) as LocalWorldHost, failing).accept);
+    const server = await serveSockets(createWorldConnections(() => ({}) as LocalWorldHost, failing, () => {}).accept);
     closers.push(server.close);
     const socket = new WebSocket(`ws://127.0.0.1:${server.port}`);
     await new Promise((resolve) => socket.once('open', resolve));

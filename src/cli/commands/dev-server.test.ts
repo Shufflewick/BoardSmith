@@ -28,6 +28,7 @@ import { DEV_HOST_ALIVE_PATH } from '../../testing/browser-smoke-clock.js';
 import { freePort } from '../lib/free-port.js';
 import { teardownInOrder } from '../dev-host/shutdown.js';
 import { createRulesReloadQueue } from '../dev-host/rules-reload-queue.js';
+import { bundledTable } from '../dev-host/table-host.test-helper.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const TEST_WS_PATH = '/__boardsmith/test-ws';
@@ -184,25 +185,40 @@ describe('a served Vite leaves the process alone (#382)', () => {
   }, 30000);
 });
 
+/** Serve a page with Vite, answering {@link DEV_HOST_ALIVE_PATH} as the dev host does; answers its port. */
+async function servedAlive(): Promise<number> {
+  dir = tempTree('bs-dev-alive-');
+  writeFileSync(join(dir, 'index.html'), '<!doctype html><title>t</title>');
+  const port = await freePort();
+  const served = await serveVite({
+    config: {
+      root: dir,
+      configFile: false,
+      logLevel: 'silent',
+      plugins: [{ name: 'alive', configureServer: (server) => answerAlive(server) }],
+    },
+    port,
+    host: '127.0.0.1',
+    sockets: [],
+    release: () => {},
+  });
+  const teardown = teardownInOrder(served.resources);
+  stopServed = () => teardown.run();
+  return port;
+}
+
+/** Rules that keep their worker busy while they load, as a loaded machine does (#885). */
+const RULES_BUSY_LOADING = [
+  "import { Game, Player } from 'boardsmith';",
+  'const until = Date.now() + 1_000;',
+  'while (Date.now() < until) { /* busy */ }',
+  'class Idle extends Game<Idle, Player> {}',
+  "export const gameDefinition = { gameClass: Idle, gameType: 'alive-busy', minPlayers: 1, maxPlayers: 1 };",
+].join('\n');
+
 describe('the dev host says it is answering (#609)', () => {
   it(`answers ${DEV_HOST_ALIVE_PATH} with nothing, and leaves every other path to the rest of the dev host`, async () => {
-    dir = tempTree('bs-dev-alive-');
-    writeFileSync(join(dir, 'index.html'), '<!doctype html><title>t</title>');
-    const port = await freePort();
-    const served = await serveVite({
-      config: {
-        root: dir,
-        configFile: false,
-        logLevel: 'silent',
-        plugins: [{ name: 'alive', configureServer: (server) => answerAlive(server) }],
-      },
-      port,
-      host: '127.0.0.1',
-      sockets: [],
-      release: () => {},
-    });
-    const teardown = teardownInOrder(served.resources);
-    stopServed = () => teardown.run();
+    const port = await servedAlive();
 
     const alive = await fetch(`http://127.0.0.1:${port}${DEV_HOST_ALIVE_PATH}`);
     const page = await fetch(`http://127.0.0.1:${port}/`);
@@ -211,6 +227,26 @@ describe('the dev host says it is answering (#609)', () => {
     expect(await alive.text()).toBe('');
     expect(page.status).toBe(200);
   }, 30000);
+
+  it('answers only once rules busy in their worker have answered, since the rules run in it (#885)', async () => {
+    const start = await bundledTable('bs-dev-alive-busy-', RULES_BUSY_LOADING);
+    const port = await servedAlive();
+    const order: string[] = [];
+
+    const loading = start().then((runtime) => {
+      order.push('rules loaded');
+      return runtime;
+    });
+    const alive = fetch(`http://127.0.0.1:${port}${DEV_HOST_ALIVE_PATH}`).then((answer) => {
+      order.push('alive answered');
+      return answer;
+    });
+    const [runtime, answer] = await Promise.all([loading, alive]);
+    await runtime.close();
+
+    expect(answer.status).toBe(204);
+    expect(order).toEqual(['rules loaded', 'alive answered']);
+  }, 60_000);
 });
 
 /**

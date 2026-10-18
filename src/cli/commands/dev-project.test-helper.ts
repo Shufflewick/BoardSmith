@@ -66,11 +66,14 @@ interface DevRun {
   readonly ended: Promise<DevRunEnding>;
 }
 
-/** Spawn the real `boardsmith dev` in `cwd` on `port`, without opening a browser, adding `flags`. */
-export function spawnDev(cwd: string, port: number, flags: readonly string[] = []): DevRun {
+/**
+ * Spawn the real `boardsmith dev` in `cwd` on `port`, without opening a browser, adding `flags`,
+ * under node run with `nodeFlags`.
+ */
+export function spawnDev(cwd: string, port: number, flags: readonly string[] = [], nodeFlags: readonly string[] = []): DevRun {
   const child = spawn(
     process.execPath,
-    [join(REPO_ROOT, 'bin', 'boardsmith.js'), 'dev', '--port', String(port), '--no-open', ...flags],
+    [...nodeFlags, join(REPO_ROOT, 'bin', 'boardsmith.js'), 'dev', '--port', String(port), '--no-open', ...flags],
     { cwd },
   );
   const output = collectOutput(child);
