@@ -46,7 +46,7 @@ import {
 // rules the server applies, and a second copy of them is a second rule set
 // (#229 for text, #237 for number).
 import { numberRuleErrors } from '../../../engine/action/number-rules.js';
-import { textRuleErrors, wirePattern } from '../../../engine/action/text-rules.js';
+import { textPickRefusal } from '../../../engine/action/text-rules.js';
 import { choiceValueKey } from '../../../engine/action/choice-matching.js';
 import ActionHelpPopover from '../helpers/ActionHelpPopover.vue';
 // Type-only, so the log component's module (and its stylesheet) never enters
@@ -952,7 +952,7 @@ function skipOptionalSelection() {
 /**
  * Why the value in the open editor cannot be submitted, or null.
  *
- * The rules come from the engine's OWN validators -- `textRuleErrors` (#229)
+ * The rules come from the engine's OWN validators -- `textPickRefusal` (#229)
  * and `numberRuleErrors` (#237) -- so what the panel refuses here and what the
  * server would refuse are the same rule in the same words, rather than two
  * copies that drift. `validate` is deliberately not among them: a game's custom
@@ -972,13 +972,7 @@ function editorValueRefusal(): string | null {
     return numberRuleErrors(pick.name, val, pick)[0] ?? null;
   }
   if (pick.type === 'text') {
-    return textRuleErrors(pick.name, textInputValue.value, {
-      minLength: pick.minLength,
-      maxLength: pick.maxLength,
-      maxBytes: pick.maxBytes,
-      multiline: pick.multiline,
-      pattern: pick.pattern && wirePattern(pick.pattern),
-    })[0] ?? null;
+    return textPickRefusal(pick, textInputValue.value);
   }
   return null;
 }

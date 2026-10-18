@@ -1047,17 +1047,9 @@ export class ActionExecutor {
     // Type-specific validation
     switch (selection.type) {
       case 'text': {
-        const textSel = selection as TextSelection;
-        const str = value as string;
-        if (typeof str !== 'string') {
-          errors.push(`${selection.name} must be a string`);
-        } else {
-          // The bounds live in `text-rules.ts` because the Action Panel has to
-          // apply the same ones to tell a player why their text will be refused
-          // before they submit it (#229). Two copies of these three checks is
-          // two rule sets that drift.
-          errors.push(...textRuleErrors(selection.name, str, textSel));
-        }
+        // The bounds live in `text-rules.ts` because the Action Panel and a
+        // custom UI's `fill` apply the same ones before submitting (#229, #1057).
+        errors.push(...textRuleErrors(selection.name, value, selection as TextSelection));
         break;
       }
 

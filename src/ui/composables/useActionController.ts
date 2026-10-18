@@ -93,6 +93,7 @@ import { ref, readonly, computed, watch, nextTick, getCurrentScope, onScopeDispo
 import { isDevMode, devWarn, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
 import { findMatchingChoice, oneChoiceListRefusal, oneElementListRefusal } from '../../engine/action/choice-matching.js';
+import { textPickRefusal } from '../../engine/action/text-rules.js';
 
 // Re-export all types from the types module for consumers
 export type {
@@ -2071,6 +2072,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         `Use appendListEntry()/confirmMultiSelect(), or pass the whole array to fill().`;
       setError(error);
       return { valid: false, error };
+    }
+
+    // The panel's own check, so a custom UI is refused the same text before it is sent (#1057).
+    const textRefusal = selection.type === 'text' ? textPickRefusal(selection, value) : null;
+    if (textRefusal !== null) {
+      setError(textRefusal);
+      return { valid: false, error: textRefusal };
     }
 
     // Handle repeating selections
