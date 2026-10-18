@@ -95,9 +95,19 @@ describe("#936: a view names more as more is loaded, never fewer", () => {
     // round two, and the round after it must not forget that.
     expect(projected).toEqual(["p2"]);
     expect(declined.p1?.code).toBe("view-dropped-partition");
-    expect(declined.p1?.message).toContain('"lobby"');
-    expect(declined.p1?.message).toContain('"index"');
+    expect(declined.p1?.message).toContain('named "lobby" and "index"');
+    expect(declined.p1?.message).toContain("dropped them");
     expect(declined.p1?.message).toMatch(/keep naming/i);
+  });
+
+  it("says \"it\" when a view drops one partition", async () => {
+    withIndex = { 1: ["index", "room"], 2: GROWS };
+    const { runner, rows } = await coldWorld();
+
+    const { declined } = await look(runner, rows, ["p1"]);
+
+    expect(declined.p1?.message).toContain('named "lobby" in one round of a look and dropped it');
+    expect(declined.p1?.message).toContain('Keep naming "lobby"');
   });
 
   it("settles a view that only grows, and refuses nobody", async () => {
@@ -138,6 +148,29 @@ describe("#936: a view names more as more is loaded, never fewer", () => {
     // Everything is resident now, and the view names only the room: nothing
     // was loaded during this look, so there is no earlier round to compare to.
     withIndex = { 1: ["room"], 2: GROWS };
+    const { declined, projected } = await look(runner, rows, ["p1"]);
+    expect(declined).toEqual({});
+    expect(projected).toEqual(["p1"]);
+  });
+
+  it("forgets a look cut short, so the next look is not judged against it", async () => {
+    withIndex = { 1: GROWS, 2: GROWS };
+    const { runner, rows } = await coldWorld();
+    // Round two names "room", and the host cannot read it: the look ends there,
+    // with seat 1's round-two names still remembered.
+    await expect(
+      settleDeclaration(
+        async (supplied) => (await runner.declareViews(["p1"], supplied)).needs,
+        async (name) => {
+          if (name === "room") throw new Error("the store is unreachable");
+          return rows[name]!;
+        },
+        "the fixture's `world.view`",
+      ),
+    ).rejects.toThrow("unreachable");
+
+    // A command moved the player: their view now names only the index.
+    withIndex = { 1: ["index"], 2: GROWS };
     const { declined, projected } = await look(runner, rows, ["p1"]);
     expect(declined).toEqual({});
     expect(projected).toEqual(["p1"]);

@@ -1057,7 +1057,10 @@ function viewRound(
 
 /** A view that stopped naming partitions once `loaded` arrived (#936). */
 function viewDroppedPartition(dropped: readonly string[], loaded: readonly string[]): WorldRefusal {
-  const quote = (names: readonly string[]) => names.map((name) => `"${name}"`).join(", ");
+  const quote = (names: readonly string[]) => {
+    const quoted = names.map((name) => `"${name}"`);
+    return quoted.length === 1 ? quoted[0]! : `${quoted.slice(0, -1).join(", ")} and ${quoted.at(-1)!}`;
+  };
   return worldRefusal(
     "view-dropped-partition",
     `This world's \`world.view\` named ${quote(dropped)} in one round of a look and dropped ` +
@@ -1530,10 +1533,11 @@ export function createWorldRunner(
       const needs = new Set<string>();
       const failures: Array<readonly [string, unknown]> = [];
       const loaded = Object.keys(supplied);
+      // A look's first round is the only one handed nothing, so it starts the
+      // comparison afresh, even after a look cut short: between looks a command
+      // may move the player. Looks are serialised by the world lock.
+      if (loaded.length === 0) viewRounds.clear();
       for (const player of players) {
-        // A look's first round is the only one handed nothing, so it starts
-        // the comparison afresh: between looks a command may move the player.
-        if (loaded.length === 0) viewRounds.delete(player);
         // PER PLAYER, INSIDE ONE CALL (#310). `viewPartitions` runs the
         // bundle's own `world.view` for that seat and reads the seat off the
         // roster, so it throws for a seat the game cannot describe and for a
@@ -1554,8 +1558,6 @@ export function createWorldRunner(
           failures.push([player, error]);
         }
       }
-      // Nothing more to load ends the look, and with it the comparison.
-      if (needs.size === 0) for (const player of players) viewRounds.delete(player);
       return { needs: [...needs], refused: viewRefusalsOf(failures) };
     },
 
