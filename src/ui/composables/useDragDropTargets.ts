@@ -116,11 +116,6 @@ export function setupDragDropOrchestration(options: DragDropOrchestrationOptions
     return true;
   }
 
-  /** Is the dragged element one of the (enabled) valid elements for this pick? */
-  function pickAcceptsDragged(pick: EnrichedPickMetadata, dragged: ElementRef): boolean {
-    return actionController.getValidElements(pick).some(el => isChoosableElement(el, dragged));
-  }
-
   /** Mirror the controller's current pick into board-interaction state so AutoUI boards react. */
   function syncCurrentActionPick(actionName: string): void {
     const nextPick = actionController.currentPick.value;
@@ -174,8 +169,12 @@ export function setupDragDropOrchestration(options: DragDropOrchestrationOptions
         // drag-to-start path below. This is what makes "drag the source card, drop
         // it on the destination zone" work when a custom UI arms the action first
         // (e.g. via an action button) before the drag begins.
-        if (pick?.type === 'element' && dragged.id !== undefined && pickAcceptsDragged(pick, dragged)) {
-          await actionController.fill(pick.name, dragged.id);
+        // The candidate dragged, not the dragged ref's id: a piece drags on its square's behalf (#943).
+        const chosen = pick?.type === 'element'
+          ? actionController.getValidElements(pick).find(el => isChoosableElement(el, dragged))
+          : undefined;
+        if (pick && chosen) {
+          await actionController.fill(pick.name, chosen.id);
           // Filling may have been the action's final input (auto-executed) — done.
           if (!actionController.currentAction.value) return;
           syncCurrentActionPick(actionName);

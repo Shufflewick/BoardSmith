@@ -377,6 +377,48 @@ describe('drag-drop follows the board and the action panel (#724)', () => {
     expect(sendAction).toHaveBeenCalledWith('move', { piece: 42, dest: 'a' });
   });
 
+  it('DRAG-TO-START: a name-only drag starts the action with the candidate anchored by that name (#945)', async () => {
+    const { controller, boardInteraction, sendAction } = await twoActions([
+      { id: 42, refs: [{ ref: { name: 'Squad A' }, role: 'highlight' }] },
+      { id: 43, refs: [{ ref: { name: 'Squad B' }, role: 'highlight' }] },
+    ]);
+
+    boardInteraction.startDrag({ name: 'Squad B' });
+    await flushAll();
+    expect(controller.currentArgs.value).toEqual({ piece: 43 });
+
+    boardInteraction.triggerDrop({ id: 100 });
+    await flushAll();
+    expect(sendAction).toHaveBeenCalledWith('move', { piece: 43, dest: 'a' });
+  });
+
+  it('dragging from the square a candidate is anchored to picks that candidate and a drop completes the move (#943)', async () => {
+    const pieces = [{ id: 42, refs: [{ ref: { notation: 'd4' }, role: 'highlight' as const }] }, { id: 43, refs: [{ ref: { notation: 'f4' }, role: 'highlight' as const }] }];
+    const fetchPickChoices = answerPicks({
+      piece: { validElements: pieces },
+      destination: {
+        choices: [
+          { value: 'm1', display: 'e5', refs: [{ ref: { notation: 'e5' }, role: 'target' }] },
+          { value: 'm2', display: 'c5', refs: [{ ref: { notation: 'c5' }, role: 'target' }] },
+        ],
+      },
+    });
+    const metadata: Record<string, EnrichedActionMetadata> = {
+      move: { name: 'move', selections: [{ name: 'piece', type: 'element', validElements: pieces }, { name: 'destination', type: 'choice' }] },
+    };
+    const { controller, boardInteraction, sendAction } = await wireAll(metadata, fetchPickChoices);
+    expect(controller.currentPick.value?.name).toBe('piece');
+
+    // The piece on d4 is dragged on behalf of its square, so the drag carries the square.
+    boardInteraction.startDrag({ id: 300, name: 'd4', notation: 'd4' });
+    await flushAll();
+    expect(controller.currentArgs.value).toEqual({ piece: 42 });
+
+    boardInteraction.triggerDrop({ id: 301, name: 'c5', notation: 'c5' });
+    await flushAll();
+    expect(sendAction).toHaveBeenCalledWith('move', { piece: 42, destination: 'm2' });
+  });
+
   it('dragging a disabled element starts no action', async () => {
     const fetchPickChoices = vi.fn().mockResolvedValue({ success: true, choices: [] });
     const metadata: Record<string, EnrichedActionMetadata> = {

@@ -18,7 +18,7 @@ import { setTransformAwareDragImage } from '../../../composables/dragImage.js';
 import { resolvePresentation } from '../presentation.js';
 import type { PresentationOverlay } from '../presentation.js';
 import { GAME_CONTEXT_KEYS } from '../../../composables/useGameContext.js';
-import type { GameElement } from '../auto-ui-helpers.js';
+import { STANDS_ON_KEY, type GameElement } from '../auto-ui-helpers.js';
 
 const props = defineProps<{
   element: GameElement;
@@ -70,9 +70,21 @@ const isDisabled = computed(() => {
   return boardInteraction.isDisabledElement(elementIdentity()) !== false;
 });
 
+const standsOn = inject(STANDS_ON_KEY, () => undefined);
+
+// What a drag starts from: the piece if it is a candidate, else the candidate
+// square it stands on, whose pick the drag then starts (#943).
+const dragIdentity = computed(() => {
+  if (!boardInteraction) return null;
+  if (isActionSelectable.value) return elementIdentity();
+  const square = standsOn();
+  return square && boardInteraction.isSelectableElement(square) ? square : null;
+});
+
 const isDragged = computed(() => {
   if (!boardInteraction) return false;
-  return boardInteraction.isDraggedElement(elementIdentity());
+  const square = standsOn();
+  return boardInteraction.isDraggedElement(elementIdentity()) || (!!square && boardInteraction.isDraggedElement(square));
 });
 
 // aria-label: piece name/notation + current interaction state
@@ -91,7 +103,8 @@ const { attrs: selectableAttrs, onActivate, onKeydown } =
 
 // ── Drag-and-drop handlers ────────────────────────────────────────────────────
 function handleDragStart(event: DragEvent) {
-  if (!boardInteraction || !isActionSelectable.value) {
+  const dragged = dragIdentity.value;
+  if (!boardInteraction || !dragged) {
     event.preventDefault();
     return;
   }
@@ -101,7 +114,7 @@ function handleDragStart(event: DragEvent) {
     name: props.element.name,
   }));
   event.dataTransfer!.effectAllowed = 'move';
-  boardInteraction.startDrag(elementIdentity());
+  boardInteraction.startDrag(dragged);
 }
 
 function handleDragEnd() {
@@ -156,12 +169,12 @@ watch(effectivePieceImage, () => {
         'is-board-highlighted': isHighlighted,
         'is-board-selected': isBoardSelected,
         'is-disabled': isDisabled,
-        'is-draggable': isActionSelectable,
+        'is-draggable': dragIdentity !== null,
         'is-dragging': isDragged,
       },
     ]"
     :data-animatable="true"
-    :draggable="isActionSelectable"
+    :draggable="dragIdentity !== null"
     v-bind="selectableAttrs"
     :aria-label="ariaLabel"
     :aria-pressed="isBoardSelected || undefined"
