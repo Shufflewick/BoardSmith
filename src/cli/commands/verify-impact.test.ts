@@ -1090,6 +1090,31 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
     expect(gateResult.pending).not.toContain(pairId);
   });
 
+  it('a retry after a crash between the RULINGS.md write and the ledger write appends no second ruling (#839)', async () => {
+    const { project, runId, pairId } = await contradictoryProjectWithRulings();
+    const ledgerPath = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'RUN.md');
+    const ledgerBefore = await fs.readFile(ledgerPath, 'utf-8');
+    const resolution = {
+      project,
+      runId,
+      pairId,
+      outcome: 'resolved' as const,
+      decision: 'The higher-timing reading applies.',
+      citation: 'rulebook/a.md, p.1',
+      rationale: 'Designer confirmed.',
+      json: true,
+    };
+
+    const first = await verifyImpactAdjudicateCommand(resolution);
+    // The crash: the ruling is written but the ledger record never was.
+    await fs.writeFile(ledgerPath, ledgerBefore);
+    const retry = await verifyImpactAdjudicateCommand(resolution);
+
+    expect(retry.rulingNumber).toBe(first.rulingNumber);
+    const rulingsText = await fs.readFile(join(project, DESIGN_DIR, 'RULINGS.md'), 'utf-8');
+    expect(rulingsText.match(/^### Ruling \d+$/gm)).toHaveLength(nextNumberFor());
+  });
+
   it('unadjudicated: a second "resolved" call for the same pair reuses the same ruling number and does NOT append a second RULINGS.md entry', async () => {
     const { project, runId, pairId } = await contradictoryProjectWithRulings();
 
