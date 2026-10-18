@@ -207,8 +207,10 @@ leave a completed `spec` unchecked (`build-chunk.md` "Every step persists before
 A chunk that introduces no new game behavior — a pure asset swap, a restyle, a refactor with no
 rules change — has no claims to pin and writes no behavioral tests. Name that exemption explicitly
 as the one row in `## Spec Manifest`, written exactly `| exempt | <reason> | n/a |` so
-`boardsmith test-step-check` can read it (an exempt row on a chunk that has claims is a finding),
-and so `boardsmith verify --chunk <slug>` can: an exempt chunk that adds or changes no test file
+`boardsmith test-step-check` can read it (an exempt row on a chunk that has claims is a finding).
+The reason cell must not be empty, and the only other rows allowed beside it are `none (regression)`
+rows; anything else is refused. The row is written that way
+so `boardsmith verify --chunk <slug>` can read it too: an exempt chunk that adds or changes no test file
 passes its fast checks on typecheck alone, while any other chunk with no test of its own fails
 them (`state-machine.md` "Git Protocol"). It is the same "name the exemption explicitly rather than
 silently omitting" discipline `build/test.md` items 3(i) and 4 already use. A chunk trivial enough

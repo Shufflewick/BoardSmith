@@ -61,6 +61,26 @@ describe('parseSpecManifest', () => {
     expect(manifest.exemption).toBe('asset swap only, no rules change');
   });
 
+  it('refuses an exempt row with no reason', () => {
+    expect(() => parseSpecManifest(chunkMd('| exempt |  | n/a |\n'))).toThrow(
+      'The Spec Manifest\'s exempt row gives no reason. Say why the chunk adds no new game behavior in its ' +
+        'second cell: `| exempt | <reason> | n/a |` (build/spec.md "Exemptions").',
+    );
+  });
+
+  it('refuses an exempt row beside a test file row, but not beside a none (regression) row', () => {
+    expect(() =>
+      parseSpecManifest(chunkMd('| exempt | restyle | n/a |\n| tests/a.test.ts | 1 | yes |\n| tests/pin.test.ts | none (regression) | n/a |\n')),
+    ).toThrow(
+      'The Spec Manifest marks this chunk exempt but also lists tests/a.test.ts. An exempt row must be the only ' +
+        'row besides `none (regression)` rows: remove the exempt row if the chunk has tests of its own, or remove ' +
+        'the other rows (build/spec.md "Exemptions").',
+    );
+    expect(
+      parseSpecManifest(chunkMd('| exempt | restyle | n/a |\n| tests/pin.test.ts | none (regression) | n/a |\n')).exemption,
+    ).toBe('restyle');
+  });
+
   it('ignores table-shaped lines inside an HTML comment, such as the template\'s own example', () => {
     const manifest = parseSpecManifest(
       chunkMd('<!-- written as\n     | exempt | <reason> | n/a |\n-->\n| tests/a.test.ts | 1 | yes |\n'),
@@ -848,14 +868,20 @@ it('regression: a bid is defined', () => { expect(bid).toBeTruthy(); });
       expect(result.findings[0].detail).toMatch(/set it to n\/a/);
     });
 
-    it.each([
-      ['in a chunk that is not exempt', '| tests/auction.test.ts | 1, 2 | yes |\n| tests/pin.test.ts | none (regression) | n/a |\n', '1. **Bid.** a\n2. **Pass.** b\n'],
-      ['marked anything but none (regression)', '| exempt | refactor | n/a |\n| tests/pin.test.ts | none (budget) | n/a |\n', ''],
-      ['that lists a claim', '| exempt | refactor | n/a |\n| tests/pin.test.ts | 3 (regression) | n/a |\n', ''],
-    ])('still demands an observed red for a row %s', async (_what, rows, claims) => {
-      if (rows.includes('tests/auction.test.ts')) await write(project, { 'tests/auction.test.ts': DISPATCHES_BOTH });
-      const result = await exemptChunk(rows, claims);
+    it('still demands an observed red for a none (regression) row in a chunk that is not exempt', async () => {
+      await write(project, { 'tests/auction.test.ts': DISPATCHES_BOTH });
+      const result = await exemptChunk(
+        '| tests/auction.test.ts | 1, 2 | yes |\n| tests/pin.test.ts | none (regression) | n/a |\n',
+        '1. **Bid.** a\n2. **Pass.** b\n',
+      );
       expect(result.findings.map((f) => [f.kind, f.subject])).toContainEqual(['red-not-observed', 'tests/pin.test.ts']);
+    });
+
+    it.each([
+      ['marked anything but none (regression)', '| tests/pin.test.ts | none (budget) | n/a |'],
+      ['that lists a claim', '| tests/pin.test.ts | 3 (regression) | n/a |'],
+    ])('refuses an exempt chunk with a row %s', async (_what, row) => {
+      await expect(exemptChunk(`| exempt | refactor | n/a |\n${row}\n`)).rejects.toThrow(/exempt but also lists tests\/pin\.test\.ts/);
     });
   });
 

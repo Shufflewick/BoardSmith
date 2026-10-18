@@ -401,6 +401,19 @@ describe('boardsmith verify --chunk <slug>: the chunk\'s fast checks', () => {
     );
   });
 
+  it.each([
+    ['with no reason', '| exempt |  | n/a |', /exempt row gives no reason/],
+    ['beside a test file row', '| exempt | a restyle | n/a |\n| tests/combat.test.ts | 1 | yes |', /exempt but also lists tests\/combat\.test\.ts/],
+  ])('refuses a chunk with no test of its own whose exempt row is %s', async (_, rows, message) => {
+    const dir = await gameOnBranch(false);
+    await chunkWithoutTests(dir, rows);
+
+    const { result } = await runVerify({ projectDir: dir, chunk: 'combat', log: () => {} });
+
+    expect(result.passed).toBe(false);
+    expect(check(result, 'test').summary).toMatch(message);
+  });
+
   it('refuses a chunk whose CHUNK.md it cannot read, rather than asking for its tests', async () => {
     const dir = await gameOnBranch(false);
     await chunkWithoutTests(dir, '| exempt | a restyle, no rules change | n/a |');
