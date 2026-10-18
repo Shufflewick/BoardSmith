@@ -37,7 +37,8 @@ describe('decodeMappings', () => {
 
 describe('readCoverage: an unreadable coverage file (#1110)', () => {
   it('names the file rather than saying the run wrote nothing', async () => {
-    const dir = realpathSync(tempTree('bs-coverage-unreadable-'));
+    const tree = tempTree('bs-coverage-unreadable-');
+    const dir = realpathSync(tree);
     const test = join(dir, 'a.test.ts');
     await fs.writeFile(test, '');
     const coverage = join(dir, 'coverage', `${encodeURIComponent(test)}.json`);
@@ -46,7 +47,8 @@ describe('readCoverage: an unreadable coverage file (#1110)', () => {
   });
 
   it('says the run wrote nothing when the test file itself is gone', async () => {
-    const dir = realpathSync(tempTree('bs-coverage-unreadable-'));
+    const tree = tempTree('bs-coverage-unreadable-');
+    const dir = realpathSync(tree);
     await expect(readCoverage(join(dir, 'coverage'), dir, join(dir, 'gone.test.ts'), 'gone.test.ts')).rejects.toThrow(
       'The run that records which game code gone.test.ts runs wrote nothing for it',
     );

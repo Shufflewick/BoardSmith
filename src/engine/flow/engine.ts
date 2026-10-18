@@ -137,11 +137,13 @@ function encodeFlowValue(value: unknown): unknown {
  *
  * @param idRemap - CR-02 (159): the `originalId -> syntheticId` map
  *   `Game.toJSONForPlayer` produces for a per-seat REDACTED clone (e.g. the MCTS
- *   bot's search sandbox). A fungible hidden-zone child is anonymized to a
- *   synthetic id there, so a marker holding its ORIGINAL id resolves through the
- *   remap to the (still-redacted) placeholder. Failing that, a marker that
- *   recorded its outermost concealing ancestor (WR-01, #726) resolves to that
- *   ancestor, which every viewer already sees.
+ *   bot's search sandbox), passed exactly when restoring one, even if empty.
+ *   A fungible hidden-zone child is anonymized to a synthetic id there, so a
+ *   marker holding its ORIGINAL id resolves through the remap to the
+ *   (still-redacted) placeholder. Failing that, a marker that recorded its
+ *   outermost concealing ancestor (WR-01, #726) resolves to that ancestor,
+ *   which every viewer already sees. Without it (a full restore) neither
+ *   fallback applies (#947).
  * @param name - The flow slot holding the marker, for the error.
  * @throws When nothing resolves: the element is gone from the game, and handing
  *   the rules a marker object where they expect an element would fail later
@@ -155,11 +157,14 @@ function resolveFlowElement(
 ): GameElement {
   const live = game.getElementById(marker.__flowElementId);
   if (live && live.constructor.name === marker.className) return live;
-  const syntheticId = idRemap?.get(marker.__flowElementId);
-  const resolved =
-    (syntheticId !== undefined ? game.getElementById(syntheticId) : undefined) ??
-    (marker.__hiddenContainerId !== undefined ? game.getElementById(marker.__hiddenContainerId) : undefined);
-  if (resolved) return resolved;
+  // A full restore holds every element the marker was written against, so a miss there is a real mismatch (#947).
+  if (idRemap) {
+    const syntheticId = idRemap.get(marker.__flowElementId);
+    const resolved =
+      (syntheticId !== undefined ? game.getElementById(syntheticId) : undefined) ??
+      (marker.__hiddenContainerId !== undefined ? game.getElementById(marker.__hiddenContainerId) : undefined);
+    if (resolved) return resolved;
+  }
   throw new Error(
     `Flow ${name} references element id ${marker.__flowElementId} (${marker.className}), but it no longer ` +
     `exists in the game: it is neither in the tree nor in game.pile. An element the flow holds must stay in ` +
@@ -1503,9 +1508,13 @@ export class FlowEngine<G extends Game = Game> {
           };
         }
         if (i < path.length - 1) {
+          const branchKey = frameData?.[`__frame_${i}`]?.branchKey;
+          const branch = currentNode.type === 'switch' && typeof branchKey === 'string'
+            ? (branchKey === '__default' ? 'the default case' : `case ${JSON.stringify(branchKey)}`)
+            : 'a branch';
           return {
             valid: false,
-            error: `the save is inside a branch of ${currentNode.type} "${nodeName}" that the current rules no longer have. ` +
+            error: `the save is inside ${branch} of ${currentNode.type} "${nodeName}" that the current rules no longer have. ` +
               'Restore it under the rules it was saved with, or start a new game',
             validPath,
           };
@@ -1574,7 +1583,7 @@ export class FlowEngine<G extends Game = Game> {
         // and `executeForEach`'s `forEachItems` do today -- so a hand-written
         // special case per field name is a hole waiting for the fourteenth
         // site. Plain values (`moveCount`, `iteration`,
-        // `eligibleSeats: number[]`, `branchIndex`) pass through untouched, which
+        // `eligibleSeats: number[]`, `branchIndex`, `branchKey`) pass through untouched, which
         // is what `turnSequence`/`dueSeats` (seat-activity.ts) and
         // `resolveFlowChild` read back out. Do NOT "simplify" this to a
         // spread: that is the asymmetry this replaced.
@@ -2286,7 +2295,6 @@ export class FlowEngine<G extends Game = Game> {
       ...frame.data,
       branchPushed: true,
       branchKey: hasCase ? stringValue : '__default',
-      branchIndex: hasCase ? Object.keys(config.cases).indexOf(stringValue) : Object.keys(config.cases).length,
     };
 
     return { awaitingInput: false };
