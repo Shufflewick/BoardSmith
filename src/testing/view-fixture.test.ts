@@ -12,9 +12,18 @@
  * `diffPlayerViews` runs it on every view it is handed.
  */
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Piece, type GameOptions, type ElementJSON } from '../engine/index.js';
+import {
+  Game,
+  Player,
+  Piece,
+  Action,
+  actionStep,
+  type GameOptions,
+  type ElementJSON,
+} from '../engine/index.js';
 import { assertViewFixtureShape } from './view-fixture.js';
 import { diffPlayerViews } from './view-diff.js';
+import { TestGame } from './test-game.js';
 
 class Token extends Piece<RefGame> {}
 
@@ -97,5 +106,44 @@ describe('diffPlayerViews refuses a drifted fixture rather than diffing it', () 
     expect(() =>
       diffPlayerViews({ player: 1, state: good }, { player: 2, state: bad })
     ).toThrowError(/__playerRef[\s\S]*getPlayerView\(seat\) or renderAsSeat\(\)/);
+  });
+});
+
+class Seating extends Piece<SeatingGame> {
+  host!: { seat: number; name: string };
+}
+
+/** A game attribute shaped like a player reference, but a plain record the game owns (#1181). */
+class SeatingGame extends Game<SeatingGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.create(Seating, 'seating', { host: { seat: 1, name: 'Alice' } });
+    this.registerAction(Action.create<SeatingGame>('pass').execute(() => ({ success: true })));
+    this.setFlow({ root: actionStep({ actions: ['pass'] }) });
+  }
+}
+
+describe('a view the engine made is trusted, a copy of one is not (#1181)', () => {
+  const makeGame = () => TestGame.create(SeatingGame, { playerCount: 2, seed: 'view-fixture-1181' });
+
+  it('passes a captured view whose game attribute is shaped { seat, name }', () => {
+    const testGame = makeGame();
+    expect(() => diffPlayerViews(testGame.getPlayerView(1), testGame.getPlayerView(2))).not.toThrow();
+  });
+
+  it('keeps trusting the tree when only the wrapper around it is rebuilt', () => {
+    const testGame = makeGame();
+    const a = testGame.getPlayerView(1);
+    const b = testGame.getPlayerView(2);
+    expect(() =>
+      diffPlayerViews({ ...a }, { player: b.player, state: b.state })
+    ).not.toThrow();
+  });
+
+  it('refuses a hand-built copy of a captured view holding the same attribute', () => {
+    const testGame = makeGame();
+    const real = testGame.getPlayerView(1);
+    const handBuilt = { player: 2, state: JSON.parse(JSON.stringify(real.state)) as ElementJSON };
+    expect(() => diffPlayerViews(real, handBuilt)).toThrowError(/seat 2 view.*host.*__playerRef/s);
   });
 });
