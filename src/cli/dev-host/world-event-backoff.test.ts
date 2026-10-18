@@ -38,10 +38,15 @@ const boom = worldClockAction<Clockwork>('boom')
     if (failing) throw new Error('broken on purpose');
   });
 
+const tick = worldClockAction<Clockwork>('tick')
+  .needs(() => [])
+  .execute(() => {});
+
 const arm = worldClockAction<Clockwork>('arm')
   .needs(() => [])
-  .execute((_args, { world }) => {
+  .execute((args, { world }) => {
     world.schedule({ delayMs: 0, action: 'boom' });
+    if (args.tickIn !== undefined) world.schedule({ delayMs: Number(args.tickIn), action: 'tick' });
   });
 
 function bundle(): ConstructorParameters<typeof ResidentWorld>[0]['definition'] {
@@ -53,7 +58,7 @@ function bundle(): ConstructorParameters<typeof ResidentWorld>[0]['definition'] 
       maxPlayers: 1,
       genesis: (game: Game): Record<string, GameElement> => ({ [LOG]: game.create(Log, LOG) }),
       view: () => [LOG],
-      actions: [boom, arm],
+      actions: [boom, arm, tick],
     } as WorldDefinition,
   } as ConstructorParameters<typeof ResidentWorld>[0]['definition'];
 }
@@ -71,7 +76,7 @@ function recordingClock(): WorldHostClock & { armedDelay: number | null } {
   return clock;
 }
 
-async function launched() {
+async function launched(armArgs: Record<string, unknown> = {}) {
   failing = true;
   runs = 0;
   const clock = recordingClock();
@@ -88,7 +93,7 @@ async function launched() {
     onNotice: (message) => notices.push(message),
   });
   await world.start();
-  await world.run(() => world.clockCommand('arm', {}));
+  await world.run(() => world.clockCommand('arm', armArgs));
   return { world, clock, notices };
 }
 
@@ -102,6 +107,16 @@ describe('#721: a refused scheduled event waits before it is tried again', () =>
     expect(runs).toBe(1);
     expect(notices).toHaveLength(1);
     expect(clock.armedDelay).toBe(RETRY_MS);
+    await world.close();
+  });
+
+  it('arms a fresh timer due before the retry at its own due, not the retry (#953)', async () => {
+    const { world, clock } = await launched({ tickIn: 10_000 });
+
+    await world.run(() => world.fireDue());
+
+    expect(runs).toBe(1);
+    expect(clock.armedDelay).toBe(10_000);
     await world.close();
   });
 

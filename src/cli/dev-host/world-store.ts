@@ -310,9 +310,16 @@ export function openWorldStore(
     sweepReceipts: db.prepare('DELETE FROM receipts WHERE at < ?'),
     addDirty: db.prepare('INSERT INTO dirty (name) VALUES (?) ON CONFLICT(name) DO NOTHING'),
     clearDirty: db.prepare('DELETE FROM dirty WHERE name = ?'),
-    listEvents: db.prepare(
-      'SELECT id, due, seq, key, owner, action, args, every_ms, attempts ' +
-        'FROM scheduled ORDER BY due, seq',
+    listEvents: db.prepare(`${EVENT_COLUMNS} FROM scheduled ORDER BY due, seq`),
+    countEvents: db.prepare('SELECT COUNT(*) AS count FROM scheduled'),
+    // shortcut: no index on owner, so this scans the table (keys and ids only, no args); add one in a layout step if a dev world's queue makes it show.
+    ownerEvents: db.prepare('SELECT id, key FROM scheduled WHERE owner = ?'),
+    earliestEventAfter: db.prepare(
+      `${EVENT_COLUMNS} FROM scheduled WHERE due > ? ORDER BY due, seq LIMIT 1`,
+    ),
+    nextDue: db.prepare(
+      `${EVENT_COLUMNS} FROM scheduled WHERE due <= ? ` +
+        'AND id NOT IN (SELECT value FROM json_each(?)) ORDER BY due, seq LIMIT 1',
     ),
     writeEvent: db.prepare(
       'INSERT INTO scheduled (id, due, seq, key, owner, action, args, every_ms, attempts) ' +
@@ -524,17 +531,32 @@ export function openWorldStore(
     },
 
     pendingEvents(): readonly PlannedEvent[] {
-      return (stmt.listEvents.all() as EventRow[]).map((row) => ({
-        id: row.id,
-        due: row.due,
-        seq: row.seq,
-        owner: row.owner,
-        action: row.action,
-        args: JSON.parse(row.args) as Record<string, unknown>,
-        attempts: row.attempts,
-        ...(row.key === null ? {} : { key: row.key }),
-        ...(row.every_ms === null ? {} : { everyMs: row.every_ms }),
-      }));
+      return (stmt.listEvents.all() as EventRow[]).map(plannedEvent);
+    },
+
+    pendingCount(): number {
+      return (stmt.countEvents.get() as { count: number }).count;
+    },
+
+    pendingOf(owner: string) {
+      const rows = stmt.ownerEvents.all(owner) as Array<{ id: string; key: string | null }>;
+      let unkeyed = 0;
+      const keyed = new Map<string, string>();
+      for (const row of rows) {
+        if (row.key === null) unkeyed += 1;
+        else keyed.set(row.key, row.id);
+      }
+      return { unkeyed, keyed };
+    },
+
+    earliestEvent(after: number = Number.MIN_SAFE_INTEGER): PlannedEvent | undefined {
+      const row = stmt.earliestEventAfter.get(after) as EventRow | undefined;
+      return row === undefined ? undefined : plannedEvent(row);
+    },
+
+    nextDue(at: number, taken: ReadonlySet<string>): PlannedEvent | undefined {
+      const row = stmt.nextDue.get(at, JSON.stringify([...taken])) as EventRow | undefined;
+      return row === undefined ? undefined : plannedEvent(row);
     },
 
     nextSeq(): number {
@@ -840,6 +862,8 @@ interface ReceiptRow {
   message: string | null;
 }
 
+const EVENT_COLUMNS = 'SELECT id, due, seq, key, owner, action, args, every_ms, attempts';
+
 /** One scheduled event as SQLite hands it back. */
 interface EventRow {
   id: string;
@@ -851,6 +875,20 @@ interface EventRow {
   args: string;
   every_ms: number | null;
   attempts: number;
+}
+
+function plannedEvent(row: EventRow): PlannedEvent {
+  return {
+    id: row.id,
+    due: row.due,
+    seq: row.seq,
+    owner: row.owner,
+    action: row.action,
+    args: JSON.parse(row.args) as Record<string, unknown>,
+    attempts: row.attempts,
+    ...(row.key === null ? {} : { key: row.key }),
+    ...(row.every_ms === null ? {} : { everyMs: row.every_ms }),
+  };
 }
 
 const LAUNCHED_KEY = 'launched';

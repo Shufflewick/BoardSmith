@@ -1007,3 +1007,55 @@ describe('a migration that grows a partition past the budget', () => {
     }
   });
 });
+
+/**
+ * #953: THE QUESTIONS A DRAIN, AN ALLOWANCE AND A RE-ARM ASK, answered without
+ * reading the whole queue, and answered the same by both stores.
+ */
+describe.each([
+  ['the local store', () => openWorldStore(worldStorePath(tempTree('bs-world-store-')), BUDGETS)],
+  ['the memory store', () => createMemoryWorldStore('key', BUDGETS)],
+])('the targeted schedule queries (#953): %s', (_name, open: () => WorldStore) => {
+  let store: WorldStore;
+  beforeEach(async () => {
+    store = open();
+    await store.writeCheckpoint(cp({}), {
+      schedule: [
+        event({ id: 'late', due: 300, seq: 0, owner: 'p1' }),
+        event({ id: 'tie-b', due: 100, seq: 2, owner: 'p1', key: 'march' }),
+        event({ id: 'tie-a', due: 100, seq: 1, owner: 'p1' }),
+        event({ id: 'other', due: 200, seq: 3, owner: 'p2', key: 'march' }),
+      ],
+    });
+  });
+  afterEach(() => store.close());
+
+  it('counts every pending event across owners', () => {
+    expect(store.pendingCount()).toBe(4);
+  });
+
+  it("answers one owner's unkeyed count and the event id under each of its keys", () => {
+    const mine = store.pendingOf('p1');
+    expect(mine.unkeyed).toBe(2);
+    expect([...mine.keyed]).toEqual([['march', 'tie-b']]);
+    expect(store.pendingOf('nobody')).toEqual({ unkeyed: 0, keyed: new Map() });
+  });
+
+  it('answers the earliest event by (due, seq), or the earliest strictly after an instant', () => {
+    expect(store.earliestEvent()?.id).toBe('tie-a');
+    expect(store.earliestEvent(100)?.id).toBe('other');
+    expect(store.earliestEvent(300)).toBeUndefined();
+  });
+
+  it('answers the next due event a drain has not taken, in (due, seq) order', () => {
+    expect(store.nextDue(100, new Set())?.id).toBe('tie-a');
+    expect(store.nextDue(100, new Set(['tie-a']))?.id).toBe('tie-b');
+    expect(store.nextDue(100, new Set(['tie-a', 'tie-b']))).toBeUndefined();
+    expect(store.nextDue(1_000, new Set(['tie-a', 'tie-b', 'other']))?.id).toBe('late');
+  });
+
+  it('decodes the arguments of the event it answers', async () => {
+    await store.writeCheckpoint(cp({}), { schedule: [event({ id: 'first', due: 50, seq: 9, args: { n: 1 } })] });
+    expect(store.nextDue(50, new Set())?.args).toEqual({ n: 1 });
+  });
+});
