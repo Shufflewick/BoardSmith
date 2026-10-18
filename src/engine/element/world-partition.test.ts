@@ -454,6 +454,26 @@ describe('Game.rebaselinePartitions', () => {
   });
 });
 
+describe('shuffle partition marking (#962)', () => {
+  it('marks the partition of a nested root whose grant the shuffle cleared', () => {
+    const game = new WorldGame({ playerCount: 2, seed: 'shuffle-grant', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
+    const region = game.create(Space, 'region');
+    const hall = region.create(Space, 'hall');
+    const rooms = hall.createMany(4, Room, 'room');
+    game.definePartition(region.id);
+    for (const room of rooms) game.definePartition(room.id);
+    rooms[1]!.addVisibleTo(2);
+    game.takeTouchedPartitions();
+
+    (opened(game, region.id) as Space<WorldGame>).first(Space, 'hall')!.shuffle();
+
+    expect(rooms[1]!._visibility).toBeUndefined();
+    const touched = game.takeTouchedPartitions();
+    expect(touched.has(region.id)).toBe(true);
+    expect(touched.has(rooms[1]!.id)).toBe(true);
+  });
+});
+
 describe('moveToInternal partition marking', () => {
   it('marks BOTH endpoints of a cross-partition move', () => {
     const { game, roomA, roomB, b0 } = worldWithPartitions('cross-move');

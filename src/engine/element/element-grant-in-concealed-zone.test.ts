@@ -179,3 +179,59 @@ describe('element grants inside concealed zones (#758)', () => {
     expect(granted).not.toBe(other);
   });
 });
+
+describe('shuffle clears the grants of everything it moves (#962)', () => {
+  it('a card peeked at with addVisibleTo is hidden from the peeker after a shuffle', () => {
+    const { game, deck } = setup();
+    const cards = deck.createMany(5, Card, 'card', (i) => ({ name: `c${i}` }));
+    cards[0]!.addVisibleTo(2);
+    expect(revealedIn(game, 2, cards[0]!)).toBe(true);
+
+    deck.shuffle();
+
+    expect(cards[0]!.isVisibleTo(2)).toBe(false);
+    expect(revealedIn(game, 2, cards[0]!)).toBe(false);
+    expectViewsAgree(game, cards);
+  });
+
+  it('showToAll and showOnlyTo are cleared too', () => {
+    const { game, deck } = setup();
+    const cards = deck.createMany(4, Card, 'card', (i) => ({ name: `c${i}` }));
+    cards[0]!.showToAll();
+    cards[1]!.showOnlyTo(3);
+
+    deck.shuffle();
+
+    for (const card of cards) expect(card._visibility).toBeUndefined();
+    for (const seat of [1, 2, 3, null]) {
+      for (const card of cards) expect(revealedIn(game, seat, card)).toBe(false);
+    }
+    expectViewsAgree(game, cards);
+  });
+
+  it('a grant below a shuffled card is cleared, so it cannot mark where the card went', () => {
+    const { game, deck } = setup();
+    const cards = deck.createMany(3, Card, 'card', (i) => ({ name: `c${i}` }));
+    const marker = cards[0]!.create(Card, 'marker');
+    marker.showToAll();
+
+    deck.shuffle();
+
+    expect(marker._visibility).toBeUndefined();
+    expectViewsAgree(game, [...cards, marker]);
+  });
+
+  it('leaves the shuffled space\'s own and zone visibility as they were', () => {
+    const { game, deck } = setup();
+    deck.createMany(3, Card, 'card', (i) => ({ name: `c${i}` }));
+    deck.showToAll();
+    const zoneBefore = structuredClone(deck.getZoneVisibility());
+    const ownBefore = structuredClone(deck._visibility);
+
+    deck.shuffle();
+
+    expect(deck.getZoneVisibility()).toEqual(zoneBefore);
+    expect(deck._visibility).toEqual(ownBefore);
+    expect(revealedIn(game, 2, deck.first(Card)!)).toBe(false);
+  });
+});
