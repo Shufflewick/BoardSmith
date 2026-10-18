@@ -10,7 +10,7 @@ import type { HistoryEntry } from '../engine/action/types.js';
 import type { GameStateSnapshot } from '../engine/utils/index.js';
 import { canSeatAct, dueSeats, availableActionsForSeat, followUpForSeat } from '../engine/index.js';
 import { isElement } from '../engine/element/game-element.js';
-import { createSnapshot } from '../engine/utils/index.js';
+import { createSnapshot, snapshotTree } from '../engine/utils/index.js';
 import { enumerateActionMoves } from '../engine/utils/enumerate-moves.js';
 import { constructGame } from '../engine/element/game.js';
 import type {
@@ -1428,7 +1428,7 @@ export class MCTSBot<G extends Game = Game> {
     // bot reason over a different world than the one it is playing in. On a
     // `forSeat` clone `createSnapshot` has already filtered it to that seat's
     // audience, so the sandbox cannot see private lines the seat may not.
-    game.loadSerializedState(snapshot.state, { messageLog: snapshot.messageLog ?? [] });
+    game.loadSerializedState(snapshotTree(snapshot), { messageLog: snapshot.messageLog ?? [] });
 
     // Restore the element id sequence so newly created elements don't drift.
     if (snapshot.sequence !== undefined) {

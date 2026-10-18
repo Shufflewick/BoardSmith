@@ -13,6 +13,7 @@ import {
 } from '../../engine/index.js';
 import type { GameDefinitionLike, OpResult } from '../stateless-ops.js';
 import { succeeded } from '../op-result.test-helper.js';
+import { snapshotTree, type GameStateSnapshot } from '../../engine/utils/index.js';
 
 /**
  * Authoritative-undo contract. Drives the SAME SnapshotSessionHost + executeOp
@@ -41,9 +42,8 @@ const gameOptions = { playerCount: 2, seed: 't' };
 
 type ValidElement = { id: number; display?: string };
 
-/** Collect the ids of the pieces inside a named space, given a result snapshot
- *  envelope (the element tree lives at `snapshot.state`). */
-function spaceChildIds(snapshot: unknown, spaceName: string): number[] {
+/** Collect the ids of the pieces inside a named space of a result snapshot's tree. */
+function spaceChildIds(snapshot: GameStateSnapshot, spaceName: string): number[] {
   const walk = (node: any): any => {
     if (node?.name === spaceName) return node;
     for (const c of node?.children ?? []) {
@@ -52,7 +52,7 @@ function spaceChildIds(snapshot: unknown, spaceName: string): number[] {
     }
     return null;
   };
-  const space = walk((snapshot as { state?: unknown })?.state);
+  const space = walk(snapshotTree(snapshot));
   return (space?.children ?? []).map((c: any) => c.id as number);
 }
 
@@ -190,13 +190,13 @@ describe('undo within the currently-active action-step frame (positive case, 155
     const p2move1 = succeeded(await session.send(2, { type: 'action', actionName: 'move', player: 2, args: {} }));
     expect(p2move1.success).toBe(true);
     expect(currentPlayer(p2move1)).toBe(2); // step still open, repeatUntil not yet true
-    expect((p2move1.snapshot as { state?: { attributes?: { score?: number } } }).state?.attributes?.score).toBe(3);
+    expect(snapshotTree(p2move1.snapshot).attributes.score).toBe(3);
 
     const undo = succeeded(await session.send(2, { type: 'undo', player: 2 }));
     expect(undo.success).toBe(true);
 
     // Exactly player 2's one pending move was undone -- player 1's whole,
     // already-closed turn is untouched.
-    expect((undo.snapshot as { state?: { attributes?: { score?: number } } }).state?.attributes?.score).toBe(2);
+    expect(snapshotTree(undo.snapshot).attributes.score).toBe(2);
   });
 });

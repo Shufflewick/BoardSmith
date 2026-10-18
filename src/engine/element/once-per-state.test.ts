@@ -15,6 +15,7 @@ import { createSnapshot } from '../utils/snapshot.js';
 import { PlayerFacingError } from '../errors.js';
 import { Pawn, RememberingDuelGame } from '../action/choice-cache-fixtures.test-helper.js';
 import { TEST_WORLD_ELEMENT_ID_KEY } from './world-element-id-key.test-helper.js';
+import { snapshotTree } from '../utils/index.js';
 
 const devMode = vi.hoisted(() => ({ override: null as boolean | null }));
 vi.mock('../../utils/dev.js', async (importOriginal) => {
@@ -158,7 +159,7 @@ describe('every change to the game is seen by the next caller', () => {
     const opening = createSnapshot(game, 'bs673');
     expect(runner.performAction('raise', 1, {}).success).toBe(true);
     expect(game.tally()).toBe(101);
-    game.loadSerializedState(opening.state);
+    game.loadSerializedState(snapshotTree(opening));
     game.setRandomState(opening.randomState);
     game.restoreFlowState(opening.flowState!);
     expect(game.tally()).toBe(1);

@@ -29,6 +29,7 @@ import {
   type UndoPolicy,
   type RandomnessPolicy,
 } from '../runtime/index.js';
+import { snapshotTree } from '../engine/utils/index.js';
 import { createBot, parseBotLevel } from '../bot/index.js';
 import type { BotMove } from '../bot/types.js';
 import { describeMoveForHint } from './move-summary.js';
@@ -668,7 +669,7 @@ function stateEnvelope(runner: GameRunner, playerCount: number): StateEnvelope {
  * one place both channels live, so the commit is the game's and no view's.
  */
 function persistCommitOf(snapshot: GameStateSnapshot): PersistCommit {
-  const attributes = snapshot.state.attributes;
+  const attributes = snapshotTree(snapshot).attributes;
   const commit: PersistCommit = {};
   if (attributes[PERSIST_KEY] !== undefined) commit.public = attributes[PERSIST_KEY];
   if (attributes[PERSIST_PRIVATE_KEY] !== undefined) commit.private = attributes[PERSIST_PRIVATE_KEY];
