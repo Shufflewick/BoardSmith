@@ -36,6 +36,7 @@ import type { BotMove } from '../bot/types.js';
 import { describeMoveForHint } from './move-summary.js';
 import { PERSIST_KEY, PERSIST_PRIVATE_KEY, type PersistCommit } from '../persistence/persistence.js';
 import { PickHandler } from './pick-handler.js';
+import { picksFromSeat } from '../engine/element/seat-placeholders.js';
 import { missingFieldError } from './parse-executor-op.js';
 import { runnerFromSnapshot } from './runner-from-snapshot.js';
 import { declaredGameOptionsOf } from './game-option-selection.js';
@@ -872,7 +873,8 @@ function handleAction(
   op: Extract<Op, { type: 'action' }>,
 ): OpResultFor<'action'> {
   const runner = runnerFromSnapshot(snapshot, def);
-  const actionResult = runner.performAction(op.actionName, op.player, op.args);
+  const args = picksFromSeat(runner.game, op.actionName, op.args, op.player);
+  const actionResult = runner.performAction(op.actionName, op.player, args);
 
   if (!actionResult.success) {
     return errorResult(actionResult.error ?? 'Action failed', 'bundle', actionResult.errorCode);

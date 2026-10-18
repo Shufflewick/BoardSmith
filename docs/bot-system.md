@@ -503,8 +503,11 @@ each one:
   still refuses a sampler that rewrites it. For a face-down card on an open
   table (`showOnlyTo` / `hideFrom`), which keeps its real id, that means it
   must stay where it is. The children of a hidden zone instead reach the seat
-  as anonymous placeholders with fresh negative ids, so what the seat holds is
-  how many of each look each container has, not which one is where: a sampler
+  as anonymous placeholders under the seat's own negative placeholder ids
+  (#715), and the search game holds those numbers as their ids, so a bot's move
+  names a hidden card exactly as its player's board does. What the contract
+  holds a sampler to is how many of each look each container has, not which
+  one is where: a sampler
   may swap them between containers, as long as each container ends up holding
   as many of each class and back (each set of known attributes) as it did
   (#871). The order of a container's children is not checked, so shuffling or

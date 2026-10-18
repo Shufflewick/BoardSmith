@@ -24,6 +24,7 @@ import {
 } from './types.js';
 import type { ValidElement } from '../types/protocol.js';
 import { PendingActionManager, type PickStepResult } from './pending-action-manager.js';
+import { picksFromSeat } from '../engine/element/seat-placeholders.js';
 import { actionForSeat, deserializePendingState, serializePendingActionState } from './utils.js';
 import { resolveMultiSelect, resolveOrderedList } from '../engine/utils/resolve-multiselect.js';
 import {
@@ -96,7 +97,7 @@ function answerPick(
   const said = () => (warnings.length > 0 ? warnings : undefined);
 
   if (selection.type === 'choice') {
-    const choices = formatChoiceCandidates(evaluated.candidates, selection, ctx, warnings, ctx.game);
+    const choices = formatChoiceCandidates(evaluated.candidates, selection, ctx, warnings);
     if (choices.length === 0 && !selection.optional) return deadEnd(action, selection, ctx);
     return {
       success: true,
@@ -111,7 +112,7 @@ function answerPick(
     };
   }
 
-  const validElements = formatElementCandidates(evaluated.candidates, selection, ctx, warnings, ctx.game);
+  const validElements = formatElementCandidates(evaluated.candidates, selection, ctx, warnings);
   if (validElements.length === 0 && !selection.optional) return deadEnd(action, selection, ctx);
   return {
     success: true,
@@ -200,12 +201,15 @@ export class PickHandler<G extends Game = Game> {
       manager.setPendingAction(playerPosition, deserializePendingState(priorPendingState));
     }
 
+    // What the seat sent, in the server's ids (#715); a pending action names its own action.
+    const sentFor = actionName ?? (priorPendingState?.actionName as string | undefined);
+    const fromSeat = (picks: Record<string, unknown>) => picksFromSeat(this.#runner.game, sentFor, picks, playerPosition);
     const result = await manager.processSelectionStep(
       playerPosition,
       selectionName,
-      value,
+      fromSeat({ [selectionName]: value })[selectionName],
       actionName,
-      initialArgs,
+      initialArgs && fromSeat(initialArgs),
     );
 
     const pending = manager.getPendingAction(playerPosition);
@@ -262,7 +266,8 @@ export class PickHandler<G extends Game = Game> {
     }
 
     const executor = this.#runner.game.getActionExecutor();
-    const asked = this.#choiceContext(action, player, currentArgs, picksHeldBy(pendingState, actionName));
+    const sent = picksFromSeat(this.#runner.game, actionName, currentArgs, playerPosition);
+    const asked = this.#choiceContext(action, player, sent, picksHeldBy(pendingState, actionName));
     if ('refusal' in asked) return asked.refusal;
     const { ctx } = asked;
 
@@ -294,8 +299,9 @@ export class PickHandler<G extends Game = Game> {
   /**
    * What a pick's choices see: the client's picks so far, with the picks the
    * pending action already holds and the seat's held follow-up's args bound
-   * over them, resolved. A held pick wins because the client names it by a
-   * placeholder id, which a move since may have given to another card (#715).
+   * over them, resolved. A held pick wins because it is what the action will
+   * take; the card it names may since have left the seat's sight, where the
+   * client's placeholder for it names nothing (#715).
    * The client sends picks only, so any other key is refused (#662).
    */
   #choiceContext(

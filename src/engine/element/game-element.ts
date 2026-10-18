@@ -1600,6 +1600,8 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       json.visibility = copyVisibilityState(this._visibility);
     }
 
+    if (this._t.placeholderToken !== undefined) json.placeholderToken = this._t.placeholderToken;
+
     if (this._t.children.length > 0) {
       json.children = this._t.children.map((child) => child.toJSON());
     }
@@ -1654,6 +1656,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     // tree files it in the id index once it is built (`Game#loadSerializedState`,
     // `Game#adoptSubtree`).
     element._t.id = json.id;
+    if (json.placeholderToken !== undefined) element._t.placeholderToken = json.placeholderToken;
 
     if (json.name) {
       element.name = json.name;

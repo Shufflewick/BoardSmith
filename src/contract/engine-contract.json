@@ -1,7 +1,7 @@
 {
-  "revision": 241,
+  "revision": 242,
   "surfaceHash": "d045fa6967c06929",
-  "payloadHash": "0e2d27db00239080",
+  "payloadHash": "b89f965899e248cd",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
@@ -1871,6 +1871,14 @@
       "payloadHash": "0e2d27db00239080",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "shuffle() clears the visibility grants of everything in the shuffled space, so a seat that peeked at a card cannot follow it (#962)"
+    },
+    {
+      "revision": 242,
+      "date": "2026-10-18",
+      "surfaceHash": "d045fa6967c06929",
+      "payloadHash": "b89f965899e248cd",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A seat now knows each card it cannot see by a stable placeholder id of its own (#715): the card keeps it while it moves, shuffle() reissues it, and the ids are large negative numbers made with a key per seat instead of -1, -2, ... in view order. Cards in a contentsHidden() zone are offered to picks under such ids too. A seat's action, selection step and choices request, and a world command and pick, read placeholders back into real cards where they enter, and refuse a placeholder whose card has left the seat's sight or been shuffled, another seat's placeholder, and the real id of a card the seat only knows by placeholder, as a card that is not there. A shuffled element's full serialization (table snapshots and world partitions) gains a placeholderToken field that no seat's view carries. No game needs a rebuild."
     }
   ]
 }

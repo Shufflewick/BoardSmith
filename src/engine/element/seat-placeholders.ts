@@ -1,19 +1,115 @@
 /**
- * THE IDS A SEAT'S BOARD SHOWS IN PLACE OF REAL ONES (#715).
+ * THE IDS A SEAT KNOWS CARDS BY (#715).
  *
- * A seat's view replaces the children of a zone it cannot see with
- * placeholders numbered -1, -2, ... in tree order (`Game.toJSONForPlayer`). A
- * pick that offers such an element must name it by that placeholder, so the
- * board can highlight it and the real id never leaves the server, and a
- * submitted placeholder must name the real element again
- * (`ActionExecutor.resolveOne`). Both directions read this map, off the seat's
- * own projection, the one source of those numbers.
+ * A seat is never sent the real id of a card that something it sits in hides
+ * from it (a hidden, count-only or owner-only zone, or a concealed element
+ * above it). It is sent a PLACEHOLDER instead, and this module is the one
+ * source of them: the board view (`Game.toJSONForPlayer`), the pick candidates
+ * (`pick-candidates.ts`) and the reading of what a seat sends back
+ * (`picksFromSeat`) all call it, so the three cannot disagree.
+ *
+ * A placeholder is STABLE AND PER SEAT. It is made from the card's token with
+ * the seat's own key (`ElementIds.placeholder`), so the card keeps it while it
+ * moves, another seat's placeholder for it is a different number, and the
+ * number says nothing about the card's id. The token is the card's id until
+ * the card is shuffled; `Space.shuffle()` then gives it a fresh one
+ * (`reissuePlaceholder`), so its old placeholder names nothing and a seat
+ * cannot follow it through the shuffle. The token lives on the element
+ * (`_t.placeholderToken`), so snapshots, checkpoints, undo and a world's
+ * stored partitions carry it.
+ *
+ * A card hidden only by its own visibility, in a place the seat can see, keeps
+ * its real id: the board draws it face down at its real id, so a flip animates
+ * (game.ts, WR-02).
  */
 import type { Game } from './game.js';
+import type { GameElement } from './game-element.js';
+import type { Selection } from '../action/types.js';
+import { outermostConcealer } from './concealed-refs.js';
+import { isSerializedElement } from '../action/choice-matching.js';
 
-/** Real id -> the placeholder id this seat's view gives it. */
-export function placeholderIdsFor(game: Game, seat: number): Map<number, number> {
-  const placeholders = new Map<number, number>();
-  game.toJSONForPlayer(seat, placeholders);
-  return placeholders;
+/** Whether `seat` knows `element` only by a placeholder: it is hidden from the seat by something it sits in. */
+function namedByPlaceholder(element: GameElement, seat: number): boolean {
+  return !element.isVisibleTo(seat) && outermostConcealer(element, seat) !== undefined;
+}
+
+/** `element`'s placeholder for `seat` (`-1` is the spectator). */
+export function placeholderIdOf(element: GameElement, seat: number): number {
+  // A game restored from a seat's view (a bot's search) already holds that seat's placeholders as ids.
+  if (element._t.id < 0) return element._t.id;
+  return element._ctx.ids.placeholder(seat, element._t.placeholderToken ?? element._t.id);
+}
+
+/** The id `seat` knows `element` by: its placeholder, or its real id. */
+export function seatIdOf(element: GameElement, seat: number): number {
+  return namedByPlaceholder(element, seat) ? placeholderIdOf(element, seat) : element.id;
+}
+
+/**
+ * Give `element` a fresh token, which no element's id or token has been, so
+ * every placeholder it had names nothing. The token is minted from the
+ * creation counter, as an id is, so each element a shuffle reissues spends one
+ * of the game's 2^32 creations (a world's 2^48).
+ */
+export function reissuePlaceholder(element: GameElement): void {
+  element._t.placeholderToken = element._ctx.ids.mint(element._ctx.sequence++);
+}
+
+/**
+ * The picks a seat sent for action `actionName`, with every element reference
+ * in the server's ids: where a seat's submission enters, before anything reads
+ * it. A placeholder becomes the id of the card it names to that seat now; a
+ * real id the seat may know stays as it is; any other id becomes one no element
+ * has, so it is refused exactly as a card that is not there. A `chooseFrom`
+ * value is read as a reference only in the `{ id, className }` form an element
+ * choice is sent in. An action the game does not have is left for its own
+ * refusal.
+ */
+export function picksFromSeat(
+  game: Game,
+  actionName: string | undefined,
+  picks: Readonly<Record<string, unknown>>,
+  seat: number,
+): Record<string, unknown> {
+  const out = { ...picks };
+  const action = actionName === undefined ? undefined : game.getAction(actionName);
+  if (action === undefined) return out;
+  const read = seatReader(game, seat);
+  for (const selection of action.selections) {
+    const value = picks[selection.name];
+    if (value !== undefined) out[selection.name] = Array.isArray(value) ? value.map((one) => itemFromSeat(selection, one, read)) : itemFromSeat(selection, value, read);
+  }
+  return out;
+}
+
+function itemFromSeat(selection: Selection, item: unknown, read: (id: number) => number): unknown {
+  const isElementPick = selection.type === 'element' || selection.type === 'elements';
+  if (isElementPick && typeof item === 'number') return read(item);
+  const ref = item as { id?: unknown } | null;
+  const isRef = selection.type === 'choice' ? isSerializedElement(item) : isElementPick && typeof ref?.id === 'number';
+  return isRef ? { ...ref, id: read(ref!.id as number) } : item;
+}
+
+/** No element has this id: what a reference the seat may not make becomes. */
+const NAMES_NOTHING = Number.MIN_SAFE_INTEGER;
+
+/** Reads ids `seat` sent into the server's, walking the id index for reissued tokens once at most. */
+function seatReader(game: Game, seat: number): (id: number) => number {
+  const index = game._ctx._elementsById;
+  let reissued: Map<number, GameElement> | undefined;
+  const reissuedTo = (token: number) => {
+    reissued ??= new Map([...index.values()].flatMap((e) => (e._t.placeholderToken === undefined ? [] : [[e._t.placeholderToken, e] as const])));
+    return reissued.get(token);
+  };
+  return (id) => {
+    if (!(id < 0)) {
+      const element = index.get(id);
+      return element && namedByPlaceholder(element, seat) ? NAMES_NOTHING : id;
+    }
+    const token = game._ctx.ids.tokenOf(seat, id);
+    if (token === undefined) return id;
+    const created = index.get(token);
+    const element = created !== undefined && created._t.placeholderToken === undefined ? created : reissuedTo(token);
+    return element && namedByPlaceholder(element, seat) ? element.id : id;
+  };
 }

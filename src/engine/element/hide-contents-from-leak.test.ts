@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Space, Piece, type GameOptions } from '../index.js';
-import { placeholderIdsFor } from './seat-placeholders.js';
+import { seatIdOf } from './seat-placeholders.js';
 
 class Card extends Piece<DeckGame> {}
 class Zone extends Space<DeckGame> {}
@@ -51,10 +51,9 @@ describe('hideContentsFrom conceals the zone from the denied seat (#750)', () =>
   });
 
   it("offers the denied seat's hidden cards by the placeholder ids its board shows (#715)", () => {
-    const { game, realIds } = shuffledDeck();
-    const placeholders = placeholderIdsFor(game, 2);
+    const { game } = shuffledDeck();
     const boardIds = (zoneIn(game, 2, 'deck').children ?? []).map((c) => c.id);
-    expect(realIds.map((id) => placeholders.get(id))).toEqual(boardIds);
+    expect(game.deck.all(Card).map((card) => seatIdOf(card, 2))).toEqual(boardIds);
   });
 
   it('conceals an owner zone from its own owner when the owner is denied', () => {

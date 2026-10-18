@@ -23,7 +23,7 @@ export function isHiddenPlaceholder(
   return node?.attributes?.[HIDDEN_PLACEHOLDER_ATTRIBUTE] === true;
 }
 
-/** Whether an element id is a per-seat view's positional placeholder: those count down from -1, and real ids are never negative. */
-export function isPositionalPlaceholderId(id: number): boolean {
+/** Whether an element id is a per-seat view's placeholder (#715): those are negative, and real ids never are. */
+export function isPlaceholderId(id: number): boolean {
   return id < 0;
 }

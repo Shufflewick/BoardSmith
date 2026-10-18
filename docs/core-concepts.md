@@ -228,11 +228,48 @@ never rode the wire for a placeholder. What the placeholder does carry stays
 known and unforgeable, so a search can still see that a card is in a
 particular hand without seeing what it is.
 
-**A pick offers a hidden element the way the board shows it (#715).** A
-`chooseElement` or `chooseFrom` candidate the asking seat cannot see goes out
-with the id that seat's board carries for it (a hidden zone's negative
-placeholder id) and a neutral label such as "Card #1", unless the selection
-has its own `display`. Submitting that placeholder id picks the real element.
+**A card in a zone a seat cannot see is named to that seat by a placeholder id
+(#715).** The board view, the pick candidates and the reading of what the seat
+sends back all take it from one place (`src/engine/element/seat-placeholders.ts`),
+so the board and the action panel always agree on which card is which.
+
+- **Stable, and the seat's own.** A card keeps its placeholder while it moves,
+  until its space is shuffled. `shuffle()` then reissues it, as it clears
+  grants (#962), so no seat can follow a face-down card through a shuffle. Each
+  seat has its own placeholder for the same card, so placeholders cannot be
+  compared between seats.
+- **Never a real id.** A placeholder is a negative number, and a real id never
+  is. It is the card's token run through a cipher keyed for that seat alone and
+  derived from the game's secret id key (#447, #482). Without that key a
+  placeholder says nothing about the card's id. The token is the card's id
+  until a shuffle gives the card a fresh one, minted from the creation counter
+  like an id. The token is stored on the element (`placeholderToken` in its
+  full serialization, never in a seat's view), so snapshots, checkpoints, undo
+  and a world's stored partitions all keep it.
+- **Picks use it.** A `chooseElement` or `chooseFrom` candidate the seat cannot
+  see goes out under the id the seat's board carries for it, with a neutral
+  label such as "Card #1" unless the selection has its own `display`. A card in
+  a `contentsHidden()` zone, which the board does not draw at all, is offered
+  the same way, so a blind pick from a hidden pile works and its real id is
+  never sent.
+- **Read back, or refused, where the seat's move enters.** A seat's action,
+  selection step and choices request, and a world command and pick, read the
+  seat's placeholders back into real cards before anything else sees them.
+  Bot moves come in through the same action op. A placeholder whose card has
+  since been taken, moved out of the seat's sight or shuffled is refused, and
+  so is another seat's placeholder and the real id of a card the seat only
+  knows by placeholder. Each is refused exactly as a card that is not there.
+  A placeholder is read only under the seat that sent it: two seats' numbers
+  can coincide, and then each names that seat's own card. Picks the server
+  already holds, such as the earlier picks of a pending action, are not seat
+  input and are not read this way.
+- **What keeps its real id.** A card hidden only by its own visibility
+  (`showOnlyTo`, `hideFrom`) on a table the seat can see keeps its real id, so
+  a flip animates. A seat may name it by that id.
+- **What it costs.** One number on each element that has been shuffled since it
+  was created. A seat shown any placeholder now gets a view of its own when one
+  update goes out to many seats (`projectionSignaturesFor`), where before seats
+  with the same visibility shared one encoded view.
 
 **The game ROOT redacts the same way.** Declare `static visibleAttributes` on
 your `Game` subclass and every root field outside the list is withheld from
