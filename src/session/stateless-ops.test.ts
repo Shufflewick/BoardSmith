@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { Game, Player, Action, actionStep, loop, type GameOptions, type TutorialDefinition } from '../engine/index.js';
+import { Game, Player, Action, actionStep, loop, PlayerFacingError, type GameOptions, type TutorialDefinition } from '../engine/index.js';
 import type { BotStrategy } from '../bot/types.js';
 import { executeOp, READ_ONLY_OP_TYPES, type GameDefinitionLike, type StateEnvelope } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
@@ -13,6 +13,13 @@ import { buildPlayerState } from './utils.js';
 vi.mock('./utils.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./utils.js')>();
   return { ...actual, buildPlayerState: vi.fn(actual.buildPlayerState) };
+});
+
+// Lets a test run as a deployed host does, where no dev detail travels (#1045).
+const devThrow = vi.hoisted(() => ({ enabled: true }));
+vi.mock('../utils/dev.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/dev.js')>();
+  return { ...actual, isDevThrowEnabled: () => devThrow.enabled };
 });
 
 // ---------------------------------------------------------------------------
@@ -1742,5 +1749,61 @@ describe('executeOp refuses, never rejects, when an async handler fails', () => 
     expectReadableRefusal(await executeOp(botTwoStepDef, twoStepGameOptions, snapshot, null, {
       type: 'heatmapToggle', seat: 1, visible: true,
     }));
+  });
+});
+
+// #1045: a throw nobody wrote for the caller is refused with a fixed sentence and
+// coded as a crash; its own text travels only in dev, and a PlayerFacingError verbatim.
+describe('executeOp refuses an unexpected throw without passing its text on', () => {
+  const INTERNAL = 'Cannot read properties of null (reading \'id\') at /srv/game/rules.ts:12';
+
+  class CrashingGame extends Game<CrashingGame, Player> {
+    constructor(options: GameOptions) {
+      super(options);
+      throw new Error(INTERNAL);
+    }
+  }
+  class RefusingGame extends Game<RefusingGame, Player> {
+    constructor(options: GameOptions) {
+      super(options);
+      throw new PlayerFacingError('This table needs a board before it can start.');
+    }
+  }
+  const def = (gameClass: GameDefinitionLike['gameClass']): GameDefinitionLike => ({
+    gameClass, gameType: 'crashing', minPlayers: 1, maxPlayers: 4,
+  });
+
+  it('in production, the caller reads only the fixed sentence, coded ENGINE_ERROR', async () => {
+    devThrow.enabled = false;
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const failure = refused(await startGame(def(CrashingGame), simpleGameOptions));
+      expect(failure.error).toBe('The game could not process that request because of an error. Try again, or reload the page.');
+      expect(failure.errorCode).toBe(ErrorCode.ENGINE_ERROR);
+      expect(failure.category).toBe('executor');
+      // The original goes to the server log.
+      expect(errors.mock.calls.flat().some((arg) => arg instanceof Error && arg.message === INTERNAL)).toBe(true);
+    } finally {
+      devThrow.enabled = true;
+      errors.mockRestore();
+    }
+  });
+
+  it('in dev, the thrown text rides after the sentence for the author', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const failure = refused(await startGame(def(CrashingGame), simpleGameOptions));
+    errors.mockRestore();
+    expect(failure.error).toBe(`The game could not process that request because of an error. Try again, or reload the page. (${INTERNAL})`);
+  });
+
+  it('a PlayerFacingError travels verbatim and uncoded', async () => {
+    devThrow.enabled = false;
+    try {
+      const failure = refused(await startGame(def(RefusingGame), simpleGameOptions));
+      expect(failure.error).toBe('This table needs a board before it can start.');
+      expect(failure.errorCode).toBeUndefined();
+    } finally {
+      devThrow.enabled = true;
+    }
   });
 });
