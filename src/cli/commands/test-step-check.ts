@@ -31,7 +31,8 @@
  * floor's colour-literal and asset scans (`build/test.md`). No code mutant can make a scan fail, so
  * a guard is never a Spec Manifest file and is never mutation-tested; the full suite runs it. A guard
  * the chunk wrote or changed that runs the game's code is a finding, since it would be a behaviour test
- * hidden from the mutation check (`test-step-code-run.ts` says what counts, #443, #485).
+ * hidden from the mutation check (`test-step-code-run.ts` says what counts, #443, #485). So is any other
+ * guard that loads a support file under `tests/` the chunk changed, directly or through another (#1013).
  *
  * "The chunk added" means the lines whose last change is one of the chunk's own
  * `chunk-<slug>/` commits, or is not committed yet (`addedImplementationLines`).
@@ -61,7 +62,7 @@ import {
 } from './test-step-ast.js';
 import { runMutationCheck, type MutationSummary } from './test-step-mutation.js';
 import { scriptRegions } from './test-step-sfc.js';
-import { findCodeRun, type CodeRunContext } from './test-step-code-run.js';
+import { findCodeRun, supportFilesLoaded, type CodeRunContext } from './test-step-code-run.js';
 import { findHandBuiltShellContext } from './test-step-shell-context.js';
 import { findChunkCommits } from '../lib/chunk-commits.js';
 import { blameHeader, gitOutput as git } from '../lib/git-output.js';
@@ -526,6 +527,8 @@ interface ChunkTestScope {
   touched: SourceFile[];
   /** The paths under `tests/` the chunk created, committed or not. */
   created: ReadonlySet<string>;
+  /** The guards the chunk wrote or changed, and every other guard that loads a support file it changed (#1013). */
+  guards: SourceFile[];
   /** What `findCodeRun` reads beyond the file in hand: the project's scripts and dispatch helpers. */
   context: CodeRunContext;
 }
@@ -592,6 +595,9 @@ async function chunkTestScope(
   const support = scripts.filter((f) => f.path.startsWith('tests/'));
   const text = new Map(scripts.map((f) => [f.path, f.text]));
   const manifest = manifestPaths(projectDir, testFiles);
+  const context: CodeRunContext = { text: (path) => text.get(path), wrappers: findDispatchWrappers(support) };
+  const loadsChangedSupport = ({ path, text: source }: SourceFile) =>
+    [...supportFilesLoaded(source, path, context)].some((loaded) => touched.has(loaded));
   return {
     touched: [
       ...testFiles.map((f) => ({ path: f.path, text: f.source })),
@@ -600,7 +606,8 @@ async function chunkTestScope(
       ),
     ],
     created,
-    context: { text: (path) => text.get(path), wrappers: findDispatchWrappers(support) },
+    guards: support.filter((f) => f.path.startsWith(GUARD_TEST_DIR) && (touched.has(f.path) || loadsChangedSupport(f))),
+    context,
   };
 }
 
@@ -621,11 +628,9 @@ function shellContextFindings(scope: ChunkTestScope): TestStepFinding[] {
   );
 }
 
-/** A guard the chunk wrote or changed that runs the game's code (see the file comment). */
+/** A guard the chunk wrote, changed or changed a support file of, that runs the game's code (see the file comment). */
 function guardRunsCodeFindings(scope: ChunkTestScope): TestStepFinding[] {
-  return scope.touched
-    .filter(({ path }) => path.startsWith(GUARD_TEST_DIR))
-    .flatMap(({ path, text }) => {
+  return scope.guards.flatMap(({ path, text }) => {
       const run = findCodeRun(text, path, scope.context);
       if (run === undefined) return [];
       return [

@@ -886,6 +886,36 @@ it('regression: a bid is defined', () => { expect(bid).toBeTruthy(); });
     expect(findings).toEqual([]);
   });
 
+  // #1013: a guard the chunk never touched starts running the game when a support file it loads changes.
+  it.each([
+    ['imports the game', 'tests/support/scan.ts', `import { bid } from '../../src/rules/auction.js';\nexport const files = () => bid;\n`, 'src/rules/auction.ts'],
+    ['globs the game', 'tests/support/scan.ts', `export const files = import.meta.glob('../../src/rules/*.ts', { eager: true });\n`, 'src/rules/*.ts'],
+    ['is loaded through another support file and imports the game', 'tests/support/deep.ts', `import { bid } from '../../src/rules/auction.js';\nexport const deep = () => bid;\n`, 'src/rules/auction.ts'],
+  ])('reports an untouched guard whose support file the chunk changed so it %s (#1013)', async (_what, support, text, module) => {
+    await write(project, {
+      'tests/support/deep.ts': 'export const deep = () => 1;\n',
+      'tests/support/scan.ts': `import { deep } from './deep';\nexport const files = () => deep();\n`,
+      'tests/guards/a11y-floor.test.ts': `import { it } from 'vitest';\nimport { files } from '../support/scan';\nit('x', () => { files(); });\n`,
+    });
+    git(project, 'add', '-A');
+    git(project, 'commit', '-q', '-m', 'chunk-setup/step-close');
+    const findings = await findingsFor({ 'src/rules/auction.ts': RULES, [support]: text });
+    expect(findings.map((f) => [f.kind, f.subject])).toEqual([['guard-runs-code', 'tests/guards/a11y-floor.test.ts:2']]);
+    expect(findings[0].detail).toContain(module);
+  });
+
+  it('leaves alone an untouched guard whose support files the chunk did not change (#1013)', async () => {
+    await write(project, {
+      'tests/support/scan.ts': `import { start } from '../../src/rules/game.js';\nexport const files = () => start;\n`,
+      'tests/support/other.ts': 'export const other = 1;\n',
+      'tests/guards/a11y-floor.test.ts': `import { files } from '../support/scan';\nfiles();\n`,
+    });
+    git(project, 'add', '-A');
+    git(project, 'commit', '-q', '-m', 'chunk-setup/step-close');
+    const findings = await findingsFor({ 'src/rules/auction.ts': RULES, 'tests/support/other.ts': 'export const other = 2;\n' });
+    expect(findings).toEqual([]);
+  });
+
   it('reports an exemption row on a chunk that has claims, and an empty manifest', async () => {
     await build({}, '| exempt | restyle | n/a |\n');
     expect((await checkTestStep(project, 'auction')).findings.map((f) => f.kind)).toEqual([
