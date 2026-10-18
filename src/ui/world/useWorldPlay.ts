@@ -168,16 +168,18 @@ export function useWorldPlay(host: WorldSeatHost): WorldPlay {
    * knows almost nothing about 493 of them; drawing 500 rows of "Seat n" would
    * be a list of numbers pretending to be a room.
    */
+  const seatName = (seat: number, name?: string): string => (name?.trim() ? name : `Seat ${seat}`);
   const players = computed<GameContextPlayer[]>(() => {
     const named = host.players.value;
     if (named.length > 0) {
-      return named.map((player) => ({ ...player }));
+      // A blank host name is no name (#1115).
+      return named.map((player) => ({ ...player, name: seatName(player.seat, player.name) }));
     }
     const seats = new Set<number>(host.presence.value ?? []);
     if (host.seat.value !== null) seats.add(host.seat.value);
     return [...seats]
       .sort((a, b) => a - b)
-      .map((seat) => ({ seat, name: `Seat ${seat}` }));
+      .map((seat) => ({ seat, name: seatName(seat) }));
   });
 
   const myPlayer = computed(() =>

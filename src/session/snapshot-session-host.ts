@@ -145,7 +145,7 @@ type MutatingOp = Exclude<ExecutableOp, { type: ReadOnlyOpType | 'hint' | 'heatm
  * when it names a seat other than the caller (#738, #950). The `Record` makes
  * every new op choose.
  */
-const OP_SENDER: Record<Op['type'], 'seat' | 'host'> = {
+const OP_SENDER = {
   start: 'host',
   action: 'seat',
   expireSeat: 'seat',
@@ -174,7 +174,11 @@ const OP_SENDER: Record<Op['type'], 'seat' | 'host'> = {
   demoStop: 'seat',
   demoControl: 'seat',
   convertSeatToBot: 'seat',
-};
+} as const satisfies Record<Op['type'], 'seat' | 'host'>;
+/** The ops a seat may send through `handleOp`, read from {@link OP_SENDER} (#1109). */
+export type SeatOpType = { [K in Op['type']]: (typeof OP_SENDER)[K] extends 'seat' ? K : never }[Op['type']];
+/** An op a seat may send through `handleOp`. */
+export type SeatOp = OpOfType<SeatOpType>;
 const HOST_ONLY_OP_TYPES: ReadonlySet<Op['type']> = new Set(
   (Object.keys(OP_SENDER) as Op['type'][]).filter((type) => OP_SENDER[type] === 'host'),
 );
@@ -1120,7 +1124,7 @@ export class SnapshotSessionHost {
    * State-mutating ops broadcast and persist the new state, THEN resolve,
    * without waiting for the bot run they wake ({@link settled}, #698).
    */
-  async handleOp<T extends Op['type']>(seat: number, op: OpOfType<T>): Promise<OpResultFor<T>> {
+  async handleOp<T extends SeatOpType>(seat: number, op: OpOfType<T>): Promise<OpResultFor<T>> {
     // `handle` answers each op from the branch that matched its type. TypeScript
     // narrows `op` there but cannot carry that back to a generic return type,
     // so it is stated here, once.

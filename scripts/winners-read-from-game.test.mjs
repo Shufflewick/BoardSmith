@@ -19,25 +19,35 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OWNER = 'src/engine/element/game.ts';
-const READ = /settings\s*\??\.\s*winners|settings\s*\??\.?\s*\[\s*['"`]winners['"`]\s*\]/;
+const READ = [
+  /settings\s*\??\.\s*winners|settings\s*\??\.?\s*\[\s*['"`]winners['"`]\s*\]/g,
+  /\{[^{}]*\bwinners\b[^{}]*\}\s*=\s*[^;=\n]*\bsettings\b(?!\s*\??\.)/g,
+];
 
-/** Every line of `source` that reaches into `settings.winners`. */
+/** Every read of `settings.winners` in `source`, by the line it starts on. */
 function winnersReads(source) {
-  return source
-    .split('\n')
-    .map((text, index) => ({ line: index + 1, text: text.trim() }))
-    .filter(({ text }) => READ.test(text));
+  const lines = source.split('\n');
+  return READ.flatMap((re) => [...source.matchAll(re)])
+    .map((m) => source.slice(0, m.index).split('\n').length)
+    .sort((a, b) => a - b)
+    .map((line) => ({ line, text: lines[line - 1].trim() }));
 }
 
 describe('winnersReads', () => {
-  it('finds a direct read, an optional read and an indexed read', () => {
+  it('finds a direct read, an optional read, an indexed read and a destructured read', () => {
     const source = [
       'const a = game.settings.winners;',
       'const b = (game as any).settings?.winners;',
       "const c = game.settings['winners'];",
       'const d = game.getWinners();',
+      'const { winners } = game.settings;',
+      'const { phase, winners: w } = (game as any).settings;',
+      'const {',
+      '  winners,',
+      '} = this.settings;',
+      'const { round } = game.settings;',
     ].join('\n');
-    expect(winnersReads(source).map((f) => f.line)).toEqual([1, 2, 3]);
+    expect(winnersReads(source).map((f) => f.line)).toEqual([1, 2, 3, 5, 6, 7]);
   });
 });
 
