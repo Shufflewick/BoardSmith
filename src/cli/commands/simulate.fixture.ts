@@ -21,9 +21,6 @@ import {
 import { isDevMode } from '../../utils/dev.js';
 
 export class DeadEndGame extends Game<DeadEndGame, Player> {
-  // Read by the action conditions and the flow's loop condition below; fallow
-  // cannot follow `ctx.game.total`.
-  // fallow-ignore-next-line unused-class-member
   total = 0;
   readonly deadEnd: number;
 

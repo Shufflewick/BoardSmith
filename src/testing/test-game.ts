@@ -264,7 +264,7 @@ export class TestGame<G extends Game = Game> {
    *   when there is no active flow, `describe()` reports that explicitly.
    */
   getFlowDebugInfo(): FlowDebugInfo {
-    return this.runner.getFlowDebugInfo();
+    return this.game.getFlowDebugInfo();
   }
 
   /**

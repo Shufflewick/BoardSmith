@@ -12,7 +12,7 @@
  * ```typescript
  * // In GameShell setup (root component)
  * const announcer = createAnnouncer({ politeMessage, assertiveMessage, emitAnnounce });
- * provideAnnouncer(announcer);
+ * provide(ANNOUNCER_KEY, announcer);
  *
  * // In any descendant component (custom UI or AutoUI)
  * const { announce } = useAnnouncer();
@@ -20,7 +20,7 @@
  * announce('Invalid move', { assertive: true });
  * ```
  */
-import { nextTick, type Ref, type InjectionKey, provide, inject } from 'vue';
+import { nextTick, type Ref, type InjectionKey, inject } from 'vue';
 import { devWarn } from '../../utils/dev.js';
 
 /**
@@ -80,13 +80,6 @@ export function createAnnouncer(options: CreateAnnouncerOptions): UseAnnouncerRe
   }
 
   return { announce };
-}
-
-/**
- * Provide the announcer to descendant components.
- */
-export function provideAnnouncer(instance: UseAnnouncerReturn): void {
-  provide(ANNOUNCER_KEY, instance);
 }
 
 /**

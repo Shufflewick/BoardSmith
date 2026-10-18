@@ -381,6 +381,11 @@ async function oneSeatWalksTheMenu({ browser, hostUrl }) {
     assert((await levelLabel(page)) === null, 'the top level drew a current-group label');
   });
 
+  await check("a group's screen-reader text is in the page but not on screen", async () => {
+    const box = await surfaceOf(page).locator('[data-bs-action-group="Dump"] .sr-only').boundingBox();
+    assert(box !== null && box.width <= 1 && box.height <= 1, `the group's screen-reader text took ${JSON.stringify(box)}`);
+  });
+
   await check('a group occupies one button, and its members appear only on opening', async () => {
     await surfaceOf(page).locator('[data-bs-action-group="Dump"]').click();
     await until(() => shownActions(page), ['dumpOre', 'dumpWater'], 'the Dump level');
