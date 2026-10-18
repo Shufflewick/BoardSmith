@@ -369,6 +369,18 @@ const view = testGame.getPlayerView(2).state;
 `diffPlayerViews` refuses a view pair that carries the short form, naming the
 element and attribute, so a drifted fixture handed to it fails there.
 
+A game attribute can itself be a plain record shaped `{ seat, name }`, which
+looks exactly like the short form. So a tree that `testGame.getPlayerView(seat)`
+or `world.getPlayerView(seat)` captured is trusted as engine-made and not
+checked (#1181). The trust belongs to that tree object, not to its contents:
+
+- Rebuilding the wrapper around it (`{ ...view }`, or
+  `{ player: 1, state: view.state }`) keeps the trust.
+- Copying the tree itself (a spread of `view.state`, a JSON round trip,
+  `structuredClone`) makes a new tree, which is checked like a hand-built one.
+- Editing a captured tree in place is not re-checked, so change the game and
+  capture again rather than editing the view.
+
 ---
 
 ## 6. Flow Loop Conditions (`maxIterations` is required)
