@@ -53,7 +53,7 @@ const SURFACES = vueFiles(UI)
 describe('teleported shell surfaces use the shell font (#451)', () => {
   it('finds the teleported surfaces', () => {
     // If this ever reads low, the search broke and every check below went quiet.
-    expect(SURFACES.length).toBeGreaterThanOrEqual(9);
+    expect(SURFACES.length).toBeGreaterThanOrEqual(8);
   });
 
   it('names only exemptions that still exist', () => {

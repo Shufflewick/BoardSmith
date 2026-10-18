@@ -24,6 +24,7 @@ import { requireGameProject, resolveRulesDir, requireRulesIndex, requireTableUi 
 import { resolveWorldMode } from '../lib/world-project.js';
 import { resolveUserPath } from '../lib/user-path.js';
 import { makeCommandBuildDir } from '../lib/command-build-dir.js';
+import { parsePositiveWholeNumber } from '../../utils/positive-whole-number.js';
 import { loadWorldRuntime, startWorldDevServer, type WorldRuntime } from './dev-world.js';
 import {
   answerAlive,
@@ -91,26 +92,13 @@ export function assertWorldProjectForReset(worldMode: boolean): void {
 }
 
 /**
- * Fail-fast positive-integer parser for `--port`/`--players` (CLIX-06),
- * copying the `simulate.ts:145-153` idiom. Pure (no process.exit) so it is
- * directly unit-testable without a real dev server (PROC-02).
- */
-export function parsePositiveInt(flagName: string, raw: string): number {
-  const value = Number(raw);
-  if (!Number.isInteger(value) || value < 1) {
-    throw new DevFlagError(`Error: --${flagName} must be a positive integer, got "${raw}"`);
-  }
-  return value;
-}
-
-/**
  * Fail-fast `--seed <file>` parser (FEAT-01/168-02). Reads and parses a
  * recorded `GameStateSnapshot` JSON file so `--seed` can thread it into the
  * host's `start` op instead of a fresh start. Fails LOUD — naming the exact
  * path and reason — on a missing file or invalid JSON; there is deliberately
  * NO silent fallback to a fresh start (CLAUDE.md hard rule: no fallbacks that
  * mask real problems). Pure (no process.exit) so it is directly unit-testable,
- * mirroring `parsePositiveInt`/`parseBotSeats`.
+ * mirroring `parseBotSeats`.
  */
 export function parseSeedFile(path: string): GameStateSnapshot {
   if (!existsSync(path)) {
@@ -148,23 +136,11 @@ export function validateBotLevel(level: string): void {
 /**
  * Fail-fast `--bot` seat parser (CLIX-06). Player positions are 1-indexed and
  * comma-separated per flag occurrence (`--bot 1,2` or repeated `--bot 1 --bot 2`).
- * Unlike the old `.filter(n => !isNaN(n))` behavior, a non-numeric entry now
- * throws instead of being silently dropped.
+ * An entry that is not a positive whole number throws instead of being dropped.
  */
 export function parseBotSeats(raw: string[] | undefined): number[] {
   if (!raw) return [];
-  const seats: number[] = [];
-  for (const group of raw) {
-    for (const part of group.split(',')) {
-      const trimmed = part.trim();
-      const value = Number(trimmed);
-      if (!Number.isInteger(value)) {
-        throw new DevFlagError(`Error: --bot must be a comma-separated list of positive integers, got "${trimmed}"`);
-      }
-      seats.push(value);
-    }
-  }
-  return seats;
+  return raw.flatMap((group) => group.split(',').map((part) => parsePositiveWholeNumber('--bot', part.trim())));
 }
 
 /**
@@ -184,13 +160,13 @@ export function resolveEffectivePlayerCount(playerCount: number, minPlayers: num
  * D14/DEVHOST-02: `--players` defaults to the game's `minPlayers` (not a
  * hardcoded '2') so a bare `boardsmith dev` on a solo game (minPlayers=1,
  * maxPlayers=1) starts instead of erroring (default 2 > max 1). An EXPLICIT
- * `--players` is unaffected: it still runs through `parsePositiveInt` +
+ * `--players` is unaffected: it still runs through `parsePositiveWholeNumber` +
  * `resolveEffectivePlayerCount`, which still throws on an out-of-range value
  * naming the bound — this only changes what happens when the flag is unset.
  */
 export function resolvePlayerCount(rawPlayers: string | undefined, minPlayers: number, maxPlayers: number): number {
   if (rawPlayers === undefined) return minPlayers;
-  return resolveEffectivePlayerCount(parsePositiveInt('players', rawPlayers), minPlayers, maxPlayers);
+  return resolveEffectivePlayerCount(parsePositiveWholeNumber('--players', rawPlayers), minPlayers, maxPlayers);
 }
 
 /**
@@ -396,7 +372,7 @@ function samePalette(a: ColorChoice[], b: ColorChoice[]): boolean {
  * D13/DEVHOST-01: parse repeatable `--game-option key=value` flags into a flat
  * record, splitting each entry on the FIRST "=" (a value may itself contain
  * "="). Fail-loud (T-161-03) on an entry missing "=" instead of silently
- * dropping it — matches the `parsePositiveInt`/`parseBotSeats` idiom.
+ * dropping it — matches the `parseBotSeats` idiom.
  */
 export function parseGameOptionFlags(raw: string[] | undefined): Record<string, string> {
   if (!raw) return {};
@@ -652,9 +628,8 @@ export async function devCommand(options: DevOptions): Promise<void> {
 // fallow-ignore-next-line complexity
 async function startDev(options: DevOptions, holdings: HostHoldings): Promise<void> {
 
-  // Fail-fast on non-numeric --port/--players/--bot (CLIX-06) — actionable
-  // errors before any server work, matching simulate.ts's Number.isInteger idiom.
-  const port = parsePositiveInt('port', options.port);
+  // Fail-fast on non-numeric --port/--players/--bot (CLIX-06): actionable errors before any server work.
+  const port = parsePositiveWholeNumber('--port', options.port);
   const botPlayers = parseBotSeats(options.bot);
   // NOTE: --players is resolved AFTER gameDefinition loads (D14) — its default
   // is the game's minPlayers, not a literal, so it cannot be parsed this early.

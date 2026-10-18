@@ -226,7 +226,7 @@ async function servedWorld() {
 }
 
 describe('#885: the world road', () => {
-  it('refuses a second run on the same world from its worker, naming the first run (#881)', async () => {
+  it('refuses a second run on the same world, naming the first run (#881)', async () => {
     const world = await servedWorld();
     const { rulesPath, tempDir } = rulesProject('bs-rules-worker-second-', worldRules(1));
     const load = () => loadWorldRuntime(rulesPath, tempDir, 'monorepo');
@@ -334,5 +334,18 @@ describe('#885: the world road', () => {
     expect(await world.stoke()).toMatchObject({ ok: true });
     await vi.waitFor(() => expect(world.logs()).toBe(3));
     expect(liveRulesWorkers() - before).toBe(1);
+  }, 60_000);
+
+  it('still refuses a second run once its rules have stopped on their own, since the run holds the world (#1040)', async () => {
+    const before = liveRulesWorkers();
+    const world = await servedWorld();
+    await sparked(world, before);
+    const { rulesPath, tempDir } = rulesProject('bs-rules-worker-stopped-', worldRules(1));
+    const runtime = await loadWorldRuntime(rulesPath, tempDir, 'monorepo');
+    closing.push(() => runtime.worker.close());
+
+    await expect(
+      openWorldRun({ cwd: world.cwd, displayName: 'Camp', port: 5174, runtime, reloadRules: async () => runtime }),
+    ).rejects.toThrow(new RegExp(`already open in another \\\`boardsmith dev\\\` \\(pid ${process.pid}, port 5173\\)`));
   }, 60_000);
 });

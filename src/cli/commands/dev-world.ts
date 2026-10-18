@@ -44,7 +44,7 @@ import { createRulesReloadQueue, type RulesReloadQueue } from '../dev-host/rules
 import { startRulesWorker, type RulesWorker } from '../dev-host/rules-worker.js';
 import { createWorldConnections } from '../dev-host/world-connections.js';
 import type { OpenedWorld, WorldCalls, WorldEvent, WorldFacts } from '../dev-host/world-rules-worker.js';
-import { worldStorePath } from '../dev-host/world-store.js';
+import { takeWorldLock, worldStorePath, type WorldLock } from '../dev-host/world-store.js';
 import { announceHost, teardownInOrder, type HeldResource, type HostHoldings } from '../dev-host/shutdown.js';
 import type { WorldDevConfig } from '../dev-host/world-config-types.js';
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
@@ -292,6 +292,22 @@ export async function openWorldRun(
   // from production makes a game's local behaviour a poor guide to its
   // published behaviour, which is the whole reason #165 made them parameters.
   const budgets = worldBudgets();
+  // HELD FOR THE WHOLE RUN, IN THIS PROCESS (#1040), so neither a reload nor a rules worker that stops on its own lets another run in.
+  const lock = takeWorldLock(worldStorePath(options.cwd), { port: options.port });
+  try {
+    return await openWorld(options, budgets, lock);
+  } catch (error) {
+    lock.release();
+    throw error;
+  }
+}
+
+/** The body of {@link openWorldRun}, under the run's lock; its `close` releases it. */
+async function openWorld(
+  options: Parameters<typeof openWorldRun>[0],
+  budgets: ReturnType<typeof worldBudgets>,
+  lock: WorldLock,
+): Promise<WorldRun> {
   const storePath = worldStorePath(options.cwd);
 
   // A RULE EDIT IS A COORDINATED WORLD RELOAD (#201).
@@ -446,7 +462,11 @@ export async function openWorldRun(
           // A worker that stopped on its own has no world left to close.
           if (running.worker.alive) await call(running, 'close', undefined);
         } finally {
-          await running.worker.close();
+          try {
+            await running.worker.close();
+          } finally {
+            lock.release();
+          }
         }
       })()),
   };

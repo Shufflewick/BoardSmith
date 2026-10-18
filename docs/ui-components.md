@@ -461,6 +461,9 @@ export default defineGameUIs({
 
 Exactly one entry is `defaultUI()`: that is the board a production build
 renders. `devUI()` entries exist only under `boardsmith dev`.
+`defaultUI()` takes the board component itself, not a loader and not a bare
+functional component (wrap one in `defineComponent`), and refuses a function
+both when compiling and when running.
 
 Under `boardsmith dev`, the dev host shows a **UI dropdown** to switch which UI
 renders the running game, without restarting. It lists every entry in the

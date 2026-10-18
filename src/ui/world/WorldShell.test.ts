@@ -370,6 +370,16 @@ describe('WorldShell — the shared chrome (#170)', () => {
     named.unmount();
   });
 
+  it('never invents "Player N" for a seat whose host sent an empty name (#1044)', async () => {
+    const wrapper = mountShell();
+    tell(wrapper, stateFrame({ players: [{ seat: 4, name: '' }, { seat: 2, name: 'Rook' }] } as never));
+    await nextTick();
+    const seats = wrapper.find('[data-testid="bs-seats"]').text();
+    expect(seats).toContain('Rook');
+    expect(seats).not.toContain('Player 4');
+    wrapper.unmount();
+  });
+
   it('marks who is here on the seat rows rather than in a list of its own', async () => {
     const wrapper = mountShell();
     tell(wrapper, stateFrame({ players: [{ seat: 2, name: 'Rook' }, { seat: 4, name: 'Ivy' }] } as never));
@@ -394,6 +404,39 @@ describe('WorldShell — the shared chrome (#170)', () => {
     const log = wrapper.find('[data-testid="bs-log"]').text();
     expect(log).toContain('Rook says hello.');
     expect(log).not.toContain('{');
+    wrapper.unmount();
+  });
+
+  it('trims a full tail without redrawing the lines it keeps (#1066)', async () => {
+    // Text-less events share the tail with lines, so the offset must count lines, not events.
+    const wrapper = mountShell();
+    tell(wrapper, stateFrame());
+    for (let n = 0; n < 150; n += 1) {
+      tell(wrapper, {
+        source: WORLD_HOST_SOURCE,
+        type: 'world_events',
+        events: [{ scope: 'world', payload: { n } }, { scope: 'world', payload: { n }, text: `line ${n}` }],
+      });
+    }
+    await nextTick();
+    const lineTexts = () => wrapper.findAll('[data-testid="bs-log"] .message .text').map((line) => line.text());
+    expect(lineTexts()).toHaveLength(100);
+    expect(lineTexts()[0]).toBe('line 50');
+    const kept = wrapper.findAll('[data-testid="bs-log"] .message').map((line) => line.element);
+
+    tell(wrapper, {
+      source: WORLD_HOST_SOURCE,
+      type: 'world_events',
+      events: [{ scope: 'world', payload: {} }, { scope: 'world', payload: {}, text: 'line 150' }],
+    });
+    await nextTick();
+
+    const lines = wrapper.findAll('[data-testid="bs-log"] .message');
+    expect(lineTexts()[0]).toBe('line 51');
+    expect(lineTexts()[lineTexts().length - 1]).toBe('line 150');
+    // The same nodes: a role="log" region announces inserted nodes, not kept ones.
+    expect(lines).toHaveLength(kept.length);
+    expect(lines.slice(0, -1).every((line, i) => line.element === kept[i + 1])).toBe(true);
     wrapper.unmount();
   });
 

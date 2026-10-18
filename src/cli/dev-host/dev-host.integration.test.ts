@@ -115,7 +115,7 @@ async function serveDevHost(host: MultiplayerHost, clients: Map<string, NodeWebS
     },
   });
   const server: Server = createServer();
-  claimed.attach(server, () => undefined); // Vite's default allowedHosts
+  claimed.attach(server, () => undefined); // Vite's default host rule
   // An upgraded socket is no longer the HTTP server's to close, so the test
   // holds every raw socket to end them at teardown.
   const rawSockets = new Set<Socket>();

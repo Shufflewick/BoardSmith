@@ -521,8 +521,7 @@ publish to it again with `--publisher <slug>`; the other block is untouched.
   "tags": ["card-game"],
   "playtime": { "min": 15, "max": 30 },
   "cooperative": false,
-  "complexity": 2,
-  "scoreboard": { "stats": ["score"] }
+  "complexity": 2
 }
 ```
 

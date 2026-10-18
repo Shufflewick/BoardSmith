@@ -283,6 +283,34 @@ describe('playGame with policies (#556)', () => {
     expect(result.completed).toBe(true);
   });
 
+  it("random names a held follow-up it cannot list as the reason its seat has no move", async () => {
+    const result = await playGame(
+      { gameClass: SimultaneousOpenThenBidGame },
+      { playerCount: 2, seed: 'sim-open-unbounded', policies: [random(), random()], maxActions: 10 },
+    );
+    expect(result.completed).toBe(false);
+    expect(result.error).toMatch(/follow-up 'bid' has no move the simulator can list/);
+  });
+
+  // #1078: a custom policy was handed only the seat's actions, so it never saw a held follow-up.
+  it("a custom policy is handed the seat's held follow-up and can play it", async () => {
+    const seen: Array<{ actions: string[]; followUp: unknown }> = [];
+    const bidThree: Policy = {
+      name: 'bid-three',
+      choose({ actions, followUp }) {
+        seen.push({ actions, followUp });
+        return followUp ? { action: followUp.action, args: { ...followUp.args, amount: 3 } } : { action: actions[0], args: {} };
+      },
+    };
+    const result = await playGame(
+      { gameClass: SimultaneousOpenThenBidGame },
+      { playerCount: 2, seed: 'custom-follow-up', gameOptions: { maxBid: 3 }, policies: [bidThree, bidThree], maxActions: 10 },
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.completed).toBe(true);
+    expect(seen).toContainEqual({ actions: [], followUp: expect.objectContaining({ action: 'bid', args: {} }) });
+  });
+
   it("greedy plays a held follow-up whose args already answer its number input", async () => {
     const bidFirst = greedy((_game, move) => (move.action === 'bid' ? 1 : 0));
     const result = await playGame(
@@ -325,6 +353,14 @@ describe('playGame with policies (#556)', () => {
     expect(result.crashed).toBe(false);
     expect(result.stuck).toBe(true);
     expect(result.error).toMatch(/^Action 'take' rejected a move that could not be shown, chosen by policy 'dated': 'take' was sent 'when', which is not one of its picks\. It takes: value\. A simulated/);
+  });
+
+  it('reports a pick the engine cannot encode as a rejected move naming the policy, not a crash (#1070)', async () => {
+    const dated: Policy = { name: 'dated', choose: () => ({ action: 'take', args: { value: new Date(0) } }) };
+    const result = await play([dated, dated], 'dated-pick');
+    expect(result.crashed).toBe(false);
+    expect(result.stuck).toBe(true);
+    expect(result.error).toMatch(/^Action 'take' rejected .*, chosen by policy 'dated': Cannot serialize action 'take': Date at property 'args\.value'/);
   });
 
   it('refuses a player count the game does not declare', async () => {

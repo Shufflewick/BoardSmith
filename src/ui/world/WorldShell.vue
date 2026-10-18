@@ -47,6 +47,7 @@
       :player-seat="host.seat.value ?? -1"
       :present-seats="host.presence.value"
       :messages="play.messages.value"
+      :message-offset="play.messageOffset.value"
       :log-empty-text="LOG_EMPTY_TEXT"
       :may-act="play.mayAct.value"
       :available-actions="play.availableActions.value"

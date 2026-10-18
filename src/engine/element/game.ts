@@ -114,70 +114,7 @@ import { checkForVolatileState } from './volatile-state.js';
 import { PersistentMap } from './persistent-map.js';
 import { PERSIST_KEY, PERSIST_PRIVATE_KEY } from '../../persistence/persistence.js';
 import { ENGINE_OWNED_GAME_FIELDS, describeEngineFieldShadow } from './engine-owned-fields.js';
-
-/**
- * Default player color palette, used when a game doesn't pass `GameOptions.colors`.
- *
- * 16 colors, matching the platform's seat ceiling, so a game can declare any
- * supported player count without hand-supplying a palette. Seats are assigned in
- * order (seat 1 = index 0), and the first eight entries are unchanged from when
- * the palette stopped there — a game that already shipped keeps the colors its
- * players know.
- *
- * **Distinctness.** Measured, not eyeballed: pairwise CIEDE2000 (ΔE00) across all
- * 120 pairs. Normal vision min ΔE00 = 10.8, which is the pre-existing
- * `#f39c12`/`#e67e22` pair from the original eight — every pair involving a newly
- * added color is ≥ 12.4, so extending to 16 does not tighten the palette's
- * floor. Under simulated dichromacy the floors are lower (protanopia 4.7,
- * deuteranopia 3.7, tritanopia 0.0 for red-vs-pink), which is inherent to 16
- * categorical hues rather than to this particular choice — the original eight
- * already measured 8.9 / 6.1 / 2.7. Color is therefore never the sole carrier of
- * player identity: every entry also has a name in {@link DEFAULT_COLOR_LABELS},
- * surfaced as `player.colorLabel`.
- */
-export const DEFAULT_COLOR_PALETTE: readonly string[] = [
-  '#e74c3c',  // Red
-  '#3498db',  // Blue
-  '#27ae60',  // Green
-  '#f39c12',  // Yellow
-  '#9b59b6',  // Purple
-  '#1abc9c',  // Teal
-  '#e67e22',  // Orange
-  '#2c3e50',  // Black (dark navy)
-  '#e84393',  // Pink
-  '#8bc34a',  // Lime
-  '#4834d4',  // Indigo
-  '#a0522d',  // Brown
-  '#7f8c8d',  // Slate
-  '#0e6655',  // Pine (dark teal)
-  '#f1948a',  // Salmon
-  '#85c1e9',  // Sky
-] as const;
-
-/**
- * Human-readable names for the default palette hexes.
- * Lets `player.colorLabel` resolve to a word (e.g. "Red") for player-facing
- * text — logs, narration — even when a game doesn't define a labeled palette.
- * Games with a custom labeled palette pass their own map via `GameOptions.colorLabels`.
- */
-export const DEFAULT_COLOR_LABELS: Readonly<Record<string, string>> = {
-  '#e74c3c': 'Red',
-  '#3498db': 'Blue',
-  '#27ae60': 'Green',
-  '#f39c12': 'Yellow',
-  '#9b59b6': 'Purple',
-  '#1abc9c': 'Teal',
-  '#e67e22': 'Orange',
-  '#2c3e50': 'Black',
-  '#e84393': 'Pink',
-  '#8bc34a': 'Lime',
-  '#4834d4': 'Indigo',
-  '#a0522d': 'Brown',
-  '#7f8c8d': 'Slate',
-  '#0e6655': 'Pine',
-  '#f1948a': 'Salmon',
-  '#85c1e9': 'Sky',
-};
+import { DEFAULT_COLOR_PALETTE, DEFAULT_COLOR_LABELS, seatDisplayName } from './seat-defaults.js';
 
 /** Every element id carried by a serialized subtree, for `adoptSubtree`. */
 function collectJsonIds(json: ElementJSON, into: number[]): void {
@@ -632,7 +569,7 @@ const SAFE_LAYOUT_KEYS = new Set([
   '$type', '$layout',
   '$direction', '$gap', '$overlap', '$fan', '$fanAngle', '$align',
   '$rowLabels', '$columnLabels', '$rowCoord', '$colCoord',
-  '$hexOrientation', '$coordSystem', '$qCoord', '$rCoord', '$sCoord',
+  '$hexOrientation', '$coordSystem', '$qCoord', '$rCoord',
   '$hexSize',
 ]);
 
@@ -1282,6 +1219,7 @@ export class Game<
     };
 
     super(ctx);
+    this._ctx._elementsById.set(this._t.id, this);
 
     this.random = random;
     // LOAD-BEARING. `G` is the game's own concrete class (`class MyGame extends
@@ -1362,7 +1300,7 @@ export class Game<
     this.settings.playerCount = options.playerCount;
     const playerNames = Array.from(
       { length: options.playerCount },
-      (_, i) => options.playerNames?.[i] ?? `Player ${i + 1}`
+      (_, i) => seatDisplayName(i + 1, options.playerNames?.[i])
     );
     this.settings.playerNames = playerNames;
 
@@ -1563,6 +1501,7 @@ export class Game<
     name: string
   ): T {
     const element = new elementClass(this._ctx);
+    this._ctx._elementsById.set(element._t.id, element);
     element.name = name;
     element.game = this;
 
@@ -2586,6 +2525,9 @@ export class Game<
    * the panel, `performAction` refuses with it, and `enumerateActionMoves`
    * leaves out what it refuses (#690), so an enumerated move is never answered
    * "Action X is disabled".
+   *
+   * Ask it only once the action's condition holds: a false condition guards
+   * the disabled rule, which may read what only that condition makes safe (#1129).
    */
   getActionRefusalReason(action: ActionDefinition, player: P): string | null {
     return getActionLevelDisabledReasons(this, player.seat, [action.name])[action.name]
@@ -2720,6 +2662,11 @@ export class Game<
     const action = this._actions.get(actionName);
     if (!action) {
       return { success: false, error: `Unknown action: ${actionName}` };
+    }
+
+    // The condition first, as the offer checks it: a false condition guards every rule after it (#1129).
+    if (!options?.followUp && !this._actionExecutor.conditionHolds(action, player)) {
+      return { success: false, error: 'Action is not available' };
     }
 
     // Enforce action-level disabling at execution, not just in the projection
@@ -3946,7 +3893,7 @@ export class Game<
 
     return players.map(p => ({
       value: p.seat,
-      label: p.name ?? `Player ${p.seat}`,
+      label: seatDisplayName(p.seat, p.name),
     }));
   }
 
@@ -5363,6 +5310,15 @@ export class Game<
         child.game = this;
         container._t.children.push(child);
       }
+    }
+    const builtFor = this.getConstructorOptions().playerCount;
+    if (this.players.length !== builtFor) {
+      throw new Error(
+        `This game state holds ${this.players.length} players, but this game was built for ${builtFor}. ` +
+          `The state is truncated, or belongs to a game with a different player count.\n` +
+          `  Fix: restore it into a game constructed with the options it was created with ` +
+          `(a snapshot carries them as gameOptions), or start the game again if the state is damaged.`
+      );
     }
     this._ctx._elementsById.clear();
     for (const root of [this, this.pile]) {

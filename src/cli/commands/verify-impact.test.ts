@@ -147,10 +147,11 @@ describe('marker — renderRulesStaleness', () => {
     expect(body).toContain('| rulebook/03-scoring.md |');
   });
 
-  it('renders RULES_STALENESS_EMPTY when Attributed slices is empty', () => {
-    const record = baseRecord({ attributedSlices: [] });
+  it('says no slices are attributed, not that the chunk is not stale, when Attributed slices is empty (#998)', () => {
+    const record = baseRecord({ marker: RULES_STALE_MARKER, attributedSlices: [] });
     const body = renderRulesStaleness(record);
-    expect(body).toContain(RULES_STALENESS_EMPTY);
+    expect(body).toContain('_No slices attributed._');
+    expect(body).not.toContain(RULES_STALENESS_EMPTY);
   });
 
   it('omits Prior reading:/Changed reading: when absent', () => {
@@ -238,6 +239,14 @@ describe('marker — parseRulesStaleness (strict)', () => {
       'rulebook/02-play.md',
       'rulebook/03-scoring.md',
     ]);
+  });
+
+  it('round-trips a real rendered section: state rules-stale, with no attributed slices (#998)', () => {
+    const record = baseRecord({ marker: RULES_STALE_MARKER, attributedSlices: [] });
+    const text = `# Chunk: test\n\nStatus: verified\n\n${renderRulesStalenessSection(record)}`;
+    const parsed = parseRulesStaleness(text);
+    expect(parsed.state).toBe('rules-stale');
+    expect(parsed.record?.attributedSlices).toEqual([]);
   });
 
   it('round-trips prior/changed readings verbatim', () => {
