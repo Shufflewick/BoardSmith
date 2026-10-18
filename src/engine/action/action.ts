@@ -2219,13 +2219,17 @@ export class ActionExecutor {
       return;
     }
     const before = branchesById(this.game);
-    changing(this.game._ctx, run);
-    const after = branchesById(this.game);
-    // Replaced, not changed in place, so a copy of the state taken earlier keeps what it had.
-    const moved = { ...noted };
-    for (const [id, branch] of before) if (!(id in moved) && after.get(id) !== branch) moved[id] = branch;
-    for (const id of after.keys()) if (!before.has(id) && !(id in moved)) moved[id] = null;
-    pendingState.branchesBeforePicks = moved;
+    try {
+      changing(this.game._ctx, run);
+    } finally {
+      // Also after a throw: what the callback moved before it threw stays moved.
+      const after = branchesById(this.game);
+      // Replaced, not changed in place, so a copy of the state taken earlier keeps what it had.
+      const moved = { ...noted };
+      for (const [id, branch] of before) if (!(id in moved) && after.get(id) !== branch) moved[id] = branch;
+      for (const id of after.keys()) if (!before.has(id) && !(id in moved)) moved[id] = null;
+      pendingState.branchesBeforePicks = moved;
+    }
   }
 
   /**

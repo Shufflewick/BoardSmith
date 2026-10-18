@@ -22,6 +22,8 @@ class Token extends Piece<ShiftGame> {}
 class ShiftGame extends Game<ShiftGame, Player> {
   from!: Space;
   to!: Space;
+  /** Whether `jostle`'s onEach has thrown yet: it throws once, after its move. */
+  jostled = false;
 
   constructor(options: GameOptions) {
     super(options);
@@ -58,11 +60,26 @@ class ShiftGame extends Game<ShiftGame, Player> {
         })
         .chooseElement('made', { elementClass: Token, from: (ctx) => ctx.game.to })
         .execute(() => ({ success: true })),
+      Action.create<ShiftGame>('jostle')
+        .chooseElement('tokens', {
+          elementClass: Token,
+          from: (ctx) => ctx.game.from,
+          repeat: {
+            onEach: (ctx, token) => {
+              (token as Token).putInto(ctx.game.to);
+              if (ctx.game.jostled) return;
+              ctx.game.jostled = true;
+              throw new Error('jostle threw after its move');
+            },
+            until: (ctx) => (ctx.args.tokens as unknown[]).length === 2,
+          },
+        })
+        .execute(() => ({ success: true })),
     );
     this.setFlow({
       root: loop({
         maxIterations: 10,
-        do: actionStep({ actions: ['shift', 'stow', 'conjure'], player: (ctx) => ctx.game.getPlayer(1)! }),
+        do: actionStep({ actions: ['shift', 'stow', 'conjure', 'jostle'], player: (ctx) => ctx.game.getPlayer(1)! }),
       }),
     });
   }
@@ -99,17 +116,29 @@ function expectReplaysToLive(history: GameRunner['actionHistory'], live: ShiftGa
 /** A host whose every step runs on a fresh process, restored from what the last one persisted. */
 function freshHostEachStep() {
   const persisted: SnapshotHostState[] = [];
+  const seatOneViews: unknown[] = [];
   const adapters: SnapshotSessionAdapters = {
     playerCount: gameOptions.playerCount,
     executeOp: (snap, pend, op) => executeOp(definition, gameOptions, snap, pend, op),
     push: () => {},
-    record: () => {},
+    record: ({ players }) => seatOneViews.push(players[0]),
     // What a Durable Object's storage hands back: a JSON round trip.
     persist: (state) => {
       persisted.push(JSON.parse(JSON.stringify(state)) as SnapshotHostState);
     },
   };
-  return { adapters, restored: () => SnapshotSessionHost.restore(adapters, { ...persisted.at(-1)!, botSeats: [] }) };
+  return {
+    adapters,
+    persisted,
+    seatOneViews,
+    restored: () => SnapshotSessionHost.restore(adapters, { ...persisted.at(-1)!, botSeats: [] }),
+  };
+}
+
+/** Seat 1's selection step on `host`, with the token's id read from the host's own game. */
+function pickOn(host: SnapshotSessionHost, action: string, selectionName: string, token: string) {
+  const value = idOf(GameRunner.fromSnapshot(host.snapshot!, ShiftGame).game, token);
+  return host.handleOp(1, { type: 'selectionStep', player: 1, selectionName, value, actionName: action, boundaryKey: boundaryKeyOfHost(host) });
 }
 
 describe('a pending action records its picks where they were before the action (#1144)', () => {
@@ -142,10 +171,7 @@ describe('a pending action records its picks where they were before the action (
 
     for (const [i, name] of picks.entries()) {
       host = restored();
-      const value = idOf(GameRunner.fromSnapshot(host.snapshot!, ShiftGame).game, picked[i]!);
-      succeeded(await host.handleOp(1, {
-        type: 'selectionStep', player: 1, selectionName: name, value, actionName: action, boundaryKey: boundaryKeyOfHost(host),
-      }));
+      succeeded(await pickOn(host, action, name, picked[i]!));
     }
 
     const live = GameRunner.fromSnapshot(host.snapshot!, ShiftGame);
@@ -172,8 +198,58 @@ describe('a pending action records its picks where they were before the action (
     delete pending.branchesBeforePicks;
     expect(live.processSelectionStep(1, 'crate', idOf(live.game, 'first')).error).toBeUndefined();
     expect(() => live.processSelectionStep(1, 'next', idOf(live.game, 'second'))).toThrow(
-      /'stow' cannot be recorded.*Cancel it and take it again/,
+      /started before the game was updated and cannot be finished\. Cancel it and take it again\./,
     );
     expect(live.actionHistory).toEqual([]);
+  });
+
+  it("keeps the record in the saved pending state and out of the seat's view and debug answer, since it names where face-down cards were", async () => {
+    const { adapters, persisted, seatOneViews } = freshHostEachStep();
+    const host = new SnapshotSessionHost(adapters);
+    await host.start();
+    succeeded(await pickOn(host, 'stow', 'crate', 'first'));
+
+    const saved = persisted.at(-1)!.pendingStates['1']!;
+    expect(Object.keys(saved.branchesBeforePicks as object).length).toBeGreaterThan(0);
+    const shown = (seatOneViews.at(-1) as { state: { pendingAction?: Record<string, unknown> } }).state.pendingAction;
+    expect(shown?.actionName).toBe('stow');
+    expect(shown).not.toHaveProperty('branchesBeforePicks');
+
+    const debug = succeeded(await executeOp(
+      definition, gameOptions, persisted.at(-1)!.snapshot!, saved, { type: 'debugFlowState', player: 1 }, { debug: true },
+    ));
+    expect(debug.pendingAction?.actionName).toBe('stow');
+    expect(debug.pendingAction).not.toHaveProperty('branchesBeforePicks');
+  });
+
+  it('tells the player a pending action saved by an older engine cannot be finished, and lets them cancel and take it again', async () => {
+    const { adapters, persisted, restored } = freshHostEachStep();
+    const first = new SnapshotSessionHost(adapters);
+    await first.start();
+    succeeded(await pickOn(first, 'stow', 'crate', 'first'));
+    delete persisted.at(-1)!.pendingStates['1']!.branchesBeforePicks;
+
+    const host = restored();
+    const refused = await pickOn(host, 'stow', 'next', 'second');
+    expect(refused).toMatchObject({
+      success: false,
+      error: 'This action was started before the game was updated and cannot be finished. Cancel it and take it again.',
+    });
+
+    succeeded(await host.handleOp(1, { type: 'cancelAction', player: 1 }));
+    succeeded(await pickOn(host, 'stow', 'crate', 'third'));
+    succeeded(await pickOn(host, 'stow', 'next', 'second'));
+    expect(host.snapshot!.actionHistory.map((entry) => 'name' in entry && entry.name)).toEqual(['stow']);
+  });
+
+  it('records what a pick callback moved before it threw, since the move stays', () => {
+    const live = new GameRunner(options);
+    live.start();
+
+    live.startPendingAction('jostle', 1);
+    expect(live.processSelectionStep(1, 'tokens', idOf(live.game, 'first')).error).toMatch(/"jostle" action could not be/);
+    expect(live.processSelectionStep(1, 'tokens', idOf(live.game, 'second')).error).toBeUndefined();
+
+    expect(live.actionHistory).toEqual([{ name: 'jostle', player: 1, args: argsBefore(['tokens', 'tokens']) }]);
   });
 });

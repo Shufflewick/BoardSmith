@@ -919,9 +919,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   ): ActionResult {
     const branchesBefore = pendingState.branchesBeforePicks;
     if (!branchesBefore) {
-      throw new Error(
-        `The pending action '${action.name}' cannot be recorded: its state does not say where its picks' onSelect ` +
-          `and onEach moved elements from, as one saved by an older BoardSmith does not. Cancel it and take it again.`
+      // A pending state saved by an engine older than #1144 lacks the record.
+      throw new PlayerFacingError(
+        'This action was started before the game was updated and cannot be finished. Cancel it and take it again.'
       );
     }
     this.ensureHeadCheckpoint();
