@@ -58,9 +58,10 @@ function field(body: string, label: string): string {
 
 /** The `### <slug>` entries under one `## ` section, each with its body. */
 function entries(text: string, heading: string): Array<{ slug: string; body: string }> {
-  const start = text.indexOf(`\n${heading}\n`);
-  if (start === -1) return [];
-  const rest = text.slice(start + heading.length + 2);
+  // `$` with the m flag also stops before a `\r`, so a CRLF file reads the same (#853).
+  const start = new RegExp(`^${heading}[ \\t]*$`, 'm').exec(text);
+  if (!start) return [];
+  const rest = text.slice(start.index + start[0].length);
   const next = /^## /m.exec(rest);
   const section = next ? rest.slice(0, next.index) : rest;
   const parts = section.split(/^### (\S+)[ \t]*$/m);

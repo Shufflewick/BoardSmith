@@ -28,4 +28,18 @@ describe('readGateTransition', () => {
     await fs.writeFile(designPath(project, GATE_TRANSITION_MD), renderGateTransition(transition));
     expect((await readGateTransition(project))?.signoffs[0]?.code).toEqual({ 'my file.ts': 'a'.repeat(64) });
   });
+
+  it('reads a record saved with Windows line endings the same as one with plain newlines (#853)', async () => {
+    const project = tempTree('bs-gate-transition-');
+    const transition: GateTransition = {
+      recorded: '2026-09-23T12:00:00.000Z',
+      by: 'Jane Designer',
+      signoffs: [{ slug: 'deal', status: 'verified', reason: 'played', code: { 'a.ts': 'a'.repeat(64) } }],
+      kept: [],
+      claims: { deal: { 3: 'b'.repeat(64) } },
+    };
+    await fs.mkdir(designPath(project), { recursive: true });
+    await fs.writeFile(designPath(project, GATE_TRANSITION_MD), renderGateTransition(transition).replaceAll('\n', '\r\n'));
+    expect(await readGateTransition(project)).toEqual(transition);
+  });
 });
