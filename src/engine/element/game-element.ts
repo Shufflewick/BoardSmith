@@ -197,6 +197,14 @@ function markNearestPartition(
   }
 }
 
+/** World mode: record that a command wrote to `element`'s partition; in snapshot mode there are no partitions and this does nothing. */
+export function markTouchedPartition(element: GameElement): void {
+  const roots = element._ctx?._partitionRoots;
+  if (!roots || roots.size === 0) return;
+  element._ctx._touchedPartitions ??= new Set<number>();
+  markNearestPartition(element, roots, element._ctx._touchedPartitions);
+}
+
 /**
  * Record the partition an element was HANDED OUT of (ShufflewickPub #295).
  *
@@ -925,19 +933,11 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     // list the element, or an exit handler throws) leaves both marked, which
     // only costs an extra partition write. In snapshot mode there are no
     // partitions at all and this costs one undefined check.
-    const partitionRoots = this._ctx?._partitionRoots;
-    if (partitionRoots && partitionRoots.size > 0) {
-      let touched = this._ctx._touchedPartitions;
-      if (!touched) {
-        touched = new Set<number>();
-        this._ctx._touchedPartitions = touched;
-      }
-      // Walking from `this` rather than from `oldParent` also covers the case
-      // where `this` IS a partition root: a whole partition that changes
-      // parent has dirtied itself.
-      markNearestPartition(this, partitionRoots, touched);
-      markNearestPartition(destination, partitionRoots, touched);
-    }
+    // Walking from `this` rather than from `oldParent` also covers the case
+    // where `this` IS a partition root: a whole partition that changes
+    // parent has dirtied itself.
+    markTouchedPartition(this);
+    markTouchedPartition(destination);
 
     // Remove from current parent
     if (oldParent) {
