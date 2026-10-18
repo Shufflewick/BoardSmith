@@ -11,6 +11,7 @@ import {
   EXAMPLE_EXTRACTION_TOKEN,
   EXAMPLE_TRANSLATION_TOKEN,
   TRANSLATION_DECLARATION_BUDGET,
+  portableMessage,
   type WorkedExampleSpec,
   type GameApiSurface,
 } from './example-derivation.js';
@@ -1516,4 +1517,27 @@ describe('SC-3 — both pipeline sides derive from one module', () => {
       }
     },
   );
+});
+
+describe('portableMessage', () => {
+  it('makes a quoted path inside a POSIX project root project-relative', () => {
+    expect(portableMessage(['/work/game'], `Cannot find module "/work/game/src/rules.ts".`)).toBe(
+      'Cannot find module "src/rules.ts".',
+    );
+  });
+
+  it('makes a quoted path inside a drive-letter project root project-relative (#1147)', () => {
+    expect(portableMessage(['C:/work/game'], `Cannot find module "C:/work/game/src/rules.ts".`)).toBe(
+      'Cannot find module "src/rules.ts".',
+    );
+  });
+
+  it('hides a quoted drive-letter path outside the project the same way as a POSIX one (#1147)', () => {
+    expect(portableMessage(['C:/work/game'], `Type from 'C:/Users/someone/lib/x.ts' and "/home/someone/lib/x.ts".`)).toBe(
+      `Type from 'a module outside the project' and "a module outside the project".`,
+    );
+    expect(portableMessage(['C:/work/game'], `Type from "D:/cache/node_modules/pkg/index.d.ts".`)).toBe(
+      'Type from "node_modules/pkg/index.d.ts".',
+    );
+  });
 });
