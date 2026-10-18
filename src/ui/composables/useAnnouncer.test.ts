@@ -11,7 +11,6 @@ import { ref, nextTick, defineComponent, h } from 'vue';
 import { mount } from '@vue/test-utils';
 import {
   createAnnouncer,
-  provideAnnouncer,
   useAnnouncer,
   ANNOUNCER_KEY,
   type UseAnnouncerReturn,
@@ -40,8 +39,7 @@ describe('useAnnouncer', () => {
       expect(typeof ANNOUNCER_KEY).toBe('symbol');
     });
 
-    it('provideAnnouncer, useAnnouncer, createAnnouncer are functions', () => {
-      expect(typeof provideAnnouncer).toBe('function');
+    it('useAnnouncer, createAnnouncer are functions', () => {
       expect(typeof useAnnouncer).toBe('function');
       expect(typeof createAnnouncer).toBe('function');
     });

@@ -346,7 +346,7 @@ export class MCTSBot<G extends Game = Game> {
     }
 
     // Check if this is our turn (either currentPlayer matches or we're in awaitingPlayers)
-    if (!this.canBotAct(liveFlowState)) {
+    if (!canSeatAct(liveFlowState, this.playerIndex)) {
       throw new Error(`Not bot's turn (player ${this.playerIndex})`);
     }
     this.searchSteps = { made: 0, scored: 0, choseAtRandom: false };
@@ -1189,13 +1189,6 @@ export class MCTSBot<G extends Game = Game> {
       return v;
     };
     return `${move.action}:${JSON.stringify(keyOf(move.args))}`;
-  }
-
-  /**
-   * Check if the bot can act in the current flow state
-   */
-  private canBotAct(flowState: FlowState): boolean {
-    return canSeatAct(flowState, this.playerIndex);
   }
 
   // ============================================================================

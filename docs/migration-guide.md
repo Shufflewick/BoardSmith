@@ -1,5 +1,20 @@
 # Migration Guide
 
+## `boardsmith test --selection` is removed (#986)
+
+`boardsmith test` no longer takes `--selection <path>`, the authored-test
+selection that ran only the files and test names listed in a manifest such as
+`.agent-policy-tests.json`. `agent-policy verify` now runs the tests related to
+a change instead, so nothing reads a selection. Delete any selection manifest
+and run `boardsmith test` (optionally with filename filters) instead.
+
+## Three unused public names are gone (#929)
+
+`provideAnnouncer` is removed from `boardsmith/ui`; provide the announcer with
+`provide(ANNOUNCER_KEY, announcer)`. `engineRootFieldAudience` is removed from
+the root export. `GameRunner.getFlowDebugInfo()` is removed; call
+`runner.game.getFlowDebugInfo()` instead.
+
 ## `handleOp` and the headless `send` take only ops a seat may send (#1109)
 
 `SnapshotSessionHost.handleOp` and `HeadlessSession.send` now take a `SeatOp`,

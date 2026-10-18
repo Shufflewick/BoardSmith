@@ -20,19 +20,7 @@
  */
 
 import type { Component } from 'vue';
-
-// ---------------------------------------------------------------------------
-// Local GameElement interface — do NOT import from engine (module is dependency-free)
-// Mirrors auto-ui-helpers.ts lines 12-19.
-// ---------------------------------------------------------------------------
-interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
-  childCount?: number;
-}
+import type { GameElement } from './auto-ui-helpers.js';
 
 // ---------------------------------------------------------------------------
 // RendererEntry

@@ -21,7 +21,6 @@ export {
   GAME_ROOT_FIELD_AUDIENCE,
   GAME_SELF_SERIALIZED_FIELDS,
   isEngineRootField,
-  engineRootFieldAudience,
   // Every GameOptions field, so a host can keep a player's selection off them.
   ENGINE_OWNED_GAME_OPTION_KEYS,
   // The live game's animation counters, which a restore stays above (#489).

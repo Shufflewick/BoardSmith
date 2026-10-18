@@ -35,7 +35,8 @@ import type {
   ChoiceWithRefs,
   EnrichedValidElement,
 } from './useActionControllerTypes.js';
-import { choiceBoardTarget, devWarn, formatActionName, resolvePickCounts } from './actionControllerHelpers.js';
+import { choiceBoardTarget, formatActionName, resolvePickCounts } from './actionControllerHelpers.js';
+import { devWarn } from '../../utils/dev.js';
 import { createActionMutators } from './actionMutators.js';
 
 interface BoardActionBridgeOptions {

@@ -10,14 +10,13 @@
  * Does NOT mount the real GameShell.vue — see GameShell.live-region.test.ts
  * for the rationale (extensive client/session mocking required). Instead this
  * mounts minimal inline components that exercise the same
- * createAnnouncer/provideAnnouncer/useAnnouncer wiring GameShell installs.
+ * createAnnouncer/ANNOUNCER_KEY/useAnnouncer wiring GameShell installs.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { ref, defineComponent, h, nextTick } from 'vue';
+import { ref, defineComponent, h, nextTick, provide } from 'vue';
 import { mount } from '@vue/test-utils';
 import {
   createAnnouncer,
-  provideAnnouncer,
   useAnnouncer,
   ANNOUNCER_KEY,
   type UseAnnouncerReturn,
@@ -81,7 +80,7 @@ describe('GameShell announcer wiring — parity', () => {
     const Host = defineComponent({
       components: { CustomUiDescendant, AutoUiDescendant },
       setup() {
-        provideAnnouncer(announcer);
+        provide(ANNOUNCER_KEY, announcer);
       },
       render() {
         return h('div', [h(CustomUiDescendant, { ref: 'custom' }), h(AutoUiDescendant, { ref: 'auto' })]);

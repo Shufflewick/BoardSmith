@@ -2157,6 +2157,8 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
   </div>
 </template>
 
+<style scoped src="../sr-only.css"></style>
+
 <style scoped>
 .action-panel {
   /* Flattened into the action bar's flex flow: ActionPanel's own box disappears so its
@@ -2293,20 +2295,6 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 .action-group-chevron {
   margin-left: 6px;
   opacity: 0.75;
-}
-
-/* Announcements for a screen reader only. The visible half of every one of
-   these is the button list itself. */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 /* Action configuration - horizontal flow layout */
@@ -2646,19 +2634,6 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
   color: var(--bsg-danger);
   font-size: 0.85rem;
   white-space: normal;
-}
-
-/* Screen-reader only (mirrors AutoRenderer's helper; scoped styles don't share). */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 .input-hint {

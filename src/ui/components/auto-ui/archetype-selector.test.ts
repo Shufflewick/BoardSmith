@@ -1,18 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { selectArchetype } from './archetype-selector.js';
 import type { Archetype } from './archetype-selector.js';
-
-// ---------------------------------------------------------------------------
-// Minimal GameElement interface for test factories (mirrors archetype-selector.ts)
-// ---------------------------------------------------------------------------
-interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
-  childCount?: number;
-}
+import type { GameElement } from './auto-ui-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Factory helpers

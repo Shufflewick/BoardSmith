@@ -13,8 +13,8 @@ import type { HistoryEntry } from '../engine/action/types.js';
 import type { PlayerGameState, ActionMetadata, PickMetadata, SerializedFlowDebugInfo, SerializedPendingActionState } from './types.js';
 import type { ElementJSON } from '../engine/index.js';
 
-// Re-export so existing consumers (session barrel, external callers) are unchanged
-export { buildActionMetadata, buildPickMetadata } from '../engine/element/action-metadata.js';
+// Re-exported for the session barrel
+export { buildActionMetadata } from '../engine/element/action-metadata.js';
 
 /**
  * Recursively locate a node by element id within an already-filtered

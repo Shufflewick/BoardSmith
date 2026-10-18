@@ -910,14 +910,6 @@ export function isEngineRootField(key: string): boolean {
 }
 
 /**
- * What the engine has decided about `key`, or `undefined` when the field is not
- * the engine's — see {@link isEngineRootField}.
- */
-export function engineRootFieldAudience(key: string): GameRootFieldAudience | undefined {
-  return Object.hasOwn(GAME_ROOT_FIELD_AUDIENCE, key) ? GAME_ROOT_FIELD_AUDIENCE[key] : undefined;
-}
-
-/**
  * The Player subclass a game declared, recovered from the game type itself.
  *
  * A game already names its player once, in `class MyGame extends Game<MyGame,

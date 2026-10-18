@@ -342,6 +342,8 @@ defineExpose({ clearHistory, copyHistory, hasMessages, scrollToNewest });
   </div>
 </template>
 
+<style scoped src="./sr-only.css"></style>
+
 <style scoped>
 .game-history {
   display: flex;
@@ -405,19 +407,6 @@ defineExpose({ clearHistory, copyHistory, hasMessages, scrollToNewest });
 /* Copy was refused by the platform — colour the outcome, don't just swap glyphs. */
 .history-copy--failed {
   color: var(--bsg-danger);
-}
-
-/* Screen-reader only (mirrors AutoRenderer's helper; scoped styles don't share). */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 .history-copy svg {
