@@ -94,6 +94,7 @@ function makeHost(options: {
   store: PersistenceStore;
   write?: { persist?: unknown | PersistFromHanded; persistPrivate?: unknown };
   playerCount?: number;
+  onChange?: () => Promise<void>;
 }): { host: MultiplayerHost; sent: HostOutbound[]; startOptions: () => Record<string, unknown> } {
   const sent: HostOutbound[] = [];
   let startOptions: Record<string, unknown> = {};
@@ -108,6 +109,7 @@ function makeHost(options: {
       gameVersion: 'dev',
       store: options.store,
       now: () => 1000,
+      onChange: options.onChange,
     },
     // harness shape, shared verbatim with the sibling multiplayer-host suites.
     // fallow-ignore-next-line code-duplication
@@ -231,6 +233,30 @@ describe('boardsmith dev — the persistence store (#41 item 2)', () => {
 
     expect(refusalFrom(replies)).toContain('wire ceiling');
     expect(store.toState().rows).toEqual([]);
+  });
+});
+
+describe('boardsmith dev — saving the store (#1179)', () => {
+  it('saves once when the finishing move commits, and not again for a read-only debug request', async () => {
+    const store = new PersistenceStore();
+    const commit = vi.spyOn(store, 'commit');
+    const onChange = vi.fn(async () => {});
+    const { host, sent } = makeHost({
+      store,
+      onChange,
+      write: { persist: { entries: [{ key: 'hall-of-fame', value: { wins: 1 } }] } },
+    });
+    await host.handleMessage('A', { type: 'hello' });
+    await playToEnd(host, sent);
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledTimes(1);
+
+    const before = sent.length;
+    await host.handleMessage('A', { type: 'server_request', requestId: 'r2', op: 'debug:history', payload: {} });
+    expect(refusalFrom(sent.slice(before))).toBeUndefined();
+
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledTimes(1);
   });
 });
 
