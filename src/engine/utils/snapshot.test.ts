@@ -12,6 +12,7 @@ import {
 } from '../index.js';
 import {
   createSnapshot,
+  snapshotTree,
   createPlayerView,
   createAllPlayerViews,
 } from './index.js';
@@ -67,9 +68,9 @@ describe('GameStateSnapshot', () => {
       expect(snapshot.version).toBe(1);
       expect(snapshot.gameType).toBe('test-game');
       expect(snapshot.seed).toBe('test');
-      expect(snapshot.state).toBeDefined();
+      expect(snapshotTree(snapshot)).toBeDefined();
       // Players are now children of the game element tree
-      const playerChildren = (snapshot.state as unknown as { children?: Array<{ className: string }> }).children?.filter((c: { className: string }) => c.className === 'Player') ?? [];
+      const playerChildren = (snapshotTree(snapshot) as unknown as { children?: Array<{ className: string }> }).children?.filter((c: { className: string }) => c.className === 'Player') ?? [];
       expect(playerChildren.length).toBe(2);
       expect(snapshot.actionHistory).toEqual([]);
     });

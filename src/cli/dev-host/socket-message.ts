@@ -19,3 +19,20 @@ export function parseSocketMessage(raw: RawData): SocketMessage | null {
     ? (parsed as SocketMessage)
     : null;
 }
+
+/** Longest page-chosen text a log line shows; a message type is a word or two. */
+const PAGE_TEXT_MAX = 200;
+
+/**
+ * Text a page chose, fit for the developer's terminal: every C0, DEL and C1
+ * character shown as a `\uXXXX` escape (the 8-bit CSI U+009B included, which
+ * `JSON.stringify` passes through), and anything past `PAGE_TEXT_MAX`
+ * characters cut with a note saying how much (#1089).
+ */
+export function pageText(text: string): string {
+  const shown = text
+    .slice(0, PAGE_TEXT_MAX)
+    .replace(/[\u0000-\u001f\u007f-\u009f]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`);
+  const cut = text.length - PAGE_TEXT_MAX;
+  return cut > 0 ? `${shown}... (${cut} more characters)` : shown;
+}

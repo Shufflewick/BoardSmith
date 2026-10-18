@@ -10,6 +10,7 @@ import {
 } from '../../engine/index.js';
 import type { GameDefinitionLike, Op } from '../stateless-ops.js';
 import { succeeded } from '../op-result.test-helper.js';
+import { snapshotTree, type GameStateSnapshot } from '../../engine/utils/index.js';
 
 /**
  * UNDO-03 regression: the solo-game "wipe" defect.
@@ -83,8 +84,8 @@ const soloWipeFixtureDefinition: GameDefinitionLike = {
 
 const gameOptions = { playerCount: 1, seed: 't' };
 
-function scoreOf(snapshot: unknown): number | undefined {
-  return (snapshot as { state?: { attributes?: { score?: number } } })?.state?.attributes?.score;
+function scoreOf(snapshot: GameStateSnapshot): unknown {
+  return snapshotTree(snapshot).attributes.score;
 }
 
 describe('UNDO-03 solo-wipe regression', () => {

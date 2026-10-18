@@ -31,6 +31,7 @@ import {
   type GameOptions,
 } from '../index.js';
 import { GameRunner } from '../../runtime/index.js';
+import { snapshotTree } from '../utils/index.js';
 
 // ---------------------------------------------------------------------------
 // Minimal test game: two Spaces (source, dest) and a Token piece. `dest`
@@ -610,7 +611,7 @@ describe('handler re-bind: same-name Spaces are told apart by element id (F-03)'
     const snapshot = roundTripJson(startSameNameRunner().getSnapshot());
     // The saved tree no longer holds the second box's slot, as when the rules
     // changed between save and restore.
-    const boxes = snapshot.state.children!.filter((child) => child.className === 'Box');
+    const boxes = snapshotTree(snapshot).children!.filter((child) => child.className === 'Box');
     const droppedSlotId = boxes[1].children![0].id;
     boxes[1].children = [];
 

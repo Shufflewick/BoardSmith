@@ -1,6 +1,6 @@
 {
-  "revision": 228,
-  "surfaceHash": "8154825e47aebf3a",
+  "revision": 229,
+  "surfaceHash": "4e9e7a68ce47a8b4",
   "payloadHash": "0e2d27db00239080",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1767,6 +1767,14 @@
       "payloadHash": "0e2d27db00239080",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A seat's view now marks an element it cannot see with visibility 'hidden' or 'count-only', and tells a seat denied a zone by hideContentsFrom that the zone is 'count-only' (it is sent one placeholder per card); GameElement gains the engine field _viewChildCount, so a bot's search sandbox keeps the counts and visibility its seat was shown (#1108)."
+    },
+    {
+      "revision": 229,
+      "date": "2026-10-18",
+      "surfaceHash": "4e9e7a68ce47a8b4",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A table snapshot from this engine stores the element tree once: when it carries checkpoints the tree is the newest checkpoint and snapshot.state is absent, otherwise it is snapshot.state and there is no window; tables below r229 still carry both state and the window, so a platform reader that spans revisions must tell the two shapes apart (state when present, otherwise the newest entry of actionCheckpoints) or call snapshotTree (boardsmith/session) only inside an r229+ runner, and this engine refuses with a readable error any snapshot an earlier engine wrote, so in-progress tables must keep running on the revision that wrote them."
     }
   ]
 }
