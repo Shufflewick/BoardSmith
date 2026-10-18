@@ -168,7 +168,11 @@ export type ClientInbound =
   | { type: 'leave' }
   /** Start a new game, dealt from `seed` when it names one (#460), else from a fresh seed. */
   | { type: 'restart'; seed?: string }
-  | { type: 'server_request'; requestId: string; op: string; payload: Record<string, unknown> }
+  /**
+   * `loadId` is the page load whose socket sent it, stamped by the connection
+   * handler (#1041), never taken from the page's own message.
+   */
+  | { type: 'server_request'; requestId: string; op: string; payload: Record<string, unknown>; loadId?: string }
   | { type: 'follow'; enabled: boolean }
   | { type: 'getState'; requestId?: string }
   | { type: 'getLobby'; requestId?: string }
@@ -469,7 +473,13 @@ export class MultiplayerHost {
    * requests from `req-0`, so two pages' ids collide (#878). Cleared when the
    * response is delivered.
    */
-  private readonly requestOrigin = new Map<string, { clientId: string; requestId: string }>();
+  private readonly requestOrigin = new Map<string, { clientId: string; loadId?: string; requestId: string }>();
+  /**
+   * The page load each client's socket now belongs to (#1041). A reloaded page
+   * keeps its client id and numbers requests from `req-0` again, so a reply is
+   * delivered only while the load that asked still holds the socket.
+   */
+  private readonly pageLoad = new Map<string, string>();
   private nextRequest = 0;
   /**
    * D13/DEVHOST-01: the currently applied gameOption selection, seeded from
@@ -517,6 +527,26 @@ export class MultiplayerHost {
   }
 
   // ── Connection lifecycle ──────────────────────────────────────────────────
+
+  /**
+   * The client's socket now belongs to page load `loadId`. Called the moment
+   * the connection handler routes the client to a new socket, not through the
+   * rules reload queue, so it is never behind a reply the queue still holds.
+   */
+  // fallow-ignore-next-line unused-class-member
+  bindPageLoad(clientId: string, loadId: string): void {
+    this.pageLoad.set(clientId, loadId);
+  }
+
+  /**
+   * The client's socket closed and no newer socket holds it: its page load is
+   * gone. Called by the connection handler outside the rules reload queue, for
+   * the same reason as `bindPageLoad`.
+   */
+  // fallow-ignore-next-line unused-class-member
+  forgetPageLoad(clientId: string): void {
+    this.pageLoad.delete(clientId);
+  }
 
   /**
    * A client connection identified itself. The game is always live: the FIRST
@@ -960,7 +990,7 @@ export class MultiplayerHost {
     const seat = this.seatOf(clientId, msg.requestId);
     if (seat === undefined) return;
     const hostRequestId = String(this.nextRequest++);
-    this.requestOrigin.set(hostRequestId, { clientId, requestId: msg.requestId });
+    this.requestOrigin.set(hostRequestId, { clientId, loadId: msg.loadId, requestId: msg.requestId });
     try {
       await this.session.handleServerRequest(seat, hostRequestId, msg.op, msg.payload);
     } catch (err) {
@@ -1565,7 +1595,7 @@ export class MultiplayerHost {
     if (hostRequestId === null) return;
     const origin = this.requestOrigin.get(hostRequestId);
     this.requestOrigin.delete(hostRequestId);
-    if (origin && this.connected.has(origin.clientId)) {
+    if (origin && this.connected.has(origin.clientId) && this.pageLoad.get(origin.clientId) === origin.loadId) {
       this.send(origin.clientId, { type: 'server_response', requestId: origin.requestId, result });
     }
   }
