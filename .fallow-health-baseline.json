@@ -581,10 +581,10 @@
     },
     "src/ui/composables/useActionController.ts": {
       "complexity_high": {
-        "count": 4
+        "count": 3
       },
       "complexity_moderate": {
-        "count": 9
+        "count": 10
       }
     },
     "src/ui/composables/useAnimationEvents.ts": {

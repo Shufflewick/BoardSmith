@@ -11,7 +11,8 @@
  *   - Grid mode: Enter/Space activates current cell via triggerElementSelect
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { computed, nextTick, ref } from 'vue';
+import { computed, defineComponent, h, nextTick, ref } from 'vue';
+import { mount } from '@vue/test-utils';
 import { useSelectable, useSelectableGrid } from './useSelectable.js';
 import { createBoardInteraction, type BoardInteraction } from './useBoardInteraction.js';
 
@@ -424,5 +425,59 @@ describe('useSelectableGrid candidate awareness', () => {
 
   it('exposes the indices of the current candidates', () => {
     expect(candidateGrid([4, 7]).candidateIndices.value).toEqual([4, 7]);
+  });
+});
+
+describe('useSelectableGrid cell registration as the grid changes (#860)', () => {
+  /** A keyed grid rendered the way the renderers do: each cell's :ref registers it. */
+  function mountGrid(initial: number[]) {
+    const ids = ref(initial);
+    let grid!: ReturnType<typeof useSelectableGrid<number>>;
+    const Grid = defineComponent({
+      setup() {
+        grid = useSelectableGrid(
+          computed(() => ids.value),
+          (id) => ({ row: 0, col: id }),
+          (id) => ({ id }),
+          makeMockInteraction() as BoardInteraction,
+          () => {},
+        );
+        return () =>
+          h('div', { onFocusin: grid.handleGridFocusIn }, ids.value.map((id, idx) =>
+            h('button', { key: id, 'data-id': id, ref: (el) => grid.registerCell(el as Element | null, idx) }),
+          ));
+      },
+    });
+    const wrapper = mount(Grid, { attachTo: document.body });
+    /** Focus a live cell by id, then report where the cursor went. */
+    const focusOn = (id: number) => {
+      wrapper.find(`[data-id="${id}"]`).element.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+      return grid.currentIdx.value;
+    };
+    return { ids, wrapper, focusOn };
+  }
+
+  it('finds the last live cell after a middle cell is removed', async () => {
+    const t = mountGrid([1, 2, 3]);
+    t.ids.value = [1, 3];
+    await nextTick();
+    expect(t.focusOn(3)).toBe(1);
+    t.wrapper.unmount();
+  });
+
+  it('finds the one cell left after the grid shrinks to it', async () => {
+    const t = mountGrid([1, 2, 3]);
+    t.ids.value = [3];
+    await nextTick();
+    expect(t.focusOn(3)).toBe(0);
+    t.wrapper.unmount();
+  });
+
+  it('follows cells to their new places when the grid is reordered', async () => {
+    const t = mountGrid([1, 2, 3]);
+    t.ids.value = [3, 1, 2];
+    await nextTick();
+    expect([t.focusOn(3), t.focusOn(1), t.focusOn(2)]).toEqual([0, 1, 2]);
+    t.wrapper.unmount();
   });
 });

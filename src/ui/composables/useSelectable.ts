@@ -162,11 +162,14 @@ export function useSelectableGrid<T>(
   // The cell elements themselves, in cell order. Registered by the renderer as
   // each cell's :ref — DOM focus is not something the renderer can be trusted to
   // keep in step with the cursor by hand, so the composable holds both ends.
-  const cellEls: (HTMLElement | SVGElement | null)[] = [];
+  const cellEls: (HTMLElement | SVGElement)[] = [];
 
   /** Bind as each cell's `:ref`. */
   function registerCell(el: Element | null, idx: number) {
-    cellEls[idx] = el instanceof HTMLElement || el instanceof SVGElement ? el : null;
+    // An unmounting cell reports null under its OLD index, which a live cell may hold
+    // by now; skip it, and let the trim drop slots past the grid's end.
+    if (el instanceof HTMLElement || el instanceof SVGElement) cellEls[idx] = el;
+    cellEls.length = Math.min(cellEls.length, cells.value.length);
   }
 
   /**

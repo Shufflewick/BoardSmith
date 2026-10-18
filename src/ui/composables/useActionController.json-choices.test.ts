@@ -15,7 +15,7 @@
  * it is the one case the old code got right.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ref } from 'vue';
 import { useActionController, type EnrichedActionMetadata } from './useActionController.js';
 import { createMockSendAction } from './useActionController.test-helper.js';
@@ -62,6 +62,35 @@ function assignSpyMetadata(): Record<string, EnrichedActionMetadata> {
         },
       ],
     },
+    guardedSquad: {
+      name: 'guardedSquad',
+      prompt: 'Assign operatives',
+      selections: [
+        {
+          name: 'squad',
+          type: 'choice',
+          prompt: 'Which operatives?',
+          multiSelect: { min: 1, max: 2 },
+          choices: [
+            { value: OPERATIVES[0], display: 'Agent Null', disabled: 'Already deployed' },
+            { value: OPERATIVES[1], display: 'Agent Vex' },
+          ],
+        },
+      ],
+    },
+    orderSquad: {
+      name: 'orderSquad',
+      prompt: 'Order operatives',
+      selections: [
+        {
+          name: 'order',
+          type: 'choice',
+          prompt: 'In what order?',
+          orderedList: { min: 1, max: 3 },
+          choices: OPERATIVES.map((spy) => ({ value: spy, display: spy.name })),
+        },
+      ],
+    },
     guardedAssign: {
       name: 'guardedAssign',
       prompt: 'Assign an operative',
@@ -93,7 +122,7 @@ describe('JSON-valued choices survive the wire (#219)', () => {
     sendAction = createMockSendAction();
     controller = useActionController({
       sendAction,
-      availableActions: ref(['assignSpy', 'assignSquad', 'guardedAssign']),
+      availableActions: ref(['assignSpy', 'assignSquad', 'guardedSquad', 'orderSquad', 'guardedAssign']),
       actionMetadata: ref(assignSpyMetadata()),
       isMyTurn: ref(true),
       autoFill: false,
@@ -182,5 +211,273 @@ describe('findMatchingChoice is the one matcher both sides use (#219)', () => {
 
   it('refuses a value that names nothing', () => {
     expect(findMatchingChoice({ id: 'operative:9:9' }, choices)).toBeUndefined();
+  });
+});
+
+describe('the draft and prefills judge a pick value by the same rule as fill (#857)', () => {
+  let sendAction: ReturnType<typeof createMockSendAction>;
+  let controller: ReturnType<typeof useActionController>;
+
+  beforeEach(() => {
+    sendAction = createMockSendAction();
+    controller = useActionController({
+      sendAction,
+      availableActions: ref(['assignSpy', 'assignSquad', 'guardedSquad', 'orderSquad', 'guardedAssign']),
+      actionMetadata: ref(assignSpyMetadata()),
+      isMyTurn: ref(true),
+      autoFill: false,
+      autoExecute: false,
+    });
+  });
+
+  it('a second toggle of a copied object deselects it', async () => {
+    await controller.start('assignSquad');
+    await controller.toggleMultiSelect('squad', overTheWire(OPERATIVES[0]));
+    await controller.toggleMultiSelect('squad', overTheWire(OPERATIVES[0]));
+
+    expect(controller.multiSelectDraft.value?.values).toEqual([]);
+  });
+
+  it('reports a copied object as selected while the draft holds it', async () => {
+    await controller.start('assignSquad');
+    await controller.toggleMultiSelect('squad', overTheWire(OPERATIVES[1]));
+
+    expect(controller.isMultiSelectSelected('squad', overTheWire(OPERATIVES[1]))).toBe(true);
+  });
+
+  it('applies a prefill holding a copied object, as fill does', async () => {
+    await controller.start('assignSpy', { prefill: { spy: overTheWire(OPERATIVES[1]) } });
+
+    expect(controller.lastError.value).toBe(null);
+    expect(controller.currentArgs.value.spy).toEqual(OPERATIVES[1]);
+    expect(controller.currentPick.value?.name).toBe('task');
+  });
+
+  it('refuses a prefill naming a disabled choice by shorthand, and says why', async () => {
+    await controller.start('guardedAssign', { prefill: { spy: 'operative:1:1' } });
+
+    expect(controller.lastError.value).toBe('Cannot prefill "Which operative?" with "operative:1:1": Already deployed.');
+    expect(controller.currentArgs.value.spy).toBeUndefined();
+    expect(controller.currentPick.value?.name).toBe('spy');
+  });
+
+  it('holds the offered value when a toggle names a choice by shorthand', async () => {
+    await controller.start('assignSquad');
+    await controller.toggleMultiSelect('squad', 'Agent Vex');
+
+    expect(controller.multiSelectDraft.value?.values).toEqual([OPERATIVES[1]]);
+    expect(controller.isMultiSelectSelected('squad', OPERATIVES[1])).toBe(true);
+  });
+
+  it('refuses a toggle that names no offered choice, as fill does', async () => {
+    await controller.start('assignSquad');
+    await controller.toggleMultiSelect('squad', 'Agent Nobody');
+
+    expect(controller.multiSelectDraft.value).toBe(null);
+    expect(controller.lastError.value).toBe('Invalid selection for "squad"');
+  });
+
+  it('reports a toggled item as selected by either shorthand', async () => {
+    await controller.start('assignSquad');
+    await controller.toggleMultiSelect('squad', 'Agent Vex');
+
+    expect(controller.isMultiSelectSelected('squad', 'Agent Vex')).toBe(true);
+    expect(controller.isMultiSelectSelected('squad', 'operative:1:2')).toBe(true);
+    expect(controller.isMultiSelectSelected('squad', 'Agent Null')).toBe(false);
+  });
+
+  it('removes an entry added as an object when toggled by its display text', async () => {
+    await controller.start('assignSquad');
+    await controller.toggleMultiSelect('squad', overTheWire(OPERATIVES[1]));
+    await controller.toggleMultiSelect('squad', 'Agent Vex');
+
+    expect(controller.multiSelectDraft.value?.values).toEqual([]);
+  });
+
+  it('removes an entry added by display text when toggled by its id', async () => {
+    await controller.start('assignSquad');
+    await controller.toggleMultiSelect('squad', 'Agent Vex');
+    await controller.toggleMultiSelect('squad', 'operative:1:2');
+
+    expect(controller.multiSelectDraft.value?.values).toEqual([]);
+  });
+
+  it('refuses a toggle naming a disabled choice, and says why', async () => {
+    await controller.start('guardedSquad');
+    await controller.toggleMultiSelect('squad', 'Agent Null');
+
+    expect(controller.multiSelectDraft.value).toBe(null);
+    expect(controller.lastError.value).toBe('Selection disabled: Already deployed');
+  });
+
+  it('never refuses removing an entry whose choice was disabled after it was added', async () => {
+    await controller.start('guardedSquad');
+    await controller.toggleMultiSelect('squad', 'Agent Vex');
+    const vex = controller.currentChoices.value.find((c) => c.display === 'Agent Vex')!;
+    vex.disabled = 'Called away';
+
+    await controller.toggleMultiSelect('squad', 'operative:1:2');
+
+    expect(controller.multiSelectDraft.value?.values).toEqual([]);
+    expect(controller.lastError.value).toBe(null);
+  });
+
+  it('holds the offered value when a list entry names a choice by shorthand', async () => {
+    await controller.start('orderSquad');
+    await controller.appendListEntry('order', 'operative:1:2');
+
+    expect(controller.multiSelectDraft.value?.values).toEqual([OPERATIVES[1]]);
+  });
+
+  it('holds and labels the offered value when fill names a choice by its id', async () => {
+    await controller.start('assignSpy');
+    await controller.fill('spy', 'operative:1:2');
+
+    expect(controller.currentArgs.value.spy).toEqual(OPERATIVES[1]);
+    expect(controller.getCollectedPick('spy')?.display).toBe('Agent Vex');
+  });
+
+  it('sends the offered value when execute() names a choice by shorthand', async () => {
+    await controller.execute('assignSpy', { spy: 'Agent Vex', task: 'propaganda' });
+
+    expect(sendAction).toHaveBeenCalledWith('assignSpy', { spy: OPERATIVES[1], task: 'propaganda' });
+  });
+});
+
+describe('every call that takes a pick value resolves it by the same rule (#857)', () => {
+  const FRUIT = [{ id: 'a', name: 'Apple' }, { id: 'b', name: 'Banana' }];
+  const fruitChoices = FRUIT.map((f) => ({ value: f, display: f.name }));
+
+  function fruitController(selection: Partial<EnrichedActionMetadata['selections'][number]>) {
+    const pickStep = vi.fn().mockResolvedValue({ success: true, done: false });
+    const controller = useActionController({
+      sendAction: createMockSendAction(),
+      availableActions: ref(['eat']),
+      actionMetadata: ref<Record<string, EnrichedActionMetadata>>({
+        eat: {
+          name: 'eat',
+          prompt: 'Eat',
+          selections: [
+            { name: 'fruit', type: 'choice', prompt: 'Which fruit?', choices: fruitChoices, ...selection },
+            { name: 'note', type: 'text', prompt: 'Note' },
+          ],
+        },
+      }),
+      isMyTurn: ref(true),
+      autoFill: false,
+      autoExecute: false,
+      pickStep,
+    });
+    return { controller, pickStep };
+  }
+
+  it('sends a repeat pick the offered value and labels it as its button', async () => {
+    const { controller, pickStep } = fruitController({ repeat: { hasOnEach: false } });
+    pickStep.mockResolvedValueOnce({ success: true, done: false }).mockResolvedValueOnce({ success: true, done: true });
+
+    await controller.start('eat');
+    await controller.fill('fruit', 'a');
+    await controller.fill('fruit', 'Banana');
+
+    expect(pickStep.mock.calls.map((c) => c[2])).toEqual([FRUIT[0], FRUIT[1]]);
+    expect(controller.getCollectedPick('fruit')).toEqual({ value: FRUIT, display: 'Apple, Banana', skipped: false });
+  });
+
+  it('sends an onSelect pick the offered value and labels it as its button', async () => {
+    const { controller, pickStep } = fruitController({ hasOnSelect: true });
+
+    await controller.start('eat');
+    await controller.fill('fruit', 'b');
+
+    expect(pickStep.mock.calls[0][2]).toEqual(FRUIT[1]);
+    expect(controller.getCollectedPick('fruit')).toEqual({ value: FRUIT[1], display: 'Banana', skipped: false });
+  });
+
+  it('starts an action holding an arg as given, for the server to judge', async () => {
+    const { controller } = fruitController({});
+
+    await controller.start('eat', { args: { fruit: 'a' } });
+
+    expect(controller.currentArgs.value.fruit).toBe('a');
+    expect(controller.getCollectedPick('fruit')).toEqual({ value: 'a', display: 'a', skipped: false });
+  });
+
+  it('refuses to start an action with a list for a pick that takes one element, and says why', async () => {
+    const { controller } = fruitController({ type: 'element' });
+
+    const result = await controller.start('eat', { args: { fruit: [1, 2] } });
+
+    const error = 'Selection "fruit" expects a single element, got an array of 2. '
+      + 'Submit one element or element ID; use chooseElements for multi-element selections.';
+    expect(result).toEqual({ success: false, error });
+    expect(controller.lastError.value).toBe(error);
+    expect(controller.currentAction.value).toBe(null);
+  });
+
+  it("starts an action with a list for a repeating element pick, which is that pick's shape", async () => {
+    const { controller } = fruitController({ type: 'element', repeat: { hasOnEach: false } });
+
+    const result = await controller.start('eat', { args: { fruit: [1, 2] } });
+
+    expect(result).toEqual({ success: true });
+    expect(controller.currentArgs.value.fruit).toEqual([1, 2]);
+  });
+});
+
+describe('execute() resolves against the choices of the action it runs (#857)', () => {
+  const SCOUT_IN_A = { id: 'scout', name: 'Scout', onlyInA: true };
+  const SCOUT_IN_B = { id: 'scout', name: 'Scout' };
+
+  function twoActionTable(autoFill = false) {
+    const sendAction = createMockSendAction();
+    const target = (choices?: Array<{ value: unknown; display: string }>) =>
+      [{ name: 'target', type: 'choice' as const, prompt: 'Which?', ...(choices && { choices }) }];
+    const controller = useActionController({
+      sendAction,
+      availableActions: ref(['scoutA', 'scoutB', 'scoutC']),
+      actionMetadata: ref<Record<string, EnrichedActionMetadata>>({
+        // manual: with auto-fill on, scoutA's one fetched choice stays on offer instead of filling itself.
+        scoutA: { name: 'scoutA', prompt: 'A', manual: true, selections: target() },
+        scoutB: { name: 'scoutB', prompt: 'B', selections: target([{ value: SCOUT_IN_B, display: 'Scout' }]) },
+        scoutC: { name: 'scoutC', prompt: 'C', selections: target() },
+      }),
+      fetchPickChoices: vi.fn(async () => ({ success: true, choices: [{ value: SCOUT_IN_A, display: 'Scout' }] })),
+      isMyTurn: ref(true),
+      autoFill,
+      autoExecute: false,
+    });
+    return { controller, sendAction };
+  }
+
+  it("sends the executed action's own choice, not the open action's", async () => {
+    const { controller, sendAction } = twoActionTable();
+    await controller.start('scoutA');
+    expect(controller.currentChoices.value[0]?.value).toEqual(SCOUT_IN_A);
+
+    await controller.execute('scoutB', { target: 'Scout' });
+
+    expect(sendAction).toHaveBeenCalledWith('scoutB', { target: SCOUT_IN_B });
+  });
+
+  it('leaves the value for the server when the executed action offers nothing here', async () => {
+    const { controller, sendAction } = twoActionTable();
+    await controller.start('scoutA');
+
+    await controller.execute('scoutC', { target: 'Scout' });
+
+    expect(sendAction).toHaveBeenCalledWith('scoutC', { target: 'Scout' });
+  });
+
+  it("auto-fills from the executed action's own choice, never the open action's", async () => {
+    const { controller, sendAction } = twoActionTable(true);
+    await controller.start('scoutA');
+    expect(controller.currentChoices.value[0]?.value).toEqual(SCOUT_IN_A);
+
+    await controller.execute('scoutB');
+    expect(sendAction).toHaveBeenCalledWith('scoutB', { target: SCOUT_IN_B });
+
+    const result = await controller.execute('scoutC');
+    expect(result).toEqual({ success: false, error: 'Missing required selection: "target"' });
+    expect(sendAction).not.toHaveBeenCalledWith('scoutC', expect.anything());
   });
 });
