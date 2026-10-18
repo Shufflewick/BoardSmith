@@ -6,7 +6,7 @@
  *   - Element mode: Enter/Space calls triggerElementSelect once; click calls it once
  *   - Element mode: no-op when disabled or not selectable; no-op when boardInteraction is null
  *   - Element mode: attrs reactive (role, tabindex, aria-disabled)
- *   - Grid mode: ArrowRight/Left/Down/Up/Home/End move currentIdx per mockup math
+ *   - Grid mode: ArrowRight/Left/Down/Up/Home/End move currentIdx by row and column
  *   - Grid mode: ArrowLeft/Right clamp at boundaries
  *   - Grid mode: Enter/Space activates current cell via triggerElementSelect
  */
@@ -173,6 +173,9 @@ describe('useSelectable (element mode)', () => {
 // useSelectableGrid — grid mode
 // ---------------------------------------------------------------------------
 
+// Cell ids laid out row by row, 3 to a row.
+const rowMajor3 = (c: { id: number }) => ({ row: Math.floor(c.id / 3), col: c.id % 3 });
+
 describe('useSelectableGrid (grid mode)', () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -183,17 +186,17 @@ describe('useSelectableGrid (grid mode)', () => {
     const cells = Array.from({ length: 9 }, (_, i) => ({ id: i }));
     return {
       cellsRef: computed(() => cells),
-      colsRef: computed(() => 3),
+      position: rowMajor3,
       cells,
     };
   }
 
   it('ArrowRight moves currentIdx from 0 to 1', () => {
     const bi = makeMockInteraction();
-    const { cellsRef, colsRef } = makeGrid3x3();
+    const { cellsRef, position } = makeGrid3x3();
     const { currentIdx, handleGridKeydown } = useSelectableGrid(
       cellsRef,
-      colsRef,
+      position,
       (c) => ({ id: c.id }),
       bi as BoardInteraction,
       () => {},
@@ -205,10 +208,10 @@ describe('useSelectableGrid (grid mode)', () => {
 
   it('ArrowLeft moves currentIdx from 1 to 0', () => {
     const bi = makeMockInteraction();
-    const { cellsRef, colsRef } = makeGrid3x3();
+    const { cellsRef, position } = makeGrid3x3();
     const { currentIdx, focusCell, handleGridKeydown } = useSelectableGrid(
       cellsRef,
-      colsRef,
+      position,
       (c) => ({ id: c.id }),
       bi as BoardInteraction,
       () => {},
@@ -220,10 +223,10 @@ describe('useSelectableGrid (grid mode)', () => {
 
   it('ArrowDown moves currentIdx by COLS (3)', () => {
     const bi = makeMockInteraction();
-    const { cellsRef, colsRef } = makeGrid3x3();
+    const { cellsRef, position } = makeGrid3x3();
     const { currentIdx, handleGridKeydown } = useSelectableGrid(
       cellsRef,
-      colsRef,
+      position,
       (c) => ({ id: c.id }),
       bi as BoardInteraction,
       () => {},
@@ -234,10 +237,10 @@ describe('useSelectableGrid (grid mode)', () => {
 
   it('ArrowUp moves currentIdx by -COLS (3)', () => {
     const bi = makeMockInteraction();
-    const { cellsRef, colsRef } = makeGrid3x3();
+    const { cellsRef, position } = makeGrid3x3();
     const { currentIdx, focusCell, handleGridKeydown } = useSelectableGrid(
       cellsRef,
-      colsRef,
+      position,
       (c) => ({ id: c.id }),
       bi as BoardInteraction,
       () => {},
@@ -249,10 +252,10 @@ describe('useSelectableGrid (grid mode)', () => {
 
   it('Home moves to row start: idx 4 → 3 (3 cols)', () => {
     const bi = makeMockInteraction();
-    const { cellsRef, colsRef } = makeGrid3x3();
+    const { cellsRef, position } = makeGrid3x3();
     const { currentIdx, focusCell, handleGridKeydown } = useSelectableGrid(
       cellsRef,
-      colsRef,
+      position,
       (c) => ({ id: c.id }),
       bi as BoardInteraction,
       () => {},
@@ -264,10 +267,10 @@ describe('useSelectableGrid (grid mode)', () => {
 
   it('End moves to row end: idx 4 → 5 (3 cols)', () => {
     const bi = makeMockInteraction();
-    const { cellsRef, colsRef } = makeGrid3x3();
+    const { cellsRef, position } = makeGrid3x3();
     const { currentIdx, focusCell, handleGridKeydown } = useSelectableGrid(
       cellsRef,
-      colsRef,
+      position,
       (c) => ({ id: c.id }),
       bi as BoardInteraction,
       () => {},
@@ -279,10 +282,10 @@ describe('useSelectableGrid (grid mode)', () => {
 
   it('ArrowLeft clamps at 0', () => {
     const bi = makeMockInteraction();
-    const { cellsRef, colsRef } = makeGrid3x3();
+    const { cellsRef, position } = makeGrid3x3();
     const { currentIdx, handleGridKeydown } = useSelectableGrid(
       cellsRef,
-      colsRef,
+      position,
       (c) => ({ id: c.id }),
       bi as BoardInteraction,
       () => {},
@@ -296,10 +299,10 @@ describe('useSelectableGrid (grid mode)', () => {
     const bi = makeMockInteraction();
     const cells2 = [{ id: 0 }, { id: 1 }, { id: 2 }];
     const cellsRef = computed(() => cells2);
-    const colsRef = computed(() => 3);
+    const position = rowMajor3;
     const { currentIdx, focusCell, handleGridKeydown } = useSelectableGrid(
       cellsRef,
-      colsRef,
+      position,
       (c) => ({ id: c.id }),
       bi as BoardInteraction,
       () => {},
@@ -314,10 +317,10 @@ describe('useSelectableGrid (grid mode)', () => {
     // GridBoardRenderer and HexBoardRenderer both intercept Enter/Space before
     // delegating to _composableKeydown, so this branch is intentionally absent.
     const bi = makeMockInteraction();
-    const { cellsRef, colsRef } = makeGrid3x3();
+    const { cellsRef, position } = makeGrid3x3();
     const { currentIdx, handleGridKeydown } = useSelectableGrid(
       cellsRef,
-      colsRef,
+      position,
       (c) => ({ id: c.id }),
       bi as BoardInteraction,
       () => {},
@@ -346,7 +349,7 @@ describe('useSelectableGrid candidate awareness', () => {
     const ids = ref(candidateIds);
     return {
       cellsRef: computed(() => cells),
-      colsRef: computed(() => 3),
+      position: rowMajor3,
       ids,
       isCandidate: (c: { id: number }) => ids.value.includes(c.id),
     };
@@ -360,12 +363,12 @@ describe('useSelectableGrid candidate awareness', () => {
 
   /** A 3x3 grid wired to a candidate predicate, with the ids list left mutable. */
   function candidateGrid(candidateIds: number[]) {
-    const { cellsRef, colsRef, ids, isCandidate } = makeCandidateGrid(candidateIds);
+    const { cellsRef, position, ids, isCandidate } = makeCandidateGrid(candidateIds);
     return {
       ids,
       ...useSelectableGrid(
         cellsRef,
-        colsRef,
+        position,
         (c) => ({ id: c.id }),
         makeMockInteraction() as BoardInteraction,
         () => {},
@@ -407,10 +410,10 @@ describe('useSelectableGrid candidate awareness', () => {
   });
 
   it('reports no candidates at all when no predicate is supplied', () => {
-    const { cellsRef, colsRef } = makeCandidateGrid([1, 2]);
+    const { cellsRef, position } = makeCandidateGrid([1, 2]);
     const { candidateIndices, focusFirstCandidate } = useSelectableGrid(
       cellsRef,
-      colsRef,
+      position,
       (c) => ({ id: c.id }),
       makeMockInteraction() as BoardInteraction,
       () => {},

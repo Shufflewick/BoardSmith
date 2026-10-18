@@ -102,6 +102,13 @@ export interface WorldHost {
    * costs.
    */
   events: ShallowRef<readonly WorldNarration[]>;
+  /**
+   * How many lines (events with `text`) the bound on `events` has dropped
+   * since this seat's log began: the log's line number of its first line
+   * (#1066). It counts only what this page was told, so it reveals nothing
+   * about any other seat.
+   */
+  linesDropped: Ref<number>;
   /** True once the host has sent one frame this UI understood. */
   heardFromHost: Ref<boolean>;
   /** True when the hello window passed with nothing from the host at all. */
@@ -184,6 +191,7 @@ export type WorldSeatHost = Pick<
   | 'presence'
   | 'players'
   | 'events'
+  | 'linesDropped'
   | 'acting'
   | 'act'
   | 'resolvePick'
@@ -194,6 +202,11 @@ export type WorldSeatHost = Pick<
  *  does. A promise nobody resolves is a button that spins forever. */
 const DROPPED_BEFORE_ANSWER =
   'The page stopped listening to this world before it answered.';
+
+/** Whether an event puts a line in the log: only one the game wrote a sentence for. */
+export function isLogLine(event: WorldNarration): event is WorldNarration & { text: string } {
+  return typeof event.text === 'string' && event.text.length > 0;
+}
 
 /**
  * WHAT A BUNDLE'S WORLD UI KNOWS, AND HOW IT ACTS (ShufflewickPub #128).
@@ -286,6 +299,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
   const presence = ref<readonly number[] | null>(null);
   const players = shallowRef<readonly WorldPlayer[]>([]);
   const events = shallowRef<readonly WorldNarration[]>([]);
+  const linesDropped = ref(0);
   const heardFromHost = ref(false);
   const hostSilent = ref(false);
   const acting = ref(false);
@@ -408,6 +422,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
    */
   function forgetTheSeatThatLeft(): void {
     events.value = [];
+    linesDropped.value = 0;
     heldOffers = null;
   }
 
@@ -538,8 +553,9 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
    */
   function takeNarration(delivery: readonly WorldNarration[]): void {
     const kept = [...events.value, ...delivery];
-    events.value =
-      kept.length > WORLD_NARRATION_KEPT ? kept.slice(kept.length - WORLD_NARRATION_KEPT) : kept;
+    const cut = Math.max(0, kept.length - WORLD_NARRATION_KEPT);
+    linesDropped.value += kept.slice(0, cut).filter(isLogLine).length;
+    events.value = kept.slice(cut);
   }
 
   /** One answer, as the caller of `act` sees it. Absent fields stay absent:
@@ -858,6 +874,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     presence,
     players,
     events,
+    linesDropped,
     heardFromHost,
     hostSilent,
     acting,

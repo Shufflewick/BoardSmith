@@ -175,6 +175,7 @@ export type {
   ActionContext,
   ActionDefinition,
   ActionResult,
+  ExecuteResult,
   FollowUpAction,
   FollowUpOffer,
   ValidationResult,

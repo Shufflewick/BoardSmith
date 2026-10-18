@@ -7,6 +7,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ObjectiveWeight, TrainingProgress } from './types.js';
 import type { WeightEvolverConfig } from './weight-evolver.js';
+import type { BenchmarkConfig } from './benchmark.js';
+import { createSeededRandom } from '../utils/random.js';
 import { Game, Player, Action, actionStep, type GameOptions } from '../engine/index.js';
 import type { BotStrategy } from '../bot/index.js';
 import { benchmarkBot, weightedBot } from './benchmark.js';
@@ -15,7 +17,7 @@ import { join } from 'node:path';
 import { tempTree } from '../testing/temp-tree.test-helper.js';
 
 /** Fitness for each benchmarked population, controlled per test. */
-let fitnessOf: (objectives: ObjectiveWeight[]) => number;
+let fitnessOf: (objectives: ObjectiveWeight[], config?: BenchmarkConfig) => number;
 const benchmarkCalls: ObjectiveWeight[][][] = [];
 
 vi.mock('./parallel-benchmark.js', () => ({
@@ -23,9 +25,10 @@ vi.mock('./parallel-benchmark.js', () => ({
     _path: string,
     _type: string,
     population: ObjectiveWeight[][],
+    config: BenchmarkConfig,
   ) => {
     benchmarkCalls.push(population);
-    return population.map((individual) => fitnessOf(individual));
+    return population.map((individual) => fitnessOf(individual, config));
   }),
 }));
 
@@ -67,6 +70,23 @@ const evolver = (config: Partial<WeightEvolverConfig> = {}) =>
 /** Total weight of an individual — a stand-in for "how good is this candidate". */
 const totalWeight = (individual: ObjectiveWeight[]) =>
   individual.reduce((sum, o) => sum + o.weight, 0);
+
+/**
+ * A benchmark with real sampling noise: `config.gameCount` games, each won with
+ * probability `strength(individual)`, drawn from the benchmark's seed and the
+ * individual, so the same games give the same score and fresh games a fresh one.
+ */
+const noisy = (strength: (individual: ObjectiveWeight[]) => number) =>
+  (individual: ObjectiveWeight[], config?: BenchmarkConfig) => {
+    const rng = createSeededRandom(`${config!.seed}|${JSON.stringify(individual)}`);
+    const games = config!.gameCount!;
+    let wins = 0;
+    for (let game = 0; game < games; game++) if (rng() < strength(individual)) wins++;
+    return wins / games;
+  };
+
+/** The search's own defaults, so the search is as easily fooled as a real run's. */
+const defaultSearch = { evolutionGenerations: 5, evolutionMu: 5, evolutionLambda: 20, evolutionBenchmarkGames: 50 };
 
 beforeEach(() => {
   benchmarkCalls.length = 0;
@@ -258,3 +278,58 @@ describe('WeightEvolver.evolve', () => {
     expect(result.objectives.map((o) => o.weight)).toEqual([5]);
   });
 });
+
+describe('WeightEvolver confirms the search pick on fresh games before keeping it (#870)', () => {
+  const original = objectives(5, -3);
+  const isOriginal = (individual: ObjectiveWeight[]) => JSON.stringify(individual) === JSON.stringify(original);
+
+  it('keeps the original, and reports no improvement, when every candidate is as strong as it', async () => {
+    fitnessOf = noisy(() => 0.5);
+    const result = await evolver({ ...defaultSearch, seed: 'equal' }).evolve(original);
+
+    expect(result.bestFitness, 'the search should have been fooled by a lucky candidate').toBeGreaterThan(result.initialFitness);
+    expect(result.objectives).toEqual(original);
+    expect(result.confirmation).toMatchObject({ games: 400, accepted: false });
+  });
+
+  it('keeps the original in at least 90 of 100 equal-strength runs (the rule allows about 5)', async () => {
+    fitnessOf = noisy(() => 0.5);
+    let accepted = 0;
+    for (let run = 0; run < 100; run++) {
+      const result = await evolver({ ...defaultSearch, seed: `equal-${run}` }).evolve(original);
+      if (result.confirmation?.accepted) accepted++;
+      else expect(result.objectives).toEqual(original);
+    }
+    expect(accepted).toBeLessThanOrEqual(10);
+  });
+
+  it('accepts a clearly stronger candidate, and reports the confirmation rates, not the search score', async () => {
+    fitnessOf = noisy((individual) => (isOriginal(individual) ? 0.5 : 0.7));
+    const result = await evolver({ ...defaultSearch, seed: 'stronger' }).evolve(original);
+
+    expect(result.objectives).not.toEqual(original);
+    const confirmation = result.confirmation!;
+    expect(confirmation.accepted).toBe(true);
+    expect(confirmation.originalWinRate).toBe(noisy(() => 0.5)(original, { gameCount: 400, seed: 'stronger-confirm' }));
+    expect(confirmation.candidateWinRate).toBe(noisy(() => 0.7)(result.objectives, { gameCount: 400, seed: 'stronger-confirm' }));
+  });
+
+  it('plays the confirmation on a seed the search never used, both sets on the same games', async () => {
+    fitnessOf = noisy((individual) => (isOriginal(individual) ? 0.5 : 0.7));
+    await evolver({ seed: 'fresh' }).evolve(original);
+    const calls = vi.mocked(runParallelBenchmarks).mock.calls;
+    const confirm = calls.at(-1)!;
+    expect(confirm[2]).toHaveLength(2);
+    expect(confirm[2][0]).toEqual(original);
+    expect(confirm[3]).toMatchObject({ gameCount: 400, seed: 'fresh-confirm', reproducible: true });
+    expect(calls.slice(0, -1).map((call) => call[3].seed)).not.toContain('fresh-confirm');
+  });
+
+  it('confirms nothing when the search kept the original', async () => {
+    fitnessOf = (individual) => (isOriginal(individual) ? 0.9 : 0.1);
+    const result = await evolver().evolve(original);
+    expect(result.confirmation).toBeUndefined();
+    expect(result.objectives).toEqual(original);
+  });
+});
+

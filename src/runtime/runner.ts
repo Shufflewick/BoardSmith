@@ -580,17 +580,17 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * deliberately stayed put on the failure, and its position is already right.
    * The elements it holds are pointed at the rebuilt tree (#679).
    *
-   * @returns the player-facing error to report: `error` as it is when the
-   *   rollback succeeded, or, when there was no checkpoint to restore (only a
-   *   game running with `checkpoints: { enabled: false }`, since
-   *   `ensureHeadCheckpoint` captures one otherwise, #802), `error` without the
-   *   engine's "nothing was changed" and with a sentence saying the game may
-   *   still hold the action's partial changes (#808).
+   * @returns the player-facing error to report: `error` followed by
+   *   `NOTHING_CHANGED` when the rollback succeeded, or, when there was no
+   *   checkpoint to restore (only a game running with
+   *   `checkpoints: { enabled: false }`, since `ensureHeadCheckpoint` captures
+   *   one otherwise, #802), by a sentence saying the game may still hold the
+   *   action's partial changes (#808, #989).
    */
-  private rollbackToPreActionState(error: string | undefined): string | undefined {
+  private rollbackToPreActionState(error: string | undefined): string {
+    const kept = error === undefined ? '' : `${error} `;
     const checkpoint = this.actionCheckpoints[this.headOffset];
     if (!checkpoint) {
-      const kept = error === undefined ? '' : `${error.replace(` ${NOTHING_CHANGED}`, '')} `;
       return kept +
         'The action failed part way through, and the game may still hold its partial changes, ' +
         'because per-action checkpoints are turned off for this session so it could not be undone. ' +
@@ -604,7 +604,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       this.game._ctx.sequence = checkpoint.sequence;
     }
     this.game.setRandomState(checkpoint.randomState);
-    return error;
+    return kept + NOTHING_CHANGED;
   }
 
   /**
@@ -650,7 +650,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     }
 
     // Serialize the action before executing (captures current element refs)
-    const serializedAction = this.serializeForHistory(actionName, playerObj, args);
+    const serializedAction = this.serializeOrRefuse(actionName, playerObj, args);
+    if ('success' in serializedAction) return serializedAction;
 
     this.ensureHeadCheckpoint();
 
@@ -714,6 +715,34 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       data: actionResult?.data,
       message: actionResult?.message,
     };
+  }
+
+  /**
+   * {@link serializeForHistory}'s entry, or the move's refusal when it cannot
+   * be encoded and is not a move the game offers: that is the caller's bad
+   * input. An offered move that cannot be encoded is the game's fault, and
+   * still throws (#1070).
+   */
+  private serializeOrRefuse(
+    actionName: string,
+    player: Player,
+    args: Record<string, unknown>
+  ): SerializedAction | ActionExecutionResult {
+    try {
+      return this.serializeForHistory(actionName, player, args);
+    } catch (error) {
+      if (!(error instanceof Error) || this.offersMove(actionName, player, args)) throw error;
+      return { success: false, error: error.message, errorCode: ErrorCode.INVALID_PICK };
+    }
+  }
+
+  /** Whether the game would accept `args` for `actionName` from `player` now, as a held follow-up when it is one. */
+  private offersMove(actionName: string, player: Player, args: Record<string, unknown>): boolean {
+    const action = this.game.getAction(actionName);
+    if (!action) return false;
+    const followUp = followUpForSeat(this.getFlowState(), player.seat);
+    const options = followUp?.action === actionName ? { followUp } : undefined;
+    return new ActionExecutor(this.game).validateAction(action, player, args, options).valid;
   }
 
   /**

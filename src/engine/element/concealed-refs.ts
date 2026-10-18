@@ -30,7 +30,7 @@ export function concealRefsForSeat(value: unknown, game: Game, position: number)
  * what is below it, as `redactTreeForSeat` decides: one the seat cannot see,
  * or a zone whose contents it cannot see.
  */
-function outermostConcealer(element: GameElement, position: number): GameElement | undefined {
+export function outermostConcealer(element: GameElement, position: number): GameElement | undefined {
   const ancestors: GameElement[] = [];
   for (let ancestor = element.parent; ancestor; ancestor = ancestor.parent) ancestors.unshift(ancestor);
   return ancestors.find((ancestor) => {
