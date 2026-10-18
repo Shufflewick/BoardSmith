@@ -69,6 +69,8 @@ export interface LobbySeat {
   name: string;
   color?: string;
   connected: boolean;
+  /** A bot plays this seat now: the live roster, not the startup `--bot` list (#887). */
+  bot: boolean;
 }
 
 export type LobbyPhase = 'lobby' | 'playing';
@@ -447,6 +449,8 @@ export class MultiplayerHost {
    * host keeps its own copy, which `announceRoster` brings up to date.
    */
   private readonly botSeats: Array<{ seat: number; level?: string }> = [];
+  /** The bot roster the pages' lobby last showed, as `announceRoster` compares it. */
+  private lobbyRoster = '';
   /** The client (if any) that follows the active seat — it controls whichever
    *  seat is currently awaiting input, and bot is paused while it is set. */
   private followerClientId: string | null = null;
@@ -675,6 +679,11 @@ export class MultiplayerHost {
   private announceRoster(): void {
     if (this.phase !== 'playing' || !this.session) return;
     this.session.host.setBotSeats(this.botSeats);
+    // The lobby shows the roster too, so a change the message did not broadcast still reaches the pages (#887).
+    const roster = this.botSeats.map((b) => b.seat).sort().join();
+    if (roster === this.lobbyRoster) return;
+    this.lobbyRoster = roster;
+    this.broadcastLobby();
   }
 
   private async dispatch(clientId: string, msg: ClientInbound): Promise<void> {
@@ -1858,6 +1867,7 @@ export class MultiplayerHost {
         ...seat,
         held: clientId !== null,
         mine: clientId === recipient,
+        bot: this.phase === 'playing' && this.botSeats.some((b) => b.seat === seat.seat),
       })),
       minPlayers: this.opts.minPlayers,
       playerCount: this.opts.playerCount,

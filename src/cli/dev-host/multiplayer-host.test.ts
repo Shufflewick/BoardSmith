@@ -192,6 +192,28 @@ describe('MultiplayerHost (always-live)', () => {
     expect(lastOfType('B', 'lobby').seats.find((s: any) => s.seat === 2)).toMatchObject({ held: false, connected: false });
   });
 
+  it('#887: the lobby says which seats a bot plays now', async () => {
+    const { host, lastOfType } = makeHost(); // no --bot: the open seat 2 is a bot all the same
+    const bots = () => lastOfType('A', 'lobby').seats.map((s: any) => s.bot);
+    await host.handleMessage('A', { type: 'hello' });
+    expect(bots()).toEqual([false, true]);
+    await host.handleMessage('B', { type: 'hello' });
+    await host.handleMessage('B', { type: 'join', seat: 2 });
+    expect(bots()).toEqual([false, false]);
+    await host.handleMessage('B', { type: 'leave' });
+    expect(bots()).toEqual([false, true]);
+  });
+
+  it('#887: the lobby is sent again when the bots stop for a follower, and when they resume', async () => {
+    const { host, lastOfType } = makeHost({ debug: true });
+    const bots = () => lastOfType('A', 'lobby').seats.map((s: any) => s.bot);
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('A', { type: 'follow', enabled: true });
+    expect(bots()).toEqual([false, false]);
+    await host.handleMessage('A', { type: 'follow', enabled: false });
+    expect(bots()).toEqual([false, true]);
+  });
+
   it('routes an in-game action to the session and responds to the actor', async () => {
     const { host, to, has, clear } = makeHost();
     await host.handleMessage('A', { type: 'hello' });
