@@ -654,11 +654,11 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
 });
 
 /** Mount the panel inside a host that provides a real board interaction. */
-function mountWithBoard(controller: Record<string, unknown>, bi: BoardInteraction) {
+function mountWithBoard(controller: Record<string, unknown>, bi: BoardInteraction, panelProps: Record<string, unknown> = {}) {
   const Host = defineComponent({
     setup() {
       provideBoardInteraction(bi);
-      return () => h(ActionPanel, { availableActions: [], isMyTurn: true });
+      return () => h(ActionPanel, { availableActions: [], isMyTurn: true, ...panelProps });
     },
   });
   return mount(Host, {
@@ -1013,6 +1013,7 @@ describe('ActionPanel large element-id-anchored choice picks (#341)', () => {
     choices: ChoiceWithRefs[],
     pick: Record<string, unknown> = {},
     overrides: Record<string, unknown> = {},
+    panelProps: Record<string, unknown> = {},
   ) {
     const controller = stubActionController({
       currentAction: ref('recruit'),
@@ -1020,7 +1021,7 @@ describe('ActionPanel large element-id-anchored choice picks (#341)', () => {
       currentChoices: ref(choices),
       ...overrides,
     });
-    return mountWithBoard(controller, createBoardInteraction());
+    return mountWithBoard(controller, createBoardInteraction(), panelProps);
   }
 
   it('renders one board handoff control instead of 3,720 buttons', () => {
@@ -1045,6 +1046,13 @@ describe('ActionPanel large element-id-anchored choice picks (#341)', () => {
     expect(wrapper.find('.ordered-list-label').text()).toBe('Piece 3');
     expect(wrapper.findAll('.ordered-list-remove')).toHaveLength(1);
     expect(wrapper.find('.done-button').exists()).toBe(true);
+  });
+
+  it('lists every Add button for that ordered list while the board shows its error message (#1153)', () => {
+    const wrapper = mountPiecePick(pieces(50), { orderedList: { min: 1, max: 4 } }, {}, { boardFailed: true });
+
+    expect(wrapper.find('.board-handoff-btn').exists()).toBe(false);
+    expect(wrapper.findAll('.ordered-list-add')).toHaveLength(50);
   });
 
   it('keeps every button when two candidates name the same element', () => {
