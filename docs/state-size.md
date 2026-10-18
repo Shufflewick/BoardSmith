@@ -144,10 +144,20 @@ state a ceiling that had moved by a factor of four.
 
 One smaller cost is fixed by the engine: **a shuffled or hidden element carries
 one more number.** `shuffle()` gives every element in the shuffled space a
-fresh `placeholderToken` (about 30 bytes of JSON each), and so does a move into
-a place some seat cannot see into, so the placeholder ids seats know those cards
-by are reissued (#715). A 52-card deck shuffled once adds about 1.5 KB to the
-tree. Reissuing again replaces the numbers rather than adding to them.
+fresh `placeholderToken` (about 30 bytes of JSON each), and so does a move of
+a card into, out of or within a place some seat cannot see into, for every
+card in each such pile the move touches, so the placeholder ids seats know
+those cards by are reissued (#715). A 52-card deck shuffled once adds about
+1.5 KB to the tree. Reissuing again replaces the numbers rather than adding to
+them, so the bytes are bounded by the number of cards, not by moves.
+
+Each reissued card also spends one value of the creation counter, the budget
+element ids come from (2^32 for a table, 2^48 for a world, #482). A move
+spends at most the size of the piles it touches: a draw from a 52-card deck
+into a hidden hand of 7 spends 58. A long game of 10,000 such moves between
+piles of at most 100 cards spends under 2 million, a twentieth of a percent
+of a table's budget, and a table would need some 40 million moves between
+52-card piles to spend it all. A world's budget is 65,000 times larger.
 
 ## Packed bulk data: use a typed array
 

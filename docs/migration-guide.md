@@ -5,11 +5,12 @@
 A card in a zone a seat cannot see used to reach that seat as `-1`, `-2`, ...
 in the order of the view, so the same number could name another card after a
 move. Now each seat gets its own placeholder id for each such card. The card
-keeps it while it stays in its hidden pile. It gets a new one when `shuffle()`
-shuffles its space, and when it moves into any place some seat cannot see into
-(another hidden zone, or under a hidden element). The ids are large
-negative numbers, different for every seat, so do not expect `-1` or compare
-them between seats. A test that read a placeholder should take it from the
+keeps it while its pile is untouched: when `shuffle()` shuffles the pile, or a
+card enters or leaves it (a move into any place some seat cannot see into, out
+of one, or within one), every card in that pile gets a new id, so neither an
+insert position nor which card left can be read from the ids. The ids are
+large negative numbers, different for every seat, so do not expect `-1` or
+compare them between seats. A test that read a placeholder should take it from the
 seat's view or its pick candidates (`validElements`, `choices`), as a client
 does.
 
@@ -30,8 +31,9 @@ not draw that zone's cards.
 
 An element whose placeholder was reissued carries a new `placeholderToken` field
 in its full serialization (table snapshots and world partitions), which no
-seat's view includes. Each reissue spends one value of the game's creation
-counter, the same budget element ids come from.
+seat's view includes. Each card reissued spends one value of the game's
+creation counter, the same budget element ids come from: one per card in each
+hidden pile a move touches (`docs/state-size.md` bounds it).
 
 ## A grant below a concealed zone's hidden child reaches its seat (#961)
 

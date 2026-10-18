@@ -1,7 +1,7 @@
 /**
  * A table names a hidden card by a stable placeholder of the asking seat's own
- * (#715): a card keeps it until it is shuffled or moved into another hidden
- * place, a placeholder names only that card, another seat's placeholder and a hidden card's real id
+ * (#715): a card keeps it until its pile is shuffled or a card enters or
+ * leaves the pile, a placeholder names only that card, another seat's placeholder and a hidden card's real id
  * are refused at every entry point, and a card in a fully hidden zone can be
  * picked blind.
  */
@@ -178,16 +178,21 @@ describe("a table's stable per-seat placeholders (#715)", () => {
     expect(how.choices?.map((c) => c.value)).toEqual(['KH']);
   });
 
-  it('reissues a card moved into another hidden pile, in the board and the offer, and keeps the rest', async () => {
+  it('reissues every card left in a hidden pile when one is moved out, in the board and the offer, and refuses a pick by a pre-move id', async () => {
     const start = await started();
     const [ace, king] = await pouchIds(start, 1);
     const moved = succeeded(await act(start, 2, 'stash', { card: (await pouchIds(start, 2))[0] })) as unknown as Envelope;
 
     const [stashed] = findByName(viewOf(moved, 1), 'stash')!.children!.map((c) => c.id);
+    const [left] = findByName(viewOf(moved, 1), 'pouch')!.children!.map((c) => c.id);
     expect(stashed).toBeLessThan(0);
+    expect(left).toBeLessThan(0);
     expect([ace, king]).not.toContain(stashed);
-    expect(findByName(viewOf(moved, 1), 'pouch')!.children!.map((c) => c.id)).toEqual([king]);
-    expect(await pouchIds(moved, 1)).toEqual([king]);
+    expect([ace, king]).not.toContain(left);
+    expect(await pouchIds(moved, 1)).toEqual([left]);
+    expect(refusal(await act(moved, 1, 'filch', { card: king }))).toBe(NO_LONGER_AVAILABLE);
+    const taken = succeeded(await act(moved, 1, 'filch', { card: left })) as unknown as Envelope;
+    expect(handOf(taken, 1)).toEqual(['KH']);
   });
 
   it('reissues placeholders when the cards are shuffled, and refuses the old ones', async () => {

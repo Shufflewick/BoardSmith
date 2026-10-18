@@ -1,7 +1,7 @@
 /**
  * A world names a hidden card by a stable placeholder of the asking seat's own
- * (#715): a card keeps it until it is shuffled or moved into another hidden
- * place, a placeholder names only that card, another seat's placeholder and a hidden card's real id
+ * (#715): a card keeps it until its pile is shuffled or a card enters or
+ * leaves the pile, a placeholder names only that card, another seat's placeholder and a hidden card's real id
  * are refused, and a card in a fully hidden zone can be picked blind.
  */
 import { describe, it, expect } from 'vitest';
@@ -85,6 +85,9 @@ function find(node: ElementJSON, name: string): ElementJSON | undefined {
   return undefined;
 }
 
+const NO_LONGER_AVAILABLE =
+  'That choice is no longer available. Things changed while you were choosing, so please choose again.';
+
 async function started() {
   return createTestWorld({ definition: { gameClass: PouchWorld, world } });
 }
@@ -141,19 +144,24 @@ describe("a world's stable per-seat placeholders (#715)", () => {
     await test.close();
   });
 
-  it('reissues a card moved into another hidden pile, keeps the rest, and keeps them through a wake', async () => {
+  it('reissues every card left in a hidden pile when one is moved out, refuses a pick by a pre-move id, and keeps the new ids through a wake', async () => {
     const test = await started();
     const [ace, king] = await pouchIds(test, 1);
     await test.take(1, 'stash', { card: ace });
 
     const stashed = () => test.getPlayerView(1).then((view) => find(view.state as ElementJSON, 'stash')!.children!.map((c) => c.id));
     const [moved] = await stashed();
+    const [left] = await pouchIds(test, 1);
     expect(moved).toBeLessThan(0);
+    expect(left).toBeLessThan(0);
     expect([ace, king]).not.toContain(moved);
-    await expect(test.take(1, 'filch', { card: ace })).rejects.toThrow();
+    expect([ace, king]).not.toContain(left);
+    await expect(test.take(1, 'filch', { card: king })).rejects.toThrow(NO_LONGER_AVAILABLE);
     await test.wake();
-    expect(await pouchIds(test, 1)).toEqual([king]);
+    expect(await pouchIds(test, 1)).toEqual([left]);
     expect(await stashed()).toEqual([moved]);
+    await test.take(1, 'filch', { card: left });
+    expect(await commonsCards(test)).toEqual(['KH']);
     await test.close();
   });
 

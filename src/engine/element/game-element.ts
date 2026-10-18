@@ -296,19 +296,23 @@ export function forEachInSubtree(element: GameElement, visit: (element: GameElem
 }
 
 /**
- * Give `element`, and everything under it, a fresh placeholder token (#715),
- * which no element's id or token has been, so every placeholder a seat knew it
- * by names nothing. A token is minted from the creation counter, as an id is,
- * so each element reissued spends one of the game's 2^32 creations (a world's
- * 2^48). `Space.shuffle()` calls it, and so does a move into a place some seat
- * cannot see into.
+ * Give every child of `pile` a fresh placeholder token (#715), which no
+ * element's id or token has been, so every placeholder a seat knew them by
+ * names nothing. Called when a card enters or leaves a pile some seat cannot
+ * see into, and when a space is shuffled: the ids are sent in pile order, so
+ * any id that stayed would show where a card went in, which one left, or where
+ * one was moved to within the pile. Only the children: what sits below one is
+ * a pile of its own, which this move did not touch, and a seat that cannot see
+ * into `pile` is sent nothing below its children. A token is minted from the
+ * creation counter, as an id is, so each card reissued spends one of the
+ * game's 2^32 creations (a world's 2^48).
  */
-export function reissuePlaceholders(element: GameElement): void {
-  forEachInSubtree(element, (reissued) => {
-    reissued._t.placeholderToken = reissued._ctx.ids.mint(reissued._ctx.sequence++);
+export function reissuePlaceholders(pile: GameElement): void {
+  for (const child of pile._t.children) {
+    child._t.placeholderToken = child._ctx.ids.mint(child._ctx.sequence++);
     // A nested partition root's token is that partition's write.
-    markTouchedPartition(reissued);
-  });
+    markTouchedPartition(child);
+  }
 }
 
 /** Whether a state keeps what it covers from some seat. */
@@ -1033,8 +1037,9 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       destination._t.children.push(this);
     }
 
-    // A seat that cannot see where it went must not follow it there by its placeholder (#715).
-    if (destination !== oldParent && hiddenFromSomeSeat(destination)) reissuePlaceholders(this);
+    // A seat that cannot see into either pile must not read where it went in or which card left from the ids that stayed (#715).
+    if (hiddenFromSomeSeat(destination)) reissuePlaceholders(destination);
+    if (oldParent && oldParent !== destination && hiddenFromSomeSeat(oldParent)) reissuePlaceholders(oldParent);
 
     // Trigger enter event if moving to a Space (duck-typed, see above).
     if (isChildEventTarget(destination)) {

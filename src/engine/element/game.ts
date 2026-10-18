@@ -4918,8 +4918,8 @@ export class Game<
     // and owner-only zone branches below. Each keeps its class and only the
     // safe layout $-keys of its attributes (identity-bearing image refs are
     // redacted), never its name, and takes this seat's placeholder id for it,
-    // which never says what the card is and is reissued when it is shuffled
-    // or moved into a hidden place (#715, `seat-placeholders.ts`).
+    // which never says what the card is and is reissued with its pile when
+    // that is shuffled or a card enters or leaves it (#715, `seat-placeholders.ts`).
     // __hidden is seeded here (not in redactHiddenElementAttrs) so the
     // count-only CONTAINER branch keeps its distinct shape (no __hidden, has
     // childCount). CR-02 (159): original -> placeholder id is recorded in

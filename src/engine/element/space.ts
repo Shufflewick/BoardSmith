@@ -478,9 +478,9 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
         this._t.children[i],
       ];
     }
-    // Descendants too: a grant or a placeholder on anything inside a moved card would show where the card went.
+    reissuePlaceholders(this);
+    // Grants below too: one on anything inside a moved card would show where the card went.
     for (const child of this._t.children) {
-      reissuePlaceholders(child);
       forEachInSubtree(child, (element) => {
         if (element._visibility === undefined) return;
         element.clearVisibility();

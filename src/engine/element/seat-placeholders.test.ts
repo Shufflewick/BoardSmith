@@ -1,8 +1,9 @@
 /**
- * When a card's placeholder is reissued (#715): whenever it moves into a place
- * some seat cannot see into, and when its space is shuffled, but not when it
- * moves within the same hidden pile. And the token behind it never reaches a
- * seat's view.
+ * When a card's placeholder is reissued (#715): whenever a card enters or
+ * leaves a pile some seat cannot see into, every card in that pile gets a new
+ * one, so neither where it went in nor which one left can be read from the ids
+ * that stayed; a pile nothing entered or left keeps its ids. And the token
+ * behind a placeholder never reaches a seat's view.
  */
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Space, Card, type GameOptions } from '../index.js';
@@ -20,7 +21,7 @@ class PileGame extends Game<PileGame, Player> {
     this.registerElements([Secret]);
     const deck = this.create(Space, 'deck');
     deck.contentsCountOnly();
-    for (const name of ['AS', 'KH', 'QD']) deck.create(Card, name);
+    for (const name of ['AS', 'KH', 'QD', 'JC']) deck.create(Card, name);
     for (const player of this.players) {
       const hand = this.create(Space, `hand-${player.seat}`);
       hand.player = player;
@@ -32,45 +33,73 @@ class PileGame extends Game<PileGame, Player> {
 
 function setup() {
   const game = new PileGame({ playerCount: 2, seed: 'bs715-reissue' });
+  const deck = game.first(Space, 'deck')!;
+  deck.shuffle();
   return {
     game,
-    deck: game.first(Space, 'deck')!,
+    deck,
     hand: (seat: number) => game.first(Space, `hand-${seat}`)!,
     table: game.first(Space, 'table')!,
   };
 }
 
-describe('a placeholder is reissued when its card moves where a seat cannot see (#715)', () => {
-  it('reissues a card inserted into a hidden deck at a chosen position', () => {
+/** The ids seat 2 knows `pile`'s cards by, in pile order. */
+const idsFor2 = (pile: Space<PileGame>) => pile.all(Card).map((card) => seatIdOf(card, 2));
+
+describe('every card in a hidden pile is reissued when one enters or leaves it (#715)', () => {
+  it('leaves no id a seat could read the insert position of a card put into a hidden deck from', () => {
     const { game, deck, hand } = setup();
     const card = game.first(Card, 'AS')!;
     card.putInto(hand(1));
-    const inHand = seatIdOf(card, 2);
+    const known = new Set([...idsFor2(deck), seatIdOf(card, 2)]);
 
-    card.putInto(deck, { position: 'last' });
+    card.putInto(deck, { position: 'first' });
 
-    expect(seatIdOf(card, 2)).toBeLessThan(0);
-    expect(seatIdOf(card, 2)).not.toBe(inHand);
+    const after = idsFor2(deck);
+    expect(after).toHaveLength(4);
+    expect(after.every((id) => id < 0 && !known.has(id))).toBe(true);
+  });
+
+  it('reissues the cards left in a hidden hand when one leaves it, so none says which left', () => {
+    const { game, hand, table } = setup();
+    for (const name of ['AS', 'KH', 'QD']) game.first(Card, name)!.putInto(hand(1));
+    const before = idsFor2(hand(1));
+
+    game.first(Card, 'KH')!.putInto(table);
+
+    const after = idsFor2(hand(1));
+    expect(after).toHaveLength(2);
+    expect(after.filter((id) => before.includes(id))).toEqual([]);
   });
 
   it('reissues every card dealt from a shuffled collection into a hidden hand', () => {
     const { game, deck, hand } = setup();
-    const before = new Set(deck.all(Card).map((card) => seatIdOf(card, 2)));
+    const before = new Set(idsFor2(deck));
 
     for (const card of deck.all(Card).shuffle(game.random)) card.putInto(hand(1));
 
-    const after = hand(1).all(Card).map((card) => seatIdOf(card, 2));
-    expect(after.filter((id) => before.has(id))).toEqual([]);
+    expect(idsFor2(hand(1)).filter((id) => before.has(id))).toEqual([]);
   });
 
-  it('keeps the placeholder of a card moved within the same hidden pile', () => {
+  it('reissues the whole pile when a card is moved within it, since the ids are sent in pile order', () => {
     const { game, deck } = setup();
+    const before = idsFor2(deck);
+
+    game.first(Card, 'AS')!.putInto(deck, { position: 'last' });
+
+    expect(idsFor2(deck).filter((id) => before.includes(id))).toEqual([]);
+  });
+
+  it('keeps the ids of a pile nothing entered or left while cards move elsewhere', () => {
+    const { game, hand, table } = setup();
     const card = game.first(Card, 'AS')!;
-    const before = seatIdOf(card, 2);
+    card.putInto(hand(1));
+    const handBefore = idsFor2(hand(1));
 
-    card.putInto(deck, { position: 'last' });
+    game.first(Card, 'KH')!.putInto(table);
+    game.first(Card, 'QD')!.putInto(hand(2));
 
-    expect(seatIdOf(card, 2)).toBe(before);
+    expect(idsFor2(hand(1))).toEqual(handBefore);
   });
 });
 

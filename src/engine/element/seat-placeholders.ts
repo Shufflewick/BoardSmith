@@ -8,15 +8,16 @@
  * (`pick-candidates.ts`) and the reading of what a seat sends back
  * (`picksFromSeat`) all call it, so the three cannot disagree.
  *
- * A placeholder is STABLE AND PER SEAT. It is made from the card's token with
- * the seat's own key (`ElementIds.placeholder`), so another seat's placeholder
- * for it is a different number, and the number says nothing about the card's
- * id. The token is the card's id until the card is shuffled or moves into a
- * place some seat cannot see into; it then gets a fresh one
- * (`reissuePlaceholders`), so its old placeholder names nothing and no seat can
- * follow it there. Within the same hidden pile it keeps its token. The token
- * lives on the element (`_t.placeholderToken`), so snapshots, checkpoints,
- * undo and a world's stored partitions carry it.
+ * A placeholder is STABLE WHILE ITS PILE IS UNTOUCHED, AND PER SEAT. It is
+ * made from the card's token with the seat's own key (`ElementIds.placeholder`),
+ * so another seat's placeholder for it is a different number, and the number
+ * says nothing about the card's id. The token is the card's id until its pile
+ * is shuffled or a card enters or leaves it; then every card in the pile gets
+ * a fresh one (`reissuePlaceholders`), so an old placeholder names nothing, is
+ * refused rather than retargeted, and no seat can read an insert position or
+ * which card left from the ids that stayed. The token lives on the element
+ * (`_t.placeholderToken`), so snapshots, checkpoints, undo and a world's
+ * stored partitions carry it.
  *
  * A card hidden only by its own visibility, in a place the seat can see, keeps
  * its real id: the board draws it face down at its real id, so a flip animates
