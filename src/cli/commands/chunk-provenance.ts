@@ -118,12 +118,7 @@ export interface VerificationScope {
 }
 
 async function exists(path: string): Promise<boolean> {
-  try {
-    await fs.access(path);
-    return true;
-  } catch {
-    return false;
-  }
+  return (await readIfExists(path, fs.stat)) !== undefined;
 }
 
 /**
@@ -146,12 +141,8 @@ export async function computeVerificationScope(projectDir: string): Promise<Veri
   }
 
   const indexPath = join(rulebookDir, 'INDEX.md');
-  let index: string;
-  try {
-    index = await fs.readFile(indexPath, 'utf-8');
-  } catch {
-    return { scope: SCOPE_CODE_ONLY, reason: 'index-missing' };
-  }
+  const index = await readIfExists(indexPath, (p) => fs.readFile(p, 'utf-8'));
+  if (index === undefined) return { scope: SCOPE_CODE_ONLY, reason: 'index-missing' };
 
   // A project's ADDITIONAL sources (`## Additional Sources`, `ingest-archive.ts`) are checked the
   // same way as the primary (archived file exists AND its SHA-256 matches), and reported whatever
@@ -175,14 +166,7 @@ export async function computeVerificationScope(projectDir: string): Promise<Veri
   // (`rulebook/source/rules.pdf`), not to the project root. Resolving it anywhere else silently
   // reports `source-missing` on a project whose source is right there.
   const archivedFullPath = sourcePath ? join(designDir(dir), sourcePath) : undefined;
-  let archivedBuf: Buffer | undefined;
-  if (archivedFullPath) {
-    try {
-      archivedBuf = await fs.readFile(archivedFullPath);
-    } catch {
-      archivedBuf = undefined;
-    }
-  }
+  const archivedBuf = archivedFullPath === undefined ? undefined : await readIfExists(archivedFullPath, (p) => fs.readFile(p));
   if (!archivedBuf) {
     return {
       scope: SCOPE_CODE_ONLY,
@@ -292,10 +276,8 @@ async function verifyAdditionalSources(
   const failedAdditionalSources: NonNullable<VerificationScope['failedAdditionalSources']> = [];
   for (const record of parseAdditionalSources(index)) {
     const row = { sourcePath: record.path, sourceHash: record.sourceHash };
-    let buf: Buffer;
-    try {
-      buf = await fs.readFile(join(designDir(dir), record.path));
-    } catch {
+    const buf = await readIfExists(join(designDir(dir), record.path), (p) => fs.readFile(p));
+    if (buf === undefined) {
       failedAdditionalSources.push({ ...row, reason: 'additional-source-missing' });
       continue;
     }
@@ -690,14 +672,10 @@ async function planVerifiedAgainst(
   const projectScope = await computeVerificationScope(projectDir);
 
   const rulebookDir = designRulebookDir(projectDir);
-  let sliceFilenames: string[] = [];
-  try {
-    sliceFilenames = (await fs.readdir(rulebookDir)).filter(
-      (f) => f.endsWith('.md') && f !== 'INDEX.md',
-    );
-  } catch {
-    sliceFilenames = []; // no rulebook/ at all — nothing to resolve against
-  }
+  // No rulebook/ at all: nothing to resolve against.
+  const sliceFilenames = ((await readIfExists(rulebookDir, (p) => fs.readdir(p))) ?? []).filter(
+    (f) => f.endsWith('.md') && f !== 'INDEX.md',
+  );
 
   // The heading position in the file AS READ, before this run writes anything. Computed once and
   // reused both for scanning citations and for locating where to write below.

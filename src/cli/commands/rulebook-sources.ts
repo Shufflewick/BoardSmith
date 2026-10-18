@@ -132,15 +132,10 @@ export function sliceDocuments(sliceSource: string | undefined, recorded: readon
  */
 export async function readSliceSources(projectDir: string): Promise<Map<string, string | undefined>> {
   const rulebookDir = designRulebookDir(resolve(projectDir));
-  let names: string[];
-  try {
-    names = (await fs.readdir(rulebookDir, { withFileTypes: true }))
-      .filter((e) => e.isFile() && e.name.endsWith('.md') && !NON_SLICE_FILES.includes(e.name))
-      .map((e) => e.name)
-      .sort();
-  } catch {
-    return new Map();
-  }
+  const names = ((await readIfExists(rulebookDir, (p) => fs.readdir(p, { withFileTypes: true }))) ?? [])
+    .filter((e) => e.isFile() && e.name.endsWith('.md') && !NON_SLICE_FILES.includes(e.name))
+    .map((e) => e.name)
+    .sort();
   const sources = new Map<string, string | undefined>();
   for (const name of names) {
     sources.set(name, parseSliceSource(await fs.readFile(join(rulebookDir, name), 'utf-8')));
@@ -150,13 +145,8 @@ export async function readSliceSources(projectDir: string): Promise<Map<string, 
 
 /** The documents `rulebook/INDEX.md` records; `[]` when there is no INDEX.md. */
 export async function readRecordedSourcePaths(projectDir: string): Promise<string[]> {
-  try {
-    return recordedSourcePaths(
-      await fs.readFile(join(designRulebookDir(resolve(projectDir)), 'INDEX.md'), 'utf-8'),
-    );
-  } catch {
-    return [];
-  }
+  const text = await readIfExists(join(designRulebookDir(resolve(projectDir)), 'INDEX.md'), (p) => fs.readFile(p, 'utf-8'));
+  return text === undefined ? [] : recordedSourcePaths(text);
 }
 
 interface SliceSourceCheck {

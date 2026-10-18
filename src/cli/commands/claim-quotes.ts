@@ -365,11 +365,9 @@ async function readSourceFile(chunk: ChunkSources, source: SourceSpec): Promise<
     };
   }
   if (source.commit !== undefined) return readAtCommit(chunk, source, source.commit, shown);
-  try {
-    return { ok: true, text: await fs.readFile(join(projectDir, shown), 'utf8'), shown };
-  } catch {
-    return { ok: false, problem: `there is no file at ${shown}. ${PATH_RULE}` };
-  }
+  const text = await readIfExists(join(projectDir, shown), (p) => fs.readFile(p, 'utf8'));
+  if (text === undefined) return { ok: false, problem: `there is no file at ${shown}. ${PATH_RULE}` };
+  return { ok: true, text, shown };
 }
 
 function linesInRange(lines: string[], source: SourceSpec, range: LineRange, shown: string): Located {

@@ -181,6 +181,14 @@ describe('checkClaimQuotes: rulebook-sourced claims', () => {
     expect(refusals[0]).toMatch(/no file at design\/rulebook\/09-missing\.md/);
   });
 
+  it('names a cited file it cannot read rather than saying there is none (#1174)', async () => {
+    await fs.mkdir(join(project, 'design/rulebook/09-folder.md'), { recursive: true });
+    await writeChunk(`1. **Armour subtracts.**
+   > Armour subtracts from damage.
+   Source: rulebook/09-folder.md §"Armour"`);
+    await expect(checkClaimQuotes(project, 'combat')).rejects.toThrow(`Could not read ${join(project, 'design/rulebook/09-folder.md')} (EISDIR)`);
+  });
+
   it('refuses a citation with no section or line range', async () => {
     const refusals = await refusalsFor(`1. **Armour subtracts.**
    > Armour subtracts from damage.

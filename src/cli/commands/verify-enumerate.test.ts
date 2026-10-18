@@ -973,6 +973,32 @@ describe('QuoteVerifiedProvenance', () => {
     expect(provenance?.sourceHash).toBe(sourceHash);
   });
 
+  it('names a project folder it cannot list rather than finding no unarchived source in it (#1174)', async () => {
+    const project = join(dir, 'unlistable');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
+    await fs.mkdir(rulebookDir, { recursive: true });
+    const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes\n');
+    const relArchivedPath = 'rulebook/source/rules.pdf';
+    await fs.writeFile(
+      join(rulebookDir, 'INDEX.md'),
+      renderIndex({
+        gameName: 'game',
+        edition: 'First Printing 2020',
+        archivedPath: relArchivedPath,
+        sourceHash: createHash('sha256').update(sourceBuf).digest('hex'),
+        transcribed: '2026-07-28',
+      }),
+    );
+    await fs.mkdir(dirname(join(project, DESIGN_DIR, relArchivedPath)), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, relArchivedPath), sourceBuf);
+    await fs.chmod(project, 0o300);
+    try {
+      await expect(QuoteVerifiedProvenance.obtain(project)).rejects.toThrow(`Could not read ${project} (EACCES)`);
+    } finally {
+      await fs.chmod(project, 0o755);
+    }
+  });
+
   it('is null when the archived source bytes no longer match the recorded hash', async () => {
     const project = join(dir, 'mismatched');
     const rulebookDir = join(project, DESIGN_DIR, 'rulebook');

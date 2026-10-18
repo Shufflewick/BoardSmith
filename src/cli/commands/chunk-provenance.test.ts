@@ -1580,3 +1580,47 @@ describe('chunk-check: an unreadable CHUNK.md (#1110)', () => {
     await expect(recordVerifiedAgainst('punch', { project })).rejects.toThrow(`Could not read ${chunk} (EISDIR)`);
   });
 });
+
+describe('chunk provenance names what it cannot read instead of calling it missing (#1174)', () => {
+  it('a rulebook/ it cannot look at, rather than a project with no rulebook', async () => {
+    const project = await makeProject('no-rulebook-project');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
+    await fs.mkdir(join(project, DESIGN_DIR), { recursive: true });
+    await fs.symlink(rulebookDir, rulebookDir);
+    await expect(computeVerificationScope(project)).rejects.toThrow(`Could not read ${rulebookDir} (ELOOP)`);
+  });
+
+  it('an INDEX.md it cannot read, rather than a missing one', async () => {
+    const project = await makeProject('index-missing');
+    const indexPath = join(project, DESIGN_DIR, 'rulebook', 'INDEX.md');
+    await fs.mkdir(indexPath);
+    await expect(computeVerificationScope(project)).rejects.toThrow(`Could not read ${indexPath} (EISDIR)`);
+  });
+
+  it('an archived source it cannot read, rather than a missing one', async () => {
+    const project = await makeProject('source-missing');
+    const archivedPath = join(project, DESIGN_DIR, 'rulebook', 'source', 'rules.pdf');
+    await fs.mkdir(archivedPath, { recursive: true });
+    await expect(computeVerificationScope(project)).rejects.toThrow(`Could not read ${archivedPath} (EISDIR)`);
+  });
+
+  it('an additional source it cannot read, rather than a missing one', async () => {
+    const project = await archiveRulesWithReference(Buffer.from('# Reference\n'));
+    const reference = join(project, DESIGN_DIR, 'rulebook', 'source', 'REFERENCE.md');
+    await fs.rm(reference);
+    await fs.mkdir(reference);
+    await expect(computeVerificationScope(project)).rejects.toThrow(`Could not read ${reference} (EISDIR)`);
+  });
+
+  it('a rulebook/ it cannot list when recording provenance, rather than one with no slices', async () => {
+    const project = await makeProject('full');
+    await writeChunk(project, 'punch', await readChunkTemplate());
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
+    await fs.chmod(rulebookDir, 0o300);
+    try {
+      await expect(recordVerifiedAgainst('punch', { project })).rejects.toThrow(`Could not read ${rulebookDir} (EACCES)`);
+    } finally {
+      await fs.chmod(rulebookDir, 0o755);
+    }
+  });
+});
