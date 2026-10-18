@@ -83,7 +83,7 @@
              `<Teleport to="#bs-game-modal">` always finds the host `PlayShell`
              renders. `GameShell` holds a table's board back for exactly this
              reason; the guarantee is the SHELL's, so both give it. -->
-        <BoardErrorBoundary v-if="boardHostReady && boardComponent" :state="boardProps.gameView">
+        <BoardErrorBoundary v-if="boardHostReady && boardComponent" :state="boardProps.gameView" :board="boardComponent">
           <component :is="boardComponent" v-bind="boardProps" />
         </BoardErrorBoundary>
         <!-- Only reachable if the registry's default entry resolved to no

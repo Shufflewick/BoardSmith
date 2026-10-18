@@ -1556,7 +1556,7 @@ defineExpose({
              Action Panel and the game context are handed, so none of them can
              disagree (#520, #516). -->
         <template v-if="shellMounted">
-        <BoardErrorBoundary v-if="selectedUiComponent" :state="gameView">
+        <BoardErrorBoundary v-if="selectedUiComponent" :state="gameView" :board="selectedUiComponent">
           <component
             :is="selectedUiComponent"
             v-bind="boardProps"

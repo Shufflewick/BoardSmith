@@ -9,8 +9,11 @@
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { defineComponent, h, nextTick } from 'vue';
-import { flushPromises } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { enterIframe, leaveIframe, mountPlatformShell } from './GameShell.platform-mount.test-helper.js';
+import GameShell from './GameShell.vue';
+import BoardErrorBoundary from './BoardErrorBoundary.vue';
+import { defineGameUIs, defaultUI, devUI } from '../game-uis.js';
 
 function fromHost(data: Record<string, unknown>): void {
   window.dispatchEvent(new MessageEvent('message', { source: window.parent, data: { source: 'shufflewick', ...data } }));
@@ -53,6 +56,7 @@ afterEach(() => {
   for (const wrapper of mounted.splice(0)) wrapper.unmount();
   leaveIframe();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 describe('GameShell board error boundary (#1149)', () => {
@@ -89,5 +93,42 @@ describe('GameShell board error boundary (#1149)', () => {
     expect(wrapper.find('[data-testid="bs-board-error"]').exists()).toBe(false);
     expect(wrapper.find('.good-board').exists()).toBe(true);
     expect(go()?.text()).toContain('Go third');
+  });
+
+  it('clears the error when the dev host switches to another board, without waiting for a new state', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    enterIframe();
+    const GoodBoard = defineComponent({ name: 'GoodBoard', setup: () => () => h('div', { class: 'other-board' }, 'other') });
+    // Shaped like an ES module, which is what defineAsyncComponent unwraps `default` from.
+    const otherModule = { __esModule: true, default: GoodBoard };
+    const wrapper = mount(GameShell, {
+      props: { uis: defineGameUIs({ Broken: defaultUI(ThrowingBoard), Other: devUI(async () => otherModule) }) },
+    });
+    mounted.push(wrapper);
+    await nextTick();
+    fromHost({ type: 'init', seat: 1 });
+    fromHost(frame(true, 'Go'));
+    await flushPromises();
+    expect(wrapper.find('[data-testid="bs-board-error"]').exists()).toBe(true);
+
+    fromHost({ type: 'dev-ui-select', name: 'Other' });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="bs-board-error"]').exists()).toBe(false);
+    expect(wrapper.find('.other-board').exists()).toBe(true);
+  });
+});
+
+describe('BoardErrorBoundary in production', () => {
+  it('shows only the fixed sentence, never the thrown message', async () => {
+    vi.stubEnv('DEV', false);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const Broken = defineComponent({ setup: () => () => { throw new Error('secret internals'); } });
+    const wrapper = mount(BoardErrorBoundary, { props: { state: 1, board: Broken }, slots: { default: () => h(Broken) } });
+    mounted.push(wrapper);
+    await nextTick();
+    const alert = wrapper.find('[data-testid="bs-board-error"]');
+    expect(alert.text()).toBe('The board hit an error and could not be drawn. It will try again when the game changes.');
+    expect(alert.text()).not.toContain('secret internals');
   });
 });

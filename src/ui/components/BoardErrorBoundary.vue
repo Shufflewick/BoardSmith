@@ -4,8 +4,8 @@
   Unhandled, Vue rethrows a render error out of the patch in dev, which leaves
   the shell's vnode tree half-patched and every later update failing: the
   Action Panel froze until a reload. Here the board is replaced by a message,
-  the error is logged once, and the board is mounted afresh when `state`
-  changes, so the next move draws it again if it no longer throws.
+  the error is logged once, and the board is mounted afresh when `state` or
+  `board` changes, so the next move (or another board) draws if it no longer throws.
 -->
 <template>
   <div v-if="failure !== null" class="bs-board-error" role="alert" data-testid="bs-board-error">
@@ -23,6 +23,8 @@ import { onErrorCaptured, ref, watch } from 'vue';
 const props = defineProps<{
   /** The state the board draws; a new one gives a failed board another try. */
   state: unknown;
+  /** The board component; switching to another one gives it a try too. */
+  board: unknown;
 }>();
 
 const isDev = import.meta.env.DEV;
@@ -35,7 +37,7 @@ onErrorCaptured((error) => {
   return false;
 });
 
-watch(() => props.state, () => {
+watch([() => props.state, () => props.board], () => {
   failure.value = null;
 });
 </script>
