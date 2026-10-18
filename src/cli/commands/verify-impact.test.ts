@@ -945,10 +945,13 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
     const { project, runId, pairId } = await contradictoryProjectWithRulings();
     const evidence = ['one', 'two', 'three', 'four', 'five'];
 
+    // Quoted, so each re-classification stays "contradictory" and the adjudication may land in any order (#1172).
     await Promise.all([
       verifyImpactAdjudicateCommand({ project, runId, pairId, outcome: 'UNADJUDICATED', json: true }),
       ...evidence.map((e) =>
-        verifyClassifyRecordCommand({ project, runId, pairId, label: 'contradictory', evidence: e, json: true }),
+        verifyClassifyRecordCommand({
+          project, runId, pairId, label: 'contradictory', evidence: e, quotedPass1: 'Lower.', quotedPass2: 'Higher.', json: true,
+        }),
       ),
     ]);
 
