@@ -18,29 +18,15 @@
  * `node scripts/gameover-scrolled-board-browser.mjs`; a missing Chromium says to
  * run `boardsmith install-browser`.
  */
-import { assert, check, runBrowserRegression, summarise } from './browser-harness.mjs';
-
-/** Play the first card offered until the game-over card shows (driving is not under test). */
-function playToTheEnd(frame) {
-  return frame.locator('body').evaluate(async (body) => {
-    const doc = body.ownerDocument;
-    for (let step = 0; step < 2000; step++) {
-      if (doc.querySelector('.game-over-card')) return true;
-      doc.querySelector('[data-testid="bs-actionbar"] .choice-btn')?.click();
-      await new Promise((settle) => setTimeout(settle, 100));
-    }
-    return false;
-  });
-}
+import {
+  assert, check, openTableSample, playTableSampleToTheEnd, runBrowserRegression, summarise,
+} from './browser-harness.mjs';
 
 await runBrowserRegression({ script: 'gameover-scrolled-board-browser.mjs', table: true }, async ({ launch, hostUrl }) => {
   const browser = await launch();
   try {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
-    await page.goto(hostUrl);
-    await page.locator('.dev-host__frame').waitFor({ timeout: 60_000 });
-    const frame = page.frameLocator('.dev-host__frame');
-    await frame.locator('[data-testid="bs-actionbar"] .choice-btn').first().waitFor({ timeout: 60_000 });
+    const frame = await openTableSample(page, hostUrl);
 
     await frame.getByRole('button', { name: 'Game controls' }).click();
     await frame.getByRole('slider', { name: 'Zoom' }).fill('2');
@@ -57,7 +43,7 @@ await runBrowserRegression({ script: 'gameover-scrolled-board-browser.mjs', tabl
       assert(scrolled.left > 0, 'the board region did not scroll');
     });
 
-    const ended = await playToTheEnd(frame);
+    const ended = await playTableSampleToTheEnd(frame);
     await check('the game plays to its end and shows the game-over card', async () => {
       assert(ended, 'the game-over card never appeared');
     });
