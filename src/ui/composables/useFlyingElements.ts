@@ -97,7 +97,7 @@ import { easeOutCubic } from '../../utils/easing.js';
 import { tryUseBoardInteraction } from './useBoardInteraction.js';
 import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
 import { isDevThrowEnabled } from '../../utils/dev.js';
-import { isHiddenPlaceholder } from '../../engine/element/hidden-placeholder.js';
+import { isHiddenPlaceholder, isPositionalPlaceholderId } from '../../engine/element/hidden-placeholder.js';
 import type { SpriteData } from '../utils/image.js';
 
 /**
@@ -941,8 +941,8 @@ export function useFlyingElements(
       const container = elementContainers.get(root.id) ?? null;
 
       // Only track elements that are in tracked containers or have been tracked before.
-      // A negative id is a hidden zone's positional placeholder, so it names no card (#1097).
-      if ((container || elementLocations.has(root.id)) && root.id >= 0) {
+      // A positional placeholder names no card (#1097).
+      if ((container || elementLocations.has(root.id)) && !isPositionalPlaceholderId(root.id)) {
         result.set(root.id, { element: root, container, isHidden: isHiddenPlaceholder(root) });
       }
 

@@ -37,6 +37,7 @@ import { findMatchingChoice, isSerializedElement, oneChoiceListRefusal, oneEleme
 import { numberRuleErrors } from './number-rules.js';
 import { formatRepeatCandidates } from '../element/pick-candidates.js';
 import { placeholderIdsFor } from '../element/seat-placeholders.js';
+import { isPositionalPlaceholderId } from '../element/hidden-placeholder.js';
 import type { ChoiceWithRefs, WarningEntry } from '../../types/protocol.js';
 import { textRuleErrors } from './text-rules.js';
 import { changing } from '../element/state-version.js';
@@ -630,7 +631,7 @@ export class ActionExecutor {
     return (id) => {
       // A direct hit first: a game restored from a seat's view (a bot's search) holds its placeholders as real elements.
       const element = game.getElementById(id);
-      if (element || id >= 0 || !player) return element;
+      if (element || !isPositionalPlaceholderId(id) || !player) return element;
       realIdOf ??= new Map([...placeholderIdsFor(this.game, player.seat)].map(([real, placeholder]) => [placeholder, real]));
       const realId = realIdOf.get(id);
       return realId === undefined ? undefined : game.getElementById(realId);
