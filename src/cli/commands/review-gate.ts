@@ -19,7 +19,9 @@
  *
  * WHAT IS UNDER REVIEW comes from the chunk's run log, `design/run-log/<slug>.md`, never from the
  * caller (#829): the change since the commit the latest review round reviewed (the chunk's verify
- * base before any round), and the role of every dispatch logged since that round.
+ * base before any round), and the role of every dispatch logged since that round. That commit must
+ * be before the one under review and have a passing `verify --chunk <slug>` result on file here, the
+ * one this gate opened for (#1001); chunk-merge copies a chunk's results out of its worktree.
  *
  * THE SIZE RULE (`reviewLevel`). Only a small change made by the mechanical role may skip review or
  * have a light one; everything else is reviewed in full. A change is mechanical only when every
@@ -37,6 +39,7 @@ import {
   type VerifyResult,
   checkoutState,
   readVerifyResult,
+  resultVouchProblem,
   verifiedProblem,
   verifyResultPath,
 } from '../lib/verify-result.js';
@@ -98,7 +101,25 @@ async function sinceCommit(projectDir: string, slug: string, since: { round: str
   }
   const isBefore = await gitSucceeds(projectDir, ['merge-base', '--is-ancestor', commit, head]);
   if (!isBefore) throw refusal;
+  const problem = await roundVerifyProblem(projectDir, slug, commit);
+  if (problem !== undefined) {
+    throw new Error(
+      `design/${RUN_LOG_DIR}/${slug}.md: ${since.round} says it reviewed ${since.commit}, but this checkout has no passing ` +
+        `\`boardsmith verify --chunk ${slug}\` result for that commit, so review-gate never opened for it.\n${problem}\n` +
+        `To record one, with a clean tree run \`git checkout ${short(commit)}\`, run \`npx boardsmith verify --chunk ${slug}\`, ` +
+        `check out your branch again, and run \`boardsmith review-gate ${slug}\` again. chunk-merge copies a chunk's results ` +
+        'from its worktree into the main checkout; a fresh clone has none.',
+    );
+  }
   return commit;
+}
+
+/** Why `commit` has no passing verify result of chunk `slug` on file here (#1001), or undefined when it has one. */
+async function roundVerifyProblem(projectDir: string, slug: string, commit: string): Promise<string | undefined> {
+  const result = await readVerifyResult(projectDir, commit);
+  if (result === undefined) return `No result is on file at ${relative(projectDir, verifyResultPath(projectDir, commit))}.`;
+  if (result === 'unreadable') return `Its result (${relative(projectDir, verifyResultPath(projectDir, commit))}) could not be read.`;
+  return resultVouchProblem(projectDir, result, commit, slug);
 }
 
 /** The chunk's run log, or empty when it has none yet. */

@@ -56,7 +56,8 @@ describe('readBoardsmithVersion', () => {
 describe('boardsmithInstallKind (#942, #1007)', () => {
   /** A BoardSmith package folder at `parts` under a fresh temp tree, with a `.git` when it is a clone. */
   const packageAt = (parts: string[], options: { git: boolean }) => {
-    const dir = join(tempTree('bs-install-kind-'), ...parts);
+    const tree = tempTree('bs-install-kind-');
+    const dir = join(tree, ...parts);
     mkdirSync(join(dir, 'src'), { recursive: true });
     writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'boardsmith', version: '0.0.0' }));
     if (options.git) mkdirSync(join(dir, '.git'));

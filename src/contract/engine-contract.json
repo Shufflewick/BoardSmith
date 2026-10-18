@@ -1,6 +1,6 @@
 {
-  "revision": 244,
-  "surfaceHash": "01f74ea669294216",
+  "revision": 246,
+  "surfaceHash": "7f205bf27a6fcb74",
   "payloadHash": "fd5c5b50c786a8f1",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1892,6 +1892,22 @@
       "revision": 244,
       "date": "2026-10-18",
       "surfaceHash": "01f74ea669294216",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A grid cell hidden from a seat keeps its coordinates in the seat view, so AutoUI can draw boards with hidden cells (#1055)"
+    },
+    {
+      "revision": 245,
+      "date": "2026-10-18",
+      "surfaceHash": "7f205bf27a6fcb74",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "game.pruneMessages({ keepLast: N }) now counts per audience (#1067): each seat, and spectators, keeps its own last N lines and is shown no older ones, so a seat's log after the cut no longer depends on how many private lines other seats got. The stored log is evicted from the front up to the earliest line any audience keeps, so it can hold more than N lines. A new restore-only root field, messagesShownFrom (LogEviction), records each audience's cut while it is past the log's front; no seat's view carries it, and messageOffset now also counts a seat's lines before its cut. A saved game without the field loads as before; no game needs a rebuild."
+    },
+    {
+      "revision": 246,
+      "date": "2026-10-18",
+      "surfaceHash": "7f205bf27a6fcb74",
       "payloadHash": "fd5c5b50c786a8f1",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A seat's view now carries an element whose own grant (addVisibleTo, showOnlyTo, showToAll) shows it to that seat even when it sits below a hidden child of a hidden, count-only or owner-only zone (#961): it arrives as a child of its nearest sent ancestor (the zone, after its placeholders), the containers between are left out, and below such a hidden child only an element's own grant counts, never a zone rule it inherits. isVisibleTo(seat) and message text follow the same rule (a granted card directly in a concealed zone is now named by message text too). A count-only or owner-only zone's children may outnumber its direct children; childCount is unchanged, and getElementCount now prefers it."

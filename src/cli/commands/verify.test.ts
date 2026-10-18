@@ -431,6 +431,39 @@ describe('boardsmith verify --chunk <slug>: the chunk\'s fast checks', () => {
     expect(test.next).toMatch(/boardsmith verify --chunk combat/);
   });
 
+  // #995 ruling: spec writes a chunk's tests, so the steps before it (investigate, redteam, ask) need none of their own.
+  it('passes a chunk with no test of its own while it has only reached the steps before spec, and fails it from spec on', async () => {
+    const dir = await gameOnBranch(false);
+    const chunkMd = '# combat\n\n## Claims\n\n1. A hit costs one health.\n\n## Spec Manifest\n\n| Test File | Claims Covered | RED Observed |\n|---|---|---|\n';
+    await write(dir, { 'design/chunks/combat/CHUNK.md': chunkMd });
+    commitAll(dir, 'chunk-combat/step-investigate');
+
+    const steps: [string, boolean][] = [];
+    for (const step of ['redteam', 'ask', 'spec', 'build']) {
+      const { result } = await runVerify({ projectDir: dir, chunk: 'combat', log: () => {} });
+      steps.push([git(dir, 'log', '-1', '--format=%s').trim(), check(result, 'test').passed]);
+      if (step === 'redteam') {
+        expect(check(result, 'test').summary).toBe(
+          'No test ran: chunk "combat" has only reached the steps before spec (investigate, redteam, ask), and spec writes its tests.',
+        );
+      }
+      await write(dir, { 'design/chunks/combat/CHUNK.md': `${chunkMd}\n<!-- ${step} -->\n` });
+      commitAll(dir, `chunk-combat/step-${step}`);
+    }
+    const { result } = await runVerify({ projectDir: dir, chunk: 'combat', log: () => {} });
+    steps.push([git(dir, 'log', '-1', '--format=%s').trim(), check(result, 'test').passed]);
+
+    expect(steps).toEqual([
+      ['chunk-combat/step-investigate', true],
+      ['chunk-combat/step-redteam', true],
+      ['chunk-combat/step-ask', true],
+      ['chunk-combat/step-spec', false],
+      ['chunk-combat/step-build', false],
+    ]);
+    expect(check(result, 'test').summary).toMatch(/^Chunk "combat" added or changed no test file since its base/);
+    expect(check(result, 'test').next).toMatch(/Write the chunk's tests \(its spec step\).*boardsmith verify --chunk combat/);
+  });
+
   it('passes an exempt chunk with no test of its own on typecheck alone, saying no test ran and why', async () => {
     const dir = await gameOnBranch(false);
     await chunkWithoutTests(dir, '| exempt | a restyle, no rules change | n/a |');
