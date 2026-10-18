@@ -621,7 +621,7 @@ async function verifyResultsOnFile(projectDir: string, commits: string[]): Promi
 }
 
 /** The project's boardsmith.json; a project without one has no `agents` block, so every role is its bs- default. */
-async function projectConfig(projectDir: string): Promise<Record<string, unknown>> {
+async function readProjectConfig(projectDir: string): Promise<Record<string, unknown>> {
   const text = await readIfExists(pathJoin(projectDir, 'boardsmith.json'), (path) => fs.readFile(path, 'utf-8'));
   if (text === undefined) return {};
   try {
@@ -1021,7 +1021,7 @@ export async function ledgerCheck(projectDir: string): Promise<LedgerCheckResult
   }
   // An untracked run log has no commit times: every line of it reads as not committed yet.
   const trackedLogs = await trackedFiles(projectDir, logs.map((log) => `${DESIGN_DIR}/${log}`));
-  const config = logs.length > 0 ? await projectConfig(projectDir) : {};
+  const config = await readProjectConfig(projectDir);
   for (const log of logs) {
     const text = (await readLedger(projectDir, log))!;
     result.checked.push(log);
