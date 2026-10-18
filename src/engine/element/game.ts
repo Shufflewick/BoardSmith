@@ -4060,8 +4060,10 @@ export class Game<
    *
    * @param text - Message text, optionally with `{{key}}` placeholders
    * @param data - Optional data for template substitution. GameElement and Player
-   *               values are automatically converted to their display names; a
-   *               seat that cannot see an element reads its outermost concealer's (#1165).
+   *               values are automatically converted to their display names. A seat
+   *               that cannot see an element reads the nearest container whose name it
+   *               can see (the game's name at the top), fixed when the line is written,
+   *               so write the line after the move it describes (#1165).
    *
    * @example
    * ```typescript
@@ -4336,7 +4338,7 @@ export class Game<
     if (!reading) {
       throw new Error(
         `The game log line "${message.text}" has no text for ${seat === 0 ? 'spectators' : `seat ${seat}`}: it was saved ` +
-          `by an engine older than #1165, or this is another seat's copy of the log. Start a new game to clear it.`
+          `by an older version of the game engine, or this is another seat's copy of the log. Start a new game to clear it.`
       );
     }
     return reading.text;
