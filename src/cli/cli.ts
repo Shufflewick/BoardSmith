@@ -524,7 +524,7 @@ export function createProgram(): Command {
   program
     .command('chunk-merge <slug>')
     .description(
-      "Merge a chunk's branch into the main line, one merge at a time: allocate ledger numbers, re-run every tree-wide check on the combined tree, and record cross-chunk references for the audit",
+      "Merge a chunk's branch into the main line, one merge at a time: allocate ledger numbers, re-run every tree-wide check, then the chunk's tests and typecheck, on the combined tree, and record cross-chunk references for the audit",
     )
     .option('--project <dir>', 'Project directory (defaults to cwd)')
     .option('--branch <name>', "The chunk's branch (defaults to chunk/<slug>)")
