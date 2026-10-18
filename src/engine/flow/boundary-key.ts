@@ -37,7 +37,7 @@
  *
  * ## Material deliberately EXCLUDED, and why
  *
- * - **`position.iterations`** — the `__iter_<depth>` counters of `loop` and
+ * - **`position.iterations`**: the `__iter_<depth>` counters of `loop` and
  *   `repeat` frames. A counter moves only when its loop opens another pass,
  *   which also moves that frame's `path` entry, so it adds nothing `path` does
  *   not already carry. (Until #971 a restore stamped a 0 counter on every

@@ -46,4 +46,20 @@ describe('#971: restore keeps only the iteration counters it saved', () => {
     expect(restored.getFlowState()!.position.iterations).toEqual(saved.position.iterations);
     expect(Object.keys(saved.position.iterations)).toHaveLength(1);
   });
+
+  it('a restored loop keeps counting into its next pass', () => {
+    const live = new NestedGame({ playerCount: 2, seed: 's' });
+    live.startFlow();
+    live.continueFlow('a', {}, 1);
+    live.continueFlow('a', {}, 1);
+
+    const restored = new NestedGame({ playerCount: 2, seed: 's' });
+    restored.startFlow();
+    restored.restoreFlowState(live.getFlowState()!);
+    restored.continueFlow('a', {}, 1);
+    restored.continueFlow('a', {}, 2);
+    restored.continueFlow('a', {}, 2);
+
+    expect(Object.values(restored.getFlowState()!.position.iterations)).toEqual([2]);
+  });
 });
