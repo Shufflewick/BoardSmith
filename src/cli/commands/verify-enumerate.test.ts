@@ -640,6 +640,28 @@ describe('composeArithmeticClaim', () => {
     expect(outcome.ok).toBe(true);
   });
 
+  it('counts operands written right after a letter, as in "7x4x4 = 112" and "x1.5" (#839)', () => {
+    const product = composeArithmeticClaim({
+      derivedLineText: 'Derived (p.3): 7x4x4 = 112 cards.',
+      operation: 'multiply',
+      operands: [
+        groundedNumeric('7 players.', 7, 'cards'),
+        groundedNumeric('4 suits.', 4, 'cards'),
+        groundedNumeric('4 ranks.', 4, 'cards'),
+      ],
+      claimedResult: { magnitude: 112, unit: 'cards', approximate: false },
+    });
+    expect(product.ok).toBe(true);
+
+    const scaled = composeArithmeticClaim({
+      derivedLineText: 'Derived (p.4): damage taken x1.5 over 2 hits (x3).',
+      operation: 'multiply',
+      operands: [groundedNumeric('x1.5 damage.', 1.5, 'damage'), groundedNumeric('2 hits.', 2, 'damage')],
+      claimedResult: { magnitude: 3, unit: 'damage', approximate: false },
+    });
+    expect(scaled.ok).toBe(true);
+  });
+
   it('refuses when computed result does not match the claimed result', () => {
     const derivedLineText = '7 x 4 x 4 = 112 in this text but claim says otherwise: 100.';
     const operands = [

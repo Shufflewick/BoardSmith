@@ -692,10 +692,10 @@ function extractOperandValue(op: GroundedBothFact): ExtractedOperand {
   return { ok: true, value, ...(unitVariance !== undefined ? { unitVariance } : {}) };
 }
 
-/** Whether `text` states `n` as a number of its own, so `1` is not found in `(p.1)`, `10` or `1.5`. */
+/** Whether `text` states `n` as a number of its own, so `1` is not found in `(p.1)`, `10` or `1.5`, but is in `x1`. */
 function mentionsNumber(text: string, n: number): boolean {
   const digits = String(n).replace('.', '\\.');
-  return new RegExp(`(?<![\\w.])${digits}(?!\\.?\\d)`).test(text);
+  return new RegExp(`(?<![\\d.])${digits}(?!\\.?\\d)`).test(text);
 }
 
 export function composeArithmeticClaim(input: {
