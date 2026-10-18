@@ -10,6 +10,7 @@ import { promises as fs } from 'node:fs';
 import { basename, isAbsolute, join, relative, resolve } from 'node:path';
 import { styleText } from 'node:util';
 import { withLedgerLock } from '../lib/ledger-lock.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 import {
   type VerificationScope,
   computeVerificationScope,
@@ -471,12 +472,8 @@ export interface ProvenanceResult {
 
 /** Every `.md` file directly in the project's `rulebook/` — `[]` when there is no such directory. */
 async function rulebookSliceFilenames(projectDir: string): Promise<string[]> {
-  try {
-    const entries = await fs.readdir(designRulebookDir(projectDir), { withFileTypes: true });
-    return entries.filter((e) => e.isFile() && e.name.endsWith('.md')).map((e) => e.name);
-  } catch {
-    return [];
-  }
+  const entries = await readIfExists(designRulebookDir(projectDir), (p) => fs.readdir(p, { withFileTypes: true }));
+  return (entries ?? []).filter((e) => e.isFile() && e.name.endsWith('.md')).map((e) => e.name);
 }
 
 /** Each chunk's `CHUNK.md` text, in `chunkSlugs` order; a chunk directory without one is skipped. */
@@ -484,11 +481,9 @@ async function readChunkTexts(projectDir: string): Promise<Array<{ slug: string;
   const chunksDir = designChunksDir(projectDir);
   const chunks: Array<{ slug: string; chunkText: string }> = [];
   for (const slug of await chunkSlugs(projectDir)) {
-    try {
-      chunks.push({ slug, chunkText: await fs.readFile(join(chunksDir, slug, 'CHUNK.md'), 'utf-8') });
-    } catch {
-      // No CHUNK.md in this directory — not a chunk to scan.
-    }
+    const chunkText = await readIfExists(join(chunksDir, slug, 'CHUNK.md'), (p) => fs.readFile(p, 'utf-8'));
+    // No CHUNK.md in this directory: not a chunk to scan.
+    if (chunkText !== undefined) chunks.push({ slug, chunkText });
   }
   return chunks;
 }
@@ -692,28 +687,26 @@ async function computeRunPairs(
   const warnings: string[] = [];
 
   const rulebookDir = designRulebookDir(projectDir);
-  let ruleFileNames: string[] = [];
-  try {
-    const entries = await fs.readdir(rulebookDir, { withFileTypes: true });
-    ruleFileNames = entries
-      .filter(
-        // ingest-archive.ts's own exclusion: 00-visual-survey.md is presentation-by-design (the
-        // UI-ask handoff artifact), never a rule slice a classifier compares. INDEX.md is the
-        // archive manifest, not a slice either.
-        (e) =>
-          e.isFile() &&
-          e.name.endsWith('.md') &&
-          e.name !== 'INDEX.md' &&
-          e.name !== '00-visual-survey.md',
-      )
-      .map((e) => e.name)
-      .sort();
-  } catch {
+  const entries = await readIfExists(rulebookDir, (p) => fs.readdir(p, { withFileTypes: true }));
+  if (entries === undefined) {
     throw new Error(
       `No rulebook/ directory in ${projectDir}.\n` +
         `A verify pass compares against an existing rulebook — nothing to pair here.`,
     );
   }
+  const ruleFileNames = entries
+    .filter(
+      // ingest-archive.ts's own exclusion: 00-visual-survey.md is presentation-by-design (the
+      // UI-ask handoff artifact), never a rule slice a classifier compares. INDEX.md is the
+      // archive manifest, not a slice either.
+      (e) =>
+        e.isFile() &&
+        e.name.endsWith('.md') &&
+        e.name !== 'INDEX.md' &&
+        e.name !== '00-visual-survey.md',
+    )
+    .map((e) => e.name)
+    .sort();
   const liveSlices = await Promise.all(
     ruleFileNames.map(async (name) => ({
       path: `rulebook/${name}`,

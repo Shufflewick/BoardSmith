@@ -39,6 +39,7 @@ import {
 } from './build-manifest.js';
 import { CHUNK_MD, designChunksDir, requireChunkSlugs } from '../lib/project-paths.js';
 import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 
 /**
  * Closes T-172-01: a hand-edited `## Verified Commit Hash` is untrusted input reaching a git
@@ -136,12 +137,7 @@ export interface DriftCheckResult {
 }
 
 async function fileExists(absPath: string): Promise<boolean> {
-  try {
-    await fs.stat(absPath);
-    return true;
-  } catch {
-    return false;
-  }
+  return (await readIfExists(absPath, fs.stat)) !== undefined;
 }
 
 /**
@@ -203,12 +199,8 @@ export async function driftCheckCommand(
   }
 
   for (const slug of slugs) {
-    let chunkText: string;
-    try {
-      chunkText = await fs.readFile(join(chunksDir, slug, CHUNK_MD), 'utf-8');
-    } catch {
-      continue; // a chunks/<slug> dir with no CHUNK.md is not this command's problem to report
-    }
+    const chunkText = await readIfExists(join(chunksDir, slug, CHUNK_MD), (p) => fs.readFile(p, 'utf-8'));
+    if (chunkText === undefined) continue; // a chunks/<slug> dir with no CHUNK.md is not this command's problem to report
 
     const manifest = parseBuildManifest(chunkText);
     for (const rowIndex of manifest.pathlessRowIndexes) {

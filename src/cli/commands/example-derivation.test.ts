@@ -886,6 +886,15 @@ describe('collectGameApiSurface — reads the source as TypeScript does (#372)',
 
     await expect(collectGameApiSurface(projectDir)).rejects.toThrow(/No tsconfig\.json in /);
   });
+
+  it('names a tsconfig.json it cannot look at rather than calling it missing (#1174)', async () => {
+    await writeParsedFixtureProject(projectDir, { 'index.ts': ['export function kept(): void {}'] });
+    const config = join(projectDir, 'tsconfig.json');
+    await fs.rm(config);
+    await fs.symlink(config, config);
+
+    await expect(collectGameApiSurface(projectDir)).rejects.toThrow(`Could not read ${config} (ELOOP)`);
+  });
 });
 
 /**

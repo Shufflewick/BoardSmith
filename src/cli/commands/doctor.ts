@@ -138,6 +138,7 @@ async function exists(path: string): Promise<boolean> {
     await fs.stat(path);
     return true;
   } catch {
+    // A health check: something it cannot look at is not a finding, and a fix that needs it fails on its own.
     return false;
   }
 }
@@ -221,6 +222,7 @@ async function strandedScratchFindings(projectDir: string): Promise<DoctorFindin
   try {
     rootEntries = await fs.readdir(projectDir, { withFileTypes: true });
   } catch {
+    // A health check: a root it cannot list has no stranded scripts to report.
     rootEntries = [];
   }
   const findings: DoctorFinding[] = [];

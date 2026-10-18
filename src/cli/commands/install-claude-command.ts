@@ -20,6 +20,7 @@ import { ROLES, defaultAgentType } from '../lib/agent-roles.js';
 import { boardsmithPackageRoot } from '../lib/boardsmith-version.js';
 import { filesContentHash } from '../lib/hash.js';
 import { listFiles } from '../lib/source-files.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 
 interface InstallOptions {
   force?: boolean;
@@ -176,6 +177,7 @@ function expectedInstallPaths(targetDir: string): string[] {
  * installed an earlier version would keep the stale skill until they thought to pass `--force`.
  */
 async function isFullyInstalled(targetDir: string, sourceHash: string): Promise<boolean> {
+  // Any failure below means "install again", which rewrites the piece or fails naming it.
   for (const path of expectedInstallPaths(targetDir)) {
     try {
       await fs.access(path);
@@ -190,12 +192,8 @@ async function isFullyInstalled(targetDir: string, sourceHash: string): Promise<
     return false; // No stamp → an unstamped or partial install
   }
   for (const skillName of RETIRED_SKILL_NAMES) {
-    try {
-      await fs.access(join(targetDir, skillName));
-      return false; // A retired skill is still on disk → not a current install
-    } catch {
-      // Absent, as it should be.
-    }
+    // A retired skill still on disk, even one that cannot be followed, is not a current install.
+    if ((await readIfExists(join(targetDir, skillName), fs.lstat)) !== undefined) return false;
   }
   return true;
 }
@@ -406,11 +404,7 @@ export async function uninstallClaudeCommand(options: { local?: boolean } = {}):
   // bs-shared/ namespace and the role agents). Never a generic top-level name like
   // `templates`/`build`, so uninstall cannot wipe an unrelated user skill or agent that shares it.
   for (const itemPath of ownedPaths(targetDir)) {
-    try {
-      await fs.access(itemPath);
-    } catch {
-      continue; // Doesn't exist, skip
-    }
+    if ((await readIfExists(itemPath, fs.lstat)) === undefined) continue; // Doesn't exist, skip
     await fs.rm(itemPath, { recursive: true, force: true });
     console.log(styleText('gray', `  Removed: ${itemPath}`));
     removedAny = true;

@@ -15,7 +15,7 @@
  * eleven suites that needed them used to hand-copy (#238).
  */
 import { describe, it, expect, beforeAll } from 'vitest';
-import { rmSync, existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync, cpSync, symlinkSync } from 'node:fs';
+import { rmSync, existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync, cpSync, symlinkSync, lstatSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -318,6 +318,26 @@ describe('installClaudeCommand — retires bs-generate-bot (issue #16)', () => {
     for (const name of SKILL_NAMES) {
       expect(existsSync(join(skills.root, name))).toBe(false);
     }
+  });
+});
+
+describe('installClaudeCommand — a retired skill it cannot look at is still removed (#1174)', () => {
+  const skills = installedSkillsTree('bs-install-retired-loop-');
+
+  it('a plain reinstall removes a leftover bs-generate-bot that links to itself', async () => {
+    const retired = join(skills.root, 'bs-generate-bot');
+    rmSync(retired, { force: true });
+    symlinkSync(retired, retired);
+    await installClaudeCommand({ local: true, skipLink: true });
+    expect(() => lstatSync(retired)).toThrow(/ENOENT/);
+  });
+
+  it('uninstall removes an owned path that links to itself', async () => {
+    const retired = join(skills.root, 'bs-generate-bot');
+    rmSync(retired, { force: true });
+    symlinkSync(retired, retired);
+    await uninstallClaudeCommand({ local: true });
+    expect(() => lstatSync(retired)).toThrow(/ENOENT/);
   });
 });
 
