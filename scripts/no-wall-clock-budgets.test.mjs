@@ -18,10 +18,12 @@
  * destructured at any depth from a literal or a variable, by declaration or
  * assignment, class field, object property, or the return of a function
  * declaration, method or getter. An array `push`ed a duration holds one, and
- * so does each element a for-of or an element callback (`forEach`, `map`, ...)
- * takes from it (#1130). A property is judged by its own value, not by
- * what else its object holds; an array element taken from a variable rather
- * than a literal takes the whole array. TypeScript's checker resolves
+ * so does each element a for-of or an element callback (`forEach`, `map`, ...,
+ * inline or by name, and `reduce`'s second parameter) takes from it (#1130,
+ * #1157). A property is judged by its own value, not by what else its object
+ * holds, including one read from an element of an array variable (#1157); `.length`
+ * is a count. An array element destructured from a variable rather than a
+ * literal takes the whole array. TypeScript's checker resolves
  * each name to the declaration it refers to, so shadowing follows the
  * language's own scope rules rather than a copy of them.
  *
@@ -83,7 +85,9 @@ const declaredValue = (node) => (HAS_VALUE.some((is) => is(node)) ? node.initial
 const RETURNS = [ts.isFunctionDeclaration, ts.isMethodDeclaration, ts.isGetAccessorDeclaration];
 const isCompound = (kind) => kind >= ts.SyntaxKind.FirstCompoundAssignment && kind <= ts.SyntaxKind.LastCompoundAssignment;
 
-const ELEMENT_CALLBACKS = ['forEach', 'map', 'flatMap', 'filter', 'find', 'some', 'every'];
+/** The array methods that hand a callback each element, and which of its parameters takes it. */
+const ELEMENT_PARAMETER = new Map([...['forEach', 'map', 'flatMap', 'filter', 'find', 'some', 'every'].map((name) => [name, 0]),
+  ['reduce', 1], ['reduceRight', 1]]);
 const EXPECTS = ['expect', 'expect.soft', 'vi.expect', 'vi.expect.soft'];
 /** Every `expect(...)` in a source whose subject measures a clock difference, with any matcher. */
 const wallClockBudgets = (source, fileName) => scanForBudgets(source, fileName).budgets;
@@ -160,17 +164,27 @@ function scanForBudgets(source, fileName = 'scanned.ts') {
     const target = ts.isVariableDeclarationList(initializer) ? initializer.declarations[0].name : initializer;
     return unpack(target, elementsAt([expression], 0, true));
   };
+  /** The function `node` is or names: an inline function, a function declaration, or a variable holding one. */
+  const functionAt = (node) => {
+    const value = bare(node);
+    const declaration = ts.isIdentifier(value) ? checker.getSymbolAtLocation(value)?.valueDeclaration : value;
+    const fn = declaration && ts.isVariableDeclaration(declaration) ? declaration.initializer && bare(declaration.initializer) : declaration;
+    return fn && ts.isFunctionLike(fn) ? fn : undefined;
+  };
   /**
    * The array methods the checker cannot resolve without a standard library: `arr.push(v)` gives `arr` the value `v`,
-   * and an element callback (`arr.forEach((x) => ...)`) gives its first parameter each element of `arr`.
+   * and an element callback, inline or by name, gives its element parameter each element of `arr` (the first, or the
+   * second for `reduce`, whose first takes the start value and what the callback returns).
    */
   const arrayCallAssignments = (call) => {
     if (!ts.isPropertyAccessExpression(call.expression)) return [];
     const { expression: array, name } = call.expression;
     if (name.text === 'push') return unpack(array, call.arguments);
-    const callback = call.arguments[0] && bare(call.arguments[0]);
-    if (!ELEMENT_CALLBACKS.includes(name.text) || !callback || !ts.isFunctionLike(callback) || !callback.parameters[0]) return [];
-    return unpack(callback.parameters[0].name, elementsAt([array], 0, true));
+    const callback = ELEMENT_PARAMETER.has(name.text) && call.arguments[0] && functionAt(call.arguments[0]);
+    const element = callback && callback.parameters[ELEMENT_PARAMETER.get(name.text)];
+    if (!element) return [];
+    const total = name.text.startsWith('reduce') ? unpack(callback.parameters[0].name, [...call.arguments.slice(1, 2), ...returnsOf(callback)]) : [];
+    return [...unpack(element.name, elementsAt([array], 0, true)), ...total];
   };
   /** `x = v` gives `x` the value `v`; `x += v` gives it the whole expression. */
   const binaryAssignments = (node) => {
@@ -222,14 +236,18 @@ function scanForBudgets(source, fileName = 'scanned.ts') {
    */
   const readsDuration = (access) => {
     if (checker.getSymbolAtLocation(access.name)) return holds(durations, access.name);
-    const base = bare(access.expression);
+    // A count, whatever the array or string it is read from holds.
+    return access.name.text !== 'length' && readsProperty(bare(access.expression), access.name.text);
+  };
+  /** Whether property `key` read through `base` holds a duration; a value that is itself a name, such as an element taken from an array variable, is read through in turn. */
+  const readsProperty = (base, key) => {
     if (!ts.isMemberName(base)) return measures(base);
-    const key = access.name.text;
     const bindings = bindingsAt(base).filter((binding) => !reading.get(binding)?.has(key));
     bindings.forEach((binding) => reading.set(binding, (reading.get(binding) ?? new Set()).add(key)));
     reads += bindings.length;
-    const values = bindings.flatMap((binding) => valuesOf.get(binding) ?? []);
-    return memberOf(values, key).some(measures);
+    const values = bindings.flatMap((binding) => valuesOf.get(binding) ?? []).map(bare);
+    return values.some((value) => ts.isMemberName(value) && readsProperty(value, key))
+      || memberOf(values.filter((value) => !ts.isMemberName(value)), key).some(measures);
   };
 
   const clockVars = bindingsOf(assignments.filter(({ value }) => isClockRead(value)));
@@ -642,6 +660,46 @@ describe('wallClockBudgets', () => {
       'for (const n of [1, 2]) calls.push(n);',
       'calls.forEach((c) => expect(c).toBeLessThan(5));',
       'expect(Math.max(...calls)).toBeLessThan(5);',
+    ].join('\n');
+    expect(wallClockBudgets(source)).toEqual([]);
+  });
+
+  it('finds a duration taken by an element callback passed by name (#1157)', () => {
+    const pushed = 'const ds = [];\nds.push(Date.now() - s);';
+    const helpers = {
+      'a function declaration': 'function check(x) { expect(x).toBeLessThan(5); }',
+      'a const arrow': 'const check = (x) => { expect(x).toBeLessThan(5); };',
+    };
+    for (const [form, helper] of Object.entries(helpers)) {
+      expect(wallClockBudgets(`${helper}\n${pushed}\nds.forEach(check);`), form).toHaveLength(1);
+      expect(wallClockBudgets(`${helper}\nconst t0 = Date.now();\n[1, 2].forEach(check);`), form).toEqual([]);
+    }
+  });
+
+  it('finds a duration taken by reduce as its element or its running total (#1157)', () => {
+    const pushed = 'const ds = [];\nds.push(Date.now() - s);';
+    const element = 'ds.reduce((total, d) => { expect(d).toBeLessThan(5); return total + d; }, 0);';
+    const total = 'ds.reduce((total, d) => { expect(total).toBeLessThan(5); return total + d; }, 0);';
+    expect(wallClockBudgets(`${pushed}\n${element}`)).toHaveLength(1);
+    expect(wallClockBudgets(`${pushed}\n${total}`)).toHaveLength(1);
+    const counts = 'const t0 = Date.now();\n[1, 2].reduce((total, c) => { expect(c).toBe(1); return total + c; }, 0);';
+    expect(wallClockBudgets(counts)).toEqual([]);
+  });
+
+  it('judges a property of a pushed object by its own value, and an array length as a count (#1157)', () => {
+    const records = "const rs = [];\nrs.push({ ms: Date.now() - s, name: 'a' });";
+    expect(wallClockBudgets(`${records}\nfor (const r of rs) expect(r.name).toBe('a');`)).toEqual([]);
+    expect(wallClockBudgets(`${records}\nrs.forEach((r) => expect(r.name).toBe('a'));`)).toEqual([]);
+    expect(wallClockBudgets(`${records}\nfor (const r of rs) expect(r.ms).toBeLessThan(5);`)).toHaveLength(1);
+    expect(wallClockBudgets('const ds = [];\nds.push(Date.now() - s);\nexpect(ds.length).toBe(1);')).toEqual([]);
+    // A `length` the file itself declares is judged by its own value, not taken for a count.
+    expect(wallClockBudgets('const o = { length: Date.now() - s };\nexpect(o.length).toBeLessThan(5);')).toHaveLength(1);
+  });
+
+  it('judges the same array name per scope, durations in one function and counts in another (#1157)', () => {
+    const source = [
+      'function timed() { const xs = []; xs.push(Date.now() - s); record(xs); }',
+      'function counted() { const xs = []; xs.push(3); for (const x of xs) expect(x).toBe(3); expect(Math.max(...xs)).toBe(3); }',
     ].join('\n');
     expect(wallClockBudgets(source)).toEqual([]);
   });
