@@ -156,6 +156,7 @@ const OP_SENDER: Record<Op['type'], 'seat' | 'host'> = {
   debugTransfer: 'seat',
   debugShuffle: 'seat',
   debugDeckView: 'seat',
+  debugDeckViewAt: 'seat',
   restoreEarlier: 'host',
   startTutorial: 'seat',
   exitTutorial: 'seat',
