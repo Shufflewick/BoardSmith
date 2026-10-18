@@ -352,7 +352,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // Use fill/start/clear to keep collectedPicks snapshot and args in sync.
   const currentArgs = ref<Record<string, unknown>>({});
   const exposedCurrentArgs = readonly(currentArgs);
-  const isExecuting = ref(false);
+  // Per seat, so a seat change neither inherits nor clears another seat's request in flight (#1155).
+  const executingSeats = ref(new Set<number>());
+  const isExecuting = computed(() => executingSeats.value.has(playerSeat?.value ?? 0));
   const lastError = ref<string | null>(null);
 
   // UIX-01 (CR-01): monotonic failure signal. Vue refs only trigger watchers on
@@ -1648,9 +1650,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * its error and followUp are not shown to or started for the new one.
    */
   async function sendAndResolve(actionName: string, args: Record<string, unknown>, seq: number): Promise<ControllerActionResult> {
-    isExecuting.value = true;
-    lastError.value = null;
     const seat = playerSeat?.value ?? 0;
+    executingSeats.value.add(seat);
+    lastError.value = null;
     const sameSeat = (): boolean => (playerSeat?.value ?? 0) === seat;
 
     try {
@@ -1677,7 +1679,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       resolveAction(actionName, seat, { success: false, error });
       return { success: false, error };
     } finally {
-      isExecuting.value = false;
+      executingSeats.value.delete(seat);
     }
   }
 
