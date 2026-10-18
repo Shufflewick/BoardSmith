@@ -160,9 +160,9 @@ export function acceptedFromScan(scan: DupesScan): AcceptedDupes {
     lines: group.line_count,
     files: [...new Set(group.instances.map((instance) => instance.file))].sort(),
   }));
-  accepted.sort(
-    (a, b) => a.content.localeCompare(b.content) || a.files.join('|').localeCompare(b.files.join('|')),
-  );
+  // Code-unit order, not localeCompare, so every machine writes the same file (#853).
+  const byCodeUnits = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
+  accepted.sort((a, b) => byCodeUnits(a.content, b.content) || byCodeUnits(a.files.join('|'), b.files.join('|')));
   return { accepted };
 }
 
