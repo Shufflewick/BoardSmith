@@ -278,6 +278,21 @@ describe('GameShell board error boundary and the zoom fit (#1154)', () => {
     await switchToBig();
     expect(zoom()).toBe('0.5');
   });
+
+  it('a UI picked after the player set the zoom by hand re-fits when the region later resizes (#1163)', async () => {
+    const { zoom, zoomByHand, switchToBig } = await mountBoard(ThrowingBoard);
+    await relayout('board and region');
+    await settle();
+    zoomByHand(1.5);
+    await nextTick();
+    await switchToBig();
+    await settle();
+    expect(zoom()).toBe('0.5');
+
+    Object.assign(region, { width: 1200, height: 900 });
+    await relayout('board and region');
+    expect(zoom()).toBe('0.75');
+  });
 });
 
 describe('BoardErrorBoundary in production', () => {

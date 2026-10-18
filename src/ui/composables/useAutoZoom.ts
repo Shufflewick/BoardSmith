@@ -114,7 +114,7 @@ export function useAutoZoom(options: {
   const pinnedBoards = provideBoardRegionPin();
 
   /** True once the user has manually zoomed (the slider). While true, the
-   *  persistent available-space re-fit is a no-op — `fitZoom()` clears it. */
+   *  persistent available-space re-fit is a no-op — `fitZoom()` and a new board clear it. */
   let userControlled = false;
 
 
@@ -174,6 +174,8 @@ export function useAutoZoom(options: {
   watch([boardEl, boardUi], ([el]) => {
     endStartup();
     startupDone = false;
+    // The fresh fit replaces any hand-set zoom, so later resizes re-fit the new board (#1163).
+    userControlled = false;
     if (el && typeof ResizeObserver !== 'undefined') {
       boardObserver = new ResizeObserver(onBoardResize);
       boardObserver.observe(el); // observe() always fires an initial callback
