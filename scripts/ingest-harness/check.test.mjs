@@ -312,3 +312,20 @@ describe('gaps-reconciliation (e2) — partial fills inside intact fences', () =
     expect(e2.detail).toMatch(/not built purely from the slice markers/);
   });
 });
+
+describe('stated check counts', () => {
+  // #1077: the README and run.mjs spell the counts out in prose, and they went stale when a check joined.
+  const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen'];
+  const COUNT = new RegExp(`\\b(${WORDS.join('|')})(?:\\s+|-)(produced-artifact checks|checks|row|pass)\\b`, 'g');
+
+  it.each(['README.md', 'run.mjs'])('%s states CHECK_IDS.length produced-artifact checks, plus one for gate item (g)', (file) => {
+    const text = fs.readFileSync(path.join(__dirname, file), 'utf8');
+    const stated = [...text.matchAll(COUNT)].map(([phrase, word, kind]) => ({
+      phrase: phrase.replace(/\s+/g, ' '),
+      count: WORDS.indexOf(word),
+      expected: kind === 'produced-artifact checks' ? CHECK_IDS.length : CHECK_IDS.length + 1,
+    }));
+    expect(stated.length).toBeGreaterThan(0);
+    expect(stated.filter((s) => s.count !== s.expected).map((s) => s.phrase)).toEqual([]);
+  });
+});

@@ -15,9 +15,10 @@ import { assertBareName } from '../lib/user-name.js';
 import { testRunScopeProblem } from '../lib/test-run-scope.js';
 import { extractSection, parseRulings, stripHtmlComments } from './build-manifest.js';
 import { ENTRY_NUMBER, entryHeadingPattern } from '../lib/ledger-entries.js';
-import { escapeRegExp } from '../lib/regexp.js';
+import { escapeRegExp } from '../../utils/regexp.js';
 import { toolCommand } from '../lib/run-tool.js';
 import { shortQuoteProblem } from '../lib/quote-length.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 
 /**
  * `boardsmith constraint-check [slug]`: does the project hold its own hard constraints (#288)?
@@ -394,7 +395,7 @@ export const runVitest: TestRunner = async (projectDir, files) => {
       child.on('error', (error) => done({ ok: false, output: error.message }));
       child.on('close', (code) => done({ ok: code === 0, output: text }));
     });
-    const reportText = await fs.readFile(reportPath, 'utf-8').catch(() => undefined);
+    const reportText = await readIfExists(reportPath, (path) => fs.readFile(path, 'utf-8'));
     return { ok, output, ran: testFilesInReport(reportText, await fs.realpath(projectDir)) };
   } finally {
     await fs.rm(reportDir, { recursive: true, force: true });

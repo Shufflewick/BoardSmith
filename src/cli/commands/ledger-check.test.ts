@@ -425,6 +425,17 @@ describe('ledgerCheck — the whole project', () => {
     expect(located((await ledgerCheck(dir)).findings)).toEqual(['src/x.ts:provisional-on-main-line']);
   });
 
+  it('passes over a link to a folder, and refuses a file it cannot read rather than finding no citation in it (#1049)', async () => {
+    const dir = await project({ 'RULINGS.md': ruling(1) });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    await fs.mkdir(join(dir, 'src'), { recursive: true });
+    await fs.symlink('../design', join(dir, 'src', 'design-link'));
+    expect(located((await ledgerCheck(dir)).findings)).toEqual([]);
+
+    await fs.writeFile(join(dir, 'src', 'x.ts'), '// Decisions 2 and @a.1\n', { mode: 0o000 });
+    await expect(ledgerCheck(dir)).rejects.toThrow(`Could not read ${join(dir, 'src', 'x.ts')} (EACCES)`);
+  });
+
   it('accepts provisional ids in a chunk\'s own worktree, where a parallel branch writes them', async () => {
     const dir = await project({ 'RULINGS.md': ruling(1) });
     commitAt(dir, '2026-09-23T12:00:00Z');

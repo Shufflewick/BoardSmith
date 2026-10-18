@@ -72,7 +72,7 @@ import { Action } from "../engine/index.js";
 import type {
   ActionContext,
   ActionDefinition,
-  ActionResult,
+  ExecuteResult,
   ChoiceBoardRefs,
   ElementRef,
   Game,
@@ -146,12 +146,14 @@ export interface WorldFacilities {
    * SAY WHAT JUST HAPPENED, AND WHERE.
    *
    * A world's narration is its routed events. `scope` is either the reserved
-   * `"world"` -- everybody in this world -- or the NAME OF A PARTITION, whose
-   * audience is the seats that can see it. That narrowing is what makes a
-   * broadcast cost what the room costs rather than what the world contains, and
-   * it is why a world action emits rather than calling `game.message()`: the
-   * message log lives outside every partition, so nothing ever checkpoints it
-   * and nobody who was not connected would see it.
+   * `"world"` -- everybody in this world -- or the NAME OF A PARTITION this
+   * action declared in `needs()`, whose audience is the seats that can see it.
+   * That narrowing is what makes a broadcast cost what the room costs rather
+   * than what the world contains, and it is why a world action emits rather
+   * than calling `game.message()`: the message log lives outside every
+   * partition, so nothing ever checkpoints it and nobody who was not connected
+   * would see it. Any other scope is refused with `undeclared-partition`,
+   * loaded or not (#933).
    *
    * Who can see a scope is the ENGINE's answer and not the game's: an action
    * says where something happened, and the world is what decides who was there.
@@ -1319,12 +1321,12 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * added.
    */
   execute(
-    fn: (args: A, context: WorldActionContext<G>) => ActionResult | void,
+    fn: (args: A, context: WorldActionContext<G>) => ExecuteResult | void,
   ): ActionDefinition {
     const handler = fn as unknown as (
       args: A,
       context: WorldActionContext<G> | WorldClockContext<G>,
-    ) => ActionResult | void;
+    ) => ExecuteResult | void;
     return this.inner.execute(((args: Record<string, unknown>, context: AnyContext) =>
       handler(
         args as A,
@@ -1423,10 +1425,10 @@ export class WorldClockAction<G extends Game = Game> {
   }
 
   execute(
-    fn: (args: Record<string, unknown>, context: WorldClockContext<G>) => ActionResult | void,
+    fn: (args: Record<string, unknown>, context: WorldClockContext<G>) => ExecuteResult | void,
   ): ActionDefinition {
     return this.action.execute(
-      fn as unknown as (args: NoArgs, context: WorldActionContext<G>) => ActionResult | void,
+      fn as unknown as (args: NoArgs, context: WorldActionContext<G>) => ExecuteResult | void,
     );
   }
 }

@@ -653,6 +653,19 @@ describe('useWorldHost — the world narrating (#331)', () => {
     expect(host.events.value).toEqual([]);
   });
 
+  it('counts the lines it drops from a full tail, and starts again for a new seat (#1066)', () => {
+    const host = make();
+    deliver(host, stateFrame({ seat: 3 }));
+    for (let n = 0; n < WORLD_NARRATION_KEPT + 6; n += 1) {
+      // Only every other event is a line; the log numbers lines, not events.
+      narrate(host, [{ scope: 'seat:3', payload: { n }, ...(n % 2 === 0 ? { text: `line ${n}` } : {}) }]);
+    }
+    expect(host.linesDropped.value).toBe(3);
+
+    deliver(host, stateFrame({ seat: 7 }));
+    expect(host.linesDropped.value).toBe(0);
+  });
+
   it('keeps the log through a re-push of the state to the same seat', () => {
     const host = make();
     deliver(host, stateFrame({ seat: 3 }));

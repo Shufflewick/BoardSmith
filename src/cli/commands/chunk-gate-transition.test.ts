@@ -359,3 +359,23 @@ describe('recordGateTransition: the transition records chunks as done, so it nee
     await expect(fs.access(join(project, 'design', GATE_TRANSITION_MD))).rejects.toThrow();
   });
 });
+
+describe('recordGateTransition — a file it cannot read is refused, never read as missing (#1049)', () => {
+  it('refuses a Build Manifest file it cannot read, rather than hashing it as missing', async () => {
+    const project = await makeProject([{ slug: 'deal', manifest: { 'src/deal.ts': 'v1' } }]);
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: SIGNED });
+    await makeWholeFileSignoff(project, 'deal', wholeFileHash({ 'src/deal.ts': 'v1' }));
+    await fs.rm(join(project, 'src/deal.ts'));
+    await fs.symlink('deal.ts', join(project, 'src/deal.ts'));
+
+    await expect(transition({ project, by: 'Jane Designer', now: NOW })).rejects.toThrow(`Could not read ${join(project, 'src/deal.ts')} (ELOOP)`);
+  });
+
+  it('refuses a CHUNK.md it cannot read, rather than passing over the chunk', async () => {
+    const project = await makeProject([{ slug: 'deal', status: 'verified', preGate: true }]);
+    await fs.rm(chunkPath(project, 'deal'));
+    await fs.symlink('CHUNK.md', chunkPath(project, 'deal'));
+
+    await expect(transition({ project, by: 'Jane Designer', now: NOW })).rejects.toThrow(`Could not read ${chunkPath(project, 'deal')} (ELOOP)`);
+  });
+});

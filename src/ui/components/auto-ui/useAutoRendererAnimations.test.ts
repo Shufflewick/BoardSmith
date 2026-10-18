@@ -11,7 +11,7 @@
  * useAutoRendererAnimations is a plain function — no component mounting required.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { ref, nextTick } from 'vue';
+import { ref, nextTick, effectScope } from 'vue';
 import { createAnimationEvents, type UseAnimationEventsReturn } from '../../composables/useAnimationEvents.js';
 import type { AnimationEvent } from '../../../engine/index.js';
 import { useAutoRendererAnimations } from './useAutoRendererAnimations.js';
@@ -91,6 +91,26 @@ describe('useAutoRendererAnimations', () => {
     await waitForIdle(instance);
 
     expect(fly).toHaveBeenCalledOnce();
+  });
+
+  it('unregisters its handlers when its scope is disposed, so an unmounted overlay is never flown', async () => {
+    const events = ref<AnimationEvent[]>([]);
+    const instance = createAnimationEvents({ events: () => events.value, handlerWaitTimeout: 0 });
+    const fly = createFlyStub();
+    const scope = effectScope();
+    scope.run(() => useAutoRendererAnimations(instance, { fly }));
+    scope.stop();
+
+    const rect = { x: 0, y: 0, width: 50, height: 70, top: 0, left: 0, right: 50, bottom: 70 };
+    events.value = [
+      createEvent(1, 'deal', { sourceRect: rect, destinationRect: rect }),
+      createEvent(2, 'reveal', { sourceRect: rect, destinationRect: rect }),
+    ];
+
+    await nextTick();
+    await waitForIdle(instance);
+
+    expect(fly).not.toHaveBeenCalled();
   });
 
   // ---------------------------------------------------------------------------

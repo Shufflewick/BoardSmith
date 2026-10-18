@@ -27,7 +27,7 @@
       "content": "30138a2100b37a20",
       "lines": 11,
       "files": [
-        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
+        "src/ui/components/auto-ui/renderers/CardBack.vue",
         "src/ui/components/auto-ui/renderers/HandRenderer.vue"
       ]
     },
@@ -44,6 +44,14 @@
       "lines": 15,
       "files": [
         "src/ui/composables/useFLIP.ts"
+      ]
+    },
+    {
+      "content": "47c61f6daca7a39b",
+      "lines": 26,
+      "files": [
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue",
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue"
       ]
     },
     {
@@ -165,14 +173,6 @@
       ]
     },
     {
-      "content": "acb2e8b5b4423ed8",
-      "lines": 26,
-      "files": [
-        "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue",
-        "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue"
-      ]
-    },
-    {
       "content": "b05c8e271786b50b",
       "lines": 20,
       "files": [
@@ -187,13 +187,6 @@
       "files": [
         "src/ui/components/auto-ui/renderers/HandRenderer.vue",
         "src/ui/components/auto-ui/renderers/SpaceRenderer.vue"
-      ]
-    },
-    {
-      "content": "b8843bcd1232e798",
-      "lines": 29,
-      "files": [
-        "src/ui/components/auto-ui/useAutoRendererAnimations.ts"
       ]
     },
     {
@@ -263,14 +256,6 @@
       "lines": 9,
       "files": [
         "src/ui/composables/useFLIP.ts"
-      ]
-    },
-    {
-      "content": "fd899edcd7857c9a",
-      "lines": 40,
-      "files": [
-        "src/ui/composables/useGameGrid.ts",
-        "src/ui/composables/useHexGrid.ts"
       ]
     }
   ]

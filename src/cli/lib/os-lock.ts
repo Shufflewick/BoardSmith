@@ -20,6 +20,7 @@
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { once } from 'node:events';
+import { readIfExists } from './read-if-exists.js';
 
 export interface OsLock {
   /** Drops the lock and its holder note. */
@@ -43,7 +44,7 @@ function isRunning(pid: number): boolean {
 /** Who holds the lock at `file`, as its holder recorded itself, and how to check on it. */
 async function describeHolder(file: string, command: string): Promise<string> {
   const wait = `Only one ${command} runs at a time. Wait for it to finish, then run ${command} again.`;
-  const note = await fs.readFile(`${file}.holder`, 'utf-8').catch(() => undefined);
+  const note = await readIfExists(`${file}.holder`, (path) => fs.readFile(path, 'utf-8'));
   const field = (name: string) => (note === undefined ? undefined : new RegExp(`^${name}: (.*)$`, 'm').exec(note)?.[1]);
   const pid = Number(field('pid'));
   if (note === undefined || !Number.isInteger(pid) || pid <= 0) {

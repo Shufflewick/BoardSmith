@@ -206,9 +206,9 @@ describe('assertStateBudget (#504)', () => {
     expect(message).toContain('checkpoints: { max }');
   });
 
-  it('refuses a budget that is not a positive whole number of bytes', () => {
-    for (const budget of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, 1.5]) {
-      expect(() => assertStateBudget(size, budget)).toThrow(/budget/);
-    }
+  it.each([0, -1, Number.NaN, Number.POSITIVE_INFINITY, 1.5])('refuses a budget of %s, saying where to look (#1047)', (budget) => {
+    expect(() => assertStateBudget(size, budget)).toThrow(
+      `assertStateBudget's budgetBytes takes a positive whole number, got "${budget}". Check where the test reads the budget from.`,
+    );
   });
 });

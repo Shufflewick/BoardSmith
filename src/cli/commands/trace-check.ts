@@ -34,6 +34,7 @@ import {
   requireChunkSlugs,
 } from '../lib/project-paths.js';
 import { ENTRY_NUMBER } from '../lib/ledger-entries.js';
+import { listFiles } from '../lib/source-files.js';
 
 // -------------------------------------------------------------------------------------------
 // scanTestCitations
@@ -208,26 +209,6 @@ function pushFinding(findings: Finding[], counts: Record<FindingKind, number>, f
   counts[f.kind]++;
 }
 
-/** Recursively collects every `*.test.ts` file under `dir`, returning absolute paths. */
-async function walkTestFiles(dir: string): Promise<string[]> {
-  const out: string[] = [];
-  async function walk(current: string): Promise<void> {
-    let entries: Array<{ name: string; isDirectory(): boolean; isFile(): boolean }>;
-    try {
-      entries = await fs.readdir(current, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      const full = join(current, entry.name);
-      if (entry.isDirectory()) await walk(full);
-      else if (entry.isFile() && entry.name.endsWith('.test.ts')) out.push(full);
-    }
-  }
-  await walk(dir);
-  return out;
-}
-
 /** POSIX-style path relative to `projectDir`, for stable comparison against manifest paths. */
 function relPosix(projectDir: string, absPath: string): string {
   return relative(projectDir, absPath).split(sep).join('/');
@@ -302,7 +283,7 @@ export async function traceCheckCommand(
 
   // --- Test-file discovery: tests/**/*.test.ts, plus manifest-listed paths ending .test.ts. ---
   const testsDir = join(projectDir, 'tests');
-  const walked = await walkTestFiles(testsDir);
+  const walked = listFiles(testsDir, { sourceTree: true, suffixes: ['.test.ts'] });
   const discovered = new Map<string, string>(); // relPosix path -> absolute path
   for (const abs of walked) discovered.set(relPosix(projectDir, abs), abs);
 

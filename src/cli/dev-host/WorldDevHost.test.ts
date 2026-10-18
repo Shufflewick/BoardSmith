@@ -168,6 +168,12 @@ describe('#167: the world chrome identifies itself and asks for state', () => {
     wrapper.unmount();
   });
 
+  it('names its page load in hello, so the host answers only the load that asked (#1099)', async () => {
+    const wrapper = await open();
+    expect(frames('hello')[0]!.loadId).toEqual(expect.any(String));
+    wrapper.unmount();
+  });
+
   it('uses a different key from the table host, since one browser plays both', async () => {
     const wrapper = await open();
     expect(localStorage.getItem('boardsmith:dev-client-id')).toBeNull();

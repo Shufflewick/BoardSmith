@@ -588,3 +588,29 @@ describe("#798 — a read answers only for an offered action", () => {
     expect(quote).toEqual(["closed price"]);
   });
 });
+
+/**
+ * #1129: A COMMAND FOR AN ACTION WHOSE CONDITION IS FALSE IS REFUSED BEFORE ITS
+ * DISABLED RULE RUNS, as the offer drops it before asking. The rule is written
+ * on the understanding that the condition guards it, so it may read what only
+ * a true condition makes safe to read.
+ */
+describe("#1129 — a command checks the condition before the disabled rule", () => {
+  it("refuses as unavailable and never runs the disabled rule", async () => {
+    const calls: string[] = [];
+    const guarded = worldAction<FleetGame>("guarded")
+      .needs(() => [FLEET])
+      .condition({ "never offered": () => (calls.push("condition"), false) })
+      .disabled(() => {
+        calls.push("disabled");
+        throw new Error("the disabled rule ran without its condition");
+      })
+      .execute(() => {});
+    const engine = await engineFor(guarded);
+
+    await expect(
+      engine.applyCommand("player-a", { name: "guarded", args: {} }, COMMAND_STAMP),
+    ).rejects.toThrow(/^Action is not available$/);
+    expect(calls).toEqual(["condition"]);
+  });
+});

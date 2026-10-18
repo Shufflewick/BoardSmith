@@ -238,6 +238,23 @@ describe('driftCheckCommand', () => {
     expect(finding?.detail).toContain(firstSha);
   });
 
+  it('a manifest file with non-ASCII letters that changed since the verified hash is reported drifted (#1113)', async () => {
+    const { repoDir } = await twoCommitRepo();
+    await fs.mkdir(join(repoDir, 'règles'));
+    await fs.writeFile(join(repoDir, 'règles/a.ts'), 'v1\n');
+    execSync('git add -A', { cwd: repoDir, stdio: 'ignore' });
+    execSync('git -c user.email=t@t -c user.name=t commit -m rules', { cwd: repoDir, stdio: 'ignore' });
+    const rulesSha = execSync('git rev-parse HEAD', { cwd: repoDir }).toString().trim();
+    await fs.writeFile(join(repoDir, 'règles/a.ts'), 'v2\n');
+    await makeChunk(repoDir, 'rules-chunk', { hash: rulesSha, manifestRows: [{ files: 'règles/a.ts', status: 'NEW' }] });
+    execSync('git add -A', { cwd: repoDir, stdio: 'ignore' });
+    execSync('git -c user.email=t@t -c user.name=t commit -m edit', { cwd: repoDir, stdio: 'ignore' });
+
+    const chunk = (await driftCheckCommand({ project: repoDir })).chunks.find((c) => c.chunk === 'rules-chunk');
+    expect(chunk?.state).toBe('drifted');
+    expect(chunk?.changedFiles).toEqual(['règles/a.ts']);
+  });
+
   it.each(['./kept.txt', '../kept.txt'])(
     'a manifest row written %s still detects the change git reports as kept.txt (#822)',
     async (row) => {

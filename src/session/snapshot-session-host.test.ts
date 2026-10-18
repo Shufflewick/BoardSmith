@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Game, Player, Action, actionStep, loop, type GameOptions } from '../engine/index.js';
 import type { Annotation } from '../engine/index.js';
 import type { BotStrategy } from '../bot/types.js';
+import type { GameStateSnapshot } from '../runtime/index.js';
 import { executeOp, type GameDefinitionLike, type ExecutableOp, type Op, type OpResult } from './stateless-ops.js';
 import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
 import { BotGame, botGameDef, botGameOptions } from './testing/fixtures/bot-game-fixture.js';
@@ -371,7 +372,9 @@ describe('SnapshotSessionHost', () => {
         await host.start();
         botCallCount = 0; // start() pumps once on its own — measure only the restore.
 
-        await host.handleOp(1, { type: opType, player: 1, actionIndex: 0, snapshot: {} } as Op);
+        // restoreEarlier is host-only (#1102): the host sends it through its own entry point.
+        if (opType === 'restoreEarlier') await host.restoreEarlier({} as GameStateSnapshot);
+        else await host.handleOp(1, { type: opType, player: 1, actionIndex: 0 } as Op);
         await host.settled();
 
         expect(botCallCount).toBeGreaterThan(0);

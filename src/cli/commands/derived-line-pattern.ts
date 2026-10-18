@@ -8,7 +8,7 @@
  * missed by others — exactly the drift class this milestone keeps closing. Every consumer now
  * imports THIS ONE regex rather than re-spelling it.
  *
- * Deliberately isolated in its own file, importing only the leaf `lib/regexp.ts`: `verify-derive-check.ts` imports
+ * Deliberately isolated in its own file, importing only the leaf `utils/regexp.ts`: `verify-derive-check.ts` imports
  * `verify-classify.ts`, which imports `chunk-provenance.ts`, which imports `ingest-archive.ts` —
  * so `ingest-archive.ts` importing `DERIVED_LINE_RE` directly from `verify-derive-check.ts`
  * would close a circular import (`ingest-archive` → `verify-derive-check` → `verify-classify` →
@@ -16,7 +16,7 @@
  * time in whichever file loads second. Routing every consumer through this leaf module avoids the
  * cycle entirely.
  */
-import { escapeRegExp } from '../lib/regexp.js';
+import { escapeRegExp } from '../../utils/regexp.js';
 
 export const DERIVED_LINE_RE = /^Derived \(p\.[^)]*\)/i;
 
