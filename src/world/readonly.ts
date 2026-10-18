@@ -190,7 +190,7 @@ function refuseBuiltinCall(subject: object, property: string | symbol): never {
     `A read-only view of this world cannot call "${String(property)}" on a ${kind}: it is not one of the ` +
       "built-in reads a world callback may call, and anything else might change the object. Use a read " +
       "such as get, has, keys, values, entries, forEach or size, or, if the call changes state, move it " +
-      "into the command's run().",
+      "into the command's run() (or, from a migration's survey.root(), into its partition() hook).",
   );
 }
 
