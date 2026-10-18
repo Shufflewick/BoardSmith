@@ -1007,11 +1007,16 @@ describe('ActionPanel large element-id-anchored choice picks (#341)', () => {
     }));
   }
 
-  function mountPiecePick(choices: ChoiceWithRefs[]) {
+  function mountPiecePick(
+    choices: ChoiceWithRefs[],
+    pick: Record<string, unknown> = {},
+    overrides: Record<string, unknown> = {},
+  ) {
     const controller = stubActionController({
       currentAction: ref('recruit'),
-      currentPick: ref({ name: 'piece', type: 'choice', prompt: 'Choose a piece to recruit' }),
+      currentPick: ref({ name: 'piece', type: 'choice', prompt: 'Choose a piece to recruit', ...pick }),
       currentChoices: ref(choices),
+      ...overrides,
     });
     return mountWithBoard(controller, createBoardInteraction());
   }
@@ -1025,6 +1030,19 @@ describe('ActionPanel large element-id-anchored choice picks (#341)', () => {
     expect(handoff.attributes('aria-label')).toContain('3720 options');
     expect(wrapper.findAll('.choice-btn:not(.board-handoff-btn)')).toHaveLength(0);
     expect(wrapper.text()).toContain('Choose a piece to recruit');
+  });
+
+  // #935: id refs are not split out as anchored, so the Add buttons must be hidden by the handoff itself.
+  it('shows only the handoff, not every Add button, for an ordered list handed to the board', () => {
+    const wrapper = mountPiecePick(pieces(50), { orderedList: { min: 1, max: 4 } }, {
+      multiSelectDraft: ref({ selectionName: 'piece', values: ['p3'] }),
+    });
+
+    expect(wrapper.find('.board-handoff-btn').exists()).toBe(true);
+    expect(wrapper.findAll('.ordered-list-add')).toHaveLength(0);
+    expect(wrapper.find('.ordered-list-label').text()).toBe('Piece 3');
+    expect(wrapper.findAll('.ordered-list-remove')).toHaveLength(1);
+    expect(wrapper.find('.done-button').exists()).toBe(true);
   });
 
   it('keeps every button when two candidates name the same element', () => {
