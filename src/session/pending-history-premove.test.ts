@@ -242,8 +242,8 @@ describe('a pending action records its picks where they were before the action (
     expect(host.snapshot!.actionHistory.map((entry) => 'name' in entry && entry.name)).toEqual(['stow']);
   });
 
-  it('records what a pick callback moved before it threw, since the move stays', () => {
-    const live = new GameRunner(options);
+  it('records what a pick callback moved before it threw, where the move stays with checkpoints off', () => {
+    const live = new GameRunner({ ...options, checkpoints: { enabled: false } });
     live.start();
 
     live.startPendingAction('jostle', 1);
@@ -251,5 +251,17 @@ describe('a pending action records its picks where they were before the action (
     expect(live.processSelectionStep(1, 'tokens', idOf(live.game, 'second')).error).toBeUndefined();
 
     expect(live.actionHistory).toEqual([{ name: 'jostle', player: 1, args: argsBefore(['tokens', 'tokens']) }]);
+  });
+
+  it('undoes a pick callback that moved a token and threw, and its note of where the token was (#1169)', () => {
+    const live = new GameRunner(options);
+    live.start();
+    const before = places(live.game);
+
+    live.startPendingAction('jostle', 1);
+    expect(live.processSelectionStep(1, 'tokens', idOf(live.game, 'first')).error).toMatch(/"jostle" action could not be/);
+
+    expect(places(live.game)).toEqual(before);
+    expect(live.getPendingAction(1)?.branchesBeforePicks).toEqual({});
   });
 });

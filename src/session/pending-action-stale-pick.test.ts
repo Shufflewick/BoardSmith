@@ -134,7 +134,7 @@ function runner(): GameRunner<GemGame> {
 const gem = (r: GameRunner<GemGame>) => r.game.first(Gem, 'gem')!;
 
 describe('GameRunner', () => {
-  it("refuses a pending action once another seat's action took an earlier pick, and fires onCancel", () => {
+  it("refuses a pending action once another seat's action took an earlier pick, and keeps it open to cancel (#1169)", () => {
     const r = runner();
     r.startPendingAction('draft', 1);
     expect(r.processSelectionStep(1, 'gem', gem(r).id).success).toBe(true);
@@ -143,7 +143,8 @@ describe('GameRunner', () => {
     const step = r.processSelectionStep(1, 'slot', 'left');
 
     expect(step).toMatchObject({ success: false, error: NO_LONGER_AVAILABLE });
-    expect(r.game.ran).toEqual(['onSelect', 'grab:2', 'onCancel']);
+    expect(r.game.ran).toEqual(['onSelect', 'grab:2']);
+    expect(r.getPendingAction(1)?.actionName).toBe('draft');
     expect(gem(r).parent!.name).toBe('tableau-2');
     expect(historyLabels(r.actionHistory)).toEqual(['grab:2']);
   });
@@ -203,7 +204,7 @@ describe('GameRunner', () => {
     expect(r.game.ran).toEqual(['grab:2']);
   });
 
-  it("refuses a pending action once another seat's action took its element pick off the offer without moving it", () => {
+  it("refuses a pending action once another seat's action took its element pick off the offer without moving it, and keeps it open (#1169)", () => {
     const r = runner();
     r.startPendingAction('draft', 1);
     expect(r.processSelectionStep(1, 'gem', gem(r).id).success).toBe(true);
@@ -212,7 +213,8 @@ describe('GameRunner', () => {
     const step = r.processSelectionStep(1, 'slot', 'left');
 
     expect(step).toMatchObject({ success: false, error: NO_LONGER_AVAILABLE });
-    expect(r.game.ran).toEqual(['onSelect', 'onCancel']);
+    expect(r.game.ran).toEqual(['onSelect']);
+    expect(r.getPendingAction(1)?.actionName).toBe('draft');
     expect(gem(r).parent!.name).toBe('supply');
   });
 

@@ -373,11 +373,6 @@
         "count": 1
       }
     },
-    "src/session/pending-action-manager.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/session/snapshot-session-host.ts": {
       "complexity_high": {
         "count": 1
