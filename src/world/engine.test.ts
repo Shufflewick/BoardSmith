@@ -2840,11 +2840,11 @@ describe("#1170: a command cannot move a partition root", () => {
       for (const token of ctx.game.room("room-one").all(Token)) token.putInto(ctx.game.room("room-two"));
     });
 
-  function rootMoveEngine(): BoardSmithWorldEngine {
+  function rootMoveEngine(stored = genesis()): BoardSmithWorldEngine {
     return new BoardSmithWorldEngine({
       game: newWorldGame(),
       seats: new Map([["player-a", 1]]),
-      store: new CountingStore(genesis()),
+      store: new CountingStore(stored),
       actions: [nestRoom, pocketRoom, emptyRoom],
       view: () => [ROOM_ONE, ROOM_TWO],
     });
@@ -2854,7 +2854,8 @@ describe("#1170: a command cannot move a partition root", () => {
     (state.children ?? []).filter((child) => child.className === "Room").map((child) => child.name!);
 
   it.each(["nestRoom", "pocketRoom"])("%s is refused as a game-owned rules error that says what to do", async (name) => {
-    const engine = rootMoveEngine();
+    const stored = genesis();
+    const engine = rootMoveEngine(stored);
 
     const refusal = await engine
       .applyCommand("player-a", { name, args: {} }, STAMP)
@@ -2867,6 +2868,9 @@ describe("#1170: a command cannot move a partition root", () => {
     );
     const view = (await engine.viewFor("player-a")) as { state: ElementJSON };
     expect(topLevelRooms(view.state)).toEqual(["room-one", "room-two"]);
+    // The old bug showed at the checkpoint: room two written holding room one, which the next wake undid.
+    const written = await engine.serializePartitions([ROOM_ONE, ROOM_TWO]);
+    for (const name of [ROOM_ONE, ROOM_TWO]) expect(JSON.parse(written[name]!)).toEqual(stored.get(name)!.json);
   });
 
   it("still moves what is inside a partition root", async () => {

@@ -1549,9 +1549,9 @@ carries what a board reads inline, so `holding.player` says everything it ever
 said. And there was nothing else on those elements to carry -- a player is in no
 partition, so nothing checkpoints a write to one. **Do not keep world state on a
 `Player`;** put it in a partition, exactly as the candidate rule above already
-requires. The one exception is a player a NAMED PARTITION was adopted
-underneath, which survives wherever the game put it, because dropping the player
-would drop the room.
+requires. No player can hold a room, either: every partition root and every
+player hangs directly from the game (#795, #1170), so dropping the roster never
+drops a partition.
 
 **Which is what lets a whole audience be told in one answer.** Nothing in a view
 says who is looking -- no seat number, no roster -- so two seats whose
