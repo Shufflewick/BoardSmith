@@ -49,18 +49,9 @@ describe('resolvePieceVisual', () => {
     expect((result as { kind: 'image'; src: string }).src).toBe('http://x/p.png');
   });
 
-  it('returns kind:sprite when $images.face is a sprite object — uses its own width/height, NOT 238/333', () => {
-    const piece = buildPiece({
-      $images: { face: { sprite: 's.png', x: 40, y: 80, width: 40, height: 40 } },
-    });
-    const result = resolvePieceVisual(piece);
-    expect(result.kind).toBe('sprite');
-    const s = result as { kind: 'sprite'; sprite: string; x: number; y: number; width: number; height: number };
-    expect(s.sprite).toBe('s.png');
-    expect(s.x).toBe(40);
-    expect(s.y).toBe(80);
-    expect(s.width).toBe(40);
-    expect(s.height).toBe(40);
+  it('returns kind:sprite with the parsed sprite when $images.face is a sprite object', () => {
+    const face = { sprite: 's.png', x: 40, y: 80, width: 40, height: 40, sheetWidth: 200, sheetHeight: 120 };
+    expect(resolvePieceVisual(buildPiece({ $images: { face } }))).toEqual({ kind: 'sprite', image: { type: 'sprite', ...face } });
   });
 
   it('returns kind:token with player.color when no $images is present', () => {

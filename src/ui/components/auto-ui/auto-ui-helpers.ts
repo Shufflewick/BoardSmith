@@ -6,6 +6,7 @@
  */
 import type { InjectionKey } from 'vue';
 import type { ElementRef } from '../../composables/useBoardInteraction.js';
+import { parseImageInfo, type ImageInfo } from '../../utils/image.js';
 
 // ---------------------------------------------------------------------------
 // GameElement: the element shape every auto-UI module reads (dependency-free)
@@ -27,7 +28,7 @@ export const STANDS_ON_KEY: InjectionKey<() => ElementRef | undefined> = Symbol(
 // ---------------------------------------------------------------------------
 export type PieceVisual =
   | { kind: 'image'; src: string }
-  | { kind: 'sprite'; sprite: string; x: number; y: number; width: number; height: number }
+  | { kind: 'sprite'; image: Extract<ImageInfo, { type: 'sprite' }> }
   | { kind: 'token'; color: string; label: string };
 
 // ---------------------------------------------------------------------------
@@ -41,8 +42,7 @@ export type GridResult =
 // resolvePieceVisual
 //
 // Reads element.attributes.$images and returns a render-ready discriminated
-// union. Piece sprites use their own width/height — do NOT fall back to
-// card-native constants (which are only correct for cards, not pieces).
+// union. A sprite is drawn with getSpriteStyle, filling the piece's CSS box (#1020).
 // ---------------------------------------------------------------------------
 export function resolvePieceVisual(element: GameElement): PieceVisual {
   const attrs = element.attributes ?? {};
@@ -53,43 +53,11 @@ export function resolvePieceVisual(element: GameElement): PieceVisual {
     return { kind: 'image', src: images };
   }
 
-  // Object: look for .face key (card convention reused for pieces per D-04)
+  // Object: .face is a URL or a sprite descriptor (card convention reused for pieces per D-04)
   if (images !== null && typeof images === 'object') {
-    const imagesObj = images as Record<string, unknown>;
-    const face = imagesObj['face'];
-
-    // .face is a plain URL string
-    if (typeof face === 'string') {
-      return { kind: 'image', src: face };
-    }
-
-    // .face is a sprite-sheet descriptor object
-    if (face !== null && typeof face === 'object') {
-      const s = face as {
-        sprite?: string;
-        x?: number;
-        y?: number;
-        width?: number;
-        height?: number;
-      };
-      if (
-        s.sprite &&
-        typeof s.x === 'number' &&
-        typeof s.y === 'number' &&
-        typeof s.width === 'number' &&
-        typeof s.height === 'number'
-      ) {
-        // Use the sprite object's own width/height — not card-native dimensions (Pitfall 5)
-        return {
-          kind: 'sprite',
-          sprite: s.sprite,
-          x: s.x,
-          y: s.y,
-          width: s.width,
-          height: s.height,
-        };
-      }
-    }
+    const face = parseImageInfo((images as Record<string, unknown>).face);
+    if (face?.type === 'url') return { kind: 'image', src: face.src };
+    if (face?.type === 'sprite') return { kind: 'sprite', image: face };
   }
 
   // No image — return colored token (D-05)
