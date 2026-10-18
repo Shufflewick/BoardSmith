@@ -629,7 +629,8 @@ describe('installClaudeCommand — SKILL_NAMES has one source of truth (structur
 
 describe('skillSourceFiles — what the source hash reads (#1048)', () => {
   function sources(): string {
-    const dir = join(tempTree('bs-skill-sources-'), 'slash-command');
+    const tree = tempTree('bs-skill-sources-');
+    const dir = join(tree, 'slash-command');
     cpSync(join(REPO_ROOT, 'src', 'cli', 'slash-command'), dir, { recursive: true });
     return dir;
   }
