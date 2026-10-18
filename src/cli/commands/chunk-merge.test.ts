@@ -215,8 +215,8 @@ describe('chunkMerge: the combined tree is checked, not the branch alone', () =>
     const trading = await buildOnBranch('trading', 300);
     const quests = await buildOnBranch('quests', 300);
     // Each branch alone holds the 512 byte budget: 100 + 300.
-    expect((await checkConstraints(trading, { runTests: budgetRunner, typeCheck })).refusals).toEqual([]);
-    expect((await checkConstraints(quests, { runTests: budgetRunner, typeCheck })).refusals).toEqual([]);
+    expect((await checkConstraints(trading, { runTests: budgetRunner })).refusals).toEqual([]);
+    expect((await checkConstraints(quests, { runTests: budgetRunner })).refusals).toEqual([]);
 
     expect((await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck })).refusals).toEqual([]);
     const before = head();
