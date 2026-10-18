@@ -2679,9 +2679,18 @@ export class Game<
       };
     }
 
-    // A refused action is not a new batch, so only an action that runs clears the buffer.
-    this._animationEvents = [];
-    return this._actionExecutor.executeAction(action, player, args, options);
+    // A refused action is not a new batch, so the buffer is cleared only once
+    // the checks accept the submission (#1128). A repeating pick changes the
+    // game while it is checked, so that action's batch starts before its picks.
+    if (this._actionExecutor.hasRepeatingSelections(action)) {
+      this._animationEvents = [];
+      return this._actionExecutor.executeAction(action, player, args, options);
+    }
+    const onAccepted = (accepted: Record<string, unknown>): void => {
+      options?.onAccepted?.(accepted);
+      this._animationEvents = [];
+    };
+    return this._actionExecutor.executeAction(action, player, args, { ...options, onAccepted });
   }
 
   // ============================================

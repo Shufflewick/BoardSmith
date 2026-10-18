@@ -738,7 +738,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   ): ActionExecutionResult | { entry: SerializedAction | undefined } {
     const action = this.game.getAction(actionName);
     const repeating = action !== undefined && this.game.getActionExecutor().hasRepeatingSelections(action);
-    const unencodable = this.unencodableRefusal(actionName, player, args);
+    const unencodable = this.unencodableRefusal(actionName, player, action, args);
     if (!repeating && !unencodable) return { entry: undefined };
     if (!acceptsSubmission(this.game, actionName, player.seat, args)) return unencodable ?? { entry: undefined };
     return { entry: repeating ? this.serializeForHistory(actionName, player, args) : undefined };
@@ -752,11 +752,11 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   private unencodableRefusal(
     actionName: string,
     player: Player,
+    action: ActionDefinition | undefined,
     args: Record<string, unknown>
   ): ActionExecutionResult | undefined {
-    const actionDef = this.game.getAction(actionName);
     try {
-      serializeAction(actionName, player, actionDef ? new ActionExecutor(this.game).picksOf(actionDef, args) : args, this.game);
+      serializeAction(actionName, player, action ? this.game.getActionExecutor().picksOf(action, args) : args, this.game);
       return undefined;
     } catch (error) {
       if (!(error instanceof Error)) throw error;

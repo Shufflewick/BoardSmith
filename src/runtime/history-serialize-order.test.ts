@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { Action, Game, Player, simultaneousActionStep, type GameOptions } from '../engine/index.js';
+import { Action, Game, Piece, Player, Space, actionStep, loop, simultaneousActionStep, type GameOptions } from '../engine/index.js';
 import { createSnapshot } from './index.js';
 import { GameRunner } from './runner.js';
 import { TestGame } from '../testing/test-game.js';
@@ -179,5 +179,60 @@ describe('history is encoded only for a submission its checks accept (#1128)', (
       /^Action 'scavenge' ran, but the same picks were refused when they were checked on a copy of the game/,
     );
     expect(target.actionHistory).toEqual([]);
+  });
+});
+
+/** Crates in a yard: `stow` picks two, and the first pick's onSelect carries it to the shed, moving the second up the yard. */
+class Crate extends Piece<StowGame> {}
+
+class StowGame extends Game<StowGame, Player> {
+  yard!: Space<StowGame>;
+  shed!: Space<StowGame>;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.yard = this.create(Space, 'yard');
+    this.shed = this.create(Space, 'shed');
+    this.yard.create(Crate, 'first');
+    this.yard.create(Crate, 'second');
+    // Left in the yard, so stow is still offered after the move.
+    this.yard.create(Crate, 'third');
+    this.registerAction(
+      Action.create<StowGame>('stow')
+        .chooseElement<Crate>('crate', {
+          elementClass: Crate,
+          from: (ctx) => ctx.game.yard,
+          onSelect: (crate) => crate.putInto(this.shed),
+        })
+        .chooseElement<Crate>('next', { elementClass: Crate, from: (ctx) => ctx.game.yard })
+        .execute((args, ctx) => {
+          (args.next as Crate).putInto(ctx.game.shed);
+          return { success: true };
+        }),
+    );
+    this.setFlow({
+      root: loop({ maxIterations: 10, do: actionStep({ actions: ['stow'], player: (ctx) => ctx.game.getPlayer(1)! }) }),
+    });
+  }
+}
+
+describe('history records where the picks were before the move (#1128)', () => {
+  it('encodes each element at its place before any onSelect moved it, so the history replays to the same game', () => {
+    const stowOptions = { GameClass: StowGame, gameType: 'stow', gameOptions: { playerCount: 2, seed: 'stow' } };
+    const live = new GameRunner(stowOptions);
+    live.start();
+    const [first, second] = live.game.yard.all(Crate);
+    const before = { crate: first.branch(), next: second.branch() };
+
+    expect(live.performAction('stow', 1, { crate: first.id, next: second.id }).error).toBeUndefined();
+    expect(second.branch()).not.toBe(before.next);
+
+    expect(live.actionHistory[0]).toMatchObject({
+      args: { crate: { __elementRef: before.crate }, next: { __elementRef: before.next } },
+    });
+    const replayed = GameRunner.replay(stowOptions, live.actionHistory);
+    const places = (game: StowGame) => [game.yard, game.shed].map((space) => space.all(Crate).map((crate) => crate.name));
+    expect(places(live.game)).toEqual([['third'], ['first', 'second']]);
+    expect(places(replayed.game)).toEqual(places(live.game));
   });
 });
