@@ -186,8 +186,10 @@ interface SnapshotFields {
    * `state`/`flowState` so `restoreGame`/`restoreFlowState` can relink an
    * element-typed flow variable that pointed at a now-hidden element to its
    * correct redacted placeholder instead of leaving a dead serialized marker.
-   * Always absent on the default (un-redacted) `createSnapshot` path — those
-   * callers keep real ids throughout, so no remap is ever needed.
+   * Present on every redacted snapshot, even when empty, because its presence
+   * is what lets a restore relink a missing element to its concealing ancestor
+   * (#947). Always absent on the default (un-redacted) `createSnapshot` path —
+   * those callers keep real ids throughout, so no remap is ever needed.
    */
   hiddenIdRemap?: Map<number, number>;
 }
@@ -543,7 +545,7 @@ export function createSnapshot(
     state: opts?.forSeat !== undefined
       ? game.toJSONForPlayer(opts.forSeat, hiddenIdRemap)
       : game.toJSON(),
-    ...(hiddenIdRemap && hiddenIdRemap.size > 0 && { hiddenIdRemap }),
+    ...(hiddenIdRemap && { hiddenIdRemap }),
   };
 }
 

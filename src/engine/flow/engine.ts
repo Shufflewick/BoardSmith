@@ -137,11 +137,13 @@ function encodeFlowValue(value: unknown): unknown {
  *
  * @param idRemap - CR-02 (159): the `originalId -> syntheticId` map
  *   `Game.toJSONForPlayer` produces for a per-seat REDACTED clone (e.g. the MCTS
- *   bot's search sandbox). A fungible hidden-zone child is anonymized to a
- *   synthetic id there, so a marker holding its ORIGINAL id resolves through the
- *   remap to the (still-redacted) placeholder. Failing that, a marker that
- *   recorded its outermost concealing ancestor (WR-01, #726) resolves to that
- *   ancestor, which every viewer already sees.
+ *   bot's search sandbox), passed exactly when restoring one, even if empty.
+ *   A fungible hidden-zone child is anonymized to a synthetic id there, so a
+ *   marker holding its ORIGINAL id resolves through the remap to the
+ *   (still-redacted) placeholder. Failing that, a marker that recorded its
+ *   outermost concealing ancestor (WR-01, #726) resolves to that ancestor,
+ *   which every viewer already sees. Without it (a full restore) neither
+ *   fallback applies (#947).
  * @param name - The flow slot holding the marker, for the error.
  * @throws When nothing resolves: the element is gone from the game, and handing
  *   the rules a marker object where they expect an element would fail later
@@ -155,11 +157,14 @@ function resolveFlowElement(
 ): GameElement {
   const live = game.getElementById(marker.__flowElementId);
   if (live && live.constructor.name === marker.className) return live;
-  const syntheticId = idRemap?.get(marker.__flowElementId);
-  const resolved =
-    (syntheticId !== undefined ? game.getElementById(syntheticId) : undefined) ??
-    (marker.__hiddenContainerId !== undefined ? game.getElementById(marker.__hiddenContainerId) : undefined);
-  if (resolved) return resolved;
+  // A full restore holds every element the marker was written against, so a miss there is a real mismatch (#947).
+  if (idRemap) {
+    const syntheticId = idRemap.get(marker.__flowElementId);
+    const resolved =
+      (syntheticId !== undefined ? game.getElementById(syntheticId) : undefined) ??
+      (marker.__hiddenContainerId !== undefined ? game.getElementById(marker.__hiddenContainerId) : undefined);
+    if (resolved) return resolved;
+  }
   throw new Error(
     `Flow ${name} references element id ${marker.__flowElementId} (${marker.className}), but it no longer ` +
     `exists in the game: it is neither in the tree nor in game.pile. An element the flow holds must stay in ` +
