@@ -84,6 +84,16 @@ describe('GameStateSnapshot', () => {
       expect(snapshot.actionHistory).toHaveLength(1);
       expect(snapshot.actionHistory[0]).toMatchObject({ name: 'test' });
     });
+
+    it('always carries an id remap on a seat snapshot, even an empty one, and never on a full one (#947)', () => {
+      // A restore relinks a missing element only when handed this map, so a seat copy must never lose it.
+      // Nothing hidden, so nothing is renumbered and the map is empty.
+      const open = new TestGame({ playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'open' });
+      const seat = createSnapshot(open, 'test-game', [], undefined, { forSeat: 1, reseed: 'sandbox' });
+      expect(seat.hiddenIdRemap).toBeInstanceOf(Map);
+      expect(seat.hiddenIdRemap!.size).toBe(0);
+      expect(createSnapshot(open, 'test-game').hiddenIdRemap).toBeUndefined();
+    });
   });
 
   describe('createSnapshot records winners (#536)', () => {

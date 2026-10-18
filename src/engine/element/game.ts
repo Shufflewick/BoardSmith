@@ -3360,8 +3360,9 @@ export class Game<
    *   by `toJSONForPlayer`) for callers restoring a REDACTED clone. Lets an
    *   element-typed flow variable that pointed at a now-anonymized hidden-zone
    *   child relink to its correct redacted placeholder instead of being left as a
-   *   dead serialized marker. Absent for the default (un-redacted) restore path —
-   *   behavior there is unchanged.
+   *   dead serialized marker. Pass it exactly when restoring a redacted clone,
+   *   even if empty: only then may a missing element relink to its concealing
+   *   ancestor. Absent (a full restore), a missing element throws (#947).
    */
   restoreFlowState(state: FlowState, idRemap?: Map<number, number>): void {
     if (!this._flowDefinition) {
