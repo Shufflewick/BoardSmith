@@ -784,6 +784,24 @@ describe('verifyExampleRecordCommand — record', () => {
     );
   });
 
+  it('records an example under the slice\'s rulebook/ path when --slice-path starts with ./ (#839)', async () => {
+    const project = await makeProject({ 'rulebook/02-punch.md': SLICE_TEXT });
+    const extractionPath = await writeExtraction('extraction.json', [
+      extractionEntry({ lineNumber: 2, sourceText: 'If you are punched while READY, you become EXHAUSTED.' }),
+    ]);
+    const translationPath = await writeTranslations('translations.json', [translationEntry({ lineNumber: 2 })]);
+
+    await verifyExampleRecordCommand({
+      project,
+      slicePath: './rulebook/02-punch.md',
+      extraction: extractionPath,
+      translations: translationPath,
+    });
+
+    const recorded = await readExampleReplayVerdicts(project);
+    expect(recorded.map((r) => r.exampleId)).toEqual(['rulebook/02-punch.md:2']);
+  });
+
   // -----------------------------------------------------------------------------------------
   // CR-03 (178-REVIEW.md) — `lineNumber` is model-controlled input; it must be cross-validated
   // against buildExampleExtractionPayload's own retained-line set for the slice BEFORE it is
@@ -1863,6 +1881,18 @@ describe('verifyExampleTranslateCommand — translate', () => {
         extraction: extractionPath,
       }),
     ).rejects.toThrow(/rulebook/);
+  });
+
+  it('names an example by the slice\'s rulebook/ path, however --slice-path spells it (#839)', async () => {
+    const project = await makeProject();
+    const extractionPath = await writeExtraction('extraction.json', [extractionEntry()]);
+
+    const result = await verifyExampleTranslateCommand({
+      project,
+      slicePath: './rulebook/../rulebook/02-punch.md',
+      extraction: extractionPath,
+    });
+    expect(result.payloads[0].exampleId).toBe('rulebook/02-punch.md:2');
   });
 
   it('each emitted exampleId deep-equals workedExampleId for its own entry, unaffected by changing the model-supplied text', async () => {

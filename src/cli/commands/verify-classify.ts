@@ -245,7 +245,7 @@ function spansOverlap(a: PageSpan, b: PageSpan): boolean {
  */
 export function livePageSpan(sliceText: string): PageSpan | undefined {
   const pages: number[] = [];
-  const citationRe = /p\.(\d+)/g;
+  const citationRe = /\bp\.(\d+)/g;
   let match: RegExpExecArray | null;
   while ((match = citationRe.exec(sliceText)) !== null) {
     pages.push(Number(match[1]));

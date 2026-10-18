@@ -6,7 +6,7 @@ import {
 import type { Role } from '../lib/agent-roles.js';
 import { promises as fs } from 'node:fs';
 import { readIfExists } from '../lib/read-if-exists.js';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { styleText } from 'node:util';
 import { atomicWriteFile } from './verify-run.js';
 import { withLedgerLock } from '../lib/ledger-lock.js';
@@ -1274,12 +1274,15 @@ export function parseSubagentJsonInput(
  * `design/` — so this resolves against the DESIGN directory and requires the result stay inside
  * `design/rulebook`, BEFORE any read. Mirrors `verify-classify.ts`'s `--live-slice` guard
  * (T-174-14).
+ *
+ * Returns the slice's text with its canonical `rulebook/<file>` path, the ledger key, so
+ * `./rulebook/x.md` and `rulebook/x.md` name one record.
  */
 export async function readSliceArgument(
   projectDir: string,
   slicePath: string,
   command: string,
-): Promise<string> {
+): Promise<{ slicePath: string; text: string }> {
   const rulebookDir = designRulebookDir(projectDir);
   const sliceAbsPath = resolve(designDir(projectDir), slicePath);
   const sliceRelToRulebook = relative(rulebookDir, sliceAbsPath);
@@ -1297,20 +1300,32 @@ export async function readSliceArgument(
   if (text === undefined) {
     throw new Error(`${command} found no --slice-path "${slicePath}" (looked for it at ${sliceAbsPath}).`);
   }
-  return text;
+  return { slicePath: relative(designDir(projectDir), sliceAbsPath).split(sep).join('/'), text };
 }
 
 // -------------------------------------------------------------------------------------------
 // verifyDeriveRecordCommand — the write surface, retargeted onto reconcileSlice (177.1-03 Task 3)
 // -------------------------------------------------------------------------------------------
 
+/** Reads a subagent's JSON return, refusing one that lacks any of the `lists` it must carry. */
 async function readRequiredJsonFile(
   filePath: string,
   flagLabel: string,
+  lists: readonly string[],
 ): Promise<SubagentJsonParseResult> {
   const text = await readIfExists(filePath, (p) => fs.readFile(p, 'utf-8'));
   if (text === undefined) throw new Error(`verify-derive-record found no ${flagLabel} at "${filePath}".`);
-  return parseSubagentJsonInput(text, flagLabel, filePath);
+  const parsed = parseSubagentJsonInput(text, flagLabel, filePath);
+  const value = parsed.value as Record<string, unknown> | null;
+  for (const list of lists) {
+    if (typeof value !== 'object' || value === null || !Array.isArray(value[list])) {
+      throw new Error(
+        `The ${flagLabel} file "${filePath}" has no "${list}" list.\n` +
+          `Pass the subagent's return unchanged; it must be a JSON object with these lists: "${lists.join('", "')}".`,
+      );
+    }
+  }
+  return parsed;
 }
 
 export interface VerifyDeriveRecordOptions {
@@ -1374,13 +1389,16 @@ export async function verifyDeriveRecordCommand(
     throw new Error('verify-derive-record requires --reconciler <file>.');
   }
 
-  const slicePath = options.slicePath;
+  const { slicePath, text: sliceText } = await readSliceArgument(projectDir, options.slicePath, 'verify-derive-record');
 
-  const sliceText = await readSliceArgument(projectDir, slicePath, 'verify-derive-record');
-
-  const enumeratorAParsed = await readRequiredJsonFile(options.enumeratorA, '--enumerator-a');
-  const enumeratorBParsed = await readRequiredJsonFile(options.enumeratorB, '--enumerator-b');
-  const reconcilerParsed = await readRequiredJsonFile(options.reconciler, '--reconciler');
+  const enumeratorAParsed = await readRequiredJsonFile(options.enumeratorA, '--enumerator-a', ['facts']);
+  const enumeratorBParsed = await readRequiredJsonFile(options.enumeratorB, '--enumerator-b', ['facts']);
+  const reconcilerParsed = await readRequiredJsonFile(options.reconciler, '--reconciler', [
+    'both',
+    'aOnly',
+    'bOnly',
+    'derivedLineProposals',
+  ]);
   const enumeratorA = enumeratorAParsed.value as EnumeratorReturn;
   const enumeratorB = enumeratorBParsed.value as EnumeratorReturn;
   const reconciler = reconcilerParsed.value as ReconcilerReturn;
