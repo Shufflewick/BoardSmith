@@ -32,18 +32,7 @@ import GridBoardTemplate from './archetypes/GridBoardTemplate.vue';
 import CardTemplate from './archetypes/CardTemplate.vue';
 import TableauTemplate from './archetypes/TableauTemplate.vue';
 import UnsupportedTopologyPanel from './archetypes/UnsupportedTopologyPanel.vue';
-
-// ---------------------------------------------------------------------------
-// Local GameElement interface — mirrors auto-ui-helpers.ts lines 12-19
-// ---------------------------------------------------------------------------
-export interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
-  childCount?: number;
-}
+import type { GameElement } from './auto-ui-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Props — interaction arrays removed (useBoardInteraction provides those)

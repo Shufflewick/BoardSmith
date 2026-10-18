@@ -15,18 +15,7 @@ import { computed } from 'vue';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
-
-// ---------------------------------------------------------------------------
-// Local GameElement interface — do NOT import from engine (module is dependency-free)
-// ---------------------------------------------------------------------------
-interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
-  childCount?: number;
-}
+import type { GameElement } from '../auto-ui-helpers.js';
 
 const props = defineProps<{
   element: GameElement;

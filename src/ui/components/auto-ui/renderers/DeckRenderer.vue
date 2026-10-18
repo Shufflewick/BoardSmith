@@ -14,22 +14,14 @@ import { useSelectable } from '../../../composables/useSelectable.js';
 import { parseImageInfo, type ImageInfo } from '../../../utils/image.js';
 import ElementRenderer from './ElementRenderer.vue';
 import CardBack from './CardBack.vue';
+import type { GameElement } from '../auto-ui-helpers.js';
 
-// ---------------------------------------------------------------------------
-// Local GameElement interface — dependency-free, mirrors auto-ui-helpers.ts
-// ---------------------------------------------------------------------------
-interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
-  childCount?: number;
+interface DeckElement extends GameElement {
   zoneVisibility?: { mode: string };
 }
 
 const props = defineProps<{
-  element: GameElement;
+  element: DeckElement;
 }>();
 
 // ---------------------------------------------------------------------------

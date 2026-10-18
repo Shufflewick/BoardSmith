@@ -15,18 +15,7 @@
 import { computed } from 'vue';
 import ElementRenderer from '../renderers/ElementRenderer.vue';
 import { isHand } from '../archetype-selector.js';
-
-// ---------------------------------------------------------------------------
-// Local GameElement interface — mirrors auto-ui-helpers.ts / ElementRenderer.vue
-// ---------------------------------------------------------------------------
-interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
-  childCount?: number;
-}
+import type { GameElement } from '../auto-ui-helpers.js';
 
 const props = defineProps<{
   topLevelChildren: GameElement[];

@@ -12,18 +12,7 @@
  */
 
 import ElementRenderer from '../renderers/ElementRenderer.vue';
-
-// ---------------------------------------------------------------------------
-// Local GameElement interface — mirrors auto-ui-helpers.ts / ElementRenderer.vue
-// ---------------------------------------------------------------------------
-interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
-  childCount?: number;
-}
+import type { GameElement } from '../auto-ui-helpers.js';
 
 defineProps<{
   topLevelChildren: GameElement[];

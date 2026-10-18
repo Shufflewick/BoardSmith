@@ -6,9 +6,9 @@
  */
 
 // ---------------------------------------------------------------------------
-// Minimal GameElement interface (mirrors ElementRenderer local definition)
+// GameElement: the element shape every auto-UI module reads (dependency-free)
 // ---------------------------------------------------------------------------
-interface GameElement {
+export interface GameElement {
   id: number;
   name?: string;
   className: string;

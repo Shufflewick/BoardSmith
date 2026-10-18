@@ -18,10 +18,8 @@
 import { describe, it, expect } from 'vitest';
 import { nextTick } from 'vue';
 import HexBoardRenderer from './HexBoardRenderer.vue';
-import {
-  mountBoardRenderer,
-  type GameElement,
-} from './board-renderer-a11y.test-helper.js';
+import { mountBoardRenderer } from './board-renderer-a11y.test-helper.js';
+import type { GameElement } from '../auto-ui-helpers.js';
 import { createBoardInteraction } from '../../../composables/useBoardInteraction.js';
 
 /** This suite's renderer, so every mount below reads the same as the other board's. */

@@ -24,19 +24,11 @@ import {
 } from '../../../composables/useBoardInteraction.js';
 import type { BoardInteraction } from '../../../composables/useBoardInteraction.js';
 import { GAME_CONTEXT_KEYS } from '../../../composables/useGameContext.js';
+import type { GameElement } from '../auto-ui-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
-  childCount?: number;
-}
 
 function buildHandElement(children: GameElement[] = []): GameElement {
   return {

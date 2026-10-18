@@ -46,10 +46,8 @@ import { shouldDeferChoicePickToBoard } from '../components/auto-ui/action-panel
 import type { EnrichedActionMetadata, ChoiceWithRefs } from './useActionControllerTypes.js';
 import type { RunnerIdentity } from './useBoardActionBridge.js';
 import GridBoardRenderer from '../components/auto-ui/renderers/GridBoardRenderer.vue';
-import {
-  mountBoardRenderer,
-  type GameElement,
-} from '../components/auto-ui/renderers/board-renderer-a11y.test-helper.js';
+import { mountBoardRenderer } from '../components/auto-ui/renderers/board-renderer-a11y.test-helper.js';
+import type { GameElement } from '../components/auto-ui/auto-ui-helpers.js';
 
 /** The game a test starts in. A test that replaces it says so. */
 const A_GAME: RunnerIdentity = { gameInstanceId: 'game-a', restoreEpoch: 0 };
