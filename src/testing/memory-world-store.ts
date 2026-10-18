@@ -129,7 +129,9 @@ export function createMemoryWorldStore(
       }
     }
     if (extras.activity !== undefined) {
-      activity.set(extras.activity.seat, extras.activity.at);
+      // A high-water mark, as the SQLite store's `max(at, excluded.at)` keeps it.
+      const { seat, at } = extras.activity;
+      activity.set(seat, Math.max(at, activity.get(seat) ?? at));
     }
     writeNoticeBoxes(extras.notices ?? []);
     releaseChair(extras.vacate);

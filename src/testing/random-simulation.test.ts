@@ -290,6 +290,30 @@ describe('simulateRandomGames', () => {
     expect(results.averageActions).toBeGreaterThan(0);
   });
 
+  it('plays every listed player count, spreading the games evenly (#916)', async () => {
+    const results = await simulateRandomGames(PickGame, { count: 4, playerCounts: [2, 3, 4], seed: 'spread' });
+    expect(results.games.map((g) => g.playerCount)).toEqual([2, 2, 3, 4]);
+  });
+
+  it('refuses an empty player count list (#916)', async () => {
+    await expect(simulateRandomGames(PickGame, { count: 4, playerCounts: [] })).rejects.toThrow(
+      /playerCounts is empty/,
+    );
+  });
+
+  it('refuses fewer games than player counts, which would leave a count unplayed (#916)', async () => {
+    await expect(simulateRandomGames(PickGame, { count: 2, playerCounts: [2, 3, 4] })).rejects.toThrow(
+      /count 2 is smaller than the 3 player counts/,
+    );
+  });
+
+  it('says why a game cut off at maxActions failed (#916)', async () => {
+    const results = await simulateRandomGames(PickGame, { count: 1, playerCounts: [2], seed: 'cut', maxActions: 1 });
+    expect(results.exceededMaxActions).toBe(1);
+    expect(results.games[0].error).toMatch(/maximum of 1 action/);
+    expect(results.errors).toEqual([results.games[0].error]);
+  });
+
   it('is deterministic and reproducible from the base seed (F50)', async () => {
     const opts: SimulateRandomGamesOptions = {
       count: 6,
