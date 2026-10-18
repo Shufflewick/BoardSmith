@@ -1,6 +1,6 @@
 {
-  "revision": 229,
-  "surfaceHash": "5894461cddc02448",
+  "revision": 230,
+  "surfaceHash": "5f7f005d097568f4",
   "payloadHash": "0e2d27db00239080",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1771,7 +1771,15 @@
     {
       "revision": 229,
       "date": "2026-10-18",
-      "surfaceHash": "5894461cddc02448",
+      "surfaceHash": "4e9e7a68ce47a8b4",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A table snapshot from this engine stores the element tree once: when it carries checkpoints the tree is the newest checkpoint and snapshot.state is absent, otherwise it is snapshot.state and there is no window; tables below r229 still carry both state and the window, so a platform reader that spans revisions must tell the two shapes apart (state when present, otherwise the newest entry of actionCheckpoints) or call snapshotTree (boardsmith/session) only inside an r229+ runner, and this engine refuses with a readable error any snapshot an earlier engine wrote, so in-progress tables must keep running on the revision that wrote them."
+    },
+    {
+      "revision": 230,
+      "date": "2026-10-18",
+      "surfaceHash": "5f7f005d097568f4",
       "payloadHash": "0e2d27db00239080",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "Games may set checkpoints: { actionHistory: 'undo' } to keep only the action history undo reads, so a step of repeatable not-undoable moves has a fixed saved size; such snapshots carry actionHistoryBase, the number of dropped entries, GameRunner gains actionHistoryBase and actionCount, and GameRunner.replay takes the snapshot's history and refuses one that does not start at action 0 (#997). An undo refusal now names what set the undo limit (the not-undoable action just below it, or else the irreversible step). An older engine ignores the setting and keeps every entry, so a game using it needs this revision."

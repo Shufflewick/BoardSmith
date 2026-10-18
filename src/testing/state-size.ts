@@ -1,9 +1,9 @@
 /**
  * State-size measurement for CI.
  *
- * A game's saved state is not its board. It is the board PLUS one full copy of
- * the element tree per retained checkpoint. A hosted table retains them back
- * to the start of the current turn, so:
+ * A game's saved state is not its board. It is one full copy of the element
+ * tree per retained checkpoint, the newest of which is the board itself (#804).
+ * A hosted table retains them back to the start of the current turn, so:
  *
  *     saved size  ~=  tree size  x  (undoable actions in the longest turn + 1)  +  history  +  log
  *
@@ -44,7 +44,7 @@
  */
 
 import { checkpointCount } from '../engine/index.js';
-import type { GameStateSnapshot } from '../engine/utils/index.js';
+import { snapshotTree, type GameStateSnapshot } from '../engine/utils/index.js';
 import { actionCountOf } from '../engine/utils/snapshot.js';
 import { parsePositiveWholeNumber } from '../utils/positive-whole-number.js';
 
@@ -57,7 +57,7 @@ function jsonByteLength(value: unknown): number {
 export interface SnapshotSizeMeasurement {
   /** Total serialized size of the snapshot, in bytes. */
   totalBytes: number;
-  /** `snapshot.state` — the element tree. The thing that gets multiplied. */
+  /** The element tree (`snapshotTree`). The thing that gets multiplied. */
   treeBytes: number;
   /** All retained per-action checkpoints, in total. */
   checkpointBytes: number;
@@ -103,7 +103,7 @@ export function measureSnapshotSize(snapshot: GameStateSnapshot): SnapshotSizeMe
   const checkpointBytes = jsonByteLength(snapshot.actionCheckpoints);
   return {
     totalBytes: jsonByteLength(snapshot),
-    treeBytes: jsonByteLength(snapshot.state),
+    treeBytes: jsonByteLength(snapshotTree(snapshot)),
     checkpointBytes,
     checkpointCount: count,
     actionHistoryBytes: jsonByteLength(snapshot.actionHistory),
@@ -203,7 +203,7 @@ export function assertStateBudget(measurement: SnapshotSizeMeasurement, budgetBy
   const bytes = (n: number) => `${n.toLocaleString('en-US')} bytes`;
   throw new Error(
     `The saved game state is ${bytes(measurement.totalBytes)}, over the host's budget of ${bytes(budgetBytes)}.\n` +
-      `  game tree:      ${bytes(measurement.treeBytes)}\n` +
+      `  game tree:      ${bytes(measurement.treeBytes)}${measurement.checkpointCount > 0 ? ' (the newest checkpoint, counted below)' : ''}\n` +
       `  checkpoints:    ${measurement.checkpointCount} checkpoints, ${bytes(measurement.checkpointBytes)}\n` +
       `  action history: ${bytes(measurement.actionHistoryBytes)}\n` +
       `  message log:    ${bytes(measurement.messageLogBytes)}\n` +

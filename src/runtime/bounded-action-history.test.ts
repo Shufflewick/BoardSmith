@@ -14,6 +14,7 @@ import {
   type GameOptions,
 } from '../engine/index.js';
 import { availableActionsForSeat } from '../engine/flow/seat-activity.js';
+import { snapshotTree } from '../engine/utils/index.js';
 import { GameRunner, type RunnerCheckpointPolicy } from './runner.js';
 import { decideUndo } from '../session/utils.js';
 
@@ -188,7 +189,8 @@ describe('actionHistory: "undo" keeps only the history undo reads (#997)', () =>
 
     const restored = GameRunner.fromSnapshot(snapshot, PackGame, { checkpoints: UNDO_HISTORY });
     const again = restored.getSnapshot();
-    for (const field of ['state', 'actionHistory', 'actionHistoryBase', 'randomState', 'sequence', 'messageLog', 'executeBarrierIndex'] as const) {
+    expect(snapshotTree(again)).toEqual(snapshotTree(snapshot));
+    for (const field of ['actionHistory', 'actionHistoryBase', 'randomState', 'sequence', 'messageLog', 'executeBarrierIndex'] as const) {
       expect(again[field]).toEqual(snapshot[field]);
     }
     expect(restored.game.right.all(Pack).map((p) => p.name)).toEqual(['pack-1']);

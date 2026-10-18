@@ -29,6 +29,7 @@ import {
 } from '../engine/index.js';
 import { GameRunner } from './runner.js';
 import { PendingActionManager } from '../session/pending-action-manager.js';
+import { snapshotTree } from '../engine/utils/index.js';
 import { TestGame } from '../testing/test-game.js';
 
 const AUTHOR_REFUSAL = 'The bell has rung. Nothing was changed. Replan next round.';
@@ -249,7 +250,7 @@ describe('an execute() that animates and then throws (#751)', () => {
     for (const seat of [1, 2]) {
       expect(runner.getPlayerView(seat).state.animationEvents ?? []).toEqual([]);
     }
-    expect(runner.getSnapshot().state.animationEvents ?? []).toEqual([]);
+    expect(snapshotTree(runner.getSnapshot()).animationEvents ?? []).toEqual([]);
   });
 });
 
@@ -261,7 +262,7 @@ describe('an execute() that throws after its picks were taken one at a time (#80
     expect(runner.game.pendingAnimationEvents).toEqual([]);
     expect(runner.actionHistory).toHaveLength(0);
     const snapshot = runner.getSnapshot();
-    expect(snapshot.state.animationEvents ?? []).toEqual([]);
+    expect(snapshotTree(snapshot).animationEvents ?? []).toEqual([]);
     const restored = GameRunner.fromSnapshot(snapshot, HalfwayGame);
     expect(restored.game.source.all(Token)).toHaveLength(5);
     expect(restored.game.target.all(Token)).toHaveLength(0);

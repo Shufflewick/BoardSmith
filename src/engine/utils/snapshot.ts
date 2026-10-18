@@ -7,20 +7,52 @@ import { SeededRandom, type RandomState } from '../../utils/random.js';
 import { getActiveTutorialStepView } from '../tutorial/gate.js';
 import { canSeatAct, availableActionsForSeat } from '../flow/seat-activity.js';
 
+/** The element tree a snapshot or checkpoint holds: the exact `game.toJSON()` payload. */
+type SnapshotTree = ReturnType<Game['toJSON']>;
+
 /**
- * Complete game state snapshot for persistence/transmission
+ * Complete game state snapshot for persistence/transmission.
+ *
+ * It holds the element tree exactly ONCE (#804), in one of two places, and
+ * the type admits neither both nor none:
+ *
+ * - `actionCheckpoints`: a runner that keeps checkpoints refreshes the newest
+ *   one to the current state on every snapshot, so that entry IS the tree.
+ * - `state`: everything else (checkpoints disabled, `createSnapshot`'s clones).
+ *
+ * Read the tree only through {@link snapshotTree}.
  */
-export interface GameStateSnapshot {
+export type GameStateSnapshot = SnapshotFields & (
+  | { state: SnapshotTree; actionCheckpoints?: never }
+  | {
+    state?: never;
+    /** Per-action authoritative checkpoints for undo / debug time-travel, as a
+     *  RETAINED WINDOW over action counts (see `ActionCheckpointWindow`).
+     *  The checkpoint for action count `k` is the LATEST per-action state observed
+     *  while `k` actions were recorded — refreshed on every op so trailing
+     *  pending/selection mutations (e.g. `Piece.putInto` inside a completed pending
+     *  action, recorded in neither command nor action history) are captured at the
+     *  right action-count boundary. Undo/rewind restore that entry directly (via
+     *  `GameRunner.fromCheckpoint`) instead of replaying history — replay loses those
+     *  pending mutations and mis-positions the flow.
+     *
+     *  Each entry is a LEAN `ActionCheckpoint` carrying only the per-action-varying
+     *  state (element tree, flow position, sequence, RNG). The snapshot-wide
+     *  invariants (`gameType`, `seed`, `gameOptions`) and the action-history PREFIX
+     *  are NOT duplicated per entry — they are rehydrated from the enclosing snapshot
+     *  by `GameRunner.fromCheckpoint`. That is what makes a single entry cheap; the
+     *  window's `baseIndex` is what bounds HOW MANY are kept. Maintained by
+     *  `GameRunner`, never nested. Its newest entry is the snapshot's tree. */
+    actionCheckpoints: ActionCheckpointWindow;
+  }
+);
+
+interface SnapshotFields {
   /** Version for compatibility checking */
   version: number;
 
   /** Game class name for reconstruction */
   gameType: string;
-
-  /** Full element tree state (players are now children in the tree).
-   *  This is the exact `game.toJSON()` payload — the same shape consumed by
-   *  `loadSerializedState`, so restore is typed end-to-end with no casts. */
-  state: ReturnType<Game['toJSON']>;
 
   /**
    * The game's message log — stored ONCE per snapshot, NOT inside `state`.
@@ -93,25 +125,6 @@ export interface GameStateSnapshot {
 
   /** Original constructor options (for full game restoration including custom options like playerConfigs) */
   gameOptions?: Record<string, unknown>;
-
-  /** Per-action authoritative checkpoints for undo / debug time-travel, as a
-   *  RETAINED WINDOW over action counts (see `ActionCheckpointWindow`).
-   *  The checkpoint for action count `k` is the LATEST per-action state observed
-   *  while `k` actions were recorded — refreshed on every op so trailing
-   *  pending/selection mutations (e.g. `Piece.putInto` inside a completed pending
-   *  action, recorded in neither command nor action history) are captured at the
-   *  right action-count boundary. Undo/rewind restore that entry directly (via
-   *  `GameRunner.fromCheckpoint`) instead of replaying history — replay loses those
-   *  pending mutations and mis-positions the flow.
-   *
-   *  Each entry is a LEAN `ActionCheckpoint` carrying only the per-action-varying
-   *  state (element tree, flow position, sequence, RNG). The snapshot-wide
-   *  invariants (`gameType`, `seed`, `gameOptions`) and the action-history PREFIX
-   *  are NOT duplicated per entry — they are rehydrated from the enclosing snapshot
-   *  by `GameRunner.fromCheckpoint`. That is what makes a single entry cheap; the
-   *  window's `baseIndex` is what bounds HOW MANY are kept. Maintained by
-   *  `GameRunner`, never nested. */
-  actionCheckpoints?: ActionCheckpointWindow;
 
   /**
    * The durable execute()-barrier fence (UNDO-02, 155-02): the action-history
@@ -472,8 +485,36 @@ export function actionCountOf(snapshot: Pick<GameStateSnapshot, 'actionHistory' 
   return (snapshot.actionHistoryBase ?? 0) + snapshot.actionHistory.length;
 }
 
+/** Everything a snapshot holds except the tree. `opts` as in `createSnapshot`. */
+function snapshotFields(
+  game: Game,
+  gameType: string,
+  actionHistory: HistoryEntry[],
+  seed: string | undefined,
+  opts: { forSeat: number | null; reseed: string } | undefined,
+): SnapshotFields {
+  return {
+    version: 1,
+    gameType,
+    // The log is a snapshot sibling, not part of the tree. It carries the SAME
+    // audience gate as the tree: on the default path the unfiltered truth (a
+    // persisted snapshot that dropped other seats' lines would destroy their
+    // history on restore), and on the `forSeat` redacted-clone path only what
+    // that seat may see. Without the second half, the MCTS search sandbox — a
+    // clone built precisely so a bot cannot reason over hidden information —
+    // would hold every seat's private log.
+    messageLog: game.serializeMessageLog(opts?.forSeat),
+    flowState: snapshotFlowState(game, opts) ?? undefined,
+    winners: game.getWinners().map((p) => p.seat),
+    actionHistory: [...actionHistory],
+    seed,
+    sequence: game._ctx.sequence,
+    ...snapshotRandom(game, opts),
+  };
+}
+
 /**
- * Create a complete game state snapshot
+ * Create a complete game state snapshot, carrying its tree as `state`.
  */
 export function createSnapshot(
   game: Game,
@@ -485,8 +526,6 @@ export function createSnapshot(
    *  `reseed`: the clone's own random seed (see `snapshotRandom`). */
   opts?: { forSeat: number | null; reseed: string }
 ): GameStateSnapshot {
-  const flowState = snapshotFlowState(game, opts);
-
   // CR-02 (159): only populated on the `forSeat` redacted path — collects the
   // originalId -> syntheticId remap `toJSONForPlayer` produces for anonymized
   // hidden-zone children, so a caller restoring this snapshot can relink an
@@ -495,8 +534,7 @@ export function createSnapshot(
   const hiddenIdRemap = opts?.forSeat !== undefined ? new Map<number, number>() : undefined;
 
   return {
-    version: 1,
-    gameType,
+    ...snapshotFields(game, gameType, actionHistory, seed, opts),
     // Default: full un-redacted truth (existing callers, e.g. GameRunner, must
     // keep seeing the authoritative tree). Opt-in `forSeat` (bot-02): callers
     // that need a per-seat REDACTED clone (the MCTS bot's search sandbox) pass
@@ -505,22 +543,48 @@ export function createSnapshot(
     state: opts?.forSeat !== undefined
       ? game.toJSONForPlayer(opts.forSeat, hiddenIdRemap)
       : game.toJSON(),
-    // The log is a snapshot sibling, not part of the tree. It carries the SAME
-    // audience gate as `state`: on the default path the unfiltered truth (a
-    // persisted snapshot that dropped other seats' lines would destroy their
-    // history on restore), and on the `forSeat` redacted-clone path only what
-    // that seat may see. Without the second half, the MCTS search sandbox — a
-    // clone built precisely so a bot cannot reason over hidden information —
-    // would hold every seat's private log.
-    messageLog: game.serializeMessageLog(opts?.forSeat),
-    flowState: flowState ?? undefined,
-    winners: game.getWinners().map((p) => p.seat),
-    actionHistory: [...actionHistory],
-    seed,
-    sequence: game._ctx.sequence,
-    ...snapshotRandom(game, opts),
     ...(hiddenIdRemap && hiddenIdRemap.size > 0 && { hiddenIdRemap }),
   };
+}
+
+/**
+ * A runner's snapshot, which serializes the tree once (#804): it is the
+ * newest entry of `checkpoints` when there is one, and `state` only when the
+ * window is empty (checkpoints disabled).
+ */
+export function createRunnerSnapshot(
+  game: Game,
+  gameType: string,
+  actionHistory: HistoryEntry[],
+  seed: string | undefined,
+  checkpoints: ActionCheckpointWindow,
+): GameStateSnapshot {
+  if (checkpoints.entries.length === 0) return createSnapshot(game, gameType, actionHistory, seed);
+  return { ...snapshotFields(game, gameType, actionHistory, seed, undefined), actionCheckpoints: checkpoints };
+}
+
+/**
+ * The element tree `snapshot` holds — the one way to read it (#804).
+ *
+ * Throws a readable error for a snapshot that holds the tree twice (written by
+ * an engine before #804) or not at all, rather than restoring a guess.
+ */
+export function snapshotTree(snapshot: GameStateSnapshot): SnapshotTree {
+  const window = snapshot.actionCheckpoints;
+  if (snapshot.state !== undefined) {
+    if (window !== undefined) {
+      throw new Error(
+        'This saved game was written by an older version of BoardSmith, which stored the board twice, ' +
+        'and this version cannot load it. Load it with the engine revision it was saved on, or start a new game.',
+      );
+    }
+    return snapshot.state;
+  }
+  const newest = window?.entries.at(-1);
+  if (window === undefined || newest === undefined) {
+    throw new Error('This saved game holds no element tree (no board state and no checkpoint), so it cannot be loaded.');
+  }
+  return newest.state;
 }
 
 /**

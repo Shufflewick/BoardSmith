@@ -30,6 +30,7 @@ import {
 import {
   deserializeAction,
   createSnapshot,
+  snapshotTree,
   type GameStateSnapshot,
 } from '../engine/utils/index.js';
 import type { SerializedAction } from '../engine/action/types.js';
@@ -243,7 +244,7 @@ describe('the pile in a saved state (#655)', () => {
     act(runner, 'discard', 1);
 
     const fresh = GameRunner.fromSnapshot(snapshot, PileGame);
-    runner.game.loadSerializedState(snapshot.state);
+    runner.game.loadSerializedState(snapshotTree(snapshot));
 
     expect(runner.game.pile.all(Card).map((card) => card.id)).toEqual(fresh.game.pile.all(Card).map((card) => card.id));
   });
@@ -301,7 +302,7 @@ describe('the pile in a saved state (#655)', () => {
     expect(JSON.stringify(seatSnapshot.flowState)).not.toContain(String(goneId));
 
     const sandbox = new PileGame(options);
-    sandbox.loadSerializedState(seatSnapshot.state as ReturnType<Game['toJSON']>);
+    sandbox.loadSerializedState(snapshotTree(seatSnapshot) as ReturnType<Game['toJSON']>);
     sandbox.restoreFlowState(roundTrip(seatSnapshot.flowState!), seatSnapshot.hiddenIdRemap);
 
     expect(sandbox.getFlowState()!.position.variables.gone).toBeUndefined();

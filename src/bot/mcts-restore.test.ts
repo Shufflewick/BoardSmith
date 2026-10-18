@@ -123,7 +123,7 @@ describe('MCTSBot restoreGame with execute block', () => {
     // pass it the FULL (finished-game) history. captureSnapshot() captures the
     // LIVE in-progress state plus that stale trailing history.
     //
-    // Under authoritative restore, restoreGame() adopts snapshot.state +
+    // Under authoritative restore, restoreGame() adopts the snapshot's tree +
     // snapshot.flowState directly and IGNORES the action history — so the clone
     // is the live in-progress game, never the finished one. There is no replay
     // and therefore nothing to "diverge": the bot simply searches and returns a

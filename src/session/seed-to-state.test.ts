@@ -41,10 +41,10 @@ import {
   type GameOptions,
 } from '../engine/index.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
-import type { GameStateSnapshot } from '../engine/utils/snapshot.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { TestGame } from '../testing/test-game.js';
 import { succeeded } from './op-result.test-helper.js';
+import { snapshotTree, type GameStateSnapshot } from '../engine/utils/index.js';
 
 // ---------------------------------------------------------------------------
 // CounterGame: player 1 repeatedly takes a 'draw' action that moves the top
@@ -131,8 +131,8 @@ const gameOptions = { playerCount: 1, seed: 'seed-to-state-fixture' };
 
 describe('FEAT-01: seed-to-state PoC — deterministic load via executeOp start', () => {
   it('RECORD: the captured seed is a distinct mid-game state (2 tokens drawn, not a fresh 5/0 split)', () => {
-    expect(deckCount(recordedSnapshot.state)).toBe(3);
-    expect(handCount(recordedSnapshot.state)).toBe(2);
+    expect(deckCount(snapshotTree(recordedSnapshot))).toBe(3);
+    expect(handCount(snapshotTree(recordedSnapshot))).toBe(2);
   });
 
   it('PASS-WITH seed: the loaded state matches the recorded element tree, flowState, and current player', async () => {
@@ -150,7 +150,7 @@ describe('FEAT-01: seed-to-state PoC — deterministic load via executeOp start'
 
     // Element tree: byte-identical (this IS the load-bearing proof the seed
     // reached the game, not a fresh construction).
-    expect(loadedSnapshot.state).toEqual(recordedSnapshot.state);
+    expect(snapshotTree(loadedSnapshot)).toEqual(snapshotTree(recordedSnapshot));
 
     // flowState: compare the meaningful fields, not internal frame-bookkeeping
     // keys — GameRunner.fromSnapshot's restoreFlowState normalizes/pre-fills
@@ -177,8 +177,8 @@ describe('FEAT-01: seed-to-state PoC — deterministic load via executeOp start'
 
     // Deck/hand split proves this ISN'T a fresh start under the hood, not just
     // a structurally-matching coincidence.
-    expect(deckCount(loadedSnapshot.state)).toBe(3);
-    expect(handCount(loadedSnapshot.state)).toBe(2);
+    expect(deckCount(snapshotTree(loadedSnapshot))).toBe(3);
+    expect(handCount(snapshotTree(loadedSnapshot))).toBe(2);
   });
 
   it('PASS-WITH seed: the seeded game can take the next legal action from the recorded state', async () => {
@@ -201,7 +201,7 @@ describe('FEAT-01: seed-to-state PoC — deterministic load via executeOp start'
     ));
 
     expect(drawn.success).toBe(true);
-    const nextState = (drawn.snapshot as { state: unknown }).state;
+    const nextState = snapshotTree(drawn.snapshot);
     expect(deckCount(nextState)).toBe(2);
     expect(handCount(nextState)).toBe(3);
   });
@@ -221,9 +221,9 @@ describe('FEAT-01: seed-to-state PoC — deterministic load via executeOp start'
     expect(result.success).toBe(true);
     const freshSnapshot = result.snapshot as typeof recordedSnapshot;
 
-    expect(freshSnapshot.state).not.toEqual(recordedSnapshot.state);
-    expect(deckCount(freshSnapshot.state)).toBe(5);
-    expect(handCount(freshSnapshot.state)).toBe(0);
+    expect(snapshotTree(freshSnapshot)).not.toEqual(snapshotTree(recordedSnapshot));
+    expect(deckCount(snapshotTree(freshSnapshot))).toBe(5);
+    expect(handCount(snapshotTree(freshSnapshot))).toBe(0);
   });
 
   it('LOAD-TWICE-IDENTICAL: loading the same seed twice yields byte-identical state (RNG randomState pinned)', async () => {

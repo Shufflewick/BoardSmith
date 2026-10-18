@@ -3,6 +3,7 @@ import { createHeadlessSession } from '../../testing/headless-session.js';
 import { executeOp, type GameDefinitionLike, type OpResult } from '../stateless-ops.js';
 import { SnapshotSessionHost, type SnapshotHostState } from '../snapshot-session-host.js';
 import { boundaryKeyOfHost } from './boundary-stamp.js';
+import { snapshotTree } from '../../engine/utils/index.js';
 import {
   Game,
   Player,
@@ -198,7 +199,7 @@ describe('UNDO-04: animation-event watermark survives undo/rewind', () => {
 
 /** The animation-event seq a host's current snapshot carries. */
 function animationEventSeqOf(host: SnapshotSessionHost): number | undefined {
-  return (host.snapshot?.state as { animationEventSeq?: number } | undefined)?.animationEventSeq;
+  return host.snapshot ? snapshotTree(host.snapshot).animationEventSeq : undefined;
 }
 
 describe('UNDO-04: full session restore is unaffected (the two loadSerializedState callers stay distinguished)', () => {

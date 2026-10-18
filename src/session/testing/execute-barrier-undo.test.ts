@@ -4,6 +4,7 @@ import { executeBarrierFixtureDefinition } from './fixtures/execute-barrier-fixt
 import { bookkeepingExecuteFixtureDefinition, BookkeepingExecuteGame } from './fixtures/bookkeeping-execute-fixture.js';
 import type { Op } from '../stateless-ops.js';
 import { ErrorCode } from '../../types/protocol.js';
+import { snapshotTree, type GameStateSnapshot } from '../../engine/utils/index.js';
 
 /**
  * UNDO-02 regression: an undo/rewind must not cross a completed `execute()`
@@ -71,10 +72,10 @@ describe('UNDO-02 execute-barrier', () => {
     // roll the execute()'s committed side effect back anyway.
     const debugState = (await session.send(1, { type: 'debugFlowState', player: 1 })) as unknown as {
       success: boolean;
-      snapshot: { state: { attributes?: { score?: number } } };
+      snapshot: GameStateSnapshot;
     };
     expect(debugState.success).toBe(true);
-    expect(debugState.snapshot.state.attributes?.score).toBe(1);
+    expect(snapshotTree(debugState.snapshot).attributes.score).toBe(1);
   });
 
   it('negative control: an undo that stops short of the barrier (mid actionStep2) still succeeds', async () => {

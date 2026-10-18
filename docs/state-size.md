@@ -13,8 +13,8 @@ refused by its host.
 
 Not "keep your state small". A multiplier.
 
-A saved game is not the board. It is the board **plus one full copy of the
-element tree per action taken** — the per-action undo checkpoints that let undo
+A saved game is not the board. It is **one full copy of the element tree per
+action taken**, the newest of which is the board itself (#804) — the per-action undo checkpoints that let undo
 and time-travel restore any point authoritatively instead of replaying history
 (replay cannot reproduce selection-step mutations, so it is not an option; see
 [agent-control.md](./agent-control.md)).
