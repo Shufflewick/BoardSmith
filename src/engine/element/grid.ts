@@ -39,9 +39,9 @@ export type ElementLayout =
  *
  * @example
  * ```typescript
- * // Define a chess board
+ * // Define a chess board (rank 1 is the lowest row coordinate, so it draws at the top)
  * class ChessBoard extends Grid {
- *   $rowLabels = ['8', '7', '6', '5', '4', '3', '2', '1'];
+ *   $rowLabels = ['1', '2', '3', '4', '5', '6', '7', '8'];
  *   $columnLabels = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
  *   $rowCoord = 'rank';
  *   $colCoord = 'file';
@@ -74,7 +74,8 @@ export class Grid<G extends Game = any, P extends Player = any> extends Space<G,
 
   /**
    * Labels for rows (optional - game designer provides these)
-   * Example: ['8', '7', '6', '5', '4', '3', '2', '1'] for chess
+   * In screen order top to bottom; the lowest row coordinate draws at the top.
+   * Example: ['1', '2', '3', '4', '5', '6', '7', '8'] for chess ranks 1-8
    * If not provided, AutoUI will use numeric indices
    */
   $rowLabels?: string[];
