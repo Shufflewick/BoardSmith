@@ -1,6 +1,6 @@
 {
-  "revision": 226,
-  "surfaceHash": "78cc3a6fa6f722cc",
+  "revision": 227,
+  "surfaceHash": "0b7a714959759a2a",
   "payloadHash": "42faf88ae9f4cb97",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1751,6 +1751,14 @@
       "payloadHash": "42faf88ae9f4cb97",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "SnapshotSessionHost.handleOp now refuses start, restoreEarlier and botSuggest from a seat with a protocol refusal, since only the host sends them; a host uses host.start(), the new host.restoreEarlier(snapshot) and host.runBotTurns(), and a restore drops every seat's half-made picks and hints (#1102)."
+    },
+    {
+      "revision": 227,
+      "date": "2026-10-18",
+      "surfaceHash": "0b7a714959759a2a",
+      "payloadHash": "42faf88ae9f4cb97",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "GameElement gains internal _ownVisibilityAllows(seat), the element's own visibility rule without the ancestor check; isVisibleTo is unchanged (#1123)."
     }
   ]
 }
