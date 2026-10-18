@@ -274,11 +274,12 @@ function updateCompact(mql: MediaQueryList | MediaQueryListEvent) {
 const boardregionEl = computed(() => playShell.value?.boardRegionEl ?? null);
 const zoomContainerEl = computed(() => playShell.value?.zoomContainerEl ?? null);
 const boardBoundary = ref<InstanceType<typeof BoardErrorBoundary> | null>(null);
+// No boundary mounted means no board, so nothing has failed.
+const boardFailed = computed(() => boardBoundary.value?.failed ?? false);
 const { zoomLevel, setZoom, fitZoom } = useAutoZoom({
   boardEl: zoomContainerEl,
   regionEl: boardregionEl,
-  // No boundary mounted means no board, so nothing has failed.
-  boardFailed: computed(() => boardBoundary.value?.failed ?? false),
+  boardFailed,
 });
 
 // Connection health (IA-01): driven by the host's postMessage heartbeat.
@@ -1396,6 +1397,7 @@ defineExpose({
          `gatedIsMyTurn`. -->
     <PlayShell
       ref="playShell"
+      :board-failed="boardFailed"
       :players="panelPlayers"
       :player-seat="playerSeat"
       :due-seats="dueSeatsNow"
@@ -1652,6 +1654,7 @@ defineExpose({
             :current-player-name="currentPlayerName"
             :current-player-color="currentPlayerColor"
             :awaiting-players="awaitingPlayerNames"
+            :board-failed="boardFailed"
             @undo="handleUndo"
           />
         </slot>

@@ -10,7 +10,7 @@ import { createColorOption, type ColorChoice, type ColorOptionDefinition, type G
 import type { GameStateSnapshot } from '../../engine/utils/index.js';
 import { MultiplayerHost } from '../dev-host/multiplayer-host.js';
 import type { TableDefinition } from '../dev-host/table-rules-worker.js';
-import { claimDevHostSocket } from '../dev-host/connection-handler.js';
+import { claimDevHostSocket, logMessageFailure } from '../dev-host/connection-handler.js';
 import { devStorePath, loadDevStore } from '../dev-host/persistence-file-store.js';
 import { resetWorldStore, worldResetNotice, worldStoreDir } from '../dev-host/world-store.js';
 import { announceHost, hostHoldings, onShutdown, type HostHoldings } from '../dev-host/shutdown.js';
@@ -982,14 +982,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
       mpHost,
       clients,
       queue: rulesReload,
-      onError: (err, msgType) =>
-        // The message, not the error: a running dev server has nothing to
-        // throw to, and a stack trace in its log is the same leak (#240).
-        console.error(
-          styleText('red',
-            `[boardsmith dev] message '${msgType}' failed: ${err instanceof Error ? err.message : String(err)}`,
-          ),
-        ),
+      onError: logMessageFailure,
     });
 
     // A refused listen closes Vite and this host's socket before the error

@@ -101,6 +101,8 @@ const props = withDefaults(defineProps<{
   actionsPending?: boolean;
   /** Whether the panel is showing each action's help text. */
   isActionHelpVisible?: boolean;
+  /** True while the board shows its error message in place of the board; the default panel then lists every pick (#1153). */
+  boardFailed: boolean;
   /** The identity token at the head of the action bar. Never absent while the
    *  bar is up: an anchor that comes and goes between phases reads as broken. */
   panelToken?: { name: string; seat: number; color?: string } | null;
@@ -603,6 +605,7 @@ const mobileToggleLabel = computed(() => {
                 :current-player-name="currentPlayerName"
                 :current-player-color="currentPlayerColor"
                 :awaiting-players="awaitingPlayers"
+                :board-failed="boardFailed"
                 @undo="emit('undo')"
               />
             </slot>

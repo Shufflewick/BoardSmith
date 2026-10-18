@@ -16,7 +16,7 @@
 import { ref, computed, watch, inject, nextTick, useId, onMounted, onBeforeUnmount } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
-import { choiceBoardTarget, formatActionName, getDisplayFromValue, labelOfPick, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
+import { choiceBoardTarget, editorRuleRefusal, formatActionName, getDisplayFromValue, labelOfPick, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
 import { createActionMutators } from '../../composables/actionMutators.js';
 import { escapeRegExp } from '../../../utils/regexp.js';
 import type {
@@ -45,8 +45,6 @@ import {
 // reaches for `MAX_FLAT_CHOICE_CANDIDATES`: the panel must apply the SAME
 // rules the server applies, and a second copy of them is a second rule set
 // (#229 for text, #237 for number).
-import { numberRuleErrors } from '../../../engine/action/number-rules.js';
-import { textRuleErrors, wirePattern } from '../../../engine/action/text-rules.js';
 import { choiceValueKey } from '../../../engine/action/choice-matching.js';
 import ActionHelpPopover from '../helpers/ActionHelpPopover.vue';
 // Type-only, so the log component's module (and its stylesheet) never enters
@@ -144,6 +142,12 @@ const props = defineProps<{
    * Absent and `false` both mean the list on screen is the whole answer.
    */
   actionsPending?: boolean;
+  /**
+   * True while the shell's BoardErrorBoundary shows its message in place of the
+   * board (#1153): there is no board to choose on, so the panel hands no pick to it.
+   * Optional because games mount the panel in their own tests; both shells always pass it.
+   */
+  boardFailed?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -547,6 +551,7 @@ function confirmDraft(): void {
  * per-editor. There is no per-editor copy of this left to forget.
  */
 const editorInputError = ref<string | null>(null);
+const editorErrorEl = ref<HTMLElement | null>(null);
 
 watch(() => actionController.currentPickDraft.value, () => {
   editorInputError.value = null;
@@ -914,6 +919,7 @@ const anchoredChoices = computed(() => _splitChoices.value.anchored);
  * candidate must be reachable on the board before the panel will yield.
  */
 const deferPickToBoard = computed(() => {
+  if (props.boardFailed) return false;
   const type = currentPick.value?.type;
   if (type === 'choice') return shouldDeferChoicePickToBoard(offeredChoices.value);
   return shouldDeferElementPickToBoard(type, offeredElements.value);
@@ -952,10 +958,10 @@ function skipOptionalSelection() {
 /**
  * Why the value in the open editor cannot be submitted, or null.
  *
- * The rules come from the engine's OWN validators -- `textRuleErrors` (#229)
- * and `numberRuleErrors` (#237) -- so what the panel refuses here and what the
- * server would refuse are the same rule in the same words, rather than two
- * copies that drift. `validate` is deliberately not among them: a game's custom
+ * The rules come from the engine's OWN validators, through `editorRuleRefusal`
+ * (#229, #237, #1057), which `controller.fill` also uses -- so what the panel
+ * refuses here, what a custom UI is refused, and what the server would refuse
+ * are the same rule in the same words, rather than two copies that drift. `validate` is deliberately not among them: a game's custom
  * validator closes over game state and never reaches a client, so the engine
  * stays the authority and this is the subset a client can honestly check.
  *
@@ -966,21 +972,8 @@ function skipOptionalSelection() {
 function editorValueRefusal(): string | null {
   const pick = currentPick.value;
   if (!pick) return null;
-  if (pick.type === 'number') {
-    const val = numberInputValue.value;
-    if (val === null) return null;
-    return numberRuleErrors(pick.name, val, pick)[0] ?? null;
-  }
-  if (pick.type === 'text') {
-    return textRuleErrors(pick.name, textInputValue.value, {
-      minLength: pick.minLength,
-      maxLength: pick.maxLength,
-      maxBytes: pick.maxBytes,
-      multiline: pick.multiline,
-      pattern: pick.pattern && wirePattern(pick.pattern),
-    })[0] ?? null;
-  }
-  return null;
+  const value = pick.type === 'number' ? numberInputValue.value : textInputValue.value;
+  return value === null ? null : editorRuleRefusal(pick, value);
 }
 
 /**
@@ -1003,6 +996,8 @@ function submitEditorValue() {
   const refusal = editorValueRefusal();
   if (refusal !== null) {
     editorInputError.value = refusal;
+    // The bar caps its height and the message sits below Done, so bring it into view (#1159).
+    void nextTick(() => editorErrorEl.value?.scrollIntoView({ block: 'nearest' }));
     return;
   }
 
@@ -2080,7 +2075,13 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           <span v-if="currentPick.multiline" class="sr-only" role="status">
             {{ textLimitAnnouncement }}
           </span>
-          <p v-if="editorInputError" :id="editorErrorId" class="selection-error" role="alert">
+          <p
+            v-if="editorInputError"
+            :id="editorErrorId"
+            ref="editorErrorEl"
+            class="selection-error"
+            role="alert"
+          >
             {{ editorInputError }}
           </p>
         </div>

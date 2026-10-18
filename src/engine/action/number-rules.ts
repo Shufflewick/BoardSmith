@@ -13,12 +13,10 @@
  * refuse in its own words while the engine refused in others, and neither would
  * be wrong about its own copy.
  *
- * WHAT IS NOT HERE, exactly as in `text-rules.ts`: the type check, which the
- * engine does on a value off the wire and the panel's number field cannot
- * produce; and `validate`, a game's own closure over game state that never
- * reaches a client. The engine remains the authority. This is the subset a
- * client can honestly check for itself, and it is exactly the subset the wire
- * carries.
+ * WHAT IS NOT HERE, exactly as in `text-rules.ts`: `validate`, a game's own
+ * closure over game state that never reaches a client. The engine remains the
+ * authority. This is the subset a client can honestly check for itself, and it
+ * is exactly the subset the wire carries.
  */
 
 /**
@@ -35,9 +33,10 @@
  */
 export function numberRuleErrors(
   name: string,
-  value: number,
+  value: unknown,
   rules: { min?: number; max?: number; integer?: boolean },
 ): string[] {
+  if (typeof value !== 'number' || Number.isNaN(value)) return [`${name} must be a number`];
   const errors: string[] = [];
   if (rules.min !== undefined && value < rules.min) {
     errors.push(`${name} must be at least ${rules.min}`);

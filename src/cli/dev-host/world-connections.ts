@@ -161,7 +161,7 @@ export function createWorldConnections(
             // A page still waiting is told why, as the table road tells it (#1060): its rules' worker may have stopped.
             if (hostRequestId === null || requestOrigin.has(hostRequestId)) refuse?.(reason);
             if (hostRequestId !== null) requestOrigin.delete(hostRequestId);
-            console.error(styleText('red', `[boardsmith dev] world message '${pageText(message.type)}' failed: ${reason}`));
+            console.error(styleText('red', `[boardsmith dev] world message '${pageText(message.type)}' failed: ${pageText(reason)}`));
           });
       });
       socket.on('close', () => {
@@ -178,7 +178,7 @@ export function createWorldConnections(
           // did (#387): it can start a departure's clock command.
           queue
             .admit({ run: () => host().disconnect(gone) })
-            .catch((error: unknown) => console.error(styleText('red', `[boardsmith dev] a page leaving the world failed: ${error instanceof Error ? error.message : String(error)}`)));
+            .catch((error: unknown) => console.error(styleText('red', `[boardsmith dev] a page leaving the world failed: ${pageText(error instanceof Error ? error.message : String(error))}`)));
         }
       });
     },

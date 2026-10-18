@@ -25,6 +25,9 @@ import { useActionController } from '../../composables/useActionController.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 import type { EnrichedActionMetadata } from '../../composables/useActionControllerTypes.js';
 
+// jsdom lays nothing out, so it has no `scrollIntoView`; the panel calls it on a refusal (#1159).
+Element.prototype.scrollIntoView = vi.fn();
+
 /**
  * ONE CONTROLLER, AND PANELS THAT COME AND GO OVER IT.
  *
@@ -85,6 +88,12 @@ export async function mountPanelAt(action: EnrichedActionMetadata) {
 export async function submitText(wrapper: VueWrapper, control: string, value: string): Promise<void> {
   await wrapper.find(`.text-input ${control}`).setValue(value);
   await wrapper.find('.text-input .done-button').trigger('click');
+  await nextTick();
+}
+
+export async function submitNumber(wrapper: VueWrapper, value: number): Promise<void> {
+  await wrapper.find('.number-input input[type="number"]').setValue(value);
+  await wrapper.find('.number-input .done-button').trigger('click');
   await nextTick();
 }
 

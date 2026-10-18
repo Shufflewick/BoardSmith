@@ -51,6 +51,7 @@ function mountShell(props: Record<string, unknown> = {}, slots: Record<string, u
   const ctl = controller();
   return mount(PlayShell, {
     props: {
+      boardFailed: false,
       players: [{ seat: 0, name: 'Ivy' }, { seat: 1, name: 'Rook' }],
       playerSeat: 0,
       messages: [],

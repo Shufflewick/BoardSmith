@@ -21,12 +21,13 @@
  * `panelRuleFor`, so an edit that flattens the textarea back onto one line has
  * to delete an assertion that says why.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { nextTick } from 'vue';
 
 import {
   mountPanelAt as panelAt,
   panelRuleFor as ruleFor,
+  submitNumber,
   submitText as submit,
 } from './action-panel-editor.test-helper.js';
 import type { EnrichedActionMetadata } from '../../composables/useActionControllerTypes.js';
@@ -190,6 +191,39 @@ describe('the multiline text editor (#229)', () => {
     expect(error.text()).toContain('at least 20 characters');
     expect(controller.currentArgs.value.creed).toBeUndefined();
     wrapper.unmount();
+  });
+
+  it('scrolls the refusal into view inside the capped bar, in both editors (#1159)', async () => {
+    // The bar caps its height and the message lands below Done, so without
+    // this it opened out of sight. Pressing Done again scrolls it back.
+    const scroll = vi.mocked(Element.prototype.scrollIntoView);
+    const recycle: EnrichedActionMetadata = {
+      name: 'recycle',
+      prompt: 'Recycle waste',
+      selections: [{ name: 'waste', type: 'number', prompt: 'Waste', min: 3 }],
+    };
+    for (const press of [
+      async () => {
+        const { wrapper } = await panelAt(setCreed);
+        await submit(wrapper, 'textarea', 'Too short.');
+        return wrapper;
+      },
+      async () => {
+        const { wrapper } = await panelAt(recycle);
+        await submitNumber(wrapper, 1);
+        return wrapper;
+      },
+    ]) {
+      scroll.mockClear();
+      const wrapper = await press();
+      await nextTick();
+      expect(scroll).toHaveBeenCalledWith({ block: 'nearest' });
+      expect(scroll.mock.contexts[0]).toBe(wrapper.find('.selection-error').element);
+      await wrapper.find('.done-button').trigger('click');
+      await nextTick();
+      expect(scroll).toHaveBeenCalledTimes(2);
+      wrapper.unmount();
+    }
   });
 
   it('associates that error with the field and marks it invalid', async () => {
