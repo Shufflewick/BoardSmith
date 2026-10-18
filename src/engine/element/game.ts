@@ -421,7 +421,7 @@ export interface AnimationEvent {
    * Event-specific data payload. Live in the game's buffer; `toJSON()` writes
    * an element in it as `{ __elementRef }` and a player as `{ __playerRef, seat,
    * color, name }`, and a seat's payload names an element it cannot see by the
-   * outermost container concealing it (#752, `concealRefsForSeat`).
+   * outermost container concealing it (#752, #1043, `concealRefsForSeat`).
    */
   data: Record<string, unknown>;
   /**
@@ -4330,10 +4330,10 @@ export class Game<
    *
    * @param type - Event type identifier (e.g., 'combat', 'score-item')
    * @param data - Event-specific data payload: plain data, elements and
-   *   players. Each seat receives an element as `{ __elementRef: branch }`, a
-   *   path in its own view: the element's, or for one the seat cannot see, the
-   *   outermost container concealing it (world mode excepted, #956). Pass the
-   *   element, not `card.id`: a raw id reaches every seat as it is.
+   *   players. Each seat receives an element as `{ __elementRef: branch }` (in
+   *   a world, `{ __elementId }`) naming the element, or for one the seat cannot
+   *   see, the outermost container concealing it (#1043). Pass the element, not
+   *   `card.id`: a raw id reaches every seat as it is.
    * @param callback - Optional callback to advance truth (convenience).
    *   Runs immediately as normal game code, after the event is buffered. Its
    *   mutations change the game like any other code; they are not recorded
@@ -4578,7 +4578,8 @@ export class Game<
   serializeMessageLog(forSeat?: number | null): MessageEntry[] {
     if (forSeat === undefined) return encodeValue(this.messages, this._ctx, this.constructor.name, 'messages') as MessageEntry[];
     const source = this.messages.filter((m) => this.canSeeMessage(m, forSeat));
-    return serializeForSeat(this._ctx, () => encodeValue(source, this._ctx, this.constructor.name, 'messages')) as MessageEntry[];
+    const encoded = serializeForSeat(this._ctx, () => encodeValue(source, this._ctx, this.constructor.name, 'messages'));
+    return concealRefsForSeat(encoded, this, forSeat ?? -1) as MessageEntry[];
   }
 
   /**
@@ -5056,7 +5057,8 @@ export class Game<
       };
     };
 
-    let filteredState = filterElement(fullJson, this) ?? fullJson;
+    // #1043: one pass for every reference in the view (attributes, settings, animation data).
+    let filteredState = concealRefsForSeat(filterElement(fullJson, this) ?? fullJson, this, visibilityPosition);
 
     // Apply playerView transformation if defined
     const GameClass = this.constructor as typeof Game;
@@ -5132,8 +5134,7 @@ export class Game<
                 `that did not number events per seat: start the game again under this engine.`,
             );
           }
-          // #752: a reference into what this seat cannot see names only the container hiding it.
-          return { ...event, id: own, data: concealRefsForSeat(event.data, this, visibilityPosition) as Record<string, unknown> };
+          return { ...event, id: own };
         });
       if (visible.length === 0) delete view.animationEvents;
       else view.animationEvents = visible;
