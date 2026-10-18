@@ -19,10 +19,10 @@
  * assignment, class field, object property, or the return of a function
  * declaration, method or getter. An array `push`ed a duration holds one, and
  * so does each element a for-of or an element callback (`forEach`, `map`, ...,
- * inline or by name, and `reduce`'s second parameter) takes from it (#1130,
- * #1157). A property is judged by its own value, not by what else its object
+ * inline, by name, as a method, through another variable or through a
+ * parameter, and `reduce`'s second parameter) takes from it (#1130, #1157, #1168). A property is judged by its own value, not by what else its object
  * holds, including one read from an element of an array variable (#1157); `.length`
- * is a count. An array element destructured from a variable rather than a
+ * judged from the whole value is a count (#1168). An array element destructured from a variable rather than a
  * literal takes the whole array. TypeScript's checker resolves
  * each name to the declaration it refers to, so shadowing follows the
  * language's own scope rules rather than a copy of them.
@@ -88,6 +88,9 @@ const isCompound = (kind) => kind >= ts.SyntaxKind.FirstCompoundAssignment && ki
 /** The array methods that hand a callback each element, and which of its parameters takes it. */
 const ELEMENT_PARAMETER = new Map([...['forEach', 'map', 'flatMap', 'filter', 'find', 'some', 'every'].map((name) => [name, 0]),
   ['reduce', 1], ['reduceRight', 1]]);
+/** Whether `node` hands a callback to an array method that passes it each element. */
+const isElementCall = (node) => ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)
+  && ELEMENT_PARAMETER.has(node.expression.name.text) && node.arguments.length > 0;
 const EXPECTS = ['expect', 'expect.soft', 'vi.expect', 'vi.expect.soft'];
 /** Every `expect(...)` in a source whose subject measures a clock difference, with any matcher. */
 const wallClockBudgets = (source, fileName) => scanForBudgets(source, fileName).budgets;
@@ -109,7 +112,8 @@ function scanForBudgets(source, fileName = 'scanned.ts') {
   const memberOf = (values, key) => values.map(bare).flatMap((from) => {
     const declaration = checker.getTypeAtLocation(from).getProperty(key)?.valueDeclaration;
     if (declaration?.name) return [declaration.name];
-    return ts.isObjectLiteralExpression(from) ? [] : [from];
+    // A `length` judged from the whole value is a count, whatever the array or string holds.
+    return ts.isObjectLiteralExpression(from) || key === 'length' ? [] : [from];
   });
   /**
    * Each name `target` gives values to, with those values: a name or `x.name` takes them whole, and a binding or
@@ -146,7 +150,8 @@ function scanForBudgets(source, fileName = 'scanned.ts') {
    * The names `node` gives values to, and those values: a declaration, parameter, field, property or default (each
    * name of a pattern its own part), what a function declaration, method or getter returns, what a call passes to the
    * function's parameters, `x = v`, or `x += v` (whose value is the whole expression, so `x -= performance.now()` is a
-   * subtraction), what `arr.push(v)` gives `arr`, and the elements a for-of or an element callback takes from an array.
+   * subtraction), what `arr.push(v)` gives `arr`, and the elements a for-of takes from an array. Element callbacks
+   * are read after, in `callbackAssignments`.
    */
   const assignmentsAt = (node) => {
     const value = declaredValue(node);
@@ -154,7 +159,7 @@ function scanForBudgets(source, fileName = 'scanned.ts') {
     if (RETURNS.some((is) => is(node)) && node.name && node.body) {
       return [{ target: node.name, values: returnsOf(node) }];
     }
-    if (ts.isCallExpression(node)) return [...passed(node), ...arrayCallAssignments(node)];
+    if (ts.isCallExpression(node)) return [...passed(node), ...pushAssignments(node)];
     if (ts.isNewExpression(node)) return passed(node);
     if (ts.isForOfStatement(node)) return forOfAssignments(node);
     return ts.isBinaryExpression(node) ? binaryAssignments(node) : [];
@@ -164,47 +169,15 @@ function scanForBudgets(source, fileName = 'scanned.ts') {
     const target = ts.isVariableDeclarationList(initializer) ? initializer.declarations[0].name : initializer;
     return unpack(target, elementsAt([expression], 0, true));
   };
-  /** The function `node` is or names: an inline function, a function declaration, or a variable holding one. */
-  const functionAt = (node) => {
-    const value = bare(node);
-    const declaration = ts.isIdentifier(value) ? checker.getSymbolAtLocation(value)?.valueDeclaration : value;
-    const fn = declaration && ts.isVariableDeclaration(declaration) ? declaration.initializer && bare(declaration.initializer) : declaration;
-    return fn && ts.isFunctionLike(fn) ? fn : undefined;
-  };
-  /**
-   * The array methods the checker cannot resolve without a standard library: `arr.push(v)` gives `arr` the value `v`,
-   * and an element callback, inline or by name, gives its element parameter each element of `arr` (the first, or the
-   * second for `reduce`, whose first takes the start value and what the callback returns).
-   */
-  const arrayCallAssignments = (call) => {
-    if (!ts.isPropertyAccessExpression(call.expression)) return [];
-    const { expression: array, name } = call.expression;
-    if (name.text === 'push') return unpack(array, call.arguments);
-    const callback = ELEMENT_PARAMETER.has(name.text) && call.arguments[0] && functionAt(call.arguments[0]);
-    const element = callback && callback.parameters[ELEMENT_PARAMETER.get(name.text)];
-    if (!element) return [];
-    const total = name.text.startsWith('reduce') ? unpack(callback.parameters[0].name, [...call.arguments.slice(1, 2), ...returnsOf(callback)]) : [];
-    return [...unpack(element.name, elementsAt([array], 0, true)), ...total];
-  };
+  /** `arr.push(v)` gives `arr` the value `v`; the checker cannot resolve `push` without a standard library. */
+  const pushAssignments = ({ expression, arguments: args }) => (ts.isPropertyAccessExpression(expression)
+    && expression.name.text === 'push' ? unpack(expression.expression, args) : []);
   /** `x = v` gives `x` the value `v`; `x += v` gives it the whole expression. */
   const binaryAssignments = (node) => {
     const { kind } = node.operatorToken;
     if (kind === ts.SyntaxKind.EqualsToken) return unpack(node.left, [node.right]);
     return isCompound(kind) ? unpack(node.left, [node]) : [];
   };
-
-  const assignments = [];
-  const expects = [];
-  const visit = (node) => {
-    for (const { target, values } of assignmentsAt(node)) {
-      if (ts.isMemberName(target)) assignments.push(...values.map((value) => ({ target, value })));
-    }
-    if (ts.isCallExpression(node) && EXPECTS.includes(node.expression.getText()) && node.arguments.length > 0) {
-      expects.push(node);
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(sourceFile);
 
   /**
    * The declarations name `name` refers to; a bare name declared nowhere is one global per spelling. Root
@@ -219,10 +192,54 @@ function scanForBudgets(source, fileName = 'scanned.ts') {
   const holds = (bindings, node) => ts.isMemberName(node) && bindingsAt(node).some((binding) => bindings.has(binding));
   const bindingsOf = (entries) => new Set(entries.flatMap(({ target }) => bindingsAt(target)));
 
+  const assignments = [];
   const valuesOf = new Map();
-  for (const { target, value } of assignments) {
-    for (const binding of bindingsAt(target)) valuesOf.set(binding, [...valuesOf.get(binding) ?? [], value]);
-  }
+  const record = (entries) => entries.filter(({ target }) => ts.isMemberName(target)).forEach(({ target, values }) => {
+    assignments.push(...values.map((value) => ({ target, value })));
+    for (const binding of bindingsAt(target)) valuesOf.set(binding, [...valuesOf.get(binding) ?? [], ...values]);
+  });
+  const expects = [];
+  const elementCalls = [];
+  const visit = (node) => {
+    record(assignmentsAt(node));
+    if (ts.isCallExpression(node) && EXPECTS.includes(node.expression.getText()) && node.arguments.length > 0) {
+      expects.push(node);
+    }
+    if (isElementCall(node)) elementCalls.push(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+
+  /**
+   * The functions `node` is or names: an inline function, a function declaration or method, or each value given a
+   * name (a variable, parameter or property) that is or names one in turn. A name already followed is not followed again.
+   */
+  const functionsAt = (node, seen = new Set()) => {
+    const value = bare(node);
+    if (ts.isFunctionLike(value)) return [value];
+    const name = ts.isPropertyAccessExpression(value) ? value.name : value;
+    if (!ts.isMemberName(name)) return [];
+    const declaration = checker.getSymbolAtLocation(name)?.valueDeclaration;
+    if (declaration && ts.isFunctionLike(declaration)) return [declaration];
+    const bindings = bindingsAt(name).filter((binding) => !seen.has(binding));
+    bindings.forEach((binding) => seen.add(binding));
+    return bindings.flatMap((binding) => valuesOf.get(binding) ?? []).flatMap((given) => functionsAt(given, seen));
+  };
+  /**
+   * An element callback gives its element parameter each element of the array (the first, or the second for `reduce`,
+   * whose first takes the start value and what the callback returns). Read once every name's values are known, since
+   * the callback may be named through other names.
+   */
+  const callbackAssignments = (call) => {
+    const { expression: array, name } = call.expression;
+    const at = ELEMENT_PARAMETER.get(name.text);
+    return functionsAt(call.arguments[0]).filter((callback) => callback.parameters[at]).flatMap((callback) => {
+      const total = at > 0 ? unpack(callback.parameters[0].name, [...call.arguments.slice(1, 2), ...returnsOf(callback)]) : [];
+      return [...unpack(callback.parameters[at].name, elementsAt([array], 0, true)), ...total];
+    });
+  };
+  elementCalls.forEach((call) => record(callbackAssignments(call)));
+
   /** For each name, the properties already read through it while answering one question. */
   const reading = new Map();
   let reads = 0;
@@ -236,12 +253,11 @@ function scanForBudgets(source, fileName = 'scanned.ts') {
    */
   const readsDuration = (access) => {
     if (checker.getSymbolAtLocation(access.name)) return holds(durations, access.name);
-    // A count, whatever the array or string it is read from holds.
-    return access.name.text !== 'length' && readsProperty(bare(access.expression), access.name.text);
+    return readsProperty(bare(access.expression), access.name.text);
   };
   /** Whether property `key` read through `base` holds a duration; a value that is itself a name, such as an element taken from an array variable, is read through in turn. */
   const readsProperty = (base, key) => {
-    if (!ts.isMemberName(base)) return measures(base);
+    if (!ts.isMemberName(base)) return key !== 'length' && measures(base);
     const bindings = bindingsAt(base).filter((binding) => !reading.get(binding)?.has(key));
     bindings.forEach((binding) => reading.set(binding, (reading.get(binding) ?? new Set()).add(key)));
     reads += bindings.length;
@@ -702,6 +718,42 @@ describe('wallClockBudgets', () => {
       'function counted() { const xs = []; xs.push(3); for (const x of xs) expect(x).toBe(3); expect(Math.max(...xs)).toBe(3); }',
     ].join('\n');
     expect(wallClockBudgets(source)).toEqual([]);
+  });
+
+  it('finds a duration taken by an element callback passed as a method (#1168)', () => {
+    const pushed = 'const ds = [];\nds.push(Date.now() - s);';
+    const helpers = {
+      'a method': 'const h = { check(x) { expect(x).toBeLessThan(5); } };',
+      'an arrow property': 'const h = { check: (x) => { expect(x).toBeLessThan(5); } };',
+    };
+    for (const [form, helper] of Object.entries(helpers)) {
+      expect(wallClockBudgets(`${helper}\n${pushed}\nds.forEach(h.check);`), form).toHaveLength(1);
+      expect(wallClockBudgets(`${helper}\nconst t0 = Date.now();\n[1, 2].forEach(h.check);`), form).toEqual([]);
+    }
+  });
+
+  it('finds a duration taken by an element callback named through another variable (#1168)', () => {
+    const pushed = 'const ds = [];\nds.push(Date.now() - s);';
+    const helper = 'const c = (x) => { expect(x).toBeLessThan(5); };\nconst d = c;';
+    expect(wallClockBudgets(`${helper}\n${pushed}\nds.forEach(d);`)).toHaveLength(1);
+    expect(wallClockBudgets(`${helper}\nconst t0 = Date.now();\n[1, 2].forEach(d);`)).toEqual([]);
+    // Names that only name each other hold no function, and must not loop.
+    expect(wallClockBudgets(`let a = b;\nlet b = a;\n${pushed}\nds.forEach(a);`)).toEqual([]);
+  });
+
+  it('finds a duration taken by an element callback passed through a parameter (#1168)', () => {
+    const pushed = 'const ds = [];\nds.push(Date.now() - s);';
+    const helpers = 'function check(x) { expect(x).toBeLessThan(5); }\nfunction run(xs, cb) { xs.forEach(cb); }';
+    expect(wallClockBudgets(`${helpers}\n${pushed}\nrun(ds, check);`)).toHaveLength(1);
+    expect(wallClockBudgets(`${helpers}\nconst t0 = Date.now();\nrun([1, 2], check);`)).toEqual([]);
+  });
+
+  it('judges a length passed in an object by its own value, and a length read from a whole array as a count (#1168)', () => {
+    const helper = 'function f(o) { expect(o.length).toBeLessThan(5); }';
+    for (const file of ['x.test.ts', 'x.test.mjs']) {
+      expect(wallClockBudgets(`${helper}\nf({ length: Date.now() - s });`, file), file).toHaveLength(1);
+      expect(wallClockBudgets(`${helper}\nconst ds = [];\nds.push(Date.now() - s);\nf(ds);`, file), file).toEqual([]);
+    }
   });
 
   it('leaves a timestamp checked against the clock alone', () => {
