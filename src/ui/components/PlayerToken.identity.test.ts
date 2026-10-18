@@ -79,6 +79,15 @@ describe('PlayerToken shape is derived from seat, not render position', () => {
     });
   });
 
+  it.each([
+    ['Player 2', '2'],
+    ['Seat 12', '12'],
+    ['Alice', 'A'],
+    ['seat', 'S'],
+  ])('draws %j as the glyph %j: default seat names show their number (#1044, #1140)', (name, glyph) => {
+    expect(mount(PlayerToken, { props: { name, seat: 2 } }).find('.tok').text()).toBe(glyph);
+  });
+
   it('wraps around the shape set by seat, so a 9th seat reuses the first shape', () => {
     const first = mount(PlayerToken, { props: { name: 'A', seat: 0 } });
     const ninth = mount(PlayerToken, { props: { name: 'I', seat: 8 } });
