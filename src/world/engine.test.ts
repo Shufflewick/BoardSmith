@@ -2921,6 +2921,29 @@ describe("ShufflewickPub #411/#413 -- one body for every seat that holds the sam
       .toHaveLength(AUDIENCE.length);
   });
 
+  it("sends a granted token nested below a hidden one inside the room, and nothing of the one between (#961)", async () => {
+    const engine = scopedWorld((room) => {
+      room.contentsHidden();
+      room.create(Token, "nested-crate").create(Token, "nested-gem").addVisibleTo(1);
+    });
+
+    const answered = await engine.viewsFor(["p1", "p2"]);
+
+    const bodyOf = (player: string) => {
+      const seat = answered.seats.find((held) => held.player === player)!;
+      if (seat.refused) throw new Error(`${player} was refused`);
+      return answered.bodies[seat.at];
+    };
+    const roomIn = (node: unknown): ElementJSON | undefined => {
+      if (typeof node !== "object" || node === null) return undefined;
+      if ((node as ElementJSON).name === "room-one") return node as ElementJSON;
+      return Object.values(node).map(roomIn).find((found) => found !== undefined);
+    };
+    expect(roomIn(bodyOf("p1"))!.children!.map((child) => child.name)).toEqual(["nested-gem"]);
+    expect(JSON.stringify(bodyOf("p1"))).not.toContain("nested-crate");
+    expect(roomIn(bodyOf("p2"))!.children).toBeUndefined();
+  });
+
   it("tells no seat who else was granted the room", async () => {
     // THE VISIBILITY BOUNDARY (F-09), asserted over what actually crosses the
     // boundary rather than over the redaction helper: no body a seat receives

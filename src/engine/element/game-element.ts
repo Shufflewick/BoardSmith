@@ -1276,13 +1276,13 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   /**
-   * Whether the seat's view carries this element (#1062): its own visibility
-   * allows the seat, and so does every ancestor's, since nothing below an
-   * element hidden from the seat is ever sent to it.
+   * Whether the seat's view carries this element (#1062, #961): its own
+   * visibility allows the seat, and so does every ancestor's, except the
+   * hidden ones between it and a concealed zone the seat can see, since a
+   * granted element below a zone's hidden child is sent inside that zone.
    */
   isVisibleTo(player: Player | number): boolean {
-    const seat = typeof player === 'number' ? player : player.seat;
-    return ownVisibilityAllows(this, seat) && (this._t.parent?.isVisibleTo(seat) ?? true);
+    return deepestRevealed(this, typeof player === 'number' ? player : player.seat) === this;
   }
 
   /**
@@ -2176,13 +2176,43 @@ export interface ZoneVisibilityOwner {
 
 /**
  * Whether the element's own visibility allows the seat, ancestors aside
- * (#1123). Only for a walk that never descends below an element hidden from
- * the seat, where every ancestor is already known visible; anywhere else,
- * `isVisibleTo` is the answer. Not re-exported from the engine.
+ * (#1123). Only for a walk from the top that already knows what its
+ * ancestors leave open (`deepestRevealed`); anywhere else, `isVisibleTo` is
+ * the answer. Not re-exported from the engine.
  */
 export function ownVisibilityAllows(element: GameElement, seat: number): boolean {
   // The owner is this element's, or the nearest ancestor's (inherited visibility).
   return canPlayerSee(element.getEffectiveVisibility(), seat, element.getEffectiveOwner()?.seat);
+}
+
+/** Whether `element` is a zone whose contents the seat cannot see. */
+export function hidesContents(element: GameElement, seat: number): boolean {
+  const zone = hasZoneVisibility(element) ? element.getZoneVisibility() : undefined;
+  return zone !== undefined && !canPlayerSee(zone, seat, element.getEffectiveOwner()?.seat);
+}
+
+/**
+ * The deepest of `element` and its ancestors that the seat's view carries, or
+ * undefined when not even the topmost is. The one rule `redactTreeForSeat`
+ * applies, walked from the top: below a visible element whose contents are
+ * shown, a hidden element closes everything under it; below a concealed zone,
+ * a hidden element stays hidden and anything under it whose own visibility
+ * allows the seat is carried, inside that zone (#961).
+ */
+export function deepestRevealed(element: GameElement, seat: number): GameElement | undefined {
+  const chain: GameElement[] = [];
+  for (let at: GameElement | undefined = element; at; at = at._t.parent) chain.unshift(at);
+  let revealed: GameElement | undefined;
+  let concealing = false;
+  for (const at of chain) {
+    if (ownVisibilityAllows(at, seat)) {
+      revealed = at;
+      concealing = hidesContents(at, seat);
+    } else if (!concealing) {
+      break;
+    }
+  }
+  return revealed;
 }
 
 /**
