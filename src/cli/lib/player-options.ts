@@ -36,8 +36,9 @@ function numberProblems(name: string, { default: initial, min, max, step }: Opti
     return [`${name} needs "min", "max" and "step", where given, to be numbers.`];
   }
   if (typeof step === 'number' && step <= 0) return [`${name} needs a "step" above 0.`];
-  const outside = (typeof min === 'number' && initial < min) || (typeof max === 'number' && initial > max);
-  return outside ? [`${name} has default ${initial}, outside ${String(min)} to ${String(max)}.`] : [];
+  if (typeof min === 'number' && initial < min) return [`${name} has default ${initial}, below its min of ${min}.`];
+  if (typeof max === 'number' && initial > max) return [`${name} has default ${initial}, above its max of ${max}.`];
+  return [];
 }
 
 /** What each type the platform's manifest accepts needs (ShufflewickPub games/src/manifest-schema.ts). */
@@ -66,7 +67,8 @@ function publishProblems(key: string, option: Option): string[] {
  * list. A key the two declare differently is refused, since either answer
  * would silently drop the other, and so is an option the platform's manifest
  * cannot carry, since dev would offer what the live lobby cannot. Colour is
- * left out: the lobby builds it from `colorPalette` (#814).
+ * left out of code and refused in boardsmith.json: the lobby builds it from
+ * `colorPalette` (#814).
  */
 export function mergePlayerOptions(
   code: Record<string, PlayerOptionDefinition> | undefined,
@@ -80,12 +82,22 @@ export function mergePlayerOptions(
     );
   }
   const { color: _color, ...merged } = { ...code };
+  const seen = new Set<string>();
   ((config ?? []) as ConfigOptionDefinition[]).forEach(({ id, name, ...declared }, index) => {
     const key = id ?? name;
     if (!key) {
       throw new Error(`boardsmith.json playerOptions[${index}] has no "id". Give it one, e.g. "id": "botLevel".`);
     }
-    if (key === 'color') return;
+    if (key === 'color') {
+      throw new Error(
+        'boardsmith.json declares a "color" player option, which the lobby never offers: it builds colour from ' +
+          '"colorPalette". Remove the "color" entry and list your colours in boardsmith.json\'s "colorPalette".',
+      );
+    }
+    if (seen.has(key)) {
+      throw new Error(`boardsmith.json declares player option "${key}" twice. Remove or rename one.`);
+    }
+    seen.add(key);
     const inCode = code?.[key];
     // Compared as JSON, the form the manifest publishes, so an undefined field in code is no difference.
     if (inCode !== undefined && !isDeepStrictEqual(JSON.parse(JSON.stringify(inCode)), declared)) {

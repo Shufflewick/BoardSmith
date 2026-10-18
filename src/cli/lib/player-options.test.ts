@@ -45,9 +45,18 @@ describe('mergePlayerOptions', () => {
     expect(merge).toThrow(/Declare "role" in one place/);
   });
 
-  it('leaves colour out, which the lobby builds from colorPalette, so a colour in both is not refused', () => {
-    const fromConfig = { id: 'color', type: 'color', label: 'Colour', choices: [] };
-    expect(mergePlayerOptions({ color: createColorOption() }, [fromConfig])).toEqual({});
+  it('leaves the code-side colour out, which the lobby builds from colorPalette', () => {
+    expect(mergePlayerOptions({ color: createColorOption(), role }, undefined)).toEqual({ role });
+  });
+
+  it('refuses a boardsmith.json colour option by name and points to colorPalette', () => {
+    const merge = () => mergePlayerOptions(undefined, [{ id: 'color', type: 'color', label: 'Colour', choices: [] }]);
+    expect(merge).toThrow(/boardsmith.json declares a "color" player option.*"colorPalette"/s);
+  });
+
+  it('refuses an id boardsmith.json declares twice, naming it', () => {
+    const merge = () => mergePlayerOptions(undefined, [{ id: 'botLevel', ...botLevel }, { name: 'botLevel', ...botLevel }]);
+    expect(merge).toThrow(/boardsmith.json declares player option "botLevel" twice/);
   });
 
   it('reads an option keyed by "name" as boardsmith.json allows', () => {
@@ -91,8 +100,10 @@ describe('mergePlayerOptions refuses an option the platform\'s manifest cannot c
   it('needs a number option\'s default to be a number inside its range, and a boolean\'s to be a boolean', () => {
     expect(refused({ type: 'number', label: 'Seats' })).toThrow(/"odd" needs a number "default"/);
     expect(refused({ type: 'number', label: 'Seats', default: 9, min: 1, max: 4 })).toThrow(
-      /"odd" has default 9, outside 1 to 4/,
+      /"odd" has default 9, above its max of 4\./,
     );
+    expect(refused({ type: 'number', label: 'Seats', default: 0, min: 1 })).toThrow(/"odd" has default 0, below its min of 1\./);
+    expect(refused({ type: 'number', label: 'Seats', default: 9, max: 4 })).toThrow(/"odd" has default 9, above its max of 4\./);
     expect(refused({ type: 'number', label: 'Seats', default: 2, step: 0 })).toThrow(/"odd" needs a "step" above 0/);
     expect(refused({ type: 'boolean', label: 'Ready' })).toThrow(/"odd" needs a true or false "default"/);
   });
