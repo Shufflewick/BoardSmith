@@ -16,7 +16,7 @@
  * so the only way a number reaches `main` from a parallel branch is through this allocation.
  */
 import { PROVISIONAL_NUMBER, blankComments, citableText, entryHeadingPattern } from './ledger-entries.js';
-import { escapeRegExp } from './regexp.js';
+import { escapeRegExp } from '../../utils/regexp.js';
 import { CONSTRAINTS_MD, DECISIONS_MD, FILINGS_MD, QUESTIONS_MD, RULINGS_MD } from './project-paths.js';
 
 /** One kind of numbered entry: its ledger, its heading word, and what separates word and number. */

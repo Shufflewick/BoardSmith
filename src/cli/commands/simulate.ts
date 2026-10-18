@@ -16,7 +16,7 @@ import type { GameOptionDefinition } from '../../session/types.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { simulateReplayCommand } from '../lib/replay-command.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
-import { parsePositiveWholeNumber } from '../lib/positive-whole-number.js';
+import { parsePositiveWholeNumber } from '../../utils/positive-whole-number.js';
 
 interface SimulateOptions {
   /** Games per player count. */
@@ -85,10 +85,7 @@ export function parsePlayerCounts(
     return Array.from({ length: maxPlayers - minPlayers + 1 }, (_, i) => minPlayers + i);
   }
   const counts = raw.split(',').map((part) => {
-    if (!/^\d+$/.test(part) || Number(part) < 1) {
-      throw new Error(`--players takes positive whole numbers separated by commas (e.g. 2,4,6), got "${raw}".`);
-    }
-    const count = Number(part);
+    const count = parsePositiveWholeNumber('--players', part);
     if ((minPlayers !== undefined && count < minPlayers) || (maxPlayers !== undefined && count > maxPlayers)) {
       throw new Error(`--players ${count} is outside this game's range of ${minPlayers} to ${maxPlayers} players.`);
     }
@@ -312,7 +309,7 @@ async function planVariants(
 
 /** A positive whole number of worker threads, every core's worth when `--jobs` is not given. */
 function parseJobs(raw: string | undefined): number {
-  return raw === undefined ? availableParallelism() : parsePositiveWholeNumber('jobs', raw);
+  return raw === undefined ? availableParallelism() : parsePositiveWholeNumber('--jobs', raw);
 }
 
 /** The flags read before the rules are loaded. */
@@ -325,12 +322,8 @@ interface RunFlags {
 }
 
 function parseRunFlags(options: SimulateOptions): RunFlags {
-  const gamesPerCount = Number(options.games);
-  if (!Number.isInteger(gamesPerCount) || gamesPerCount < 1) {
-    throw new Error(`Error: --games must be a positive integer, got "${options.games}"`);
-  }
   return {
-    gamesPerCount,
+    gamesPerCount: parsePositiveWholeNumber('--games', options.games),
     jobs: parseJobs(options.jobs),
     dimensions: parseCompare(options.compare),
     seed: options.replay ?? options.seed ?? crypto.randomUUID(),

@@ -1,4 +1,4 @@
-import { NOTHING_CHANGED, rulesErrorSentence, withDevDetail } from './rules-error.js';
+import { rulesErrorSentence, withDevDetail } from './rules-error.js';
 import type { GameElement } from '../element/game-element.js';
 import { isElement } from '../element/game-element.js';
 import type { Player } from '../player/player.js';
@@ -7,6 +7,7 @@ import type {
   ActionDefinition,
   ActionContext,
   ActionResult,
+  ExecuteResult,
   Selection,
   ChoiceSelection,
   ElementSelection,
@@ -94,13 +95,33 @@ export function failedExecute(actionName: string, error: unknown): ActionResult 
   // An engine policy refusal was written to be read — its message IS the
   // actionable next step. Anything else is an arbitrary runtime error, and
   // goes no further than this log.
-  const generic = `${rulesErrorSentence(actionName)} ${NOTHING_CHANGED}`;
+  const generic = rulesErrorSentence(actionName);
   // A PlayerFacingError's text was written to be read, so it always travels.
   // Anything else travels only in a positively-labelled dev/test environment,
   // where the reader is the author who needs it and there is no player to leak
   // to. In production it goes no further than the log above.
   if (error instanceof PlayerFacingError) return { success: false, error: error.message, partiallyApplied: true };
   return { success: false, error: withDevDetail(generic, error), partiallyApplied: true, rulesError: true };
+}
+
+const ENGINE_ONLY_FLAGS = ['rulesError', 'partiallyApplied', 'notSimulable'] as const;
+
+/**
+ * Drop the flags only the engine may set from what `execute()` returned (#1016).
+ * The type already forbids them; this catches plain JS and casts, so a game
+ * cannot code its own refusal as a crash and change what a host decides.
+ */
+function withoutEngineFlags(actionName: string, returned: ExecuteResult): ActionResult {
+  const smuggled = ENGINE_ONLY_FLAGS.filter((flag) => returned[flag] !== undefined);
+  if (smuggled.length === 0) return returned;
+  console.error(
+    `[BoardSmith] Action '${actionName}' returned ${smuggled.join(', ')} from execute(). ` +
+      'Only the engine sets these, so they were dropped. Refuse with ' +
+      "{ success: false, error: 'why' }; a crash is reported by throwing.",
+  );
+  const result: ActionResult = { ...returned };
+  for (const flag of smuggled) delete result[flag];
+  return result;
 }
 
 /**
@@ -126,7 +147,8 @@ export function failedExecute(actionName: string, error: unknown): ActionResult 
  * Not `partiallyApplied`. The author believed they were refusing cleanly, and a clean
  * refusal mutated nothing, so there is nothing for the runner to roll back.
  */
-function acceptExecuteResult(actionName: string, result: ActionResult): ActionResult {
+function acceptExecuteResult(actionName: string, returned: ExecuteResult): ActionResult {
+  const result = withoutEngineFlags(actionName, returned);
   if (result.success) return result;
   if (typeof result.error === 'string' && result.error.trim() !== '') return result;
 
@@ -1197,7 +1219,9 @@ export class ActionExecutor {
   }
 
   /**
-   * Validate all arguments for an action
+   * Validate all arguments for an action. A repeating selection's picks are
+   * not made here, since their `onEach` changes the game: `acceptsSubmission`
+   * (utils/enumerate-moves) judges those on a copy (#1101).
    */
   validateAction(
     action: ActionDefinition,
@@ -1221,6 +1245,8 @@ export class ActionExecutor {
     args: Record<string, unknown>,
     options?: PerformOptions,
   ): { args: Record<string, unknown> } | { error: string } {
+    // A held follow-up's args over the client's.
+    args = { ...args, ...options?.followUp?.args };
     // A follow-up is offered by the chain, not its condition. The condition
     // sees no picks, as availability and each pick-by-pick step see it.
     const resolved = this.resolveNonPickArgs(action, args, this.game);
@@ -1285,8 +1311,7 @@ export class ActionExecutor {
       return this.executeThroughSelectionSteps(action, player, args, options);
     }
 
-    // A held follow-up's args over the client's.
-    const checked = this.checkSubmission(action, player, { ...args, ...options?.followUp?.args }, options);
+    const checked = this.checkSubmission(action, player, args, options);
     if ('error' in checked) return { success: false, error: checked.error };
     const resolvedArgs = checked.args;
 
@@ -1362,10 +1387,29 @@ export class ActionExecutor {
     args: Record<string, unknown>,
     options?: PerformOptions,
   ): ActionResult {
-    // The condition sees no picks, as availability and each step see it; the picks are checked one at a time below (#772).
-    const context = { game: this.game, player, args: this.resolveNonPickArgs(action, args, this.game) };
-    if (!options?.followUp && action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
-      return { success: false, error: 'Action is not available' };
+    const fed = this.feedThroughSelectionSteps(action, player, args, options);
+    if ('error' in fed) return { success: false, error: fed.error, ...(fed.applied && { partiallyApplied: true }) };
+    const result = this.executePendingAction(action, player, fed.pendingState);
+    return !result.success && fed.applied ? { ...result, partiallyApplied: true } : result;
+  }
+
+  /**
+   * A whole submission's picks made through the selection steps, as
+   * {@link executeThroughSelectionSteps} makes them before `execute`: the
+   * pending action they complete, or why they were refused. `applied` says
+   * whether a callback that can change the game (`onSelect`, `onEach`) ran, so
+   * the game is not as it was. Ask {@link pendingActionRefusal} of the pending
+   * action for the action-level gate.
+   */
+  feedThroughSelectionSteps(
+    action: ActionDefinition,
+    player: Player,
+    args: Record<string, unknown>,
+    options?: PerformOptions,
+  ): { pendingState: PendingActionState; applied: boolean } | { error: string; applied: boolean } {
+    // The condition first, with no picks, as the offer checks it; the picks are checked one at a time below (#772, #1129).
+    if (!options?.followUp && !this.conditionHolds(action, player)) {
+      return { error: 'Action is not available', applied: false };
     }
 
     const pendingState = this.createPendingActionState(action.name, player.seat);
@@ -1377,12 +1421,10 @@ export class ActionExecutor {
       applied ||= step.applied;
       if (step.error !== undefined) {
         this.fireOnCancelCallbacks(action, pendingState);
-        return { success: false, error: step.error, ...(applied && { partiallyApplied: true }) };
+        return { error: step.error, applied };
       }
     }
-
-    const result = this.executePendingAction(action, player, pendingState);
-    return !result.success && applied ? { ...result, partiallyApplied: true } : result;
+    return { pendingState, applied };
   }
 
   /**
@@ -1580,16 +1622,14 @@ export class ActionExecutor {
     return this.hasValidSelectionPath(action.selections, player, resolved, 0, action.name);
   }
 
-  isActionAvailable(action: ActionDefinition, player: Player): boolean {
-    const context: ActionContext = {
-      game: this.game,
-      player,
-      args: {},
-    };
+  /** Whether the action's condition offers it to `player`, with empty args as availability sees it. */
+  conditionHolds(action: ActionDefinition, player: Player): boolean {
+    return !action.condition
+      || evaluateCondition(action.condition, { game: this.game, player, args: {} }, `action '${action.name}'`);
+  }
 
-    if (action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
-      return false;
-    }
+  isActionAvailable(action: ActionDefinition, player: Player): boolean {
+    if (!this.conditionHolds(action, player)) return false;
 
     // Check if there's at least one valid path through all selections.
     // Pass action.name so tutorial gate disabled reasons are included when

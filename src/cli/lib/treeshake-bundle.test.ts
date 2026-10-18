@@ -287,9 +287,10 @@ describe('tree-shaking bundle proof (real Vite/Rollup build)', () => {
       writeFileSync(
         join(fixtureDir, 'src/ui/uis.ts'),
         `import { defineGameUIs, defaultUI, devUI } from 'boardsmith/ui';
+import GameTable from './components/GameTable.vue';
 
 export default defineGameUIs({
-  GameTable: defaultUI(() => import('./components/GameTable.vue')),
+  GameTable: defaultUI(GameTable),
   Retired: devUI(() => import('./components/RetiredBoard.vue')),
 });
 `,

@@ -5,7 +5,7 @@
  * Fake timers stand in for the machine: an answer that takes long is a page or host that was busy.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ANSWER_TICK_MS, clocks, FROZEN_MS, lastErrorsLand, PageClock, PageTimeOverrun, withinPageTime } from './browser-smoke-clock.js';
+import { anyWithinPageTime, ANSWER_TICK_MS, clocks, FROZEN_MS, lastErrorsLand, PageClock, PageTimeOverrun, withinPageTime } from './browser-smoke-clock.js';
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => vi.useRealTimers());
@@ -102,6 +102,37 @@ describe('withinPageTime', () => {
 
     await failed;
     clock.stop();
+  });
+});
+
+describe('anyWithinPageTime (#926)', () => {
+  const ranOutError = () => Object.assign(new Error('locator.waitFor: Timeout exceeded.'), { name: 'TimeoutError' });
+
+  /** What `anyWithinPageTime` gives for `attempts` on a page that always answers, once 60s of (fake) time has passed. */
+  async function outcome(...attempts: ((timeout: number) => Promise<unknown>)[]): Promise<boolean | Error> {
+    const { clock } = clockAnswering(() => 0);
+    const page = {};
+    clocks.set(page, clock);
+    const waiting = anyWithinPageTime(page, 5_000, 'waiting for a turn', attempts).catch((error: Error) => error);
+    await vi.advanceTimersByTimeAsync(60_000);
+    clock.stop();
+    return waiting;
+  }
+
+  /** A wait that runs out after its timeout, as a locator that never appears does. */
+  const neverThere = (timeout: number) => new Promise<never>((_, fail) => setTimeout(() => fail(ranOutError()), timeout));
+
+  it('is true once any wait is met', async () => {
+    expect(await outcome(neverThere, () => Promise.resolve())).toBe(true);
+  });
+
+  it('is false when every wait ran out of page time', async () => {
+    expect(await outcome(neverThere, neverThere)).toBe(false);
+  });
+
+  it('passes on any other error, as a frame detached under the wait, even when another wait ran out', async () => {
+    const detached = new Error('locator.waitFor: Frame was detached');
+    expect(await outcome(neverThere, () => Promise.reject(detached))).toBe(detached);
   });
 });
 

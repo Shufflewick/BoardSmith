@@ -139,7 +139,8 @@ export type ExecutorOp =
    * A bot's search: the move one due bot seat among `seats` would make, found
    * WITHOUT making it. Read-only: the game is left as it was. A host makes the
    * move as an ordinary `action` op for that seat, once it has checked the game
-   * still stands where the search began (#635).
+   * still stands where the search began (#635). Host-internal:
+   * `SnapshotSessionHost.handleOp` refuses it (#1100).
    */
   | { type: 'botSuggest'; seats: Array<{ seat: number; level?: string }> };
 

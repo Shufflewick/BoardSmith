@@ -15,7 +15,7 @@
  * of Node and nothing else; `tsx` is loaded the same way `bin/boardsmith.js`
  * loads it, so the store runs from source with no build step.
  *
- * `hold` mode is `world-store.lock.test.ts`'s other run: it opens the store,
+ * `hold` mode is `world-store.lock.test.ts`'s other run: it takes the run's lock, opens the store,
  * prints `holding`, and keeps it open until it is killed.
  *
  * Usage: `node world-store-child.test-helper.mjs <mode> <storePath> <markerDir> [count] [bytes]`
@@ -25,14 +25,16 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 await import('tsx');
-const { openWorldStore } = await import('./world-store.ts');
+const { openWorldStore, takeWorldLock } = await import('./world-store.ts');
 const { worldBudgets } = await import('../../world/budgets.ts');
 
 const [mode, storePath, markerDir, countArg, bytesArg] = process.argv.slice(2);
 const count = Number(countArg ?? 0);
 const bytes = Number(bytesArg ?? 0);
 
-const store = openWorldStore(storePath, worldBudgets());
+// `hold` is a `boardsmith dev` run: it holds the world for the run, then opens the store (#1040).
+if (mode === 'hold') takeWorldLock(storePath, { port: 5173 });
+const store = openWorldStore(storePath, worldBudgets(), mode === 'hold' ? { port: 5173 } : {});
 const mark = (name) => writeFileSync(join(markerDir, name), 'x');
 
 /** One partition's bytes at a given version, padded to `bytes` so a checkpoint

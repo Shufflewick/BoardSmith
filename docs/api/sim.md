@@ -47,8 +47,13 @@ shares the game's engine. Its options are described in
 
 - `random()` - Builds one random, valid move from each of the seat's enabled
   actions, step by step from the engine's own choices, and one from its held
-  follow-up (`followUpForSeat`), and plays one of them (#911).
-  The policy `simulateRandomGames` plays every seat with.
+  follow-up (`turn.followUp`), and plays one of them (#911).
+  The policy `simulateRandomGames` plays every seat with. A follow-up's move
+  is built differently from an action's: it comes from move enumeration, so a
+  number input its args leave open is listed only with `min`, `max` and
+  `integer: true` (an action's needs only `min` and `max`), and
+  `onSelectionChoices` never sees its choice steps, so the choice-cardinality
+  audit of `boardsmith validate` skips an action reached only as a follow-up.
 - `greedy(score)` - Scores every legal move of the seat
   (`enumerateLegalMoves`) with `score(game, move, seat)` and plays the highest,
   breaking a tie with the seat's own seeded generator. `score` must return a
@@ -83,9 +88,11 @@ shares the game's engine. Its options are described in
   (`{ action, args }`), or `{ noMove: reason }` when its seat has none it can
   play; it may return a promise.
 - `PolicyTurn` - What `choose` is handed: the live `game`, the `seat` to move,
-  its enabled `actions` (a held follow-up is not among them: read it with
-  `followUpForSeat`), its own seeded `random` generator and the game
-  `definition`.
+  its enabled `actions`, the `followUp` it holds, if any (#1078), its own
+  seeded `random` generator and the game `definition`. A held follow-up is
+  not among `actions` and may be the seat's only move, with `actions` empty:
+  play it as `{ action: followUp.action, args }`, where `args` keeps
+  `followUp.args` and adds the picks they leave open.
 - `PolicyMove`, `PolicyChoice`, `SimulatedGame`, `PlayGameConfig` - The shapes above.
 
 ## Rules a policy plays by

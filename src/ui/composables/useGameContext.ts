@@ -84,8 +84,6 @@ export interface PlayContext {
   availableActions: ComputedRef<string[]>;
   /** The action controller — the one write path for taking an action. */
   actionController: UseActionControllerReturn;
-  /** Issue a host op (dev/debug surfaces). */
-  platformRequest: (op: string, payload: Record<string, unknown>) => Promise<Record<string, unknown>>;
   /** The presentation overlay, if the host supplied one. */
   presentation: Ref<unknown>;
   /** Element id the debug panel is highlighting, or null. */
@@ -93,7 +91,7 @@ export interface PlayContext {
 }
 
 /**
- * Everything `GameShell` makes available — the shared context plus the three
+ * Everything `GameShell` makes available — the shared context plus the
  * fields only a table has.
  *
  * Every field is reactive; read `.value` as usual. The shape is what the shell
@@ -117,6 +115,8 @@ export interface GameContext extends PlayContext {
   dueSeats: ComputedRef<number[]>;
   /** What a time-travel step changed, or null when not time travelling. */
   timeTravelDiff: Ref<TimeTravelDiff | null>;
+  /** Issue a host op (dev/debug surfaces). A world has no host ops, so this is a table-only field. */
+  platformRequest: (op: string, payload: Record<string, unknown>) => Promise<Record<string, unknown>>;
   /**
    * The host's deadline for the current step, or null when the host has set
    * none. `remainingMs` is measured on the host's clock, floors at zero and
@@ -134,7 +134,7 @@ export interface GameContext extends PlayContext {
  */
 export const PLAY_CONTEXT_KEY_NAMES = [
   'gameView', 'players', 'myPlayer', 'playerSeat', 'isMyTurn', 'isViewingHistory', 'availableActions',
-  'actionController', 'platformRequest', 'presentation', 'debugHighlight',
+  'actionController', 'presentation', 'debugHighlight',
 ] as const satisfies readonly (keyof PlayContext)[];
 
 /** One typed key per field of {@link GameContext}. */

@@ -332,6 +332,24 @@ describe('verifyRunRecordCommand / verifyRunStatusCommand — ledger', () => {
     expect(status.runId).toBe(newer.runId);
   });
 
+  it('with no --run-id, a later run-id folder with no RUN.md is not the default run, and is named for removal once (#1003)', async () => {
+    const project = await liveProject();
+    const real = await verifyRunInitCommand({ project, runId: '2026-01-01T00-00-00Z', json: true });
+    const fake = '2099-01-01T00-00-00Z';
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook', '.verify', fake), { recursive: true });
+    const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const status = await verifyRunStatusCommand({ project, json: true });
+      expect(status.runId).toBe(real.runId);
+      const notices = stderr.mock.calls.map((c) => String(c[0])).filter((m) => m.includes(fake));
+      expect(notices).toHaveLength(1);
+      expect(notices[0]).toContain(`${DESIGN_DIR}/rulebook/.verify/${fake}/ has no RUN.md`);
+      expect(notices[0]).toMatch(/Remove that folder; it is not a verify run/);
+    } finally {
+      stderr.mockRestore();
+    }
+  });
+
   it('L7: a torn final in-fence line reads as that unit NOT recorded (crash safety), with a warning, no throw', async () => {
     const { project, runId } = await initAndStage();
     await verifyRunRecordCommand({ project, runId, unit: '03-setup', slice: '03-setup.md', json: true });
@@ -371,6 +389,32 @@ describe('verifyRunRecordCommand / verifyRunStatusCommand — ledger', () => {
     await expect(
       verifyRunRecordCommand({ project, runId, unit: 'x', slice: '03-setup.md', json: true }),
     ).rejects.toThrow(/machine-owned fences/);
+  });
+
+  it('L9: the repair the fences error advises restores a working run (#1006)', async () => {
+    const { project, runId, stagingAbs } = await initAndStage();
+    await verifyRunRecordCommand({ project, runId, unit: '03-setup', slice: '03-setup.md', json: true });
+    execSync('git init', { cwd: project, stdio: 'ignore' });
+    execSync('git add -A', { cwd: project, stdio: 'ignore' });
+    execSync('git -c user.email=t@t -c user.name=t commit -m run', { cwd: project, stdio: 'ignore' });
+    await fs.writeFile(join(stagingAbs, '07-turn.md'), 'staged turn content\n');
+    await verifyRunRecordCommand({ project, runId, unit: '07-turn', slice: '07-turn.md', json: true });
+    const ledgerAbs = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'RUN.md');
+    await fs.writeFile(ledgerAbs, '# Verify Run Ledger\n\nno fences here\n');
+
+    const message = await verifyRunStatusCommand({ project, runId, json: true }).then(
+      () => '',
+      (err: Error) => err.message,
+    );
+    expect(message).not.toMatch(/verify-run-init --run-id/);
+    const advised = message.match(/`(git restore [^`]+)`/)?.[1];
+    expect(advised).toBeDefined();
+    expect(message).toMatch(/drops every slice recorded since that commit/);
+    execSync(advised!, { cwd: project, stdio: 'ignore' });
+
+    // The committed record comes back; the one made after the commit is gone, as the message says.
+    const status = await verifyRunStatusCommand({ project, runId, json: true });
+    expect(status.recorded).toEqual(['03-setup']);
   });
 });
 

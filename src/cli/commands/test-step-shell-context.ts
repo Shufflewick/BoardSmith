@@ -15,7 +15,7 @@ import { parseSource, walk, type AstNode } from './test-step-ast.js';
  * The game-context fields a table's shell provides and a world's never does. A test in
  * `test-step-shell-context.test.ts` holds this list equal to the one the shells are built from.
  */
-export const ONE_SHELL_CONTEXT_FIELDS = ['gameState', 'dueSeats', 'timeTravelDiff', 'turnDeadline'] as const;
+export const ONE_SHELL_CONTEXT_FIELDS = ['gameState', 'dueSeats', 'timeTravelDiff', 'platformRequest', 'turnDeadline'] as const;
 
 /** The other keys only one shell provides: the table's announcer and animations, and the world itself. */
 const ONE_SHELL_KEYS = new Set(['ANNOUNCER_KEY', 'ANIMATION_EVENTS_KEY', 'WORLD_CONTEXT_KEY']);
