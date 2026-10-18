@@ -186,8 +186,8 @@ describe('history is encoded only for a submission its checks accept (#1128)', (
 class Crate extends Piece<StowGame> {}
 
 class StowGame extends Game<StowGame, Player> {
-  yard!: Space<StowGame>;
-  shed!: Space<StowGame>;
+  yard!: Space;
+  shed!: Space;
 
   constructor(options: GameOptions) {
     super(options);
@@ -199,12 +199,12 @@ class StowGame extends Game<StowGame, Player> {
     this.yard.create(Crate, 'third');
     this.registerAction(
       Action.create<StowGame>('stow')
-        .chooseElement<Crate>('crate', {
+        .chooseElement('crate', {
           elementClass: Crate,
           from: (ctx) => ctx.game.yard,
           onSelect: (crate) => crate.putInto(this.shed),
         })
-        .chooseElement<Crate>('next', { elementClass: Crate, from: (ctx) => ctx.game.yard })
+        .chooseElement('next', { elementClass: Crate, from: (ctx) => ctx.game.yard })
         .execute((args, ctx) => {
           (args.next as Crate).putInto(ctx.game.shed);
           return { success: true };
