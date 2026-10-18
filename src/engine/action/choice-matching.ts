@@ -221,15 +221,14 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * True when every own key of `subset` exists on `full` and deep-equals it.
- * `full` may carry extra keys (the presentation-only metadata). Both must be
- * plain objects for a subset relationship to be meaningful.
+ * True when `subset` has at least one own key and every one exists on `full`
+ * and deep-equals it. `full` may carry extra keys (the presentation-only
+ * metadata). An object with no own keys (`{}`, a Date, a Map) identifies
+ * nothing, so it is a subset of no choice (#1131). Both must be plain objects
+ * for a subset relationship to be meaningful.
  */
 function isObjectSubset(subset: unknown, full: unknown): boolean {
   if (!isPlainObject(subset) || !isPlainObject(full)) return false;
-  for (const key of Object.keys(subset)) {
-    if (!(key in full)) return false;
-    if (!valuesEqual(subset[key], full[key])) return false;
-  }
-  return true;
+  const keys = Object.keys(subset);
+  return keys.length > 0 && keys.every((key) => key in full && valuesEqual(subset[key], full[key]));
 }

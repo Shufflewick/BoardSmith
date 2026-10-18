@@ -4,7 +4,7 @@ import type { Annotation } from '../engine/index.js';
 import type { BotStrategy } from '../bot/types.js';
 import type { GameStateSnapshot } from '../runtime/index.js';
 import { executeOp, type GameDefinitionLike, type ExecutableOp, type Op, type OpResult } from './stateless-ops.js';
-import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
+import { SnapshotSessionHost, type SeatOp, type SnapshotSessionAdapters } from './snapshot-session-host.js';
 import { BotGame, botGameDef, botGameOptions } from './testing/fixtures/bot-game-fixture.js';
 import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
 import { stubExecuteOp, succeeded } from './op-result.test-helper.js';
@@ -374,7 +374,8 @@ describe('SnapshotSessionHost', () => {
 
         // restoreEarlier is host-only (#1102): the host sends it through its own entry point.
         if (opType === 'restoreEarlier') await host.restoreEarlier({} as GameStateSnapshot);
-        else await host.handleOp(1, { type: opType, player: 1, actionIndex: 0 } as Op);
+        else if (opType === 'undo') await host.handleOp(1, { type: 'undo', player: 1 });
+        else await host.handleOp(1, { type: 'debugRewind', actionIndex: 0 });
         await host.settled();
 
         expect(botCallCount).toBeGreaterThan(0);
@@ -594,7 +595,7 @@ describe('SnapshotSessionHost', () => {
     }
 
     it('a refused close, stale or player-sent, leaves the seat\'s picks in the new round intact, live and saved', async () => {
-      const closes: Array<(oldKey: string) => Op> = [
+      const closes: Array<(oldKey: string) => SeatOp> = [
         (oldKey) => ({ type: 'expireSeat', player: 1, idleAction: 'pick', args: {}, boundaryKey: oldKey }),
         (oldKey) => ({ type: 'action', actionName: 'pick', player: 1, args: { color: 'green', size: 'L' }, boundaryKey: oldKey }),
         // Refused for its arguments rather than its key.

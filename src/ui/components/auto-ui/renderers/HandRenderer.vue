@@ -16,6 +16,7 @@ import ElementRenderer from './ElementRenderer.vue';
 import CardBack from './CardBack.vue';
 import { resolvePresentation } from '../presentation.js';
 import { isHiddenPlaceholder } from '../../../../engine/element/hidden-placeholder.js';
+import { seatDisplayName } from '../../../../engine/element/seat-defaults.js';
 import type { PresentationOverlay } from '../presentation.js';
 import { GAME_CONTEXT_KEYS, injectPlayerSeat } from '../../../composables/useGameContext.js';
 import { parseImageInfo, type ImageInfo } from '../../../utils/image.js';
@@ -111,9 +112,11 @@ const playerInfo = computed(() => {
 
 const isOwned = computed(() => playerInfo.value?.seat === playerSeat);
 
-const playerName = computed(() => {
-  const player = playerInfo.value;
-  return player?.name || `Player ${(player?.seat ?? 0) + 1}`;
+// Whose hand this is, for the header and its accessible name alike.
+const ownerLabel = computed(() => {
+  if (isOwned.value) return 'Your Hand';
+  const seat = playerInfo.value?.seat;
+  return seat === undefined ? 'Hand' : `${seatDisplayName(seat, playerInfo.value?.name)}'s Hand`;
 });
 
 // ---------------------------------------------------------------------------
@@ -244,7 +247,7 @@ void isBoardSelected;
   <div
     v-bind="selectableAttrs"
     role="group"
-    :aria-label="`Your hand, ${childCountDisplay} cards`"
+    :aria-label="`${ownerLabel}, ${childCountDisplay} cards`"
     :class="[
       'hand-container',
       {
@@ -267,7 +270,7 @@ void isBoardSelected;
     <!-- Header: overlay label wins, then element.name, then ownership fallback (CF-2 + D-04) -->
     <div class="hand-header">
       <span class="hand-label">
-        {{ presentationEntry?.label ?? element.name ?? (isOwned ? 'Your Hand' : `${playerName}'s Hand`) }}
+        {{ presentationEntry?.label ?? element.name ?? ownerLabel }}
       </span>
       <span class="hand-count">({{ childCountDisplay }})</span>
     </div>

@@ -17,6 +17,7 @@ import {
   type AnnotatedChoice,
   type ElementJSON,
 } from '../engine/index.js';
+import { seatDisplayName } from '../engine/element/seat-defaults.js';
 import {
   GameRunner,
   type ActionExecutionResult,
@@ -198,7 +199,7 @@ export class TestGame<G extends Game = Game> {
     // command history. Pass an explicit `seed` option to vary the run.
     const seed = options.seed ?? 'test-seed';
     const playerNames = options.playerNames ??
-      Array.from({ length: options.playerCount }, (_, i) => `Player ${i + 1}`);
+      Array.from({ length: options.playerCount }, (_, i) => seatDisplayName(i + 1));
 
     // Separate known TestGame fields from extra game-specific options so the
     // extras can be forwarded to the game constructor unchanged.

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { DEFAULT_COLOR_PALETTE } from '../../engine/index.js';
 import {
   DevFlagError,
-  parsePositiveInt,
+  devCommand,
   parseBotSeats,
   resolveEffectivePlayerCount,
   validateBotSeats,
@@ -30,26 +30,43 @@ import { createColorOption, type OpSuccess } from '../../session/index.js';
  * simulate.test.ts's arg-validation style (135-06-PLAN.md read_first).
  */
 
-describe('parsePositiveInt (CLIX-06: fail-fast numeric flags)', () => {
-  it('throws an actionable DevFlagError on a non-numeric --players value', () => {
-    expect(() => parsePositiveInt('players', 'abc')).toThrow(DevFlagError);
-    expect(() => parsePositiveInt('players', 'abc')).toThrow(/--players/);
-    expect(() => parsePositiveInt('players', 'abc')).toThrow(/"abc"/);
+const NOT_POSITIVE_WHOLE = ['0', '-1', '1.5', '1e3', '12abc', ''];
+
+/** devCommand rejects with exactly `message`, as a plain Error `cli.ts` prints as one line. */
+async function expectDevRefusal(options: Parameters<typeof devCommand>[0], message: string): Promise<void> {
+  const listening = { SIGINT: process.listeners('SIGINT'), SIGTERM: process.listeners('SIGTERM') };
+  try {
+    const refusal = await devCommand(options).then(() => undefined, (error: unknown) => error);
+    expect(refusal).toBeInstanceOf(Error);
+    expect(refusal).not.toBeInstanceOf(DevFlagError);
+    expect((refusal as Error).message).toBe(message);
+  } finally {
+    // devCommand installs its Ctrl+C handlers first and never removes them; a test run must not keep them.
+    for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+      for (const handler of process.listeners(signal)) if (!listening[signal].includes(handler)) process.off(signal, handler);
+    }
+  }
+}
+
+describe('dev refuses a count flag that is not a positive whole number (#1047)', () => {
+  it.each(NOT_POSITIVE_WHOLE)('--players "%s" is refused by name', (raw) => {
+    expect(() => resolvePlayerCount(raw, 1, 2000)).toThrow(`--players takes a positive whole number, got "${raw}".`);
   });
 
-  it('throws an actionable DevFlagError on a non-numeric --port value', () => {
-    expect(() => parsePositiveInt('port', 'xyz')).toThrow(DevFlagError);
-    expect(() => parsePositiveInt('port', 'xyz')).toThrow(/--port/);
+  it.each(NOT_POSITIVE_WHOLE)('--bot "%s" is refused by name', (raw) => {
+    expect(() => parseBotSeats([`1,${raw}`])).toThrow(`--bot takes a positive whole number, got "${raw}".`);
   });
 
-  it('throws on zero/negative values (not a positive integer)', () => {
-    expect(() => parsePositiveInt('players', '0')).toThrow(DevFlagError);
-    expect(() => parsePositiveInt('players', '-1')).toThrow(DevFlagError);
+  it.each(NOT_POSITIVE_WHOLE)('--port "%s" is refused by name before any server work', async (raw) => {
+    await expectDevRefusal({ port: raw }, `--port takes a positive whole number, got "${raw}".`);
   });
 
-  it('returns the parsed integer for valid input', () => {
-    expect(parsePositiveInt('players', '3')).toBe(3);
-    expect(parsePositiveInt('port', '5173')).toBe(5173);
+  it.each(['65536', '70000', '99999999999999999999'])('--port "%s" above 65535 is refused before any server work (#1119)', async (raw) => {
+    await expectDevRefusal({ port: raw }, `--port takes a port number from 1 to 65535, got "${raw}".`);
+  });
+
+  it('takes a positive whole number', () => {
+    expect(resolvePlayerCount('3', 1, 4)).toBe(3);
   });
 });
 
@@ -75,15 +92,6 @@ describe('validateBotLevel (--bot-level names a real preset or a real count)', (
 });
 
 describe('parseBotSeats (CLIX-06: fail-fast --bot parsing, no silent filtering)', () => {
-  it('throws an actionable DevFlagError on a non-numeric --bot value instead of silently dropping it', () => {
-    expect(() => parseBotSeats(['abc'])).toThrow(DevFlagError);
-    expect(() => parseBotSeats(['abc'])).toThrow(/--bot/);
-  });
-
-  it('throws when any comma-separated entry is non-numeric', () => {
-    expect(() => parseBotSeats(['1,abc,3'])).toThrow(DevFlagError);
-  });
-
   it('parses comma-separated and repeated --bot flags into a flat seat list', () => {
     expect(parseBotSeats(['1,2'])).toEqual([1, 2]);
     expect(parseBotSeats(['1', '2'])).toEqual([1, 2]);
@@ -95,14 +103,11 @@ describe('parseBotSeats (CLIX-06: fail-fast --bot parsing, no silent filtering)'
 });
 
 describe('resolveEffectivePlayerCount (CLIX-06: error, not clamp, on out-of-range --players)', () => {
-  it('errors naming the game max when --players exceeds maxPlayers (no silent clamp)', () => {
-    expect(() => resolveEffectivePlayerCount(6, 2, 4)).toThrow(DevFlagError);
-    expect(() => resolveEffectivePlayerCount(6, 2, 4)).toThrow(/4/);
-  });
-
-  it('errors naming the game min when --players is below minPlayers', () => {
-    expect(() => resolveEffectivePlayerCount(1, 2, 4)).toThrow(DevFlagError);
-    expect(() => resolveEffectivePlayerCount(1, 2, 4)).toThrow(/2/);
+  // One style for every --players refusal (#1119): the shared number check's wording, as a plain Error.
+  it.each([[6, 2, 4], [1, 2, 4]])('refuses --players %i for a %i-%i game in the shared style', (count, min, max) => {
+    const refusal = (() => { try { resolveEffectivePlayerCount(count, min, max); } catch (error) { return error; } })();
+    expect(refusal).not.toBeInstanceOf(DevFlagError);
+    expect((refusal as Error).message).toBe(`--players takes a whole number from ${min} to ${max} for this game, got "${count}".`);
   });
 
   it('returns playerCount unchanged when it is within [minPlayers, maxPlayers]', () => {
@@ -200,8 +205,7 @@ describe('resolvePlayerCount (D14/DEVHOST-02: default --players to gameDefinitio
   });
 
   it('still ERRORS naming the bound when an EXPLICIT --players is out of range (range-check not weakened)', () => {
-    expect(() => resolvePlayerCount('5', 1, 1)).toThrow(DevFlagError);
-    expect(() => resolvePlayerCount('5', 1, 1)).toThrow(/1/);
+    expect(() => resolvePlayerCount('5', 1, 1)).toThrow('--players takes a whole number from 1 to 1 for this game, got "5".');
   });
 });
 

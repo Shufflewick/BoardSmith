@@ -10,10 +10,14 @@
  * exists as the ESLint plugin's `no-element-identity-comparison`.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { lintCommand, lintFile } from './lint.js';
+import { runTool } from '../lib/run-tool.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+
+// The config tests only need to see which tool lint hands off to, not run a real linter.
+vi.mock('../lib/run-tool.js', () => ({ runTool: vi.fn(async () => 0) }));
 
 const rulesFor = (code: string): string[] =>
   lintFile('game.ts', code).map((issue) => issue.rule);
@@ -79,5 +83,77 @@ describe('a selected check with no config fails instead of passing (#846)', () =
     // A game has no docs/ folder, so the advice names the package's own export and a public page.
     expect(errors.join('\n')).toContain('boardsmith/eslint-plugin');
     expect(errors.join('\n')).toContain('https://github.com/Shufflewick/BoardSmith/blob/main/docs/api/eslint-plugin.md');
+  });
+
+  it('lint --css in a project with no Stylelint config exits 1 and names the missing file (#1014)', async () => {
+    const dir = tempTree('boardsmith-lint-no-stylelint-');
+    writeFileSync(join(dir, 'boardsmith.json'), '{}');
+    process.chdir(dir);
+    const errors: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...args) => { errors.push(args.join(' ')); });
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(process, 'exit').mockImplementation((code) => { throw new Error(`exit ${code}`); });
+
+    await expect(lintCommand({ css: true })).rejects.toThrow('exit 1');
+    expect(errors.join('\n')).toContain('.stylelintrc.cjs');
+    // Without postcss-html Stylelint cannot read the <style> blocks of the .vue files it is pointed at.
+    expect(errors.join('\n')).toContain('postcss-html');
+  });
+
+  it('lint --css accepts a stylelint key in package.json, which Stylelint reads as its config (#1014)', async () => {
+    const dir = tempTree('boardsmith-lint-pkg-stylelint-');
+    writeFileSync(join(dir, 'boardsmith.json'), '{}');
+    writeFileSync(join(dir, 'package.json'), JSON.stringify({ stylelint: { customSyntax: 'postcss-html' } }));
+    process.chdir(dir);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(process, 'exit').mockImplementation((code) => { throw new Error(`exit ${code}`); });
+
+    await lintCommand({ css: true });
+    expect(vi.mocked(runTool)).toHaveBeenCalledWith('stylelint', ['src/**/*.vue'], { cwd: process.cwd() });
+  });
+
+  it.each([
+    ['malformed', '{"name": "game" "stylelint": {}}'],
+    ['not an object', 'null'],
+  ])('lint stops with a readable message naming package.json when it is %s (#1014)', async (_label, text) => {
+    const dir = tempTree('boardsmith-lint-bad-pkg-');
+    writeFileSync(join(dir, 'boardsmith.json'), '{}');
+    writeFileSync(join(dir, 'package.json'), text);
+    process.chdir(dir);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const run = lintCommand({});
+    await expect(run).rejects.toThrow(join(process.cwd(), 'package.json'));
+    await expect(run).rejects.toThrow(/to find a Stylelint config.*Fix the JSON/s);
+  });
+});
+
+describe('the pitfall hints read every game source file the sandbox scan reads (#1005)', () => {
+  const originalCwd = process.cwd();
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.chdir(originalCwd);
+  });
+
+  it('fires in .tsx and .mts files, and skips node_modules and dot folders', async () => {
+    const dir = tempTree('boardsmith-lint-sources-');
+    writeFileSync(join(dir, 'boardsmith.json'), '{}');
+    const game = 'export class G extends Game {\n}\n';
+    for (const rel of ['src/rules/a.tsx', 'src/rules/b.mts', 'src/node_modules/c.ts', 'src/.cache/d.ts']) {
+      mkdirSync(join(dir, dirname(rel)), { recursive: true });
+      writeFileSync(join(dir, rel), game);
+    }
+    process.chdir(dir);
+    const out: string[] = [];
+    vi.spyOn(console, 'log').mockImplementation((...args) => { out.push(args.join(' ')); });
+
+    await lintCommand({ pitfalls: true });
+
+    const text = out.join('\n');
+    expect(text).toContain(join('src', 'rules', 'a.tsx'));
+    expect(text).toContain(join('src', 'rules', 'b.mts'));
+    expect(text).not.toContain('c.ts');
+    expect(text).not.toContain('d.ts');
   });
 });

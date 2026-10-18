@@ -51,7 +51,7 @@ import {
   type VisibilityState,
 } from './visibility.js';
 import type { ActionDefinition, ActionResult, ActionTrace, ActionDebugInfo, PickTrace, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
-import { ActionExecutor, type PerformOptions } from '../action/action.js';
+import { ActionExecutor, type AcceptedArgs, type PerformOptions } from '../action/action.js';
 import { hasActionTemp, settingsForSeat } from '../action/helpers.js';
 import type { FlowDefinition, FlowState, FlowDebugInfo } from '../flow/types.js';
 import type { TutorialDefinition, TutorialProgress } from '../tutorial/types.js';
@@ -114,70 +114,7 @@ import { checkForVolatileState } from './volatile-state.js';
 import { PersistentMap } from './persistent-map.js';
 import { PERSIST_KEY, PERSIST_PRIVATE_KEY } from '../../persistence/persistence.js';
 import { ENGINE_OWNED_GAME_FIELDS, describeEngineFieldShadow } from './engine-owned-fields.js';
-
-/**
- * Default player color palette, used when a game doesn't pass `GameOptions.colors`.
- *
- * 16 colors, matching the platform's seat ceiling, so a game can declare any
- * supported player count without hand-supplying a palette. Seats are assigned in
- * order (seat 1 = index 0), and the first eight entries are unchanged from when
- * the palette stopped there — a game that already shipped keeps the colors its
- * players know.
- *
- * **Distinctness.** Measured, not eyeballed: pairwise CIEDE2000 (ΔE00) across all
- * 120 pairs. Normal vision min ΔE00 = 10.8, which is the pre-existing
- * `#f39c12`/`#e67e22` pair from the original eight — every pair involving a newly
- * added color is ≥ 12.4, so extending to 16 does not tighten the palette's
- * floor. Under simulated dichromacy the floors are lower (protanopia 4.7,
- * deuteranopia 3.7, tritanopia 0.0 for red-vs-pink), which is inherent to 16
- * categorical hues rather than to this particular choice — the original eight
- * already measured 8.9 / 6.1 / 2.7. Color is therefore never the sole carrier of
- * player identity: every entry also has a name in {@link DEFAULT_COLOR_LABELS},
- * surfaced as `player.colorLabel`.
- */
-export const DEFAULT_COLOR_PALETTE: readonly string[] = [
-  '#e74c3c',  // Red
-  '#3498db',  // Blue
-  '#27ae60',  // Green
-  '#f39c12',  // Yellow
-  '#9b59b6',  // Purple
-  '#1abc9c',  // Teal
-  '#e67e22',  // Orange
-  '#2c3e50',  // Black (dark navy)
-  '#e84393',  // Pink
-  '#8bc34a',  // Lime
-  '#4834d4',  // Indigo
-  '#a0522d',  // Brown
-  '#7f8c8d',  // Slate
-  '#0e6655',  // Pine (dark teal)
-  '#f1948a',  // Salmon
-  '#85c1e9',  // Sky
-] as const;
-
-/**
- * Human-readable names for the default palette hexes.
- * Lets `player.colorLabel` resolve to a word (e.g. "Red") for player-facing
- * text — logs, narration — even when a game doesn't define a labeled palette.
- * Games with a custom labeled palette pass their own map via `GameOptions.colorLabels`.
- */
-export const DEFAULT_COLOR_LABELS: Readonly<Record<string, string>> = {
-  '#e74c3c': 'Red',
-  '#3498db': 'Blue',
-  '#27ae60': 'Green',
-  '#f39c12': 'Yellow',
-  '#9b59b6': 'Purple',
-  '#1abc9c': 'Teal',
-  '#e67e22': 'Orange',
-  '#2c3e50': 'Black',
-  '#e84393': 'Pink',
-  '#8bc34a': 'Lime',
-  '#4834d4': 'Indigo',
-  '#a0522d': 'Brown',
-  '#7f8c8d': 'Slate',
-  '#0e6655': 'Pine',
-  '#f1948a': 'Salmon',
-  '#85c1e9': 'Sky',
-};
+import { DEFAULT_COLOR_PALETTE, DEFAULT_COLOR_LABELS, seatDisplayName } from './seat-defaults.js';
 
 /** Every element id carried by a serialized subtree, for `adoptSubtree`. */
 function collectJsonIds(json: ElementJSON, into: number[]): void {
@@ -1363,7 +1300,7 @@ export class Game<
     this.settings.playerCount = options.playerCount;
     const playerNames = Array.from(
       { length: options.playerCount },
-      (_, i) => options.playerNames?.[i] ?? `Player ${i + 1}`
+      (_, i) => seatDisplayName(i + 1, options.playerNames?.[i])
     );
     this.settings.playerNames = playerNames;
 
@@ -2588,6 +2525,9 @@ export class Game<
    * the panel, `performAction` refuses with it, and `enumerateActionMoves`
    * leaves out what it refuses (#690), so an enumerated move is never answered
    * "Action X is disabled".
+   *
+   * Ask it only once the action's condition holds: a false condition guards
+   * the disabled rule, which may read what only that condition makes safe (#1129).
    */
   getActionRefusalReason(action: ActionDefinition, player: P): string | null {
     return getActionLevelDisabledReasons(this, player.seat, [action.name])[action.name]
@@ -2724,6 +2664,11 @@ export class Game<
       return { success: false, error: `Unknown action: ${actionName}` };
     }
 
+    // The condition first, as the offer checks it: a false condition guards every rule after it (#1129).
+    if (!options?.followUp && !this._actionExecutor.conditionHolds(action, player)) {
+      return { success: false, error: 'Action is not available' };
+    }
+
     // Enforce action-level disabling at execution, not just in the projection
     // layer: a greyed-out button must also be a closed door (HR-01).
     const disabledReason = this.getActionRefusalReason(action, player);
@@ -2734,9 +2679,18 @@ export class Game<
       };
     }
 
-    // A refused action is not a new batch, so only an action that runs clears the buffer.
-    this._animationEvents = [];
-    return this._actionExecutor.executeAction(action, player, args, options);
+    // A refused action is not a new batch, so the buffer is cleared only once
+    // the checks accept the submission (#1128). A repeating pick changes the
+    // game while it is checked, so that action's batch starts before its picks.
+    if (this._actionExecutor.hasRepeatingSelections(action)) {
+      this._animationEvents = [];
+      return this._actionExecutor.executeAction(action, player, args, options);
+    }
+    const onAccepted = (accepted: Record<string, unknown>): void => {
+      options?.onAccepted?.(accepted);
+      this._animationEvents = [];
+    };
+    return this._actionExecutor.executeAction(action, player, args, { ...options, onAccepted });
   }
 
   // ============================================
@@ -3281,13 +3235,14 @@ export class Game<
    * @param actionName Action name to perform
    * @param args Action arguments
    * @param playerIndex Optional player index for simultaneous actions
+   * @param onAccepted Handed the action's args once its checks accept them (`PerformOptions.onAccepted`)
    */
-  continueFlow(actionName: string, args: Record<string, unknown>, playerIndex?: number): FlowState {
+  continueFlow(actionName: string, args: Record<string, unknown>, playerIndex?: number, onAccepted?: AcceptedArgs): FlowState {
     if (!this._flowEngine) {
       throw new Error('Flow not started');
     }
 
-    const state = this._flowEngine.resume(actionName, args, playerIndex);
+    const state = this._flowEngine.resume(actionName, args, playerIndex, onAccepted);
 
     this.#applyFlowCompletion(state);
 
@@ -3948,7 +3903,7 @@ export class Game<
 
     return players.map(p => ({
       value: p.seat,
-      label: p.name ?? `Player ${p.seat}`,
+      label: seatDisplayName(p.seat, p.name),
     }));
   }
 
@@ -4865,6 +4820,8 @@ export class Game<
           id: json.id,
           attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(json.attributes ?? {}) },
           childCount: element._t.children.length,
+          // What this seat was shown, no roster (#411), so a restore knows it cannot see in (#1108).
+          visibility: { mode: 'count-only', explicit: true },
         };
       }
 
@@ -4905,6 +4862,7 @@ export class Game<
           // branches below. redactHiddenElementAttrs drops $image and narrows
           // $images to { back } only, so $images.face still never leaks.
           attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(json.attributes ?? {}) },
+          visibility: { mode: 'hidden', explicit: true },
         };
       }
 

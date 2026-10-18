@@ -42,6 +42,7 @@ import { fillGameOptionDefaults } from '../session/game-option-selection.js';
 import { PlayerFacingError } from '../engine/errors.js';
 import { constructGame, animationFloorOf, type AnimationFloor } from '../engine/element/game.js';
 import { isDevThrowEnabled } from '../utils/dev.js';
+import { acceptsSubmission } from '../engine/utils/enumerate-moves.js';
 import type { RandomState } from '../utils/random.js';
 import type { MessageEntry } from '../engine/index.js';
 
@@ -579,17 +580,17 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * deliberately stayed put on the failure, and its position is already right.
    * The elements it holds are pointed at the rebuilt tree (#679).
    *
-   * @returns the player-facing error to report: `error` as it is when the
-   *   rollback succeeded, or, when there was no checkpoint to restore (only a
-   *   game running with `checkpoints: { enabled: false }`, since
-   *   `ensureHeadCheckpoint` captures one otherwise, #802), `error` without the
-   *   engine's "nothing was changed" and with a sentence saying the game may
-   *   still hold the action's partial changes (#808).
+   * @returns the player-facing error to report: `error` followed by
+   *   `NOTHING_CHANGED` when the rollback succeeded, or, when there was no
+   *   checkpoint to restore (only a game running with
+   *   `checkpoints: { enabled: false }`, since `ensureHeadCheckpoint` captures
+   *   one otherwise, #802), by a sentence saying the game may still hold the
+   *   action's partial changes (#808, #989).
    */
-  private rollbackToPreActionState(error: string | undefined): string | undefined {
+  private rollbackToPreActionState(error: string | undefined): string {
+    const kept = error === undefined ? '' : `${error} `;
     const checkpoint = this.actionCheckpoints[this.headOffset];
     if (!checkpoint) {
-      const kept = error === undefined ? '' : `${error.replace(` ${NOTHING_CHANGED}`, '')} `;
       return kept +
         'The action failed part way through, and the game may still hold its partial changes, ' +
         'because per-action checkpoints are turned off for this session so it could not be undone. ' +
@@ -603,7 +604,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       this.game._ctx.sequence = checkpoint.sequence;
     }
     this.game.setRandomState(checkpoint.randomState);
-    return error;
+    return kept + NOTHING_CHANGED;
   }
 
   /**
@@ -648,23 +649,29 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       };
     }
 
-    // Serialize the action before executing (captures current element refs)
-    const serializedAction = this.serializeOrRefuse(actionName, playerObj, args);
-    if ('success' in serializedAction) return serializedAction;
+    // The history entry is encoded before the move changes anything, so its
+    // refs are the positions the action acts on, and only from picks the
+    // action's checks accepted, since encoding reads its choice callbacks
+    // (#1128): the executor hands over the args its one check accepted.
+    const checkedOnCopy = this.checkOnCopy(actionName, playerObj, args);
+    if ('success' in checkedOnCopy) return checkedOnCopy;
+    const history = this.historyRecorder(actionName, playerObj, args, checkedOnCopy.entry);
 
     this.ensureHeadCheckpoint();
 
     // Execute through flow (pass player index for simultaneous actions)
     let flowState: FlowState;
     try {
-      flowState = this.game.continueFlow(actionName, args, playerIndex);
+      flowState = this.game.continueFlow(actionName, args, playerIndex, history.onAccepted);
     } catch (error) {
+      // An offered pick that cannot be encoded is the game's fault, thrown before anything changed (#1070).
+      if (error === history.failure) throw error;
       // FlowHaltedError means the flow threw AFTER the action committed its
       // state changes. Record the committed action so actionHistory stays
       // consistent with applied game state (WR-02) — dropping it would make
       // replay/undo/snapshot diverge from what actually happened.
       if (error instanceof FlowHaltedError) {
-        this.actionHistory.push(serializedAction);
+        this.actionHistory.push(this.recorded(actionName, history.entry));
       }
       // #47: an engine policy error's message was written to be read and goes
       // through; anything else is an arbitrary runtime error whose text would
@@ -701,6 +708,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     }
 
     // Record in history
+    const serializedAction = this.recorded(actionName, history.entry);
     this.actionHistory.push(serializedAction);
 
     // The action's own return value to the acting seat. Read straight off the
@@ -717,31 +725,80 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   }
 
   /**
-   * {@link serializeForHistory}'s entry, or the move's refusal when it cannot
-   * be encoded and is not a move the game offers: that is the caller's bad
-   * input. An offered move that cannot be encoded is the game's fault, and
-   * still throws (#1070).
+   * What only a check on a copy of the game can settle before the move: the
+   * history entry of a repeating action the copy accepts, since its picks
+   * change the game while they are checked (#1101), and the refusal of picks
+   * that cannot be encoded as sent and that the game does not take (#1070).
+   * No entry for any other submission, which costs no extra check.
    */
-  private serializeOrRefuse(
+  private checkOnCopy(
     actionName: string,
     player: Player,
     args: Record<string, unknown>
-  ): SerializedAction | ActionExecutionResult {
+  ): ActionExecutionResult | { entry: SerializedAction | undefined } {
+    const action = this.game.getAction(actionName);
+    const repeating = action !== undefined && this.game.getActionExecutor().hasRepeatingSelections(action);
+    const unencodable = this.unencodableRefusal(actionName, player, action, args);
+    if (!repeating && !unencodable) return { entry: undefined };
+    if (!acceptsSubmission(this.game, actionName, player.seat, args)) return unencodable ?? { entry: undefined };
+    return { entry: repeating ? this.serializeForHistory(actionName, player, args) : undefined };
+  }
+
+  /**
+   * The refusal of a submission the game does not take whose picks cannot be
+   * encoded at all: that is the caller's bad input (#1070). Its picks are
+   * encoded as sent, so no game callback runs on them.
+   */
+  private unencodableRefusal(
+    actionName: string,
+    player: Player,
+    action: ActionDefinition | undefined,
+    args: Record<string, unknown>
+  ): ActionExecutionResult | undefined {
     try {
-      return this.serializeForHistory(actionName, player, args);
+      serializeAction(actionName, player, action ? this.game.getActionExecutor().picksOf(action, args) : args, this.game);
+      return undefined;
     } catch (error) {
-      if (!(error instanceof Error) || this.offersMove(actionName, player, args)) throw error;
+      if (!(error instanceof Error)) throw error;
       return { success: false, error: error.message, errorCode: ErrorCode.INVALID_PICK };
     }
   }
 
-  /** Whether the game would accept `args` for `actionName` from `player` now, as a held follow-up when it is one. */
-  private offersMove(actionName: string, player: Player, args: Record<string, unknown>): boolean {
-    const action = this.game.getAction(actionName);
-    if (!action) return false;
-    const followUp = followUpForSeat(this.getFlowState(), player.seat);
-    const options = followUp?.action === actionName ? { followUp } : undefined;
-    return new ActionExecutor(this.game).validateAction(action, player, args, options).valid;
+  /**
+   * A move's history entry: `entry` when it is already known, or else encoded
+   * by `onAccepted` from the args the action's checks accepted, with `failure`
+   * the error it threw when they cannot be encoded.
+   */
+  private historyRecorder(actionName: string, player: Player, args: Record<string, unknown>, entry: SerializedAction | undefined) {
+    const history = {
+      entry,
+      failure: undefined as unknown,
+      onAccepted: (resolved: Record<string, unknown>): void => {
+        try {
+          history.entry = this.serializeForHistory(actionName, player, args, resolved);
+        } catch (error) {
+          history.failure = error;
+          throw error;
+        }
+      },
+    };
+    return history;
+  }
+
+  /**
+   * The history entry of an action that ran. Only a repeating action, checked
+   * on a copy first, can run without one: when the copy refused what the game
+   * then took.
+   */
+  private recorded(actionName: string, serializedAction: SerializedAction | undefined): SerializedAction {
+    if (!serializedAction) {
+      throw new Error(
+        `Action '${actionName}' ran, but the same picks were refused when they were checked on a copy of the game, ` +
+          `so the move has no history entry. Its rules read something the game's state does not hold, such as a ` +
+          `module-level variable or which game object they were handed: keep everything they read in the game's state.`,
+      );
+    }
+    return serializedAction;
   }
 
   /**
@@ -749,7 +806,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    *
    * Raw element IDs are first resolved to GameElement objects so they serialize
    * with branch paths (or stable IDs) that survive game restoration, instead of
-   * being passed through as raw numbers. This is the single place the
+   * being passed through as raw numbers; `resolved`, when given, holds the args
+   * the action's checks already resolved and accepted. This is the single place the
    * `actionHistory` entry shape is produced, shared by:
    *   - `performAction` (single-step actions), and
    *   - `executeCollectedAction` (multi-step / repeating-selection actions).
@@ -763,7 +821,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   private serializeForHistory(
     actionName: string,
     player: Player,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
+    resolved?: Record<string, unknown>
   ): SerializedAction {
     const actionDef = (this.game as any)._actions?.get(actionName);
     const isUndoable = actionDef?.undoable;
@@ -771,9 +830,12 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     let argsToSerialize = args;
     if (actionDef) {
       // Only the picks: a follow-up's other args are bound again by the engine
-      // when the entry is replayed (#662).
+      // when the entry is replayed (#662). A skipped pick is absent (#627).
       const executor = new ActionExecutor(this.game);
-      argsToSerialize = executor.resolveArgs(actionDef, executor.picksOf(actionDef, args), player);
+      const sent = executor.picksOf(actionDef, args);
+      argsToSerialize = resolved
+        ? Object.fromEntries(Object.keys(sent).filter((name) => name in resolved).map((name) => [name, resolved[name]]))
+        : executor.resolveArgs(actionDef, sent, player);
     }
 
     return serializeAction(

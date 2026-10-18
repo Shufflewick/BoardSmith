@@ -4,7 +4,7 @@ import type { ElementRef } from '../../types/protocol.js';
 import type {
   ActionDefinition,
   ActionContext,
-  ActionResult,
+  ExecuteResult,
   Selection,
   ChoiceSelection,
   ChoiceValue,
@@ -1245,7 +1245,7 @@ export class Action<
    * ```
    */
   execute(
-    fn: (args: A, context: ActionContext<G, A>) => ActionResult | void
+    fn: (args: A, context: ActionContext<G, A>) => ExecuteResult | void
   ): ActionDefinition {
     // The accumulated args type A and game type G are erased at the storage
     // boundary (ActionDefinition is non-generic); both are sound because the
