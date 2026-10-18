@@ -10,6 +10,8 @@ import { TestGame } from '../testing/test-game.js';
 
 const catalog: Record<string, string[]> = { Scuttlers: ['Drill'] };
 let trace: string[] = [];
+/** The game whose `scavenge` offers a part: its copies offer none. */
+let partsOnlyIn: Game | undefined;
 
 class Buyer extends Player<PurchaseGame, Buyer> {
   static override visibleAttributes = [];
@@ -68,12 +70,19 @@ class PurchaseGame extends Game<PurchaseGame, Buyer> {
           repeat: { until: () => true },
         })
         .execute(() => ({ success: true })),
+      // Rules that read something the game's state does not hold: a copy of the game answers differently.
+      Action.create<PurchaseGame>('scavenge')
+        .chooseFrom('part', {
+          choices: (ctx) => (ctx.game === partsOnlyIn ? ['gear'] : []),
+          repeat: { until: () => true },
+        })
+        .execute(() => ({ success: true })),
       Action.create<PurchaseGame>('pass').execute(() => ({ success: true })),
     );
     this.setFlow({
       root: simultaneousActionStep({
         name: 'shopping',
-        actions: ['buy', 'sell', 'salvage', 'pass'],
+        actions: ['buy', 'sell', 'salvage', 'scavenge', 'pass'],
         playerDone: () => false,
       }),
     });
@@ -159,5 +168,16 @@ describe('history is encoded only for a submission its checks accept (#1128)', (
 
     expect(result.success).toBe(false);
     expect(trace).not.toContain('technology choices');
+  });
+
+  it('says loudly when a repeating action ran though its picks were refused on a copy, and records nothing', () => {
+    const target = new GameRunner({ GameClass: PurchaseGame, gameType: 'history-serialize-order', gameOptions });
+    partsOnlyIn = target.game;
+    target.start();
+
+    expect(() => target.performAction('scavenge', 1, { part: ['gear'] })).toThrow(
+      /^Action 'scavenge' ran, but the same picks were refused when they were checked on a copy of the game/,
+    );
+    expect(target.actionHistory).toEqual([]);
   });
 });

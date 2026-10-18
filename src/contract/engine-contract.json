@@ -1766,7 +1766,7 @@
       "surfaceHash": "78cc3a6fa6f722cc",
       "payloadHash": "42faf88ae9f4cb97",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "GameRunner.performAction encodes a submission for history only after the checks execution uses accept it (condition first, then each pick in order, #772), so a choice callback no longer runs on an unchecked earlier pick or on an attribute a false condition guards. A move that used to throw (TypeError, RedactedAttributeError) or come back refused with that internal message is now refused with the normal reason (#1128). Run this build so WindupWarfare's technology purchase and Field Recovery refusals behave."
+      "summary": "GameRunner.performAction records a move in history from the args the action's own checks accepted (condition first, then each pick in order, #772), handed back before the move changes anything, so a choice callback no longer runs on an unchecked earlier pick or on an attribute a false condition guards, and no move is checked twice. A move that used to throw (TypeError, RedactedAttributeError) or come back refused with that internal message is now refused with the normal reason (#1128). Game.continueFlow and FlowEngine.resume take an optional fourth argument for this. Run this build so WindupWarfare's technology purchase and Field Recovery refusals behave."
     }
   ]
 }

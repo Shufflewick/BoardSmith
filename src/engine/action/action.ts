@@ -391,7 +391,18 @@ export interface PerformOptions {
    * this, for the seat that owns the follow-up.
    */
   followUp?: FollowUpAction;
+  /**
+   * Called once the checks accept the submission, with the args `execute`
+   * receives, before `onSelect` or `execute` changes the game: how a host
+   * records the move that ran without checking it a second time (#1128). Not
+   * called for an action with a repeating selection, whose picks change the
+   * game while they are checked.
+   */
+  onAccepted?: AcceptedArgs;
 }
+
+/** Receives a submission's args once the action's checks accept them. */
+export type AcceptedArgs = (args: Record<string, unknown>) => void;
 
 /** The element an id a player sent names, or undefined. */
 type SeatIdReader = (id: number) => GameElement | undefined;
@@ -1317,6 +1328,7 @@ export class ActionExecutor {
     const checked = this.checkSubmission(action, player, args, options);
     if ('error' in checked) return { success: false, error: checked.error };
     const resolvedArgs = checked.args;
+    options?.onAccepted?.(resolvedArgs);
 
     // Fire onSelect for each selection that has it (before execute).
     // A throwing onSelect must ABORT the action (fail loud): fire onCancel for
