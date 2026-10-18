@@ -637,3 +637,10 @@ describe('a failed restoreFlowState keeps the flow that was running (#757)', () 
     expect(game.getFlowState()).toEqual(before);
   });
 });
+
+describe('playerChoices labels a seat with no name by its seat (#1044)', () => {
+  it('reads "Player 1", the name every other surface shows for that seat', () => {
+    const game = new Game({ playerCount: 2, playerNames: ['', 'Bob'] });
+    expect(game.playerChoices().map((c) => c.label)).toEqual(['Player 1', 'Bob']);
+  });
+});

@@ -180,11 +180,6 @@ export function enumerateActionMoves(
   const bound = followUp?.args ?? {};
 
   try {
-    // #690: an action the game refuses outright (its own `.disabled()` rule or
-    // the tutorial gate) stays offered so the panel can grey it out, but
-    // performAction refuses it, so it has no moves. A held follow-up too.
-    if (game.getActionRefusalReason(actionDef, player)) return [];
-
     // #19: an action list comes from the flow state's FROZEN `availableActions`,
     // computed once on the authoritative game when the step opened and replayed
     // verbatim — into a bot's redacted sandbox, and into a game whose state has
@@ -194,6 +189,12 @@ export function enumerateActionMoves(
     if (!followUp && actionDef.condition && !executor.isActionAvailable(actionDef, player)) {
       return [];
     }
+
+    // #690: an action the game refuses outright (its own `.disabled()` rule or
+    // the tutorial gate) stays offered so the panel can grey it out, but
+    // performAction refuses it, so it has no moves. A held follow-up too. After
+    // the condition, which guards it as performAction's does (#1129).
+    if (game.getActionRefusalReason(actionDef, player)) return [];
 
     // #325: a repeating selection's picks change the game (`onEach`) while
     // they are being made, so its moves can only be found by making them.
@@ -974,25 +975,31 @@ function _valuesToTry(
     return { values: combination ? [combination] : [], judged: choices.judged };
   }
   // More combinations than the budget: `spend` refuses on `judged` alone, so none is built (#692).
-  const count = combinationCount(choices.values.length, resolved.min, max);
+  const count = combinationCount(choices.values, resolved.min, max);
   const values = count > MAX_MULTISELECT_COMBINATIONS ? [] : generateCombinations(choices.values, resolved.min, max);
   return { values, judged: Math.max(choices.judged, count) };
 }
 
 /**
- * How many combinations of `min` to `max` of `n` choices there are, exactly
- * up to {@link MAX_MULTISELECT_COMBINATIONS}; past it, some larger number.
+ * How many distinct combinations of `min` to `max` of `choices` there are,
+ * equal values counted once as `generateCombinations` lists them (#967),
+ * exactly up to {@link MAX_MULTISELECT_COMBINATIONS}; past it, some larger number.
  */
-function combinationCount(n: number, min: number, max: number): number {
-  let count = 0;
-  for (let size = min; size <= max && count <= MAX_MULTISELECT_COMBINATIONS; size++) {
-    const k = Math.min(size, n - size);
-    let ways = 1;
-    // C(n - k + i, i) at each step, so every product is a whole number.
-    for (let i = 1; i <= k && ways <= MAX_MULTISELECT_COMBINATIONS; i++) ways = (ways * (n - k + i)) / i;
-    count += ways;
+function combinationCount(choices: unknown[], min: number, max: number): number {
+  const cap = MAX_MULTISELECT_COMBINATIONS + 1;
+  const groupSizes = new Map<unknown, number>();
+  for (const key of groupEqualChoices(choices).keys) groupSizes.set(key, (groupSizes.get(key) ?? 0) + 1);
+  // ways[s]: distinct combinations of size s from the groups so far; adding a group never lowers one.
+  let ways = [1];
+  for (const size of groupSizes.values()) {
+    const next = new Array<number>(Math.min(ways.length - 1 + size, max) + 1).fill(0);
+    for (let s = 0; s < ways.length; s++) {
+      for (let j = 0; j <= size && s + j < next.length; j++) next[s + j] = Math.min(cap, next[s + j] + ways[s]);
+    }
+    ways = next;
+    if (ways.slice(min).reduce((a, b) => a + b, 0) >= cap) return cap;
   }
-  return count;
+  return ways.slice(min).reduce((a, b) => a + b, 0);
 }
 
 /**

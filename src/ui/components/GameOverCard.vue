@@ -19,7 +19,8 @@
  */
 import { ref, computed, onMounted } from 'vue';
 import { useFocusTrap } from '../composables/useFocusTrap';
-import { seatInk } from '../utils/color-contrast';
+import PlayerToken from './PlayerToken.vue';
+import { seatDisplay } from '../seat-display.js';
 
 export interface Player {
   seat: number;
@@ -50,13 +51,6 @@ const emit = defineEmits<{
 
 const cardRef = ref<HTMLElement | null>(null);
 
-// LIBX-03 / F-17: the winner glyph's ink comes from the seat color the same
-// way PlayerToken's does, instead of a hardcoded `--bsg-bg`, so a dark seat
-// color on the dark theme (or a pale one on light) stays legible.
-function winnerInk(color?: string): string {
-  return seatInk(color, 'GameOverCard').ink;
-}
-
 const { open: openTrap, handleKeydown } = useFocusTrap(cardRef, {
   escapeToClose: true,
   onClose: () => emit('dismiss'),
@@ -64,35 +58,8 @@ const { open: openTrap, handleKeydown } = useFocusTrap(cardRef, {
 
 onMounted(() => openTrap());
 
-// ---------------------------------------------------------------------------
-// Shape set (mirrors PlayersPanel.vue, IA-06): seat index → shape class.
-// Keeps player identity tokens visually consistent across the shell.
-// ---------------------------------------------------------------------------
-const SHAPES = [
-  'sh-circle',
-  'sh-square',
-  'sh-hexagon',
-  'sh-octagon',
-  'sh-diamond',
-  'sh-pentagon',
-  'sh-shield',
-  'sh-plus',
-] as const;
-
-function playerShape(index: number): string {
-  return SHAPES[index % SHAPES.length];
-}
-
-function playerInitial(name: string): string {
-  return (name.trim()[0] ?? '?').toUpperCase();
-}
-
-/** Players whose seat number appears in winnerSeats. */
-const winners = computed(() =>
-  props.winnerSeats
-    .map(seat => props.players.find(p => p.seat === seat))
-    .filter((p): p is Player => p !== undefined)
-);
+/** The winners, shown as every other surface shows their seat. */
+const winners = computed(() => props.winnerSeats.map((seat) => seatDisplay(props.players, seat)));
 
 /**
  * h2 title text — a pure function of winners + isDraw (UI-SPEC §1):
@@ -136,14 +103,7 @@ const titleText = computed(() => {
           :key="player.seat"
           class="winner-row"
         >
-          <span
-            class="tok"
-            :class="playerShape(players.findIndex(p => p.seat === player.seat))"
-            :style="player.color ? { '--tc': player.color } : {}"
-          >
-            <span class="shape"></span>
-            <span class="ini" :style="{ color: winnerInk(player.color) }">{{ playerInitial(player.name) }}</span>
-          </span>
+          <PlayerToken :name="player.name" :seat="player.seat" :color="player.color" :size="32" />
           <span class="winner-name">{{ player.name }}</span>
         </div>
       </div>
@@ -172,7 +132,9 @@ const titleText = computed(() => {
   border: 1px solid var(--bsg-line-2);
   border-radius: var(--bsg-r-lg);
   box-shadow: var(--bsg-shadow);
-  padding: var(--bsg-s6) var(--bsg-s5);
+  --goc-pad-x: var(--bsg-s5);
+  --goc-close: 44px;
+  padding: var(--bsg-s6) var(--goc-pad-x);
   min-width: 280px;
   max-width: min(480px, 90cqw);
   display: flex;
@@ -187,8 +149,8 @@ const titleText = computed(() => {
   position: absolute;
   top: 0;
   right: 0;
-  width: 44px;
-  height: 44px;
+  width: var(--goc-close);
+  height: var(--goc-close);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -211,6 +173,9 @@ const titleText = computed(() => {
   color: var(--bsg-ink);
   margin: 0;
   line-height: 1.2;
+  /* #1061: room for the corner Close button on both sides keeps the title centred and clear of it. */
+  padding-inline: calc(var(--goc-close) + var(--bsg-s2) - var(--goc-pad-x));
+  overflow-wrap: anywhere;
 }
 
 /* Winner list */
@@ -233,42 +198,4 @@ const titleText = computed(() => {
   font-weight: 600;
   color: var(--bsg-ink);
 }
-
-/* Player identity token (mirrors PlayersPanel.vue) */
-.tok {
-  position: relative;
-  width: 32px;
-  height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  --tc: var(--bsg-accent);
-}
-
-.tok .shape {
-  position: absolute;
-  inset: 0;
-  background: var(--tc);
-  opacity: 0.85;
-}
-
-.tok .ini {
-  position: relative;
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--bsg-bg);
-  line-height: 1;
-  z-index: 1;
-}
-
-/* Shape clip-paths (same set as PlayersPanel.vue) */
-.sh-circle .shape { border-radius: 50%; }
-.sh-square .shape { border-radius: var(--bsg-r-sm); }
-.sh-hexagon .shape { clip-path: polygon(50% 0%, 93% 25%, 93% 75%, 50% 100%, 7% 75%, 7% 25%); }
-.sh-octagon .shape { clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%); }
-.sh-diamond .shape { clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); }
-.sh-pentagon .shape { clip-path: polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%); }
-.sh-shield .shape { clip-path: polygon(50% 0%, 100% 25%, 100% 65%, 50% 100%, 0% 65%, 0% 25%); }
-.sh-plus .shape { clip-path: polygon(33% 0%, 67% 0%, 67% 33%, 100% 33%, 100% 67%, 67% 67%, 67% 100%, 33% 100%, 33% 67%, 0% 67%, 0% 33%, 33% 33%); }
 </style>

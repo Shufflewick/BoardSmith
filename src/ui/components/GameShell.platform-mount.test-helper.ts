@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils';
-import { defineComponent, h, nextTick, type Component } from 'vue';
+import { defineComponent, h, nextTick, type Component, type FunctionalComponent } from 'vue';
 import GameShell from './GameShell.vue';
 import DebugPanel from './DebugPanel.vue';
 import { defineGameUIs, defaultUI } from '../game-uis.js';
@@ -37,6 +37,9 @@ if (typeof window.matchMedia !== 'function') {
   });
 }
 
+/** What `defaultUI()` accepts: any component but a bare function. */
+export type BoardComponent = Exclude<Component, FunctionalComponent>;
+
 const StubBoard = defineComponent({ name: 'StubBoard', setup: () => () => h('div', 'board') });
 
 const realParent = Object.getOwnPropertyDescriptor(window, 'parent');
@@ -67,7 +70,7 @@ interface PlatformShellOptions {
    * custom UI reads from the context passes a board that reads it; the default
    * draws nothing worth asserting on.
    */
-  board?: Component;
+  board?: BoardComponent;
   /**
    * Further GameShell props, for a test about what a prop changes, in either
    * form a template writes them (#433).
@@ -107,7 +110,7 @@ function postFromHost(data: Record<string, unknown>): void {
  * Call {@link leaveIframe} in `afterEach`.
  */
 export async function mountTableWithDebugPanel(
-  board: Component,
+  board: BoardComponent,
   seatState: Record<string, unknown> = {},
   slots?: PlatformShellOptions['slots'],
 ) {
