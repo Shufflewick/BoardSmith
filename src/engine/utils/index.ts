@@ -12,6 +12,8 @@ export type {
 // State snapshots
 export {
   createSnapshot,
+  createSeatSnapshot,
+  type SeatSnapshot,
   createRunnerSnapshot,
   snapshotTree,
   createActionCheckpoint,

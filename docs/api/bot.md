@@ -59,7 +59,6 @@ const bot = createBot(
   CheckersGame,
   'checkers',
   2,          // seat this bot plays
-  [],         // action history
   'medium',
 );
 
@@ -74,12 +73,12 @@ console.log(`bot plays: ${move.action}`, move.args);
 ```typescript
 import { createBot, DIFFICULTY_PRESETS, DEFAULT_CONFIG } from 'boardsmith/bot';
 
-const easyBot = createBot(game, GameClass, 'game', 2, [], 'easy');
-const hardBot = createBot(game, GameClass, 'game', 2, [], 'hard');
+const easyBot = createBot(game, GameClass, 'game', 2, 'easy');
+const hardBot = createBot(game, GameClass, 'game', 2, 'hard');
 
 // A number is taken as an explicit iteration ceiling; every other knob
 // falls back to DEFAULT_CONFIG (note: NOT to the medium preset).
-const customBot = createBot(game, GameClass, 'game', 2, [], 5000);
+const customBot = createBot(game, GameClass, 'game', 2, 5000);
 
 console.log(DIFFICULTY_PRESETS);
 // {
@@ -96,7 +95,7 @@ console.log(DEFAULT_CONFIG);
 
 ```typescript
 // Same position, same move, every time. Runs all 300 iterations however long they take.
-const fixtureBot = createBot(game, GameClass, 'game', 2, [], 'medium', undefined, { seed: 'fixture-7' });
+const fixtureBot = createBot(game, GameClass, 'game', 2, 'medium', undefined, { seed: 'fixture-7' });
 ```
 
 The game's seed does not seed the bot: the bot has its own random source.
@@ -129,7 +128,7 @@ const botSeatConfig: BotStrategy = {
   }),
 };
 
-const bot = createBot(game, CheckersGame, 'checkers', 2, actionHistory, 'hard', botSeatConfig);
+const bot = createBot(game, CheckersGame, 'checkers', 2, 'hard', botSeatConfig);
 ```
 
 Each `Objective` is `{ checker, weight }`. The key is the objective's name; there is no `name`/`description`/`feature` field.
@@ -170,7 +169,6 @@ const bot = new MCTSBot(
   CheckersGame,
   'checkers',
   2,              // seat
-  actionHistory,
   {
     iterations: 1000,
     uctC: 1.5,           // static exploration constant (default sqrt(2))

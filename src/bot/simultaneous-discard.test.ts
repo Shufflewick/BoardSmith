@@ -92,7 +92,7 @@ const newRunner = () => {
 type Runner = ReturnType<typeof newRunner>;
 
 const botFor = (runner: Runner, seat: number) =>
-  new MCTSBot(runner.game, DiscardGame, 'discard', seat, runner.actionHistory, {
+  new MCTSBot(runner.game, DiscardGame, 'discard', seat, {
     iterations: 20,
     playoutDepth: 2,
     async: false,

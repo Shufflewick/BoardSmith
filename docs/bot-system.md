@@ -62,7 +62,6 @@ const bot = createBot(
   MyGame,                  // Game class constructor
   'my-game',               // Game type identifier
   1,                       // Player position (1-indexed)
-  actionHistory,           // History of actions taken so far
   'hard'                   // Difficulty level or iteration count
 );
 
@@ -118,7 +117,7 @@ const myGameBotStrategy: BotStrategy = {
 };
 
 // Use with createBot
-const bot = createBot(game, MyGame, 'my-game', 1, [], 'medium', myGameBotStrategy);
+const bot = createBot(game, MyGame, 'my-game', 1, 'medium', myGameBotStrategy);
 ```
 
 ### Objective Evaluation
@@ -596,7 +595,6 @@ function createBot<G extends Game>(
   GameClass: new (options: GameOptions) => G,
   gameType: string,
   playerIndex: number,
-  actionHistory?: SerializedAction[],
   difficulty?: DifficultyLevel | number,
   botStrategy?: BotStrategy,
   reproducible?: { seed: string }

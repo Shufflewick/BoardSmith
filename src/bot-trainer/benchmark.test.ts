@@ -633,7 +633,7 @@ describe('a reproducible benchmark is repeatable move for move (#699)', () => {
 
   it("seeds every move's search through createBot's reproducible option, each with its own seed", async () => {
     await race({ seed: 'per-move', reproducible: true });
-    const reproducible = vi.mocked(createBot).mock.calls.map((call) => call[7]);
+    const reproducible = vi.mocked(createBot).mock.calls.map((call) => call[6]);
     expect(reproducible.length).toBeGreaterThan(0);
     expect(reproducible.every((r) => typeof r?.seed === 'string')).toBe(true);
     expect(new Set(reproducible.map((r) => r!.seed)).size).toBe(reproducible.length);
@@ -641,10 +641,10 @@ describe('a reproducible benchmark is repeatable move for move (#699)', () => {
 
   it('gives different game seeds different search seeds', async () => {
     await race({ seed: 'one', reproducible: true });
-    const one = vi.mocked(createBot).mock.calls.map((call) => call[7]!.seed);
+    const one = vi.mocked(createBot).mock.calls.map((call) => call[6]!.seed);
     vi.mocked(createBot).mockClear();
     await race({ seed: 'two', reproducible: true });
-    const two = vi.mocked(createBot).mock.calls.map((call) => call[7]!.seed);
+    const two = vi.mocked(createBot).mock.calls.map((call) => call[6]!.seed);
     expect(two.some((seed) => one.includes(seed))).toBe(false);
   });
 
@@ -653,7 +653,7 @@ describe('a reproducible benchmark is repeatable move for move (#699)', () => {
     await race({});
     const calls = vi.mocked(createBot).mock.calls;
     expect(calls.length).toBeGreaterThan(0);
-    expect(calls.every((call) => call[7] === undefined)).toBe(true);
+    expect(calls.every((call) => call[6] === undefined)).toBe(true);
   });
 
   it('refuses a game timeout on a reproducible benchmark, since a clock would make it unrepeatable', async () => {

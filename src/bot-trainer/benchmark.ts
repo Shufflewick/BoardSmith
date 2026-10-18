@@ -370,7 +370,6 @@ function moveBot<G extends Game>(
     GameClass,
     gameType,
     seat,
-    runner.actionHistory,
     isTrainedSeat ? mctsIterations : 0,
     isTrainedSeat ? trainedBot : undefined,
     reproducible ? { seed: `${seed}-move-${actionCount}` } : undefined,

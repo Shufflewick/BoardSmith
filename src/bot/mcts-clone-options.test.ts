@@ -82,7 +82,6 @@ describe('MCTS Game Clone Constructor Options', () => {
       ConfigTestGame,
       'config-test',
       1,
-      [],
       { iterations: 1, playoutDepth: 1 }
     );
 
@@ -131,8 +130,7 @@ describe('MCTS Game Clone Constructor Options', () => {
       game,
       ConfigTestGame,
       'config-test',
-      5, // Last player (should be Rebel in original, Rebel in clone too)
-      [],
+      5,
       { iterations: 1, playoutDepth: 1 }
     );
 
@@ -157,7 +155,7 @@ describe('MCTS Game Clone Constructor Options', () => {
     });
     game.startFlow();
 
-    const bot = new MCTSBot(game, ConfigTestGame, 'config-test', 1, [], { iterations: 1, playoutDepth: 1 });
+    const bot = new MCTSBot(game, ConfigTestGame, 'config-test', 1, { iterations: 1, playoutDepth: 1 });
     const { gameOptions: _dropped, ...withoutOptions } = (bot as any).captureSnapshot();
 
     expect(() => (bot as any).restoreGame(withoutOptions)).toThrow(/without gameOptions/);
@@ -171,7 +169,7 @@ describe('MCTS Game Clone Constructor Options', () => {
     });
     game.startFlow();
 
-    const bot = new MCTSBot(game, ConfigTestGame, 'config-test', 1, [], { iterations: 1, playoutDepth: 1, seed: 'bot' });
+    const bot = new MCTSBot(game, ConfigTestGame, 'config-test', 1, { iterations: 1, playoutDepth: 1, seed: 'bot' });
     const snapshot = (bot as any).captureSnapshot();
     const sandbox = (bot as any).restoreGame(snapshot) as ConfigTestGame;
 

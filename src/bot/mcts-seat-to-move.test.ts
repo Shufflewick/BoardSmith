@@ -82,7 +82,7 @@ type SearchInternals = {
 };
 
 function botFor(game: RaidGame, seat: number): SearchInternals {
-  return new MCTSBot(game, RaidGame, 'raid', seat, [], {
+  return new MCTSBot(game, RaidGame, 'raid', seat, {
     iterations: 200,
     playoutDepth: 6,
     seed: `raid-${seat}`,
@@ -181,7 +181,7 @@ describe('MCTSBot: a step held open after every seat is done', () => {
   function gatedBot(seat: number) {
     const game = new GatedPickGame({ playerCount: 2, playerNames: ['A', 'B'], seed: 'gated' });
     game.startFlow();
-    const bot = new MCTSBot(game, GatedPickGame, 'gated', seat, [], {
+    const bot = new MCTSBot(game, GatedPickGame, 'gated', seat, {
       iterations: 100,
       playoutDepth: 6,
       seed: `gated-${seat}`,
@@ -249,7 +249,7 @@ describe('MCTSBot: a due seat with only disabled actions (#1133)', () => {
     expect(game.getFlowState()!.awaitingPlayers!.find((p) => p.playerIndex === 1))
       .toMatchObject({ completed: false, availableActions: ['pick'] });
 
-    const bot = new MCTSBot(game, SitOutGame, 'sit-out', 3, [], {
+    const bot = new MCTSBot(game, SitOutGame, 'sit-out', 3, {
       iterations: 50,
       playoutDepth: 6,
       seed: 'sit-out-3',

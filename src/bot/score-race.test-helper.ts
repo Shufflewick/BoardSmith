@@ -80,7 +80,6 @@ export function scoreRaceBot(game: ScoreRaceGame, seed: string, config: Partial<
     ScoreRaceGame,
     'score-race',
     1,
-    [],
     { async: false, timeout: Infinity, seed, ...config },
     scoreStrategy,
   );

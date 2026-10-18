@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Game, Player, Action, actionStep, type GameOptions } from '../engine/index.js';
-import { createSnapshot, snapshotTree } from '../engine/utils/index.js';
+import { createSeatSnapshot, snapshotTree } from '../engine/utils/index.js';
 import { applyDeterminization } from './determinization.js';
 
 const devMode = vi.hoisted(() => ({ override: null as boolean | null }));
@@ -56,7 +56,7 @@ describe('determinization and reused choices (#631)', () => {
     game.startFlow();
 
     // The seat's redacted sandbox, restored as the bot restores it.
-    const snapshot = createSnapshot(game, 'safe', [], undefined, { forSeat: 1, reseed: 'sandbox' });
+    const snapshot = createSeatSnapshot(game, 'safe', undefined, { forSeat: 1, reseed: 'sandbox' });
     const sandbox = new SafeGame(snapshot.gameOptions as GameOptions);
     sandbox.loadSerializedState(snapshotTree(snapshot));
     sandbox.restoreFlowState(snapshot.flowState!, snapshot.hiddenIdRemap);

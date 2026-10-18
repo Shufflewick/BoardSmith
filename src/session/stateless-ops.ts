@@ -1104,7 +1104,6 @@ async function handleHint(
     def.gameClass,
     def.gameType,
     op.seat,
-    runner.actionHistory,
     parseBotLevel('medium'),
     def.bot,
   );
@@ -1192,7 +1191,6 @@ async function handleHeatmapToggle(
     def.gameClass,
     def.gameType,
     op.seat,
-    runner.actionHistory,
     parseBotLevel('medium'),
     def.bot,
   );
@@ -1300,7 +1298,6 @@ async function handleBotSuggest(
     def.gameClass,
     def.gameType,
     botPlayer,
-    runner.actionHistory,
     parseBotLevel(seatLevel ?? 'medium'),
     def.bot,
   );
