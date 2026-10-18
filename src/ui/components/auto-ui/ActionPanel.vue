@@ -952,8 +952,8 @@ function skipOptionalSelection() {
  *
  * The rules come from the engine's OWN validators, through `editorRuleRefusal`
  * (#229, #237, #1057), which `controller.fill` also uses -- so what the panel
- * refuses here, what a custom UI is refused, and what the server would refuse are the same rule in the same words, rather than two
- * copies that drift. `validate` is deliberately not among them: a game's custom
+ * refuses here, what a custom UI is refused, and what the server would refuse
+ * are the same rule in the same words, rather than two copies that drift. `validate` is deliberately not among them: a game's custom
  * validator closes over game state and never reaches a client, so the engine
  * stays the authority and this is the subset a client can honestly check.
  *

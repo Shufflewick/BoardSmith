@@ -14,10 +14,9 @@
  * be wrong about its own copy.
  *
  * WHAT IS NOT HERE, exactly as in `text-rules.ts`: `validate`, a game's own
- * closure over game state that never
- * reaches a client. The engine remains the authority. This is the subset a
- * client can honestly check for itself, and it is exactly the subset the wire
- * carries.
+ * closure over game state that never reaches a client. The engine remains the
+ * authority. This is the subset a client can honestly check for itself, and it
+ * is exactly the subset the wire carries.
  */
 
 /**
