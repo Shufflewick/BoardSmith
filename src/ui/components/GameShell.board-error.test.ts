@@ -172,7 +172,7 @@ describe('GameShell board error boundary and the zoom fit (#1154)', () => {
   async function mountBoard(board: BoardComponent) {
     // Shaped like an ES module, which is what defineAsyncComponent unwraps `default` from.
     const bigModule = { __esModule: true, default: BigBoard };
-    const wrapper = mountPlatformShell({ props: { uis: defineGameUIs({ Stub: defaultUI(board), Big: devUI(async () => bigModule) }) } });
+    const wrapper = mount(GameShell, { props: { uis: defineGameUIs({ Stub: defaultUI(board), Big: devUI(async () => bigModule) }) } });
     mounted.push(wrapper);
     await nextTick();
     fromHost({ type: 'init', seat: 1 });
