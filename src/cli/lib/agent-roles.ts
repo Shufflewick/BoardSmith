@@ -123,3 +123,8 @@ export function agentTypeFor(config: Record<string, unknown>, role: Role): strin
   const mapped = (config.agents as Record<string, string> | undefined)?.[role];
   return mapped ?? defaultAgentType(role);
 }
+
+/** The roles `config` dispatches as `agent`: empty for an agent no role is mapped to now. */
+export function rolesDispatchedAs(config: Record<string, unknown>, agent: string): Role[] {
+  return ROLES.filter((role) => agentTypeFor(config, role) === agent);
+}

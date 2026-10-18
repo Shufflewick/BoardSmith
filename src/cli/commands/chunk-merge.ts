@@ -44,6 +44,8 @@
  *   4. It lists every reference between the merged chunk's changes and what the main line gained
  *      while it was being built, in design/CROSS-CHUNK.md, pending the audit's ruling;
  *      `ledger-check` fails until the audit rules, so the next close and merge wait for it.
+ *   5. Once merged, it copies the chunk's verify results (`.boardsmith/verify/`) from its worktree
+ *      into the main checkout, where review-gate looks for a review round's result (#1001).
  *
  * Conflicts in design documents that are only two appends at the same place, or the session lock
  * line, are resolved here (keep both; keep the main line's lock). Any other conflict aborts the
@@ -88,6 +90,7 @@ import { appendCrossChunkEntry, changedSide, crossReferences } from './cross-chu
 import { takeOsLock } from '../lib/os-lock.js';
 import { onlyTestCollectionChanged } from '../lib/test-config-edit.js';
 import { readIfExists, readListedText } from '../lib/read-if-exists.js';
+import { verifyResultPath, verifyResultsDir } from '../lib/verify-result.js';
 
 interface ChunkMergeOptions {
   /** The chunk's branch. Defaults to `chunk/<slug>`, the branch the dispatch contract names. */
@@ -694,6 +697,25 @@ async function recordCrossChunk(ctx: MergeContext, alongside: string[]): Promise
   return refs.sharedFiles.length + refs.sharedNames.length > 0 ? 'pending' : 'none';
 }
 
+/**
+ * Copies the verify results of the branch's own commits from the worktree it is checked out in
+ * into the main checkout, so review-gate still finds a review round's result once that worktree
+ * is removed (#1001). A branch checked out in no worktree has no results apart from this checkout's.
+ */
+async function copyVerifyResults(ctx: MergeContext): Promise<void> {
+  const worktrees = (await git(ctx.top, ['worktree', 'list', '--porcelain'])).split('\n\n');
+  const block = worktrees.find((w) => w.split('\n').includes(`branch refs/heads/${ctx.branch}`));
+  if (block === undefined) return;
+  const chunkProject = join(block.split('\n')[0].slice('worktree '.length), ctx.prefix);
+  const own = (await git(ctx.top, ['rev-list', ctx.branchCommit, `^${ctx.mainCommit}`])).split('\n').filter(Boolean);
+  for (const commit of own) {
+    const result = await readIfExists(verifyResultPath(chunkProject, commit), fs.readFile);
+    if (result === undefined) continue;
+    await fs.mkdir(verifyResultsDir(ctx.projectDir), { recursive: true });
+    await fs.writeFile(verifyResultPath(ctx.projectDir, commit), result);
+  }
+}
+
 // ---------------------------------------------------------------------------------------------
 // The merge
 // ---------------------------------------------------------------------------------------------
@@ -809,6 +831,7 @@ async function checkStartedMerge(ctx: MergeContext, left: string[], runners: Run
   }
   const crossChunk = await recordCrossChunk(ctx, alongside);
   await git(ctx.top, ['commit', '-q', '-m', commitMessage(ctx, allocated, alongside)]);
+  await copyVerifyResults(ctx);
   return { merged: true, refusals: [], allocated, alongside, crossChunk, vouched: shared };
 }
 

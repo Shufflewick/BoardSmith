@@ -118,7 +118,12 @@ is cheap.
 (`design/run-log/<slug>.md`, "The Run Log" below), never from the session. The change is everything
 since the commit the latest finished review round names in `Verify:` (before any round, the chunk's
 verify base), and the work's role is that of every dispatch logged since that round. So the run log
-must be current before the gate runs: each dispatch, with its Role, and each review round.
+must be current before the gate runs: each dispatch, with its Role, and each review round. The
+commit that round names must have a passing `verify --chunk <slug>` result on file in this checkout,
+the one the gate opened for; review-gate refuses one with none, saying how to record it. A chunk
+built in its own worktree keeps its results there, and `chunk-merge` copies them into the main
+checkout; a fresh clone has none, so check out that commit and run `npx boardsmith verify --chunk
+<slug>` on it.
 
 **The size rule** is the command's, not a judgement made here. Work by the `bounded` or
 `judgement` role is always reviewed in full. A `mechanical` change (every dispatch since the last
@@ -214,7 +219,9 @@ their own dispatches, in `design/run-log/ingest-rules.md` and `design/run-log/ve
 (so no chunk may be named `ingest-rules` or `verify-game`; `ledger-check` refuses one).
 
 A `### Dispatch N` entry records the work (the name in the step table above, a step name, or a
-short name for a bulk edit), the role, the agent type actually dispatched, and the failure it
+short name for a bulk edit), the role, the agent type actually dispatched (which must fit the role:
+`ledger-check` refuses an agent the project's `agents` mapping dispatches as other roles and not
+this one, and lets through an agent no role is mapped to now), and the failure it
 retries: `Retry of: Dispatch N` for a dispatch that failed, or `Retry of: Review Round N` for a
 round that asked for changes, whether the retry is at the same role or one up. A dispatch that
 does work again after it failed twice at the top role, once the designer has answered, writes
@@ -233,5 +240,6 @@ from, is on file.
 exist, answers one failure twice, does failed work again without naming the failure, retries a
 first failure at any role but its own, makes a third attempt at one role, moves up by anything but
 one role, dispatches more after a second failure at the top without the designer's answer, reviews a dispatch that did not finish or one a later finished dispatch
-carried on from, or records a review round that did not start from a passing verify, checked
-against `.boardsmith/verify/<commit>.json` when that result is on this machine.
+carried on from, records an agent the project dispatches as another role and not this one, or
+records a review round that did not start from a passing verify, checked against
+`.boardsmith/verify/<commit>.json` when that result is on this machine.
