@@ -728,7 +728,9 @@ describe('useBoardActionBridge — disabled actions', () => {
       isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
     });
 
-    board.triggerElementSelect({ id: 5, name: 'A1' });
+    // selectElement is the click-to-start path; triggerElementSelect only
+    // reaches an open pick's callback, so it never tried to start (#944).
+    board.selectElement({ id: 5, name: 'A1' });
     await nextTick();
 
     expect(start).not.toHaveBeenCalled();
@@ -815,5 +817,47 @@ describe('useBoardActionBridge ordered lists (#249)', () => {
     ]);
     expect((controller as unknown as { toggleMultiSelect: ReturnType<typeof vi.fn> }).toggleMultiSelect)
       .not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #965: the piece a filterBy pick narrows by is marked draggable only when the
+// first pick is ONE element
+// ---------------------------------------------------------------------------
+
+describe('useBoardActionBridge dragged piece for a filterBy pick (#965)', () => {
+  const destinationPick: EnrichedPickMetadata = {
+    name: 'to',
+    type: 'choice',
+    prompt: 'Move where?',
+    filterBy: { key: 'pieceId', selectionName: 'piece' },
+    choices: [{ value: { pieceId: 7, to: 'b2' }, display: 'b2', refs: [{ ref: { id: 20 }, role: 'target' }] }],
+  };
+  const validElements: EnrichedValidElement[] = [{ id: 7, refs: [{ ref: { id: 7 }, role: 'highlight' }] }];
+
+  function bridgeWith(firstPick: EnrichedPickMetadata, pieceValue: unknown) {
+    const board = createBoardInteraction();
+    const { controller } = makeController({ pick: destinationPick, action: 'move', validElements, args: { piece: pieceValue } });
+    useBoardActionBridge({
+      controller,
+      boardInteraction: board,
+      isMyTurn: ref(true),
+      autoEndTurn: ref(false),
+      actionMetadata: ref({ move: { name: 'move', selections: [firstPick, destinationPick] } }),
+      availableActions: ref(['move']),
+      disabledActions: ref(undefined),
+      isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
+    });
+    return board;
+  }
+
+  it('marks the chosen piece draggable when the first pick is a single element', () => {
+    const board = bridgeWith({ name: 'piece', type: 'element', prompt: 'Which piece?' }, 7);
+    expect(board.isDraggableSelectedElement({ id: 7 })).toBe(true);
+  });
+
+  it('marks no piece draggable when the first pick is a list, even a list of one', () => {
+    const board = bridgeWith({ name: 'piece', type: 'elements', prompt: 'Which pieces?' }, [7]);
+    expect(board.draggableSelectedElement).toBeNull();
   });
 });

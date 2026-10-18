@@ -120,6 +120,14 @@ describe('ingest-slice-source', () => {
     expect(sources.has('00-visual-survey.md')).toBe(false);
   });
 
+  it('names a slice it cannot read rather than calling it missing (#1110)', async () => {
+    await fs.rm(join(rulebook(), '01-setup.md'));
+    await fs.mkdir(join(rulebook(), '01-setup.md'));
+    await expect(ingestSliceSourceCommand(RULES, ['01-setup.md'], { project, json: true })).rejects.toThrow(
+      `Could not read ${join(rulebook(), '01-setup.md')} (EISDIR)`,
+    );
+  });
+
   it('accepts the rulebook/ spelling a chunk citation uses, and is a no-op when already recorded', async () => {
     await ingestSliceSourceCommand(RULES, ['rulebook/01-setup.md'], { project, json: true });
     const again = await ingestSliceSourceCommand(RULES, ['01-setup.md'], { project, json: true });

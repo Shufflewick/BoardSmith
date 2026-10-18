@@ -3,6 +3,7 @@ import {
 } from '../lib/project-paths.js';
 import { randomBytes } from 'node:crypto';
 import { sha256Hex } from '../lib/hash.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 import { withLedgerLock } from '../lib/ledger-lock.js';
 import { promises as fs } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
@@ -988,9 +989,7 @@ export async function verifyRunInitCommand(
   const projectDir = resolve(options.project ?? process.cwd());
   const rulebookDir = designRulebookDir(projectDir);
 
-  try {
-    await fs.access(rulebookDir);
-  } catch {
+  if ((await readIfExists(rulebookDir, (p) => fs.stat(p))) === undefined) {
     throw new Error(
       `No rulebook/ directory in ${projectDir}.\n` +
         `A verify run re-transcribes an existing rulebook — run \`boardsmith ingest-archive\`\n` +
@@ -1008,12 +1007,7 @@ export async function verifyRunInitCommand(
 
   let created: boolean;
   let ranges: ManifestRange[];
-  let existingText: string | undefined;
-  try {
-    existingText = await fs.readFile(ledgerFile, 'utf-8');
-  } catch {
-    existingText = undefined;
-  }
+  const existingText = await readIfExists(ledgerFile, (p) => fs.readFile(p, 'utf-8'));
   if (existingText !== undefined) {
     created = false;
     // Resume: the manifest was decided at first init and is never re-derived — whatever
@@ -1068,20 +1062,31 @@ export interface VerifyRunRangeActionResult {
   alreadyRecorded: boolean;
 }
 
+/** Whether anything stands at `path`, counting what cannot be looked at (no permission, a link loop) as there. */
+async function present(path: string): Promise<boolean> {
+  try {
+    await fs.lstat(path);
+    return true;
+  } catch (error) {
+    const { code } = error as NodeJS.ErrnoException;
+    return code !== 'ENOENT' && code !== 'ENOTDIR';
+  }
+}
+
 /**
  * Why `runId` names no usable run, and what to do about it: the one message every `--run-id`
  * command gives. Never suggests init with this id: a mistyped id would become a real, latest run (#833).
  */
 export async function missingRunMessage(projectDir: string, runId: string): Promise<string> {
   const ledgerFile = ledgerFilePath(projectDir, runId);
-  if (await exists(ledgerFile)) {
+  if (await present(ledgerFile)) {
     return `${relative(projectDir, ledgerFile)} could not be read. Check that it is a readable file.`;
   }
   const runDir = runRootDir(projectDir, runId);
-  if (await exists(runDir)) {
+  if (await present(runDir)) {
     const noRun = `${relative(projectDir, runDir)}/ has no RUN.md, so verify-run-init did not make it.\n`;
     const verdicts = rulingVerdictsLedgerPath(projectDir, runId);
-    if (await exists(verdicts)) {
+    if (await present(verdicts)) {
       return (
         noRun +
         `It holds ${relative(projectDir, verdicts)}: verdicts recorded under the mistyped id "${runId}". ` +
@@ -1115,11 +1120,9 @@ export async function readLedgerOrThrow(
   runId: string,
   projectDir: string,
 ): Promise<string> {
-  try {
-    return await fs.readFile(ledgerFile, 'utf-8');
-  } catch {
-    throw new Error(await missingRunMessage(projectDir, runId));
-  }
+  const text = await readIfExists(ledgerFile, (p) => fs.readFile(p, 'utf-8'));
+  if (text === undefined) throw new Error(await missingRunMessage(projectDir, runId));
+  return text;
 }
 
 /**
@@ -1346,10 +1349,8 @@ async function recordInRun(
     );
   }
 
-  let stat: import('node:fs').Stats;
-  try {
-    stat = await fs.stat(sliceAbs);
-  } catch {
+  const stat = await readIfExists(sliceAbs, (p) => fs.stat(p));
+  if (stat === undefined) {
     throw new Error(
       `Slice not found: ${relative(projectDir, sliceAbs)}.\n` +
         `verify-run-record only records a slice-unit AFTER its file is confirmed written — write\n` +

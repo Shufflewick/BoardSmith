@@ -88,7 +88,7 @@ describe('ingest-archive — archiving', () => {
     await fs.mkdir(project, { recursive: true });
     await expect(
       ingestArchiveCommand(join(dir, 'nope.pdf'), { project, json: true }),
-    ).rejects.toThrow(/not found or unreadable/);
+    ).rejects.toThrow(/not found/);
     // Critically: no INDEX.md claiming provenance for a file that was never archived.
     await expect(fs.access(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'))).rejects.toThrow();
   });
@@ -99,6 +99,41 @@ describe('ingest-archive — archiving', () => {
     await expect(ingestArchiveCommand(sourcePath, { project, json: true })).rejects.toThrow(
       /already exists .* and differs/,
     );
+  });
+
+  it('refuses, naming the file, when the archived copy cannot be read, and leaves it as it was (#1110)', async () => {
+    const project = await run();
+    const archived = join(project, DESIGN_DIR, 'rulebook', 'source', 'src-rules.pdf');
+    await fs.writeFile(archived, 'different bytes');
+    await fs.chmod(archived, 0o200);
+    try {
+      await expect(ingestArchiveCommand(sourcePath, { project, json: true })).rejects.toThrow(`Could not read ${archived} (EACCES)`);
+    } finally {
+      await fs.chmod(archived, 0o644);
+    }
+    expect(await fs.readFile(archived, 'utf-8')).toBe('different bytes');
+  });
+
+  it('refuses, naming the file, when INDEX.md cannot be read, before archiving anything (#1110)', async () => {
+    const project = join(dir, 'game');
+    const index = join(project, DESIGN_DIR, 'rulebook', 'INDEX.md');
+    await fs.mkdir(index, { recursive: true });
+    await expect(ingestArchiveCommand(sourcePath, { project, json: true })).rejects.toThrow(`Could not read ${index} (EISDIR)`);
+    await expect(fs.readdir(join(project, DESIGN_DIR, 'rulebook'))).resolves.toEqual(['INDEX.md']);
+  });
+
+  it('names a rulebook it cannot read rather than calling it missing (#1110)', async () => {
+    const project = join(dir, 'game');
+    const folder = join(dir, 'folder.pdf');
+    await fs.mkdir(folder);
+    await expect(ingestArchiveCommand(folder, { project, json: true })).rejects.toThrow(`Could not read ${folder} (EISDIR)`);
+  });
+
+  it('ingest-gaps names an INDEX.md it cannot read rather than calling it missing (#1110)', async () => {
+    const project = join(dir, 'game');
+    const index = join(project, DESIGN_DIR, 'rulebook', 'INDEX.md');
+    await fs.mkdir(index, { recursive: true });
+    await expect(ingestGapsCommand({ project, quiet: true, skipRelabel: true })).rejects.toThrow(`Could not read ${index} (EISDIR)`);
   });
 
   it('is idempotent when the archived copy is byte-identical', async () => {
@@ -478,7 +513,7 @@ describe('ingest-archive --additional-source (#305)', () => {
 
   it('refuses an unreadable additional source BEFORE archiving anything', async () => {
     expect(await refusedBeforeWriting([join(dir, 'missing-reference.md')])).toMatch(
-      /Additional source not found or unreadable: .*missing-reference\.md/,
+      /Additional source not found: .*missing-reference\.md/,
     );
   });
 

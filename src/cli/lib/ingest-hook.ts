@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { DESIGN_DIR, RULEBOOK_DIR } from './project-paths.js';
+import { readIfExists } from './read-if-exists.js';
 
 /**
  * The `pre-commit` hook `boardsmith init` installs into every scaffolded game project.
@@ -99,7 +100,7 @@ exit 0
  */
 export async function installIngestHook(
   projectPath: string,
-): Promise<'installed' | 'skipped-existing' | 'skipped-no-git'> {
+): Promise<'installed' | 'skipped-existing' | 'skipped-unreadable' | 'skipped-no-git'> {
   const hooksDir = join(projectPath, '.git', 'hooks');
   const hookPath = join(hooksDir, 'pre-commit');
 
@@ -109,13 +110,14 @@ export async function installIngestHook(
     return 'skipped-no-git';
   }
 
+  let existing: string | undefined;
   try {
-    const existing = await fs.readFile(hookPath, 'utf-8');
-    // Never clobber a hook we did not write — a designer's own hook wins.
-    if (!existing.includes('BoardSmith ingest synthesis')) return 'skipped-existing';
+    existing = await readIfExists(hookPath, (p) => fs.readFile(p, 'utf-8'));
   } catch {
-    // No hook yet — the normal path.
+    return 'skipped-unreadable'; // Something we cannot read stands there: not ours to replace, and init must not fail.
   }
+  // Never clobber a hook we did not write — a designer's own hook wins.
+  if (existing !== undefined && !existing.includes('BoardSmith ingest synthesis')) return 'skipped-existing';
 
   try {
     await fs.mkdir(hooksDir, { recursive: true });

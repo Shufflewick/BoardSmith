@@ -398,7 +398,7 @@ describe('verifyRulingRecordCommand — the CLI write surface', () => {
     }).catch((e: Error) => e);
 
     const message = (err as Error).message;
-    expect(message).toContain(`${DESIGN_DIR}/rulebook/.verify/${odd}/RUN.md could not be read`);
+    expect(message).toContain(`Could not read ${ledgerFilePath(project, odd)} (EISDIR)`);
     expect(message).not.toMatch(/has no RUN\.md/);
     expect(message).not.toMatch(/Remove that folder/);
   });

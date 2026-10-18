@@ -552,3 +552,13 @@ describe('the CHUNK.md template', () => {
     expect(refusals[0]).toMatch(/no claims and no open questions/);
   });
 });
+
+describe('claim-quote-check: an unreadable CHUNK.md (#1110)', () => {
+  it('names the file rather than calling it missing', async () => {
+    const dir = tempTree('bs-claim-quotes-unreadable-');
+    const chunk = join(dir, 'design', 'chunks', 'punch', 'CHUNK.md');
+    await fs.mkdir(dirname(chunk), { recursive: true });
+    await fs.symlink(chunk, chunk);
+    await expect(claimQuoteCheckCommand('punch', { project: dir })).rejects.toThrow(`Could not read ${chunk} (ELOOP)`);
+  });
+});

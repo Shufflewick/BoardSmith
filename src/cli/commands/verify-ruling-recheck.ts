@@ -4,6 +4,7 @@ import {
   designRulebookDir,
 } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
+import { readIfExists } from '../lib/read-if-exists.js';
 import { dirname, join, relative, resolve } from 'node:path';
 import { styleText } from 'node:util';
 import { parseRulings } from './build-manifest.js';
@@ -345,14 +346,14 @@ function emptyVerdictCounts(): Record<RulingVerdict, number> {
 
 /** The project's RULINGS.md, or an error saying how to point at the right project. */
 async function readRulingsMd(projectDir: string): Promise<string> {
-  try {
-    return await fs.readFile(designPath(projectDir, RULINGS_MD), 'utf-8');
-  } catch {
+  const text = await readIfExists(designPath(projectDir, RULINGS_MD), (p) => fs.readFile(p, 'utf-8'));
+  if (text === undefined) {
     throw new Error(
       `No RULINGS.md found in this project directory.\n` +
         `Pass --project <dir> to target the bs-project this run should read.`,
     );
   }
+  return text;
 }
 
 /**

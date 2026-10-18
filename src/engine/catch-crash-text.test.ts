@@ -228,3 +228,31 @@ describe('FlowHaltedError (#1120)', () => {
     expect(new FlowHaltedError(new Error(SECRET)).message).toContain(`(${SECRET})`);
   });
 });
+
+describe('a whole submission of a repeating pick (#1141)', () => {
+  const hooks: Record<string, (thrower: Thrower) => Action> = {
+    onSelect: (thrower) => Action.create('act').chooseFrom('items', { choices: ['a', 'done'], repeatUntil: 'done', onSelect: thrower }),
+    onEach: (thrower) => Action.create('act').chooseFrom('items', { choices: ['a', 'done'], repeat: { onEach: thrower, until: () => false } }),
+    until: (thrower) => Action.create('act').chooseFrom('items', { choices: ['a', 'done'], repeat: { until: thrower } }),
+  };
+
+  it.each(Object.entries(hooks))('codes a crash in %s as a rules error, told in the shared sentence alone', (_hook, build) => {
+    devThrow.enabled = false;
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { executor, player } = setup();
+    const result = executor.executeAction(build(crashing).execute(() => {}), player, { items: ['a', 'done'] });
+    expect(result).toMatchObject({ success: false, error: rulesErrorSentence('act'), rulesError: true, partiallyApplied: true });
+  });
+
+  it('keeps the pick prefix on a refusal the game wrote', () => {
+    const { executor, player } = setup();
+    const refuse = () => { throw new PlayerFacingError(REFUSAL); };
+    const result = executor.executeAction(hooks.onEach(refuse).execute(() => {}), player, { items: ['a', 'done'] });
+    expect(result.error).toBe(`Pick 1 of "items": ${REFUSAL}`);
+    expect(result.rulesError).toBeUndefined();
+  });
+});
+
+function crashing(): never {
+  throw new TypeError(SECRET);
+}

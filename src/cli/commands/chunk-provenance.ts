@@ -9,6 +9,7 @@ import {
 import { assertBareName } from '../lib/user-name.js';
 import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
+import { readIfExists } from '../lib/read-if-exists.js';
 import { basename, join, resolve } from 'node:path';
 import { styleText } from 'node:util';
 import { normalizeEdition } from './ingest-archive.js';
@@ -678,10 +679,8 @@ async function planVerifiedAgainst(
   const chunkPath = chunkMdPath(projectDir, slug);
   const relChunkPath = relChunkMdPath(slug);
 
-  let chunkText: string;
-  try {
-    chunkText = await fs.readFile(chunkPath, 'utf-8');
-  } catch {
+  const chunkText = await readIfExists(chunkPath, (p) => fs.readFile(p, 'utf-8'));
+  if (chunkText === undefined) {
     throw new Error(
       `No chunk found at ${relChunkPath} in ${projectDir}.\n` +
         `Check the slug, or run \`boardsmith chunk-provenance-status\` to list known chunks.`,

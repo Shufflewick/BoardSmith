@@ -48,6 +48,11 @@ export interface PickStepResult {
   warnings?: WarningEntry[];
 }
 
+/** A refused pick's code: a crash in the rules is ENGINE_ERROR, as on every other route (#1142). */
+function pickFailureCode(refused: { rulesError?: boolean }): ErrorCode {
+  return refused.rulesError ? ErrorCode.ENGINE_ERROR : ErrorCode.INVALID_PICK;
+}
+
 /**
  * Manages pending actions for players.
  *
@@ -161,7 +166,7 @@ export class PendingActionManager<G extends Game = Game> {
       const result = executor.processRepeatingStep(action, player, pendingState, value);
 
       if (result.error) {
-        return { success: false, error: result.error, nextChoices: result.nextChoices, errorCode: ErrorCode.INVALID_PICK };
+        return { success: false, error: result.error, nextChoices: result.nextChoices, errorCode: pickFailureCode(result) };
       }
 
       // onEach may have modified game state.
@@ -187,7 +192,7 @@ export class PendingActionManager<G extends Game = Game> {
     const stepResult = executor.processSelectionStep(action, player, pendingState, selectionName, value);
 
     if (!stepResult.success) {
-      return { success: false, error: stepResult.error, errorCode: ErrorCode.INVALID_PICK };
+      return { success: false, error: stepResult.error, errorCode: pickFailureCode(stepResult) };
     }
 
     // Check if action is now complete
@@ -274,12 +279,12 @@ export class PendingActionManager<G extends Game = Game> {
     initialArgs: Record<string, unknown>,
   ): PickStepResult | undefined {
     const game = this.#runner.game;
-    const error = game.getActionExecutor().makePicksBefore(
+    const refused = game.getActionExecutor().makePicksBefore(
       game.getAction(pendingState.actionName)!, game.getPlayer(playerPosition)!, pendingState, selectionName, initialArgs,
     );
-    if (error === undefined) return undefined;
+    if (refused === undefined) return undefined;
     this.cancelPendingAction(playerPosition);
-    return { success: false, error, errorCode: ErrorCode.INVALID_PICK };
+    return { success: false, error: refused.error, errorCode: pickFailureCode(refused) };
   }
 
   async #completePendingAction(
@@ -299,6 +304,7 @@ export class PendingActionManager<G extends Game = Game> {
     return {
       success: actionResult.success,
       error: actionResult.error,
+      errorCode: actionResult.errorCode,
       done: true,
       actionComplete: true,
       followUp: offerFollowUp(this.#runner.game, this.#runner.getFlowState(), playerPosition),
