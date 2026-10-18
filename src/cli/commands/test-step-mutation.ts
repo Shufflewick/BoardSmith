@@ -1185,6 +1185,8 @@ interface DiffMutationInput {
   log: (line: string) => void;
   /** What changed in the execution context since the run began, checked before each mutant runs, so a mixed run stops early (#932). */
   contextChange?: () => Promise<string | undefined>;
+  /** Saves the outcomes found so far, called after each mutant that ran, so an interrupted run keeps them (#940). */
+  saveProgress?: () => Promise<void>;
 }
 
 interface DiffMutationResult {
@@ -1308,7 +1310,10 @@ async function tallyMutants(
     const label = `mutant ${i + 1}/${mutants.length}: ${mutant.file}:${mutant.line} ${mutant.description}`;
     input.log(stored === undefined ? label : `${label} (reused: ${stored})`);
     const outcome = stored ?? (await runUnlessContextChanged(input, run!, mutant, i));
-    if (stored === undefined && outcome !== 'timed-out') input.cache.set(mutant, outcome);
+    if (stored === undefined && outcome !== 'timed-out') {
+      input.cache.set(mutant, outcome);
+      await input.saveProgress?.();
+    }
     summary.mutants++;
     summary[COUNTED[outcome]]++;
     if (outcome === 'survived') await countSurvivor(input, mutant, review, result);

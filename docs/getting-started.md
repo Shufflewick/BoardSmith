@@ -305,7 +305,9 @@ uncommitted and untracked changes, and the git-ignored files that its
 cannot be read, or the exports reach every file in the package, nothing is
 reused or kept for that run, and `boardsmith verify` says why.
 Those outcomes are kept in the repository's git directory, shared by the main
-checkout and every worktree. A merge reuses them only when the merged tree is
+checkout and every worktree. Each one is saved as soon as its mutant finishes, so
+a run that is interrupted, or stopped by a time limit, loses only the mutant it
+was running when it stopped, and the next run reuses the rest. A merge reuses them only when the merged tree is
 the tree the worktree verified: main has not moved since, or the branch merged
 main before its last verify. Otherwise every mutant runs again at the merge. So
 for a cheap merge, merge main into the branch first and verify there. Older
@@ -364,8 +366,8 @@ the command runs and the game loads (its commit and uncommitted changes), the
 installed packages, and the packages linked from outside the repository. If any
 of these changes, for example a linked BoardSmith checkout moves to a new
 commit, the run stops before its next mutant and ends with an error naming what
-changed. It records no result and keeps no mutant outcome, since checks after
-the change ran against different code. Run it again in a checkout nothing else
+changed. It records no result and keeps no mutant outcome found after the
+change, since checks after the change ran against different code. Run it again in a checkout nothing else
 edits while it runs, such as a separate BoardSmith worktree.
 `boardsmith verify --check` exits 0 only when the current commit,
 on a clean tree, has a passing full result, and otherwise says what to run.

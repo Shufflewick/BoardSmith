@@ -58,12 +58,15 @@ import { readIfExists } from './read-if-exists.js';
  * `save` puts the ones this run looked up or recorded in front of those already on file and drops
  * the oldest past the limit, so two checkouts verifying in turn do not evict each other. A run that
  * tried no mutant leaves the file as it was. Two runs saving at the same moment can lose one run's
- * new outcomes, which costs only running those mutants again.
- * `boardsmith verify` saves only when the tree stayed clean for the whole run, since the key is
- * computed from the commit and would not describe files edited mid-run. It also captures the
- * execution context (`captureExecutionContext`) once when it starts, keys the cache by that
- * capture, and refuses the whole run, saving nothing, when the context changed by its end or
- * before a mutant runs (#932): outcomes from a mixed run would be stored under a key they do not fit.
+ * new outcomes, which costs only running those mutants again; each save writes all of the run's
+ * outcomes again, so the next one puts back what an overlapping save dropped.
+ * `boardsmith verify` saves after each mutant it runs, so an interrupted run keeps every finished
+ * outcome (#940). A save is about 10ms for a full file (1.6MB), next to a mutant's whole-suite run
+ * of seconds. It saves only while the tree is clean, since the key is computed from the commit and
+ * would not describe files edited mid-run. It also captures the execution context
+ * (`captureExecutionContext`) once when it starts, keys the cache by that capture, saves only
+ * while the context is unchanged, and refuses the rest of the run when the context changed by its
+ * end or before a mutant runs (#932): outcomes from a mixed run would be stored under a key they do not fit.
  */
 
 const CACHE_FORMAT = 4;

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { existsSync, promises as fs, writeFileSync } from 'node:fs';
+import { promises as fs, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { linkGameModules } from '../../testing/installed-modules.test-helper.js';
@@ -512,6 +512,29 @@ describe('boardsmith verify: a re-verify reuses mutant outcomes only while nothi
     expect(lines).toContainEqual(expect.stringMatching(/^the mutant cache is off for this run: could not read .*dep.*; every mutant runs\.$/));
   });
 
+  it('keeps the outcome of each mutant that finished when the run is cut short, so a retry runs only the rest (#940)', async () => {
+    const dir = await gameOnBranch(false);
+    let cutShort!: () => void;
+    const stopped = new Promise<void>((resolve) => { cutShort = resolve; });
+    const interrupted = {
+      ...CHECKS,
+      // Stands in for SIGINT at the third mutant's label: nothing of verify after this point ever runs.
+      mutation: async (ctx: Parameters<typeof CHECKS.mutation>[0]) => {
+        const log = (line: string) => { if (line.startsWith('mutant 3/')) throw new Error('interrupted'); };
+        await CHECKS.mutation({ ...ctx, log }).catch(() => {});
+        cutShort();
+        return new Promise<never>(() => {});
+      },
+    };
+    void runVerify({ projectDir: dir, checks: interrupted, log: () => {} });
+    await stopped;
+
+    const lines: string[] = [];
+    const retry = await runVerify({ projectDir: dir, checks: CHECKS, log: (l) => lines.push(l) });
+    expect(check(retry.result, 'mutation').counts).toMatchObject({ mutants: 3, killed: 3, reused: 2 });
+    expect(freshRuns(lines)).toBe(1);
+  });
+
   it('keeps no outcome from a run whose tree changed while it ran', async () => {
     const dir = await gameOnBranch(false);
     const dirtying = dirtiesTheTree(dir, CHECKS);
@@ -643,7 +666,7 @@ describe('boardsmith verify: a run counts only when what the tests run with stay
     expect(await readVerifyResult(dir, head)).toBeUndefined();
   });
 
-  it('stops before the next mutant once a linked package changes, and saves no mutant outcome', async () => {
+  it('stops before the next mutant once a linked package changes, keeping only the outcome found before the change (#940)', async () => {
     const dir = await gameOnBranch(false);
     const head = git(dir, 'rev-parse', 'HEAD').trim();
     const dep = join(dirname(dir), 'dep');
@@ -658,7 +681,8 @@ describe('boardsmith verify: a run counts only when what the tests run with stay
     await expect(runVerify({ projectDir: dir, checks: CHECKS, log })).rejects.toThrow(/the packages linked from outside the repository/);
     expect(lines.filter((l) => /^mutant \d+\/\d+: /.test(l))).toHaveLength(2);
     expect(await readVerifyResult(dir, head)).toBeUndefined();
-    expect(existsSync(await mutantCachePath(dir))).toBe(false);
+    const saved = JSON.parse(await fs.readFile(await mutantCachePath(dir), 'utf-8')) as { outcomes: unknown[] };
+    expect(saved.outcomes).toHaveLength(1);
   });
 });
 
