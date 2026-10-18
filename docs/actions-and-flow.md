@@ -1154,7 +1154,7 @@ thinking about the action at all:
 | `.condition()` | Nothing — the action is gone | The action is **irrelevant** here (playing a card during someone else's turn) |
 | `.disabled()` | A greyed button that explains itself | The action is **relevant but blocked**, and its absence would be confusing (Build, while two wood short) |
 
-Three things worth knowing:
+Four things worth knowing:
 
 - **It is enforced, not decorative.** `performAction` refuses a disabled action
   with the same reason, so a stale tab, a custom UI, or a bot gets the same
@@ -1162,14 +1162,14 @@ Three things worth knowing:
 - **It runs at availability time, with empty args** — like `.condition()`. A
   rule that needs the resolved selections belongs in `.validate()`, which runs
   at submit time and returns the same `string`-or-not shape.
-- **The condition is checked first**, on offer and on submission alike. A
-  false `.condition()` refuses the action as unavailable before `.disabled()`
-  runs, so the condition can guard what the rule reads, such as an attribute
-  a seat's redacted copy may not know (#1129).
 - **A disabled action stays in `availableActions`** on purpose. That is what
   lets the panel draw it. The reason travels beside it in
   `PlayerGameState.disabledActions`, which is also where tutorial-gate reasons
   arrive — one channel, so a custom UI has one thing to read.
+- **The condition is checked first**, on offer and on submission alike. A
+  false `.condition()` refuses the action as unavailable before `.disabled()`
+  runs, so the condition can guard what the rule reads, such as an attribute
+  a seat's redacted copy may not know (#1129).
 
 The same `string | false` contract disables individual choices inside an
 action — `chooseFrom({ disabled })`, `chooseElement({ disabled })` — so a
