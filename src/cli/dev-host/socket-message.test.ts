@@ -38,7 +38,7 @@ describe('#1089: a page-chosen message type in the dev server log', () => {
     const report = new Promise<string>((resolve) => (reported = resolve));
     const server = await serveSockets(
       createDevHostConnectionHandler({
-        mpHost: { handleMessage: async () => {}, disconnect: async () => {} },
+        mpHost: { handleMessage: async () => {}, disconnect: async () => {}, bindPageLoad: () => {}, forgetPageLoad: () => {} },
         clients: new Map(),
         queue: failing,
         onError: (_err, msgType) => {
