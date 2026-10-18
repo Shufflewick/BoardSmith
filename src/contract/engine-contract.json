@@ -1,6 +1,6 @@
 {
-  "revision": 238,
-  "surfaceHash": "47cfcbc00d93215e",
+  "revision": 239,
+  "surfaceHash": "d045fa6967c06929",
   "payloadHash": "0e2d27db00239080",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
@@ -1847,6 +1847,14 @@
       "payloadHash": "0e2d27db00239080",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A failed action that the runner rolls back now restores the flow from the same checkpoint as the elements (#972), so an open simultaneous step's awaiting seats, and which of them have completed, return to what they were before the action, on every route (whole, pick by pick, and through the session and a reload); the restored flow also has no action error and no last action result of its own. Game.relinkFlowElements() is replaced by Game.rollBackFlow(state). game.refreshAwaitingActions() called inside an action's own execute, onSelect or onEach now leaves the acting seat as it is, for that action's settling to decide (#973): a pick-by-pick action whose onEach makes its own seat done and refreshes now settles instead of throwing 'Seat N is not awaited by the open simultaneous step', and an action taken whole that does the same leaves its seat in the awaiting list marked completed, where before it was dropped from the list. No saved-state or payload shape changes."
+    },
+    {
+      "revision": 239,
+      "date": "2026-10-18",
+      "surfaceHash": "d045fa6967c06929",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "engineRootFieldAudience is removed from the boardsmith root (nothing called it; isEngineRootField and GAME_ROOT_FIELD_AUDIENCE remain), and GameRunner.getFlowDebugInfo is removed (call runner.game.getFlowDebugInfo()). No game uses either, so no rebuild is needed; no saved-state or payload shape changes."
     }
   ]
 }
