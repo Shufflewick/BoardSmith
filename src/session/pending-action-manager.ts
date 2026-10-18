@@ -135,76 +135,22 @@ export class PendingActionManager<G extends Game = Game> {
       };
     }
 
-    const action = this.#runner.game.getAction(pendingState.actionName);
-    if (!action) {
-      return { success: false, error: `Action not found: ${pendingState.actionName}`, errorCode: ErrorCode.ACTION_NOT_FOUND };
+    const taken = this.#runner.takePick(pendingState, playerPosition, selectionName, value);
+    if (!taken.success) {
+      return { success: false, error: taken.error, errorCode: taken.errorCode, nextChoices: taken.nextChoices };
     }
 
-    const executor = this.#runner.game.getActionExecutor();
-    const player = this.#runner.game.getPlayer(playerPosition);
-    const selection = action.selections[pendingState.currentSelectionIndex];
+    // A pick's onSelect or onEach may have changed the game. A repeat's last
+    // pick is recorded before its action runs, so a failed action keeps what
+    // that onEach did (whether it should is #1169).
+    if (taken.repeating || !taken.complete) this.#runner.captureCheckpoint();
+    if (taken.complete) return this.#completePendingAction(pendingState, playerPosition);
 
-    if (!selection) {
-      return { success: false, error: 'No current selection', errorCode: ErrorCode.PICK_NOT_FOUND };
-    }
-
-    // Verify we're processing the expected selection
-    if (selection.name !== selectionName) {
-      return {
-        success: false,
-        error: `Expected selection at index ${pendingState.currentSelectionIndex}, got ${selectionName} at index ${action.selections.findIndex(s => s.name === selectionName)}`,
-        errorCode: ErrorCode.PICK_NOT_FOUND,
-      };
-    }
-
-    // Check if it's a repeating selection
-    if (executor.isRepeatingSelection(selection)) {
-      const result = executor.processRepeatingStep(action, player, pendingState, value);
-
-      if (result.error) {
-        return { success: false, error: result.error, nextChoices: result.nextChoices, errorCode: pickFailureCode(result) };
-      }
-
-      // onEach may have modified game state.
-      this.#runner.captureCheckpoint();
-
-      // Check if the action is now complete
-      if (result.done && executor.isPendingActionComplete(action, pendingState)) {
-        return this.#completePendingAction(executor, action, player, pendingState, playerPosition);
-      }
-
-      // More selections needed
-      this.#runner.notePickTaken(pendingState, playerPosition);
-      return {
-        success: true,
-        done: result.done,
-        nextChoices: result.nextChoices,
-        warnings: result.warnings,
-        actionComplete: false,
-      };
-    }
-
-    // Regular (non-repeating) selection
-    const stepResult = executor.processSelectionStep(action, player, pendingState, selectionName, value);
-
-    if (!stepResult.success) {
-      return { success: false, error: stepResult.error, errorCode: pickFailureCode(stepResult) };
-    }
-
-    // Check if action is now complete
-    if (executor.isPendingActionComplete(action, pendingState)) {
-      return this.#completePendingAction(executor, action, player, pendingState, playerPosition);
-    }
-
-    this.#runner.notePickTaken(pendingState, playerPosition);
-
-    // onSelect may have modified game state (e.g. animation events).
-    this.#runner.captureCheckpoint();
-
-    // More selections needed
     return {
       success: true,
-      done: true,
+      done: taken.done,
+      nextChoices: taken.nextChoices,
+      warnings: taken.warnings,
       actionComplete: false,
     };
   }
@@ -283,16 +229,10 @@ export class PendingActionManager<G extends Game = Game> {
     return { success: false, error: refused.error, errorCode: pickFailureCode(refused) };
   }
 
-  async #completePendingAction(
-    executor: ReturnType<Game['getActionExecutor']>,
-    action: any,
-    player: any,
-    pendingState: PendingActionState,
-    playerPosition: number,
-  ): Promise<PickStepResult> {
+  async #completePendingAction(pendingState: PendingActionState, playerPosition: number): Promise<PickStepResult> {
     // The UNIQUE completion path for multi-step / repeating-selection actions
     // on the session layer; the runner records, advances or rolls back.
-    const actionResult = this.#runner.executeCollectedAction(executor, action, player, pendingState, playerPosition);
+    const actionResult = this.#runner.executeCollectedAction(pendingState, playerPosition);
     this.#pendingActions.delete(playerPosition);
 
     if (actionResult.success) this.#runner.captureCheckpoint();
