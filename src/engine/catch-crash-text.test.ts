@@ -155,12 +155,12 @@ it('listing moves through an onSelect or onEach that refuses values in words log
   expect(log).not.toHaveBeenCalled();
 });
 
-/** A game whose flow throws `halt()` in the step after its one action commits. */
-function haltingGame(halt: () => Error) {
+/** A game whose flow throws `halt()` in the step after its one action, 'go', commits. */
+function haltingGame(halt: () => Error, go = Action.create('go').prompt('Go').execute(() => {})) {
   return class HaltingGame extends Game<Game, Player> {
     constructor(options: GameOptions) {
       super(options);
-      this.registerActions(Action.create('go').prompt('Go').execute(() => {}));
+      this.registerActions(go);
       this.setFlow({
         root: loop({
           maxIterations: 5,
@@ -186,6 +186,24 @@ describe('FlowHaltedError (#1120)', () => {
     expect(result.error).toBe(new FlowHaltedError(cause).message);
     expect(result.error).not.toContain(SECRET);
     expect(log.mock.calls.filter((call) => call.includes(cause))).toHaveLength(1);
+  });
+
+  it("halting after a multi-step action on the runner's own route is refused like performAction's, its cause logged once", () => {
+    devThrow.enabled = false;
+    const cause = new Error(SECRET);
+    const twoStep = Action.create('go').chooseFrom('color', { choices: ['red'] }).chooseFrom('size', { choices: ['S'] }).execute(() => {});
+    const runner = new GameRunner({ GameClass: haltingGame(() => cause, twoStep), gameType: 'halt', gameOptions: { playerCount: 2, seed: 'halt' } });
+    runner.start();
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    runner.startPendingAction('go', 1);
+    expect(runner.processSelectionStep(1, 'color', 'red').success).toBe(true);
+    const result = runner.processSelectionStep(1, 'size', 'S');
+    expect(result.success).toBe(false);
+    expect(result.error).toBe(new FlowHaltedError(cause).message);
+    expect(result.error).not.toContain(SECRET);
+    expect(log.mock.calls.filter((call) => call.includes(cause))).toHaveLength(1);
+    expect(runner.getPendingAction(1)).toBeUndefined();
+    expect(runner.actionHistory).toHaveLength(1);
   });
 
   it('the runner logs a NotSimulableError cause too, since a live game that halts on one has really halted', () => {

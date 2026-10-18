@@ -796,7 +796,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * this runner's `completePendingAction` and `PendingActionManager`'s: record
    * it and advance the flow when it succeeds, and roll the game back when it
    * failed after changing something, as `performAction` does (#44, #801). A
-   * flow that halts after it is refused like `performAction`'s, not thrown (#1120).
+   * flow that halts after the action is refused, as in `performAction`, rather than thrown (#1120).
    */
   executeCollectedAction(
     executor: ActionExecutor,
