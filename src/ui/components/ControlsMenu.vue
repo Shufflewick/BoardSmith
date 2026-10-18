@@ -15,11 +15,12 @@
  */
 import { ref, nextTick, onMounted, onUnmounted } from 'vue';
 import { useFocusTrap } from '../composables/useFocusTrap';
+import { ZOOM_MIN, ZOOM_MAX } from '../composables/useAutoZoom';
 
 const props = withDefaults(defineProps<{
   /** Current auto-end-turn state */
   autoEndTurn: boolean;
-  /** Current zoom level (0.5–2.0) */
+  /** Current zoom level; a fitted board can sit below the slider's minimum (#1162). */
   zoom: number;
   /** Whether the undo action is currently available */
   canUndo: boolean;
@@ -256,8 +257,8 @@ function handleUndo() {
           <input
             type="range"
             class="zoom-range"
-            min="0.5"
-            max="2"
+            :min="ZOOM_MIN"
+            :max="ZOOM_MAX"
             step="0.1"
             :value="zoom"
             aria-label="Zoom"

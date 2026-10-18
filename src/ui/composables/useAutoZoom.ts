@@ -5,7 +5,7 @@
  * scrollable board region. This composable watches the board while it is
  * settling in (content arrives asynchronously over the session socket), fits
  * the zoom so the whole board fills the available region without scrolling
- * (clamped to the slider range), and then stops watching the board itself
+ * (clamped to [FIT_ZOOM_MIN, ZOOM_MAX]), and then stops watching the board itself
  * once its size has been stable for SETTLE_MS — mid-game board CONTENT
  * growth never moves the zoom on its own.
  *
@@ -60,8 +60,14 @@
 import { ref, watch, onUnmounted, type Ref } from 'vue';
 import { provideBoardRegionPin } from './boardRegionPin.js';
 
+/** The slider's range. */
 export const ZOOM_MIN = 0.5;
 export const ZOOM_MAX = 2.0;
+
+/** The automatic fit's own floor, below the slider's, so a wide board fits a
+ *  phone (#1162): Hex's Auto UI needs 0.23 at 390px. Below a fifth, text is
+ *  unreadable and cells too small to tap, so scrolling serves better. */
+export const FIT_ZOOM_MIN = 0.2;
 
 /** Which axes the board must fit inside the available space.
  *  `'both'` for a fixed-intrinsic board; `'width'` for a board pinned to the
@@ -73,7 +79,7 @@ export type FitAxis = 'both' | 'width';
 export const SETTLE_MS = 300;
 
 /** Largest zoom at which `natural` fits inside `avail` on the requested axes,
- *  clamped to the slider range. Returns null when a box the chosen axes need is
+ *  clamped to [FIT_ZOOM_MIN, ZOOM_MAX]. Returns null when a box the chosen axes need is
  *  unmeasurable (not laid out yet). `fitAxis` is required, not defaulted: the
  *  axis is a property of the board, and a caller that hasn't decided it hasn't
  *  finished the measurement. */
@@ -83,7 +89,7 @@ export function computeFitZoom(
   fitAxis: FitAxis,
 ): number | null {
   if (natural.width < 1 || avail.width < 1) return null;
-  const clamp = (fit: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, fit));
+  const clamp = (fit: number) => Math.min(ZOOM_MAX, Math.max(FIT_ZOOM_MIN, fit));
   const widthFit = avail.width / natural.width;
   // Width-only: the height boxes are irrelevant, and an unmeasurable height
   // (a tall board under a tall Action Panel) must not suppress the fit.
