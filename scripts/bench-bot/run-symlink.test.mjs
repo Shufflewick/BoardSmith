@@ -14,7 +14,8 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 describe('bench-bot through a symlink', () => {
   it('runs main, so a game it cannot find is refused rather than silently skipped', () => {
-    const link = join(tempTree('bs-bench-link-'), 'boardsmith');
+    const tree = tempTree('bs-bench-link-');
+    const link = join(tree, 'boardsmith');
     symlinkSync(REPO, link);
     const ran = spawnSync(process.execPath, [join(link, 'scripts', 'bench-bot', 'run.mjs'), '/no-such-game'], {
       encoding: 'utf8',

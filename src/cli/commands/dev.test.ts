@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_COLOR_PALETTE } from '../../engine/index.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import {
   assertWorldProjectForReset,
   devCommand,
@@ -117,19 +117,21 @@ describe('every dev flag refusal is a plain one-line Error naming the flag, what
   });
 
   it('--seed with no file there', () => {
-    const path = join(mkdtempSync(join(tmpdir(), 'bs-seed-')), 'missing.json');
+    const tree = tempTree('bs-seed-');
+    const path = join(tree, 'missing.json');
     expectRefusal(() => parseSeedFile(path), `--seed takes a recorded game state JSON file, got "${path}", which does not exist.`);
   });
 
   it('--seed naming something that cannot be read as a file', () => {
-    const path = mkdtempSync(join(tmpdir(), 'bs-seed-'));
+    const path = tempTree('bs-seed-');
     let reason = '';
     try { readFileSync(path, 'utf-8'); } catch (error) { reason = (error as Error).message; }
     expectRefusal(() => parseSeedFile(path), `--seed takes a recorded game state JSON file, got "${path}", which could not be read: ${reason}.`);
   });
 
   it('--seed naming a file that is not JSON', () => {
-    const path = join(mkdtempSync(join(tmpdir(), 'bs-seed-')), 'seed.json');
+    const tree = tempTree('bs-seed-');
+    const path = join(tree, 'seed.json');
     writeFileSync(path, 'not json');
     let reason = '';
     try { JSON.parse('not json'); } catch (error) { reason = (error as Error).message; }
