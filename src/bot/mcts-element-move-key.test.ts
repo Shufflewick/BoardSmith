@@ -90,4 +90,26 @@ describe('MCTSBot: element moves keep one key across worlds (#876)', () => {
 
     expect(root.allMoves).toHaveLength(moves);
   });
+
+  // #1038: the stored move holds the element of the world it was listed in; the
+  // engine matches a later world's offer against that element's JSON, so an
+  // element left un-rebound inside a plain object was refused as "no longer
+  // available" and the move was barred from the root for good.
+  it.each([
+    { arg: 'an element', GameClass: HandGame },
+    { arg: 'an array of elements', GameClass: ManyGame },
+    { arg: 'a plain object holding an element', GameClass: WrappedGame },
+  ])('never refuses a legal move listed in an earlier world, for $arg', async ({ GameClass }) => {
+    const game = new GameClass({ playerCount: 2, seed: 'bs1038' });
+    game.startFlow();
+    const bot = new MCTSBot(
+      game, GameClass, 'hand', 1, [],
+      { iterations: 60, playoutDepth: 1, seed: 'bs1038', async: false, timeout: Infinity, usePNS: false },
+      { determinize: sampler },
+    ) as unknown as { runSearch(): Promise<{ root: MCTSNode }> };
+
+    const { root } = await bot.runSearch();
+
+    expect([...root.refusedMoveKeys]).toEqual([]);
+  });
 });
