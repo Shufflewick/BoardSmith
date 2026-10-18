@@ -1370,7 +1370,7 @@ async function readRequiredJsonFile(
     if (typeof value !== 'object' || value === null || !Array.isArray(value[list])) {
       throw new Error(
         `The ${flagLabel} file "${filePath}" has no "${list}" list.\n` +
-          `Pass the subagent's return unchanged; it must be a JSON object with "${lists.join('", "')}" lists.`,
+          `Pass the subagent's return unchanged; it must be a JSON object with these lists: "${lists.join('", "')}".`,
       );
     }
   }
