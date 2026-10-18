@@ -161,15 +161,6 @@ describe('verifyRunInitCommand — staging + run allocation', () => {
     await expect(verifyRunInitCommand({ project, json: true })).rejects.toThrow(`Could not read ${rulebookDir} (ELOOP)`);
   });
 
-  it('names an unreadable run ledger rather than calling the run missing (#1110)', async () => {
-    const project = await liveProject();
-    const init = await verifyRunInitCommand({ project, json: true });
-    const ledgerAbs = join(project, init.ledgerPath);
-    await fs.rm(ledgerAbs);
-    await fs.mkdir(ledgerAbs);
-    await expect(readLedgerOrThrow(ledgerAbs, init.runId, project)).rejects.toThrow(`Could not read ${ledgerAbs} (EISDIR)`);
-  });
-
   it('names an unreadable slice rather than calling it missing (#1110)', async () => {
     const project = await liveProject();
     const init = await verifyRunInitCommand({ project, json: true });

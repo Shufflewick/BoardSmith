@@ -23,7 +23,7 @@
     "src/ui/components/auto-ui/renderers/HandRenderer.vue:92-103|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:62-73",
     "src/cli/commands/verify-enumerate.ts:1293-1300|src/cli/commands/verify-enumerate.ts:1416-1423",
     "src/session/testing/fixtures/collect-fixture.ts:66-83|src/session/testing/fixtures/collect-turns-fixture.ts:68-81",
-    "src/cli/commands/verify-classify.ts:698-716|src/cli/commands/verify-derive-check.ts:112-138",
+    "src/cli/commands/verify-classify.ts:698-716|src/cli/commands/verify-derive-check.ts:113-139",
     "src/session/testing/fixtures/simultaneous-fixture.ts:56-71|src/session/testing/fixtures/simultaneous-fixture.ts:83-93",
     "src/ui/components/PlayShell.vue:773-785|src/ui/components/PlayShell.vue:967-979",
     "src/engine/element/game-element.ts:1096-1102|src/engine/element/game-element.ts:1157-1163",

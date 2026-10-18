@@ -216,11 +216,11 @@ export async function readCoverage(coverageDir: string, projectDir: string, test
     `The run that records which game code ${testPath} runs wrote nothing for it, so the mutation check cannot ` +
       "tell what that test pins. Run `boardsmith test` to see whether the file runs on its own, fix that, and run this check again.",
   );
-  const text = await readIfExists(join(coverageDir, `${encodeURIComponent(realpathSync(testAbsPath))}.json`), (p) => fs.readFile(p, 'utf-8'));
-  if (text === undefined) throw wroteNothing;
+  const json = await readIfExists(join(coverageDir, `${encodeURIComponent(realpathSync(testAbsPath))}.json`), (p) => fs.readFile(p, 'utf-8'));
+  if (json === undefined) throw wroteNothing;
   let file: CoverageFile;
   try {
-    file = JSON.parse(text);
+    file = JSON.parse(json);
   } catch {
     throw wroteNothing; // A run cut off mid-write leaves a partial file: no usable record for this test.
   }

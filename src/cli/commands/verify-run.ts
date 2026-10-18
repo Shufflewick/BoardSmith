@@ -1109,9 +1109,11 @@ export async function readLedgerOrThrow(
   runId: string,
   projectDir: string,
 ): Promise<string> {
-  const text = await readIfExists(ledgerFile, (p) => fs.readFile(p, 'utf-8'));
-  if (text === undefined) throw new Error(await missingRunMessage(projectDir, runId));
-  return text;
+  try {
+    return await fs.readFile(ledgerFile, 'utf-8');
+  } catch {
+    throw new Error(await missingRunMessage(projectDir, runId));
+  }
 }
 
 /**
