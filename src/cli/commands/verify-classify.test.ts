@@ -331,6 +331,10 @@ describe('pairing — m:n page-overlap group join, over REAL archived fixtures',
     expect(livePageSpan(solo)).toEqual({ first: 2, last: 2 });
   });
 
+  it('livePageSpan() reads p.N only as its own word, never the tail of one like "step.3" (#839)', () => {
+    expect(livePageSpan('Do step.3 and then setup.9 (p.2).')).toEqual({ first: 2, last: 2 });
+  });
+
   it('pairing-2: livePageSpan() works identically on one-two-punch live slices, which has NO INDEX.md Slices table', async () => {
     const index = await readFixture('one-two-punch/live/INDEX.md');
     expect(index).not.toMatch(/## Slices/);
