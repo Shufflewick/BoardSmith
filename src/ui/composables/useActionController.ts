@@ -2196,11 +2196,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         return { valid: true };
       }
 
-      // For selections with onEach, clear accumulated since items are processed immediately
-      if (selection.repeat?.hasOnEach) {
-        repeatingState.value.accumulated = [];
-      }
-
       // More iterations needed - update choices if provided
       if (result.nextChoices) {
         repeatingState.value.currentChoices = result.nextChoices;
