@@ -34,7 +34,8 @@ export function outermostConcealer(element: GameElement, position: number): Game
   const ancestors: GameElement[] = [];
   for (let ancestor = element.parent; ancestor; ancestor = ancestor.parent) ancestors.unshift(ancestor);
   return ancestors.find((ancestor) => {
-    if (!ancestor.isVisibleTo(position)) return true;
+    // Searched outermost first, so every ancestor above this one is visible (#1123).
+    if (!ancestor._ownVisibilityAllows(position)) return true;
     const zone = hasZoneVisibility(ancestor) ? ancestor.getZoneVisibility() : undefined;
     return zone !== undefined && !canPlayerSee(zone, position, ancestor.getEffectiveOwner()?.seat);
   });

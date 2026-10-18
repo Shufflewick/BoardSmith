@@ -3,7 +3,9 @@
  * element below something hidden from the seat is never sent, so it is not
  * visible to that seat, whatever its own visibility says.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { GameElement as GameElementClass } from './game-element.js';
+import { outermostConcealer } from './concealed-refs.js';
 import { Game, Piece, Player, Space, type ElementJSON, type GameElement, type GameOptions } from '../index.js';
 import { isHiddenPlaceholder } from './hidden-placeholder.js';
 
@@ -89,6 +91,41 @@ describe('isVisibleTo matches the seat view (#1062)', () => {
           );
         }
       }
+    }
+  });
+});
+
+describe('a seat view checks each element\'s own visibility once (#1123)', () => {
+  /** Ten nested boxes holding a card. */
+  function deepTree(): { game: TestGame; card: Card } {
+    const game = new TestGame({ playerCount: 2 });
+    let parent: Game | Box = game;
+    for (let depth = 0; depth < 10; depth++) parent = parent.create(Box, `box${depth}`);
+    return { game, card: parent.create(Card, 'card') };
+  }
+
+  it('building one seat\'s view of a deep tree runs the own-visibility rule once per element it checks', () => {
+    const { game } = deepTree();
+    const rule = vi.spyOn(GameElementClass.prototype, '_ownVisibilityAllows');
+    try {
+      game.toJSONForPlayer(1);
+      // The game, its two players, the ten boxes and the card, once each.
+      expect(new Set(rule.mock.contexts).size).toBe(14);
+      expect(rule).toHaveBeenCalledTimes(14);
+    } finally {
+      rule.mockRestore();
+    }
+  });
+
+  it('finding what conceals a deep element runs the own-visibility rule once per ancestor', () => {
+    const { card } = deepTree();
+    const rule = vi.spyOn(GameElementClass.prototype, '_ownVisibilityAllows');
+    try {
+      expect(outermostConcealer(card, 1)).toBeUndefined();
+      // The game root and the ten boxes, once each.
+      expect(rule).toHaveBeenCalledTimes(11);
+    } finally {
+      rule.mockRestore();
     }
   });
 });

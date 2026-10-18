@@ -1257,11 +1257,21 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    */
   isVisibleTo(player: Player | number): boolean {
     const seat = typeof player === 'number' ? player : player.seat;
-    const visibility = this.getEffectiveVisibility();
+    return this._ownVisibilityAllows(seat) && (this._t.parent?.isVisibleTo(seat) ?? true);
+  }
+
+  /**
+   * Whether this element's own visibility allows the seat, ancestors aside
+   * (#1123). Only for a walk that never descends below an element hidden from
+   * the seat, where every ancestor is already known visible; anywhere else,
+   * `isVisibleTo` is the answer.
+   *
+   * @internal Engine-internal. Called by `Game`'s per-seat redaction.
+   */
+  _ownVisibilityAllows(seat: number): boolean {
     // For owner-based visibility, check this element's owner first,
     // then walk up the tree to find an owner (for inherited visibility)
-    const ownerSeat = this.getEffectiveOwner()?.seat;
-    return canPlayerSee(visibility, seat, ownerSeat) && (this._t.parent?.isVisibleTo(seat) ?? true);
+    return canPlayerSee(this.getEffectiveVisibility(), seat, this.getEffectiveOwner()?.seat);
   }
 
   /**
