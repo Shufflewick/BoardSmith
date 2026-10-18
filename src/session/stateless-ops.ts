@@ -50,6 +50,7 @@ import {
   UndoRefusedError,
   decideUndo,
   debuggingOffMessage,
+  pendingActionForSeat,
 } from './utils.js';
 
 // ---------------------------------------------------------------------------
@@ -1505,7 +1506,7 @@ function handleDebugFlowState(
   // SECURITY (T-123-10): pendingAction is derived ONLY from the passed-in
   // pendingState — the requesting seat's own persisted pending state, threaded
   // by the host (naturally seat-scoped) — never by reading another seat's state.
-  const pendingAction = (pendingState as unknown as SerializedPendingActionState | null) ?? undefined;
+  const pendingAction = pendingState ? pendingActionForSeat(pendingState) : undefined;
 
   return {
     success: true,
