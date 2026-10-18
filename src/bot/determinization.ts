@@ -305,7 +305,7 @@ function findContradiction(before: KnownWorld, after: KnownWorld, seat: number):
  * `sandbox` MUST be the seat's redacted clone, never the authoritative game:
  * that is what makes it impossible for a sampler to read the truth it is
  * supposed to be guessing. `MCTSBot` is the only caller and builds it from
- * `createSnapshot(..., { forSeat })`.
+ * `createSeatSnapshot`.
  *
  * @param sandbox - The seat's redacted search sandbox, restored as a live game
  * @param seat - 1-indexed seat the search belongs to

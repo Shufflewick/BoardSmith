@@ -138,7 +138,7 @@ describe('enumerateLegalMoves', () => {
     const flowState = game.getFlowState()!;
 
     // Seed the bot so its results are deterministic (though noSampling path is used here)
-    const bot = new MCTSBot(game, TokenGame, 'token-game', 1, [], {
+    const bot = new MCTSBot(game, TokenGame, 'token-game', 1, {
       iterations: 1,
       playoutDepth: 1,
       seed: 'parity-test',
@@ -612,7 +612,7 @@ describe('enumeration leaves out actions the game refuses (#690)', () => {
   });
 
   it("never lets the bot search or play a disabled action", async () => {
-    const bot = new MCTSBot(game, GatedGame, 'gated', 1, [], { iterations: 20, playoutDepth: 2, seed: 'gated-bot' });
+    const bot = new MCTSBot(game, GatedGame, 'gated', 1, { iterations: 20, playoutDepth: 2, seed: 'gated-bot' });
     const rootMoves: Array<{ action: string }> = (bot as any).movesFor(game, game.getFlowState()!, 1, { sample: false });
     expect(rootMoves.map((m) => m.action).sort()).toEqual(['move', 'move', 'pass']);
     expect((await bot.play())?.action).not.toBe('build');

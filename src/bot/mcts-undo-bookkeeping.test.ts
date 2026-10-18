@@ -86,7 +86,6 @@ describe('MCTS undo restores flow-bookkeeping (v4.8-MCTS-UNDO)', () => {
       SimultaneousGame,
       'simultaneous',
       1,
-      [],
       { iterations: 1, playoutDepth: 0, seed: 'undo-bookkeeping-1', async: false, usePNS: false, useRAVE: false },
     );
 
@@ -175,7 +174,6 @@ describe('MCTS undo restores flow-bookkeeping (v4.8-MCTS-UNDO)', () => {
       FinishGame,
       'finish-game',
       1,
-      [],
       { iterations: 1, playoutDepth: 0, seed: 'undo-finish-1', async: false, usePNS: false, useRAVE: false },
     );
 

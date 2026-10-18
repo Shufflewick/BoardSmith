@@ -33,6 +33,7 @@ import {
 ### State Snapshots
 
 - `createSnapshot()` - Create a full game state snapshot
+- `createSeatSnapshot()` - Create one seat's redacted snapshot, with no action history
 - `createPlayerView()` - Create player-specific state view
 - `createAllPlayerViews()` - Create views for all players
 

@@ -26,6 +26,10 @@ written.
 
 ### 1. Create a New Game Project
 
+Install BoardSmith first, or clone it and run `npm link` in the clone. The
+new game links to the BoardSmith that ran `init`, so `init` refuses to run from
+a one-off download in npm's `_npx` cache, which npm clears.
+
 ```bash
 npx boardsmith init my-game
 cd my-game
@@ -460,7 +464,10 @@ touching a ruling), `review` (once `boardsmith verify --chunk` has passed) and
 `second-opinion` (an independent second reading, which `boardsmith validate`
 keeps on a different agent from `judgement`).
 `boardsmith claude` installs one Claude Code agent per role, `bs-mechanical`,
-`bs-bounded`, `bs-judgement`, `bs-review` and `bs-second-opinion`, with a default model and effort. To
+`bs-bounded`, `bs-judgement`, `bs-review` and `bs-second-opinion`, with a default model and effort. Run
+from a clone of BoardSmith, it also runs `npm link` there so `boardsmith` works
+anywhere; run from an installed copy, it skips that step and says so, since
+linking would point the global command into one game's `node_modules`. To
 use other agents, map roles in `boardsmith.json`; a role left out stays on its
 `bs-` agent:
 

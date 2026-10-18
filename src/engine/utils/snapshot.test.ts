@@ -12,6 +12,7 @@ import {
 } from '../index.js';
 import {
   createSnapshot,
+  createSeatSnapshot,
   snapshotTree,
   createPlayerView,
   createAllPlayerViews,
@@ -89,7 +90,7 @@ describe('GameStateSnapshot', () => {
       // A restore relinks a missing element only when handed this map, so a seat copy must never lose it.
       // Nothing hidden, so nothing is renumbered and the map is empty.
       const open = new TestGame({ playerCount: 2, playerNames: ['Alice', 'Bob'], seed: 'open' });
-      const seat = createSnapshot(open, 'test-game', [], undefined, { forSeat: 1, reseed: 'sandbox' });
+      const seat = createSeatSnapshot(open, 'test-game', undefined, { forSeat: 1, reseed: 'sandbox' });
       expect(seat.hiddenIdRemap).toBeInstanceOf(Map);
       expect(seat.hiddenIdRemap!.size).toBe(0);
       expect(createSnapshot(open, 'test-game').hiddenIdRemap).toBeUndefined();

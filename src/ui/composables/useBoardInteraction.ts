@@ -58,6 +58,12 @@ function elementKeys(element: { id?: number; name?: string; notation?: string })
     .map(k => k.key);
 }
 
+/** Is `element` the board element `ref` names, by the ref's own identity (boardRefKey)? */
+export function matchesRef(element: { id?: number; name?: string; notation?: string }, ref: ElementRef): boolean {
+  const key = boardRefKey(ref);
+  return key !== undefined && elementKeys(element).includes(key.key);
+}
+
 /**
  * A choice that can be highlighted on the board
  */
@@ -294,11 +300,6 @@ export function createBoardInteraction(): BoardInteraction {
 
   // Callback for when element is dropped on valid target
   let onDropCallback: ((elementId: number) => void) | null = null;
-
-  function matchesRef(element: { id?: number; name?: string; notation?: string }, ref: ElementRef): boolean {
-    const key = boardRefKey(ref);
-    return key !== undefined && elementKeys(element).includes(key.key);
-  }
 
   function matchesAnyRef(element: { id?: number; name?: string; notation?: string }, refs: ElementRef[]): boolean {
     return refs.some(ref => matchesRef(element, ref));

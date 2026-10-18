@@ -207,7 +207,7 @@ describe('#421: a move refused inside the search', () => {
   it('is never recorded as an explored move, whether or not it changed the game first', async () => {
     const game = new PickyGame({ playerCount: 2, playerNames: ['Bot', 'Other'], seed: 'picky' });
     game.startFlow();
-    const bot = new MCTSBot(game, PickyGame, 'picky', 1, [], {
+    const bot = new MCTSBot(game, PickyGame, 'picky', 1, {
       iterations: 60, playoutDepth: 2, seed: 'picky', async: false, timeout: Infinity,
     });
 

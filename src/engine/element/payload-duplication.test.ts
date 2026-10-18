@@ -24,7 +24,7 @@
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Space } from '../index.js';
 import { GAME_ROOT_FIELD_AUDIENCE, GAME_SELF_SERIALIZED_FIELDS } from './game.js';
-import { createPlayerView, createSnapshot } from '../utils/snapshot.js';
+import { createPlayerView, createSnapshot, createSeatSnapshot } from '../utils/snapshot.js';
 
 class LeakGame extends Game<LeakGame, Player> {
   board!: Space<LeakGame>;
@@ -105,9 +105,9 @@ describe('SEC-04: whole-payload leak assertions for messageTo', () => {
   });
 
   it('withholds a private line from the WHOLE redacted snapshot of an unaddressed seat', () => {
-    // `createSnapshot({forSeat})` is the MCTS search sandbox's clone — a payload
+    // `createSeatSnapshot` is the MCTS search sandbox's clone, a payload
     // built precisely so a bot cannot reason over information its seat lacks.
-    const seat2 = JSON.stringify(createSnapshot(narratedGame(), 'LeakGame', [], undefined, {
+    const seat2 = JSON.stringify(createSeatSnapshot(narratedGame(), 'LeakGame', undefined, {
       forSeat: 2, reseed: 'sandbox',
     }));
 
@@ -117,7 +117,7 @@ describe('SEC-04: whole-payload leak assertions for messageTo', () => {
   });
 
   it('withholds every private line from the WHOLE spectator snapshot', () => {
-    const spectator = JSON.stringify(createSnapshot(narratedGame(), 'LeakGame', [], undefined, {
+    const spectator = JSON.stringify(createSeatSnapshot(narratedGame(), 'LeakGame', undefined, {
       forSeat: null, reseed: 'sandbox',
     }));
 
@@ -141,7 +141,7 @@ describe('SEC-04: whole-payload leak assertions for messageTo', () => {
     game.messageTo(1, 'SECRET-FOR-SEAT-1');
     game.message('PUBLIC-LINE');
 
-    const log = createSnapshot(game, 'LeakGame', [], undefined, { forSeat: 2, reseed: 'sandbox' }).messageLog;
+    const log = createSeatSnapshot(game, 'LeakGame', undefined, { forSeat: 2, reseed: 'sandbox' }).messageLog;
 
     // The leaked copy carried `to: [1]` alongside the text, so a reader learned
     // both the secret AND that it was meant for someone else. Seat 2 should see

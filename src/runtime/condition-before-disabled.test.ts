@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Action, Game, Player, simultaneousActionStep, type GameOptions } from '../engine/index.js';
-import { createSnapshot } from './index.js';
+import { createSeatSnapshot } from './index.js';
 import { GameRunner } from './runner.js';
 import { ErrorCode } from '../types/protocol.js';
 import { enumerateActionMoves } from '../engine/utils/enumerate-moves.js';
@@ -56,7 +56,7 @@ function seatTwoCopy(): GameRunner<RecoveryGame> {
     gameOptions: { playerCount: 2, seed: 'condition-before-disabled' },
   });
   truth.start();
-  const snapshot = createSnapshot(truth.game, 'condition-before-disabled', [], 'condition-before-disabled', {
+  const snapshot = createSeatSnapshot(truth.game, 'condition-before-disabled', 'condition-before-disabled', {
     forSeat: 2, reseed: 'condition-before-disabled-seat-two',
   });
   return GameRunner.fromSnapshot(snapshot, RecoveryGame);

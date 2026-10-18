@@ -114,7 +114,6 @@ function sandboxFor(game: TravelGame, seat: number): TravelGame {
     TravelGame,
     'travel',
     seat,
-    [],
     { iterations: 20, playoutDepth: 0, seed: 'sandbox', async: false, usePNS: false },
     { objectives: () => ({ nothing: { weight: 1, checker: () => 0 } }) },
   );
@@ -172,7 +171,6 @@ describe('#19: enumerating another seat\'s moves inside a redacted search sandbo
       TravelGame,
       'travel',
       1,
-      [],
       { iterations: 10, playoutDepth: 0, seed: 's6', async: false, usePNS: false },
       { objectives: () => ({ nothing: { weight: 1, checker: () => 0 } }) },
     );
@@ -190,7 +188,6 @@ describe('#19: enumerating another seat\'s moves inside a redacted search sandbo
       TravelGame,
       'travel',
       1,
-      [],
       { iterations: 30, playoutDepth: 2, seed: 's5', async: false, usePNS: false },
       { objectives: () => ({ home: { weight: 1, checker: (g) => ((g as TravelGame).getPlayer(1)!.loc > 10 ? 1 : 0) } }) },
     );
