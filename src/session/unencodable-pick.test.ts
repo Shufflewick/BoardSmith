@@ -42,6 +42,12 @@ class PickGame extends Game<PickGame, Player> {
         }),
     );
     this.registerAction(
+      Action.create<PickGame>('cheer').execute((_args, ctx) => {
+        ctx.game.animate('cheer', {});
+        return { success: true };
+      }),
+    );
+    this.registerAction(
       Action.create<PickGame>('stash')
         .chooseFrom('token', { choices: [offeredToken] })
         .execute(() => ({ success: true })),
@@ -94,7 +100,7 @@ class PickGame extends Game<PickGame, Player> {
     this.setFlow({
       root: loop({
         maxIterations: 100,
-        do: actionStep({ actions: ['take', 'stash', 'open', 'gather', 'dig'], player: (ctx) => ctx.game.getPlayer(1)! }),
+        do: actionStep({ actions: ['take', 'stash', 'open', 'gather', 'dig', 'cheer'], player: (ctx) => ctx.game.getPlayer(1)! }),
       }),
     });
   }
@@ -124,10 +130,23 @@ describe('a pick the engine cannot encode (#1070)', () => {
 
   it('still throws when the game itself offered the value: that is the game at fault', () => {
     const runner = startedRunner();
+    expect(runner.performAction('cheer', 1, {}).success).toBe(true);
+    const before = JSON.stringify(runner.getSnapshot());
 
     expect(() => runner.performAction('stash', 1, { token: offeredToken })).toThrow(
       /Cannot serialize action 'stash'.*at property 'args\.token'/,
     );
+    // Thrown before anything changed, the last move's animation included (#1128).
+    expect(JSON.stringify(runner.getSnapshot())).toBe(before);
+  });
+
+  it('leaves the last move\'s animation when a pick is refused (#1128)', () => {
+    const runner = startedRunner();
+    expect(runner.performAction('cheer', 1, {}).success).toBe(true);
+
+    expect(runner.performAction('take', 1, { value: 9 }).success).toBe(false);
+
+    expect(runner.game.pendingAnimationEvents.map((event) => event.type)).toEqual(['cheer']);
   });
 
   it('still throws when a held follow-up offered the value through its own args', () => {

@@ -51,7 +51,7 @@ import {
   type VisibilityState,
 } from './visibility.js';
 import type { ActionDefinition, ActionResult, ActionTrace, ActionDebugInfo, PickTrace, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
-import { ActionExecutor, type PerformOptions } from '../action/action.js';
+import { ActionExecutor, type AcceptedArgs, type PerformOptions } from '../action/action.js';
 import { hasActionTemp, settingsForSeat } from '../action/helpers.js';
 import type { FlowDefinition, FlowState, FlowDebugInfo } from '../flow/types.js';
 import type { TutorialDefinition, TutorialProgress } from '../tutorial/types.js';
@@ -2679,9 +2679,18 @@ export class Game<
       };
     }
 
-    // A refused action is not a new batch, so only an action that runs clears the buffer.
-    this._animationEvents = [];
-    return this._actionExecutor.executeAction(action, player, args, options);
+    // A refused action is not a new batch, so the buffer is cleared only once
+    // the checks accept the submission (#1128). A repeating pick changes the
+    // game while it is checked, so that action's batch starts before its picks.
+    if (this._actionExecutor.hasRepeatingSelections(action)) {
+      this._animationEvents = [];
+      return this._actionExecutor.executeAction(action, player, args, options);
+    }
+    const onAccepted = (accepted: Record<string, unknown>): void => {
+      options?.onAccepted?.(accepted);
+      this._animationEvents = [];
+    };
+    return this._actionExecutor.executeAction(action, player, args, { ...options, onAccepted });
   }
 
   // ============================================
@@ -3226,13 +3235,14 @@ export class Game<
    * @param actionName Action name to perform
    * @param args Action arguments
    * @param playerIndex Optional player index for simultaneous actions
+   * @param onAccepted Handed the action's args once its checks accept them (`PerformOptions.onAccepted`)
    */
-  continueFlow(actionName: string, args: Record<string, unknown>, playerIndex?: number): FlowState {
+  continueFlow(actionName: string, args: Record<string, unknown>, playerIndex?: number, onAccepted?: AcceptedArgs): FlowState {
     if (!this._flowEngine) {
       throw new Error('Flow not started');
     }
 
-    const state = this._flowEngine.resume(actionName, args, playerIndex);
+    const state = this._flowEngine.resume(actionName, args, playerIndex, onAccepted);
 
     this.#applyFlowCompletion(state);
 
