@@ -41,6 +41,7 @@ class CrashGame extends Game<CrashGame, Player> {
         .chooseFrom('first', { choices: ['a'], onSelect: crash })
         .chooseFrom('second', { choices: ['b'] })
         .execute(() => {}),
+      Action.create('refuse').chooseFrom('x', { choices: ['a'] }).execute(() => ({ success: false, error: 'Not today.' })),
       Action.create('mark').execute(() => ({ success: true, data: { marked: 7 } })),
       Action.create('again')
         .chooseFrom('n', { choices: (ctx) => [(ctx.game.getLastActionResult()?.data?.marked as number | undefined) ?? 0] })
@@ -53,7 +54,7 @@ class CrashGame extends Game<CrashGame, Player> {
       root: loop({
         maxIterations: 5,
         do: sequence(
-          actionStep({ player: (ctx) => ctx.game.getPlayer(1)!, actions: ['crash', 'halt', 'moveThenThrow', 'throwFirst', 'gather', 'mark', 'again'] }),
+          actionStep({ player: (ctx) => ctx.game.getPlayer(1)!, actions: ['crash', 'halt', 'moveThenThrow', 'throwFirst', 'gather', 'mark', 'again', 'refuse'] }),
           execute((ctx) => { if ((ctx.game as CrashGame).haltAfter) crash(); }),
         ),
       }),
@@ -130,5 +131,12 @@ describe('crash and halt coding across routes', () => {
     const { runner } = setup(false);
     expect(runner.performAction('crash', 1, { x: 'a' }).errorCode).toBe(ErrorCode.ENGINE_ERROR);
     expect(runner.performAction('nope', 1, {}).errorCode).toBe(ErrorCode.ACTION_EXECUTION_ERROR);
+  });
+
+  it('codes a refusal from execute() alike after a single-step and a multi-step action (#1143)', async () => {
+    const single = setup().runner.performAction('refuse', 1, { x: 'a' });
+    const multi = await setup().manager.processSelectionStep(1, 'x', 'a', 'refuse');
+    expect(multi).toMatchObject({ success: false, errorCode: ErrorCode.ACTION_EXECUTION_ERROR, error: 'Not today.' });
+    expect(single).toMatchObject({ success: false, errorCode: ErrorCode.ACTION_EXECUTION_ERROR, error: 'Not today.' });
   });
 });
