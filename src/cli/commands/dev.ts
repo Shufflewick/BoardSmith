@@ -282,14 +282,15 @@ interface BoardSmithConfig {
  * color picker.
  */
 function normalizeColorPalette(
-  palette: Array<string | Record<string, unknown>>
+  palette: ReadonlyArray<string | object>
 ): Array<{ value: string; label: string }> {
   const result: Array<{ value: string; label: string }> = [];
-  for (const entry of palette) {
-    if (typeof entry === 'string') {
-      result.push({ value: entry, label: entry });
+  for (const item of palette) {
+    if (typeof item === 'string') {
+      result.push({ value: item, label: item });
       continue;
     }
+    const entry = item as Record<string, unknown>;
     const hex = (entry.value ?? entry.hex ?? entry.color) as string | undefined;
     if (hex === undefined) {
       console.warn(

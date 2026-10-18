@@ -920,13 +920,14 @@ For asymmetric games where exactly one player must have a specific role (e.g., 1
       "type": "exclusive",
       "label": "Dictator",
       "description": "Select which player is the dictator",
-      "default": "last"
+      "default": "last",
+      "choices": [{ "value": "dictator", "label": "Dictator" }]
     }
   ]
 }
 ```
 
-The `default` field accepts `"first"`, `"last"`, or a player index number.
+The platform needs `choices` and a string `default`; the game reads the default (here `"last"`) itself. The `ExclusivePlayerOption` and `StandardPlayerOption` types require the same shape in code.
 
 ### Presets
 

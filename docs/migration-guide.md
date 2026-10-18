@@ -27,8 +27,12 @@ A player option the platform's manifest cannot carry is now refused by both
 The platform takes only `number`, `select`, `boolean` and `exclusive` options;
 a `select` or `exclusive` needs a string `default` and `choices` given as
 `{ "value", "label" }` pairs, and a `select`'s default must be one of them. A
-`text` option, or an exclusive with no choices, is refused. MERC's `isDictator`
-is an example (Shufflewick/MERC#72):
+`text` option, or an exclusive with no choices, is refused. The code types
+match: `ExclusivePlayerOption` now requires `choices` and a string `default`
+(no seat number), and `StandardPlayerOption` is a `select` with a required
+`default` and `{ value, label }` choices, with no `text` or plain-string form.
+A `color` option is typed as `ColorOptionDefinition`. MERC's `isDictator` is an
+example (Shufflewick/MERC#72):
 
 ```typescript
 // Before: refused, it has no choices

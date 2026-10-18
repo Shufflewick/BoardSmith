@@ -381,13 +381,13 @@ describe('resolveColorOption: dev offers exactly the colours production does (#8
     expect(resolveColorOption({ playerOptions: { color: createColorOption() } }, {})).toEqual(engineDefault);
   });
 
-  it('refuses a `color` player option that is not a colour option with choices', () => {
+  it('refuses a `color` player option that is not a colour option', () => {
     expect(() =>
-      resolveColorOption({ playerOptions: { color: { type: 'select', label: 'Color', choices: ['red'] } } }, {}),
+      resolveColorOption(
+        { playerOptions: { color: { type: 'select', label: 'Color', default: 'red', choices: [{ value: 'red', label: 'Red' }] } } },
+        {},
+      ),
     ).toThrow(/playerOptions\.color/);
-    expect(() => resolveColorOption({ playerOptions: { color: { type: 'color', label: 'Color' } } }, {})).toThrow(
-      /playerOptions\.color/,
-    );
   });
 
   it('refuses a code gameDefinition.colorPalette that differs from what production offers', () => {
@@ -406,14 +406,13 @@ describe('dev and the live lobby offer the same player options (#992)', () => {
     default: 'easy',
     choices: [{ value: 'easy', label: 'Easy' }],
   };
-  // ExclusivePlayerOption has no `choices` yet, though the platform needs them.
-  const gameDefinition = {
+  const gameDefinition: GameDefinition = {
     gameClass: class FixtureGame extends Game<FixtureGame, Player> {},
     gameType: 'fixture',
     minPlayers: 2,
     maxPlayers: 4,
     playerOptions: { role },
-  } as GameDefinition;
+  };
   const config = { playerOptions: [botLevel] };
 
   it('keeps the gameDefinition\'s player options beside boardsmith.json\'s, and adds the colour option', () => {
@@ -446,9 +445,10 @@ describe('dev and the live lobby offer the same player options (#992)', () => {
     ['a select with no default', { type: 'select', label: 'Side', choices: [{ value: 'a', label: 'A' }] }, /"default"/],
     ['a text option', { type: 'text', label: 'Name' }, /type "text"/],
   ])('refuses %s, which the live lobby could not offer', (_, option, problem) => {
-    const odd = { ...gameDefinition, playerOptions: { odd: option } } as GameDefinition;
-    expect(() => resolveDevPlayerOptions(odd, {})).toThrow(/Player option "odd"/);
-    expect(() => resolveDevPlayerOptions(odd, {})).toThrow(problem);
+    // The code types cannot express these shapes, so they come from untyped boardsmith.json.
+    const odd = { playerOptions: [{ id: 'odd', ...option }] };
+    expect(() => resolveDevPlayerOptions(gameDefinition, odd)).toThrow(/Player option "odd"/);
+    expect(() => resolveDevPlayerOptions(gameDefinition, odd)).toThrow(problem);
   });
 });
 

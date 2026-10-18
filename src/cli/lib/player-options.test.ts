@@ -8,9 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { mergePlayerOptions } from './player-options.js';
 import { createColorOption, type PlayerOptionDefinition } from '../../session/index.js';
 
-// ExclusivePlayerOption has no `choices` yet, though the platform needs them, so fixtures are cast.
-const code = (options: Record<string, unknown>) => options as Record<string, PlayerOptionDefinition>;
-const role = {
+const role: PlayerOptionDefinition = {
   type: 'exclusive',
   label: 'Dictator',
   default: 'last',
@@ -25,22 +23,22 @@ const botLevel = {
 
 describe('mergePlayerOptions', () => {
   it('keeps the options each side declares', () => {
-    expect(mergePlayerOptions(code({ role }), [{ id: 'botLevel', ...botLevel }])).toEqual({ role, botLevel });
+    expect(mergePlayerOptions({ role }, [{ id: 'botLevel', ...botLevel }])).toEqual({ role, botLevel });
   });
 
   it('keeps a key declared the same in both once', () => {
-    expect(mergePlayerOptions(code({ role }), [{ id: 'role', ...role }])).toEqual({ role });
+    expect(mergePlayerOptions({ role }, [{ id: 'role', ...role }])).toEqual({ role });
   });
 
   it('does not count an undefined field or a different field order as a difference', () => {
     const reordered = { id: 'role', choices: role.choices, default: 'last', label: 'Dictator', type: 'exclusive' };
-    expect(mergePlayerOptions(code({ role: { ...role, description: undefined } }), [reordered])).toEqual({
+    expect(mergePlayerOptions({ role: { ...role, description: undefined } }, [reordered])).toEqual({
       role: { type: 'exclusive', label: 'Dictator', default: 'last', choices: role.choices },
     });
   });
 
   it('refuses a key declared differently in both, naming the key and both declarations', () => {
-    const merge = () => mergePlayerOptions(code({ role }), [{ id: 'role', ...role, label: 'Tyrant' }]);
+    const merge = () => mergePlayerOptions({ role }, [{ id: 'role', ...role, label: 'Tyrant' }]);
     expect(merge).toThrow(/player option "role"/);
     expect(merge).toThrow(/"label":"Dictator"/);
     expect(merge).toThrow(/"label":"Tyrant"/);
@@ -66,8 +64,8 @@ describe('mergePlayerOptions', () => {
 });
 
 describe('mergePlayerOptions refuses an option the platform\'s manifest cannot carry', () => {
-  const refused = (option: Record<string, unknown>) => () =>
-    mergePlayerOptions(code({ odd: option }), undefined);
+  // boardsmith.json is untyped, so these shapes still reach the check from there.
+  const refused = (option: Record<string, unknown>) => () => mergePlayerOptions(undefined, [{ id: 'odd', ...option }]);
 
   it('names a type the lobby has no control for, and the types it has', () => {
     expect(refused({ type: 'text', label: 'Name' })).toThrow(
@@ -105,7 +103,25 @@ describe('mergePlayerOptions refuses an option the platform\'s manifest cannot c
 
   it('reports every option it cannot carry in one error', () => {
     const merge = () =>
-      mergePlayerOptions({ a: { type: 'text', label: 'A' } }, [{ id: 'b', type: 'select', label: 'B' }]);
+      mergePlayerOptions(undefined, [{ id: 'a', type: 'text', label: 'A' }, { id: 'b', type: 'select', label: 'B' }]);
     expect(merge).toThrow(/"a".*"b"/s);
+  });
+});
+
+describe('the code types take only shapes the platform\'s manifest can carry (#992)', () => {
+  it('does not compile the shapes the platform refuses', () => {
+    const refused: PlayerOptionDefinition[] = [
+      // @ts-expect-error an exclusive option needs choices
+      { type: 'exclusive', label: 'Dictator', default: 'last' },
+      // @ts-expect-error a seat number is not a default the platform carries
+      { type: 'exclusive', label: 'Dictator', default: 2, choices: [{ value: 'd', label: 'D' }] },
+      // @ts-expect-error choices are value and label pairs
+      { type: 'select', label: 'Side', default: 'a', choices: ['a', 'b'] },
+      // @ts-expect-error a select needs a default
+      { type: 'select', label: 'Side', choices: [{ value: 'a', label: 'A' }] },
+      // @ts-expect-error the lobby has no text control
+      { type: 'text', label: 'Name', default: '' },
+    ];
+    expect(refused).toHaveLength(5);
   });
 });
