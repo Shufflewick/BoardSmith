@@ -90,7 +90,7 @@ in every game.
   `boardsmith/runtime`) with only ES2022 and
   Workers-shaped declarations (#488). Read a runtime
   global by its bare name, never as a property of `globalThis`.
-- **The code blocks in `docs/*.md`.** A Markdown file is not compiled. A
+- **The code blocks in `docs/*.md` and `docs/api/*.md`.** A Markdown file is not compiled. A
   block an author copies into a game is marked with a
   `<!-- typecheck: game <path> -->` line directly above its fence, and
   `src/contract/docs-game-typecheck.test.ts` writes each marked block to

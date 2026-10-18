@@ -47,6 +47,14 @@ describe('the game code the docs teach (#511)', () => {
     ).toEqual(['src/rules/game.ts', 'src/rules/elements.ts', 'src/rules/actions.ts', 'src/rules/flow.ts']);
   });
 
+  it('marks the runtime API GameRunner examples for compiling (#1152)', () => {
+    expect(blocks.filter((block) => block.doc === 'docs/api/runtime').map((block) => block.path)).toEqual([
+      'src/game.ts',
+      'src/run.ts',
+      'src/history.ts',
+    ]);
+  });
+
   it('marks the game code of every aspect template for compiling (#645)', () => {
     for (const aspect of ['dice', 'hex-grid', 'playing-cards', 'square-grid']) {
       expect(
