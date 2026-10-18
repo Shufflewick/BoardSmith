@@ -1062,20 +1062,31 @@ export interface VerifyRunRangeActionResult {
   alreadyRecorded: boolean;
 }
 
+/** Whether anything stands at `path`, counting what cannot be looked at (no permission, a link loop) as there. */
+async function present(path: string): Promise<boolean> {
+  try {
+    await fs.lstat(path);
+    return true;
+  } catch (error) {
+    const { code } = error as NodeJS.ErrnoException;
+    return code !== 'ENOENT' && code !== 'ENOTDIR';
+  }
+}
+
 /**
  * Why `runId` names no usable run, and what to do about it: the one message every `--run-id`
  * command gives. Never suggests init with this id: a mistyped id would become a real, latest run (#833).
  */
 export async function missingRunMessage(projectDir: string, runId: string): Promise<string> {
   const ledgerFile = ledgerFilePath(projectDir, runId);
-  if (await exists(ledgerFile)) {
+  if (await present(ledgerFile)) {
     return `${relative(projectDir, ledgerFile)} could not be read. Check that it is a readable file.`;
   }
   const runDir = runRootDir(projectDir, runId);
-  if (await exists(runDir)) {
+  if (await present(runDir)) {
     const noRun = `${relative(projectDir, runDir)}/ has no RUN.md, so verify-run-init did not make it.\n`;
     const verdicts = rulingVerdictsLedgerPath(projectDir, runId);
-    if (await exists(verdicts)) {
+    if (await present(verdicts)) {
       return (
         noRun +
         `It holds ${relative(projectDir, verdicts)}: verdicts recorded under the mistyped id "${runId}". ` +
@@ -1109,11 +1120,9 @@ export async function readLedgerOrThrow(
   runId: string,
   projectDir: string,
 ): Promise<string> {
-  try {
-    return await fs.readFile(ledgerFile, 'utf-8');
-  } catch {
-    throw new Error(await missingRunMessage(projectDir, runId));
-  }
+  const text = await readIfExists(ledgerFile, (p) => fs.readFile(p, 'utf-8'));
+  if (text === undefined) throw new Error(await missingRunMessage(projectDir, runId));
+  return text;
 }
 
 /**

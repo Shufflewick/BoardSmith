@@ -20,6 +20,7 @@ import {
   resolveLedgerState,
   ledgerFilePath,
   readLedgerOrThrow,
+  missingRunMessage,
   type ClassificationRecord,
   type ImpactRecord,
   type AdjudicationRecord,
@@ -146,11 +147,34 @@ describe('verifyRunInitCommand — staging + run allocation', () => {
       await expect(verifyRunInitCommand({ project, runId: first.runId, json: true })).rejects.toThrow(
         `Could not read ${ledgerAbs} (EACCES)`,
       );
-      await fs.chmod(ledgerAbs, 0o644);
-      expect(await fs.readFile(ledgerAbs, 'utf-8')).toBe(before);
     } finally {
       await fs.chmod(ledgerAbs, 0o644);
     }
+    expect(await fs.readFile(ledgerAbs, 'utf-8')).toBe(before);
+  });
+
+  it('names a run ledger that links to itself rather than calling the run missing (#1110)', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, json: true });
+    const ledgerAbs = join(project, init.ledgerPath);
+    await fs.rm(ledgerAbs);
+    await fs.symlink(ledgerAbs, ledgerAbs);
+    await expect(readLedgerOrThrow(ledgerAbs, init.runId, project)).rejects.toThrow(`Could not read ${ledgerAbs} (ELOOP)`);
+    expect(await missingRunMessage(project, init.runId)).toBe(`${init.ledgerPath} could not be read. Check that it is a readable file.`);
+  });
+
+  it('says a run folder it cannot search could not be read, never that it is not a run (#1110)', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, json: true });
+    const runDir = join(project, init.ledgerPath, '..');
+    await fs.chmod(runDir, 0o000);
+    let message: string;
+    try {
+      message = await missingRunMessage(project, init.runId);
+    } finally {
+      await fs.chmod(runDir, 0o755);
+    }
+    expect(message).toBe(`${init.ledgerPath} could not be read. Check that it is a readable file.`);
   });
 
   it('names an unreadable rulebook/ rather than calling it missing (#1110)', async () => {
