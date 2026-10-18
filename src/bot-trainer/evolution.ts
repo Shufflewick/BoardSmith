@@ -28,14 +28,17 @@ function gaussian(rng: () => number): number {
 /** Probability to flip sign during mutation */
 const SIGN_FLIP_PROBABILITY = 0.1;
 
+/** A weight below 1 (including one written back with a decimal) moves by a fixed sigma, not in proportion, so zero can still move */
+const NUDGE_FLOOR = 1;
+
 /** Probability to use crossover (vs pure mutation) when generating offspring */
 const CROSSOVER_PROBABILITY = 0.2;
 
 /**
- * Mutate objective weights using Gaussian perturbation.
+ * Mutate objective weights using Gaussian perturbation relative to each weight's size.
  *
  * @param objectives - Array of learned objectives
- * @param sigma - Standard deviation for mutation (0 = no mutation)
+ * @param sigma - Standard deviation of the nudge as a fraction of each weight's magnitude, at least NUDGE_FLOOR (0 = no mutation)
  * @param rng - Seeded random function
  * @returns New array with mutated weights
  */
@@ -49,7 +52,7 @@ export function mutateWeights(
 
     // Apply Gaussian perturbation
     if (sigma > 0) {
-      newWeight = obj.weight + gaussian(rng) * sigma;
+      newWeight = obj.weight + gaussian(rng) * sigma * Math.max(Math.abs(obj.weight), NUDGE_FLOOR);
 
       // Occasionally flip sign to explore opposite hypothesis
       if (rng() < SIGN_FLIP_PROBABILITY) {

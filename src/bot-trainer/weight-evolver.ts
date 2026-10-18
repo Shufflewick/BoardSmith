@@ -20,7 +20,7 @@ export interface WeightEvolverConfig {
   evolutionLambda?: number;
   /** Number of parents to select (default: 5) */
   evolutionMu?: number;
-  /** Initial mutation strength (default: 1.0) */
+  /** Initial mutation strength, as a fraction of each weight's size (default: 0.2) */
   evolutionSigma?: number;
   /** Games per benchmark evaluation (default: 50) */
   evolutionBenchmarkGames?: number;
@@ -98,7 +98,7 @@ const DEFAULT_CONFIG: Required<Omit<WeightEvolverConfig, 'seed' | 'onProgress' |
   evolutionGenerations: 5,
   evolutionLambda: 20,
   evolutionMu: 5,
-  evolutionSigma: 1.0,
+  evolutionSigma: 0.2,
   evolutionBenchmarkGames: 50,
   benchmarkMCTSIterations: 100,
   maxActionsPerGame: 1000,
@@ -237,7 +237,7 @@ export class WeightEvolver {
     const generations = this.config.evolutionGenerations ?? 5;
     const mu = this.config.evolutionMu ?? 5;
     const lambda = this.config.evolutionLambda ?? 20;
-    let sigma = this.config.evolutionSigma ?? 1.0;
+    let sigma = this.config.evolutionSigma ?? 0.2;
     const benchmarkGames = this.config.evolutionBenchmarkGames ?? 50;
 
     // Initialize parent population with slight variations
