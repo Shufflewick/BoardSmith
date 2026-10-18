@@ -1362,7 +1362,6 @@ export class FlowEngine<G extends Game = Game> {
     let currentNode = this.definition.root;
     for (let i = 0; i < position.path.length; i++) {
       const index = position.path[i];
-      const iterationKey = `__iter_${i}`;
       // Inverse of getPosition's encodeFlowValue on frame data: an
       // element-valued entry (a `forEach` item included) comes back as a LIVE
       // element of this game, under whatever field name the engine wrote it to.
@@ -1372,9 +1371,6 @@ export class FlowEngine<G extends Game = Game> {
         idRemap,
         'step data',
       ) as Record<string, unknown>;
-      if (restoredFrameData.iteration === undefined) {
-        restoredFrameData.iteration = position.iterations[iterationKey] ?? 0;
-      }
 
       this.stack.push({
         node: currentNode,

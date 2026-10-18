@@ -37,18 +37,11 @@
  *
  * ## Material deliberately EXCLUDED, and why
  *
- * - **`position.iterations`** — the `__iter_<depth>` counters. This was the
- *   obvious second candidate and it is WRONG, measured against
- *   `simultaneous-rounds-fixture.ts`: `getPosition()` emits an `__iter_<depth>`
- *   entry for every frame whose `data.iteration` happens to be set, and which
- *   frames those are depends on HOW the position was reached, not on where it
- *   is. Round 1 opens reporting `{__iter_1: 1}`; one seat then commits — no
- *   boundary crossed, `path` correctly unmoved at `[1,1,2,0]` — and the same
- *   position reports `{__iter_0: 0, __iter_1: 1, __iter_2: 0, __iter_3: 0}`.
- *   Including it would move the key mid-round, which is precisely the bug this
- *   primitive exists to prevent (see case 3 of `boundary-key.test.ts`, which
- *   fails on any key that includes it). `iterations` is not a second signal and
- *   not an escape hatch; it is noise.
+ * - **`position.iterations`** — the `__iter_<depth>` counters of `loop` and
+ *   `repeat` frames. A counter moves only when its loop opens another pass,
+ *   which also moves that frame's `path` entry, so it adds nothing `path` does
+ *   not already carry. (Until #971 a restore stamped a 0 counter on every
+ *   frame, so it also varied with how a position was reached.)
  * - **`moveCount`** — advances on EVERY submission inside an open simultaneous
  *   round. Including it would move the key mid-round, re-stamping the round
  *   clock and re-notifying every seat each time one of them answered.
