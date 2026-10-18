@@ -437,7 +437,7 @@ describe('assertHidden — honors static playerView post-transform', () => {
 
 // ---------------------------------------------------------------------------
 // #909: with no static playerView, the assertions still judge from the seat's
-// serialized tree, where isVisibleTo() says true but nothing is sent
+// serialized tree, which isVisibleTo() agrees with (#1062)
 // ---------------------------------------------------------------------------
 
 class VisAssertNestedCard extends Card<VisAssertNestedGame> {
@@ -485,9 +485,9 @@ describe('assertHidden / assertVisible — judged from the serialized tree witho
     return { card, sent };
   }
 
-  it('a child of a hideFromAll() card: isVisibleTo says true, seat 1 is never sent it, so it is hidden', () => {
+  it('a child of a hideFromAll() card: seat 1 is never sent it, so it is hidden', () => {
     const { card, sent } = cardIn('under-covered');
-    expect(card.isVisibleTo(1)).toBe(true);
+    expect(card.isVisibleTo(1)).toBe(false);
     expect(sent).toBe(false);
     expect(() => assertHidden(card, 1)).not.toThrow();
     expect(() => assertVisible(card, 1)).toThrow(/NOT visible to seat 1/);
