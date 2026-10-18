@@ -367,6 +367,10 @@ export const WORLD_REFUSALS = {
     owner: "game",
     why: "#122: a bundle's `world.view()` named a partition it had not seen on every round of declaration, so `declaration.ts`'s round ceiling stopped it. Two-phase declaration exists so a view can read an index and then name the room the index names; one that names something new every round is walking the world, which is the O(world) read the mechanism exists to prevent. A VIEW ONLY, since #169: an action's declaration is an ordered walk whose length is its own selection count, so it cannot fail this way and has no ceiling to trip. GAME-owned because the declaration is the bundle's own and the same bundle writes the same one next time",
   },
+  "view-dropped-partition": {
+    owner: "game",
+    why: "#936: a bundle's `world.view()` stopped naming a partition it named on an earlier round of the same look, once more was loaded. #717 judges who hears an event by running the view against only what a command declared, which is right only if a view names more as more is loaded and never fewer; a view that drops a name would be told about events its settled view does not show. GAME-owned because the view is the bundle's own and does the same next time",
+  },
   "partition-too-large": {
     owner: "game",
     why: "a partition serialized to more than `budgets.ts:WorldBudgets.partitionMaxBytes` (#110). The budget is the platform's, drawn well below the SQLite value wall #74 measured, but what a partition CONTAINS is entirely the bundle's -- the same call `schedule-cap` makes about a platform cap a bundle's own choices ran into. Game-owned so one room that outgrew its budget cannot park a world 499 other players are in, and the refusal names the fix the author can actually apply: split the partition",
