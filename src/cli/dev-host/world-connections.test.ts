@@ -128,8 +128,9 @@ async function serve() {
   // Each run gets its own worker: a run stops the worker it runs in when it closes.
   const runtime = await startWorldRuntime(bundlePath);
   cleanup.push(() => runtime.worker.close());
+  const cwd = tempTree('bs-world-connections-run-');
   const run = await openWorldRun({
-    cwd: tempTree('bs-world-connections-run-'),
+    cwd,
     displayName: 'Camp',
     port: 5173,
     runtime,
