@@ -13,8 +13,7 @@
  * animation data) and its message log.
  */
 import type { Game } from './game.js';
-import { hasZoneVisibility, ownVisibilityAllows, WITHHELD_PILE_BRANCH, type GameElement } from './game-element.js';
-import { canPlayerSee } from './visibility.js';
+import { deepestRevealed, hidesContents, ownVisibilityAllows, WITHHELD_PILE_BRANCH, type GameElement } from './game-element.js';
 
 /**
  * `value` with every element reference in it rewritten for the seat at
@@ -73,30 +72,19 @@ export function outermostConcealer(element: GameElement, position: number): Game
   });
 }
 
-/** Whether `element` is a zone whose contents the seat cannot see. */
-function hidesContents(element: GameElement, position: number): boolean {
-  const zone = hasZoneVisibility(element) ? element.getZoneVisibility() : undefined;
-  return zone !== undefined && !canPlayerSee(zone, position, element.getEffectiveOwner()?.seat);
-}
-
 /**
  * The element whose name the seat at `position` may read for `element` (#1165):
- * the element itself, or when the seat cannot see it, the nearest container
- * above what hides it whose name the seat can see, and the game at the top.
- * Walks down from the root by the rule `outermostConcealer` applies. An element
- * not in the game's tree or pile here (an unloaded world partition) cannot be
- * checked, so it is the game.
+ * the element itself when the seat's view carries it (a grant inside a
+ * concealed zone included, #961), or else the nearest container above it that
+ * the view carries, and the game at the top. An element not in the game's
+ * tree or pile here (an unloaded world partition) cannot be checked, so it is
+ * the game.
  */
 export function nameableFor(element: GameElement, game: Game, position: number): GameElement {
-  const chain: GameElement[] = [];
-  for (let at: GameElement | undefined = element; at; at = at._t.parent) chain.unshift(at);
-  let named: GameElement = game;
-  if (chain[0] !== game && chain[0] !== game.pile) return named;
-  for (const at of chain) {
-    if (!ownVisibilityAllows(at, position)) break;
-    // The pile is in no seat's view, so its own name is not one a seat can see.
-    if (at !== game.pile) named = at;
-    if (hidesContents(at, position)) break;
-  }
-  return named;
+  let top = element;
+  while (top._t.parent) top = top._t.parent;
+  if (top !== game && top !== game.pile) return game;
+  const named = deepestRevealed(element, position);
+  // The pile is in no seat's view, so its own name is not one a seat can see.
+  return named && named !== game.pile ? named : game;
 }
