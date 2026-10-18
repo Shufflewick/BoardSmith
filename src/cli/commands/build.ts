@@ -11,6 +11,7 @@ import { resolveUserPath } from '../lib/user-path.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { requireGameProjectManifests, requireRulesIndex, requireTableUi, resolveRulesDir, tableUiState } from '../lib/game-project.js';
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
+import { listFiles } from '../lib/source-files.js';
 import { parseGameOptionList } from '../../session/game-option-selection.js';
 import { readWorldDefinition, type WorldDefinition } from '../../world/index.js';
 import type { GameBackend, GameDefinition } from '../../session/index.js';
@@ -465,6 +466,8 @@ async function buildProjectIn(projectDir: string, options: BuildOptions): Promis
   const rulesPath = resolveRulesDir(cwd, config);
   const rulesIndexPath = requireRulesIndex(rulesPath);
   requireTableUi(cwd, config);
+  // public/ is copied into dist/ as it is, and publish cannot follow a linked folder there (#1114).
+  listFiles(join(cwd, 'public'), { sourceTree: false });
   emptyBuildOutputDir(cwd, outDir);
 
   console.log(styleText('cyan', `\nBuilding ${config.displayName || config.name}...\n`));

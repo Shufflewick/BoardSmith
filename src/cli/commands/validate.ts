@@ -872,6 +872,13 @@ export async function validateBundleSize(cwd: string, worldMode: boolean): Promi
     };
   }
 
+  // A linked folder fails publish however often it rebuilds, so it blocks here rather than warns (#1114).
+  try {
+    listFiles(distDir, { sourceTree: false });
+  } catch (error) {
+    return { name: 'Bundle Size', passed: false, message: (error as Error).message };
+  }
+
   const issues: string[] = [];
   const notes: string[] = [];
   let measured = true;
@@ -1076,25 +1083,32 @@ export async function validateAssetPaths(cwd: string): Promise<ValidationResult>
   // sheet is set in `src/rules/game.ts`, not in a component -- so a scan that
   // opened only the UI bundle passed cribbage while it shipped
   // `sprite: '/cards/deck-sprite.svg'` (ShufflewickPub #260).
-  const filesToScan = publicDirs.length > 0
-    ? [
-        ...listFiles(join(cwd, 'dist', 'ui', 'assets'), { sourceTree: false, suffixes: ['.js'] }),
-        ...listFiles(join(cwd, 'dist', 'rules'), { sourceTree: false, suffixes: ['.js'] }),
-        ...listFiles(join(cwd, 'data'), { sourceTree: false, suffixes: ['.json'] }),
-      ]
-    : [];
+  let filesToScan: string[];
+  let remoteFiles: string[];
+  try {
+    filesToScan = publicDirs.length > 0
+      ? [
+          ...listFiles(join(cwd, 'dist', 'ui', 'assets'), { sourceTree: false, suffixes: ['.js'] }),
+          ...listFiles(join(cwd, 'dist', 'rules'), { sourceTree: false, suffixes: ['.js'] }),
+          ...listFiles(join(cwd, 'data'), { sourceTree: false, suffixes: ['.json'] }),
+        ]
+      : [];
+    // REMOTE ARTWORK IS SCANNED OVER THE WHOLE BUILT BUNDLE, not only when the
+    // project has a `public/` tree: a game whose artwork lives entirely off-bundle
+    // has no `public/` directory at all, which is exactly the case this catches.
+    remoteFiles = [
+      // All of `dist/ui`, not only `assets/`: the entry HTML can name artwork too.
+      ...listFiles(join(cwd, 'dist', 'ui'), { sourceTree: false, suffixes: ['.js', '.css', '.html'] }),
+      ...listFiles(join(cwd, 'dist', 'rules'), { sourceTree: false, suffixes: ['.js'] }),
+      ...listFiles(join(cwd, 'data'), { sourceTree: false, suffixes: ['.json'] }),
+    ];
+  } catch (error) {
+    // A linked folder is a failed check, not a crash, so every other check still prints (#1114).
+    return { name: 'Asset Paths', passed: false, message: (error as Error).message, details: danglingIssues };
+  }
 
   const absoluteIssues = findAbsolutePathIssues(cwd, filesToScan, publicDirs);
-
-  // REMOTE ARTWORK IS SCANNED OVER THE WHOLE BUILT BUNDLE, not only when the
-  // project has a `public/` tree: a game whose artwork lives entirely off-bundle
-  // has no `public/` directory at all, which is exactly the case this catches.
-  const remoteIssues = findUndeclaredImageSources(cwd, [
-    // All of `dist/ui`, not only `assets/`: the entry HTML can name artwork too.
-    ...listFiles(join(cwd, 'dist', 'ui'), { sourceTree: false, suffixes: ['.js', '.css', '.html'] }),
-    ...listFiles(join(cwd, 'dist', 'rules'), { sourceTree: false, suffixes: ['.js'] }),
-    ...listFiles(join(cwd, 'data'), { sourceTree: false, suffixes: ['.json'] }),
-  ]);
+  const remoteIssues = findUndeclaredImageSources(cwd, remoteFiles);
 
   if (danglingIssues.length === 0 && absoluteIssues.length === 0 && remoteIssues.length === 0) {
     return { name: 'Asset Paths', passed: true, message: '' };
