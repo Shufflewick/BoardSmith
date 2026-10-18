@@ -118,7 +118,6 @@ function makeBot(
     VaultGame,
     'vault',
     1,
-    [],
     { iterations: 240, playoutDepth: 2, seed, async: false, timeout: Infinity, usePNS: false, ...config },
     strategy,
   );
@@ -472,7 +471,7 @@ describe('#147/#73: a card game can determinize a hidden hand', () => {
     };
 
     const bot = new MCTSBot(
-      game, CardGame, 'cards', 1, [],
+      game, CardGame, 'cards', 1,
       { iterations: 60, playoutDepth: 1, seed: 'cards', async: false, timeout: Infinity, usePNS: false },
       { determinize: sampler },
     );

@@ -71,6 +71,21 @@ npx boardsmith evolve-bot-weights --generations 5 --population 20
 The game's `gameDefinition` must set `bot.objectives` to the objectives function
 `bot.ts` exports; the command refuses a game without one.
 
+### How weights are nudged
+
+Each mutation nudges every weight by a random amount in proportion to its own
+size, so a weight of 50 and a weight of 2 each move by about the same fraction
+(#1029). Only the ratios between weights matter to the bot, so a fixed nudge
+would barely move the large weights and swamp the small ones. A weight below 1,
+including one an earlier run wrote back with a decimal such as 0.3, is
+deliberately nudged by a fixed amount (sigma) instead of in proportion, so that
+a zero weight can still move.
+
+`WeightEvolverConfig.evolutionSigma` is the size of that nudge as a fraction of
+the weight, 0.2 by default (about 20%, which is what the old fixed nudge of 1
+gave a typical authored weight of 5). The first parents are nudged by half of
+it, and it shrinks by 10% each generation for a finer search.
+
 ### Confirming an improvement
 
 The search scores about 125 candidates on 50 games each and picks the highest.

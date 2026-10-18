@@ -134,7 +134,7 @@ describe('the failure result', () => {
 describe('a bot searching that sandbox', () => {
   it('still returns a move, falling back to what it can resolve', async () => {
     const r = runner(undefined);
-    const bot = createBot(r.game, FogGame, 'fog', 1, r.actionHistory, 'easy');
+    const bot = createBot(r.game, FogGame, 'fog', 1, 'easy');
     const move = await bot.play();
     expect(move).not.toBeNull();
   });
@@ -142,7 +142,7 @@ describe('a bot searching that sandbox', () => {
   it('does not fill the console with a stack per rollout', async () => {
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const r = runner(undefined);
-    const bot = createBot(r.game, FogGame, 'fog', 1, r.actionHistory, 'easy');
+    const bot = createBot(r.game, FogGame, 'fog', 1, 'easy');
     await bot.play();
     const crashLogs = errorSpy.mock.calls
       .map((c) => String(c[0]))
@@ -152,7 +152,7 @@ describe('a bot searching that sandbox', () => {
 
   it('resolves travel normally when the state IS there', async () => {
     const r = runner(7);
-    const bot = createBot(r.game, FogGame, 'fog', 1, r.actionHistory, 'easy');
+    const bot = createBot(r.game, FogGame, 'fog', 1, 'easy');
     const move = await bot.play();
     expect(move).not.toBeNull();
     const result = r.performAction(move!.action, 1, move!.args);

@@ -11,13 +11,19 @@
  * which is intentional during the renderer rebuild phase.
  */
 
-import { computed } from 'vue';
+import { computed, provide } from 'vue';
 import { resolveRenderer } from '../renderer-registry.js';
-import type { GameElement } from '../auto-ui-helpers.js';
+import { STANDS_ON_KEY, type GameElement } from '../auto-ui-helpers.js';
+import type { ElementRef } from '../../../composables/useBoardInteraction.js';
 
 const props = defineProps<{
   element: GameElement;
+  /** The grid cell this element stands on, if any. */
+  standsOn?: ElementRef;
 }>();
+
+// Provided even when absent, so an element never inherits a cell from further up.
+provide(STANDS_ON_KEY, () => props.standsOn);
 
 const rendererComponent = computed(() => resolveRenderer(props.element));
 </script>

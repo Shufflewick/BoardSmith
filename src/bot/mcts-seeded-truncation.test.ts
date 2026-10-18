@@ -46,7 +46,7 @@ function newGame(): ChoiceGame {
 }
 
 function makeBot(config: { iterations: number; seed?: string; timeout?: number }) {
-  return new MCTSBot(newGame(), ChoiceGame, 'choice', 1, [], {
+  return new MCTSBot(newGame(), ChoiceGame, 'choice', 1, {
     playoutDepth: 2,
     async: false,
     ...config,
@@ -157,7 +157,7 @@ async function subSearchesOf(bot: MCTSBot<ChoiceGame>): Promise<SubSearch[]> {
  * event-loop yield between iterations, which only a live game needs.
  */
 const ITERATIONS_PER_SUB_SEARCH = 8;
-const parallelBot = (seed?: string) => new MCTSBot(newGame(), ChoiceGame, 'choice', 1, [], {
+const parallelBot = (seed?: string) => new MCTSBot(newGame(), ChoiceGame, 'choice', 1, {
   ...DIFFICULTY_PRESETS.hard,
   iterations: DIFFICULTY_PRESETS.hard.parallel! * ITERATIONS_PER_SUB_SEARCH,
   timeout: Infinity,
@@ -221,7 +221,7 @@ const parityConfig = {
   async: false,
 };
 const parityBot = (seed: string) =>
-  new MCTSBot(newParityGame(), ParityGame, 'parity', 1, [], { ...parityConfig, seed });
+  new MCTSBot(newParityGame(), ParityGame, 'parity', 1, { ...parityConfig, seed });
 
 describe('parallel MCTS sub-search seeding (#329)', () => {
   afterEach(() => {
@@ -270,7 +270,7 @@ describe('parallel MCTS sub-search seeding (#329)', () => {
       // Each sub-search on its own, configured as playParallel configures it.
       const subs = await Promise.all(
         Array.from({ length: DIFFICULTY_PRESETS.hard.parallel! }, (_, i) => new MCTSBot(
-          newParityGame(), ParityGame, 'parity', 1, [],
+          newParityGame(), ParityGame, 'parity', 1,
           { ...parityConfig, iterations: ITERATIONS_PER_SUB_SEARCH, parallel: 1, seed: `${seed}-parallel-${i}` },
         ).playWithStats()),
       );
@@ -297,7 +297,7 @@ describe('parallel MCTS sub-search seeding (#329)', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     // timeout: 0 truncates every sub-search at its first clock check.
-    const bot = new MCTSBot(newGame(), ChoiceGame, 'choice', 1, [], { ...DIFFICULTY_PRESETS.hard, timeout: 0 });
+    const bot = new MCTSBot(newGame(), ChoiceGame, 'choice', 1, { ...DIFFICULTY_PRESETS.hard, timeout: 0 });
     expect(await bot.play()).not.toBeNull();
 
     expect(warn).not.toHaveBeenCalled();

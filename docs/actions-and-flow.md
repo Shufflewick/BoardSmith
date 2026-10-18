@@ -2583,11 +2583,11 @@ apply the audience:
 
 - `createPlayerView(game, seat)` → `getFormattedMessages(seat)` — the broadcast
   path, what the shell's log renders.
-- `createSnapshot(game, …, { forSeat })` → `serializeMessageLog(forSeat)` — the
+- `createSeatSnapshot(game, …, { forSeat })` → `serializeMessageLog(forSeat)`, the
   redacted-clone path, used by the MCTS search sandbox so a bot cannot reason
   over lines its seat never saw.
 
-A persisted snapshot (no `forSeat`) carries the **unfiltered** log, and must:
+A persisted snapshot (`createSnapshot`) carries the **unfiltered** log, and must:
 undo restores from it, so a filtered copy would destroy other seats' history on
 the next rewind. `game.messages` stays complete for the same reason.
 

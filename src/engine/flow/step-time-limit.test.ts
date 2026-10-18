@@ -160,7 +160,7 @@ describe('the resolved limit survives every restore path', () => {
 
   it('survives an MCTS clone', () => {
     const runner = midRound();
-    const bot = new MCTSBot(runner.game, GrowingDeployGame, 'step-time-limit', 2, runner.actionHistory, {
+    const bot = new MCTSBot(runner.game, GrowingDeployGame, 'step-time-limit', 2, {
       iterations: 1,
       playoutDepth: 1,
     });

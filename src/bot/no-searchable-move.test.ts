@@ -57,7 +57,7 @@ function blindBot() {
     gameOptions: { playerCount: 2, playerNames: ['A', 'B'], seed: 'blind' },
   });
   runner.start();
-  return createBot(runner.game, BlindGame, 'blind', 1, runner.actionHistory, 'easy');
+  return createBot(runner.game, BlindGame, 'blind', 1, 'easy');
 }
 
 describe('a bot whose own information state offers no move', () => {
@@ -103,7 +103,7 @@ describe('a bot that CAN see its choices is unaffected', () => {
       gameOptions: { playerCount: 2, playerNames: ['A', 'B'], seed: 'open' },
     });
     runner.start();
-    const bot = createBot(runner.game, OpenGame, 'open', 1, runner.actionHistory, 'easy');
+    const bot = createBot(runner.game, OpenGame, 'open', 1, 'easy');
     const move = await bot.play();
     expect(move).not.toBeNull();
     expect(move!.action).toBe('reveal');

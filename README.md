@@ -24,6 +24,10 @@ written.
 
 Requires Node.js 20 or newer.
 
+Install BoardSmith first, or clone it and run `npm link` in the clone. The
+new game links to the BoardSmith that ran `init`, so `init` refuses to run from
+a one-off download in npm's `_npx` cache, which npm clears.
+
 ```bash
 npx boardsmith init my-game
 cd my-game

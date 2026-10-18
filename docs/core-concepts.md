@@ -316,7 +316,7 @@ What the hook guarantees:
 - **Evaluated at projection time, per receiving seat.** Every per-seat view
   goes through one serializer (`Game.toJSONForPlayer`, and the batched
   `toJSONForPlayers` under it), so a derivation runs for every view a seat can
-  receive — a table's player view, a snapshot taken `forSeat`, a bot's redacted
+  receive — a table's player view, a `createSeatSnapshot`, a bot's redacted
   clone, and a world's `viewFor`.
 - **Never stored.** `toJSON()` (checkpoints, storage, a world's partitions)
   carries no derived attribute, and a restore of a per-seat view does not turn

@@ -1,5 +1,4 @@
 import type { Game, GameClass } from '../engine/index.js';
-import type { HistoryEntry } from '../engine/action/types.js';
 import { MCTSBot } from './mcts-bot.js';
 import type { BotConfig, BotStrategy, DifficultyLevel } from './types.js';
 import { DIFFICULTY_PRESETS } from './types.js';
@@ -30,7 +29,6 @@ export { DeterminizationError, applyDeterminization } from './determinization.js
  * @param GameClass - The game class constructor (needed for cloning during simulation)
  * @param gameType - The game type identifier
  * @param playerIndex - Which player this bot controls
- * @param actionHistory - History of actions taken so far
  * @param difficulty - Difficulty level or iteration count
  * @param botStrategy - Optional bot configuration with objectives
  * @param reproducible - Pass `{ seed }` for a search that picks the same move
@@ -47,7 +45,6 @@ export { DeterminizationError, applyDeterminization } from './determinization.js
  *   CheckersGame,
  *   'checkers',
  *   1,
- *   actionHistory,
  *   'hard'
  * );
  * const move = await bot.play();
@@ -58,7 +55,6 @@ export function createBot<G extends Game>(
   GameClass: GameClass<G>,
   gameType: string,
   playerIndex: number,
-  actionHistory: HistoryEntry[] = [],
   difficulty: DifficultyLevel | number = 'medium',
   botStrategy?: BotStrategy,
   reproducible?: { seed: string }
@@ -73,7 +69,6 @@ export function createBot<G extends Game>(
     GameClass,
     gameType,
     playerIndex,
-    actionHistory,
     config,
     botStrategy
   );

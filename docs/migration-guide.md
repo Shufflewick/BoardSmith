@@ -20,7 +20,8 @@ The player options your `gameDefinition` declares are now merged with
 manifest `boardsmith build` publishes. Before, dev dropped the code ones and the
 live lobby never saw them. A key declared in both places must be declared the
 same in both, or dev and build refuse it, naming the key; keep each option in
-one place.
+one place. An id `boardsmith.json` declares twice is refused, and so is a
+`color` entry in its `playerOptions`: move those colours to `colorPalette`.
 
 A player option the platform's manifest cannot carry is now refused by both
 `boardsmith dev` and `boardsmith build`, naming the option and what it needs.
@@ -40,6 +41,25 @@ isDictator: { type: 'exclusive', label: 'Dictator', default: 'last' }
 // After
 isDictator: { type: 'exclusive', label: 'Dictator', default: 'last', choices: [{ value: 'dictator', label: 'Dictator' }] }
 ```
+
+## `createBot` and `new MCTSBot` take no action history; seat snapshots carry none (#1167)
+
+The bot never read the history it was given: it searches from the game's
+state. Its seat snapshot did carry that history, unredacted, so it named
+hidden elements by their real place. Drop the fifth argument:
+
+```typescript
+// Before
+createBot(game, MyGame, 'my-game', 2, runner.actionHistory, 'hard', strategy);
+new MCTSBot(game, MyGame, 'my-game', 2, [], config, strategy);
+// After
+createBot(game, MyGame, 'my-game', 2, 'hard', strategy);
+new MCTSBot(game, MyGame, 'my-game', 2, config, strategy);
+```
+
+`createSnapshot` no longer takes a `{ forSeat, reseed }` option. Use
+`createSeatSnapshot(game, gameType, seed, { forSeat, reseed })`, which takes no
+history and returns a `SeatSnapshot` whose `actionHistory` is always `[]`.
 
 ## `boardsmith test --selection` is removed (#986)
 

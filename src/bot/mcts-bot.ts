@@ -6,11 +6,10 @@ import type {
   Selection,
   FollowUpAction,
 } from '../engine/index.js';
-import type { HistoryEntry } from '../engine/action/types.js';
-import type { GameStateSnapshot } from '../engine/utils/index.js';
+import type { GameStateSnapshot, SeatSnapshot } from '../engine/utils/index.js';
 import { canSeatAct, dueSeats, availableActionsForSeat, followUpForSeat } from '../engine/index.js';
 import { isElement } from '../engine/element/game-element.js';
-import { createSnapshot, snapshotTree } from '../engine/utils/index.js';
+import { createSnapshot, createSeatSnapshot, snapshotTree } from '../engine/utils/index.js';
 import { enumerateActionMoves } from '../engine/utils/enumerate-moves.js';
 import { constructGame } from '../engine/element/game.js';
 import type {
@@ -105,7 +104,6 @@ export class MCTSBot<G extends Game = Game> {
    */
   private determinize?: DeterminizeSampler;
   private rng: SeededRandom;
-  private actionHistory: HistoryEntry[];
   private seed?: string;
   /** Cached UCT exploration constant (computed once per move in playSingle) */
   private cachedUctC: number = Math.sqrt(2);
@@ -117,7 +115,7 @@ export class MCTSBot<G extends Game = Game> {
   /** Live game instance used during search (cloned from original) */
   private searchGame: G | null = null;
   /** Root snapshot for fallback recovery */
-  private rootSnapshot: GameStateSnapshot | null = null;
+  private rootSnapshot: SeatSnapshot | null = null;
   /**
    * Saved copies of the search game at tree nodes (#633): each the JSON of a
    * snapshot of the position the node stands for, so it is restored whole and
@@ -161,7 +159,6 @@ export class MCTSBot<G extends Game = Game> {
     GameClass: GameClass<G>,
     gameType: string,
     playerIndex: number,
-    actionHistory: HistoryEntry[] = [],
     config: Partial<BotConfig> = {},
     botStrategy?: BotStrategy
   ) {
@@ -169,7 +166,6 @@ export class MCTSBot<G extends Game = Game> {
     this.GameClass = GameClass;
     this.gameType = gameType;
     this.playerIndex = playerIndex;
-    this.actionHistory = actionHistory;
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.objectives = botStrategy?.objectives;
     this.threatResponseMoves = botStrategy?.threatResponseMoves;
@@ -296,7 +292,6 @@ export class MCTSBot<G extends Game = Game> {
         this.GameClass,
         this.gameType,
         this.playerIndex,
-        this.actionHistory,
         subConfig,
         {
           objectives: this.objectives,
@@ -1378,16 +1373,15 @@ export class MCTSBot<G extends Game = Game> {
   /**
    * Capture current game state as snapshot.
    *
-   * T-159-06 (bot-02): passes `forSeat: this.playerIndex` so `createSnapshot`
+   * T-159-06 (bot-02): uses `createSeatSnapshot` for `this.playerIndex`, which
    * clones the bot's per-seat REDACTED view (`toJSONForPlayer`) instead of
    * the full un-redacted truth. The search sandbox must never see opponents'
    * hidden info -- reusing the existing redaction, not inventing one. Its
    * random source is reseeded from the bot's own generator, so the search
    * samples chance instead of reading the real game's next draws (#776).
    */
-  private captureSnapshot(): GameStateSnapshot {
-    const seat = { forSeat: this.playerIndex, reseed: String(this.rng.next()) };
-    return createSnapshot(this.game, this.gameType, this.actionHistory, this.seed, seat);
+  private captureSnapshot(): SeatSnapshot {
+    return createSeatSnapshot(this.game, this.gameType, this.seed, { forSeat: this.playerIndex, reseed: String(this.rng.next()) });
   }
 
   /**
@@ -1398,7 +1392,7 @@ export class MCTSBot<G extends Game = Game> {
    * RNG), so we adopt those directly instead of replaying action history.
    * Replay was unsound for the search root: selection-step /
    * pending-completed actions mutate the tree via `Piece.putInto` and are not
-   * recorded in actionHistory, so a root carrying such a mutation lost it on
+   * recorded in action history, so a root carrying such a mutation lost it on
    * every clone and the bot searched from a wrong position. Adopting the
    * serialized tree keeps those mutations.
    */
@@ -1406,14 +1400,14 @@ export class MCTSBot<G extends Game = Game> {
     // The game's own constructor options, custom ones (playerConfigs) and its
     // element id key included, with the search game's own seed (#776). Every
     // snapshot this bot restores is one it captured itself, and
-    // `createSnapshot` always records them. They are required: element ids are
+    // `createSeatSnapshot` and `createSnapshot` always record them. They are required: element ids are
     // minted under the game's own key (#447), which only these options carry,
     // and `snapshot.seed` is the BOT's search seed, not the search game's.
     const gameOptions = snapshot.gameOptions;
     if (gameOptions === undefined) {
       throw new Error(
         'MCTS bot cannot restore a snapshot without gameOptions: the search game must be built ' +
-          "with the game's own options and seed. Capture it with createSnapshot, which records them.",
+          "with the game's own options and seed. Capture it with createSeatSnapshot, which records them.",
       );
     }
 
@@ -1426,7 +1420,7 @@ export class MCTSBot<G extends Game = Game> {
     // so a game whose rules read `game.messages` evaluates the same way inside
     // the search as it does outside — a silently empty log there would make the
     // bot reason over a different world than the one it is playing in. On a
-    // `forSeat` clone `createSnapshot` has already filtered it to that seat's
+    // seat clone `createSeatSnapshot` has already filtered it to that seat's
     // audience, so the sandbox cannot see private lines the seat may not.
     game.loadSerializedState(snapshotTree(snapshot), { messageLog: snapshot.messageLog ?? [] });
 

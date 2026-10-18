@@ -260,7 +260,6 @@ describe('a bot holding a follow-up', () => {
         raidClass(shape, false),
         'raid',
         1,
-        r.actionHistory,
         { iterations: 8, playoutDepth: 2, seed: 'hold', async: false, usePNS: false },
         { objectives: () => ({ loot: { weight: 1, checker: (game) => (game as RaidGame).looted.length } }) },
       );

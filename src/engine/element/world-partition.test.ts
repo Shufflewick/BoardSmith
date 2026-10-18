@@ -471,12 +471,27 @@ describe('moveToInternal partition marking', () => {
     expect([...game.takeTouchedPartitions()]).toEqual([roomB.id]);
   });
 
-  it('marks the moved partition root itself when a whole partition re-parents', () => {
+  it('refuses to move a partition root anywhere but directly under the game (#1170)', () => {
     const { game, roomA, roomC } = worldWithPartitions('root-move');
+    const refusal = /"roomC" \(id: \d+\) is a world partition root, and a partition's root must stay directly under the game\. Move what is inside it instead/;
 
-    roomC.reparent(roomA);
+    expect(() => roomC.reparent(roomA)).toThrow(refusal);
+    expect(() => roomC.reparent(game.players[0]!)).toThrow(refusal);
+    expect(() => roomC.remove()).toThrow(refusal);
 
-    expect([...game.takeTouchedPartitions()].sort()).toEqual([roomA.id, roomC.id].sort());
+    expect(roomC.parent).toBe(game);
+    expect([...game.takeTouchedPartitions()]).toEqual([]);
+  });
+
+  it("still moves a partition root's contents, and reorders a root among the game's children", () => {
+    const { game, roomA, roomC } = worldWithPartitions('root-contents-move');
+    const moved = roomC.all(Token);
+
+    for (const token of moved) token.putInto(roomA);
+    roomC.reparent(game, 'first');
+
+    expect(roomA.all(Token)).toEqual(expect.arrayContaining(moved));
+    expect(game.first(Space)).toBe(roomC);
   });
 
   it('marks nothing for a REJECTED move', () => {

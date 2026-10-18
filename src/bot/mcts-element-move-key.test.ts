@@ -81,7 +81,7 @@ describe('MCTSBot: element moves keep one key across worlds (#876)', () => {
     const game = new GameClass({ playerCount: 2, seed: 'bs876' });
     game.startFlow();
     const bot = new MCTSBot(
-      game, GameClass, 'hand', 1, [],
+      game, GameClass, 'hand', 1,
       { iterations: 60, playoutDepth: 1, seed: 'bs876', async: false, timeout: Infinity, usePNS: false },
       { determinize: sampler },
     ) as unknown as { runSearch(): Promise<{ root: MCTSNode }> };
@@ -103,7 +103,7 @@ describe('MCTSBot: element moves keep one key across worlds (#876)', () => {
     const game = new GameClass({ playerCount: 2, seed: 'bs1038' });
     game.startFlow();
     const bot = new MCTSBot(
-      game, GameClass, 'hand', 1, [],
+      game, GameClass, 'hand', 1,
       { iterations: 60, playoutDepth: 1, seed: 'bs1038', async: false, timeout: Infinity, usePNS: false },
       { determinize: sampler },
     ) as unknown as { runSearch(): Promise<{ root: MCTSNode }> };

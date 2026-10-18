@@ -29,7 +29,7 @@ import {
 } from '../engine/index.js';
 import {
   deserializeAction,
-  createSnapshot,
+  createSeatSnapshot,
   snapshotTree,
   type GameStateSnapshot,
 } from '../engine/utils/index.js';
@@ -296,7 +296,7 @@ describe('the pile in a saved state (#655)', () => {
   // than failing the restore.
   it('writes a flow variable holding a removed element into a seat snapshot without its id, and restores it to nothing', () => {
     const { runner, goneId } = playedRunner();
-    const seatSnapshot = createSnapshot(runner.game, 'pile', [], undefined, { forSeat: 1, reseed: 'sandbox' });
+    const seatSnapshot = createSeatSnapshot(runner.game, 'pile', undefined, { forSeat: 1, reseed: 'sandbox' });
 
     expect(seatSnapshot.flowState!.position.variables.gone).toEqual({ __elementRef: 'pile/removed' });
     expect(JSON.stringify(seatSnapshot.flowState)).not.toContain(String(goneId));

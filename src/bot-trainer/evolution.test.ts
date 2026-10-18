@@ -79,7 +79,7 @@ describe('evolution', () => {
       const rng = createSeededRandom('scale-test');
 
       for (let i = 0; i < 50; i++) {
-        const [a, b, c] = mutateWeights(objectives, 1.0, rng).map(o => Math.abs(o.weight));
+        const [a, b, c] = mutateWeights(objectives, 0.05, rng).map(o => Math.abs(o.weight));
         // Sign flips are deliberate; magnitudes stay within a few sigma of the original
         expect(a).toBeGreaterThan(40);
         expect(a).toBeLessThan(60);
@@ -87,6 +87,47 @@ describe('evolution', () => {
         expect(b).toBeLessThan(35);
         expect(c).toBeLessThan(10);
       }
+    });
+
+    it('nudges each weight in proportion to its size (#1029)', () => {
+      const objectives = [
+        createObjective('a', 50),
+        createObjective('b', 25),
+        createObjective('c', 2),
+      ];
+      const rng = createSeededRandom('relative-nudge');
+      const sumSquares = [0, 0, 0];
+      const draws = 400;
+
+      for (let i = 0; i < draws; i++) {
+        mutateWeights(objectives, 0.2, rng).forEach((o, j) => {
+          // Magnitude change, so a deliberate sign flip does not count as a nudge
+          const relative = (Math.abs(o.weight) - objectives[j].weight) / objectives[j].weight;
+          sumSquares[j] += relative * relative;
+        });
+      }
+
+      for (const s of sumSquares) {
+        const rms = Math.sqrt(s / draws);
+        expect(rms).toBeGreaterThan(0.17);
+        expect(rms).toBeLessThan(0.23);
+      }
+    });
+
+    it('moves a zero weight by the floor (#1029)', () => {
+      const objectives = [createObjective('zero', 0)];
+      const rng = createSeededRandom('zero-floor');
+      let sumSquares = 0;
+      const draws = 400;
+
+      for (let i = 0; i < draws; i++) {
+        sumSquares += mutateWeights(objectives, 0.2, rng)[0].weight ** 2;
+      }
+
+      // Floor of 1 weight unit, so the spread is sigma itself
+      const rms = Math.sqrt(sumSquares / draws);
+      expect(rms).toBeGreaterThan(0.17);
+      expect(rms).toBeLessThan(0.23);
     });
 
     it('returns identical weights with sigma=0', () => {
