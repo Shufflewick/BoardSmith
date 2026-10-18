@@ -821,7 +821,7 @@ describe('useBoardActionBridge ordered lists (#249)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// #965 — the piece a filterBy pick narrows by is marked draggable only when the
+// #965: the piece a filterBy pick narrows by is marked draggable only when the
 // first pick is ONE element
 // ---------------------------------------------------------------------------
 
