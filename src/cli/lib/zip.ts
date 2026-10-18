@@ -1,4 +1,4 @@
-import { deflateRawSync } from 'node:zlib';
+import { crc32, deflateRawSync } from 'node:zlib';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { listFiles } from './source-files.js';
@@ -126,16 +126,8 @@ function collectFiles(
 
 // -- Minimal zip builder (binary-safe) --
 
-function crc32(buf: Uint8Array): number {
-  let crc = 0xffffffff;
-  for (let i = 0; i < buf.length; i++) {
-    crc ^= buf[i]!;
-    for (let j = 0; j < 8; j++) {
-      crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
-    }
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
+/** General purpose flag bit 11: entry names are UTF-8, as TextEncoder writes them. */
+const UTF8_NAME = 0x0800;
 
 export function createZip(files: Map<string, Uint8Array>): Uint8Array {
   const encoder = new TextEncoder();
@@ -151,7 +143,8 @@ export function createZip(files: Map<string, Uint8Array>): Uint8Array {
   const parts: Uint8Array[] = [];
 
   for (const [filename, content] of files) {
-    const nameBytes = encoder.encode(filename);
+    // The zip format allows only forward slashes, and a Windows build hands us backslash paths.
+    const nameBytes = encoder.encode(filename.replaceAll('\\', '/'));
     const compressed = deflateRawSync(content);
     const crc = crc32(content);
 
@@ -160,7 +153,7 @@ export function createZip(files: Map<string, Uint8Array>): Uint8Array {
     const hv = new DataView(header);
     hv.setUint32(0, 0x04034b50, true);
     hv.setUint16(4, 20, true);
-    hv.setUint16(6, 0, true);
+    hv.setUint16(6, UTF8_NAME, true);
     hv.setUint16(8, 8, true); // deflate
     hv.setUint16(10, 0, true);
     hv.setUint16(12, 0, true);
@@ -185,7 +178,7 @@ export function createZip(files: Map<string, Uint8Array>): Uint8Array {
     cv.setUint32(0, 0x02014b50, true);
     cv.setUint16(4, 20, true);
     cv.setUint16(6, 20, true);
-    cv.setUint16(8, 0, true);
+    cv.setUint16(8, UTF8_NAME, true);
     cv.setUint16(10, 8, true);
     cv.setUint16(12, 0, true);
     cv.setUint16(14, 0, true);

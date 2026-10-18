@@ -14,7 +14,7 @@
 import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import { readDistDir } from './zip.js';
+import { createZip, readDistDir } from './zip.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 let dir: string;
@@ -91,5 +91,29 @@ describe('readDistDir packages the whole build, dot folders included (#1048)', (
     writeFileSync(join(root, '..', 'shared-art', 'ace.png'), 'png');
     symlinkSync(join(root, '..', 'shared-art'), join(root, 'cards'));
     expect(() => readDistDir(root)).toThrow(`${join(root, 'cards')} is a link to a folder`);
+  });
+});
+
+describe('createZip writes entries any unzip tool reads the same way (#853)', () => {
+  const header = (zip: Uint8Array) => new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+  const entryName = (zip: Uint8Array) =>
+    new TextDecoder().decode(zip.subarray(30, 30 + header(zip).getUint16(26, true)));
+
+  it('writes forward slashes, since a Windows build hands it backslash paths', () => {
+    const zip = createZip(new Map([['cards\\ace.png', new Uint8Array([1])]]));
+    expect(entryName(zip)).toBe('cards/ace.png');
+  });
+
+  it('marks names as UTF-8 so a non-ASCII file name is not read as code page 437', () => {
+    const zip = createZip(new Map([['carte-épée.png', new Uint8Array([1])]]));
+    expect(header(zip).getUint16(6, true) & 0x0800).toBe(0x0800);
+    const central = zip.length - 22 - 46 - new TextEncoder().encode('carte-épée.png').length;
+    expect(header(zip).getUint32(central, true)).toBe(0x02014b50);
+    expect(header(zip).getUint16(central + 8, true) & 0x0800).toBe(0x0800);
+  });
+
+  it('records the standard CRC-32 of the content', () => {
+    const zip = createZip(new Map([['a.txt', new TextEncoder().encode('123456789')]]));
+    expect(header(zip).getUint32(14, true)).toBe(0xcbf43926);
   });
 });
