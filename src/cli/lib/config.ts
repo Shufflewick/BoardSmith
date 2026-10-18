@@ -51,15 +51,3 @@ export function saveApiKey(target: PlatformTarget, apiKey: string): void {
   config.apiKeys = { ...config.apiKeys, [target]: apiKey };
   writeGlobalConfig(config);
 }
-
-/** True when the config still carries the single pre-taxonomy `apiKey` field,
- * which no target reads. `publish` uses this to say why a key that is visibly
- * in the file is not being used, instead of silently claiming there is none. */
-export function hasLegacyApiKeyField(): boolean {
-  return 'apiKey' in (readGlobalConfig() as Record<string, unknown>);
-}
-
-/** The config file a `boardsmith publish --api-key` writes to, for error messages. */
-export function globalConfigPath(): string {
-  return configFile();
-}
