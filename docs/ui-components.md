@@ -955,6 +955,8 @@ Or use your own class names alongside the library classes:
 **ElementRef:**
 - Can include `id`, `name`, or `notation` to identify the element.
 - Matching is **precedence-based**, not OR-based: if `id` is present it is the sole criterion (`name`/`notation` are ignored); otherwise `notation` is tried, then `name`. This prevents duplicate-named elements (e.g. several `'Militia'` pieces) from cross-talking — a ref carrying a precise `id` always resolves to exactly that element. Use `id` for unambiguous selection; reserve bare `name`/`notation` refs for when you genuinely want to match every element sharing that property.
+- A board click (`selectElement`) or drag (`startDrag`) starts an action by the same rule: it starts the first action whose first element pick has a candidate that is the ref's element, or whose board ref the element matches as above. So a name-only ref starts an action exactly when the candidate's board ref is that name (#945). This needs the action's first-pick candidates on the client; the server does not send them before an action opens yet, which is #1192.
+- In the AutoUI, while a pick is open, a piece standing on a square that is one of that pick's candidates is draggable, and its drag carries the square, so it chooses that square's candidate (#943). Checkers is the case: its move action opens on its own, and each piece's board ref is its square's notation. With no action open, no piece is draggable this way yet; fetching first-pick candidates for that case is #1192.
 
 #### Migration from Verbose Pattern
 
@@ -1729,7 +1731,7 @@ Use `args` for selections that are already available. Use `prefill` for deferred
 | `currentAction` | `Ref<string \| null>` | Name of action currently in wizard mode (read `.value`) |
 | `currentPick` | `ComputedRef<EnrichedPickMetadata \| null>` | Metadata for the current pick step (read `.value`) |
 | `validElements` | `ComputedRef<EnrichedValidElement[]>` | **Reactive** list of valid elements for current selection |
-| `isExecuting` | `Ref<boolean>` | Whether an action is currently executing (read `.value`) |
+| `isExecuting` | `Readonly<Ref<boolean>>` | Whether the current seat has an action out to the server (read `.value`) |
 | `lastError` | `Ref<string \| null>` | Error message from last failed execution (read `.value`) |
 | `lastActionResult` | `ComputedRef<ResolvedAction \| null>` | The most recently resolved action and its server result — `{ action, seat, result }`. See below. |
 

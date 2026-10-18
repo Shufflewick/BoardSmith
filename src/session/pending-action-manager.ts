@@ -12,7 +12,7 @@ import {
   type WarningEntry,
   type ChoiceWithRefs,
 } from './types.js';
-import { actionForSeat, offerFollowUp } from './utils.js';
+import { actionForSeat, deserializePendingState, offerFollowUp, serializePendingActionState } from './utils.js';
 
 /**
  * Result from processing a pick step.
@@ -38,6 +38,8 @@ export interface PickStepResult {
   data?: Record<string, unknown>;
   /** `ActionResult.message` from the completed multi-step action (BUG-012). */
   message?: string;
+  /** A pick callback or `execute()` threw part way, so `runPickOp` says what it undid. */
+  partiallyApplied?: boolean;
   /** The follow-up the completed action chained to, with its action's metadata. */
   followUp?: FollowUpOffer;
   /**
@@ -110,12 +112,30 @@ export class PendingActionManager<G extends Game = Game> {
     actionName?: string,
     initialArgs?: Record<string, unknown>
   ): Promise<PickStepResult> {
-    let pendingState = this.#pendingActions.get(playerPosition);
+    const pendingState = this.#pendingActions.get(playerPosition);
 
     const refused = this.#refuseUnofferedAction(playerPosition, pendingState, actionName);
     if (refused) return refused;
     if (pendingState) this.#runner.markStalePicks(pendingState, playerPosition);
 
+    // A failed step keeps nothing: the game and this pending action are as before it (#1169).
+    const before = pendingState && serializePendingActionState(pendingState);
+    const { result, undone } = this.#runner.runPickOp(
+      () => this.#takeStep(playerPosition, pendingState, selectionName, value, actionName, initialArgs),
+    );
+    if (undone && before) this.#pendingActions.set(playerPosition, deserializePendingState(before));
+    if (undone && !before) this.#pendingActions.delete(playerPosition);
+    return result;
+  }
+
+  #takeStep(
+    playerPosition: number,
+    pendingState: PendingActionState | undefined,
+    selectionName: string,
+    value: unknown,
+    actionName: string | undefined,
+    initialArgs: Record<string, unknown> | undefined,
+  ): PickStepResult {
     // Auto-create pending action if it doesn't exist and actionName is provided
     if (!pendingState && actionName) {
       const startResult = this.startPendingAction(actionName, playerPosition);
@@ -137,12 +157,11 @@ export class PendingActionManager<G extends Game = Game> {
 
     const taken = this.#runner.takePick(pendingState, playerPosition, selectionName, value);
     if (!taken.success) {
-      return { success: false, error: taken.error, errorCode: taken.errorCode, nextChoices: taken.nextChoices };
+      return { success: false, error: taken.error, errorCode: taken.errorCode, nextChoices: taken.nextChoices, partiallyApplied: taken.partiallyApplied };
     }
 
-    // A repeat's last pick is saved before its action runs, so a failed action keeps that onEach's changes (#1169 decides).
-    if (taken.repeating || !taken.complete) this.#runner.captureCheckpoint();
     if (taken.complete) return this.#completePendingAction(pendingState, playerPosition);
+    this.#runner.captureCheckpoint();
 
     return {
       success: true,
@@ -210,7 +229,8 @@ export class PendingActionManager<G extends Game = Game> {
    * made as its own step would be, in order (#658). A pick a held follow-up
    * answered is the engine's and is not taken from the client, and an arg
    * that names no pick is refused (#662). A refusal cancels the action,
-   * running `onCancel` for any `onSelect` that ran.
+   * running `onCancel` for any `onSelect` that ran: `runPickOp` then undoes the
+   * step whole, and with checkpoints off this is the only undo the step gets.
    */
   #makeInitialPicks(
     pendingState: PendingActionState,
@@ -227,7 +247,7 @@ export class PendingActionManager<G extends Game = Game> {
     return { success: false, error: refused.error, errorCode: pickFailureCode(refused) };
   }
 
-  async #completePendingAction(pendingState: PendingActionState, playerPosition: number): Promise<PickStepResult> {
+  #completePendingAction(pendingState: PendingActionState, playerPosition: number): PickStepResult {
     // The UNIQUE completion path for multi-step / repeating-selection actions
     // on the session layer; the runner records, advances or rolls back.
     const actionResult = this.#runner.executeCollectedAction(pendingState, playerPosition);
@@ -246,6 +266,7 @@ export class PendingActionManager<G extends Game = Game> {
       // the ops layer on the same footing as a single-step one (BUG-017).
       data: actionResult.data,
       message: actionResult.message,
+      partiallyApplied: actionResult.partiallyApplied,
     };
   }
 }

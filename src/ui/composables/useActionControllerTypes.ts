@@ -388,8 +388,8 @@ export interface UseActionControllerReturn {
   currentChoices: ComputedRef<ChoiceWithRefs[]>;
   /** Whether all selections are filled and action is ready */
   isReady: ComputedRef<boolean>;
-  /** Whether an action is currently executing */
-  isExecuting: Ref<boolean>;
+  /** Whether the current seat has an action out to the server */
+  isExecuting: Readonly<Ref<boolean>>;
   /** Last validation error */
   lastError: Ref<string | null>;
   /**

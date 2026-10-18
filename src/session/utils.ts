@@ -117,6 +117,16 @@ export function serializePendingActionState(s: PendingActionState): SerializedPe
 }
 
 /**
+ * Restore a pending action's state from its JSON-safe form (array -> Set),
+ * copied as `serializePendingActionState` copies it, so a step never changes
+ * the form an in-memory caller handed in (#1169).
+ */
+export function deserializePendingState(s: SerializedPendingActionState | Record<string, unknown>): PendingActionState {
+  const { onSelectFired, ...state } = serializePendingActionState(s as unknown as PendingActionState);
+  return { ...state, onSelectFired: onSelectFired ? new Set(onSelectFired) : undefined };
+}
+
+/**
  * A seat's own pending action as its client is shown it: without
  * `branchesBeforePicks`, which names where this action's callbacks moved
  * elements from, face-down cards and the pile included (#1144, #655). It stays

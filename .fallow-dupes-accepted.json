@@ -94,14 +94,6 @@
       ]
     },
     {
-      "content": "8c5df45e8e5c36f7",
-      "lines": 17,
-      "files": [
-        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
-        "src/ui/components/auto-ui/renderers/PieceRenderer.vue"
-      ]
-    },
-    {
       "content": "8f23a79b3b91febe",
       "lines": 15,
       "files": [

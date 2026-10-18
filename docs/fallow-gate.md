@@ -818,12 +818,31 @@ that asks the one question that can go latent and FILES rather than blocks.
 
 ### Filing, and why it cannot spam
 
-`--file-issue` opens one GitHub issue per finding through `gh`. Each body
-carries a fingerprint -- a hash of the baseline key, spelled as one lowercase
-alphanumeric token because GitHub's issue search splits on punctuation -- and
-the sweep searches open AND closed issues for that token before filing.
+`--file-issue` opens one GitHub issue per finding through `gh`, labelled
+`duplicate-export-sweep`. Each body carries a fingerprint, a hash of the
+baseline key, and before filing the sweep lists every issue with that label,
+open AND closed, and looks for the fingerprint in their bodies.
 
-Searching closed issues too is deliberate. A closed issue is a human's ruling
+It lists by label rather than searching because GitHub's search index lags: two
+runs close together could each miss the other's issue and file the same
+finding twice (#1184). A label listing is current at once.
+
+The label must exist in the repository. If it does not, `--file-issue` stops
+before filing anything and prints the command that creates it:
+
+```bash
+gh label create duplicate-export-sweep --description "Filed by boardsmith audit --sweep" --color ededed
+```
+
+It does not create the label itself or fall back to searching, since either
+would hide that the repository is not set up for the sweep.
+
+The listing reads at most 1000 issues. If the label ever holds that many, the
+sweep stops without filing, since an issue past the limit would be invisible
+and its finding filed again on every run; raise the limit in
+`githubIssueTracker`.
+
+Listing closed issues too is deliberate. A closed issue is a human's ruling
 on this exact finding, and re-filing it every run is the auto-filer that spams,
 which is worse than no auto-filer. The sweep still REPORTS the finding and says
 which issue already covers it; the way to stop it recurring is to fix the

@@ -285,7 +285,7 @@ describe('boardsmith verify: a claim of green is refused when a test outside the
     expect(result.passed).toBe(true);
     expect(check(result, 'test').counts).toEqual({ files: 2, tests: 3, passed: 3, failed: 0, skipped: 0 });
     // `return price * 2`: return undefined, * -> /, 2 -> 3. The fee test catches each one.
-    expect(check(result, 'mutation').counts).toEqual({ files: 1, mutants: 3, killed: 3, survived: 0, timedOut: 0, equivalent: 0, reused: 0 });
+    expect(check(result, 'mutation').counts).toEqual({ files: 1, mutants: 3, killed: 3, survived: 0, timedOut: 0, equivalent: 0, unreached: 0, reused: 0 });
     expect(await verifiedProblem(dir)).toBeUndefined();
   });
 
@@ -304,6 +304,23 @@ describe('boardsmith verify: a claim of green is refused when a test outside the
       { file: 'src/rules.ts', line: 5, detail: '2 -> 3: no test failed', mutantId: expect.stringMatching(/^[a-f0-9]{64}$/) },
     ]);
     expect(mutation.next).toMatch(/test.*fails.*boardsmith verify/s);
+  });
+
+  it('reports each mutant in a file no test loads, neither killed nor survived (#981)', async () => {
+    const dir = await gameOnBranch(false);
+    await write(dir, { 'src/unused.ts': 'export function same(n: number): number {\n  return n;\n}\n' });
+    commitAll(dir, 'chunk-deal/a module no test loads');
+
+    const { result } = await runVerify({ projectDir: dir, checks: CHECKS, log: () => {} });
+
+    const mutation = check(result, 'mutation');
+    expect(mutation.passed).toBe(false);
+    expect(mutation.counts).toMatchObject({ mutants: 4, killed: 3, survived: 0, unreached: 1 });
+    expect(mutation.findings).toEqual([
+      { file: 'src/unused.ts', line: 2, detail: 'return value replaced with undefined: no test loads src/unused.ts' },
+    ]);
+    expect(mutation.summary).toMatch(/1 of 4 mutants .* in a file no test loads/);
+    expect(mutation.next).toMatch(/test that imports/);
   });
 
   it('fails the mutation check on the main branch with no --base, rather than passing with nothing covered', async () => {

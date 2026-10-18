@@ -4,6 +4,8 @@
  * These are pure functions: no Vue reactivity, no DOM access.
  * Shared by all per-element renderers (CardRenderer, PieceRenderer, etc.).
  */
+import type { InjectionKey } from 'vue';
+import type { ElementRef } from '../../composables/useBoardInteraction.js';
 
 // ---------------------------------------------------------------------------
 // GameElement: the element shape every auto-UI module reads (dependency-free)
@@ -16,6 +18,9 @@ export interface GameElement {
   children?: GameElement[];
   childCount?: number;
 }
+
+/** The grid cell an element stands on, provided by ElementRenderer for a piece to drag on its behalf (#943). */
+export const STANDS_ON_KEY: InjectionKey<() => ElementRef | undefined> = Symbol('bs:standsOn');
 
 // ---------------------------------------------------------------------------
 // PieceVisual — discriminated union returned by resolvePieceVisual
