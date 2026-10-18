@@ -191,7 +191,7 @@ export const WORLD_REFUSALS = {
   // ---- GAME: the bundle's own doing; dead-letters, never parks ----
   "rules-error": {
     owner: "game",
-    why: "#847: a SEATED action's `execute` or `onSelect` threw something that is not a `PlayerFacingError`, so the engine marked its result `rulesError` and the command was rolled back. A clock action's crash is not coded yet. Coded so a caller can tell a crash in the rules from the rules saying no, which still travels as a plain Error carrying the game's own sentence. GAME-owned, which is what an uncoded throw already was: the same bundle crashes the same way next time",
+    why: "#847, #1045: an action's `execute` or `onSelect` threw something that is not a `PlayerFacingError`, so the engine marked its result `rulesError` and the command was rolled back. Coded so a caller can tell a crash in the rules from the rules saying no, which still travels as a plain Error carrying the game's own sentence. GAME-owned, which is what an uncoded throw already was: the same bundle crashes the same way next time",
   },
   "undeclared-partition": {
     owner: "game",

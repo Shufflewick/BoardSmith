@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { simultaneousUndoBoundary } from './utils.js';
+import { simultaneousUndoBoundary, type KeptHistory } from './utils.js';
 
 // F-05 (v4.8, SIM-02): the undo boundary for a seat inside a simultaneous step
 // must anchor on the START OF THE TRAILING RUN of that seat's OWN actions, not
 // on its FIRST action in the window. With multi-action interleavings like
 // [A, B, A] the old code anchored on the first A, saw B after it, and refused —
 // leaving NOBODY able to undo.
-function hist(...players: number[]): Array<{ player: number }> {
-  return players.map((player) => ({ player }));
+function hist(...players: number[]): KeptHistory {
+  return { actionHistory: players.map((player) => ({ player })), actionHistoryBase: 0 };
 }
 
 describe('simultaneousUndoBoundary (F-05 / SIM-02)', () => {
@@ -52,6 +52,6 @@ describe('simultaneousUndoBoundary (F-05 / SIM-02)', () => {
 
   it('returns undefined when moveCount is undefined or history empty', () => {
     expect(simultaneousUndoBoundary(hist(1), undefined, 1)).toBeUndefined();
-    expect(simultaneousUndoBoundary([], 3, 1)).toBeUndefined();
+    expect(simultaneousUndoBoundary(hist(), 3, 1)).toBeUndefined();
   });
 });

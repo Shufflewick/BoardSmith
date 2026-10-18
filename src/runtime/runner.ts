@@ -1,5 +1,5 @@
 import { secureRandomHex } from '../utils/secure-random.js';
-import { NOTHING_CHANGED, rulesErrorSentence } from '../engine/action/rules-error.js';
+import { NOTHING_CHANGED, rulesErrorSentence, withDevDetail } from '../engine/action/rules-error.js';
 import { ActionExecutor, evaluateConditionWithTrace } from '../engine/action/action.js';
 import {
   createActionCheckpoint,
@@ -26,7 +26,8 @@ import {
 import {
   serializeAction,
   deserializeAction,
-  createSnapshot,
+  createRunnerSnapshot,
+  snapshotTree,
   createPlayerView,
   createAllPlayerViews,
   type GameStateSnapshot,
@@ -41,7 +42,6 @@ import { ErrorCode, type GameOptionDefinition } from '../types/protocol.js';
 import { fillGameOptionDefaults } from '../session/game-option-selection.js';
 import { PlayerFacingError } from '../engine/errors.js';
 import { constructGame, animationFloorOf, type AnimationFloor } from '../engine/element/game.js';
-import { isDevThrowEnabled } from '../utils/dev.js';
 import { acceptsSubmission } from '../engine/utils/enumerate-moves.js';
 import type { RandomState } from '../utils/random.js';
 import type { MessageEntry } from '../engine/index.js';
@@ -216,6 +216,18 @@ function checkpointWithLiveLog(
   return { state, messageLog: log.slice(0, Math.max(0, checkpoint.messageCount - evicted)) };
 }
 
+/** The kept history entries before action `actionIndex`, which a checkpoint there restores with. */
+function historyBefore(snapshot: GameStateSnapshot, actionIndex: number): HistoryEntry[] {
+  const base = snapshot.actionHistoryBase ?? 0;
+  if (actionIndex < base) {
+    throw new Error(
+      `This snapshot has a checkpoint at action ${actionIndex} but its history starts at action ${base}. ` +
+      'The runner keeps both itself, so this is a BoardSmith bug; please report it.',
+    );
+  }
+  return snapshot.actionHistory.slice(0, actionIndex - base);
+}
+
 export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptions> {
   /** The game instance */
   readonly game: G;
@@ -223,8 +235,22 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   /** Game type identifier */
   readonly gameType: string;
 
-  /** The game's history: every action taken, and every seat the host closed at a deadline */
+  /**
+   * The game's history: every action taken, and every seat the host closed at
+   * a deadline. Entry `i` is action `actionHistoryBase + i`.
+   */
   readonly actionHistory: HistoryEntry[] = [];
+
+  /**
+   * How many actions `checkpoints: { actionHistory: 'undo' }` has dropped from
+   * the front of `actionHistory`. Public like `executeBarrierIndex`.
+   */
+  actionHistoryBase = 0;
+
+  /** How many actions this game has recorded, dropped ones included: every action index counts from here. */
+  get actionCount(): number {
+    return this.actionHistoryBase + this.actionHistory.length;
+  }
 
   /**
    * The RETAINED WINDOW of per-action authoritative undo checkpoints: the
@@ -342,7 +368,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     const completions = this.game.getIrreversibleCommitCount();
     if (completions !== this.lastSeenIrreversibleCommits) {
       this.lastSeenIrreversibleCommits = completions;
-      this.executeBarrierIndex = this.actionHistory.length;
+      this.executeBarrierIndex = this.actionCount;
     }
   }
 
@@ -372,6 +398,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       max: options.checkpoints?.max ?? Number.POSITIVE_INFINITY,
       enabled: options.checkpoints?.enabled ?? true,
       history: options.checkpoints?.history ?? 'turn',
+      actionHistory: options.checkpoints?.actionHistory ?? 'all',
     };
     this.undoPolicy_ = {
       fenceRandomRewind: options.undo?.fenceRandomRewind ?? false,
@@ -447,9 +474,21 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // FIRST so it still happens for a game that has checkpointing disabled:
     // the barrier fences undo, it is not part of undo's payload.
     this.recordExecuteBarrierAdvance();
+
+    // Under `'turn'` history nothing is kept before the oldest point a seat's
+    // undo can still restore. No undo restores further back than the current
+    // action-step frame's start (`computeUndoInfo`, `simultaneousUndoBoundary`
+    // in session/utils.ts), and with no frame open no undo is possible at all.
+    // Nor does any undo cross a `.notUndoable()` action or an irreversible
+    // `execute()` (`undoFloor`, which `assertUndoAllowed` refuses by), so it
+    // starts after the last of those when it lies inside the frame.
+    const len = this.actionCount;
+    const undoReach = this.checkpointPolicy_.history === 'full'
+      ? undefined
+      : this.undoFloor(len - (this.getFlowState()?.moveCount ?? 0));
+    this.dropUnreadHistory(undoReach);
     if (!this.checkpointPolicy_.enabled) return;
 
-    const len = this.actionHistory.length;
     const headOffset = len - this.checkpointBaseIndex;
     if (headOffset < 0) {
       // The head is BELOW the retained window -- the history was rewound past
@@ -466,17 +505,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     this.actionCheckpoints[headOffset] = createActionCheckpoint(this.game);
 
     // Then drop from the FRONT. Oldest-first is what makes the retained window
-    // the most recent actions -- the ones undo can actually reach. Under
-    // `'turn'` history everything before the oldest point a seat's undo can
-    // still restore goes. No undo restores further back than the current
-    // action-step frame's start (`computeUndoInfo`, `simultaneousUndoBoundary`
-    // in session/utils.ts), and with no frame open no undo is possible at all.
-    // Nor does any undo cross a `.notUndoable()` action or an irreversible
-    // `execute()` (`undoFloor`, which `assertUndoAllowed` refuses by), so the window starts after the last
-    // of those when it lies inside the frame. `max` caps either policy.
-    const keepFrom = this.checkpointPolicy_.history === 'full'
-      ? this.checkpointBaseIndex
-      : this.undoFloor(len - (this.getFlowState()?.moveCount ?? 0));
+    // the most recent actions -- the ones undo can actually reach: under
+    // `'turn'` history, from the undo reach above. `max` caps either policy.
+    const keepFrom = undoReach ?? this.checkpointBaseIndex;
     const excess = Math.max(
       keepFrom - this.checkpointBaseIndex,
       this.actionCheckpoints.length - this.checkpointPolicy_.max,
@@ -488,6 +519,20 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   }
 
   /**
+   * Under `checkpoints: { actionHistory: 'undo' }`, drop the history entries no
+   * undo reads: those before the one just ahead of `undoReach` (#997). That
+   * entry stays: it is what fences undo there, and an undo it refuses names it.
+   * A host keeping full history has no reach, and keeps everything.
+   */
+  private dropUnreadHistory(undoReach: number | undefined): void {
+    if (undoReach === undefined || this.checkpointPolicy_.actionHistory !== 'undo') return;
+    const drop = undoReach - 1 - this.actionHistoryBase;
+    if (drop <= 0) return;
+    this.actionHistory.splice(0, drop);
+    this.actionHistoryBase += drop;
+  }
+
+  /**
    * The oldest action count at or after `from` that an undo may restore: the
    * action after the last `.notUndoable()` entry since `from`, or
    * `executeBarrierIndex`, whichever is later, and never before `from`. The one
@@ -496,8 +541,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * (session/utils.ts) refuses any target below `undoFloor(target)`.
    */
   undoFloor(from: number): number {
-    for (let i = this.actionHistory.length - 1; i >= from; i--) {
-      if (this.actionHistory[i].undoable === false) return Math.max(i + 1, this.executeBarrierIndex);
+    // Dropped entries never decide it: the one that fences undo is always kept (`dropUnreadHistory`).
+    for (let i = this.actionHistory.length - 1; i >= from - this.actionHistoryBase && i >= 0; i--) {
+      if (this.actionHistory[i].undoable === false) return Math.max(i + 1 + this.actionHistoryBase, this.executeBarrierIndex);
     }
     return Math.max(from, this.executeBarrierIndex);
   }
@@ -555,7 +601,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
 
   /** Index in `actionCheckpoints` of the checkpoint for the current action count. */
   private get headOffset(): number {
-    return this.actionHistory.length - this.checkpointBaseIndex;
+    return this.actionCount - this.checkpointBaseIndex;
   }
 
   /**
@@ -681,11 +727,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       }
       return {
         success: false,
-        error: error instanceof PlayerFacingError
-          ? error.message
-          : isDevThrowEnabled()
-            ? `${rulesErrorSentence(actionName)} (${error instanceof Error ? error.message : String(error)})`
-            : rulesErrorSentence(actionName),
+        error: error instanceof PlayerFacingError ? error.message : withDevDetail(rulesErrorSentence(actionName), error),
         errorCode: ErrorCode.ENGINE_ERROR,
       };
     }
@@ -1276,10 +1318,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   getSnapshot(): GameStateSnapshot {
     this.captureCheckpoint();
-    const base = createSnapshot(this.game, this.gameType, this.actionHistory, this.seed);
     return {
-      ...base,
-      actionCheckpoints: this.checkpointWindow(),
+      ...createRunnerSnapshot(this.game, this.gameType, this.actionHistory, this.seed, this.checkpointWindow()),
+      ...(this.actionHistoryBase > 0 && { actionHistoryBase: this.actionHistoryBase }),
       executeBarrierIndex: this.executeBarrierIndex,
       restoreEpoch: this.restoreEpoch,
       gameInstanceId: this.gameInstanceId,
@@ -1317,12 +1358,19 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   /**
    * Replay a game from its history: every action is performed again, and every
    * seat the host closed at a deadline is closed again, in order. Throws, naming the
-   * entry, when the rules no longer accept one.
+   * entry, when the rules no longer accept one, and when the history no longer
+   * starts at action 0 (`checkpoints: { actionHistory: 'undo' }`).
    */
   static replay<G extends Game>(
     options: GameRunnerOptions<G>,
-    history: HistoryEntry[]
+    { actionHistory: history, actionHistoryBase }: Pick<GameStateSnapshot, 'actionHistory' | 'actionHistoryBase'>
   ): GameRunner<G> {
+    if (actionHistoryBase) {
+      throw new Error(
+        `Cannot replay this game: its history starts at action ${actionHistoryBase}, because the game keeps only ` +
+        `the history undo needs (checkpoints: { actionHistory: 'undo' }). Replay needs every action from the start.`,
+      );
+    }
     const runner = new GameRunner(options);
     runner.start();
 
@@ -1350,7 +1398,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * Restore a game from a snapshot — fully STATE-AUTHORITATIVE, NO replay.
    *
    * The snapshot already carries the complete authoritative state: the element
-   * tree (`snapshot.state` = `game.toJSON()`), the flow engine state
+   * tree (`snapshotTree(snapshot)` = `game.toJSON()`), the flow engine state
    * (`snapshot.flowState`), the element sequence counter (`snapshot.sequence`),
    * and — since RNG-state capture was added — the seeded RNG position
    * (`snapshot.randomState`). We reconstruct the game directly from those rather
@@ -1379,11 +1427,12 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       undo?: UndoPolicy;
     }
   ): GameRunner<G> {
+    const tree = snapshotTree(snapshot);
     // Use full gameOptions from snapshot if available, falling back to basic options
     // This ensures custom options like playerConfigs are preserved
     const gameOptions = snapshot.gameOptions ?? {
-      playerCount: snapshot.state.settings.playerCount as number,
-      playerNames: snapshot.state.settings.playerNames as string[],
+      playerCount: tree.settings.playerCount as number,
+      playerNames: tree.settings.playerNames as string[],
       seed: snapshot.seed,
     };
 
@@ -1409,14 +1458,14 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // Preserve action history for the undo op (which reads runner.actionHistory).
     // It is intentionally NOT replayed.
     runner.actionHistory.push(...snapshot.actionHistory);
+    // Absent: nothing was dropped, the honest reading of a snapshot that does not say.
+    runner.actionHistoryBase = snapshot.actionHistoryBase ?? 0;
 
     // Carry the retained checkpoint window forward so the next getSnapshot keeps
     // the retained entries intact while refreshing the head one.
     //
-    // A snapshot with no window -- or one whose `actionCheckpoints` is not a
-    // window at all, which is what a snapshot written by an engine predating
-    // the window looks like -- starts an EMPTY window at the CURRENT action
-    // count, not at 0. Starting at 0 would make the next capture write into
+    // A snapshot with no window (written with checkpoints disabled) starts an
+    // EMPTY window at the CURRENT action count, not at 0. Starting at 0 would make the next capture write into
     // slot `actionHistory.length` of an empty array, leaving a hole per
     // preceding action: `null`s that serialize, cost bytes forever, and read
     // back as "a checkpoint that is missing" rather than "a checkpoint that
@@ -1437,12 +1486,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // emitted window honest evidence of the policy actually in force, which is
     // the only evidence there is (the policy itself is never persisted).
     const window = snapshot.actionCheckpoints;
-    const usable =
-      runner.checkpointPolicy_.enabled &&
-      window &&
-      Array.isArray(window.entries) &&
-      typeof window.baseIndex === 'number';
-    runner.checkpointBaseIndex = usable ? window.baseIndex : snapshot.actionHistory.length;
+    const usable = runner.checkpointPolicy_.enabled && window !== undefined;
+    runner.checkpointBaseIndex = usable ? window.baseIndex : runner.actionCount;
     runner.actionCheckpoints = usable ? [...window.entries] : [];
 
     // UNDO-02: adopt the durable execute()-barrier from the snapshot. Absent
@@ -1464,7 +1509,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     if (snapshot.gameInstanceId !== undefined) runner.gameInstanceId = snapshot.gameInstanceId;
 
     // Adopt the authoritative element tree. loadSerializedState fully clears and
-    // rebuilds the tree from snapshot.state on its own (see Game.loadSerializedState),
+    // rebuilds the tree from `tree` on its own (see Game.loadSerializedState),
     // so it stands alone with no prior replay.
     //
     // `animationFloor` (UNDO-04): absent for a normal full restore (adopt
@@ -1473,11 +1518,11 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // move the live animation-event id sequence backwards. Do not thread a
     // floor through any other caller of `fromSnapshot` -- see game.ts's
     // `loadSerializedState` doc comment / RESEARCH.md §C.
-    // The message log is NOT in `snapshot.state` (it is a snapshot sibling —
+    // The message log is NOT in the tree (it is a snapshot sibling —
     // see `GameStateSnapshot.messageLog`), so it must be handed over explicitly.
     // `loadSerializedState` assigns it unconditionally, so a snapshot without a
     // log restores an empty one rather than leaving whatever this instance held.
-    runner.game.loadSerializedState(snapshot.state, {
+    runner.game.loadSerializedState(tree, {
       ...options,
       messageLog: snapshot.messageLog ?? [],
     });
@@ -1537,7 +1582,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    *
    * The restored runner carries the checkpoint prefix `[0..actionIndex]` forward
    * so subsequent undos/rewinds from it still resolve authoritatively, and its
-   * `actionHistory` is the matching prefix `[0..actionIndex)`.
+   * `actionHistory` is the kept part of the matching prefix `[0..actionIndex)`.
    *
    * Returns `null` when no checkpoint exists at `actionIndex`. Callers that
    * report the failure should ask `describeCheckpointAbsence` why — an entry
@@ -1561,7 +1606,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // game already was. This is what makes the fix self-serving from this
     // single call site -- no undo/rewind executor needs to remember to pass
     // it. See game.ts's `loadSerializedState` doc comment / RESEARCH.md §C.
-    const animationFloor = animationFloorOf(snapshot.state);
+    const liveTree = snapshotTree(snapshot);
+    const animationFloor = animationFloorOf(liveTree);
 
     // UNDO-02: clamp the barrier to the restore point. A barrier set AHEAD of
     // `actionIndex` (e.g. from an execute() node that ran after the point
@@ -1584,29 +1630,30 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // A checkpoint predating the watermark has no recorded boundary, so the
     // honest restore is the whole log rather than a guess.
     const fullLog = snapshot.messageLog ?? [];
-    // The eviction counts ride in the snapshot's own state, which is where the
-    // log's position bookkeeping lives.
-    const { state, messageLog } = checkpointWithLiveLog(checkpoint, fullLog, snapshot.state);
+    // The eviction counts ride in the snapshot's tree, which is where the log's
+    // position bookkeeping lives.
+    const { state, messageLog } = checkpointWithLiveLog(checkpoint, fullLog, liveTree);
 
     return GameRunner.fromSnapshot<G>(
       {
         version: snapshot.version,
         gameType: snapshot.gameType,
-        state,
         messageLog,
         flowState: checkpoint.flowState,
         winners: checkpoint.winners,
-        actionHistory: snapshot.actionHistory.slice(0, actionIndex),
+        actionHistory: historyBefore(snapshot, actionIndex),
+        actionHistoryBase: snapshot.actionHistoryBase,
         seed: snapshot.seed,
         sequence: checkpoint.sequence,
         randomState: checkpoint.randomState,
         gameOptions: snapshot.gameOptions,
         // The retained window, truncated at the restore point: entries AHEAD of
         // `actionIndex` describe a timeline this runner no longer has. The base
-        // is unchanged -- everything already pruned stays pruned.
+        // is unchanged -- everything already pruned stays pruned. Its newest
+        // entry is the restored tree: `checkpoint` with the live eviction count.
         actionCheckpoints: {
           baseIndex: window!.baseIndex,
-          entries: window!.entries.slice(0, actionIndex - window!.baseIndex + 1),
+          entries: [...window!.entries.slice(0, actionIndex - window!.baseIndex), { ...checkpoint, state }],
         },
         executeBarrierIndex,
         // The restore itself, recorded durably. This is the ONE site that
@@ -1660,7 +1707,7 @@ export function restoreEarlierSnapshot<G extends Game>(
     { ...earlier, restoreEpoch: (live.restoreEpoch ?? 0) + 1 },
     GameClass,
     {
-      animationFloor: animationFloorOf(live.state),
+      animationFloor: animationFloorOf(snapshotTree(live)),
       checkpoints: options?.checkpoints,
       randomness: options?.randomness,
       undo: options?.undo,

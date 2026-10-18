@@ -14,6 +14,7 @@ import {
 } from '../index.js';
 import type { GameDefinitionLike, Op } from '../../session/stateless-ops.js';
 import { succeeded } from '../../session/op-result.test-helper.js';
+import { snapshotTree, type GameStateSnapshot } from '../utils/index.js';
 
 /**
  * A turn made of several actions has exactly two shapes in this API, and until
@@ -51,8 +52,8 @@ function def(cls: GameDefinitionLike['gameClass'], gameType: string, maxPlayers 
   };
 }
 
-function scoreOf(snapshot: unknown): number | undefined {
-  return (snapshot as { state?: { attributes?: { score?: number } } })?.state?.attributes?.score;
+function scoreOf(snapshot: GameStateSnapshot): unknown {
+  return snapshotTree(snapshot).attributes.score;
 }
 
 /** Base game: one `act` action worth a point, plus a move counter. */

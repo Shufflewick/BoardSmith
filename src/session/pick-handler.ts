@@ -15,6 +15,8 @@ import type {
   Player,
   PendingActionState,
 } from '../engine/index.js';
+import { PlayerFacingError } from '../engine/errors.js';
+import { rulesErrorSentence, withDevDetail } from '../engine/action/rules-error.js';
 import type { GameRunner } from '../runtime/index.js';
 import {
   ErrorCode,
@@ -56,6 +58,7 @@ function picksHeldBy(pendingState: Record<string, unknown> | null, actionName: s
  */
 function evaluateCandidates(
   executor: ReturnType<Game['getActionExecutor']>,
+  actionName: string,
   selection: ChoiceSelection | ElementSelection | ElementsSelection,
   player: Player,
   args: Record<string, unknown>,
@@ -63,13 +66,15 @@ function evaluateCandidates(
   try {
     return { candidates: executor.getChoices(selection, player, args) as AnnotatedCandidate[] };
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    const asChoices = selection.type === 'choice';
+    // The shared crash handling (#1045): a PlayerFacingError travels, anything else is logged and replaced.
+    if (!(error instanceof PlayerFacingError)) {
+      console.error(`[BoardSmith] Evaluating '${selection.name}' of action '${actionName}' failed:`, error);
+    }
     return {
       refusal: {
         success: false,
-        error: `Error evaluating ${asChoices ? 'choices' : 'elements'}: ${message}`,
-        errorCode: asChoices ? ErrorCode.CHOICES_EVALUATION_ERROR : ErrorCode.ELEMENTS_EVALUATION_ERROR,
+        error: error instanceof PlayerFacingError ? error.message : withDevDetail(rulesErrorSentence(actionName), error),
+        errorCode: selection.type === 'choice' ? ErrorCode.CHOICES_EVALUATION_ERROR : ErrorCode.ELEMENTS_EVALUATION_ERROR,
       },
     };
   }
@@ -92,7 +97,7 @@ function answerPick(
   ctx: { game: Game; player: Player; args: Record<string, unknown> },
   warnings: WarningEntry[],
 ): PickChoicesResponse {
-  const evaluated = evaluateCandidates(executor, selection, player, ctx.args);
+  const evaluated = evaluateCandidates(executor, action.name, selection, player, ctx.args);
   if ('refusal' in evaluated) return evaluated.refusal;
 
   // AFTER THE FORMATTERS RUN, NEVER BEFORE: a soft-failing `display()` or

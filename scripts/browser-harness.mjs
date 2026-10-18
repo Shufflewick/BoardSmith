@@ -304,12 +304,13 @@ async function loadFixtures(script) {
  * @param run.fixture the world project, as `withFixtureWorld` takes it
  * @param run.table   instead of `fixture`: `true` serves `boardsmith init`'s table
  *                    sample through `boardsmith dev` (`withFixtureTable`, #703)
- * @param body        called with `{ launch, hostUrl }`; returns `summarise`
+ * @param body        called with `{ launch, hostUrl, fixture }`, `fixture` being the served
+ *                    project's directory; returns `summarise`
  */
 export async function runBrowserRegression(run, body) {
   const { withFixtureWorld, withFixtureTable } = await loadFixtures(run.script);
   const chromium = await loadChromium();
-  const drive = ({ hostUrl }) => body({ launch: () => launchChromium(chromium), hostUrl });
+  const drive = ({ hostUrl, fixture }) => body({ launch: () => launchChromium(chromium), hostUrl, fixture });
   process.exit(await (run.table === true ? withFixtureTable(drive) : withFixtureWorld(run.fixture, drive)));
 }
 

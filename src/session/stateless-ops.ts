@@ -12,7 +12,9 @@
 import type { Game, GameClass, TutorialDefinition, Annotation, FlowState, FollowUpOffer } from '../engine/index.js';
 import type { HistoryEntry } from '../engine/action/types.js';
 import { ErrorCode, type ChoiceWithRefs, type ValidElement } from '../types/protocol.js';
-import { dueSeats, canSeatAct, availableActionsForSeat, flowBoundaryKey, toPublicFlowState } from '../engine/index.js';
+import { canSeatAct, availableActionsForSeat, flowBoundaryKey, toPublicFlowState, PlayerFacingError } from '../engine/index.js';
+import { withDevDetail } from '../engine/action/rules-error.js';
+import { dueSeatOffers, describeRefused } from '../engine/flow/seat-activity.js';
 import type { BoundaryKeyState } from '../engine/index.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState, WarningEntry } from './types.js';
 import { validateTutorialDefinition, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
@@ -28,6 +30,7 @@ import {
   type UndoPolicy,
   type RandomnessPolicy,
 } from '../runtime/index.js';
+import { snapshotTree } from '../engine/utils/index.js';
 import { createBot, parseBotLevel } from '../bot/index.js';
 import type { BotMove } from '../bot/types.js';
 import { describeMoveForHint } from './move-summary.js';
@@ -346,7 +349,7 @@ export interface OpFailure {
    * handler carries the code they gave (e.g. NOT_YOUR_TURN, ENGINE_ERROR,
    * CHOICES_EVALUATION_ERROR), and a code is never invented for one that gave
    * none. The engine's own protocol refusals carry their own code
-   * (STALE_SUBMISSION).
+   * (STALE_SUBMISSION), and an op that crashed carries ENGINE_ERROR (#1045).
    */
   errorCode?: ErrorCode;
   category: OpFailureCategory;
@@ -438,8 +441,12 @@ export interface OpSuccessFields {
   };
   cancelAction: Record<never, never>;
   undo: Record<never, never>;
-  /** The game's action history, oldest first. */
-  debugHistory: { actionHistory: DebugHistoryEntry[] };
+  /**
+   * The game's kept action history, oldest first. Entry `i` is action
+   * `actionHistoryBase + i`; the base is absent while no action was dropped
+   * (`checkpoints: { actionHistory: 'undo' }`, #997).
+   */
+  debugHistory: { actionHistory: DebugHistoryEntry[]; actionHistoryBase?: number };
   debugStateAt: { historicalState: unknown };
   debugStateDiff: { diff: ElementDiff };
   debugActionTraces: { traces: unknown[]; flowContext: unknown };
@@ -675,7 +682,7 @@ function stateEnvelope(runner: GameRunner, playerCount: number): StateEnvelope {
  * one place both channels live, so the commit is the game's and no view's.
  */
 function persistCommitOf(snapshot: GameStateSnapshot): PersistCommit {
-  const attributes = snapshot.state.attributes;
+  const attributes = snapshotTree(snapshot).attributes;
   const commit: PersistCommit = {};
   if (attributes[PERSIST_KEY] !== undefined) commit.public = attributes[PERSIST_KEY];
   if (attributes[PERSIST_PRIVATE_KEY] !== undefined) commit.private = attributes[PERSIST_PRIVATE_KEY];
@@ -694,6 +701,20 @@ function errorResult(
     ...(errorCode === undefined ? {} : { errorCode }),
     category,
   };
+}
+
+/**
+ * The refusal for a throw out of an op (#1045). A `PlayerFacingError` was written to be read and
+ * travels verbatim; anything else is a crash, logged here and replaced by a fixed sentence.
+ */
+function unexpectedErrorResult(error: unknown): OpFailure {
+  if (error instanceof PlayerFacingError) return errorResult(error, 'executor');
+  console.error('[BoardSmith] An op failed unexpectedly:', error);
+  return errorResult(
+    withDevDetail('The game could not process that request because of an error. Try again, or reload the page.', error),
+    'executor',
+    ErrorCode.ENGINE_ERROR,
+  );
 }
 
 /**
@@ -743,11 +764,27 @@ function refuseStaleSubmission(snapshot: GameStateSnapshot | null, op: Executabl
   return errorResult(STALE_SUBMISSION_MESSAGE, 'protocol', ErrorCode.STALE_SUBMISSION);
 }
 
+/**
+ * The due bot seat to search: the first that can move, since a seat offered
+ * only disabled actions has nothing to search (#1133). When no due seat at
+ * all can move, the first due bot seat is reported stalled, with the reasons,
+ * so a table stuck on disabled actions is said out loud rather than gone quiet.
+ */
 function selectDueBotSeat(
   flowState: BotFlowState,
+  game: Game,
   botSeats: Set<number>,
-): number | undefined {
-  return dueSeats(flowState).find(seat => botSeats.has(seat));
+): { seat: number } | { stalled: { seat: number; reason: string } } | undefined {
+  const offers = dueSeatOffers(flowState, game);
+  const movable = offers.find((offer) => offer.canMove && botSeats.has(offer.seat));
+  if (movable) return { seat: movable.seat };
+  const dueBot = offers.find((offer) => botSeats.has(offer.seat));
+  if (!dueBot || offers.some((offer) => offer.canMove)) return undefined;
+  const refused = describeRefused(offers);
+  const reason =
+    'No seat the game is waiting on can move: none has an enabled action or a follow-up.' +
+    (refused.length > 0 ? ` Refused: ${refused.join('; ')}.` : '');
+  return { stalled: { seat: dueBot.seat, reason } };
 }
 
 // ---------------------------------------------------------------------------
@@ -1245,8 +1282,10 @@ async function handleBotSuggest(
   const runner = runnerFromSnapshot(snapshot, def);
   const flowState = runner.getFlowState() as BotFlowState | undefined;
   if (!flowState?.awaitingInput || flowState.complete) return { success: true };
-  const botPlayer = selectDueBotSeat(flowState, new Set(op.seats.map((s) => s.seat)));
-  if (botPlayer === undefined) return { success: true };
+  const due = selectDueBotSeat(flowState, runner.game as Game, new Set(op.seats.map((s) => s.seat)));
+  if (due === undefined) return { success: true };
+  if ('stalled' in due) return { success: true, botStalled: due.stalled };
+  const botPlayer = due.seat;
 
   const seatLevel = op.seats.find((s) => s.seat === botPlayer)?.level;
   // `def.bot` MUST be threaded through — it carries the game's MCTS hooks
@@ -1335,7 +1374,7 @@ function runnersAt(
   actionIndex: number,
 ): { current: GameRunner; at: GameRunner } | OpFailure {
   const current = runnerFromSnapshot(snapshot, def);
-  const historyLength = current.actionHistory.length;
+  const historyLength = current.actionCount;
   if (actionIndex < 0 || actionIndex > historyLength) {
     return errorResult(`Invalid action index: ${actionIndex}. History has ${historyLength} actions.`, 'protocol');
   }
@@ -1370,6 +1409,7 @@ function handleDebugHistory(
     success: true,
     ...stateEnvelope(runner, gameOptions.playerCount),
     actionHistory: [...runner.actionHistory],
+    ...(runner.actionHistoryBase > 0 && { actionHistoryBase: runner.actionHistoryBase }),
   };
 }
 
@@ -1395,7 +1435,7 @@ function handleDebugStateDiff(
   op: Extract<Op, { type: 'debugStateDiff' }>,
 ): OpResultFor<'debugStateDiff'> {
   const current = runnerFromSnapshot(snapshot, def);
-  const historyLength = current.actionHistory.length;
+  const historyLength = current.actionCount;
   if (op.fromIndex < 0 || op.fromIndex > historyLength) {
     return errorResult(`Invalid fromIndex: ${op.fromIndex}`, 'protocol');
   }
@@ -1528,7 +1568,7 @@ function handleDebugRewind(
   op: Extract<Op, { type: 'debugRewind' }>,
 ): OpResultFor<'debugRewind'> {
   const current = runnerFromSnapshot(snapshot, def);
-  const historyLength = current.actionHistory.length;
+  const historyLength = current.actionCount;
   if (op.actionIndex < 0) {
     return errorResult(
       `Invalid action index: ${op.actionIndex}. History has ${historyLength} actions.`,
@@ -1813,6 +1853,6 @@ async function runOp(
       'protocol',
     );
   } catch (err) {
-    return errorResult(err, 'executor');
+    return unexpectedErrorResult(err);
   }
 }

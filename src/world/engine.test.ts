@@ -18,7 +18,7 @@
 // through serialized bytes -- the engine under test never sees the tree that
 // produced them. A fixture that handed the engine live objects would prove
 // adoption worked without ever running it (docs/TEST-FIXTURES.md).
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Game, Piece, Player, Space } from "../engine/index.js";
 import type { GameElement } from "../engine/index.js";
 import { PlayerFacingError } from "../engine/errors.js";
@@ -37,6 +37,13 @@ import {
   newVillageEngine,
 } from "./village.test-helper.js";
 import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
+
+// Lets a test run as a deployed isolate does, where no dev detail travels (#1045).
+const devThrow = vi.hoisted(() => ({ enabled: true }));
+vi.mock("../utils/dev.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../utils/dev.js")>();
+  return { ...actual, isDevThrowEnabled: () => devThrow.enabled };
+});
 
 /** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
  *  The clock's road passes its whole occurrence instead. */
@@ -510,6 +517,13 @@ const clockTear = worldClockAction<WorldFixtureGame>("clockTear")
     throw new Error("this handler fails halfway, deliberately");
   });
 
+/** #191's refusal in words, on the clock's road (#1045). */
+const clockRefuseInWords = worldClockAction<WorldFixtureGame>("clockRefuseInWords")
+  .needs(() => [])
+  .execute(() => {
+    throw new PlayerFacingError("The hearth is full: it holds 3 logs and you offered 14.");
+  });
+
 /**
  * Every verb the fixture world answers to, in the order it declares them --
  * which is the order `unknown-command` names them back in.
@@ -543,6 +557,7 @@ const ACTIONS: readonly ActionDefinition[] = [
   refuseUnreadably,
   refuseInCrashWords,
   returnCrashWords,
+  clockRefuseInWords,
 ];
 
 function newEngine(store: WorldPartitionSource = new CountingStore(genesis())) {
@@ -1908,6 +1923,31 @@ describe("#191 — a refusal written for a player reaches one", () => {
     // Coded by what the engine knows happened, never by the words a refusal carries.
     expect(await thrown("refuseInCrashWords")).not.toBeInstanceOf(WorldRefusal);
     expect(await thrown("returnCrashWords")).not.toBeInstanceOf(WorldRefusal);
+  });
+
+  it("codes a crash in a CLOCK action rules-error with the shared sentence, and leaves its refusal uncoded (#1045)", async () => {
+    const engine = newEngine();
+    const fired = (name: string) =>
+      engine.onEvent({ name, args: {} }, { due: 1_000, missedCount: 0 }, EVENT_STAMP).then(() => null, (error: unknown) => error);
+
+    devThrow.enabled = false;
+    try {
+      const crash = await fired("clockTear");
+      expect(crash).toBeInstanceOf(WorldRefusal);
+      expect(crash).toMatchObject({ code: "rules-error", owner: "game" });
+      // A deployed isolate: the shared sentence and nothing of what was thrown.
+      expect((crash as Error).message).toBe(rulesErrorSentence("clockTear"));
+
+      const refusal = await fired("clockRefuseInWords");
+      expect(refusal).not.toBeInstanceOf(WorldRefusal);
+      expect((refusal as Error).message).toBe(SENTENCE);
+    } finally {
+      devThrow.enabled = true;
+    }
+    // In dev the author reads what was thrown, after the sentence.
+    expect(((await fired("clockTear")) as Error).message).toBe(
+      `${rulesErrorSentence("clockTear")} (this handler fails halfway, deliberately)`,
+    );
   });
 
   it("leaves the world unchanged either way, because a refusal is still a refusal", async () => {

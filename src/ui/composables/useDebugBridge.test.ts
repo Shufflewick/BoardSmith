@@ -125,8 +125,14 @@ describe('debug bridge response validation', () => {
 
   it('returns an empty history and an empty log when the host sends neither', async () => {
     const { bridge } = bridgeWith(ok);
-    expect(await bridge.history()).toEqual([]);
+    expect(await bridge.history()).toEqual({ actionHistory: [], actionHistoryBase: 0 });
     expect(await bridge.logs()).toEqual([]);
+  });
+
+  it('says which action the kept history starts at when the game dropped the ones before it (#997)', async () => {
+    const entry = { name: 'move', player: 1, args: {} };
+    const { bridge } = bridgeWith(async () => ({ success: true, actionHistory: [entry], actionHistoryBase: 899 }));
+    expect(await bridge.history()).toEqual({ actionHistory: [entry], actionHistoryBase: 899 });
   });
 });
 

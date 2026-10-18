@@ -174,6 +174,7 @@ onUnmounted(() => {
 
 const {
   actionHistory,
+  actionHistoryBase,
   historyLoading,
   historyError,
   fetchHistory,
@@ -598,6 +599,7 @@ function handleRestartClick() {
         <HistoryTab
           v-show="activeTab === 'history'"
           :action-history="actionHistory"
+          :action-history-base="actionHistoryBase"
           :players="players"
           :history-loading="historyLoading"
           :history-error="historyError"

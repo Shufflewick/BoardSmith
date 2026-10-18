@@ -8,7 +8,7 @@ import type { BotStrategy } from '../../bot/index.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { parsePositiveWholeNumber } from '../../utils/positive-whole-number.js';
-import { packageSourceFile, getProjectContext, importRuntimeBundle, runtimeBundlePath, toPosix } from './game-runtime.js';
+import { packageSourceFile, getProjectContext, importRuntimeBundle, toPosix } from './game-runtime.js';
 
 interface EvolveBotWeightsOptions {
   generations?: string;
@@ -68,7 +68,7 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
   // the bot plays on the engine the rules are built with (#697).
   await withCommandBuildDir(cwd, 'evolve-bot-weights', async (tempDir) => {
     try {
-      const { gameDefinition } = await importRuntimeBundle({
+      const { gameDefinition, bundlePath: modulePath } = await importRuntimeBundle({
         rulesPath: rulesDir,
         tempDir,
         name: 'evolve',
@@ -78,7 +78,6 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
           `export { benchmarkBot, weightedBot } from ${JSON.stringify(toPosix(packageSourceFile('bot-trainer/benchmark.ts')))};`,
         ],
       });
-      const modulePath = runtimeBundlePath(tempDir, 'evolve');
 
       const gameType = gameDefinition.gameType || config.name;
       requireBotObjectives(gameDefinition.bot);

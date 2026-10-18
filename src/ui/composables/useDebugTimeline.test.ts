@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { nextTick } from 'vue';
 import { useDebugTimeline } from './useDebugTimeline.js';
-import type { DebugBridge, SerializedAction } from './useDebugBridge.js';
+import type { DebugBridge, DebugHistory, SerializedAction } from './useDebugBridge.js';
 import type { PlayerState } from '../../client/types.js';
 
 const HISTORY: SerializedAction[] = [
@@ -9,6 +9,11 @@ const HISTORY: SerializedAction[] = [
   { name: 'endTurn', player: 1, args: {}, timestamp: 2000 },
   { name: 'playCard', player: 2, args: {}, timestamp: 3000 },
 ];
+
+/** The host's answer for a history nothing was dropped from. */
+function kept(actionHistory: SerializedAction[]): DebugHistory {
+  return { actionHistory, actionHistoryBase: 0 };
+}
 
 /** The seat's state after an action, as the host answers `debug:state-at`. */
 const HISTORICAL: PlayerState = {
@@ -26,7 +31,7 @@ function stubBridge(over: Partial<DebugBridge> = {}): DebugBridge {
     actionTraces: vi.fn(async () => ({ traces: [], flowContext: null })),
     flowState: vi.fn(async () => null),
     customDebug: vi.fn(async () => null),
-    history: vi.fn(async () => HISTORY),
+    history: vi.fn(async () => kept(HISTORY)),
     logs: vi.fn(async () => []),
     stateAt: vi.fn(async () => HISTORICAL),
     stateDiff: vi.fn(async () => DIFF),
@@ -78,7 +83,7 @@ describe('history loading', () => {
     const { timeline } = setup({
       history: vi.fn(async () => {
         if (fail) throw new Error('no history');
-        return HISTORY;
+        return kept(HISTORY);
       }),
     });
     await timeline.fetchHistory();
@@ -89,42 +94,42 @@ describe('history loading', () => {
   });
 
   it('asks again while a load is in flight and shows the newest answer, whatever order they arrive in', async () => {
-    const pending: Array<(v: SerializedAction[]) => void> = [];
-    const history = vi.fn(() => new Promise<SerializedAction[]>((r) => { pending.push(r); }));
+    const pending: Array<(v: DebugHistory) => void> = [];
+    const history = vi.fn(() => new Promise<DebugHistory>((r) => { pending.push(r); }));
     const { timeline } = setup({ history });
     const first = timeline.fetchHistory();
     const second = timeline.fetchHistory();
     expect(history).toHaveBeenCalledTimes(2);
-    pending[1]!(HISTORY);
+    pending[1]!(kept(HISTORY));
     await second;
-    pending[0]!(HISTORY.slice(0, 1));
+    pending[0]!(kept(HISTORY.slice(0, 1)));
     await first;
     expect(timeline.actionHistory.value).toEqual(HISTORY);
     expect(timeline.historyLoading.value).toBe(false);
   });
 
   it('stays loading until the newest answer arrives', async () => {
-    const pending: Array<(v: SerializedAction[]) => void> = [];
-    const history = vi.fn(() => new Promise<SerializedAction[]>((r) => { pending.push(r); }));
+    const pending: Array<(v: DebugHistory) => void> = [];
+    const history = vi.fn(() => new Promise<DebugHistory>((r) => { pending.push(r); }));
     const { timeline } = setup({ history });
     const first = timeline.fetchHistory();
     const second = timeline.fetchHistory();
-    pending[0]!(HISTORY.slice(0, 1));
+    pending[0]!(kept(HISTORY.slice(0, 1)));
     await first;
     expect(timeline.historyLoading.value).toBe(true);
-    pending[1]!(HISTORY);
+    pending[1]!(kept(HISTORY));
     await second;
     expect(timeline.actionHistory.value).toEqual(HISTORY);
     expect(timeline.historyLoading.value).toBe(false);
   });
 
   it('leaves the error empty when an older load fails after the newest succeeded', async () => {
-    const pending: Array<{ resolve: (v: SerializedAction[]) => void; reject: (e: Error) => void }> = [];
-    const history = vi.fn(() => new Promise<SerializedAction[]>((resolve, reject) => { pending.push({ resolve, reject }); }));
+    const pending: Array<{ resolve: (v: DebugHistory) => void; reject: (e: Error) => void }> = [];
+    const history = vi.fn(() => new Promise<DebugHistory>((resolve, reject) => { pending.push({ resolve, reject }); }));
     const { timeline } = setup({ history });
     const first = timeline.fetchHistory();
     const second = timeline.fetchHistory();
-    pending[1]!.resolve(HISTORY);
+    pending[1]!.resolve(kept(HISTORY));
     await second;
     pending[0]!.reject(new Error('older failed'));
     await first;
@@ -338,4 +343,23 @@ describe('rewind', () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+});
+
+describe('a history that starts after action 0 (#997)', () => {
+  it('points at actions, the live head and a rewind by their place in the whole game', async () => {
+    const { timeline, bridge } = setup({ history: vi.fn(async () => ({ actionHistory: HISTORY, actionHistoryBase: 10 })) });
+    await timeline.fetchHistory();
+    expect(timeline.actionHistoryBase.value).toBe(10);
+
+    await timeline.selectAction(12);
+    expect(bridge.stateAt).toHaveBeenCalledWith(12);
+    expect(timeline.selectedActionIndex.value).toBe(12);
+
+    // Action 13 is the live head: 10 dropped plus 3 kept.
+    await timeline.selectAction(13);
+    expect(timeline.selectedActionIndex.value).toBeNull();
+
+    timeline.requestRewind(11);
+    expect(timeline.pendingRewindDiscardCount.value).toBe(2);
+  });
 });

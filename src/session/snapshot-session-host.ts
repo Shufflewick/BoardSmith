@@ -119,6 +119,15 @@ function completesAction(op: Op, res: OpResult): boolean {
 }
 
 /**
+ * Whether `op` replaces the position every seat was looking at: an undo or a
+ * rewind goes back to another one, and a tutorial's setup rewrites the board
+ * (#1082). What any seat holds against the old position goes with it.
+ */
+function replacesPosition(op: Op): boolean {
+  return op.type === 'undo' || op.type === 'debugRewind' || op.type === 'restoreEarlier' || op.type === 'startTutorial';
+}
+
+/**
  * The ops that change the game and run through `executeOp`: every executable
  * op except the read-only ones and the teaching ops, which the host keeps as
  * its own state rather than as a move.
@@ -636,14 +645,19 @@ export class SnapshotSessionHost {
   private lastFlowDebugInfo: SerializedFlowDebugInfo | null = null;
 
   /**
-   * When each entry of the game's action history reached this host, by
-   * history index (#547): what the Debug panel's history shows beside each
-   * move. Held here, never in the snapshot, because engine history stays
-   * clock-free (#54). Recorded only while debugging is on, so a host with it
-   * off reads no clock; an entry with no time is one made while debugging was
-   * off or before this host held the game.
+   * When each KEPT entry of the game's action history reached this host
+   * (#547): `arrivalTimes[i]` is action `arrivalBase + i`, what the Debug
+   * panel's history shows beside each move. Only kept entries, so a game that
+   * drops its old history (`checkpoints: { actionHistory: 'undo' }`, #997)
+   * holds a bounded array here too. Held here, never in the snapshot, because
+   * engine history stays clock-free (#54). Recorded only while debugging is
+   * on, so a host with it off reads no clock; an entry with no time is one
+   * made while debugging was off or before this host held the game.
    */
   private arrivalTimes: Array<number | undefined> = [];
+
+  /** The action `arrivalTimes[0]` is: the held snapshot's `actionHistoryBase`. */
+  private arrivalBase = 0;
 
   // Demo loop cancellation flag, move cap, and cancellable-delay handle.
   // demoAbort: set by demoStop to cancel the in-flight runDemoLoop.
@@ -939,6 +953,7 @@ export class SnapshotSessionHost {
     host.pendingStates = host.restorablePendingStates(state.pendingStates);
     host._snapshot = snapshot;
     // Moves made before this host held the game arrived at times it never saw.
+    host.arrivalBase = snapshot.actionHistoryBase ?? 0;
     host.arrivalTimes = new Array<undefined>(snapshot.actionHistory.length).fill(undefined);
     host.botSeats = state.botSeats.map((s) => ({ ...s }));
     if (state.playerViews) host.lastPlayerViews = state.playerViews;
@@ -1044,7 +1059,7 @@ export class SnapshotSessionHost {
    */
   private async apply(res: StateEnvelope, seat?: number, pending: Record<string, unknown> | null = null): Promise<void> {
     this._snapshot = this.checkedSnapshot(res.snapshot, 'op');
-    this.noteArrivals(this._snapshot.actionHistory.length);
+    this.noteArrivals(this._snapshot);
     // FLOW-01/03: every state-mutating op's stateEnvelope() carries a fresh
     // flowDebugInfo (shared serializeFlowDebugInfo — same shape as the
     // debug:flow-state op). Carry it forward
@@ -1063,19 +1078,27 @@ export class SnapshotSessionHost {
   }
 
   /**
-   * Bring {@link arrivalTimes} to a history of `length` entries: drop the times
-   * of entries an undo or rewind removed, and stamp each new entry with now.
+   * Bring {@link arrivalTimes} to `snapshot`'s kept history: drop the times of
+   * entries the game dropped from the front or an undo or rewind removed from
+   * the end, and stamp each new entry with now.
    */
-  private noteArrivals(length: number): void {
+  private noteArrivals(snapshot: GameStateSnapshot): void {
+    const base = snapshot.actionHistoryBase ?? 0;
+    const dropped = base - this.arrivalBase;
+    // A base that moved back is another game's history (a new game): this host saw none of it arrive.
+    if (dropped < 0) this.arrivalTimes = new Array<undefined>(snapshot.actionHistory.length).fill(undefined);
+    else this.arrivalTimes.splice(0, dropped);
+    this.arrivalBase = base;
+    const length = snapshot.actionHistory.length;
     if (this.arrivalTimes.length > length) this.arrivalTimes.length = length;
     const now = this.adapters.debug === true ? Date.now() : undefined;
     while (this.arrivalTimes.length < length) this.arrivalTimes.push(now);
   }
 
-  /** `history` with each entry's arrival time, where this host recorded one. */
-  private withArrivalTimes(history: HistoryEntry[]): DebugHistoryEntry[] {
+  /** `history`, whose first entry is action `base`, with each entry's arrival time, where this host recorded one. */
+  private withArrivalTimes(history: HistoryEntry[], base: number): DebugHistoryEntry[] {
     return history.map((entry, index) => {
-      const timestamp = this.arrivalTimes[index];
+      const timestamp = this.arrivalTimes[base - this.arrivalBase + index];
       return timestamp === undefined ? entry : { ...entry, timestamp };
     });
   }
@@ -1243,7 +1266,7 @@ export class SnapshotSessionHost {
     if (isReadOnlyOp(op)) {
       const res = await this.adapters.executeOp(this.snapshot, this.pendingStates.get(seat) ?? null, op);
       if (op.type === 'debugHistory' && res.success && 'actionHistory' in res) {
-        return { ...res, actionHistory: this.withArrivalTimes(res.actionHistory) };
+        return { ...res, actionHistory: this.withArrivalTimes(res.actionHistory, res.actionHistoryBase ?? 0) };
       }
       return res;
     }
@@ -1371,7 +1394,7 @@ export class SnapshotSessionHost {
       }
     }
 
-    if (op.type === 'undo' || op.type === 'debugRewind' || op.type === 'restoreEarlier') this.#forgetReplacedTree();
+    if (replacesPosition(op)) this.#forgetReplacedTree();
 
     await this.apply(res, seat ?? undefined, pending);
     return res;
@@ -1405,10 +1428,11 @@ export class SnapshotSessionHost {
 
   /**
    * Drop what every seat holds against a runner that was just replaced (undo,
-   * rewind, a demo's step back, a rules reload): hints, heatmaps, narration and
-   * half-made selections, which hold element ids from the old game tree. `apply`
-   * drops only the acting seat's selection, so another seat would otherwise stay
-   * mid-chain against a tree that no longer exists. A rules reload that restored
+   * rewind, a tutorial start, a demo's step back, a rules reload): hints,
+   * heatmaps, narration and half-made selections, which hold element ids from
+   * the old game tree. `apply` drops only the acting seat's selection, so
+   * another seat would otherwise stay mid-chain against a tree that no longer
+   * exists. A rules reload that restored
    * the saved tree keeps the selections: the tree they point into is unchanged.
    */
   #forgetReplacedTree({ keepPendingSelections = false } = {}): void {

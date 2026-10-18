@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { Game, Player, Action, actionStep, loop, type GameOptions, type TutorialDefinition } from '../engine/index.js';
+import { Game, Player, Action, actionStep, loop, simultaneousActionStep, PlayerFacingError, type GameOptions, type TutorialDefinition } from '../engine/index.js';
 import type { BotStrategy } from '../bot/types.js';
 import { executeOp, READ_ONLY_OP_TYPES, type GameDefinitionLike, type StateEnvelope } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
@@ -13,6 +13,13 @@ import { buildPlayerState } from './utils.js';
 vi.mock('./utils.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./utils.js')>();
   return { ...actual, buildPlayerState: vi.fn(actual.buildPlayerState) };
+});
+
+// Lets a test run as a deployed host does, where no dev detail travels (#1045).
+const devThrow = vi.hoisted(() => ({ enabled: true }));
+vi.mock('../utils/dev.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/dev.js')>();
+  return { ...actual, isDevThrowEnabled: () => devThrow.enabled };
 });
 
 // ---------------------------------------------------------------------------
@@ -1311,6 +1318,75 @@ describe('executeOp', () => {
       expect(res.suggestedAction).toBe('move');
     });
 
+    /** Seats in `sittingOut` are offered `pick` greyed out by its own `.disabled()` reason (#1133). */
+    class SitOutGame extends Game<SitOutGame, Player> {
+      static sittingOut: number[] = [1];
+      picked: number[] = [];
+      constructor(options: GameOptions) {
+        super(options);
+        this.registerAction(
+          Action.create<SitOutGame>('pick')
+            .disabled((ctx) => (SitOutGame.sittingOut.includes(ctx.player.seat) ? `Seat ${ctx.player.seat} sits this round out.` : false))
+            .chooseFrom('card', { choices: ['ace', 'king'] })
+            .execute((_a, ctx) => { (ctx.game as SitOutGame).picked.push(ctx.player.seat); }),
+        );
+        this.setFlow({
+          root: simultaneousActionStep({
+            actions: ['pick'],
+            playerDone: (ctx, player) => (ctx.game as SitOutGame).picked.includes(player.seat),
+          }),
+        });
+      }
+    }
+
+    it('botSuggest asks the due bot seat that can move, not one offered only disabled actions (#1133)', async () => {
+      SitOutGame.sittingOut = [1];
+      const def: GameDefinitionLike = { gameClass: SitOutGame, gameType: 'sit-out', minPlayers: 2, maxPlayers: 2 };
+      const opts = { playerCount: 2, seed: 'sit-out' };
+      const started = succeeded(await executeOp(def, opts, null, null, { type: 'start' }));
+      const res = succeeded(await executeOp(def, opts, started.snapshot, null, {
+        type: 'botSuggest',
+        seats: [{ seat: 1 }, { seat: 2 }],
+      }));
+
+      expect(res.botStalled).toBeUndefined();
+      expect(res.botPlayer).toBe(2);
+      expect(res.suggestedAction).toBe('pick');
+    });
+
+    it('botSuggest waits quietly when its bot seat has only disabled actions but a human seat can still move (#1133)', async () => {
+      SitOutGame.sittingOut = [1];
+      const def: GameDefinitionLike = { gameClass: SitOutGame, gameType: 'sit-out', minPlayers: 2, maxPlayers: 2 };
+      const opts = { playerCount: 2, seed: 'sit-out' };
+      const started = succeeded(await executeOp(def, opts, null, null, { type: 'start' }));
+      const res = succeeded(await executeOp(def, opts, started.snapshot, null, {
+        type: 'botSuggest',
+        seats: [{ seat: 1 }],
+      }));
+
+      expect(res.botStalled).toBeUndefined();
+      expect(res.botPlayer).toBeUndefined();
+    });
+
+    it('botSuggest reports the first due bot seat stalled, quoting the reasons, when no due seat can move (#1133)', async () => {
+      SitOutGame.sittingOut = [1, 2];
+      const def: GameDefinitionLike = { gameClass: SitOutGame, gameType: 'sit-out', minPlayers: 2, maxPlayers: 2 };
+      const opts = { playerCount: 2, seed: 'sit-out' };
+      const started = succeeded(await executeOp(def, opts, null, null, { type: 'start' }));
+      const res = succeeded(await executeOp(def, opts, started.snapshot, null, {
+        type: 'botSuggest',
+        seats: [{ seat: 2 }],
+      }));
+
+      expect(res.botPlayer).toBeUndefined();
+      expect(res.botStalled).toEqual({
+        seat: 2,
+        reason:
+          'No seat the game is waiting on can move: none has an enabled action or a follow-up. ' +
+          "Refused: player 1's 'pick' (Seat 1 sits this round out); player 2's 'pick' (Seat 2 sits this round out).",
+      });
+    });
+
     it('botSuggest reports the due seat as stalled, with why, when the bot fails while choosing (#29)', async () => {
       const brokenDef: BotSuggestGameDef = {
         ...botSuggestGameDef,
@@ -1742,5 +1818,61 @@ describe('executeOp refuses, never rejects, when an async handler fails', () => 
     expectReadableRefusal(await executeOp(botTwoStepDef, twoStepGameOptions, snapshot, null, {
       type: 'heatmapToggle', seat: 1, visible: true,
     }));
+  });
+});
+
+// #1045: a throw nobody wrote for the caller is refused with a fixed sentence and
+// coded as a crash; its own text travels only in dev, and a PlayerFacingError verbatim.
+describe('executeOp refuses an unexpected throw without passing its text on', () => {
+  const INTERNAL = 'Cannot read properties of null (reading \'id\') at /srv/game/rules.ts:12';
+
+  class CrashingGame extends Game<CrashingGame, Player> {
+    constructor(options: GameOptions) {
+      super(options);
+      throw new Error(INTERNAL);
+    }
+  }
+  class RefusingGame extends Game<RefusingGame, Player> {
+    constructor(options: GameOptions) {
+      super(options);
+      throw new PlayerFacingError('This table needs a board before it can start.');
+    }
+  }
+  const def = (gameClass: GameDefinitionLike['gameClass']): GameDefinitionLike => ({
+    gameClass, gameType: 'crashing', minPlayers: 1, maxPlayers: 4,
+  });
+
+  it('in production, the caller reads only the fixed sentence, coded ENGINE_ERROR', async () => {
+    devThrow.enabled = false;
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const failure = refused(await startGame(def(CrashingGame), simpleGameOptions));
+      expect(failure.error).toBe('The game could not process that request because of an error. Try again, or reload the page.');
+      expect(failure.errorCode).toBe(ErrorCode.ENGINE_ERROR);
+      expect(failure.category).toBe('executor');
+      // The original goes to the server log.
+      expect(errors.mock.calls.flat().some((arg) => arg instanceof Error && arg.message === INTERNAL)).toBe(true);
+    } finally {
+      devThrow.enabled = true;
+      errors.mockRestore();
+    }
+  });
+
+  it('in dev, the thrown text rides after the sentence for the author', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const failure = refused(await startGame(def(CrashingGame), simpleGameOptions));
+    errors.mockRestore();
+    expect(failure.error).toBe(`The game could not process that request because of an error. Try again, or reload the page. (${INTERNAL})`);
+  });
+
+  it('a PlayerFacingError travels verbatim and uncoded', async () => {
+    devThrow.enabled = false;
+    try {
+      const failure = refused(await startGame(def(RefusingGame), simpleGameOptions));
+      expect(failure.error).toBe('This table needs a board before it can start.');
+      expect(failure.errorCode).toBeUndefined();
+    } finally {
+      devThrow.enabled = true;
+    }
   });
 });

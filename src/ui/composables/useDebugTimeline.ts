@@ -29,8 +29,10 @@ export interface DebugTimelineOptions {
 }
 
 export interface DebugTimeline {
-  /** Every action played so far, oldest first. */
+  /** The actions the game keeps, oldest first. */
   actionHistory: Ref<HistoryEntry[]>;
+  /** Which action the first kept one is: the game dropped those before it (#997). */
+  actionHistoryBase: Ref<number>;
   historyLoading: Ref<boolean>;
   historyError: Ref<string | null>;
   /** Reload the history. Ignored while a load is already in flight. */
@@ -93,6 +95,9 @@ export function useDebugTimeline(options: DebugTimelineOptions): DebugTimeline {
   const { bridge, onTimeTravel } = options;
 
   const actionHistory = ref<HistoryEntry[]>([]);
+  const actionHistoryBase = ref(0);
+  // Every index the panel sends counts the dropped actions too.
+  const actionCount = computed(() => actionHistoryBase.value + actionHistory.value.length);
   const historyLoading = ref(false);
   const historyError = ref<string | null>(null);
   const historyLastFetched = ref(0);
@@ -120,9 +125,10 @@ export function useDebugTimeline(options: DebugTimelineOptions): DebugTimeline {
     historyLoading.value = true;
     historyError.value = null;
     try {
-      const entries = await bridge.history();
+      const history = await bridge.history();
       if (!isNewest()) return;
-      actionHistory.value = entries;
+      actionHistory.value = history.actionHistory;
+      actionHistoryBase.value = history.actionHistoryBase;
       historyLastFetched.value = Date.now();
     } catch (e) {
       if (isNewest()) historyError.value = e instanceof Error ? e.message : 'Unknown error';
@@ -179,7 +185,7 @@ export function useDebugTimeline(options: DebugTimelineOptions): DebugTimeline {
   async function selectAction(index: number): Promise<void> {
     // The index one past the end IS the live head, and re-picking the current
     // selection toggles it off. Both mean "stop time travelling".
-    if (index === actionHistory.value.length || selectedActionIndex.value === index) {
+    if (index === actionCount.value || selectedActionIndex.value === index) {
       clearHistoricalState();
       return;
     }
@@ -197,7 +203,7 @@ export function useDebugTimeline(options: DebugTimelineOptions): DebugTimeline {
   }
 
   const pendingRewindDiscardCount = computed(() =>
-    pendingRewindIndex.value === null ? 0 : actionHistory.value.length - pendingRewindIndex.value
+    pendingRewindIndex.value === null ? 0 : actionCount.value - pendingRewindIndex.value
   );
 
   async function confirmRewind(): Promise<void> {
@@ -222,6 +228,7 @@ export function useDebugTimeline(options: DebugTimelineOptions): DebugTimeline {
 
   return {
     actionHistory,
+    actionHistoryBase,
     historyLoading,
     historyError,
     fetchHistory,

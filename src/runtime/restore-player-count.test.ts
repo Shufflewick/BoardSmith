@@ -4,6 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { Game, Player, actionStep, type GameOptions } from '../engine/index.js';
+import { snapshotTree } from '../engine/utils/index.js';
 import { GameRunner } from './index.js';
 
 class SeatGame extends Game<SeatGame, Player> {
@@ -20,9 +21,10 @@ describe('restoring a state whose players do not match the player count (#959)',
     const live = new GameRunner({ GameClass: SeatGame, gameType: 'seats', gameOptions: { playerCount: 3, seed: 'seats' } });
     live.start();
     const snapshot = live.getSnapshot();
-    const aPlayer = snapshot.state.children!.findIndex(isPlayerJson);
+    const tree = snapshotTree(snapshot);
+    const aPlayer = tree.children!.findIndex(isPlayerJson);
     expect(aPlayer).toBeGreaterThanOrEqual(0);
-    snapshot.state.children!.splice(aPlayer, 1);
+    tree.children!.splice(aPlayer, 1);
 
     expect(() => GameRunner.fromSnapshot(snapshot, SeatGame)).toThrow(
       /holds 2 players, but this game was built for 3/,
