@@ -69,6 +69,8 @@ export interface LobbySeat {
   name: string;
   color?: string;
   connected: boolean;
+  /** A bot plays this seat now: the live roster, not the startup `--bot` list (#887). */
+  bot: boolean;
 }
 
 export type LobbyPhase = 'lobby' | 'playing';
@@ -385,7 +387,7 @@ interface DevPersistenceOptions {
    * without a dev server. Saving is the one thing that genuinely belongs to
    * whoever owns the file.
    */
-  onChange?: () => void;
+  onChange?: () => Promise<void>;
 }
 
 /**
@@ -447,6 +449,8 @@ export class MultiplayerHost {
    * host keeps its own copy, which `announceRoster` brings up to date.
    */
   private readonly botSeats: Array<{ seat: number; level?: string }> = [];
+  /** The bot roster the pages' lobby last showed, as `announceRoster` compares it. */
+  private lobbyRoster = '';
   /** The client (if any) that follows the active seat — it controls whichever
    *  seat is currently awaiting input, and bot is paused while it is set. */
   private followerClientId: string | null = null;
@@ -675,6 +679,11 @@ export class MultiplayerHost {
   private announceRoster(): void {
     if (this.phase !== 'playing' || !this.session) return;
     this.session.host.setBotSeats(this.botSeats);
+    // The lobby shows the roster too, so a change the message did not broadcast still reaches the pages (#887).
+    const roster = this.botSeats.map((b) => b.seat).sort().join();
+    if (roster === this.lobbyRoster) return;
+    this.lobbyRoster = roster;
+    this.broadcastLobby();
   }
 
   private async dispatch(clientId: string, msg: ClientInbound): Promise<void> {
@@ -944,6 +953,11 @@ export class MultiplayerHost {
     }
     if (info.clientId && info.clientId !== clientId && info.connected) {
       this.send(clientId, { type: 'error', message: `Seat ${msg.seat} is taken.` });
+      return;
+    }
+    // The page's frame is unchecked JSON, and a refusal here leaves no seat half assigned (#887).
+    if (![msg.name, msg.color].every((text) => text === undefined || typeof text === 'string')) {
+      this.send(clientId, { type: 'error', message: `Seat ${msg.seat} was not taken: its name and color must be text.` });
       return;
     }
     this.assignSeat(clientId, msg.seat, msg.name, msg.color);
@@ -1238,7 +1252,7 @@ export class MultiplayerHost {
    * would watch a game finish locally and then watch the identical move be
    * refused in production.
    */
-  private commitAtGameOver<R extends OpResult>(result: R): R | OpFailure {
+  private async commitAtGameOver<R extends OpResult>(result: R): Promise<R | OpFailure> {
     const persistence = this.opts.persistence;
     const ended = endedGame(result);
     if (!persistence || !ended) return result;
@@ -1249,7 +1263,7 @@ export class MultiplayerHost {
       now: persistence.now ?? Date.now,
     });
     if (!outcome.ok) return refusedCommit(outcome.reason);
-    if (outcome.written > 0) persistence.onChange?.();
+    if (outcome.written > 0) await persistence.onChange?.();
     return result;
   }
 
@@ -1853,6 +1867,7 @@ export class MultiplayerHost {
         ...seat,
         held: clientId !== null,
         mine: clientId === recipient,
+        bot: this.phase === 'playing' && this.botSeats.some((b) => b.seat === seat.seat),
       })),
       minPlayers: this.opts.minPlayers,
       playerCount: this.opts.playerCount,

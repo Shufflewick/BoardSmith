@@ -567,13 +567,13 @@ function buildDevConfig(args: {
  * That is the platform's own opt-in rule, kept here so a local run and a
  * published one differ in nothing.
  */
-function openDevStore(
+async function openDevStore(
   gameDefinition: Pick<GameDefinition, 'persistence'>,
   storeFile: string,
-): { store: PersistenceStore; save: () => void } | null {
+): Promise<{ store: PersistenceStore; save: () => Promise<void> } | null> {
   if (gameDefinition.persistence !== true) return null;
   const devStore = loadDevStore(storeFile);
-  devStore.save();
+  await devStore.save();
   return devStore;
 }
 
@@ -911,7 +911,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
     const clients = new Map<string, WebSocket>();
 
     const storeFile = devStorePath(cwd);
-    const devStore = openDevStore(gameDefinition, storeFile);
+    const devStore = await openDevStore(gameDefinition, storeFile);
 
     const mpHost = new MultiplayerHost({
       playerCount: effectivePlayerCount,
