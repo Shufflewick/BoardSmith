@@ -15,7 +15,6 @@ import {
   isSeatExpiry,
   type ActionResult,
   type FlowState,
-  type FlowDebugInfo,
   type ActionCheckpoint,
   type ActionCheckpointWindow,
   type PendingActionState,
@@ -971,15 +970,6 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   getFlowState(): FlowState | undefined {
     return this.game.getFlowState() ?? undefined;
-  }
-
-  /**
-   * Get a structured, human- and machine-readable description of the current
-   * flow position. Thin passthrough mirroring the `getFlowState()` passthrough
-   * above — never throws, never returns `undefined` (see `Game.getFlowDebugInfo()`).
-   */
-  getFlowDebugInfo(): FlowDebugInfo {
-    return this.game.getFlowDebugInfo();
   }
 
   /**

@@ -159,7 +159,7 @@ export class WeightEvolver {
     bundle.weightedBot(gameClass, this.gameType, bot, objectives);
 
     // Benchmark initial objectives to get baseline
-    this.reportProgress({
+    this.config.onProgress?.({
       iteration: 0,
       totalIterations: this.config.evolutionGenerations ?? 5,
       gamesCompleted: 0,
@@ -199,7 +199,7 @@ export class WeightEvolver {
   ): Promise<{ objectives: ObjectiveWeight[]; confirmation?: WeightConfirmation }> {
     if (candidate === original) return { objectives: original };
     const generations = this.config.evolutionGenerations ?? 5;
-    this.reportProgress({
+    this.config.onProgress?.({
       iteration: generations,
       totalIterations: generations,
       gamesCompleted: 0,
@@ -253,7 +253,7 @@ export class WeightEvolver {
     let bestFitness = initialFitness;
 
     for (let gen = 1; gen <= generations; gen++) {
-      this.reportProgress({
+      this.config.onProgress?.({
         iteration: gen,
         totalIterations: generations,
         gamesCompleted: 0,
@@ -270,7 +270,7 @@ export class WeightEvolver {
       // Combine parents + offspring
       const population = [...parents, ...offspring];
 
-      this.reportProgress({
+      this.config.onProgress?.({
         iteration: gen,
         totalIterations: generations,
         gamesCompleted: 0,
@@ -293,7 +293,7 @@ export class WeightEvolver {
         },
         { workerCount: this.config.workerCount },
         (completed, total) => {
-          this.reportProgress({
+          this.config.onProgress?.({
             iteration: gen,
             totalIterations: generations,
             gamesCompleted: completed,
@@ -319,7 +319,7 @@ export class WeightEvolver {
       // Decay sigma for finer search
       sigma *= 0.9;
 
-      this.reportProgress({
+      this.config.onProgress?.({
         iteration: gen,
         totalIterations: generations,
         gamesCompleted: population.length,
@@ -343,14 +343,5 @@ export class WeightEvolver {
     return this.config.seed === undefined
       ? { seed, timeout: this.config.gameTimeout ?? 30000 }
       : { seed, reproducible: true };
-  }
-
-  /**
-   * Report progress to callback.
-   */
-  private reportProgress(progress: TrainingProgress): void {
-    if (this.config.onProgress) {
-      this.config.onProgress(progress);
-    }
   }
 }
