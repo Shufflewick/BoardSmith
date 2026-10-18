@@ -903,8 +903,8 @@ export class ResidentWorld {
                 "Send it again in a moment -- it will run exactly once when the world is level."
             : `This world is waiting on its scheduled event "${this.#refused.action}", which could ` +
                 "not run and is still queued, and its rules say a command must not overtake it. " +
-                "Nothing was changed. The world keeps retrying that event; your command can run, " +
-                "exactly once, after it goes through.",
+                "Nothing was changed and your command was not kept. The world keeps retrying that " +
+                "event; send your command again once it has gone through, and it will run exactly once.",
         );
       }
       // THE CATCH-UP CAN END THE WORLD, and then this command is refused like

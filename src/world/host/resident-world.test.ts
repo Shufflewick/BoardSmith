@@ -174,6 +174,8 @@ describe('#793: ResidentWorld', () => {
       .catch((error: unknown) => error);
     expect(refusal).toMatchObject({ code: 'world-catching-up', message: expect.stringContaining('"boom"') });
     expect((refusal as Error).message).not.toMatch(/in a moment/);
+    // Nothing is kept, so the player must be told to resend.
+    expect((refusal as Error).message).toMatch(/send your command again/);
     // The game's own error text is for the author's notice, not the player.
     expect((refusal as Error).message).not.toContain('refused on purpose');
   });
