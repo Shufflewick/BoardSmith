@@ -41,6 +41,10 @@ class CrashGame extends Game<CrashGame, Player> {
         .chooseFrom('first', { choices: ['a'], onSelect: crash })
         .chooseFrom('second', { choices: ['b'] })
         .execute(() => {}),
+      Action.create('mark').execute(() => ({ success: true, data: { marked: 7 } })),
+      Action.create('again')
+        .chooseFrom('n', { choices: (ctx) => [(ctx.game.getLastActionResult()?.data?.marked as number | undefined) ?? 0] })
+        .execute(() => {}),
       Action.create('gather')
         .chooseFrom('items', { choices: ['a', 'done'], repeat: { onEach: () => { move('one'); crash(); }, until: () => false } })
         .execute(() => {}),
@@ -49,7 +53,7 @@ class CrashGame extends Game<CrashGame, Player> {
       root: loop({
         maxIterations: 5,
         do: sequence(
-          actionStep({ player: (ctx) => ctx.game.getPlayer(1)!, actions: ['crash', 'halt', 'moveThenThrow', 'throwFirst', 'gather'] }),
+          actionStep({ player: (ctx) => ctx.game.getPlayer(1)!, actions: ['crash', 'halt', 'moveThenThrow', 'throwFirst', 'gather', 'mark', 'again'] }),
           execute((ctx) => { if ((ctx.game as CrashGame).haltAfter) crash(); }),
         ),
       }),
@@ -57,8 +61,13 @@ class CrashGame extends Game<CrashGame, Player> {
   }
 }
 
-function setup() {
-  const runner = new GameRunner({ GameClass: CrashGame, gameType: 'crash', gameOptions: { playerCount: 1, seed: 'crash' } });
+function setup(checkpoints = true) {
+  const runner = new GameRunner({
+    GameClass: CrashGame,
+    gameType: 'crash',
+    gameOptions: { playerCount: 1, seed: 'crash' },
+    checkpoints: { enabled: checkpoints },
+  });
   runner.start();
   return { runner, manager: new PendingActionManager(runner, 1), game: runner.game };
 }
@@ -108,5 +117,18 @@ describe('crash and halt coding across routes', () => {
     expect(where(game)).toEqual([]);
     expect(result).toMatchObject({ success: false, errorCode: ErrorCode.ENGINE_ERROR });
     expect(runner.actionHistory).toHaveLength(0);
+  });
+
+  it("lets a move read the last move's result while it is checked, as it was offered (#1143)", () => {
+    const { runner } = setup();
+    expect(runner.performAction('mark', 1, {}).success).toBe(true);
+    expect(runner.performAction('again', 1, { n: 7 }).success).toBe(true);
+  });
+
+  it('does not code a later refusal as a crash after a crash it did not roll back (#1143)', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { runner } = setup(false);
+    expect(runner.performAction('crash', 1, { x: 'a' }).errorCode).toBe(ErrorCode.ENGINE_ERROR);
+    expect(runner.performAction('nope', 1, {}).errorCode).toBe(ErrorCode.ACTION_EXECUTION_ERROR);
   });
 });

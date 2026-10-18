@@ -723,6 +723,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     const history = this.historyRecorder(actionName, playerObj, args, checkedOnCopy.entry);
 
     this.ensureHeadCheckpoint();
+    // A move refused before any action ran leaves the last move's result in place, so only a new one is this move's.
+    const earlier = this.game.getLastActionResult();
 
     // Execute through flow (pass player index for simultaneous actions)
     let flowState: FlowState;
@@ -755,7 +757,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // Check if the action failed (flow state contains error)
     if (flowState.actionError) {
       // Read before the rollback, which restores a flow with no last action.
-      const failed = this.game.getLastActionResult();
+      const last = this.game.getLastActionResult();
+      const failed = last === earlier ? undefined : last;
       // #44: a clean refusal mutated nothing, but a THROW out of execute(), or
       // a repeating selection refused after onEach ran for some picks (#325),
       // may have applied part of its changes before it stopped — leaving the tree

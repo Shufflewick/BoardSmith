@@ -30,8 +30,13 @@ afterEach(() => {
   devMode.override = null;
 });
 
-function start<G extends Game>(GameClass: new (options: GameOptions) => G, playerCount = 2): GameRunner<G> {
-  const runner = new GameRunner<G>({ GameClass, gameType: 'bs631', gameOptions: { playerCount, seed: 'bs631' } });
+function start<G extends Game>(GameClass: new (options: GameOptions) => G, playerCount = 2, checkpoints = true): GameRunner<G> {
+  const runner = new GameRunner<G>({
+    GameClass,
+    gameType: 'bs631',
+    gameOptions: { playerCount, seed: 'bs631' },
+    checkpoints: { enabled: checkpoints },
+  });
   runner.start();
   return runner;
 }
@@ -304,6 +309,15 @@ describe('every change to the game is seen by the next question', () => {
       'onExitPhase:true',
       'onEnter:true',
     ]);
+  });
+
+  it("an onCancel run while a throwing onSelect aborts sees its own change, where nothing rolls it back", () => {
+    devMode.override = false;
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const runner = start(ProbeGame, 1, false);
+    expect(runner.performAction('risky', 1, { a: 1, b: 1 }).success).toBe(false);
+    log.mockRestore();
+    expect(runner.game.probes.at(-1)).toBe('onCancel:true');
   });
 
   it('an action run outside the flow', () => {
