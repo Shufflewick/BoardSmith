@@ -147,8 +147,9 @@ const props = defineProps<{
   /**
    * True while the shell's BoardErrorBoundary shows its message in place of the
    * board (#1153): there is no board to choose on, so the panel hands no pick to it.
+   * Optional because games mount the panel in their own tests; both shells always pass it.
    */
-  boardFailed: boolean;
+  boardFailed?: boolean;
 }>();
 
 const emit = defineEmits<{

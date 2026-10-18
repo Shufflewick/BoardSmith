@@ -56,7 +56,6 @@ export function panelsOver(actions: EnrichedActionMetadata[]) {
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
       attachTo: document.body,
       props: {
-        boardFailed: false,
         availableActions: availableActions.value,
         actionMetadata: metadata,
         isMyTurn: true,

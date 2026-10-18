@@ -122,7 +122,6 @@ function mountHarness(): Harness {
       return () =>
         h('div', [
           h(ActionPanel, {
-            boardFailed: false,
             availableActions: AVAILABLE,
             actionMetadata: METADATA,
             isMyTurn: true,

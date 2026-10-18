@@ -63,7 +63,6 @@ function mountPanel(state: PlayerGameState) {
     global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: stubActionController() } },
     attachTo: document.body,
     props: {
-      boardFailed: false,
       availableActions: state.availableActions ?? [],
       actionMetadata: state.actionMetadata,
       isMyTurn: state.isMyTurn,

@@ -94,7 +94,6 @@ async function table(): Promise<Table> {
   const Host = defineComponent({
     setup: () => () =>
       h(ActionPanel, {
-        boardFailed: false,
         availableActions: seatState.value.availableActions ?? [],
         actionMetadata: wiring.actionMetadata.value,
         isMyTurn: true,
@@ -280,7 +279,6 @@ async function labelsTable(): Promise<Table> {
   const Host = defineComponent({
     setup: () => () =>
       h(ActionPanel, {
-        boardFailed: false,
         availableActions: seatState.value.availableActions ?? [],
         actionMetadata: wiring.actionMetadata.value,
         isMyTurn: true,

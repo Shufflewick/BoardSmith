@@ -130,7 +130,6 @@ describe('ActionPanel interaction tests', () => {
         provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller },
       },
       props: {
-        boardFailed: false,
         availableActions: ['twoStepMove'],
         isMyTurn: true,
       },
@@ -199,7 +198,7 @@ describe('ActionPanel interaction tests', () => {
 
     const wrapper = mount(ActionPanel, {
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
-      props: { boardFailed: false, availableActions: ['twoStepMove'], isMyTurn: true },
+      props: { availableActions: ['twoStepMove'], isMyTurn: true },
     });
 
     expect(controller.currentPick.value?.name).toBe('destination');
@@ -261,7 +260,7 @@ describe('ActionPanel interaction tests', () => {
 
     const wrapper = mount(ActionPanel, {
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
-      props: { boardFailed: false, availableActions: ['twoStepMove'], isMyTurn: true },
+      props: { availableActions: ['twoStepMove'], isMyTurn: true },
     });
 
     expect(controller.currentPick.value?.name).toBe('destination');
@@ -320,7 +319,6 @@ describe('ActionPanel interaction tests', () => {
         provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller },
       },
       props: {
-        boardFailed: false,
         availableActions: ['notationChoice'],
         isMyTurn: true,
       },

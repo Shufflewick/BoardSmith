@@ -225,7 +225,7 @@ describe('ActionPanel UIX-01 — no direct toast on rejected actions (GameShell 
 
     const wrapper = mount(ActionPanel, {
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
-      props: { boardFailed: false, availableActions: [], isMyTurn: true },
+      props: { availableActions: [], isMyTurn: true },
     });
 
     // Click the choice button to trigger setSelectionValue → fill()
@@ -251,7 +251,6 @@ describe('ActionPanel UIX-01 — no direct toast on rejected actions (GameShell 
     const wrapper = mount(ActionPanel, {
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
       props: {
-        boardFailed: false,
         availableActions: ['testAction'],
         isMyTurn: true,
       },
@@ -275,7 +274,6 @@ describe('ActionPanel UIX-01 — no direct toast on rejected actions (GameShell 
     const wrapper = mount(ActionPanel, {
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
       props: {
-        boardFailed: false,
         availableActions: ['testAction'],
         isMyTurn: true,
       },
@@ -298,7 +296,7 @@ function mountWithAnOpenAction() {
   const controller = stubActionController({ currentAction: ref('testAction') });
   return mount(ActionPanel, {
     global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
-    props: { boardFailed: false, availableActions: [], isMyTurn: true },
+    props: { availableActions: [], isMyTurn: true },
   });
 }
 
@@ -337,7 +335,6 @@ function mountWithHelp(opts: {
       stubs: { Teleport: true },
     },
     props: {
-      boardFailed: false,
       availableActions: opts.actions,
       actionMetadata: opts.actionMetadata,
       isMyTurn: true,
@@ -409,7 +406,6 @@ describe('ActionPanel 108-02 — ActionHelpPopover affordance visibility', () =>
         stubs: { Teleport: true },
       },
       props: {
-        boardFailed: false,
         availableActions: ['attack'],
         actionMetadata: {
           attack: { name: 'attack', prompt: 'Attack', help: 'Strike an adjacent enemy.', selections: [] },
@@ -481,7 +477,6 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
     const wrapper = mount(ActionPanel, {
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller }, stubs: { Teleport: true } },
       props: {
-        boardFailed: false,
         availableActions: ['build'],
         actionMetadata: {
           build: {
@@ -520,7 +515,6 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
     const wrapper = mount(ActionPanel, {
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller }, stubs: { Teleport: true } },
       props: {
-        boardFailed: false,
         availableActions: ['build'],
         actionMetadata: { build: { name: 'build', prompt: 'Build', selections: [] } },
         isMyTurn: true,
@@ -544,7 +538,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
   it('#474: does not mark the panel as submitting while nothing is in flight', () => {
     const wrapper = mount(ActionPanel, {
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: stubActionController() }, stubs: { Teleport: true } },
-      props: { boardFailed: false, availableActions: ['build'], actionMetadata: { build: { name: 'build', prompt: 'Build', selections: [] } }, isMyTurn: true },
+      props: { availableActions: ['build'], actionMetadata: { build: { name: 'build', prompt: 'Build', selections: [] } }, isMyTurn: true },
     });
     expect(wrapper.find('.action-panel-root').attributes('data-bs-submitting')).toBeUndefined();
     wrapper.unmount();
@@ -555,7 +549,6 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
     const wrapper = mount(ActionPanel, {
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller }, stubs: { Teleport: true } },
       props: {
-        boardFailed: false,
         availableActions: ['build'],
         actionMetadata: { build: { name: 'build', prompt: 'Build', selections: [] } },
         isMyTurn: true,
@@ -581,7 +574,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
     });
     const wrapper = mount(ActionPanel, {
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller }, stubs: { Teleport: true } },
-      props: { boardFailed: false, availableActions: ['paint'], isMyTurn: true },
+      props: { availableActions: ['paint'], isMyTurn: true },
     });
 
     const buttons = wrapper.findAll('.choice-btn');
@@ -618,7 +611,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
     });
     const wrapper = mount(ActionPanel, {
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller }, stubs: { Teleport: true } },
-      props: { boardFailed: false, availableActions: ['discard'], isMyTurn: true },
+      props: { availableActions: ['discard'], isMyTurn: true },
     });
 
     const options = wrapper.findAll('.multi-select-choice');
@@ -650,7 +643,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
     });
     const wrapper = mount(ActionPanel, {
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller }, stubs: { Teleport: true } },
-      props: { boardFailed: false, availableActions: ['discard'], isMyTurn: true },
+      props: { availableActions: ['discard'], isMyTurn: true },
     });
 
     const done = wrapper.find('.done-button');
@@ -665,7 +658,7 @@ function mountWithBoard(controller: Record<string, unknown>, bi: BoardInteractio
   const Host = defineComponent({
     setup() {
       provideBoardInteraction(bi);
-      return () => h(ActionPanel, { boardFailed: false, availableActions: [], isMyTurn: true });
+      return () => h(ActionPanel, { availableActions: [], isMyTurn: true });
     },
   });
   return mount(Host, {

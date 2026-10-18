@@ -22,7 +22,6 @@ function mountPanel(deadline: TurnDeadline | null | 'unprovided', isMyTurn = tru
   return mountOver(
     stubActionController({ showActionPanel: ref(isMyTurn) }),
     {
-      boardFailed: false,
       availableActions: ['pass'],
       actionMetadata: { pass: { name: 'pass', prompt: 'Pass', selections: [] } },
       isMyTurn,

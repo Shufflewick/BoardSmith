@@ -77,7 +77,7 @@ function mountTable(fetchPickChoices: ReturnType<typeof dealer>['fetchPickChoice
         isViewingHistory: ref(false),
         runnerIdentity,
       });
-      return () => h(ActionPanel, { boardFailed: false, availableActions: ACTIONS, actionMetadata: METADATA, isMyTurn: true });
+      return () => h(ActionPanel, { availableActions: ACTIONS, actionMetadata: METADATA, isMyTurn: true });
     },
   });
 

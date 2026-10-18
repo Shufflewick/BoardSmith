@@ -49,7 +49,7 @@ function mountRepair(
   });
   const wrapper = mountPanel(
     controller,
-    { boardFailed: false, availableActions: ['repair'], isMyTurn: true },
+    { availableActions: ['repair'], isMyTurn: true },
     mountOptions,
   );
   return { wrapper, controller };

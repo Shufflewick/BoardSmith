@@ -60,7 +60,6 @@ function mountConfirmPanel(opts: { completed: boolean; sendAction: ReturnType<ty
   const wrapper = mount(ActionPanel, {
     global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
     props: {
-      boardFailed: false,
       availableActions: ['confirm'],
       isMyTurn: true,
       completed: opts.completed,
@@ -135,7 +134,7 @@ describe('ActionPanel executeAction — commit-leak gate on own completed flag (
 
     const wrapper = mount(ActionPanel, {
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
-      props: { boardFailed: false, availableActions: ['confirm'], isMyTurn: true, completed: false },
+      props: { availableActions: ['confirm'], isMyTurn: true, completed: false },
     });
 
     // Confirm the pre-flip state genuinely can execute (sanity, not yet clicked).
