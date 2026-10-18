@@ -138,6 +138,15 @@ const NOT_A_PATH =
   'which is not a file path (a path ends in a name and an extension, like `src/rules/game.ts`). ' +
   'Put notes about a file in brackets or after a dash.';
 const A_PATTERN = 'a pattern. Patterns are not expanded: list each file in its own backticks.';
+const DECOMPOSED =
+  'whose accented letters are written in decomposed form, so it never matches the file name git reports. ' +
+  'Retype the path with composed letters (one character per accented letter, like `r\u00e8gles/a.ts`).';
+
+/** A path read exactly as written must be in composed form (NFC), the form git reports names in (#1117). */
+function composed(path: string, refuse: Refuse): string {
+  if (path !== path.normalize('NFC')) throw refuse(path, DECOMPOSED);
+  return path;
+}
 
 /** One word of a cell's path list: the path it names, if any, or a refusal. */
 function wordPath(word: string, spans: string[], refuse: Refuse): string | undefined {
@@ -146,14 +155,14 @@ function wordPath(word: string, spans: string[], refuse: Refuse): string | undef
     const span = spans[Number(mark[1])]!;
     if (PATTERN.test(span)) throw refuse(span, A_PATTERN);
     if (!ENDS_IN_EXTENSION.test(span)) throw refuse(span, NOT_A_PATH);
-    return span;
+    return composed(span, refuse);
   }
   const bare = bareWord(word);
   const found = bare.match(PATH_TOKEN);
   if (found === null) return undefined;
   if (PATTERN.test(bare)) throw refuse(bare, A_PATTERN);
   if (found.length > 1 || found[0] !== bare) throw refuse(bare, WRAP(bare));
-  return bare;
+  return composed(bare, refuse);
 }
 
 /**

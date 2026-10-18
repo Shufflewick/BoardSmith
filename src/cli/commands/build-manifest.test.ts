@@ -130,10 +130,20 @@ describe('parseBuildManifest', () => {
   });
 
   it('reads a path with non-ASCII letters whole (#1113)', () => {
-    // 'e\u0300' is the decomposed form a macOS file name can arrive in.
-    const chunk = tableChunk('| règles/a.ts, `re\u0300gles/b.ts` | written |');
-    expect(parseBuildManifest(chunk).entries.map((e) => e.path)).toEqual(['règles/a.ts', 're\u0300gles/b.ts']);
+    const chunk = tableChunk('| règles/a.ts, `règles/b.ts` | written |');
+    expect(parseBuildManifest(chunk).entries.map((e) => e.path)).toEqual(['règles/a.ts', 'règles/b.ts']);
   });
+
+  // 'è' is the decomposed form some macOS tools write; git names the file 'règles'.
+  it.each(['règles/a.ts', '`règles/a.ts`'])(
+    'refuses the decomposed accent in %s rather than miss the file git names (#1117)',
+    (cell) => {
+      const chunk = tableChunk(`| ${cell} | written |`);
+      expect(() => parseBuildManifest(chunk)).toThrow(
+        `Build Manifest row 1: the File cell "${cell}" has "règles/a.ts", whose accented letters are written in decomposed form, so it never matches the file name git reports. Retype the path with composed letters (one character per accented letter, like \`règles/a.ts\`).`,
+      );
+    },
+  );
 
   it('reads a backticked path whole, spaces and symbols included (#1116)', () => {
     const chunk = tableChunk('| `my file.ts`, `@scope/x.ts` (edit), `~x.ts` | written |');

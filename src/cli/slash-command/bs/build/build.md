@@ -160,8 +160,9 @@ Write each path in the File cell in backticks, one per path, comma-separated
 dash. Backticks inside a note are fine: nothing in a note is read as a path. A backticked path is
 read whole, exactly as written, so a path with a space or a symbol (`` `my file.ts` ``,
 `` `@scope/x.ts` ``) needs them. List every file on its own: a pattern (`` `tests/*.test.ts` ``) is
-not expanded. A path the commands cannot read whole, a pattern, or a backticked name that is not a
-file path is refused with a message naming the cell, never read in part.
+not expanded. Type accented letters in composed form (one character each, as git names files).
+A path the commands cannot read whole, a pattern, a backticked name that is not a file path, or a
+path with a decomposed accent is refused with a message naming the cell, never read in part.
 
 ## Test Script — Rewritten in Interaction Terms
 
