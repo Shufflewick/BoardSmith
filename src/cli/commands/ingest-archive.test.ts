@@ -101,6 +101,27 @@ describe('ingest-archive — archiving', () => {
     );
   });
 
+  it('refuses, naming the file, when the archived copy cannot be read, and leaves it as it was (#1110)', async () => {
+    const project = await run();
+    const archived = join(project, DESIGN_DIR, 'rulebook', 'source', 'src-rules.pdf');
+    await fs.writeFile(archived, 'different bytes');
+    await fs.chmod(archived, 0o200);
+    try {
+      await expect(ingestArchiveCommand(sourcePath, { project, json: true })).rejects.toThrow(`Could not read ${archived} (EACCES)`);
+    } finally {
+      await fs.chmod(archived, 0o644);
+    }
+    expect(await fs.readFile(archived, 'utf-8')).toBe('different bytes');
+  });
+
+  it('refuses, naming the file, when INDEX.md cannot be read, before archiving anything (#1110)', async () => {
+    const project = join(dir, 'game');
+    const index = join(project, DESIGN_DIR, 'rulebook', 'INDEX.md');
+    await fs.mkdir(index, { recursive: true });
+    await expect(ingestArchiveCommand(sourcePath, { project, json: true })).rejects.toThrow(`Could not read ${index} (EISDIR)`);
+    await expect(fs.readdir(join(project, DESIGN_DIR, 'rulebook'))).resolves.toEqual(['INDEX.md']);
+  });
+
   it('is idempotent when the archived copy is byte-identical', async () => {
     const project = await run();
     await expect(

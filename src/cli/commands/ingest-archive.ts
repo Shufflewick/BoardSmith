@@ -3,6 +3,7 @@ import {
 } from '../lib/project-paths.js';
 import { resolveUserPath } from '../lib/user-path.js';
 import { sha256Hex } from '../lib/hash.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 import { promises as fs } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { styleText } from 'node:util';
@@ -578,12 +579,8 @@ async function readSourceToArchive(
  * already in place is fine (a re-run); a different one is refused before anything is written.
  */
 async function assertArchiveSlotFree(source: SourceToArchive): Promise<void> {
-  let existing: Buffer;
-  try {
-    existing = await fs.readFile(source.archivePath);
-  } catch {
-    return; // Not archived yet -- the normal path.
-  }
+  const existing = await readIfExists(source.archivePath, (p) => fs.readFile(p));
+  if (existing === undefined) return; // Not archived yet -- the normal path.
   if (sha256Hex(existing) !== sha256Hex(source.bytes)) {
     throw new Error(
       `${source.relArchivePath} already exists in this project and differs from ${source.sourcePath}.\n` +
@@ -621,12 +618,8 @@ async function readAllSources(
     extras.push(await readSourceToArchive(projectDir, path, 'Additional source'));
   }
 
-  let recordedPrimary: string | undefined;
-  try {
-    recordedPrimary = readCanonicalPrimarySource(await fs.readFile(indexPath, 'utf-8'))?.path;
-  } catch {
-    recordedPrimary = undefined; // No INDEX.md yet.
-  }
+  const indexText = await readIfExists(indexPath, (p) => fs.readFile(p, 'utf-8'));
+  const recordedPrimary = indexText === undefined ? undefined : readCanonicalPrimarySource(indexText)?.path;
 
   const claimed = new Map<string, string>([[primary.relArchivePath, primary.sourcePath]]);
   for (const extra of extras) {
@@ -669,18 +662,12 @@ export async function ingestArchiveCommand(
   // designer INDEX.md with a fresh scaffold on ANY throw raised while repairing — a read failure,
   // a transform error, a partial write. The scaffold branch below is now reached ONLY when
   // INDEX.md genuinely does not exist; a repair error propagates as a plain exception instead.
-  let indexExists: boolean;
-  try {
-    await fs.access(indexPath);
-    indexExists = true;
-  } catch {
-    indexExists = false;
-  }
+  const existingText = await readIfExists(indexPath, (p) => fs.readFile(p, 'utf-8'));
 
   let wroteIndex = false;
   let headerBroughtToContract = false;
   let recordedAsAdditionalSource = false;
-  if (!indexExists) {
+  if (existingText === undefined) {
     await fs.mkdir(dirname(indexPath), { recursive: true });
     await fs.writeFile(
       indexPath,
@@ -695,7 +682,6 @@ export async function ingestArchiveCommand(
     wroteIndex = true;
     headerBroughtToContract = true;
   } else {
-    const existingText = await fs.readFile(indexPath, 'utf-8');
     const canonicalPrimary = readCanonicalPrimarySource(existingText);
 
     // A DIFFERENT source is already the canonical primary — this call must NOT silently
