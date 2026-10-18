@@ -868,6 +868,8 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
     expect(wrapper.findAll('.ordered-list-add')).toHaveLength(0);
     // The list is still readable and each entry still removable from the panel.
     expect(wrapper.findAll('.ordered-list-entry')).toHaveLength(2);
+    // #935: notation refs leave the panel's own list empty, so the label comes from the offered choices.
+    expect(wrapper.findAll('.ordered-list-label').map(l => l.text())).toEqual(['Space 3', 'Space 3']);
     expect(wrapper.findAll('.ordered-list-remove')).toHaveLength(2);
     expect(wrapper.find('.done-button').exists()).toBe(true);
   });

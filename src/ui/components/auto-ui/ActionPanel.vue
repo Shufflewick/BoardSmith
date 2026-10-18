@@ -1204,7 +1204,7 @@ function choiceSpokenName(choice: ChoiceWithRefs): string {
 
 /** What one built entry reads as: the label of the button that adds it. */
 function orderedEntryDisplay(value: unknown): string {
-  return labelOfPick(value, filteredChoices.value);
+  return labelOfPick(value, offeredChoices.value);
 }
 
 /** "Added: 2/3", or "Added: 2" when the list has no upper bound. */
