@@ -1410,9 +1410,8 @@ export class ActionExecutor {
     args: Record<string, unknown>,
     options?: PerformOptions,
   ): { pendingState: PendingActionState; applied: boolean } | { error: string; applied: boolean } {
-    // The condition sees no picks, as availability and each step see it; the picks are checked one at a time below (#772).
-    const context = { game: this.game, player, args: this.resolveNonPickArgs(action, args, this.game) };
-    if (!options?.followUp && action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
+    // The condition first, with no picks, as the offer checks it; the picks are checked one at a time below (#772, #1128).
+    if (!options?.followUp && !this.conditionHolds(action, player)) {
       return { error: 'Action is not available', applied: false };
     }
 
