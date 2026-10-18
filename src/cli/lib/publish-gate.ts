@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { gitOutput as git, gitSucceeds } from './git-output.js';
+import { readIfExists } from './read-if-exists.js';
 import { checkoutState, readVerifyResult, verifiedProblem, type VerifyResult } from './verify-result.js';
 
 /**
@@ -39,12 +40,8 @@ const UNUSABLE = {
 
 /** The last publish recorded on this machine, undefined when there is none, or 'unusable' when it is malformed. */
 async function readPublished(projectDir: string): Promise<Published | 'unusable' | undefined> {
-  let text: string;
-  try {
-    text = await fs.readFile(publishedPath(projectDir), 'utf-8');
-  } catch {
-    return undefined;
-  }
+  const text = await readIfExists(publishedPath(projectDir), (p) => fs.readFile(p, 'utf-8'));
+  if (text === undefined) return undefined;
   try {
     const published = JSON.parse(text) as Partial<Published> | null;
     if (typeof published?.commit === 'string' && typeof published.base === 'string') return { commit: published.commit, base: published.base };

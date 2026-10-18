@@ -9,12 +9,25 @@ export async function readIfExists<T>(path: string, read: (path: string) => Prom
   try {
     return await read(path);
   } catch (error) {
-    const { code, message } = error as NodeJS.ErrnoException;
-    if (code === 'ENOENT' || code === 'ENOTDIR') return undefined;
-    throw new Error(`Could not read ${path} (${code ?? message}). Check that you can read it, then run the command again.`, {
-      cause: error,
-    });
+    return absentOrThrow(path, error);
   }
+}
+
+/** {@link readIfExists} for a synchronous `read`. */
+export function readIfExistsSync<T>(path: string, read: (path: string) => T): T | undefined {
+  try {
+    return read(path);
+  } catch (error) {
+    return absentOrThrow(path, error);
+  }
+}
+
+function absentOrThrow(path: string, error: unknown): undefined {
+  const { code, message } = error as NodeJS.ErrnoException;
+  if (code === 'ENOENT' || code === 'ENOTDIR') return undefined;
+  throw new Error(`Could not read ${path} (${code ?? message}). Check that you can read it, then run the command again.`, {
+    cause: error,
+  });
 }
 
 /**

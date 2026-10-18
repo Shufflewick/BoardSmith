@@ -3,7 +3,7 @@
  * The fixtures are in `catalogue-fixture.test-helper.ts`.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { mkdirSync, symlinkSync } from 'node:fs';
+import { mkdirSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { commitAll, git, initRepo, writeFiles } from './verify-result.test-helper.js';
@@ -71,6 +71,35 @@ describe('which games are checked (#591)', () => {
     await makeGame(fx, 'hex');
 
     await expect(checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue })).rejects.toThrow(/not a BoardSmith checkout/);
+  });
+});
+
+describe('a file the catalogue check cannot read is named, never read as missing (#1174)', () => {
+  it("names the tree's package.json when it cannot be read, rather than calling the tree something else", async () => {
+    const fx = fixture();
+    await makeTree(fx.tree);
+    rmSync(join(fx.tree, 'package.json'));
+    mkdirSync(join(fx.tree, 'package.json'));
+    await expect(checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue })).rejects.toThrow(/Could not read .*package\.json \(EISDIR\)/);
+  });
+
+  it("names the tree's install record when it cannot be read, rather than keying the cache as if there were none", async () => {
+    const fx = fixture();
+    await makeTree(fx.tree);
+    await makeGame(fx, 'hex');
+    mkdirSync(join(fx.tree, 'node_modules', '.package-lock.json'), { recursive: true });
+    await expect(checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue })).rejects.toThrow(/Could not read .*node_modules\/\.package-lock\.json \(EISDIR\)/);
+  });
+
+  it("names a link in a game's install it cannot follow, and still passes over one whose folder is gone", async () => {
+    const fx = fixture();
+    await makeTree(fx.tree);
+    const hex = await makeGame(fx, 'hex');
+    symlinkSync(join(hex, 'gone'), join(hex, 'node_modules', 'dangling'));
+    expect(statusOf(await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue }))).toEqual({ hex: 'passed' });
+
+    symlinkSync('loop', join(hex, 'node_modules', 'loop'));
+    await expect(checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue })).rejects.toThrow(`Could not read ${join(hex, 'node_modules', 'loop')} (ELOOP)`);
   });
 });
 

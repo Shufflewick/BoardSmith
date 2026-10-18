@@ -173,11 +173,8 @@ async function packageNames(modules: string): Promise<string[]> {
 
 /** What the install record of the checkout at `dir` says, by content, or `absent`. */
 async function installRecord(dir: string): Promise<string> {
-  try {
-    return sha256Hex(await fs.readFile(join(dir, 'node_modules', '.package-lock.json')));
-  } catch {
-    return 'absent';
-  }
+  const record = await readIfExists(join(dir, 'node_modules', '.package-lock.json'), fs.readFile);
+  return record === undefined ? 'absent' : sha256Hex(record);
 }
 
 /** The catalogue repositories `repo`'s install links a package to, by package name. */
@@ -187,13 +184,9 @@ async function catalogueLinks(repo: CatalogueRepo, byDir: Map<string, CatalogueR
   if (!existsSync(modules)) return links;
   for (const name of await packageNames(modules)) {
     if (name === 'boardsmith') continue;
-    let target: string;
-    try {
-      target = realpathSync(join(modules, name));
-    } catch {
-      continue;
-    }
-    const linked = byDir.get(target);
+    // A link whose folder is gone links nothing.
+    const target = await readIfExists(join(modules, name), (p) => fs.realpath(p));
+    const linked = target === undefined ? undefined : byDir.get(target);
     if (linked !== undefined) links.set(name, linked);
   }
   return links;
@@ -234,11 +227,12 @@ async function requireBoardsmithTree(tree: string): Promise<string> {
   } catch {
     // Not a git checkout; refused below.
   }
+  const text = await readIfExists(join(real, 'package.json'), (p) => fs.readFile(p, 'utf-8'));
   let name: unknown;
   try {
-    name = (JSON.parse(await fs.readFile(join(real, 'package.json'), 'utf-8')) as { name?: unknown }).name;
+    name = text === undefined ? undefined : (JSON.parse(text) as { name?: unknown }).name;
   } catch {
-    name = undefined;
+    // Not JSON: refused below, as a tree with no package.json is.
   }
   if (top !== real || name !== 'boardsmith') {
     throw new Error(`${tree} is not a BoardSmith checkout. Run boardsmith catalogue from the top of a BoardSmith git checkout.`);
@@ -253,6 +247,7 @@ export async function catalogueCachePath(tree: string): Promise<string> {
 }
 
 async function readPasses(path: string): Promise<string[]> {
+  // A cache: any file it cannot read or parse only means every game runs again.
   try {
     const file = JSON.parse(await fs.readFile(path, 'utf-8')) as { format?: number; passes?: unknown };
     if (file.format !== CACHE_FORMAT || !Array.isArray(file.passes)) return [];
