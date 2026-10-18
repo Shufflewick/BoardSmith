@@ -184,8 +184,9 @@ defineSlots<{
   /** The controls menu, at the far left of the action bar. Its contents are the
    *  adapter's: a table's carries undo, hints and the tutorial. */
   controls(): unknown;
-  /** Replace the action panel wholesale. */
-  'action-panel'(): unknown;
+  /** Replace the action panel wholesale. `boardFailed` is true while the board shows
+   *  its error message, so a pick cannot be handed to the board. */
+  'action-panel'(props: { boardFailed: boolean }): unknown;
   /** Whatever the adapter puts after the panel — a table's time-travel banner. */
   'actionbar-extra'(): unknown;
   /**
@@ -592,7 +593,7 @@ const mobileToggleLabel = computed(() => {
                  That focusable list is the keyboard/SR safety net (A11Y C-2):
                  custom UIs whose board isn't keyboard-operable still expose an
                  operable control. -->
-            <slot name="action-panel">
+            <slot name="action-panel" :board-failed="boardFailed">
               <ActionPanel
                 data-testid="bs-action-panel"
                 :available-actions="availableActions"

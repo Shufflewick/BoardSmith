@@ -1641,7 +1641,7 @@ defineExpose({
       </template>
 
       <template #action-panel>
-        <slot name="action-panel">
+        <slot name="action-panel" :board-failed="boardFailed">
           <ActionPanel
             :available-actions="gatedAvailableActions"
             :action-metadata="gatedActionMetadata"

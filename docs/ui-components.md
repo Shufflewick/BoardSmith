@@ -263,6 +263,22 @@ function onSquareClick(squareId: number) {
 </script>
 ```
 
+#### Replacing the action panel
+
+The `action-panel` slot replaces the built-in Action Panel wholesale. It receives
+`boardFailed`: true while the board shows its error message instead of drawing,
+false otherwise. The built-in panel lists a large pick's candidates while it is
+true, rather than handing the pick to a board that is not there; your panel
+should do the same.
+
+```vue
+<GameShell :uis="uis">
+  <template #action-panel="{ boardFailed }">
+    <MyActionPanel :list-every-choice="boardFailed" />
+  </template>
+</GameShell>
+```
+
 ### AutoUI
 
 Automatic UI generation from game state. A production-ready UI for any game — ideal for simple games or as a starting point before investing in a custom UI.
