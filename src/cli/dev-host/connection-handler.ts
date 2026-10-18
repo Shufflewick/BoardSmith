@@ -119,10 +119,7 @@ export function createDevHostConnectionHandler(opts: DevHostConnectionOptions): 
     let loadId = '';
 
     type Inbound = { type?: string; clientId?: unknown; [key: string]: unknown };
-    // Only tear down if THIS socket still owns the clientId mapping. A stale
-    // close from a superseded (reloaded) socket must not disconnect the
-    // reconnected client — that would orphan every future broadcast/response
-    // to its seat (DEF-C).
+    // Only if this socket still owns the id: a reloaded page's stale close must not disconnect its new socket (DEF-C).
     const release = () => {
       if (clientId && clients.get(clientId) === socket) {
         const gone = clientId;
