@@ -129,7 +129,7 @@ describe('history is encoded only for a submission its checks accept (#1128)', (
     const { result } = perform(target, 'buy', { unit: 'Scuttlers', technology: 'Drill' });
 
     expect(result.success).toBe(true);
-    expect(target.actionHistory.map((entry) => entry.args)).toEqual([{ unit: 'Scuttlers', technology: 'Drill' }]);
+    expect(target.actionHistory).toMatchObject([{ name: 'buy', args: { unit: 'Scuttlers', technology: 'Drill' } }]);
     expect(target.game.getPlayer(1)!.owned).toEqual(['Drill']);
   });
 
