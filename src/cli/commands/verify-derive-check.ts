@@ -6,7 +6,7 @@ import {
 import type { Role } from '../lib/agent-roles.js';
 import { promises as fs } from 'node:fs';
 import { readIfExists } from '../lib/read-if-exists.js';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { styleText } from 'node:util';
 import { atomicWriteFile } from './verify-run.js';
 import { withLedgerLock } from '../lib/ledger-lock.js';
@@ -1323,12 +1323,15 @@ export function parseSubagentJsonInput(
  * `design/` — so this resolves against the DESIGN directory and requires the result stay inside
  * `design/rulebook`, BEFORE any read. Mirrors `verify-classify.ts`'s `--live-slice` guard
  * (T-174-14).
+ *
+ * Returns the slice's text with its canonical `rulebook/<file>` path, the ledger key, so
+ * `./rulebook/x.md` and `rulebook/x.md` name one record.
  */
 export async function readSliceArgument(
   projectDir: string,
   slicePath: string,
   command: string,
-): Promise<string> {
+): Promise<{ slicePath: string; text: string }> {
   const rulebookDir = designRulebookDir(projectDir);
   const sliceAbsPath = resolve(designDir(projectDir), slicePath);
   const sliceRelToRulebook = relative(rulebookDir, sliceAbsPath);
@@ -1346,7 +1349,7 @@ export async function readSliceArgument(
   if (text === undefined) {
     throw new Error(`${command} found no --slice-path "${slicePath}" (looked for it at ${sliceAbsPath}).`);
   }
-  return text;
+  return { slicePath: relative(designDir(projectDir), sliceAbsPath).split(sep).join('/'), text };
 }
 
 // -------------------------------------------------------------------------------------------
@@ -1423,9 +1426,7 @@ export async function verifyDeriveRecordCommand(
     throw new Error('verify-derive-record requires --reconciler <file>.');
   }
 
-  const slicePath = options.slicePath;
-
-  const sliceText = await readSliceArgument(projectDir, slicePath, 'verify-derive-record');
+  const { slicePath, text: sliceText } = await readSliceArgument(projectDir, options.slicePath, 'verify-derive-record');
 
   const enumeratorAParsed = await readRequiredJsonFile(options.enumeratorA, '--enumerator-a');
   const enumeratorBParsed = await readRequiredJsonFile(options.enumeratorB, '--enumerator-b');
