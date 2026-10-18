@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, parse } from 'node:path';
+import { readIfExistsSync } from './read-if-exists.js';
 
 /**
  * `boardsmith --version` used to hardcode `.version('0.0.1')` in `src/cli/cli.ts`, so it reported
@@ -32,16 +33,16 @@ function findPackage(): { dir: string; version: string } {
   let dir = startDir;
 
   for (;;) {
-    const candidate = join(dir, 'package.json');
+    const raw = readIfExistsSync(join(dir, 'package.json'), (p) => readFileSync(p, 'utf-8'));
+    let pkg: { name?: unknown; version?: unknown } | undefined;
     try {
-      const raw = readFileSync(candidate, 'utf-8');
-      const pkg = JSON.parse(raw);
-      if (pkg.name === 'boardsmith') {
-        cachedRoot = { dir, version: pkg.version as string };
-        return cachedRoot;
-      }
+      pkg = raw === undefined ? undefined : JSON.parse(raw);
     } catch {
-      // Not found or not parseable at this level — keep walking up.
+      // Not JSON, so not BoardSmith's own: keep walking up.
+    }
+    if (pkg?.name === 'boardsmith') {
+      cachedRoot = { dir, version: pkg.version as string };
+      return cachedRoot;
     }
 
     const parent = dirname(dir);

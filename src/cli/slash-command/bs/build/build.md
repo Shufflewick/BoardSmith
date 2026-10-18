@@ -61,6 +61,18 @@ are mutation-tested (`build/test.md` item 2(c)):
   runs setup, or asserts a constant, is not a pin.
 - A scan that only reads source as text goes in `tests/guards/`, never in a row.
 
+## Light path: `build` writes the exempt row
+
+A `light` chunk (the light path in `state-machine.md` "Step Names") has no
+`spec` step, so there are no failing tests to turn green and no Spec Manifest yet. It adds no new
+game behaviour, so `build` writes its `## Spec Manifest` as the one row
+`| exempt | <reason> | n/a |` (`build/spec.md` "Exemptions"), in the same commit as the code. The
+reason must not be empty: name why there is no new behaviour (an asset swap, a restyle, a copy
+change). The only other rows allowed beside it are `none (regression)` rows (above); an exempt row
+beside any other row, or with no reason, is refused by `boardsmith test-step-check` and
+`boardsmith verify --chunk <slug>`. If the chunk turns out to need new behaviour, stop: that is a
+re-proposal on the full ceremony, not an exempt row.
+
 ## Fresh-Context Exception (one of the two steps allowed to read raw slices)
 
 Every other step in this pipeline restates the Context-Economics Hard Rule

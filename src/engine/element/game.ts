@@ -910,14 +910,6 @@ export function isEngineRootField(key: string): boolean {
 }
 
 /**
- * What the engine has decided about `key`, or `undefined` when the field is not
- * the engine's — see {@link isEngineRootField}.
- */
-export function engineRootFieldAudience(key: string): GameRootFieldAudience | undefined {
-  return Object.hasOwn(GAME_ROOT_FIELD_AUDIENCE, key) ? GAME_ROOT_FIELD_AUDIENCE[key] : undefined;
-}
-
-/**
  * The Player subclass a game declared, recovered from the game type itself.
  *
  * A game already names its player once, in `class MyGame extends Game<MyGame,
@@ -2405,6 +2397,8 @@ export class Game<
    * this step is left alone. The step's `players` filter is re-evaluated and
    * only seats it includes are admitted; a seat already awaited stays even if
    * the filter has since dropped it. No-op when no simultaneous step is open.
+   * Inside a seat's own action (its `execute`, `onSelect` or `onEach`) that
+   * seat is left for the action's settling to decide (#973).
    *
    * When every seat is then done (the step's `allDone`), the step ends: at
    * once when called from outside game code, and when the running action
@@ -3385,13 +3379,17 @@ export class Game<
   }
 
   /**
-   * Point every element the running flow holds at the same element of the
-   * current tree, after `loadSerializedState` rebuilt the tree in place under a
-   * flow that stays where it is (a failed action's rollback, #679). A flow
-   * restored with `restoreFlowState` relinks itself.
+   * Put the running flow back to `state`, after `loadSerializedState` rebuilt
+   * the tree in place to the same moment (a failed action's rollback, #679,
+   * #972): the open step's awaiting seats come back with the elements, and
+   * every element the flow holds is relinked to the rebuilt tree. The flow
+   * engine itself is kept, so its count of irreversible steps carries on.
    */
-  relinkFlowElements(): void {
-    this._flowEngine?.relinkElements();
+  rollBackFlow(state: FlowState): void {
+    const result = this._flowEngine?.restoreFullState(state);
+    if (!result?.success) {
+      throw new Error(`The flow could not be rolled back to its state before the failed action: ${result?.error ?? 'no flow is running'}.`);
+    }
   }
 
   /**

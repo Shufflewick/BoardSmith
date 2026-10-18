@@ -185,12 +185,13 @@ async function opened(budgets: WorldBudgets = worldBudgets()): Promise<{
 }> {
   const clock = frozenClock(OPENED);
   const store = openWorldStore(worldStorePath(dir), budgets);
-  // COUNTED, because in SQLite every read decodes the whole queue (#746).
+  // COUNTED IN ROWS DECODED, because the full read decodes every queued event (#746, #953).
   let queueReads = 0;
   const readQueue = store.pendingEvents.bind(store);
   store.pendingEvents = () => {
-    queueReads += 1;
-    return readQueue();
+    const queue = readQueue();
+    queueReads += queue.length;
+    return queue;
   };
   let minted = 0;
   const world = new ResidentWorld({
@@ -283,14 +284,13 @@ describe('#280: a chronological drain reads the queue between its own checkpoint
     await world.close();
   });
 
-  it('reads the queue once per drained event, not once per question about it (#746)', async () => {
+  it('never decodes the whole queue to drain it (#746, #953)', async () => {
     const { world, marks, queueReads } = await drained('crowd', { count: 5 });
 
     expect(marks).toBe('m0,m1,m2,m3,m4');
-    // One read per event, which picks it and is what its own dispatch's
-    // allowance and planning judge against; then `fireDue`'s own read, the
-    // read that finds nothing left due, and the re-arm's.
-    expect(queueReads).toBe(5 + 3);
+    // Picking, allowance, planning, catch-up and re-arm each ask the store a
+    // targeted question; none of them reads every queued event.
+    expect(queueReads).toBe(0);
     await world.close();
   });
 });

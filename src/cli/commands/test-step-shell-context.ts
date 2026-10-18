@@ -20,8 +20,8 @@ export const ONE_SHELL_CONTEXT_FIELDS = ['gameState', 'dueSeats', 'timeTravelDif
 /** The other keys only one shell provides: the table's announcer and animations, and the world itself. */
 const ONE_SHELL_KEYS = new Set(['ANNOUNCER_KEY', 'ANIMATION_EVENTS_KEY', 'WORLD_CONTEXT_KEY']);
 
-/** The helpers that provide one of those keys. */
-const ONE_SHELL_PROVIDERS = new Set(['provideAnnouncer', 'provideAnimationEvents']);
+/** The helper that provides one of those keys. */
+const ONE_SHELL_PROVIDERS = new Set(['provideAnimationEvents']);
 
 /** The stubs whose `provide` option is checked against the real shell when the test runs. */
 const CHECKED_STUBS = new Set(['renderAsSeat', 'tableShellContext', 'worldShellContext', 'assertNoHiddenInfoLeak']);

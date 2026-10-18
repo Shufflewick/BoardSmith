@@ -6,12 +6,13 @@ import {
 import type { Role } from '../lib/agent-roles.js';
 import { promises as fs } from 'node:fs';
 import { readIfExists } from '../lib/read-if-exists.js';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { styleText } from 'node:util';
 import { atomicWriteFile } from './verify-run.js';
 import { withLedgerLock } from '../lib/ledger-lock.js';
 import { readFencedJsonLedger } from '../lib/fenced-json-ledger.js';
 import { isPresentationLine } from './verify-classify.js';
+import { readLiveSlices } from './rulebook-sources.js';
 import { DERIVED_LINE_RE, annotationLineStartRe } from './derived-line-pattern.js';
 import {
   createEnumeratedFact,
@@ -84,7 +85,7 @@ export const DERIVE_CHECK_ROLES = Object.freeze({
  */
 
 // -------------------------------------------------------------------------------------------
-// readLiveSlices / annotationBody / quoteLinesOnly / enumerateDerivedLines — MOVED wholesale from
+// annotationBody / quoteLinesOnly / enumerateDerivedLines — MOVED wholesale from
 // the retired blind-derivation module (177.1-CONTEXT.md decision 6; the module itself, and every
 // symbol not moved here, was deleted outright in 177.1-07). These are the design-agnostic parts
 // the CHECK-04 closure note already named as carrying forward unchanged: the live-tree read, the
@@ -94,56 +95,6 @@ export const DERIVE_CHECK_ROLES = Object.freeze({
 // was specific to the retired design and no longer exists anywhere in the tree.
 // -------------------------------------------------------------------------------------------
 
-/**
- * Reads the LIVE `rulebook/*.md` tree directly — the same source `verify-classify.ts`'s
- * `computeRunPairs` already reads (excluding `INDEX.md`, the archive manifest, and
- * `00-visual-survey.md`, `ingest-archive.ts`'s presentation-by-design UI-ask handoff artifact).
- * This is the correct "which files are slices" definition for a source-free, run-less check
- * (decision 14): CHECK-04 targets live slices with NO staged prerequisite and never constructs a
- * `.verify/<runId>/` staging path — proven behaviorally by
- * `verifyDeriveCheckCommand`'s own `.verify/` decoy test.
- */
-export async function readLiveSlices(
-  projectDir: string,
-): Promise<{ path: string; text: string }[]> {
-  const rulebookDir = designRulebookDir(projectDir);
-  let names: string[];
-  try {
-    const entries = await fs.readdir(rulebookDir, { withFileTypes: true });
-    names = entries
-      .filter(
-        (e) =>
-          e.isFile() &&
-          e.name.endsWith('.md') &&
-          e.name !== 'INDEX.md' &&
-          e.name !== '00-visual-survey.md',
-      )
-      .map((e) => e.name)
-      .sort();
-  } catch (err) {
-    // (WR-02/WR-10): this is the ONE "no rulebook/" message in the module — only ENOENT means
-    // "does not exist"; any other errno (EACCES, ENOTDIR, ...) is a real, different condition and
-    // must say so, never be reported as a missing directory.
-    const code = (err as NodeJS.ErrnoException).code;
-    if (code === 'ENOENT') {
-      throw new Error(
-        `No rulebook/ directory in ${projectDir}.\n` +
-          `Pass --project <dir> to target the bs-project this check should read.`,
-      );
-    }
-    throw new Error(
-      `rulebook/ exists at ${rulebookDir} but could not be read (${code ?? 'unknown error'}).\n` +
-        `Pass --project <dir> to target the bs-project this check should read, and confirm the ` +
-        `directory is accessible.`,
-    );
-  }
-  return Promise.all(
-    names.map(async (name) => ({
-      path: `rulebook/${name}`,
-      text: await fs.readFile(join(rulebookDir, name), 'utf-8'),
-    })),
-  );
-}
 
 /**
  * Leading blockquote markers, list bullets, and ordered-list markers, repeatable (a line can be
@@ -1323,12 +1274,15 @@ export function parseSubagentJsonInput(
  * `design/` — so this resolves against the DESIGN directory and requires the result stay inside
  * `design/rulebook`, BEFORE any read. Mirrors `verify-classify.ts`'s `--live-slice` guard
  * (T-174-14).
+ *
+ * Returns the slice's text with its canonical `rulebook/<file>` path, the ledger key, so
+ * `./rulebook/x.md` and `rulebook/x.md` name one record.
  */
 export async function readSliceArgument(
   projectDir: string,
   slicePath: string,
   command: string,
-): Promise<string> {
+): Promise<{ slicePath: string; text: string }> {
   const rulebookDir = designRulebookDir(projectDir);
   const sliceAbsPath = resolve(designDir(projectDir), slicePath);
   const sliceRelToRulebook = relative(rulebookDir, sliceAbsPath);
@@ -1346,20 +1300,32 @@ export async function readSliceArgument(
   if (text === undefined) {
     throw new Error(`${command} found no --slice-path "${slicePath}" (looked for it at ${sliceAbsPath}).`);
   }
-  return text;
+  return { slicePath: relative(designDir(projectDir), sliceAbsPath).split(sep).join('/'), text };
 }
 
 // -------------------------------------------------------------------------------------------
 // verifyDeriveRecordCommand — the write surface, retargeted onto reconcileSlice (177.1-03 Task 3)
 // -------------------------------------------------------------------------------------------
 
+/** Reads a subagent's JSON return, refusing one that lacks any of the `lists` it must carry. */
 async function readRequiredJsonFile(
   filePath: string,
   flagLabel: string,
+  lists: readonly string[],
 ): Promise<SubagentJsonParseResult> {
   const text = await readIfExists(filePath, (p) => fs.readFile(p, 'utf-8'));
   if (text === undefined) throw new Error(`verify-derive-record found no ${flagLabel} at "${filePath}".`);
-  return parseSubagentJsonInput(text, flagLabel, filePath);
+  const parsed = parseSubagentJsonInput(text, flagLabel, filePath);
+  const value = parsed.value as Record<string, unknown> | null;
+  for (const list of lists) {
+    if (typeof value !== 'object' || value === null || !Array.isArray(value[list])) {
+      throw new Error(
+        `The ${flagLabel} file "${filePath}" has no "${list}" list.\n` +
+          `Pass the subagent's return unchanged; it must be a JSON object with these lists: "${lists.join('", "')}".`,
+      );
+    }
+  }
+  return parsed;
 }
 
 export interface VerifyDeriveRecordOptions {
@@ -1423,13 +1389,16 @@ export async function verifyDeriveRecordCommand(
     throw new Error('verify-derive-record requires --reconciler <file>.');
   }
 
-  const slicePath = options.slicePath;
+  const { slicePath, text: sliceText } = await readSliceArgument(projectDir, options.slicePath, 'verify-derive-record');
 
-  const sliceText = await readSliceArgument(projectDir, slicePath, 'verify-derive-record');
-
-  const enumeratorAParsed = await readRequiredJsonFile(options.enumeratorA, '--enumerator-a');
-  const enumeratorBParsed = await readRequiredJsonFile(options.enumeratorB, '--enumerator-b');
-  const reconcilerParsed = await readRequiredJsonFile(options.reconciler, '--reconciler');
+  const enumeratorAParsed = await readRequiredJsonFile(options.enumeratorA, '--enumerator-a', ['facts']);
+  const enumeratorBParsed = await readRequiredJsonFile(options.enumeratorB, '--enumerator-b', ['facts']);
+  const reconcilerParsed = await readRequiredJsonFile(options.reconciler, '--reconciler', [
+    'both',
+    'aOnly',
+    'bOnly',
+    'derivedLineProposals',
+  ]);
   const enumeratorA = enumeratorAParsed.value as EnumeratorReturn;
   const enumeratorB = enumeratorBParsed.value as EnumeratorReturn;
   const reconciler = reconcilerParsed.value as ReconcilerReturn;

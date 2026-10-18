@@ -17,18 +17,11 @@
 import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
 import GridBoardRenderer from './GridBoardRenderer.vue';
+import type { GameElement } from '../auto-ui-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Factory helpers
 // ---------------------------------------------------------------------------
-interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
-  childCount?: number;
-}
 
 /**
  * Build a minimal grid element whose resolveGridSize result will be cols×rows.

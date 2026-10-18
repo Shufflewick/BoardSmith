@@ -28,7 +28,7 @@ export interface PopoverPosition {
  */
 const FLIP_THRESHOLD = 16;
 
-/** Horizontal clearance kept between the popover and the viewport edge. `--bsg-s2`. */
+/** Clearance kept between the popover and the viewport's left, right and top edges. `--bsg-s2`. */
 const EDGE_MARGIN = 8;
 
 /** Gap between trigger and popover. */
@@ -59,7 +59,7 @@ export function computePopoverPosition(
   let caretSide: 'top' | 'bottom' = 'top';
 
   if (top + height > window.innerHeight - FLIP_THRESHOLD) {
-    top = triggerRect.top - height - OFFSET;
+    top = Math.max(EDGE_MARGIN, triggerRect.top - height - OFFSET);
     caretSide = 'bottom';
   }
 

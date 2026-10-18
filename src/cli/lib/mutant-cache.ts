@@ -58,12 +58,15 @@ import { readIfExists } from './read-if-exists.js';
  * `save` puts the ones this run looked up or recorded in front of those already on file and drops
  * the oldest past the limit, so two checkouts verifying in turn do not evict each other. A run that
  * tried no mutant leaves the file as it was. Two runs saving at the same moment can lose one run's
- * new outcomes, which costs only running those mutants again.
- * `boardsmith verify` saves only when the tree stayed clean for the whole run, since the key is
- * computed from the commit and would not describe files edited mid-run. It also captures the
- * execution context (`captureExecutionContext`) once when it starts, keys the cache by that
- * capture, and refuses the whole run, saving nothing, when the context changed by its end or
- * before a mutant runs (#932): outcomes from a mixed run would be stored under a key they do not fit.
+ * new outcomes, which costs only running those mutants again; each save writes all of the run's
+ * outcomes again, so the next one puts back what an overlapping save dropped.
+ * `boardsmith verify` saves after each mutant it runs, so an interrupted run keeps every finished
+ * outcome (#940). A save is about 10ms for a full file (1.6MB), next to a mutant's whole-suite run
+ * of seconds. It saves only while the tree is clean, since the key is computed from the commit and
+ * would not describe files edited mid-run. It also captures the execution context
+ * (`captureExecutionContext`) once when it starts, keys the cache by that capture, and refuses the
+ * rest of the run, keeping nothing more, when the context changed before or while a mutant ran, or
+ * by its end (#932, #940): outcomes from a mixed run would be stored under a key they do not fit.
  */
 
 const CACHE_FORMAT = 4;
@@ -321,13 +324,8 @@ async function folderContentHash(dir: string): Promise<string> {
 /** The links in `dir/node_modules`, scoped packages included, each with the path it is reached by. */
 async function installedLinks(nodeModules: string): Promise<string[]> {
   const links: string[] = [];
-  let entries;
-  try {
-    entries = await fs.readdir(nodeModules, { withFileTypes: true });
-  } catch {
-    return links;
-  }
-  for (const entry of entries) {
+  const entries = await readIfExists(nodeModules, (p) => fs.readdir(p, { withFileTypes: true }));
+  for (const entry of entries ?? []) {
     if (entry.name.startsWith('.')) continue;
     const path = join(nodeModules, entry.name);
     if (entry.isSymbolicLink()) links.push(path);
@@ -412,6 +410,7 @@ export async function mutantCachePath(projectDir: string): Promise<string> {
 
 /** The outcomes on file, the most recently used first. */
 async function readEntries(path: string): Promise<Map<string, CachedOutcome>> {
+  // A cache: any file it cannot read or parse only means every mutant runs again.
   try {
     const file = JSON.parse(await fs.readFile(path, 'utf-8')) as { format?: number; outcomes?: unknown };
     if (file.format !== CACHE_FORMAT || !Array.isArray(file.outcomes)) return new Map();

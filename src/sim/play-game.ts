@@ -64,7 +64,7 @@ export interface SingleGameResult {
   resting: boolean;
   /** The reason `isResting` gave, when the game is resting */
   restReason?: string;
-  /** Error message if crashed, or the reason the simulation got stuck */
+  /** Error message if crashed, or the reason the simulation got stuck or exceeded max actions */
   error?: string;
   /** Number of actions taken */
   actionCount: number;
@@ -329,6 +329,9 @@ export async function playGame<G extends Game>(
 
       if (actionCount >= maxActions) {
         exceededMaxActions = true;
+        stuckReason =
+          `Game did not finish within the maximum of ${maxActions} action${maxActions === 1 ? '' : 's'}. ` +
+          'Raise maxActions if the game is just long, or check its flow for a loop that never ends.';
         break;
       }
 

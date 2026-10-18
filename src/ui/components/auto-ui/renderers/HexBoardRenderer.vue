@@ -37,19 +37,7 @@ import { resolvePresentation } from '../presentation.js';
 import type { PresentationOverlay } from '../presentation.js';
 import { GAME_CONTEXT_KEYS } from '../../../composables/useGameContext.js';
 import { boardCellStates } from './board-cell-states.js';
-
-// ---------------------------------------------------------------------------
-// Local GameElement interface — do NOT import from engine (module is dependency-free)
-// Mirrors auto-ui-helpers.ts lines 12-19.
-// ---------------------------------------------------------------------------
-interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
-  childCount?: number;
-}
+import type { GameElement } from '../auto-ui-helpers.js';
 
 const props = defineProps<{
   element: GameElement;

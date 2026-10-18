@@ -1,14 +1,6 @@
 {
   "accepted": [
     {
-      "content": "021065be73155da2",
-      "lines": 27,
-      "files": [
-        "src/cli/commands/verify-classify.ts",
-        "src/cli/commands/verify-derive-check.ts"
-      ]
-    },
-    {
       "content": "1207ddfa1fa44b57",
       "lines": 8,
       "files": [
@@ -165,15 +157,6 @@
       ]
     },
     {
-      "content": "b05c8e271786b50b",
-      "lines": 20,
-      "files": [
-        "src/ui/components/GameHistory.vue",
-        "src/ui/components/auto-ui/ActionPanel.vue",
-        "src/ui/components/auto-ui/AutoRenderer.vue"
-      ]
-    },
-    {
       "content": "b550bc3bb27ef530",
       "lines": 15,
       "files": [
@@ -195,14 +178,6 @@
       "files": [
         "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue",
         "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue"
-      ]
-    },
-    {
-      "content": "c6903880d55edbd4",
-      "lines": 20,
-      "files": [
-        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
-        "src/ui/components/auto-ui/renderers/HandRenderer.vue"
       ]
     },
     {
@@ -233,14 +208,6 @@
       "files": [
         "src/session/testing/fixtures/collect-fixture.ts",
         "src/session/testing/fixtures/collect-turns-fixture.ts"
-      ]
-    },
-    {
-      "content": "f35accdf70435d88",
-      "lines": 21,
-      "files": [
-        "src/ui/components/GameHistory.vue",
-        "src/ui/components/auto-ui/ActionPanel.vue"
       ]
     },
     {

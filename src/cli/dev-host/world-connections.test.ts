@@ -148,7 +148,7 @@ async function serve() {
     await server.close();
     await run.close();
   });
-  return { server, run };
+  return { server, run, runtime };
 }
 
 async function open(port: number, clientId: string, loadId?: string) {
@@ -341,5 +341,36 @@ describe('#1060: a command to a world whose rules worker stopped', () => {
       ]);
     }
     expect(failures).toHaveLength(2);
+  });
+});
+
+describe('#1178: a second hello on one socket naming a different client', () => {
+  it('lets the first client go, and a later close lets go of the new client only', async () => {
+    const { server, runtime } = await serve();
+    const call = vi.spyOn(runtime.worker, 'call');
+    const departures = () => call.mock.calls.filter(([type]) => type === 'disconnect').map(([, payload]) => payload);
+    const watcher = await open(server.port, 'p0');
+    const page = await open(server.port, 'p1');
+    const greeted = page.next((frame) => frame.type === 'world_offers');
+    page.send({ type: 'hello', clientId: 'p2' });
+    await greeted;
+
+    // The world answers in order, so the watcher's state shows every departure before it.
+    const presence = async (requestId: string) => {
+      const state = watcher.next((frame) => frame.type === 'world_state');
+      const answered = watcher.next((frame) => frame.type === 'world_response' && frame.requestId === requestId);
+      watcher.send(act(requestId, requestId, 'stoke'));
+      await answered;
+      return (await state).presence;
+    };
+    // p1 left first, so p2 takes the seat it freed.
+    expect(await presence('w1')).toEqual([1, 2]);
+    expect(departures()).toEqual([{ clientId: 'p1' }]);
+
+    const gone = server.closed();
+    page.socket.close();
+    await gone;
+    expect(await presence('w2')).toEqual([1]);
+    expect(departures()).toEqual([{ clientId: 'p1' }, { clientId: 'p2' }]);
   });
 });

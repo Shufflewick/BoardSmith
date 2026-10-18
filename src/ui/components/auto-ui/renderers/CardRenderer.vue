@@ -27,18 +27,7 @@ import type { PresentationOverlay } from '../presentation.js';
 import { GAME_CONTEXT_KEYS, injectPlayerSeat } from '../../../composables/useGameContext.js';
 import { getSpriteStyle, parseImageInfo, type ImageInfo } from '../../../utils/image.js';
 import CardBack from './CardBack.vue';
-
-// ---------------------------------------------------------------------------
-// Local GameElement interface — dependency-free, mirrors auto-ui-helpers.ts
-// ---------------------------------------------------------------------------
-interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
-  childCount?: number;
-}
+import type { GameElement } from '../auto-ui-helpers.js';
 
 const props = defineProps<{
   element: GameElement;

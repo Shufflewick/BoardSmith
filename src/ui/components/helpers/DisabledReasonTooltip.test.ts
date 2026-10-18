@@ -111,6 +111,13 @@ describe('computePopoverPosition', () => {
     expect(p.top).toBe(760 - 60 - 4);
   });
 
+  it('never flips above the top of the viewport (#907)', () => {
+    const p = computePopoverPosition(rect({ top: 30, bottom: 60, left: 200, width: 80 }), 760, 260);
+
+    expect(p.caretSide).toBe('bottom');
+    expect(p.top).toBe(8);
+  });
+
   it('clamps against the right edge instead of overflowing', () => {
     const p = computePopoverPosition(rect({ top: 100, bottom: 130, left: 950, width: 40 }), 60, 260);
 

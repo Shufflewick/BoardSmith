@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, relative, sep } from 'node:path';
 import { listFiles } from './source-files.js';
+import { readIfExists } from './read-if-exists.js';
 
 /**
  * A content hash over the installer-owned `bs-` skills tree (171-CONTEXT.md decision 7).
@@ -45,13 +46,8 @@ export async function resolveSkillsRoot(projectDir: string): Promise<string | nu
 }
 
 async function hasBsPrefixedEntry(root: string): Promise<boolean> {
-  let entries;
-  try {
-    entries = await fs.readdir(root, { withFileTypes: true });
-  } catch {
-    return false; // Root does not exist (or is not a directory) — not an install.
-  }
-  return entries.some((entry) => entry.isDirectory() && entry.name.startsWith('bs-'));
+  const entries = await readIfExists(root, (p) => fs.readdir(p, { withFileTypes: true }));
+  return (entries ?? []).some((entry) => entry.isDirectory() && entry.name.startsWith('bs-'));
 }
 
 /**

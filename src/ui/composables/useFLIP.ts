@@ -58,9 +58,6 @@ import { prefersReducedMotion } from './reducedMotion.js';
 import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
 import { isDevThrowEnabled } from '../../utils/dev.js';
 
-// Re-export for convenience
-export { prefersReducedMotion };
-
 /**
  * Configuration for a single FLIP container
  */

@@ -79,9 +79,10 @@ const TEST_CONFIG: DevHostConfig = {
 const SEAT_LOBBY = {
   type: 'lobby',
   seats: [
-    { seat: 1, held: true, mine: false, name: 'Alice', connected: true },
-    { seat: 2, held: false, mine: false, name: '', connected: false }, // bot seat
-    { seat: 3, held: false, mine: false, name: '', connected: false }, // bot seat
+    { seat: 1, held: true, mine: false, name: 'Alice', connected: true, bot: false },
+    { seat: 2, held: false, mine: false, name: '', connected: false, bot: true },
+    // Named by --bot, but no bot plays it now (#887).
+    { seat: 3, held: false, mine: false, name: '', connected: false, bot: false },
   ],
 };
 
@@ -159,13 +160,13 @@ describe('DevHost — seat switcher menu (presence + follow)', () => {
     expect(items.some((i) => i.text().includes('Alice'))).toBe(true);
   });
 
-  it('shows bot badge for seats listed in cfg.botSeats', async () => {
+  it('shows the bot badge for the seats a bot plays now, from the lobby (#887)', async () => {
     const wrapper = await mountDevHost();
     await activateSeat(wrapper);
     await openMenu(wrapper);
 
-    // Seats 2 and 3 are bot → two bot badges in the menu
-    expect(wrapper.findAll('.seat-switcher-menu__ai')).toHaveLength(2);
+    const badged = wrapper.findAll('.seat-switcher-menu__item').filter((i) => i.find('.seat-switcher-menu__ai').exists());
+    expect(badged.map((i) => i.text())).toEqual([expect.stringContaining('Seat 2')]);
   });
 });
 

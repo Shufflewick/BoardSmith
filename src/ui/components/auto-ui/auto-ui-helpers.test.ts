@@ -1,18 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { resolvePieceVisual, resolveGridSize } from './auto-ui-helpers.js';
 import type { PieceVisual, GridResult } from './auto-ui-helpers.js';
-
-// ---------------------------------------------------------------------------
-// Minimal GameElement interface for test factories (mirrors auto-ui-helpers.ts)
-// ---------------------------------------------------------------------------
-interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
-  childCount?: number;
-}
+import type { GameElement } from './auto-ui-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Factory helpers

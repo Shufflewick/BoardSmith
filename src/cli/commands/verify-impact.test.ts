@@ -902,6 +902,19 @@ describe('contradictory — nextRulingNumber / appendRuling — over a self-cont
     expect(appendedBlock).not.toMatch(/supersede[sd]?/i);
   });
 
+  it('appendRuling reuses an identical ruling on file, but never one a later ruling superseded (#839)', async () => {
+    const entry = { decision: 'Ties go to the dealer.', citation: 'rulebook/a.md, p.1', rationale: 'Asked.' };
+    await fs.writeFile(join(dir, DESIGN_DIR, 'RULINGS.md'), `# Rulings\n\n${renderRuling({ number: 1, ...entry })}`);
+    expect((await appendRuling(dir, entry)).number).toBe(1);
+
+    await fs.writeFile(
+      join(dir, DESIGN_DIR, 'RULINGS.md'),
+      `# Rulings\n\n${renderRuling({ number: 1, ...entry })}\n` +
+        renderRuling({ number: 2, decision: 'This supersedes Ruling 1.', citation: 'rulebook/a.md, p.1', rationale: 'Changed.' }),
+    );
+    expect((await appendRuling(dir, entry)).number).toBe(3);
+  });
+
   it('appendRuling throws an actionable error when RULINGS.md does not exist, and never creates one', async () => {
     await expect(
       appendRuling(dir, { decision: 'x', citation: 'y', rationale: 'z' }),
@@ -1088,6 +1101,31 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
     const entry = gateResult.contradictions.find((c) => c.pairId === pairId);
     expect(entry?.adjudication).toBe('resolved');
     expect(gateResult.pending).not.toContain(pairId);
+  });
+
+  it('a retry after a crash between the RULINGS.md write and the ledger write appends no second ruling (#839)', async () => {
+    const { project, runId, pairId } = await contradictoryProjectWithRulings();
+    const ledgerPath = join(project, DESIGN_DIR, 'rulebook', '.verify', runId, 'RUN.md');
+    const ledgerBefore = await fs.readFile(ledgerPath, 'utf-8');
+    const resolution = {
+      project,
+      runId,
+      pairId,
+      outcome: 'resolved' as const,
+      decision: 'The higher-timing reading applies.',
+      citation: 'rulebook/a.md, p.1',
+      rationale: 'Designer confirmed.',
+      json: true,
+    };
+
+    const first = await verifyImpactAdjudicateCommand(resolution);
+    // The crash: the ruling is written but the ledger record never was.
+    await fs.writeFile(ledgerPath, ledgerBefore);
+    const retry = await verifyImpactAdjudicateCommand(resolution);
+
+    expect(retry.rulingNumber).toBe(first.rulingNumber);
+    const rulingsText = await fs.readFile(join(project, DESIGN_DIR, 'RULINGS.md'), 'utf-8');
+    expect(rulingsText.match(/^### Ruling \d+$/gm)).toHaveLength(nextNumberFor());
   });
 
   it('unadjudicated: a second "resolved" call for the same pair reuses the same ruling number and does NOT append a second RULINGS.md entry', async () => {

@@ -55,7 +55,6 @@ import {
   WORLD_OWNER,
   assertSeatWithinWorld,
   createWorld,
-  nextDueBatch,
   runDueOccurrences,
   dispatchStep,
   rearmAt,
@@ -532,13 +531,9 @@ export class ResidentWorld {
     return this.#store.seats().find((record) => record.player === player)?.seat;
   }
 
-  #allowanceFor(owner: string, pending: readonly PlannedEvent[]): ScheduleAllowance {
-    const mine = pending.filter((event) => event.owner === owner);
-    return {
-      unkeyed: mine.filter((event) => event.key === undefined).length,
-      keys: [...new Set(mine.flatMap((event) => (event.key === undefined ? [] : [event.key])))],
-      worldPending: pending.length,
-    };
+  #allowanceFor(owner: string): ScheduleAllowance {
+    const { unkeyed, keyed } = this.#store.pendingOf(owner);
+    return { unkeyed, keys: [...keyed.keys()], worldPending: this.#store.pendingCount() };
   }
 
   // ── starting ───────────────────────────────────────────────────────────────
@@ -916,7 +911,6 @@ export class ResidentWorld {
         command: { name: action, args },
         timing: null,
         arrivedAt,
-        queue: this.#store.pendingEvents(),
         receipt: { order, player },
       });
       return { kind: "committed", events };
@@ -955,7 +949,6 @@ export class ResidentWorld {
         command: { name, args },
         timing: { due: now, missedCount: 0 },
         arrivedAt: now,
-        queue: this.#store.pendingEvents(),
       });
       this.#onEvents(events);
     } finally {
@@ -982,12 +975,6 @@ export class ResidentWorld {
     timing: WorldTiming;
     arrivedAt: number;
     /**
-     * THE QUEUE AS COMMITTED NOW, read once by the caller (#746). Nothing
-     * before this dispatch's checkpoint writes the queue, so the allowance and
-     * the planning below both judge against it without re-reading.
-     */
-    queue: readonly PlannedEvent[];
-    /**
      * THE QUEUED EVENT THIS DISPATCH IS ONE OCCURRENCE OF, and where it is
      * owed next (`runDueOccurrences`' `owedDue`). The event is settled and
      * re-armed there in the same write as the occurrence's effects -- unless
@@ -1009,7 +996,7 @@ export class ResidentWorld {
      */
     about?: string;
   }): Promise<{ readonly events: readonly RoutedEvent[]; readonly displaced: boolean }> {
-    const { player, command, timing, arrivedAt, queue } = request;
+    const { player, command, timing, arrivedAt } = request;
     const runner = this.#world.runner;
 
     // THE ORDER EVERY HOST SHARES (#539): walk the action's declaration
@@ -1031,7 +1018,7 @@ export class ResidentWorld {
         // partition.
         readActivity: (seat) => Promise.resolve(this.#store.activityOf(seat)),
         readNoticeBox: (seat) => Promise.resolve({ seat, box: this.#store.noticeBox(seat) }),
-        allowance: (asking) => Promise.resolve(this.#allowanceFor(asking, queue)),
+        allowance: (asking) => Promise.resolve(this.#allowanceFor(asking)),
         apply: ({ allowance, answers }) =>
           runner.apply({
             player,
@@ -1050,13 +1037,15 @@ export class ResidentWorld {
             activity: this.#activityFor(request.about ?? player),
             ...answers,
           }),
-        planning: (owner) =>
-          Promise.resolve({
+        planning: (owner) => {
+          // Read on the first keyed request only: most dispatches schedule nothing keyed.
+          let keyed: ReadonlyMap<string, string> | undefined;
+          return Promise.resolve({
             nextSeq: this.#store.nextSeq(),
             mintId: this.#mintId,
-            replaces: (key: string) =>
-              queue.find((event) => event.owner === owner && event.key === key)?.id,
-          }),
+            replaces: (key: string) => (keyed ??= this.#store.pendingOf(owner).keyed).get(key),
+          });
+        },
       },
       this.#budgets,
     );
@@ -1165,7 +1154,14 @@ export class ResidentWorld {
 
   /** The instant `rearm` arms for, which is what a host shows as "next due". */
   nextWakeAt(): number | null {
-    return rearmAt(this.#store.pendingEvents(), this.now(), this.#refused?.retryAt);
+    const now = this.now();
+    const earliest = this.#store.earliestEvent();
+    if (earliest === undefined || earliest.due > now) {
+      return rearmAt(earliest === undefined ? [] : [earliest], now);
+    }
+    // OVERDUE WORK MAY WAIT FOR A RETRY, and a timer due before that retry still fires on time.
+    const upcoming = this.#store.earliestEvent(now);
+    return rearmAt(upcoming === undefined ? [earliest] : [earliest, upcoming], now, this.#refused?.retryAt);
   }
 
   /**
@@ -1218,11 +1214,11 @@ export class ResidentWorld {
       // RE-ASKED BEFORE EVERY EVENT (#395): the one before may have ended the
       // world, and an ended world runs nothing else.
       if (this.completed) break;
-      const queue = this.#store.pendingEvents();
-      const event = this.#nextDue(queue, now, spent);
+      // `(due, seq)` order, the order `nextDueBatch` sorts by (#280).
+      const event = this.#store.nextDue(now, spent);
       if (event === undefined) break;
       spent.add(event.id);
-      ran += await this.#runQueued(event, now, queue);
+      ran += await this.#runQueued(event, now);
     }
     return ran;
   }
@@ -1237,15 +1233,9 @@ export class ResidentWorld {
    * loop is `runDueOccurrences`, the one every host runs (#539).
    *
    * Answers how many calls it made, which is a batch's own measure of progress.
-   *
-   * `queue` is the read that picked this event, still current for its first
-   * occurrence; every later one follows a checkpoint and reads again (#746).
    */
-  async #runQueued(event: PlannedEvent, now: number, queue: readonly PlannedEvent[]): Promise<number> {
-    let unwritten: readonly PlannedEvent[] | undefined = queue;
+  async #runQueued(event: PlannedEvent, now: number): Promise<number> {
     const outcome = await runDueOccurrences(event, now, this.#budgets, async (timing, owedDue) => {
-      const current = unwritten ?? this.#store.pendingEvents();
-      unwritten = undefined;
       const { events, displaced } = await this.#dispatch({
         player: null,
         command: { name: event.action, args: event.args },
@@ -1253,7 +1243,6 @@ export class ResidentWorld {
         // ITS `now` IS ITS `due`, never the wall clock at execution: a world
         // that drained late must produce the state a punctual one would.
         arrivedAt: timing.due,
-        queue: current,
         // THE EVENT'S OWNER IS WHO IT IS ABOUT (#383), which is not who is
         // charged for it. A seat's own deadline rechecks that seat.
         about: event.owner,
@@ -1286,23 +1275,6 @@ export class ResidentWorld {
       );
     }
     return outcome.ran;
-  }
-
-  /**
-   * THE EARLIEST EVENT DUE AT `now` THAT THIS BATCH HAS NOT TAKEN.
-   *
-   * `nextDueBatch` is the library's ordering and is asked for one, so the
-   * order a re-reading drain runs in is the same `(due, seq)` a single
-   * selection ran in -- insertion still breaks a tie within one millisecond,
-   * and no second comparison of due times exists to disagree with it.
-   */
-  #nextDue(
-    queue: readonly PlannedEvent[],
-    now: number,
-    spent: ReadonlySet<string>,
-  ): PlannedEvent | undefined {
-    const queued = queue.filter((event) => !spent.has(event.id));
-    return nextDueBatch(queued, now, 1).batch[0];
   }
 
   /**
@@ -1364,7 +1336,7 @@ export class ResidentWorld {
   /** Whether any scheduled event was already due at `instant`, which is the
    *  whole of "is this world behind that instant?". */
   #anythingDueAt(instant: number): boolean {
-    return this.#store.pendingEvents().some((event) => event.due <= instant);
+    return this.#store.nextDue(instant, new Set()) !== undefined;
   }
 
   /**
@@ -1381,12 +1353,9 @@ export class ResidentWorld {
    * fire and no clock to move.
    */
   async fireDue(): Promise<WorldFireOutcome | null> {
-    const pending = this.#store.pendingEvents();
-    if (pending.length === 0) return null;
-    // A loop, not Math.min(...): spreading a queue past ~125k events overflows the stack (#791).
-    let earliest = Infinity;
-    for (const event of pending) if (event.due < earliest) earliest = event.due;
-    const jumpMs = Math.max(0, earliest - this.now());
+    const earliest = this.#store.earliestEvent();
+    if (earliest === undefined) return null;
+    const jumpMs = Math.max(0, earliest.due - this.now());
     // DURABLE BEFORE IT IS DRAINED. The partitions this firing settles become
     // durable at the advanced time, so the advance itself has to be on disk
     // first or a crash between the two leaves a world settled in a future its

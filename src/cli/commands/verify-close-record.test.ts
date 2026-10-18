@@ -1,5 +1,5 @@
 import { DESIGN_DIR } from '../lib/project-paths.js';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -239,6 +239,27 @@ describe('verify-close-record — the durable Close write (SC-3, PROV-02)', () =
     // between — recordVerifiedAgainst never touches the file on this throw path).
     const healthyText = await fs.readFile(healthyPath, 'utf-8');
     expect(healthyText).toContain(VERIFIED_AGAINST_BEGIN);
+  });
+
+  it('with --json, a chunk that could not be recorded is still named on stderr (#839)', async () => {
+    const { project, headSha } = await makeRulebookProject('game-json-errors', 'full');
+    const brokenPath = await makeChunk(project, 'broken', { headSha, cite: 'rulebook/01-setup.md' });
+    const brokenText = await fs.readFile(brokenPath, 'utf-8');
+    await fs.writeFile(
+      brokenPath,
+      brokenText.replace(VERIFIED_AGAINST_BEGIN, '').replace(VERIFIED_AGAINST_END, ''),
+    );
+    await gitCommitAll(project, 'chunks');
+
+    const stderr = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const stdout = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await verifyCloseRecordCommand({ project, json: true });
+      expect(stderr.mock.calls.flat().join('\n')).toMatch(/broken: .*machine-owned fences/i);
+    } finally {
+      stderr.mockRestore();
+      stdout.mockRestore();
+    }
   });
 
   it('cross-surface: the scope/reason written into the block equal computeSourceFreeReport for the same fixture', async () => {

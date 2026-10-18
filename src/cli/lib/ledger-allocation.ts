@@ -39,18 +39,14 @@ export const NUMBERED_LEDGER_SPECS: readonly NumberedLedgerSpec[] = [
   { file: CONSTRAINTS_MD, kind: 'G', sep: '' },
 ];
 
-function headingPattern(spec: NumberedLedgerSpec, id: string): RegExp {
-  return entryHeadingPattern(spec.kind, spec.sep, id);
-}
-
 /** Real (allocated) numbers used as headings, in file order, template comments excluded. */
 function plainNumbers(text: string, spec: NumberedLedgerSpec): number[] {
-  return [...blankComments(text).matchAll(headingPattern(spec, '\\d+'))].map((m) => Number(m[1]));
+  return [...blankComments(text).matchAll(entryHeadingPattern(spec.kind, spec.sep, '\\d+'))].map((m) => Number(m[1]));
 }
 
 /** Provisional ids used as headings, in file order, e.g. `Ruling @trading.1`. */
 export function provisionalHeadings(text: string, spec: NumberedLedgerSpec): string[] {
-  return [...blankComments(text).matchAll(headingPattern(spec, PROVISIONAL_NUMBER))].map(
+  return [...blankComments(text).matchAll(entryHeadingPattern(spec.kind, spec.sep, PROVISIONAL_NUMBER))].map(
     (m) => `${spec.kind}${spec.sep}${m[1]}`,
   );
 }

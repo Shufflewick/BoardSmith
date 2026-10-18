@@ -34,6 +34,7 @@ import { executeOp, type GameDefinitionLike, type StateEnvelope } from './statel
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { historyLabels } from './testing/history-labels.js';
 import { succeeded } from './op-result.test-helper.js';
+import { ErrorCode } from './types.js';
 
 class QuarryGame extends Game<QuarryGame, Player> {
   /** Whether the one shared stone is still in the quarry. */
@@ -160,7 +161,7 @@ describe('GameRunner', () => {
 
     const step = r.processSelectionStep(1, 'what', 'wall');
 
-    expect(step).toEqual({ success: false, error: STONE_GONE });
+    expect(step).toEqual({ success: false, error: STONE_GONE, errorCode: ErrorCode.ACTION_NOT_AVAILABLE });
     expect(r.game.ran).toEqual(['take:2']);
     expect(historyLabels(r.actionHistory)).toEqual(historyBefore);
   });
@@ -170,7 +171,7 @@ describe('GameRunner', () => {
     r.startPendingAction('build', 1);
     expect(r.processSelectionStep(1, 'where', 'north').success).toBe(true);
     expect(r.performAction('take', 2, {}).success).toBe(true);
-    expect(r.processSelectionStep(1, 'what', 'wall')).toEqual({ success: false, error: STONE_GONE });
+    expect(r.processSelectionStep(1, 'what', 'wall')).toEqual({ success: false, error: STONE_GONE, errorCode: ErrorCode.ACTION_NOT_AVAILABLE });
 
     r.game.stoneInQuarry = true;
 
@@ -184,7 +185,7 @@ describe('GameRunner', () => {
     expect(r.performAction('take', 2, {}).success).toBe(true);
     r.startPendingAction('build', 1);
 
-    expect(r.processSelectionStep(1, 'where', 'north')).toEqual({ success: false, error: STONE_GONE_AT_START });
+    expect(r.processSelectionStep(1, 'where', 'north')).toEqual({ success: false, error: STONE_GONE_AT_START, errorCode: ErrorCode.ACTION_NOT_AVAILABLE });
     expect(r.game.ran).toEqual(['take:2']);
   });
 
@@ -218,6 +219,7 @@ describe('GameRunner', () => {
       error:
         "'dig' is no longer available to you: the game changed since your last choice, " +
         "and 'you have energy left' no longer holds.",
+      errorCode: ErrorCode.ACTION_NOT_AVAILABLE,
     });
     expect(r.game.ran).toEqual(['rest:2']);
   });
@@ -241,6 +243,7 @@ describe('GameRunner', () => {
     expect(r.processSelectionStep(2, 'where', 'north')).toEqual({
       success: false,
       error: "'loot' is not one of your actions right now.",
+      errorCode: ErrorCode.ACTION_NOT_AVAILABLE,
     });
   });
 });

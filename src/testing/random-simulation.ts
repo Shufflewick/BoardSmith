@@ -17,7 +17,7 @@ import { random, type Policy, type SelectionChoicesObservation } from '../sim/po
 export interface SimulateRandomGamesOptions<G extends Game = Game> {
   /** Number of games to simulate */
   count: number;
-  /** Player counts to test (will run games with each count) */
+  /** Player counts to test. Games are shared evenly across them, so `count` must be at least their number. */
   playerCounts: number[];
   /**
    * Base seed for the whole run. Per-game seeds are derived deterministically
@@ -160,6 +160,24 @@ export async function replayRandomGame<G extends Game>(
 }
 
 /**
+ * How many of `count` games each player count plays: an even share, the first
+ * counts taking the remainder. Refuses a split that would leave a count unplayed.
+ */
+function gamesPerPlayerCount(count: number, playerCounts: readonly number[]): Array<[number, number]> {
+  if (playerCounts.length === 0) {
+    throw new Error('simulateRandomGames: playerCounts is empty, so no game would run. List at least one player count, e.g. playerCounts: [2].');
+  }
+  if (count < playerCounts.length) {
+    throw new Error(
+      `simulateRandomGames: count ${count} is smaller than the ${playerCounts.length} player counts listed, ` +
+        `so some player counts would never be played. Raise count to at least ${playerCounts.length} or list fewer player counts.`,
+    );
+  }
+  const base = Math.floor(count / playerCounts.length);
+  return playerCounts.map((playerCount, index) => [playerCount, base + (index < count % playerCounts.length ? 1 : 0)]);
+}
+
+/**
  * Simulate multiple random games to verify game completeness.
  *
  * Runs many games with random (but valid) moves to find bugs, verify all games
@@ -174,6 +192,7 @@ export async function replayRandomGame<G extends Game>(
  * @param GameClass - The game class constructor
  * @param options - Simulation configuration
  * @returns Aggregated results including completion rate, errors, and timing
+ * @throws Error when `playerCounts` is empty or `count` is smaller than its length
  *
  * @example
  * ```typescript
@@ -206,11 +225,8 @@ export async function simulateRandomGames<G extends Game>(
   const errors = new Set<string>();
   let total = 0;
 
-  // Distribute games across player counts
-  const gamesPerPlayerCount = Math.ceil(count / playerCounts.length);
-
-  for (const playerCount of playerCounts) {
-    for (let i = 0; i < gamesPerPlayerCount && total < count; i++) {
+  for (const [playerCount, share] of gamesPerPlayerCount(count, playerCounts)) {
+    for (let i = 0; i < share; i++) {
       // Deterministic per-game seed: re-running with the same base seed
       // reproduces this exact game; the seed is also replayable on its own.
       const seed = gameSeed(baseSeed, playerCount, i);

@@ -122,8 +122,37 @@ export interface WorldStore extends WorldPartitionStore, WorldPartitionWriter {
    *
    * The same order `nextDueBatch` sorts by, because a world's behaviour must
    * not depend on how a storage engine happened to return ties.
+   *
+   * THE WHOLE QUEUE, DECODED, so only a migration (which rewrites every event)
+   * and a dev host's status panel ask for it. The drain, a dispatch's
+   * allowance and the re-arm ask the targeted questions below (#953): at the
+   * default `maxPendingEvents` this read is thousands of rows.
    */
   pendingEvents(): readonly PlannedEvent[];
+
+  /** How many events are pending across every owner: the world's ceiling is
+   *  judged against it. */
+  pendingCount(): number;
+
+  /**
+   * WHAT ONE OWNER HAS PENDING, without any event's arguments: how many of its
+   * events are unkeyed, and the event id under each key it holds. Its schedule
+   * allowance and a keyed upsert's displacement are both judged against this.
+   */
+  pendingOf(owner: string): { readonly unkeyed: number; readonly keyed: ReadonlyMap<string, string> };
+
+  /**
+   * The first pending event in `(due, seq)` order, or only among those due
+   * strictly after `after`. A re-arm asks for both, which is what `rearmAt`
+   * needs to know about the queue.
+   */
+  earliestEvent(after?: number): PlannedEvent | undefined;
+
+  /**
+   * The first event in `(due, seq)` order that is due at or before `at` and
+   * whose id is not in `taken`: the next entry a drain runs.
+   */
+  nextDue(at: number, taken: ReadonlySet<string>): PlannedEvent | undefined;
 
   /**
    * The next monotonic insertion sequence for a scheduled event.

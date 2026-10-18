@@ -151,9 +151,8 @@ const PRODUCTION_ONLY =
  * the replay finished, the production message and that it fails only in production mode.
  */
 function failure(g: SingleGameResult, inDevMode: SingleGameResult | undefined): Pick<PerGameReport, 'error' | 'productionOnly'> {
-  const own = g.error ?? (g.exceededMaxActions ? 'Game exceeded the maximum action count.' : undefined);
-  if (inDevMode?.completed) return { error: [own, PRODUCTION_ONLY].filter(Boolean).join(' '), productionOnly: true };
-  const error = inDevMode?.error ?? own;
+  if (inDevMode?.completed) return { error: [g.error, PRODUCTION_ONLY].filter(Boolean).join(' '), productionOnly: true };
+  const error = inDevMode?.error ?? g.error;
   return error === undefined ? {} : { error };
 }
 

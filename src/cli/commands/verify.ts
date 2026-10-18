@@ -207,6 +207,8 @@ interface VerifyContext {
   mutantCache: () => Promise<MutantCache>;
   /** What changed in the execution context since the run began, or undefined while nothing has (#932). */
   contextChange: () => Promise<string | undefined>;
+  /** Saves the mutant outcomes found so far, while the tree is still clean at the commit the run began on (#940). */
+  saveMutantProgress: () => Promise<void>;
   earlier: ReadonlyMap<VerifyCheckName, VerifyCheckResult>;
   log: (line: string) => void;
   /**
@@ -246,10 +248,11 @@ async function suiteCannotRun(dir: string): Promise<VerifyCheckOutcome | undefin
 }
 
 async function readJsonReport(path: string): Promise<VitestJsonReport | undefined> {
+  const text = await readIfExists(path, (p) => fs.readFile(p, 'utf-8'));
   try {
-    return JSON.parse(await fs.readFile(path, 'utf-8')) as VitestJsonReport;
+    return text === undefined ? undefined : (JSON.parse(text) as VitestJsonReport);
   } catch {
-    return undefined;
+    return undefined; // A report cut short says no more than none: the verdict comes from vitest's own.
   }
 }
 
@@ -305,9 +308,14 @@ async function unpassedSuite(
   };
 }
 
-/** The test files a chunk added or changed since its base, which `--chunk` runs instead of the suite. */
-function chunkTestFiles(ctx: VerifyContext): string[] {
-  return ctx.changed.files.filter((path) => isTestFile(path) && existsSync(join(ctx.projectDir, path)));
+/**
+ * The tests a chunk's fast checks run (#985): the test files among `changed` (project-relative,
+ * since the chunk's base `base`) that exist. With none, the outcome `noChunkTests` gives instead.
+ * `--chunk` runs them on the chunk's commit, and chunk-merge on the combined tree (#987).
+ */
+export async function chunkTests(projectDir: string, chunk: string, base: string, changed: readonly string[]): Promise<string[] | VerifyCheckOutcome> {
+  const files = changed.filter((path) => isTestFile(path) && existsSync(join(projectDir, path)));
+  return files.length > 0 ? files : noChunkTests(projectDir, chunk, base);
 }
 
 /**
@@ -338,8 +346,8 @@ async function noChunkTests(projectDir: string, chunk: string, base: string): Pr
 async function testCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
   const cannot = await suiteCannotRun(ctx.projectDir);
   if (cannot) return cannot;
-  const files = ctx.chunk === undefined ? [] : chunkTestFiles(ctx);
-  if (ctx.chunk !== undefined && files.length === 0) return noChunkTests(ctx.projectDir, ctx.chunk, ctx.base.commit);
+  const files = ctx.chunk === undefined ? [] : await chunkTests(ctx.projectDir, ctx.chunk, ctx.base.commit, ctx.changed.files);
+  if (!Array.isArray(files)) return files;
   const suite = ctx.chunk === undefined ? 'the full suite' : "the chunk's tests";
   // Real absolute paths, as vitest names test files, so its filename filter matches only these.
   const root = await fs.realpath(ctx.projectDir);
@@ -463,6 +471,7 @@ async function mutationCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
     cache: await ctx.mutantCache(),
     log: ctx.log,
     contextChange: ctx.contextChange,
+    saveProgress: ctx.saveMutantProgress,
   });
   return mutationVerdict(since, run);
 }
@@ -606,6 +615,10 @@ export async function runVerify(options: {
     if (cache.unavailable !== undefined) log(`${cache.unavailable}; every mutant runs.`);
     return cache;
   }));
+  const saveMutantProgress = async () => {
+    if (mutantCache === undefined) return;
+    if (cleanAt(await checkoutState(projectDir), head)) await (await mutantCache).save();
+  };
   let typeCheck: Promise<TypeCheckRun> | undefined;
   const checks = await runChecks(options.checks ?? VERIFY_CHECKS, {
     projectDir,
@@ -616,6 +629,7 @@ export async function runVerify(options: {
     changed: await changedSince(projectDir, base.commit),
     mutantCache: openCache,
     contextChange,
+    saveMutantProgress,
     log,
   }, options.chunk === undefined ? VERIFY_CHECK_NAMES : CHUNK_VERIFY_CHECK_NAMES);
 
@@ -623,12 +637,11 @@ export async function runVerify(options: {
   if (change !== undefined) {
     throw new Error(
       `What the tests run with changed while \`boardsmith verify\` ran: ${change}. Checks after the change ran against ` +
-        'different code, so no result was recorded and no mutant outcome was saved. Run `boardsmith verify` again in a ' +
+        'different code, so no result was recorded and no mutant outcome found after the change was saved. Run `boardsmith verify` again in a ' +
         'checkout whose BoardSmith and installed packages stay unchanged until it finishes, such as a separate BoardSmith worktree nothing else edits.',
     );
   }
-  const after = await checkoutState(projectDir);
-  const cleanTree = !('problem' in after) && after.clean && after.commit === head;
+  const cleanTree = cleanAt(await checkoutState(projectDir), head);
   // The cache keys outcomes by the commit's files; a run whose files changed under it keeps none.
   if (cleanTree && mutantCache !== undefined) await (await mutantCache).save();
   const result = buildVerifyResult({
@@ -640,6 +653,11 @@ export async function runVerify(options: {
     boardsmithCommit,
   });
   return { result, path: await recordResult(projectDir, result) };
+}
+
+/** Whether the checkout is clean and still at `head`, the commit the run verifies. */
+function cleanAt(state: Awaited<ReturnType<typeof checkoutState>>, head: string): boolean {
+  return !('problem' in state) && state.clean && state.commit === head;
 }
 
 /** The closing line: whether the run counts, and if not, what to do. */

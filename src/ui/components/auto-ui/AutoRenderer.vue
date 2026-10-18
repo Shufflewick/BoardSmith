@@ -32,18 +32,7 @@ import GridBoardTemplate from './archetypes/GridBoardTemplate.vue';
 import CardTemplate from './archetypes/CardTemplate.vue';
 import TableauTemplate from './archetypes/TableauTemplate.vue';
 import UnsupportedTopologyPanel from './archetypes/UnsupportedTopologyPanel.vue';
-
-// ---------------------------------------------------------------------------
-// Local GameElement interface — mirrors auto-ui-helpers.ts lines 12-19
-// ---------------------------------------------------------------------------
-export interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
-  childCount?: number;
-}
+import type { GameElement } from './auto-ui-helpers.js';
 
 // ---------------------------------------------------------------------------
 // Props — interaction arrays removed (useBoardInteraction provides those)
@@ -214,6 +203,8 @@ useAutoRendererAnimations(animationEvents, { fly });
   </div>
 </template>
 
+<style scoped src="../sr-only.css"></style>
+
 <style scoped>
 .auto-renderer {
   position: relative;
@@ -263,19 +254,6 @@ useAutoRendererAnimations(animationEvents, { fly });
   .skeleton-bar {
     animation: none;
   }
-}
-
-/* Screen-reader only helper (no raw hex — uses inherit) */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 /* Retry affordance */

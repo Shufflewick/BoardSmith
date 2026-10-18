@@ -24,18 +24,7 @@ import { ADD_DICE_SUPPORT_ADVICE, getDiePreviewComponent } from '../../dice/die-
 import { dieAriaLabel } from '../../dice/die-label.js';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
-
-// ---------------------------------------------------------------------------
-// Local GameElement interface — do NOT import from engine (module is dependency-free)
-// ---------------------------------------------------------------------------
-interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
-  childCount?: number;
-}
+import type { GameElement } from '../auto-ui-helpers.js';
 
 const props = defineProps<{
   element: GameElement;

@@ -70,7 +70,7 @@ import { NUMBERED_LEDGER_SPECS, provisionalHeadings, provisionalReferences } fro
 import { checkCrossChunkLedger } from './cross-chunk.js';
 import { type VerifyLookup, type VerifyOnFile, checkRunLogRoles, reviewRoundCommits, runLogEntries } from '../lib/run-log-roles.js';
 import { readVerifyResult, verifyResultPath, verifyResultsDir } from '../lib/verify-result.js';
-import { readListedText } from '../lib/read-if-exists.js';
+import { readIfExists, readListedText } from '../lib/read-if-exists.js';
 
 export type LedgerFindingKind =
   | 'duplicate-number'
@@ -741,11 +741,7 @@ function evidenceDetail(path: string, rel: string | undefined, problem: Evidence
 }
 
 async function fileExists(path: string): Promise<boolean> {
-  try {
-    return (await fs.stat(path)).isFile();
-  } catch {
-    return false;
-  }
+  return (await readIfExists(path, fs.stat))?.isFile() ?? false;
 }
 
 function isIgnored(projectDir: string, rel: string): Promise<boolean> {

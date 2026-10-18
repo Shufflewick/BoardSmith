@@ -1,4 +1,5 @@
 import { sha256Hex } from '../lib/hash.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 import { promises as fs } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { computeVerificationScope, documentFailure, type VerificationScope } from './chunk-provenance.js';
@@ -692,6 +693,12 @@ function extractOperandValue(op: GroundedBothFact): ExtractedOperand {
   return { ok: true, value, ...(unitVariance !== undefined ? { unitVariance } : {}) };
 }
 
+/** Whether `text` states `n` as a number of its own, so `1` is not found in `(p.1)`, `10` or `1.5`, but is in `x1`. */
+function mentionsNumber(text: string, n: number): boolean {
+  const digits = String(n).replace('.', '\\.');
+  return new RegExp(`(?<![\\d.])${digits}(?!\\.?\\d)`).test(text);
+}
+
 export function composeArithmeticClaim(input: {
   derivedLineText: string;
   operation: ArithmeticOp;
@@ -716,7 +723,7 @@ export function composeArithmeticClaim(input: {
   }
 
   for (const value of operandValues) {
-    if (!derivedLineText.includes(String(value.magnitude))) {
+    if (!mentionsNumber(derivedLineText, value.magnitude)) {
       return {
         ok: false,
         reason:
@@ -867,7 +874,7 @@ export function composeArithmeticChain(input: {
         const extracted = extractOperandValue(op);
         if (!extracted.ok) return extracted;
         if (extracted.unitVariance !== undefined) unitVariances.push(extracted.unitVariance);
-        if (!derivedLineText.includes(String(extracted.value.magnitude))) {
+        if (!mentionsNumber(derivedLineText, extracted.value.magnitude)) {
           return {
             ok: false,
             reason:
@@ -890,7 +897,7 @@ export function composeArithmeticChain(input: {
           };
         }
         const prior = stepResults[ref.index];
-        if (!derivedLineText.includes(String(prior.magnitude))) {
+        if (!mentionsNumber(derivedLineText, prior.magnitude)) {
           return {
             ok: false,
             reason:
@@ -1021,13 +1028,8 @@ const CANDIDATE_SOURCE_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg', '.txt'];
  * while any candidate is present.
  */
 async function detectRootSourceCandidates(projectDir: string): Promise<string[]> {
-  let entries: Array<{ name: string; isFile(): boolean }>;
-  try {
-    entries = await fs.readdir(resolve(projectDir), { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  return entries
+  const entries = await readIfExists(resolve(projectDir), (p) => fs.readdir(p, { withFileTypes: true }));
+  return (entries ?? [])
     .filter(
       (e) =>
         e.isFile() &&

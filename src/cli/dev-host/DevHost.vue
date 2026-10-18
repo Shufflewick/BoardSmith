@@ -48,6 +48,8 @@ interface SeatInfo {
   name: string;
   color?: string;
   connected: boolean;
+  /** A bot plays the seat now. */
+  bot: boolean;
 }
 // The game is always live on the host: this client is in the game once it holds a
 // seat (mySeat). The first client to connect is auto-seated by the host and lands
@@ -794,7 +796,7 @@ onUnmounted(() => {
                     :class="seat.connected ? 'is-online' : 'is-offline'"
                   ></span>
                   {{ seat.name || `Seat ${seat.seat}` }}
-                  <span v-if="cfg.botSeats.includes(seat.seat)" class="seat-switcher-menu__ai">bot</span>
+                  <span v-if="seat.bot" class="seat-switcher-menu__ai">bot</span>
                   <span v-if="seat.seat === mySeat" class="seat-switcher-menu__current-label"> (you)</span>
                 </button>
                 <div class="seat-switcher-menu__sep"></div>

@@ -127,6 +127,13 @@ export async function verifyCloseRecordCommand(
     errors,
   };
 
+  if (errors.length > 0) {
+    console.error(styleText('red', `${errors.length} chunk(s) could not be recorded:`));
+    for (const e of errors) {
+      console.error(styleText('red', `  ${e.slug}: ${e.message}`));
+    }
+  }
+
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
     return result;
@@ -139,13 +146,6 @@ export async function verifyCloseRecordCommand(
   const changedCount = recorded.filter((r) => r.changed).length;
   const currentCount = recorded.length - changedCount;
   console.log(`${changedCount} written, ${currentCount} already current`);
-
-  if (errors.length > 0) {
-    console.error(styleText('red', `${errors.length} chunk(s) could not be recorded:`));
-    for (const e of errors) {
-      console.error(styleText('red', `  ${e.slug}: ${e.message}`));
-    }
-  }
 
   return result;
 }

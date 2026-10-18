@@ -40,7 +40,7 @@ import { placeholderIdsFor } from '../element/seat-placeholders.js';
 import { isPositionalPlaceholderId } from '../element/hidden-placeholder.js';
 import type { ChoiceWithRefs, WarningEntry } from '../../types/protocol.js';
 import { textRuleErrors } from './text-rules.js';
-import { changing } from '../element/state-version.js';
+import { actingFor, changing } from '../element/state-version.js';
 import { reusedCandidates } from './choice-cache.js';
 import { resolveMultiSelect, resolveOrderedList } from '../utils/resolve-multiselect.js';
 
@@ -1328,7 +1328,7 @@ export class ActionExecutor {
     for (const selection of action.selections) {
       if (selection.onSelect && resolvedArgs[selection.name] != null) {
         try {
-          changing(this.game._ctx, () => (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(resolvedArgs[selection.name], onSelectCtx));
+          actingFor(this.game._ctx, player.seat, () => (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(resolvedArgs[selection.name], onSelectCtx));
           firedSelections.push(selection);
         } catch (error) {
           // Compensate: run onCancel for selections whose onSelect already fired.
@@ -1358,7 +1358,7 @@ export class ActionExecutor {
   /** Run an action's `execute`, the one place it is called, as game code that changes the game (#631). */
   private runExecute(action: ActionDefinition, args: Record<string, unknown>, context: ActionContext): ActionResult {
     try {
-      const result = changing(this.game._ctx, () => action.execute(args, context));
+      const result = actingFor(this.game._ctx, context.player.seat, () => action.execute(args, context));
       return result ? acceptExecuteResult(action.name, result) : { success: true };
     } catch (error) {
       return failedExecute(action.name, error);
@@ -2215,13 +2215,14 @@ export class ActionExecutor {
   private runPickCallback(pendingState: PendingActionState, run: () => void): void {
     const noted = pendingState.branchesBeforePicks;
     // World mode records elements by id, which no move changes.
+    const seat = pendingState.playerPosition;
     if (!noted || this.game._ctx._worldMode) {
-      changing(this.game._ctx, run);
+      actingFor(this.game._ctx, seat, run);
       return;
     }
     const before = branchesById(this.game);
     try {
-      changing(this.game._ctx, run);
+      actingFor(this.game._ctx, seat, run);
     } finally {
       // Also after a throw: what the callback moved before it threw stays moved.
       const after = branchesById(this.game);

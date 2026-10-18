@@ -1,7 +1,8 @@
 import { beforeEach, describe, it, expect, vi, type MockInstance } from 'vitest';
 import { Game, Player, Action, actionStep, loop, eachPlayer, PlayerFacingError, type GameOptions } from '../../engine/index.js';
 import { executeOp, type GameDefinitionLike } from '../../session/index.js';
-import { MultiplayerHost, type HostOutbound, type MultiplayerHostOptions } from './multiplayer-host.js';
+import { MultiplayerHost, type HostOutbound, type MultiplayerHostOptions, type ReconnectTimer } from './multiplayer-host.js';
+import { manualGraceTimer } from './reconnect-grace.test-helper.js';
 import { createDevHostClientMemory } from './test-client-memory.js';
 import { succeeded } from '../../session/op-result.test-helper.js';
 
@@ -121,7 +122,7 @@ function expectFollowingSeatTwo(lastOfType: ReturnType<typeof makeAltHost>['last
   expect((lastOfType('A', 'game_state').view as any).state.isMyTurn).toBe(true);
 }
 
-function makeHost(opts: { designatedBotSeats?: number[]; debug?: boolean } = {}) {
+function makeHost(opts: { designatedBotSeats?: number[]; debug?: boolean; reconnectTimer?: ReconnectTimer } = {}) {
   const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
   const host = new MultiplayerHost({
     playerCount: 2,
@@ -130,6 +131,7 @@ function makeHost(opts: { designatedBotSeats?: number[]; debug?: boolean } = {})
     makeSeed: () => 'mp',
     designatedBotSeats: opts.designatedBotSeats,
     debug: opts.debug,
+    reconnectTimer: opts.reconnectTimer,
     executeOp: (gameOptions, snap, pend, op, hostOptions) => executeOp(def, gameOptions, snap, pend, op, hostOptions),
     send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
   });
@@ -180,6 +182,51 @@ describe('MultiplayerHost (always-live)', () => {
     await host.handleMessage('B', { type: 'hello' });
     await host.handleMessage('B', { type: 'join', seat: 1 });
     expect(lastOfType('B', 'error')).toBeTruthy();
+  });
+
+  it.each([{ name: 42 }, { color: {} }])('#887: refuses a join with %o, and leaves the seat open', async (bad) => {
+    const { host, lastOfType } = makeHost();
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('B', { type: 'hello' });
+    await host.handleMessage('B', { type: 'join', seat: 2, ...(bad as any) });
+    expect(lastOfType('B', 'error').message).toBe('Seat 2 was not taken: its name and color must be text.');
+    await host.handleMessage('B', { type: 'getLobby', requestId: 'check' });
+    expect(lastOfType('B', 'lobby').seats.find((s: any) => s.seat === 2)).toMatchObject({ held: false, connected: false });
+  });
+
+  it('#887: the lobby says which seats a bot plays now', async () => {
+    const { host, lastOfType } = makeHost(); // no --bot: the open seat 2 is a bot all the same
+    const bots = () => lastOfType('A', 'lobby').seats.map((s: any) => s.bot);
+    await host.handleMessage('A', { type: 'hello' });
+    expect(bots()).toEqual([false, true]);
+    await host.handleMessage('B', { type: 'hello' });
+    await host.handleMessage('B', { type: 'join', seat: 2 });
+    expect(bots()).toEqual([false, false]);
+    await host.handleMessage('B', { type: 'leave' });
+    expect(bots()).toEqual([false, true]);
+  });
+
+  it("#887: the lobby is sent again when an away seat's grace runs out and a bot covers it", async () => {
+    const graces = manualGraceTimer();
+    const { host, lastOfType } = makeHost({ reconnectTimer: graces.timer });
+    const bots = () => lastOfType('A', 'lobby').seats.map((s: any) => s.bot);
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('B', { type: 'hello' });
+    await host.handleMessage('B', { type: 'join', seat: 2 });
+    host.disconnect('B');
+    expect(bots()).toEqual([false, false]);
+    await graces.elapse();
+    expect(bots()).toEqual([false, true]);
+  });
+
+  it('#887: the lobby is sent again when the bots stop for a follower, and when they resume', async () => {
+    const { host, lastOfType } = makeHost({ debug: true });
+    const bots = () => lastOfType('A', 'lobby').seats.map((s: any) => s.bot);
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('A', { type: 'follow', enabled: true });
+    expect(bots()).toEqual([false, false]);
+    await host.handleMessage('A', { type: 'follow', enabled: false });
+    expect(bots()).toEqual([false, true]);
   });
 
   it('routes an in-game action to the session and responds to the actor', async () => {

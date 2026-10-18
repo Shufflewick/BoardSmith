@@ -122,8 +122,26 @@ export function createWorldConnections(
     accept(socket) {
       let clientId: string | null = null;
       let loadId: string | null = null;
+      // Only if this socket still owns the id: a reload's new socket may be helloed before the old one's close fires.
+      const release = (): void => {
+        if (clientId !== null && clients.get(clientId) === socket) {
+          const gone = clientId;
+          clients.delete(gone);
+          pageLoad.delete(gone);
+          for (const [id, origin] of requestOrigin) if (origin.clientId === gone) requestOrigin.delete(id);
+          changed();
+          // A departure waits for a pending reload like the page's messages
+          // did (#387): it can start a departure's clock command.
+          queue
+            .admit({ run: () => host().disconnect(gone) })
+            .catch((error: unknown) => console.error(styleText('red', `[boardsmith dev] a page leaving the world failed: ${pageText(error instanceof Error ? error.message : String(error))}`)));
+        }
+      };
       const identify = (hello: Record<string, unknown>): void => {
-        clientId = typeof hello.clientId === 'string' ? hello.clientId : `anon-${Math.random().toString(36).slice(2)}`;
+        const next = typeof hello.clientId === 'string' ? hello.clientId : `anon-${Math.random().toString(36).slice(2)}`;
+        // A socket that changes identity leaves as its old client (#1178).
+        if (next !== clientId) release();
+        clientId = next;
         // A caller that names no page load (a scripted client) is one per socket.
         loadId = typeof hello.loadId === 'string' ? hello.loadId : randomUUID();
         clients.set(clientId, socket);
@@ -164,23 +182,7 @@ export function createWorldConnections(
             console.error(styleText('red', `[boardsmith dev] world message '${pageText(message.type)}' failed: ${pageText(reason)}`));
           });
       });
-      socket.on('close', () => {
-        // Only tear down if THIS socket still owns the id: a reload's new socket
-        // may be helloed before the old one's close fires, and a stale close
-        // would drop the seat the reconnected page just took.
-        if (clientId !== null && clients.get(clientId) === socket) {
-          const gone = clientId;
-          clients.delete(gone);
-          pageLoad.delete(gone);
-          for (const [id, origin] of requestOrigin) if (origin.clientId === gone) requestOrigin.delete(id);
-          changed();
-          // A departure waits for a pending reload like the page's messages
-          // did (#387): it can start a departure's clock command.
-          queue
-            .admit({ run: () => host().disconnect(gone) })
-            .catch((error: unknown) => console.error(styleText('red', `[boardsmith dev] a page leaving the world failed: ${pageText(error instanceof Error ? error.message : String(error))}`)));
-        }
-      });
+      socket.on('close', release);
     },
 
     forgetAll(farewell) {

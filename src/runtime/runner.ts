@@ -15,7 +15,6 @@ import {
   isSeatExpiry,
   type ActionResult,
   type FlowState,
-  type FlowDebugInfo,
   type ActionCheckpoint,
   type ActionCheckpointWindow,
   type PendingActionState,
@@ -166,6 +165,8 @@ export interface ActionExecutionResult {
 export interface PendingStepResult {
   success: boolean;
   error?: string;
+  /** Why a step failed, coded as the session route codes it (#1169). */
+  errorCode?: ErrorCode;
   /** True once the final selection was supplied and the action executed. */
   actionComplete?: boolean;
   /** `ActionResult.data` from the completed action. Only set when `actionComplete`. */
@@ -233,6 +234,11 @@ function reportHalt(actionName: string, halt: FlowHaltedError): ActionExecutionR
  */
 function failureCode(result: ActionResult | undefined): ErrorCode {
   return result?.rulesError ? ErrorCode.ENGINE_ERROR : ErrorCode.ACTION_EXECUTION_ERROR;
+}
+
+/** A refused pick's code: a crash in the rules is ENGINE_ERROR, as on every other route (#1142). */
+export function pickFailureCode(refused: { rulesError?: boolean }): ErrorCode {
+  return refused.rulesError ? ErrorCode.ENGINE_ERROR : ErrorCode.INVALID_PICK;
 }
 
 /** The kept history entries before action `actionIndex`, which a checkpoint there restores with. */
@@ -640,10 +646,10 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    *
    * The per-action checkpoint window's head entry IS that state: it is captured
    * at the current action count and the failed action recorded nothing, so no
-   * extra serialization is needed for this. Only the element tree, sequence
-   * counter, RNG position and message log are restored — the flow engine
-   * deliberately stayed put on the failure, and its position is already right.
-   * The elements it holds are pointed at the rebuilt tree (#679).
+   * extra serialization is needed for this. The element tree, sequence counter,
+   * RNG position, message log and flow are restored together from it, so the
+   * open step's awaiting seats come back with the elements (#972) and the flow
+   * holds the rebuilt tree's elements (#679).
    *
    * @returns the player-facing error to report: `error` followed by
    *   `NOTHING_CHANGED` when the rollback succeeded, or, when there was no
@@ -662,9 +668,10 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
         'Check the board before playing on, or restart the game from a save.';
     }
 
+    if (!checkpoint.flowState) throw new Error('The checkpoint before the failed action holds no flow state, so the action cannot be rolled back.');
     const { state, messageLog } = checkpointWithLiveLog(checkpoint, this.game.messages ?? [], this.game.logEviction);
     this.game.loadSerializedState(state, { messageLog });
-    this.game.relinkFlowElements();
+    this.game.rollBackFlow(checkpoint.flowState);
     if (checkpoint.sequence !== undefined) {
       this.game._ctx.sequence = checkpoint.sequence;
     }
@@ -924,13 +931,13 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * failed after changing something, as `performAction` does (#44, #801). A
    * flow that halts after the action is refused, as in `performAction`, rather than thrown (#1120).
    */
-  executeCollectedAction(
-    executor: ActionExecutor,
-    action: ActionDefinition,
-    player: Player,
-    pendingState: PendingActionState,
-    playerPosition: number
-  ): ActionExecutionResult {
+  executeCollectedAction(pendingState: PendingActionState, playerPosition: number): ActionExecutionResult {
+    const action = this.game.getAction(pendingState.actionName);
+    const player = this.game.getPlayer(playerPosition);
+    if (!action || !player) {
+      throw new Error(`Cannot complete '${pendingState.actionName}' for seat ${playerPosition}: the game has no such action or seat.`);
+    }
+    const executor = this.game.getActionExecutor();
     const branchesBefore = pendingState.branchesBeforePicks;
     if (!branchesBefore) {
       // A pending state saved by an engine older than #1144 lacks the record.
@@ -963,15 +970,6 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   getFlowState(): FlowState | undefined {
     return this.game.getFlowState() ?? undefined;
-  }
-
-  /**
-   * Get a structured, human- and machine-readable description of the current
-   * flow position. Thin passthrough mirroring the `getFlowState()` passthrough
-   * above — never throws, never returns `undefined` (see `Game.getFlowDebugInfo()`).
-   */
-  getFlowDebugInfo(): FlowDebugInfo {
-    return this.game.getFlowDebugInfo();
   }
 
   /**
@@ -1231,59 +1229,64 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   ): PendingStepResult {
     const pendingState = this.pendingActions.get(playerPosition);
     if (!pendingState) {
-      return { success: false, error: 'No pending action for this player. Call startPendingAction first.' };
+      return { success: false, error: 'No pending action for this player. Call startPendingAction first.', errorCode: ErrorCode.PICK_NOT_FOUND };
     }
 
     const refusal = this.refusalToPick(pendingState.actionName, playerPosition, pendingState);
-    if (refusal) return { success: false, error: refusal.error };
+    if (refusal) return { success: false, ...refusal };
     this.markStalePicks(pendingState, playerPosition);
 
+    const taken = this.takePick(pendingState, playerPosition, selectionName, value);
+    if (!taken.success) return { success: false, error: taken.error, errorCode: taken.errorCode };
+    if (taken.complete) return this.completePendingAction(pendingState, playerPosition);
+    return { success: true, actionComplete: false };
+  }
+
+  /**
+   * Take one pick of a seat's open pick-by-pick action, the step both routes
+   * share (`processSelectionStep` here and `PendingActionManager`'s): check it
+   * is the pick the action is at, make it, and say whether the action is now
+   * complete. It does not run the action: the caller does, with
+   * `executeCollectedAction`.
+   */
+  takePick(pendingState: PendingActionState, playerPosition: number, selectionName: string, value: unknown) {
     const action = this.game.getAction(pendingState.actionName);
     if (!action) {
-      return { success: false, error: `Action not found: ${pendingState.actionName}` };
+      return { success: false as const, error: `Action not found: ${pendingState.actionName}`, errorCode: ErrorCode.ACTION_NOT_FOUND };
     }
-
     const player = this.game.getPlayer(playerPosition);
     if (!player) {
-      return { success: false, error: `Player not found: ${playerPosition}` };
+      return { success: false as const, error: `Player not found: ${playerPosition}`, errorCode: ErrorCode.INVALID_PLAYER };
     }
-
-    const executor = this.game.getActionExecutor();
     const selection = action.selections[pendingState.currentSelectionIndex];
     if (!selection) {
-      return { success: false, error: 'No current selection' };
+      return { success: false as const, error: 'No current selection', errorCode: ErrorCode.PICK_NOT_FOUND };
     }
-
     if (selection.name !== selectionName) {
       return {
-        success: false,
-        error: `Expected selection at index ${pendingState.currentSelectionIndex}, got ${selectionName}`,
+        success: false as const,
+        error: `Expected selection at index ${pendingState.currentSelectionIndex}, got ${selectionName} at index ${action.selections.findIndex(s => s.name === selectionName)}`,
+        errorCode: ErrorCode.PICK_NOT_FOUND,
       };
     }
 
-    if (executor.isRepeatingSelection(selection)) {
+    const executor = this.game.getActionExecutor();
+    const repeating = executor.isRepeatingSelection(selection);
+    let step: Omit<ReturnType<ActionExecutor['processRepeatingStep']>, 'error' | 'rulesError'> = { done: true };
+    if (repeating) {
       const result = executor.processRepeatingStep(action, player, pendingState, value);
       if (result.error) {
-        return { success: false, error: result.error };
+        return { success: false as const, error: result.error, errorCode: pickFailureCode(result), nextChoices: result.nextChoices };
       }
-      if (result.done && executor.isPendingActionComplete(action, pendingState)) {
-        return this.completePendingAction(executor, action, player, pendingState, playerPosition);
-      }
-      this.notePickTaken(pendingState, playerPosition);
-      return { success: true, actionComplete: false };
+      step = result;
+    } else {
+      const result = executor.processSelectionStep(action, player, pendingState, selectionName, value);
+      if (!result.success) return { success: false as const, error: result.error, errorCode: pickFailureCode(result) };
     }
 
-    const stepResult = executor.processSelectionStep(action, player, pendingState, selectionName, value);
-    if (!stepResult.success) {
-      return { success: false, error: stepResult.error };
-    }
-
-    if (executor.isPendingActionComplete(action, pendingState)) {
-      return this.completePendingAction(executor, action, player, pendingState, playerPosition);
-    }
-
-    this.notePickTaken(pendingState, playerPosition);
-    return { success: true, actionComplete: false };
+    const complete = step.done && executor.isPendingActionComplete(action, pendingState);
+    if (!complete) this.notePickTaken(pendingState, playerPosition);
+    return { success: true as const, complete, repeating, done: step.done, nextChoices: step.nextChoices, warnings: step.warnings };
   }
 
   /**
@@ -1294,18 +1297,16 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * side effects.
    */
   private completePendingAction(
-    executor: ActionExecutor,
-    action: ActionDefinition,
-    player: Player,
     pendingState: PendingActionState,
     playerPosition: number
   ): PendingStepResult & { actionComplete: true } {
-    const actionResult = this.executeCollectedAction(executor, action, player, pendingState, playerPosition);
+    const actionResult = this.executeCollectedAction(pendingState, playerPosition);
     this.pendingActions.delete(playerPosition);
 
     return {
       success: actionResult.success,
       error: actionResult.error,
+      errorCode: actionResult.errorCode,
       actionComplete: true,
       data: actionResult.data,
       message: actionResult.message,
