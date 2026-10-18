@@ -391,10 +391,18 @@ interface LintCheck {
 // silently skipped check (#624).
 const LEGACY_ESLINT_CONFIGS = ['.eslintrc.js', '.eslintrc.cjs', '.eslintrc.json'];
 
-/** Asks boardsmith's own ESLint, the copy lint runs, whether it finds a config from this project upward. */
+/**
+ * Asks boardsmith's own ESLint, the copy lint runs, whether it finds a config
+ * from this project, or from any source file under src/, upward.
+ */
 async function hasEslintConfig(cwd: string): Promise<boolean> {
   if (LEGACY_ESLINT_CONFIGS.some((name) => existsSync(join(cwd, name)))) return true;
-  return (await new ESLint({ cwd }).findConfigFile()) !== undefined;
+  const eslint = new ESLint({ cwd });
+  if ((await eslint.findConfigFile()) !== undefined) return true;
+  for (const file of collectSourceFiles(join(cwd, 'src'))) {
+    if ((await eslint.findConfigFile(file)) !== undefined) return true;
+  }
+  return false;
 }
 
 // Stylelint 17 searches with cosmiconfig 9's 'global' strategy. These are
@@ -409,11 +417,11 @@ const STYLELINT_CONFIGS = [
 ];
 const STYLELINT_GLOBAL_CONFIGS = RC_EXTENSIONS.map((ext) => `config${ext}`);
 
-/** The project folder and each parent, stopping after the home folder (or at the root, outside it). */
-function stylelintSearchDirs(cwd: string): string[] {
+/** `start` and each parent, stopping after the home folder (or at the root, outside it). */
+function stylelintSearchDirs(start: string): string[] {
   const home = homedir();
-  const dirs = [cwd];
-  for (let dir = cwd; dir !== home && dirname(dir) !== dir; dir = dirname(dir)) dirs.push(dirname(dir));
+  const dirs = [start];
+  for (let dir = start; dir !== home && dirname(dir) !== dir; dir = dirname(dir)) dirs.push(dirname(dir));
   return dirs;
 }
 
@@ -447,8 +455,25 @@ function hasStylelintKey(pkgPath: string): boolean {
   return (pkg as Record<string, unknown>).stylelint != null;
 }
 
+/** The search above is Stylelint 17's, so another installed major is refused rather than guessed at. */
+function requireStylelint17(cwd: string): void {
+  const manifest = join(cwd, 'node_modules', 'stylelint', 'package.json');
+  if (!existsSync(manifest)) return;
+  const { version } = JSON.parse(readFileSync(manifest, 'utf-8')) as { version: string };
+  if (version.split('.')[0] === '17') return;
+  throw new Error(
+    `This project has Stylelint ${version} installed. boardsmith lint's Stylelint config detection is written ` +
+      `for Stylelint 17, so it cannot tell whether Stylelint ${version} would find a config. ` +
+      'Install Stylelint 17 with: npm install -D stylelint@17',
+  );
+}
+
+/** Searches from the project and from each folder holding a .vue file lint passes Stylelint, as Stylelint does. */
 function hasStylelintConfig(cwd: string): boolean {
-  const found = stylelintSearchDirs(cwd).some((dir) =>
+  requireStylelint17(cwd);
+  const starts = new Set([cwd, ...collectSourceFiles(join(cwd, 'src'), ['vue']).map((file) => dirname(file))]);
+  const dirs = new Set([...starts].flatMap(stylelintSearchDirs));
+  const found = [...dirs].some((dir) =>
     hasStylelintKey(join(dir, 'package.json')) || STYLELINT_CONFIGS.some((name) => isNonEmptyFile(join(dir, name))));
   return found || STYLELINT_GLOBAL_CONFIGS.some((name) => isNonEmptyFile(join(stylelintGlobalDir(), name)));
 }

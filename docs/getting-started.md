@@ -214,6 +214,14 @@ boardsmith test           # Run once
 boardsmith test --watch   # Watch mode
 ```
 
+`boardsmith lint` runs BoardSmith's pitfall checks, plus ESLint and Stylelint
+when the project has a config for them. It finds a config wherever the linter
+would: in the project folder, any parent folder, and any folder under `src/`
+that holds a file the linter checks (any source file for ESLint, a `.vue` file
+for Stylelint). ESLint is asked directly. Stylelint cannot be asked, so lint
+copies Stylelint 17's search, and stops on any other installed Stylelint major
+with the command to install 17 (`npm install -D stylelint@17`).
+
 ### 4. Validate Before Publishing
 
 ```bash
