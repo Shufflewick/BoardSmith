@@ -296,8 +296,8 @@ describe('afterTurns(n)', () => {
 /**
  * The shape Go Fish and Checkers use: a turn is an inner loop the seat stays in
  * (multi-jump, extra ask) until it plays `end`. A setup step ahead of the round
- * loop keeps the round loop off depth 0, so a restored position (which stamps a
- * 0 counter on every frame) cannot be read as "the outermost counter".
+ * loop keeps the round loop off depth 0, so `__iter_0` cannot be read as "the
+ * outermost counter".
  */
 class NestedLoopGame extends Game<NestedLoopGame, Player> {
   constructor(options: { playerCount: number; playerNames?: string[]; seed?: string }) {
