@@ -490,6 +490,15 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    */
   _redactedAttributes?: Set<string>;
 
+  /**
+   * How many children the per-seat view this element was restored from said it
+   * holds (`childCount`, #1108). A count-only element the seat cannot see
+   * arrives with its count and no children, so this is the only place the
+   * count survives. Read once, when a sampler fills the restored sandbox; not
+   * written back by `toJSON`, since moves made in the sandbox would leave it stale.
+   */
+  _viewChildCount?: number;
+
   /** Static flag to identify GameElement classes */
   static isGameElement = true;
 
@@ -1637,6 +1646,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     if (json.name) {
       element.name = json.name;
     }
+    if (json.childCount !== undefined) element._viewChildCount = json.childCount;
 
     // Restore visibility if present. Adopt a COPY so the restored element
     // never shares mutable state with the snapshot it was restored from —

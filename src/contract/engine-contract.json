@@ -1,7 +1,7 @@
 {
   "revision": 228,
-  "surfaceHash": "78cc3a6fa6f722cc",
-  "payloadHash": "42faf88ae9f4cb97",
+  "surfaceHash": "8154825e47aebf3a",
+  "payloadHash": "0e2d27db00239080",
   "formatHash": "3aff5d1f34f52ec0",
   "history": [
     {
@@ -1763,10 +1763,10 @@
     {
       "revision": 228,
       "date": "2026-10-18",
-      "surfaceHash": "78cc3a6fa6f722cc",
-      "payloadHash": "42faf88ae9f4cb97",
+      "surfaceHash": "8154825e47aebf3a",
+      "payloadHash": "0e2d27db00239080",
       "formatHash": "3aff5d1f34f52ec0",
-      "summary": "GameRunner.performAction records a move in history from the args the action's own checks accepted (condition first, then each pick in order, #772), handed back before the move changes anything, so a choice callback no longer runs on an unchecked earlier pick or on an attribute a false condition guards, and no move without a repeating selection is checked twice. A refused move no longer clears the previous move's animations. A move that used to throw (TypeError, RedactedAttributeError) or come back refused with that internal message is now refused with the normal reason (#1128). Game.continueFlow and FlowEngine.resume take an optional fourth argument for this. Run this build so WindupWarfare's technology purchase and Field Recovery refusals behave."
+      "summary": "A seat's view now marks an element it cannot see with visibility 'hidden' or 'count-only', and tells a seat denied a zone by hideContentsFrom that the zone is 'count-only' (it is sent one placeholder per card); GameElement gains the engine field _viewChildCount, so a bot's search sandbox keeps the counts and visibility its seat was shown (#1108)."
     }
   ]
 }

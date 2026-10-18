@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { stripVTControlCharacters } from 'node:util';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   ALLOWED_TOP_LEVEL_KEYS,
@@ -1212,6 +1213,63 @@ describe('absolute asset paths are found in subfolders too (#1111)', () => {
     const result = await validateAssetPaths(cwd);
     expect(result.passed).toBe(false);
     expect((result.details ?? []).join('\n')).toContain(`${rel}: absolute path "/cards/..." found`);
+  });
+});
+
+/** Runs validateProject in `cwd` with a passing type check, and returns what it threw and printed. */
+async function validatePrinted(cwd: string): Promise<{ thrown: unknown; printed: string }> {
+  const lines: string[] = [];
+  const log = vi.spyOn(console, 'log').mockImplementation((line?: unknown) => void lines.push(String(line)));
+  try {
+    const typeCheck = { result: { name: 'TypeScript', passed: true, message: '' }, programFiles: [], compilerReport: [] };
+    await validateProject(cwd, { typeCheck });
+    return { thrown: undefined, printed: stripVTControlCharacters(lines.join('\n')) };
+  } catch (thrown) {
+    return { thrown, printed: stripVTControlCharacters(lines.join('\n')) };
+  } finally {
+    log.mockRestore();
+  }
+}
+
+describe('a linked folder in dist/ or data/ fails validate and every check still prints (#1114)', () => {
+  /** A built table game, with a folder `link` made at `linkAt` (relative to the project). */
+  function projectWithLinkedFolder(linkAt: string): { cwd: string; link: string } {
+    const cwd = tempTree('bs-validate-linked-folder-');
+    writeFileSync(join(cwd, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table', playerCount: { min: 2, max: 4 } }));
+    mkdirSync(join(cwd, 'dist', 'rules'), { recursive: true });
+    mkdirSync(join(cwd, 'dist', 'ui'), { recursive: true });
+    mkdirSync(join(cwd, 'data'), { recursive: true });
+    writeFileSync(join(cwd, 'dist', 'manifest.json'), JSON.stringify({ name: 'fixture', backend: 'table', playerCount: { min: 2, max: 4 } }));
+    writeFileSync(join(cwd, 'dist', 'rules', 'rules.js'), 'module.exports = {};\n');
+    writeFileSync(join(cwd, 'dist', 'ui', 'index.html'), '<!DOCTYPE html><html></html>');
+    mkdirSync(join(cwd, 'elsewhere'));
+    writeFileSync(join(cwd, 'elsewhere', 'card.png'), '');
+    const link = join(cwd, linkAt);
+    symlinkSync(join(cwd, 'elsewhere'), link, 'dir');
+    return { cwd, link };
+  }
+
+  const linkMessage = (link: string) =>
+    `${link} is a link to a folder, and links are followed only to files. Replace the link with a copy of what it should point to.`;
+
+  it('fails Bundle Size, not warns, for a linked folder at the top of dist/', async () => {
+    const { cwd, link } = projectWithLinkedFolder('dist/cards');
+    const { thrown, printed } = await validatePrinted(cwd);
+    expect(thrown).toBeInstanceOf(Error);
+    expect(printed).toContain('Bundle Size: FAIL');
+    expect(printed).toContain(linkMessage(link));
+    expect(printed).not.toContain('Run `boardsmith build` to measure it now');
+    expect(printed).toContain('Required Files:');
+  });
+
+  it.each(['dist/ui/cards', 'dist/rules/cards', 'data/cards'])('fails Asset Paths for a linked folder at %s', async (linkAt) => {
+    const { cwd, link } = projectWithLinkedFolder(linkAt);
+    const { thrown, printed } = await validatePrinted(cwd);
+    expect(thrown).toBeInstanceOf(Error);
+    expect(printed).toContain('Asset Paths: FAIL');
+    expect(printed).toContain(linkMessage(link));
+    expect(printed).toContain('Bundle Size:');
+    expect(printed).toContain('Required Files:');
   });
 });
 
