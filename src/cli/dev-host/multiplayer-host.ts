@@ -385,7 +385,7 @@ interface DevPersistenceOptions {
    * without a dev server. Saving is the one thing that genuinely belongs to
    * whoever owns the file.
    */
-  onChange?: () => void;
+  onChange?: () => Promise<void>;
 }
 
 /**
@@ -1243,7 +1243,7 @@ export class MultiplayerHost {
    * would watch a game finish locally and then watch the identical move be
    * refused in production.
    */
-  private commitAtGameOver<R extends OpResult>(result: R): R | OpFailure {
+  private async commitAtGameOver<R extends OpResult>(result: R): Promise<R | OpFailure> {
     const persistence = this.opts.persistence;
     const ended = endedGame(result);
     if (!persistence || !ended) return result;
@@ -1254,7 +1254,7 @@ export class MultiplayerHost {
       now: persistence.now ?? Date.now,
     });
     if (!outcome.ok) return refusedCommit(outcome.reason);
-    if (outcome.written > 0) persistence.onChange?.();
+    if (outcome.written > 0) await persistence.onChange?.();
     return result;
   }
 
