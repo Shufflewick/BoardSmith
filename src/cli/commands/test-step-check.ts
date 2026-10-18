@@ -139,6 +139,24 @@ function parseClaimsCell(cell: string): number[] {
   return [...text.matchAll(/(?<![\w-])\d+(?![\w-])/g)].map((m) => Number(m[0]));
 }
 
+/** The exempt row must give a reason and be the only row besides `none (regression)` rows (build/spec.md "Exemptions"). */
+function refuseBadExemption(rows: SpecManifestRow[], exemption: string | undefined): void {
+  if (exemption === '') {
+    throw new Error(
+      'The Spec Manifest\'s exempt row gives no reason. Say why the chunk adds no new game behavior in its ' +
+        'second cell: `| exempt | <reason> | n/a |` (build/spec.md "Exemptions").',
+    );
+  }
+  const tested = rows.find((row) => !row.regression);
+  if (exemption !== undefined && tested !== undefined) {
+    throw new Error(
+      `The Spec Manifest marks this chunk exempt but also lists ${tested.testFile}. An exempt row must be the only ` +
+        'row besides `none (regression)` rows: remove the exempt row if the chunk has tests of its own, or remove ' +
+        'the other rows (build/spec.md "Exemptions").',
+    );
+  }
+}
+
 /** Reads the `| Test File | Claims Covered | RED Observed |` table. */
 export function parseSpecManifest(chunkText: string): SpecManifest {
   const body = extractSection(chunkText, '## Spec Manifest');
@@ -169,20 +187,7 @@ export function parseSpecManifest(chunkText: string): SpecManifest {
       regression: /^none\s*\(regression\)$/i.test(stripCell(cells[1])),
     });
   }
-  if (exemption === '') {
-    throw new Error(
-      'The Spec Manifest\'s exempt row gives no reason. Say why the chunk adds no new game behavior in its ' +
-        'second cell: `| exempt | <reason> | n/a |` (build/spec.md "Exemptions").',
-    );
-  }
-  const tested = rows.find((row) => !row.regression);
-  if (exemption !== undefined && tested !== undefined) {
-    throw new Error(
-      `The Spec Manifest marks this chunk exempt but also lists ${tested.testFile}. An exempt row must be the only ` +
-        'row besides `none (regression)` rows: remove the exempt row if the chunk has tests of its own, or remove ' +
-        'the other rows (build/spec.md "Exemptions").',
-    );
-  }
+  refuseBadExemption(rows, exemption);
   return { rows, exemption };
 }
 
