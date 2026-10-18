@@ -12,18 +12,12 @@ import { DECLARED_GAME_OPTIONS_KEY, withDeclaredGameOptions } from '../../sessio
 // `game-runtime` as the game-loading entry point.
 export { getProjectContext, type ProjectContext } from '../lib/project-context.js';
 
-// Get the CLI's directory to find the monorepo root.
-// HAZARD: this depends on this file's directory depth (and differs between
-// tsx-src and built-dist layouts). This file MUST live in the same directory
-// as dev.ts (src/cli/commands/) so the relative path math below stays correct.
+// The BoardSmith checkout this CLI runs from, whose package.json `exports` the
+// monorepo-context loaders below read. __dirname is <repo>/src/cli/commands
+// (tsx-src) or <repo>/dist/cli/commands (built-dist); three levels up reaches
+// <repo> in both, so this file MUST stay in src/cli/commands/.
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-// __dirname is <repo>/src/cli/commands (tsx-src) or <repo>/dist/cli/commands
-// (built-dist); three levels up reaches <repo> in both layouts. NOTE: the
-// monorepo-context branch below is currently unreachable in practice (there is
-// no boardsmith.json at the BoardSmith monorepo root, so getProjectContext
-// never returns 'monorepo' today) — this depth math only matters if a future
-// monorepo-context consumer is added.
 export const cliMonorepoRoot = resolve(__dirname, '..', '..', '..');
 
 /**

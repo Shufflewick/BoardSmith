@@ -1,19 +1,15 @@
 /**
- * Asset-reachability scanner — the single source of truth for ASSET-02's
- * build-blocking gate.
+ * Asset-reachability scanner: the one check that refuses a bare `<img>` tag in a
+ * game's own UI source (`src/ui`).
  *
- * It is a file-system-level static scan: it never issues an HTTP request. Vite's
- * SPA fallback serves a 200 for any unmatched path, including missing images, so
- * an HTTP-based "is this asset reachable?" probe would falsely pass every time
- * (Pitfall 2). Instead this scan reads generated UI source directly off disk and
- * flags any bare `<img` tag in a game's own UI source — the coarse, pit-of-success
- * heuristic locked in 152-CONTEXT.md. `AssetImage` lives in `boardsmith/ui`
+ * It reads the files off disk and never issues an HTTP request: Vite's SPA
+ * fallback serves a 200 for any unmatched path, including a missing image, so an
+ * HTTP probe would pass every time. `AssetImage` lives in `boardsmith/ui`
  * (issue #81), so no path inside a game is exempt: routing art through
- * `<AssetImage>` is the one sanctioned path, and anything else is a FAIL regardless
- * of what `src` resolves to. Today the `/bs:build-chunk` `test` step is the
- * caller (see `src/cli/slash-command/bs/build/test.md`); any future CLI wiring
- * should delegate here too rather than growing a second, subtly different regex
- * scanner — the single-source-of-truth pattern `sandbox-scan.ts` established.
+ * `<AssetImage>` is the one sanctioned path, and anything else fails whatever
+ * `src` resolves to. Today the `/bs:build-chunk` `test` step is the caller (see
+ * `src/cli/slash-command/bs/build/test.md`); any other caller should delegate
+ * here rather than grow a second scanner, as with `sandbox-scan.ts`.
  *
  * Games import it from its own subpath, `boardsmith/asset-scan` (the `exports`
  * entry in package.json), not from `boardsmith/testing`, so the testing barrel
