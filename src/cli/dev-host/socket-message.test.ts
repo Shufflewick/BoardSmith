@@ -95,20 +95,12 @@ const forgingEscaped = 'boom\\u000a[boardsmith dev] forged\\u202eline';
 const failingForging = { admit: () => Promise.reject(forging) };
 
 /** The console.error line that names `marker`, once one is printed. */
-function nextErrorLine(marker: string): Promise<string> {
-  return new Promise((resolve) =>
-    vi.spyOn(console, 'error').mockImplementation((...parts: unknown[]) => {
-      const line = parts.join(' ');
-      if (line.includes(marker)) resolve(line);
-    }),
-  );
-}
-
 describe('#1132: an error message in the dev server log', () => {
   it('table host: the failure line escapes the error message', () => {
-    const logged = nextErrorLine('failed');
+    const lines: string[] = [];
+    vi.spyOn(console, 'error').mockImplementation((...parts: unknown[]) => lines.push(parts.join(' ')));
     logMessageFailure(forging, 'server_request');
-    return expect(logged).resolves.toContain(`message 'server_request' failed: ${forgingEscaped}`);
+    expect(lines).toEqual([expect.stringContaining(`message 'server_request' failed: ${forgingEscaped}`)]);
   });
 
   it('world host: a failed message and a failed departure escape the error message', async () => {

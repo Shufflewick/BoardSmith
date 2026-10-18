@@ -20,7 +20,7 @@ export function parseSocketMessage(raw: RawData): SocketMessage | null {
     : null;
 }
 
-/** Longest page-chosen text a log line shows; a message type is a word or two. */
+/** Longest page-influenced text a log line shows: a message type, or the error message printed after it. */
 const PAGE_TEXT_MAX = 200;
 
 /**
