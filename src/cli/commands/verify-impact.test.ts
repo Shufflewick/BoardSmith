@@ -1004,8 +1004,11 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
 
   it('refuses a run that does not exist with its own message, not a bare ENOENT on the lock (#1164)', async () => {
     const { project, pairId } = await contradictoryProjectWithRulings();
-    const attempt = verifyImpactAdjudicateCommand({ project, runId: 'no-such-run', pairId, outcome: 'UNADJUDICATED', json: true });
-    await expect(attempt).rejects.toThrow(/no-such-run/);
+    // A well-formed id, so the run lookup (not the id format check) is what refuses it.
+    const runId = '2099-01-01T00-00-00Z';
+    const attempt = verifyImpactAdjudicateCommand({ project, runId, pairId, outcome: 'UNADJUDICATED', json: true });
+    await expect(attempt).rejects.toThrow(runId);
+    await expect(attempt).rejects.not.toThrow(/Invalid --run-id/);
     await expect(attempt).rejects.not.toThrow(/ENOENT/);
   });
 
