@@ -767,26 +767,33 @@ export async function appendRuling(
   const rulingsPath = designPath(dir, RULINGS_MD);
   const relRulingsPath = join(DESIGN_DIR, RULINGS_MD);
 
-  let rulingsText: string;
-  try {
-    rulingsText = await fs.readFile(rulingsPath, 'utf-8');
-  } catch {
-    throw new Error(
-      `No ${relRulingsPath} found in ${dir}.\n` +
-        `A bs-built project always has one, scaffolded at \`boardsmith init\` time — this command\n` +
-        `never creates it. Confirm --project points at the right game directory, or restore\n` +
-        `${relRulingsPath} before recording an adjudication resolution.`,
-    );
+  async function readRulings(): Promise<string> {
+    try {
+      return await fs.readFile(rulingsPath, 'utf-8');
+    } catch {
+      throw new Error(
+        `No ${relRulingsPath} found in ${dir}.\n` +
+          `A bs-built project always has one, scaffolded at \`boardsmith init\` time — this command\n` +
+          `never creates it. Confirm --project points at the right game directory, or restore\n` +
+          `${relRulingsPath} before recording an adjudication resolution.`,
+      );
+    }
   }
 
-  const number = nextRulingNumber(rulingsText);
-  const block = renderRuling({ number, ...entry });
-  const separator = rulingsText.endsWith('\n\n') ? '' : rulingsText.endsWith('\n') ? '\n' : '\n\n';
-  const newText = rulingsText + separator + block;
+  // The lock file sits beside RULINGS.md, so a missing one is refused before the lock is taken.
+  await readRulings();
+  // Two adjudications in different runs share RULINGS.md, so the number and the append are taken under one lock.
+  return withLedgerLock(rulingsPath, async () => {
+    const rulingsText = await readRulings();
+    const number = nextRulingNumber(rulingsText);
+    const block = renderRuling({ number, ...entry });
+    const separator = rulingsText.endsWith('\n\n') ? '' : rulingsText.endsWith('\n') ? '\n' : '\n\n';
+    const newText = rulingsText + separator + block;
 
-  await atomicWriteFile(rulingsPath, newText);
+    await atomicWriteFile(rulingsPath, newText);
 
-  return { number, path: relRulingsPath };
+    return { number, path: relRulingsPath };
+  });
 }
 
 export interface VerifyImpactAdjudicateResult {

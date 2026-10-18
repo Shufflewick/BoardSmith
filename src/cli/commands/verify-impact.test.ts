@@ -816,6 +816,19 @@ describe('contradictory — nextRulingNumber / appendRuling — over a self-cont
     await fs.mkdir(join(dir, DESIGN_DIR), { recursive: true });
   });
 
+  it('keeps every ruling, each with its own number, when several appendRuling calls run in parallel (#999)', async () => {
+    await fs.writeFile(join(dir, DESIGN_DIR, 'RULINGS.md'), rulingsCorpus());
+    const decisions = ['one', 'two', 'three', 'four', 'five'];
+
+    const appended = await Promise.all(
+      decisions.map((d) => appendRuling(dir, { decision: `Decision ${d}.`, citation: 'rulebook/a.md, p.1', rationale: 'Parallel.' })),
+    );
+
+    const text = await fs.readFile(join(dir, DESIGN_DIR, 'RULINGS.md'), 'utf-8');
+    for (const d of decisions) expect(text).toContain(`Decision ${d}.`);
+    expect(new Set(appended.map((a) => a.number)).size).toBe(decisions.length);
+  });
+
   it('contradictory: nextRulingNumber returns one past the corpus\'s last entry', async () => {
     const text = rulingsCorpus();
     expect(nextRulingNumber(text)).toBe(nextNumberFor());
@@ -894,6 +907,13 @@ describe('contradictory — nextRulingNumber / appendRuling — over a self-cont
       appendRuling(dir, { decision: 'x', citation: 'y', rationale: 'z' }),
     ).rejects.toThrow(/No design\/RULINGS\.md found/);
     await expect(fs.access(join(dir, DESIGN_DIR, 'RULINGS.md'))).rejects.toThrow();
+  });
+
+  it('appendRuling gives the same actionable error when --project has no design directory at all (#999)', async () => {
+    const elsewhere = tempTree('bs-verify-impact-no-design-');
+    await expect(
+      appendRuling(elsewhere, { decision: 'x', citation: 'y', rationale: 'z' }),
+    ).rejects.toThrow(/No design\/RULINGS\.md found/);
   });
 });
 
