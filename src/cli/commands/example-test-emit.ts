@@ -6,7 +6,7 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { styleText } from 'node:util';
 import { parse as parseTypeScript } from '@typescript-eslint/parser';
 import { atomicWriteFile } from './verify-run.js';
-import { readLiveSlices } from './verify-derive-check.js';
+import { readLiveSlices } from './rulebook-sources.js';
 import { resolveCitedSlices } from './chunk-provenance.js';
 import { scanSourceForSandboxViolations, type SandboxViolation } from '../lib/sandbox-scan.js';
 import {

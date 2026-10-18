@@ -248,10 +248,11 @@ async function suiteCannotRun(dir: string): Promise<VerifyCheckOutcome | undefin
 }
 
 async function readJsonReport(path: string): Promise<VitestJsonReport | undefined> {
+  const text = await readIfExists(path, (p) => fs.readFile(p, 'utf-8'));
   try {
-    return JSON.parse(await fs.readFile(path, 'utf-8')) as VitestJsonReport;
+    return text === undefined ? undefined : (JSON.parse(text) as VitestJsonReport);
   } catch {
-    return undefined;
+    return undefined; // A report cut short says no more than none: the verdict comes from vitest's own.
   }
 }
 

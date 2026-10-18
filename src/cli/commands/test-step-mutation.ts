@@ -50,6 +50,7 @@ import type { MutantCache } from '../lib/mutant-cache.js';
 import { readEquivalenceReview, type EquivalenceBasis, type EquivalenceReview, type EquivalentMutant } from '../lib/mutation-equivalences.js';
 import { sha256Hex } from '../lib/hash.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 import { VITEST_CONFIG_NAMES } from '../lib/test-run-scope.js';
 import { toolCommand } from '../lib/run-tool.js';
 
@@ -601,6 +602,20 @@ function runVitest(
   };
 }
 
+/** The run's report as the reporter wrote it; throws when vitest left none, or one cut short. */
+async function reportOnFile(reportPath: string): Promise<{ files: ReportedFile[] } | { refused: string }> {
+  const text = await readIfExists(reportPath, (p) => fs.readFile(p, 'utf-8'));
+  try {
+    if (text !== undefined) return JSON.parse(text);
+  } catch {
+    // A report cut short reads the same as none: the run did not finish writing it.
+  }
+  throw new Error(
+    'vitest exited without writing its report, so the test run could not be read.\n' +
+      'Run `boardsmith test` in the project to see why the suite does not start, fix that, and run this check again.',
+  );
+}
+
 /**
  * The outcomes in the run's report, for the test files `pathOf` names (it returns undefined for a
  * file the run is not about). A file that failed with no failing test, such as one that could not
@@ -611,15 +626,7 @@ async function readReport(
   projectDir: string,
   pathOf: (realPath: string) => string | undefined,
 ): Promise<{ outcomes: Outcome[]; filesRun: Set<string>; failedFiles: FailedFile[] }> {
-  let report: { files: ReportedFile[] } | { refused: string };
-  try {
-    report = JSON.parse(await fs.readFile(reportPath, 'utf-8'));
-  } catch {
-    throw new Error(
-      'vitest exited without writing its report, so the test run could not be read.\n' +
-        'Run `boardsmith test` in the project to see why the suite does not start, fix that, and run this check again.',
-    );
-  }
+  const report = await reportOnFile(reportPath);
   if ('refused' in report) throw new Error(report.refused);
   const outcomes: Outcome[] = [];
   const filesRun = new Set<string>();

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { promises as fs, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { fixtureSandbox } from '../../testing/fixture-sandbox.test-helper.js';
 import { linkGameModules } from '../../testing/installed-modules.test-helper.js';
 import { spawnCli } from '../spawn-cli.test-helper.js';
 import { GAME_VITE_CONFIG } from '../lib/test-run-scope.js';
@@ -25,6 +26,31 @@ async function repo(files: Record<string, string>): Promise<string> {
   commitAll(dir, 'base');
   return dir;
 }
+
+describe("the test check names vitest's report when it cannot read it (#1174)", () => {
+  it('rather than taking the suite for one that wrote no report', async () => {
+    const sandbox = fixtureSandbox('bs-verify-report-');
+    const dir = join(sandbox.root, 'game');
+    await write(dir, {
+      'vite.config.ts': GAME_VITE_CONFIG,
+      'tests/a.test.ts': "import { it } from 'vitest';\nit('runs', () => {});\n",
+      // A vitest that leaves a folder where its JSON report belongs.
+      'node_modules/.bin/vitest':
+        "#!/usr/bin/env node\nconst flag = '--outputFile.json=';\n" +
+        "require('node:fs').mkdirSync(process.argv.find((a) => a.startsWith(flag)).slice(flag.length));\n",
+    });
+    await fs.chmod(join(dir, 'node_modules/.bin/vitest'), 0o755);
+    const report = join(dir, '.boardsmith');
+    for (const key of ['HOME', 'TMPDIR', 'PATH', 'NODE_OPTIONS'] as const) vi.stubEnv(key, sandbox.env[key]!);
+    try {
+      await expect(VERIFY_CHECKS.test({ projectDir: dir, changed: { files: [] } } as unknown as Parameters<typeof VERIFY_CHECKS.test>[0])).rejects.toThrow(
+        new RegExp(`Could not read ${report}.*test-report\\.json \\(EISDIR\\)`),
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});
 
 describe('resolveBase: where the changes are measured from', () => {
   it('defaults to the merge base with main, not main\'s newer commits', async () => {

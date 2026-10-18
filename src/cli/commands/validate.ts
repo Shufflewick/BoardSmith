@@ -971,7 +971,7 @@ function findDanglingManifestAssets(cwd: string): string[] {
   try {
     config = JSON.parse(readFileSync(configPath, 'utf-8')) as Record<string, unknown>;
   } catch {
-    // A malformed boardsmith.json is the Project Config check's business, not
+    // A boardsmith.json it cannot read or parse is the Metadata check's report, not
     // this one's; reporting it twice would only obscure the real error.
     return [];
   }
@@ -1031,8 +1031,8 @@ function findUndeclaredImageSources(cwd: string, files: string[]): string[] {
   });
 }
 
-/** `boardsmith.json`'s declared sources, or none. A malformed config is the
- *  Project Config check's business, not this one's. */
+/** `boardsmith.json`'s declared sources, or none. A config it cannot read or
+ *  parse is the Metadata check's report, not this one's. */
 function declaredImageSources(cwd: string): string[] {
   const configPath = join(cwd, 'boardsmith.json');
   if (!existsSync(configPath)) return [];

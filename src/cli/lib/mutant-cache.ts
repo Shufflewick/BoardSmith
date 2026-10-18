@@ -324,13 +324,8 @@ async function folderContentHash(dir: string): Promise<string> {
 /** The links in `dir/node_modules`, scoped packages included, each with the path it is reached by. */
 async function installedLinks(nodeModules: string): Promise<string[]> {
   const links: string[] = [];
-  let entries;
-  try {
-    entries = await fs.readdir(nodeModules, { withFileTypes: true });
-  } catch {
-    return links;
-  }
-  for (const entry of entries) {
+  const entries = await readIfExists(nodeModules, (p) => fs.readdir(p, { withFileTypes: true }));
+  for (const entry of entries ?? []) {
     if (entry.name.startsWith('.')) continue;
     const path = join(nodeModules, entry.name);
     if (entry.isSymbolicLink()) links.push(path);
@@ -415,6 +410,7 @@ export async function mutantCachePath(projectDir: string): Promise<string> {
 
 /** The outcomes on file, the most recently used first. */
 async function readEntries(path: string): Promise<Map<string, CachedOutcome>> {
+  // A cache: any file it cannot read or parse only means every mutant runs again.
   try {
     const file = JSON.parse(await fs.readFile(path, 'utf-8')) as { format?: number; outcomes?: unknown };
     if (file.format !== CACHE_FORMAT || !Array.isArray(file.outcomes)) return new Map();

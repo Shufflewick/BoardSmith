@@ -893,6 +893,49 @@ async function recordedSevenRunFirstPair(): Promise<{ project: string; runId: st
   return { project, runId, pairId: pairsResult.pairs[0].pairId };
 }
 
+describe('verify-classify names what it cannot read instead of calling it missing (#1174)', () => {
+  it("names a chunk's CHUNK.md it cannot read rather than passing over the chunk", async () => {
+    const { project, liveSliceRel, sourceHash } = await provenanceProject();
+    await writeCitingChunk(project, 'setup', liveSliceRel, sourceHash);
+    const odd = join(project, DESIGN_DIR, 'chunks', 'odd', 'CHUNK.md');
+    await fs.mkdir(odd, { recursive: true });
+    await expect(resolveProvenance(project, [liveSliceRel])).rejects.toThrow(`Could not read ${odd} (EISDIR)`);
+  });
+
+  it('names a rulebook/ it cannot list rather than finding no slices in it', async () => {
+    const { project, liveSliceRel, sourceHash } = await provenanceProject();
+    await writeCitingChunk(project, 'setup', liveSliceRel, sourceHash);
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
+    await fs.chmod(rulebookDir, 0o300);
+    try {
+      await expect(resolveProvenance(project, [liveSliceRel])).rejects.toThrow(`Could not read ${rulebookDir} (EACCES)`);
+    } finally {
+      await fs.chmod(rulebookDir, 0o755);
+    }
+  });
+
+  it('a --run-id run is read even when another run cannot be', async () => {
+    const { project, runId } = await recordedSevenRun();
+    const other = await verifyRunInitCommand({ project, runId: '2099-01-01T00-00-00Z', json: true });
+    const otherLedger = join(project, other.ledgerPath);
+    await fs.rm(otherLedger);
+    await fs.symlink(otherLedger, otherLedger);
+    const result = await verifyClassifyPairsCommand({ project, runId, json: true });
+    expect(result.pairs.length).toBeGreaterThan(0);
+  });
+
+  it('names a rulebook/ it cannot list rather than saying there is none', async () => {
+    const { project, runId } = await recordedSevenRun();
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
+    await fs.chmod(rulebookDir, 0o300);
+    try {
+      await expect(verifyClassifyPairsCommand({ project, runId, json: true })).rejects.toThrow(`Could not read ${rulebookDir} (EACCES)`);
+    } finally {
+      await fs.chmod(rulebookDir, 0o755);
+    }
+  });
+});
+
 describe('verifyClassifyPairsCommand — enumerate pairs with provenance, over a real recorded run', () => {
   it('pairs-1: every pair carries live/staged arrays and rule-bearing counts; provenance is a sibling map keyed identically', async () => {
     const { project, runId } = await recordedSevenRun();

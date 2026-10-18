@@ -629,6 +629,27 @@ export function fee(price: number): number {
     }
   }
 
+  it("names vitest's report when it cannot read it, rather than saying vitest wrote none (#1174)", async () => {
+    const sandbox = fixtureSandbox('bs-mutant-report-');
+    const project = await designProjectFixtures(() => sandbox.root).makeProject({
+      'src/rules.ts': 'export const enabled = true;\n',
+      'node_modules/vitest/package.json': JSON.stringify({ name: 'vitest', version: '3.2.0' }),
+      // A vitest that leaves a folder where the run's report belongs, beside the config it is given.
+      'node_modules/.bin/vitest':
+        "#!/usr/bin/env node\nconst { dirname, join } = require('node:path');\n" +
+        "require('node:fs').mkdirSync(join(dirname(process.argv[process.argv.indexOf('--config') + 1]), 'report.json'));\n",
+    });
+    await fs.chmod(join(project, 'node_modules/.bin/vitest'), 0o755);
+    for (const key of ['HOME', 'TMPDIR', 'PATH', 'NODE_OPTIONS'] as const) vi.stubEnv(key, sandbox.env[key]!);
+    try {
+      await expect(runDiffMutationCheck({
+        projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), cache: memoryCache(), log: () => {},
+      })).rejects.toThrow(/Could not read .*report\.json \(EISDIR\)/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('cancels already running work after a confirmed mutant failure, while completing the baseline (#711)', async () => {
     const sandbox = fixtureSandbox('bs-mutant-fail-fast-');
     const project = await designProjectFixtures(() => sandbox.root).makeProject({
