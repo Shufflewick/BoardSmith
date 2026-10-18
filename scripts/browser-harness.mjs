@@ -67,6 +67,32 @@ export const browserScripts = () =>
  */
 export const surfaceOf = (page) => page.frameLocator('.world-dev__frame');
 
+/**
+ * Every frame that crosses `page`'s world socket, each way, in order, parsed.
+ * A frame that is not a JSON object is kept as `{ unparsed: <text> }`, so a run
+ * can read it instead of crashing on it. The arrays fill as the page runs.
+ */
+export function recordWorldFrames(page) {
+  const sent = [];
+  const received = [];
+  page.on('websocket', (ws) => {
+    if (!ws.url().includes('/__boardsmith/world')) return;
+    ws.on('framesent', ({ payload }) => sent.push(readFrame(String(payload))));
+    ws.on('framereceived', ({ payload }) => received.push(readFrame(String(payload))));
+  });
+  return { sent, received };
+}
+
+function readFrame(text) {
+  try {
+    const frame = JSON.parse(text);
+    if (frame !== null && typeof frame === 'object') return frame;
+  } catch {
+    // Not JSON: kept as text below.
+  }
+  return { unparsed: text };
+}
+
 /** Wait for the panel to be offering the action `name` to a seated player. */
 export async function waitForAction(page, name) {
   await surfaceOf(page).locator(`[data-bs-action="${name}"]`).waitFor({ timeout: 30_000 });
@@ -278,12 +304,13 @@ async function loadFixtures(script) {
  * @param run.fixture the world project, as `withFixtureWorld` takes it
  * @param run.table   instead of `fixture`: `true` serves `boardsmith init`'s table
  *                    sample through `boardsmith dev` (`withFixtureTable`, #703)
- * @param body        called with `{ launch, hostUrl }`; returns `summarise`
+ * @param body        called with `{ launch, hostUrl, fixture }`, `fixture` being the served
+ *                    project's directory; returns `summarise`
  */
 export async function runBrowserRegression(run, body) {
   const { withFixtureWorld, withFixtureTable } = await loadFixtures(run.script);
   const chromium = await loadChromium();
-  const drive = ({ hostUrl }) => body({ launch: () => launchChromium(chromium), hostUrl });
+  const drive = ({ hostUrl, fixture }) => body({ launch: () => launchChromium(chromium), hostUrl, fixture });
   process.exit(await (run.table === true ? withFixtureTable(drive) : withFixtureWorld(run.fixture, drive)));
 }
 

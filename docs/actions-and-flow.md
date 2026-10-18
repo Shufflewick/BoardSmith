@@ -1128,6 +1128,12 @@ Action.create('move')
   .order(20)                        // Where its button sits in its level
 ```
 
+A `.notUndoable()` action is still recorded in the action history, one entry
+per use. Where a seat may repeat one without limit (move a piece until it
+checks in), set `checkpoints: { actionHistory: 'undo' }` on the game definition
+to keep only the history undo reads, so the saved game stays a fixed size. See
+[Bounding the action history](./state-size.md#bounding-the-action-history).
+
 #### `.disabled()` — offer the action, greyed out, and say why
 
 ```typescript
@@ -1162,7 +1168,8 @@ Four things worth knowing:
 - **It runs at availability time, with empty args** — like `.condition()`. A
   rule that needs the resolved selections belongs in `.validate()`, which runs
   at submit time and returns the same `string`-or-not shape.
-- **A disabled action stays in `availableActions`** on purpose. That is what
+- **A disabled action stays in `availableActions`** on purpose, even when
+  every choice of its first selection is disabled too. That is what
   lets the panel draw it. The reason travels beside it in
   `PlayerGameState.disabledActions`, which is also where tutorial-gate reasons
   arrive — one channel, so a custom UI has one thing to read.
@@ -2012,7 +2019,7 @@ actionStep({
 ##### `turnScope` - say whether a re-entry continues the turn
 
 Undo reach is measured per action-step **frame**: `moveCount` lives on the frame,
-and `computeUndoInfo` anchors the rewind at `actionHistory.length - moveCount`.
+and `computeUndoInfo` anchors the rewind at the action count minus `moveCount`.
 A step that stays open via `repeatUntil` keeps one frame, so the count
 accumulates. A step **re-entered** -- from a `loop` iteration, or as the next
 step of a `sequence` -- gets a NEW frame, and the count starts again.

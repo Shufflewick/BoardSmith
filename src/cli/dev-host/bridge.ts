@@ -26,6 +26,7 @@ import {
   type SnapshotSessionAdapters,
   type PublishMeta,
   type BotSeat,
+  type SeatOp,
 } from '../../session/index.js';
 import { record, getEntries } from './log-capture.js';
 import type { WarningEntry } from '../../types/protocol.js';
@@ -187,7 +188,7 @@ export function translateOp(
   wireOp: string,
   seat: number,
   payload: Record<string, unknown>,
-): Op | DebugLogsMarker | undefined {
+): SeatOp | DebugLogsMarker | undefined {
   switch (wireOp) {
     case 'action':
       return {
@@ -365,7 +366,8 @@ const SHAPERS: { [T in Op['type']]: (result: OpResultFor<T>) => Reply } = {
   demoControl: outcomeOnly,
   convertSeatToBot: outcomeOnly,
   restoreEarlier: outcomeOnly,
-  debugHistory: (r) => (r.success ? { success: true, actionHistory: r.actionHistory } : refusal(r)),
+  debugHistory: (r) =>
+    r.success ? { success: true, actionHistory: r.actionHistory, actionHistoryBase: r.actionHistoryBase } : refusal(r),
   // DebugPanel reads `data.state`; the op carries it as `historicalState`.
   debugStateAt: (r) => (r.success ? { success: true, state: r.historicalState } : refusal(r)),
   debugStateDiff: (r) => (r.success ? { success: true, diff: r.diff } : refusal(r)),

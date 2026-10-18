@@ -221,12 +221,6 @@ export async function loadGameDefinition(
   return module.gameDefinition;
 }
 
-/** Where {@link importRuntimeBundle} writes the bundle it names `name` in `tempDir`. */
-export function runtimeBundlePath(tempDir: string, name: string): string {
-  // The real path, so Node resolves the source map's relative sources from where esbuild wrote them (macOS links /tmp and /var).
-  return join(realpathSync(tempDir), `${name}-bundle.mjs`);
-}
-
 /**
  * The package's own `src/`. The package ships it, and this module runs either
  * from it under tsx (`src/cli/commands/game-runtime.ts`) or inlined in the CLI
@@ -351,7 +345,8 @@ export async function buildRuntimeBundle(args: RuntimeBundleArgs): Promise<strin
       '\n',
     ),
   );
-  const bundlePath = runtimeBundlePath(args.tempDir, args.name);
+  // The real path, so Node resolves the map's relative sources from where esbuild wrote them (macOS links /tmp and /var).
+  const bundlePath = join(realpathSync(args.tempDir), `${args.name}-bundle.mjs`);
   const redirects = args.redirects ?? new Map<string, string>();
   const redirected = new Set<string>();
 
@@ -385,18 +380,21 @@ export async function buildRuntimeBundle(args: RuntimeBundleArgs): Promise<strin
  * {@link buildRuntimeBundle}, then load the bundle into this process.
  *
  * Returns its `gameDefinition` carrying `gameOptions` (`withDeclaredGameOptions`,
- * which refuses a definition that declares its own). The import is
- * cache-busted, so calling this again after an edit is a genuine re-read of the
- * author's source; Node never unloads the bundle it replaced, so this is for
- * commands that load once (#885).
+ * which refuses a definition that declares its own), and where the bundle was
+ * written. The import is cache-busted, so calling this again after an edit is a
+ * genuine re-read of the author's source; Node never unloads the bundle it
+ * replaced, so this is for commands that load once (#885).
  */
 export async function importRuntimeBundle(
   args: RuntimeBundleArgs & {
     /** `boardsmith.json`'s `gameOptions` list, as read (absent when it declares none). */
     gameOptions: unknown;
   },
-): Promise<{ gameDefinition: GameDefinition } & Record<string, unknown>> {
-  const moduleUrl = pathToFileURL(await buildRuntimeBundle(args)).href;
+): Promise<{ gameDefinition: GameDefinition; bundlePath: string } & Record<string, unknown>> {
+  const bundlePath = await buildRuntimeBundle(args);
+  // With the inline map, a crash in the game names its line in the game's own source, not the bundle's (#1103).
+  process.setSourceMapsEnabled(true);
+  const moduleUrl = pathToFileURL(bundlePath).href;
   // The cache-bust is `load`, not `t`: Vite strips a `t=` query as its own HMR
   // timestamp, so under any Vite-based module runner (the test suite's) a `t`
   // bust answered the first bundle again and a rules reload re-ran the old rules.
@@ -411,5 +409,7 @@ export async function importRuntimeBundle(
   return {
     ...module,
     gameDefinition: withDeclaredGameOptions(module.gameDefinition as GameDefinition, args.gameOptions),
+    // Where the bundle was written, for a worker that imports it again.
+    bundlePath,
   };
 }

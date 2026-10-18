@@ -1,5 +1,5 @@
 import { beforeEach, describe, it, expect, vi, type MockInstance } from 'vitest';
-import { Game, Player, Action, actionStep, loop, eachPlayer, type GameOptions } from '../../engine/index.js';
+import { Game, Player, Action, actionStep, loop, eachPlayer, PlayerFacingError, type GameOptions } from '../../engine/index.js';
 import { executeOp, type GameDefinitionLike } from '../../session/index.js';
 import { MultiplayerHost, type HostOutbound, type MultiplayerHostOptions } from './multiplayer-host.js';
 import { createDevHostClientMemory } from './test-client-memory.js';
@@ -61,8 +61,27 @@ class BrokenSetupGame extends AlternateGame {
   }
 }
 
+// A game whose setup refuses in words written for the player.
+class RefusingSetupGame extends AlternateGame {
+  constructor(options: GameOptions) {
+    super(options);
+    throw new PlayerFacingError('This table needs a board before it can start.');
+  }
+}
+
+/** What a page and the terminal are told when the game's setup crashed (#1103). */
+const SETUP_CRASHED =
+  "The game could not start because of an error in the game's rules. The terminal running boardsmith dev shows " +
+  'where. Fix the problem, then press "New game" or reload this page.';
+
 function makeAltHost(
-  opts: { debug?: boolean; playerCount?: number; failStart?: () => boolean; brokenSetup?: () => boolean } = {},
+  opts: {
+    debug?: boolean;
+    playerCount?: number;
+    failStart?: () => boolean;
+    brokenSetup?: () => boolean;
+    refusingSetup?: boolean;
+  } = {},
 ) {
   const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
   const playerCount = opts.playerCount ?? 2;
@@ -74,7 +93,10 @@ function makeAltHost(
     debug: opts.debug,
     executeOp: (gameOptions, snap, pend, op, hostOptions) => {
       if (op.type === 'start' && opts.failStart?.()) throw new Error('The deck is missing.');
-      const gameClass = op.type === 'start' && opts.brokenSetup?.() ? BrokenSetupGame : AlternateGame;
+      const gameClass = op.type !== 'start' ? AlternateGame
+        : opts.brokenSetup?.() ? BrokenSetupGame
+        : opts.refusingSetup ? RefusingSetupGame
+        : AlternateGame;
       return executeOp({ ...altDef, gameClass, maxPlayers: playerCount }, gameOptions, snap, pend, op, hostOptions);
     },
     send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
@@ -415,9 +437,7 @@ describe('MultiplayerHost — New game after a failed start (#1039)', () => {
     failStart = false;
     await host.handleMessage('A', { type: 'restart' });
     expect(lastOfType('A', 'init').seat).toBe(1);
-    expect(lastOfType('A', 'error').message).toBe(
-      'The game could not start (The deck is missing.). Fix the problem, then press "New game" or reload this page.',
-    );
+    expect(lastOfType('A', 'error').message).toBe(SETUP_CRASHED);
   });
 
   it('starts a game when a restart failed', async () => {
@@ -445,12 +465,23 @@ describe('MultiplayerHost — New game after a failed start (#1039)', () => {
     expect(lastOfType('C', 'init')).toBeUndefined();
   });
 
-  it("prints a crash in the game's setup in the terminal as one line, without a stack", async () => {
-    const { host } = makeAltHost({ brokenSetup: () => true });
+  it("prints a crash in the game's setup in the terminal with its stack, and tells the page only that it crashed (#1103)", async () => {
+    const { host, to } = makeAltHost({ brokenSetup: () => true });
     await host.handleMessage('A', { type: 'hello' });
-    expect(printed.mock.calls).toEqual([
-      ['[boardsmith dev] The game could not start (The deck is missing.). Fix the problem, then press "New game" or reload this page.'],
-    ]);
+    const crash = printed.mock.calls.flat().find((arg): arg is Error => arg instanceof Error);
+    expect(crash?.stack).toMatch(/^TypeError: The deck is missing\.\n\s+at new BrokenSetupGame /);
+    expect(printed.mock.calls.at(-1)).toEqual([`[boardsmith dev] ${SETUP_CRASHED}`]);
+    expect(to('A').filter((m) => m.type === 'error')).toEqual([{ type: 'error', message: SETUP_CRASHED }]);
+  });
+
+  it("prints and shows a PlayerFacingError from the game's setup in its own words, without a stack (#1103)", async () => {
+    const { host, lastOfType } = makeAltHost({ refusingSetup: true });
+    await host.handleMessage('A', { type: 'hello' });
+    const message =
+      'The game could not start (This table needs a board before it can start.). ' +
+      'Fix the problem, then press "New game" or reload this page.';
+    expect(printed.mock.calls).toEqual([[`[boardsmith dev] ${message}`]]);
+    expect(lastOfType('A', 'error').message).toBe(message);
   });
 
   it('prints a throw from the host itself in the terminal with its stack', async () => {

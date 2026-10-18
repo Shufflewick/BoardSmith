@@ -42,13 +42,18 @@ describe('listFiles', () => {
     expect(listFiles(join(tempTree('bs-list-files-'), 'missing'), { sourceTree: false })).toEqual([]);
   });
 
-  it('counts a link to a file as that file, and in a source tree skips a link to a folder, so a loop cannot trap it', () => {
-    const dir = tree(['real/a.ts', 'outside/b.ts']);
+  it('counts a link to a file as that file, and in a source tree skips a link to nothing', () => {
+    const dir = tree(['real/a.ts']);
     symlinkSync(join(dir, 'real', 'a.ts'), join(dir, 'real', 'linked.ts'));
-    symlinkSync(join(dir, 'outside'), join(dir, 'real', 'folder-link'));
-    symlinkSync(dir, join(dir, 'real', 'loop'));
     symlinkSync(join(dir, 'gone.ts'), join(dir, 'real', 'dangling.ts'));
     expect(rel(dir, listFiles(join(dir, 'real'), { sourceTree: true }))).toEqual(['real/a.ts', 'real/linked.ts']);
+  });
+
+  // The build follows a folder link, so a source-tree check that skipped it would miss bundled code (#1112).
+  it.each([true, false])('stops on a link to a folder, loops included, when sourceTree is %s', (sourceTree) => {
+    const dir = tree(['real/a.ts']);
+    symlinkSync(dir, join(dir, 'real', 'loop'));
+    expect(() => listFiles(join(dir, 'real'), { sourceTree })).toThrow(`${join(dir, 'real', 'loop')} is a link to a folder`);
   });
 
   // Outside a source tree every file is wanted, so a link the walk cannot follow would silently drop files (#1048).

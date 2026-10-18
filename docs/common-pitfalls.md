@@ -560,8 +560,8 @@ A `loop` iteration is only incremented when an action completes **without return
 ### The Problem
 
 Undo reach is measured per action-step **frame**. `moveCount` lives on the
-frame, and `computeUndoInfo` anchors the rewind at
-`actionHistory.length - moveCount`. A `loop` around an `actionStep`, or a
+frame, and `computeUndoInfo` anchors the rewind at the action count minus
+`moveCount`. A `loop` around an `actionStep`, or a
 `sequence` of several action steps, opens a NEW frame for every action -- so a
 seat that is prompted again straight after its own action starts from zero and
 cannot take back what it just did, even mid-turn.

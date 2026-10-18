@@ -59,6 +59,7 @@ export function executeDebugCommand(game: Game, command: GameCommand): CommandRe
       }
     }
   } catch (err) {
+    // The thrown text travels: a debug command runs only where the host turned debugging on, for the author (#1045).
     return { success: false, error: err instanceof Error ? err.message : String(err) };
   }
 }

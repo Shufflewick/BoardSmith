@@ -10,7 +10,7 @@ import {
 import { runnerFromSnapshot } from '../session/runner-from-snapshot.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-key.js';
 import type { Game, GameClass } from '../engine/index.js';
-import type { BotSeat, SnapshotSessionAdapters } from '../session/snapshot-session-host.js';
+import type { BotSeat, SeatOpType, SnapshotSessionAdapters } from '../session/snapshot-session-host.js';
 import { fillGameOptionDefaults, type GameOptionSelection } from '../session/game-option-selection.js';
 import { projectGameOptions } from '#testing/project-game-options';
 import type { PlayerGameState } from '../session/types.js';
@@ -33,10 +33,10 @@ type WithOptionalBoundary<T> = T extends { boundaryKey: string }
 // member keeps its OWN fields. A non-distributive `Omit<Extract<Op, ...>, ...>`
 // would collapse `action` and `selectionStep` into their common keys and make
 // `args`/`value` unrepresentable.
-export type HeadlessOp = WithOptionalBoundary<Op>;
+export type HeadlessOp = HeadlessOpOf<SeatOpType>;
 
 /** The headless op of type `T`, so `send` answers with that op's own result. */
-type HeadlessOpOf<T extends Op['type']> = { [K in T]: WithOptionalBoundary<OpOfType<K>> }[T];
+type HeadlessOpOf<T extends SeatOpType> = { [K in T]: WithOptionalBoundary<OpOfType<K>> }[T];
 
 /** The `meta` object the host hands to every broadcast, captured verbatim. */
 type BroadcastMeta = Parameters<SnapshotSessionAdapters['record']>[1];
@@ -192,7 +192,7 @@ export function createHeadlessSession<G extends Game = Game>(
     async start() {
       await host.start();
     },
-    async send<T extends Op['type']>(seat: number, op: HeadlessOpOf<T>): Promise<OpResultFor<T>> {
+    async send<T extends SeatOpType>(seat: number, op: HeadlessOpOf<T>): Promise<OpResultFor<T>> {
       structuredClone(op); // throws DataCloneError if a payload carries a non-cloneable game object
       // Stamp the host's CURRENT boundary only when the caller supplied none.
       // Never `??` over a supplied key — an explicit key, including a stale one,

@@ -1,4 +1,4 @@
-import { rulesErrorSentence } from './rules-error.js';
+import { rulesErrorSentence, withDevDetail } from './rules-error.js';
 import type { GameElement } from '../element/game-element.js';
 import { isElement } from '../element/game-element.js';
 import type { Player } from '../player/player.js';
@@ -66,7 +66,7 @@ const NO_LONGER_AVAILABLE =
  *   applied part of its changes before it stopped and rolls the game back
  *   (#44). A clean refusal carries no such mark, because it mutated nothing.
  */
-function failedExecute(actionName: string, error: unknown): ActionResult {
+export function failedExecute(actionName: string, error: unknown): ActionResult {
   // #31: a game saying "I cannot resolve this from the information state I
   // have" is an expected answer inside a bot's redacted sandbox, not a crash.
   // Logging it printed a stack per rollout — measured at 198 MB in 15 seconds
@@ -101,10 +101,7 @@ function failedExecute(actionName: string, error: unknown): ActionResult {
   // where the reader is the author who needs it and there is no player to leak
   // to. In production it goes no further than the log above.
   if (error instanceof PlayerFacingError) return { success: false, error: error.message, partiallyApplied: true };
-  const message = isDevThrowEnabled()
-    ? `${generic} (${error instanceof Error ? error.message : String(error)})`
-    : generic;
-  return { success: false, error: message, partiallyApplied: true, rulesError: true };
+  return { success: false, error: withDevDetail(generic, error), partiallyApplied: true, rulesError: true };
 }
 
 const ENGINE_ONLY_FLAGS = ['rulesError', 'partiallyApplied', 'notSimulable'] as const;
@@ -391,7 +388,18 @@ export interface PerformOptions {
    * this, for the seat that owns the follow-up.
    */
   followUp?: FollowUpAction;
+  /**
+   * Called once the checks accept the submission, with the args `execute`
+   * receives, before `onSelect` or `execute` changes the game: how a host
+   * records the move that ran without checking it a second time (#1128). Not
+   * called for an action with a repeating selection, whose picks change the
+   * game while they are checked.
+   */
+  onAccepted?: AcceptedArgs;
 }
+
+/** Receives a submission's args once the action's checks accept them. */
+export type AcceptedArgs = (args: Record<string, unknown>) => void;
 
 /** The element an id a player sent names, or undefined. */
 type SeatIdReader = (id: number) => GameElement | undefined;
@@ -1222,7 +1230,9 @@ export class ActionExecutor {
   }
 
   /**
-   * Validate all arguments for an action
+   * Validate all arguments for an action. A repeating selection's picks are
+   * not made here, since their `onEach` changes the game: `acceptsSubmission`
+   * (utils/enumerate-moves) judges those on a copy (#1101).
    */
   validateAction(
     action: ActionDefinition,
@@ -1315,6 +1325,7 @@ export class ActionExecutor {
     const checked = this.checkSubmission(action, player, args, options);
     if ('error' in checked) return { success: false, error: checked.error };
     const resolvedArgs = checked.args;
+    options?.onAccepted?.(resolvedArgs);
 
     // Fire onSelect for each selection that has it (before execute).
     // A throwing onSelect must ABORT the action (fail loud): fire onCancel for
@@ -1388,6 +1399,31 @@ export class ActionExecutor {
     args: Record<string, unknown>,
     options?: PerformOptions,
   ): ActionResult {
+    const fed = this.feedThroughSelectionSteps(action, player, args, options);
+    if ('error' in fed) return { success: false, error: fed.error, ...(fed.applied && { partiallyApplied: true }) };
+    const result = this.executePendingAction(action, player, fed.pendingState);
+    return !result.success && fed.applied ? { ...result, partiallyApplied: true } : result;
+  }
+
+  /**
+   * A whole submission's picks made through the selection steps, as
+   * {@link executeThroughSelectionSteps} makes them before `execute`: the
+   * pending action they complete, or why they were refused. `applied` says
+   * whether a callback that can change the game (`onSelect`, `onEach`) ran, so
+   * the game is not as it was. Ask {@link pendingActionRefusal} of the pending
+   * action for the action-level gate.
+   */
+  feedThroughSelectionSteps(
+    action: ActionDefinition,
+    player: Player,
+    args: Record<string, unknown>,
+    options?: PerformOptions,
+  ): { pendingState: PendingActionState; applied: boolean } | { error: string; applied: boolean } {
+    // The condition first, with no picks, as the offer checks it; the picks are checked one at a time below (#772, #1129).
+    if (!options?.followUp && !this.conditionHolds(action, player)) {
+      return { error: 'Action is not available', applied: false };
+    }
+
     const pendingState = this.createPendingActionState(action.name, player.seat);
     Object.assign(pendingState.collectedArgs, options?.followUp?.args);
     let applied = false;
@@ -1397,12 +1433,10 @@ export class ActionExecutor {
       applied ||= step.applied;
       if (step.error !== undefined) {
         this.fireOnCancelCallbacks(action, pendingState);
-        return { success: false, error: step.error, ...(applied && { partiallyApplied: true }) };
+        return { error: step.error, applied };
       }
     }
-
-    const result = this.executePendingAction(action, player, pendingState);
-    return !result.success && applied ? { ...result, partiallyApplied: true } : result;
+    return { pendingState, applied };
   }
 
   /**
@@ -1609,6 +1643,9 @@ export class ActionExecutor {
   isActionAvailable(action: ActionDefinition, player: Player): boolean {
     if (!this.conditionHolds(action, player)) return false;
 
+    // Its own `.disabled()` reason keeps it offered, greyed, even with no enabled pick, so the reason reaches the player (#1090).
+    if (this.game.getActionDisabledReason(action, player) !== null) return true;
+
     // Check if there's at least one valid path through all selections.
     // Pass action.name so tutorial gate disabled reasons are included when
     // filtering enabled choices — hasValidSelectionPath checks disabled===false.
@@ -1658,7 +1695,7 @@ export class ActionExecutor {
     // whether the action is offered is decided by the very walk that offers it,
     // so a trace can never name a reason the offer does not act on.
     this.traceSelectionPath(action.selections, player, trace.selections);
-    trace.available = this.hasValidSelectionPath(action.selections, player, {}, 0, action.name);
+    trace.available = this.isActionAvailable(action, player);
     return trace;
   }
 
