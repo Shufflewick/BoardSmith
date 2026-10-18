@@ -345,6 +345,21 @@ describe('DevHost — replay after a seat change with no state', () => {
     expect(replayed(postSpy)).toEqual([expect.objectContaining({ type: 'init', seat: 2 })]);
   });
 
+  it('an init for the same seat keeps its cached view for a frame reload', async () => {
+    const wrapper = await mountAndActivate();
+    const ws = mockWsInstance!;
+    ws.simulateMessage({ type: 'init', seat: 1 });
+    ws.simulateMessage({ type: 'game_state', view: { seat: 1 }, isComplete: false, winners: [], isDraw: false });
+    ws.simulateMessage({ type: 'init', seat: 1 });
+    await wrapper.vm.$nextTick();
+    const postSpy = spyOnIframePostMessage(wrapper);
+    await wrapper.find('iframe').trigger('load');
+    expect(replayed(postSpy)).toEqual([
+      expect.objectContaining({ type: 'init', seat: 1 }),
+      expect.objectContaining({ type: 'game_state', view: { seat: 1 } }),
+    ]);
+  });
+
   it('a frame reload after seat 2 state arrives replays seat 2 with its own view', async () => {
     const { wrapper, postSpy } = await seatTwoWithoutState();
     mockWsInstance!.simulateMessage({ type: 'game_state', view: { seat: 2 }, isComplete: false, winners: [], isDraw: false });
