@@ -330,8 +330,11 @@ function projectingCallback(argument: object): unknown {
   // A CLASS IS A FINDER'S SUBJECT AND NOT ITS CALLBACK. Wrapping one would hand
   // the door an arrow function where it expects a constructor.
   if (isClass(argument)) return argument;
-  const call = argument as (...a: unknown[]) => unknown;
-  return (...inner: unknown[]) => call(...inner.map((one) => readOnlyProjection(one)));
+  const call = argument as (this: unknown, ...a: unknown[]) => unknown;
+  // A function, not an arrow, so a caller's thisArg (as forEach takes) reaches the predicate, projected too.
+  return function (this: unknown, ...inner: unknown[]) {
+    return call.apply(readOnlyProjection(this), inner.map((one) => readOnlyProjection(one)));
+  };
 }
 
 /** A finder written as `{ player }` or `{ name }`, with anything projected in
@@ -395,7 +398,9 @@ function projectedProperty(
         function (this: unknown, ...args: unknown[]) {
           return readOnlyProjection(Reflect.apply(call, projection, args));
         }
-    : () => (...args: unknown[]) => readOnlyProjection(Reflect.apply(call, target, args));
+    : // The real collection is keyed by real objects, and its forEach hands back live entries (#978).
+      // shortcut: a plain function used as a key is wrapped as a callback and misses; name the key methods if a game needs one.
+      () => (...args: unknown[]) => readOnlyProjection(Reflect.apply(call, target, throughTheDoor(args)));
   return receiver === projection ? cachedWrapper(target, call, build) : build();
 }
 
