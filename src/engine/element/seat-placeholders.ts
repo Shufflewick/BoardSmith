@@ -9,14 +9,14 @@
  * (`picksFromSeat`) all call it, so the three cannot disagree.
  *
  * A placeholder is STABLE AND PER SEAT. It is made from the card's token with
- * the seat's own key (`ElementIds.placeholder`), so the card keeps it while it
- * moves, another seat's placeholder for it is a different number, and the
- * number says nothing about the card's id. The token is the card's id until
- * the card is shuffled; `Space.shuffle()` then gives it a fresh one
- * (`reissuePlaceholder`), so its old placeholder names nothing and a seat
- * cannot follow it through the shuffle. The token lives on the element
- * (`_t.placeholderToken`), so snapshots, checkpoints, undo and a world's
- * stored partitions carry it.
+ * the seat's own key (`ElementIds.placeholder`), so another seat's placeholder
+ * for it is a different number, and the number says nothing about the card's
+ * id. The token is the card's id until the card is shuffled or moves into a
+ * place some seat cannot see into; it then gets a fresh one
+ * (`reissuePlaceholders`), so its old placeholder names nothing and no seat can
+ * follow it there. Within the same hidden pile it keeps its token. The token
+ * lives on the element (`_t.placeholderToken`), so snapshots, checkpoints,
+ * undo and a world's stored partitions carry it.
  *
  * A card hidden only by its own visibility, in a place the seat can see, keeps
  * its real id: the board draws it face down at its real id, so a flip animates
@@ -43,16 +43,6 @@ export function placeholderIdOf(element: GameElement, seat: number): number {
 /** The id `seat` knows `element` by: its placeholder, or its real id. */
 export function seatIdOf(element: GameElement, seat: number): number {
   return namedByPlaceholder(element, seat) ? placeholderIdOf(element, seat) : element.id;
-}
-
-/**
- * Give `element` a fresh token, which no element's id or token has been, so
- * every placeholder it had names nothing. The token is minted from the
- * creation counter, as an id is, so each element a shuffle reissues spends one
- * of the game's 2^32 creations (a world's 2^48).
- */
-export function reissuePlaceholder(element: GameElement): void {
-  element._t.placeholderToken = element._ctx.ids.mint(element._ctx.sequence++);
 }
 
 /**

@@ -141,6 +141,33 @@ describe('#482 -- adoption reads stored ids back to the counter', () => {
     expect(() => stale.adoptSubtree(rootId, rooms[4]!)).toThrow(/id allocation stamp/);
   });
 
+  /** A room whose coins were shuffled after it was built, so its tokens stand above every id in it (#715). */
+  function shuffledRoom(): { room: ElementJSON; next: number; rootId: number; tokens: number[] } {
+    const game = world();
+    const room = game.create(Room, 'room');
+    for (let index = 0; index < 3; index += 1) room.create(Coin, `coin-${index}`);
+    room.shuffle();
+    game.definePartition(room.id);
+    const tokens = room.all(Coin).map((coin) => coin._t.placeholderToken!);
+    return { room: JSON.parse(JSON.stringify(room.toJSON())) as ElementJSON, next: game.worldIdAllocation(), rootId: game.id, tokens };
+  }
+
+  it('advances an undeclared counter past the stored placeholder tokens too, so nothing is minted as one', () => {
+    const { room, next, rootId, tokens } = shuffledRoom();
+    const woken = world();
+    woken.adoptSubtree(rootId, room);
+
+    expect(woken.worldIdAllocation()).toBe(next);
+    expect(tokens).not.toContain(woken.create(Coin, 'fresh').id);
+  });
+
+  it('refuses a declared stamp that stands below a stored placeholder token', () => {
+    const { room, rootId, tokens } = shuffledRoom();
+    const stale = world();
+    stale.adoptWorldIdAllocation(Math.max(...tokens.map((token) => worldElementIds(KEY).cursorOf(token))));
+    expect(() => stale.adoptSubtree(rootId, room)).toThrow(/id allocation stamp/);
+  });
+
   it('cannot find the root a stored partition hangs from under another key', () => {
     const { rooms, rootId } = storedRooms(KEY);
     const wrong = world(OTHER_KEY);

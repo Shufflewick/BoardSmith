@@ -241,7 +241,7 @@ export type ElementTree<T extends GameElement = GameElement> = {
   id: number;
   /** Child ordering: 'normal' = append, 'stacking' = prepend (like card piles) */
   order: 'normal' | 'stacking';
-  /** The token this element's placeholders are made from since a shuffle reissued it; absent, its id is the token (#715). */
+  /** The token this element's placeholders are made from since a shuffle or a move into a hidden place reissued it; absent, its id is the token (#715). */
   placeholderToken?: number;
 };
 

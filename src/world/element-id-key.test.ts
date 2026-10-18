@@ -166,6 +166,24 @@ describe("#482 -- a world's ids", () => {
     expect(worldIdAllocationOf(records, KEY)).toBe(genesis.nextElementId);
   });
 
+  it("counts a stored placeholder token in the stamp worldIdAllocationOf derives (#715)", async () => {
+    const shuffled = {
+      ...definition,
+      world: {
+        ...definition.world,
+        genesis: (game: Game) => {
+          const rooms = Object.fromEntries(ROOMS.map((name) => [name, game.create(Room, name)])) as Record<string, Room>;
+          for (const name of ["x", "y", "z"]) rooms.a!.create(Room, name);
+          rooms.a!.shuffle();
+          return rooms;
+        },
+      },
+    } as WorldRunnerOptions["definition"];
+    const genesis = await createWorld(options({ definition: shuffled })).runner.genesis();
+    const records = ROOMS.map((name) => genesis.partitions[name]!);
+    expect(worldIdAllocationOf(records, KEY)).toBe(genesis.nextElementId);
+  });
+
   it("refuses, as the platform's fault, a world woken with a key its bytes were not minted under", async () => {
     // The host handed back the wrong key -- another world's, or one minted
     // afresh on a wake. Every stored partition hangs from the root, whose id is

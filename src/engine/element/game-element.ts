@@ -296,6 +296,36 @@ export function forEachInSubtree(element: GameElement, visit: (element: GameElem
 }
 
 /**
+ * Give `element`, and everything under it, a fresh placeholder token (#715),
+ * which no element's id or token has been, so every placeholder a seat knew it
+ * by names nothing. A token is minted from the creation counter, as an id is,
+ * so each element reissued spends one of the game's 2^32 creations (a world's
+ * 2^48). `Space.shuffle()` calls it, and so does a move into a place some seat
+ * cannot see into.
+ */
+export function reissuePlaceholders(element: GameElement): void {
+  forEachInSubtree(element, (reissued) => {
+    reissued._t.placeholderToken = reissued._ctx.ids.mint(reissued._ctx.sequence++);
+    // A nested partition root's token is that partition's write.
+    markTouchedPartition(reissued);
+  });
+}
+
+/** Whether a state keeps what it covers from some seat. */
+function concealsFromSomeSeat(state: VisibilityState | undefined): boolean {
+  return state !== undefined && (state.mode !== 'all' || (state.exceptPlayers?.length ?? 0) > 0);
+}
+
+/** Whether some seat cannot see into `place`: it, or something it sits in, hides its contents from that seat. */
+function hiddenFromSomeSeat(place: GameElement): boolean {
+  for (let at: GameElement | undefined = place; at; at = at._t.parent) {
+    if (concealsFromSomeSeat(at._visibility)) return true;
+    if (hasZoneVisibility(at) && concealsFromSomeSeat(at.getZoneVisibility())) return true;
+  }
+  return false;
+}
+
+/**
  * Every element a query answered with, marked at once.
  *
  * The residency check is hoisted OUT of the loop: a published board game has
@@ -1002,6 +1032,9 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     } else {
       destination._t.children.push(this);
     }
+
+    // A seat that cannot see where it went must not follow it there by its placeholder (#715).
+    if (destination !== oldParent && hiddenFromSomeSeat(destination)) reissuePlaceholders(this);
 
     // Trigger enter event if moving to a Space (duck-typed, see above).
     if (isChildEventTarget(destination)) {

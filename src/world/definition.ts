@@ -790,9 +790,10 @@ export function worldIdAllocationOf(
   return highest + 1;
 }
 
-/** The highest counter value any id in a serialized subtree was minted from. */
+/** The highest counter value any id or placeholder token (#715) in a serialized subtree was minted from. */
 function highestElementCursor(json: ElementJSON, ids: WorldElementIds): number {
   let highest = typeof json.id === "number" ? ids.cursorOf(json.id) : WORLD_PARTITION_ID_FLOOR - 1;
+  if (json.placeholderToken !== undefined) highest = Math.max(highest, ids.cursorOf(json.placeholderToken));
   for (const child of json.children ?? []) {
     highest = Math.max(highest, highestElementCursor(child, ids));
   }

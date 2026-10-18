@@ -1,8 +1,8 @@
 {
-  "revision": 245,
+  "revision": 246,
   "surfaceHash": "7f205bf27a6fcb74",
-  "payloadHash": "0e2d27db00239080",
-  "formatHash": "3aff5d1f34f52ec0",
+  "payloadHash": "b89f965899e248cd",
+  "formatHash": "ed115e27605f2ca7",
   "history": [
     {
       "revision": 1,
@@ -1903,6 +1903,14 @@
       "payloadHash": "0e2d27db00239080",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "game.pruneMessages({ keepLast: N }) now counts per audience (#1067): each seat, and spectators, keeps its own last N lines and is shown no older ones, so a seat's log after the cut no longer depends on how many private lines other seats got. The stored log is evicted from the front up to the earliest line any audience keeps, so it can hold more than N lines. A new restore-only root field, messagesShownFrom (LogEviction), records each audience's cut while it is past the log's front; no seat's view carries it, and messageOffset now also counts a seat's lines before its cut. A saved game without the field loads as before; no game needs a rebuild."
+    },
+    {
+      "revision": 246,
+      "date": "2026-10-18",
+      "surfaceHash": "7f205bf27a6fcb74",
+      "payloadHash": "b89f965899e248cd",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A seat now knows each card it cannot see by a placeholder id of its own (#715), instead of -1, -2, ... in view order: large negative numbers made with a key per seat. A card keeps its placeholder while it stays in its hidden pile and is given a new one when shuffle() shuffles its space or it moves into a place some seat cannot see into. Cards in a contentsHidden() zone are offered to picks under such ids too. A seat's action, selection step and choices request, and a world command and pick, read placeholders back into real cards where they enter, and refuse a reissued placeholder, another seat's placeholder, and the real id of a card the seat only knows by placeholder, as a card that is not there. Stored format: an element whose placeholder was reissued carries placeholderToken in its full serialization (table snapshots and world partitions, never a seat view), minted from the creation counter, and a world's allocation stamp now stands above every stored token; an older runner would drop the tokens, so formatHash moves. No game needs a rebuild."
     }
   ]
 }

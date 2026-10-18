@@ -1,7 +1,7 @@
 /**
  * A world names a hidden card by a stable placeholder of the asking seat's own
- * (#715): a card keeps it while it moves and until it is shuffled, a placeholder
- * names only that card, another seat's placeholder and a hidden card's real id
+ * (#715): a card keeps it until it is shuffled or moved into another hidden
+ * place, a placeholder names only that card, another seat's placeholder and a hidden card's real id
  * are refused, and a card in a fully hidden zone can be picked blind.
  */
 import { describe, it, expect } from 'vitest';
@@ -141,19 +141,23 @@ describe("a world's stable per-seat placeholders (#715)", () => {
     await test.close();
   });
 
-  it('keeps a moved card on its placeholder, and keeps every placeholder through a wake', async () => {
+  it('reissues a card moved into another hidden pile, keeps the rest, and keeps them through a wake', async () => {
     const test = await started();
     const [ace, king] = await pouchIds(test, 1);
     await test.take(1, 'stash', { card: ace });
 
-    const view = await test.getPlayerView(1);
-    expect(find(view.state as ElementJSON, 'stash')!.children!.map((c) => c.id)).toEqual([ace]);
+    const stashed = () => test.getPlayerView(1).then((view) => find(view.state as ElementJSON, 'stash')!.children!.map((c) => c.id));
+    const [moved] = await stashed();
+    expect(moved).toBeLessThan(0);
+    expect([ace, king]).not.toContain(moved);
+    await expect(test.take(1, 'filch', { card: ace })).rejects.toThrow();
     await test.wake();
     expect(await pouchIds(test, 1)).toEqual([king]);
+    expect(await stashed()).toEqual([moved]);
     await test.close();
   });
 
-  it('reissues placeholders when the cards are shuffled, and refuses the old ones', async () => {
+  it('reissues placeholders when the cards are shuffled, refuses the old ones, and keeps the new ones through a wake', async () => {
     const test = await started();
     const before = await pouchIds(test, 1);
     await test.take(1, 'shake');
@@ -161,6 +165,8 @@ describe("a world's stable per-seat placeholders (#715)", () => {
     const after = await pouchIds(test, 1);
     expect(after).toHaveLength(2);
     expect(after.filter((id) => before.includes(id))).toEqual([]);
+    await test.wake();
+    expect(await pouchIds(test, 1)).toEqual(after);
     await expect(test.take(1, 'filch', { card: before[0] })).rejects.toThrow();
     await test.take(1, 'filch', { card: after[0] });
     expect(await commonsCards(test)).toHaveLength(1);

@@ -54,7 +54,7 @@
  *
  * A SEAT'S PLACEHOLDER IDS ARE MADE HERE TOO (#715). A card a seat cannot see
  * is named to it by a placeholder: a token from the id space (the card's id,
- * or the id a shuffle reissued it) run through a cipher of the same shape
+ * or the id it was reissued when it was shuffled or hidden) run through a cipher of the same shape
  * keyed for that seat alone, and negated, so it is never a real id. The seat's
  * key is derived from the game's, which the seat never holds, so a placeholder
  * says nothing about the card's id, and one seat's placeholders say nothing

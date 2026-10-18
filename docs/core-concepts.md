@@ -233,16 +233,19 @@ particular hand without seeing what it is.
 sends back all take it from one place (`src/engine/element/seat-placeholders.ts`),
 so the board and the action panel always agree on which card is which.
 
-- **Stable, and the seat's own.** A card keeps its placeholder while it moves,
-  until its space is shuffled. `shuffle()` then reissues it, as it clears
-  grants (#962), so no seat can follow a face-down card through a shuffle. Each
-  seat has its own placeholder for the same card, so placeholders cannot be
-  compared between seats.
+- **Stable, and the seat's own.** A card keeps its placeholder while it stays
+  in its hidden pile, reordered within it included. It is reissued when
+  `shuffle()` shuffles its space, as it clears grants (#962), and whenever the
+  card moves into a place some seat cannot see into (another hidden zone, or
+  under a hidden element). So no seat can follow a face-down card through a
+  shuffle, a deal or an insert at a secret position. Each seat has its own
+  placeholder for the same card, so placeholders cannot be compared between
+  seats.
 - **Never a real id.** A placeholder is a negative number, and a real id never
   is. It is the card's token run through a cipher keyed for that seat alone and
   derived from the game's secret id key (#447, #482). Without that key a
   placeholder says nothing about the card's id. The token is the card's id
-  until a shuffle gives the card a fresh one, minted from the creation counter
+  until a reissue gives the card a fresh one, minted from the creation counter
   like an id. The token is stored on the element (`placeholderToken` in its
   full serialization, never in a seat's view), so snapshots, checkpoints, undo
   and a world's stored partitions all keep it.
@@ -256,7 +259,7 @@ so the board and the action panel always agree on which card is which.
   selection step and choices request, and a world command and pick, read the
   seat's placeholders back into real cards before anything else sees them.
   Bot moves come in through the same action op. A placeholder whose card has
-  since been taken, moved out of the seat's sight or shuffled is refused, and
+  since been reissued or moved out of the seat's sight is refused, and
   so is another seat's placeholder and the real id of a card the seat only
   knows by placeholder. Each is refused exactly as a card that is not there.
   A placeholder is read only under the seat that sent it: two seats' numbers
@@ -266,8 +269,8 @@ so the board and the action panel always agree on which card is which.
 - **What keeps its real id.** A card hidden only by its own visibility
   (`showOnlyTo`, `hideFrom`) on a table the seat can see keeps its real id, so
   a flip animates. A seat may name it by that id.
-- **What it costs.** One number on each element that has been shuffled since it
-  was created. A seat shown any placeholder now gets a view of its own when one
+- **What it costs.** One number on each element that has been shuffled or
+  hidden since it was created, and one creation-counter value per reissue. A seat shown any placeholder now gets a view of its own when one
   update goes out to many seats (`projectionSignaturesFor`), where before seats
   with the same visibility shared one encoded view.
 

@@ -1,6 +1,5 @@
-import { GameElement, forEachInSubtree, markTouchedPartition } from './game-element.js';
+import { GameElement, forEachInSubtree, markTouchedPartition, reissuePlaceholders } from './game-element.js';
 import { childrenChanged } from './cell-index.js';
-import { reissuePlaceholder } from './seat-placeholders.js';
 import { changing } from './state-version.js';
 import type { ElementClass, ElementAttributes, ElementContext, ElementJSON } from './types.js';
 import type { Player } from '../player/player.js';
@@ -481,10 +480,11 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
     }
     // Descendants too: a grant or a placeholder on anything inside a moved card would show where the card went.
     for (const child of this._t.children) {
+      reissuePlaceholders(child);
       forEachInSubtree(child, (element) => {
-        reissuePlaceholder(element);
-        if (element._visibility !== undefined) element.clearVisibility();
-        // Both are writes to a nested partition root's own partition, not the shuffled space's.
+        if (element._visibility === undefined) return;
+        element.clearVisibility();
+        // A cleared grant on a nested partition root is that partition's write, not the shuffled space's.
         markTouchedPartition(element);
       });
     }

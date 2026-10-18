@@ -142,12 +142,12 @@ state a ceiling that had moved by a factor of four.
   137 bytes where `[3, …]` is 23. Across 8 seats and 325 actions, that single
   stylistic choice is ~579 KB of saved state.
 
-One smaller cost is fixed by the engine: **a shuffled element carries one more
-number.** `shuffle()` gives every element in the shuffled space a fresh
-`placeholderToken` (about 30 bytes of JSON each), so the placeholder ids seats
-know those cards by are reissued and stay stable until the next shuffle (#715).
-A 52-card deck shuffled once adds about 1.5 KB to the tree. Shuffling it again
-replaces the numbers rather than adding to them.
+One smaller cost is fixed by the engine: **a shuffled or hidden element carries
+one more number.** `shuffle()` gives every element in the shuffled space a
+fresh `placeholderToken` (about 30 bytes of JSON each), and so does a move into
+a place some seat cannot see into, so the placeholder ids seats know those cards
+by are reissued (#715). A 52-card deck shuffled once adds about 1.5 KB to the
+tree. Reissuing again replaces the numbers rather than adding to them.
 
 ## Packed bulk data: use a typed array
 

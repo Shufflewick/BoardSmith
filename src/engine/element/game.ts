@@ -119,11 +119,12 @@ import { PERSIST_KEY, PERSIST_PRIVATE_KEY } from '../../persistence/persistence.
 import { ENGINE_OWNED_GAME_FIELDS, describeEngineFieldShadow } from './engine-owned-fields.js';
 import { DEFAULT_COLOR_PALETTE, DEFAULT_COLOR_LABELS, seatDisplayName } from './seat-defaults.js';
 
-/** Every element id carried by a serialized subtree, for `adoptSubtree`. */
-function collectJsonIds(json: ElementJSON, into: number[]): void {
-  into.push(json.id);
+/** Every element id carried by a serialized subtree, and every placeholder token (#715), for `adoptSubtree`. */
+function collectJsonIds(json: ElementJSON, ids: number[], tokens: number[]): void {
+  ids.push(json.id);
+  if (json.placeholderToken !== undefined) tokens.push(json.placeholderToken);
   if (json.children) {
-    for (const child of json.children) collectJsonIds(child, into);
+    for (const child of json.children) collectJsonIds(child, ids, tokens);
   }
 }
 
@@ -2173,7 +2174,8 @@ export class Game<
     // comparison with the counter below is made on the value read back with
     // the world's key, never on the id.
     const adoptedIds: number[] = [];
-    collectJsonIds(json, adoptedIds);
+    const adoptedTokens: number[] = [];
+    collectJsonIds(json, adoptedIds, adoptedTokens);
     const worldIds = this._ctx._worldIds!;
 
     // The id index holds every element in the tree and the pile (#755).
@@ -2197,9 +2199,10 @@ export class Game<
     // that were NOT hydrated were the ones it then minted on top of. A world
     // that declared an allocation stamp is therefore told here, at the bytes
     // that prove it, rather than at the collision hours later.
+    // A placeholder token is minted from the same counter, so the next id must stand above every token too (#715).
     let maxAdoptedCursor = -1;
     let maxAdoptedId = -1;
-    for (const id of adoptedIds) {
+    for (const id of [...adoptedIds, ...adoptedTokens]) {
       const cursor = worldIds.cursorOf(id);
       if (cursor > maxAdoptedCursor) {
         maxAdoptedCursor = cursor;
@@ -2209,7 +2212,7 @@ export class Game<
     if (this._ctx.sequence <= maxAdoptedCursor) {
       if (this._ctx._worldIdAllocationDeclared) {
         throw new StaleAllocationStampError(
-          `Cannot adopt partition "${json.name ?? json.className}": it holds element id ` +
+          `Cannot adopt partition "${json.name ?? json.className}": it holds element id or placeholder token ` +
             `${maxAdoptedId}, minted at or above this world's id allocation stamp of ` +
             `${this._ctx.sequence}. The stamp is stale, so the next id this world minted would ` +
             `collide with one it has already stored. This is a host defect: the host lost or ` +
@@ -4904,7 +4907,7 @@ export class Game<
     // safe layout $-keys of its attributes (identity-bearing image refs are
     // redacted), never its name, and takes this seat's placeholder id for it,
     // which never says what the card is and is reissued when it is shuffled
-    // (#715, `seat-placeholders.ts`).
+    // or moved into a hidden place (#715, `seat-placeholders.ts`).
     // __hidden is seeded here (not in redactHiddenElementAttrs) so the
     // count-only CONTAINER branch keeps its distinct shape (no __hidden, has
     // childCount). CR-02 (159): original -> placeholder id is recorded in
@@ -5055,7 +5058,7 @@ export class Game<
           // sandbox does exactly that), and without the marker every withheld
           // attribute came back as its class-field default — a specific false
           // fact the searcher then reasoned from. See `GameElement.fromJSON`.
-          ownJson = { ...json, attributes: filteredAttrs, redacted: true };
+          ownJson = { ...ownJson, attributes: filteredAttrs, redacted: true };
         }
       }
 
