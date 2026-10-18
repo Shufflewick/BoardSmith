@@ -1097,6 +1097,14 @@ describe('chunk-provenance-status', () => {
     await expect(chunkProvenanceStatusCommand({ project, json: true })).rejects.toThrow(/No design\/chunks\/ directory/);
   });
 
+  it('names a CHUNK.md it cannot read instead of skipping the chunk (#1174)', async () => {
+    const { project } = await makeStatusProject();
+    await fs.mkdir(join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md'), { recursive: true });
+    await expect(chunkProvenanceStatusCommand({ project, quiet: true })).rejects.toThrow(
+      `Could not read ${join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md')} (EISDIR)`,
+    );
+  });
+
   it('a well-formed full block reports state full', async () => {
     const { project } = await makeStatusProject();
     await addChunk(project, 'jab', 'verified', 'rulebook/01-setup-and-round-structure.md');

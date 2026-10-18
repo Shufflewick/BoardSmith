@@ -3,7 +3,8 @@
  * The fixtures are in `catalogue-fixture.test-helper.ts`.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { mkdirSync, rmSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { commitAll, git, initRepo, writeFiles } from './verify-result.test-helper.js';
@@ -147,7 +148,8 @@ describe('what each game is checked against (#591)', () => {
     expect([checkoutState(legacy), checkoutState(world)]).toEqual(before);
   });
 
-  it('links a catalogue game when the catalogue is named in other letter case than on disk (#1174)', async () => {
+  // Only a disk that ignores letter case finds the fixture's Games/ folder as games/.
+  it.skipIf(!existsSync(tmpdir().toUpperCase()))('links a catalogue game when the catalogue is named in other letter case than on disk (#1174)', async () => {
     const fx = fixture();
     await makeTree(fx.tree);
     await makeGame(fx, 'legacy');

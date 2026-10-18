@@ -133,7 +133,10 @@ export async function appendGitignoreEntry(projectDir: string): Promise<void> {
   );
 }
 
-/** Whether anything stands at `path`, a link that cannot be followed included, so a move never lands on it. */
+/**
+ * Whether anything stands at `path`, a link that cannot be followed included, so a move never lands on it.
+ * At a source path that is deliberate too: a dangling link there is stranded and moved like any file.
+ */
 async function exists(path: string): Promise<boolean> {
   try {
     await fs.lstat(path);
