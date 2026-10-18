@@ -78,6 +78,10 @@ describe('element-level visibility on GameElement', () => {
     const lantern = game.hall.first(Token)!;
     expect(game.hall.isVisibleTo(1)).toBe(true);
     expect(game.hall.isVisibleTo(2)).toBe(false);
+    expect(lantern.isVisibleTo(1)).toBe(false);
+    // The zone grant reaches seat 2, but the hall itself is hidden from it, so nothing inside is sent (#1062).
+    expect(lantern.isVisibleTo(2)).toBe(false);
+    game.hall.addVisibleTo(2);
     expect(lantern.isVisibleTo(2)).toBe(true);
     expect(lantern.isVisibleTo(1)).toBe(false);
   });

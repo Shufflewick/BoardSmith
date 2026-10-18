@@ -347,6 +347,16 @@ describe('useFocusTrap', () => {
     for (const el of [t.board, t.actionPanel, t.other]) expect(el.hasAttribute('inert'), el.id).toBe(false);
   });
 
+  it('a background element marked data-bs-outside-modal stays live while the rest goes inert (#1106)', () => {
+    const t = buildAppTree();
+    t.board.setAttribute('data-bs-outside-modal', '');
+    const { open } = trap(ref(t.dialog), { onClose: vi.fn() });
+
+    open();
+    expect(t.board.hasAttribute('inert')).toBe(false);
+    for (const el of [t.actionPanel, t.other]) expect(el.hasAttribute('inert'), el.id).toBe(true);
+  });
+
   it('close() leaves elements that were already inert before open() inert (#863)', () => {
     const t = buildAppTree();
     t.actionPanel.setAttribute('inert', '');

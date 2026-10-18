@@ -23,6 +23,7 @@ import {
   provideBoardInteraction,
 } from '../../../composables/useBoardInteraction.js';
 import type { BoardInteraction } from '../../../composables/useBoardInteraction.js';
+import { GAME_CONTEXT_KEYS } from '../../../composables/useGameContext.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -59,7 +60,7 @@ function buildCardElement(id: number): GameElement {
 function mountWithInteraction(
   element: GameElement,
   interaction: BoardInteraction,
-  extraProvides: Record<string, unknown> = {},
+  extraProvides: Record<string | symbol, unknown> = {},
 ) {
   const Parent = defineComponent({
     setup() {
@@ -200,5 +201,34 @@ describe('HandRenderer — anchor attributes (105-02 structural-parity blocker f
     // Both must coexist on the same element
     expect(container.attributes('data-bs-el-id')).toBe('10');
     expect(container.attributes('data-zone-id')).toBe('10');
+  });
+});
+
+describe('HandRenderer — whose hand it is (#895, #1044)', () => {
+  const opponentHand = (name: string) => ({
+    id: 10,
+    className: 'Hand',
+    attributes: { player: { seat: 2, name } },
+    children: [buildCardElement(1)],
+  });
+  const viewer = { [GAME_CONTEXT_KEYS.playerSeat]: ref(1) };
+
+  it("names an unnamed opponent's hand by their seat, not the seat after it", () => {
+    const wrapper = mountWithInteraction(opponentHand(''), createBoardInteraction(), viewer);
+    expect(wrapper.find('.hand-label').text()).toBe("Player 2's Hand");
+  });
+
+  it("announces an opponent's hand as theirs, matching its header", () => {
+    const wrapper = mountWithInteraction(opponentHand('Bob'), createBoardInteraction(), viewer);
+    expect(wrapper.find('.hand-container').attributes('aria-label')).toBe("Bob's Hand, 1 cards");
+  });
+
+  it('announces the viewer\'s own hand as theirs', () => {
+    const wrapper = mountWithInteraction(
+      { ...opponentHand('Bob'), attributes: { player: { seat: 1, name: 'Ann' } } },
+      createBoardInteraction(),
+      viewer,
+    );
+    expect(wrapper.find('.hand-container').attributes('aria-label')).toBe('Your Hand, 1 cards');
   });
 });

@@ -32,6 +32,9 @@ const cfg = props.config;
 // Shared with the world dev host, which needs the identical guarantee under its
 // own key; `dev-client-id.ts` says why the keys are separate.
 const clientId = loadDevClientId(TABLE_CLIENT_KEY, 'c');
+// This page load, named in every hello: the game numbers its requests from
+// req-0 on each load, so the host answers only the load that asked (#1041).
+const loadId = `l-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
 
 // ── Lobby / game state (driven by the host over WS) ──────────────────────────
 /** One seat as the host shows it to this page (`LobbySeat` in multiplayer-host.ts). */
@@ -217,7 +220,7 @@ function wsSend(message: Record<string, unknown>): void {
 function connect(): void {
   ws = new WebSocket(wsUrl());
   ws.addEventListener('open', () =>
-    wsSend({ type: 'hello', clientId, ...(joinedRunId === null ? {} : { runId: joinedRunId }) }),
+    wsSend({ type: 'hello', clientId, loadId, ...(joinedRunId === null ? {} : { runId: joinedRunId }) }),
   );
   ws.addEventListener('message', (ev) => {
     try {

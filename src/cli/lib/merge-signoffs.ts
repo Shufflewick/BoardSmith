@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import { MERGE_SIGNOFFS_MD, designPath } from './project-paths.js';
+import { readIfExists } from './read-if-exists.js';
 
 /**
  * `design/MERGE-SIGNOFFS.md` (#403): what `boardsmith chunk-merge` vouched for when the merged
@@ -63,7 +64,7 @@ function parseEntry(path: string, body: string): MergeSignoff {
 
 /** Every entry, oldest first; `[]` when no merge has recorded one. */
 export async function readMergeSignoffs(projectDir: string): Promise<MergeSignoff[]> {
-  const text = await fs.readFile(designPath(projectDir, MERGE_SIGNOFFS_MD), 'utf-8').catch(() => undefined);
+  const text = await readIfExists(designPath(projectDir, MERGE_SIGNOFFS_MD), (path) => fs.readFile(path, 'utf-8'));
   if (text === undefined) return [];
   const parts = text.split(/^### (.+?)[ \t]*$/m);
   const entries: MergeSignoff[] = [];

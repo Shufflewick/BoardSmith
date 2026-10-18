@@ -121,7 +121,7 @@ describe("useGameContext inside a world's shell (#453)", () => {
 
   it('says the component is in a world, which has no table context, and what to read instead', () => {
     expect(() => mount(WorldProvider, { slots: { default: () => h(ReadsTheContext) } })).toThrow(
-      /inside a world's shell.*gameState, dueSeats, timeTravelDiff, turnDeadline.*usePlayContext\(\).*useWorld\(\)/s,
+      /inside a world's shell.*gameState, dueSeats, timeTravelDiff, platformRequest, turnDeadline.*usePlayContext\(\).*useWorld\(\)/s,
     );
   });
 });

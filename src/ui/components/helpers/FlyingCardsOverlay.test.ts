@@ -7,6 +7,9 @@
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
+import { computed } from 'vue';
+import { DEFAULT_COLOR_PALETTE } from '../../../engine/index.js';
+import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 import FlyingCardsOverlay from './FlyingCardsOverlay.vue';
 import type { FlyingCard } from '../../composables/useFlyingElements.js';
 
@@ -105,31 +108,37 @@ describe('FlyingCardsOverlay', () => {
     });
 
     it('draws an owned element with no art as a coloured piece, not a card', () => {
-      overlay([flyingCard('a', { playerSeat: 0 })]);
+      overlay([flyingCard('a', { playerSeat: 1 })]);
       expect(document.querySelector('.piece-inner')).not.toBeNull();
       expect(document.querySelector('.card-inner')).toBeNull();
     });
 
-    it('colours the piece by seat', () => {
-      overlay([flyingCard('a', { playerSeat: 1 })], { playerColors: ['#ff0000', '#00ff00'] });
+    it("colours the piece with its seat's colour from the players the shell publishes", () => {
+      mount(FlyingCardsOverlay, {
+        props: { flyingCards: [flyingCard('a', { playerSeat: 2 })] },
+        attachTo: document.body,
+        global: {
+          provide: {
+            [GAME_CONTEXT_KEYS.players]: computed(() => [
+              { seat: 1, name: 'Ann', color: '#ff0000' },
+              { seat: 2, name: 'Bob', color: '#00ff00' },
+            ]),
+          },
+        },
+      });
       const piece = document.querySelector('.piece-inner') as HTMLElement;
       expect(piece.getAttribute('style')).toContain('rgb(0, 255, 0)');
     });
 
-    it('falls back to its own palette when the game supplies none', () => {
-      overlay([flyingCard('a', { playerSeat: 0 })]);
+    it("outside a shell, colours the piece as the engine colours that seat (seat 2 is the palette's second colour)", () => {
+      overlay([flyingCard('a', { playerSeat: 2 })]);
       const piece = document.querySelector('.piece-inner') as HTMLElement;
-      expect(piece.getAttribute('style')).toContain('rgb(231, 76, 60)');
-    });
-
-    it('wraps the seat around a short palette rather than rendering colourless', () => {
-      overlay([flyingCard('a', { playerSeat: 3 })], { playerColors: ['#ff0000', '#00ff00'] });
-      const piece = document.querySelector('.piece-inner') as HTMLElement;
-      expect(piece.getAttribute('style')).toContain('rgb(0, 255, 0)');
+      expect(DEFAULT_COLOR_PALETTE[1]).toBe('#3498db');
+      expect(piece.getAttribute('style')).toContain('rgb(52, 152, 219)');
     });
 
     it('prefers card art over piece rendering when an element has both', () => {
-      overlay([flyingCard('a', { playerSeat: 0, faceImage: '/ace.png' })]);
+      overlay([flyingCard('a', { playerSeat: 1, faceImage: '/ace.png' })]);
       expect(document.querySelector('.card-inner')).not.toBeNull();
       expect(document.querySelector('.piece-inner')).toBeNull();
     });
