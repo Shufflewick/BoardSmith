@@ -345,6 +345,22 @@ describe('DecksTab unfiltered view (#898)', () => {
     expect(vm.discoveredDecks.map((d: { id: number }) => d.id)).toEqual([5]);
   });
 
+  it('leaves the error empty when an older request fails after the newest succeeded', async () => {
+    const answers: Array<{ resolve: (table: unknown) => void; reject: (err: Error) => void }> = [];
+    const handler: Op = (op) => (op === 'debug:deck-view'
+      ? new Promise((resolve, reject) => answers.push({ resolve: (table) => resolve({ success: true, view: table }), reject }))
+      : Promise.resolve({ success: true }));
+    const { wrapper } = track(await mountDecks(handler, { view: SEAT_VIEW }));
+    await wrapper.setProps({ view: { ...SEAT_VIEW } });
+    expect(answers).toHaveLength(2);
+
+    answers[1]!.resolve(VIEW);
+    await flushPromises();
+    answers[0]!.reject(new Error('older failed'));
+    await flushPromises();
+    expect(wrapper.find('.deck-error').exists()).toBe(false);
+  });
+
   it('shows why the host refused, rather than an empty list', async () => {
     const { wrapper } = track(await mountDecks(async () => ({ success: false, error: 'Debugging is not turned on' })));
     expect(wrapper.find('.deck-error').text()).toContain('Debugging is not turned on');

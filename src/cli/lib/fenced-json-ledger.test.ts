@@ -39,6 +39,12 @@ describe('readFencedJsonLedger', () => {
     expect(await readFencedJsonLedger(ledgerFile(dir), asNumber)).toEqual([]);
   });
 
+  it('refuses a ledger it cannot read rather than reading it as empty', async () => {
+    const file = ledgerFile(dir);
+    await fs.mkdir(file.path, { recursive: true });
+    await expect(readFencedJsonLedger(file, asNumber)).rejects.toThrow(`Could not read ${file.path} (EISDIR)`);
+  });
+
   it('parses every non-blank line between the fences, in order', async () => {
     const file = ledgerFile(dir);
     await writeLedger(file, `# T\n\n${BEGIN}\n{"n":1}\n\n{"n":2}\n${END}\n`);

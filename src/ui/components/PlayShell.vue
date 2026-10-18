@@ -630,8 +630,9 @@ const mobileToggleLabel = computed(() => {
     </div>
 
     <!-- The adapter's debug surface: one placement, one keyboard shortcut, one
-         transport, and a tab set the adapter declares. -->
-    <div v-if="$slots.debug" data-testid="bs-debug">
+         transport, and a tab set the adapter declares. A dialog's focus trap leaves
+         it usable (data-bs-outside-modal): the end of a game is when it is needed (#1106). -->
+    <div v-if="$slots.debug" data-testid="bs-debug" data-bs-outside-modal>
       <slot name="debug"></slot>
     </div>
   </div>

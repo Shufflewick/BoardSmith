@@ -5,11 +5,12 @@ import {
 } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
-import chalk from 'chalk';
+import { styleText } from 'node:util';
 import { parseRulings } from './build-manifest.js';
 import { allocatedNumber } from '../lib/ledger-entries.js';
 import { readFencedJsonLedger } from '../lib/fenced-json-ledger.js';
 import { withLedgerLock } from '../lib/ledger-lock.js';
+import { parsePositiveWholeNumber } from '../../utils/positive-whole-number.js';
 import {
   atomicWriteFile,
   exists,
@@ -341,6 +342,18 @@ function emptyVerdictCounts(): Record<RulingVerdict, number> {
   return counts;
 }
 
+/** The project's RULINGS.md, or an error saying how to point at the right project. */
+async function readRulingsMd(projectDir: string): Promise<string> {
+  try {
+    return await fs.readFile(designPath(projectDir, RULINGS_MD), 'utf-8');
+  } catch {
+    throw new Error(
+      `No RULINGS.md found in this project directory.\n` +
+        `Pass --project <dir> to target the bs-project this run should read.`,
+    );
+  }
+}
+
 /**
  * `boardsmith verify-ruling-recheck` — CHECK-01's report: one row per non-superseded ruling
  * (number, verdict-or-`pending`, reasoning), the skipped/unparsed-supersession sets, and
@@ -371,19 +384,7 @@ export async function verifyRulingRecheckCommand(
   } = {},
 ): Promise<VerifyRulingRecheckResult> {
   const projectDir = resolve(options.project ?? process.cwd());
-  const rulingsPath = designPath(projectDir, RULINGS_MD);
-
-  let rulingsText: string;
-  try {
-    rulingsText = await fs.readFile(rulingsPath, 'utf-8');
-  } catch {
-    throw new Error(
-      `No RULINGS.md found in this project directory.\n` +
-        `Pass --project <dir> to target the bs-project this run should read.`,
-    );
-  }
-
-  const { enumerated, skipped, unparsedSupersession } = enumerateRulingsForRecheck(rulingsText);
+  const { enumerated, skipped, unparsedSupersession } = enumerateRulingsForRecheck(await readRulingsMd(projectDir));
   const transcription = await resolveFreshTranscription(projectDir, options.runId);
 
   // The durable half of the verdict source (the defect this command was filed for): verdicts
@@ -425,10 +426,10 @@ export async function verifyRulingRecheckCommand(
   }
 
   if (transcription.scopeLimited) {
-    console.log(chalk.yellow(`⚠ Scope-limited: ${transcription.reason}`));
+    console.log(styleText('yellow', `⚠ Scope-limited: ${transcription.reason}`));
   }
   console.log(
-    chalk.green(`✓ Ruling re-check — ${rows.length} ruling(s), ${skipped.length} skipped`),
+    styleText('green', `✓ Ruling re-check — ${rows.length} ruling(s), ${skipped.length} skipped`),
   );
   for (const row of rows) {
     console.log(`  Ruling ${row.number}: ${row.verdict}`);
@@ -550,7 +551,7 @@ export async function verifyRulingRecordCommand(
   options: {
     project?: string;
     runId?: string;
-    number?: string | number;
+    number?: string;
     verdict?: string;
     reasoning?: string;
     json?: boolean;
@@ -571,26 +572,9 @@ export async function verifyRulingRecordCommand(
   // Before anything is written: a mistyped id must not create a run folder that sorts as latest.
   await readLedgerOrThrow(ledgerFilePath(projectDir, runId), runId, projectDir);
 
-  const number = Number(options.number);
-  if (!Number.isInteger(number) || number < 1) {
-    throw new Error(
-      `"--number ${options.number ?? '<missing>'}" is not a RULINGS.md entry number.\n` +
-        `Pass the positive whole number of the ruling this verdict is for.`,
-    );
-  }
+  const number = parsePositiveWholeNumber('--number', options.number ?? '');
 
-  const rulingsPath = designPath(projectDir, RULINGS_MD);
-  let rulingsText: string;
-  try {
-    rulingsText = await fs.readFile(rulingsPath, 'utf-8');
-  } catch {
-    throw new Error(
-      `No RULINGS.md found in this project directory.\n` +
-        `Pass --project <dir> to target the bs-project this run should read.`,
-    );
-  }
-
-  const { enumerated, skipped } = enumerateRulingsForRecheck(rulingsText);
+  const { enumerated, skipped } = enumerateRulingsForRecheck(await readRulingsMd(projectDir));
   if (!enumerated.some((e) => e.number === number)) {
     const supersededBy = skipped.find((s) => s.number === number)?.supersededBy;
     if (supersededBy !== undefined) {
@@ -630,8 +614,8 @@ export async function verifyRulingRecordCommand(
   }
 
   console.log(
-    chalk.green(`✓ Ruling ${record.number}: ${record.verdict}`) +
-      chalk.dim(` — recorded in ${ledgerPath} (${recordCount} verdict(s) total)`),
+    styleText('green', `✓ Ruling ${record.number}: ${record.verdict}`) +
+      styleText('dim', ` — recorded in ${ledgerPath} (${recordCount} verdict(s) total)`),
   );
   return result;
 }

@@ -33,13 +33,11 @@ interface GameElement {
 /**
  * Build a minimal grid element whose resolveGridSize result will be cols×rows.
  *
- * resolveGridSize uses $rowCoord/$colCoord attributes on the board element, then
- * scans children's coordinate attributes to find the max values. To get a grid of
- * `cols` columns and `rows` rows we provide a single child cell at the corner
- * (row: rows-1, col: cols-1) so max+1 = the desired dimensions.
+ * resolveGridSize sizes the grid from the minimum to the maximum of the cells'
+ * $rowCoord/$colCoord values, so two cells at opposite corners give `cols` x `rows`.
  */
 function buildGridElement(cols: number, rows: number, extraChildren: GameElement[] = []): GameElement {
-  // Corner cell at (rows-1, cols-1) drives resolveGridSize to return {rows, cols}
+  const originCell: GameElement = { id: 98, className: 'Space', name: 'origin', attributes: { row: 0, col: 0 }, children: [] };
   const cornerCell: GameElement = {
     id: 99,
     className: 'Space',
@@ -56,7 +54,7 @@ function buildGridElement(cols: number, rows: number, extraChildren: GameElement
       $rowCoord: 'row',
       $colCoord: 'col',
     },
-    children: [cornerCell, ...extraChildren],
+    children: [originCell, cornerCell, ...extraChildren],
   };
 }
 

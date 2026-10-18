@@ -390,6 +390,58 @@ describe('MultiplayerHost — a restart that fails (#880)', () => {
   });
 });
 
+describe('MultiplayerHost — a move while a restart is starting (#1042)', () => {
+  it('is refused with the reason, not answered success with no new state', async () => {
+    let release: (() => void) | null = null;
+    let starts = 0;
+    const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
+    const host = new MultiplayerHost({
+      playerCount: 2,
+      minPlayers: 2,
+      maxPlayers: def.maxPlayers,
+      makeSeed: () => 'mp',
+      executeOp: async (gameOptions, snap, pend, op, hostOptions) => {
+        if (op.type === 'start' && ++starts === 2) {
+          await new Promise<void>((resolve) => { release = resolve; });
+        }
+        return executeOp(altDef, gameOptions, snap, pend, op, hostOptions);
+      },
+      send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
+    });
+    const to = (clientId: string) => sent.filter((e) => e.clientId === clientId).map((e) => e.msg);
+    await host.handleMessage('A', { type: 'hello' }); // A = seat 1; the first start is not held
+    const key = clientKey('A');
+    const restarting = host.handleMessage('A', { type: 'restart' }); // held inside its start op
+    sent.length = 0;
+    await host.handleMessage('A', {
+      type: 'server_request',
+      requestId: 'r1',
+      op: 'action',
+      payload: { actionName: 'pass', args: {}, boundaryKey: key },
+    });
+    await host.handleMessage('A', { type: 'getState', requestId: 'r2' });
+    await host.handleMessage('A', { type: 'restart' });
+    await host.handleMessage('A', { type: 'follow', enabled: true });
+    host.disconnect('A'); // the page reloads while the new game starts
+    await host.handleMessage('A', { type: 'hello' });
+    const during = to('A');
+    sent.length = 0;
+    release!();
+    await restarting;
+    expect(during.some((m) => m.type === 'server_response' || m.type === 'game_state')).toBe(false);
+    expect(during.some((m) => m.type === 'init')).toBe(true);
+    const after = to('A').filter((m) => m.type === 'init' || m.type === 'game_state').map((m) => m.type);
+    expect(after.slice(-2)).toEqual(['init', 'game_state']); // startGame's reinit, after any state the new game broadcast
+    const errors = during.filter((m) => m.type === 'error');
+    expect(errors).toEqual([
+      { type: 'error', message: expect.stringMatching(/game is starting.*try again/i), requestId: 'r1' },
+      { type: 'error', message: expect.stringMatching(/game is starting.*try again/i), requestId: 'r2' },
+      { type: 'error', message: expect.stringMatching(/game is starting.*try again/i) },
+      { type: 'error', message: expect.stringMatching(/game is starting.*try again/i) },
+    ]);
+  });
+});
+
 describe('MultiplayerHost — stale disconnect after reconnect (DEF-C session-layer canary)', () => {
   it('drops broadcasts to a seat when a STALE disconnect() arrives after its reconnect hello (documents the consequence the dev.ts transport-layer guard must prevent)', async () => {
     // This test intentionally drives the sequence that `MultiplayerHost`'s

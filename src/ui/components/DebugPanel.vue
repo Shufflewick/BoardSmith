@@ -336,11 +336,15 @@ async function fetchActionTraces() {
  * Where the flow currently stands. A host that cannot say is not an error worth
  * showing — the Actions tab simply omits the section.
  */
+const flowStateTicket = newestWins();
+
 async function fetchFlowState() {
+  const isNewest = flowStateTicket();
   try {
-    flowStateInfo.value = await bridge.flowState();
+    const info = await bridge.flowState();
+    if (isNewest()) flowStateInfo.value = info;
   } catch {
-    flowStateInfo.value = null;
+    if (isNewest()) flowStateInfo.value = null;
   }
 }
 
@@ -412,12 +416,16 @@ const liveCustomDebug = ref<Record<string, unknown> | null>(null);
 const customDebugLastFetched = ref(0);
 const customDebugData = computed(() => (isViewingHistory.value ? null : liveCustomDebug.value));
 
+const customDebugTicket = newestWins();
+
 async function fetchCustomDebug() {
+  const isNewest = customDebugTicket();
   customDebugLastFetched.value = Date.now();
   try {
-    liveCustomDebug.value = await bridge.customDebug();
+    const custom = await bridge.customDebug();
+    if (isNewest()) liveCustomDebug.value = custom;
   } catch {
-    liveCustomDebug.value = null;
+    if (isNewest()) liveCustomDebug.value = null;
   }
 }
 

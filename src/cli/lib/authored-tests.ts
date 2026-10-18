@@ -4,6 +4,7 @@ import type { JsonTestResults } from 'vitest/reporters';
 import { withCommandBuildDir } from './command-build-dir.js';
 import { discardRecord, runVitestRecorded, testRunVerdict } from './vitest-run.js';
 import { existingConfigs } from './test-run-scope.js';
+import { readIfExists } from './read-if-exists.js';
 
 export interface AuthoredTest {
   file: string;
@@ -51,7 +52,7 @@ async function readSelection(projectDir: string, selectionPath: string): Promise
     });
     if (new Set(names).size !== names.length) return fail(`${entry.file} repeats a full test name.`);
     const file = resolve(projectDir, entry.file);
-    const actual = await fs.lstat(file).catch(() => undefined);
+    const actual = await readIfExists(file, fs.lstat);
     if (!actual?.isFile()) return fail(`${entry.file} must be an existing regular test file.`);
     const real = relative(await fs.realpath(projectDir), await fs.realpath(file));
     if (real.startsWith('..') || isAbsolute(real)) return fail(`${entry.file} resolves outside the project.`);
