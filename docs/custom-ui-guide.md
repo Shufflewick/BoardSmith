@@ -798,7 +798,7 @@ const { playerSeat, isMyTurn, isViewingHistory, availableActions, actionControll
 `usePlayContext()` returns the fields both shells publish, so it works the same at
 a table and in a persistent world. Use it in any component a game shares between
 the two. `useGameContext()` returns the whole table context, adding `gameState`,
-`dueSeats`, `timeTravelDiff` and `turnDeadline`. It throws in a world, which has
+`dueSeats`, `timeTravelDiff`, `turnDeadline` and `platformRequest`. It throws in a world, which has
 none of those. `tryUseGameContext()` returns the table context or `undefined`, and
 never throws.
 

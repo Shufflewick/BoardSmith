@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { cpus } from 'node:os';
 import { styleText } from 'node:util';
 import ora from 'ora';
-import type { ObjectiveWeight, TrainingProgress } from '../../bot-trainer/index.js';
+import type { ObjectiveWeight, TrainingProgress, WeightEvolutionResult } from '../../bot-trainer/index.js';
 import type { BotStrategy } from '../../bot/index.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
@@ -127,8 +127,12 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
       spinner.succeed(`Evolution complete in ${duration}s`);
 
       printEvolutionResult(result);
+      const { confirmation } = result;
+      if (!confirmation?.accepted) {
+        console.log(styleText('yellow', `\nNo improvement confirmed, so ${botPath} is unchanged.\n`));
+        return;
+      }
 
-      // Update the bot.ts file with new weights
       spinner.start('Updating bot.ts with optimized weights...');
 
       const originalCode = readFileSync(botPath, 'utf-8');
@@ -137,8 +141,8 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
         evolutionStats: {
           generations,
           population,
-          initialWinRate: result.initialFitness,
-          finalWinRate: result.bestFitness,
+          initialWinRate: confirmation.originalWinRate,
+          finalWinRate: confirmation.candidateWinRate,
         },
       });
 
@@ -194,15 +198,21 @@ function printExistingObjectives(objectives: readonly ObjectiveWeight[]): void {
   }
 }
 
-function printEvolutionResult(result: {
-  initialFitness: number;
-  bestFitness: number;
-  objectives: readonly ObjectiveWeight[];
-}): void {
+function printEvolutionResult(result: WeightEvolutionResult): void {
+  const percent = (rate: number) => `${(rate * 100).toFixed(1)}%`;
   console.log(styleText('green', '\n=== Evolution Results ===\n'));
-  console.log(`  Initial win rate: ${(result.initialFitness * 100).toFixed(1)}%`);
-  console.log(`  Final win rate: ${(result.bestFitness * 100).toFixed(1)}%`);
-  console.log(`  Improvement: ${((result.bestFitness - result.initialFitness) * 100).toFixed(1)}%`);
+  console.log(`  Search: original ${percent(result.initialFitness)}, best candidate ${percent(result.bestFitness)}`);
+  const { confirmation } = result;
+  if (!confirmation) {
+    console.log('  No improvement confirmed: no candidate scored above the original in the search.');
+    return;
+  }
+  const rematch = `${percent(confirmation.candidateWinRate)} against the original ${percent(confirmation.originalWinRate)} over ${confirmation.games} fresh games each`;
+  if (!confirmation.accepted) {
+    console.log(`  No improvement confirmed: the best candidate scored ${rematch}, within chance.`);
+    return;
+  }
+  console.log(`  Improvement: +${percent(confirmation.candidateWinRate - confirmation.originalWinRate)} (${rematch})`);
 
   if (result.objectives.length > 0) {
     console.log(styleText('cyan', '\nOptimized weights:'));

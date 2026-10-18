@@ -160,7 +160,6 @@ export function useWorldSeat({ host, boardInteraction }: WorldSeatOptions): Worl
       isViewingHistory: computed(() => false),
       availableActions: play.availableActions,
       actionController: controller,
-      platformRequest: async () => ({}),
       presentation: ref(undefined),
       debugHighlight: ref(null),
     }),

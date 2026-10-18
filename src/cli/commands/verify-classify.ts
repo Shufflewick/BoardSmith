@@ -33,6 +33,7 @@ import {
   appendLedgerLine,
   atomicWriteFile,
   ledgerFilePath,
+  latestRunId,
   listRunIds,
   missingRunMessage,
   readLedgerOrThrow,
@@ -661,14 +662,14 @@ async function resolveRunId(projectDir: string, runId?: string): Promise<string>
     if (!existing.includes(runId)) throw new Error(await missingRunMessage(projectDir, runId));
     return runId;
   }
-  const runIds = await listRunIds(projectDir);
-  if (runIds.length === 0) {
+  const latest = await latestRunId(projectDir);
+  if (latest === undefined) {
     throw new Error(
       `No verify runs found under rulebook/.verify/ in ${projectDir}.\n` +
         `Run \`boardsmith verify-run-init\` first.`,
     );
   }
-  return runIds[runIds.length - 1];
+  return latest;
 }
 
 /**

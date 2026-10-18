@@ -1422,7 +1422,7 @@ export class ActionExecutor {
     args: Record<string, unknown>,
     options?: PerformOptions,
   ): { pendingState: PendingActionState; applied: boolean } | { error: string; applied: boolean } {
-    // The condition first, with no picks, as the offer checks it; the picks are checked one at a time below (#772, #1128).
+    // The condition first, with no picks, as the offer checks it; the picks are checked one at a time below (#772, #1129).
     if (!options?.followUp && !this.conditionHolds(action, player)) {
       return { error: 'Action is not available', applied: false };
     }

@@ -26,6 +26,7 @@ import { isHiddenPlaceholder } from '../../../../engine/element/hidden-placehold
 import type { PresentationOverlay } from '../presentation.js';
 import { GAME_CONTEXT_KEYS, injectPlayerSeat } from '../../../composables/useGameContext.js';
 import { getSpriteStyle, parseImageInfo, type ImageInfo } from '../../../utils/image.js';
+import CardBack from './CardBack.vue';
 
 // ---------------------------------------------------------------------------
 // Local GameElement interface — dependency-free, mirrors auto-ui-helpers.ts
@@ -362,22 +363,7 @@ function handleDrop(event: DragEvent) {
     <!-- Baseline 3 / 4: No image from $images — show face or back fallback -->
     <template v-else>
       <!-- Hidden card with no face image — show back gradient or back image fallback -->
-      <template v-if="isHidden">
-        <div class="card-back" :class="{ 'has-image': !!backImageFallback }">
-          <img
-            v-if="backImageFallback?.type === 'url'"
-            :src="backImageFallback.src"
-            class="card-image"
-            alt="Card back"
-          />
-          <div
-            v-else-if="backImageFallback?.type === 'sprite'"
-            class="card-image card-sprite"
-            :style="getSpriteStyle(backImageFallback)"
-          ></div>
-          <!-- Default back gradient rendered via .card-back CSS when no image -->
-        </div>
-      </template>
+      <CardBack v-if="isHidden" :image="backImageFallback" />
       <!-- Baseline 3: Visible card with no image — white face with name label -->
       <div v-else class="card-face">
         {{ displayLabel }}
@@ -545,28 +531,6 @@ function handleDrop(event: DragEvent) {
 }
 
 /* Baseline 4: default card back — shared token surface (THEME-05) */
-.card-back {
-  width: var(--card-w);
-  height: var(--card-h);
-  background: var(--bsg-card-back);
-  border-radius: var(--bsg-r-sm);
-  border: 1px solid var(--bsg-line-2);
-  box-shadow: var(--bsg-shadow-sm);
-  flex-shrink: 0;
-}
-
-.card-back.has-image {
-  background: transparent;
-  border: none;
-}
-
-.card-back .card-image {
-  width: 100%;
-  height: 100%;
-  border-radius: var(--bsg-r-sm);
-  object-fit: contain;
-}
-
 /* Overlay stats block (D-04) */
 .card-stats {
   margin: var(--bsg-s1) 0 0;
