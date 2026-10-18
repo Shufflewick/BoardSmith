@@ -6,6 +6,7 @@ import { appendGitignoreEntry, doctorCommand } from './doctor.js';
 import { DESIGN_DIR, SCRATCH_DIR } from '../lib/project-paths.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { GAME_VITE_CONFIG, GAME_VITE_CONFIG_FILE } from '../lib/test-run-scope.js';
+import { INGEST_PRE_COMMIT_HOOK, installIngestHook } from '../lib/ingest-hook.js';
 
 /**
  * `doctor` is issue #6's migration path: design artifacts belong under `design/`, throwaway
@@ -504,6 +505,102 @@ describe('boardsmith doctor', () => {
       await doctorCommand({ project: projectDir });
 
       expect(printed()).toMatch(/1 to fix, 1 conflict\(s\)\.\nRun boardsmith doctor --fix to put the 1 fixable finding\(s\) right\. The conflict\(s\) need a hand edit; --fix cannot resolve them\. Follow the instructions printed under each one above\./);
+    });
+  });
+
+  // #1009: doctor is where a project's ingest pre-commit hook is installed and kept current.
+  describe('the ingest pre-commit hook (#1009)', () => {
+    const OWN_HOOK = '#!/bin/sh\necho mine\n';
+    const hookPath = (projectDir: string) => join(projectDir, '.git', 'hooks', 'pre-commit');
+
+    async function gitProject(): Promise<string> {
+      const projectDir = await project();
+      execSync('git init', { cwd: projectDir, stdio: 'ignore' });
+      return projectDir;
+    }
+
+    it('reports a missing hook, and --fix installs it executable', async () => {
+      const projectDir = await gitProject();
+      await fs.rm(hookPath(projectDir), { force: true });
+
+      const report = await doctorCommand({ project: projectDir });
+      expect(report.findings.map((f) => f.kind)).toEqual(['ingest-hook-not-current']);
+      expect(process.exitCode).toBe(1);
+      expect(await exists(hookPath(projectDir))).toBe(false);
+
+      process.exitCode = undefined;
+      const fixed = await doctorCommand({ project: projectDir, fix: true });
+      expect(fixed.counts).toEqual({ moved: 1, pending: 0, conflicts: 0 });
+      expect(process.exitCode).toBeUndefined();
+      expect(await read(hookPath(projectDir))).toBe(INGEST_PRE_COMMIT_HOOK);
+      expect((await fs.stat(hookPath(projectDir))).mode & 0o111).toBeGreaterThan(0);
+    });
+
+    it('reports a stale BoardSmith hook, and --fix rewrites it with the current text', async () => {
+      const projectDir = await gitProject();
+      await fs.writeFile(hookPath(projectDir), '#!/bin/sh\n# BoardSmith ingest synthesis (old)\nexit 0\n', { mode: 0o755 });
+
+      const report = await doctorCommand({ project: projectDir });
+      expect(report.findings.map((f) => f.kind)).toEqual(['ingest-hook-not-current']);
+      expect(process.exitCode).toBe(1);
+
+      process.exitCode = undefined;
+      await doctorCommand({ project: projectDir, fix: true });
+      expect(process.exitCode).toBeUndefined();
+      expect(await read(hookPath(projectDir))).toBe(INGEST_PRE_COMMIT_HOOK);
+    });
+
+    it('finds nothing when the current hook is installed', async () => {
+      const projectDir = await gitProject();
+      await installIngestHook(projectDir);
+
+      const result = await doctorCommand({ project: projectDir });
+
+      expect(result.healthy).toBe(true);
+      expect(result.notes).toEqual([]);
+      expect(process.exitCode).toBeUndefined();
+    });
+
+    it('leaves a hook it did not write alone, with a note that does not change the exit code', async () => {
+      const projectDir = await gitProject();
+      await fs.writeFile(hookPath(projectDir), OWN_HOOK, { mode: 0o755 });
+
+      const result = await doctorCommand({ project: projectDir, fix: true });
+
+      expect(result.healthy).toBe(true);
+      expect(process.exitCode).toBeUndefined();
+      expect(await read(hookPath(projectDir))).toBe(OWN_HOOK);
+      expect(result.notes).toHaveLength(1);
+      expect(printed()).toContain(result.notes[0]);
+      expect(result.notes[0]).toMatch(/delete \.git\/hooks\/pre-commit and run boardsmith doctor --fix/);
+      expect(result.notes[0]).toMatch(/boardsmith ingest-gaps/);
+    });
+
+    it('leaves a hook it cannot read alone, with a note that does not change the exit code (#1110)', async () => {
+      const projectDir = await gitProject();
+      await fs.writeFile(hookPath(projectDir), OWN_HOOK);
+      await fs.chmod(hookPath(projectDir), 0o200);
+      let result;
+      try {
+        result = await doctorCommand({ project: projectDir, fix: true });
+      } finally {
+        await fs.chmod(hookPath(projectDir), 0o755);
+      }
+
+      expect(result.healthy).toBe(true);
+      expect(process.exitCode).toBeUndefined();
+      expect(await read(hookPath(projectDir))).toBe(OWN_HOOK);
+      expect(result.notes[0]).toMatch(/could not read \.git\/hooks\/pre-commit/);
+    });
+
+    it('checks no hook in a checkout whose .git is a file, a linked worktree sharing its main checkout\'s hooks', async () => {
+      const projectDir = await project();
+      await fs.writeFile(join(projectDir, '.git'), 'gitdir: /elsewhere\n');
+
+      const result = await doctorCommand({ project: projectDir });
+
+      expect(result.healthy).toBe(true);
+      expect(result.notes).toEqual([]);
     });
   });
 });

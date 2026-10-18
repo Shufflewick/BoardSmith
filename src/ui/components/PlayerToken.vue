@@ -58,10 +58,10 @@ function shape(): string {
 
 function initial(): string {
   const trimmed = props.name.trim();
-  // Default seat names ("Player 1", "Player 2") all start with "P" — useless as
-  // an identity glyph. Use the trailing number so tokens read 1 / 2 / 3. Real
-  // names ("Alice") fall through to their first letter.
-  const generic = trimmed.match(/^player\s*(\d+)$/i);
+  // Default seat names (table "Player N", world "Seat N") all share a first
+  // letter, useless as an identity glyph. Use the trailing number so tokens
+  // read 1 / 2 / 3. Real names ("Alice") fall through to their first letter.
+  const generic = trimmed.match(/^(?:player|seat)\s*(\d+)$/i);
   if (generic) return generic[1];
   return (trimmed[0] ?? '?').toUpperCase();
 }

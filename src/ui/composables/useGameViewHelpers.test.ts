@@ -220,6 +220,11 @@ describe('findAllHands', () => {
   it('returns an empty array for a missing view', () => {
     expect(findAllHands(null)).toEqual([]);
   });
+
+  it('finds a hand nested below the root, as findPlayerHand does (#860)', () => {
+    const nested = element(2, 'Game', {}, [element(60, 'Table', {}, [HAND_TWO])], 'game');
+    expect(findAllHands(nested)).toEqual([HAND_TWO]);
+  });
 });
 
 describe('findPlayerElement', () => {

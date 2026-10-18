@@ -407,6 +407,15 @@ describe('WorldShell — the shared chrome (#170)', () => {
     wrapper.unmount();
   });
 
+  it('gives an unnamed seat its number as a token and a named seat its first letter (#1140)', async () => {
+    const wrapper = mountShell();
+    tell(wrapper, stateFrame({ seat: 7, presence: [2, 7], players: [{ seat: 7, name: '' }, { seat: 2, name: 'Rook' }] } as never));
+    await nextTick();
+    const tokens = wrapper.findAll('[data-testid="bs-seats"] .player-card .tok').map((t) => t.text());
+    expect(tokens).toEqual(['7', 'R']);
+    wrapper.unmount();
+  });
+
   it('marks who is here on the seat rows rather than in a list of its own', async () => {
     const wrapper = mountShell();
     tell(wrapper, stateFrame({ players: [{ seat: 2, name: 'Rook' }, { seat: 4, name: 'Ivy' }] } as never));

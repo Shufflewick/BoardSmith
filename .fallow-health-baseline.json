@@ -373,11 +373,6 @@
         "count": 1
       }
     },
-    "src/session/pending-action-manager.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/session/snapshot-session-host.ts": {
       "complexity_high": {
         "count": 1
@@ -581,10 +576,10 @@
     },
     "src/ui/composables/useActionController.ts": {
       "complexity_high": {
-        "count": 4
+        "count": 3
       },
       "complexity_moderate": {
-        "count": 9
+        "count": 10
       }
     },
     "src/ui/composables/useAnimationEvents.ts": {

@@ -200,6 +200,19 @@ then `onEach` runs for it, and `until` is tested.
   end, or picks after the end are refused with a message saying which. When a
   submission is refused after `onEach` has run for some of its picks, the
   runner rolls the game back, so a refused move changed nothing.
+- **A pick-by-pick step that fails keeps nothing** (#1169): a pick whose
+  `onSelect`, `onEach` or `until` throws, or the last pick whose action is then
+  refused or throws, leaves the game and the open action as they were before
+  that step, on every route. The action stays open at the last good pick, so
+  the player can pick again or cancel; `onCancel` runs only on that cancel,
+  for each pick whose `onSelect` ran. The one exception is an in-memory game running
+  with `checkpoints: { enabled: false }`, which has nothing to restore: a
+  failed step that changed the game keeps its changes, the action closes when
+  its last pick failed, and the player is told the game may still hold the
+  step's partial changes and to check the board or restart from a save. A step
+  whose callbacks did not run, refused by the action's `validate` or by an
+  `execute()` that returns `{ success: false }`, changed nothing, so it is
+  undone there too and the player is told only the refusal.
 - **Bots and the simulator find repeats by making the picks** on a scratch copy
   of the game, shortest sequences first, within enumeration's budget of 10,000
   values for one action (see [agent control](./agent-control.md)). The game
@@ -800,6 +813,13 @@ A pick may only depend on (`dependsOn`) or filter by (`filterBy`) a pick
 declared **before** it, since picks are asked in declared order. The builder
 refuses a forward reference when the action is declared.
 
+`filterBy` keeps the choices whose `key` equals the one value an earlier pick
+gave, so it needs a pick of one value: a `chooseElement`, or a `chooseFrom`
+without `multiSelect`, `orderedList` or `repeat`. A pick that answers with a
+list (`chooseElements`, `multiSelect`, `orderedList`, any repeating pick) is
+refused as a `filterBy` source when the action is declared. To narrow choices
+by a list, declare `dependsOn` and read the list from `ctx.args` in `choices`.
+
 **What `dependsOn` does:**
 - During the availability check the engine iterates every choice for A
 - For each one it re-asks B with that value bound
@@ -1015,20 +1035,22 @@ A host that resumes a pending action without its persisted pending state (only
 `initialArgs`) is treated as starting it, so the condition must hold then.
 Those `initialArgs` are the picks the client made before the one it sends, and
 each is made in order as the seat's own step would be (#658): a required one
-left out, or a value the game does not offer, is refused, and the pending
-action is cancelled. A held follow-up's published args come from the engine,
-never from `initialArgs`, and an initial arg that names no pick is not taken.
+left out, or a value the game does not offer, is refused, and the step keeps
+nothing: the action is not started. A held follow-up's published args come
+from the engine, never from `initialArgs`, and an initial arg that names no
+pick is not taken.
 
 **Its earlier picks must still be on offer when it runs** (#767). A pick
 another action took after the seat made it is checked again, as a whole
 submission checks it, before the action runs: in a simultaneous step, seat 2
 grabbing the gem seat 1 picked for `draft` refuses seat 1's `draft` with the
 pick's `unavailable` sentence (or the default "That choice is no longer
-available" one). `onCancel` runs for each pick whose `onSelect` ran, and nothing
-is recorded. A pick counts as taken when it was on offer right after the
-seat's latest pick and is not on offer before its next one, whether another
-seat's action moved its element, changed what its filter reads (a gem marked
-reserved in place), or another seat's own pick claimed it. The action's own
+available" one). Nothing is recorded, the step that ran the action is undone,
+and the action stays open for the seat to cancel (#1169). A pick counts as
+taken when it was on offer right after the seat's latest pick and is not on
+offer before its next one, whether another seat's action moved its element,
+changed what its filter reads (a gem marked reserved in place), or another
+seat's own pick claimed it. The action's own
 changes do not count: a pick its own `onSelect` took off the offer is already
 off the offer right after it, so it still completes, even when another seat
 acts in between. A repeating pick and a pick a held follow-up answered are

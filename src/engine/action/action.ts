@@ -30,7 +30,7 @@ import type {
 } from './types.js';
 import { wrapFilterWithHelpfulErrors } from './helpers.js';
 import { isDevMode, devWarn, isDevThrowEnabled } from '../../utils/dev.js';
-import { Action } from './action-builder.js';
+import { Action, answersWithList } from './action-builder.js';
 import { PlayerFacingError, NotSimulableError } from '../errors.js';
 import { getActiveStep, getGateReasonForValue } from '../tutorial/gate.js';
 import { findMatchingChoice, isSerializedElement, oneChoiceListRefusal, oneElementListRefusal, trySmartResolveChoice, valuesEqual } from './choice-matching.js';
@@ -1897,9 +1897,7 @@ export class ActionExecutor {
     // A DECLARED dependency: re-ask the dependent step with each enabled answer
     // bound, exactly as the player's own answer will.
     // A pick that takes several values answers with an array, so bind one as the player's would be.
-    const takesArray = this.isRepeatingSelection(selection)
-      || selection.type === 'elements'
-      || (selection.type === 'choice' && (selection.multiSelect !== undefined || selection.orderedList !== undefined));
+    const takesArray = answersWithList(selection);
     for (const choice of enabledChoices) {
       const newArgs = { ...args, [selection.name]: takesArray ? [choice.value] : choice.value };
       if (this.hasValidSelectionPath(selections, player, newArgs, index + 1, actionName)) {
@@ -2035,6 +2033,7 @@ export class ActionExecutor {
    *   - nextChoices: the next iteration's choices (if not done), labelled for
    *     a surface exactly as the first iteration's were
    *   - error: error message if something went wrong
+ *   - partiallyApplied: a pick callback threw, so the game may hold part of its changes
    *   - warnings: soft failures (a throwing `display()` or `boardRefs()`) met
    *     while labelling nextChoices, reported as the first pass reports them
    */
@@ -2043,7 +2042,7 @@ export class ActionExecutor {
     player: Player,
     pendingState: PendingActionState,
     value: unknown
-  ): { done: boolean; nextChoices?: ChoiceWithRefs[]; error?: string; rulesError?: boolean; warnings?: WarningEntry[] } {
+  ): { done: boolean; nextChoices?: ChoiceWithRefs[]; error?: string; rulesError?: boolean; partiallyApplied?: boolean; warnings?: WarningEntry[] } {
     if (this.passBoundPick(action, pendingState)) return { done: true };
     const selection = action.selections[pendingState.currentSelectionIndex];
     if (!selection) {
@@ -2122,7 +2121,7 @@ export class ActionExecutor {
         // selections whose onSelect already fired, then return an error.
         this.fireOnCancelCallbacks(action, pendingState);
         const crashed = pickHookThrew(action, 'onSelect', selection, error);
-        return { done: false, error: crashed.error, rulesError: crashed.rulesError };
+        return { done: false, error: crashed.error, rulesError: crashed.rulesError, partiallyApplied: true };
       }
     }
 
@@ -2136,7 +2135,7 @@ export class ActionExecutor {
         this.runPickCallback(pendingState, () => repeatConfig.onEach!(context, chosen));
       } catch (error) {
         const crashed = pickHookThrew(action, 'onEach', selection, error);
-        return { done: true, error: crashed.error, rulesError: crashed.rulesError };
+        return { done: true, error: crashed.error, rulesError: crashed.rulesError, partiallyApplied: true };
       }
     }
 
@@ -2157,7 +2156,7 @@ export class ActionExecutor {
         isDone = repeatConfig.until(context, chosen);
       } catch (error) {
         const crashed = pickHookThrew(action, 'until', selection, error);
-        return { done: true, error: crashed.error, rulesError: crashed.rulesError };
+        return { done: true, error: crashed.error, rulesError: crashed.rulesError, partiallyApplied: true };
       }
     }
 

@@ -695,7 +695,7 @@ it('catches the changed value after the other worker starts', async () => {
       expect(await fs.readFile(join(project, 'tests/mutant-busy'), 'utf-8')).toBe('started');
       expect(await fs.readFile(join(project, 'tests/mutant-failed'), 'utf-8')).toBe('assertion failed');
       await expect(fs.access(join(project, 'tests/mutant-finished'))).rejects.toMatchObject({ code: 'ENOENT' });
-      expect(result.summary).toEqual({ files: 1, mutants: 1, killed: 1, survived: 0, timedOut: 0, equivalent: 0 });
+      expect(result.summary).toEqual({ files: 1, mutants: 1, killed: 1, survived: 0, timedOut: 0, equivalent: 0, unreached: 0 });
     } finally {
       vi.unstubAllEnvs();
     }
@@ -736,7 +736,7 @@ afterAll(() => writeFileSync(new URL('./' + (process.env.BOARDSMITH_MUTANT ? 'mu
         projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), cache: memoryCache(), log: () => {},
       });
       expect(result.notGreen).toBeUndefined();
-      expect(result.summary).toEqual({ files: 1, mutants: 1, killed: 0, survived: 1, timedOut: 0, equivalent: 0 });
+      expect(result.summary).toEqual({ files: 1, mutants: 1, killed: 0, survived: 1, timedOut: 0, equivalent: 0, unreached: 0 });
       expect(JSON.parse(await fs.readFile(join(project, 'tests/mutant-completed'), 'utf-8'))).toEqual({ attempts: 2, repetitions: 2 });
     } finally {
       vi.unstubAllEnvs();
@@ -979,9 +979,115 @@ export default defineConfig({ test: { workspace: './config/projects.ts' } });
     });
   });
 
+  // #981: a mutant runs only against the test files that loaded its file in the unmutated run,
+  // and a mutant in a file no test loads is reported as such, neither killed nor survived.
+  describe('runs each mutant only against the test files that load its file (#981)', () => {
+    /** A test file's first lines: under a mutant, it notes the mutated file's name and its own in tests/ran. */
+    const notesRun = (name: string) => `import { appendFileSync, readFileSync } from 'node:fs';
+import { basename } from 'node:path';
+import { it, expect, inject } from 'vitest';
+const mutant = process.env.BOARDSMITH_MUTANT;
+if (mutant) appendFileSync(new URL('./ran', import.meta.url), basename(JSON.parse(readFileSync(mutant, 'utf-8')).file) + ' ${name}\\n');
+`;
+    const SOURCES = {
+      'src/a.ts': 'export function double(n: number): number {\n  return n + n;\n}\n',
+      'src/b.ts': 'export function triple(n: number): number {\n  return n * 3;\n}\n',
+      'src/plugin.ts': "export function name(): string {\n  return 'plugin';\n}\n",
+      'src/orphan.ts': 'export function same(n: number): number {\n  return n;\n}\n',
+      'tests/a.test.ts': `${notesRun('a')}import { double } from '../src/a';
+it('doubles', () => { expect(double(2)).toBe(4); });
+`,
+      'tests/b.test.ts': `${notesRun('b')}import { triple } from '../src/b';
+it('triples', () => { expect(triple(2)).toBe(6); });
+`,
+      // No static import names the plugin: the path is put together while the test runs.
+      'tests/dynamic.test.ts': `${notesRun('dynamic')}const which = ['plug', 'in'].join('');
+it('loads a module by a path built at run time', async () => {
+  const { name } = await import(\`../src/\${which}.ts\`);
+  expect(name()).toBe('plugin');
+});
+`,
+    };
+    const CHANGED = new Map([['src/a.ts', lines(2)], ['src/plugin.ts', lines(2)], ['src/orphan.ts', lines(2)]]);
+
+    async function selectionCheck(config: string, files: Record<string, string> = {}, added = CHANGED) {
+      const project = await makeProject({ 'vitest.config.ts': config, ...SOURCES, ...files });
+      const cache = memoryCache();
+      const result = await runDiffMutationCheck({ projectDir: project, added, cache, log: () => {} });
+      const ran = await fs.readFile(join(project, 'tests/ran'), 'utf-8').catch(() => '');
+      return { result, cache, ran: [...new Set(ran.split('\n').filter(Boolean))].sort() };
+    }
+
+    it('runs a mutant only against the files that load it, finds a module loaded by a computed path, and reports a file no test loads', async () => {
+      const { result, cache, ran } = await selectionCheck(VITEST_CONFIG);
+      expect(result.notGreen).toBeUndefined();
+      // a.ts is imported by a.test.ts alone; plugin.ts is reached only through the dynamic import.
+      expect(ran).toEqual(['a.ts a', 'plugin.ts dynamic']);
+      expect(result.summary).toEqual({ files: 3, mutants: 4, killed: 3, survived: 0, timedOut: 0, equivalent: 0, unreached: 1 });
+      expect(result.survivors).toEqual([]);
+      expect(result.unreached).toEqual([{ file: 'src/orphan.ts', line: 2, description: 'return value replaced with undefined' }]);
+      // A mutant no test runs is not an outcome of any run, so nothing is kept for it.
+      expect([...cache.held.values()]).toEqual(['killed', 'killed', 'killed']);
+    }, 120_000);
+
+    it('runs every mutant against every file that shares a worker with another, since it may use what that file loaded', async () => {
+      const { result, ran } = await selectionCheck(`import { defineConfig } from 'vitest/config';
+export default defineConfig({ test: { include: ['tests/**/*.test.ts'], isolate: false, fileParallelism: false } });
+`);
+      expect(result.notGreen).toBeUndefined();
+      // Whichever file ran second in the shared worker is run for the orphan's mutant too, which survives it.
+      expect(result.unreached).toEqual([]);
+      expect(result.survivors).toEqual([{ file: 'src/orphan.ts', line: 2, description: 'return value replaced with undefined' }]);
+      expect(ran.filter((r) => r.startsWith('orphan.ts '))).toHaveLength(2);
+    }, 120_000);
+
+    it('runs every mutant against every file when a global setup loads project code outside the test workers', async () => {
+      const { result } = await selectionCheck(`import { defineConfig } from 'vitest/config';
+export default defineConfig({ test: { include: ['tests/**/*.test.ts'], globalSetup: ['./global-setup.ts'] } });
+`, {
+        'src/seed.ts': 'export function seed(): number {\n  return 7;\n}\n',
+        'global-setup.ts': "import { seed } from './src/seed';\nexport default ({ provide }) => { provide('seed', seed()); };\n",
+        'tests/seed.test.ts': `${notesRun('seed')}it('starts from the seed', () => { expect(inject('seed')).toBe(7); });\n`,
+      }, new Map([['src/seed.ts', lines(2)]]));
+      expect(result.notGreen).toBeUndefined();
+      // No test worker loads seed.ts; the global setup does, and hands its value to the tests.
+      expect(result.unreached).toEqual([]);
+      expect(result.summary).toMatchObject({ mutants: 2, killed: 2 });
+    }, 120_000);
+
+    it('runs a mutant against a test file that reaches its file only through another file', async () => {
+      const { result, ran } = await selectionCheck(VITEST_CONFIG, {
+        'src/x.ts': "import { double } from './a';\nexport const quadruple = (n: number): number => double(double(n));\n",
+        'tests/a.test.ts': `${notesRun('a')}import { quadruple } from '../src/x';
+it('quadruples', () => { expect(quadruple(2)).toBe(8); });
+`,
+      }, new Map([['src/a.ts', lines(2)]]));
+      expect(result.notGreen).toBeUndefined();
+      expect(ran).toEqual(['a.ts a']);
+      expect(result.summary).toMatchObject({ survived: 0, timedOut: 0, unreached: 0, killed: result.summary.mutants });
+    }, 120_000);
+
+    it('runs a mutant against the test files whose project setup file loads its file', async () => {
+      const { result, ran } = await selectionCheck(`import { defineConfig } from 'vitest/config';
+export default defineConfig({ test: { include: ['tests/**/*.test.ts'], setupFiles: ['./setup.ts'] } });
+`, {
+        'src/seed.ts': 'export function seed(): number {\n  return 7;\n}\n',
+        'setup.ts': "import { seed } from './src/seed';\n(globalThis as { seed?: number }).seed = seed();\n",
+        'tests/seed.test.ts': `${notesRun('seed')}it('starts from the seed', () => { expect((globalThis as { seed?: number }).seed).toBe(7); });\n`,
+      }, new Map([['src/seed.ts', lines(2)], ['src/a.ts', lines(2)]]));
+      expect(result.notGreen).toBeUndefined();
+      // seed.ts is loaded before the recording setup file runs, which is merged after the project's own.
+      expect(result.unreached).toEqual([]);
+      expect(result.summary).toMatchObject({ files: 2, survived: 0, timedOut: 0, unreached: 0, killed: result.summary.mutants });
+      // The setup file did not turn selection off: a.ts's mutants still ran only against a.test.ts.
+      expect(ran.filter((r) => r.startsWith('a.ts '))).toEqual(['a.ts a']);
+      expect(ran).toContain('seed.ts seed');
+    }, 120_000);
+  });
+
   it('runs nothing when no changed line can be mutated', async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
     const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(3)]]), cache: memoryCache(), log: () => {} });
-    expect(result).toEqual({ summary: { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, equivalent: 0 }, reused: 0, survivors: [], equivalents: [] });
+    expect(result).toEqual({ summary: { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, equivalent: 0, unreached: 0 }, reused: 0, survivors: [], unreached: [], equivalents: [] });
   });
 });

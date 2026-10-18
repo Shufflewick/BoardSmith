@@ -293,7 +293,7 @@ export interface ChoiceSelection<T = unknown> extends BaseSelection<T>, Disabled
   display?: (choice: T) => string;
   /** Get board element references for highlighting (source/target) */
   boardRefs?: (choice: T, context: ActionContext) => ChoiceBoardRefs;
-  /** Filter choices based on a previous selection value */
+  /** Keep the choices whose `key` equals an earlier pick's value; that pick must answer with one value, not a list. */
   filterBy?: DependentFilter;
   /**
    * Name of a previous selection this choice depends on.

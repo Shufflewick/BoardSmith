@@ -146,15 +146,14 @@ describe('initialArgs are checked as picks (#658)', () => {
     expect(game.purchases).toEqual([]);
   });
 
-  it('runs onCancel for an earlier pick whose onSelect ran when a later initial pick is refused', async () => {
+  it('leaves the game as before the step when a later initial pick is refused after an earlier one ran its onSelect (#1169)', async () => {
     const { manager, game, gemId } = shop();
 
     const step = await manager.processSelectionStep(1, 'pay', 'gold', 'buy', { color: 'red', gem: gemId('Coal') });
 
     expect(step.success).toBe(false);
-    // onSelect ran for color, as it does for a player's step; the refusal
-    // cancelled the pending action, so its onCancel undid it.
-    expect(game.selected).toEqual(['color:red', 'cancel:color']);
+    // onSelect ran for color, as it does for a player's step; the failed step keeps nothing.
+    expect(game.selected).toEqual([]);
     expect(manager.getPendingAction(1)).toBeUndefined();
   });
 

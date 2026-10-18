@@ -32,7 +32,10 @@ export async function mutationEquivalenceCommand(id: string, options: {
   if (matches.length !== 1) throw new Error('That mutant ID does not identify one current mutation. Run `boardsmith verify` again and use its ID with the same --base.');
   const mutant = matches[0];
   const outcome = await observeMutant(projectDir, mutant);
-  if (outcome !== 'survived') throw new Error(`The selected mutant ${outcome === 'killed' ? 'was killed by the suite' : 'timed out'}. Only a normally completed survivor can receive an equivalence review.`);
+  if (outcome !== 'survived') {
+    const why = { killed: 'was killed by the suite', 'timed-out': 'timed out', unreached: `is in ${mutant.file}, which no test loads` }[outcome];
+    throw new Error(`The selected mutant ${why}. Only a normally completed survivor can receive an equivalence review.`);
+  }
   await requireUnchangedContext(projectDir, commit, mutant, id);
   const record: EquivalentMutant = {
     id, file: mutant.file, line: mutant.line, description: mutant.description,

@@ -92,6 +92,30 @@ rm -f "$CHANGED"
 exit 0
 `;
 
+/** Where a project's ingest hook stands: what `init` and `doctor` both decide from. */
+export type IngestHookState = 'no-git' | 'missing' | 'current' | 'stale' | 'foreign' | 'unreadable';
+
+/**
+ * The state of `.git/hooks/pre-commit`. A `.git` that is not a folder (a linked worktree) is
+ * `no-git`: its hooks are its main checkout's. A hook carrying the marker is ours; any other is the designer's.
+ */
+export async function ingestHookState(projectPath: string): Promise<IngestHookState> {
+  try {
+    if (!(await fs.stat(join(projectPath, '.git'))).isDirectory()) return 'no-git';
+  } catch {
+    return 'no-git'; // Whatever stops the look, there is no hooks folder here to put the hook in.
+  }
+  let existing: string | undefined;
+  try {
+    existing = await readIfExists(join(projectPath, '.git', 'hooks', 'pre-commit'), (p) => fs.readFile(p, 'utf-8'));
+  } catch {
+    return 'unreadable';
+  }
+  if (existing === undefined) return 'missing';
+  if (!existing.includes('BoardSmith ingest synthesis')) return 'foreign';
+  return existing === INGEST_PRE_COMMIT_HOOK ? 'current' : 'stale';
+}
+
 /**
  * Install the pre-commit hook into a scaffolded project.
  *
@@ -101,25 +125,15 @@ exit 0
 export async function installIngestHook(
   projectPath: string,
 ): Promise<'installed' | 'skipped-existing' | 'skipped-unreadable' | 'skipped-no-git'> {
+  const state = await ingestHookState(projectPath);
+  if (state === 'no-git') return 'skipped-no-git';
+  // Something we cannot read stands there: not ours to replace, and init must not fail.
+  if (state === 'unreadable') return 'skipped-unreadable';
+  // Never clobber a hook we did not write — a designer's own hook wins.
+  if (state === 'foreign') return 'skipped-existing';
+
   const hooksDir = join(projectPath, '.git', 'hooks');
   const hookPath = join(hooksDir, 'pre-commit');
-
-  try {
-    await fs.access(join(projectPath, '.git'));
-  } catch {
-    // Whatever stops it, the hook cannot go in, and init reports that without failing.
-    return 'skipped-no-git';
-  }
-
-  let existing: string | undefined;
-  try {
-    existing = await readIfExists(hookPath, (p) => fs.readFile(p, 'utf-8'));
-  } catch {
-    return 'skipped-unreadable'; // Something we cannot read stands there: not ours to replace, and init must not fail.
-  }
-  // Never clobber a hook we did not write — a designer's own hook wins.
-  if (existing !== undefined && !existing.includes('BoardSmith ingest synthesis')) return 'skipped-existing';
-
   try {
     await fs.mkdir(hooksDir, { recursive: true });
     await fs.writeFile(hookPath, INGEST_PRE_COMMIT_HOOK, { mode: 0o755 });

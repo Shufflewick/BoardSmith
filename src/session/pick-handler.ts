@@ -13,7 +13,6 @@ import type {
   ElementsSelection,
   Game,
   Player,
-  PendingActionState,
 } from '../engine/index.js';
 import { PlayerFacingError } from '../engine/errors.js';
 import { rulesErrorSentence, withDevDetail } from '../engine/action/rules-error.js';
@@ -25,7 +24,7 @@ import {
 } from './types.js';
 import type { ValidElement } from '../types/protocol.js';
 import { PendingActionManager, type PickStepResult } from './pending-action-manager.js';
-import { actionForSeat, serializePendingActionState } from './utils.js';
+import { actionForSeat, deserializePendingState, serializePendingActionState } from './utils.js';
 import { resolveMultiSelect, resolveOrderedList } from '../engine/utils/resolve-multiselect.js';
 import {
   deadEndPickMessage,
@@ -33,15 +32,6 @@ import {
   formatElementCandidates,
   type AnnotatedCandidate,
 } from '../engine/element/pick-candidates.js';
-
-/** Restore a pending action's state from its JSON-safe form (array -> Set). */
-function deserializePendingState(s: Record<string, unknown>): PendingActionState {
-  const onSelectFired = s.onSelectFired;
-  return {
-    ...(s as unknown as PendingActionState),
-    onSelectFired: Array.isArray(onSelectFired) ? new Set(onSelectFired as number[]) : undefined,
-  };
-}
 
 /** The picks a pending action of `actionName` already holds, resolved to real elements when made. */
 function picksHeldBy(pendingState: Record<string, unknown> | null, actionName: string): Record<string, unknown> {
