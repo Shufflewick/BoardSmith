@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -172,6 +173,39 @@ describe('every dev flag refusal is a plain one-line Error naming the flag, what
 
   it('--game-option without "="', () => {
     expectRefusal(() => parseGameOptionFlags(['difficulty']), '--game-option takes "key=value", got "difficulty".');
+  });
+});
+
+describe('a startup failure after the flags is the same plain Error, through the shared cleanup (#1139)', () => {
+  it('"paths.ui" naming a directory that does not exist', async () => {
+    const project = mkdtempSync(join(tmpdir(), 'bs-dev-ui-'));
+    writeFileSync(join(project, 'boardsmith.json'), JSON.stringify({ name: 'ui-path-test', paths: { ui: 'web' } }));
+    writeFileSync(join(project, 'index.html'), '<!doctype html>');
+    const uiPath = join(project, 'web');
+    // A port nothing holds right now, so the run gets past the port check to the UI path.
+    const port = await new Promise<number>((resolve) => {
+      const probe = createServer().listen(0, '127.0.0.1', () => {
+        const { port: free } = probe.address() as { port: number };
+        probe.close(() => resolve(free));
+      });
+    });
+    const cwd = vi.spyOn(process, 'cwd').mockReturnValue(project);
+    const exit = vi.spyOn(process, 'exit').mockImplementation((code) => {
+      throw new Error(`process.exit(${code}) was called`);
+    });
+    const before = cleanups.runs;
+    try {
+      await expectDevRefusal(
+        { port: String(port) },
+        `The UI directory ${uiPath} does not exist. "paths.ui" in boardsmith.json names it; ` +
+          'create that directory, or point "paths.ui" at the directory that holds your index.html.',
+      );
+      expect(exit).not.toHaveBeenCalled();
+      expect(cleanups.runs).toBe(before + 1);
+    } finally {
+      exit.mockRestore();
+      cwd.mockRestore();
+    }
   });
 });
 
