@@ -13,6 +13,7 @@ import type { TutorialDefinition, TutorialStepView, Annotation } from '../engine
 import type { FollowUpOffer } from '../engine/action/types.js';
 import type { CheckpointPolicy, UndoPolicy, GameMetrics } from '../engine/index.js';
 import type { WorldDefinition } from '../world/definition.js';
+import type { ColorOptionDefinition } from './colors.js';
 import type {
   LobbyState,
   SlotStatus,
@@ -183,14 +184,17 @@ export interface GameDefinition {
 export type { NumberOption, SelectOption, BooleanOption, GameOptionDefinition };
 
 /**
- * Standard per-player option definition (shown for each player slot)
+ * Standard per-player option: a pick from a list, shown for each player slot.
+ * Its shape is what the platform's manifest accepts, so a game cannot write
+ * one the live lobby would refuse (#992).
  */
 export interface StandardPlayerOption {
-  type: 'select' | 'color' | 'text';
+  type: 'select';
   label: string;
   description?: string;
-  default?: string;
-  choices?: Array<{ value: string; label: string }> | string[];
+  /** One of the choices' values. */
+  default: string;
+  choices: Array<{ value: string; label: string }>;
 }
 
 /**
@@ -205,7 +209,8 @@ export interface StandardPlayerOption {
  *     type: 'exclusive',
  *     label: 'Dictator',
  *     description: 'Select which player is the dictator',
- *     default: 'last',  // 'first', 'last', or player index number
+ *     default: 'last',
+ *     choices: [{ value: 'dictator', label: 'Dictator' }],
  *   },
  * }
  * ```
@@ -214,19 +219,16 @@ export interface ExclusivePlayerOption {
   type: 'exclusive';
   label: string;
   description?: string;
-  /**
-   * Which player has this option by default.
-   * - 'first': Player 1 (first player)
-   * - 'last': Last player
-   * - number: Specific player seat (1-indexed)
-   */
-  default?: 'first' | 'last' | number;
+  /** Who holds the option at first, such as 'last'; the game reads it, so any string. */
+  default: string;
+  choices: Array<{ value: string; label: string }>;
 }
 
 /**
- * Per-player option definition (shown for each player slot)
+ * Per-player option definition (shown for each player slot). A `color` option
+ * is built from boardsmith.json's `colorPalette`; see `createColorOption`.
  */
-export type PlayerOptionDefinition = StandardPlayerOption | ExclusivePlayerOption;
+export type PlayerOptionDefinition = StandardPlayerOption | ExclusivePlayerOption | ColorOptionDefinition;
 
 /**
  * Preset configuration for quick game setup

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { describe, it, expect } from 'vitest';
-import type { GameDefinition } from '../../session/index.js';
+import { createColorOption, type GameDefinition } from '../../session/index.js';
 import { Game, Player, type GameOptions } from '../../engine/index.js';
 import { buildOutputDir, deriveManifest, resolveUiBuild } from './build.js';
 import { fixedDeployDefinition } from '../../session/testing/fixtures/timed-step-fixture.js';
@@ -136,6 +136,46 @@ describe('deriveManifest', () => {
     expect(() => derive({ name: 'fixture', gameOptions: [{ id: 'rounds', type: 'number', label: 'Rounds' }] })).toThrow(
       /"rounds" with no default/,
     );
+  });
+
+  it('publishes the player options the gameDefinition declares beside boardsmith.json\'s, without colour (#992)', () => {
+    const botLevel = {
+      id: 'botLevel',
+      type: 'select',
+      label: 'Difficulty',
+      default: 'easy',
+      choices: [{ value: 'easy', label: 'Easy' }],
+    };
+    const role = { type: 'exclusive' as const, label: 'Dictator', default: 'last', choices: [{ value: 'd', label: 'D' }] };
+    const gameDefinition: GameDefinition = {
+      ...makeGameDefinition(2, 4),
+      playerOptions: { role, color: createColorOption() },
+    };
+    expect(derive({ name: 'fixture', playerOptions: [botLevel] }, gameDefinition).playerOptions).toEqual([
+      { id: 'role', ...role },
+      botLevel,
+    ]);
+    expect(derive({ name: 'fixture' })).not.toHaveProperty('playerOptions');
+  });
+
+  it('refuses a player option the gameDefinition and boardsmith.json declare differently (#992)', () => {
+    const select = { type: 'select' as const, label: 'Side', default: 'a', choices: [{ value: 'a', label: 'A' }] };
+    const gameDefinition: GameDefinition = { ...makeGameDefinition(2, 4), playerOptions: { side: select } };
+    expect(() =>
+      derive({ name: 'fixture', playerOptions: [{ id: 'side', ...select, label: 'Team' }] }, gameDefinition),
+    ).toThrow(/player option "side"/);
+  });
+
+  it.each([
+    ['an exclusive option with no choices', { type: 'exclusive', label: 'Dictator', default: 'last' }, /"choices"/],
+    ['a select with plain string choices', { type: 'select', label: 'Side', default: 'a', choices: ['a', 'b'] }, /"choices"/],
+    ['a select with no default', { type: 'select', label: 'Side', choices: [{ value: 'a', label: 'A' }] }, /"default"/],
+    ['a text option', { type: 'text', label: 'Name' }, /type "text"/],
+  ])('refuses to publish %s, which the platform cannot carry (#992)', (_, option, problem) => {
+    // The code types cannot express these shapes, so they come from untyped boardsmith.json.
+    const config = { name: 'fixture', playerOptions: [{ id: 'odd', ...option }] };
+    expect(() => derive(config)).toThrow(/Player option "odd"/);
+    expect(() => derive(config)).toThrow(problem);
   });
 
   it('leaves the "agents" role mapping out of the manifest: it says how the game is built, not what is published (#454)', () => {

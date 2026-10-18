@@ -14,6 +14,7 @@ import { requireGameProjectManifests, requireRulesIndex, requireTableUi, resolve
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
 import { listFiles } from '../lib/source-files.js';
 import { parseGameOptionList } from '../../session/game-option-selection.js';
+import { mergePlayerOptions } from '../lib/player-options.js';
 import { readWorldDefinition, type WorldDefinition } from '../../world/index.js';
 import type { GameBackend, GameDefinition } from '../../session/index.js';
 import {
@@ -170,7 +171,7 @@ export function deriveManifest(
   pkg: Record<string, unknown>,
   gameDefinition: Pick<
     GameDefinition,
-    'gameClass' | 'minPlayers' | 'maxPlayers' | 'bot' | 'persistence' | 'world'
+    'gameClass' | 'minPlayers' | 'maxPlayers' | 'bot' | 'persistence' | 'world' | 'playerOptions'
   >,
   engineRevision: number,
   artifacts: { tableUi: boolean; worldUi: boolean },
@@ -242,8 +243,9 @@ export function deriveManifest(
   // bookkeeping (#706): nothing a player or the platform reads.
   const {
     asyncPlay: _asyncPlay, joinInProgress: _joinInProgress, agents: _agents,
-    platforms: _platforms, publisher: _publisher, gameOptions, ...rest
+    platforms: _platforms, publisher: _publisher, gameOptions, playerOptions, ...rest
   } = config;
+  const publishedPlayerOptions = mergePlayerOptions(gameDefinition.playerOptions, playerOptions);
 
   return {
     ...rest,
@@ -251,6 +253,10 @@ export function deriveManifest(
     // player may see or set, is left out (#701). The bundle still carries it
     // (`rulesEntrySource`), so a published game starts at its default.
     ...(gameOptions === undefined ? {} : { gameOptions: publishedGameOptions(gameOptions) }),
+    // The gameDefinition's player options and boardsmith.json's, as dev offers them (#992).
+    ...(Object.keys(publishedPlayerOptions).length === 0
+      ? {}
+      : { playerOptions: Object.entries(publishedPlayerOptions).map(([id, option]) => ({ id, ...option })) }),
     backend,
     capabilities: resolveCapabilities({
       backend,
