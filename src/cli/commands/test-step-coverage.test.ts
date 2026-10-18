@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { countsAt, decodeMappings } from './test-step-coverage.js';
+import { promises as fs, realpathSync } from 'node:fs';
+import { join } from 'node:path';
+import { countsAt, decodeMappings, readCoverage } from './test-step-coverage.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * #485: a test that pins earlier behaviour is mutation-tested on the game code it runs, read from
@@ -29,5 +32,16 @@ describe('decodeMappings', () => {
   });
   it('refuses a character that is not base64, naming it', () => {
     expect(() => decodeMappings('AA!A')).toThrow('holds "!", which is not base64');
+  });
+});
+
+describe('readCoverage: an unreadable coverage file (#1110)', () => {
+  it('names the file rather than saying the run wrote nothing', async () => {
+    const dir = realpathSync(tempTree('bs-coverage-unreadable-'));
+    const test = join(dir, 'a.test.ts');
+    await fs.writeFile(test, '');
+    const coverage = join(dir, 'coverage', `${encodeURIComponent(test)}.json`);
+    await fs.mkdir(coverage, { recursive: true });
+    await expect(readCoverage(join(dir, 'coverage'), dir, test, 'a.test.ts')).rejects.toThrow(`Could not read ${coverage} (EISDIR)`);
   });
 });
