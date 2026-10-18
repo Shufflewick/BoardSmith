@@ -989,9 +989,7 @@ export async function verifyRunInitCommand(
   const projectDir = resolve(options.project ?? process.cwd());
   const rulebookDir = designRulebookDir(projectDir);
 
-  try {
-    await fs.access(rulebookDir);
-  } catch {
+  if ((await readIfExists(rulebookDir, (p) => fs.stat(p))) === undefined) {
     throw new Error(
       `No rulebook/ directory in ${projectDir}.\n` +
         `A verify run re-transcribes an existing rulebook — run \`boardsmith ingest-archive\`\n` +
@@ -1111,11 +1109,9 @@ export async function readLedgerOrThrow(
   runId: string,
   projectDir: string,
 ): Promise<string> {
-  try {
-    return await fs.readFile(ledgerFile, 'utf-8');
-  } catch {
-    throw new Error(await missingRunMessage(projectDir, runId));
-  }
+  const text = await readIfExists(ledgerFile, (p) => fs.readFile(p, 'utf-8'));
+  if (text === undefined) throw new Error(await missingRunMessage(projectDir, runId));
+  return text;
 }
 
 /**
@@ -1342,10 +1338,8 @@ async function recordInRun(
     );
   }
 
-  let stat: import('node:fs').Stats;
-  try {
-    stat = await fs.stat(sliceAbs);
-  } catch {
+  const stat = await readIfExists(sliceAbs, (p) => fs.stat(p));
+  if (stat === undefined) {
     throw new Error(
       `Slice not found: ${relative(projectDir, sliceAbs)}.\n` +
         `verify-run-record only records a slice-unit AFTER its file is confirmed written — write\n` +

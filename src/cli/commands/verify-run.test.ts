@@ -153,6 +153,33 @@ describe('verifyRunInitCommand — staging + run allocation', () => {
     }
   });
 
+  it('names an unreadable rulebook/ rather than calling it missing (#1110)', async () => {
+    const project = join(dir, 'game');
+    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
+    await fs.mkdir(join(project, DESIGN_DIR), { recursive: true });
+    await fs.symlink(rulebookDir, rulebookDir);
+    await expect(verifyRunInitCommand({ project, json: true })).rejects.toThrow(`Could not read ${rulebookDir} (ELOOP)`);
+  });
+
+  it('names an unreadable run ledger rather than calling the run missing (#1110)', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, json: true });
+    const ledgerAbs = join(project, init.ledgerPath);
+    await fs.rm(ledgerAbs);
+    await fs.mkdir(ledgerAbs);
+    await expect(readLedgerOrThrow(ledgerAbs, init.runId, project)).rejects.toThrow(`Could not read ${ledgerAbs} (EISDIR)`);
+  });
+
+  it('names an unreadable slice rather than calling it missing (#1110)', async () => {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, json: true });
+    const sliceAbs = join(project, init.stagingDir, '03-setup.md');
+    await fs.symlink(sliceAbs, sliceAbs);
+    await expect(
+      verifyRunRecordCommand({ project, runId: init.runId, unit: '03-setup', slice: '03-setup.md', json: true }),
+    ).rejects.toThrow(`Could not read ${sliceAbs} (ELOOP)`);
+  });
+
   it('S4: stagingSlicesDir resolves under <projectDir>/rulebook/.verify/', async () => {
     const project = await liveProject();
     const runId = '2026-07-28T22-18-00Z';
