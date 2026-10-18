@@ -649,9 +649,13 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       };
     }
 
-    // Serialize the action before executing (captures current element refs)
-    const serializedAction = this.serializeOrRefuse(actionName, playerObj, args);
-    if ('success' in serializedAction) return serializedAction;
+    // Encoded before executing, so the recorded refs are the positions the
+    // action acts on, and only once its checks accept it: encoding resolves the
+    // picks through the game's choice callbacks (#1128).
+    const accepted = acceptsSubmission(this.game, actionName, playerIndex, args);
+    const unencodable = accepted ? undefined : this.unencodableRefusal(actionName, playerObj, args);
+    if (unencodable) return unencodable;
+    const serializedAction = accepted ? this.serializeForHistory(actionName, playerObj, args) : undefined;
 
     this.ensureHeadCheckpoint();
 
@@ -665,7 +669,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       // consistent with applied game state (WR-02) — dropping it would make
       // replay/undo/snapshot diverge from what actually happened.
       if (error instanceof FlowHaltedError) {
-        this.actionHistory.push(serializedAction);
+        this.actionHistory.push(this.recorded(actionName, serializedAction));
       }
       // #47: an engine policy error's message was written to be read and goes
       // through; anything else is an arbitrary runtime error whose text would
@@ -702,7 +706,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     }
 
     // Record in history
-    this.actionHistory.push(serializedAction);
+    this.actionHistory.push(this.recorded(actionName, serializedAction));
 
     // The action's own return value to the acting seat. Read straight off the
     // flow engine rather than out of `flowState`, which is broadcast (BUG-017).
@@ -718,22 +722,31 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   }
 
   /**
-   * {@link serializeForHistory}'s entry, or the move's refusal when it cannot
-   * be encoded and is not a move the game offers: that is the caller's bad
-   * input. An offered move that cannot be encoded is the game's fault, and
-   * still throws (#1070).
+   * The refusal of a submission the game does not take whose picks cannot be
+   * encoded at all: that is the caller's bad input (#1070). Its picks are
+   * encoded as sent, so no game callback runs on them.
    */
-  private serializeOrRefuse(
+  private unencodableRefusal(
     actionName: string,
     player: Player,
     args: Record<string, unknown>
-  ): SerializedAction | ActionExecutionResult {
+  ): ActionExecutionResult | undefined {
+    const actionDef = this.game.getAction(actionName);
     try {
-      return this.serializeForHistory(actionName, player, args);
+      serializeAction(actionName, player, actionDef ? new ActionExecutor(this.game).picksOf(actionDef, args) : args, this.game);
+      return undefined;
     } catch (error) {
-      if (!(error instanceof Error) || acceptsSubmission(this.game, actionName, player.seat, args)) throw error;
+      if (!(error instanceof Error)) throw error;
       return { success: false, error: error.message, errorCode: ErrorCode.INVALID_PICK };
     }
+  }
+
+  /** The history entry of an action that ran: one only a submission its checks accepted has. */
+  private recorded(actionName: string, serializedAction: SerializedAction | undefined): SerializedAction {
+    if (!serializedAction) {
+      throw new Error(`BoardSmith engine bug: action '${actionName}' ran a submission acceptsSubmission refused, so it has no history entry.`);
+    }
+    return serializedAction;
   }
 
   /**

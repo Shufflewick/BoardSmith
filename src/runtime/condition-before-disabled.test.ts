@@ -101,7 +101,8 @@ describe('a false condition is checked before the disabled rule (#1129)', () => 
 
     const result = runner.performAction('buy', 1, {});
 
-    expect(trace.slice(0, 2)).toEqual(['condition', 'disabled']);
+    expect(trace[0]).toBe('condition');
+    expect(trace).toContain('disabled');
     expect(result.success).toBe(false);
     expect(result.error).toBe("Action 'buy' is disabled: Already owned.");
   });

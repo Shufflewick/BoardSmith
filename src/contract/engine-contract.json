@@ -1,5 +1,5 @@
 {
-  "revision": 227,
+  "revision": 228,
   "surfaceHash": "78cc3a6fa6f722cc",
   "payloadHash": "42faf88ae9f4cb97",
   "formatHash": "3aff5d1f34f52ec0",
@@ -1759,6 +1759,14 @@
       "payloadHash": "42faf88ae9f4cb97",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A submitted action whose .condition() is false is now refused as 'Action is not available' before its .disabled() rule or the tutorial gate runs, matching the offer; a redacted seat copy (a bot sandbox) used to answer ENGINE_ERROR with an internal redaction message, and a false-condition action with a disabled reason used to answer \"Action 'x' is disabled: ...\" (#1129). Run this build so WindupWarfare's restored-copy refusals behave."
+    },
+    {
+      "revision": 228,
+      "date": "2026-10-18",
+      "surfaceHash": "78cc3a6fa6f722cc",
+      "payloadHash": "42faf88ae9f4cb97",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "GameRunner.performAction encodes a submission for history only after the checks execution uses accept it (condition first, then each pick in order, #772), so a choice callback no longer runs on an unchecked earlier pick or on an attribute a false condition guards. A move that used to throw (TypeError, RedactedAttributeError) or come back refused with that internal message is now refused with the normal reason (#1128). Run this build so WindupWarfare's technology purchase and Field Recovery refusals behave."
     }
   ]
 }
