@@ -1,5 +1,5 @@
 {
-  "revision": 243,
+  "revision": 244,
   "surfaceHash": "01f74ea669294216",
   "payloadHash": "0e2d27db00239080",
   "formatHash": "3aff5d1f34f52ec0",
@@ -1887,6 +1887,14 @@
       "payloadHash": "0e2d27db00239080",
       "formatHash": "3aff5d1f34f52ec0",
       "summary": "A seat's message text is now fixed when the message is written, from what that seat could see then, and never changes afterwards (#1165): an element the seat cannot see is named by the nearest container whose name it can see (its outermost concealer, or that concealer's parent when the concealer hides itself, and the game's name at the top), an element hidden by its own visibility included. MessageEntry gains readings: { text, seats }[], one entry per distinct text with the seats that read it (0 is the spectator); text stays the template. A seat's serializeMessageLog copy keeps only its own reading. A message log saved by an older engine has no readings, and formatting it throws a message saying to start a new game, so live tables should stay on the revision that wrote them. In world mode, a seat's view no longer carries the real id of an element in a partition not loaded on this instance: the reference is written as { __elementRef: 'pile/removed' }, the reference that names nothing, for every seat (#1166)."
+    },
+    {
+      "revision": 244,
+      "date": "2026-10-18",
+      "surfaceHash": "01f74ea669294216",
+      "payloadHash": "0e2d27db00239080",
+      "formatHash": "3aff5d1f34f52ec0",
+      "summary": "A seat's view now carries an element whose own visibility shows it to that seat even when it sits below a hidden child of a hidden, count-only or owner-only zone (#961): it arrives as a child of that zone, after the zone's placeholders, with the containers between left out. isVisibleTo(seat) is true for such an element and message text names it for that seat (a granted card directly in a concealed zone too). A count-only or owner-only zone's children may outnumber its direct children; childCount is unchanged."
     }
   ]
 }
