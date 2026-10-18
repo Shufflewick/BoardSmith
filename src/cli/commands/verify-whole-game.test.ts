@@ -161,7 +161,7 @@ describe('boardsmith verify on a whole game, as a user runs it', () => {
     expect(result.checks.filter((c) => !c.passed).map((c) => c.name)).toEqual(['smoke']);
     expect(check(result, 'test').counts).toMatchObject({ failed: 0 });
     expect(check(result, 'smoke').summary).toMatch(
-      /useGameContext\(\) reads a table's whole game context, and this component is inside a world's shell.*gameState, dueSeats, timeTravelDiff, turnDeadline/s,
+      /useGameContext\(\) reads a table's whole game context, and this component is inside a world's shell.*gameState, dueSeats, timeTravelDiff, platformRequest, turnDeadline/s,
     );
     expect(await verifiedProblem(dir)).toMatch(/smoke: /);
   });
