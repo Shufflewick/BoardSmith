@@ -12,6 +12,7 @@ import {
 } from '../index.js';
 import type { ActionContext, ActionDefinition } from '../index.js';
 import { ActionExecutor } from './action.js';
+import { rulesErrorSentence } from './rules-error.js';
 
 // Test classes
 class TestGame extends Game<TestGame, Player> {}
@@ -2784,10 +2785,8 @@ describe('onSelect throwing aborts the action (F35)', () => {
     const result = executor.executeAction(action, player, { color: 'red', size: 'M' });
 
     expect(result.success).toBe(false);
-    // Actionable: names the offending selection, the action, and the original message.
-    expect(result.error).toContain("'size'");
-    expect(result.error).toContain("'test'");
-    expect(result.error).toContain('size hook blew up');
+    // The shared crash sentence, with the thrown text only because tests run with dev throwing on (#1120).
+    expect(result.error).toBe(`${rulesErrorSentence('test')} (size hook blew up)`);
     // execute() must NOT run (action not committed).
     expect(executed).toBe(false);
     // onCancel fired for the selection whose onSelect already ran; the throwing
@@ -2839,8 +2838,7 @@ describe('onSelect throwing aborts the action (F35)', () => {
     // Second selection's onSelect throws → abort with actionable error + onCancel.
     const step2 = executor.processSelectionStep(action, player, pendingState, 'size', 'M');
     expect(step2.success).toBe(false);
-    expect(step2.error).toContain("'size'");
-    expect(step2.error).toContain('size hook blew up');
+    expect(step2.error).toBe(`${rulesErrorSentence('test')} (size hook blew up)`);
     expect(events).toEqual(['onSelect:color', 'onCancel:color']);
   });
 });

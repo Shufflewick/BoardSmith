@@ -4,6 +4,7 @@ import { GameElement, hasZoneVisibility, withheldFromSeat, WITHHELD_PILE_BRANCH 
 import { Player } from '../player/player.js';
 import { devWarn, isDevMode } from '../../utils/dev.js';
 import { PlayerFacingError } from '../errors.js';
+import { withDevDetail } from '../action/rules-error.js';
 import { changing, flowStateRead } from '../element/state-version.js';
 import type { ActionResult, FollowUpAction } from '../action/types.js';
 import type { AcceptedArgs } from '../action/action.js';
@@ -287,12 +288,14 @@ interface ExecutionFrame<G extends Game = Game> {
  */
 export class FlowHaltedError extends PlayerFacingError {
   constructor(cause: unknown) {
-    const message = cause instanceof Error ? cause.message : String(cause);
-    super(
-      `Game halted: the flow failed after the action was committed — ${message}. ` +
-      `This is a flow-definition bug, not a retryable player error; the game cannot continue until the flow definition is fixed.`
-    );
+    super(withDevDetail(
+      'Game halted: the flow failed after the action was committed. ' +
+      'This is a flow-definition bug, not a retryable player error; the game cannot continue until the flow definition is fixed.',
+      cause,
+    ));
     this.name = 'FlowHaltedError';
+    // The message carries the cause only in dev, so whoever reports the halt logs it from here (#1120).
+    this.cause = cause;
   }
 }
 

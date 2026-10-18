@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { Game, Player, Action, actionStep, loop, simultaneousActionStep, PlayerFacingError, type GameOptions, type TutorialDefinition } from '../engine/index.js';
+import { Game, Player, Action, actionStep, loop, sequence, execute, simultaneousActionStep, PlayerFacingError, FlowHaltedError, type GameOptions, type TutorialDefinition } from '../engine/index.js';
 import type { BotStrategy } from '../bot/types.js';
 import { executeOp, READ_ONLY_OP_TYPES, type GameDefinitionLike, type StateEnvelope } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
@@ -1873,6 +1873,57 @@ describe('executeOp refuses an unexpected throw without passing its text on', ()
       expect(failure.errorCode).toBeUndefined();
     } finally {
       devThrow.enabled = true;
+    }
+  });
+});
+
+// #1120: a multi-step action whose flow then halts is completed through the session's
+// pending route; the halt's cause is logged once and the player reads none of its text.
+describe('completing a multi-step action whose flow then halts', () => {
+  const INTERNAL = 'Cannot read properties of undefined (reading \'suit\')';
+  const cause = new Error(INTERNAL);
+
+  class HaltingTwoStepGame extends Game<HaltingTwoStepGame, Player> {
+    constructor(options: GameOptions) {
+      super(options);
+      this.registerAction(
+        Action.create('pick')
+          .chooseFrom('color', { choices: ['red', 'blue'] })
+          .chooseFrom('size', { choices: ['S', 'M'] })
+          .execute(() => ({ success: true })),
+      );
+      this.setFlow({
+        root: loop({
+          maxIterations: 5,
+          do: sequence(
+            actionStep({ actions: ['pick'], player: (ctx) => ctx.game.getPlayer(1)! }),
+            execute(() => { throw cause; }),
+          ),
+        }),
+      });
+    }
+  }
+  const haltingDef: GameDefinitionLike = { gameClass: HaltingTwoStepGame, gameType: 'halting', minPlayers: 1, maxPlayers: 2 };
+
+  it('logs the cause exactly once and tells a deployed player no thrown text', async () => {
+    devThrow.enabled = false;
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const start = succeeded(await startGame(haltingDef, twoStepGameOptions));
+      const step1 = succeeded(await executeOp(haltingDef, twoStepGameOptions, start.snapshot, null, {
+        type: 'selectionStep', player: 1, selectionName: 'color', value: 'red', actionName: 'pick', boundaryKey: boundaryKeyOf(start.snapshot),
+      }));
+      const result = await executeOp(haltingDef, twoStepGameOptions, step1.snapshot, step1.pendingState, {
+        type: 'selectionStep', player: 1, selectionName: 'size', value: 'M', actionName: 'pick',
+        initialArgs: { color: 'red' }, boundaryKey: boundaryKeyOf(step1.snapshot),
+      });
+      expect(result.success).toBe(false);
+      expect(refused(result).error).toBe(new FlowHaltedError(cause).message);
+      expect(refused(result).error).not.toContain(INTERNAL);
+      expect(errors.mock.calls.filter((call) => call.includes(cause))).toHaveLength(1);
+    } finally {
+      devThrow.enabled = true;
+      errors.mockRestore();
     }
   });
 });

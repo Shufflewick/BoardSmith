@@ -216,6 +216,16 @@ function checkpointWithLiveLog(
   return { state, messageLog: log.slice(0, Math.max(0, checkpoint.messageCount - evicted)) };
 }
 
+/**
+ * The refusal for a flow that halted after `actionName` committed, its cause logged once (#1120).
+ * Every live completion route reports through here, since the message carries the cause only in
+ * dev and nothing logs a halt when it is created, which keeps a bot's search copies quiet (#31).
+ */
+function reportHalt(actionName: string, halt: FlowHaltedError): string {
+  console.error(`[BoardSmith] The flow failed after action '${actionName}' was committed:`, halt.cause);
+  return halt.message;
+}
+
 /** The kept history entries before action `actionIndex`, which a checkpoint there restores with. */
 function historyBefore(snapshot: GameStateSnapshot, actionIndex: number): HistoryEntry[] {
   const base = snapshot.actionHistoryBase ?? 0;
@@ -718,6 +728,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       // replay/undo/snapshot diverge from what actually happened.
       if (error instanceof FlowHaltedError) {
         this.actionHistory.push(this.recorded(actionName, history.entry));
+        return { success: false, error: reportHalt(actionName, error), errorCode: ErrorCode.ENGINE_ERROR };
       }
       // #47: an engine policy error's message was written to be read and goes
       // through; anything else is an arbitrary runtime error whose text would
@@ -893,7 +904,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * Execute a fully-collected pending action, the one completion step shared by
    * this runner's `completePendingAction` and `PendingActionManager`'s: record
    * it and advance the flow when it succeeds, and roll the game back when it
-   * failed after changing something, as `performAction` does (#44, #801).
+   * failed after changing something, as `performAction` does (#44, #801). A
+   * flow that halts after the action is refused, as in `performAction`, rather than thrown (#1120).
    */
   executeCollectedAction(
     executor: ActionExecutor,
@@ -909,7 +921,12 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
 
     if (actionResult.success) {
       this.actionHistory.push(serializedAction);
-      this.game.continueFlowAfterPendingAction(actionResult, playerPosition);
+      try {
+        this.game.continueFlowAfterPendingAction(actionResult, playerPosition);
+      } catch (error) {
+        if (!(error instanceof FlowHaltedError)) throw error;
+        return { success: false, error: reportHalt(action.name, error) };
+      }
       return actionResult;
     }
     if (!actionResult.partiallyApplied) return actionResult;
