@@ -102,4 +102,34 @@ describe('GameShell following the active seat (#1135)', () => {
     expect(checkIn()!.attributes('aria-disabled')).toBeUndefined();
     expect(posted.filter((m) => m.type === 'server_request' && m.op === 'action')).toHaveLength(1);
   });
+
+  it('reports a reply that lands after the change under the seat that sent the action (#1150)', async () => {
+    const posted = enterIframe() as Array<{ type?: string; op?: string; requestId?: string }>;
+    const resolved: Array<{ action: string; seat: number }> = [];
+    const listen = (e: Event) => resolved.push((e as CustomEvent).detail);
+    window.addEventListener('boardsmith:action-resolved', listen);
+    try {
+      const wrapper = mountPlatformShell({ board: HandBoard });
+      mounted.push(wrapper);
+      await nextTick();
+      fromHost({ type: 'init', seat: 1 });
+      fromHost(seatFrame(1, []));
+      await flushPromises();
+
+      const checkIn = wrapper.find('#bs-actionbar .action-panel-root').findAll('button').find((b) => b.text().includes('Check in'));
+      await checkIn!.trigger('click');
+      const request = posted.find((m) => m.type === 'server_request' && m.op === 'action');
+
+      fromHost({ type: 'init', seat: 2 });
+      await flushPromises();
+      fromHost(seatFrame(2, [1]));
+      await flushPromises();
+      fromHost({ type: 'server_response', requestId: request!.requestId, result: { success: true } });
+      await flushPromises();
+    } finally {
+      window.removeEventListener('boardsmith:action-resolved', listen);
+    }
+
+    expect(resolved).toEqual([{ action: 'checkIn', success: true, seat: 1 }]);
+  });
 });

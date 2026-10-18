@@ -1641,19 +1641,23 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * currentAction stale and blocks the next auto-start. `seq` is actionStartTick
    * when the caller began: the clear is skipped if a newer action started during
    * the await, or it would wipe that freshly started action (the cross-turn
-   * auto-start race). Every result is published through resolveAction, and a
-   * followUp the server hands back is started.
+   * auto-start race). Every result is published through resolveAction, under
+   * the seat that sent it, and a followUp the server hands back is started.
+   * A reply that lands after the page changed seats (#1150) is the last seat's:
+   * its error and followUp are not shown to or started for the new one.
    */
   async function sendAndResolve(actionName: string, args: Record<string, unknown>, seq: number): Promise<ControllerActionResult> {
     isExecuting.value = true;
     lastError.value = null;
+    const seat = playerSeat?.value ?? 0;
+    const sameSeat = (): boolean => (playerSeat?.value ?? 0) === seat;
 
     try {
       const result = await sendAction(actionName, args);
-      if (!result.success) {
+      if (!result.success && sameSeat()) {
         setError(result.error || 'Action failed');
       }
-      resolveAction(actionName, playerSeat?.value ?? 0, result);
+      resolveAction(actionName, seat, result);
 
       if (!actionMovedOn(seq)) {
         currentAction.value = null;
@@ -1661,15 +1665,15 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         clearAdvancedState();
       }
 
-      if (result.success && result.followUp) {
+      if (result.success && result.followUp && sameSeat()) {
         queueFollowUp(result.followUp);
       }
 
       return result;
     } catch (err) {
       const error = err instanceof Error ? err.message : 'Action failed';
-      setError(error);
-      resolveAction(actionName, playerSeat?.value ?? 0, { success: false, error });
+      if (sameSeat()) setError(error);
+      resolveAction(actionName, seat, { success: false, error });
       return { success: false, error };
     } finally {
       isExecuting.value = false;
