@@ -257,7 +257,7 @@
         "count": 1
       },
       "complexity_moderate": {
-        "count": 5
+        "count": 4
       }
     },
     "src/engine/action/helpers.ts": {

@@ -1388,12 +1388,6 @@ export class ActionExecutor {
     args: Record<string, unknown>,
     options?: PerformOptions,
   ): ActionResult {
-    // The condition sees no picks, as availability and each step see it; the picks are checked one at a time below (#772).
-    const context = { game: this.game, player, args: this.resolveNonPickArgs(action, args, this.game) };
-    if (!options?.followUp && action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
-      return { success: false, error: 'Action is not available' };
-    }
-
     const pendingState = this.createPendingActionState(action.name, player.seat);
     Object.assign(pendingState.collectedArgs, options?.followUp?.args);
     let applied = false;
@@ -1606,16 +1600,14 @@ export class ActionExecutor {
     return this.hasValidSelectionPath(action.selections, player, resolved, 0, action.name);
   }
 
-  isActionAvailable(action: ActionDefinition, player: Player): boolean {
-    const context: ActionContext = {
-      game: this.game,
-      player,
-      args: {},
-    };
+  /** Whether the action's condition offers it to `player`, with empty args as availability sees it. */
+  conditionHolds(action: ActionDefinition, player: Player): boolean {
+    return !action.condition
+      || evaluateCondition(action.condition, { game: this.game, player, args: {} }, `action '${action.name}'`);
+  }
 
-    if (action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
-      return false;
-    }
+  isActionAvailable(action: ActionDefinition, player: Player): boolean {
+    if (!this.conditionHolds(action, player)) return false;
 
     // Check if there's at least one valid path through all selections.
     // Pass action.name so tutorial gate disabled reasons are included when
