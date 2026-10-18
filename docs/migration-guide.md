@@ -1,5 +1,13 @@
 # Migration Guide
 
+## `boardsmith test --selection` is removed (#986)
+
+`boardsmith test` no longer takes `--selection <path>`, the authored-test
+selection that ran only the files and test names listed in a manifest such as
+`.agent-policy-tests.json`. `agent-policy verify` now runs the tests related to
+a change instead, so nothing reads a selection. Delete any selection manifest
+and run `boardsmith test` (optionally with filename filters) instead.
+
 ## Three unused public names are gone (#929)
 
 `provideAnnouncer` is removed from `boardsmith/ui`; provide the announcer with

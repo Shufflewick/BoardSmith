@@ -120,11 +120,6 @@
         "count": 1
       }
     },
-    "src/cli/commands/test.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/cli/commands/trace-check.ts": {
       "complexity_critical": {
         "count": 1
@@ -230,11 +225,6 @@
       }
     },
     "src/cli/dev-host/multiplayer-host.ts": {
-      "complexity_moderate": {
-        "count": 2
-      }
-    },
-    "src/cli/lib/authored-tests.ts": {
       "complexity_moderate": {
         "count": 2
       }
