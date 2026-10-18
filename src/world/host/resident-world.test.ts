@@ -198,13 +198,13 @@ describe('#793: ResidentWorld', () => {
     await world.clockCommand('armFizz', {});
     advance(3 * MINUTE);
 
-    const refusal = world.run(() =>
-      world.command({ player: worldSeatPlayer(1), order: { id: 'o1', at: OPENED }, action: 'poke', args: {} }),
-    );
-    await expect(refusal).rejects.toMatchObject({ code: 'world-catching-up' });
-    const message = (await refusal.catch((error: Error) => error)).message;
-    expect(message).toContain('"the harvest festival"');
-    expect(message).not.toContain('"fizz"');
+    const refusal: unknown = await world
+      .run(() =>
+        world.command({ player: worldSeatPlayer(1), order: { id: 'o1', at: OPENED }, action: 'poke', args: {} }),
+      )
+      .catch((error: unknown) => error);
+    expect(refusal).toMatchObject({ code: 'world-catching-up', message: expect.stringContaining('"the harvest festival"') });
+    expect((refusal as Error).message).not.toContain('"fizz"');
   });
 
   it('still says "in a moment" when the world is only catching up (#939)', async () => {
