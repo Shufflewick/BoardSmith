@@ -43,15 +43,27 @@ export function walk(node: unknown, visit: (n: Record<string, unknown>) => void)
   }
 }
 
+/** The local names an `ImportDeclaration` from boardsmith or a subpath binds `roots` to. */
+function boardsmithLocalNames(node: Record<string, unknown>, roots: readonly string[]): string[] {
+  const source = String((node.source as { value?: unknown }).value);
+  if (source !== 'boardsmith' && !source.startsWith('boardsmith/')) return [];
+  return (node.specifiers as { type: string; imported?: { name?: string }; local: { name: string } }[])
+    .filter((spec) => spec.type === 'ImportSpecifier' && roots.includes(spec.imported?.name ?? ''))
+    .map((spec) => spec.local.name);
+}
+
 /**
- * `roots` plus every class declared in `program` that extends one of them, transitively and in
- * any declaration order.
+ * `roots`, the local name of each root imported from boardsmith under another name
+ * (`import { Card as BaseCard } from 'boardsmith'`, #1036), and every class declared in `program`
+ * that extends one of them, transitively and in any declaration order.
  */
 export function collectSubclassNames(program: unknown, roots: readonly string[]): Set<string> {
   const names = new Set<string>(roots);
   const classDecls: { name: string; superName: string | undefined }[] = [];
   walk(program, (node) => {
-    if (node.type === 'ClassDeclaration') {
+    if (node.type === 'ImportDeclaration') {
+      for (const local of boardsmithLocalNames(node, roots)) names.add(local);
+    } else if (node.type === 'ClassDeclaration') {
       const id = node.id as { name?: string } | null | undefined;
       const superClass = node.superClass as { type?: string; name?: string } | null | undefined;
       if (id?.name) {

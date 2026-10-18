@@ -6,6 +6,7 @@
  */
 import { rulesErrorSentence } from '../engine/action/rules-error.js';
 import { PageFrozen } from './browser-smoke-clock.js';
+import { parsePositiveWholeNumber } from '../utils/positive-whole-number.js';
 
 /** Where a game keeps its smoke test. `boardsmith init` writes it and `boardsmith verify` runs it. */
 export const SMOKE_SPEC_PATH = 'tests/browser/smoke.spec.ts';
@@ -59,6 +60,15 @@ function checkedSeeds(seeds: string[], from: string): string[] {
   return seeds;
 }
 
+/** The spec's `actions`, once none is blank or listed twice (#926). */
+export function smokeActions(actions: readonly string[]): string[] {
+  const from = `\`actions\` in ${SMOKE_SPEC_PATH}`;
+  if (actions.some((name) => name.trim() === '')) throw new Error(`${from} has a blank name. Name each action as its rules do, such as "greet".`);
+  const twice = actions.find((name, i) => actions.indexOf(name) !== i);
+  if (twice !== undefined) throw new Error(`${from} lists "${twice}" twice. List each action once.`);
+  return [...actions];
+}
+
 /**
  * The world seats a walk plays (#471), in order: `seats` in the spec, a count of the first seats the
  * world gives (1, 2...) or a list naming them, so a spec can choose seats the world brings together.
@@ -83,6 +93,11 @@ export function smokeWorldSeats(seats: number | readonly number[] | undefined): 
   const twice = seats.find((seat, i) => seats.indexOf(seat) !== i);
   if (twice !== undefined) throw new Error(`${from} lists seat ${twice} twice. List each seat once.`);
   return [...seats];
+}
+
+/** The spec's `steps`, once it is a positive whole number: with none, the walk takes no step and passes any game that loads (#924). */
+export function smokeSteps(steps: number): number {
+  return parsePositiveWholeNumber(`\`steps\` in ${SMOKE_SPEC_PATH}`, String(steps));
 }
 
 /** Where a walk stopped because no seat was offered anything for `seconds`. */
@@ -482,8 +497,9 @@ function inputProblems(walk: SmokeWalk): string[] {
  * blank text.
  */
 function fieldInputProblem(walk: SmokeWalk, action: string, field: string, input: SmokeInput): string | undefined {
-  const met = walk.fieldsMet.get(action);
-  if (met !== undefined && (met.size > 0 || walk.taken.has(action)) && !met.has(field)) {
+  // An action taken without the walk opening it was taken in one press: it has no fields (#926).
+  const met = walk.fieldsMet.get(action) ?? new Map<string, FieldKind>();
+  if ((met.size > 0 || walk.taken.has(action)) && !met.has(field)) {
     return (
       `${inputName(action, field)} in ${SMOKE_SPEC_PATH} names a field the walk never met in "${action}", whose fields it ` +
       `met are ${met.size === 0 ? 'none' : quoted([...met.keys()].sort())}. Name the field by the pick name its rules give it.`

@@ -418,6 +418,15 @@ describe('a sign-off counts only for the chunk as it was signed (#295)', () => {
     expect((await checkSignoff(project, 'deal')).length).toBeGreaterThan(0);
   });
 
+  it('records a path with non-ASCII letters whole and reports a later change to it (#1113)', async () => {
+    const project = await makeProject([{ slug: 'deal', manifest: { 'règles/a.ts': 'v1' } }]);
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    expect(Object.keys(parseSignoff(await readChunk(project, 'deal')).record!.code)).toEqual(['règles/a.ts']);
+    await setStatusByHand(project, 'deal', 'built');
+    await fs.writeFile(join(project, 'règles/a.ts'), 'v2');
+    expect(await verifiedByHandProblems(project, 'deal')).toMatch(/règles\/a\.ts changed after it/);
+  });
+
   it('a design ledger in the manifest changing at close does not void the sign-off', async () => {
     const project = await makeProject([
       { slug: 'deal', manifest: { 'src/deal.ts': 'v1', 'DECISIONS.md': '# Decisions\n' } },
@@ -650,3 +659,28 @@ function signOffUnverified(project: string): Promise<unknown> {
 async function commitWithoutVerify(project: string): Promise<void> {
   commitAll(project, 'more work, not verified');
 }
+
+describe('a design or code file the sign-off cannot read is refused, never read as missing (#1049)', () => {
+  it('refuses a Build Manifest file it cannot read, rather than recording it as missing', async () => {
+    const project = await makeProject([{ slug: 'deal', manifest: { 'src/deal.ts': 'deal v1' } }]);
+    await fs.rm(join(project, 'src/deal.ts'));
+    await fs.mkdir(join(project, 'src/deal.ts'));
+    await expect(assessSignoffs(project)).rejects.toThrow(`Could not read ${join(project, 'src/deal.ts')} (EISDIR)`);
+  });
+
+  it('refuses a CHUNK.md it cannot read, rather than leaving that chunk out', async () => {
+    const project = await makeProject([{ slug: 'deal' }, { slug: 'shop' }]);
+    const chunkMd = join(project, DESIGN_DIR, 'chunks', 'shop', 'CHUNK.md');
+    await fs.rm(chunkMd);
+    await fs.mkdir(chunkMd);
+    await expect(assessSignoffs(project)).rejects.toThrow(`Could not read ${chunkMd} (EISDIR)`);
+  });
+
+  it('refuses a waivers ledger it cannot read, rather than reading it as holding no waiver', async () => {
+    const project = await makeProject([{ slug: 'deal' }]);
+    await fs.mkdir(join(project, DESIGN_DIR, WAIVERS_MD));
+    await expect(signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW })).rejects.toThrow(
+      `Could not read ${join(project, DESIGN_DIR, WAIVERS_MD)} (EISDIR)`,
+    );
+  });
+});

@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import { relative } from 'node:path';
+import { readIfExists } from './read-if-exists.js';
 
 /**
  * The one reader of a fenced JSON-lines ledger: a markdown file holding one JSON record per line
@@ -29,12 +30,8 @@ export async function readFencedJsonLedger<T>(
   file: FencedJsonLedgerFile,
   read: (record: Record<string, unknown>) => T,
 ): Promise<T[]> {
-  let text: string;
-  try {
-    text = await fs.readFile(file.path, 'utf-8');
-  } catch {
-    return [];
-  }
+  const text = await readIfExists(file.path, (path) => fs.readFile(path, 'utf-8'));
+  if (text === undefined) return [];
   const where = `Malformed ${file.name} ledger at ${relative(file.projectDir, file.path)}`;
   const beginIdx = text.indexOf(file.begin);
   const endIdx = text.indexOf(file.end);

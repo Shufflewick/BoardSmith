@@ -4,8 +4,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import { Game, Piece, Player, Space, type GameElement } from '../index.js';
-import { formatElementCandidates } from './pick-candidates.js';
-import type { ElementSelection } from '../action/types.js';
+import { formatChoiceCandidates, formatElementCandidates } from './pick-candidates.js';
+import type { ChoiceSelection, ElementSelection } from '../action/types.js';
 
 class LabelGame extends Game<LabelGame, Player> {}
 class Square extends Space<LabelGame> {
@@ -42,5 +42,18 @@ describe('labels for element candidates (#766)', () => {
     const two = game.create(Square, 'Square', { code: 'x' });
     const other = game.create(Piece, 'Square');
     expect(labelsOf([one, two, other], game)).toEqual(['x #1', 'x #2', 'Square']);
+  });
+});
+
+describe('a seat with no name is labelled by its seat (#1044)', () => {
+  it('reads "Player 1" when a game chooses from its players without display labels', () => {
+    const game = new LabelGame({ playerCount: 2, playerNames: ['', 'Bob'], seed: 'labels' });
+    const selection = { type: 'choice', name: 'target' } as ChoiceSelection;
+    const ctx = { game, player: game.getPlayer(2)!, args: {} };
+    const choices = formatChoiceCandidates(
+      game.players.map((value) => ({ value, disabled: false as const })), selection, ctx, [], game,
+    );
+    expect(choices.map((c) => c.display)).toEqual(['Player 1', 'Bob']);
+    expect(labelsOf([...game.players], game)).toEqual(['Player 1', 'Bob']);
   });
 });

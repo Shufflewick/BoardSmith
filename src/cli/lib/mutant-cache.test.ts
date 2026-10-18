@@ -453,6 +453,14 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
       }
     });
 
+    it('does not cache, and names the file, when an ignored entry point of a linked package cannot be read', async () => {
+      const { dir, dep } = await withSibling({ git: true });
+      await write(dep, { 'package.json': JSON.stringify({ name: 'dep', main: './main.js' }), '.gitignore': 'main.js\n' });
+      commitAll(dep, 'ignored entry point');
+      await fs.symlink('main.js', join(dep, 'main.js'));
+      expect((await openMutantCache(dir)).unavailable).toMatch(/Could not read .*dep\/main\.js \(ELOOP\)/);
+    });
+
     it('does not cache at all, and says why, when a linked folder cannot be read', async () => {
       const { dir, dep } = await withSibling({ git: false });
       await record(dir, 'killed');
@@ -507,6 +515,13 @@ describe('gameBoardsmithRoot: the BoardSmith a game loads', () => {
     const dir = join(tree, 'game');
     await write(dir, { 'package.json': '{}\n' });
     expect(await gameBoardsmithRoot(dir)).toBeUndefined();
+  });
+
+  it('refuses a BoardSmith install whose package.json it cannot read, rather than looking past it', async () => {
+    const tree = tempTree('bs-mutant-cache-game-');
+    const dir = join(tree, 'game');
+    await fs.mkdir(join(dir, 'node_modules', 'boardsmith', 'package.json'), { recursive: true });
+    await expect(gameBoardsmithRoot(dir)).rejects.toThrow(/Could not read .*node_modules\/boardsmith\/package\.json \(EISDIR\)/);
   });
 });
 

@@ -129,6 +129,12 @@ describe('parseBuildManifest', () => {
     expect(parsed.entries.map((e) => e.path)).toEqual(['src/rules/game.ts']);
   });
 
+  it('reads a path with non-ASCII letters whole (#1113)', () => {
+    // 'e\u0300' is the decomposed form a macOS file name can arrive in.
+    const chunk = tableChunk('| règles/a.ts, `re\u0300gles/b.ts` | written |');
+    expect(parseBuildManifest(chunk).entries.map((e) => e.path)).toEqual(['règles/a.ts', 're\u0300gles/b.ts']);
+  });
+
   it('records a zero-path row in pathlessRowIndexes and produces no entry', () => {
     const chunk = tableChunk('| (no files) | n/a |');
     const parsed = parseBuildManifest(chunk);

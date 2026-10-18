@@ -118,6 +118,13 @@ describe('hashSkillsTree', () => {
     expect(hashA).not.toBe(hashB);
   });
 
+  it('covers dot files and dot folders inside an installed skill (#1048)', async () => {
+    await writeSkillsTree(dir, BASE_TREE);
+    const hashBefore = await hashSkillsTree(dir);
+    await writeSkillsTree(dir, { ...BASE_TREE, 'bs-build-chunk/.notes/a.md': 'x\n' });
+    expect(await hashSkillsTree(dir)).not.toBe(hashBefore);
+  });
+
   it('does NOT change when a non-bs- sibling directory is added to the skills root', async () => {
     await writeSkillsTree(dir, BASE_TREE);
     const hashBefore = await hashSkillsTree(dir);

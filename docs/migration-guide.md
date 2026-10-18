@@ -1,5 +1,43 @@
 # Migration Guide
 
+## boardsmith.json has no `scoreboard` key any more (#930)
+
+Nothing ever read `scoreboard`; only `boardsmith new` wrote it. `boardsmith
+validate` now refuses it as an unknown key. Delete it from your
+`boardsmith.json`.
+
+## `simulateTutorial` starts a tutorial as the server does (#914)
+
+`simulateTutorial` now starts a tutorial through the same function as the
+server's `startTutorial` op. It runs the tutorial's `setup` before the first
+scripted move, restarts the flow with the learner seat to move, and gives only
+the learner seat a tutorial. So:
+
+- `scenario` is now a function of the game, called once after `setup` has run,
+  so its moves name the elements `setup` left on the board (#1079). A list is
+  no longer accepted. A list built before the call named elements a `setup`
+  that recreates them had already replaced, and the move failed with "That
+  choice is no longer available". Before:
+
+  ```typescript
+  const scenario = buildWalkthrough(testGame.game);
+  simulateTutorial(testGame, MY_TUTORIAL, { scenario });
+  ```
+
+  After:
+
+  ```typescript
+  simulateTutorial(testGame, MY_TUTORIAL, { scenario: (game) => buildWalkthrough(game) });
+  ```
+
+  A scenario that names no elements just wraps its list:
+  `scenario: () => [{ action: 'pass' }]`. Patch the game in the function, not
+  before the call, when the patch moves elements `setup` replaces.
+- Moves by other seats are no longer gated by the tutorial's steps.
+- A move's `expectStep` names the learner's step, whichever seat moves.
+- A `learnerSeat` other than the seat that opens the game now gets the opening
+  turn, as on the server: drop scripted moves for the seats before it.
+
 ## `review-gate` reads what is under review from the run log (#829)
 
 `boardsmith review-gate` no longer takes `--since` or `--work-role`. It reads

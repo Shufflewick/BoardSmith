@@ -4,6 +4,7 @@ import { join, relative, sep, resolve as resolvePath } from 'node:path';
 import { styleText } from 'node:util';
 import ora from 'ora';
 import { scanSandboxViolations } from '../lib/sandbox-scan.js';
+import { listFiles } from '../lib/source-files.js';
 import {
   findUnknownKeys,
   findUnknownKeysIn,
@@ -272,6 +273,11 @@ export function checkMetadataIssues(config: Record<string, unknown>): string[] {
       issues.push(
         "Unknown key 'ui' — a game's UIs are declared in src/ui/uis.ts (defineGameUIs), "
         + 'which is the single source of truth for which boards exist and which one ships. '
+        + 'Remove this key from boardsmith.json.',
+      );
+    } else if (key === 'scoreboard') {
+      issues.push(
+        "Unknown key 'scoreboard': nothing in BoardSmith or the platform ever read it. "
         + 'Remove this key from boardsmith.json.',
       );
     } else if (key === 'playerCount') {
@@ -931,18 +937,6 @@ function listFilesWithExtension(dir: string, extension: string): string[] {
     .map((entry) => join(dir, entry));
 }
 
-/** Every file under `dir`, at any depth, whose name ends in one of `extensions`. */
-function listFilesUnder(dir: string, extensions: readonly string[]): string[] {
-  if (!existsSync(dir)) return [];
-  const found: string[] = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const full = join(dir, entry.name);
-    if (entry.isDirectory()) found.push(...listFilesUnder(full, extensions));
-    else if (extensions.some((ext) => entry.name.endsWith(ext))) found.push(full);
-  }
-  return found;
-}
-
 /**
  * One issue per offending file: the first `"/<publicDir>/"` reference it
  * contains is enough to tell the author the path style is wrong.
@@ -1108,9 +1102,9 @@ export async function validateAssetPaths(cwd: string): Promise<ValidationResult>
     // into `dist/ui/assets/`, so a flat listing of `dist/ui` opens the entry
     // HTML and misses every stylesheet and chunk the game's artwork is actually
     // named in.
-    ...listFilesUnder(join(cwd, 'dist', 'ui'), ['.js', '.css', '.html']),
-    ...listFilesUnder(join(cwd, 'dist', 'rules'), ['.js']),
-    ...listFilesUnder(join(cwd, 'data'), ['.json']),
+    ...listFiles(join(cwd, 'dist', 'ui'), { sourceTree: false, suffixes: ['.js', '.css', '.html'] }),
+    ...listFiles(join(cwd, 'dist', 'rules'), { sourceTree: false, suffixes: ['.js'] }),
+    ...listFiles(join(cwd, 'data'), { sourceTree: false, suffixes: ['.json'] }),
   ]);
 
   if (danglingIssues.length === 0 && absoluteIssues.length === 0 && remoteIssues.length === 0) {

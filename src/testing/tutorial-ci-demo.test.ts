@@ -244,7 +244,7 @@ describe('Tutorial CI Demo — criterion #3 proof', () => {
     });
 
     const result = simulateTutorial(testGame, DEMO_TUTORIAL, {
-      scenario: WALKTHROUGH,
+      scenario: () => WALKTHROUGH,
       seed: 'tutorial-ci-demo-intact',
     });
 
@@ -304,7 +304,7 @@ describe('Tutorial CI Demo — criterion #3 proof', () => {
     // `move` is gated out by the broken tutorial definition.
     expect(() =>
       simulateTutorial(brokenGame, brokenGateDef, {
-        scenario: WALKTHROUGH,
+        scenario: () => WALKTHROUGH,
       }),
     ).toThrow(/Tutorial drift \(gate\)/);
   });
@@ -333,7 +333,7 @@ describe('Tutorial CI Demo — criterion #3 proof', () => {
     // The SAME walkthrough fails at the capture, still on `capture-tip`.
     expect(() =>
       simulateTutorial(brokenGame, DEMO_TUTORIAL, {
-        scenario: WALKTHROUGH,
+        scenario: () => WALKTHROUGH,
       }),
     ).toThrow(/action 'capture' by seat 1 on step 'capture-tip' failed/);
   });
