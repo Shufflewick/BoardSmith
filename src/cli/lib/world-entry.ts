@@ -25,7 +25,7 @@
 import { existsSync } from 'fs';
 import { mkdir, writeFile } from 'fs/promises';
 import { dirname, join } from 'path';
-import type { GeneratedFile } from './project-scaffold.js';
+import { escapeHtml, type GeneratedFile } from './project-scaffold.js';
 
 /** The bundle-root filename a world's surface is served from. */
 export const WORLD_ENTRY_HTML = 'world.html';
@@ -40,7 +40,7 @@ function generateWorldHtml(displayName: string): string {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>${displayName}</title>
+    <title>${escapeHtml(displayName)}</title>
     <style>
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body { height: 100%; }
