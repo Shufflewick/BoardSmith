@@ -33,6 +33,7 @@ import { createNodeWorldClock, type WorldHostClock } from './node-world-clock.js
 import { runsAtOnce, type HostWorkGate } from '../../session/host-work-gate.js';
 import { heldClock, type RulesReloadNotice } from './rules-reload-queue.js';
 import { dueSeats, type SeatActivityState } from '../../engine/index.js';
+import { seatDisplayName } from '../../engine/element/seat-defaults.js';
 import type { GameStateSnapshot } from '../../engine/utils/index.js';
 import { selectDesignerGameOptions, type GameOptionSelection } from '../../session/game-option-selection.js';
 import type { GameOptionDefinition } from '../../session/types.js';
@@ -510,7 +511,7 @@ export class MultiplayerHost {
     this.clock = heldClock(opts.clock ?? createNodeWorldClock(), opts.hostWork ?? runsAtOnce);
     this.executeOp = opts.executeOp;
     for (let seat = 1; seat <= opts.playerCount; seat++) {
-      this.seats.set(seat, { seat, clientId: null, name: `Player ${seat}`, connected: false });
+      this.seats.set(seat, { seat, clientId: null, name: seatDisplayName(seat), connected: false });
     }
     this.appliedGameOptions = opts.baseGameOptions ?? selectDesignerGameOptions(opts.declaredGameOptions, {});
   }
@@ -816,7 +817,7 @@ export class MultiplayerHost {
     if (newCount === current) return;
     if (newCount > current) {
       for (let seat = current + 1; seat <= newCount; seat++) {
-        this.seats.set(seat, { seat, clientId: null, name: `Player ${seat}`, connected: false });
+        this.seats.set(seat, { seat, clientId: null, name: seatDisplayName(seat), connected: false });
       }
     } else {
       for (let seat = current; seat > newCount; seat--) {
@@ -1065,7 +1066,7 @@ export class MultiplayerHost {
     if (info.clientId && info.clientId !== clientId) this.clientSeat.delete(info.clientId);
     this.endGrace(seat);
     info.clientId = clientId;
-    info.name = name?.trim() || `Player ${seat}`;
+    info.name = seatDisplayName(seat, name?.trim());
     info.color = color ?? this.opts.colorPalette?.[seat - 1]?.value;
     info.connected = true;
     this.clientSeat.set(clientId, seat);
@@ -1289,7 +1290,7 @@ export class MultiplayerHost {
       // games: they treat the bot seat as a human, build an interactive turn, and
       // the dev host's MCTS bot then finds "No available moves" and locks up.
       playerConfigs: Array.from({ length: playerCount }, (_, i) => ({
-        name: this.seats.get(i + 1)?.name ?? `Player ${i + 1}`,
+        name: seatDisplayName(i + 1, this.seats.get(i + 1)?.name),
         isBot: !humanSeats.has(i + 1),
         botLevel: this.opts.botLevel,
         ...perSeatOptions[i],
@@ -1553,7 +1554,7 @@ export class MultiplayerHost {
     const info = this.seats.get(seat);
     if (info) {
       info.clientId = null;
-      info.name = `Player ${seat}`;
+      info.name = seatDisplayName(seat);
       info.color = undefined;
       info.connected = false;
     }
