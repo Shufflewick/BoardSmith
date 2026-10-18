@@ -2011,6 +2011,38 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return { success: true };
   }
 
+  /** Why `fill` refuses this value for this pick before anything is sent, or null. */
+  function fillValueRefusal(selection: EnrichedPickMetadata, value: unknown): string | null {
+    const selectionName = selection.name;
+    // PIT OF SUCCESS: Reject a scalar for a multiSelect pick (UIX-02).
+    // Mirrors toggleMultiSelect's reverse guard (useActionController.ts ~1729-1734):
+    // that guard rejects a non-multiSelect selection from toggleMultiSelect; this one
+    // rejects a multiSelect selection from fill() unless the value is already an array.
+    const multiSelectCfg = resolveMultiSelectConfig(selection);
+    if (multiSelectCfg && !Array.isArray(value)) {
+      return (
+        `fill('${selectionName}', ...) rejected: '${selectionName}' is a multiSelect selection ` +
+        `(min ${multiSelectCfg.min}, max ${multiSelectCfg.max ?? 'unlimited'}) and requires an array. ` +
+        `Use toggleMultiSelect()/confirmMultiSelect(), or pass an array directly to fill().`
+      );
+    }
+
+    // THE SAME GUARD FOR A LIST (#249). A list pick's value is a sequence, and a
+    // bare entry submitted as the whole answer is the mistake most likely to be
+    // made by a custom UI that has just learned the verb.
+    const orderedListCfg = resolveOrderedListConfig(selection);
+    if (orderedListCfg && !Array.isArray(value)) {
+      return (
+        `fill('${selectionName}', ...) rejected: '${selectionName}' is an ordered list ` +
+        `(min ${orderedListCfg.min}, max ${orderedListCfg.max ?? 'unlimited'}) and requires an array. ` +
+        `Use appendListEntry()/confirmMultiSelect(), or pass the whole array to fill().`
+      );
+    }
+
+    // The panel's own check, so a custom UI is refused the same text before it is sent (#1057).
+    return selection.type === 'text' ? textPickRefusal(selection, value) : null;
+  }
+
   async function fill(selectionName: string, value: unknown): Promise<PickValidationResult> {
     // CR-02: EVERY fill() failure path must setError() — GameShell's UIX-01
     // watch is the only place a failed action surfaces (ActionPanel's direct
@@ -2047,38 +2079,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return { valid: false, error };
     }
 
-    // PIT OF SUCCESS: Reject a scalar for a multiSelect pick (UIX-02).
-    // Mirrors toggleMultiSelect's reverse guard (useActionController.ts ~1729-1734):
-    // that guard rejects a non-multiSelect selection from toggleMultiSelect; this one
-    // rejects a multiSelect selection from fill() unless the value is already an array.
-    const multiSelectCfg = resolveMultiSelectConfig(selection);
-    if (multiSelectCfg && !Array.isArray(value)) {
-      const error =
-        `fill('${selectionName}', ...) rejected: '${selectionName}' is a multiSelect selection ` +
-        `(min ${multiSelectCfg.min}, max ${multiSelectCfg.max ?? 'unlimited'}) and requires an array. ` +
-        `Use toggleMultiSelect()/confirmMultiSelect(), or pass an array directly to fill().`;
-      setError(error);
-      return { valid: false, error };
-    }
-
-    // THE SAME GUARD FOR A LIST (#249). A list pick's value is a sequence, and a
-    // bare entry submitted as the whole answer is the mistake most likely to be
-    // made by a custom UI that has just learned the verb.
-    const orderedListCfg = resolveOrderedListConfig(selection);
-    if (orderedListCfg && !Array.isArray(value)) {
-      const error =
-        `fill('${selectionName}', ...) rejected: '${selectionName}' is an ordered list ` +
-        `(min ${orderedListCfg.min}, max ${orderedListCfg.max ?? 'unlimited'}) and requires an array. ` +
-        `Use appendListEntry()/confirmMultiSelect(), or pass the whole array to fill().`;
-      setError(error);
-      return { valid: false, error };
-    }
-
-    // The panel's own check, so a custom UI is refused the same text before it is sent (#1057).
-    const textRefusal = selection.type === 'text' ? textPickRefusal(selection, value) : null;
-    if (textRefusal !== null) {
-      setError(textRefusal);
-      return { valid: false, error: textRefusal };
+    const refusal = fillValueRefusal(selection, value);
+    if (refusal !== null) {
+      setError(refusal);
+      return { valid: false, error: refusal };
     }
 
     // Handle repeating selections
