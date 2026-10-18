@@ -3097,6 +3097,37 @@ describe('Object-subset choice resolution (custom-UI partial choice objects)', (
     const resolved = executor.resolveArgs(action, { destination: bogus }, player);
     expect(executor.validateAction(action, player, resolved).valid).toBe(false);
   });
+
+  // #1131: an object with no own keys had no field to fail, so it named the only object choice.
+  const NOT_OFFERED = 'That choice is no longer available';
+  for (const [kind, empty] of [['{}', {}], ['a Date', new Date(0)], ['a Map', new Map()], ['a Set', new Set()]] as const) {
+    it(`refuses ${kind} as the only object choice offered (#1131)`, () => {
+      const action = Action.create('pick')
+        .chooseFrom('item', { choices: [{ label: 'a' }] })
+        .execute(() => {});
+      const result = executor.executeAction(action, game.getPlayer(1)!, { item: empty });
+      expect(result.error).toContain(NOT_OFFERED);
+    });
+
+    it(`refuses ${kind} as an item of a multiSelect with one object choice (#1131)`, () => {
+      const action = Action.create('pick')
+        .chooseFrom('items', { choices: [1, { label: 'a' }], multiSelect: { min: 1 } })
+        .execute(() => {});
+      const result = executor.executeAction(action, game.getPlayer(1)!, { items: [1, empty] });
+      expect(result.error).toContain(NOT_OFFERED);
+    });
+  }
+
+  it('still picks an offered {} by equality, beside a choice that carries a key (#1131)', () => {
+    const picked: unknown[] = [];
+    const action = Action.create('pick')
+      .chooseFrom('item', { choices: [{}, { label: 'a' }] })
+      .execute((args) => { picked.push(args.item); });
+    const player = game.getPlayer(1)!;
+    expect(executor.executeAction(action, player, { item: {} }).success).toBe(true);
+    expect(executor.executeAction(action, player, { item: { label: 'a' } }).success).toBe(true);
+    expect(picked).toEqual([{}, { label: 'a' }]);
+  });
 });
 
 describe('repeating element selection with an unresolvable choice', () => {
