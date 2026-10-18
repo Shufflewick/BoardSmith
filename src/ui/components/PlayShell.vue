@@ -1231,7 +1231,8 @@ const mobileToggleLabel = computed(() => {
   inset: 0;
   pointer-events: none;
 }
-.board-overlays > :deep(*) {
+/* :where() keeps this below any child's own pointer-events rule, whatever order the styles load in. */
+:where(.board-overlays) > :deep(*) {
   pointer-events: auto;
 }
 

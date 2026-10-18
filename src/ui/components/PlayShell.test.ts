@@ -189,7 +189,7 @@ describe('what is the adapter\'s and not the shell\'s', () => {
     expect(rule).toMatch(/position:\s*absolute;/);
     expect(rule).toMatch(/inset:\s*0;/);
     expect(rule).toMatch(/pointer-events:\s*none;/);
-    expect(css).toMatch(/\n\.board-overlays > :deep\(\*\) \{\s*pointer-events:\s*auto;/);
+    expect(css).toMatch(/\n:where\(\.board-overlays\) > :deep\(\*\) \{\s*pointer-events:\s*auto;/);
   });
 });
 
