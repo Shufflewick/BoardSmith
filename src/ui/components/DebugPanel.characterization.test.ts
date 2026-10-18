@@ -87,6 +87,7 @@ interface Vm {
   cancelRewind: () => void;
   confirmRewind: () => Promise<void>;
   customDebugData: unknown;
+  fetchCustomDebug: () => Promise<void>;
   restartConfirming: boolean;
   handleRestartClick: () => void;
   switchToPlayer: (p: number) => void;
@@ -737,13 +738,16 @@ describe('DebugPanel clipboard and download', () => {
 
 });
 
-describe('DebugPanel refetch while a fetch is in flight (#901)', () => {
-  /** A host whose answers to `op` wait until the test releases them, in any order. */
+describe('DebugPanel refetch while a fetch is in flight (#901, #1073)', () => {
+  /** A host whose answers to `op` wait until the test releases or rejects them, in any order. */
   function deferredHost(op: string) {
     const pending: Array<(answer: Record<string, unknown>) => void> = [];
+    const failures: Array<(err: Error) => void> = [];
     const handler: Op = (sent) =>
-      sent === op ? new Promise((resolve) => pending.push(resolve)) : Promise.resolve({ success: true });
-    return { handler, pending };
+      sent === op
+        ? new Promise((resolve, reject) => { pending.push(resolve); failures.push(reject); })
+        : Promise.resolve({ success: true });
+    return { handler, pending, failures };
   }
 
   it('asks for the traces again and shows the newest answer, whatever order they arrive in', async () => {
@@ -774,5 +778,85 @@ describe('DebugPanel refetch while a fetch is in flight (#901)', () => {
     await first;
     expect((vm.logEntries as Array<{ message: string }>).map((e) => e.message)).toEqual(['newest']);
     expect(vm.logsLoading).toBe(false);
+  });
+
+  it('asks for the flow state again and shows the newest answer, whatever order they arrive in', async () => {
+    const { handler, pending } = deferredHost('debug:flow-state');
+    const { vm } = track(mountPanel(handler));
+    const first = vm.fetchFlowState();
+    const second = vm.fetchFlowState();
+    expect(pending).toHaveLength(2);
+
+    pending[1]!({ success: true, flowDebugInfo: { description: 'newest' } });
+    await second;
+    pending[0]!({ success: true, flowDebugInfo: { description: 'older' } });
+    await first;
+    expect(vm.flowStateInfo).toEqual({ description: 'newest' });
+  });
+
+  it('asks for the custom debug data again and shows the newest answer, whatever order they arrive in', async () => {
+    const { handler, pending } = deferredHost('debug:custom-data');
+    const { vm } = track(mountPanel(handler));
+    const first = vm.fetchCustomDebug();
+    const second = vm.fetchCustomDebug();
+    expect(pending).toHaveLength(2);
+
+    pending[1]!({ success: true, customDebug: { seed: 2 } });
+    await second;
+    pending[0]!({ success: true, customDebug: { seed: 1 } });
+    await first;
+    expect(vm.customDebugData).toEqual({ seed: 2 });
+  });
+
+  it('leaves the traces error empty when an older request fails after the newest succeeded', async () => {
+    const { handler, pending, failures } = deferredHost('debug:action-traces');
+    const { vm } = track(mountPanel(handler));
+    const first = vm.fetchActionTraces();
+    const second = vm.fetchActionTraces();
+
+    pending[1]!({ success: true, traces: [] });
+    await second;
+    failures[0]!(new Error('older failed'));
+    await first;
+    expect(vm.tracesError).toBeNull();
+  });
+
+  it('leaves the logs error empty when an older request fails after the newest succeeded', async () => {
+    const { handler, pending, failures } = deferredHost('debug:logs');
+    const { vm } = track(mountPanel(handler));
+    const first = vm.fetchLogs();
+    const second = vm.fetchLogs();
+
+    pending[1]!({ success: true, entries: [] });
+    await second;
+    failures[0]!(new Error('older failed'));
+    await first;
+    expect(vm.logsError).toBeNull();
+  });
+
+  it('keeps the newest flow state when an older request fails late', async () => {
+    const { handler, pending, failures } = deferredHost('debug:flow-state');
+    const { vm } = track(mountPanel(handler));
+    const first = vm.fetchFlowState();
+    const second = vm.fetchFlowState();
+
+    pending[1]!({ success: true, flowDebugInfo: { description: 'newest' } });
+    await second;
+    failures[0]!(new Error('older failed'));
+    await first;
+    expect(vm.flowStateInfo).toEqual({ description: 'newest' });
+  });
+
+  it('keeps the newest custom debug data when an older request fails late', async () => {
+    const { handler, pending, failures } = deferredHost('debug:custom-data');
+    const { vm } = track(mountPanel(handler));
+    const first = vm.fetchCustomDebug();
+    const second = vm.fetchCustomDebug();
+
+    pending[1]!({ success: true, customDebug: { seed: 2 } });
+    await second;
+    failures[0]!(new Error('older failed'));
+    await first;
+    expect(vm.customDebugData).toEqual({ seed: 2 });
   });
 });

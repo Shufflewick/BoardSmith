@@ -40,12 +40,12 @@
 import { test, type Browser, type BrowserContext, type Frame, type Locator, type Page } from '@playwright/test';
 import {
   actWithinPageTime,
+  anyWithinPageTime,
   clocks,
   DEV_HOST_ALIVE_PATH,
   lastErrorsLand,
   PageClock,
   PageFrozen,
-  ranOut,
   stopwatch,
   TRY_MS,
   withinPageTime,
@@ -75,10 +75,12 @@ import {
   SMOKE_ANNOTATION,
   SMOKE_SEEDS_ENV,
   SMOKE_SPEC_PATH,
+  smokeActions,
   smokeFailure,
   smokeProblems,
   smokeRecord,
   smokeSeeds,
+  smokeSteps,
   smokeWorldSeats,
   startAnswering,
   walkStopped,
@@ -241,12 +243,12 @@ const WORLD_TAKES_NO_SEED =
 
 function newWalk(options: SmokeTestOptions): SmokeWalk {
   return {
-    listed: [...options.actions],
+    listed: smokeActions(options.actions),
     unreachable: { ...options.unreachable },
     offered: new Set(),
     enabled: new Set(),
     taken: new Set(),
-    steps: options.steps ?? DEFAULT_SMOKE_STEPS,
+    steps: smokeSteps(options.steps ?? DEFAULT_SMOKE_STEPS),
     errors: [],
     seeds: [],
     stalls: [],
@@ -1611,14 +1613,7 @@ async function waitForATurn(frames: readonly Frame[]): Promise<boolean> {
   const offered = (frame: Frame, timeout: number) =>
     frame.locator('[data-bs-action]:not([aria-disabled="true"]), [data-bs-open-action], .game-over-card').first().waitFor({ timeout });
   // Counted on the first browser's clock: a world's browsers share the machine that starves them.
-  const anyOffered = (timeout: number) => Promise.any(frames.map((frame) => offered(frame, timeout))).catch((none: AggregateError) => Promise.reject(none.errors.find(ranOut) ?? none.errors[0]));
-  return withinPageTime(frames[0].page(), TURN_WAIT_MS, 'waiting for a turn', anyOffered).then(
-    () => true,
-    (error: unknown) => {
-      if (error instanceof PageFrozen) throw error;
-      return false;
-    },
-  );
+  return anyWithinPageTime(frames[0].page(), TURN_WAIT_MS, 'waiting for a turn', frames.map((frame) => (timeout: number) => offered(frame, timeout)));
 }
 
 /**

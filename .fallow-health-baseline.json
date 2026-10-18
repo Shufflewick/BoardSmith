@@ -197,7 +197,7 @@
     },
     "src/cli/commands/verify-ruling-recheck.ts": {
       "complexity_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "src/cli/commands/verify-run.ts": {
@@ -257,7 +257,7 @@
         "count": 1
       },
       "complexity_moderate": {
-        "count": 5
+        "count": 4
       }
     },
     "src/engine/action/helpers.ts": {
@@ -523,7 +523,7 @@
     },
     "src/ui/components/auto-ui/useAutoRendererAnimations.ts": {
       "complexity_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "src/ui/components/debug/ActionsTab.vue": {
@@ -567,16 +567,6 @@
     "src/ui/components/helpers/FlyingCardsOverlay.vue": {
       "complexity_moderate": {
         "count": 1
-      }
-    },
-    "src/ui/components/helpers/HintOverlay.vue": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
-    "src/ui/components/helpers/TutorialOverlay.vue": {
-      "complexity_moderate": {
-        "count": 2
       }
     },
     "src/ui/components/helpers/ZoomPreviewOverlay.vue": {
