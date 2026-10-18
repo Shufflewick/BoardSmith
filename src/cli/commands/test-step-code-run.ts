@@ -395,3 +395,11 @@ function codeRunIn(source: string, file: string, context: CodeRunContext, visite
 export function findCodeRun(source: string, file: string, context: CodeRunContext): CodeRun | undefined {
   return codeRunIn(source, file, context, new Set());
 }
+
+/** The support files under `tests/` that loading a test file loads, directly or through each other (#1013). */
+export function supportFilesLoaded(source: string, file: string, context: CodeRunContext): Set<string> {
+  const visited = new Set<string>();
+  codeRunIn(source, file, context, visited);
+  visited.delete(file);
+  return visited;
+}
