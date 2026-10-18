@@ -327,13 +327,13 @@ const balk = worldAction<CardinalityWorld>('balk')
     throw new PlayerFacingError('Not today.');
   });
 
-/** A bug in a selection's `validate`, which throws before `execute` is reached (#847). */
+/** A bug in a selection's `validate`, thrown as a plain Error before `execute` is reached (#847, #1015). */
 const sift = worldAction<CardinalityWorld>('sift')
   .needs(inCommons)
   .chooseFrom('how', {
     choices: ['finely'],
     validate: () => {
-      throw new TypeError('the sieve is undefined');
+      throw new Error('the sieve is undefined');
     },
   })
   .execute(() => {});

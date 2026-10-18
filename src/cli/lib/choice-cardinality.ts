@@ -270,7 +270,8 @@ interface WorldDrive {
  *
  * It never reports an undriven world as clean: a world in which no seat was
  * offered anything it could take is refused, and so is a move the rules crashed
- * on (`rules-error`, or a throw out of a callback such as `validate`) or the
+ * on (`rules-error`, which a throw out of `validate`, `choices` or a condition
+ * now is too) or the
  * world itself refused (a `WorldRefusal`, such as a partition the action never
  * declared). An action that says no to a random answer is the rules working,
  * and is not.
@@ -455,7 +456,8 @@ function drawSet(bounds: { min: number; max?: number }, candidates: unknown[], r
 /**
  * Send one drafted command. The rules saying no to a random answer (a plain
  * Error) leaves the world as it was and is part of driving it. Anything else --
- * the rules crashing (`rules-error`, or a callback's own throw) or the WORLD
+ * the rules crashing (`rules-error`, including a throw out of `validate`,
+ * `choices` or a condition) or the WORLD
  * refusing it -- is a fault in the bundle, and is reported with the move that
  * found it.
  */

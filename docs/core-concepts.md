@@ -873,7 +873,7 @@ players. Declare it in `boardsmith.json` like any option and mark it
 
 #### Player Options
 
-Per-player settings that appear for each player slot in the lobby.
+Per-player settings that appear for each player slot in the lobby. They can be declared here or in your `gameDefinition.playerOptions`; `boardsmith dev` and the published manifest both offer the two sets merged by key. A key declared in both must be declared the same in both, or `boardsmith dev` and `boardsmith build` refuse it, naming the key and both declarations. An id declared twice here is refused. A `color` option is never published: the lobby builds colour from `colorPalette` below, so a code-side `createColorOption()` is left out and a `color` entry here is refused. Each option must be one the platform's lobby can show: type `number`, `select`, `boolean` or `exclusive`, with a `default`; a `select` or `exclusive` also needs `choices` as `{ "value", "label" }` pairs. Dev and build refuse any other, by name.
 
 ```json
 {
@@ -920,13 +920,14 @@ For asymmetric games where exactly one player must have a specific role (e.g., 1
       "type": "exclusive",
       "label": "Dictator",
       "description": "Select which player is the dictator",
-      "default": "last"
+      "default": "last",
+      "choices": [{ "value": "dictator", "label": "Dictator" }]
     }
   ]
 }
 ```
 
-The `default` field accepts `"first"`, `"last"`, or a player index number.
+The platform needs `choices` and a string `default`; the game reads the default (here `"last"`) itself. The `ExclusivePlayerOption` and `StandardPlayerOption` types require the same shape in code.
 
 ### Presets
 

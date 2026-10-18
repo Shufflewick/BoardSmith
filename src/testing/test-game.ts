@@ -26,6 +26,7 @@ import {
 } from '../runtime/index.js';
 import { ActionBuilder } from './action-builder.js';
 import { formatSelectionLines } from './debug.js';
+import { markEngineView } from './view-fixture.js';
 import { projectGameOptions } from '#testing/project-game-options';
 
 /**
@@ -510,7 +511,9 @@ export class TestGame<G extends Game = Game> {
    * @returns The game state as visible to that player, with hidden info excluded
    */
   getPlayerView(playerSeat: number): PlayerStateView {
-    return this.runner.getPlayerView(playerSeat);
+    const view = this.runner.getPlayerView(playerSeat);
+    markEngineView(view.state);
+    return view;
   }
 
   /**
