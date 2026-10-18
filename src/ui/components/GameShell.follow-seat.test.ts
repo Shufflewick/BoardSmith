@@ -132,4 +132,79 @@ describe('GameShell following the active seat (#1135)', () => {
 
     expect(resolved).toEqual([{ action: 'checkIn', success: true, seat: 1 }]);
   });
+
+  it('lets the new seat act while the old seat\'s action is still out, and lands that reply under the old seat (#1155)', async () => {
+    const posted = enterIframe() as Array<{ type?: string; op?: string; requestId?: string; seat?: number }>;
+    const resolved: Array<{ action: string; seat: number }> = [];
+    const listen = (e: Event) => resolved.push((e as CustomEvent).detail);
+    window.addEventListener('boardsmith:action-resolved', listen);
+    try {
+      const wrapper = mountPlatformShell({ board: HandBoard });
+      mounted.push(wrapper);
+      await nextTick();
+      fromHost({ type: 'init', seat: 1 });
+      fromHost(seatFrame(1, []));
+      await flushPromises();
+
+      const panel = () => wrapper.find('#bs-actionbar .action-panel-root');
+      const checkIn = () => panel().findAll('button').find((b) => b.text().includes('Check in'));
+      const actions = () => posted.filter((m) => m.type === 'server_request' && m.op === 'action');
+      await checkIn()!.trigger('click');
+      expect(panel().attributes('data-bs-submitting')).toBeDefined();
+
+      fromHost({ type: 'init', seat: 2 });
+      await flushPromises();
+      fromHost(seatFrame(2, [1]));
+      await flushPromises();
+
+      // Seat 1's reply is still out: seat 2 is not shown as submitting and can act.
+      expect(panel().attributes('data-bs-submitting')).toBeUndefined();
+      expect(checkIn()!.attributes('aria-disabled')).toBeUndefined();
+      await checkIn()!.trigger('click');
+      expect(actions()).toHaveLength(2);
+      expect(panel().attributes('data-bs-submitting')).toBeDefined();
+
+      fromHost({ type: 'server_response', requestId: actions()[0].requestId, result: { success: true } });
+      await flushPromises();
+      expect(resolved).toEqual([{ action: 'checkIn', success: true, seat: 1 }]);
+      // Seat 2's own request is untouched by seat 1's reply.
+      expect(panel().attributes('data-bs-submitting')).toBeDefined();
+
+      fromHost({ type: 'server_response', requestId: actions()[1].requestId, result: { success: true } });
+      await flushPromises();
+      expect(resolved).toEqual([{ action: 'checkIn', success: true, seat: 1 }, { action: 'checkIn', success: true, seat: 2 }]);
+      expect(panel().attributes('data-bs-submitting')).toBeUndefined();
+    } finally {
+      window.removeEventListener('boardsmith:action-resolved', listen);
+    }
+  });
+
+  it('shows the old seat busy again on switching back while its action is still out (#1155)', async () => {
+    const posted = enterIframe() as Array<{ type?: string; op?: string; requestId?: string }>;
+    const wrapper = mountPlatformShell({ board: HandBoard });
+    mounted.push(wrapper);
+    await nextTick();
+    fromHost({ type: 'init', seat: 1 });
+    fromHost(seatFrame(1, []));
+    await flushPromises();
+
+    const panel = () => wrapper.find('#bs-actionbar .action-panel-root');
+    await panel().findAll('button').find((b) => b.text().includes('Check in'))!.trigger('click');
+    fromHost({ type: 'init', seat: 2 });
+    await flushPromises();
+    fromHost(seatFrame(2, [1]));
+    await flushPromises();
+    expect(panel().attributes('data-bs-submitting')).toBeUndefined();
+
+    fromHost({ type: 'init', seat: 1 });
+    await flushPromises();
+    fromHost(seatFrame(1, []));
+    await flushPromises();
+    expect(panel().attributes('data-bs-submitting')).toBeDefined();
+
+    const request = posted.find((m) => m.type === 'server_request' && m.op === 'action');
+    fromHost({ type: 'server_response', requestId: request!.requestId, result: { success: true } });
+    await flushPromises();
+    expect(panel().attributes('data-bs-submitting')).toBeUndefined();
+  });
 });

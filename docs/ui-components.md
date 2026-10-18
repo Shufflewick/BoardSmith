@@ -1729,7 +1729,7 @@ Use `args` for selections that are already available. Use `prefill` for deferred
 | `currentAction` | `Ref<string \| null>` | Name of action currently in wizard mode (read `.value`) |
 | `currentPick` | `ComputedRef<EnrichedPickMetadata \| null>` | Metadata for the current pick step (read `.value`) |
 | `validElements` | `ComputedRef<EnrichedValidElement[]>` | **Reactive** list of valid elements for current selection |
-| `isExecuting` | `Ref<boolean>` | Whether an action is currently executing (read `.value`) |
+| `isExecuting` | `Readonly<Ref<boolean>>` | Whether the current seat has an action out to the server (read `.value`) |
 | `lastError` | `Ref<string \| null>` | Error message from last failed execution (read `.value`) |
 | `lastActionResult` | `ComputedRef<ResolvedAction \| null>` | The most recently resolved action and its server result — `{ action, seat, result }`. See below. |
 

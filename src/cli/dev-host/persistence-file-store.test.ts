@@ -4,10 +4,10 @@
  * developer's store torn; a second name for the old file still reads the old
  * store afterwards, which an in-place write would have overwritten.
  */
-import { linkSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { linkSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterEach, expect, it, vi } from 'vitest';
+import { expect, it, vi } from 'vitest';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { loadDevStore } from './persistence-file-store.js';
 
 /** While set, the next write waits for it, so a test can hold a save mid-write. */
@@ -28,14 +28,8 @@ vi.mock('../commands/verify-run.js', async (importOriginal) => {
   };
 });
 
-const dirs: string[] = [];
-afterEach(() => {
-  for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
-});
-
 it('replaces the store file rather than writing into it', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'dev-store-'));
-  dirs.push(dir);
+  const dir = tempTree('dev-store-');
   const path = join(dir, '.boardsmith-dev-store.json');
   const { save } = loadDevStore(path);
   writeFileSync(path, 'old');
@@ -48,8 +42,7 @@ it('replaces the store file rather than writing into it', async () => {
 });
 
 it('runs saves one after another, so an older snapshot never finishes last', async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'dev-store-'));
-  dirs.push(dir);
+  const dir = tempTree('dev-store-');
   const { save } = loadDevStore(join(dir, '.boardsmith-dev-store.json'));
   let release!: () => void;
   hold = new Promise<void>((resolve) => (release = resolve));

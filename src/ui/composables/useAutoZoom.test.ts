@@ -4,7 +4,7 @@
  *
  * Behaviors under test:
  *   AZ-1: computeFitZoom returns the largest zoom where the board fits both
- *         axes, clamped to [ZOOM_MIN, ZOOM_MAX], and null for unmeasurable boxes.
+ *         axes, clamped to [FIT_ZOOM_MIN, ZOOM_MAX], and null for unmeasurable boxes.
  *   AZ-2: measureAndFit applies the fitted zoom from real element measurements
  *         (board rect ÷ applied zoom vs region client box minus padding and
  *         Action Panel height).
@@ -26,7 +26,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { defineComponent, h, ref, nextTick, type Ref } from 'vue';
 import { mount } from '@vue/test-utils';
-import { computeFitZoom, useAutoZoom, ZOOM_MIN, ZOOM_MAX, SETTLE_MS } from './useAutoZoom';
+import { computeFitZoom, useAutoZoom, FIT_ZOOM_MIN, ZOOM_MIN, ZOOM_MAX, SETTLE_MS } from './useAutoZoom';
 
 describe('computeFitZoom (AZ-1)', () => {
   it('fits the constraining axis', () => {
@@ -34,9 +34,16 @@ describe('computeFitZoom (AZ-1)', () => {
     expect(computeFitZoom({ width: 500, height: 400 }, { width: 1000, height: 600 }, 'both')).toBe(1.5);
   });
 
-  it('clamps to the slider range', () => {
+  it('clamps to the slider maximum', () => {
     expect(computeFitZoom({ width: 100, height: 100 }, { width: 1000, height: 1000 }, 'both')).toBe(ZOOM_MAX);
-    expect(computeFitZoom({ width: 4000, height: 4000 }, { width: 500, height: 500 }, 'both')).toBe(ZOOM_MIN);
+  });
+
+  it('fits a wide board below the slider minimum, down to the fit floor (#1162)', () => {
+    // Hex's Auto UI board at 390px: 1591px natural width in 367px of room.
+    expect(computeFitZoom({ width: 1591, height: 1100 }, { width: 367, height: 600 }, 'both')).toBeCloseTo(367 / 1591);
+    expect(computeFitZoom({ width: 1591, height: 300 }, { width: 367, height: 600 }, 'width')).toBeCloseTo(367 / 1591);
+    expect(FIT_ZOOM_MIN).toBeLessThan(367 / 1591);
+    expect(computeFitZoom({ width: 8000, height: 8000 }, { width: 500, height: 500 }, 'both')).toBe(FIT_ZOOM_MIN);
   });
 
   it('returns null for unmeasurable boxes (not laid out yet)', () => {

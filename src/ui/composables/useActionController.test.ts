@@ -212,6 +212,26 @@ describe('useActionController', () => {
       expect(controller.lastError.value).toBe('Network error');
     });
 
+    it('closes an auto-executed action whose send throws, as a refusal does, so it can be retried (#860)', async () => {
+      sendAction.mockRejectedValueOnce(new Error('Network error'));
+      const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn, autoExecute: true });
+      const settle = async () => { for (let i = 0; i < 4; i++) await nextTick(); };
+
+      await controller.start('playCard');
+      await controller.fill('card', 2);
+      await settle();
+
+      expect(controller.lastError.value).toBe('Network error');
+      expect(controller.currentAction.value).toBe(null);
+      expect(controller.currentArgs.value).toEqual({});
+
+      await controller.start('playCard');
+      await controller.fill('card', 2);
+      await settle();
+      expect(sendAction).toHaveBeenCalledTimes(2);
+      expect(controller.lastError.value).toBe(null);
+    });
+
     it('should succeed for optional selections without value', async () => {
       const controller = useActionController({
         sendAction,
@@ -2150,6 +2170,21 @@ describe('useActionController', () => {
       expect(controller.currentAction.value).toBe('loot');
       expect(controller.pendingOnServer.value).toBe(true);
       expect(controller.currentArgs.value.by).toBe(1);
+    });
+
+    it('resumeFollowUp starts nothing while the player is viewing history (#860)', async () => {
+      const heldFollowUp = ref<typeof held | undefined>(held);
+      const isViewingHistory = ref(false);
+      const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn, heldFollowUp, isViewingHistory });
+      await settle();
+      controller.cancel();
+      isViewingHistory.value = true;
+      await settle();
+
+      await controller.resumeFollowUp();
+
+      expect(controller.currentAction.value).toBe(null);
+      expect(controller.pendingOnServer.value).toBe(false);
     });
 
     it('starts the held follow-up of the seat the page switches to, even one it cancelled for the last seat', async () => {

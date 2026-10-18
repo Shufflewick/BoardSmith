@@ -2819,3 +2819,69 @@ describe("ShufflewickPub #411/#413 -- one body for every seat that holds the sam
     }
   });
 });
+
+describe("#1170: a command cannot move a partition root", () => {
+  // The store fixes a partition's parent when it is created and a checkpoint
+  // writes only the subtree, so a root moved by a command would come back
+  // directly under the game at the next wake, with nobody told.
+  const nestRoom = worldAction<WorldFixtureGame>("nestRoom")
+    .needs(() => [ROOM_ONE, ROOM_TWO])
+    .execute((_args, ctx) => {
+      ctx.game.room("room-one").reparent(ctx.game.room("room-two"));
+    });
+  const pocketRoom = worldAction<WorldFixtureGame>("pocketRoom")
+    .needs(() => [ROOM_ONE])
+    .execute((_args, ctx) => {
+      ctx.game.room("room-one").reparent(ctx.player);
+    });
+  const emptyRoom = worldAction<WorldFixtureGame>("emptyRoom")
+    .needs(() => [ROOM_ONE, ROOM_TWO])
+    .execute((_args, ctx) => {
+      for (const token of ctx.game.room("room-one").all(Token)) token.putInto(ctx.game.room("room-two"));
+    });
+
+  function rootMoveEngine(stored = genesis()): BoardSmithWorldEngine {
+    return new BoardSmithWorldEngine({
+      game: newWorldGame(),
+      seats: new Map([["player-a", 1]]),
+      store: new CountingStore(stored),
+      actions: [nestRoom, pocketRoom, emptyRoom],
+      view: () => [ROOM_ONE, ROOM_TWO],
+    });
+  }
+
+  const topLevelRooms = (state: ElementJSON): string[] =>
+    (state.children ?? []).filter((child) => child.className === "Room").map((child) => child.name!);
+
+  it.each(["nestRoom", "pocketRoom"])("%s is refused as a game-owned rules error that says what to do", async (name) => {
+    const stored = genesis();
+    const engine = rootMoveEngine(stored);
+
+    const refusal = await engine
+      .applyCommand("player-a", { name, args: {} }, STAMP)
+      .then(() => null, (error: unknown) => error);
+
+    expect(refusal).toBeInstanceOf(WorldRefusal);
+    expect(refusal).toMatchObject({ code: "rules-error", owner: "game" });
+    expect((refusal as Error).message).toMatch(
+      /"room-one" \(id: \d+\) is a world partition root, and a partition's root must stay directly under the game\. Move what is inside it instead/,
+    );
+    const view = (await engine.viewFor("player-a")) as { state: ElementJSON };
+    expect(topLevelRooms(view.state)).toEqual(["room-one", "room-two"]);
+    // The old bug showed at the checkpoint: room two written holding room one, which the next wake undid.
+    const written = await engine.serializePartitions([ROOM_ONE, ROOM_TWO]);
+    for (const name of [ROOM_ONE, ROOM_TWO]) expect(JSON.parse(written[name]!)).toEqual(stored.get(name)!.json);
+  });
+
+  it("still moves what is inside a partition root", async () => {
+    const engine = rootMoveEngine();
+
+    await engine.applyCommand("player-a", { name: "emptyRoom", args: {} }, STAMP);
+
+    const view = (await engine.viewFor("player-a")) as { state: ElementJSON };
+    const tokensIn = (room: string) =>
+      view.state.children?.find((child) => child.name === room)?.children?.map((child) => child.name) ?? [];
+    expect(tokensIn("room-one")).toEqual([]);
+    expect(tokensIn("room-two")).toEqual(["token-two", "token-one"]);
+  });
+});

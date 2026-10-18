@@ -193,8 +193,6 @@ export interface ActionStateSnapshot {
   pickSnapshots: Map<string, PickSnapshot>;
   /** Collected picks with value+display stored together */
   collectedPicks: Map<string, CollectedPick>;
-  /** For repeating picks: current state (reuses existing RepeatingState) */
-  repeatingState: RepeatingState | null;
   /** Queued fills for future picks - applied when pick becomes active */
   prefills: Map<string, unknown>;
   /**
@@ -390,8 +388,8 @@ export interface UseActionControllerReturn {
   currentChoices: ComputedRef<ChoiceWithRefs[]>;
   /** Whether all selections are filled and action is ready */
   isReady: ComputedRef<boolean>;
-  /** Whether an action is currently executing */
-  isExecuting: Ref<boolean>;
+  /** Whether the current seat has an action out to the server */
+  isExecuting: Readonly<Ref<boolean>>;
   /** Last validation error */
   lastError: Ref<string | null>;
   /**

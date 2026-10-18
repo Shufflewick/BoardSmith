@@ -16,6 +16,7 @@
 import type { BoardInteraction } from './useBoardInteraction.js';
 import type { EnrichedActionMetadata, UseActionControllerReturn } from './useActionControllerTypes.js';
 import { choiceBoardTarget } from './actionControllerHelpers.js';
+import { findMatchingChoice, valuesEqual } from '../../engine/action/choice-matching.js';
 
 /** What a surface knows about whether the seat may act. Read on every call. */
 export interface ActionMutatorGuards {
@@ -136,8 +137,8 @@ export function createActionMutators(
     const result = await controller.fill(selectionName, value);
     // A refusal is already in the controller's `lastError`.
     if (!result.valid) return false;
-    // Keep the chosen board element marked.
-    const chosen = offered.find(c => c.value === value);
+    // Keep the chosen board element marked: the choice fill's own rule names.
+    const chosen = findMatchingChoice(value, offered);
     const ref = chosen && choiceBoardTarget(chosen);
     if (ref) board?.selectElement(ref);
     return true;
@@ -162,13 +163,12 @@ export function createActionMutators(
   function updateMultiSelectBoardHighlights(): void {
     if (!board) return;
     const selectedValues = controller.multiSelectDraft.value?.values ?? [];
-    if (selectedValues.length === 0) {
+    const choices = controller.currentChoices.value;
+    const refs = selectedValues.flatMap(val => choices.find(c => valuesEqual(c.value, val))?.refs ?? []);
+    if (refs.length === 0) {
       board.setHoveredChoice(null);
       return;
     }
-    const choices = controller.currentChoices.value;
-    const refs = selectedValues.flatMap(val => choices.find(c => c.value === val)?.refs ?? []);
-    if (refs.length === 0) return;
     board.setHoveredChoice({
       value: selectedValues,
       display: `${selectedValues.length} selected`,

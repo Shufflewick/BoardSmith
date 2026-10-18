@@ -179,6 +179,20 @@ function recordQueriedClassIfActive(ctx: ElementContext, classNameOrFinder: unkn
  * @typeParam P - The Player subclass type
  */
 /**
+ * World mode (#1170): the store restores every partition root directly under
+ * the game, so a root moved anywhere else would silently snap back at the next
+ * wake. Refused before the move touches anything.
+ */
+function assertPartitionRootStays(element: GameElement, destination: GameElement): void {
+  if (!element._ctx?._partitionRoots?.has(element._t.id) || destination === element._ctx.game) return;
+  throw new Error(
+    `"${element.name ?? element.constructor.name}" (id: ${element._t.id}) is a world partition root, ` +
+    `and a partition's root must stay directly under the game. Move what is inside it ` +
+    `instead (its pieces and spaces, with putInto() or reparent()), and leave the root where it is.`
+  );
+}
+
+/**
  * Record the partition `from` belongs to: the nearest ancestor-or-self that
  * the platform declared a partition root. An element in no partition marks
  * nothing, which is what keeps the game's own non-partitioned core out of the
@@ -909,6 +923,8 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       }
     }
 
+    assertPartitionRootStays(this, destination);
+
     const oldParent = this._t.parent;
 
     // D22 (163-01): a sealed Space rejects a child being spliced OUT of it.
@@ -934,8 +950,8 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     // only costs an extra partition write. In snapshot mode there are no
     // partitions at all and this costs one undefined check.
     // Walking from `this` rather than from `oldParent` also covers the case
-    // where `this` IS a partition root: a whole partition that changes
-    // parent has dirtied itself.
+    // where `this` IS a partition root reordered among the game's children
+    // (the only root move the #1170 guard above lets through).
     markTouchedPartition(this);
     markTouchedPartition(destination);
 
