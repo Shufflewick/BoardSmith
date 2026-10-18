@@ -252,6 +252,9 @@ const actionBarCollapsed = computed(() => props.actionBarMinimized && !barOpened
 /** Whether the game is waiting on THIS seat, for the collapsed bar's mark. */
 const barWaitsOnMe = computed(() => props.mayAct && !props.completed);
 
+/** The board's error message is drawn at the region's own size, never the board's zoom (#1158). */
+const containerZoom = computed(() => (props.boardFailed ? 1 : props.zoomLevel));
+
 /** The toggle's label, carrying the attention state for screen readers too. */
 const barToggleLabel = computed(() => {
   if (!actionBarCollapsed.value) return 'Collapse action bar';
@@ -481,7 +484,7 @@ const mobileToggleLabel = computed(() => {
           <div
             class="game-shell__zoom-container"
             ref="zoomContainerEl"
-            :style="{ '--zoom-level': zoomLevel }"
+            :style="{ '--zoom-level': containerZoom }"
           >
             <!-- ONE render path for the board: the registry's default UI, or the
                  dev switcher's selection. There is no second slot for naming a

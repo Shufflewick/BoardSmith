@@ -238,6 +238,7 @@ describe('GameShell board error boundary and the zoom fit (#1154)', () => {
     await nextTick();
     Object.assign(region, { width: 600, height: 450 });
     await relayout('board and region');
+    expect(zoom(), 'the message is drawn at the region\'s own size (#1158)').toBe('1');
 
     fromHost(frame(false, 'Go second'));
     await flushPromises();
