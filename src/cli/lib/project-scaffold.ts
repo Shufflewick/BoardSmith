@@ -266,9 +266,14 @@ export function generateTsConfig(): string {
   return JSON.stringify(config, null, 2);
 }
 
-/** `text` as HTML text content: a display name is the author's free text. */
+/** `text` escaped for HTML text or a quoted attribute: a display name is the author's free text. */
 export function escapeHtml(text: string): string {
-  return text.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  return text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }
 
 /**

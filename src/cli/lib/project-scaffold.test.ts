@@ -48,6 +48,10 @@ describe('generateIndexHtml', () => {
       '<title>Cats &amp; Dogs &lt;/title&gt;</title>',
     );
   });
+
+  it('escapes quotes too, so the name is safe in an attribute (#853)', () => {
+    expect(generateIndexHtml({ displayName: `Bob's "Game"` })).toContain('<title>Bob&#39;s &quot;Game&quot;</title>');
+  });
 });
 
 describe('generateAppVue', () => {
