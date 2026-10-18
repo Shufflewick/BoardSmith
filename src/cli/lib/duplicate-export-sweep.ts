@@ -293,6 +293,9 @@ const ghIn = (cwd: string): RunGh => async (args) => {
   }
 };
 
+/** How many sweep issues `find` reads; a listing that fills it stops the sweep rather than re-filing. */
+const ISSUE_LIST_LIMIT = 1000;
+
 /**
  * The GitHub issue tracker, through the `gh` CLI.
  *
@@ -309,10 +312,10 @@ export function githubIssueTracker(cwd: string, gh: RunGh = ghIn(cwd)): IssueTra
   let labelChecked: Promise<void> | undefined;
   // Without the label every listing is empty, so every run would re-file every finding.
   const requireLabel = async () => {
-    const labels = JSON.parse(await gh(['label', 'list', '--json', 'name', '--limit', '1000'])) as {
-      name: string;
-    }[];
-    if (!labels.some((label) => label.name === SWEEP_LABEL)) {
+    try {
+      await gh(['api', `repos/{owner}/{repo}/labels/${SWEEP_LABEL}`, '--jq', '.name']);
+    } catch (error) {
+      if (!/HTTP 404/.test((error as Error).message)) throw error;
       throw new Error(
         `This repository has no \`${SWEEP_LABEL}\` label, which the sweep uses to find the `
         + 'issues it already filed. Create it once with:\n'
@@ -325,7 +328,6 @@ export function githubIssueTracker(cwd: string, gh: RunGh = ghIn(cwd)): IssueTra
   return {
     find: async (fingerprint) => {
       await (labelChecked ??= requireLabel());
-      // shortcut: reads at most 1000 sweep issues, raise the limit if the label ever holds more.
       const stdout = await gh([
         'issue',
         'list',
@@ -336,10 +338,18 @@ export function githubIssueTracker(cwd: string, gh: RunGh = ghIn(cwd)): IssueTra
         '--json',
         'number,state,body',
         '--limit',
-        '1000',
+        String(ISSUE_LIST_LIMIT),
       ]);
-      const issue = (JSON.parse(stdout) as (FiledIssue & { body: string })[]).find((candidate) =>
-        candidate.body.includes(fingerprint));
+      const issues = JSON.parse(stdout) as (FiledIssue & { body: string })[];
+      // A full page may hide older issues, and a hidden one would be filed again every run.
+      if (issues.length >= ISSUE_LIST_LIMIT) {
+        throw new Error(
+          `The \`${SWEEP_LABEL}\` label holds ${ISSUE_LIST_LIMIT} or more issues, more than the sweep `
+          + 'reads, so it cannot tell which findings are already filed. Nothing was filed. '
+          + 'Raise the limit in githubIssueTracker (src/cli/lib/duplicate-export-sweep.ts).',
+        );
+      }
+      const issue = issues.find((candidate) => candidate.body.includes(fingerprint));
       return issue && { number: issue.number, state: issue.state };
     },
     create: async (title, body) => {

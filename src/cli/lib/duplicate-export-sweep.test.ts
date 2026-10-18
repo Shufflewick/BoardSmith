@@ -209,13 +209,19 @@ describe('the issue it files', () => {
 describe('githubIssueTracker', () => {
   const fingerprint = fingerprintOf(baselineKey(elementRef));
 
-  /** A `gh` that answers label and issue listings from fixed data, and records every call. */
-  function fakeGh(labels: string[], issues: { number: number; state: string; body: string }[]) {
+  /** A `gh` that has the sweep label or not, answers the issue listing from fixed data, and records every call. */
+  function fakeGh(
+    labelExists: boolean,
+    issues: (args: string[]) => { number: number; state: string; body: string }[],
+  ) {
     const calls: string[][] = [];
     const gh = async (args: string[]) => {
       calls.push(args);
-      if (args[0] === 'label') return JSON.stringify(labels.map((name) => ({ name })));
-      if (args[1] === 'list') return JSON.stringify(issues);
+      if (args[0] === 'api') {
+        if (labelExists) return `${SWEEP_LABEL}\n`;
+        throw new Error(`Could not run \`gh ${args.join(' ')}\`: Command failed\ngh: Not Found (HTTP 404)`);
+      }
+      if (args[1] === 'list') return JSON.stringify(issues(args));
       return 'https://github.com/Shufflewick/BoardSmith/issues/777\n';
     };
     return { gh, calls };
@@ -226,7 +232,7 @@ describe('githubIssueTracker', () => {
    * issue and file it twice (#1184). A label listing is current at once.
    */
   it('finds a filed issue by listing the sweep label, open and closed, not by searching', async () => {
-    const { gh, calls } = fakeGh([SWEEP_LABEL], [
+    const { gh, calls } = fakeGh(true, () => [
       { number: 12, state: 'OPEN', body: 'something else' },
       { number: 34, state: 'CLOSED', body: `text <!-- ${fingerprint} -->` },
     ]);
@@ -239,12 +245,12 @@ describe('githubIssueTracker', () => {
   });
 
   it('finds nothing when no labelled issue carries the fingerprint', async () => {
-    const { gh } = fakeGh([SWEEP_LABEL], [{ number: 12, state: 'OPEN', body: 'something else' }]);
+    const { gh } = fakeGh(true, () => [{ number: 12, state: 'OPEN', body: 'something else' }]);
     expect(await githubIssueTracker('/repo', gh).find(fingerprint)).toBeUndefined();
   });
 
   it('labels every issue it files', async () => {
-    const { gh, calls } = fakeGh([SWEEP_LABEL], []);
+    const { gh, calls } = fakeGh(true, () => []);
     const number = await githubIssueTracker('/repo', gh).create('title', 'body');
 
     expect(number).toBe(777);
@@ -254,9 +260,27 @@ describe('githubIssueTracker', () => {
 
   /** A missing label would make every listing empty, so every run would re-file everything. */
   it('fails loud, naming the command to create it, when the repository has no sweep label', async () => {
-    const { gh } = fakeGh(['bug'], []);
+    const { gh } = fakeGh(false, () => []);
     await expect(githubIssueTracker('/repo', gh).find(fingerprint)).rejects.toThrow(
       `gh label create ${SWEEP_LABEL}`,
+    );
+  });
+
+  it('passes any other failure of the label check through, rather than blaming a missing label', async () => {
+    const gh = async () => {
+      throw new Error('Could not run `gh api`: gh: Bad credentials (HTTP 401)');
+    };
+    await expect(githubIssueTracker('/repo', gh).find(fingerprint)).rejects.toThrow('HTTP 401');
+  });
+
+  /** Past the listing limit an older issue is out of sight, so its finding would be filed again every run. */
+  it('fails loud when the label holds as many issues as the listing reads', async () => {
+    const { gh } = fakeGh(true, (args) => {
+      const limit = Number(args[args.indexOf('--limit') + 1]);
+      return Array.from({ length: limit }, (_, i) => ({ number: i + 1, state: 'CLOSED', body: '' }));
+    });
+    await expect(githubIssueTracker('/repo', gh).find(fingerprint)).rejects.toThrow(
+      /holds 1000 or more issues.*raise the limit in githubIssueTracker/is,
     );
   });
 });

@@ -837,6 +837,11 @@ gh label create duplicate-export-sweep --description "Filed by boardsmith audit 
 It does not create the label itself or fall back to searching, since either
 would hide that the repository is not set up for the sweep.
 
+The listing reads at most 1000 issues. If the label ever holds that many, the
+sweep stops without filing, since an issue past the limit would be invisible
+and its finding filed again on every run; raise the limit in
+`githubIssueTracker`.
+
 Listing closed issues too is deliberate. A closed issue is a human's ruling
 on this exact finding, and re-filing it every run is the auto-filer that spams,
 which is worse than no auto-filer. The sweep still REPORTS the finding and says
