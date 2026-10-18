@@ -272,6 +272,8 @@ function onHostMessage(msg: Record<string, unknown>): void {
       // the game before it (one a rules reload could not carry across, say) no
       // longer describes anything on screen.
       errorMsg.value = null;
+      // The cached view belongs to the old seat; a replay must never pair it with the new one (#1151).
+      if (msg.seat !== lastInitSeat) lastGameState = null;
       lastInitSeat = msg.seat as number;
       mySeat.value = msg.seat as number;
       postToGame({ type: 'init', seat: msg.seat, teachingDisabled: cfg.teachingDisabled === true });

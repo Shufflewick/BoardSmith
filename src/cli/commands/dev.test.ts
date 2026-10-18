@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_COLOR_PALETTE } from '../../engine/index.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import {
   assertWorldProjectForReset,
   devCommand,
@@ -118,19 +118,21 @@ describe('every dev flag refusal is a plain one-line Error naming the flag, what
   });
 
   it('--seed with no file there', () => {
-    const path = join(mkdtempSync(join(tmpdir(), 'bs-seed-')), 'missing.json');
+    const tree = tempTree('bs-seed-');
+    const path = join(tree, 'missing.json');
     expectRefusal(() => parseSeedFile(path), `--seed takes a recorded game state JSON file, got "${path}", which does not exist.`);
   });
 
   it('--seed naming something that cannot be read as a file', () => {
-    const path = mkdtempSync(join(tmpdir(), 'bs-seed-'));
+    const path = tempTree('bs-seed-');
     let reason = '';
     try { readFileSync(path, 'utf-8'); } catch (error) { reason = (error as Error).message; }
     expectRefusal(() => parseSeedFile(path), `--seed takes a recorded game state JSON file, got "${path}", which could not be read: ${reason}.`);
   });
 
   it('--seed naming a file that is not JSON', () => {
-    const path = join(mkdtempSync(join(tmpdir(), 'bs-seed-')), 'seed.json');
+    const tree = tempTree('bs-seed-');
+    const path = join(tree, 'seed.json');
     writeFileSync(path, 'not json');
     let reason = '';
     try { JSON.parse('not json'); } catch (error) { reason = (error as Error).message; }
@@ -178,7 +180,7 @@ describe('every dev flag refusal is a plain one-line Error naming the flag, what
 
 describe('a startup failure after the flags is the same plain Error, through the shared cleanup (#1139)', () => {
   it('"paths.ui" naming a directory that does not exist', async () => {
-    const project = mkdtempSync(join(tmpdir(), 'bs-dev-ui-'));
+    const project = tempTree('bs-dev-ui-');
     writeFileSync(join(project, 'boardsmith.json'), JSON.stringify({ name: 'ui-path-test', paths: { ui: 'web' } }));
     writeFileSync(join(project, 'index.html'), '<!doctype html>');
     const uiPath = join(project, 'web');
