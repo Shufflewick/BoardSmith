@@ -2122,15 +2122,6 @@ export interface ZoneVisibilityOwner {
 }
 
 /**
- * Narrow a value to an element that declares zone visibility.
- *
- * Deliberately duck-typed rather than `instanceof Space`: `Space` imports from
- * this module, and every visibility walk starts from a `GameElement`, so an
- * `instanceof` here would be a cycle. Kept in one place because the three
- * callers (a child's parent walk, per-seat serialization, and flow-variable
- * relinking) must agree on what counts as a zone.
- */
-/**
  * Whether the element's own visibility allows the seat, ancestors aside
  * (#1123). Only for a walk that never descends below an element hidden from
  * the seat, where every ancestor is already known visible; anywhere else,
@@ -2141,6 +2132,15 @@ export function ownVisibilityAllows(element: GameElement, seat: number): boolean
   return canPlayerSee(element.getEffectiveVisibility(), seat, element.getEffectiveOwner()?.seat);
 }
 
+/**
+ * Narrow a value to an element that declares zone visibility.
+ *
+ * Deliberately duck-typed rather than `instanceof Space`: `Space` imports from
+ * this module, and every visibility walk starts from a `GameElement`, so an
+ * `instanceof` here would be a cycle. Kept in one place because the three
+ * callers (a child's parent walk, per-seat serialization, and flow-variable
+ * relinking) must agree on what counts as a zone.
+ */
 export function hasZoneVisibility(value: unknown): value is ZoneVisibilityOwner {
   return (
     typeof value === 'object' &&
