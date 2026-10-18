@@ -957,6 +957,58 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
     expect(records.map((r) => String(r.evidence).split(' | ')[0])).toEqual(expect.arrayContaining(evidence));
   });
 
+  it('writes one RULINGS.md entry when two resolved adjudications of the same pair run in parallel (#1164)', async () => {
+    const { project, runId, pairId } = await contradictoryProjectWithRulings();
+    const resolve = (decision: string) =>
+      verifyImpactAdjudicateCommand({
+        project, runId, pairId, outcome: 'resolved', decision, citation: 'rulebook/a.md, p.1', rationale: 'Parallel.', json: true,
+      });
+
+    const [first, second] = await Promise.all([resolve('Decision one.'), resolve('Decision two.')]);
+
+    expect(second.rulingNumber).toBe(first.rulingNumber);
+    const rulingsText = await fs.readFile(join(project, DESIGN_DIR, 'RULINGS.md'), 'utf-8');
+    expect(rulingsText.match(new RegExp(`^### Ruling ${nextNumberFor()}$`, 'gm'))).toHaveLength(1);
+    expect(rulingsText.match(/^### Ruling /gm)).toHaveLength(rulingsCorpus().match(/^### Ruling /gm)!.length + 1);
+    // Each call records its adjudication line (last write wins per pair), both naming the one ruling.
+    const adjudications = (await runLedgerRecords(project, runId)).filter((r) => r.kind === 'adjudication');
+    expect(adjudications.map((r) => r.rulingNumber)).toEqual([first.rulingNumber, first.rulingNumber]);
+  });
+
+  it('refuses, writing no ruling, when the pair is re-classified while adjudicate waits for the ledger lock (#1164)', async () => {
+    const { project, runId, pairId } = await contradictoryProjectWithRulings();
+    const rulingsBefore = await fs.readFile(join(project, DESIGN_DIR, 'RULINGS.md'), 'utf-8');
+    const realOpen = fs.open.bind(fs);
+    let reclassified = false;
+    // Lands the re-classification just before adjudicate's first try at the RUN.md lock.
+    const openSpy = vi.spyOn(fs, 'open').mockImplementation(async (...args: Parameters<typeof fs.open>) => {
+      if (!reclassified && String(args[0]).endsWith('RUN.md.lock')) {
+        reclassified = true;
+        await verifyClassifyRecordCommand({ project, runId, pairId, label: 'sharper', evidence: 'reread', json: true });
+      }
+      return realOpen(...args);
+    });
+    try {
+      await expect(
+        verifyImpactAdjudicateCommand({
+          project, runId, pairId, outcome: 'resolved', decision: 'Too late.', citation: 'rulebook/a.md, p.1', rationale: 'Raced.', json: true,
+        }),
+      ).rejects.toThrow(/has no recorded "contradictory" classification/);
+    } finally {
+      openSpy.mockRestore();
+    }
+    expect(reclassified).toBe(true);
+    expect(await fs.readFile(join(project, DESIGN_DIR, 'RULINGS.md'), 'utf-8')).toBe(rulingsBefore);
+    expect((await runLedgerRecords(project, runId)).filter((r) => r.kind === 'adjudication')).toEqual([]);
+  });
+
+  it('refuses a run that does not exist with its own message, not a bare ENOENT on the lock (#1164)', async () => {
+    const { project, pairId } = await contradictoryProjectWithRulings();
+    const attempt = verifyImpactAdjudicateCommand({ project, runId: 'no-such-run', pairId, outcome: 'UNADJUDICATED', json: true });
+    await expect(attempt).rejects.toThrow(/no-such-run/);
+    await expect(attempt).rejects.not.toThrow(/ENOENT/);
+  });
+
   it('unadjudicated: outcome "resolved" with no --decision rejects with a message naming the missing field', async () => {
     const { project, runId, pairId } = await contradictoryProjectWithRulings();
     await expect(
