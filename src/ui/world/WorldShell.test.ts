@@ -380,6 +380,15 @@ describe('WorldShell — the shared chrome (#170)', () => {
     wrapper.unmount();
   });
 
+  it.each(['', '   '])('names a seat whose host sent the blank name %j "Seat N" (#1115)', async (blank) => {
+    const wrapper = mountShell();
+    tell(wrapper, stateFrame({ seat: 7, presence: [2, 7], players: [{ seat: 7, name: blank }, { seat: 2, name: 'Rook' }] } as never));
+    await nextTick();
+    const names = wrapper.findAll('[data-testid="bs-seats"] .player-name').map((n) => n.text());
+    expect(names).toEqual(['Seat 7', 'Rook']);
+    wrapper.unmount();
+  });
+
   it('marks who is here on the seat rows rather than in a list of its own', async () => {
     const wrapper = mountShell();
     tell(wrapper, stateFrame({ players: [{ seat: 2, name: 'Rook' }, { seat: 4, name: 'Ivy' }] } as never));
