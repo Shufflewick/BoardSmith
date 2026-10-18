@@ -145,6 +145,8 @@ const { flyingElements } = useFlyingElements({
 });
 ```
 
+A face-down pile's cards reach a seat as placeholders whose ids say nothing about which card is which, so auto-watch does not follow them by id. A flight out of a face-down pile, to an open container or to another face-down pile, needs a `countBasedRoutes` entry; it flies when the source's count drops and the destination's rises.
+
 ##### Other Animation Utilities
 
 - `useActionAnimations()` - Action-triggered animations
