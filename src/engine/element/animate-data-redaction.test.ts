@@ -356,6 +356,16 @@ describe('message text names a hidden element by its outermost concealer (#1165)
     game.evictSubtree(casket.id);
     expect(textFor(game, 2)).toBe('Player 1 hid vault');
   });
+
+  it('names the game for an element whose partition is not loaded when the message is written (world)', () => {
+    const game = makeGame(true);
+    const casket = game.vault.first(Space, 'casket')!;
+    const crown = casket.first(Card, 'Crown')!;
+    game.definePartition(casket.id);
+    game.evictSubtree(casket.id);
+    game.message('{{card}} glints', { card: crown });
+    for (const seat of [1, 2, null]) expect(textFor(game, seat)).toBe(`${String(game)} glints`);
+  });
 });
 
 it('refuses, by name, a saved log line with no text for the seat (#1165)', () => {
