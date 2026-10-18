@@ -173,6 +173,13 @@ describe('findMatchingChoice is the one matcher both sides use (#219)', () => {
     expect(findMatchingChoice({ team: 'red' }, ambiguous)).toBeUndefined();
   });
 
+  it('refuses an object with no own keys, which identifies nothing (#1131)', () => {
+    const one = [{ value: OPERATIVES[0] }];
+    for (const empty of [{}, new Date(0), new Map(), new Set()]) {
+      expect(findMatchingChoice(empty, one)).toBeUndefined();
+    }
+  });
+
   it('refuses a value that names nothing', () => {
     expect(findMatchingChoice({ id: 'operative:9:9' }, choices)).toBeUndefined();
   });

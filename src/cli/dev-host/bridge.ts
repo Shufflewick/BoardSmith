@@ -26,6 +26,7 @@ import {
   type SnapshotSessionAdapters,
   type PublishMeta,
   type BotSeat,
+  type SeatOp,
 } from '../../session/index.js';
 import { record, getEntries } from './log-capture.js';
 import type { WarningEntry } from '../../types/protocol.js';
@@ -188,7 +189,7 @@ export function translateOp(
   wireOp: string,
   seat: number,
   payload: Record<string, unknown>,
-): Op | DebugLogsMarker | undefined {
+): SeatOp | DebugLogsMarker | undefined {
   if (Object.hasOwn(DEBUG_WIRE_OPS, wireOp)) return DEBUG_WIRE_OPS[wireOp as keyof typeof DEBUG_WIRE_OPS](seat, payload);
   switch (wireOp) {
     case 'action':
@@ -250,7 +251,7 @@ export function translateOp(
 /** How each Debug panel wire op becomes an op, one entry per name so none can be missed. */
 const DEBUG_WIRE_OPS: Record<
   Extract<WireOp, `debug:${string}`>,
-  (seat: number, payload: Record<string, unknown>) => Op | DebugLogsMarker
+  (seat: number, payload: Record<string, unknown>) => SeatOp | DebugLogsMarker
 > = {
   'debug:history': () => ({ type: 'debugHistory' }),
   // The seat-view debug ops always report the connection's own seat (#481):

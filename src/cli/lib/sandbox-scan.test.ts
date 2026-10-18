@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SANDBOX_LINT_CONFIG, scanSandboxViolations, scanSourceForSandboxViolations } from './sandbox-scan.js';
 import { configs } from '../../eslint-plugin/index.js';
@@ -39,6 +39,28 @@ describe('scanSandboxViolations', () => {
   it.each(['d.ts', 'd.mts', 'd.cts'])('skips a .%s declaration file', (ext) => {
     write(`src/rules/x.${ext}`, 'export const x = Math.random();\n');
     expect(scanSandboxViolations(dir)).toEqual([]);
+  });
+
+  it('skips node_modules and dot folders under src', () => {
+    write('src/node_modules/pkg/x.ts', 'export const x = Math.random();\n');
+    write('src/.cache/y.ts', 'export const y = Math.random();\n');
+    expect(scanSandboxViolations(dir)).toEqual([]);
+  });
+
+  // The build bundles code under a linked folder, so the scan refuses one rather than skip it (#1112).
+  it('stops on a linked folder under src, naming it', () => {
+    write('outside/sneaky.ts', 'export const t = setTimeout(() => fetch("/x"), 1);\n');
+    symlinkSync(join(dir, 'outside'), join(dir, 'src', 'rules', 'linked'));
+    expect(() => scanSandboxViolations(dir)).toThrow(
+      `${join(dir, 'src', 'rules', 'linked')} is a link to a folder, and links are followed only to files. ` +
+        'Replace the link with a copy of what it should point to.',
+    );
+  });
+
+  it('scans a linked file under src as the file it points to, under the link\'s path', () => {
+    write('outside/sneaky.ts', 'export const t = fetch("/x");\n');
+    symlinkSync(join(dir, 'outside', 'sneaky.ts'), join(dir, 'src', 'rules', 'linked.ts'));
+    expect(scanSandboxViolations(dir).map((v) => [v.file, v.ruleId])).toEqual([['src/rules/linked.ts', 'boardsmith/no-network']]);
   });
 
   // Security rules (network/filesystem/eval) are enforced everywhere, including

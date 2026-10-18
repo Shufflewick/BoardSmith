@@ -507,7 +507,7 @@
       }
     },
     "src/ui/components/auto-ui/renderers/HandRenderer.vue": {
-      "complexity_high": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -523,7 +523,7 @@
     },
     "src/ui/components/auto-ui/useAutoRendererAnimations.ts": {
       "complexity_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "src/ui/components/debug/ActionsTab.vue": {

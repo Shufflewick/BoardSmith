@@ -850,6 +850,7 @@ describe('translate-example.md — CHECK-06/TEST-01\'s second judgment contract 
     expect(doc).toContain('no-matching-symbol');
     expect(doc).toContain('unmodeled-component-state');
     expect(doc).toContain('image-derived-indeterminate');
+    expect(doc).toContain('missing-api-declaration');
     const flat_ = flat(doc);
     expect(flat_).toMatch(/Guessing at an API that is not in the supplied surface is forbidden/);
   });

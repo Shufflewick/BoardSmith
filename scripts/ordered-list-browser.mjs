@@ -45,6 +45,7 @@
 import {
   assert,
   check,
+  recordWorldFrames,
   runBrowserRegression,
   summarise,
   surfaceOf,
@@ -345,18 +346,8 @@ async function driveThrough({ launch, hostUrl }) {
     // The command as it leaves for the host: the wire is where a sequence would
     // be silently deduplicated or sorted, and it is not a thing the surface can
     // be asked about afterwards.
-    const commanded = [];
-    page.on('websocket', (ws) => {
-      if (!ws.url().includes('/__boardsmith/world')) return;
-      ws.on('framesent', ({ payload }) => {
-        try {
-          const frame = JSON.parse(String(payload));
-          if (frame.action === 'repair') commanded.push(frame);
-        } catch {
-          // not JSON: not a command
-        }
-      });
-    });
+    const { sent } = recordWorldFrames(page);
+    const commanded = () => sent.filter((frame) => frame.action === 'repair');
     await page.goto(hostUrl);
     await waitForAction(page, 'repair');
     await startRepair(page);
@@ -453,7 +444,7 @@ async function driveThrough({ launch, hostUrl }) {
     });
 
     await check('the command crossed the socket carrying that same sequence', () => {
-      const last = commanded[commanded.length - 1];
+      const last = commanded().at(-1);
       assert(last !== undefined, 'no command frame reached the world host at all');
       assert(last.action === 'repair', `the command named "${last.action}"`);
       assert(
@@ -496,7 +487,7 @@ async function driveThrough({ launch, hostUrl }) {
       await expectEntries(page, ['1. University', '2. Foundry', '3. University']);
       await submit(page);
       await expectStoredOrder(page, 'university > foundry > university');
-      const last = commanded[commanded.length - 1];
+      const last = commanded().at(-1);
       assert(
         JSON.stringify(last.args?.buildings) ===
           JSON.stringify(['university', 'foundry', 'university']),

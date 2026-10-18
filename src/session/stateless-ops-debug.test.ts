@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Action, Card, Deck, actionStep, loop, type GameOptions } from '../engine/index.js';
 import { parseExecutorOp } from './parse-executor-op.js';
-import { executeOp, DEBUG_OP_TYPES, type GameDefinitionLike, type ExecutableOp, type Op, type StateEnvelope } from './stateless-ops.js';
+import { executeOp, DEBUG_OP_TYPES, type GameDefinitionLike, type Op, type OpOfType, type DebugOpType, type StateEnvelope } from './stateless-ops.js';
 import { SnapshotSessionHost, type SnapshotSessionAdapters } from './snapshot-session-host.js';
 import { boundaryKeyOf, boundaryKeyOfHost } from './testing/boundary-stamp.js';
 import { collectFixtureDefinition } from './testing/fixtures/collect-fixture.js';
@@ -324,7 +324,7 @@ describe('debugDeckViewAt (#1071)', () => {
 // ---------------------------------------------------------------------------
 
 /** One instance of every debug op, each valid against a two-pass game. */
-const EVERY_DEBUG_OP: ExecutableOp[] = [
+const EVERY_DEBUG_OP: OpOfType<DebugOpType>[] = [
   { type: 'debugHistory' },
   { type: 'debugStateAt', actionIndex: 1, player: 1 },
   { type: 'debugStateDiff', fromIndex: 0, toIndex: 1, player: 1 },
@@ -340,7 +340,7 @@ const EVERY_DEBUG_OP: ExecutableOp[] = [
 ];
 
 /** The debug ops that report one seat's view. */
-const SEAT_VIEW_OPS: ExecutableOp[] = [
+const SEAT_VIEW_OPS: OpOfType<DebugOpType>[] = [
   { type: 'debugStateAt', actionIndex: 1, player: 2 },
   { type: 'debugStateDiff', fromIndex: 0, toIndex: 1, player: 2 },
   { type: 'debugActionTraces', player: 2 },

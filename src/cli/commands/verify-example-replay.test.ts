@@ -1034,14 +1034,14 @@ describe('verifyExampleRecordCommand — record', () => {
     expect(result.records[0].verdict).toBe('not-run');
   });
 
-  it('an unexecutable translator return is recorded unexecutable with its named reason and no test', async () => {
+  it.each(['unmodeled-component-state', 'missing-api-declaration'])('an unexecutable translator return is recorded unexecutable with its named reason (%s) and no test', async (unexecutableReason) => {
     const project = await makeProject({ 'rulebook/02-punch.md': SLICE_TEXT });
     const extractionPath = await writeExtraction('extraction.json', [extractionEntry()]);
     const translationPath = await writeTranslations('translations.json', [
       translationEntry({
         testCode: '',
         verdictHint: 'unexecutable',
-        unexecutableReason: 'unmodeled-component-state',
+        unexecutableReason,
       }),
     ]);
 
@@ -1052,7 +1052,7 @@ describe('verifyExampleRecordCommand — record', () => {
       translations: translationPath,
     });
     expect(result.records[0].verdict).toBe('unexecutable');
-    expect(result.records[0].reason).toMatch(/^unmodeled-component-state: /);
+    expect(result.records[0].reason).toMatch(new RegExp(`^${unexecutableReason}: `));
     expect(result.records[0].translation).toBeUndefined();
   });
 

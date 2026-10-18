@@ -19,7 +19,8 @@
  * @param flyApi          - The fly function from useFlyingElements() for flying-element animations.
  */
 
-import type { UseAnimationEventsReturn } from '../../composables/useAnimationEvents.js';
+import { onScopeDispose } from 'vue';
+import type { AnimationHandler, UseAnimationEventsReturn } from '../../composables/useAnimationEvents.js';
 import type { FlyConfig } from '../../composables/useFlyingElements.js';
 
 /**
@@ -44,90 +45,56 @@ export function useAutoRendererAnimations(
   if (!animationEvents) return;
 
   // -------------------------------------------------------------------
-  // 'deal' handler — skip: 'drop'
-  // Flies an element from source to destination when a card is dealt.
+  // 'deal' and 'reveal' handlers — skip: 'drop'
+  // Fly an element from source to destination (a card dealt, or a hidden card
+  // revealed to the player), flipping it on the way.
   // event.data shape (all optional, defensive access required — T-93-16):
   //   sourceRect:      DOMRect-like (source position)
   //   destinationRect: DOMRect-like (destination position)
   //   elementData:     FlyingCardData partial (rank, suit, faceUp, etc.)
+  //   faceUp:          boolean
   // -------------------------------------------------------------------
-  animationEvents.registerHandler(
-    'deal',
-    async (event, { signal }) => {
-      if (signal.aborted) return;
+  const flyBetweenRects = (type: string): AnimationHandler => async (event, { signal }) => {
+    if (signal.aborted) return;
 
-      const data = event.data;
+    const data = event.data;
 
-      // Defensive access: tolerate missing or malformed rect data
-      const sourceRect = data?.sourceRect as DOMRect | undefined;
-      const destinationRect = data?.destinationRect as DOMRect | undefined;
+    // Defensive access: tolerate missing or malformed rect data
+    const sourceRect = data?.sourceRect as DOMRect | undefined;
+    const destinationRect = data?.destinationRect as DOMRect | undefined;
 
-      // Cannot animate without positional data — skip silently (T-93-16)
-      if (!sourceRect || !destinationRect) return;
+    // Cannot animate without positional data — skip silently (T-93-16)
+    if (!sourceRect || !destinationRect) return;
 
-      if (signal.aborted) return;
+    if (signal.aborted) return;
 
-      await flyApi.fly({
-        id: `deal-${event.id}`,
-        startRect: sourceRect,
-        endRect: destinationRect,
-        elementData: {
-          ...(data?.elementData as Record<string, unknown> | undefined),
-          faceUp: (data?.faceUp as boolean | undefined) ?? false,
-        },
-        flip: true,
-        duration: 400,
-      });
-    },
-    { skip: 'drop' },
-  );
+    await flyApi.fly({
+      id: `${type}-${event.id}`,
+      startRect: sourceRect,
+      endRect: destinationRect,
+      elementData: {
+        ...(data?.elementData as Record<string, unknown> | undefined),
+        faceUp: (data?.faceUp as boolean | undefined) ?? false,
+      },
+      flip: true,
+      duration: 400,
+    });
+  };
 
-  // -------------------------------------------------------------------
-  // 'flip' handler — skip: 'run'
-  // Runs sync/cleanup even on skip so visual state stays consistent.
-  // event.data shape (optional):
-  //   elementId: number — the element to flip in the DOM (future: CSS flip-by-id)
-  // -------------------------------------------------------------------
-  animationEvents.registerHandler(
-    'flip',
-    async (_event, { signal }) => {
-      if (signal.aborted) return;
-      // Future: drive CSS flip animation targeting event.data.elementId.
-      // For now: handler is registered (RENDER-05 proof) — no DOM available at this layer.
-    },
-    { skip: 'run' },
-  );
+  const unregisters = [
+    animationEvents.registerHandler('deal', flyBetweenRects('deal'), { skip: 'drop' }),
+    animationEvents.registerHandler('reveal', flyBetweenRects('reveal'), { skip: 'drop' }),
+    // 'flip' — skip: 'run', so sync/cleanup runs even on skip and visual state stays consistent.
+    // event.data.elementId names the element to flip (future: CSS flip-by-id); no DOM at this layer yet.
+    animationEvents.registerHandler(
+      'flip',
+      async (_event, { signal }) => {
+        if (signal.aborted) return;
+      },
+      { skip: 'run' },
+    ),
+  ];
 
-  // -------------------------------------------------------------------
-  // 'reveal' handler — skip: 'drop'
-  // Combination of fly + flip when a hidden card is revealed to the player.
-  // event.data shape: same as 'deal' plus optional faceUp field.
-  // -------------------------------------------------------------------
-  animationEvents.registerHandler(
-    'reveal',
-    async (event, { signal }) => {
-      if (signal.aborted) return;
-
-      const data = event.data;
-      const sourceRect = data?.sourceRect as DOMRect | undefined;
-      const destinationRect = data?.destinationRect as DOMRect | undefined;
-
-      if (!sourceRect || !destinationRect) return;
-
-      if (signal.aborted) return;
-
-      await flyApi.fly({
-        id: `reveal-${event.id}`,
-        startRect: sourceRect,
-        endRect: destinationRect,
-        elementData: {
-          ...(data?.elementData as Record<string, unknown> | undefined),
-          faceUp: (data?.faceUp as boolean | undefined) ?? false,
-        },
-        flip: true,
-        duration: 400,
-      });
-    },
-    { skip: 'drop' },
-  );
+  // A dev UI switch unmounts this renderer; its handlers must not fly on the dead overlay.
+  onScopeDispose(() => unregisters.forEach((unregister) => unregister()));
 }
