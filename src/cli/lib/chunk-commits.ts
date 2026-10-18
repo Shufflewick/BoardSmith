@@ -58,7 +58,7 @@ async function chunkLog(projectDir: string, slug: string): Promise<{ hash: strin
     .map(([hash, parents, subject]) => ({ hash, parents: parents.split(' ').filter(Boolean), subject }));
   if (commits.length === 0) {
     throw new Error(
-      `No commit for chunk "${slug}" yet: none of its commit messages starts with "${prefix}step-".\n` +
+      `No commit for chunk "${slug}" yet: none of its commit messages starts with "${prefix}".\n` +
         `Commit each finished step as "chunk-${slug}/step-<name>" (state-machine.md "Git Protocol"), then run this again.`,
     );
   }
