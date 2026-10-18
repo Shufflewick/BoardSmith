@@ -619,6 +619,27 @@ describe('composeArithmeticClaim', () => {
     if (!outcome.ok) expect(outcome.reason).toMatch(/does not mention the operand value 10/);
   });
 
+  it('does not count a page citation like (p.1) as mentioning operand 1 (#839)', () => {
+    const outcome = composeArithmeticClaim({
+      derivedLineText: 'Derived (p.1): 7 players each get cards, 7 in all.',
+      operation: 'multiply',
+      operands: [groundedNumeric('7 players.', 7, 'players'), groundedNumeric('1 card each.', 1, 'cards')],
+      claimedResult: { magnitude: 7, unit: 'cards', approximate: false },
+    });
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.reason).toMatch(/does not mention the operand value 1 /);
+  });
+
+  it('counts an operand mentioned as its own number, even at the end of a sentence (#839)', () => {
+    const outcome = composeArithmeticClaim({
+      derivedLineText: 'Derived (p.2): 7 players get 1. So 7 cards.',
+      operation: 'multiply',
+      operands: [groundedNumeric('7 players.', 7, 'players'), groundedNumeric('1 card each.', 1, 'cards')],
+      claimedResult: { magnitude: 7, unit: 'cards', approximate: false },
+    });
+    expect(outcome.ok).toBe(true);
+  });
+
   it('refuses when computed result does not match the claimed result', () => {
     const derivedLineText = '7 x 4 x 4 = 112 in this text but claim says otherwise: 100.';
     const operands = [

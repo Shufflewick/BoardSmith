@@ -692,6 +692,12 @@ function extractOperandValue(op: GroundedBothFact): ExtractedOperand {
   return { ok: true, value, ...(unitVariance !== undefined ? { unitVariance } : {}) };
 }
 
+/** Whether `text` states `n` as a number of its own, so `1` is not found in `(p.1)`, `10` or `1.5`. */
+function mentionsNumber(text: string, n: number): boolean {
+  const digits = String(n).replace('.', '\\.');
+  return new RegExp(`(?<![\\w.])${digits}(?!\\.?\\d)`).test(text);
+}
+
 export function composeArithmeticClaim(input: {
   derivedLineText: string;
   operation: ArithmeticOp;
@@ -716,7 +722,7 @@ export function composeArithmeticClaim(input: {
   }
 
   for (const value of operandValues) {
-    if (!derivedLineText.includes(String(value.magnitude))) {
+    if (!mentionsNumber(derivedLineText, value.magnitude)) {
       return {
         ok: false,
         reason:
@@ -867,7 +873,7 @@ export function composeArithmeticChain(input: {
         const extracted = extractOperandValue(op);
         if (!extracted.ok) return extracted;
         if (extracted.unitVariance !== undefined) unitVariances.push(extracted.unitVariance);
-        if (!derivedLineText.includes(String(extracted.value.magnitude))) {
+        if (!mentionsNumber(derivedLineText, extracted.value.magnitude)) {
           return {
             ok: false,
             reason:
@@ -890,7 +896,7 @@ export function composeArithmeticChain(input: {
           };
         }
         const prior = stepResults[ref.index];
-        if (!derivedLineText.includes(String(prior.magnitude))) {
+        if (!mentionsNumber(derivedLineText, prior.magnitude)) {
           return {
             ok: false,
             reason:
