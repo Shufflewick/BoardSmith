@@ -278,43 +278,47 @@ describe('isVisibleTo matches the seat view on random trees (#961)', () => {
     (s) => s.contentsVisible(),
   ];
 
+  /** A random tree, two children per level, four levels deep, each element given a random owner and setting. */
+  function randomTree(seed: number): { game: TestGame; elements: GameElement[] } {
+    const next = random(seed);
+    const pick = <T,>(list: T[]): T => list[Math.floor(next() * list.length)]!;
+    const game = new TestGame({ playerCount: 3, elementIdKey: '0000000000000961' });
+    const elements: GameElement[] = [];
+    const grow = (parent: Game | Box, depth: number) => {
+      for (let i = 0; i < 2; i++) {
+        const leaf = depth === 4 || next() < 0.3;
+        const element: GameElement = leaf ? parent.create(Card, `e${elements.length}`) : parent.create(Box, `e${elements.length}`);
+        if (next() < 0.3) element.player = game.getPlayer(1 + Math.floor(next() * 3))!;
+        pick(owns)(element);
+        elements.push(element);
+        if (leaf) continue;
+        pick(zones)(element as Box);
+        grow(element as Box, depth + 1);
+      }
+    };
+    grow(game, 1);
+    return { game, elements };
+  }
+
+  /** What the seat's view must and must not carry for one element. */
+  function checkElement(view: ElementJSON, ids: Set<number>, element: GameElement, seat: number, where: string): void {
+    expect(element.isVisibleTo(seat), where).toBe(revealedIn(view, element));
+    // Checked without the rule under test: a hidden ancestor lets through only the element's own grant.
+    if (hiddenAncestor(element, seat) && !ownGrant(element, seat)) expect(ids.has(element.id), where).toBe(false);
+    // A hidden container keeps its real id only as a placeholder in a parent whose contents the seat sees.
+    const hidden = !shows(element.getEffectiveVisibility(), element, seat);
+    if (hidden && (inConcealedZone(element, seat) || hiddenAncestor(element, seat))) expect(ids.has(element.id), where).toBe(false);
+  }
+
   it('for every element and seat, across 200 trees four levels deep', () => {
     for (let seed = 1; seed <= 200; seed++) {
-      const next = random(seed);
-      const pick = <T,>(list: T[]): T => list[Math.floor(next() * list.length)]!;
-      const game = new TestGame({ playerCount: 3, elementIdKey: '0000000000000961' });
-      const elements: GameElement[] = [];
-      const grow = (parent: Game | Box, depth: number) => {
-        for (let i = 0; i < 2; i++) {
-          const leaf = depth === 4 || next() < 0.3;
-          const element: GameElement = leaf ? parent.create(Card, `e${elements.length}`) : parent.create(Box, `e${elements.length}`);
-          if (next() < 0.3) element.player = game.getPlayer(1 + Math.floor(next() * 3))!;
-          pick(owns)(element);
-          elements.push(element);
-          if (!leaf) {
-            pick(zones)(element as Box);
-            grow(element as Box, depth + 1);
-          }
-        }
-      };
-      grow(game, 1);
+      const { game, elements } = randomTree(seed);
       for (const seat of SEATS) {
         const view = game.toJSONForPlayer(seat);
         const ids = new Set(idsIn(view));
-        for (const element of elements) {
-          const where = `${element.name} for seat ${seat}, seed ${seed}`;
-          expect(element.isVisibleTo(seat ?? -1), where).toBe(revealedIn(view, element));
-          // Checked without the rule under test: a hidden ancestor lets through only the element's own grant.
-          if (hiddenAncestor(element, seat ?? -1) && !ownGrant(element, seat ?? -1)) expect(ids.has(element.id), where).toBe(false);
-          // A hidden container keeps its real id only as a placeholder in a parent whose contents the seat sees.
-          const hidden = !shows(element.getEffectiveVisibility(), element, seat ?? -1);
-          if (hidden && (inConcealedZone(element, seat ?? -1) || hiddenAncestor(element, seat ?? -1))) {
-            expect(ids.has(element.id), where).toBe(false);
-          }
-        }
+        for (const element of elements) checkElement(view, ids, element, seat ?? -1, `${element.name} for seat ${seat}, seed ${seed}`);
         forEachNode(view, (node) => {
-          const element = game.getElementById(node.id);
-          if (node.childCount !== undefined) expect(node.childCount).toBe(element!._t.children.length);
+          if (node.childCount !== undefined) expect(node.childCount).toBe(game.getElementById(node.id)!._t.children.length);
         });
       }
     }
