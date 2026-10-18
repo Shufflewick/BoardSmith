@@ -880,13 +880,13 @@ export async function verifyImpactAdjudicateCommand(options: {
     const { ledgerFile, relLedgerPath, ledgerText, adjudications } = await readRunLedger(projectDir, runId);
     const existing = adjudications.find((a) => a.pairId === pairId);
 
-    let rulingNumber: number | undefined;
+    let assigned: number | undefined;
 
     if (outcome === 'resolved') {
       if (existing?.outcome === 'resolved' && existing.rulingNumber !== undefined) {
         // Idempotent: this pair already has a recorded ruling — reuse it, never append a second
         // RULINGS.md entry for an already-recorded resolution.
-        rulingNumber = existing.rulingNumber;
+        assigned = existing.rulingNumber;
       } else {
         // RULINGS.md write FIRST (T-175-13) — both verbatim readings embedded into the Citation
         // field, matching the real corpus's own convention of quoting the interpreted rulebook
@@ -898,7 +898,7 @@ export async function verifyImpactAdjudicateCommand(options: {
             `Reading in the fresh transcription (pass 2): "${quotedPass2}"`,
           rationale: options.rationale!.trim(),
         });
-        rulingNumber = appended.number;
+        assigned = appended.number;
       }
     }
 
@@ -906,7 +906,7 @@ export async function verifyImpactAdjudicateCommand(options: {
       kind: 'adjudication',
       pairId,
       outcome,
-      ...(rulingNumber !== undefined ? { rulingNumber } : {}),
+      ...(assigned !== undefined ? { rulingNumber: assigned } : {}),
       quotedPass1,
       quotedPass2,
       recordedAt: new Date().toISOString(),
@@ -917,7 +917,7 @@ export async function verifyImpactAdjudicateCommand(options: {
     // ruling behind it.
     const newLedgerText = appendLedgerLine(ledgerText, relLedgerPath, JSON.stringify(record));
     await atomicWriteFile(ledgerFile, newLedgerText);
-    return rulingNumber;
+    return assigned;
   });
 
   const result: VerifyImpactAdjudicateResult = {
