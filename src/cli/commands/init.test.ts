@@ -870,8 +870,32 @@ describe('initCommand --into-existing — scaffold into the repository you are i
     } finally {
       chmodSync(hook, 0o755);
     }
-    expect(log.mock.calls.flat().join('\n')).toContain('could not read .git/hooks/pre-commit');
+    expect(log.mock.calls.flat().join('\n')).toContain('Left .git/hooks/pre-commit alone: could not read it');
     expect(readFileSync(hook, 'utf-8')).toBe('#!/bin/sh\necho mine\n');
+  });
+
+  it('names where it installed the hook, which is where core.hooksPath points (#1186)', async () => {
+    const repo = researchRepo('bs-init-1186-hook-');
+    execSync('git config core.hooksPath githooks', { cwd: repo });
+    process.chdir(repo);
+
+    await initCommand('sample-game', { withoutRulebook: true, intoExisting: true });
+
+    expect(vi.mocked(console.log).mock.calls.flat().join('\n')).toContain(`installed the ingest pre-commit hook at ${join('githooks', 'pre-commit')}`);
+    expect(existsSync(join(repo, 'githooks', 'pre-commit'))).toBe(true);
+  });
+
+  it('writes nothing into a hooks folder outside the repository, and names it (#1186)', async () => {
+    const repo = researchRepo('bs-init-1186-hook-');
+    const shared = join(dirname(repo), 'shared-hooks');
+    mkdirSync(shared);
+    execSync(`git config core.hooksPath "${shared}"`, { cwd: repo });
+    process.chdir(repo);
+
+    await initCommand('sample-game', { withoutRulebook: true, intoExisting: true });
+
+    expect(vi.mocked(console.log).mock.calls.flat().join('\n')).toContain(`Left ${join(shared, 'pre-commit')} alone`);
+    expect(readdirSync(shared)).toEqual([]);
   });
 });
 
