@@ -13,7 +13,8 @@ const CHECKOUT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /** A game whose vite.config.ts uses a packed boardsmith: a real directory under node_modules, not a symlink to a checkout. */
 function packedGame(prefix: string, within = ''): string {
-  const game = join(tempTree(prefix), within);
+  const tree = tempTree(prefix);
+  const game = join(tree, within);
   const packed = join(game, 'node_modules', 'boardsmith');
   mkdirSync(join(packed, 'src'), { recursive: true });
   cpSync(join(CHECKOUT, 'package.json'), join(packed, 'package.json'));
