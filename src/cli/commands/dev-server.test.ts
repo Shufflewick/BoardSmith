@@ -185,6 +185,36 @@ describe('a served Vite leaves the process alone (#382)', () => {
   }, 30000);
 });
 
+/**
+ * #979: A PAGE STILL CONNECTED WHEN THE HOST STOPS.
+ *
+ * `ws` closes no client when its server closes, and an upgraded socket is not
+ * one of the connections `closeAllConnections` ends, so a page whose socket was
+ * open kept the HTTP server's `close()` from finishing.
+ */
+describe('a dev host stops with a page still connected (#979)', () => {
+  it('closes the page\'s socket and the HMR socket, and the HTTP server finishes closing', async () => {
+    const { port } = await serveEmpty(() => {});
+    const open = (url: string, protocol?: string): Promise<WsClient> =>
+      new Promise((resolve, reject) => {
+        const socket = new WsClient(url, protocol);
+        socket.once('open', () => resolve(socket));
+        socket.once('error', reject);
+      });
+    const page = await open(`ws://127.0.0.1:${port}${TEST_WS_PATH}`);
+    const hmr = await open(`ws://127.0.0.1:${port}/`, 'vite-hmr');
+    const closed = (socket: WsClient): Promise<void> => new Promise((resolve) => socket.once('close', () => resolve()));
+    const pageClosed = closed(page);
+    const hmrClosed = closed(hmr);
+    const stop = stopServed!;
+    stopServed = null;
+    // Rejects naming what is still open when a close never finishes.
+    await expect(stop()).resolves.toBeUndefined();
+    await pageClosed;
+    await hmrClosed;
+  }, 30000);
+});
+
 /** Serve a page with Vite, answering {@link DEV_HOST_ALIVE_PATH} as the dev host does; answers its port. */
 async function servedAlive(): Promise<number> {
   dir = tempTree('bs-dev-alive-');

@@ -78,7 +78,7 @@ interface HttpUpgradeServer {
 interface ClaimedWebSocketPath {
   /** Route this path's upgrades on `httpServer`. `serveVite` calls it. */
   attach(httpServer: HttpUpgradeServer, viteConfig: () => ResolvedConfig | undefined): void;
-  /** Stop accepting connections; called from the run's shutdown. */
+  /** Stop accepting connections and end the open ones; called from the run's shutdown. */
   close(): void;
 }
 
@@ -119,7 +119,11 @@ export function claimWebSocketPath(
         wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
       });
     },
-    close: () => wss.close(),
+    close: () => {
+      // `ws` leaves its clients open on close, and an open one keeps the HTTP server from closing (#979).
+      for (const client of wss.clients) client.terminate();
+      wss.close();
+    },
   };
 }
 
