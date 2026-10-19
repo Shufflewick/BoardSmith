@@ -598,16 +598,20 @@ const SAFE_LAYOUT_KEYS = new Set([
   '$hexSize',
 ]);
 
+/** The attributes a cell's board names as its coordinates; none for anything that is not a grid or hex cell. */
+function cellCoordinateNames(element: GameElement): (string | undefined)[] {
+  const parent = element._t.parent;
+  // Only cells: a piece placed straight in a grid would give away where it is (#1199).
+  if (element instanceof GridCell && parent instanceof Grid) return [parent.$rowCoord, parent.$colCoord];
+  if (element instanceof HexCell && parent instanceof HexGrid) return [parent.$qCoord ?? 'q', parent.$rCoord ?? 'r'];
+  return [];
+}
+
 /** A grid or hex cell's numeric coordinates, the only own attributes a hidden cell keeps (#1055, #1198). */
 function cellCoordinates(attrs: Record<string, unknown>, element: GameElement): Record<string, unknown> {
-  const parent = element._t.parent;
   // A cell's place on the board is layout the seat already sees; AutoUI cannot draw the board without it.
-  // Only cells: a piece placed straight in a grid would give away where it is (#1199).
-  const names = element instanceof GridCell && parent instanceof Grid ? [parent.$rowCoord, parent.$colCoord]
-    : element instanceof HexCell && parent instanceof HexGrid ? [parent.$qCoord ?? 'q', parent.$rCoord ?? 'r']
-    : [];
   const coordinates: Record<string, unknown> = {};
-  for (const key of names) {
+  for (const key of cellCoordinateNames(element)) {
     if (key !== undefined && typeof attrs[key] === 'number') coordinates[key] = attrs[key];
   }
   return coordinates;

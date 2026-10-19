@@ -164,20 +164,20 @@ describe('a grid cell hidden from a seat (#1055)', () => {
 
 describe('a hex cell hidden from a seat (#1198)', () => {
   class Tile extends HexCell<HexGame> {
-    col!: number;
-    row!: number;
+    east!: number;
+    south!: number;
     secret?: string;
   }
   class Map extends HexGrid<HexGame> {
-    $qCoord = 'col';
-    $rCoord = 'row';
+    $qCoord = 'east';
+    $rCoord = 'south';
   }
   class HexGame extends Game<HexGame, Player> {
     map!: Map;
     constructor(options: { playerCount: number }) {
       super(options);
       this.map = this.create(Map, 'map');
-      this.map.create(Tile, 'tile', { col: 2, row: -1, secret: 'treasure' });
+      this.map.create(Tile, 'tile', { east: 2, south: -1, secret: 'treasure' });
     }
   }
 
@@ -186,7 +186,7 @@ describe('a hex cell hidden from a seat (#1198)', () => {
     const tile = game.map.first(Tile)!;
     tile.hideFromAll();
     const view = game.toJSONForPlayer(1).children!.find((c) => c.name === 'map')!.children![0];
-    expect(view.attributes).toEqual({ __hidden: true, $type: 'hex-cell', col: 2, row: -1 });
+    expect(view.attributes).toEqual({ __hidden: true, $type: 'hex-cell', east: 2, south: -1 });
   });
 });
 
