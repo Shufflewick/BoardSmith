@@ -986,9 +986,10 @@ It receives `(value, context)`. `value` is what was submitted, so it is typed
 exists and the player can see it, otherwise the id sent. An element the player
 cannot see (face down, or in a hidden hand or pile) is handed as the id the
 player knows it by, its placeholder when it has one (#715), so the sentence
-cannot name a card the player was never shown (#1205). Return the sentence the
-player reads, saying what happened and what to do next. An empty return is
-refused as an authoring error.
+cannot name a card the player was never shown (#1205). Do not print that id: a
+placeholder is a meaningless negative number. Return the sentence the player
+reads, saying what happened and what to do next. An empty return is refused as
+an authoring error.
 
 #### `.condition()` is about availability, not arguments
 

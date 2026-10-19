@@ -31,6 +31,8 @@ class PouchGame extends Game<PouchGame, Player> {
       hand.player = player;
       hand.contentsVisibleToOwner();
     }
+    // Every seat sees the table; its one card lies face down there.
+    this.create(Space, 'table').create(Card, 'QD').hideFromAll();
 
     const inPouch = (ctx: { game: PouchGame }) => ctx.game.first(Pouch)!.all(Card);
     const handOf = (player: Player) => this.first(Space, `hand-${player.seat}`)!;
@@ -160,6 +162,14 @@ describe("a table's stable per-seat placeholders (#715)", () => {
     const [stashed] = findByName(viewOf(moved, 1), 'stash')!.children!.map((c) => c.id);
 
     expect(refusal(await act(moved, 1, 'pocket', { card: stashed }))).toBe(`Card ${stashed} was taken.`);
+  });
+
+  it("hands a refused pick's unavailable sentence the id of a face-down card on the seat's board, not the card (#1205)", async () => {
+    const start = await started();
+    // The table hides nothing, so the face-down card keeps its real id on seat 1's board.
+    const [faceDown] = findByName(viewOf(start, 1), 'table')!.children!.map((c) => c.id);
+
+    expect(refusal(await act(start, 1, 'pocket', { card: faceDown }))).toBe(`Card ${faceDown} was taken.`);
   });
 
   it("refuses another seat's placeholder, as an action and as a selection step", async () => {
