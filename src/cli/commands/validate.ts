@@ -31,6 +31,9 @@ import { runToolCapturingStdout } from '../lib/run-tool.js';
 import { resolveWorldMode, WORLD_AUTHORING_DOC } from '../lib/world-project.js';
 import { GAME_BACKENDS, capabilityContradictions, isGameBackend } from '../../session/index.js';
 import type { GameDefinition } from '../../session/index.js';
+import { declaredGameOptionsOf, selectGameOptions } from '../../session/game-option-selection.js';
+import { constructGame } from '../../engine/element/game.js';
+import { parseImageInfo } from '../../ui/utils/image.js';
 import {
   auditChoiceCardinality,
   auditWorldChoiceCardinality,
@@ -39,7 +42,7 @@ import {
   type ChoiceCardinalityBackend,
   type UnboundedChoiceStep,
 } from '../lib/choice-cardinality.js';
-import type { Game, GameOptions } from '../../engine/index.js';
+import type { Game, GameElement, GameOptions } from '../../engine/index.js';
 import { missingThreePeerHint } from '../../ui/components/dice/three-peer.js';
 import { ENGINE_CONTRACT } from '../../contract/index.js';
 import { engineChangeHint } from '../lib/engine-changes.js';
@@ -127,6 +130,9 @@ async function runValidation(
 
   // 8. The compiled rules agree with boardsmith.json, exactly as build requires.
   results.push(await validateRulesAgreement(cwd));
+
+  // 9. Every sprite the table builds carries the sizes getSpriteStyle needs (#1021).
+  if (!worldMode) results.push(await validateSpriteImages(cwd));
 
   return { results, worldMode };
 }
@@ -1426,4 +1432,81 @@ async function validateRulesAgreement(cwd: string): Promise<ValidationResult> {
   if (result.passed) spinner.succeed('Rules agree with boardsmith.json');
   else spinner.fail('Rules and boardsmith.json disagree');
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// Sprite images (#1021)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build the game at every seat count it supports, with its default options, and
+ * run every element's `$image` and `$images` through `parseImageInfo`, the parse
+ * every renderer uses. Sprite data from plain JS or JSON is not type-checked, and
+ * a sprite missing a size renders as an empty card with no message.
+ */
+export function checkSpriteImages(gameDefinition: GameDefinition): ValidationResult {
+  const name = 'Sprite images';
+  const { minPlayers, maxPlayers } = gameDefinition;
+  if (!Number.isInteger(minPlayers) || !Number.isInteger(maxPlayers)) {
+    throw new Error('your gameDefinition does not declare whole-number minPlayers and maxPlayers, so there is no seat count to build it at');
+  }
+  const options = selectGameOptions(declaredGameOptionsOf(gameDefinition), {});
+  const problems = new Map<string, { image: string; reason: string; seats: Set<number> }>();
+  for (let playerCount = minPlayers!; playerCount <= maxPlayers!; playerCount++) {
+    const game = constructGame(gameDefinition.gameClass, { ...options, playerCount, seed: 'sprite-images' });
+    for (const element of [game, ...game.all(), ...game.pile.all()]) {
+      for (const { image, reason } of spriteProblemsOf(element)) {
+        const key = JSON.stringify([image, reason]);
+        const problem = problems.get(key) ?? { image, reason, seats: new Set<number>() };
+        problem.seats.add(playerCount);
+        problems.set(key, problem);
+      }
+    }
+  }
+  if (problems.size === 0) return { name, passed: true, message: 'Every sprite has its size and its sheet size.' };
+  const seatCounts = maxPlayers! - minPlayers! + 1;
+  return {
+    name,
+    passed: false,
+    message: `${problems.size} sprite image(s) are missing a size, so they would draw as empty elements.`,
+    details: [...problems.values()].map(({ image, reason, seats }) => {
+      const only = seats.size < seatCounts ? ` (at ${[...seats].join(', ')} players only)` : '';
+      return `${image}${only}: ${reason}`;
+    }),
+  };
+}
+
+/** Each of this element's `$image` and `$images` that `parseImageInfo` refuses, named and with its reason. */
+function spriteProblemsOf(element: GameElement): Array<{ image: string; reason: string }> {
+  const label = element.name === undefined
+    ? `${element.constructor.name} at ${element.branch()}`
+    : `${element.constructor.name} '${element.name}'`;
+  const images: Array<[string, unknown]> = [['$image', element.$image]];
+  for (const [side, image] of Object.entries(element.$images ?? {})) images.push([`$images.${side}`, image]);
+  return images.flatMap(([where, image]) => {
+    try {
+      parseImageInfo(image);
+      return [];
+    } catch (error) {
+      return [{ image: `${label}, ${where}`, reason: (error as Error).message }];
+    }
+  });
+}
+
+/** Load the compiled rules and run {@link checkSpriteImages} on them. */
+export async function validateSpriteImages(cwd: string): Promise<ValidationResult> {
+  const spinner = ora('Checking sprite images...').start();
+  try {
+    const result = checkSpriteImages(await loadProjectRules(cwd));
+    if (result.passed) spinner.succeed('Sprite images OK');
+    else spinner.fail('Sprite images are missing sizes');
+    return result;
+  } catch (error) {
+    spinner.fail('Sprite images could not be checked');
+    return {
+      name: 'Sprite images',
+      passed: false,
+      message: `Your sprite images could not be checked, because loading or building the game failed: ${(error as Error).message.replace(/\.$/, '')}. Fix that and run boardsmith validate again.`,
+    };
+  }
 }
