@@ -10,6 +10,7 @@
  * @module
  */
 import type { HistoryEntry } from '../../composables/useDebugBridge.js';
+import { formatActionName } from '../../composables/actionControllerHelpers.js';
 
 /** CSS custom property naming the colour a value of this type is drawn in. */
 export function getTypeColor(value: unknown): string {
@@ -49,13 +50,6 @@ export function formatConditionValue(value: unknown): string {
   if (Array.isArray(value)) return `[${value.length} items]`;
   if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
-}
-
-/** `playCard` reads as `Play Card` in the History tab. */
-export function formatActionName(name: string): string {
-  return name
-    .replace(/([a-z])([A-Z])/g, '$1 $2')
-    .replace(/^./, s => s.toUpperCase());
 }
 
 /**
