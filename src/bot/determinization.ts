@@ -245,6 +245,11 @@ function inheritsConcealment(element: GameElement, seat: number): boolean {
   return false;
 }
 
+/** Whether the seat's view carries `element` and every element it holds, whole or face down. */
+function showsContents(element: GameElement, seat: number): boolean {
+  return element.isVisibleTo(seat) && !hidesContents(element, seat) && !inheritsConcealment(element, seat);
+}
+
 /**
  * Whether the seat's view says how many children this container holds, as
  * `redactTreeForSeat` decides (#1206): a count-only element sent in a
@@ -255,8 +260,7 @@ function inheritsConcealment(element: GameElement, seat: number): boolean {
 function countVisibleTo(container: GameElement, seat: number): boolean {
   if (!container.isVisibleTo(seat)) {
     const parent = container._t.parent;
-    return container.getEffectiveVisibility().mode === 'count-only' &&
-      (!parent || (parent.isVisibleTo(seat) && !hidesContents(parent, seat) && !inheritsConcealment(parent, seat)));
+    return container.getEffectiveVisibility().mode === 'count-only' && (!parent || showsContents(parent, seat));
   }
   if (inheritsConcealment(container, seat)) return false;
   const zone = hasZoneVisibility(container) ? container.getZoneVisibility() : undefined;
