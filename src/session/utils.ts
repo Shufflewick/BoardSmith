@@ -98,9 +98,7 @@ export function actionForSeat(
  *
  * Also copies `collectedArgs` and `repeating.accumulated` one level deep, so
  * the returned object is never the live mutable state a caller could
- * continue to observe mutate via subsequent selection steps (CR-01) — the
- * same guarantee `GameRunner.getPendingAction()` (runtime/runner.ts) provides
- * on the testing path.
+ * continue to observe mutate via subsequent selection steps (CR-01).
  *
  * Single shared serializer reused by `PickHandler` (selection-step
  * responses) and the `debug:flow-state` op — one

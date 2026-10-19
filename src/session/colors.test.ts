@@ -22,14 +22,13 @@ describe('createColorOption', () => {
     expect(new Set(choices.map((c) => c.label)).size).toBe(DEFAULT_COLOR_PALETTE.length);
   });
 
-  it('defaults its label to Color', () => {
+  it('is labelled Color', () => {
     expect(createColorOption().label).toBe('Color');
   });
 
-  it('takes a custom label as its one argument; colours come only from boardsmith.json (#994)', () => {
-    const option = createColorOption('Team Colour');
-    expect(option.label).toBe('Team Colour');
-    expect(option.choices.map((c) => c.value)).toEqual([...DEFAULT_COLOR_PALETTE]);
+  it('takes no arguments, since neither dev nor the lobby would read them (#1196)', () => {
+    // @ts-expect-error the lobby builds colour from boardsmith.json's colorPalette, so a label would go unread
+    expect(createColorOption('Team Colour').label).toBe('Color');
   });
 
   it('gives each call its own choices array', () => {

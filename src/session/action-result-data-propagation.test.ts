@@ -125,22 +125,6 @@ describe('BUG-017 — ActionResult.data across layer boundaries', () => {
     });
   });
 
-  describe('GameRunner.processSelectionStep (multi-step, session-free)', () => {
-    it('returns the completed action data on the final step only', () => {
-      const runner = makeRunner();
-      runner.startPendingAction('appraise', 1);
-
-      const mid = runner.processSelectionStep(1, 'item', 'shield');
-      expect(mid.actionComplete).toBe(false);
-      expect(mid.data).toBeUndefined();
-
-      const done = runner.processSelectionStep(1, 'lens', 'coarse');
-      expect(done.actionComplete).toBe(true);
-      expect(done.data).toEqual({ appraisal: 'shield:coarse' });
-      expect(done.message).toBe(NARRATION);
-    });
-  });
-
   describe('SnapshotSessionHost action op', () => {
     it('returns data and message to the acting seat, and publishes them to no seat', async () => {
       const session = await makeSession();
