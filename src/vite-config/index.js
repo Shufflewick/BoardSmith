@@ -23,6 +23,9 @@ import { configDefaults, mergeConfig } from 'vitest/config';
  *   in-browser smoke test under `tests/browser/` at any depth, which runs under Playwright
  *   (`boardsmith verify`, `boardsmith smoke`), not vitest. `configDefaults.exclude` is spread in
  *   because setting `exclude` at all replaces vitest's defaults.
+ * - `boardsmith.json` as a rerun trigger, so `vitest --changed` runs the whole suite when it changes
+ *   (#1211). No test imports it, but `TestGame` and the headless session read game options from it.
+ *   vitest's own triggers are spread in for the same reason as `exclude`.
  *
  * `boardsmith test`, `constraint-check`, `chunk-merge` and `verify` refuse a project whose config is
  * not built with this (`testRunScopeProblem`).
@@ -39,7 +42,11 @@ export function defineGameViteConfig(overrides = {}) {
     {
       plugins: [vue()],
       resolve: { dedupe: ['vue'] },
-      test: { exclude: [...configDefaults.exclude, '.boardsmith/**', '.worktrees/**', '**/tests/browser/**'] },
+      test: {
+        exclude: [...configDefaults.exclude, '.boardsmith/**', '.worktrees/**', '**/tests/browser/**'],
+        // vitest matches absolute paths and `**` skips dot folders, so `*(*/|.*/)` lets it pass the `.worktrees/` verify runs in.
+        forceRerunTriggers: [...configDefaults.forceRerunTriggers, '**/*(*/|.*/)boardsmith.json'],
+      },
     },
     overrides,
   );
