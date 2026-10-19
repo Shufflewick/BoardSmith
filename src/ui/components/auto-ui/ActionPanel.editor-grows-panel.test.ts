@@ -47,7 +47,7 @@ const setTithe: EnrichedActionMetadata = {
   selections: [{ name: 'tithe', type: 'number', prompt: 'Tithe', min: 0, max: 10 }],
 };
 
-describe('a multi-line text editor may grow the panel past the strip, and only while it is open', () => {
+describe('a typed editor may grow the panel past the strip, and only while it is open', () => {
   it('marks the open multi-line editor', async () => {
     const { wrapper } = await mountPanelAt(setDescription);
     const marked = wrapper.findAll(MARK);
@@ -56,11 +56,13 @@ describe('a multi-line text editor may grow the panel past the strip, and only w
     wrapper.unmount();
   });
 
-  it('does not mark a one-line text field or a number field', async () => {
+  it('marks a one-line text field and a number field too (#1058)', async () => {
+    // Label, hint and field + Done are three rows; the strip holds two at 390px.
     for (const action of [setNickname, setTithe]) {
       const { wrapper } = await mountPanelAt(action);
-      expect(wrapper.find('.text-input, .number-input').exists(), action.name).toBe(true);
-      expect(wrapper.find(MARK).exists(), action.name).toBe(false);
+      const marked = wrapper.findAll(MARK);
+      expect(marked, action.name).toHaveLength(1);
+      expect(marked[0]!.find('input').exists(), action.name).toBe(true);
       wrapper.unmount();
     }
   });
@@ -87,7 +89,7 @@ describe('a multi-line text editor may grow the panel past the strip, and only w
   });
 });
 
-describe("the shell's bar lifts its cap for the marked editor, and for nothing else", () => {
+describe("the shell's bar lifts its cap for a marked editor, and for nothing else", () => {
   const shell = fs.readFileSync(
     path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'PlayShell.vue'),
     'utf-8',
