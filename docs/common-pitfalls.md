@@ -1806,7 +1806,7 @@ You drag an element, but nothing happens: no drop targets highlight, and droppin
 GameShell wires drag-drop once, for the Action Panel and custom UIs alike (`setupDragDropOrchestration`). When a drag starts:
 
 1. If no action is in progress, it looks for an available action whose **first** selection is a `chooseElement` that accepts the dragged element, and starts that action with it.
-2. If an action is in progress and the dragged element is a candidate of its current element pick, it fills that pick.
+2. If an action is in progress, its current pick is a `chooseElement`, and the dragged element is one of its candidates, it fills that pick. During a `chooseElements` pick a drag fills nothing; it only shows the drop targets.
 3. The drop targets are then the board's own candidates for the current pick, the same elements a click would choose, and a drop does exactly what a click on that element does (#724).
 
 So any pick the board can show is a drop target:
@@ -1878,7 +1878,7 @@ Action.create('moveCard')
 
 3. **Choices with no board refs**: a `chooseFrom` choice is a drop target only through `boardRefs`. The board uses the ref with role `target`, or the first ref when none is marked target. A choice without refs is reachable from the Action Panel only.
 
-4. **Element ref mismatch**: the ref you pass to `drag()` and `drop()` must identify the same element the action offers, by `id` or `notation`:
+4. **Element ref mismatch**: the ref you pass to `drag()` and `drop()` must identify the same element the action offers, by `id`, `notation` or `name`. An `id` is the only criterion when present; a bare `name` matches every element with that name, so use `id` when names repeat:
    ```typescript
    drag({ id: card.id })      // matches a candidate with that id
    drop({ id: zone.id })      // matches a choice whose boardRefs name zone.id
