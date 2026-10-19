@@ -2,8 +2,8 @@
  * A pick-by-pick op that fails keeps nothing (#1169): the game and the seat's
  * open action are left as they were before that op, so the player can retry
  * the pick or cancel. A host saves nothing for a failed op; the in-memory
- * routes (the runner's own, and the session's on a long-lived runner) match it.
- * The two routes agree on a repeating pick whose action then fails (#983), and
+ * routes (the session's on a long-lived runner, and a PickHandler handed back
+ * its pending state each step, as a host does) match it. The two routes agree on a repeating pick whose action then fails (#983), and
  * another seat's move in between changes nothing about it (#1177).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -93,15 +93,6 @@ interface Route {
   pending(): { currentSelectionIndex: number; collectedArgs: Record<string, unknown>; repeating?: { accumulated: unknown[] } } | undefined;
 }
 
-function runnerRoute(action: string, r = runner()): Route {
-  r.startPendingAction(action, 1);
-  return {
-    game: r.game,
-    pick: async (selection, value) => r.processSelectionStep(1, selection, value),
-    pending: () => r.getPendingAction(1),
-  };
-}
-
 function sessionRoute(action: string, r = runner()): Route & { cancel(): void } {
   const manager = new PendingActionManager(r, 2);
   return {
@@ -109,6 +100,22 @@ function sessionRoute(action: string, r = runner()): Route & { cancel(): void } 
     pick: (selection, value) => manager.processSelectionStep(1, selection, value, action),
     pending: () => manager.getPendingAction(1),
     cancel: () => manager.cancelPendingAction(1),
+  };
+}
+
+/** A long-lived PickHandler, the caller keeping the pending state between steps as a host does. */
+function pickHandlerRoute(action: string, r = runner()): Route & { cancel(): void } {
+  const picks = new PickHandler(r, 2);
+  let pendingState: Record<string, unknown> | null = null;
+  return {
+    game: r.game,
+    pick: async (selection, value) => {
+      const result = await picks.processSelectionStep(1, selection, value, action, undefined, pendingState);
+      pendingState = result.pendingState;
+      return result;
+    },
+    pending: () => (pendingState ?? undefined) as ReturnType<Route['pending']>,
+    cancel: () => { picks.cancelPendingAction(1, pendingState); pendingState = null; },
   };
 }
 
@@ -122,7 +129,7 @@ const held = (route: Route) => {
   }));
 };
 
-const routes = { runner: runnerRoute, session: sessionRoute };
+const routes = { session: sessionRoute, pickHandler: pickHandlerRoute };
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -158,16 +165,18 @@ describe('a failed pick-by-pick op keeps nothing (#1169)', () => {
     }
   }
 
-  it('lets the player cancel the open action after a failed op, undoing its earlier picks', async () => {
-    const seat = sessionRoute('pairRefused');
-    await seat.pick('first', 'a');
-    expect((await seat.pick('second', 'b')).success).toBe(false);
+  for (const [name, route] of Object.entries(routes)) {
+    it(`lets the player cancel the open action after a failed op, undoing its earlier picks, on the ${name} route`, async () => {
+      const seat = route('pairRefused');
+      await seat.pick('first', 'a');
+      expect((await seat.pick('second', 'b')).success).toBe(false);
 
-    seat.cancel();
+      seat.cancel();
 
-    expect(moved(seat.game)).toEqual([]);
-    expect(seat.pending()).toBeUndefined();
-  });
+      expect(moved(seat.game)).toEqual([]);
+      expect(seat.pending()).toBeUndefined();
+    });
+  }
 
   for (const [name, route] of Object.entries(routes)) {
     it(`says a failed completing op could not be undone when checkpoints are off, and closes the action as before, on the ${name} route`, async () => {
@@ -212,17 +221,19 @@ describe('a failed pick-by-pick op keeps nothing (#1169)', () => {
     }
   }
 
-  it('runs onCancel once, when the player cancels, for an action whose refused step changed nothing, with checkpoints off', async () => {
-    const seat = sessionRoute('askVetoed', runner(false));
-    await seat.pick('first', 'a');
-    expect((await seat.pick('second', 'b')).success).toBe(false);
-    expect(seat.game.cancels).toBe(0);
+  for (const [name, route] of Object.entries(routes)) {
+    it(`runs onCancel once, when the player cancels, for an action whose refused step changed nothing, with checkpoints off, on the ${name} route`, async () => {
+      const seat = route('askVetoed', runner(false));
+      await seat.pick('first', 'a');
+      expect((await seat.pick('second', 'b')).success).toBe(false);
+      expect(seat.game.cancels).toBe(0);
 
-    seat.cancel();
+      seat.cancel();
 
-    expect(seat.game.cancels).toBe(1);
-    expect(moved(seat.game)).toEqual([]);
-  });
+      expect(seat.game.cancels).toBe(1);
+      expect(moved(seat.game)).toEqual([]);
+    });
+  }
 
   it('hands a long-lived PickHandler back the pending action as it was before the failed op', async () => {
     const r = runner();
@@ -237,7 +248,7 @@ describe('a failed pick-by-pick op keeps nothing (#1169)', () => {
 });
 
 describe('a repeating pick whose action then fails (#983)', () => {
-  it('ends in the same state on the session and session-free routes: the last pick undone, the action open', async () => {
+  it('ends in the same state on the session and PickHandler routes: the last pick undone, the action open', async () => {
     const ends = [];
     for (const route of Object.values(routes)) {
       const seat = route('gatherRefused');

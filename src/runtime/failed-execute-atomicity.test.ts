@@ -229,10 +229,9 @@ describe('an execute() that throws half-way with no checkpoint to roll back to (
     expect(result.error).toMatch(new RegExp(`^${AUTHOR_REFUSAL} The action failed part way`));
   });
 
-  it('says the same on the pick-by-pick path', () => {
+  it('says the same on the pick-by-pick path', async () => {
     const runner = runnerWithoutCheckpoints();
-    runner.startPendingAction('pickThenFail', 1);
-    const result = runner.processSelectionStep(1, 'how', 'all');
+    const result = await new PendingActionManager(runner, 2).processSelectionStep(1, 'how', 'all', 'pickThenFail');
     expect(result.success).toBe(false);
     expect(runner.game.target.all(Token)).toHaveLength(3);
     expectPartialChangesReported(result.error);
@@ -267,18 +266,6 @@ describe('an execute() that throws after its picks were taken one at a time (#80
     expect(restored.game.source.all(Token)).toHaveLength(5);
     expect(restored.game.target.all(Token)).toHaveLength(0);
   }
-
-  it('the runner\'s selection path leaves the game as it was', () => {
-    const runner = makeRunner();
-    const messagesBefore = runner.game.messages.length;
-    runner.startPendingAction('pickThenFail', 1);
-
-    const result = runner.processSelectionStep(1, 'how', 'all');
-
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('Nothing was changed');
-    expectNothingMoved(runner, messagesBefore);
-  });
 
   it('the session\'s pending-action path leaves the game as it was', async () => {
     const runner = makeRunner();
@@ -344,18 +331,6 @@ describe('a second action that throws half-way, with no snapshot taken between (
     expectAfterFirstAction(testGame.runner, messagesBefore, result.error);
   });
 
-  it('the runner\'s pending-action completion rolls back to the state after the first action', () => {
-    const runner = makeRunner();
-    expect(runner.performAction('cleanMove', 1, {}).success).toBe(true);
-    const messagesBefore = runner.game.messages.length;
-    runner.startPendingAction('pickThenFail', 2);
-
-    const result = runner.processSelectionStep(2, 'how', 'all');
-
-    expect(result.success).toBe(false);
-    expectAfterFirstAction(runner, messagesBefore, result.error);
-  });
-
   it('the session\'s pending-action completion rolls back to the state after the first action', async () => {
     const runner = makeRunner();
     expect(runner.performAction('cleanMove', 1, {}).success).toBe(true);
@@ -369,13 +344,12 @@ describe('a second action that throws half-way, with no snapshot taken between (
     expectAfterFirstAction(runner, messagesBefore, result.error);
   });
 
-  it('the runner\'s pending-action path also undoes what a pick changed', () => {
+  it('the session\'s pending-action path also undoes what a pick changed', async () => {
     const runner = makeRunner();
     expect(runner.performAction('cleanMove', 1, {}).success).toBe(true);
     const messagesBefore = runner.game.messages.length;
-    runner.startPendingAction('movingPickThenFail', 2);
 
-    const result = runner.processSelectionStep(2, 'how', 'all');
+    const result = await new PendingActionManager(runner, 2).processSelectionStep(2, 'how', 'all', 'movingPickThenFail');
 
     expect(result.success).toBe(false);
     expectAfterFirstAction(runner, messagesBefore, result.error);

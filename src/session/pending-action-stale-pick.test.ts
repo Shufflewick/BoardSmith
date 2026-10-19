@@ -23,6 +23,7 @@ import {
   type GameOptions,
 } from '../engine/index.js';
 import { GameRunner } from '../runtime/runner.js';
+import { PendingActionManager } from './pending-action-manager.js';
 import { executeOp, type GameDefinitionLike, type StateEnvelope } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { historyLabels } from './testing/history-labels.js';
@@ -133,110 +134,119 @@ function runner(): GameRunner<GemGame> {
 
 const gem = (r: GameRunner<GemGame>) => r.game.first(Gem, 'gem')!;
 
-describe('GameRunner', () => {
-  it("refuses a pending action once another seat's action took an earlier pick, and keeps it open to cancel (#1169)", () => {
+describe('PendingActionManager on a runner, pick by pick', () => {
+  it("refuses a pending action once another seat's action took an earlier pick, and keeps it open to cancel (#1169)", async () => {
     const r = runner();
-    r.startPendingAction('draft', 1);
-    expect(r.processSelectionStep(1, 'gem', gem(r).id).success).toBe(true);
+    const picks = new PendingActionManager(r, 2);
+    picks.startPendingAction('draft', 1);
+    expect((await picks.processSelectionStep(1, 'gem', gem(r).id)).success).toBe(true);
     expect(r.performAction('grab', 2, { gem: gem(r).id }).success).toBe(true);
 
-    const step = r.processSelectionStep(1, 'slot', 'left');
+    const step = await picks.processSelectionStep(1, 'slot', 'left');
 
     expect(step).toMatchObject({ success: false, error: NO_LONGER_AVAILABLE });
     expect(r.game.ran).toEqual(['onSelect', 'grab:2']);
-    expect(r.getPendingAction(1)?.actionName).toBe('draft');
+    expect(picks.getPendingAction(1)?.actionName).toBe('draft');
     expect(gem(r).parent!.name).toBe('tableau-2');
     expect(historyLabels(r.actionHistory)).toEqual(['grab:2']);
   });
 
-  it('completes a pending action whose own onSelect took its pick off the offer', () => {
+  it('completes a pending action whose own onSelect took its pick off the offer', async () => {
     const r = runner();
-    r.startPendingAction('claim', 1);
-    expect(r.processSelectionStep(1, 'gem', gem(r).id).success).toBe(true);
+    const picks = new PendingActionManager(r, 2);
+    picks.startPendingAction('claim', 1);
+    expect((await picks.processSelectionStep(1, 'gem', gem(r).id)).success).toBe(true);
     expect(gem(r).parent!.name).toBe('held');
 
-    expect(r.processSelectionStep(1, 'slot', 'left')).toMatchObject({ success: true, actionComplete: true });
+    expect(await picks.processSelectionStep(1, 'slot', 'left')).toMatchObject({ success: true, actionComplete: true });
     expect(gem(r).parent!.name).toBe('tableau-1');
   });
 
-  it('completes a pending action whose own onSelect took its pick off the offer, when another seat acted in between', () => {
+  it('completes a pending action whose own onSelect took its pick off the offer, when another seat acted in between', async () => {
     const r = runner();
-    r.startPendingAction('claim', 1);
-    expect(r.processSelectionStep(1, 'gem', gem(r).id).success).toBe(true);
+    const picks = new PendingActionManager(r, 2);
+    picks.startPendingAction('claim', 1);
+    expect((await picks.processSelectionStep(1, 'gem', gem(r).id)).success).toBe(true);
     expect(r.performAction('rest', 2, {}).success).toBe(true);
 
-    expect(r.processSelectionStep(1, 'slot', 'left')).toMatchObject({ success: true, actionComplete: true });
+    expect(await picks.processSelectionStep(1, 'slot', 'left')).toMatchObject({ success: true, actionComplete: true });
     expect(gem(r).parent!.name).toBe('tableau-1');
   });
 
-  it('completes a pending action whose own onSelect took a chooseFrom pick off the offer, when another seat acted in between', () => {
+  it('completes a pending action whose own onSelect took a chooseFrom pick off the offer, when another seat acted in between', async () => {
     const r = runner();
-    r.startPendingAction('paint', 1);
-    expect(r.processSelectionStep(1, 'color', 'red').success).toBe(true);
+    const picks = new PendingActionManager(r, 2);
+    picks.startPendingAction('paint', 1);
+    expect((await picks.processSelectionStep(1, 'color', 'red')).success).toBe(true);
     expect(r.performAction('rest', 2, {}).success).toBe(true);
 
-    expect(r.processSelectionStep(1, 'slot', 'left')).toMatchObject({ success: true, actionComplete: true });
+    expect(await picks.processSelectionStep(1, 'slot', 'left')).toMatchObject({ success: true, actionComplete: true });
     expect(r.game.ran).toEqual(['rest:2', 'paint:1:red']);
   });
 
-  it("refuses a pending action once another seat's pick took its chooseFrom pick off the offer", () => {
+  it("refuses a pending action once another seat's pick took its chooseFrom pick off the offer", async () => {
     const r = runner();
-    r.startPendingAction('dye', 1);
-    expect(r.processSelectionStep(1, 'color', 'red').success).toBe(true);
-    r.startPendingAction('paint', 2);
-    expect(r.processSelectionStep(2, 'color', 'red').success).toBe(true);
+    const picks = new PendingActionManager(r, 2);
+    picks.startPendingAction('dye', 1);
+    expect((await picks.processSelectionStep(1, 'color', 'red')).success).toBe(true);
+    picks.startPendingAction('paint', 2);
+    expect((await picks.processSelectionStep(2, 'color', 'red')).success).toBe(true);
 
-    const step = r.processSelectionStep(1, 'slot', 'left');
+    const step = await picks.processSelectionStep(1, 'slot', 'left');
 
     expect(step).toMatchObject({ success: false, error: NO_LONGER_AVAILABLE });
     expect(r.game.ran).toEqual([]);
     expect(r.actionHistory).toEqual([]);
   });
 
-  it('keeps a pick another seat took marked across later picks, and refuses the last one', () => {
+  it('keeps a pick another seat took marked across later picks, and refuses the last one', async () => {
     const r = runner();
-    r.startPendingAction('stamp', 1);
-    expect(r.processSelectionStep(1, 'gem', gem(r).id).success).toBe(true);
+    const picks = new PendingActionManager(r, 2);
+    picks.startPendingAction('stamp', 1);
+    expect((await picks.processSelectionStep(1, 'gem', gem(r).id)).success).toBe(true);
     expect(r.performAction('grab', 2, { gem: gem(r).id }).success).toBe(true);
-    expect(r.processSelectionStep(1, 'slot', 'left').success).toBe(true);
+    expect((await picks.processSelectionStep(1, 'slot', 'left')).success).toBe(true);
 
-    expect(r.processSelectionStep(1, 'side', 'up')).toMatchObject({ success: false, error: NO_LONGER_AVAILABLE });
+    expect(await picks.processSelectionStep(1, 'side', 'up')).toMatchObject({ success: false, error: NO_LONGER_AVAILABLE });
     expect(r.game.ran).toEqual(['grab:2']);
   });
 
-  it("refuses a pending action once another seat's action took its element pick off the offer without moving it, and keeps it open (#1169)", () => {
+  it("refuses a pending action once another seat's action took its element pick off the offer without moving it, and keeps it open (#1169)", async () => {
     const r = runner();
-    r.startPendingAction('draft', 1);
-    expect(r.processSelectionStep(1, 'gem', gem(r).id).success).toBe(true);
+    const picks = new PendingActionManager(r, 2);
+    picks.startPendingAction('draft', 1);
+    expect((await picks.processSelectionStep(1, 'gem', gem(r).id)).success).toBe(true);
     expect(r.performAction('reserve', 2, { gem: gem(r).id }).success).toBe(true);
 
-    const step = r.processSelectionStep(1, 'slot', 'left');
+    const step = await picks.processSelectionStep(1, 'slot', 'left');
 
     expect(step).toMatchObject({ success: false, error: NO_LONGER_AVAILABLE });
     expect(r.game.ran).toEqual(['onSelect']);
-    expect(r.getPendingAction(1)?.actionName).toBe('draft');
+    expect(picks.getPendingAction(1)?.actionName).toBe('draft');
     expect(gem(r).parent!.name).toBe('supply');
   });
 
-  it("does not re-check a pick a held follow-up answered, when another seat's action took it", () => {
+  it("does not re-check a pick a held follow-up answered, when another seat's action took it", async () => {
     const r = runner();
+    const picks = new PendingActionManager(r, 2);
     expect(r.performAction('mark', 1, { gem: gem(r).id }).success).toBe(true);
-    r.startPendingAction('stamp', 1);
-    expect(r.processSelectionStep(1, 'gem', gem(r).id).success).toBe(true);
-    expect(r.processSelectionStep(1, 'slot', 'left').success).toBe(true);
+    picks.startPendingAction('stamp', 1);
+    expect((await picks.processSelectionStep(1, 'gem', gem(r).id)).success).toBe(true);
+    expect((await picks.processSelectionStep(1, 'slot', 'left')).success).toBe(true);
     expect(r.performAction('grab', 2, { gem: gem(r).id }).success).toBe(true);
 
-    expect(r.processSelectionStep(1, 'side', 'up')).toMatchObject({ success: true, actionComplete: true });
+    expect(await picks.processSelectionStep(1, 'side', 'up')).toMatchObject({ success: true, actionComplete: true });
     expect(r.game.ran).toEqual(['grab:2', 'stamp:1']);
   });
 
-  it("completes a pending action when another seat's action left its picks on offer", () => {
+  it("completes a pending action when another seat's action left its picks on offer", async () => {
     const r = runner();
-    r.startPendingAction('draft', 1);
-    expect(r.processSelectionStep(1, 'gem', gem(r).id).success).toBe(true);
+    const picks = new PendingActionManager(r, 2);
+    picks.startPendingAction('draft', 1);
+    expect((await picks.processSelectionStep(1, 'gem', gem(r).id)).success).toBe(true);
     expect(r.performAction('rest', 2, {}).success).toBe(true);
 
-    expect(r.processSelectionStep(1, 'slot', 'right')).toMatchObject({ success: true, actionComplete: true });
+    expect(await picks.processSelectionStep(1, 'slot', 'right')).toMatchObject({ success: true, actionComplete: true });
     expect(r.game.ran).toEqual(['onSelect', 'rest:2', 'draft:1']);
     expect(gem(r).parent!.name).toBe('tableau-1');
   });

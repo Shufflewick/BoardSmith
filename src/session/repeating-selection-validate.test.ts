@@ -18,6 +18,7 @@ import { SnapshotSessionHost } from './snapshot-session-host.js';
 import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
 import type { GameDefinitionLike } from './stateless-ops.js';
 import { GameRunner } from '../runtime/runner.js';
+import { PendingActionManager } from './pending-action-manager.js';
 import {
   Game,
   Player,
@@ -241,13 +242,14 @@ class GemGame extends Game<GemGame, Player> {
 }
 
 describe("a repeating chooseElement's validate (#352)", () => {
-  it('receives the picked element, with the elements picked before it in args', () => {
+  it('receives the picked element, with the elements picked before it in args', async () => {
     const runner = new GameRunner({ GameClass: GemGame, gameType: 'gems', gameOptions: options });
     runner.start();
     const id = (name: string) => runner.game.heap.first(Gem, name)!.id;
-    runner.startPendingAction('take', 1);
-    expect(runner.processSelectionStep(1, 'gems', id('ruby')).success).toBe(true);
-    expect(runner.processSelectionStep(1, 'gems', id('onyx')).error).toContain('Onyx is cursed.');
+    const picks = new PendingActionManager(runner, options.playerCount);
+    picks.startPendingAction('take', 1);
+    expect((await picks.processSelectionStep(1, 'gems', id('ruby'))).success).toBe(true);
+    expect((await picks.processSelectionStep(1, 'gems', id('onyx'))).error).toContain('Onyx is cursed.');
     expect(runner.game.seen).toEqual([
       { pick: 'ruby', before: [] },
       { pick: 'onyx', before: ['ruby'] },
