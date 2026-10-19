@@ -137,8 +137,6 @@ describe('GameRunner and PendingActionManager', () => {
   it('refuses a pending action from a seat whose turn it is not, before it runs', async () => {
     const r = runner(TurnBuildGame);
     const picks = new PendingActionManager(r, gameOptions.playerCount);
-    picks.startPendingAction('build', 3);
-
     const step = await picks.processSelectionStep(3, 'where', 'north', 'build');
 
     expect(step.success).toBe(false);
@@ -278,7 +276,6 @@ describe('a follow-up belongs to the seat that published it', () => {
 
     expect(r.refusalToAct('loot', 2)).toEqual({ error: NOT_YOURS, errorCode: 'ACTION_NOT_AVAILABLE' });
     const picks = new PendingActionManager(r, gameOptions.playerCount);
-    picks.startPendingAction('loot', 2);
     const stolen = await picks.processSelectionStep(2, 'where', 'north', 'loot');
     expect(stolen).toMatchObject({ success: false, error: NOT_YOURS });
     expect(r.game.looted).toEqual([]);

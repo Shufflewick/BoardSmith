@@ -151,7 +151,6 @@ describe('GameRunner and PendingActionManager', () => {
 
     // Neither may take the other's (seat 3 holds none at all).
     const picks = new PendingActionManager(r, gameOptions.playerCount);
-    picks.startPendingAction('loot', 3);
     expect(await picks.processSelectionStep(3, 'where', 'north', 'loot')).toMatchObject({ success: false, error: NOT_YOURS });
 
     expect(await lootByPicks(r, 2)).toMatchObject({ success: true, actionComplete: true });

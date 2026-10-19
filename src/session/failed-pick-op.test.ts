@@ -165,16 +165,18 @@ describe('a failed pick-by-pick op keeps nothing (#1169)', () => {
     }
   }
 
-  it('lets the player cancel the open action after a failed op, undoing its earlier picks', async () => {
-    const seat = sessionRoute('pairRefused');
-    await seat.pick('first', 'a');
-    expect((await seat.pick('second', 'b')).success).toBe(false);
+  for (const [name, route] of Object.entries(routes)) {
+    it(`lets the player cancel the open action after a failed op, undoing its earlier picks, on the ${name} route`, async () => {
+      const seat = route('pairRefused');
+      await seat.pick('first', 'a');
+      expect((await seat.pick('second', 'b')).success).toBe(false);
 
-    seat.cancel();
+      seat.cancel();
 
-    expect(moved(seat.game)).toEqual([]);
-    expect(seat.pending()).toBeUndefined();
-  });
+      expect(moved(seat.game)).toEqual([]);
+      expect(seat.pending()).toBeUndefined();
+    });
+  }
 
   for (const [name, route] of Object.entries(routes)) {
     it(`says a failed completing op could not be undone when checkpoints are off, and closes the action as before, on the ${name} route`, async () => {
@@ -219,17 +221,19 @@ describe('a failed pick-by-pick op keeps nothing (#1169)', () => {
     }
   }
 
-  it('runs onCancel once, when the player cancels, for an action whose refused step changed nothing, with checkpoints off', async () => {
-    const seat = sessionRoute('askVetoed', runner(false));
-    await seat.pick('first', 'a');
-    expect((await seat.pick('second', 'b')).success).toBe(false);
-    expect(seat.game.cancels).toBe(0);
+  for (const [name, route] of Object.entries(routes)) {
+    it(`runs onCancel once, when the player cancels, for an action whose refused step changed nothing, with checkpoints off, on the ${name} route`, async () => {
+      const seat = route('askVetoed', runner(false));
+      await seat.pick('first', 'a');
+      expect((await seat.pick('second', 'b')).success).toBe(false);
+      expect(seat.game.cancels).toBe(0);
 
-    seat.cancel();
+      seat.cancel();
 
-    expect(seat.game.cancels).toBe(1);
-    expect(moved(seat.game)).toEqual([]);
-  });
+      expect(seat.game.cancels).toBe(1);
+      expect(moved(seat.game)).toEqual([]);
+    });
+  }
 
   it('hands a long-lived PickHandler back the pending action as it was before the failed op', async () => {
     const r = runner();

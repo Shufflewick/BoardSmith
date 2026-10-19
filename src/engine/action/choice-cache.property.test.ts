@@ -57,12 +57,11 @@ async function makeMove(runner: GameRunner<Game>, playerCount: number, seat: num
     return;
   }
   const picks = new PendingActionManager(runner, playerCount);
-  picks.startPendingAction(move.action, seat);
   const action = runner.game.getAction(move.action)!;
   for (const selection of action.selections) {
     const value = move.args[selection.name];
     const values = Array.isArray(value) && 'repeat' in selection && selection.repeat ? value : [value];
-    for (const pick of values) expect((await picks.processSelectionStep(seat, selection.name, pick)).error).toBeUndefined();
+    for (const pick of values) expect((await picks.processSelectionStep(seat, selection.name, pick, move.action)).error).toBeUndefined();
   }
 }
 

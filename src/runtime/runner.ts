@@ -1028,8 +1028,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * Why `seat` may not take the next pick of its pending action `actionName`
    * now, or `undefined` when it may. `pending` is the seat's open pending state,
    * or `undefined` when the pick about to be processed starts the action.
-   * `PendingActionManager` asks this before any pick is processed, then calls `markStalePicks`,
-   * and calls `notePickTaken` after each pick that leaves the action open.
+   * `PendingActionManager` asks this before any pick is processed, then calls `markStalePicks`;
+   * `takePick` calls `notePickTaken` after each pick that leaves the action open.
    *
    * First, the flow must offer the action to the seat (`refusalToAct`). Then
    * its `condition`, evaluated as hosts evaluate it to show the action (with

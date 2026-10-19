@@ -20,7 +20,6 @@ import {
   Space,
   Piece,
   Action,
-  loop,
   eachPlayer,
   actionStep,
   type GameOptions,
@@ -318,42 +317,18 @@ describe('doAction throw-on-failure (TST-01)', () => {
   });
 });
 
-/** Minimal game fixture with a two-selection ('color' then 'size') action. */
-class MultiStepGame extends Game<MultiStepGame, Player> {
-  chosenColor?: string;
-  chosenSize?: string;
-
+/** Minimal game fixture: a flow waiting on one action step. */
+class FlowStepGame extends Game<FlowStepGame, Player> {
   constructor(options: GameOptions) {
     super(options);
-
-    this.registerAction(
-      Action.create<MultiStepGame>('pick')
-        .chooseFrom('color', { choices: ['red', 'blue', 'green'] })
-        .chooseFrom('size', { choices: ['S', 'M', 'L'] })
-        .execute((args, ctx) => {
-          (ctx.game as MultiStepGame).chosenColor = args.color as string;
-          (ctx.game as MultiStepGame).chosenSize = args.size as string;
-          return { success: true };
-        }),
-    );
-
-    this.setFlow({
-      root: loop({
-        while: () => true,
-        maxIterations: 1, // one pass over all players, then complete
-        do: eachPlayer({ do: actionStep({ actions: ['pick'] }) }),
-      }),
-    });
+    this.registerAction(Action.create<FlowStepGame>('pass').execute(() => ({ success: true })));
+    this.setFlow({ root: actionStep({ actions: ['pass'] }) });
   }
-}
-
-function makeMultiStepGame(): TestGame<MultiStepGame> {
-  return TestGame.create(MultiStepGame, { playerCount: 2, seed: 'flow-03-pending-action' });
 }
 
 describe('TestGame.getFlowDebugInfo — FLOW-01 passthrough (Phase 123 Plan 03)', () => {
   it('equals game.getFlowDebugInfo()', () => {
-    const testGame = makeMultiStepGame();
+    const testGame = TestGame.create(FlowStepGame, { playerCount: 2, seed: 'flow-01-passthrough' });
     const viaTestGame = testGame.getFlowDebugInfo();
     const viaGame = testGame.game.getFlowDebugInfo();
 

@@ -720,6 +720,8 @@ failure messages (`assertActionAvailable`,
 `toDebugString`) — you don't need to call it manually just to get a
 readable diagnostic on a failing test.
 
+A half-finished multi-pick action lives in the session, not in `TestGame`: drive it pick by pick with the `selectionStep` op ([session.md](./session.md)).
+
 To see **why** a choice is disabled (not just that it is), use
 `TestGame.getActionSpaceWithChoices(seat)` — it composes the existing
 `getActionSpace()` + `getSelectionChoices()` calls into one view where every
