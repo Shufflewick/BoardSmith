@@ -25,8 +25,8 @@
     "src/cli/commands/verify-classify.ts:1568-1575|src/cli/commands/verify-classify.ts:783-790",
     "src/ui/composables/useFLIP.ts:331-339|src/ui/composables/useFLIP.ts:477-484",
     "src/ui/components/auto-ui/renderers/DieRenderer.vue:70-87|src/ui/components/auto-ui/renderers/PieceRenderer.vue:64-77",
-    "src/engine/element/game.ts:3747-3753|src/engine/element/game.ts:3777-3783",
-    "src/engine/element/game.ts:3819-3823|src/engine/element/game.ts:3851-3855",
+    "src/engine/element/game.ts:3733-3739|src/engine/element/game.ts:3763-3769",
+    "src/engine/element/game.ts:3805-3809|src/engine/element/game.ts:3837-3841",
     "src/ui/components/auto-ui/renderers/CardRenderer.vue:42-58|src/ui/components/auto-ui/renderers/HandRenderer.vue:35-53"
   ],
   "clone_fingerprints": [
