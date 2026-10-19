@@ -1,4 +1,3 @@
-import { DESIGN_DIR } from '../lib/project-paths.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { execSync } from 'node:child_process';
@@ -18,7 +17,7 @@ import {
   VERIFY_EPISODE_ROUND_BUDGET,
 } from './verify-repair.js';
 import { createProgram } from '../cli.js';
-import { chunkMdPath } from '../lib/project-paths.js';
+import { DESIGN_DIR, chunkMdPath } from '../lib/project-paths.js';
 import {
   readLedgerOrThrow,
   parseLedgerBody,
@@ -529,6 +528,19 @@ describe('verify-repair-round — opens the next verify-episode round in CHUNK.m
     const plan = await verifyRepairRoundCommand({ project: root, chunk: slug, episode: 1 });
     expect(plan.disposition).toBe('triage');
     expect(await fs.readFile(file, 'utf-8')).toBe(before);
+  });
+
+  it('refuses a --chunk that is a path, writing nothing outside design/chunks/', async () => {
+    // `../..` resolves chunkMdPath to <project>/CHUNK.md, so plant one there to catch a write.
+    const outside = join(root, 'CHUNK.md');
+    await fs.writeFile(outside, threeBuildRoundChunkMd(TABLE_AND_DRAW_ROUND_3), 'utf-8');
+    expect(chunkMdPath(root, '../..')).toBe(outside);
+    const before = await fs.readFile(outside, 'utf-8');
+
+    await expect(verifyRepairRoundCommand({ project: root, chunk: '../..', episode: 1 })).rejects.toThrow(
+      /--chunk "\.\.\/\.\." is a path, not a name/,
+    );
+    expect(await fs.readFile(outside, 'utf-8')).toBe(before);
   });
 
   it('refuses a chunk with no CHUNK.md, naming the path', async () => {

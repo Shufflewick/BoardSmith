@@ -6,6 +6,7 @@ import {
 import { promises as fs } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { styleText } from 'node:util';
+import { assertBareName } from '../lib/user-name.js';
 import {
   atomicWriteFile,
   readRunLedgerState,
@@ -344,6 +345,7 @@ export async function verifyRepairRoundCommand(options: {
   episode: number;
   json?: boolean;
 }): Promise<VerifyEpisodeRoundPlan> {
+  assertBareName('--chunk', options.chunk, "Pass the stale chunk's slug, the name of its directory under design/chunks/.");
   const projectDir = resolve(options.project ?? process.cwd());
   const chunkFile = chunkMdPath(projectDir, options.chunk);
 
