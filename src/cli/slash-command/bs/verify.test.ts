@@ -1195,6 +1195,14 @@ describe('CHECK-02 no-fork guard — lens/repair prose sourced from build/*.md a
     expect(doc).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/build/repair.md');
   });
 
+  it('repair-dispatch.md drives the repair steps through the verify-repair commands (#838)', () => {
+    const doc = read('verify/repair-dispatch.md');
+    expect(doc).toContain('boardsmith verify-repair --json');
+    expect(doc).toContain('boardsmith verify-repair-round --chunk');
+    expect(doc).toContain('--episode');
+    expect(doc).toContain('boardsmith verify-repair-gate --chunk');
+  });
+
   it('no file under bs/verify/ instructs reading ## Interpretation (decision 11)', () => {
     const NEGATORS = /\b(not|never|forbidden|do not|does not|no)\b/i;
     const files = verifyFiles();

@@ -35,6 +35,10 @@ re-check the code against the very text this verify pass just called into questi
 transcription is unavailable for a chunk, report SCOPE-LIMITED following PROV-02's pattern —
 there is no fallback to live slices, silent or otherwise (decision 10).
 
+Run `boardsmith verify-repair --json` once at the start of this step. Each row is one stale
+chunk: its `slicePaths` (or `scopeLimitedReason`), and in `roundPlan.episode` the verify episode
+this pass uses for that chunk in Steps 4 and 5.
+
 ## 3. Dispatch the three lenses by reference, plus the 4th where the build rule already says to
 
 Dispatch `${CLAUDE_SKILL_DIR}/../bs-shared/build/audit.md`'s three lens templates — fidelity,
@@ -70,7 +74,10 @@ slices and `RULINGS.md` directly, exactly as `build/audit.md` requires for a bui
 
 Follow `build/audit.md`'s "Persisting the Round — Write to the Findings Ledger BEFORE Repair
 Starts" exactly: append this round's `### Audit Round N` entry before repair begins, and follow
-its cold-resume rule for a partial or missing current-round entry. Then dispatch
+its cold-resume rule for a partial or missing current-round entry. Open the round with
+`boardsmith verify-repair-round --chunk <slug> --episode <episode> --json`, with the episode from
+Step 2's report: it writes the round's heading into the Findings Ledger, and the round's findings
+go under it. If it reports `triage`, it wrote nothing: the episode's budget is spent. Then dispatch
 `${CLAUDE_SKILL_DIR}/../bs-shared/build/repair.md`'s bounded loop exactly as written — the two
 repair actions (fix, refute-with-citation), the three terminal dispositions
 (`fixed`/`deferred`/`refuted`), and `build/repair.md`'s own round-3 user triage with its three
@@ -101,7 +108,8 @@ own round sequence.
 
 Once every finding across this chunk's verify-episode rounds has a disposition and no round
 remains open, re-derive the repair-gate disposition from freshly re-checked post-repair code
-state — never reuse the pre-repair `ImpactMapEntry.gate` Step 4 already computed. **Repair MAY
+state — never reuse the pre-repair `ImpactMapEntry.gate` Step 4 already computed. Run
+`boardsmith verify-repair-gate --chunk <slug> --json`, which re-checks the chunk's code now. **Repair MAY
 change code, and that changes the gate's answer:** a chunk whose code changed during repair
 re-opens the human playtest gate (`reopen-playtest`); a chunk that passes the lenses with no code
 change closes without re-playtesting (`close-without-replaytest`). State this seam plainly rather
