@@ -6,7 +6,7 @@
     "src/ui/components/auto-ui/renderers/DieRenderer.vue:46-78|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:25-57",
     "src/ui/components/auto-ui/renderers/DieRenderer.vue:46-64|src/ui/components/auto-ui/renderers/PieceRenderer.vue:40-60|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:25-43",
     "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:96-110|src/ui/composables/useHexGrid.ts:298-313",
-    "src/ui/components/auto-ui/renderers/CardRenderer.vue:261-274|src/ui/components/auto-ui/renderers/HandRenderer.vue:214-224|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:65-75",
+    "src/ui/components/auto-ui/renderers/CardRenderer.vue:264-277|src/ui/components/auto-ui/renderers/HandRenderer.vue:214-224|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:65-75",
     "src/ui/components/auto-ui/renderers/DeckRenderer.vue:62-76|src/ui/components/auto-ui/renderers/HandRenderer.vue:73-87|src/ui/components/auto-ui/renderers/PieceRenderer.vue:53-67",
     "src/ui/components/auto-ui/renderers/HandRenderer.vue:498-504|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:291-297",
     "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue:123-141|src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:226-244",
