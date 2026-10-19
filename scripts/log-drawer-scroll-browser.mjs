@@ -124,9 +124,16 @@ await runBrowserRegression(
               const status = surface.locator('[data-testid="bs-log"] .sr-only[role="status"]');
               // Copying gives the status words to announce; an empty span would take no space anyway.
               await surface.locator('[data-testid="bs-log"] .history-copy').click();
-              await waitUntil(() => status.textContent(), (text) => Boolean(text?.trim()));
-              const box = await status.boundingBox();
-              assert(box !== null && box.width <= 1 && box.height <= 1, `the log's screen-reader status took ${JSON.stringify(box)}`);
+              // Text and box in one read, so the status's 2-second reset cannot fall between them.
+              const { text, box } = await waitUntil(
+                () => status.evaluate((el) => {
+                  const { width, height } = el.getBoundingClientRect();
+                  return { text: el.textContent.trim(), box: { width, height } };
+                }),
+                (seen) => seen.text !== '',
+              );
+              assert(text !== '', 'copying the log never set its screen-reader status, so there was nothing to measure; check that the copy button still announces through the sr-only status');
+              assert(box.width <= 1 && box.height <= 1, `the log's screen-reader status "${text}" took ${JSON.stringify(box)}`);
             });
           }
         });

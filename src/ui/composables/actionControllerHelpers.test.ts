@@ -200,4 +200,8 @@ describe('formatActionName', () => {
     expect(formatActionName('Pass')).toBe('Pass');
     expect(formatActionName('')).toBe('');
   });
+
+  it('splits a run of capitals into one word per letter', () => {
+    expect(formatActionName('drawUSB')).toBe('Draw U S B');
+  });
 });
