@@ -536,6 +536,15 @@ describe('verify-repair-round — opens the next verify-episode round in CHUNK.m
       /chunks\/nope\/CHUNK\.md/,
     );
   });
+
+  it('surfaces the real read error for a CHUNK.md that exists but cannot be read, not the wrong-slug message', async () => {
+    const slug = 'table-and-draw';
+    // A folder where CHUNK.md should be fails with EISDIR, an error that is not "missing".
+    await fs.mkdir(chunkMdPath(root, slug), { recursive: true });
+    const error = await verifyRepairRoundCommand({ project: root, chunk: slug, episode: 1 }).catch((e: Error) => e);
+    expect(String(error)).toMatch(/Could not read .*EISDIR/);
+    expect(String(error)).not.toMatch(/check the --chunk slug/);
+  });
 });
 
 describe('cli — the post-repair commands are registered', () => {

@@ -1,5 +1,7 @@
 import {
   chunkMdPath,
+  readChunkMdIfExists,
+  relChunkMdPath,
 } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -345,13 +347,9 @@ export async function verifyRepairRoundCommand(options: {
   const projectDir = resolve(options.project ?? process.cwd());
   const chunkFile = chunkMdPath(projectDir, options.chunk);
 
-  let chunkMd: string;
-  try {
-    chunkMd = await fs.readFile(chunkFile, 'utf-8');
-  } catch {
-    throw new Error(
-      `Chunk "${options.chunk}" has no readable chunks/${options.chunk}/CHUNK.md — check the --chunk slug.`,
-    );
+  const chunkMd = await readChunkMdIfExists(projectDir, options.chunk);
+  if (chunkMd === undefined) {
+    throw new Error(`Chunk "${options.chunk}" has no ${relChunkMdPath(options.chunk)} — check the --chunk slug.`);
   }
 
   const plan = planVerifyEpisodeRound(chunkMd, options.episode);
