@@ -576,6 +576,22 @@ describe('boardsmith doctor', () => {
       expect(result.notes[0]).toMatch(/boardsmith ingest-gaps/);
     });
 
+    it('writes nothing into a hooks folder outside the project, with a note naming it (#1186)', async () => {
+      const projectDir = await gitProject();
+      const shared = `${projectDir}-shared-hooks`;
+      await fs.mkdir(shared);
+      execSync(`git config core.hooksPath "${shared}"`, { cwd: projectDir });
+
+      const result = await doctorCommand({ project: projectDir, fix: true });
+
+      expect(result.healthy).toBe(true);
+      expect(process.exitCode).toBeUndefined();
+      expect(await fs.readdir(shared)).toEqual([]);
+      expect(result.notes).toHaveLength(1);
+      expect(result.notes[0]).toContain(`Left ${join(shared, 'pre-commit')} alone`);
+      expect(result.notes[0]).toMatch(/boardsmith ingest-gaps/);
+    });
+
     it('leaves a hook it cannot read alone, with a note that does not change the exit code (#1110)', async () => {
       const projectDir = await gitProject();
       await fs.writeFile(hookPath(projectDir), OWN_HOOK);

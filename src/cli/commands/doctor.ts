@@ -328,6 +328,12 @@ async function ingestHookCheck(projectDir: string): Promise<{ findings: DoctorFi
   if (hook.state === 'no-git') return { findings: [], notes: [] };
   const { state, path } = hook;
   const byHand = 'or run boardsmith ingest-gaps yourself after transcription.';
+  if (state === 'outside') {
+    return { findings: [], notes: [
+      `Left ${path} alone: git runs hooks from a folder outside this project, which other repositories may share, ` +
+        `so the ingest hook is not installed. Run boardsmith ingest-gaps yourself after transcription.`,
+    ] };
+  }
   if (state === 'foreign') {
     return { findings: [], notes: [
       `Left ${path} alone: BoardSmith did not write it, so the ingest hook is not installed. To use BoardSmith's, ` +
@@ -362,7 +368,7 @@ async function fixAll(projectDir: string, findings: DoctorFinding[]): Promise<vo
 /** Resolve one finding `--fix` is allowed to resolve. */
 async function fix(projectDir: string, f: DoctorFinding): Promise<void> {
   if (f.kind === 'ingest-hook-not-current') {
-    if ((await installIngestHook(projectDir)) === 'installed') return;
+    if ((await installIngestHook(projectDir)).result === 'installed') return;
     throw new Error(`Could not write ${f.from}. Check that you can write to its folder, then run boardsmith doctor --fix again.`);
   }
   if (f.kind === 'test-config-missing' || f.kind === 'test-run-collects-worktrees') {

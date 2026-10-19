@@ -1,5 +1,5 @@
 import { DESIGN_DIR } from '../lib/project-paths.js';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { join } from 'node:path';
@@ -24,6 +24,10 @@ beforeEach(async () => {
   dir = tempTree('bs-ingest-hook-');
 });
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 async function gitProject(): Promise<string> {
   const p = join(dir, 'proj');
   await fs.mkdir(p, { recursive: true });
@@ -34,7 +38,7 @@ async function gitProject(): Promise<string> {
 describe('installIngestHook', () => {
   it('installs an executable pre-commit hook', async () => {
     const p = await gitProject();
-    expect(await installIngestHook(p)).toBe('installed');
+    expect((await installIngestHook(p)).result).toBe('installed');
     const hookPath = join(p, '.git', 'hooks', 'pre-commit');
     const stat = await fs.stat(hookPath);
     // Must be executable or git silently ignores it — a hook that never runs is worse than
@@ -47,7 +51,7 @@ describe('installIngestHook', () => {
     const p = await gitProject();
     const hookPath = join(p, '.git', 'hooks', 'pre-commit');
     await fs.writeFile(hookPath, '#!/bin/sh\necho mine\n', { mode: 0o755 });
-    expect(await installIngestHook(p)).toBe('skipped-existing');
+    expect((await installIngestHook(p)).result).toBe('skipped-existing');
     expect(await fs.readFile(hookPath, 'utf-8')).toContain('echo mine');
   });
 
@@ -57,7 +61,7 @@ describe('installIngestHook', () => {
     await fs.writeFile(hookPath, '#!/bin/sh\necho mine\n');
     await fs.chmod(hookPath, 0o200);
     try {
-      expect(await installIngestHook(p)).toBe('skipped-unreadable');
+      expect((await installIngestHook(p)).result).toBe('skipped-unreadable');
     } finally {
       await fs.chmod(hookPath, 0o755);
     }
@@ -67,13 +71,13 @@ describe('installIngestHook', () => {
   it('is idempotent — reinstalling over its own hook is fine', async () => {
     const p = await gitProject();
     await installIngestHook(p);
-    expect(await installIngestHook(p)).toBe('installed');
+    expect((await installIngestHook(p)).result).toBe('installed');
   });
 
   it('installs where core.hooksPath points, the only folder git runs hooks from then (#1186)', async () => {
     const p = await gitProject();
     execSync('git config core.hooksPath githooks', { cwd: p });
-    expect(await installIngestHook(p)).toBe('installed');
+    expect((await installIngestHook(p)).result).toBe('installed');
     expect(await fs.readFile(join(p, 'githooks', 'pre-commit'), 'utf-8')).toBe(INGEST_PRE_COMMIT_HOOK);
     expect(await ingestHookState(p)).toEqual({ state: 'current', path: join('githooks', 'pre-commit') });
   });
@@ -84,15 +88,28 @@ describe('installIngestHook', () => {
     const wt = join(dir, 'wt');
     execSync(`git worktree add "${wt}"`, { cwd: p, stdio: 'ignore' });
     expect((await ingestHookState(wt)).state).toBe('missing');
-    expect(await installIngestHook(wt)).toBe('installed');
+    expect((await installIngestHook(wt)).result).toBe('installed');
     expect(await fs.readFile(join(p, '.git', 'hooks', 'pre-commit'), 'utf-8')).toBe(INGEST_PRE_COMMIT_HOOK);
     expect((await ingestHookState(p)).state).toBe('current');
+  });
+
+  it('writes nothing into a hooks folder outside the repository, such as a global core.hooksPath (#1186)', async () => {
+    const p = await gitProject();
+    const shared = join(dir, 'shared-hooks');
+    await fs.mkdir(shared);
+    const globalConfig = join(dir, 'gitconfig');
+    await fs.writeFile(globalConfig, `[core]\n\thooksPath = ${shared}\n`);
+    vi.stubEnv('GIT_CONFIG_GLOBAL', globalConfig);
+
+    expect(await ingestHookState(p)).toEqual({ state: 'outside', path: join(shared, 'pre-commit') });
+    expect(await installIngestHook(p)).toEqual({ result: 'skipped-outside', path: join(shared, 'pre-commit') });
+    expect(await fs.readdir(shared)).toEqual([]);
   });
 
   it('does not throw when there is no git repository', async () => {
     const p = join(dir, 'nogit');
     await fs.mkdir(p, { recursive: true });
-    expect(await installIngestHook(p)).toBe('skipped-no-git');
+    expect((await installIngestHook(p)).result).toBe('skipped-no-git');
   });
 });
 
