@@ -618,10 +618,18 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (takesList && !Array.isArray(prefillValue)) return `Cannot prefill "${label}": it takes a list, so pass an array.`;
     const choices = getChoices(selection);
     if (!resolved.refusal && choices.length > 0 && (resolved.choice || takesList)) return undefined;
+    return describeRejectedPrefill(label, takesList ? (resolved.value as unknown[]) : undefined, prefillValue, choices);
+  }
 
-    const entries = takesList ? (resolved.value as unknown[]) : [resolved.value];
-    const shown = takesList ? entries.map(v => labelOfPick(v, choices)).join(', ') : getDisplayFromValue(prefillValue);
-    const disabledReason = entries.map(v => choices.find(c => valuesEqual(c.value, v))?.disabled).find(Boolean);
+  /** {@link prefillRefusal}'s message for a value it refuses; `entries` is a list pick's resolved entries. */
+  function describeRejectedPrefill(
+    label: string,
+    entries: unknown[] | undefined,
+    prefillValue: unknown,
+    choices: Array<{ value: unknown; display: string; disabled?: string }>,
+  ): string {
+    const shown = entries ? entries.map(v => labelOfPick(v, choices)).join(', ') : getDisplayFromValue(prefillValue);
+    const disabledReason = (entries ?? [prefillValue]).map(v => findMatchingChoice(v, choices)?.disabled).find(Boolean);
     if (disabledReason) return `Cannot prefill "${label}" with "${shown}": ${disabledReason}.`;
 
     if (choices.length === 0) {
