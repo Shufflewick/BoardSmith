@@ -13,7 +13,6 @@ import {
   type GameOptions,
   type FlowState,
   type FlowDebugInfo,
-  type PendingActionState,
   type AnnotatedChoice,
   type ElementJSON,
 } from '../engine/index.js';
@@ -266,22 +265,6 @@ export class TestGame<G extends Game = Game> {
    */
   getFlowDebugInfo(): FlowDebugInfo {
     return this.game.getFlowDebugInfo();
-  }
-
-  /**
-   * Get a read-only snapshot of a seat's in-progress multi-step / repeating-
-   * selection action — current selection index, completed selections, and
-   * accumulated repeating-selection state.
-   *
-   * The returned object is always a copy: mutating it never affects
-   * subsequent calls or game state.
-   *
-   * @param seat - The player seat to inspect (1-indexed)
-   * @returns The pending action snapshot, or `undefined` if nothing is pending
-   *   for that seat (including for an out-of-range seat — no throw).
-   */
-  getPendingAction(seat: number): PendingActionState | undefined {
-    return this.runner.getPendingAction(seat);
   }
 
   /**

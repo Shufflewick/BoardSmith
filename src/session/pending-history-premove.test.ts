@@ -142,16 +142,6 @@ function pickOn(host: SnapshotSessionHost, action: string, selectionName: string
 }
 
 describe('a pending action records its picks where they were before the action (#1144)', () => {
-  it.each(cases)('GameRunner: %s', (_name, action, picks) => {
-    const live = new GameRunner(options);
-    live.start();
-
-    live.startPendingAction(action, 1);
-    picks.forEach((name, i) => expect(live.processSelectionStep(1, name, idOf(live.game, picked[i]!)).error).toBeUndefined());
-
-    expectReplaysToLive(live.actionHistory, live.game, action, picks);
-  });
-
   it.each(cases)('PendingActionManager: %s', async (_name, action, picks) => {
     const live = new GameRunner(options);
     live.start();
@@ -178,26 +168,28 @@ describe('a pending action records its picks where they were before the action (
     expectReplaysToLive(live.actionHistory, live.game, action, picks);
   });
 
-  it('refuses to record a pick of an element an earlier pick created, which did not exist before the action', () => {
+  it('refuses to record a pick of an element an earlier pick created, which did not exist before the action', async () => {
     const live = new GameRunner(options);
     live.start();
+    const picks = new PendingActionManager(live, 2);
 
-    live.startPendingAction('conjure', 1);
-    expect(live.processSelectionStep(1, 'source', idOf(live.game, 'first')).error).toBeUndefined();
-    expect(() => live.processSelectionStep(1, 'made', idOf(live.game, 'conjured'))).toThrow(
+    picks.startPendingAction('conjure', 1);
+    expect((await picks.processSelectionStep(1, 'source', idOf(live.game, 'first'))).error).toBeUndefined();
+    await expect(picks.processSelectionStep(1, 'made', idOf(live.game, 'conjured'))).rejects.toThrow(
       /Cannot record action 'conjure': 'args.made' is "conjured", which an earlier pick's onSelect or onEach created/,
     );
     expect(live.actionHistory).toEqual([]);
   });
 
-  it('refuses to complete a pending action saved without its record of what its picks moved', () => {
+  it('refuses to complete a pending action saved without its record of what its picks moved', async () => {
     const live = new GameRunner(options);
     live.start();
+    const picks = new PendingActionManager(live, 2);
 
-    const pending = live.startPendingAction('stow', 1)!;
+    const pending = picks.startPendingAction('stow', 1).pendingState!;
     delete pending.branchesBeforePicks;
-    expect(live.processSelectionStep(1, 'crate', idOf(live.game, 'first')).error).toBeUndefined();
-    expect(() => live.processSelectionStep(1, 'next', idOf(live.game, 'second'))).toThrow(
+    expect((await picks.processSelectionStep(1, 'crate', idOf(live.game, 'first'))).error).toBeUndefined();
+    await expect(picks.processSelectionStep(1, 'next', idOf(live.game, 'second'))).rejects.toThrow(
       /started before the game was updated and cannot be finished\. Cancel it and take it again\./,
     );
     expect(live.actionHistory).toEqual([]);
@@ -242,26 +234,28 @@ describe('a pending action records its picks where they were before the action (
     expect(host.snapshot!.actionHistory.map((entry) => 'name' in entry && entry.name)).toEqual(['stow']);
   });
 
-  it('records what a pick callback moved before it threw, where the move stays with checkpoints off', () => {
+  it('records what a pick callback moved before it threw, where the move stays with checkpoints off', async () => {
     const live = new GameRunner({ ...options, checkpoints: { enabled: false } });
     live.start();
+    const picks = new PendingActionManager(live, 2);
 
-    live.startPendingAction('jostle', 1);
-    expect(live.processSelectionStep(1, 'tokens', idOf(live.game, 'first')).error).toMatch(/"jostle" action could not be/);
-    expect(live.processSelectionStep(1, 'tokens', idOf(live.game, 'second')).error).toBeUndefined();
+    picks.startPendingAction('jostle', 1);
+    expect((await picks.processSelectionStep(1, 'tokens', idOf(live.game, 'first'))).error).toMatch(/"jostle" action could not be/);
+    expect((await picks.processSelectionStep(1, 'tokens', idOf(live.game, 'second'))).error).toBeUndefined();
 
     expect(live.actionHistory).toEqual([{ name: 'jostle', player: 1, args: argsBefore(['tokens', 'tokens']) }]);
   });
 
-  it('undoes a pick callback that moved a token and threw, and its note of where the token was (#1169)', () => {
+  it('undoes a pick callback that moved a token and threw, and its note of where the token was (#1169)', async () => {
     const live = new GameRunner(options);
     live.start();
+    const picks = new PendingActionManager(live, 2);
     const before = places(live.game);
 
-    live.startPendingAction('jostle', 1);
-    expect(live.processSelectionStep(1, 'tokens', idOf(live.game, 'first')).error).toMatch(/"jostle" action could not be/);
+    picks.startPendingAction('jostle', 1);
+    expect((await picks.processSelectionStep(1, 'tokens', idOf(live.game, 'first'))).error).toMatch(/"jostle" action could not be/);
 
     expect(places(live.game)).toEqual(before);
-    expect(live.getPendingAction(1)?.branchesBeforePicks).toEqual({});
+    expect(picks.getPendingAction(1)?.branchesBeforePicks).toEqual({});
   });
 });

@@ -244,17 +244,6 @@ describe('a selection step carries only declared picks (#662)', () => {
     expect(game.runs.at(-1)).toEqual({ action: 'jump', stone: 'A', to: 'A-to-1', chain: 1 });
   });
 
-  it('keeps the engine\'s value on the session-free runner path too', () => {
-    const { runner, game, stoneId } = duel();
-    holdJump(runner, stoneId);
-
-    runner.startPendingAction('jump', 1);
-    expect(runner.processSelectionStep(1, 'stone', stoneId('B'))).toMatchObject({ success: true, actionComplete: false });
-    expect(runner.processSelectionStep(1, 'to', 'A-to-1')).toMatchObject({ success: true, actionComplete: true });
-
-    expect(game.runs.at(-1)).toEqual({ action: 'jump', stone: 'A', to: 'A-to-1', chain: 1 });
-  });
-
   it('takes a whole multi-jump chain pick by pick, and records only the picks', async () => {
     const { runner, manager, game, stoneId } = duel();
     holdJump(runner, stoneId);
