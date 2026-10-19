@@ -45,6 +45,15 @@ class PouchGame extends Game<PouchGame, Player> {
         // Reads the card it was handed, so a pick that resolved a hidden card would say which.
         .chooseFrom('how', { choices: ({ args }) => [args.card instanceof Card ? args.card.name! : 'no card'] })
         .execute(() => {}),
+      Action.create<PouchGame>('pocket')
+        .chooseElement<'card', Card>('card', {
+          elements: inPouch,
+          // Names the card it is handed, so being handed a card the seat cannot see would say which.
+          unavailable: (card) => (card instanceof Card ? `${card.name} was taken.` : `Card ${String(card)} was taken.`),
+        })
+        .execute(({ card }, { player }) => {
+          card.putInto(handOf(player));
+        }),
       Action.create<PouchGame>('stash')
         .chooseElement<'card', Card>('card', { elements: inPouch })
         .execute(({ card }) => {
@@ -61,7 +70,7 @@ class PouchGame extends Game<PouchGame, Player> {
     );
     this.setFlow({
       root: simultaneousActionStep({
-        actions: ['filch', 'peek', 'stash', 'shake', 'drawBlind'],
+        actions: ['filch', 'peek', 'pocket', 'stash', 'shake', 'drawBlind'],
         playerDone: () => false,
       }),
     });
@@ -142,6 +151,15 @@ describe("a table's stable per-seat placeholders (#715)", () => {
 
     expect(refusal(await act(taken, 1, 'filch', { card: ace }))).toBe(NO_LONGER_AVAILABLE);
     expect(await pouchIds(taken, 1)).toHaveLength(1);
+  });
+
+  it("hands a refused pick's unavailable sentence the placeholder the seat sent, not the hidden card it names (#1205)", async () => {
+    const start = await started();
+    const moved = succeeded(await act(start, 2, 'stash', { card: (await pouchIds(start, 2))[0] })) as unknown as Envelope;
+    // Seat 1's board names the stashed card by a placeholder that still names it, but `pocket` offers only the pouch.
+    const [stashed] = findByName(viewOf(moved, 1), 'stash')!.children!.map((c) => c.id);
+
+    expect(refusal(await act(moved, 1, 'pocket', { card: stashed }))).toBe(`Card ${stashed} was taken.`);
   });
 
   it("refuses another seat's placeholder, as an action and as a selection step", async () => {
