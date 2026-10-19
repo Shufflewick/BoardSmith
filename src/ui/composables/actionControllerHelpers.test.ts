@@ -193,5 +193,15 @@ describe('formatActionName', () => {
   it('turns a camelCase action name into a title-cased prompt', () => {
     expect(formatActionName('playCard')).toBe('Play Card');
     expect(formatActionName('pass')).toBe('Pass');
+    expect(formatActionName('drawFromDiscardPile')).toBe('Draw From Discard Pile');
+  });
+
+  it('leaves an already-capitalised word alone, and an empty name empty', () => {
+    expect(formatActionName('Pass')).toBe('Pass');
+    expect(formatActionName('')).toBe('');
+  });
+
+  it('splits a run of capitals into one word per letter', () => {
+    expect(formatActionName('drawUSB')).toBe('Draw U S B');
   });
 });
