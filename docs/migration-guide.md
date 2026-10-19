@@ -17,7 +17,9 @@ contents from that seat (`hideContentsFrom`), now gets the zone's `childCount`
 alongside its placeholders, as a count-only zone already did. Its `children`
 can carry granted cards nested below a placeholder (#961), so
 `children.length` could count more cards than the zone holds; `childCount` and
-`getElementCount` count only the zone's direct children.
+`getElementCount` count only the zone's direct children. The seat now learns,
+for these zones too, how many of its granted cards sit inside a hidden child,
+so with one hidden child it knows which child holds them.
 
 ## A hidden card's placeholder id is stable and the seat's own (#715)
 
