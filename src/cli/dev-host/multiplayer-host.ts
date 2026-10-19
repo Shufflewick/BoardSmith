@@ -967,12 +967,15 @@ export class MultiplayerHost {
     this.send(clientId, { type: 'joined', seat: msg.seat });
     if (this.phase === 'playing') this.reinitSeat(clientId, msg.seat);
     this.broadcastLobby();
-    // A seat left by moving straight to another is given up as `leave` gives it up (#1025).
-    if (vacated !== undefined && vacated !== msg.seat && this.phase === 'playing' && this.followerClientId === null) {
-      this.addBotSeat(vacated);
-      this.announceRoster();
-      await this.session?.host.runBotTurns();
-    }
+    if (vacated !== msg.seat) await this.coverLeftSeat(vacated);
+  }
+
+  /** A seat its player left by joining another goes to the bot, as `leave` gives it up (#1025). */
+  private async coverLeftSeat(seat: number | undefined): Promise<void> {
+    if (seat === undefined || this.phase !== 'playing' || this.followerClientId !== null) return;
+    this.addBotSeat(seat);
+    this.announceRoster();
+    await this.session?.host.runBotTurns();
   }
 
   /** Give up a seat mid-game → it reverts to bot so the game continues for others. */
