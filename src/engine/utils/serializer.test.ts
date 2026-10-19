@@ -13,6 +13,11 @@ import {
 } from './index.js';
 import { TEST_WORLD_ELEMENT_ID_KEY } from '../element/world-element-id-key.test-helper.js';
 
+// Loaded here, where no test timeout applies, since the import is slow on a busy machine (#1195).
+vi.resetModules();
+// Dynamic import: after vi.resetModules(), a second copy of the engine, as a bundled game carries.
+const other = await import('../index.js');
+
 // Test game classes
 class TestGame extends Game<TestGame, Player> {}
 
@@ -121,10 +126,7 @@ describe('Action Serialization', () => {
     // A game bundled with its own copy of the engine hands the host's runner
     // elements of a different GameElement class, so `instanceof` cannot be
     // how the codec recognises one.
-    it('writes an element from another copy of the engine as a reference, not as its object graph', async () => {
-      vi.resetModules();
-      // Dynamic import: after vi.resetModules(), a second copy of the engine, as a bundled game carries.
-      const other = await import('../index.js');
+    it('writes an element from another copy of the engine as a reference, not as its object graph', () => {
       class OtherGame extends other.Game<OtherGame, Player> {}
       class OtherCard extends other.Piece<OtherGame> {}
       const otherGame = new OtherGame({ playerCount: 2, playerNames: ['Alice', 'Bob'] });
