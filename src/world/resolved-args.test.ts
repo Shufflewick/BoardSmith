@@ -14,6 +14,7 @@
  * on every road (`Game#getActionDisabledReason`), so it has no selection to see.
  */
 import { describe, it, expect } from 'vitest';
+import { Card, Game, Space, type GameOptions } from '../engine/index.js';
 import { createTestWorld, type TestWorld } from '../testing/test-world.js';
 import {
   Vault,
@@ -205,6 +206,54 @@ describe('world-action callbacks receive element selections as elements (#418)',
       });
     }
     expect(seen.size).toBe(0);
+    await world.close();
+  });
+});
+
+class Pouch extends Space<PouchWorld> {}
+class Commons extends Space<PouchWorld> {}
+
+class PouchWorld extends Game<PouchWorld> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([Pouch, Commons, Card]);
+  }
+}
+
+describe('a re-asked pick after an element pick nested below its partition root (#1203)', () => {
+  it('is answered, with the element handed to the later pick', async () => {
+    const handed: unknown[] = [];
+    const peek = worldAction<PouchWorld>('peek')
+      .chooseElement('card', { needs: () => ['commons'], elements: ({ game }) => game.first(Pouch)!.all(Card) })
+      .chooseFrom('how', {
+        needs: () => ['commons'],
+        choices: ({ args }) => {
+          if (args.card !== undefined) handed.push((args.card as Card).name);
+          return ['gently'];
+        },
+      })
+      .execute(() => {});
+    const world = await createTestWorld({
+      definition: {
+        gameClass: PouchWorld,
+        world: {
+          maxPlayers: 2,
+          actions: [peek],
+          view: () => ['commons'],
+          genesis: (game: Game) => {
+            const commons = game.create(Commons, 'commons');
+            commons.create(Pouch, 'pouch').create(Card, 'AS');
+            return { commons };
+          },
+        } as WorldDefinition,
+      },
+    });
+    const card = (await world.resolvePick(1, 'peek', 'card', {})).validElements![0]!.id;
+
+    const pick = await world.resolvePick(1, 'peek', 'how', { card });
+
+    expect(pick.choices?.map((c) => c.value)).toEqual(['gently']);
+    expect(handed).toEqual(['AS']);
     await world.close();
   });
 });
