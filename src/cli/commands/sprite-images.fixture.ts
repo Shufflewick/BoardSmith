@@ -3,7 +3,8 @@
  * cast past the type, the way plain JS or JSON game data reaches the engine
  * unchecked, so the check sees what a real game would hand it.
  */
-import { Card, Deck, Game, Player, type GameOptions, type ImageRef } from '../../engine/index.js';
+import { Card, Deck, Game, Player, type GameOptions } from '../../engine/index.js';
+import type { ImageRef } from '../../engine/element/types.js';
 
 const SHEET = 'cards/deck-sprite.svg';
 const FULL = { sprite: SHEET, x: 0, y: 0, width: 238, height: 333, sheetWidth: 3094, sheetHeight: 1665 };

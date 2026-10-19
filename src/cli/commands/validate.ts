@@ -42,7 +42,7 @@ import {
   type ChoiceCardinalityBackend,
   type UnboundedChoiceStep,
 } from '../lib/choice-cardinality.js';
-import type { Game, GameOptions } from '../../engine/index.js';
+import type { Game, GameElement, GameOptions } from '../../engine/index.js';
 import { missingThreePeerHint } from '../../ui/components/dice/three-peer.js';
 import { ENGINE_CONTRACT } from '../../contract/index.js';
 import { engineChangeHint } from '../lib/engine-changes.js';
@@ -1455,21 +1455,11 @@ export function checkSpriteImages(gameDefinition: GameDefinition): ValidationRes
   for (let playerCount = minPlayers!; playerCount <= maxPlayers!; playerCount++) {
     const game = constructGame(gameDefinition.gameClass, { ...options, playerCount, seed: 'sprite-images' });
     for (const element of [game, ...game.all(), ...game.pile.all()]) {
-      const label = element.name === undefined
-        ? `${element.constructor.name} at ${element.branch()}`
-        : `${element.constructor.name} '${element.name}'`;
-      const images: Array<[string, unknown]> = [['$image', element.$image]];
-      for (const [side, image] of Object.entries(element.$images ?? {})) images.push([`$images.${side}`, image]);
-      for (const [where, image] of images) {
-        try {
-          parseImageInfo(image);
-        } catch (error) {
-          const reason = (error as Error).message;
-          const key = JSON.stringify([label, where, reason]);
-          const problem = problems.get(key) ?? { image: `${label}, ${where}`, reason, seats: [] };
-          problem.seats.push(playerCount);
-          problems.set(key, problem);
-        }
+      for (const { image, reason } of spriteProblemsOf(element)) {
+        const key = JSON.stringify([image, reason]);
+        const problem = problems.get(key) ?? { image, reason, seats: [] };
+        problem.seats.push(playerCount);
+        problems.set(key, problem);
       }
     }
   }
@@ -1484,6 +1474,23 @@ export function checkSpriteImages(gameDefinition: GameDefinition): ValidationRes
       return `${image}${only}: ${reason}`;
     }),
   };
+}
+
+/** Each of this element's `$image` and `$images` that `parseImageInfo` refuses, named and with its reason. */
+function spriteProblemsOf(element: GameElement): Array<{ image: string; reason: string }> {
+  const label = element.name === undefined
+    ? `${element.constructor.name} at ${element.branch()}`
+    : `${element.constructor.name} '${element.name}'`;
+  const images: Array<[string, unknown]> = [['$image', element.$image]];
+  for (const [side, image] of Object.entries(element.$images ?? {})) images.push([`$images.${side}`, image]);
+  return images.flatMap(([where, image]) => {
+    try {
+      parseImageInfo(image);
+      return [];
+    } catch (error) {
+      return [{ image: `${label}, ${where}`, reason: (error as Error).message }];
+    }
+  });
 }
 
 /** Load the compiled rules and run {@link checkSpriteImages} on them. */
