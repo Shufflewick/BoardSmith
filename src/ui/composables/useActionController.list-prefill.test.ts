@@ -7,7 +7,7 @@ import { ref, nextTick } from 'vue';
 import { useActionController, type EnrichedActionMetadata } from './useActionController.js';
 import { createMockSendAction } from './useActionController.test-helper.js';
 
-const XYZ = [{ value: 'x', display: 'X' }, { value: 'y', display: 'Y' }, { value: 'z', display: 'Z' }];
+const XYZ = [{ value: 'x', display: 'X' }, { value: 'y', display: 'Y' }, { value: 'z', display: 'Z', disabled: 'Z is spent' }];
 
 const metadata: Record<string, EnrichedActionMetadata> = {
   pickCards: {
@@ -44,8 +44,8 @@ async function prefilled(action: string, prefill: Record<string, unknown>) {
 describe('an array prefill for a list pick (#964)', () => {
   it.each([
     ['pickCards', { cards: [9, 7] }],
-    ['pickMany', { many: ['x', 'z'] }],
-    ['pickOrder', { order: ['z', 'x', 'y'] }],
+    ['pickMany', { many: ['x', 'y'] }],
+    ['pickOrder', { order: ['y', 'x', 'y'] }],
   ])('%s submits %j', async (action, prefill) => {
     const { sendAction, controller } = await prefilled(action, prefill);
     expect(controller.lastError.value).toBeNull();
@@ -60,5 +60,21 @@ describe('an array prefill for a list pick (#964)', () => {
     const { sendAction, controller } = await prefilled(action, prefill);
     expect(sendAction).not.toHaveBeenCalled();
     expect(controller.lastError.value).toMatch(/^Cannot prefill "Which/);
+  });
+
+  it.each([
+    ['pickCards', { cards: 7 }],
+    ['pickMany', { many: 'x' }],
+    ['pickOrder', { order: 'x' }],
+  ])('%s refuses the lone value %j, asking for a list', async (action, prefill) => {
+    const { sendAction, controller } = await prefilled(action, prefill);
+    expect(sendAction).not.toHaveBeenCalled();
+    expect(controller.lastError.value).toMatch(/^Cannot prefill "Which.*": it takes a list, so pass an array\.$/);
+  });
+
+  it('gives the reason a disabled entry carries', async () => {
+    const { sendAction, controller } = await prefilled('pickMany', { many: ['x', 'z'] });
+    expect(sendAction).not.toHaveBeenCalled();
+    expect(controller.lastError.value).toBe('Cannot prefill "Which?" with "X, Z": Z is spent.');
   });
 });

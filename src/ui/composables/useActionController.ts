@@ -606,20 +606,22 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /**
-   * Message for a prefill the pick refuses. Names the pick and the rejected
-   * value so the caller can correct it, and gives the reason a disabled choice
-   * carries or lists what would have been accepted (capped, because an element
-   * pick can offer hundreds).
+   * Message for a prefill the pick refuses, or undefined when the pick takes it.
+   * Names the pick and the rejected value so the caller can correct it, and
+   * gives the reason a disabled choice carries or lists what would have been
+   * accepted (capped, because an element pick can offer hundreds).
    */
-  function describeRejectedPrefill(
-    selection: EnrichedPickMetadata,
-    value: unknown,
-    choices: Array<{ value: unknown; display: string; disabled?: string }>,
-    disabledReason?: string,
-  ): string {
+  function prefillRefusal(selection: EnrichedPickMetadata, prefillValue: unknown, resolved: ResolvedPick): string | undefined {
     const label = selection.prompt || selection.name;
-    const shown = getDisplayFromValue(value);
+    const takesList = selectionTakesList(selection);
+    // The engine refuses a lone value for a list pick (#769), so say so before sending it.
+    if (takesList && !Array.isArray(prefillValue)) return `Cannot prefill "${label}": it takes a list, so pass an array.`;
+    const choices = getChoices(selection);
+    if (!resolved.refusal && choices.length > 0 && (resolved.choice || takesList)) return undefined;
 
+    const entries = takesList ? (resolved.value as unknown[]) : [resolved.value];
+    const shown = takesList ? entries.map(v => labelOfPick(v, choices)).join(', ') : getDisplayFromValue(prefillValue);
+    const disabledReason = entries.map(v => choices.find(c => valuesEqual(c.value, v))?.disabled).find(Boolean);
     if (disabledReason) return `Cannot prefill "${label}" with "${shown}": ${disabledReason}.`;
 
     if (choices.length === 0) {
@@ -886,18 +888,16 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const prefillValue = actionSnapshot.value?.prefills.get(selection.name);
     if (prefillValue === undefined) return false;
 
-    const { value, choice: matched, refusal } = resolvePick(selection, prefillValue);
-    const choices = getChoices(selection);
-    // A list prefill names no one choice; resolvePick has matched each entry instead.
-    const isList = Array.isArray(prefillValue) && selectionTakesList(selection);
-
     actionSnapshot.value?.prefills.delete(selection.name);
 
-    if (refusal || choices.length === 0 || (!matched && !isList)) {
-      setError(describeRejectedPrefill(selection, prefillValue, choices, matched?.disabled));
+    const resolved = resolvePick(selection, prefillValue);
+    const refusal = prefillRefusal(selection, prefillValue, resolved);
+    if (refusal) {
+      setError(refusal);
       return true;
     }
 
+    const { value } = resolved;
     currentArgs.value[selection.name] = value;
     actionSnapshot.value?.collectedPicks.set(selection.name, {
       value,
