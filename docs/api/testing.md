@@ -720,15 +720,6 @@ failure messages (`assertActionAvailable`,
 `toDebugString`) — you don't need to call it manually just to get a
 readable diagnostic on a failing test.
 
-For mid-multi-step-action state (a player is partway through a
-multi-selection action), use `TestGame.getPendingAction(seat)`:
-
-```typescript
-const pending = testGame.getPendingAction(1); // PendingActionState | undefined
-pending?.actionName;       // the action currently being built
-pending?.completedSteps;   // selections already made
-```
-
 To see **why** a choice is disabled (not just that it is), use
 `TestGame.getActionSpaceWithChoices(seat)` — it composes the existing
 `getActionSpace()` + `getSelectionChoices()` calls into one view where every

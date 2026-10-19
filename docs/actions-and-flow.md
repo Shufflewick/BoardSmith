@@ -1028,8 +1028,8 @@ availability is:
 - A held follow-up is offered by its chain, not its condition, so its
   condition is never checked.
 
-`GameRunner.refusalToPick` is the one place this is decided, for the
-session-free runner and the stateless `selectionStep` op that every session
+`GameRunner.refusalToPick` is the one place this is decided, for
+`PendingActionManager` and the stateless `selectionStep` op that every session
 host runs alike.
 A host that resumes a pending action without its persisted pending state (only
 `initialArgs`) is treated as starting it, so the condition must hold then.

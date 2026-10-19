@@ -15,6 +15,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Game, Player, Piece, Space, Action, actionTempState, actionStep, execute, loop, phase, sequence, enumerateLegalMoves, type GameOptions } from '../index.js';
 import { enumerateActionMoves } from '../utils/enumerate-moves.js';
 import { GameRunner } from '../../runtime/runner.js';
+import { PendingActionManager } from '../../session/pending-action-manager.js';
 import { createSnapshot } from '../utils/snapshot.js';
 import { Card, CardsGame, DuelGame, Pawn, type PawnMove } from './choice-cache-fixtures.test-helper.js';
 import { TEST_WORLD_ELEMENT_ID_KEY } from '../element/world-element-id-key.test-helper.js';
@@ -262,17 +263,18 @@ describe('every change to the game is seen by the next question', () => {
     expect(destinations(game, 1, pawn)).toEqual([2]);
   });
 
-  it('an attribute written by a pick\'s onSelect', () => {
+  it('an attribute written by a pick\'s onSelect', async () => {
     devMode.override = false;
     const runner = start(DuelGame);
     const game = runner.game;
     expect(movable(game, 2)).toContain('p2-6');
-    runner.startPendingAction('stun', 1);
-    expect(runner.processSelectionStep(1, 'target', game.first(Pawn, 'p2-6')!).success).toBe(true);
+    const picks = new PendingActionManager(runner, 2);
+    picks.startPendingAction('stun', 1);
+    expect((await picks.processSelectionStep(1, 'target', game.first(Pawn, 'p2-6')!)).success).toBe(true);
     expect(movable(game, 2)).not.toContain('p2-6');
   });
 
-  it('game code that changes the game sees its own change when it asks again', () => {
+  it('game code that changes the game sees its own change when it asks again', async () => {
     devMode.override = false;
     const runner = start(ProbeGame, 1);
     const game = runner.game;
@@ -280,11 +282,12 @@ describe('every change to the game is seen by the next question', () => {
 
     // One submission, then pick by pick, then a cancelled pick.
     expect(runner.performAction('act', 1, { x: 1, z: 1 }).success).toBe(true);
-    runner.startPendingAction('act', 1);
-    runner.processSelectionStep(1, 'x', 1);
-    runner.processSelectionStep(1, 'z', 2);
-    const cancelled = runner.startPendingAction('act', 1)!;
-    runner.processSelectionStep(1, 'x', 2);
+    const picks = new PendingActionManager(runner, 1);
+    picks.startPendingAction('act', 1);
+    await picks.processSelectionStep(1, 'x', 1);
+    await picks.processSelectionStep(1, 'z', 2);
+    const cancelled = picks.startPendingAction('act', 1).pendingState!;
+    await picks.processSelectionStep(1, 'x', 2);
     game.getActionExecutor().fireOnCancelCallbacks(act, cancelled);
     expect(runner.performAction('gather', 1, { y: [1, 3] }).success).toBe(true);
     // An onSelect that throws: the action is rolled back, its probes with it (#1142).

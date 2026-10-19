@@ -13,8 +13,8 @@
  * - a seat whose turn it was not could complete one, and the flow counted it
  *   as the CURRENT seat's move.
  *
- * Each case is driven through all three completion paths: the session-free
- * GameRunner, the live session host (`SnapshotSessionHost`, which holds each
+ * Each case is driven through all three completion paths: a long-lived
+ * PendingActionManager, the live session host (`SnapshotSessionHost`, which holds each
  * seat's pending state between ops), and the stateless `selectionStep` op.
  */
 import { describe, it, expect } from 'vitest';
@@ -31,6 +31,7 @@ import {
   type GameClass,
 } from '../engine/index.js';
 import { GameRunner } from '../runtime/runner.js';
+import { PendingActionManager } from './pending-action-manager.js';
 import { createHeadlessSession } from '../testing/headless-session.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
@@ -114,16 +115,17 @@ async function session<G extends Game>(GameClass: GameClass<G>) {
   };
 }
 
-describe('GameRunner', () => {
-  it('refuses to complete a pending action once another seat has finished the game', () => {
+describe('GameRunner and PendingActionManager', () => {
+  it('refuses to complete a pending action once another seat has finished the game', async () => {
     const r = runner(SimultaneousBuildGame);
-    r.startPendingAction('build', 2);
-    expect(r.processSelectionStep(2, 'where', 'north').success).toBe(true);
+    const picks = new PendingActionManager(r, gameOptions.playerCount);
+    picks.startPendingAction('build', 2);
+    expect((await picks.processSelectionStep(2, 'where', 'north')).success).toBe(true);
 
     expect(r.performAction('win', 1, {}).success).toBe(true);
     const historyAtEnd = r.actionHistory.length;
 
-    const step = r.processSelectionStep(2, 'what', 'farm');
+    const step = await picks.processSelectionStep(2, 'what', 'farm');
 
     expect(step.success).toBe(false);
     expect(step.error).toBe('The game is finished.');
@@ -132,11 +134,12 @@ describe('GameRunner', () => {
     expect(r.isComplete()).toBe(true);
   });
 
-  it('refuses a pending action from a seat whose turn it is not, before it runs', () => {
+  it('refuses a pending action from a seat whose turn it is not, before it runs', async () => {
     const r = runner(TurnBuildGame);
-    r.startPendingAction('build', 3);
+    const picks = new PendingActionManager(r, gameOptions.playerCount);
+    picks.startPendingAction('build', 3);
 
-    const step = r.processSelectionStep(3, 'where', 'north');
+    const step = await picks.processSelectionStep(3, 'where', 'north', 'build');
 
     expect(step.success).toBe(false);
     expect(step.error).toBe("It's not your turn.");
@@ -147,11 +150,12 @@ describe('GameRunner', () => {
     expect(r.getFlowState()?.moveCount ?? 0).toBe(0);
   });
 
-  it('still completes a pending action the flow offers', () => {
+  it('still completes a pending action the flow offers', async () => {
     const r = runner(TurnBuildGame);
-    r.startPendingAction('build', 1);
-    r.processSelectionStep(1, 'where', 'north');
-    const step = r.processSelectionStep(1, 'what', 'farm');
+    const picks = new PendingActionManager(r, gameOptions.playerCount);
+    picks.startPendingAction('build', 1);
+    await picks.processSelectionStep(1, 'where', 'north');
+    const step = await picks.processSelectionStep(1, 'what', 'farm');
 
     expect(step).toMatchObject({ success: true, actionComplete: true });
     expect(r.game.built).toEqual([1]);
@@ -266,22 +270,23 @@ class ScoutGame extends Game<ScoutGame, Player> {
 const NOT_YOURS = "'loot' is not one of your actions right now.";
 
 describe('a follow-up belongs to the seat that published it', () => {
-  it('GameRunner: another seat is refused it; the publishing seat takes it', () => {
+  it('PendingActionManager: another seat is refused it; the publishing seat takes it', async () => {
     const r = new GameRunner({ GameClass: ScoutGame, gameType: 'scout', gameOptions });
     r.start();
     expect(r.performAction('scout', 1, {}).success).toBe(true);
     expect(r.getFlowState()?.followUps).toEqual([{ action: 'loot', seat: 1 }]);
 
     expect(r.refusalToAct('loot', 2)).toEqual({ error: NOT_YOURS, errorCode: 'ACTION_NOT_AVAILABLE' });
-    r.startPendingAction('loot', 2);
-    const stolen = r.processSelectionStep(2, 'where', 'north');
+    const picks = new PendingActionManager(r, gameOptions.playerCount);
+    picks.startPendingAction('loot', 2);
+    const stolen = await picks.processSelectionStep(2, 'where', 'north', 'loot');
     expect(stolen).toMatchObject({ success: false, error: NOT_YOURS });
     expect(r.game.looted).toEqual([]);
 
     expect(r.refusalToAct('loot', 1)).toBeUndefined();
-    r.startPendingAction('loot', 1);
-    expect(r.processSelectionStep(1, 'where', 'north').success).toBe(true);
-    expect(r.processSelectionStep(1, 'what', 'gold')).toMatchObject({ success: true, actionComplete: true });
+    picks.startPendingAction('loot', 1);
+    expect((await picks.processSelectionStep(1, 'where', 'north')).success).toBe(true);
+    expect(await picks.processSelectionStep(1, 'what', 'gold')).toMatchObject({ success: true, actionComplete: true });
     expect(r.game.looted).toEqual([1]);
     expect(historyLabels(r.actionHistory)).toEqual(['scout:1', 'loot:1']);
   });
