@@ -9,13 +9,14 @@
  *
  * Measured in bytes and bodies, never in time.
  */
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, expectTypeOf } from "vitest";
 import { Game, Piece, Player, Space } from "../engine/index.js";
 import type { ElementJSON, GameOptions } from "../engine/index.js";
 import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 import { BoardSmithWorldEngine } from "./engine.js";
 import { seatView } from "./index.js";
 import type { StoredPartition, WorldAudienceViews, WorldPartitionSource } from "./contract.js";
+import type { WorldViews } from "./runner.js";
 
 class Plaza extends Space<DeckWorld> {}
 class Stall extends Piece<DeckWorld> {}
@@ -156,5 +157,13 @@ describe("#1207 -- seats shown the same count-only pile share one body", () => {
     expect(() => seatView(answered.bodies[seat.at], seat.placeholders.slice(1))).toThrow(
       /52 placeholders.*51 ids/,
     );
+  });
+
+  it("hands a runner's reader a seat's body index only beside that seat's ids", () => {
+    // A bare index would let a reader send bodies[of[player]] with no ids in it.
+    expectTypeOf<WorldViews["of"][string]>().toEqualTypeOf<{
+      readonly at: number;
+      readonly placeholders: readonly number[];
+    }>();
   });
 });

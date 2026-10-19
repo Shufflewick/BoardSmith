@@ -1576,8 +1576,9 @@ sharing removes.
 **A count-only pile shares too (#1207).** A seat knows a card it cannot see by a
 placeholder id of its own (#715), so the body seats share has each placeholder's
 id taken out, and `viewsFor` answers each seat its own ids beside the body it
-holds (`placeholders`, in order). `seatView(body, placeholders)` from
-`boardsmith/world` is that seat's view: a host calls it last, or sends the ids
+holds (`placeholders`, in order); the runner's `of[player]` is
+`{ at, placeholders }`, so a seat's body index never comes without its ids.
+`seatView(bodies[at], placeholders)` from `boardsmith/world` is that seat's view: a host calls it last, or sends the ids
 beside the shared body and lets the client call it. No shared body carries any
 seat's ids, and a seat is sent ids only for the placeholders in its own body.
 

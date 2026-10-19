@@ -1000,14 +1000,12 @@ export interface WorldViews {
    * parent encodes one frame per distinct body instead of one per watcher.
    */
   readonly bodies: readonly unknown[];
-  /** Which body each answered player holds, as an index into `bodies`. */
-  readonly of: Record<string, number>;
   /**
-   * Each answered player's own ids for the placeholders in the body it holds,
-   * which no shared body carries (#1207): `seatView(bodies[of[player]],
-   * placeholders[player])` is that player's view.
+   * Which body each answered player holds, as an index into `bodies`, and that
+   * player's own ids for the placeholders in it, which no shared body carries
+   * (#1207). `seatView(bodies[at], placeholders)` is the player's view.
    */
-  readonly placeholders: Record<string, readonly number[]>;
+  readonly of: Record<string, { readonly at: number; readonly placeholders: readonly number[] }>;
   readonly refused: Record<string, WorldViewRefusal>;
 }
 
@@ -1570,8 +1568,7 @@ export function createWorldRunner(
     async viewsFor(players: readonly string[]): Promise<WorldViews> {
       // NOTHING TO SUPPLY. Everything these views are about was adopted while
       // the declaration was settling (#122), so this projects and never fetches.
-      const of: Record<string, number> = {};
-      const placeholders: Record<string, readonly number[]> = {};
+      const of: WorldViews["of"] = {};
       const failures: Array<readonly [string, unknown]> = [];
       // THE WHOLE AUDIENCE IN ONE ASK (ShufflewickPub #408). This used to loop
       // over `viewFor`, which meant the engine serialized the resident tree in
@@ -1590,12 +1587,9 @@ export function createWorldRunner(
       const audience = await engine.viewsFor(players);
       for (const seat of audience.seats) {
         if (seat.refused) failures.push([seat.player, seat.failure]);
-        else {
-          of[seat.player] = seat.at;
-          placeholders[seat.player] = seat.placeholders;
-        }
+        else of[seat.player] = { at: seat.at, placeholders: seat.placeholders };
       }
-      return { bodies: audience.bodies, of, placeholders, refused: viewRefusalsOf(failures) };
+      return { bodies: audience.bodies, of, refused: viewRefusalsOf(failures) };
     },
 
     async declareOffers(
