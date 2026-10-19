@@ -7,12 +7,13 @@ import { configDefaults } from 'vitest/config';
 import { defineGameViteConfig } from './index.js';
 import { tempTree } from '../testing/temp-tree.test-helper.js';
 import { INSTALLED_MODULES } from '../testing/installed-modules.test-helper.js';
+import { commitAll, git, initRepo } from '../cli/lib/verify-result.test-helper.js';
 
 const CHECKOUT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /** A game whose vite.config.ts uses a packed boardsmith: a real directory under node_modules, not a symlink to a checkout. */
-function packedGame(prefix: string): string {
-  const game = tempTree(prefix);
+function packedGame(prefix: string, within = ''): string {
+  const game = join(tempTree(prefix), within);
   const packed = join(game, 'node_modules', 'boardsmith');
   mkdirSync(join(packed, 'src'), { recursive: true });
   cpSync(join(CHECKOUT, 'package.json'), join(packed, 'package.json'));
@@ -33,7 +34,7 @@ describe('defineGameViteConfig', () => {
     expect(config.plugins?.flat().map((p) => (p && typeof p === 'object' && 'name' in p ? p.name : p))).toEqual(['vite:vue']);
     expect(config.resolve?.dedupe).toEqual(['vue']);
     expect(config.test?.exclude).toEqual([...configDefaults.exclude, '.boardsmith/**', '.worktrees/**', '**/tests/browser/**']);
-    expect(config.test?.forceRerunTriggers).toEqual([...configDefaults.forceRerunTriggers, '**/boardsmith.json']);
+    expect(config.test?.forceRerunTriggers).toEqual([...configDefaults.forceRerunTriggers, '**/*(*/|.*/)boardsmith.json']);
   });
 
   it("keeps a game's own settings, adding its excludes to the shipped ones", () => {
@@ -47,7 +48,7 @@ describe('defineGameViteConfig', () => {
       'tests/tdd/**',
     ]);
     expect(config.resolve?.dedupe).toEqual(['vue']);
-    expect(config.test?.forceRerunTriggers).toEqual([...configDefaults.forceRerunTriggers, '**/boardsmith.json']);
+    expect(config.test?.forceRerunTriggers).toEqual([...configDefaults.forceRerunTriggers, '**/*(*/|.*/)boardsmith.json']);
   });
 
   it('loads from a packed boardsmith under node_modules, where Node strips no TypeScript', () => {
@@ -64,18 +65,18 @@ describe('defineGameViteConfig', () => {
     expect(listed.status).toBe(0);
   }, 60_000);
 
-  it('runs every test under --changed when only boardsmith.json changed (#1211)', () => {
+  it.each(['', '.worktrees/t'])('runs every test under --changed when only boardsmith.json changed, in a game at "%s" (#1211)', (within) => {
     // No test imports boardsmith.json, yet TestGame and the headless session read their options from it.
-    const game = packedGame('bs-vite-config-rerun-');
+    // A thread or chunk worktree puts the game under a dot folder, where verify runs.
+    const game = packedGame('bs-vite-config-rerun-', within);
     writeFileSync(join(game, 'boardsmith.json'), '{ "name": "g" }\n');
     mkdirSync(join(game, 'tests'), { recursive: true });
     writeFileSync(join(game, 'tests', 'a.test.ts'), "import { it } from 'vitest';\nit('holds', () => {});\n");
     writeFileSync(join(game, '.gitignore'), 'node_modules\n');
-    const git = (...args: string[]) => spawnSync('git', args, { cwd: game, encoding: 'utf-8' });
-    git('init', '-q');
-    git('add', '.');
-    git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'base');
+    initRepo(game);
+    commitAll(game, 'base');
     writeFileSync(join(game, 'boardsmith.json'), '{ "name": "g", "minPlayers": 2 }\n');
+    expect(git(game, 'status', '--porcelain')).toBe(' M boardsmith.json\n');
 
     const run = spawnSync(join(INSTALLED_MODULES, '.bin', 'vitest'), ['run', '--changed', 'HEAD', '--passWithNoTests=false'], { cwd: game, encoding: 'utf-8' });
 

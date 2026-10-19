@@ -44,7 +44,8 @@ export function defineGameViteConfig(overrides = {}) {
       resolve: { dedupe: ['vue'] },
       test: {
         exclude: [...configDefaults.exclude, '.boardsmith/**', '.worktrees/**', '**/tests/browser/**'],
-        forceRerunTriggers: [...configDefaults.forceRerunTriggers, '**/boardsmith.json'],
+        // vitest matches absolute paths and `**` skips dot folders, so `*(*/|.*/)` lets it pass the `.worktrees/` verify runs in.
+        forceRerunTriggers: [...configDefaults.forceRerunTriggers, '**/*(*/|.*/)boardsmith.json'],
       },
     },
     overrides,
