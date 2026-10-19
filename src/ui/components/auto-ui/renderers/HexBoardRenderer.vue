@@ -62,6 +62,18 @@ const coordNames = computed(() => hexCoordNames(props.element));
 const qCoordName = computed(() => coordNames.value.q);
 const rCoordName = computed(() => coordNames.value.r);
 
+/** A cell's coordinate, refused when missing: drawing it at 0 would stack it on another cell (#1198). */
+function coord(cell: GameElement, name: string): number {
+  const value = cell.attributes?.[name];
+  if (typeof value !== 'number') {
+    throw new Error(
+      `Hex board "${props.element.name ?? props.element.id}" can't render: cell "${cell.name ?? cell.id}" has no numeric "${name}"; ` +
+      `give every cell numeric ${qCoordName.value} and ${rCoordName.value} values`,
+    );
+  }
+  return value;
+}
+
 // ── Closed-form functions (no hand-rolled trig) ──────────────────────────────
 
 /**
@@ -69,10 +81,7 @@ const rCoordName = computed(() => coordNames.value.r);
  * Reads q/r from the cell's own coordinate attributes, using coord names from parent.
  */
 function getCellPosition(cell: GameElement): { x: number; y: number } {
-  const attrs = cell.attributes ?? {};
-  const q = (attrs[qCoordName.value] as number) ?? 0;
-  const r = (attrs[rCoordName.value] as number) ?? 0;
-  return hexToPixel(q, r, hexSize.value, orientation.value);
+  return hexToPixel(coord(cell, qCoordName.value), coord(cell, rCoordName.value), hexSize.value, orientation.value);
 }
 
 /** SVG polygon points string from standalone getHexPolygonPoints function */
@@ -195,7 +204,7 @@ const hexCols = computed(() => {
   let maxQ = -Infinity;
   let minQ = Infinity;
   for (const cell of cells) {
-    const q = (cell.attributes?.[qCoordName.value] as number) ?? 0;
+    const q = coord(cell, qCoordName.value);
     maxQ = Math.max(maxQ, q);
     minQ = Math.min(minQ, q);
   }
@@ -209,7 +218,7 @@ const hexRows = computed(() => {
   let maxR = -Infinity;
   let minR = Infinity;
   for (const cell of cells) {
-    const r = (cell.attributes?.[rCoordName.value] as number) ?? 0;
+    const r = coord(cell, rCoordName.value);
     maxR = Math.max(maxR, r);
     minR = Math.min(minR, r);
   }
@@ -217,8 +226,7 @@ const hexRows = computed(() => {
 });
 
 function hexCellAxes(cell: GameElement) {
-  const attrs = cell.attributes ?? {};
-  return { row: (attrs[rCoordName.value] as number) ?? 0, col: (attrs[qCoordName.value] as number) ?? 0 };
+  return { row: coord(cell, rCoordName.value), col: coord(cell, qCoordName.value) };
 }
 
 // Hex cell activation: selectable AND passive selectElement branches.
@@ -267,13 +275,12 @@ watch(
 
 // Per-cell aria-label: coord + occupant names + state
 function hexCellAriaLabel(cell: GameElement): string {
-  const coord = cell.name
-    ?? `(${cell.attributes?.[qCoordName.value] ?? '?'},${cell.attributes?.[rCoordName.value] ?? '?'})`;
+  const label = cell.name ?? `(${coord(cell, qCoordName.value)},${coord(cell, rCoordName.value)})`;
   const pieces = cell.children ?? [];
   const occupant = pieces.length > 0
     ? `, ${pieces.map(p => p.name ?? 'piece').join(', ')}`
     : '';
-  return `${coord}${occupant}, ${cellStateLabel(cell)}`;
+  return `${label}${occupant}, ${cellStateLabel(cell)}`;
 }
 </script>
 

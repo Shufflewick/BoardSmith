@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Game, Grid, GridCell, Piece, Player, Space } from '../index.js';
+import { Game, Grid, GridCell, HexCell, HexGrid, Piece, Player, Space } from '../index.js';
 import { serializedRoundTrip } from './serialized-round-trip.test-helper.js';
 
 class Pawn extends Piece<GridGame> {}
@@ -159,5 +159,48 @@ describe('a grid cell hidden from a seat (#1055)', () => {
     const placeholders = cellsInView(game);
     expect(placeholders).toHaveLength(9);
     expect(placeholders.every((c) => c.id < 0 && Object.keys(c.attributes!).sort().join() === '$layout,__hidden,file,rank')).toBe(true);
+  });
+});
+
+describe('a hex cell hidden from a seat (#1198)', () => {
+  class Tile extends HexCell<HexGame> {
+    col!: number;
+    row!: number;
+    secret?: string;
+  }
+  class Map extends HexGrid<HexGame> {
+    $qCoord = 'col';
+    $rCoord = 'row';
+  }
+  class HexGame extends Game<HexGame, Player> {
+    map!: Map;
+    constructor(options: { playerCount: number }) {
+      super(options);
+      this.map = this.create(Map, 'map');
+      this.map.create(Tile, 'tile', { col: 2, row: -1, secret: 'treasure' });
+    }
+  }
+
+  it('keeps its own coordinates and nothing else of its own', () => {
+    const game = new HexGame({ playerCount: 2 });
+    const tile = game.map.first(Tile)!;
+    tile.hideFromAll();
+    const view = game.toJSONForPlayer(1).children!.find((c) => c.name === 'map')!.children![0];
+    expect(view.attributes).toEqual({ __hidden: true, $type: 'hex-cell', col: 2, row: -1 });
+  });
+});
+
+describe('a hidden piece placed directly in a grid (#1199)', () => {
+  class Ship extends Piece<GridGame> {
+    rank!: number;
+    file!: number;
+  }
+
+  it('keeps none of its own attributes, even ones named like the grid coordinates', () => {
+    const game = new GridGame({ playerCount: 2 });
+    const ship = game.board.create(Ship, 'ship', { rank: 2, file: 3 });
+    ship.hideFromAll();
+    const view = game.toJSONForPlayer(1).children!.find((c) => c.name === 'board')!.children!.find((c) => c.id === ship.id)!;
+    expect(view.attributes).toEqual({ __hidden: true });
   });
 });
