@@ -258,11 +258,18 @@ describe('a granted element nested below a concealed child (#961)', () => {
   });
 });
 
-/** Whether a visibility rule on `element` shows the seat, written out apart from the engine's. */
-function shows(rule: VisibilityState, element: GameElement, seat: number): boolean {
+/** The owner `view` gives `element` (#1209): its own player, or that of its nearest ancestor the view carries. */
+function seenOwner(view: ElementJSON, element: GameElement): number | undefined {
+  if (element.player) return element.player.seat;
+  for (let at = element._t.parent; at; at = at._t.parent) if (revealedIn(view, at)) return seenOwner(view, at);
+  return undefined;
+}
+
+/** Whether a visibility rule on `element` shows the seat whose view is `view`, written out apart from the engine's. */
+function shows(rule: VisibilityState, element: GameElement, seat: number, view: ElementJSON): boolean {
   if (rule.addPlayers?.includes(seat)) return true;
   if (rule.exceptPlayers?.includes(seat)) return false;
-  return rule.mode === 'all' || (rule.mode === 'owner' && element.getEffectiveOwner()?.seat === seat);
+  return rule.mode === 'all' || (rule.mode === 'owner' && seenOwner(view, element) === seat);
 }
 
 /** `element`'s ancestors, nearest first, up to the one whose zone rule it inherits, or to the top when none has one. */
@@ -276,16 +283,16 @@ function ancestorsToRule(element: GameElement): GameElement[] {
 }
 
 /** Whether `element`'s parent is a zone whose contents the seat may not see. */
-function inConcealedZone(element: GameElement, seat: number): boolean {
+function inConcealedZone(element: GameElement, seat: number, view: ElementJSON): boolean {
   const parent = element._t.parent;
   const zone = parent && 'getZoneVisibility' in parent ? (parent as Box).getZoneVisibility() : undefined;
-  return zone !== undefined && !shows(zone, parent!, seat);
+  return zone !== undefined && !shows(zone, parent!, seat, view);
 }
 
 /** Whether the element's own setting, not one it inherits, shows it to the seat. */
-function ownGrant(element: GameElement, seat: number): boolean {
+function ownGrant(element: GameElement, seat: number, view: ElementJSON): boolean {
   const own = element._visibility;
-  return own !== undefined && (own.explicit ? shows(own, element, seat) : own.addPlayers?.includes(seat) === true);
+  return own !== undefined && (own.explicit ? shows(own, element, seat, view) : own.addPlayers?.includes(seat) === true);
 }
 
 function forEachNode(node: ElementJSON, visit: (node: ElementJSON) => void): void {
@@ -307,6 +314,7 @@ describe('isVisibleTo matches the seat view on random trees (#961)', () => {
     (e) => e.addVisibleTo(2),
     (e) => e.showOnlyTo(3),
     (e) => e.hideFrom(1),
+    (e) => e.showToOwner(),
   ];
   const zones: Array<(s: Box) => void> = [
     () => {},
@@ -344,20 +352,20 @@ describe('isVisibleTo matches the seat view on random trees (#961)', () => {
   function checkElement(view: ElementJSON, ids: Set<number>, element: GameElement, seat: number, where: string): void {
     expect(element.isVisibleTo(seat), where).toBe(revealedIn(view, element));
     // Checked without the rule under test: without its own grant, an element is shown only by a rule the seat can see, on an ancestor the view carries with all between.
-    if (revealedIn(view, element) && !ownGrant(element, seat)) {
+    if (revealedIn(view, element) && !ownGrant(element, seat, view)) {
       for (const ancestor of ancestorsToRule(element)) expect(revealedIn(view, ancestor), `${where}, via ${ancestor.name}`).toBe(true);
     }
     // A hidden container keeps its real id only as a placeholder in a parent whose contents the seat sees.
-    const hidden = !shows(element.getEffectiveVisibility(), element, seat);
-    if (hidden && (inConcealedZone(element, seat) || !revealedIn(view, element._t.parent!))) expect(ids.has(element.id), where).toBe(false);
+    const hidden = !shows(element.getEffectiveVisibility(), element, seat, view);
+    if (hidden && (inConcealedZone(element, seat, view) || !revealedIn(view, element._t.parent!))) expect(ids.has(element.id), where).toBe(false);
   }
 
   /** A node's `childCount`, where sent, is its element's real number of children. */
-  function checkChildCount(game: TestGame, node: ElementJSON, seat: number, where: string): void {
+  function checkChildCount(game: TestGame, view: ElementJSON, node: ElementJSON, seat: number, where: string): void {
     const element = game.getElementById(node.id);
     const zone = element instanceof Space && !isHiddenPlaceholder(node) ? element.getZoneVisibility() : undefined;
     // A count-only zone the view carries but the seat cannot see into always says how many it holds.
-    const mustCount = zone?.mode === 'count-only' && !shows(zone, element!, seat);
+    const mustCount = zone?.mode === 'count-only' && !shows(zone, element!, seat, view);
     if (mustCount || node.childCount !== undefined) expect(node.childCount, where).toBe(element!._t.children.length);
   }
 
@@ -368,7 +376,27 @@ describe('isVisibleTo matches the seat view on random trees (#961)', () => {
         const view = game.toJSONForPlayer(seat);
         const ids = new Set(idsIn(view));
         for (const element of elements) checkElement(view, ids, element, seat ?? -1, `${element.name} for seat ${seat}, seed ${seed}`);
-        forEachNode(view, (node) => checkChildCount(game, node, seat ?? -1, `${node.name} for seat ${seat}, seed ${seed}`));
+        forEachNode(view, (node) => checkChildCount(game, view, node, seat ?? -1, `${node.name} for seat ${seat}, seed ${seed}`));
+      }
+    }
+  });
+
+  it("never depends on the owner of an element the seat's view does not carry (#1209), across 60 trees", () => {
+    for (let seed = 1; seed <= 60; seed++) {
+      const { game, elements } = randomTree(seed);
+      for (const seat of SEATS) {
+        const view = game.toJSONForPlayer(seat);
+        for (const element of elements.filter((e) => !e.isVisibleTo(seat ?? -1))) {
+          const real = element.player;
+          for (const owner of [undefined, ...game.all(Player)]) {
+            element.player = owner;
+            // Owning it may show the element itself to the seat, which is the element's own rule.
+            if (!element.isVisibleTo(seat ?? -1)) {
+              expect(game.toJSONForPlayer(seat), `${element.name} owned by ${owner?.seat} for seat ${seat}, seed ${seed}`).toEqual(view);
+            }
+          }
+          element.player = real;
+        }
       }
     }
   });

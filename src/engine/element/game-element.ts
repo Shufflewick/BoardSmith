@@ -2219,20 +2219,29 @@ export interface ZoneVisibilityOwner {
 }
 
 /**
- * Whether the element's own visibility allows the seat, ancestors aside
- * (#1123). Only for a walk from the top that already knows what its
- * ancestors leave open (`deepestRevealed`); anywhere else, `isVisibleTo` is
- * the answer. Not re-exported from the engine.
+ * The seat that owns `element` as a seat's view resolves it (#1209): its own
+ * player, or else `above`, the owner of the nearest container the view
+ * carries. A hidden container's player is never consulted, so who owns it
+ * changes nothing the seat is sent.
  */
-export function ownVisibilityAllows(element: GameElement, seat: number): boolean {
-  // The owner is this element's, or the nearest ancestor's (inherited visibility).
-  return canPlayerSee(element.getEffectiveVisibility(), seat, element.getEffectiveOwner()?.seat);
+export function viewOwner(element: GameElement, above: number | undefined): number | undefined {
+  return element.player?.seat ?? above;
 }
 
-/** Whether `element` is a zone whose contents the seat cannot see. */
-export function hidesContents(element: GameElement, seat: number): boolean {
+/**
+ * Whether the element's own visibility allows the seat, ancestors aside
+ * (#1123), with `owner` its {@link viewOwner}. Only for a walk from the top
+ * that already knows what its ancestors leave open (`deepestRevealed`);
+ * anywhere else, `isVisibleTo` is the answer. Not re-exported from the engine.
+ */
+export function ownVisibilityAllows(element: GameElement, seat: number, owner: number | undefined): boolean {
+  return canPlayerSee(element.getEffectiveVisibility(), seat, owner);
+}
+
+/** Whether `element`, owned by `owner` as the view resolves it, is a zone whose contents the seat cannot see. */
+export function hidesContents(element: GameElement, seat: number, owner: number | undefined): boolean {
   const zone = hasZoneVisibility(element) ? element.getZoneVisibility() : undefined;
-  return zone !== undefined && !canPlayerSee(zone, seat, element.getEffectiveOwner()?.seat);
+  return zone !== undefined && !canPlayerSee(zone, seat, owner);
 }
 
 /**
@@ -2240,10 +2249,10 @@ export function hidesContents(element: GameElement, seat: number): boolean {
  * visibility that allows the seat, or the seat in its own `addVisibleTo`
  * grant. A rule inherited from a zone above it never counts.
  */
-export function ownGrantAllows(element: GameElement, seat: number): boolean {
+export function ownGrantAllows(element: GameElement, seat: number, owner: number | undefined): boolean {
   const own = element._visibility;
   if (!own) return false;
-  return own.explicit ? canPlayerSee(own, seat, element.getEffectiveOwner()?.seat) : own.addPlayers?.includes(seat) === true;
+  return own.explicit ? canPlayerSee(own, seat, owner) : own.addPlayers?.includes(seat) === true;
 }
 
 /**
@@ -2254,18 +2263,22 @@ export function ownGrantAllows(element: GameElement, seat: number): boolean {
  * visibility allows the seat (#758). Below a hidden child of a concealed zone,
  * only an element's own grant carries it (#961), since an open zone rule
  * there sits on a container the seat cannot see. A granted element there with
- * a zone rule of its own applies that rule to its contents, as usual.
+ * a zone rule of its own applies that rule to its contents, as usual. Owners
+ * resolve only through the elements carried (#1209).
  */
 export function deepestRevealed(element: GameElement, seat: number): GameElement | undefined {
   const chain: GameElement[] = [];
   for (let at: GameElement | undefined = element; at; at = at._t.parent) chain.unshift(at);
   let revealed: GameElement | undefined;
   let state: RevealWalk = 'open';
+  let carriedOwner: number | undefined;
   for (const at of chain) {
-    const allowed = state === 'below-hidden' ? ownGrantAllows(at, seat) : ownVisibilityAllows(at, seat);
+    const owner = viewOwner(at, carriedOwner);
+    const allowed = state === 'below-hidden' ? ownGrantAllows(at, seat, owner) : ownVisibilityAllows(at, seat, owner);
     if (allowed) {
       revealed = at;
-      state = walkBelow(at, seat, state);
+      carriedOwner = owner;
+      state = walkBelow(at, seat, state, owner);
     } else if (state === 'open') {
       break;
     } else {
@@ -2278,10 +2291,10 @@ export function deepestRevealed(element: GameElement, seat: number): GameElement
 type RevealWalk = 'open' | 'in-concealed-zone' | 'below-hidden';
 
 /** The walk's state for the contents of `at`, an element the seat's view carries. */
-function walkBelow(at: GameElement, seat: number, state: RevealWalk): RevealWalk {
+function walkBelow(at: GameElement, seat: number, state: RevealWalk, owner: number | undefined): RevealWalk {
   // With no zone rule of its own, a granted element's contents inherit one from a hidden container above.
   if (state === 'below-hidden' && !(hasZoneVisibility(at) && at.getZoneVisibility())) return state;
-  return hidesContents(at, seat) ? 'in-concealed-zone' : 'open';
+  return hidesContents(at, seat, owner) ? 'in-concealed-zone' : 'open';
 }
 
 /**

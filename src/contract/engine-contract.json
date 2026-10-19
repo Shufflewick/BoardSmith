@@ -1,5 +1,5 @@
 {
-  "revision": 248,
+  "revision": 249,
   "surfaceHash": "7f205bf27a6fcb74",
   "payloadHash": "434e366607ffd36b",
   "formatHash": "ed115e27605f2ca7",
@@ -1927,6 +1927,14 @@
       "payloadHash": "434e366607ffd36b",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A hex cell hidden from a seat keeps its coordinates in the seat view, so AutoUI draws it where it is (#1198), and a hidden piece placed directly in a grid no longer keeps attributes named like the grid's coordinates, which showed where it was (#1199). AutoUI's hex board refuses a cell with no coordinates instead of drawing it at (0,0). No game needs a rebuild."
+    },
+    {
+      "revision": 249,
+      "date": "2026-10-19",
+      "surfaceHash": "7f205bf27a6fcb74",
+      "payloadHash": "434e366607ffd36b",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A seat's view resolves who owns an element only through containers the seat is sent (#1209). A card or container granted to a seat below a hidden box takes its owner from its own player, or else from the nearest container the seat can see, never from the hidden box, so an owner-only rule on it (showToOwner, contentsVisibleToOwner, visibleAttributes) no longer tells the hidden box's owner that the box is theirs. isVisibleTo agrees. No game needs a rebuild."
     }
   ]
 }

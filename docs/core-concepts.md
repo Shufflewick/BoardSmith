@@ -243,7 +243,11 @@ hidden from the seat. A granted element there with a zone rule of its own
 applies it to its contents as usual: a granted `Deck` arrives with its
 placeholders and `childCount`, a granted box with `contentsVisible()` with its
 contents. One with no zone rule of its own carries only its own granted
-contents, since the rule they inherit sits on a hidden box.
+contents, since the rule they inherit sits on a hidden box. For the same
+reason an owner rule there (`showToOwner()`, `contentsVisibleToOwner()`,
+`visibleAttributes`) takes its owner from the element's own `player`, or else
+from the nearest container the seat is sent, never from a hidden box between,
+so no seat learns who owns that box (#1209).
 `isVisibleTo(seat)` follows the same rule, so it is true exactly when the
 seat's view carries the element. Outside a concealed zone, nothing below an
 element hidden from the seat is sent, granted or not. A shuffle clears every
