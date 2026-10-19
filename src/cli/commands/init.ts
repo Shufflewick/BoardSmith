@@ -298,31 +298,36 @@ async function initVersionControl(projectPath: string): Promise<void> {
 
 /**
  * Install the ingest synthesis `pre-commit` hook, for a fresh project and an existing
- * repository alike, and say so whenever it was not installed.
+ * repository alike, and say where it went or why it was not installed.
  *
  * It runs on every commit after this one, including the ones the bs- build protocol makes during
  * chunk work, and is what sweeps `## Open Rules Gaps` once transcription has produced slices.
  */
 async function installHookAndReport(projectPath: string): Promise<void> {
-  const result = await installIngestHook(projectPath);
-  if (result === 'skipped-existing') {
+  const hook = await installIngestHook(projectPath);
+  const byHand = 'run `boardsmith ingest-gaps` manually after transcription';
+  if (hook.result === 'skipped-no-git') {
+    console.log(styleText('yellow', `  Could not install the ingest pre-commit hook: this folder has no git repository, so ${byHand}.`));
+  } else if (hook.result === 'installed') {
+    console.log(styleText('dim', `  (installed the ingest pre-commit hook at ${hook.path})`));
+  } else if (hook.result === 'skipped-existing') {
+    console.log(styleText('dim', `  (left your existing ${hook.path} alone — ${byHand})`));
+  } else if (hook.result === 'skipped-unreadable') {
     console.log(
-      styleText('dim', '  (left your existing .git/hooks/pre-commit alone — run `boardsmith ingest-gaps` manually after transcription)'),
+      styleText('yellow', `  Left ${hook.path} alone: could not read it, so the ingest hook is not installed. Check that you can read it, or ${byHand}.`),
     );
-  } else if (result === 'skipped-unreadable') {
+  } else if (hook.result === 'skipped-outside') {
     console.log(
-      styleText('yellow', '  Left .git/hooks/pre-commit alone: could not read .git/hooks/pre-commit, so the ingest hook is not installed. Check that you can read it, or run `boardsmith ingest-gaps` manually after transcription.'),
+      styleText('yellow', `  Left ${hook.path} alone: git runs hooks from a folder outside this project, which other repositories may share, so the ingest hook is not installed. Run \`boardsmith ingest-gaps\` manually after transcription.`),
     );
-  } else if (result === 'skipped-no-git') {
-    console.log(
-      styleText('yellow', '  Could not install the ingest pre-commit hook into .git/hooks — run `boardsmith ingest-gaps` manually after transcription.'),
-    );
+  } else {
+    console.log(styleText('yellow', `  Could not write ${hook.path}, so the ingest hook is not installed. Check that you can write to its folder, or ${byHand}.`));
   }
 }
 
 /**
  * `--into-existing` scaffolds into the repository it is run from, so that folder must BE the top
- * of a git repository: the hook is installed into its `.git/hooks`, and the hook reads
+ * of a git repository: the hook is installed where git runs it from, and the hook reads
  * `design/rulebook/` relative to the folder git runs it from, which is the top folder.
  */
 function assertGitTopFolder(projectPath: string): void {
