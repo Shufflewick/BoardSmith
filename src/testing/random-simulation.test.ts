@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   Game,
   Player,
@@ -312,6 +312,20 @@ describe('simulateRandomGames', () => {
     expect(results.exceededMaxActions).toBe(1);
     expect(results.games[0].error).toMatch(/maximum of 1 action/);
     expect(results.errors).toEqual([results.games[0].error]);
+  });
+
+  it('says why a game cut off at its timeout failed (#1182)', async () => {
+    let now = 0;
+    // Every clock read moves a second on, so the 1 ms limit is passed before the first move.
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => (now += 1000));
+    try {
+      const results = await simulateRandomGames(PickGame, { count: 1, playerCounts: [2], seed: 'slow', timeout: 1 });
+      expect(results.timedOut).toBe(1);
+      expect(results.games[0].error).toMatch(/^Game did not finish within its timeout of 1 ms\. Raise timeout/);
+      expect(results.errors).toEqual([results.games[0].error]);
+    } finally {
+      clock.mockRestore();
+    }
   });
 
   it('is deterministic and reproducible from the base seed (F50)', async () => {
