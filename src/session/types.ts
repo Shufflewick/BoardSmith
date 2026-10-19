@@ -198,6 +198,28 @@ export interface StandardPlayerOption {
 }
 
 /**
+ * Number per-player option, shown for each player slot. The platform also
+ * needs `step`, where given, above 0, which dev and build check (#1197).
+ */
+export interface NumberPlayerOption {
+  type: 'number';
+  label: string;
+  description?: string;
+  default: number;
+  min?: number;
+  max?: number;
+  step?: number;
+}
+
+/** On/off per-player option, shown for each player slot (#1197). */
+export interface BooleanPlayerOption {
+  type: 'boolean';
+  label: string;
+  description?: string;
+  default: boolean;
+}
+
+/**
  * Exclusive player option - renders as radio button, exactly one player can have this
  *
  * Use for asymmetric games where exactly one player must have a specific role.
@@ -228,7 +250,12 @@ export interface ExclusivePlayerOption {
  * Per-player option definition (shown for each player slot). A `color` option
  * is built from boardsmith.json's `colorPalette`; see `createColorOption`.
  */
-export type PlayerOptionDefinition = StandardPlayerOption | ExclusivePlayerOption | ColorOptionDefinition;
+export type PlayerOptionDefinition =
+  | StandardPlayerOption
+  | NumberPlayerOption
+  | BooleanPlayerOption
+  | ExclusivePlayerOption
+  | ColorOptionDefinition;
 
 /**
  * Preset configuration for quick game setup

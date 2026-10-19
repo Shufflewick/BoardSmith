@@ -623,6 +623,21 @@ describe('boardsmith doctor', () => {
       expect(await read(hookPath(mainDir))).toBe(INGEST_PRE_COMMIT_HOOK);
     });
 
+    it.skipIf(process.platform === 'win32')('reports a hook git cannot run because it lost its execute bit, and --fix restores it (#1187)', async () => {
+      const projectDir = await gitProject();
+      await installIngestHook(projectDir);
+      await fs.chmod(hookPath(projectDir), 0o644);
+
+      const report = await doctorCommand({ project: projectDir });
+      expect(report.findings.map((f) => [f.kind, f.detail])).toEqual([
+        ['ingest-hook-not-current', 'the ingest pre-commit hook is not executable, so git skips it.'],
+      ]);
+
+      process.exitCode = undefined;
+      await doctorCommand({ project: projectDir, fix: true });
+      expect((await fs.stat(hookPath(projectDir))).mode & 0o111).toBeGreaterThan(0);
+    });
+
     it('reports a missing hook where core.hooksPath points, and --fix installs it there (#1186)', async () => {
       const projectDir = await gitProject();
       execSync('git config core.hooksPath githooks', { cwd: projectDir });
