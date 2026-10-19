@@ -151,6 +151,9 @@ const isDisabled = computed(() => {
 
 // Keyboard/ARIA: tabindex 0 for both action-selectable and drop-target cards
 // so keyboard users can reach cards that are valid drag targets too.
+// A disabled candidate starts no drag, as a click on it chooses nothing (#1190).
+const canDrag = computed(() => isActionSelectable.value && !isDisabled.value);
+
 const isInteractiveForTabindex = computed(
   () => isActionSelectable.value || isDropTarget.value,
 );
@@ -231,7 +234,7 @@ watch(
 // Drag handlers
 // ---------------------------------------------------------------------------
 function handleDragStart(event: DragEvent) {
-  if (!boardInteraction || !isActionSelectable.value) {
+  if (!boardInteraction || !canDrag.value) {
     event.preventDefault();
     return;
   }
@@ -293,14 +296,14 @@ function handleDrop(event: DragEvent) {
         'is-board-selected': isBoardSelected,
         'is-hidden': isHidden,
         'is-disabled': isDisabled,
-        'is-draggable': isActionSelectable,
+        'is-draggable': canDrag,
         'is-dragging': isDragged,
         'is-drop-target': isDropTarget,
         'has-image': !!(effectiveCardImage || presentationEntry?.image),
       },
     ]"
     :data-animatable="true"
-    :draggable="isActionSelectable"
+    :draggable="canDrag"
     v-bind="selectableAttrs"
     :aria-label="ariaLabel"
     :aria-pressed="isSelected || undefined"
