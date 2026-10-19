@@ -279,7 +279,8 @@ class ReferenceWorldEngine implements WorldEngine {
     for (const player of players) {
       try {
         const view = await this.viewFor(player);
-        seats.push({ player, refused: false, at: bodies.length });
+        // Counters hide nothing, so there is no placeholder to give an id.
+        seats.push({ player, refused: false, at: bodies.length, placeholders: [] });
         bodies.push(view);
       } catch (error) {
         seats.push({ player, refused: true, failure: error });

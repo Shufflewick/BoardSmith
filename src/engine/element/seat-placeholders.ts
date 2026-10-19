@@ -25,6 +25,7 @@
  */
 import type { Game } from './game.js';
 import type { GameElement } from './game-element.js';
+import type { ElementJSON } from './types.js';
 import type { Selection } from '../action/types.js';
 import { outermostConcealer } from './concealed-refs.js';
 import { isSerializedElement } from '../action/choice-matching.js';
@@ -39,6 +40,60 @@ export function placeholderIdOf(element: GameElement, seat: number): number {
   // A game restored from a seat's view (a bot's search) already holds that seat's placeholders as ids.
   if (element._t.id < 0) return element._t.id;
   return element._ctx.ids.placeholder(seat, element._t.placeholderToken ?? element._t.id);
+}
+
+/**
+ * `view` with each placeholder's id taken out, for every seat shown the same
+ * thing to share (#1207), and the cards those placeholders stand for. Each
+ * placeholder carries `placeholder: k` where its id was, and a seat's own id
+ * for it is `placeholderIdOf(cards[k], seat)`. `shownAs` is the redaction's
+ * `idRemap` for the seat `view` was made for, so none of that seat's ids is
+ * left in what is returned.
+ */
+export function sharePlaceholders(
+  view: ElementJSON,
+  shownAs: ReadonlyMap<number, number>,
+  game: Game,
+): { view: ElementJSON; cards: GameElement[] } {
+  const realIdOf = new Map([...shownAs].map(([real, shown]) => [shown, real]));
+  const cards: GameElement[] = [];
+  const shared = mapPlaceholders(view, (node) => {
+    const real = realIdOf.get(node.id);
+    return real === undefined ? undefined : renamed(node, 'id', 'placeholder', cards.push(game._ctx._elementsById.get(real)!) - 1);
+  });
+  return { view: shared, cards };
+}
+
+/** A shared view (`sharePlaceholders`) as one seat's, given that seat's ids for its placeholders in order. */
+export function fillPlaceholders(view: ElementJSON, ids: readonly number[]): ElementJSON {
+  let holes = 0;
+  const filled = mapPlaceholders(view, (node) => {
+    const { placeholder } = node as { placeholder?: unknown };
+    if (typeof placeholder !== 'number') return undefined;
+    holes += 1;
+    return renamed(node, 'placeholder', 'id', ids[placeholder]);
+  });
+  if (holes !== ids.length) {
+    throw new Error(
+      `This view has ${holes} placeholders and was handed ${ids.length} ids for them. ` +
+        "A seat's ids come in the same viewsFor answer as the body it holds; fill that body with exactly those.",
+    );
+  }
+  return filled;
+}
+
+/** `node` with `replace` applied wherever it answers, copying only the nodes above a change. */
+function mapPlaceholders(node: ElementJSON, replace: (node: ElementJSON) => ElementJSON | undefined): ElementJSON {
+  const replaced = replace(node);
+  if (replaced !== undefined) return replaced;
+  if (node.children === undefined) return node;
+  const children = node.children.map((child) => mapPlaceholders(child, replace));
+  return children.every((child, i) => child === node.children![i]) ? node : { ...node, children };
+}
+
+/** `node` with key `from` renamed `to` and holding `value`, in the same place, so a filled view is byte for byte the seat's own. */
+function renamed(node: ElementJSON, from: string, to: string, value: unknown): ElementJSON {
+  return Object.fromEntries(Object.entries(node).map(([key, held]) => (key === from ? [to, value] : [key, held]))) as ElementJSON;
 }
 
 /** The id `seat` knows `element` by: its placeholder, or its real id. */

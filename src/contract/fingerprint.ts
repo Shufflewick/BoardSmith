@@ -1748,7 +1748,7 @@ async function computeWorldFixture(): Promise<{
             refused: true,
             message: seat.failure instanceof Error ? seat.failure.message : String(seat.failure),
           }
-        : { player: seat.player, refused: false, at: seat.at },
+        : { player: seat.player, refused: false, at: seat.at, placeholders: seat.placeholders },
     ),
   };
 

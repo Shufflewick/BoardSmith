@@ -71,6 +71,7 @@ import {
   receiptAt,
   receiptFloor,
   resolveOrder,
+  seatView,
   type PlannedEvent,
   type RoutedEvent,
   type SeatActivityStamp,
@@ -710,8 +711,8 @@ export class ResidentWorld {
     const { bodies, of, refused } = await runner.viewsFor(projecting);
     return {
       bodyFor: (player: string): unknown => {
-        const at = of[player];
-        return at === undefined ? null : (bodies[at] ?? null);
+        const held = of[player];
+        return held === undefined ? null : seatView(bodies[held.at], held.placeholders);
       },
       failed: { ...declined, ...refused },
       revision,

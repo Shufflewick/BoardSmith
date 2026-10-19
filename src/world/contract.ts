@@ -894,7 +894,13 @@ export interface WorldPartitionSource extends WorldPartitionStore {
  * told to ask again.
  */
 export type WorldAudienceSeat =
-  | { readonly player: string; readonly refused: false; readonly at: number }
+  | {
+      readonly player: string;
+      readonly refused: false;
+      readonly at: number;
+      /** This seat's own ids for the placeholders in `bodies[at]`, in order; `seatView` puts them back (#1207). */
+      readonly placeholders: readonly number[];
+    }
   | { readonly player: string; readonly refused: true; readonly failure: unknown };
 
 /**
@@ -913,7 +919,9 @@ export type WorldAudienceSeat =
  * seats you.
  *
  * So `bodies` holds each distinct answer once and a seat says WHICH ONE IS
- * THEIRS. The host reads that as permission to encode once and send the same
+ * THEIRS, with its own placeholder ids for what it cannot see (#1207): a
+ * shared body carries no seat's ids, so a body is a seat's view only once
+ * `seatView` has put that seat's back. The host reads that as permission to encode once and send the same
  * bytes to everybody naming the same index -- which is the whole point, and the
  * reason this is a table rather than a per-seat map that happens to repeat
  * itself: a host cannot discover the repetition without doing the encoding it
