@@ -24,18 +24,18 @@
       ]
     },
     {
-      "content": "39b9c20cb69fe9e8",
-      "lines": 15,
-      "files": [
-        "src/ui/composables/useFLIP.ts"
-      ]
-    },
-    {
-      "content": "47c61f6daca7a39b",
+      "content": "395afb5c9f7f098e",
       "lines": 26,
       "files": [
         "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue",
         "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue"
+      ]
+    },
+    {
+      "content": "39b9c20cb69fe9e8",
+      "lines": 15,
+      "files": [
+        "src/ui/composables/useFLIP.ts"
       ]
     },
     {
