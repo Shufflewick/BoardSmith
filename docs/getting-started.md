@@ -5,8 +5,9 @@ BoardSmith is a TypeScript framework for building turn-based board and card game
 ## The path from an idea to players
 
 BoardSmith is one install and one command away from a game you can play.
-`npx boardsmith init my-game` scaffolds the project, `npm install` pulls in the
-whole engine, `boardsmith dev` hosts real multiplayer on your own machine with
+Install BoardSmith, then `boardsmith init my-game` scaffolds the project,
+`npm install` pulls in the whole engine, `boardsmith dev` hosts real
+multiplayer on your own machine with
 no server, database or service to provision, and `boardsmith test` drives the
 same rules headlessly. When the game is ready, `boardsmith publish` sends the
 bundle to ShufflewickPub, where a single account supplies the networking, the
