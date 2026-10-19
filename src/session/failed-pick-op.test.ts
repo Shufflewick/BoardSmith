@@ -297,6 +297,7 @@ describe("another seat's failed action after a seat's pick (#1185)", () => {
       expect(await seat.pick('items', 'done')).toMatchObject({ success: true, actionComplete: true });
       expect(moved(r.game)).toEqual(['one']);
       expect(r.actionHistory).toHaveLength(1);
+      expect(r.actionHistory[0]).toMatchObject({ name: 'gather', player: 1, args: { items: ['one', 'done'] } });
     });
   }
 });
