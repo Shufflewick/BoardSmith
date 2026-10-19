@@ -10,14 +10,14 @@ class Tile extends HexCell<HexGame> {
   r!: number;
 }
 
-class Map extends HexGrid<HexGame> {}
+class HexMap extends HexGrid<HexGame> {}
 
 class HexGame extends Game<HexGame, Player> {
-  map!: Map;
+  map!: HexMap;
 
   constructor(options: { playerCount: number }) {
     super(options);
-    this.map = this.create(Map, 'map');
+    this.map = this.create(HexMap, 'map');
     for (let q = 0; q < 3; q++) this.map.create(Tile, `t${q}`, { q, r: 0 });
   }
 }
@@ -35,10 +35,14 @@ describe('HexBoardRenderer with a cell hidden from the seat (#1198)', () => {
     expect(cellTransforms(mapView(game))).toEqual(visible);
   });
 
-  it('refuses a cell with no coordinates rather than drawing it at (0,0)', () => {
+  it('refuses a cell with no coordinates in a panel inside the hex board, rather than drawing it at (0,0)', () => {
     const board = mapView(new HexGame({ playerCount: 2 }));
     delete board.children![2].attributes!.q;
 
-    expect(() => mount(HexBoardRenderer, { props: { element: board } })).toThrow(/cell "t2" has no numeric "q"/);
+    const wrapper = mount(HexBoardRenderer, { props: { element: board } });
+    expect(wrapper.find('.hex-board-svg').exists()).toBe(false);
+    expect(wrapper.find('.hex-error-panel').text()).toBe(
+      'Hex board "map" can\'t render: cell "t2" has no numeric "q"; give every cell numeric q and r values',
+    );
   });
 });

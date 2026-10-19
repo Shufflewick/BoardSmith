@@ -37,7 +37,7 @@ import { resolvePresentation } from '../presentation.js';
 import type { PresentationOverlay } from '../presentation.js';
 import { GAME_CONTEXT_KEYS } from '../../../composables/useGameContext.js';
 import { boardCellStates } from './board-cell-states.js';
-import type { GameElement } from '../auto-ui-helpers.js';
+import { cellCoordinateError, type GameElement } from '../auto-ui-helpers.js';
 
 const props = defineProps<{
   element: GameElement;
@@ -62,17 +62,12 @@ const coordNames = computed(() => hexCoordNames(props.element));
 const qCoordName = computed(() => coordNames.value.q);
 const rCoordName = computed(() => coordNames.value.r);
 
-/** A cell's coordinate, refused when missing: drawing it at 0 would stack it on another cell (#1198). */
-function coord(cell: GameElement, name: string): number {
-  const value = cell.attributes?.[name];
-  if (typeof value !== 'number') {
-    throw new Error(
-      `Hex board "${props.element.name ?? props.element.id}" can't render: cell "${cell.name ?? cell.id}" has no numeric "${name}"; ` +
-      `give every cell numeric ${qCoordName.value} and ${rCoordName.value} values`,
-    );
-  }
-  return value;
-}
+// A cell with no coordinates is refused, not drawn at 0 on top of another cell (#1198).
+const coordError = computed(() => cellCoordinateError(props.element, qCoordName.value, rCoordName.value, 'Hex board'));
+
+// Every reader below takes cells from here, so each one has numeric q and r.
+const hexCells = computed(() => (coordError.value ? [] : props.element.children ?? []));
+const coord = (cell: GameElement, name: string) => cell.attributes![name] as number;
 
 // ── Closed-form functions (no hand-rolled trig) ──────────────────────────────
 
@@ -92,7 +87,7 @@ const hexPoints = computed(() =>
 // ── SVG viewBox bounds using hexToPixel ────
 // Uses hexToPixel (not hand-rolled math) for consistency.
 const svgBounds = computed(() => {
-  const cells = props.element.children ?? [];
+  const cells = hexCells.value;
   if (!cells.length) return { minX: 0, minY: 0, width: 400, height: 400 };
 
   const size = hexSize.value;
@@ -195,7 +190,6 @@ const displayLabel = computed(
 // NOTE (research Open Q3): tabindex on SVG <g> is spec-valid but Safari/VoiceOver
 // may not reliably focus <g> elements. Ships with tabindex-on-g first.
 // If manual VoiceOver/Safari testing fails, escalate to overlay <button> approach.
-const hexCells = computed(() => props.element.children ?? []);
 
 // Grid width as the q-coordinate range + 1, for aria-colcount on the role="grid" SVG root (WR-02).
 const hexCols = computed(() => {
@@ -297,7 +291,11 @@ function hexCellAriaLabel(cell: GameElement): string {
       MANUAL VERIFICATION, PART DONE (research Open Q3): Chrome verified
       2026-09-06; Safari and VoiceOver still unverified. See the script header.
     -->
+    <div v-if="coordError" class="hex-error-panel">
+      <span class="hex-error-panel__text">{{ coordError }}</span>
+    </div>
     <svg
+      v-else
       class="hex-board-svg"
       :key="`hex-svg-${element.id}`"
       :viewBox="viewBox"
@@ -414,6 +412,20 @@ function hexCellAriaLabel(cell: GameElement): string {
 
 .hex-cell-group {
   cursor: pointer;
+}
+
+/* ── Error panel (matches GridBoardRenderer's) ── */
+.hex-error-panel {
+  background: color-mix(in srgb, var(--bsg-danger) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--bsg-danger) 40%, transparent);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.hex-error-panel__text {
+  color: var(--bsg-danger);
+  font-size: 14px;
+  font-weight: 700;
 }
 
 /* ── Hex polygon states (UI-SPEC §HexBoardRenderer) ── */
