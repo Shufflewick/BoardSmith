@@ -6,7 +6,7 @@
  * session surface — they are defined once, in one place.
  */
 
-import type { FlowState, Game, GameClass, AnimationEvent, PendingActionState } from '../engine/index.js';
+import type { FlowState, Game, GameClass, AnimationEvent } from '../engine/index.js';
 import type { PlayerStateView } from '../engine/utils/index.js';
 import type { BotStrategy } from '../bot/index.js';
 import type { TutorialDefinition, TutorialStepView, Annotation } from '../engine/tutorial/types.js';
