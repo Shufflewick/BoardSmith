@@ -286,17 +286,17 @@ describe("another seat's move between a seat's picks (#1177)", () => {
 
 describe("another seat's failed action after a seat's pick (#1185)", () => {
   for (const [name, route] of Object.entries(routes)) {
-    it(`rolls back only that action, keeping the seat's pick and its move, on the ${name} route`, async () => {
+    it(`rolls back only that action, and the seat finishes its open action with its earlier pick kept, on the ${name} route`, async () => {
       vi.spyOn(console, 'error').mockImplementation(() => {});
       const r = runner();
-      const seat = route('pairRefused', r);
-      expect((await seat.pick('first', 'a')).success).toBe(true);
-      const before = held(seat);
+      const seat = route('gather', r);
+      expect((await seat.pick('items', 'one')).success).toBe(true);
 
       expect(r.performAction('smash', 2, {}).success).toBe(false);
 
+      expect(await seat.pick('items', 'done')).toMatchObject({ success: true, actionComplete: true });
       expect(moved(r.game)).toEqual(['one']);
-      expect(held(seat)).toEqual(before);
+      expect(r.actionHistory).toHaveLength(1);
     });
   }
 });
