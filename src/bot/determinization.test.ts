@@ -842,11 +842,21 @@ class CrateGame extends Game<CrateGame, Player> {
     bag.showOnlyTo(1);
     bag.create(HandCard, 'granted', { rank: 3 }).showOnlyTo(1);
     bag.create(HandCard, 'withheld', { rank: 4 });
+    const chest = deck.create(Space<CrateGame>, 'chest');
+    chest.showOnlyTo(1);
+    const box = chest.create(Space<CrateGame>, 'box');
+    box.setVisibility('count-only');
+    for (const rank of [5, 6, 7, 8]) box.create(HandCard, `boxed-${rank}`, { rank });
     this.setFlow({ root: actionStep({ actions: [], player: (ctx) => ctx.game.getPlayer(1)! }) });
   }
 
   granted(name: string): Space<CrateGame> {
     return this.first(Space<CrateGame>, 'deck')!.first(Space<CrateGame>, name)!;
+  }
+
+  // By position: a count-only box is sent with no name.
+  get box(): Space<CrateGame> {
+    return this.granted('chest').first(Space<CrateGame>)!;
   }
 }
 
@@ -881,5 +891,30 @@ describe('#1206 determinization: a granted container below a concealer keeps wha
     }, () => 0.5);
 
     expect(bag.count(HandCard)).toBe(2);
+  });
+
+  it('refuses a sampler that fills a count-only box sent in a granted chest with other than its count', () => {
+    for (const fill of [1, 7]) {
+      const sandbox = crateSandboxForSeat1();
+      const box = sandbox.box;
+
+      expect(() => applyDeterminization(sandbox, 1, () => {
+        for (let i = 0; i < fill; i++) box.create(HandCard, `supposed-${i}`, { rank: i });
+      }, () => 0.5)).toThrow(
+        `Space#${box.id} held 4 elements and now holds ${fill}. The seat can count what that ` +
+        `container holds even where it cannot see them, so a sampler may not change how many it holds.`,
+      );
+    }
+  });
+
+  it('accepts a sampler that fills a count-only box sent in a granted chest to its count', () => {
+    const sandbox = crateSandboxForSeat1();
+    const box = sandbox.box;
+
+    applyDeterminization(sandbox, 1, () => {
+      for (let i = 0; i < 4; i++) box.create(HandCard, `supposed-${i}`, { rank: i });
+    }, () => 0.5);
+
+    expect(box.count(HandCard)).toBe(4);
   });
 });

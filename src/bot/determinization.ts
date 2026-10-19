@@ -245,23 +245,16 @@ function inheritsConcealment(element: GameElement, seat: number): boolean {
   return false;
 }
 
-/** Whether the seat's view carries `element` and every element it holds, whole or face down. */
-function showsContents(element: GameElement, seat: number): boolean {
-  return element.isVisibleTo(seat) && !hidesContents(element, seat) && !inheritsConcealment(element, seat);
-}
-
 /**
- * Whether the seat's view says how many children this container holds, as
- * `redactTreeForSeat` decides (#1206): a count-only element sent in a
- * container whose contents the seat sees, or one the view carries (a grant
- * inside a concealed zone included, #961) whose contents are not cut down to
- * their grants and are not a zone whose 'hidden' mode keeps its size secret.
+ * Whether the seat's view says how many children this container holds (#1206).
+ * For one the seat cannot see, the view decides: `redactTreeForSeat` sends a
+ * count-only element's count, kept as `_viewChildCount`. For one it can see,
+ * this is a cautious guess, not what the view says: a container with no zone
+ * rule of its own below a concealed zone is taken for a grant (#961) and not
+ * counted, so a #758 visible direct child of such a zone goes uncounted too.
  */
 function countVisibleTo(container: GameElement, seat: number): boolean {
-  if (!container.isVisibleTo(seat)) {
-    const parent = container._t.parent;
-    return container.getEffectiveVisibility().mode === 'count-only' && (!parent || showsContents(parent, seat));
-  }
+  if (!container.isVisibleTo(seat)) return container._viewChildCount !== undefined;
   if (inheritsConcealment(container, seat)) return false;
   const zone = hasZoneVisibility(container) ? container.getZoneVisibility() : undefined;
   return zone?.mode !== 'hidden' || canPlayerSee(zone, seat, container.getEffectiveOwner()?.seat);
