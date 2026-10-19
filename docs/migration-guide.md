@@ -10,6 +10,15 @@ Code player options can now be `number` and `boolean` too, typed as
 `NumberPlayerOption` and `BooleanPlayerOption` from `boardsmith/session`, the
 same shapes `boardsmith.json` already accepted (#1197).
 
+## A zone a seat cannot see into says how many it holds (#1208)
+
+A seat that cannot see into an owner-only zone, or into a zone that hides its
+contents from that seat (`hideContentsFrom`), now gets the zone's `childCount`
+alongside its placeholders, as a count-only zone already did. Its `children`
+can carry granted cards nested below a placeholder (#961), so
+`children.length` could count more cards than the zone holds; `childCount` and
+`getElementCount` count only the zone's direct children.
+
 ## A hidden card's placeholder id is stable and the seat's own (#715)
 
 A card in a zone a seat cannot see used to reach that seat as `-1`, `-2`, ...

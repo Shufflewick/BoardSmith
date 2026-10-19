@@ -5190,12 +5190,14 @@ export class Game<
         // Every other zone this seat cannot see (a non-owner of an owner zone,
         // or a seat in `exceptPlayers` of any mode, #750) gets anonymous
         // placeholders, which keep the ids its picks are offered by (#715).
+        // childCount, as its children may also carry nested grants (#1208).
         const hiddenChildren = placeholderChildren(json, element);
         return {
           // ownJson (not json): the container's own attributes must stay
           // whitelist-redacted in this early return (CR-01).
           ...ownJson,
           children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
+          childCount: element._t.children.length,
         };
       }
 

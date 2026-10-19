@@ -177,8 +177,8 @@ export function findAllHands(
 
 /**
  * Get the count of children in an element, handling hidden contents.
- * A count-only zone's `childCount` wins over its `children`, which may also
- * carry granted cards nested below its children (#961).
+ * A concealed zone's `childCount` wins over its `children`, which may also
+ * carry granted cards nested below its children (#961, #1208).
  */
 export function getElementCount(element: GameViewElement | null | undefined): number {
   if (!element) return 0;
