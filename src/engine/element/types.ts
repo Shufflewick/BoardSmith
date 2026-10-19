@@ -241,6 +241,8 @@ export type ElementTree<T extends GameElement = GameElement> = {
   id: number;
   /** Child ordering: 'normal' = append, 'stacking' = prepend (like card piles) */
   order: 'normal' | 'stacking';
+  /** The token this element's placeholders are made from since a shuffle, or a card entering or leaving its hidden pile, reissued it; absent, its id is the token (#715). */
+  placeholderToken?: number;
 };
 
 /**
@@ -263,6 +265,8 @@ export type ElementJSON = {
   children?: ElementJSON[];
   /** For 'count-only' visibility mode, just show the count */
   childCount?: number;
+  /** `ElementTree.placeholderToken`, in a full serialization only: no seat's view carries it (#715). */
+  placeholderToken?: number;
   /**
    * This node was filtered by `static visibleAttributes` for a seat that does
    * not own it (#19), so every attribute absent from `attributes` was WITHHELD

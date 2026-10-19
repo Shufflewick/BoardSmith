@@ -19,7 +19,8 @@ import {
   registerCreatedElementClass,
 } from './game-element.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE } from './hidden-placeholder.js';
-import { concealRefsForSeat, nameableFor } from './concealed-refs.js';
+import { concealRefsForSeat, nameableFor, outermostConcealer } from './concealed-refs.js';
+import { placeholderIdOf } from './seat-placeholders.js';
 import { childrenChanged } from './cell-index.js';
 import { oncePerState, stateChanged } from './state-version.js';
 import { Piece } from './piece.js';
@@ -119,11 +120,12 @@ import { PERSIST_KEY, PERSIST_PRIVATE_KEY } from '../../persistence/persistence.
 import { ENGINE_OWNED_GAME_FIELDS, describeEngineFieldShadow } from './engine-owned-fields.js';
 import { DEFAULT_COLOR_PALETTE, DEFAULT_COLOR_LABELS, seatDisplayName } from './seat-defaults.js';
 
-/** Every element id carried by a serialized subtree, for `adoptSubtree`. */
-function collectJsonIds(json: ElementJSON, into: number[]): void {
-  into.push(json.id);
+/** Every element id carried by a serialized subtree, and every placeholder token (#715), for `adoptSubtree`. */
+function collectJsonIds(json: ElementJSON, ids: number[], tokens: number[]): void {
+  ids.push(json.id);
+  if (json.placeholderToken !== undefined) tokens.push(json.placeholderToken);
   if (json.children) {
-    for (const child of json.children) collectJsonIds(child, into);
+    for (const child of json.children) collectJsonIds(child, ids, tokens);
   }
 }
 
@@ -375,6 +377,20 @@ function savedPile(game: Game): { pile?: ElementJSON[] } {
   const piled = game.pile._t.children;
   if (game._ctx._worldMode || game._ctx._seatView || piled.length === 0) return {};
   return { pile: piled.map((child) => child.toJSON()) };
+}
+
+/**
+ * Whether `seat`'s view shows a child of `zone` as a placeholder, as
+ * `redactTreeForSeat` decides: the view reaches the zone, the zone keeps its
+ * contents from the seat while counting them, and a child is not granted to it.
+ */
+function showsPlaceholders(zone: GameElement, seat: number): boolean {
+  const state = hasZoneVisibility(zone) ? zone.getZoneVisibility() : undefined;
+  return state !== undefined
+    && redactedVisibilityFor(state, seat) === 'count-only'
+    && ownVisibilityAllows(zone, seat)
+    && outermostConcealer(zone, seat) === undefined
+    && zone._t.children.some((child) => !ownVisibilityAllows(child, seat));
 }
 
 /**
@@ -2159,7 +2175,8 @@ export class Game<
     // comparison with the counter below is made on the value read back with
     // the world's key, never on the id.
     const adoptedIds: number[] = [];
-    collectJsonIds(json, adoptedIds);
+    const adoptedTokens: number[] = [];
+    collectJsonIds(json, adoptedIds, adoptedTokens);
     const worldIds = this._ctx._worldIds!;
 
     // The id index holds every element in the tree and the pile (#755).
@@ -2183,9 +2200,10 @@ export class Game<
     // that were NOT hydrated were the ones it then minted on top of. A world
     // that declared an allocation stamp is therefore told here, at the bytes
     // that prove it, rather than at the collision hours later.
+    // A placeholder token is minted from the same counter, so the next id must stand above every token too (#715).
     let maxAdoptedCursor = -1;
     let maxAdoptedId = -1;
-    for (const id of adoptedIds) {
+    for (const id of [...adoptedIds, ...adoptedTokens]) {
       const cursor = worldIds.cursorOf(id);
       if (cursor > maxAdoptedCursor) {
         maxAdoptedCursor = cursor;
@@ -2195,7 +2213,7 @@ export class Game<
     if (this._ctx.sequence <= maxAdoptedCursor) {
       if (this._ctx._worldIdAllocationDeclared) {
         throw new StaleAllocationStampError(
-          `Cannot adopt partition "${json.name ?? json.className}": it holds element id ` +
+          `Cannot adopt partition "${json.name ?? json.className}": it holds element id or placeholder token ` +
             `${maxAdoptedId}, minted at or above this world's id allocation stamp of ` +
             `${this._ctx.sequence}. The stamp is stale, so the next id this world minted would ` +
             `collide with one it has already stored. This is a host defect: the host lost or ` +
@@ -4764,12 +4782,17 @@ export class Game<
    *   any `actionTempState` value, which only its own seat receives (#716);
    *   any animation event addressed to an audience (#23), or numbered
    *     differently for two asking seats (#489).
+   *
+   * A SEAT SHOWN A PLACEHOLDER HOLDS A PROJECTION OF ITS OWN (#715): its
+   * placeholder ids are made with its own key, so its signature names the seat.
    */
   projectionSignaturesFor(seats: readonly number[]): readonly string[] | null {
     if (this.rootDiffersBySeat(seats)) return null;
 
     /** Every state the tree declares, in one fixed order for every seat. */
     const declared: VisibilityState[] = [];
+    /** Every zone that declares a state and holds something, which a seat may be shown as placeholders. */
+    const zones: GameElement[] = [];
     const collect = (element: GameElement): boolean => {
       const ElementClass = element.constructor as typeof GameElement;
       if (ElementClass.visibleAttributes !== undefined) return false;
@@ -4780,6 +4803,7 @@ export class Game<
       if (hasZoneVisibility(element)) {
         const zone = element.getZoneVisibility();
         if (zone !== undefined) declared.push(zone);
+        if (zone !== undefined && element._t.children.length > 0) zones.push(element);
       }
       return element._t.children.every(collect);
     };
@@ -4795,7 +4819,7 @@ export class Game<
       }
       // A comma between the modes, because they are four fixed words and a
       // separator is what makes one seat's list unreadable as another's.
-      signatures.push(spelled.join(','));
+      signatures.push(zones.some((zone) => showsPlaceholders(zone, seat)) ? `seat ${seat}` : spelled.join(','));
     }
     return signatures;
   }
@@ -4873,14 +4897,6 @@ export class Game<
     // For visibility checks, spectators use -1 (no special access)
     const visibilityPosition = playerSeat ?? -1;
 
-    // THE NEXT PLACEHOLDER ID, counted down from -1 across this one projection.
-    // A hidden zone's children are fungible and never animated one by one, so
-    // all a placeholder needs is an id no other element in this tree has, and
-    // a real id is never negative. Counted rather than derived from the
-    // container's id: a world's ids run to 2^48 (#482), where `id * 1000 + i`
-    // is past the safe integers and neighbouring placeholders round to one.
-    let nextPlaceholderId = -1;
-
     // #961: below a hidden child of a concealed zone only an element's own grant
     // sends it, as a child of its nearest sent ancestor, and the hidden ones
     // between are left out. `deepestRevealed` is the same rule for `isVisibleTo`.
@@ -4901,8 +4917,9 @@ export class Game<
     // A CONCEALED ZONE'S CHILDREN AS ANONYMOUS PLACEHOLDERS, for the count-only
     // and owner-only zone branches below. Each keeps its class and only the
     // safe layout $-keys of its attributes (identity-bearing image refs are
-    // redacted), never its name, and takes a fresh negative id, so a non-owner
-    // cannot track a face-down card across zones by a real, stable id.
+    // redacted), never its name, and takes this seat's placeholder id for it,
+    // which never says what the card is and is reissued with its pile when
+    // that is shuffled or a card enters or leaves it (#715, `seat-placeholders.ts`).
     // __hidden is seeded here (not in redactHiddenElementAttrs) so the
     // count-only CONTAINER branch keeps its distinct shape (no __hidden, has
     // childCount). CR-02 (159): original -> placeholder id is recorded in
@@ -4922,7 +4939,7 @@ export class Game<
           continue;
         }
         nested.push(...grantedBelowHidden(childElement, childJson));
-        const syntheticId = nextPlaceholderId--;
+        const syntheticId = placeholderIdOf(childElement, visibilityPosition);
         idRemap?.set(childElement.id, syntheticId);
         placeholders.push({
           className: childJson.className,
@@ -5013,7 +5030,12 @@ export class Game<
       // set zone visibility (the most security-conscious combination) would
       // leak every non-whitelisted container attribute to non-owners.
       const ElementClass = element.constructor as typeof GameElement;
-      let ownJson = json;
+      // A placeholder token is the server's; a seat that held it could match a card's placeholders to it.
+      let ownJson: ElementJSON = json;
+      if (json.placeholderToken !== undefined) {
+        const { placeholderToken: _token, ...seen } = json;
+        ownJson = seen;
+      }
       if (ElementClass.visibleAttributes !== undefined) {
         // WR-01: a player is not resolved by `instanceof Player` — bundlers
         // (esbuild) can create separate Player class copies, making instanceof
@@ -5053,7 +5075,7 @@ export class Game<
           // sandbox does exactly that), and without the marker every withheld
           // attribute came back as its class-field default — a specific false
           // fact the searcher then reasoned from. See `GameElement.fromJSON`.
-          ownJson = { ...json, attributes: filteredAttrs, redacted: true };
+          ownJson = { ...ownJson, attributes: filteredAttrs, redacted: true };
         }
       }
 

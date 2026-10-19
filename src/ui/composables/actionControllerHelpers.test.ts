@@ -166,7 +166,6 @@ describe('getDisplayFromValue agrees with the server label (#509)', () => {
       { type: 'choice', name: 'pick', choices: [] } as ChoiceSelection,
       {} as never,
       [],
-      {} as never,
     )[0]!.display;
 
   it.each([

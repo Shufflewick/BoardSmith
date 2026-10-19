@@ -28,7 +28,7 @@ import { changing } from '../engine/element/state-version.js';
 import { outermostConcealer } from '../engine/element/concealed-refs.js';
 import { hasZoneVisibility } from '../engine/element/game-element.js';
 import { canPlayerSee } from '../engine/element/visibility.js';
-import { isPositionalPlaceholderId } from '../engine/element/hidden-placeholder.js';
+import { isPlaceholderId } from '../engine/element/hidden-placeholder.js';
 
 /**
  * A game's determinization sampler broke the one contract it has (#73).
@@ -147,7 +147,7 @@ interface PlaceholderGroup {
 function placeholderLooks(world: KnownWorld): Map<number, string> {
   const looks = new Map<number, string>();
   for (const [id, entry] of world) {
-    if (!isPositionalPlaceholderId(id)) continue;
+    if (!isPlaceholderId(id)) continue;
     const known = [...entry.attributes]
       .filter(([, value]) => value !== 'undefined')
       .sort(([a], [b]) => a.localeCompare(b))
@@ -284,7 +284,7 @@ function findContradiction(before: KnownWorld, after: KnownWorld, seat: number):
         `so a world without it is not a world the seat could be in.`
       );
     }
-    if (!isPositionalPlaceholderId(id) && now.parent?._t.id !== prior.parent?._t.id) {
+    if (!isPlaceholderId(id) && now.parent?._t.id !== prior.parent?._t.id) {
       return (
         `it moved ${nameOf(now.element)} from ${nameOf(prior.parent)} to ${nameOf(now.parent)}. ` +
         `The seat can see where that element is. A sampler may reorder the children of a container ` +

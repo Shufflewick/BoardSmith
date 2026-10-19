@@ -2352,6 +2352,11 @@ async function formatFixtureWorld(options: {
       const ingot = strongbox.create(FormatFixtureCoin, 'ingot', { denomination: 50 });
       // Explicit element visibility, which is a COPY in the bytes.
       ingot.showOnlyTo(1);
+      // A shuffle reissues placeholder tokens, which only a full serialization carries (#715).
+      const purse = vault.create(FormatFixtureChest, 'purse', { sealed: false });
+      purse.contentsCountOnly();
+      for (const denomination of [5, 10]) purse.create(FormatFixtureCoin, `coin-${denomination}`, { denomination });
+      purse.shuffle();
       return vault;
     }
     if (name === FORMAT_FIXTURE_LEDGER) {
@@ -2505,6 +2510,12 @@ export async function computeFormatHash(): Promise<string> {
 
   const fresh = await buildFormatFixture();
   assertCoversFormat('what the engine writes today', fresh);
+  // Not in the committed corpus, which predates it: an older reader drops it, so it must move this hash (#715).
+  assertCovers(
+    "what the engine writes today of a world's stored bytes",
+    [['a placeholder token (placeholderToken)', JSON.stringify(fresh).includes('"placeholderToken"')]],
+    'formatHash would not tell a runner that drops placeholder tokens from one that keeps them.',
+  );
 
   const read = async (names: readonly string[]): Promise<unknown> => {
     try {

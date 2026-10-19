@@ -3,6 +3,8 @@ import {
   Game,
   Player,
   Action,
+  Space,
+  Card,
   loop,
   eachPlayer,
   actionStep,
@@ -34,6 +36,37 @@ class RaceGame extends Game<RaceGame, Player> {
         while: (ctx) => !ctx.game.isFinished(),
         maxIterations: 100,
         do: eachPlayer({ do: actionStep({ actions: ['take'] }) }),
+      }),
+    });
+  }
+}
+
+/** Each seat in turn filches a card from a pouch nobody can see into; the game ends when it is empty. */
+class FilchGame extends Game<FilchGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    const pouch = this.create(Space, 'pouch');
+    pouch.contentsCountOnly();
+    for (const name of ['AS', 'KH', 'QD']) pouch.create(Card, name);
+    for (const player of this.players) {
+      const hand = this.create(Space, `hand-${player.seat}`);
+      hand.player = player;
+      hand.contentsVisibleToOwner();
+    }
+    this.registerAction(
+      Action.create<FilchGame>('filch')
+        .chooseElement<'card', Card>('card', { elements: (ctx) => ctx.game.first(Space, 'pouch')!.all(Card) })
+        .execute(({ card }, ctx) => {
+          card.putInto(ctx.game.first(Space, `hand-${ctx.player.seat}`)!);
+          if (ctx.game.first(Space, 'pouch')!.all(Card).length === 0) ctx.game.finish([]);
+          return { success: true };
+        }),
+    );
+    this.setFlow({
+      root: loop({
+        while: (ctx) => !ctx.game.isFinished(),
+        maxIterations: 10,
+        do: eachPlayer({ do: actionStep({ actions: ['filch'] }) }),
       }),
     });
   }
@@ -240,6 +273,16 @@ describe('playGame with policies (#556)', () => {
     const result = await playGame(
       { gameClass: BidGame, gameType: 'bid' },
       { playerCount: 2, seed: 'mcts-bid', gameOptions: { maxBid: 5 }, policies: [mcts(10), mcts(10)], maxActions: 10 },
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.completed).toBe(true);
+  });
+
+  // #715: the bot names a card it cannot see by its seat's placeholder, which the simulator must read back.
+  it('an MCTS seat picks a card it cannot see', async () => {
+    const result = await playGame(
+      { gameClass: FilchGame, gameType: 'filch' },
+      { playerCount: 2, seed: 'mcts-filch', policies: [mcts(10), mcts(10)], maxActions: 10 },
     );
     expect(result.error).toBeUndefined();
     expect(result.completed).toBe(true);

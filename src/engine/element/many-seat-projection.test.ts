@@ -363,15 +363,15 @@ describe("#408/#411/#413 -- which seats hold the same projection", () => {
 
   it("refuses for an owner-only zone even where every seat is DENIED it", () => {
     // The refusal is of the MODE rather than of a branch. A denied owner and a
-    // denied stranger are both shown placeholders (#750), so they hold the same
-    // projection, but the predicate does not reason about ownership at all.
+    // denied stranger are both shown placeholders (#750), each its own (#715),
+    // and the predicate does not reason about ownership at all.
     const game = newSquare();
     const square = game.first(Stall, 'square')!;
     square.setZoneVisibility('owner');
     square.player = game.players[0];
     square.hideContentsFrom(1, 2);
     const { predicted, observed } = grouping(game);
-    expect(observed, 'a denied owner is shown what a denied stranger is').toEqual([[1, 2]]);
+    expect(observed, 'each denied seat is shown placeholders of its own').toEqual([[1], [2]]);
     expect(predicted).toBe(null);
   });
 

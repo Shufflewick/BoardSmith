@@ -1,5 +1,42 @@
 # Migration Guide
 
+## A hidden card's placeholder id is stable and the seat's own (#715)
+
+A card in a zone a seat cannot see used to reach that seat as `-1`, `-2`, ...
+in the order of the view, so the same number could name another card after a
+move. Now each seat gets its own placeholder id for each such card. The card
+keeps it while its pile is untouched: when `shuffle()` shuffles the pile, or a
+card enters or leaves it (a move into any place some seat cannot see into, out
+of one, or within one), every card in that pile and everything it holds gets a
+new id, so neither an insert position nor which card left can be read from the
+ids. The ids are
+large negative numbers, different for every seat, so do not expect `-1` or
+compare them between seats. A test that read a placeholder should take it from the
+seat's view or its pick candidates (`validElements`, `choices`), as a client
+does.
+
+Where a seat's move enters (an action, a selection step, a choices request,
+and a world command or pick), its placeholders are read back into the real
+cards. The move is refused, as if the card were not there, when a placeholder's
+card has since been reissued or left the seat's sight, when the number is
+another seat's placeholder, or when the seat sends the real id of a card it
+only knows by placeholder. A bot's move names hidden cards by its seat's
+placeholders, so the simulator's `mcts` policy and the bot trainer's benchmark
+read them back the same way. Other server-side code is not affected:
+`testGame.doAction`, the simulator's other policies and a game's own code still
+pass elements or real ids.
+
+A card in a `contentsHidden()` zone is now offered to a pick under such a
+placeholder too, so a blind pick from a hidden pile works. The board still does
+not draw that zone's cards.
+
+An element whose placeholder was reissued carries a new `placeholderToken` field
+in its full serialization (table snapshots and world partitions), which no
+seat's view includes. Each card reissued spends one value of the game's
+creation counter, the same budget element ids come from: one per element in
+each hidden pile a move touches, what the cards hold included
+(`docs/state-size.md` bounds it).
+
 ## A grant below a concealed zone's hidden child reaches its seat (#961)
 
 A card whose own visibility shows it to a seat now reaches that seat even when

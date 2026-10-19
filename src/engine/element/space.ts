@@ -1,4 +1,4 @@
-import { GameElement, forEachInSubtree, markTouchedPartition } from './game-element.js';
+import { GameElement, forEachInSubtree, markTouchedPartition, reissuePlaceholders } from './game-element.js';
 import { childrenChanged } from './cell-index.js';
 import { changing } from './state-version.js';
 import type { ElementClass, ElementAttributes, ElementContext, ElementJSON } from './types.js';
@@ -436,6 +436,9 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
    * The space's own visibility and its zone visibility are unchanged. Re-apply
    * a grant after shuffling to keep a card revealed.
    *
+   * It also reissues every placeholder id a seat knows those elements by, so
+   * no seat can follow a face-down card through the shuffle by its id (#715).
+   *
    * @example
    * ```typescript
    * // Shuffle the deck during game setup
@@ -475,7 +478,8 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
         this._t.children[i],
       ];
     }
-    // Descendants too: a grant on anything inside a moved card would show where the card went.
+    reissuePlaceholders(this);
+    // Grants below too: one on anything inside a moved card would show where the card went.
     for (const child of this._t.children) {
       forEachInSubtree(child, (element) => {
         if (element._visibility === undefined) return;

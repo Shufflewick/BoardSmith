@@ -1,6 +1,7 @@
 import type { Game } from '../engine/index.js';
 import { dueSeatOffers } from '../engine/flow/seat-activity.js';
 import { GameRunner } from '../runtime/index.js';
+import { picksFromSeat } from '../engine/element/seat-placeholders.js';
 import { createBot, type BotStrategy, type Objective } from '../bot/index.js';
 import type { GameClass, GameOptions } from '../engine/index.js';
 import type { ObjectiveWeight } from './types.js';
@@ -297,7 +298,8 @@ async function runBenchmarkGame<G extends Game>(
           );
         }
         action = move.action;
-        args = move.args;
+        // The bot names a card its seat cannot see by that seat's placeholder, as a client would (#715).
+        args = picksFromSeat(runner.game, move.action, move.args, currentPlayer);
       } catch (error) {
         // #37: this used to substitute a RANDOM bot for the crashing one and
         // play on. A trained bot whose objectives function threw on every call

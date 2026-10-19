@@ -7,6 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { Game, Piece, Player, Deck, Hand, Space, type ElementJSON, type GameOptions } from '../index.js';
 import { isHiddenPlaceholder } from './hidden-placeholder.js';
+import { seatIdOf } from './seat-placeholders.js';
 
 class Card extends Piece<TestGame> {}
 class TestGame extends Game<TestGame, Player> {
@@ -100,7 +101,9 @@ describe('element grants inside concealed zones (#758)', () => {
 
     const deckJson = game.toJSONForPlayer(2).children!.find((c) => c.name === 'deck')!;
     expect(deckJson.childCount).toBe(3);
-    expect(deckJson.children!.map((c) => c.id)).toEqual([-1, cards[1]!.id, -2]);
+    const ids = deckJson.children!.map((c) => c.id);
+    expect(ids).toEqual(deck.all(Card).map((card) => seatIdOf(card, 2)));
+    expect(ids.map((id) => (id === cards[1]!.id ? 'granted' : id < 0))).toEqual([true, 'granted', true]);
   });
 
   it('isVisibleTo agrees with the view across zone and grant combinations', () => {

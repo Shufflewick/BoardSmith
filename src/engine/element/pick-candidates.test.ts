@@ -18,7 +18,7 @@ class Square extends Space<LabelGame> {
 function labelsOf(elements: GameElement[], game: LabelGame): Array<string | undefined> {
   const selection = { type: 'element', name: 'square' } as ElementSelection;
   const ctx = { game, player: game.getPlayer(1)!, args: {} };
-  return formatElementCandidates(elements.map((value) => ({ value, disabled: false as const })), selection, ctx, [], game).map((e) => e.display);
+  return formatElementCandidates(elements.map((value) => ({ value, disabled: false as const })), selection, ctx, []).map((e) => e.display);
 }
 
 describe('labels for element candidates (#766)', () => {
@@ -51,7 +51,7 @@ describe('a seat with no name is labelled by its seat (#1044)', () => {
     const selection = { type: 'choice', name: 'target' } as ChoiceSelection;
     const ctx = { game, player: game.getPlayer(2)!, args: {} };
     const choices = formatChoiceCandidates(
-      game.players.map((value) => ({ value, disabled: false as const })), selection, ctx, [], game,
+      game.players.map((value) => ({ value, disabled: false as const })), selection, ctx, [],
     );
     expect(choices.map((c) => c.display)).toEqual(['Player 1', 'Bob']);
     expect(labelsOf([...game.players], game)).toEqual(['Player 1', 'Bob']);

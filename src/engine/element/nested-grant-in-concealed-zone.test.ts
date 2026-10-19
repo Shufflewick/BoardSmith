@@ -9,6 +9,7 @@ import { Game, Piece, Player, Deck, Hand, Space, type ElementJSON, type GameElem
 import type { VisibilityState } from './visibility.js';
 import { isHiddenPlaceholder } from './hidden-placeholder.js';
 import { nameableFor } from './concealed-refs.js';
+import { seatIdOf } from './seat-placeholders.js';
 import { getElementCount } from '../../ui/composables/useGameViewHelpers.js';
 import type { GameViewElement } from '../../ui/types.js';
 
@@ -86,7 +87,7 @@ describe('a granted element nested below a concealed child (#961)', () => {
     for (const seat of SEATS) {
       const json = zoneIn(game, seat, 'deck');
       expect(json.childCount).toBe(2);
-      expect(json.children!.map((c) => c.id)).toEqual([-1, -2, gem.id]);
+      expect(json.children!.map((c) => c.id)).toEqual([...deck._t.children.map((c) => seatIdOf(c, seat ?? -1)), gem.id]);
       expect(json.children![2]!.name).toBe('gem');
       expect(idsIn(game.toJSONForPlayer(seat))).not.toContain(crate.id);
       expect(idsIn(game.toJSONForPlayer(seat))).not.toContain(loose.id);
@@ -99,9 +100,9 @@ describe('a granted element nested below a concealed child (#961)', () => {
     gem.addVisibleTo(2);
 
     const json = zoneIn(game, 2, 'hand');
-    expect(json.children!.map((c) => c.id)).toEqual([-1, gem.id]);
+    expect(json.children!.map((c) => c.id)).toEqual([seatIdOf(crate, 2), gem.id]);
     expect('childCount' in json).toBe(false);
-    expect(zoneIn(game, 3, 'hand').children!.map((c) => c.id)).toEqual([-1]);
+    expect(zoneIn(game, 3, 'hand').children!.map((c) => c.id)).toEqual([seatIdOf(crate, 3)]);
     // The owner sees the hand as it is.
     expect(zoneIn(game, 1, 'hand').children!.map((c) => c.id)).toEqual([crate.id]);
     for (const seat of SEATS) {

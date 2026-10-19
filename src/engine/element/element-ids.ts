@@ -51,9 +51,18 @@
  * also needs its ids read BACK to counter values (`WorldElementIds.cursorOf`):
  * the host's allocation stamp and the construction floor are counter values,
  * and adoption checks stored ids against both.
+ *
+ * A SEAT'S PLACEHOLDER IDS ARE MADE HERE TOO (#715). A card a seat cannot see
+ * is named to it by a placeholder: a token from the id space (the card's id,
+ * or the id it was reissued when it was shuffled or hidden) run through a cipher of the same shape
+ * keyed for that seat alone, and negated, so it is never a real id. The seat's
+ * key is derived from the game's, which the seat never holds, so a placeholder
+ * says nothing about the card's id, and one seat's placeholders say nothing
+ * about another's. `seat-placeholders.ts` says which cards are named this way.
  */
 
 import { secureRandomHex } from '../../utils/secure-random.js';
+import { sha256 } from '../../utils/sha256.js';
 
 /** How many distinct element ids a table game can mint: Speck32's 32-bit block. */
 export const ELEMENT_ID_SPACE = 2 ** 32;
@@ -65,6 +74,10 @@ export const WORLD_ELEMENT_ID_SPACE = 2 ** 48;
 export interface ElementIds {
   /** The id for creation-counter value `cursor`. Never the same for two cursors. */
   mint(cursor: number): number;
+  /** Seat `seat`'s placeholder for `token`, an id-space value: negative, and never the same for two tokens (#715). */
+  placeholder(seat: number, token: number): number;
+  /** The token behind `placeholder` for seat `seat`, or undefined when no token makes that number. */
+  tokenOf(seat: number, placeholder: number): number | undefined;
 }
 
 /**
@@ -143,6 +156,34 @@ export function speck(shape: SpeckShape, key: readonly [number, number, number, 
         x = rotateLeft(((x ^ roundKeys[i]!) - y) & mask, alpha);
       }
       return x * wordSpace + y;
+    },
+  };
+}
+
+/**
+ * One seat's placeholders over a block of `space` values: its token through
+ * Speck keyed by a SHA-256 of the game's key and the seat, negated and moved
+ * off zero. A per-seat cipher is a permutation, so no two of a seat's cards
+ * share a placeholder; another seat's number is read under this seat's key.
+ */
+function seatPlaceholders(shape: SpeckShape, key: string, space: number): Pick<ElementIds, 'placeholder' | 'tokenOf'> {
+  const ciphers = new Map<number, SpeckCipher>();
+  const cipherFor = (seat: number): SpeckCipher => {
+    let cipher = ciphers.get(seat);
+    if (cipher === undefined) {
+      const digest = sha256(new TextEncoder().encode(`boardsmith placeholder ids ${key} ${seat}`));
+      const bytes = shape.wordBits / 8;
+      const word = (i: number) => digest.slice(i * bytes, (i + 1) * bytes).reduce((value, byte) => value * 256 + byte, 0);
+      cipher = speck(shape, [word(0), word(1), word(2), word(3)]);
+      ciphers.set(seat, cipher);
+    }
+    return cipher;
+  };
+  return {
+    placeholder: (seat, token) => -1 - cipherFor(seat).encrypt(token),
+    tokenOf(seat, placeholder) {
+      const block = -1 - placeholder;
+      return Number.isInteger(block) && block >= 0 && block < space ? cipherFor(seat).decrypt(block) : undefined;
     },
   };
 }
@@ -236,6 +277,7 @@ export function opaqueElementIds(key: string): ElementIds {
       }
       return cipher.encrypt(cursor);
     },
+    ...seatPlaceholders(SPECK_32_64, key, ELEMENT_ID_SPACE),
   };
 }
 
@@ -263,6 +305,7 @@ export function worldElementIds(key: string): WorldElementIds {
       }
       return cipher.encrypt(cursor);
     },
+    ...seatPlaceholders(SPECK_48_96, key, WORLD_ELEMENT_ID_SPACE),
     cursorOf(id) {
       if (!(Number.isInteger(id) && id >= 0 && id < WORLD_ELEMENT_ID_SPACE)) {
         throw new Error(

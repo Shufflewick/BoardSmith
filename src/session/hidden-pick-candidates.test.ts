@@ -205,15 +205,18 @@ describe('pick candidates the seat cannot see (#715)', () => {
 
   it("offers a repeating pick's next hidden candidates by placeholder, without names", async () => {
     const start = await started();
-    const [firstId] = boardIdsOfHand2(start);
+    const [firstId, secondId] = boardIdsOfHand2(start);
 
     const step = succeeded(await executeOp(definition, options, start.snapshot, null, {
       type: 'selectionStep', player: 1, selectionName: 'card', value: firstId!, actionName: 'stealUntilTwo',
       boundaryKey: boundaryKeyOf(start.snapshot),
     }));
 
-    expect(boardIdsOfHand2(step)).toEqual([-1]);
-    expect(step.nextChoices?.map((c) => [c.value, c.display])).toEqual([[-1, 'Card #1']]);
+    // The card left behind is reissued with the pile, so neither id it had names it now.
+    const [left] = boardIdsOfHand2(step);
+    expect(left).toBeLessThan(0);
+    expect([firstId, secondId]).not.toContain(left);
+    expect(step.nextChoices?.map((c) => [c.value, c.display])).toEqual([[left, 'Card #1']]);
   });
 
   // A hidden card's name is refused exactly as a card that is not there, so a
@@ -261,15 +264,17 @@ describe('pick candidates the seat cannot see (#715)', () => {
     expect((res as { error: string }).error).toContain('card = a hidden Card');
   });
 
-  it("answers a later step from the pick the pending action holds, not a placeholder that has since moved", async () => {
+  it("answers a later step from the pick the pending action holds, not the placeholder the client sends", async () => {
     const start = await started();
-    const [aceId] = boardIdsOfHand2(start);
+    const [aceId, kingId] = boardIdsOfHand2(start);
     const step = succeeded(await executeOp(definition, options, start.snapshot, null, {
       type: 'selectionStep', player: 1, selectionName: 'card', value: aceId!, actionName: 'stealAndSay',
       boundaryKey: boundaryKeyOf(start.snapshot),
     }));
-    // The ace left seat 2's hand, so -1 now stands for the king.
-    expect(boardIdsOfHand2(step)).toEqual([-1]);
+    // The ace is in seat 1's hand now, where seat 1 sees it, so its placeholder names nothing; the king was reissued with its pile.
+    const [left] = boardIdsOfHand2(step);
+    expect(left).toBeLessThan(0);
+    expect([aceId, kingId]).not.toContain(left);
 
     const res = succeeded(await executeOp(definition, options, step.snapshot, step.pendingState ?? null, {
       type: 'resolveChoices', actionName: 'stealAndSay', selectionName: 'where', player: 1, args: { card: aceId! },

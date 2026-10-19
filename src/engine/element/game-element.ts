@@ -296,6 +296,43 @@ export function forEachInSubtree(element: GameElement, visit: (element: GameElem
 }
 
 /**
+ * Give every child of `pile`, and everything under it, a fresh placeholder
+ * token (#715), which no element's id or token has been, so every placeholder
+ * a seat knew them by names nothing. Called when a card enters or leaves a pile
+ * some seat cannot see into, and when a space is shuffled: the ids are sent in
+ * pile order, so any id that stayed would show where a card went in, which one
+ * left, or where one was moved to within the pile. Whole subtrees, because a
+ * pick names a hidden element at any depth by its own token (`seatIdOf`), so a
+ * kept token on something inside a card would show where the card went, as a
+ * kept grant would (#962). A token is minted from the creation counter, as an
+ * id is, so each element reissued spends one of the game's 2^32 creations (a
+ * world's 2^48).
+ */
+export function reissuePlaceholders(pile: GameElement): void {
+  for (const child of pile._t.children) {
+    forEachInSubtree(child, (reissued) => {
+      reissued._t.placeholderToken = reissued._ctx.ids.mint(reissued._ctx.sequence++);
+      // A nested partition root's token is that partition's write.
+      markTouchedPartition(reissued);
+    });
+  }
+}
+
+/** Whether a state keeps what it covers from some seat. */
+function concealsFromSomeSeat(state: VisibilityState | undefined): boolean {
+  return state !== undefined && (state.mode !== 'all' || (state.exceptPlayers?.length ?? 0) > 0);
+}
+
+/** Whether some seat cannot see into `place`: it, or something it sits in, hides its contents from that seat. */
+function hiddenFromSomeSeat(place: GameElement): boolean {
+  for (let at: GameElement | undefined = place; at; at = at._t.parent) {
+    if (concealsFromSomeSeat(at._visibility)) return true;
+    if (hasZoneVisibility(at) && concealsFromSomeSeat(at.getZoneVisibility())) return true;
+  }
+  return false;
+}
+
+/**
  * Every element a query answered with, marked at once.
  *
  * The residency check is hoisted OUT of the loop: a published board game has
@@ -1003,6 +1040,10 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       destination._t.children.push(this);
     }
 
+    // A seat that cannot see into either pile must not read where it went in or which card left from the ids that stayed (#715).
+    if (hiddenFromSomeSeat(destination)) reissuePlaceholders(destination);
+    if (oldParent && oldParent !== destination && hiddenFromSomeSeat(oldParent)) reissuePlaceholders(oldParent);
+
     // Trigger enter event if moving to a Space (duck-typed, see above).
     if (isChildEventTarget(destination)) {
       destination.triggerEvent('enter', this);
@@ -1600,6 +1641,8 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       json.visibility = copyVisibilityState(this._visibility);
     }
 
+    if (this._t.placeholderToken !== undefined) json.placeholderToken = this._t.placeholderToken;
+
     if (this._t.children.length > 0) {
       json.children = this._t.children.map((child) => child.toJSON());
     }
@@ -1654,6 +1697,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     // tree files it in the id index once it is built (`Game#loadSerializedState`,
     // `Game#adoptSubtree`).
     element._t.id = json.id;
+    if (json.placeholderToken !== undefined) element._t.placeholderToken = json.placeholderToken;
 
     if (json.name) {
       element.name = json.name;

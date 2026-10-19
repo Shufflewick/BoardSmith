@@ -65,12 +65,12 @@ describe("a world's pick candidates the seat cannot see (#715)", () => {
     const test = await started();
     const view = await test.getPlayerView(1);
     const shown = find(view.state as ElementJSON, 'pouch')!.children!.map((c) => c.id);
-    expect(shown).toEqual([-1, -2]);
+    expect(shown.every((id) => id < 0)).toBe(true);
 
     const pick = await test.resolvePick(1, 'filch', 'card', {});
-    expect(pick.validElements?.map((e) => [e.id, e.display])).toEqual([[-1, 'Card #1'], [-2, 'Card #2']]);
+    expect(pick.validElements?.map((e) => [e.id, e.display])).toEqual([[shown[0], 'Card #1'], [shown[1], 'Card #2']]);
 
-    await test.take(1, 'filch', { card: -2 });
+    await test.take(1, 'filch', { card: shown[1] });
     const after = await test.getPlayerView(1);
     const commons = find(after.state as ElementJSON, 'commons')!;
     expect(commons.children!.map((c) => c.name)).toContain('KH');
@@ -79,14 +79,16 @@ describe("a world's pick candidates the seat cannot see (#715)", () => {
 
   it('offers a chooseFrom element the same way, and takes it by its placeholder', async () => {
     const test = await started();
+    const view = await test.getPlayerView(1);
+    const [first, second] = find(view.state as ElementJSON, 'pouch')!.children!.map((c) => c.id);
 
     const pick = await test.resolvePick(1, 'grab', 'card', {});
     expect(JSON.parse(JSON.stringify(pick.choices))).toEqual([
-      { value: { id: -1, className: 'Card' }, display: 'Card #1' },
-      { value: { id: -2, className: 'Card' }, display: 'Card #2' },
+      { value: { id: first, className: 'Card' }, display: 'Card #1' },
+      { value: { id: second, className: 'Card' }, display: 'Card #2' },
     ]);
 
-    await test.take(1, 'grab', { card: { id: -2, className: 'Card' } });
+    await test.take(1, 'grab', { card: { id: second, className: 'Card' } });
     const after = await test.getPlayerView(1);
     expect(find(after.state as ElementJSON, 'commons')!.children!.map((c) => c.name)).toContain('KH');
     await test.close();

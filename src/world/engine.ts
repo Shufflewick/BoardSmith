@@ -74,6 +74,7 @@ import type {
 } from "../engine/index.js";
 import type { ActionMetadata, PickMetadata } from "../session/types.js";
 import { buildPickMetadata } from "../engine/element/action-metadata.js";
+import { picksFromSeat } from "../engine/element/seat-placeholders.js";
 import {
   formatChoiceCandidates,
   formatElementCandidates,
@@ -1501,7 +1502,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     const draft = this.game.readingOnly(() =>
       this.game
         .getActionExecutor()
-        .resolveArgs(definition, { ...args }, acting, readOnlyProjection(this.game)),
+        .resolveArgs(definition, picksFromSeat(this.game, definition.name, args, acting.seat), acting, readOnlyProjection(this.game)),
     );
     for (const selection of definition.selections) {
       if (selection.type === "element" || selection.type === "elements") {
@@ -1725,7 +1726,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // somewhere to put one, and dropped, because the console already has it.
     const warnings: never[] = [];
     if (selection.type === "choice") {
-      pick.choices = formatChoiceCandidates(candidates, selection, context, warnings, this.game);
+      pick.choices = formatChoiceCandidates(candidates, selection, context, warnings);
       return pick;
     }
 
@@ -1736,7 +1737,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     for (const candidate of candidates) {
       assertDeclared(definition.name, this.partitionOf(candidate.value as GameElement), named);
     }
-    pick.validElements = formatElementCandidates(candidates, selection, context, warnings, this.game);
+    pick.validElements = formatElementCandidates(candidates, selection, context, warnings);
     return pick;
   }
 
@@ -3041,7 +3042,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
     args: Readonly<Record<string, unknown>>,
   ): ActionResult {
     try {
-      return this.game.performAction(name, this.playerFor(seat), { ...args });
+      // The seat's placeholder ids read into real ones where its command enters (#715).
+      return this.game.performAction(name, this.playerFor(seat), picksFromSeat(this.game, name, args, seat));
     } catch (error) {
       return failedExecute(name, error, `A rule of action '${name}' outside execute()`);
     }

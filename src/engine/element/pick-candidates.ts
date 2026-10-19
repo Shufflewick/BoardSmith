@@ -22,7 +22,7 @@
  */
 import { isDevThrowEnabled } from '../../utils/dev.js';
 import { isElement, type GameElement } from './game-element.js';
-import { placeholderIdsFor } from './seat-placeholders.js';
+import { seatIdOf } from './seat-placeholders.js';
 import { labelOfValue } from '../action/choice-matching.js';
 import type { ElementRef } from '../../types/protocol.js';
 import type {
@@ -87,9 +87,8 @@ export function formatChoiceCandidates(
   selection: ChoiceSelection,
   ctx: CandidateContext,
   warnings: WarningEntry[],
-  live: Game,
 ): ChoiceWithRefs[] {
-  const sight = seatSight(candidates.map((c) => c.value), ctx, live);
+  const sight = seatSight(candidates.map((c) => c.value), ctx);
   return candidates.map(({ value, label, disabled }) => {
     const neutral = sight.neutralLabel(value);
     const display = label ?? (selection.display ? selection.display(value) : neutral ?? labelOfValue(value));
@@ -129,10 +128,9 @@ export function formatElementCandidates(
   selection: ElementSelection | ElementsSelection,
   ctx: CandidateContext,
   warnings: WarningEntry[],
-  live: Game,
 ): ValidElement[] {
   const elements = candidates.map(({ value }) => value) as ElementLike[];
-  const sight = seatSight(elements, ctx, live);
+  const sight = seatSight(elements, ctx);
   const labels = labelElements(elements, selection, ctx, warnings, sight);
 
   return candidates.map(({ value: elementRaw, disabled }, index) => {
@@ -159,11 +157,10 @@ export function formatRepeatCandidates(
   selection: ChoiceSelection | ElementSelection | ElementsSelection,
   ctx: CandidateContext,
   warnings: WarningEntry[],
-  live: Game,
 ): ChoiceWithRefs[] {
-  if (selection.type === 'choice') return formatChoiceCandidates(candidates, selection, ctx, warnings, live);
+  if (selection.type === 'choice') return formatChoiceCandidates(candidates, selection, ctx, warnings);
   const elements = candidates.filter((c) => isElement(c.value));
-  return formatElementCandidates(elements, selection, ctx, warnings, live).map(({ id, display, refs, disabled }) => {
+  return formatElementCandidates(elements, selection, ctx, warnings).map(({ id, display, refs, disabled }) => {
     const choice: ChoiceWithRefs = { value: id, display: display!, refs };
     if (disabled !== undefined) choice.disabled = disabled;
     return choice;
@@ -183,16 +180,15 @@ interface SeatSight {
 
 /**
  * A candidate the seat cannot see goes out as its board shows it (#715): by
- * the placeholder id its view carries, under a neutral label, so highlighting
- * matches the board and the real id and name never leave the server. The view
- * is projected only when some candidate is hidden, from the LIVE game: a
- * world's callbacks read a projection that refuses the flag a projection sets.
+ * the id its view carries (`seatIdOf`, the one source of placeholder ids),
+ * under a neutral label, so highlighting matches the board and the real id and
+ * name never leave the server.
  */
-function seatSight(values: readonly unknown[], ctx: CandidateContext, live: Game): SeatSight {
+function seatSight(values: readonly unknown[], ctx: CandidateContext): SeatSight {
   const hidden = values.filter((v): v is GameElement => isElement(v) && !v.isVisibleTo(ctx.player.seat));
   if (hidden.length === 0) return { idOf: (element) => element.id, neutralLabel: () => undefined };
+  const seat = ctx.player.seat;
 
-  const placeholders = placeholderIdsFor(live, ctx.player.seat);
   const labels = new Map<unknown, string>();
   const perClass = new Map<string, number>();
   for (const element of hidden) {
@@ -201,8 +197,7 @@ function seatSight(values: readonly unknown[], ctx: CandidateContext, live: Game
     perClass.set(className, index);
     labels.set(element, `${className} #${index}`);
   }
-  // An individually hidden element keeps its real id in the view, so it has no placeholder.
-  return { idOf: (element) => placeholders.get(element.id) ?? element.id, neutralLabel: (value) => labels.get(value) };
+  return { idOf: (element) => (isElement(element) ? seatIdOf(element, seat) : element.id), neutralLabel: (value) => labels.get(value) };
 }
 
 /**

@@ -39,7 +39,7 @@
  */
 
 import type { ElementJSON, Game } from '../engine/index.js';
-import { isHiddenPlaceholder, isPositionalPlaceholderId } from '../engine/element/hidden-placeholder.js';
+import { isHiddenPlaceholder, isPlaceholderId } from '../engine/element/hidden-placeholder.js';
 import type { TestGame } from './test-game.js';
 import { TestWorld } from './test-world.js';
 import { assertViewFixtureShape } from './view-fixture.js';
@@ -200,13 +200,13 @@ function pairChildren(
   const takenB = new Set<number>();
   const byIdB = new Map<number, number>();
   childrenB.forEach((child, index) => {
-    if (!isPositionalPlaceholderId(child.id) && !byIdB.has(child.id)) byIdB.set(child.id, index);
+    if (!isPlaceholderId(child.id) && !byIdB.has(child.id)) byIdB.set(child.id, index);
   });
 
   const pairs: ChildPair[] = [];
   const leftoverA: ChildPair[] = [];
   childrenA.forEach((child, index) => {
-    const at = isPositionalPlaceholderId(child.id) ? undefined : byIdB.get(child.id);
+    const at = isPlaceholderId(child.id) ? undefined : byIdB.get(child.id);
     if (at === undefined) {
       leftoverA.push({ a: child, index });
       return;
