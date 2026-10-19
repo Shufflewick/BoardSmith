@@ -576,6 +576,22 @@ describe('boardsmith doctor', () => {
       expect(result.notes[0]).toMatch(/boardsmith ingest-gaps/);
     });
 
+    it('writes nothing into a hooks folder outside the project, with a note naming it (#1186)', async () => {
+      const projectDir = await gitProject();
+      const shared = `${projectDir}-shared-hooks`;
+      await fs.mkdir(shared);
+      execSync(`git config core.hooksPath "${shared}"`, { cwd: projectDir });
+
+      const result = await doctorCommand({ project: projectDir, fix: true });
+
+      expect(result.healthy).toBe(true);
+      expect(process.exitCode).toBeUndefined();
+      expect(await fs.readdir(shared)).toEqual([]);
+      expect(result.notes).toHaveLength(1);
+      expect(result.notes[0]).toContain(`Left ${join(shared, 'pre-commit')} alone`);
+      expect(result.notes[0]).toMatch(/boardsmith ingest-gaps/);
+    });
+
     it('leaves a hook it cannot read alone, with a note that does not change the exit code (#1110)', async () => {
       const projectDir = await gitProject();
       await fs.writeFile(hookPath(projectDir), OWN_HOOK);
@@ -593,14 +609,31 @@ describe('boardsmith doctor', () => {
       expect(result.notes[0]).toMatch(/could not read \.git\/hooks\/pre-commit/);
     });
 
-    it('checks no hook in a checkout whose .git is a file, a linked worktree sharing its main checkout\'s hooks', async () => {
-      const projectDir = await project();
-      await fs.writeFile(join(projectDir, '.git'), 'gitdir: /elsewhere\n');
+    it('reports a missing hook from a linked worktree, and --fix installs it where git runs it (#1186)', async () => {
+      const mainDir = await gitProject();
+      execSync('git add -A && git -c user.email=t@t -c user.name=t commit -m base', { cwd: mainDir, stdio: 'ignore' });
+      const worktree = `${mainDir}-wt`;
+      execSync(`git worktree add "${worktree}"`, { cwd: mainDir, stdio: 'ignore' });
 
-      const result = await doctorCommand({ project: projectDir });
+      const report = await doctorCommand({ project: worktree });
+      expect(report.findings.map((f) => f.kind)).toEqual(['ingest-hook-not-current']);
 
-      expect(result.healthy).toBe(true);
-      expect(result.notes).toEqual([]);
+      process.exitCode = undefined;
+      await doctorCommand({ project: worktree, fix: true });
+      expect(await read(hookPath(mainDir))).toBe(INGEST_PRE_COMMIT_HOOK);
+    });
+
+    it('reports a missing hook where core.hooksPath points, and --fix installs it there (#1186)', async () => {
+      const projectDir = await gitProject();
+      execSync('git config core.hooksPath githooks', { cwd: projectDir });
+      await fs.writeFile(hookPath(projectDir), INGEST_PRE_COMMIT_HOOK, { mode: 0o755 });
+
+      const report = await doctorCommand({ project: projectDir });
+      expect(report.findings.map((f) => [f.kind, f.from])).toEqual([['ingest-hook-not-current', join('githooks', 'pre-commit')]]);
+
+      process.exitCode = undefined;
+      await doctorCommand({ project: projectDir, fix: true });
+      expect(await read(join(projectDir, 'githooks', 'pre-commit'))).toBe(INGEST_PRE_COMMIT_HOOK);
     });
   });
 });
