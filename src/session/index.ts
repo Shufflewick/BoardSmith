@@ -24,6 +24,8 @@ export type {
   // Player option types
   PlayerOptionDefinition,
   StandardPlayerOption,
+  NumberPlayerOption,
+  BooleanPlayerOption,
   ExclusivePlayerOption,
   PlayerConfig,
   GamePreset,

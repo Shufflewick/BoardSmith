@@ -1,5 +1,15 @@
 # Migration Guide
 
+## `createColorOption` takes no arguments (#1196)
+
+`createColorOption(label)` is now `createColorOption()`, labelled "Color".
+Neither dev nor the live lobby read the label: both build the colour option
+from `boardsmith.json`'s `colorPalette`. Drop the argument.
+
+Code player options can now be `number` and `boolean` too, typed as
+`NumberPlayerOption` and `BooleanPlayerOption` from `boardsmith/session`, the
+same shapes `boardsmith.json` already accepted (#1197).
+
 ## A hidden card's placeholder id is stable and the seat's own (#715)
 
 A card in a zone a seat cannot see used to reach that seat as `-1`, `-2`, ...
