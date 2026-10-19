@@ -1795,44 +1795,43 @@ The `fill()` function expects the raw value, not the wrapper object.
 
 ---
 
-## 19. Drag-Drop Not Working with ActionPanel
+## 19. Drag-Drop Not Working
 
 ### The Problem
 
-You've set up drag-drop using `useDragDrop`, but when you drag an element, nothing happens - no drop targets highlight, and dropping doesn't execute the action.
+You drag an element, but nothing happens: no drop targets highlight, and dropping does not complete the action.
+
+### How Drag-Drop Finds Its Targets
+
+GameShell wires drag-drop once, for the Action Panel and custom UIs alike (`setupDragDropOrchestration`). When a drag starts:
+
+1. If no action is in progress, it looks for an available action whose **first** selection is a `chooseElement` that accepts the dragged element, and starts that action with it.
+2. If an action is in progress and the dragged element is a candidate of its current element pick, it fills that pick.
+3. The drop targets are then the board's own candidates for the current pick, the same elements a click would choose, and a drop does exactly what a click on that element does (#724).
+
+So any pick the board can show is a drop target:
+
+- an element pick (`chooseElement`, `chooseElements`): drop onto any valid element;
+- a `chooseFrom` pick, **with or without `filterBy`**: drop onto the element each choice's `boardRefs` names.
+
+A number or text pick has no board targets, so a drag during one does nothing.
 
 ### Check the Console for Warnings
 
-In development mode, BoardSmith warns you when a drag starts but no matching action is found:
+In development mode, BoardSmith warns once per dragged element when a drag wires no drop targets. The warning names the dragged element, the action it matched (or `none`) and the current pick:
 
 ```
-[BoardSmith] Drag started for element {"id":42} but no matching action found.
-
-For drag-drop to work automatically, your action needs one of these patterns:
-1. Element -> Choice with filterBy: .chooseElement('piece', {...}).chooseFrom('dest', { filterBy: { key: 'pieceId' } })
-2. Element -> Element: .chooseElement('source', {...}).chooseElement('target', {...})
-
-Current action: none
-Available actions: move, attack, endTurn
+[BoardSmith] Drag started for element {"id":42} but no drop targets could be derived.
+...
+Observed:
+  Dragged element: {"id":42}
+  Matched action: none (no action has a first element selection accepting this element)
+  Current pick: none
 ```
 
-### Required Action Patterns
+### Action Shapes That Drag
 
-For ActionPanel's automatic drag-drop to work, your action must follow one of these patterns:
-
-**Pattern 1: Element -> Choice with filterBy**
-```typescript
-Action.create('moveCard')
-  .chooseElement('card', {
-    elements: (ctx) => [...ctx.game.all(Card)],
-  })
-  .chooseFrom('destination', {
-    choices: buildDestinationChoices(),  // Returns { value, targetRef }
-    filterBy: { key: 'cardId' },  // Filter destinations by the selected card
-  })
-```
-
-**Pattern 2: Element -> Element**
+**Element -> Element**
 ```typescript
 Action.create('assignToSquad')
   .chooseElement('combatant', {
@@ -1843,44 +1842,48 @@ Action.create('assignToSquad')
   })
 ```
 
+**Element -> Choice**
+```typescript
+Action.create('moveCard')
+  .chooseElement('card', {
+    elements: (ctx) => [...ctx.game.all(Card)],
+  })
+  .chooseFrom('destination', {
+    choices: (ctx) => ctx.game.all(Zone).map(zone => zone.name),
+    // Each choice names the board element it is dropped onto.
+    boardRefs: (zoneName, ctx) => ({
+      refs: [{ ref: { id: ctx.game.first(Zone, zoneName)!.id }, role: 'target' }],
+    }),
+  })
+```
+
+`filterBy` is optional here. Add it only when the choices themselves depend on the card (`filterBy: { key: 'cardId', selectionName: 'card' }`); the controller applies it before the board sees the choices.
+
 ### Common Mistakes
 
-1. **Action not available**: The action must be in `availableActions` for drag-drop to work. Check that:
-   - The action is listed in your flow's `actionStep({ actions: [...] })`
-   - The action's conditions pass
+1. **Action not available**: the action must be in `availableActions`. Check that it is listed in your flow's `actionStep({ actions: [...] })` and that its conditions pass.
 
-2. **Wrong selection type**: Using `chooseFrom` without `filterBy` doesn't work for automatic drag-drop. The framework needs to know how to filter destinations based on the dragged element.
+2. **First selection is not an element**: a drag can only start an action whose first selection is a `chooseElement` that accepts the dragged element. An action that opens with a `chooseFrom` is started by clicking or from the Action Panel; once it reaches an element pick, dragging works.
 
-3. **Missing targetRef**: For `chooseFrom` with `filterBy`, each choice needs a `targetRef` property that identifies the drop target element:
+3. **Choices with no board refs**: a `chooseFrom` choice is a drop target only through `boardRefs`. The board uses the ref with role `target`, or the first ref when none is marked target. A choice without refs is reachable from the Action Panel only.
+
+4. **Element ref mismatch**: the ref you pass to `drag()` and `drop()` must identify the same element the action offers, by `id` or `notation`:
    ```typescript
-   choices: zones.map(zone => ({
-     value: { zoneId: zone.id, cardId: selectedCard.id },
-     display: zone.name,
-     targetRef: { name: zone.name },  // Required for drop target identification
-   }))
-   ```
-
-4. **Element ref mismatch**: The `dragProps` ref must match what the action's `chooseElement` returns:
-   ```typescript
-   // If your action uses element IDs:
-   dragProps({ id: card.id })  // ✓
-   dragProps({ name: card.name })  // ✗ Won't match
-
-   // If your action returns elements by name:
-   dragProps({ name: piece.name })  // ✓
+   drag({ id: card.id })      // matches a candidate with that id
+   drop({ id: zone.id })      // matches a choice whose boardRefs name zone.id
    ```
 
 ### Debugging Checklist
 
-1. **Open browser console** - Look for `[BoardSmith] Drag started...` warnings
-2. **Check action availability** - Is the action in `availableActions`?
-3. **Verify action pattern** - Does it use one of the supported patterns?
-4. **Check element refs** - Do `dragProps` refs match what `chooseElement` returns?
-5. **Inspect choices** - For `chooseFrom`, do choices have `targetRef`?
+1. **Open the browser console**: look for the `[BoardSmith] Drag started...` warning.
+2. **Check action availability**: is the action in `availableActions`?
+3. **Check the first selection**: is it a `chooseElement` that accepts the dragged element?
+4. **Check the next pick**: is it an element pick, or a `chooseFrom` whose choices have `boardRefs`?
+5. **Check refs**: do the refs given to `drag()` and `drop()` name the same elements the action offers?
 
-### Using the Pit-of-Success API
+### Drag-Drop in a Custom UI
 
-If drag-drop isn't working with the automatic ActionPanel integration, you can use the simpler `drag()` and `drop()` helpers which give you more control:
+A custom UI marks what is draggable and what can receive a drop with `useDragDrop()`; the drop targets come from the same orchestration as the Action Panel's, so the two never disagree:
 
 ```vue
 <script setup>
@@ -1888,18 +1891,18 @@ import { useDragDrop } from 'boardsmith/ui';
 import 'boardsmith/ui/animation/drag-drop.css';
 
 const { drag, drop } = useDragDrop();
-
-const canDragCard = (cardId) =>
-  currentAction.value === 'moveCard' &&
-  currentPick.value?.name === 'card' &&
-  isCardSelectable(cardId);
 </script>
 
 <template>
   <div
     v-for="card in cards"
-    v-bind="drag({ id: card.id }, { when: canDragCard(card.id) }).props"
-    :class="drag({ id: card.id }, { when: canDragCard(card.id) }).classes"
+    v-bind="drag({ id: card.id }).props"
+    :class="drag({ id: card.id }).classes"
+  />
+  <div
+    v-for="zone in zones"
+    v-bind="drop({ id: zone.id }).props"
+    :class="drop({ id: zone.id }).classes"
   />
 </template>
 ```
@@ -2109,7 +2112,7 @@ class MyGame extends Game<MyGame, MyPlayer> {
 | **Loop exit with pending state** | Loop checks only actions remaining | Use `stateAwareLoop()` with `pendingStates` |
 | **execute() vs start()** | `execute('retreat', {})` without params | `start('retreat')` for wizard mode |
 | **Choice objects in fill()** | `fill(name, choiceObject)` | `fill(name, choiceObject.value)` |
-| **Drag-drop not working** | No matching action for drag | Use element→element or element→choice with filterBy |
+| **Drag-drop not working** | No drop targets when dragging | Start the action with a `chooseElement`; give `chooseFrom` choices `boardRefs` |
 | **Mixing dice randomization** | `die.roll()` then `die.setValue(Math.random())` | Use only `die.roll()` for normal rolling |
 | **Element identity (lint)** | `el1 === el2` / `arr.includes(el)` | `no-element-identity-comparison` ESLint rule auto-fixes simple cases to `.id` |
 | **Element array state (lint)** | `class X { items: Card[] = game.all(Card); }` | `no-element-array-state` ESLint rule flags it — query at point of use or store ids |
