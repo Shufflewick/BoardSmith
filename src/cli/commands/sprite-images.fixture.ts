@@ -48,3 +48,12 @@ export class ThreeSeatSpriteGame extends Game<ThreeSeatSpriteGame, Player> {
     if (options.playerCount === 3) deck.create(Card, '3H', { $image: NO_SHEET_SIZE });
   }
 }
+
+/** Two same-named cards with the same bad sprite, at three players only. */
+export class TwinSpriteGame extends Game<TwinSpriteGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    const deck = this.create(Deck, 'deck');
+    if (options.playerCount === 3) deck.createMany(2, Card, '3H', { $image: NO_SHEET_SIZE });
+  }
+}

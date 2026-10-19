@@ -1451,14 +1451,14 @@ export function checkSpriteImages(gameDefinition: GameDefinition): ValidationRes
     throw new Error('your gameDefinition does not declare whole-number minPlayers and maxPlayers, so there is no seat count to build it at');
   }
   const options = selectGameOptions(declaredGameOptionsOf(gameDefinition), {});
-  const problems = new Map<string, { image: string; reason: string; seats: number[] }>();
+  const problems = new Map<string, { image: string; reason: string; seats: Set<number> }>();
   for (let playerCount = minPlayers!; playerCount <= maxPlayers!; playerCount++) {
     const game = constructGame(gameDefinition.gameClass, { ...options, playerCount, seed: 'sprite-images' });
     for (const element of [game, ...game.all(), ...game.pile.all()]) {
       for (const { image, reason } of spriteProblemsOf(element)) {
         const key = JSON.stringify([image, reason]);
-        const problem = problems.get(key) ?? { image, reason, seats: [] };
-        problem.seats.push(playerCount);
+        const problem = problems.get(key) ?? { image, reason, seats: new Set<number>() };
+        problem.seats.add(playerCount);
         problems.set(key, problem);
       }
     }
@@ -1470,7 +1470,7 @@ export function checkSpriteImages(gameDefinition: GameDefinition): ValidationRes
     passed: false,
     message: `${problems.size} sprite image(s) are missing a size, so they would draw as empty elements.`,
     details: [...problems.values()].map(({ image, reason, seats }) => {
-      const only = seats.length < seatCounts ? ` (at ${seats.join(', ')} players only)` : '';
+      const only = seats.size < seatCounts ? ` (at ${[...seats].join(', ')} players only)` : '';
       return `${image}${only}: ${reason}`;
     }),
   };
@@ -1506,7 +1506,7 @@ export async function validateSpriteImages(cwd: string): Promise<ValidationResul
     return {
       name: 'Sprite images',
       passed: false,
-      message: `Your sprite images could not be checked, because building the game failed: ${(error as Error).message.replace(/\.$/, '')}. Fix that and run boardsmith validate again.`,
+      message: `Your sprite images could not be checked, because loading or building the game failed: ${(error as Error).message.replace(/\.$/, '')}. Fix that and run boardsmith validate again.`,
     };
   }
 }

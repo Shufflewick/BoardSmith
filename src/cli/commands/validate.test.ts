@@ -49,6 +49,7 @@ import {
   MissingSheetSizeGame,
   PiledSpriteGame,
   ThreeSeatSpriteGame,
+  TwinSpriteGame,
 } from './sprite-images.fixture.js';
 import boardsmithSchema from '../lib/boardsmith.schema.json' with { type: 'json' };
 
@@ -1025,6 +1026,12 @@ describe('validate.ts sprite images (#1021)', () => {
     const result = checkSpriteImages(definition(ThreeSeatSpriteGame, 2, 4));
 
     expect(result.details).toEqual([expect.stringMatching(/^Card '3H', \$image \(at 3 players only\): Sprite image .* is missing sheetWidth, sheetHeight\./)]);
+  });
+
+  it('counts each seat count once when same-named cards share a bad sprite', () => {
+    const result = checkSpriteImages(definition(TwinSpriteGame, 2, 4));
+
+    expect(result.details).toEqual([expect.stringMatching(/^Card '3H', \$image \(at 3 players only\): /)]);
   });
 
   it('loads the project rules and runs the check on them', async () => {
