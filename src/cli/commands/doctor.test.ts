@@ -593,14 +593,31 @@ describe('boardsmith doctor', () => {
       expect(result.notes[0]).toMatch(/could not read \.git\/hooks\/pre-commit/);
     });
 
-    it('checks no hook in a checkout whose .git is a file, a linked worktree sharing its main checkout\'s hooks', async () => {
-      const projectDir = await project();
-      await fs.writeFile(join(projectDir, '.git'), 'gitdir: /elsewhere\n');
+    it('reports a missing hook from a linked worktree, and --fix installs it where git runs it (#1186)', async () => {
+      const mainDir = await gitProject();
+      execSync('git add -A && git -c user.email=t@t -c user.name=t commit -m base', { cwd: mainDir, stdio: 'ignore' });
+      const worktree = `${mainDir}-wt`;
+      execSync(`git worktree add "${worktree}"`, { cwd: mainDir, stdio: 'ignore' });
 
-      const result = await doctorCommand({ project: projectDir });
+      const report = await doctorCommand({ project: worktree });
+      expect(report.findings.map((f) => f.kind)).toEqual(['ingest-hook-not-current']);
 
-      expect(result.healthy).toBe(true);
-      expect(result.notes).toEqual([]);
+      process.exitCode = undefined;
+      await doctorCommand({ project: worktree, fix: true });
+      expect(await read(hookPath(mainDir))).toBe(INGEST_PRE_COMMIT_HOOK);
+    });
+
+    it('reports a hook git cannot run because it lost its execute bit, and --fix restores it (#1187)', async () => {
+      const projectDir = await gitProject();
+      await installIngestHook(projectDir);
+      await fs.chmod(hookPath(projectDir), 0o644);
+
+      const report = await doctorCommand({ project: projectDir });
+      expect(report.findings.map((f) => f.kind)).toEqual(['ingest-hook-not-current']);
+
+      process.exitCode = undefined;
+      await doctorCommand({ project: projectDir, fix: true });
+      expect((await fs.stat(hookPath(projectDir))).mode & 0o111).toBeGreaterThan(0);
     });
   });
 });

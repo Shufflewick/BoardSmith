@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
+import { gitOutput } from './git-output.js';
 import { DESIGN_DIR, RULEBOOK_DIR } from './project-paths.js';
 import { readIfExists } from './read-if-exists.js';
 
@@ -96,24 +97,31 @@ exit 0
 export type IngestHookState = 'no-git' | 'missing' | 'current' | 'stale' | 'foreign' | 'unreadable';
 
 /**
- * The state of `.git/hooks/pre-commit`. A `.git` that is not a folder (a linked worktree) is
- * `no-git`: its hooks are its main checkout's. A hook carrying the marker is ours; any other is the designer's.
+ * The state of the `pre-commit` hook git runs for this project, and its path relative to the
+ * project. Git names the path, so `core.hooksPath` and a linked worktree's shared hooks are followed (#1186).
+ * A folder with no `.git` of its own is `no-git`: a hook found above it would run from another top folder.
+ * A hook carrying the marker is ours; any other is the designer's.
  */
-export async function ingestHookState(projectPath: string): Promise<IngestHookState> {
+export async function ingestHookState(projectPath: string): Promise<{ state: 'no-git' } | { state: Exclude<IngestHookState, 'no-git'>; path: string }> {
+  let path: string;
   try {
-    if (!(await fs.stat(join(projectPath, '.git'))).isDirectory()) return 'no-git';
+    await fs.stat(join(projectPath, '.git'));
+    path = (await gitOutput(projectPath, ['rev-parse', '--git-path', 'hooks/pre-commit'])).trim();
   } catch {
-    return 'no-git'; // Whatever stops the look, there is no hooks folder here to put the hook in.
+    return { state: 'no-git' }; // Whatever stops the look, there is no hooks folder here to put the hook in.
   }
+  path = relative(projectPath, resolve(projectPath, path));
   let existing: string | undefined;
   try {
-    existing = await readIfExists(join(projectPath, '.git', 'hooks', 'pre-commit'), (p) => fs.readFile(p, 'utf-8'));
+    existing = await readIfExists(join(projectPath, path), (p) => fs.readFile(p, 'utf-8'));
   } catch {
-    return 'unreadable';
+    return { state: 'unreadable', path };
   }
-  if (existing === undefined) return 'missing';
-  if (!existing.includes('BoardSmith ingest synthesis')) return 'foreign';
-  return existing === INGEST_PRE_COMMIT_HOOK ? 'current' : 'stale';
+  if (existing === undefined) return { state: 'missing', path };
+  if (!existing.includes('BoardSmith ingest synthesis')) return { state: 'foreign', path };
+  // Git skips a hook without the execute bit, so ours without it is not current (#1187).
+  const executable = ((await fs.stat(join(projectPath, path))).mode & 0o111) !== 0;
+  return { state: existing === INGEST_PRE_COMMIT_HOOK && executable ? 'current' : 'stale', path };
 }
 
 /**
@@ -125,17 +133,16 @@ export async function ingestHookState(projectPath: string): Promise<IngestHookSt
 export async function installIngestHook(
   projectPath: string,
 ): Promise<'installed' | 'skipped-existing' | 'skipped-unreadable' | 'skipped-no-git'> {
-  const state = await ingestHookState(projectPath);
-  if (state === 'no-git') return 'skipped-no-git';
+  const hook = await ingestHookState(projectPath);
+  if (hook.state === 'no-git') return 'skipped-no-git';
   // Something we cannot read stands there: not ours to replace, and init must not fail.
-  if (state === 'unreadable') return 'skipped-unreadable';
+  if (hook.state === 'unreadable') return 'skipped-unreadable';
   // Never clobber a hook we did not write — a designer's own hook wins.
-  if (state === 'foreign') return 'skipped-existing';
+  if (hook.state === 'foreign') return 'skipped-existing';
 
-  const hooksDir = join(projectPath, '.git', 'hooks');
-  const hookPath = join(hooksDir, 'pre-commit');
+  const hookPath = join(projectPath, hook.path);
   try {
-    await fs.mkdir(hooksDir, { recursive: true });
+    await fs.mkdir(dirname(hookPath), { recursive: true });
     await fs.writeFile(hookPath, INGEST_PRE_COMMIT_HOOK, { mode: 0o755 });
     // writeFile's mode is ignored when the file already exists, so set it explicitly.
     await fs.chmod(hookPath, 0o755);

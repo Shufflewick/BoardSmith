@@ -4,7 +4,7 @@ import { promises as fs } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { INGEST_PRE_COMMIT_HOOK, installIngestHook } from './ingest-hook.js';
+import { INGEST_PRE_COMMIT_HOOK, ingestHookState, installIngestHook } from './ingest-hook.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
@@ -68,6 +68,36 @@ describe('installIngestHook', () => {
     const p = await gitProject();
     await installIngestHook(p);
     expect(await installIngestHook(p)).toBe('installed');
+  });
+
+  it('installs where core.hooksPath points, the only folder git runs hooks from then (#1186)', async () => {
+    const p = await gitProject();
+    execSync('git config core.hooksPath githooks', { cwd: p });
+    expect(await installIngestHook(p)).toBe('installed');
+    expect(await fs.readFile(join(p, 'githooks', 'pre-commit'), 'utf-8')).toBe(INGEST_PRE_COMMIT_HOOK);
+    expect(await ingestHookState(p)).toEqual({ state: 'current', path: join('githooks', 'pre-commit') });
+  });
+
+  it('sees the main checkout\'s hook from a linked worktree, whose .git is a file (#1186)', async () => {
+    const p = await gitProject();
+    execSync('git -c user.email=t@t -c user.name=t commit --allow-empty -m base', { cwd: p, stdio: 'ignore' });
+    const wt = join(dir, 'wt');
+    execSync(`git worktree add "${wt}"`, { cwd: p, stdio: 'ignore' });
+    expect((await ingestHookState(wt)).state).toBe('missing');
+    expect(await installIngestHook(wt)).toBe('installed');
+    expect(await fs.readFile(join(p, '.git', 'hooks', 'pre-commit'), 'utf-8')).toBe(INGEST_PRE_COMMIT_HOOK);
+    expect((await ingestHookState(p)).state).toBe('current');
+  });
+
+  it('counts its own hook without the execute bit as stale, and reinstalling makes it executable (#1187)', async () => {
+    const p = await gitProject();
+    const hookPath = join(p, '.git', 'hooks', 'pre-commit');
+    await installIngestHook(p);
+    await fs.chmod(hookPath, 0o644);
+    expect((await ingestHookState(p)).state).toBe('stale');
+    expect(await installIngestHook(p)).toBe('installed');
+    expect((await fs.stat(hookPath)).mode & 0o111).toBeGreaterThan(0);
+    expect((await ingestHookState(p)).state).toBe('current');
   });
 
   it('does not throw when there is no git repository', async () => {

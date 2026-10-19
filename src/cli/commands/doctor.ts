@@ -75,7 +75,7 @@ export type DoctorFindingKind =
   | 'test-run-collects-worktrees'
   /** The config is not built with `defineGameViteConfig` and has settings of its own; only a person should carry them over. */
   | 'test-config-needs-edit'
-  /** `.git/hooks/pre-commit` is missing or an older BoardSmith ingest hook; `--fix` writes the current one. */
+  /** The `pre-commit` hook git runs is missing, not executable, or an older BoardSmith ingest hook; `--fix` writes the current one. */
   | 'ingest-hook-not-current'
   /** Both the root and the `design/` copy exist — a human has to decide which one is real. */
   | 'move-conflict';
@@ -322,29 +322,29 @@ async function sortConfigs(projectDir: string): Promise<{ built: string | undefi
   return { built, outdated };
 }
 
-const HOOK_PATH = '.git/hooks/pre-commit';
-
 /** The ingest hook as a finding when `--fix` can bring it up to date, or as a note when it is not ours to touch. */
 async function ingestHookCheck(projectDir: string): Promise<{ findings: DoctorFinding[]; notes: string[] }> {
-  const state = await ingestHookState(projectDir);
+  const hook = await ingestHookState(projectDir);
+  if (hook.state === 'no-git') return { findings: [], notes: [] };
+  const { state, path } = hook;
   const byHand = 'or run boardsmith ingest-gaps yourself after transcription.';
   if (state === 'foreign') {
     return { findings: [], notes: [
-      `Left ${HOOK_PATH} alone: BoardSmith did not write it, so the ingest hook is not installed. To use BoardSmith's, ` +
-        `move your commands elsewhere, delete ${HOOK_PATH} and run boardsmith doctor --fix; ${byHand}`,
+      `Left ${path} alone: BoardSmith did not write it, so the ingest hook is not installed. To use BoardSmith's, ` +
+        `move your commands elsewhere, delete ${path} and run boardsmith doctor --fix; ${byHand}`,
     ] };
   }
   if (state === 'unreadable') {
     return { findings: [], notes: [
-      `Left ${HOOK_PATH} alone: could not read ${HOOK_PATH}, so doctor cannot tell whether BoardSmith wrote it. ` +
+      `Left ${path} alone: could not read ${path}, so doctor cannot tell whether BoardSmith wrote it. ` +
         `Check that you can read it, then run boardsmith doctor again; ${byHand}`,
     ] };
   }
-  if (state !== 'missing' && state !== 'stale') return { findings: [], notes: [] };
+  if (state === 'current') return { findings: [], notes: [] };
   const detail = state === 'missing'
     ? 'no ingest pre-commit hook is installed, so commits do not run the ingest synthesis.'
-    : 'the ingest pre-commit hook is an older version than this BoardSmith writes.';
-  return { findings: [{ kind: 'ingest-hook-not-current', from: HOOK_PATH, to: HOOK_PATH, fixed: false, detail }], notes: [] };
+    : 'the ingest pre-commit hook is an older version than this BoardSmith writes, or is not executable so git skips it.';
+  return { findings: [{ kind: 'ingest-hook-not-current', from: path, to: path, fixed: false, detail }], notes: [] };
 }
 
 /**
@@ -363,7 +363,7 @@ async function fixAll(projectDir: string, findings: DoctorFinding[]): Promise<vo
 async function fix(projectDir: string, f: DoctorFinding): Promise<void> {
   if (f.kind === 'ingest-hook-not-current') {
     if ((await installIngestHook(projectDir)) === 'installed') return;
-    throw new Error(`Could not write ${HOOK_PATH}. Check that you can write to .git/hooks, then run boardsmith doctor --fix again.`);
+    throw new Error(`Could not write ${f.from}. Check that you can write to its folder, then run boardsmith doctor --fix again.`);
   }
   if (f.kind === 'test-config-missing' || f.kind === 'test-run-collects-worktrees') {
     const { built, outdated } = await sortConfigs(projectDir);
