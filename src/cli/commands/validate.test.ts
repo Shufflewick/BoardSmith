@@ -21,6 +21,8 @@ import {
   buildChoiceCardinalityResult,
   validateChoiceCardinality,
   checkRulesAgreement,
+  checkSpriteImages,
+  validateSpriteImages,
   validateRequiredFiles,
   successGuidance,
   typeScriptFailureDetails,
@@ -42,6 +44,12 @@ import {
   untimedDeployDefinition,
 } from '../../session/testing/fixtures/timed-step-fixture.js';
 import type { GameDefinition } from '../../session/index.js';
+import {
+  GoodSpriteGame,
+  MissingSheetSizeGame,
+  PiledSpriteGame,
+  ThreeSeatSpriteGame,
+} from './sprite-images.fixture.js';
 import boardsmithSchema from '../lib/boardsmith.schema.json' with { type: 'json' };
 
 const schema = boardsmithSchema as { properties: Record<string, Record<string, unknown>> };
@@ -979,6 +987,76 @@ describe('validate.ts rules agreement (#300)', () => {
 
   it('passes an untimed game with no idleAction', () => {
     expect(checkRulesAgreement({ backend: 'table' }, untimed).passed).toBe(true);
+  });
+});
+
+/**
+ * #1021: sprite data in plain JS or JSON is not type-checked, and a sprite
+ * missing a size renders as an empty card with no message. Validate builds the
+ * game and holds every element's `$image` and `$images` to what
+ * `getSpriteStyle` needs, so the game fails while it is being built.
+ */
+describe('validate.ts sprite images (#1021)', () => {
+  const definition = (gameClass: unknown, minPlayers = 2, maxPlayers = 2) =>
+    ({ gameClass, gameType: 'fixture', displayName: 'Fixture', minPlayers, maxPlayers }) as GameDefinition;
+
+  it('passes a game whose every sprite has its four sizes', () => {
+    expect(checkSpriteImages(definition(GoodSpriteGame)).passed).toBe(true);
+  });
+
+  it('refuses a sprite missing its sheet sizes, naming the element, the image and the fix', () => {
+    const result = checkSpriteImages(definition(MissingSheetSizeGame));
+
+    expect(result.passed).toBe(false);
+    expect(result.severity).toBeUndefined();
+    expect(result.details).toEqual([
+      "Card '2H', $images.face: Sprite image 'cards/deck-sprite.svg' at x 238, y 0 is missing sheetWidth, sheetHeight. "
+        + "Give each sprite its own width and height and the whole sheet image's sheetWidth and sheetHeight, in pixels.",
+    ]);
+  });
+
+  it('checks a card removed to the pile during setup too', () => {
+    const result = checkSpriteImages(definition(PiledSpriteGame));
+
+    expect(result.details).toEqual([expect.stringMatching(/^Card 'burned', \$image: .* is missing width\./)]);
+  });
+
+  it('builds the game at every seat count it supports', () => {
+    const result = checkSpriteImages(definition(ThreeSeatSpriteGame, 2, 4));
+
+    expect(result.details).toEqual([expect.stringMatching(/^Card '3H', \$image \(at 3 players only\): Sprite image .* is missing sheetWidth, sheetHeight\./)]);
+  });
+
+  it('loads the project rules and runs the check on them', async () => {
+    const cwd = tempTree('bs-validate-sprites-');
+    writeFileSync(join(cwd, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table' }));
+    mkdirSync(join(cwd, 'src', 'rules'), { recursive: true });
+    const fixture = resolve(dirname(fileURLToPath(import.meta.url)), 'sprite-images.fixture.ts');
+    writeFileSync(join(cwd, 'src', 'rules', 'index.ts'), [
+      `import { MissingSheetSizeGame } from ${JSON.stringify(fixture)};`,
+      "export const gameDefinition = { gameClass: MissingSheetSizeGame, gameType: 'fixture', displayName: 'Fixture', minPlayers: 2, maxPlayers: 2 };",
+    ].join('\n'));
+
+    const result = await validateSpriteImages(cwd);
+
+    expect(result.passed).toBe(false);
+    expect(result.details!.join('\n')).toContain("Card '2H', $images.face");
+  }, 30_000);
+
+  it('fails, saying why, when the rules cannot be loaded', async () => {
+    const cwd = tempTree('bs-validate-sprites-');
+    writeFileSync(join(cwd, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table' }));
+
+    const result = await validateSpriteImages(cwd);
+
+    expect(result.passed).toBe(false);
+    expect(result.message).toMatch(/could not be checked.*run boardsmith validate again/is);
+  }, 30_000);
+
+  it('says it cannot build a game that declares no seat range', () => {
+    const noSeats = { gameClass: GoodSpriteGame, gameType: 'fixture', displayName: 'Fixture' } as GameDefinition;
+
+    expect(() => checkSpriteImages(noSeats)).toThrow(/minPlayers and maxPlayers/);
   });
 });
 
