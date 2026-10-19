@@ -59,7 +59,7 @@ The rules `boardsmith build` publishes carry the whole list on their `gameDefini
 
 ### Player Colors
 
-- `createColorOption()` - Create a color player option; always the engine's `DEFAULT_COLOR_PALETTE` with its names; its one argument is the option's label. A game's own colours go only in `boardsmith.json`'s `colorPalette`, and `boardsmith dev` refuses a code-declared `color` option whose list differs from what the lobby offers
+- `createColorOption()` - Create a color player option; always the engine's `DEFAULT_COLOR_PALETTE` with its names, labelled "Color"; it takes no arguments. A game's own colours go only in `boardsmith.json`'s `colorPalette`, and `boardsmith dev` refuses a code-declared `color` option whose list differs from what the lobby offers
 
 ### Executor Op Contract
 
@@ -95,7 +95,9 @@ The rules `boardsmith build` publishes carry the whole list on their `gameDefini
 - `ActionRequest` - Action request message
 - `WebSocketMessage` - WebSocket message type
 - `PlayerOptionDefinition` - Player option definition
-- `StandardPlayerOption` - Standard player option
+- `StandardPlayerOption` - Select player option
+- `NumberPlayerOption` - Number player option (`default`, optional `min`, `max` and `step`)
+- `BooleanPlayerOption` - On/off player option (`default` is `true` or `false`)
 - `ExclusivePlayerOption` - Exclusive player option
 - `PlayerConfig` - Player configuration
 - `GamePreset` - Game preset definition

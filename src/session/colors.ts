@@ -42,7 +42,6 @@ export interface ColorOptionDefinition {
  * belong in boardsmith.json's `colorPalette`, the one list dev and the live
  * lobby both use (#994).
  *
- * @param label - Label for the option (optional, defaults to 'Color')
  * @returns A player option definition for use in gameDefinition.playerOptions
  *
  * @example
@@ -52,10 +51,10 @@ export interface ColorOptionDefinition {
  * }
  * ```
  */
-export function createColorOption(label = 'Color'): ColorOptionDefinition {
+export function createColorOption(): ColorOptionDefinition {
   return {
     type: 'color' as const,
-    label,
+    label: 'Color',
     choices: DEFAULT_COLOR_PALETTE.map((value) => ({ value, label: DEFAULT_COLOR_LABELS[value]! })),
   };
 }

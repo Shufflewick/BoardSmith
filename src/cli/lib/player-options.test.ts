@@ -132,7 +132,19 @@ describe('the code types take only shapes the platform\'s manifest can carry (#9
       { type: 'select', label: 'Side', choices: [{ value: 'a', label: 'A' }] },
       // @ts-expect-error the lobby has no text control
       { type: 'text', label: 'Name', default: '' },
+      // @ts-expect-error a number option needs a number default
+      { type: 'number', label: 'Seats', default: '2' },
+      // @ts-expect-error a number option's range is numbers
+      { type: 'number', label: 'Seats', default: 2, min: '1' },
+      // @ts-expect-error a boolean option needs a true or false default
+      { type: 'boolean', label: 'Ready', default: 'yes' },
     ];
-    expect(refused).toHaveLength(5);
+    expect(refused).toHaveLength(8);
+  });
+
+  it('takes number and boolean options from code, as boardsmith.json can declare them (#1197)', () => {
+    const seats: PlayerOptionDefinition = { type: 'number', label: 'Seats', default: 2, min: 1, max: 4, step: 1 };
+    const ready: PlayerOptionDefinition = { type: 'boolean', label: 'Ready', description: 'Start at once', default: false };
+    expect(mergePlayerOptions({ seats, ready }, [{ id: 'seats', ...seats }])).toEqual({ seats, ready });
   });
 });
