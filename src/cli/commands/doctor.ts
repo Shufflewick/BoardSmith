@@ -75,7 +75,7 @@ export type DoctorFindingKind =
   | 'test-run-collects-worktrees'
   /** The config is not built with `defineGameViteConfig` and has settings of its own; only a person should carry them over. */
   | 'test-config-needs-edit'
-  /** The `pre-commit` hook git runs is missing, not executable, or an older BoardSmith ingest hook; `--fix` writes the current one. */
+  /** The `pre-commit` hook git runs is missing or an older BoardSmith ingest hook; `--fix` writes the current one. */
   | 'ingest-hook-not-current'
   /** Both the root and the `design/` copy exist — a human has to decide which one is real. */
   | 'move-conflict';
@@ -343,7 +343,7 @@ async function ingestHookCheck(projectDir: string): Promise<{ findings: DoctorFi
   if (state === 'current') return { findings: [], notes: [] };
   const detail = state === 'missing'
     ? 'no ingest pre-commit hook is installed, so commits do not run the ingest synthesis.'
-    : 'the ingest pre-commit hook is an older version than this BoardSmith writes, or is not executable so git skips it.';
+    : 'the ingest pre-commit hook is an older version than this BoardSmith writes.';
   return { findings: [{ kind: 'ingest-hook-not-current', from: path, to: path, fixed: false, detail }], notes: [] };
 }
 

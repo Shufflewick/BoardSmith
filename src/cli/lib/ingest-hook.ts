@@ -119,9 +119,7 @@ export async function ingestHookState(projectPath: string): Promise<{ state: 'no
   }
   if (existing === undefined) return { state: 'missing', path };
   if (!existing.includes('BoardSmith ingest synthesis')) return { state: 'foreign', path };
-  // Git skips a hook without the execute bit, so ours without it is not current (#1187).
-  const executable = ((await fs.stat(join(projectPath, path))).mode & 0o111) !== 0;
-  return { state: existing === INGEST_PRE_COMMIT_HOOK && executable ? 'current' : 'stale', path };
+  return { state: existing === INGEST_PRE_COMMIT_HOOK ? 'current' : 'stale', path };
 }
 
 /**

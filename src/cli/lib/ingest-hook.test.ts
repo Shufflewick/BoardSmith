@@ -89,17 +89,6 @@ describe('installIngestHook', () => {
     expect((await ingestHookState(p)).state).toBe('current');
   });
 
-  it('counts its own hook without the execute bit as stale, and reinstalling makes it executable (#1187)', async () => {
-    const p = await gitProject();
-    const hookPath = join(p, '.git', 'hooks', 'pre-commit');
-    await installIngestHook(p);
-    await fs.chmod(hookPath, 0o644);
-    expect((await ingestHookState(p)).state).toBe('stale');
-    expect(await installIngestHook(p)).toBe('installed');
-    expect((await fs.stat(hookPath)).mode & 0o111).toBeGreaterThan(0);
-    expect((await ingestHookState(p)).state).toBe('current');
-  });
-
   it('does not throw when there is no git repository', async () => {
     const p = join(dir, 'nogit');
     await fs.mkdir(p, { recursive: true });
