@@ -74,6 +74,17 @@ describe('installIngestHook', () => {
     expect((await installIngestHook(p)).result).toBe('installed');
   });
 
+  it('counts its own hook without the execute bit as not current, since git skips it, and reinstalling restores the bit (#1187)', async () => {
+    const p = await gitProject();
+    const hookPath = join(p, '.git', 'hooks', 'pre-commit');
+    await installIngestHook(p);
+    await fs.chmod(hookPath, 0o644);
+    expect((await ingestHookState(p)).state).toBe('not-executable');
+    expect((await installIngestHook(p)).result).toBe('installed');
+    expect((await fs.stat(hookPath)).mode & 0o111).toBeGreaterThan(0);
+    expect((await ingestHookState(p)).state).toBe('current');
+  });
+
   it('installs where core.hooksPath points, the only folder git runs hooks from then (#1186)', async () => {
     const p = await gitProject();
     execSync('git config core.hooksPath githooks', { cwd: p });

@@ -94,7 +94,7 @@ exit 0
 `;
 
 /** Where a project's ingest hook stands: what `init` and `doctor` both decide from. */
-export type IngestHookState = 'no-git' | 'outside' | 'missing' | 'current' | 'stale' | 'foreign' | 'unreadable';
+export type IngestHookState = 'no-git' | 'outside' | 'missing' | 'current' | 'stale' | 'not-executable' | 'foreign' | 'unreadable';
 
 /**
  * The state of the `pre-commit` hook git runs for this project, and its path relative to the
@@ -102,7 +102,8 @@ export type IngestHookState = 'no-git' | 'outside' | 'missing' | 'current' | 'st
  * A folder with no `.git` of its own is `no-git`: a hook found above it would run from another top folder.
  * A hook path outside both the project and its git folder is `outside`, with its absolute path:
  * a global `core.hooksPath` is shared by every repository on the machine, so it is not ours to write.
- * A hook carrying the marker is ours; any other is the designer's.
+ * A hook carrying the marker is ours; any other is the designer's. Ours without the execute bit is
+ * `not-executable`: git skips it, printing only a hint (#1187).
  */
 export async function ingestHookState(projectPath: string): Promise<{ state: 'no-git' } | { state: Exclude<IngestHookState, 'no-git'>; path: string }> {
   let commonDir: string;
@@ -128,7 +129,8 @@ export async function ingestHookState(projectPath: string): Promise<{ state: 'no
   }
   if (existing === undefined) return { state: 'missing', path };
   if (!existing.includes('BoardSmith ingest synthesis')) return { state: 'foreign', path };
-  return { state: existing === INGEST_PRE_COMMIT_HOOK ? 'current' : 'stale', path };
+  if (existing !== INGEST_PRE_COMMIT_HOOK) return { state: 'stale', path };
+  return { state: ((await fs.stat(absolute)).mode & 0o111) === 0 ? 'not-executable' : 'current', path };
 }
 
 /**
