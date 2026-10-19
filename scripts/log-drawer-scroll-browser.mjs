@@ -10,7 +10,8 @@
  * A world whose one verb narrates many lines, played with the drawer shut. Then
  * the drawer is opened at 390px, light and dark, and the newest line must be
  * inside the log's box, the drawer's box and the viewport. At 1440px, where the
- * log is always shown, the same must hold.
+ * log is always shown, the same must hold, and the log's screen-reader status
+ * line (the shared `sr-only.css`, #1183) must take no space.
  *
  * Runs under `boardsmith test --browser`, or by hand with
  * `node scripts/log-drawer-scroll-browser.mjs`; a missing Chromium says to run
@@ -118,6 +119,16 @@ await runBrowserRegression(
             assert(seen.text?.includes(`Line ${LINES} of the chatter.`), `the last log line read ${JSON.stringify(seen.text)}`);
             assert(seen.hidden.length === 0, `the newest line is outside ${seen.hidden.join(' and ')}`);
           });
+          if (!phone) {
+            await check(`the log's screen-reader status is in the page but takes no space at ${width}px`, async () => {
+              const status = surface.locator('[data-testid="bs-log"] .sr-only[role="status"]');
+              // Copying gives the status words to announce; an empty span would take no space anyway.
+              await surface.locator('[data-testid="bs-log"] .history-copy').click();
+              await waitUntil(() => status.textContent(), (text) => Boolean(text?.trim()));
+              const box = await status.boundingBox();
+              assert(box !== null && box.width <= 1 && box.height <= 1, `the log's screen-reader status took ${JSON.stringify(box)}`);
+            });
+          }
         });
       }
     } finally {
