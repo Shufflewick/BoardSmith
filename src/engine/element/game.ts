@@ -120,6 +120,12 @@ import { PERSIST_KEY, PERSIST_PRIVATE_KEY } from '../../persistence/persistence.
 import { ENGINE_OWNED_GAME_FIELDS, describeEngineFieldShadow } from './engine-owned-fields.js';
 import { DEFAULT_COLOR_PALETTE, DEFAULT_COLOR_LABELS, seatDisplayName } from './seat-defaults.js';
 
+/** Why a partition root may hang only from the game (#795, #1170, #1188). */
+const PARTITION_ROOT_RULE =
+  'a partition root must be a direct child of the game. A world stores and wakes every ' +
+  'partition there, so a root anywhere else would be stored twice, inside its parent\'s ' +
+  'partition as well as on its own, or come back directly under the game at the next wake.';
+
 /** Every element id carried by a serialized subtree, and every placeholder token (#715), for `adoptSubtree`. */
 function collectJsonIds(json: ElementJSON, ids: number[], tokens: number[]): void {
   ids.push(json.id);
@@ -1710,7 +1716,7 @@ export class Game<
 
   /**
    * Declare a resident element a PARTITION ROOT: a subtree the platform loads,
-   * checkpoints and evicts as one unit.
+   * checkpoints and evicts as one unit. It must be a direct child of the game.
    *
    * The engine keeps no partition contents and no partition names — the
    * platform already knows what it hydrated. All the engine owes it is the
@@ -1735,6 +1741,17 @@ export class Game<
       throw new Error(
         `Cannot define the game root (id ${id}) as a partition: a partition is a subtree ` +
           `that can be evicted, and evicting the game would evict the world.`
+      );
+    }
+    const parent = element._t.parent;
+    if (parent !== this) {
+      throw new Error(
+        `Cannot define "${element.name ?? element.constructor.name}" (id ${id}) as a partition: it ` +
+          (!parent || parent === this.pile
+            ? `has been removed from the game`
+            : `sits inside "${parent.name ?? parent.constructor.name}" (id ${parent._t.id})`) +
+          `, and ${PARTITION_ROOT_RULE} Create the root with game.create(...), or leave it ` +
+          `undeclared and let it travel inside the partition that holds it.`
       );
     }
     this._partitionRootTable().set(id, element);
@@ -2127,10 +2144,11 @@ export class Game<
   }
 
   /**
-   * Graft one serialized subtree into the resident tree, under `parentId`.
+   * Graft one serialized subtree into the resident tree, under `parentId`,
+   * which must be the game's own id: a partition root hangs only from the game.
    *
    * This is the same restore path a snapshot uses (`GameElement.fromJSON`),
-   * pointed at a found parent instead of at the game root, so an adopted
+   * pointed at one subtree instead of the whole game, so an adopted
    * element is indistinguishable from one that was never evicted.
    *
    * Two passes that bracket `loadSerializedState`'s rebuild are deliberately
@@ -2164,11 +2182,17 @@ export class Game<
     if (!parent) {
       throw new Error(
         `Cannot adopt partition "${json.name ?? json.className}" under parent id ${parentId}: ` +
-          `no element with that id is resident. Hydrate the parent's partition first — a graft ` +
-          `needs its attachment point in the tree. A partition that hangs from the game itself ` +
-          `can only fail this way when the world was built with a different element id key ` +
-          `than the one its stored bytes were minted under (#482): pass the key stored with ` +
-          `this world.`
+          `no element with that id is resident. A partition hangs from the game, element ` +
+          `${this._t.id} here, so stored bytes naming another parent were minted under a ` +
+          `different element id key than this world was built with (#482): pass the key stored ` +
+          `with this world.`
+      );
+    }
+    if (parent !== this) {
+      throw new Error(
+        `Cannot adopt partition "${json.name ?? json.className}" under ` +
+          `"${parent.name ?? parent.constructor.name}" (id ${parentId}): ${PARTITION_ROOT_RULE} ` +
+          `Adopt it under the game (id ${this._t.id}).`
       );
     }
 
