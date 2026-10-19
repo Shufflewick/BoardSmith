@@ -231,7 +231,10 @@ describe('a read whose draft answers an element pick nested below its partition 
         return ['gently'];
       },
     })
-    .quote(({ card }) => [`peek at ${(card as Card).name}`])
+    .quote(({ card }) => {
+      handed.push((card as Card).name);
+      return [`peek at ${(card as Card).name}`];
+    })
     .execute(() => {});
 
   async function pouchWorld(): Promise<{ world: TestWorld; card: number }> {
@@ -242,16 +245,20 @@ describe('a read whose draft answers an element pick nested below its partition 
         world: {
           maxPlayers: 2,
           actions: [peek],
-          view: () => ['commons'],
+          // Both resident, so a card in `stash` is found, yet `peek` declares only `commons`.
+          view: () => ['commons', 'stash'],
           genesis: (game: Game) => {
             const commons = game.create(Commons, 'commons');
             commons.create(Pouch, 'pouch').create(Card, 'AS');
-            return { commons };
+            const stash = game.create(Commons, 'stash');
+            stash.create(Pouch, 'hoard').create(Card, 'KH');
+            return { commons, stash };
           },
         } as WorldDefinition,
       },
     });
     const card = (await world.resolvePick(1, 'peek', 'card', {})).validElements![0]!.id;
+    handed.length = 0;
     return { world, card };
   }
 
@@ -269,6 +276,17 @@ describe('a read whose draft answers an element pick nested below its partition 
     const { world, card } = await pouchWorld();
 
     expect(await world.quote(1, 'peek', { card, how: 'gently' })).toEqual(['peek at AS']);
+    await world.close();
+  });
+
+  it('a draft naming a card nested in a partition the read does not declare is refused, and no callback is handed it', async () => {
+    const { world } = await pouchWorld();
+    const hidden = (await world.unredactedElements()).find((e) => e.name === 'KH')?.id;
+    if (hidden === undefined) throw new Error('The pouch fixture has no KH card in its stash.');
+
+    await expect(world.quote(1, 'peek', { card: hidden })).rejects.toMatchObject({ code: 'stale-draft' });
+    await expect(world.resolvePick(1, 'peek', 'how', { card: hidden })).rejects.toMatchObject({ code: 'stale-draft' });
+    expect(handed).toEqual([]);
     await world.close();
   });
 });
