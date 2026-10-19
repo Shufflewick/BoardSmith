@@ -2813,7 +2813,7 @@ describe('onSelect throwing aborts the action (F35)', () => {
     expect(events).toEqual(['onSelect:color']); // onCancel NOT fired
   });
 
-  it('aborts and fires onCancel when a later step onSelect throws (step path)', () => {
+  it('fails the pick and leaves onCancel to the player\'s cancel when a later step onSelect throws (step path, #1189)', () => {
     const events: string[] = [];
     const action = Action.create('test')
       .chooseFrom('color', {
@@ -2835,10 +2835,12 @@ describe('onSelect throwing aborts the action (F35)', () => {
     const step1 = executor.processSelectionStep(action, player, pendingState, 'color', 'red');
     expect(step1.success).toBe(true);
 
-    // Second selection's onSelect throws → abort with actionable error + onCancel.
     const step2 = executor.processSelectionStep(action, player, pendingState, 'size', 'M');
     expect(step2.success).toBe(false);
     expect(step2.error).toBe(`${rulesErrorSentence('test')} (size hook blew up)`);
+    expect(events).toEqual(['onSelect:color']);
+
+    executor.fireOnCancelCallbacks(action, pendingState);
     expect(events).toEqual(['onSelect:color', 'onCancel:color']);
   });
 });
