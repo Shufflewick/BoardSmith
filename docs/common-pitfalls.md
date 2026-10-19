@@ -1857,7 +1857,18 @@ Action.create('moveCard')
   })
 ```
 
-`filterBy` is optional here. Add it only when the choices themselves depend on the card (`filterBy: { key: 'cardId', selectionName: 'card' }`); the controller applies it before the board sees the choices.
+`filterBy` is optional here. Use it only when the choices depend on the card. The engine applies it: `filterBy: { key: 'cardId', selectionName: 'card' }` keeps only the choices whose `cardId` equals the picked card's id, and a plain-string choice like the zone names above never has one, so every choice would be removed. Make each choice an object that carries the key:
+
+```typescript
+  .chooseFrom('destination', {
+    choices: (ctx) => ctx.game.all(Card).flatMap(card =>
+      card.legalZones().map(zone => ({ zone: zone.name, cardId: card.id }))),
+    filterBy: { key: 'cardId', selectionName: 'card' },
+    boardRefs: (choice, ctx) => ({
+      refs: [{ ref: { id: ctx.game.first(Zone, choice.zone)!.id }, role: 'target' }],
+    }),
+  })
+```
 
 ### Common Mistakes
 
@@ -1886,18 +1897,21 @@ Action.create('moveCard')
 A custom UI marks what is draggable and what can receive a drop with `useDragDrop()`; the drop targets come from the same orchestration as the Action Panel's, so the two never disagree:
 
 ```vue
-<script setup>
-import { useDragDrop } from 'boardsmith/ui';
+<script setup lang="ts">
+import { useDragDrop, type TableBoardProps } from 'boardsmith/ui';
 import 'boardsmith/ui/animation/drag-drop.css';
 
+const props = defineProps<TableBoardProps>();
 const { drag, drop } = useDragDrop();
+// Without `when`, every card looks draggable even on another seat's turn, when the drop does nothing.
+const canDrag = () => props.isMyTurn && props.availableActions.includes('moveCard');
 </script>
 
 <template>
   <div
     v-for="card in cards"
-    v-bind="drag({ id: card.id }).props"
-    :class="drag({ id: card.id }).classes"
+    v-bind="drag({ id: card.id }, { when: canDrag }).props"
+    :class="drag({ id: card.id }, { when: canDrag }).classes"
   />
   <div
     v-for="zone in zones"
