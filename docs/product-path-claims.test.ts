@@ -55,8 +55,9 @@ const LANDING_PAGES: Array<{ path: string; docsPrefix: string }> = [
 const pitch = (docsPrefix: string) => `## The path from an idea to players
 
 BoardSmith is one install and one command away from a game you can play.
-\`npx boardsmith init my-game\` scaffolds the project, \`npm install\` pulls in the
-whole engine, \`boardsmith dev\` hosts real multiplayer on your own machine with
+Install BoardSmith, then \`boardsmith init my-game\` scaffolds the project,
+\`npm install\` pulls in the whole engine, \`boardsmith dev\` hosts real
+multiplayer on your own machine with
 no server, database or service to provision, and \`boardsmith test\` drives the
 same rules headlessly. When the game is ready, \`boardsmith publish\` sends the
 bundle to ShufflewickPub, where a single account supplies the networking, the
@@ -95,7 +96,7 @@ describe('#168: the product path is written down where an author lands', () => {
 
   it('names every step of the path, so no step can quietly fall out', () => {
     for (const step of [
-      'npx boardsmith init',
+      'Install BoardSmith, then `boardsmith init my-game`',
       'npm install',
       '`boardsmith dev`',
       '`boardsmith publish`',
@@ -107,6 +108,15 @@ describe('#168: the product path is written down where an author lands', () => {
     ]) {
       expect(PITCH, `The pitch stopped saying "${step}".`).toContain(step);
     }
+  });
+
+  it('does not tell a new author to fetch BoardSmith with npx (#1191)', () => {
+    expect(
+      PITCH,
+      'No `boardsmith` package is published on npm, so `npx boardsmith init` with nothing ' +
+        'installed fails or runs whoever claims the name, and init refuses to run from ' +
+        "npm's _npx cache (#1007). The pitch says to install first.",
+    ).not.toContain('npx boardsmith');
   });
 
   it('does not promise infrastructure the author has to stand up', () => {
