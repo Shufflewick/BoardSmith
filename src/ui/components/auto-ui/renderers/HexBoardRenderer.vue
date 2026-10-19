@@ -62,11 +62,8 @@ const coordNames = computed(() => hexCoordNames(props.element));
 const qCoordName = computed(() => coordNames.value.q);
 const rCoordName = computed(() => coordNames.value.r);
 
-// A cell with no coordinates is refused, not drawn at 0 on top of another cell (#1198).
+// A cell with no coordinates is refused, not drawn at 0 on top of another cell; hexCells (below) is then empty, so every coord() reader sees only valid cells (#1198).
 const coordError = computed(() => cellCoordinateError(props.element, qCoordName.value, rCoordName.value, 'Hex board'));
-
-// Every reader below takes cells from here, so each one has numeric q and r.
-const hexCells = computed(() => (coordError.value ? [] : props.element.children ?? []));
 const coord = (cell: GameElement, name: string) => cell.attributes![name] as number;
 
 // ── Closed-form functions (no hand-rolled trig) ──────────────────────────────
@@ -190,6 +187,7 @@ const displayLabel = computed(
 // NOTE (research Open Q3): tabindex on SVG <g> is spec-valid but Safari/VoiceOver
 // may not reliably focus <g> elements. Ships with tabindex-on-g first.
 // If manual VoiceOver/Safari testing fails, escalate to overlay <button> approach.
+const hexCells = computed(() => (coordError.value ? [] : props.element.children ?? []));
 
 // Grid width as the q-coordinate range + 1, for aria-colcount on the role="grid" SVG root (WR-02).
 const hexCols = computed(() => {
