@@ -4,7 +4,7 @@
  * the pick or cancel. A host saves nothing for a failed op; the in-memory
  * routes (the session's on a long-lived runner, and a PickHandler handed back
  * its pending state each step, as a host does) match it. The two routes agree on a repeating pick whose action then fails (#983), and
- * another seat's move in between changes nothing about it (#1177).
+ * another seat's move in between changes nothing about it (#1177), nor does another seat's failed action (#1185).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Game, Player, Piece, Space, Action, simultaneousActionStep, type GameOptions } from '../engine/index.js';
@@ -66,10 +66,11 @@ class UndoGame extends Game<UndoGame, Player> {
       ask('askRefused').execute(refuse as () => void),
       ask('askVetoed').validate(() => 'Not with these.').execute(() => {}),
       Action.create('tap').execute(() => { this.taps++; }),
+      Action.create('smash').execute(() => { move('two'); crash(); }),
     );
     this.setFlow({
       root: simultaneousActionStep({
-        actions: ['gather', 'gatherRefused', 'pairRefused', 'pairCrash', 'askRefused', 'askVetoed', 'tap'],
+        actions: ['gather', 'gatherRefused', 'pairRefused', 'pairCrash', 'askRefused', 'askVetoed', 'tap', 'smash'],
         playerDone: () => false,
       }),
     });
@@ -278,6 +279,23 @@ describe("another seat's move between a seat's picks (#1177)", () => {
       expect(moved(r.game)).toEqual(['one']);
       expect(r.game.taps).toBe(1);
       expect(r.actionHistory).toHaveLength(1);
+      expect(held(seat)).toEqual(before);
+    });
+  }
+});
+
+describe("another seat's failed action after a seat's pick (#1185)", () => {
+  for (const [name, route] of Object.entries(routes)) {
+    it(`rolls back only that action, keeping the seat's pick and its move, on the ${name} route`, async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const r = runner();
+      const seat = route('pairRefused', r);
+      expect((await seat.pick('first', 'a')).success).toBe(true);
+      const before = held(seat);
+
+      expect(r.performAction('smash', 2, {}).success).toBe(false);
+
+      expect(moved(r.game)).toEqual(['one']);
       expect(held(seat)).toEqual(before);
     });
   }
