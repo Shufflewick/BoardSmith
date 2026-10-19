@@ -8,7 +8,7 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Game, Player, Piece, Space, Action, simultaneousActionStep, type GameOptions } from '../engine/index.js';
-import { GameRunner } from '../runtime/index.js';
+import { GameRunner, type GameStateSnapshot } from '../runtime/index.js';
 import { PendingActionManager } from './pending-action-manager.js';
 import { PickHandler } from './pick-handler.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
@@ -279,6 +279,44 @@ describe("another seat's move between a seat's picks (#1177)", () => {
       expect(r.game.taps).toBe(1);
       expect(r.actionHistory).toHaveLength(1);
       expect(held(seat)).toEqual(before);
+    });
+
+    it(`says the failed op could not be undone when checkpoints are off, keeping the other seat's move, on the ${name} route`, async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const r = runner(false);
+      const seat = route('pairCrash', r);
+      expect((await seat.pick('first', 'a')).success).toBe(true);
+      expect(r.performAction('tap', 2, {}).success).toBe(true);
+
+      const failed = await seat.pick('second', 'b') as { error?: string };
+
+      expect(failed.error).toMatch(/may still hold its partial changes/);
+      expect(moved(r.game)).toEqual(['one', 'two']);
+      expect(r.game.taps).toBe(1);
+    });
+  }
+
+  for (const checkpoints of [true, false]) {
+    it(`saves nothing for the failed op on the platform route, so the seat goes on from the other seat's move with its earlier pick, checkpoints ${checkpoints ? 'on' : 'off'}`, async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const def: GameDefinitionLike = { gameClass: UndoGame, gameType: 'undo', minPlayers: 2, maxPlayers: 2, checkpoints: { enabled: checkpoints } };
+      const options = { playerCount: 2, seed: 'undo' };
+      const step = (snapshot: unknown, pendingState: Record<string, unknown> | null, value: string) =>
+        executeOp(def, options, snapshot, pendingState, {
+          type: 'selectionStep', player: 1, selectionName: 'items', value, actionName: 'gather', boundaryKey: boundaryKeyOf(snapshot),
+        });
+      const start = succeeded(await executeOp(def, options, null, null, { type: 'start' }));
+      const first = succeeded(await step(start.snapshot, null, 'one'));
+      const tapped = succeeded(await executeOp(def, options, first.snapshot, null, {
+        type: 'action', player: 2, actionName: 'tap', args: {}, boundaryKey: boundaryKeyOf(first.snapshot),
+      }));
+
+      expect(await step(tapped.snapshot, first.pendingState, 'two')).toMatchObject({ success: false, errorCode: ErrorCode.ENGINE_ERROR });
+
+      const done = succeeded(await step(tapped.snapshot, first.pendingState, 'done'));
+      const game = GameRunner.fromSnapshot(done.snapshot as GameStateSnapshot, UndoGame).game;
+      expect(moved(game)).toEqual(['one']);
+      expect(game.taps).toBe(1);
     });
   }
 });
