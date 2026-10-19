@@ -1182,12 +1182,14 @@ board:
   more than fits, it scrolls inside the strip
   rather than growing over the board. So a board that fits itself above the
   strip is never covered, at rest or mid-pick. The one exception is a typed
-  editor (a text or number pick): while it is open the panel grows over the
+  editor (a text or number pick): while it is open the panel may grow over the
   bottom of the board to what the editor needs, bounded at 60% of the
-  screen's height. A one-line or number field needs only its label and hint
-  above the field and submit, about one row more than the strip on a phone; a
-  multi-line text box (`multiline: true`) needs six lines of text plus the
-  action, the field's label, the count and the submit. On a short screen the
+  screen's height. A one-line or number field grows it only where it does not
+  fit the strip, which is on a phone, by about one row (its label and hint
+  stack above the field and submit); everywhere else it stays inside the
+  strip. A multi-line text box (`multiline: true`) grows it at every size: it
+  needs six lines of text plus the action, the field's label, the count and
+  the submit. On a short screen the
   box gives way (down to a few lines) rather than the submit button leaving
   the panel. Your board does not refit, and the part of it under the open
   panel cannot be scrolled into view until the editor closes, when the panel

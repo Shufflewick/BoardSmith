@@ -698,8 +698,9 @@ const mobileToggleLabel = computed(() => {
   /* The ONE exception to that cap: a typed editor (#229, #237). A multi-line box
      cannot be written in two rows, and a one-line or number field stacks label,
      hint and field + Done in three on a phone (#1058), so while one is open the
-     bar may grow to what the editor needs and cover part of the board. The board does not refit -- the
-     reservation above is untouched -- and the cap returns when it closes. See
+     bar may grow to what the editor needs and cover part of the board. The
+     board does not refit -- the reservation above is untouched -- and the cap
+     returns when it closes. See
      `.actionbar:has([data-bs-grows-panel])`.
 
      What the editor needs is its box plus everything around it that must stay

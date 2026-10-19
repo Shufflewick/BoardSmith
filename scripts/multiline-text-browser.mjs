@@ -531,8 +531,9 @@ function screens() {
   // A function, not a constant: the run starts at a top-level await above this
   // line, before a `const` here would be initialised.
   return [
-    { width: 375, height: 812 },
-    { width: 390, height: 844 },
+    // fieldRows: rows a one-line or number editor may grow the bar past the strip (#1058).
+    { width: 375, height: 812, fieldRows: 1 },
+    { width: 390, height: 844, fieldRows: 1 },
     { width: 844, height: 390 },
     { width: 1280, height: 900 },
     { width: 1440, height: 900 },
@@ -561,10 +562,15 @@ async function onASmallerScreen(browser, hostUrl, viewport) {
           `${editor} input`,
           `${editor} .done-button`,
         ]);
+        const row = await surface.locator('[data-testid="bs-actionbar"]').evaluate((el) => {
+          const style = getComputedStyle(el);
+          return parseFloat(style.getPropertyValue('--bsg-panel-row')) + parseFloat(style.getPropertyValue('--bsg-panel-gap'));
+        });
         await surface.locator('.cancel-btn').click();
         await surface.locator(editor).waitFor({ state: 'detached', timeout: 10_000 });
         assert(!bar.scrolls, `the bar scrolls (${bar.height}px tall): the editor is cut off`);
-        assert(bar.top >= 0, `the bar's top is at ${bar.top}, off the top of the screen`);
+        const allowed = bar.strip - (viewport.fieldRows ?? 0) * row - 1;
+        assert(bar.top >= allowed, `the bar's top is at ${bar.top}, above ${allowed} (the strip at ${bar.strip} less ${viewport.fieldRows ?? 0} row(s))`);
         assert(bar.outside.length === 0, `not in view inside the bar: ${bar.outside.join(', ')}`);
       });
     }
