@@ -64,7 +64,7 @@ export interface SingleGameResult {
   resting: boolean;
   /** The reason `isResting` gave, when the game is resting */
   restReason?: string;
-  /** Error message if crashed, or the reason the simulation got stuck or exceeded max actions */
+  /** Error message if crashed, or the reason the simulation got stuck, timed out or exceeded max actions */
   error?: string;
   /** Number of actions taken */
   actionCount: number;
@@ -324,6 +324,9 @@ export async function playGame<G extends Game>(
     while (!testGame.isComplete()) {
       if (Date.now() - startTime > timeout) {
         timedOut = true;
+        stuckReason =
+          `Game did not finish within its timeout of ${timeout} ms. ` +
+          'Raise timeout if the game is just slow, or check for a move or rule that takes far longer than it should.';
         break;
       }
 
