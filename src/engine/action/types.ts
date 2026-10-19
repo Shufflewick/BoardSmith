@@ -253,10 +253,11 @@ export interface UnavailableRule {
    * `disabled` covers a value still listed; this covers one that is gone.
    *
    * `value` is what was submitted, so it is `unknown`: for a choice, the value
-   * sent; for an element, the element if it still exists, otherwise the id
-   * sent. Return the sentence the player reads, saying what happened and what
-   * to do next. Without it the player reads a plain default, and the engine's
-   * detailed text (the value and the current choices) goes to the dev log.
+   * sent; for an element, the element if it still exists and the player can
+   * see it, otherwise the id the player knows it by (#1205). Return the
+   * sentence the player reads, saying what happened and what to do next.
+   * Without it the player reads a plain default, and the engine's detailed
+   * text (the value and the current choices) goes to the dev log.
    */
   unavailable?: (value: unknown, context: ActionContext) => string;
 }

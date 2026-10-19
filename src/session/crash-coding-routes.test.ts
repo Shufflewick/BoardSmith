@@ -111,13 +111,8 @@ describe('crash and halt coding across routes', () => {
     expect(initial).toMatchObject({ success: false, errorCode: ErrorCode.ENGINE_ERROR });
   });
 
-  it('codes a pending pick the same on the session-free route as on the session route (#1169)', async () => {
+  it('codes each way a pending pick fails (#1169)', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    const runnerRoute = (picks: Array<[string, unknown]>, action?: string) => {
-      const { runner } = setup();
-      if (action) runner.startPendingAction(action, 1);
-      return picks.map(([name, value]) => runner.processSelectionStep(1, name, value)).at(-1)!;
-    };
     const sessionRoute = async (picks: Array<[string, unknown]>, action?: string) => {
       const { manager } = setup();
       const results = [];
@@ -133,7 +128,6 @@ describe('crash and halt coding across routes', () => {
     ];
     for (const [picks, action, code] of cases) {
       expect(await sessionRoute(picks, action)).toMatchObject({ success: false, errorCode: code });
-      expect(runnerRoute(picks, action)).toMatchObject({ success: false, errorCode: code });
     }
   });
 

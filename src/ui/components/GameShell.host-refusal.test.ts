@@ -16,6 +16,7 @@ import { defineComponent, h, nextTick } from 'vue';
 import { flushPromises } from '@vue/test-utils';
 import { useToast } from '../composables/useToast.js';
 import PlayShell from './PlayShell.vue';
+import ControlsMenu from './ControlsMenu.vue';
 import {
   enterIframe,
   leaveIframe,
@@ -136,5 +137,20 @@ describe('GameShell shows a host refusal of undo and the debug ops (#859)', () =
     answerer(posted)(op, { success: false, error: 'Debugging is off at this table.' });
     await flushPromises();
     expect(shownToasts()).toEqual([['error', 'Debugging is off at this table.']]);
+  });
+});
+
+describe('GameShell shows the host\'s reason for refusing a hint or heatmap (#952)', () => {
+  // The host's refusal of a result worked out on a position the game has since left (#742).
+  const stale = 'The game moved on while this was being worked out. Ask again for the position as it is now.';
+
+  it.each(['hint', 'heatmap-toggle'] as const)('%s', async (op) => {
+    const { wrapper, posted } = await mountTableWithDebugPanel(Board);
+    mounted.push(wrapper);
+    wrapper.findComponent(ControlsMenu).vm.$emit('teaching-action', op);
+    await flushPromises();
+    answerer(posted)(op, { success: false, error: stale });
+    await flushPromises();
+    expect(shownToasts()).toEqual([['error', stale]]);
   });
 });
