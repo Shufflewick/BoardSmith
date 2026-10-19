@@ -1,4 +1,4 @@
-import { promises as fs } from 'node:fs';
+import { constants as fsConstants, promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { gitOutput } from './git-output.js';
 import { DESIGN_DIR, RULEBOOK_DIR } from './project-paths.js';
@@ -130,7 +130,12 @@ export async function ingestHookState(projectPath: string): Promise<{ state: 'no
   if (existing === undefined) return { state: 'missing', path };
   if (!existing.includes('BoardSmith ingest synthesis')) return { state: 'foreign', path };
   if (existing !== INGEST_PRE_COMMIT_HOOK) return { state: 'stale', path };
-  return { state: ((await fs.stat(absolute)).mode & 0o111) === 0 ? 'not-executable' : 'current', path };
+  try {
+    await fs.access(absolute, fsConstants.X_OK); // On Windows X_OK only checks the file exists, so a hook there is never wrongly not-executable.
+  } catch {
+    return { state: 'not-executable', path };
+  }
+  return { state: 'current', path };
 }
 
 /**

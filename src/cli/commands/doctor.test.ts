@@ -623,7 +623,7 @@ describe('boardsmith doctor', () => {
       expect(await read(hookPath(mainDir))).toBe(INGEST_PRE_COMMIT_HOOK);
     });
 
-    it('reports a hook git cannot run because it lost its execute bit, and --fix restores it (#1187)', async () => {
+    it.skipIf(process.platform === 'win32')('reports a hook git cannot run because it lost its execute bit, and --fix restores it (#1187)', async () => {
       const projectDir = await gitProject();
       await installIngestHook(projectDir);
       await fs.chmod(hookPath(projectDir), 0o644);

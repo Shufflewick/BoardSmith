@@ -74,7 +74,7 @@ describe('installIngestHook', () => {
     expect((await installIngestHook(p)).result).toBe('installed');
   });
 
-  it('counts its own hook without the execute bit as not current, since git skips it, and reinstalling restores the bit (#1187)', async () => {
+  it.skipIf(process.platform === 'win32')('counts its own hook without the execute bit as not current, since git skips it, and reinstalling restores the bit (#1187)', async () => {
     const p = await gitProject();
     const hookPath = join(p, '.git', 'hooks', 'pre-commit');
     await installIngestHook(p);
