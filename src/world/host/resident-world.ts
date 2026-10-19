@@ -708,11 +708,11 @@ export class ResidentWorld {
     // one copy per seat could not tell. A host with one reader per socket
     // simply looks its own up; the saving is the platform's, where a body is
     // encoded once for everybody naming it.
-    const { bodies, of, refused } = await runner.viewsFor(projecting);
+    const { bodies, of, placeholders, refused } = await runner.viewsFor(projecting);
     return {
       bodyFor: (player: string): unknown => {
-        const held = of[player];
-        return held === undefined ? null : seatView(bodies[held.at], held.placeholders);
+        const at = of[player];
+        return at === undefined ? null : seatView(bodies[at], placeholders[player]!);
       },
       failed: { ...declined, ...refused },
       revision,
