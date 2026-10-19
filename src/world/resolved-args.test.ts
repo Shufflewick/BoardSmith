@@ -220,19 +220,22 @@ class PouchWorld extends Game<PouchWorld> {
   }
 }
 
-describe('a re-asked pick after an element pick nested below its partition root (#1203)', () => {
-  it('is answered, with the element handed to the later pick', async () => {
-    const handed: unknown[] = [];
-    const peek = worldAction<PouchWorld>('peek')
-      .chooseElement('card', { needs: () => ['commons'], elements: ({ game }) => game.first(Pouch)!.all(Card) })
-      .chooseFrom('how', {
-        needs: () => ['commons'],
-        choices: ({ args }) => {
-          if (args.card !== undefined) handed.push((args.card as Card).name);
-          return ['gently'];
-        },
-      })
-      .execute(() => {});
+describe('a read whose draft answers an element pick nested below its partition root (#1203)', () => {
+  const handed: unknown[] = [];
+  const peek = worldAction<PouchWorld>('peek')
+    .chooseElement('card', { needs: () => ['commons'], elements: ({ game }) => game.first(Pouch)!.all(Card) })
+    .chooseFrom('how', {
+      needs: () => ['commons'],
+      choices: ({ args }) => {
+        if (args.card !== undefined) handed.push((args.card as Card).name);
+        return ['gently'];
+      },
+    })
+    .quote(({ card }) => [`peek at ${(card as Card).name}`])
+    .execute(() => {});
+
+  async function pouchWorld(): Promise<{ world: TestWorld; card: number }> {
+    handed.length = 0;
     const world = await createTestWorld({
       definition: {
         gameClass: PouchWorld,
@@ -249,11 +252,23 @@ describe('a re-asked pick after an element pick nested below its partition root 
       },
     });
     const card = (await world.resolvePick(1, 'peek', 'card', {})).validElements![0]!.id;
+    return { world, card };
+  }
+
+  it('a re-asked later pick is answered, with the element handed to it', async () => {
+    const { world, card } = await pouchWorld();
 
     const pick = await world.resolvePick(1, 'peek', 'how', { card });
 
     expect(pick.choices?.map((c) => c.value)).toEqual(['gently']);
     expect(handed).toEqual(['AS']);
+    await world.close();
+  });
+
+  it('a quote is answered, with the element handed to it', async () => {
+    const { world, card } = await pouchWorld();
+
+    expect(await world.quote(1, 'peek', { card, how: 'gently' })).toEqual(['peek at AS']);
     await world.close();
   });
 });
