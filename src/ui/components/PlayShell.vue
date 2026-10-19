@@ -695,9 +695,10 @@ const mobileToggleLabel = computed(() => {
   --bsg-panel-reserved: calc(2 * var(--bsg-panel-row) + var(--bsg-panel-gap)
                              + 2 * var(--bsg-panel-pad) + env(safe-area-inset-bottom));
 
-  /* The ONE exception to that cap: a multi-line text editor (#229, #237) cannot
-     be written in two rows, so while one is open the bar may grow to what the
-     editor needs and cover part of the board. The board does not refit -- the
+  /* The ONE exception to that cap: a typed editor (#229, #237). A multi-line box
+     cannot be written in two rows, and a one-line or number field stacks label,
+     hint and field + Done in three on a phone (#1058), so while one is open the
+     bar may grow to what the editor needs and cover part of the board. The board does not refit -- the
      reservation above is untouched -- and the cap returns when it closes. See
      `.actionbar:has([data-bs-grows-panel])`.
 
@@ -925,7 +926,7 @@ const mobileToggleLabel = computed(() => {
   overflow-y: auto;
 }
 
-/* While a multi-line text editor is open, and only then, the bar may grow past
+/* While a typed editor is open, and only then, the bar may grow past
    the strip (see --bsg-panel-editor-max). Keyed on the editor's own mark, so the
    exception lives exactly as long as the editor's DOM: submitting, cancelling or
    putting the bar down all unmount it and the strip cap is back. `max()` so a

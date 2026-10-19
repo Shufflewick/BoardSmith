@@ -521,8 +521,8 @@ async function driveThrough({ launch, hostUrl }) {
  * THE PANEL AND THE BOX ON EVERY KIND OF SCREEN (issue 444).
  *
  * The bar is capped at the strip the board reserves for it, so it never covers
- * the board; the one exception is this box, which may grow the bar while it is
- * open. The checks above run at one desktop size. These hold the cap and the
+ * the board; the one exception is a typed editor, which may grow the bar while
+ * it is open. The checks above run at one desktop size. These hold the cap and the
  * exception where they are tightest: a phone, where the bar's width is the
  * scarce axis, and a short landscape screen, which reserves one row and has
  * little height to grow into.
@@ -548,13 +548,26 @@ async function onASmallerScreen(browser, hostUrl, viewport) {
       assert(!bar.scrolls, `the bar scrolls at rest (${bar.height}px tall): its actions do not fit the strip`);
     });
 
-    await check(`${size}: during a one-line pick the bar stays inside the strip, its submit in view`, async () => {
-      await startAction(page, 'setNickname');
-      const bar = await barGeometry(surface, ['.text-input .done-button']);
-      assert(bar.top >= bar.strip - 1, `the bar's top is at ${bar.top}, above the strip at ${bar.strip}`);
-      assert(bar.outside.length === 0, `not in view inside the bar: ${bar.outside.join(', ')}`);
-      await surface.locator('.cancel-btn').click();
-    });
+    // A one-line or number editor stacks label, hint and field + Done: three
+    // rows, one more than the strip holds on a phone, so it grows the bar too (#1058).
+    for (const [action, editor] of [['setNickname', '.text-input'], ['recycle', '.number-input']]) {
+      await check(`${size}: an open ${editor} shows the action, its label, field and submit without scrolling`, async () => {
+        await startAction(page, action, editor);
+        await surface.locator(`${editor} input`).focus();
+        const bar = await barGeometry(surface, [
+          '.config-title',
+          `${editor} .selection-prompt`,
+          `${editor} .input-hint`,
+          `${editor} input`,
+          `${editor} .done-button`,
+        ]);
+        await surface.locator('.cancel-btn').click();
+        await surface.locator(editor).waitFor({ state: 'detached', timeout: 10_000 });
+        assert(!bar.scrolls, `the bar scrolls (${bar.height}px tall): the editor is cut off`);
+        assert(bar.top >= 0, `the bar's top is at ${bar.top}, off the top of the screen`);
+        assert(bar.outside.length === 0, `not in view inside the bar: ${bar.outside.join(', ')}`);
+      });
+    }
 
     await check(`${size}: the open box keeps the action, its label, count and submit in view`, async () => {
       // The box may grow the bar past the strip, but it floats over the board:
