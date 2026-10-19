@@ -584,12 +584,20 @@ const SAFE_LAYOUT_KEYS = new Set([
   '$hexSize',
 ]);
 
-/** A Grid cell's numeric coordinates, the only own attributes a hidden cell keeps (#1055). */
-function gridCellCoordinates(attrs: Record<string, unknown>, parent: GameElement | undefined): Record<string, unknown> {
-  // A cell's place on the board is layout the seat already sees; AutoUI cannot draw the grid without it.
-  if (!(parent instanceof Grid)) return {};
+/** The attributes a cell's board names as its coordinates; none for anything that is not a grid or hex cell. */
+function cellCoordinateNames(element: GameElement): (string | undefined)[] {
+  const parent = element._t.parent;
+  // Only cells: a piece placed straight in a grid would give away where it is (#1199).
+  if (element instanceof GridCell && parent instanceof Grid) return [parent.$rowCoord, parent.$colCoord];
+  if (element instanceof HexCell && parent instanceof HexGrid) return [parent.$qCoord ?? 'q', parent.$rCoord ?? 'r'];
+  return [];
+}
+
+/** A grid or hex cell's numeric coordinates, the only own attributes a hidden cell keeps (#1055, #1198). */
+function cellCoordinates(attrs: Record<string, unknown>, element: GameElement): Record<string, unknown> {
+  // A cell's place on the board is layout the seat already sees; AutoUI cannot draw the board without it.
   const coordinates: Record<string, unknown> = {};
-  for (const key of [parent.$rowCoord, parent.$colCoord]) {
+  for (const key of cellCoordinateNames(element)) {
     if (key !== undefined && typeof attrs[key] === 'number') coordinates[key] = attrs[key];
   }
   return coordinates;
@@ -607,10 +615,10 @@ function gridCellCoordinates(attrs: Record<string, unknown>, parent: GameElement
  *   unknown $-keys → dropped (fail-safe)
  *   non-$ keys → dropped (callers seed __hidden/childCount themselves)
  *   SAFE_LAYOUT_KEYS → copied through as-is
- *   a Grid cell's two coordinate attributes (named by the parent's $rowCoord/$colCoord) → copied through (#1055)
+ *   a GridCell's or HexCell's two coordinate attributes (named by its Grid or HexGrid) → copied through (#1055, #1198)
  */
-function redactHiddenElementAttrs(attrs: Record<string, unknown>, parent: GameElement | undefined): Record<string, unknown> {
-  const safe = gridCellCoordinates(attrs, parent);
+function redactHiddenElementAttrs(attrs: Record<string, unknown>, element: GameElement): Record<string, unknown> {
+  const safe = cellCoordinates(attrs, element);
 
   for (const [key, value] of Object.entries(attrs)) {
     if (key === '$image') continue; // identity-bearing single-sided image — drop
@@ -4932,7 +4940,7 @@ export class Game<
         placeholders.push({
           className: childJson.className,
           id: syntheticId,
-          attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(childJson.attributes ?? {}, element) },
+          attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(childJson.attributes ?? {}, childElement) },
         });
       }
       return [...placeholders, ...nested];
@@ -4951,7 +4959,7 @@ export class Game<
         return {
           className: json.className,
           id: json.id,
-          attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(json.attributes ?? {}, element._t.parent) },
+          attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(json.attributes ?? {}, element) },
           childCount: element._t.children.length,
           // What this seat was shown, no roster (#411), so a restore knows it cannot see in (#1108).
           visibility: { mode: 'count-only', explicit: true },
@@ -4994,7 +5002,7 @@ export class Game<
           // can render face-down on first paint, consistent with the zone
           // branches below. redactHiddenElementAttrs drops $image and narrows
           // $images to { back } only, so $images.face still never leaks.
-          attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(json.attributes ?? {}, element._t.parent) },
+          attributes: { [HIDDEN_PLACEHOLDER_ATTRIBUTE]: true, ...redactHiddenElementAttrs(json.attributes ?? {}, element) },
           visibility: { mode: 'hidden', explicit: true },
         };
       }
