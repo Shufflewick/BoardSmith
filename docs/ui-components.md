@@ -1720,7 +1720,7 @@ The `actionController` (type: `UseActionControllerReturn`) is the unified interf
 | Option | Type | Description |
 |--------|------|-------------|
 | `args` | `Record<string, unknown>` | Values applied immediately to matching selections |
-| `prefill` | `Record<string, unknown>` | Values auto-filled when their selection becomes active |
+| `prefill` | `Record<string, unknown>` | Values auto-filled when their selection becomes active. A pick that takes a list (chooseElements, multiSelect, ordered list) takes an array, each entry matched against the choices |
 
 Use `args` for selections that are already available. Use `prefill` for deferred auto-fill of future selections (e.g., when the first selection determines which options appear in the second).
 

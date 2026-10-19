@@ -886,19 +886,22 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const prefillValue = actionSnapshot.value?.prefills.get(selection.name);
     if (prefillValue === undefined) return false;
 
-    const { choice: matched, refusal } = resolvePick(selection, prefillValue);
+    const { value, choice: matched, refusal } = resolvePick(selection, prefillValue);
+    const choices = getChoices(selection);
+    // A list prefill names no one choice; resolvePick has matched each entry instead.
+    const isList = Array.isArray(prefillValue) && selectionTakesList(selection);
 
     actionSnapshot.value?.prefills.delete(selection.name);
 
-    if (!matched || refusal) {
-      setError(describeRejectedPrefill(selection, prefillValue, getChoices(selection), matched?.disabled));
+    if (refusal || choices.length === 0 || (!matched && !isList)) {
+      setError(describeRejectedPrefill(selection, prefillValue, choices, matched?.disabled));
       return true;
     }
 
-    currentArgs.value[selection.name] = matched.value;
+    currentArgs.value[selection.name] = value;
     actionSnapshot.value?.collectedPicks.set(selection.name, {
-      value: matched.value,
-      display: matched.display,
+      value,
+      display: matched?.display ?? findDisplayForValue(selection.name, value),
       skipped: false,
     });
     return true;
