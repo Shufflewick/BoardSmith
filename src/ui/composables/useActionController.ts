@@ -901,7 +901,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     currentArgs.value[selection.name] = value;
     actionSnapshot.value?.collectedPicks.set(selection.name, {
       value,
-      display: matched?.display ?? findDisplayForValue(selection.name, value),
+      display: findDisplayForValue(selection.name, value),
       skipped: false,
     });
     return true;
