@@ -1438,23 +1438,31 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   const fetchedStartCandidates = ref<ReadonlyMap<string, StartCandidates>>(new Map());
   let startCandidatesRequest = 0;
 
+  /** True while a board click or drag may start an action. */
+  function mayStartFromBoard(): boolean {
+    return !!isMyTurn.value && !currentAction.value && !isExecuting.value && !pendingFollowUp.value && !isViewingHistoryValue();
+  }
+
+  /** Each available, enabled action that opens with an element pick, and that pick's name. */
+  function elementFirstPicks(): { action: string; pick: string }[] {
+    return (availableActions.value ?? []).flatMap((action) => {
+      if (disabledActions?.value?.[action]) return [];
+      const pick = getActionMetadata(action)?.selections[0];
+      return pick?.type === 'element' ? [{ action, pick: pick.name }] : [];
+    });
+  }
+
   async function refreshStartCandidates(): Promise<void> {
     const request = ++startCandidatesRequest;
     // What an earlier state offered may name elements that are gone, so it is never shown past it.
     if (fetchedStartCandidates.value.size > 0) fetchedStartCandidates.value = new Map();
     const fetchFn = options.fetchPickChoices;
-    const offering = fetchFn && isMyTurn.value && !currentAction.value && !isExecuting.value
-      && !pendingFollowUp.value && !isViewingHistoryValue();
-    const actions = offering ? availableActions.value ?? [] : [];
-    const firstPicks = actions.flatMap((action) => {
-      if (disabledActions?.value?.[action]) return [];
-      const pick = getActionMetadata(action)?.selections[0];
-      return pick?.type === 'element' ? [{ action, pick: pick.name }] : [];
-    });
+    if (!fetchFn || !mayStartFromBoard()) return;
+    const firstPicks = elementFirstPicks();
     const player = playerSeat?.value ?? 0;
     const answers = await Promise.all(firstPicks.map(async ({ action, pick }) => {
       try {
-        const result = await fetchFn!(action, pick, player, {});
+        const result = await fetchFn(action, pick, player, {});
         if (result.success) return [action, { pick, elements: result.validElements ?? [] }] as const;
         console.error(`[BoardSmith] Could not fetch what '${action}' can start with:`, result.error);
       } catch (err) {
