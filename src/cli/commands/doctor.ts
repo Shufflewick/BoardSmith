@@ -326,8 +326,20 @@ async function sortConfigs(projectDir: string): Promise<{ built: string | undefi
 async function ingestHookCheck(projectDir: string): Promise<{ findings: DoctorFinding[]; notes: string[] }> {
   const hook = await ingestHookState(projectDir);
   if (hook.state === 'no-git') return { findings: [], notes: [] };
-  const { state, path } = hook;
   const byHand = 'or run boardsmith ingest-gaps yourself after transcription.';
+  if (hook.state === 'git-failed') {
+    return { findings: [], notes: [
+      `Could not check the ingest pre-commit hook: ${hook.reason}. Fix what git reports, then run boardsmith doctor again; ${byHand}`,
+    ] };
+  }
+  const { state, path } = hook;
+  if (state === 'in-project') {
+    return { findings: [], notes: [
+      `Left ${path} alone: git runs hooks from a folder inside this project that git does not ignore (core.hooksPath), ` +
+        `so a hook written there would be committed and shared with everyone, and the ingest hook is not installed. ` +
+        `If that folder is meant to stay out of git, add it to .gitignore and run boardsmith doctor --fix; ${byHand}`,
+    ] };
+  }
   if (state === 'outside') {
     return { findings: [], notes: [
       `Left ${path} alone: git runs hooks from a folder outside this project, which other repositories may share, ` +
@@ -370,7 +382,14 @@ async function fixAll(projectDir: string, findings: DoctorFinding[]): Promise<vo
 /** Resolve one finding `--fix` is allowed to resolve. */
 async function fix(projectDir: string, f: DoctorFinding): Promise<void> {
   if (f.kind === 'ingest-hook-not-current') {
-    if ((await installIngestHook(projectDir)).result === 'installed') return;
+    const installed = await installIngestHook(projectDir);
+    if (installed.result === 'installed') return;
+    if (installed.result === 'skipped-not-executable') {
+      throw new Error(
+        `Wrote ${f.from}, but its filesystem does not keep the execute bit, so git still skips it. ` +
+          'Move the project to a filesystem that keeps file permissions, or run boardsmith ingest-gaps yourself after transcription.',
+      );
+    }
     throw new Error(`Could not write ${f.from}. Check that you can write to its folder, then run boardsmith doctor --fix again.`);
   }
   if (f.kind === 'test-config-missing' || f.kind === 'test-run-collects-worktrees') {

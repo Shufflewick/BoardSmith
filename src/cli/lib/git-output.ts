@@ -6,13 +6,14 @@ import { execFile } from 'node:child_process';
  * read here matches the same path read anywhere else, and a whole-project diff or listing fits in
  * the buffer. A non-zero exit rejects with an error naming the git command and what git said,
  * carrying git's exit status as `code` for a caller that tells one non-zero exit from another.
+ * `options.env` replaces the inherited environment, as `execFile`'s does.
  */
-export function gitOutput(dir: string, args: string[]): Promise<string> {
+export function gitOutput(dir: string, args: string[], options: { env?: NodeJS.ProcessEnv } = {}): Promise<string> {
   return new Promise((resolvePromise, reject) => {
     execFile(
       'git',
       ['-c', 'core.quotePath=false', ...args],
-      { cwd: dir, maxBuffer: 256 * 1024 * 1024 },
+      { cwd: dir, maxBuffer: 256 * 1024 * 1024, env: options.env },
       (error, stdout, stderr) => {
         if (error) {
           const message = `git ${args.join(' ')} failed: ${(String(stderr) || error.message).trim()}`;
@@ -27,8 +28,8 @@ export function gitOutput(dir: string, args: string[]): Promise<string> {
  * Whether git exits zero, for a yes/no question (`merge-base --is-ancestor`, `check-ignore -q`,
  * `rev-parse --verify`) where a non-zero exit is the answer "no", not a failure.
  */
-export function gitSucceeds(dir: string, args: string[]): Promise<boolean> {
-  return gitOutput(dir, args).then(
+export function gitSucceeds(dir: string, args: string[], options: { env?: NodeJS.ProcessEnv } = {}): Promise<boolean> {
+  return gitOutput(dir, args, options).then(
     () => true,
     () => false,
   );

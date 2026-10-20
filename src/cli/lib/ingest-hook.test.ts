@@ -85,12 +85,77 @@ describe('installIngestHook', () => {
     expect((await ingestHookState(p)).state).toBe('current');
   });
 
-  it('installs where core.hooksPath points, the only folder git runs hooks from then (#1186)', async () => {
+  it('installs where core.hooksPath points when git ignores that folder, the only folder git runs hooks from then (#1186, #1301)', async () => {
     const p = await gitProject();
     execSync('git config core.hooksPath githooks', { cwd: p });
+    await fs.writeFile(join(p, '.gitignore'), 'githooks/\n');
     expect((await installIngestHook(p)).result).toBe('installed');
     expect(await fs.readFile(join(p, 'githooks', 'pre-commit'), 'utf-8')).toBe(INGEST_PRE_COMMIT_HOOK);
-    expect(await ingestHookState(p)).toEqual({ state: 'current', path: join('githooks', 'pre-commit') });
+    expect(await ingestHookState(p)).toMatchObject({ state: 'current', path: join('githooks', 'pre-commit') });
+  });
+
+  it('writes nothing into a hooks folder the project tracks, where the generated hook would be committed (#1301)', async () => {
+    const p = await gitProject();
+    execSync('git config core.hooksPath .husky', { cwd: p });
+    await fs.mkdir(join(p, '.husky'));
+    expect(await ingestHookState(p)).toMatchObject({ state: 'in-project', path: join('.husky', 'pre-commit') });
+    expect(await installIngestHook(p)).toMatchObject({ result: 'skipped-in-project', path: join('.husky', 'pre-commit') });
+    expect(await fs.readdir(join(p, '.husky'))).toEqual([]);
+  });
+
+  it('describes the project\'s own hooks, not those of a repository an inherited GIT_DIR names (#1301)', async () => {
+    const p = await gitProject();
+    const other = join(dir, 'other');
+    await fs.mkdir(other);
+    execSync('git init', { cwd: other, stdio: 'ignore' });
+    vi.stubEnv('GIT_DIR', join(other, '.git'));
+    vi.stubEnv('GIT_WORK_TREE', other);
+
+    expect((await installIngestHook(p)).result).toBe('installed');
+    expect(await fs.readFile(join(p, '.git', 'hooks', 'pre-commit'), 'utf-8')).toBe(INGEST_PRE_COMMIT_HOOK);
+    await expect(fs.access(join(other, '.git', 'hooks', 'pre-commit'))).rejects.toThrow();
+  });
+
+  it('names a worktree\'s shared hook relative to the real folder, when the project is reached through a symlink (#1301)', async () => {
+    const p = await gitProject();
+    execSync('git -c user.email=t@t -c user.name=t commit --allow-empty -m base', { cwd: p, stdio: 'ignore' });
+    const wt = join(dir, 'wt');
+    execSync(`git worktree add "${wt}"`, { cwd: p, stdio: 'ignore' });
+    const link = join(dir, 'link');
+    await fs.symlink(wt, link);
+
+    expect(await ingestHookState(link)).toMatchObject({ state: 'missing', path: join('..', 'proj', '.git', 'hooks', 'pre-commit') });
+  });
+
+  it('says git failed, with git\'s own words, rather than that there is no repository (#1301)', async () => {
+    const p = join(dir, 'broken');
+    await fs.mkdir(p);
+    await fs.writeFile(join(p, '.git'), `gitdir: ${join(dir, 'pruned')}\n`);
+
+    const hook = await ingestHookState(p);
+    expect(hook.state).toBe('git-failed');
+    expect(hook.state === 'git-failed' && hook.reason).toMatch(/not a git repository/);
+    expect(await installIngestHook(p)).toMatchObject({ result: 'skipped-git-failed' });
+  });
+
+  it.skipIf(process.platform === 'win32')('calls an older hook without the execute bit not executable, as git is skipping it, and reinstalling fixes both (#1301)', async () => {
+    const p = await gitProject();
+    const hookPath = join(p, '.git', 'hooks', 'pre-commit');
+    await fs.writeFile(hookPath, '#!/bin/sh\n# BoardSmith ingest synthesis (an older one)\n', { mode: 0o644 });
+    expect((await ingestHookState(p)).state).toBe('not-executable');
+    expect((await installIngestHook(p)).result).toBe('installed');
+    expect((await ingestHookState(p)).state).toBe('current');
+  });
+
+  it.skipIf(process.platform === 'win32')('says the execute bit did not stick, rather than that the hook is installed, on a filesystem that drops it (#1301)', async () => {
+    const p = await gitProject();
+    const hookPath = join(p, '.git', 'hooks', 'pre-commit');
+    await fs.writeFile(hookPath, INGEST_PRE_COMMIT_HOOK, { mode: 0o644 });
+    // A filesystem that keeps no mode bits takes the chmod and changes nothing.
+    vi.spyOn(fs, 'chmod').mockResolvedValue(undefined);
+
+    expect(await installIngestHook(p)).toMatchObject({ result: 'skipped-not-executable', path: join('.git', 'hooks', 'pre-commit') });
+    vi.restoreAllMocks();
   });
 
   it('sees the main checkout\'s hook from a linked worktree, whose .git is a file (#1186)', async () => {
@@ -112,8 +177,8 @@ describe('installIngestHook', () => {
     await fs.writeFile(globalConfig, `[core]\n\thooksPath = ${shared}\n`);
     vi.stubEnv('GIT_CONFIG_GLOBAL', globalConfig);
 
-    expect(await ingestHookState(p)).toEqual({ state: 'outside', path: join(shared, 'pre-commit') });
-    expect(await installIngestHook(p)).toEqual({ result: 'skipped-outside', path: join(shared, 'pre-commit') });
+    expect(await ingestHookState(p)).toMatchObject({ state: 'outside', path: join(shared, 'pre-commit') });
+    expect(await installIngestHook(p)).toMatchObject({ result: 'skipped-outside', path: join(shared, 'pre-commit') });
     expect(await fs.readdir(shared)).toEqual([]);
   });
 

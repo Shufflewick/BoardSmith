@@ -1,6 +1,6 @@
 import { constants as fsConstants, promises as fs } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
-import { gitOutput } from './git-output.js';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { gitOutput, gitSucceeds } from './git-output.js';
 import { DESIGN_DIR, RULEBOOK_DIR } from './project-paths.js';
 import { readIfExists } from './read-if-exists.js';
 
@@ -93,50 +93,102 @@ rm -f "$CHANGED"
 exit 0
 `;
 
-/** Where a project's ingest hook stands: what `init` and `doctor` both decide from. */
-export type IngestHookState = 'no-git' | 'outside' | 'missing' | 'current' | 'stale' | 'not-executable' | 'foreign' | 'unreadable';
+/**
+ * Where a project's ingest hook stands: what `init` and `doctor` both decide from. `path` names the
+ * hook for messages, relative to the project where it can be; `absolute` is the file itself.
+ */
+export type IngestHook =
+  | { state: 'no-git' }
+  | { state: 'git-failed'; reason: string }
+  | {
+      state: 'outside' | 'in-project' | 'missing' | 'current' | 'stale' | 'not-executable' | 'foreign' | 'unreadable';
+      path: string;
+      absolute: string;
+    };
+
+/** The project's own repository, not one an inherited GIT_DIR, GIT_WORK_TREE or GIT_COMMON_DIR names (#1301). */
+function ownRepositoryEnv(): NodeJS.ProcessEnv {
+  const { GIT_DIR: _dir, GIT_WORK_TREE: _workTree, GIT_COMMON_DIR: _commonDir, ...env } = process.env;
+  return env;
+}
 
 /**
- * The state of the `pre-commit` hook git runs for this project, and its path relative to the
- * project. Git names the path, so `core.hooksPath` and a linked worktree's shared hooks are followed (#1186).
+ * The state of the `pre-commit` hook git runs for this project. Git names the path, so
+ * `core.hooksPath` and a linked worktree's shared hooks are followed (#1186).
  * A folder with no `.git` of its own is `no-git`: a hook found above it would run from another top folder.
- * A hook path outside both the project and its git folder is `outside`, with its absolute path:
- * a global `core.hooksPath` is shared by every repository on the machine, so it is not ours to write.
+ * A `.git` git cannot read is `git-failed`, with git's own words.
+ * A hook path outside both the project and its git folder is `outside`: a global `core.hooksPath`
+ * is shared by every repository on the machine, so it is not ours to write. One inside the project
+ * that git does not ignore is `in-project`: a hook written there would be committed (#1301).
  * A hook carrying the marker is ours; any other is the designer's. Ours without the execute bit is
- * `not-executable`: git skips it, printing only a hint (#1187).
+ * `not-executable`, whatever its version: git skips it, printing only a hint (#1187).
  */
-export async function ingestHookState(projectPath: string): Promise<{ state: 'no-git' } | { state: Exclude<IngestHookState, 'no-git'>; path: string }> {
+export async function ingestHookState(projectPath: string): Promise<IngestHook> {
+  try {
+    await fs.access(join(projectPath, '.git'));
+  } catch {
+    return { state: 'no-git' };
+  }
+  // Git names real paths, so the project's must be real too, or every relative path runs through `..` (#1301).
+  const project = await fs.realpath(projectPath);
+  const env = ownRepositoryEnv();
   let commonDir: string;
   let hookPath: string;
   try {
-    await fs.stat(join(projectPath, '.git'));
-    [commonDir, hookPath] = (await gitOutput(projectPath, ['rev-parse', '--git-common-dir', '--git-path', 'hooks/pre-commit'])).trim().split('\n');
-  } catch {
-    return { state: 'no-git' }; // Whatever stops the look, there is no hooks folder here to put the hook in.
+    [commonDir, hookPath] = (await gitOutput(project, ['rev-parse', '--git-common-dir', '--git-path', 'hooks/pre-commit'], { env })).trim().split('\n');
+  } catch (error) {
+    return { state: 'git-failed', reason: error instanceof Error ? error.message : String(error) };
   }
-  const absolute = resolve(projectPath, hookPath);
+  const absolute = resolve(project, hookPath);
   const within = (folder: string) => {
     const rel = relative(folder, absolute);
-    return !rel.startsWith('..') && !isAbsolute(rel);
+    return rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
   };
-  if (!within(projectPath) && !within(resolve(projectPath, commonDir))) return { state: 'outside', path: absolute };
-  const path = relative(projectPath, absolute);
+  const shown = relative(project, absolute);
+  // On Windows a hook on another drive has no relative path.
+  const path = isAbsolute(shown) ? absolute : shown;
+  if (!within(resolve(project, commonDir))) {
+    if (!within(project)) return { state: 'outside', path: absolute, absolute };
+    if (!(await gitSucceeds(project, ['check-ignore', '-q', '--', path], { env }))) return { state: 'in-project', path, absolute };
+  }
   let existing: string | undefined;
   try {
     existing = await readIfExists(absolute, (p) => fs.readFile(p, 'utf-8'));
   } catch {
-    return { state: 'unreadable', path };
+    return { state: 'unreadable', path, absolute };
   }
-  if (existing === undefined) return { state: 'missing', path };
-  if (!existing.includes('BoardSmith ingest synthesis')) return { state: 'foreign', path };
-  if (existing !== INGEST_PRE_COMMIT_HOOK) return { state: 'stale', path };
-  try {
-    await fs.access(absolute, fsConstants.X_OK); // On Windows X_OK only checks the file exists, so a hook there is never wrongly not-executable.
-  } catch {
-    return { state: 'not-executable', path };
-  }
-  return { state: 'current', path };
+  if (existing === undefined) return { state: 'missing', path, absolute };
+  if (!existing.includes('BoardSmith ingest synthesis')) return { state: 'foreign', path, absolute };
+  if (!(await isExecutable(absolute))) return { state: 'not-executable', path, absolute };
+  if (existing !== INGEST_PRE_COMMIT_HOOK) return { state: 'stale', path, absolute };
+  return { state: 'current', path, absolute };
 }
+
+/** On Windows X_OK only checks the file exists, so a hook there is never wrongly not executable. */
+async function isExecutable(file: string): Promise<boolean> {
+  try {
+    await fs.access(file, fsConstants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** What `installIngestHook` did, with the hook's path for the message when there is one. */
+export type IngestHookInstall =
+  | { result: 'skipped-no-git' }
+  | { result: 'skipped-git-failed'; reason: string }
+  | {
+      result:
+        | 'installed'
+        | 'skipped-outside'
+        | 'skipped-in-project'
+        | 'skipped-existing'
+        | 'skipped-unreadable'
+        | 'skipped-unwritable'
+        | 'skipped-not-executable';
+      path: string;
+    };
 
 /**
  * Install the pre-commit hook into a scaffolded project.
@@ -144,29 +196,26 @@ export async function ingestHookState(projectPath: string): Promise<{ state: 'no
  * Never throws: an unwritable hooks directory, a missing `.git`, or a pre-existing hook must not
  * fail `init`. Returns what happened, and the hook's path when there is one, so the caller can report it honestly.
  */
-export async function installIngestHook(
-  projectPath: string,
-): Promise<
-  | { result: 'skipped-no-git' }
-  | { result: 'installed' | 'skipped-outside' | 'skipped-existing' | 'skipped-unreadable' | 'skipped-unwritable'; path: string }
-> {
+export async function installIngestHook(projectPath: string): Promise<IngestHookInstall> {
   const hook = await ingestHookState(projectPath);
   if (hook.state === 'no-git') return { result: 'skipped-no-git' };
-  const { path } = hook;
+  if (hook.state === 'git-failed') return { result: 'skipped-git-failed', reason: hook.reason };
+  const { path, absolute } = hook;
   if (hook.state === 'outside') return { result: 'skipped-outside', path };
+  if (hook.state === 'in-project') return { result: 'skipped-in-project', path };
   // Something we cannot read stands there: not ours to replace, and init must not fail.
   if (hook.state === 'unreadable') return { result: 'skipped-unreadable', path };
   // Never clobber a hook we did not write — a designer's own hook wins.
   if (hook.state === 'foreign') return { result: 'skipped-existing', path };
 
-  const hookPath = join(projectPath, path);
   try {
-    await fs.mkdir(dirname(hookPath), { recursive: true });
-    await fs.writeFile(hookPath, INGEST_PRE_COMMIT_HOOK, { mode: 0o755 });
+    await fs.mkdir(dirname(absolute), { recursive: true });
+    await fs.writeFile(absolute, INGEST_PRE_COMMIT_HOOK, { mode: 0o755 });
     // writeFile's mode is ignored when the file already exists, so set it explicitly.
-    await fs.chmod(hookPath, 0o755);
-    return { result: 'installed', path };
+    await fs.chmod(absolute, 0o755);
   } catch {
     return { result: 'skipped-unwritable', path };
   }
+  // A filesystem that keeps no mode bits takes the chmod and changes nothing (#1301).
+  return { result: (await isExecutable(absolute)) ? 'installed' : 'skipped-not-executable', path };
 }
