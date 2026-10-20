@@ -8,16 +8,19 @@ BoardSmith provides comprehensive support for dice games and roll-and-write styl
 
 The base `Die` class extends `Piece` with dice-specific properties:
 
+<!-- typecheck: game src/rules/elements.ts -->
 ```typescript
 import { Die } from 'boardsmith';
+import type { MyGame, MyPlayer } from './game.js';
 
-class MyDie extends Die<MyGame, MyPlayer> {
+export class MyDie extends Die<MyGame, MyPlayer> {
   // Inherited properties:
-  // sides: number - Number of faces (4, 6, 8, 10, 12, 20)
+  // sides: DieSides - Number of faces (4, 6, 8, 10, 12, 20)
   // value: number - Current face value
+  // color: string - Face color the UI draws, default '#ffffff'
 
   // Add custom properties
-  color?: 'red' | 'blue' | 'green';
+  locked = false;
 }
 ```
 
@@ -38,16 +41,22 @@ The engine supports standard polyhedral dice:
 
 A `DicePool` is a `Space` designed to hold multiple dice:
 
+<!-- typecheck: game src/rules/game.ts -->
 ```typescript
-import { DicePool, Die } from 'boardsmith';
+import { DicePool, Game, Player, type GameOptions } from 'boardsmith';
+import { MyDie } from './elements.js';
 
-class MyGame extends Game<MyGame, MyPlayer> {
+export class MyPlayer extends Player<MyGame, MyPlayer> {}
+
+export class MyGame extends Game<MyGame, MyPlayer> {
+  static PlayerClass = MyPlayer;
+
   shelf!: DicePool;
 
   constructor(options: GameOptions) {
     super(options);
 
-    this.registerElements([DicePool, MyDie]);
+    this.registerElements([MyDie]);
 
     // Create the dice pool
     this.shelf = this.create(DicePool, 'shelf');
@@ -164,6 +173,7 @@ npm install three @types/three
 
 Importing `boardsmith/ui/dice` is also what lets the auto-UI and the zoom preview draw a die. A game whose dice are drawn only by the auto-UI imports the entry once, in `src/ui/uis.ts`:
 
+<!-- typecheck: game src/ui/uis.ts -->
 ```typescript
 import 'boardsmith/ui/dice';
 ```
@@ -172,14 +182,16 @@ Without that import the auto-UI shows each die's label only, and warns in dev.
 
 ### Die3D Component
 
+<!-- typecheck: board -->
 ```vue
 <script setup lang="ts">
+import type { DieSides } from 'boardsmith';
 import { Die3D } from 'boardsmith/ui/dice';
 
-const props = defineProps<{
+defineProps<{
   die: {
     id: string;
-    sides: number;
+    sides: DieSides;
     value: number;
   };
 }>();
@@ -260,21 +272,28 @@ Games where players earn and spend special abilities keep them as a plain `Abili
 
 ### Basic Usage
 
+<!-- typecheck: game src/rules/abilities.ts -->
 ```typescript
-import { Player, addAbility, hasUnusedAbility, spendAbility, type Ability } from 'boardsmith';
+import { Game, Player, addAbility, hasUnusedAbility, spendAbility, type Ability } from 'boardsmith';
 
 // Define your ability types
 type MyAbility = 'reroll' | 'flip' | 'bonus' | 'skip';
 
-class MyPlayer extends Player<MyGame, MyPlayer> {
+export class AbilityPlayer extends Player<AbilityGame, AbilityPlayer> {
   // Every player starts with one reroll
   abilities: Ability<MyAbility>[] = [{ type: 'reroll', used: false, earnedFrom: 'starting' }];
 }
 
-// In an action's execute():
-addAbility(player.abilities, 'flip', 'from-track');
-if (hasUnusedAbility(player.abilities, 'reroll')) {
-  spendAbility(player.abilities, 'reroll');
+export class AbilityGame extends Game<AbilityGame, AbilityPlayer> {
+  static PlayerClass = AbilityPlayer;
+}
+
+// Called from an action's execute():
+export function earnFlipAndSpendReroll(player: AbilityPlayer): void {
+  addAbility(player.abilities, 'flip', 'from-track');
+  if (hasUnusedAbility(player.abilities, 'reroll')) {
+    spendAbility(player.abilities, 'reroll');
+  }
 }
 ```
 
@@ -308,6 +327,7 @@ Roll-and-write games record values on scoring tracks. A track is a plain object 
 
 For tracks where values must increase or decrease:
 
+<!-- typecheck: game src/rules/monotonic-tracks.ts -->
 ```typescript
 import { monotonicTrack } from 'boardsmith';
 
@@ -351,6 +371,7 @@ trackPoints(track);                  // Total, including the completion bonus on
 
 For tracks where each value can only appear once:
 
+<!-- typecheck: game src/rules/unique-tracks.ts -->
 ```typescript
 import { uniqueTrack, canAddToTrack, addToTrack } from 'boardsmith';
 
@@ -371,6 +392,7 @@ canAddToTrack(upperSection, 3);  // false (already used)
 
 For simple counting/tallying:
 
+<!-- typecheck: game src/rules/counter-tracks.ts -->
 ```typescript
 import { counterTrack, incrementCounter, isTrackComplete, trackPoints } from 'boardsmith';
 
@@ -394,7 +416,7 @@ trackPoints(poisonTrack);          // 4 (2 * 2)
 
 Here's a complete example combining abilities and tracks. Every field is plain data, so the player needs no `toJSON` override. The score is a getter, so it is worked out from the tracks each time and never saved.
 
-<!-- typecheck: game src/rules/game.ts -->
+<!-- typecheck: game src/rules/dice-game.ts -->
 ```typescript
 import {
   Game,

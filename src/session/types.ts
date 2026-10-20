@@ -6,7 +6,7 @@
  * session surface — they are defined once, in one place.
  */
 
-import type { FlowState, Game, GameClass, AnimationEvent, PendingActionState } from '../engine/index.js';
+import type { FlowState, Game, GameClass, AnimationEvent } from '../engine/index.js';
 import type { PlayerStateView } from '../engine/utils/index.js';
 import type { BotStrategy } from '../bot/index.js';
 import type { TutorialDefinition, TutorialStepView, Annotation } from '../engine/tutorial/types.js';
@@ -198,6 +198,28 @@ export interface StandardPlayerOption {
 }
 
 /**
+ * Number per-player option, shown for each player slot. The platform also
+ * needs `step`, where given, above 0, which dev and build check (#1197).
+ */
+export interface NumberPlayerOption {
+  type: 'number';
+  label: string;
+  description?: string;
+  default: number;
+  min?: number;
+  max?: number;
+  step?: number;
+}
+
+/** On/off per-player option, shown for each player slot (#1197). */
+export interface BooleanPlayerOption {
+  type: 'boolean';
+  label: string;
+  description?: string;
+  default: boolean;
+}
+
+/**
  * Exclusive player option - renders as radio button, exactly one player can have this
  *
  * Use for asymmetric games where exactly one player must have a specific role.
@@ -228,7 +250,12 @@ export interface ExclusivePlayerOption {
  * Per-player option definition (shown for each player slot). A `color` option
  * is built from boardsmith.json's `colorPalette`; see `createColorOption`.
  */
-export type PlayerOptionDefinition = StandardPlayerOption | ExclusivePlayerOption | ColorOptionDefinition;
+export type PlayerOptionDefinition =
+  | StandardPlayerOption
+  | NumberPlayerOption
+  | BooleanPlayerOption
+  | ExclusivePlayerOption
+  | ColorOptionDefinition;
 
 /**
  * Preset configuration for quick game setup
@@ -472,14 +499,24 @@ export interface PlayerGameState {
    * seat must never receive another seat's accumulated pending-action args
    * (T-123-07, the phase's flagged hidden-info leak threat).
    *
-   * Merged into the seat's view by `SnapshotSessionHost.mergeTransientState`. Always
-   * the JSON-safe serialized form (`SerializedPendingActionState`), never the
-   * live engine `PendingActionState` (its `onSelectFired: Set<number>` does
-   * not survive `JSON.stringify` — see `serializePendingActionState()` in
-   * `session/utils.ts`, CR-01).
+   * Merged into the seat's view by `SnapshotSessionHost.mergeTransientState`,
+   * as `pendingActionForSeat()` in `session/utils.ts` shapes it: which picks
+   * are held, never their values (#1204).
    */
-  pendingAction?: SerializedPendingActionState;
+  pendingAction?: SeatPendingAction;
 }
+
+/**
+ * A seat's own pending action as its client is shown it (#1204): which picks
+ * it holds, never what they hold. The engine keeps a held element as the real
+ * element, so a card picked blind would otherwise reach the seat's page whole.
+ */
+export type SeatPendingAction = Omit<SerializedPendingActionState, 'collectedArgs' | 'repeating' | 'branchesBeforePicks'> & {
+  /** The names of the picks that hold a value so far: answered, or bound by the follow-up that started the action. */
+  heldPicks: string[];
+  /** The repeating pick still taking answers, and how many it has taken. */
+  repeating?: { selectionName: string; iterationCount: number };
+};
 
 /**
  * Plain-object, wire-safe snapshot of `PendingActionState` (see
@@ -487,11 +524,9 @@ export interface PlayerGameState {
  *
  * `PendingActionState.onSelectFired` is a `Set<number>`, which does not
  * survive `JSON.stringify` (`JSON.stringify(new Set([1,2]))` produces `"{}"`).
- * This type replaces it with a plain `number[]`. This is the single shared
- * serialized shape reused by `PickHandler`'s
- * selection-step responses, and `SnapshotSessionHost`/`stateless-ops.ts`'s
- * `debug:flow-state` op — no divergent wire shapes across those channels
- * (CR-01/WR-01).
+ * This type replaces it with a plain `number[]`. It is what the host persists
+ * and `PickHandler`'s selection-step responses carry; a seat is shown
+ * `SeatPendingAction` instead, which holds no pick's value (#1204).
  */
 export interface SerializedPendingActionState {
   actionName: string;
@@ -507,7 +542,7 @@ export interface SerializedPendingActionState {
   conditionHeld?: boolean;
   picksOnOffer?: string[];
   stalePicks?: string[];
-  /** Persisted only: `pendingActionForSeat` leaves it out of what a seat is shown (#1144). */
+  /** Persisted only: a seat is never shown it (#1144). */
   branchesBeforePicks?: Record<number, string | null>;
 }
 

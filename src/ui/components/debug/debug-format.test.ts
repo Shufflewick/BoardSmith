@@ -4,7 +4,6 @@ import {
   formatValue,
   isExpandable,
   formatConditionValue,
-  formatActionName,
   formatHistoryEntry,
   formatActionArgs,
   formatTimestamp,
@@ -73,22 +72,6 @@ describe('formatConditionValue', () => {
   });
 });
 
-describe('formatActionName', () => {
-  it('turns camelCase into title case', () => {
-    expect(formatActionName('playCard')).toBe('Play Card');
-    expect(formatActionName('endTurn')).toBe('End Turn');
-    expect(formatActionName('drawFromDiscardPile')).toBe('Draw From Discard Pile');
-  });
-
-  it('leaves an already-capitalised single word alone', () => {
-    expect(formatActionName('Pass')).toBe('Pass');
-  });
-
-  it('returns nothing for an empty name', () => {
-    expect(formatActionName('')).toBe('');
-  });
-});
-
 describe('formatActionArgs', () => {
   it('is empty for no arguments', () => {
     expect(formatActionArgs({})).toBe('');
@@ -138,7 +121,7 @@ describe('formatState', () => {
 });
 
 describe('formatHistoryEntry', () => {
-  it('names an action the way formatActionName does', () => {
+  it('names an action the way the action panel does', () => {
     expect(formatHistoryEntry({ name: 'playCard', player: 1, args: {} })).toBe('Play Card');
   });
 

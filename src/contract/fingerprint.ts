@@ -1881,7 +1881,7 @@ function throughStorage(json: unknown): unknown {
 export async function computePayloadHash(): Promise<string> {
   const engine = await import('../engine/index.js');
   const { GameRunner } = await import('../runtime/index.js');
-  const { buildPlayerState } = await import('../session/utils.js');
+  const { buildPlayerState, buildViews, buildSpectatorView } = await import('../session/utils.js');
   const {
     Game, Space, Piece, Player, Deck, Hand, Action,
     actionStep, simultaneousActionStep, sequence, eachPlayer, setVar,
@@ -2047,13 +2047,19 @@ export async function computePayloadHash(): Promise<string> {
   assertCoversFlowLayer(views);
 
   // The whole-game flow state at the same point. The executor hands it to the
-  // platform beside the views and the platform stores it; the session layer
-  // sends each seat only its own cut of it (#778), so this hash does not see
-  // what a seat receives (#968).
+  // platform beside the views and the platform stores it; each seat is sent
+  // only its own cut of it (#778), which `seatFlowStates` records (#968).
   // The per-seat views above resolve turns through `awaitingPlayers` and so
   // could not see #321: a simultaneous step also published a single-seat
   // `currentPlayer` / `availableActions` left over from before it.
   const openingFlowState = runner.getFlowState();
+
+  // WHAT THE SPECTATOR AND EACH SEAT ARE SENT (#968), read from the views the
+  // executor publishes, so a change to a seat's cut moves `payloadHash`.
+  const seatFlowStates = (): unknown[] =>
+    [buildSpectatorView(runner), ...buildViews(runner, 2)]
+      .map((view) => (view as { flowState: unknown }).flowState);
+  const openingSeatFlowStates = seatFlowStates();
 
   // WHICH FIELDS A SEAT'S BROADCAST STATE CARRIES (#356). The session layer
   // wraps each view in a `PlayerGameState`, and GameShell reads fields of it
@@ -2088,6 +2094,7 @@ export async function computePayloadHash(): Promise<string> {
   // and an engine that went back to omitting it would move this hash.
   const sequentialViews = runner.getAllPlayerViews();
   assertSeatThatCannotAct(sequentialViews);
+  const sequentialSeatFlowStates = seatFlowStates();
 
   // THE OUTCOME THE SNAPSHOT RECORDS (#536). A host that cannot run the game
   // reads the winners from the stored snapshot, so the field is part of what
@@ -2138,6 +2145,8 @@ export async function computePayloadHash(): Promise<string> {
     canonicalize({
       views,
       openingFlowState,
+      openingSeatFlowStates,
+      sequentialSeatFlowStates,
       publishedStateFields,
       flowPosition,
       sequentialViews,

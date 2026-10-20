@@ -10,6 +10,10 @@ The main wrapper component that provides the complete game UI structure: player 
 
 The board itself is not a slot. `GameShell` renders the default UI from the game's registry in `src/ui/uis.ts` (see [Dev-time UI switcher](#dev-time-ui-switcher)) and hands it the props listed under [Board props](#board-props).
 
+A game's `src/ui/App.vue` renders it, importing `GameShell` from `boardsmith/ui`
+and `uis` from `./uis.js`. Its template, with two of the shell's slots filled
+(`portraitFor` stands for the game's own helper):
+
 ```vue
 <template>
   <GameShell
@@ -42,11 +46,6 @@ The board itself is not a slot. `GameShell` renders the default UI from the game
     </template>
   </GameShell>
 </template>
-
-<script setup lang="ts">
-import { GameShell } from 'boardsmith/ui';
-import uis from './uis.js';
-</script>
 ```
 
 #### Players-panel order
@@ -131,6 +130,7 @@ The board component (the registry's default UI, or the dev switcher's
 selection) receives one typed set of props. Declare it by importing the type
 rather than restating the list:
 
+<!-- typecheck: board -->
 ```vue
 <script setup lang="ts">
 import type { TableBoardProps } from 'boardsmith/ui';
@@ -243,6 +243,7 @@ sends only those, which keeps async steps such as `followUp` chains free of
 races.
 
 **Board interactions pattern**
+<!-- typecheck: board -->
 ```vue
 <script setup lang="ts">
 import type { TableBoardProps } from 'boardsmith/ui';
@@ -283,17 +284,16 @@ should do the same.
 
 Automatic UI generation from game state. A production-ready UI for any game — ideal for simple games or as a starting point before investing in a custom UI.
 
-```vue
-<template>
-  <AutoUI
-    :game-view="gameView"
-    :player-seat="playerSeat"
-  />
-</template>
+`boardsmith dev` always offers it as `Auto` in the UI switcher. To ship it,
+make it the game's default UI in `src/ui/uis.ts`:
 
-<script setup lang="ts">
-import { AutoUI } from 'boardsmith/ui';
-</script>
+<!-- typecheck: game src/ui/uis.ts -->
+```ts
+import { defaultUI, defineGameUIs } from 'boardsmith/ui';
+// AutoUI has its own entry point, so a game with a custom UI never ships it
+import { AutoUI } from 'boardsmith/ui/auto-ui';
+
+export default defineGameUIs({ Auto: defaultUI(AutoUI) });
 ```
 
 The auto-generated UI includes:
@@ -469,8 +469,8 @@ A game declares every board it has in one file, `src/ui/uis.ts`, and passes
 that registry to `<GameShell :uis="uis">`:
 
 ```ts
-import { defineGameUIs, defaultUI, devUI } from 'boardsmith/ui';
-import HeirloomTable from './heirloom/HeirloomTable.vue';
+// src/ui/uis.ts: defineGameUIs, defaultUI and devUI come from 'boardsmith/ui',
+// and HeirloomTable from './heirloom/HeirloomTable.vue'
 
 export default defineGameUIs({
   HeirloomTable: defaultUI(HeirloomTable),
@@ -574,9 +574,12 @@ roll condition, a piece's glyph) — never something the library could guess at.
 The fallback layer is a bare `position: absolute; inset: 0` box, so your slot
 content owns its own presentation.
 
+<!-- typecheck: board -->
 ```vue
 <script setup lang="ts">
 import { AssetImage } from 'boardsmith/ui';
+
+defineProps<{ artSrc: string | null; cardName: string; rank: string; suit: string }>();
 </script>
 
 <template>
@@ -622,8 +625,9 @@ Modal overlay that stays **constrained within the game content area**, keeping t
 
 **How it works:** GameOverlay uses `position: fixed` but renders in-place (no Teleport). When inside GameShell's zoom-container (which has `contain: layout`), the fixed positioning is trapped within that container.
 
+<!-- typecheck: board -->
 ```vue
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue';
 import { GameOverlay } from 'boardsmith/ui';
 
@@ -690,9 +694,12 @@ changes layout. It is themed entirely with `--bsg-*` tokens, exposes a
 fade transition under `prefers-reduced-motion`. (Distinct from `Toast`, which is
 for global, viewport-edge notifications.)
 
+<!-- typecheck: board -->
 ```vue
-<script setup>
-import { BoardMessage } from 'boardsmith/ui';
+<script setup lang="ts">
+import { BoardMessage, type TableBoardProps } from 'boardsmith/ui';
+
+defineProps<TableBoardProps>();
 </script>
 
 <template>
@@ -718,7 +725,7 @@ import { BoardMessage } from 'boardsmith/ui';
 Bidirectional interaction between action panel and game board.
 
 ```typescript
-import { useBoardInteraction, createBoardInteraction, provideBoardInteraction } from 'boardsmith/ui';
+// useBoardInteraction, createBoardInteraction and provideBoardInteraction come from 'boardsmith/ui'
 
 // In GameShell (provide)
 const boardInteraction = createBoardInteraction();
@@ -737,7 +744,7 @@ boardInteraction.isSelectableElement(element)  // Can be clicked to select
 boardInteraction.triggerElementSelect(element)
 
 // Drag and drop
-boardInteraction.startDrag(element)
+boardInteraction.startDrag(element)  // A disabled candidate starts no drag, as a click chooses nothing
 boardInteraction.endDrag()
 boardInteraction.isDropTarget(element)
 boardInteraction.isDraggedElement(element)
@@ -756,6 +763,7 @@ Custom game boards can detect which action is currently being filled in. This is
 - Displaying on-demand choices (e.g., cards drawn when action clicked)
 - Customizing the board based on current selection step
 
+<!-- typecheck: game src/ui/action-state.ts -->
 ```typescript
 import { useBoardInteraction, type GameViewElement } from 'boardsmith/ui';
 import { computed, watch } from 'vue';
@@ -834,22 +842,38 @@ on the shell never does. Call it yourself only where you mount a board without
 the shell, which in practice means a test (see the a11y floor in
 `src/cli/slash-command/bs/build/test.md`).
 
+<!-- typecheck: game tests/wiring.ts -->
 ```typescript
-import { createBoardInteraction, provideBoardInteraction, useTableActionWiring } from 'boardsmith/ui';
+import { computed, ref, type Ref } from 'vue';
+import type { PlayerGameState } from 'boardsmith/session';
+import {
+  createBoardInteraction,
+  provideBoardInteraction,
+  useTableActionWiring,
+  type TableActionWiringOptions,
+} from 'boardsmith/ui';
 
-const board = createBoardInteraction();
-provideBoardInteraction(board);
-const { controller, actionMetadata, disabledActions } = useTableActionWiring({
-  seatState,                    // Ref<PlayerGameState>, replaced on every broadcast
-  availableActions: computed(() => seatState.value.availableActions ?? []),
-  isMyTurn: computed(() => seatState.value.isMyTurn),
-  playerSeat: ref(seat),
-  boardInteraction: board,
-  autoEndTurn: ref(true),
-  isViewingHistory: ref(false),
-  sendAction: (name, args) => session.performAction(name, seat, args),
-  fetchPickChoices: async (action, pick, player, args) => session.getPickChoices(action, pick, player, args),
-});
+export function wireSeat(
+  seatState: Ref<PlayerGameState | null>, // replaced on every broadcast
+  seat: number,
+  // How this seat's moves reach the game, e.g. a test session's.
+  sendAction: TableActionWiringOptions['sendAction'],
+  fetchPickChoices: TableActionWiringOptions['fetchPickChoices'],
+) {
+  const board = createBoardInteraction();
+  provideBoardInteraction(board);
+  return useTableActionWiring({
+    seatState,
+    availableActions: computed(() => seatState.value?.availableActions ?? []),
+    isMyTurn: computed(() => seatState.value?.isMyTurn),
+    playerSeat: ref(seat),
+    boardInteraction: board,
+    autoEndTurn: ref(true),
+    isViewingHistory: ref(false),
+    sendAction,
+    fetchPickChoices,
+  });
+}
 ```
 
 It reads the action metadata, disabled reasons, tutorial step and which game
@@ -865,22 +889,27 @@ Composable for drag-and-drop in custom UIs. Call once at setup, get functions th
 
 Use the pit-of-success API with the library's CSS for minimal boilerplate:
 
+<!-- typecheck: board -->
 ```vue
 <script setup lang="ts">
-import { useDragDrop } from 'boardsmith/ui';
+import { computed } from 'vue';
+import { findElements, useDragDrop, type TableBoardProps } from 'boardsmith/ui';
 import 'boardsmith/ui/animation/drag-drop.css';
 
+const props = defineProps<TableBoardProps>();
 const { drag, drop } = useDragDrop();
+const controller = props.actionController;
 
-// Condition function determines when cards can be dragged
+const cards = computed(() => findElements(props.gameView, { className: 'Card' }));
+const zones = computed(() => findElements(props.gameView, { className: 'Zone' }));
+
 const canDragCard = (cardId: number) =>
-  currentAction.value === 'moveCard' &&
-  currentPick.value?.name === 'card' &&
-  isCardSelectable(cardId);
+  controller.currentAction.value === 'moveCard' &&
+  controller.currentPick.value?.name === 'card' &&
+  controller.validElements.value.some((valid) => valid.id === cardId);
 </script>
 
 <template>
-  <!-- Cards: drag with condition -->
   <div
     v-for="card in cards"
     :key="card.id"
@@ -889,13 +918,11 @@ const canDragCard = (cardId: number) =>
   >
     {{ card.name }}
   </div>
-
-  <!-- Zones: always accept drops (when action is active) -->
   <div
     v-for="zone in zones"
     :key="zone.id"
-    v-bind="drop({ name: zone.id }).props"
-    :class="drop({ name: zone.id }).classes"
+    v-bind="drop({ id: zone.id }).props"
+    :class="drop({ id: zone.id }).classes"
   >
     {{ zone.name }}
   </div>
@@ -955,14 +982,13 @@ Or use your own class names alongside the library classes:
 **ElementRef:**
 - Can include `id`, `name`, or `notation` to identify the element.
 - Matching is **precedence-based**, not OR-based: if `id` is present it is the sole criterion (`name`/`notation` are ignored); otherwise `notation` is tried, then `name`. This prevents duplicate-named elements (e.g. several `'Militia'` pieces) from cross-talking — a ref carrying a precise `id` always resolves to exactly that element. Use `id` for unambiguous selection; reserve bare `name`/`notation` refs for when you genuinely want to match every element sharing that property.
-- A board click (`selectElement`) or drag (`startDrag`) starts an action by the same rule: it starts the first action whose first element pick has a candidate that is the ref's element, or whose board ref the element matches as above. So a name-only ref starts an action exactly when the candidate's board ref is that name (#945). This needs the action's first-pick candidates on the client; the server does not send them before an action opens yet, which is #1192.
-- In the AutoUI, while a pick is open, a piece standing on a square that is one of that pick's candidates is draggable, and its drag carries the square, so it chooses that square's candidate (#943). Checkers is the case: its move action opens on its own, and each piece's board ref is its square's notation. With no action open, no piece is draggable this way yet; fetching first-pick candidates for that case is #1192.
+- A board click (`selectElement`) or drag (`startDrag`) starts an action by the same rule: it starts the first action whose first element pick has a candidate that is the ref's element, or whose board ref the element matches as above. So a name-only ref starts an action exactly when the candidate's board ref is that name (#945). With no action open, the client asks the server for each available action's first-pick candidates (`actionController.startCandidates`), so this works when a turn offers several actions and opens none, as Chess does (#1192).
+- In the AutoUI, while a pick is open, a piece standing on a square that is one of that pick's candidates is draggable, and its drag carries the square, so it chooses that square's candidate (#943). Checkers is the case: its move action opens on its own, and each piece's board ref is its square's notation. With no action open, the board offers each action's first-pick candidates instead, so a piece is clickable and draggable when it, or the square it stands on, can start an action (#1192).
 
 #### Migration from Verbose Pattern
 
 **Before (verbose):**
-```vue
-<script setup>
+```ts
 const { dragProps, dropProps, isDragging, isDropTarget } = useDragDrop();
 
 const isDragDropCardSelection = computed(() =>
@@ -971,8 +997,9 @@ const isDragDropCardSelection = computed(() =>
 
 function isCardDragging(cardId) { return isDragging({ id: cardId }); }
 function isZoneDropTarget(zoneName) { return isDropTarget({ name: zoneName }); }
-</script>
+```
 
+```vue
 <template>
   <div
     v-bind="isDragDropCardSelection && isSelectable(card.id) ? dragProps({ id: card.id }) : {}"
@@ -991,19 +1018,26 @@ function isZoneDropTarget(zoneName) { return isDropTarget({ name: zoneName }); }
 ```
 
 **After (pit of success):**
+<!-- typecheck: board -->
 ```vue
-<script setup>
+<script setup lang="ts">
+import { useDragDrop, type TableBoardProps } from 'boardsmith/ui';
 import 'boardsmith/ui/animation/drag-drop.css';
-const { drag, drop } = useDragDrop();
 
-const canDrag = (cardId) =>
+const props = defineProps<TableBoardProps>();
+const { drag } = useDragDrop();
+const { currentAction, currentPick, validElements } = props.actionController;
+
+const canDrag = (cardId: number) =>
   currentAction.value === 'moveCard' &&
   currentPick.value?.name === 'card' &&
-  isSelectable(cardId);
+  validElements.value.some((valid) => valid.id === cardId);
 </script>
 
 <template>
   <div
+    v-for="card in validElements"
+    :key="card.id"
     v-bind="drag({ id: card.id }, { when: canDrag(card.id) }).props"
     :class="drag({ id: card.id }, { when: canDrag(card.id) }).classes"
   />
@@ -1022,12 +1056,19 @@ When building custom game boards with drag-and-drop, use `useDragDrop`. ActionPa
 
 **Example: Assigning Combatants to Squads**
 
+<!-- typecheck: board -->
 ```vue
 <script setup lang="ts">
 import { useDragDrop } from 'boardsmith/ui';
 import 'boardsmith/ui/animation/drag-drop.css';
 
-const props = defineProps<{
+interface Squad {
+  id: number;
+  name: string;
+  combatants: { id: number; name: string }[];
+}
+
+defineProps<{
   squads: Squad[];
 }>();
 
@@ -1043,16 +1084,16 @@ const canDrag = () => true;
       v-for="squad in squads"
       :key="squad.id"
       class="squad"
-      v-bind="drop({ name: squad.id }).props"
-      :class="drop({ name: squad.id }).classes"
+      v-bind="drop({ id: squad.id }).props"
+      :class="drop({ id: squad.id }).classes"
     >
       <h3>{{ squad.name }}</h3>
       <div
         v-for="combatant in squad.combatants"
         :key="combatant.id"
         class="combatant"
-        v-bind="drag({ name: combatant.name }, { when: canDrag() }).props"
-        :class="drag({ name: combatant.name }, { when: canDrag() }).classes"
+        v-bind="drag({ id: combatant.id }, { when: canDrag() }).props"
+        :class="drag({ id: combatant.id }, { when: canDrag() }).classes"
       >
         {{ combatant.name }}
       </div>
@@ -1082,39 +1123,59 @@ const canDrag = () => true;
 
 Unified composable for flying element animations (cards, pieces, tokens).
 
-```typescript
-import { useFlyingElements, FlyingCardsOverlay } from 'boardsmith/ui';
+<!-- typecheck: board -->
+```vue
+<script setup lang="ts">
+import { computed, ref } from 'vue';
+import { findElement, useFlyingElements, FlyingCardsOverlay, type TableBoardProps } from 'boardsmith/ui';
+
+const props = defineProps<TableBoardProps>();
+const deckRef = ref<HTMLElement | null>(null);
+const handRef = ref<HTMLElement | null>(null);
+const starterRef = ref<HTMLElement | null>(null);
+const starterCard = computed(() => findElement(props.gameView, { name: 'starter' }));
 
 const { fly, flyMultiple, flyOnAppear, flyingElements, isAnimating } = useFlyingElements();
 
-// Fly a single element
-await fly({
-  id: 'draw-animation',
-  startRect: deckElement.getBoundingClientRect(),
-  endRect: () => handElement.getBoundingClientRect(),  // Function to track moving targets
-  elementData: { rank: 'A', suit: 'S', faceUp: false },
-  flip: true,           // Flip element during flight
-  duration: 400,        // Animation duration in ms
-  elementSize: { width: 60, height: 84 },
-});
+async function draw() {
+  if (!deckRef.value || !handRef.value) return;
+  const deck = deckRef.value;
+  const hand = handRef.value;
 
-// Fly multiple elements with stagger
-await flyMultiple([
-  { id: 'card-1', startRect: deck, endRect: () => hand, elementData: { rank: 'K', suit: 'H' } },
-  { id: 'card-2', startRect: deck, endRect: () => hand, elementData: { rank: 'Q', suit: 'H' } },
-], 100);  // 100ms stagger between elements
+  // Fly a single element
+  await fly({
+    id: 'draw-animation',
+    startRect: deck,
+    endRect: () => handRef.value,  // A function tracks a moving target
+    elementData: { rank: 'A', suit: 'S', faceUp: false },
+    flip: true,           // Flip element during flight
+    duration: 400,        // Animation duration in ms
+    elementSize: { width: 60, height: 84 },
+  });
+
+  // Fly multiple elements with stagger
+  await flyMultiple([
+    { id: 'card-1', startRect: deck, endRect: () => hand, elementData: { rank: 'K', suit: 'H' } },
+    { id: 'card-2', startRect: deck, endRect: () => hand, elementData: { rank: 'Q', suit: 'H' } },
+  ], 100);  // 100ms stagger between elements
+}
 
 // Declarative fly-on-appear (replaces useFlyOnAppear)
 const { isFlying } = flyOnAppear({
   element: starterCard,  // Ref or ComputedRef that triggers when truthy
   sourceRef: deckRef,
   targetRef: starterRef,
-  getElementData: (el) => ({ rank: el.rank, suit: el.suit }),
+  getElementData: (el) => ({ rank: String(el.attributes?.rank), suit: String(el.attributes?.suit) }),
   flip: true,
 });
+</script>
 
-// In template:
-// <FlyingCardsOverlay :flying-cards="flyingElements" />
+<template>
+  <div ref="deckRef" class="deck" :class="{ busy: isAnimating }" @click="draw" />
+  <div ref="handRef" class="hand" />
+  <div ref="starterRef" class="starter" :class="{ arriving: isFlying }" />
+  <FlyingCardsOverlay :flying-cards="flyingElements" />
+</template>
 ```
 
 ### useActionAnimations
@@ -1125,16 +1186,17 @@ Declarative animations triggered by action execution. Captures element positions
 
 When `elementSelector` equals `destinationSelector`, the composable auto-detects a "flip-in-place" animation and configures everything correctly:
 
-```typescript
-import { useActionAnimations, FlyingCardsOverlay } from 'boardsmith/ui';
+<!-- typecheck: board -->
+```vue
+<script setup lang="ts">
+import { toRef } from 'vue';
+import { useActionAnimations, FlyingCardsOverlay, type TableBoardProps } from 'boardsmith/ui';
 
 // The board receives `actionController` and `gameView` as props from GameShell.
-const props = defineProps<{ actionController: UseActionControllerReturn; gameView: GameViewElement | null }>();
-const gameViewRef = ref(null);
-watchEffect(() => { gameViewRef.value = props.gameView; });
+const props = defineProps<TableBoardProps>();
 
 const actionAnimations = useActionAnimations({
-  gameView: gameViewRef,
+  gameView: toRef(props, 'gameView'),
   // Tells the composable how each action ended, so a refused one puts its element back.
   actionController: props.actionController,
   animations: [
@@ -1159,16 +1221,20 @@ const actionAnimations = useActionAnimations({
 
 // Returns an unregister function. Called inside setup(), the hook is also
 // unregistered automatically when the component's effect scope disposes.
-// A game may wrap this hook (to skip some actions, say); the outcome still arrives.
+// A game may wrap this hook (to skip some actions, say); pass all three
+// arguments through, since `run` is what matches the action to its outcome.
 props.actionController.onBeforeAutoExecute(actionAnimations.onBeforeAutoExecute);
+
+// Top-level, so the template unwraps it.
+const { flyingElements } = actionAnimations;
+</script>
+
+<template>
+  <FlyingCardsOverlay :flying-cards="flyingElements" />
+</template>
 ```
 
 A `{selection}` placeholder goes only inside a double-quoted attribute value, as above. Its value is escaped for that spot, so quotes and backslashes in it are safe; a placeholder anywhere else (`#card-{card}`, `[data-x='{card}']`) is refused when `useActionAnimations` is set up.
-
-In template:
-```vue
-<FlyingCardsOverlay :flying-cards="actionAnimations.flyingElements" />
-```
 
 **Flip-in-Place Behavior:**
 
@@ -1180,7 +1246,7 @@ When the composable detects a flip-in-place animation (`elementSelector === dest
 
 You don't need to set `hideDestination`, `flip`, or `crossfadeDuration` - they're configured automatically.
 
-**When it plays:** the composable listens to `actionController.onAfterAutoExecute` for each action's result. The flight plays only once the server has accepted the action and the state it produced has rendered; a state update from another seat while the action is in flight does not play it. If the server refuses the action, or it is cancelled before it is sent, the hidden element gets back exactly the inline styles it had and no flight plays.
+**When it plays:** the composable listens to `actionController.onAfterAutoExecute` for each action's result. The flight plays only once the server has accepted the action and the state it produced has rendered; a state update from another seat while the action is in flight does not play it. If the server refuses the action, or it is cancelled before it is sent, the hidden element gets back exactly the inline styles it had and no flight plays. If the player cancels while a game's own before-hook is still waiting, no hook after it is called for that action, and its outcome carries the `run` number the hooks were given, so whether the game's hook is registered before or after this one, the cancelled action cannot undo or overwrite the capture of the action the player started next (#1026).
 
 **Animation Config Options:**
 
@@ -1200,25 +1266,31 @@ You don't need to set `hideDestination`, `flip`, or `crossfadeDuration` - they'r
 
 Unified FLIP animation API with multi-container support. FLIP (First-Last-Invert-Play) animations smoothly transition elements when they move within containers.
 
-```typescript
-import { useFLIP } from 'boardsmith/ui';
+<!-- typecheck: board -->
+```vue
+<script setup lang="ts">
+import { ref } from 'vue';
+import { useFLIP, type TableBoardProps } from 'boardsmith/ui';
+
+const props = defineProps<TableBoardProps>();
+const boardRef = ref<HTMLElement | null>(null);
+const handRef = ref<HTMLElement | null>(null);
 
 // Single container (manual mode)
-const boardRef = ref<HTMLElement | null>(null);
-const { capture, animate, isAnimating, clear } = useFLIP({
+const manual = useFLIP({
   containerRef: boardRef,
   selector: '[data-element-id]',
   duration: 300,
 });
 
-// Before state change
-capture();
-// ... state change ...
-await animate();
+async function moveWithAnimation(change: () => void) {
+  manual.capture();   // Before state change
+  change();
+  await manual.animate();
+}
 
 // Multi-container support
-const handRef = ref<HTMLElement | null>(null);
-const { capture, animate } = useFLIP({
+const multi = useFLIP({
   containers: [
     { ref: boardRef, selector: '[data-piece-id]' },
     { ref: handRef, selector: '[data-card-id]' },
@@ -1227,12 +1299,18 @@ const { capture, animate } = useFLIP({
 });
 
 // Auto mode (watches game state automatically)
-const { isAnimating } = useFLIP({
+const auto = useFLIP({
   containerRef: boardRef,
   selector: '[data-element-id]',
   auto: true,
-  gameView: () => gameState.value.view,
+  gameView: () => props.gameView,
 });
+</script>
+
+<template>
+  <div ref="boardRef" class="board" :class="{ moving: auto.isAnimating.value }" />
+  <div ref="handRef" class="hand" />
+</template>
 ```
 
 **Options:**
@@ -1252,103 +1330,158 @@ const { isAnimating } = useFLIP({
 
 Animate stat changes and fly elements to player stat displays.
 
-```typescript
+<!-- typecheck: board -->
+```vue
+<script setup lang="ts">
 import { usePlayerStatAnimation, flyToPlayerStat, useFlyingElements } from 'boardsmith/ui';
 
 // Get flyMultiple function from useFlyingElements
 const { flyMultiple } = useFlyingElements();
+// The stat's element in the players panel, for your own animations
 const { getPlayerStatElement } = usePlayerStatAnimation();
 
-// Fly cards to a player's stat display
-flyToPlayerStat(flyMultiple, {
-  cards: removedCards.map(c => ({ rect: c.rect, rank: c.rank, suit: c.suit })),
-  playerSeat: 0,
-  statName: 'books',
-});
+// Fly cards to seat 1's "books" stat display (seats are 1-indexed)
+function flyBooksHome(removedCards: { rect: DOMRect; rank: string; suit: string }[]) {
+  flyToPlayerStat(flyMultiple, {
+    cards: removedCards.map((c) => ({ rect: c.rect, rank: c.rank, suit: c.suit })),
+    playerSeat: 1,
+    statName: 'books',
+  });
+}
+</script>
 ```
 
 ### useGameViewHelpers
 
 Utilities for querying game state.
 
+<!-- typecheck: game src/ui/helpers.ts -->
 ```typescript
 import {
   findElement,
-  findElements,
   findPlayerHand,
   getCards,
   getElementOwner,
   isMyElement,
+  type GameViewElement,
 } from 'boardsmith/ui';
 
-// Find specific element
-const deck = findElement(gameView, { type: 'deck' });
+export function describeHand(gameView: GameViewElement, playerSeat: number) {
+  // Find specific element
+  const deck = findElement(gameView, { type: 'deck' });
 
-// Find player's hand
-const myHand = findPlayerHand(gameView, playerSeat);
+  // Find player's hand
+  const myHand = findPlayerHand(gameView, playerSeat);
 
-// Get all cards in an element
-const cardsInHand = getCards(myHand);
+  // Get all cards in an element
+  const cardsInHand = getCards(myHand);
 
-// Check ownership
-const owner = getElementOwner(card);
-const isMine = isMyElement(card, playerSeat);
+  // Check ownership
+  const [card] = cardsInHand;
+  const owner = getElementOwner(card);
+  const isMine = isMyElement(card, playerSeat);
+
+  return { deck, cardsInHand, owner, isMine };
+}
 ```
 
 ### useGameGrid
 
 Utilities for square grids (chess notation, etc.).
 
-```typescript
-import { useGameGrid, toAlgebraicNotation, fromAlgebraicNotation } from 'boardsmith/ui';
+It reads the board's cells from the game view: the board element (class `Board` by default) and its cells (class `Square`), each carrying its `row` and `col` attributes.
 
-const { getCellAt, toNotation, fromNotation } = useGameGrid({
+<!-- typecheck: board -->
+```vue
+<script setup lang="ts">
+import { useGameGrid, toAlgebraicNotation, fromAlgebraicNotation, type TableBoardProps } from 'boardsmith/ui';
+
+const props = defineProps<TableBoardProps>();
+
+const { getCellAt, toNotation, fromNotation, isInBounds } = useGameGrid({
+  gameView: () => props.gameView,
+  boardClassName: 'Board',   // the defaults, shown for clarity
+  cellClassName: 'Square',
   rows: 8,
   cols: 8,
-  cellSize: 60,
 });
 
-// Convert coordinates
-const notation = toAlgebraicNotation(0, 0);  // "a1"
-const { col, row } = fromAlgebraicNotation('e4');  // { col: 4, row: 3 }
+const corner = getCellAt(0, 0);   // the cell at row 0, col 0, or undefined
+toNotation(0, 0);                 // "a8": row 0 is the top row by default
+fromNotation('e4');               // { row: 4, col: 4 }, or null off the board
+
+// The same conversions without a board
+toAlgebraicNotation(0, 0, { rowZeroAtTop: false });   // "a1"
+fromAlgebraicNotation('e4');                          // { row: 4, col: 4 }
+</script>
+
+<template>
+  <div class="grid" :data-corner="corner?.id" :data-in-bounds="isInBounds(7, 7)" />
+</template>
 ```
 
 ### useHexGrid
 
 Utilities for hexagonal grids.
 
-```typescript
+It reads the board's cells from the game view. Each cell's axial coordinates come from the attributes the board names in `$qCoord`/`$rCoord` (default `q` and `r`), and the size and orientation from the board's `$hexSize`/`$hexOrientation`, falling back to the defaults you pass.
+
+<!-- typecheck: board -->
+```vue
+<script setup lang="ts">
 import {
   useHexGrid,
   hexToPixel,
   getHexPolygonPoints,
-  calculateHexDistance
+  calculateHexDistance,
+  type TableBoardProps,
 } from 'boardsmith/ui';
 
+const props = defineProps<TableBoardProps>();
+
 const {
+  cells,
   getHexPosition,
   getHexPoints,
   getNeighbors,
-  hexDistance
+  hexDistance,
+  hexGridBounds,
 } = useHexGrid({
-  size: 30,
-  orientation: 'flat',  // or 'pointy'
+  gameView: () => props.gameView,
+  boardClassName: 'Board',   // the defaults, shown for clarity
+  cellClassName: 'Cell',
+  defaultHexSize: 30,
+  defaultOrientation: 'flat',  // or 'pointy'
 });
 
-// Convert hex coords to pixel position
+const hexPoints = getHexPoints();        // one polygon, centred on (0, 0)
+const center = getHexPosition(3, 2);     // { x, y } of the hex at q=3, r=2
+getNeighbors(3, 2);                      // the six { q, r } around it
+hexDistance(0, 0, 3, 2);                 // 5 steps
+
+// The same maths without a board
 const { x, y } = hexToPixel(3, 2, 30, 'flat');
+const points = getHexPolygonPoints(30, 'flat');
+const dist = calculateHexDistance(0, 0, 3, 2);
+</script>
 
-// Get SVG polygon points for a hex cell
-const points = getHexPolygonPoints(cx, cy, size, 'flat');
-
-// Calculate distance between hexes
-const dist = calculateHexDistance(q1, r1, q2, r2);
+<template>
+  <svg :viewBox="`${hexGridBounds.minX} ${hexGridBounds.minY} ${hexGridBounds.width} ${hexGridBounds.height}`">
+    <polygon
+      v-for="cell in cells"
+      :key="cell.id"
+      :points="hexPoints"
+      :transform="`translate(${getHexPosition(Number(cell.attributes?.q), Number(cell.attributes?.r)).x}, ${getHexPosition(Number(cell.attributes?.q), Number(cell.attributes?.r)).y})`"
+    />
+  </svg>
+</template>
 ```
 
 ### useCardDisplay
 
 Card display formatting utilities.
 
+<!-- typecheck: game src/ui/cards.ts -->
 ```typescript
 import {
   useCardDisplay,
@@ -1374,19 +1507,24 @@ isRedSuit('D');      // true
 
 One-off FLIP animation for a single update cycle.
 
+<!-- typecheck: game src/ui/flip-once.ts -->
 ```typescript
+import { nextTick, type Ref } from 'vue';
 import { createFLIPSnapshot } from 'boardsmith/ui';
 
-const containerRef = ref<HTMLElement | null>(null);
+export async function sortWithAnimation(containerRef: Ref<HTMLElement | null>, sort: () => void) {
+  // Capture positions immediately
+  const snapshot = createFLIPSnapshot(containerRef, '[data-card-id]', {
+    duration: 300,
+    easing: 'ease-out',
+  });
 
-// Capture positions immediately
-const snapshot = createFLIPSnapshot(containerRef, '[data-card-id]', {
-  duration: 300,
-  easing: 'ease-out',
-});
+  sort();
+  await nextTick();
 
-// After DOM update
-await snapshot.animate();
+  // After DOM update
+  await snapshot.animate();
+}
 ```
 
 ## Theming
@@ -1394,6 +1532,7 @@ await snapshot.animate();
 `applyTheme()` is the only theming knob. It injects the Slate token stylesheet (once, idempotently)
 and writes your overrides as inline custom properties on `<html>`.
 
+<!-- typecheck: game src/ui/theme.ts -->
 ```typescript
 import { applyTheme } from 'boardsmith/ui';
 
@@ -1558,33 +1697,42 @@ The UI-side uses a composable pattern with provide/inject for component tree acc
 
 **Creating the instance (in GameShell or root component):**
 
+<!-- typecheck: game src/ui/animation-events.ts -->
 ```typescript
+import type { Ref } from 'vue';
+import type { PlayerGameState } from 'boardsmith/session';
 import { createAnimationEvents, provideAnimationEvents } from 'boardsmith/ui';
 
-const animationEvents = createAnimationEvents({
-  // Get events from player state (reactive getter)
-  events: () => state.value?.animationEvents,
+// Call from the root component's setup, with the seat's latest state.
+export function setUpAnimationEvents(state: Ref<PlayerGameState | null>) {
+  const animationEvents = createAnimationEvents({
+    // Get events from player state (reactive getter)
+    events: () => state.value?.animationEvents,
 
-  // Optional: delay for events without handlers (ms, default: 0)
-  defaultDuration: 0,
+    // Optional: delay for events without handlers (ms, default: 0)
+    defaultDuration: 0,
 
-  // Optional: time to wait for handler registration before skipping (ms, default: 3000)
-  handlerWaitTimeout: 3000,
-});
+    // Optional: time to wait for handler registration before skipping (ms, default: 3000)
+    handlerWaitTimeout: 3000,
+  });
 
-// Provide to component tree
-provideAnimationEvents(animationEvents);
+  // Provide to component tree
+  provideAnimationEvents(animationEvents);
+  return animationEvents;
+}
 ```
 
 **Registering handlers (in game board components):**
 
 ```typescript
-import { useAnimationEvents } from 'boardsmith/ui';
-
+// In a board's setup. useAnimationEvents comes from 'boardsmith/ui', onUnmounted from 'vue';
+// playAttackAnimation and the rest are your game's own animations.
 const animations = useAnimationEvents();
 
 // Register handler - returns cleanup function
-// The second argument provides a signal for cooperative skip support
+// The handler's second argument provides a signal for cooperative skip support.
+// The third says what skipAll() does to it: 'run' calls it with the signal already
+// aborted (for cleanup that must happen), 'drop' discards the event. It is required.
 const unregister = animations?.registerHandler('combat', async (event, { signal }) => {
   const { attackerId, targetId, damage, outcome } = event.data;
 
@@ -1603,7 +1751,7 @@ const unregister = animations?.registerHandler('combat', async (event, { signal 
   if (outcome === 'kill') {
     await playDeathAnimation(targetEl);
   }
-});
+}, { skip: 'drop' });
 
 // Clean up on unmount (optional - composable handles cleanup)
 onUnmounted(() => unregister?.());
@@ -1621,7 +1769,7 @@ onUnmounted(() => unregister?.());
 
 | Property/Method | Type | Description |
 |-----------------|------|-------------|
-| `registerHandler(type, handler)` | `(string, (event, { signal }) => Promise<void>) => () => void` | Register handler, returns cleanup function. `signal` is an `AbortSignal` that fires on skip. |
+| `registerHandler(type, handler, { skip })` | `(string, (event, { signal }) => Promise<void>, { skip: 'run' \| 'drop' }) => () => void` | Register handler, returns cleanup function. `signal` is an `AbortSignal` that fires on skip; `skip` says whether a skipped handler still runs (`'run'`, signal pre-aborted) or is dropped. |
 | `isAnimating` | `Ref<boolean>` | Whether animations are currently playing |
 | `paused` | `Ref<boolean>` | Pause/resume control |
 | `skipAll()` | `() => void` | Skip remaining animations |
@@ -1632,7 +1780,7 @@ onUnmounted(() => unregister?.());
 For custom animation needs, combine `useFLIP` and `useFlyingElements` with animation events:
 
 ```typescript
-import { useFLIP, useFlyingElements, useAnimationEvents } from 'boardsmith/ui';
+// In a board's setup: useFLIP, useFlyingElements and useAnimationEvents come from 'boardsmith/ui'
 
 // FLIP animations for element movements
 const { capture, animate } = useFLIP({
@@ -1646,10 +1794,10 @@ const { fly, flyingElements, flyOnAppear } = useFlyingElements();
 
 // Animation events for custom handlers
 const animationEvents = useAnimationEvents();
-animationEvents.registerHandler('combat', async (event, { signal }) => {
+animationEvents?.registerHandler('combat', async (event, { signal }) => {
   await playCombatAnimation(event.data);
   if (signal.aborted) return; // skip support
-});
+}, { skip: 'drop' });
 ```
 
 This approach gives you full control over each animation system while maintaining clean separation of concerns.
@@ -1720,7 +1868,7 @@ The `actionController` (type: `UseActionControllerReturn`) is the unified interf
 | Option | Type | Description |
 |--------|------|-------------|
 | `args` | `Record<string, unknown>` | Values applied immediately to matching selections |
-| `prefill` | `Record<string, unknown>` | Values auto-filled when their selection becomes active |
+| `prefill` | `Record<string, unknown>` | Values auto-filled when their selection becomes active. A pick that takes a list (chooseElements, multiSelect, ordered list) takes an array, each entry matched against the choices; a lone value for one is refused |
 
 Use `args` for selections that are already available. Use `prefill` for deferred auto-fill of future selections (e.g., when the first selection determines which options appear in the second).
 
@@ -1861,36 +2009,31 @@ The `actionController` provides error state that your UI should handle gracefull
 
 ### Displaying Action Errors
 
+<!-- typecheck: board -->
 ```vue
 <template>
   <div class="game-board">
     <!-- Error toast/banner -->
     <Transition name="fade">
-      <div v-if="actionController.lastError.value" class="error-banner">
+      <div v-if="actionController.lastError.value" class="error-banner" role="alert">
         {{ actionController.lastError.value }}
-        <button @click="dismissError">×</button>
+        <button aria-label="Dismiss" @click="dismissError">×</button>
       </div>
     </Transition>
 
     <!-- Game content -->
-    <GameTable ... />
   </div>
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{
-  actionController: UseActionControllerReturn;
-}>();
+import type { TableBoardProps } from 'boardsmith/ui';
 
-// Error auto-dismisses after 5 seconds
-watch(() => props.actionController.lastError.value, (error) => {
-  if (error) {
-    setTimeout(() => {
-      // Error clears automatically on next successful action
-      // Or clear manually if your UI needs it
-    }, 5000);
-  }
-});
+const props = defineProps<TableBoardProps>();
+
+// The next action clears the error itself; this lets the player hide it sooner.
+function dismissError() {
+  props.actionController.lastError.value = null;
+}
 </script>
 
 <style>
@@ -2000,6 +2143,7 @@ async function handleAction(name: string, args: Record<string, unknown>) {
 
 Check availability before showing interactive elements:
 
+<!-- typecheck: board -->
 ```vue
 <template>
   <!-- Only show clickable cards that are valid selections -->
@@ -2013,15 +2157,24 @@ Check availability before showing interactive elements:
     }"
     @click="isCardPlayable(card) && playCard(card)"
   >
-    {{ card.rank }}{{ card.suit }}
+    {{ card.attributes?.rank }}{{ card.attributes?.suit }}
   </div>
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{
-  actionController: UseActionControllerReturn;
-  availableActions: string[];
-}>();
+import { computed } from 'vue';
+import { findElements, type BaseElementAttributes, type GameViewElement, type TableBoardProps } from 'boardsmith/ui';
+
+const props = defineProps<TableBoardProps>();
+
+interface CardAttributes extends BaseElementAttributes {
+  rank?: string;
+  suit?: string;
+}
+
+const myHand = computed(() =>
+  props.gameView ? (findElements(props.gameView, { className: 'Card' }) as GameViewElement<CardAttributes>[]) : [],
+);
 
 // Check if card can be played
 function isCardPlayable(card: GameViewElement): boolean {
@@ -2035,6 +2188,14 @@ function isCardPlayable(card: GameViewElement): boolean {
   }
 
   return true;
+}
+
+function playCard(card: GameViewElement) {
+  if (props.actionController.currentPick.value?.name === 'card') {
+    void props.actionController.fill('card', card.id);
+  } else {
+    void props.actionController.start('play', { args: { card: card.id } });
+  }
 }
 </script>
 ```
@@ -2117,18 +2278,25 @@ const selectedEquipment = { name: 'Laser Rifle', damage: 10 };
 
 **The Solution:** Use `findElement` to search the merc's subtree. Its `name` criterion compares the element's own top-level `name` (the name the game gave the element when it created it), never anything in `attributes`. So this works only when the equipment element's `name` is the same string the UI is showing:
 
+<!-- typecheck: game src/ui/drop-equipment.ts -->
 ```typescript
-import { findElement, getElementId } from 'boardsmith/ui';
+import { findElement, getElementId, type GameViewElement, type UseActionControllerReturn } from 'boardsmith/ui';
 
-// Only right when the element's own `name` equals the displayed name
-const equipment = findElement(merc, { name: selectedEquipment.name });
-const equipmentId = getElementId(equipment);
+export async function dropEquipment(
+  actionController: UseActionControllerReturn,
+  merc: GameViewElement,
+  selectedEquipment: { name: string },
+): Promise<void> {
+  // Only right when the element's own `name` equals the displayed name
+  const equipment = findElement(merc, { name: selectedEquipment.name });
+  const equipmentId = getElementId(equipment);
 
-if (equipmentId) {
-  await actionController.execute('dropEquipment', {
-    actingMerc: merc.id,
-    equipment: equipmentId
-  });
+  if (equipmentId) {
+    await actionController.execute('dropEquipment', {
+      actingMerc: merc.id,
+      equipment: equipmentId,
+    });
+  }
 }
 ```
 
@@ -2312,6 +2480,7 @@ Or check the Network tab in browser dev tools - look for WebSocket messages or `
 
 ### Example: Custom Game Board
 
+<!-- typecheck: board -->
 ```vue
 <script setup lang="ts">
 import { computed, ref, watch, nextTick } from 'vue';

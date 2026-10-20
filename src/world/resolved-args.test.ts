@@ -14,6 +14,7 @@
  * on every road (`Game#getActionDisabledReason`), so it has no selection to see.
  */
 import { describe, it, expect } from 'vitest';
+import { Card, Game, Space, type GameOptions } from '../engine/index.js';
 import { createTestWorld, type TestWorld } from '../testing/test-world.js';
 import {
   Vault,
@@ -205,6 +206,87 @@ describe('world-action callbacks receive element selections as elements (#418)',
       });
     }
     expect(seen.size).toBe(0);
+    await world.close();
+  });
+});
+
+class Pouch extends Space<PouchWorld> {}
+class Commons extends Space<PouchWorld> {}
+
+class PouchWorld extends Game<PouchWorld> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([Pouch, Commons, Card]);
+  }
+}
+
+describe('a read whose draft answers an element pick nested below its partition root (#1203)', () => {
+  const handed: unknown[] = [];
+  const peek = worldAction<PouchWorld>('peek')
+    .chooseElement('card', { needs: () => ['commons'], elements: ({ game }) => game.first(Pouch)!.all(Card) })
+    .chooseFrom('how', {
+      needs: () => ['commons'],
+      choices: ({ args }) => {
+        if (args.card !== undefined) handed.push((args.card as Card).name);
+        return ['gently'];
+      },
+    })
+    .quote(({ card }) => {
+      handed.push((card as Card).name);
+      return [`peek at ${(card as Card).name}`];
+    })
+    .execute(() => {});
+
+  async function pouchWorld(): Promise<{ world: TestWorld; card: number }> {
+    handed.length = 0;
+    const world = await createTestWorld({
+      definition: {
+        gameClass: PouchWorld,
+        world: {
+          maxPlayers: 2,
+          actions: [peek],
+          // Both resident, so a card in `stash` is found, yet `peek` declares only `commons`.
+          view: () => ['commons', 'stash'],
+          genesis: (game: Game) => {
+            const commons = game.create(Commons, 'commons');
+            commons.create(Pouch, 'pouch').create(Card, 'AS');
+            const stash = game.create(Commons, 'stash');
+            stash.create(Pouch, 'hoard').create(Card, 'KH');
+            return { commons, stash };
+          },
+        } as WorldDefinition,
+      },
+    });
+    const card = (await world.resolvePick(1, 'peek', 'card', {})).validElements![0]!.id;
+    handed.length = 0;
+    return { world, card };
+  }
+
+  it('a re-asked later pick is answered, with the element handed to it', async () => {
+    const { world, card } = await pouchWorld();
+
+    const pick = await world.resolvePick(1, 'peek', 'how', { card });
+
+    expect(pick.choices?.map((c) => c.value)).toEqual(['gently']);
+    expect(handed).toEqual(['AS']);
+    await world.close();
+  });
+
+  it('a quote is answered, with the element handed to it', async () => {
+    const { world, card } = await pouchWorld();
+
+    expect(await world.quote(1, 'peek', { card, how: 'gently' })).toEqual(['peek at AS']);
+    await world.close();
+  });
+
+  it('a draft naming a card nested in a partition the read does not declare is refused, and no callback is handed it', async () => {
+    const { world } = await pouchWorld();
+    const hidden = (await world.unredactedElements()).find((e) => e.name === 'KH')?.id;
+    if (hidden === undefined) throw new Error('The pouch fixture has no KH card in its stash.');
+
+    await expect(world.quote(1, 'peek', { card: hidden })).rejects.toMatchObject({ code: 'stale-draft' });
+    await expect(world.resolvePick(1, 'peek', 'how', { card: hidden })).rejects.toMatchObject({ code: 'stale-draft' });
+    expect(handed).toEqual([]);
     await world.close();
   });
 });

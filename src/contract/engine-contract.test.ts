@@ -31,29 +31,31 @@ const UPDATE_HINT = (dimension: string) =>
   + 'silently and shows up as a game misbehaving in production.\n\n'
   + 'See docs/engine-contract.md.';
 
+// Slow one-time setup lives here, where no test timeout applies (#354, #1194).
+const fingerprints = await computeFingerprints();
+const fingerprintsAgain = await computeFingerprints();
+
 describe('engine contract', () => {
-  it('matches the committed surface fingerprint', async () => {
-    const { surfaceHash } = await computeFingerprints();
+  it('matches the committed surface fingerprint', () => {
+    const { surfaceHash } = fingerprints;
     expect(surfaceHash, UPDATE_HINT('exported API surface')).toBe(ENGINE_CONTRACT.surfaceHash);
   });
 
-  it('matches the committed player-view payload fingerprint', async () => {
-    const { payloadHash } = await computeFingerprints();
+  it('matches the committed player-view payload fingerprint', () => {
+    const { payloadHash } = fingerprints;
     expect(payloadHash, UPDATE_HINT('player-view payload')).toBe(ENGINE_CONTRACT.payloadHash);
   });
 
-  it('matches the committed world serialization-format fingerprint', async () => {
-    const { formatHash } = await computeFingerprints();
+  it('matches the committed world serialization-format fingerprint', () => {
+    const { formatHash } = fingerprints;
     expect(formatHash, UPDATE_HINT('world serialization format')).toBe(ENGINE_CONTRACT.formatHash);
   });
 
-  it('is deterministic across runs', async () => {
+  it('is deterministic across runs', () => {
     // A fingerprint that drifts on its own would be worse than none: it would
     // train everyone to re-run `contract:update` reflexively until the test
     // went green, which is indistinguishable from ignoring it.
-    const first = await computeFingerprints();
-    const second = await computeFingerprints();
-    expect(second).toEqual(first);
+    expect(fingerprintsAgain).toEqual(fingerprints);
   });
 
   it('covers exactly the entrypoints the platform can reach', async () => {

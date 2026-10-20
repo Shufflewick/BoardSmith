@@ -77,6 +77,12 @@ export interface WeightConfirmation {
 
 /** Games each set plays in the confirmation, split evenly between the seats. */
 const CONFIRMATION_GAMES = 400;
+/**
+ * Separately seeded batches each set's confirmation games are split into, so they
+ * spread across the pool (#1031). Fixed, not the worker count, so a seeded run
+ * confirms the same way on any machine.
+ */
+const CONFIRMATION_BATCHES = 20;
 /** One-sided 95% critical value of the standard normal. */
 const Z_95 = 1.645;
 
@@ -172,13 +178,15 @@ export class WeightEvolver {
     const initialFitnesses = await runParallelBenchmarks(
       this.gameModulePath,
       this.gameType,
-      [objectives],
-      {
-        gameCount: this.config.evolutionBenchmarkGames ?? 50,
-        mctsIterations: this.config.benchmarkMCTSIterations ?? 100,
-        maxActions: this.config.maxActionsPerGame,
-        ...this.benchmarkSeeding('initial'),
-      },
+      [{
+        weights: objectives,
+        config: {
+          gameCount: this.config.evolutionBenchmarkGames ?? 50,
+          mctsIterations: this.config.benchmarkMCTSIterations ?? 100,
+          maxActions: this.config.maxActionsPerGame,
+          ...this.benchmarkSeeding('initial'),
+        },
+      }],
       { workerCount: this.config.workerCount }
     );
 
@@ -203,23 +211,28 @@ export class WeightEvolver {
       iteration: generations,
       totalIterations: generations,
       gamesCompleted: 0,
-      totalGames: 2,
+      totalGames: 2 * CONFIRMATION_BATCHES,
       bestWinRate: bestFitness,
       objectiveCount: candidate.length,
       message: `Confirming the best weights against the original on ${CONFIRMATION_GAMES} fresh games each...`,
     });
-    const [originalWinRate, candidateWinRate] = await runParallelBenchmarks(
+    // Both sets play the same batches, so they meet the same games.
+    const batches = Array.from({ length: CONFIRMATION_BATCHES }, (_, batch) => ({
+      gameCount: CONFIRMATION_GAMES / CONFIRMATION_BATCHES,
+      mctsIterations: this.config.benchmarkMCTSIterations ?? 100,
+      maxActions: this.config.maxActionsPerGame,
+      ...this.benchmarkSeeding(`confirm-${batch}`),
+    }));
+    const winRates = await runParallelBenchmarks(
       this.gameModulePath,
       this.gameType,
-      [original, candidate],
-      {
-        gameCount: CONFIRMATION_GAMES,
-        mctsIterations: this.config.benchmarkMCTSIterations ?? 100,
-        maxActions: this.config.maxActionsPerGame,
-        ...this.benchmarkSeeding('confirm'),
-      },
+      [original, candidate].flatMap((weights) => batches.map((config) => ({ weights, config }))),
       { workerCount: this.config.workerCount },
     );
+    // Equal batches, so a set's win rate over all its games is the mean of its batches'.
+    const overBatches = (rates: number[]) => rates.reduce((sum, rate) => sum + rate, 0) / CONFIRMATION_BATCHES;
+    const originalWinRate = overBatches(winRates.slice(0, CONFIRMATION_BATCHES));
+    const candidateWinRate = overBatches(winRates.slice(CONFIRMATION_BATCHES));
     const accepted = confirmsImprovement(originalWinRate, candidateWinRate, CONFIRMATION_GAMES);
     return {
       objectives: accepted ? candidate : original,
@@ -284,13 +297,15 @@ export class WeightEvolver {
       const fitnesses = await runParallelBenchmarks(
         this.gameModulePath,
         this.gameType,
-        population,
-        {
-          gameCount: benchmarkGames,
-          mctsIterations: this.config.benchmarkMCTSIterations ?? 100,
-          maxActions: this.config.maxActionsPerGame,
-          ...this.benchmarkSeeding(`gen-${gen}`),
-        },
+        population.map((weights) => ({
+          weights,
+          config: {
+            gameCount: benchmarkGames,
+            mctsIterations: this.config.benchmarkMCTSIterations ?? 100,
+            maxActions: this.config.maxActionsPerGame,
+            ...this.benchmarkSeeding(`gen-${gen}`),
+          },
+        })),
         { workerCount: this.config.workerCount },
         (completed, total) => {
           this.config.onProgress?.({

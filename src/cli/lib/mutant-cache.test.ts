@@ -162,6 +162,24 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
     expect(await fillThenOneMore(true)).toEqual({ first: 'killed', newest: 'survived' });
   });
 
+  it('keeps the test that killed a mutant apart from its outcome, for the same mutated text after any other change (#954)', async () => {
+    const dir = await project();
+    const hint = { file: 'tests/rules.test.ts', test: 'fee' };
+    const cache = await openMutantCache(dir);
+    cache.set(MUTANT, 'killed');
+    cache.setKillerHint(MUTANT, hint);
+    await cache.save();
+    const outcomes = await fs.readFile(await mutantCachePath(dir), 'utf-8');
+    expect(outcomes).not.toContain('tests/rules.test.ts');
+
+    await write(dir, { 'tests/rules.test.ts': "it('fee', () => { expect(1).toBe(1); });\n" });
+    commitAll(dir, 'change a test');
+    const after = await openMutantCache(dir);
+    expect(after.get(MUTANT)).toBeUndefined();
+    expect(after.killerHint(MUTANT)).toEqual(hint);
+    expect(after.killerHint({ ...MUTANT, source: 'export const fee = (price: number) => price * 3;\n' })).toBeUndefined();
+  });
+
   it('starts empty, without failing, when the file on disk is unreadable', async () => {
     const dir = await project();
     const path = await mutantCachePath(dir);

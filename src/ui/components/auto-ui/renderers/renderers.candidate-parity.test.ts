@@ -51,8 +51,6 @@ function mountWith(component: any, props: Record<string, unknown>, board: BoardI
       // The context chain AutoRenderer provides — supplied here so the mounted
       // renderer is the same component the shell renders, warnings included.
       provide('playerSeat', 0);
-      provide('selectableElements', ref(new Set<number>()));
-      provide('selectedElements', ref(new Set<number>()));
       provide('defaultBackImage', ref(null));
       provide('presentation', ref(undefined));
     },
@@ -126,6 +124,38 @@ describe.each(ELEMENT_CASES)('%s — anchored candidate hook (#189)', (_name, co
     wrapper.unmount();
   });
 });
+
+// Each renderer once worked out its own board state, and the copies drifted (#1052).
+// The auto-filled first pick is offered only where it can be dragged on.
+const DRAGGABLE = new Set(['CardRenderer', 'PieceRenderer']);
+
+describe.each(ELEMENT_CASES)('%s — board state (#1052)', (name, component, props, opts) => {
+  it(`${DRAGGABLE.has(name) ? 'offers' : 'does not offer'} the draggable-selected element`, () => {
+    const board = createBoardInteraction();
+    board.setDraggableSelectedElement({ id: CANDIDATE_ID });
+    const wrapper = mountWith(component, props, board, opts);
+    const root = wrapper.find(`[data-element-id="${CANDIDATE_ID}"]`);
+    expect(root.classes().includes('action-selectable')).toBe(DRAGGABLE.has(name));
+    expect(root.attributes('tabindex')).toBe(DRAGGABLE.has(name) ? '0' : '-1');
+    wrapper.unmount();
+  });
+});
+
+// A hand is a role="group" container, so it is never pressed.
+describe.each(ELEMENT_CASES.filter(([name]) => name !== 'HandRenderer'))(
+  '%s — selected state (#894)',
+  (_name, component, props, opts) => {
+    it('announces a board-selected element as selected', () => {
+      const board = createBoardInteraction();
+      board.selectElement({ id: CANDIDATE_ID });
+      const wrapper = mountWith(component, props, board, opts);
+      const root = wrapper.find(`[data-element-id="${CANDIDATE_ID}"]`);
+      expect(root.attributes('aria-pressed')).toBe('true');
+      expect(root.attributes('aria-label')).toMatch(/, selected$/);
+      wrapper.unmount();
+    });
+  },
+);
 
 const BOARD_CASES: Array<[string, unknown, 'grid' | 'hex-grid']> = [
   ['GridBoardRenderer', GridBoardRenderer, 'grid'],

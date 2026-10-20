@@ -10,6 +10,7 @@ For the conceptual guide — how to write objectives, tune difficulty, and debug
 
 ## Usage
 
+<!-- typecheck: game src/imports.ts -->
 ```typescript
 import { createBot, MCTSBot, parseBotLevel, DIFFICULTY_PRESETS } from 'boardsmith/bot';
 ```
@@ -42,11 +43,21 @@ import { createBot, MCTSBot, parseBotLevel, DIFFICULTY_PRESETS } from 'boardsmit
 
 ## Examples
 
+The examples construct `CheckersGame`, a game class like this one. A real game also registers its elements, actions and flow; [Getting Started](../getting-started.md) builds one.
+
+<!-- typecheck: game src/game.ts -->
+```typescript
+import { Game } from 'boardsmith';
+
+export class CheckersGame extends Game<CheckersGame> {}
+```
+
 ### Basic Bot Opponent
 
+<!-- typecheck: game src/opponent.ts -->
 ```typescript
 import { createBot } from 'boardsmith/bot';
-import { CheckersGame } from './game';
+import { CheckersGame } from './game.js';
 
 const game = new CheckersGame({
   playerCount: 2,
@@ -62,16 +73,21 @@ const bot = createBot(
   'medium',
 );
 
-const move = await bot.play();   // BotMove — always resolves to a move
-console.log(`bot plays: ${move.action}`, move.args);
+const move = await bot.play();   // BotMove, or null when the seat has nothing it can search
+if (move) console.log(`bot plays: ${move.action}`, move.args);
 ```
 
-`play()` returns a `BotMove` — `{ action: string; args: Record<string, unknown> }`. Feed it back through your normal action path (`session.performAction(move.action, seat, move.args)`); the bot does not mutate the live game.
+`play()` returns a `BotMove` (`{ action: string; args: Record<string, unknown> }`), or `null` when the bot's own view of the game offers it nothing to search; `bot.lastStallReason` then says why. Feed a move back through your normal action path (`session.performAction(move.action, seat, move.args)`); the bot does not mutate the live game.
 
 ### Difficulty Levels
 
+<!-- typecheck: game src/difficulty.ts -->
 ```typescript
 import { createBot, DIFFICULTY_PRESETS, DEFAULT_CONFIG } from 'boardsmith/bot';
+import { CheckersGame } from './game.js';
+
+const game = new CheckersGame({ playerCount: 2 });
+const GameClass = CheckersGame;
 
 const easyBot = createBot(game, GameClass, 'game', 2, 'easy');
 const hardBot = createBot(game, GameClass, 'game', 2, 'hard');
@@ -104,8 +120,11 @@ The game's seed does not seed the bot: the bot has its own random source.
 
 `BotStrategy` is a set of optional hooks, all of them functions. Attach it to your game definition (or pass it as `createBot`'s last argument).
 
+<!-- typecheck: game src/strategy.ts -->
 ```typescript
-import type { BotStrategy, Objective } from 'boardsmith/bot';
+import { Piece, Space } from 'boardsmith';
+import { createBot, type BotStrategy, type Objective } from 'boardsmith/bot';
+import { CheckersGame } from './game.js';
 
 const botSeatConfig: BotStrategy = {
   // A FUNCTION returning a keyed record — not an array. It is called during
@@ -113,13 +132,14 @@ const botSeatConfig: BotStrategy = {
   objectives: (game, playerIndex): Record<string, Objective> => ({
     controlCenter: {
       // Return 0..1: how well the objective is achieved right now.
-      checker: (g, seat) => g.board.center.all(Piece, { player: seat }).length / 4,
+      checker: (g, seat) =>
+        (g.first(Space, 'center')?.all(Piece).filter((piece) => piece.player?.seat === seat).length ?? 0) / 4,
       // Positive = good for the player, negative = bad.
       weight: 0.3,
     },
     pieceAdvantage: {
       checker: (g, seat) => {
-        const mine = g.all(Piece, { player: seat }).length;
+        const mine = g.all(Piece).filter((piece) => piece.player?.seat === seat).length;
         const theirs = g.all(Piece).length - mine;
         return Math.max(0, (mine - theirs) / 12);
       },
@@ -128,7 +148,8 @@ const botSeatConfig: BotStrategy = {
   }),
 };
 
-const bot = createBot(game, CheckersGame, 'checkers', 2, 'hard', botSeatConfig);
+const game = new CheckersGame({ playerCount: 2 });
+export const bot = createBot(game, CheckersGame, 'checkers', 2, 'hard', botSeatConfig);
 ```
 
 Each `Objective` is `{ checker, weight }`. The key is the objective's name; there is no `name`/`description`/`feature` field.
@@ -146,6 +167,7 @@ The remaining hooks, all optional:
 
 ### Parsing CLI Arguments
 
+<!-- typecheck: game src/level.ts -->
 ```typescript
 import { parseBotLevel } from 'boardsmith/bot';
 
@@ -161,9 +183,12 @@ parseBotLevel('invalid'); // throws: Unknown bot level "invalid". Use one of: ea
 
 `createBot` is a thin wrapper that resolves a difficulty into a `Partial<BotConfig>`. Construct `MCTSBot` yourself when you want to set knobs a preset does not cover.
 
+<!-- typecheck: game src/mcts.ts -->
 ```typescript
 import { MCTSBot } from 'boardsmith/bot';
+import { CheckersGame } from './game.js';
 
+const game = new CheckersGame({ playerCount: 2 });
 const bot = new MCTSBot(
   game,
   CheckersGame,

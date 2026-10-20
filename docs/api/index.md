@@ -8,6 +8,7 @@ Import from `boardsmith` when building game logic. This is the root export conta
 
 ## Usage
 
+<!-- typecheck: game src/imports.ts -->
 ```typescript
 import {
   Game,
@@ -162,57 +163,82 @@ the root entry. Import them from `boardsmith/runtime`; see [Runtime](./runtime.m
 
 ### Defining a Game
 
+<!-- typecheck: game src/rules/game.ts -->
 ```typescript
-import { Game, Player, Space, Piece, Action } from 'boardsmith';
+import { Game, Player, Space, Piece, Action, type GameOptions } from 'boardsmith';
+import { createGameFlow } from './flow.js';
 
-class MyGame extends Game<MyGame, MyPlayer> {
-  board!: Space<MyGame, MyPlayer>;
+export class Board extends Space<MyGame> {}
+
+export class Token extends Piece<MyGame> {
+  color = 0;
+}
+
+export class MyPlayer extends Player<MyGame, MyPlayer> {}
+
+export class MyGame extends Game<MyGame, MyPlayer> {
+  static PlayerClass = MyPlayer;
+
+  board!: Board;
 
   constructor(options: GameOptions) {
     super(options);
+    this.registerElements([Board, Token]);
 
     // Create elements directly in the constructor -- there is no
     // defineElements()/defineActions() lifecycle hook.
-    this.board = this.create(Space, 'board');
+    this.board = this.create(Board, 'board');
 
     for (let i = 0; i < 4; i++) {
-      this.board.create(Piece, 'token', { color: i });
+      this.board.create(Token, 'token', { color: i });
     }
 
     this.registerActions(
-      Action.create('move')
+      Action.create<MyGame>('move')
         .prompt('Select a token to move')
         .chooseElement('token', {
           prompt: 'Select a token',
-          elementClass: Piece,
+          elementClass: Token,
         })
         .execute(({ token }) => {
           // Move logic
         }),
     );
+
+    this.setFlow(createGameFlow());
+  }
+
+  deal(): void {
+    // Deal the opening hands
   }
 }
 ```
 
 ### Using Flow Control
 
+<!-- typecheck: game src/rules/flow.ts -->
 ```typescript
-import { sequence, eachPlayer, actionStep, loop, execute } from 'boardsmith';
+import { sequence, eachPlayer, actionStep, loop, execute, type FlowDefinition } from 'boardsmith';
+import type { MyGame } from './game.js';
 
-const gameFlow = sequence(
-  // Setup phase
-  execute((ctx) => ctx.game.deal()),
+export function createGameFlow(): FlowDefinition<MyGame> {
+  return {
+    root: sequence(
+      // Setup phase
+      execute((ctx) => ctx.game.deal()),
 
-  // Main game loop
-  loop({
-    // Continue until game ends
-    while: (ctx) => !ctx.game.isFinished(),
-    maxIterations: 100,
-    do: eachPlayer({
-      do: actionStep({ actions: ['play'] }),
-    }),
-  }),
-);
+      // Main game loop
+      loop({
+        // Continue until game ends
+        while: (ctx) => !ctx.game.isFinished(),
+        maxIterations: 100,
+        do: eachPlayer({
+          do: actionStep({ actions: ['move'] }),
+        }),
+      }),
+    ),
+  };
+}
 ```
 
 ## See Also

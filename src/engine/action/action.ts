@@ -36,6 +36,7 @@ import { getActiveStep, getGateReasonForValue } from '../tutorial/gate.js';
 import { findMatchingChoice, isSerializedElement, oneChoiceListRefusal, oneElementListRefusal, trySmartResolveChoice, valuesEqual } from './choice-matching.js';
 import { numberRuleErrors } from './number-rules.js';
 import { formatRepeatCandidates } from '../element/pick-candidates.js';
+import { seatIdOf } from '../element/seat-placeholders.js';
 import type { ChoiceWithRefs, WarningEntry } from '../../types/protocol.js';
 import { textRuleErrors } from './text-rules.js';
 import { actingFor, changing } from '../element/state-version.js';
@@ -1157,7 +1158,9 @@ export class ActionExecutor {
     context: ActionContext,
     actionName: string | undefined,
   ): string {
-    const message: unknown = selection.unavailable!(value, context);
+    // A card the seat cannot see is handed as the id the seat knows it by, so the sentence cannot name it (#1205).
+    const shown = isElement(value) && !value.isVisibleTo(context.player) ? seatIdOf(value, context.player.seat) : value;
+    const message: unknown = selection.unavailable!(shown, context);
     if (typeof message === 'string' && message.trim() !== '') return message;
     const returned = typeof message === 'string' ? 'an empty string' : describeValidateReturn(message);
     throw new Error(
@@ -2089,9 +2092,7 @@ export class ActionExecutor {
         }
         pendingState.onSelectFired.add(pendingState.currentSelectionIndex);
       } catch (error) {
-        // Fail loud: a throwing onSelect aborts the action. Fire onCancel for
-        // selections whose onSelect already fired, then return an error.
-        this.fireOnCancelCallbacks(action, pendingState);
+        // Fail loud. onCancel runs only on the player's cancel, so it runs once per pick (#1189).
         const crashed = pickHookThrew(action, 'onSelect', selection, error);
         return { done: false, error: crashed.error, rulesError: crashed.rulesError, partiallyApplied: true };
       }
@@ -2257,10 +2258,8 @@ export class ActionExecutor {
     // Store the resolved value so downstream dependsOn filters see GameElements, not raw IDs
     pendingState.collectedArgs[selectionName] = resolvedValue;
 
-    // Fire onSelect if defined.
-    // A throwing onSelect must ABORT the action (fail loud): fire onCancel for
-    // any selections whose onSelect already ran, then return failure. The caller
-    // discards the pending action rather than committing it.
+    // Fire onSelect if defined. A throwing one fails the pick loud; onCancel
+    // runs only on the player's cancel, so it runs once per pick (#1189).
     if (selection.onSelect) {
       try {
         const ctx = this.createOnSelectContext();
@@ -2272,8 +2271,6 @@ export class ActionExecutor {
         }
         pendingState.onSelectFired.add(selectionIndex);
       } catch (error) {
-        // Compensate: run onCancel for selections whose onSelect already fired.
-        this.fireOnCancelCallbacks(action, pendingState);
         return pickHookThrew(action, 'onSelect', selection, error);
       }
     }

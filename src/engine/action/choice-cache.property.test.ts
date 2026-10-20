@@ -11,6 +11,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Game, enumerateLegalMoves, dueSeats, type GameOptions } from '../index.js';
 import { GameRunner } from '../../runtime/runner.js';
+import { PendingActionManager } from '../../session/pending-action-manager.js';
 import { SeededRandom } from '../../utils/random.js';
 import { isElement } from '../element/game-element.js';
 import { CardsGame, DuelGame, RememberingDuelGame } from './choice-cache-fixtures.test-helper.js';
@@ -49,22 +50,22 @@ function offers(game: Game): unknown {
   });
 }
 
-function makeMove(runner: GameRunner<Game>, seat: number, move: { action: string; args: Record<string, unknown> }, stepwise: boolean): void {
+async function makeMove(runner: GameRunner<Game>, playerCount: number, seat: number, move: { action: string; args: Record<string, unknown> }, stepwise: boolean): Promise<void> {
   if (!stepwise) {
     const result = runner.performAction(move.action, seat, move.args);
     expect(result.error).toBeUndefined();
     return;
   }
-  runner.startPendingAction(move.action, seat);
+  const picks = new PendingActionManager(runner, playerCount);
   const action = runner.game.getAction(move.action)!;
   for (const selection of action.selections) {
     const value = move.args[selection.name];
-    const picks = Array.isArray(value) && 'repeat' in selection && selection.repeat ? value : [value];
-    for (const pick of picks) expect(runner.processSelectionStep(seat, selection.name, pick).error).toBeUndefined();
+    const values = Array.isArray(value) && 'repeat' in selection && selection.repeat ? value : [value];
+    for (const pick of values) expect((await picks.processSelectionStep(seat, selection.name, pick, move.action)).error).toBeUndefined();
   }
 }
 
-function playChecked(GameClass: new (options: GameOptions) => Game, playerCount: number, seed: string): number {
+async function playChecked(GameClass: new (options: GameOptions) => Game, playerCount: number, seed: string): Promise<number> {
   devMode.override = false;
   const runner = new GameRunner<Game>({ GameClass, gameType: 'bs631', gameOptions: { playerCount, seed } });
   runner.start();
@@ -82,7 +83,7 @@ function playChecked(GameClass: new (options: GameOptions) => Game, playerCount:
     const seat = dueSeats(flowState)[0];
     const moves = enumerateLegalMoves(runner.game, seat);
     if (moves.length === 0) break;
-    makeMove(runner, seat, random.pick(moves), random.next() < 0.5);
+    await makeMove(runner, playerCount, seat, random.pick(moves), random.next() < 0.5);
   }
   return plies;
 }
@@ -90,15 +91,15 @@ function playChecked(GameClass: new (options: GameOptions) => Game, playerCount:
 describe('a reused answer always equals a fresh one (#631)', () => {
   const seeds = Array.from({ length: 12 }, (_, at) => `bs631-${at}`);
 
-  it.each(seeds)('in a duel of pawns, seed %s', (seed) => {
-    expect(playChecked(DuelGame, 2, seed)).toBeGreaterThan(10);
+  it.each(seeds)('in a duel of pawns, seed %s', async (seed) => {
+    expect(await playChecked(DuelGame, 2, seed)).toBeGreaterThan(10);
   });
 
-  it.each(seeds)('in a duel of pawns whose legal moves are remembered per state (#673), seed %s', (seed) => {
-    expect(playChecked(RememberingDuelGame, 2, seed)).toBeGreaterThan(10);
+  it.each(seeds)('in a duel of pawns whose legal moves are remembered per state (#673), seed %s', async (seed) => {
+    expect(await playChecked(RememberingDuelGame, 2, seed)).toBeGreaterThan(10);
   });
 
-  it.each(seeds)('in a game of cards, seed %s', (seed) => {
-    expect(playChecked(CardsGame, 3, seed)).toBeGreaterThan(10);
+  it.each(seeds)('in a game of cards, seed %s', async (seed) => {
+    expect(await playChecked(CardsGame, 3, seed)).toBeGreaterThan(10);
   });
 });

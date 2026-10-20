@@ -19,6 +19,7 @@ import {
   type GameOptions,
 } from '../index.js';
 import { GameRunner } from '../../runtime/runner.js';
+import { PendingActionManager } from '../../session/pending-action-manager.js';
 import {
   RepeatingCollectGame,
   Token,
@@ -88,12 +89,13 @@ function gemOutcome(game: GemGame) {
 describe('a repeating element selection (#325)', () => {
   const expected = { eachCalls: ['opal', 'ruby'], taken: ['opal', 'ruby'], pouch: ['opal', 'ruby'] };
 
-  it('step by step: execute receives the picked ELEMENTS, not their ids', () => {
+  it('step by step: execute receives the picked ELEMENTS, not their ids', async () => {
     const runner = gemRunner();
     const id = (name: string) => runner.game.heap.first(Gem, name)!.id;
-    runner.startPendingAction('take', 1);
-    expect(runner.processSelectionStep(1, 'gems', id('opal')).success).toBe(true);
-    const done = runner.processSelectionStep(1, 'gems', id('ruby'));
+    const picks = new PendingActionManager(runner, 1);
+    picks.startPendingAction('take', 1);
+    expect((await picks.processSelectionStep(1, 'gems', id('opal'))).success).toBe(true);
+    const done = await picks.processSelectionStep(1, 'gems', id('ruby'));
     expect(done.error).toBeUndefined();
     expect(done.actionComplete).toBe(true);
     expect(gemOutcome(runner.game)).toEqual(expected);

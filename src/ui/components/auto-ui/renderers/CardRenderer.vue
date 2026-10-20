@@ -8,23 +8,21 @@
  *   3. No-image visible card — white face with name label (sane floor)
  *   4. No-image hidden card — default back gradient
  *
- * Board interaction states (is-selectable, is-selected, action-selectable,
- * is-board-highlighted, is-board-selected) are reflected via
- * tryUseBoardInteraction — the substrate is never modified.
+ * Board interaction states (action-selectable, is-board-highlighted,
+ * is-board-selected, is-disabled) come from useElementBoardState — the
+ * substrate is never modified.
  *
  * Face/back image selection: hidden cards ALWAYS show the back image;
  * visible cards show the face image. The face URL is never exposed when
  * the element is a hidden placeholder (T-93-04).
  */
 
-import { computed, inject, ref, watch, type Ref, type ComputedRef } from 'vue';
-import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
+import { computed, inject, ref, watch, type Ref } from 'vue';
+import { useElementBoardState } from '../../../composables/useElementBoardState.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
 import { setTransformAwareDragImage } from '../../../composables/dragImage.js';
-import { resolvePresentation } from '../presentation.js';
+import { usePresentationEntry } from '../../../composables/usePresentationEntry.js';
 import { isHiddenPlaceholder } from '../../../../engine/element/hidden-placeholder.js';
-import type { PresentationOverlay } from '../presentation.js';
-import { GAME_CONTEXT_KEYS, injectPlayerSeat } from '../../../composables/useGameContext.js';
 import { getSpriteStyle, parseImageInfo, type ImageInfo } from '../../../utils/image.js';
 import CardBack from './CardBack.vue';
 import type { GameElement } from '../auto-ui-helpers.js';
@@ -36,131 +34,43 @@ const props = defineProps<{
 // ---------------------------------------------------------------------------
 // Inject context — exact keys provided by AutoRenderer.vue
 // ---------------------------------------------------------------------------
-const playerSeat = injectPlayerSeat();
-const selectableElements = inject<Ref<Set<number>>>('selectableElements');
-const selectedElements = inject<Ref<Set<number>>>('selectedElements');
 const defaultBackImage = inject<Ref<ImageInfo | null>>('defaultBackImage', ref(null));
 
-// Board interaction — always tryUse (never useBoardInteraction directly)
-const boardInteraction = tryUseBoardInteraction();
+const {
+  boardInteraction,
+  identity: elementIdentity,
+  isHighlighted: isBoardHighlighted,
+  isSelected: isBoardSelected,
+  isActionSelectable: isCandidate,
+  isDraggableSelected,
+  isDisabled,
+  isDropTarget,
+  isDragged,
+} = useElementBoardState(() => props.element);
 
-// ---------------------------------------------------------------------------
-// Presentation overlay — injected from AutoRenderer (D-04)
-// Resolved AFTER engine visibility filtering; resolvePresentation strips
-// image/stats for hidden placeholders (PRESENT-02).
-// ---------------------------------------------------------------------------
-const overlay = inject(GAME_CONTEXT_KEYS.presentation, undefined) as ComputedRef<PresentationOverlay | undefined> | undefined;
-const presentationEntry = computed(() =>
-  resolvePresentation(props.element, overlay?.value)
-);
+// A card can be dragged, so it also offers the auto-filled first pick to drag on.
+const isActionSelectable = computed(() => isCandidate.value || isDraggableSelected.value);
+
+const presentationEntry = usePresentationEntry(() => props.element);
 
 // Whether the seat is sent a placeholder for this card rather than the card.
 const isHidden = computed(() => isHiddenPlaceholder(props.element));
 
-// Suppress unused variable warning for playerSeat and selectableElements/selectedElements
-// (injected for context completeness per interface spec; element-level selectable state
-// comes via boardInteraction for cards; container injects consumed by parent hand/deck)
-void playerSeat;
-
-// ---------------------------------------------------------------------------
-// Selectable / selected state (from injected sets — passed down from AutoRenderer)
-// ---------------------------------------------------------------------------
-const isSelectable = computed(() => selectableElements?.value?.has(props.element.id) ?? false);
-const isSelected = computed(() => selectedElements?.value?.has(props.element.id) ?? false);
-
-// ---------------------------------------------------------------------------
-// Element notation (used in all boardInteraction calls)
-// Pitfall 6: prefer attributes.notation if present; fall back to element.name
-// ---------------------------------------------------------------------------
-const elementNotation = computed(
-  () => (props.element.attributes?.notation as string | undefined) ?? props.element.name ?? null,
-);
-
-// Element identity function — passed to the keyboard/click composable
-function elementIdentity() {
-  return {
-    id: props.element.id,
-    name: props.element.name,
-    notation: elementNotation.value || undefined,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Board state computeds — all with defensive !boardInteraction guard
-// ---------------------------------------------------------------------------
-const isBoardHighlighted = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isHighlighted({
-    id: props.element.id,
-    name: props.element.name,
-    notation: elementNotation.value || undefined,
-  });
-});
-
-const isBoardSelected = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isSelected({
-    id: props.element.id,
-    name: props.element.name,
-    notation: elementNotation.value || undefined,
-  });
-});
-
-const isActionSelectable = computed(() => {
-  if (!boardInteraction) return false;
-  // Don't show as action-selectable if already board-selected
-  if (isBoardSelected.value) return false;
-
-  const elementRef = {
-    id: props.element.id,
-    name: props.element.name,
-    notation: elementNotation.value || undefined,
-  };
-
-  if (boardInteraction.isSelectableElement(elementRef)) return true;
-  if (boardInteraction.isDraggableSelectedElement(elementRef)) return true;
-  return false;
-});
-
-const isDragged = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isDraggedElement({
-    id: props.element.id,
-    name: props.element.name,
-    notation: elementNotation.value || undefined,
-  });
-});
-
-const isDropTarget = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isDropTarget({
-    id: props.element.id,
-    name: props.element.name,
-    notation: elementNotation.value || undefined,
-  });
-});
-
-const isDisabled = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isDisabledElement({
-    id: props.element.id,
-    name: props.element.name,
-    notation: elementNotation.value || undefined,
-  }) !== false;
-});
-
 // Keyboard/ARIA: tabindex 0 for both action-selectable and drop-target cards
 // so keyboard users can reach cards that are valid drag targets too.
+// A disabled candidate starts no drag, as a click on it chooses nothing (#1190).
+const canDrag = computed(() => isActionSelectable.value && !isDisabled.value);
+
 const isInteractiveForTabindex = computed(
   () => isActionSelectable.value || isDropTarget.value,
 );
 
 // aria-label: name + current interaction state (spec: "<name>, <state>")
 const ariaLabel = computed(() => {
-  const name = elementNotation.value || props.element.name || props.element.className;
+  const name = (props.element.attributes?.notation as string | undefined) || props.element.name || props.element.className;
   if (isDisabled.value) return `${name}, unavailable`;
   if (isDropTarget.value) return `${name}, drop target`;
-  if (isSelected.value) return `${name}, selected`;
+  if (isBoardSelected.value) return `${name}, selected`;
   if (isActionSelectable.value) return `${name}, selectable`;
   return name;
 });
@@ -231,25 +141,17 @@ watch(
 // Drag handlers
 // ---------------------------------------------------------------------------
 function handleDragStart(event: DragEvent) {
-  if (!boardInteraction || !isActionSelectable.value) {
+  if (!boardInteraction || !canDrag.value) {
     event.preventDefault();
     return;
   }
 
   setTransformAwareDragImage(event, event.currentTarget as HTMLElement);
 
-  event.dataTransfer?.setData('boardsmith/element', JSON.stringify({
-    id: props.element.id,
-    name: props.element.name,
-    notation: elementNotation.value,
-  }));
+  event.dataTransfer?.setData('boardsmith/element', JSON.stringify(elementIdentity()));
   event.dataTransfer!.effectAllowed = 'move';
 
-  boardInteraction.startDrag({
-    id: props.element.id,
-    name: props.element.name,
-    notation: elementNotation.value || undefined,
-  });
+  boardInteraction.startDrag(elementIdentity());
 }
 
 function handleDragEnd() {
@@ -271,11 +173,7 @@ function handleDrop(event: DragEvent) {
 
   event.preventDefault();
 
-  boardInteraction.triggerDrop({
-    id: props.element.id,
-    name: props.element.name,
-    notation: elementNotation.value || undefined,
-  });
+  boardInteraction.triggerDrop(elementIdentity());
 }
 
 
@@ -286,24 +184,22 @@ function handleDrop(event: DragEvent) {
     :class="[
       'card-container',
       {
-        'is-selectable': isSelectable,
-        'is-selected': isSelected,
         'action-selectable': isActionSelectable,
         'is-board-highlighted': isBoardHighlighted,
         'is-board-selected': isBoardSelected,
         'is-hidden': isHidden,
         'is-disabled': isDisabled,
-        'is-draggable': isActionSelectable,
+        'is-draggable': canDrag,
         'is-dragging': isDragged,
         'is-drop-target': isDropTarget,
         'has-image': !!(effectiveCardImage || presentationEntry?.image),
       },
     ]"
     :data-animatable="true"
-    :draggable="isActionSelectable"
+    :draggable="canDrag"
     v-bind="selectableAttrs"
     :aria-label="ariaLabel"
-    :aria-pressed="isSelected || undefined"
+    :aria-pressed="isBoardSelected || undefined"
     @click="onActivate"
     @keydown="onSelectKey"
     @dragstart="handleDragStart"
@@ -377,22 +273,6 @@ function handleDrop(event: DragEvent) {
   --card-h: calc(var(--card-w) * 1.4);
   display: inline-block;
   transition: transform var(--bsg-dur-base) var(--bsg-ease);
-}
-
-/* Selection states */
-.card-container.is-selectable {
-  cursor: pointer;
-}
-
-.card-container.is-selectable:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--bsg-shadow-sm);
-}
-
-.card-container.is-selected {
-  outline: 3px solid var(--bsg-accent);
-  outline-offset: 2px;
-  box-shadow: var(--bsg-ring);
 }
 
 /* action-selectable: Slate dashed accent outline + translucent fill (T-93-03 XSS guard) */

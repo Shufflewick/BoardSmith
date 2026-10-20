@@ -83,9 +83,9 @@ export function resolveGridSize(element: GameElement): GridResult {
   const rowCoord = element.attributes?.$rowCoord as string | undefined;
   const colCoord = element.attributes?.$colCoord as string | undefined;
   if (!rowCoord || !colCoord) {
-    return { ok: false, error: `${cantRender(element)} — declare $rowCoord/$colCoord on the Grid element` };
+    return { ok: false, error: `${cantRender(element, 'Grid')} — declare $rowCoord/$colCoord on the Grid element` };
   }
-  const error = cellCoordinateError(element, rowCoord, colCoord);
+  const error = cellCoordinateError(element, rowCoord, colCoord, 'Grid');
   if (error) return { ok: false, error };
   const children = element.children ?? [];
   const coord = (cell: GameElement, name: string) => cell.attributes![name] as number;
@@ -99,14 +99,16 @@ export function resolveGridSize(element: GameElement): GridResult {
   };
 }
 
-const cantRender = (grid: GameElement) => `Grid "${grid.name ?? grid.id}" can't render`;
+const cantRender = (board: GameElement, kind: BoardKind) => `${kind} "${board.name ?? board.id}" can't render`;
 
-/** Why a grid's cells cannot be placed, or undefined when every cell has both declared coordinates. */
-function cellCoordinateError(element: GameElement, rowCoord: string, colCoord: string): string | undefined {
+type BoardKind = 'Grid' | 'Hex board';
+
+/** Why a board's cells cannot be placed, or undefined when every cell has both declared coordinates. */
+export function cellCoordinateError(element: GameElement, first: string, second: string, kind: BoardKind): string | undefined {
   for (const child of element.children ?? []) {
-    const missing = [rowCoord, colCoord].find((name) => typeof child.attributes?.[name] !== 'number');
+    const missing = [first, second].find((name) => typeof child.attributes?.[name] !== 'number');
     if (missing) {
-      return `${cantRender(element)}: cell "${child.name ?? child.id}" has no numeric "${missing}"; give every cell numeric ${rowCoord} and ${colCoord} values`;
+      return `${cantRender(element, kind)}: cell "${child.name ?? child.id}" has no numeric "${missing}"; give every cell numeric ${first} and ${second} values`;
     }
   }
   return undefined;

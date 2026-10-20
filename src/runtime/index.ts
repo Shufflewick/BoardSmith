@@ -27,7 +27,6 @@ export {
   type UndoPolicy,
   type RandomnessPolicy,
   type ActionExecutionResult,
-  type PendingStepResult,
 } from './runner.js';
 
 // History entry types (used by callers that invoke GameRunner.replay)

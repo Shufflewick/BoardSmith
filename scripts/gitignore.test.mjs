@@ -1,12 +1,12 @@
 /**
  * Files a tool writes into the checkout for a moment must be ignored, because
- * `agent-policy thread merge` refuses to start on a dirty main and runs
- * `boardsmith test` there.
+ * `agent-policy verify` and `agent-policy merge` refuse a dirty checkout, and
+ * both run tests in it.
  *
  * Vite writes `<config>.timestamp-<n>-<hash>.mjs` beside a config file while it
  * loads it and deletes it afterwards. A test run killed at that moment leaves
- * the file behind, and until #335 that left main dirty and blocked every later
- * merge until someone removed it by hand.
+ * the file behind, and until #335 that left the checkout dirty and blocked every
+ * later merge until someone removed it by hand.
  */
 
 import { spawnSync } from 'node:child_process';

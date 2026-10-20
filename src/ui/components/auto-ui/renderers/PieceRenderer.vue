@@ -10,81 +10,48 @@
  *   #2: Single shadow on outermost .piece only — no stacking on inner elements.
  */
 
-import { computed, inject, ref, watch, type ComputedRef } from 'vue';
+import { computed, inject, ref, watch } from 'vue';
 import { resolvePieceVisual, type PieceVisual } from '../auto-ui-helpers.js';
 import { getSpriteStyle } from '../../../utils/image.js';
-import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
+import { useElementBoardState } from '../../../composables/useElementBoardState.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
 import { setTransformAwareDragImage } from '../../../composables/dragImage.js';
-import { resolvePresentation } from '../presentation.js';
-import type { PresentationOverlay } from '../presentation.js';
-import { GAME_CONTEXT_KEYS } from '../../../composables/useGameContext.js';
+import { usePresentationEntry } from '../../../composables/usePresentationEntry.js';
 import { STANDS_ON_KEY, type GameElement } from '../auto-ui-helpers.js';
 
 const props = defineProps<{
   element: GameElement;
 }>();
 
-// Board interaction for selectable/dragging state
-const boardInteraction = tryUseBoardInteraction();
+const {
+  boardInteraction,
+  identity: elementIdentity,
+  isHighlighted,
+  isSelected: isBoardSelected,
+  isActionSelectable: isCandidate,
+  isDraggableSelected,
+  isDisabled,
+  isDragged,
+} = useElementBoardState(() => props.element);
+
+// A piece can be dragged, so it also offers the auto-filled first pick to drag on.
+const isActionSelectable = computed(() => isCandidate.value || isDraggableSelected.value);
 
 // ── Core: delegate all visual logic to Phase 92 helper ───────────────────────
 const pieceVisual = computed((): PieceVisual => resolvePieceVisual(props.element));
 
-// ── Presentation overlay injection (D-04) ────────────────────────────────────
-// Resolved AFTER visibility filtering; resolvePresentation strips image/stats
-// for hidden placeholders (PRESENT-02).
-const overlay = inject(GAME_CONTEXT_KEYS.presentation, undefined) as ComputedRef<PresentationOverlay | undefined> | undefined;
-const presentationEntry = computed(() =>
-  resolvePresentation(props.element, overlay?.value)
-);
-
-// Element identity helper — passes notation from attributes (Pitfall 6).
-// Piece elements may use a notation attribute for board-ref matching.
-function elementIdentity() {
-  return {
-    id: props.element.id,
-    name: props.element.name,
-    notation: props.element.attributes?.notation as string | undefined,
-  };
-}
-
-// ── Board interaction states (all six required — CF-1: piece MUST get action-selectable) ──
-const isBoardSelected = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isSelected(elementIdentity());
-});
-
-const isActionSelectable = computed(() => {
-  if (!boardInteraction) return false;
-  if (isBoardSelected.value) return false;
-  return boardInteraction.isSelectableElement(elementIdentity());
-});
-
-const isHighlighted = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isHighlighted(elementIdentity());
-});
-
-const isDisabled = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isDisabledElement(elementIdentity()) !== false;
-});
-
-const isDragged = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isDraggedElement(elementIdentity());
-});
+const presentationEntry = usePresentationEntry(() => props.element);
 
 const standsOn = inject(STANDS_ON_KEY, () => undefined);
 
 // What a drag starts from: the piece if it is a candidate, else the candidate
-// square it stands on, whose pick the drag then starts (#943).
+// square it stands on, whose pick the drag then starts (#943). A disabled
+// candidate starts nothing, as a click on it chooses nothing (#1190).
 const dragIdentity = computed(() => {
   if (!boardInteraction) return null;
-  if (isActionSelectable.value) return elementIdentity();
+  if (isActionSelectable.value) return isDisabled.value ? null : elementIdentity();
   const square = standsOn();
-  return square && boardInteraction.isSelectableElement(square) ? square : null;
+  return square && boardInteraction.isSelectableElement(square) && !boardInteraction.isDisabledElement(square) ? square : null;
 });
 
 const canDrag = computed(() => dragIdentity.value !== null);
