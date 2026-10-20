@@ -100,11 +100,10 @@ exit 0
 export type IngestHook =
   | { state: 'no-git' }
   | { state: 'git-failed'; reason: string }
-  | {
-      state: 'outside' | 'in-project' | 'missing' | 'current' | 'stale' | 'not-executable' | 'foreign' | 'unreadable';
-      path: string;
-      absolute: string;
-    };
+  | HookAt<'outside' | 'in-project' | 'missing' | 'current' | 'stale' | 'not-executable' | 'foreign' | 'unreadable'>;
+
+/** One member per state, so a check of `state` narrows to it. */
+type HookAt<State> = State extends string ? { state: State; path: string; absolute: string } : never;
 
 /** The project's own repository, not one an inherited GIT_DIR, GIT_WORK_TREE or GIT_COMMON_DIR names (#1301). */
 function ownRepositoryEnv(): NodeJS.ProcessEnv {
@@ -124,6 +123,25 @@ function ownRepositoryEnv(): NodeJS.ProcessEnv {
  * `not-executable`, whatever its version: git skips it, printing only a hint (#1187).
  */
 export async function ingestHookState(projectPath: string): Promise<IngestHook> {
+  const place = await hookPlace(projectPath);
+  if (place.state !== 'found') return place;
+  const { path, absolute } = place;
+  let existing: string | undefined;
+  try {
+    existing = await readIfExists(absolute, (p) => fs.readFile(p, 'utf-8'));
+  } catch {
+    return { state: 'unreadable', path, absolute };
+  }
+  if (existing === undefined) return { state: 'missing', path, absolute };
+  if (!existing.includes('BoardSmith ingest synthesis')) return { state: 'foreign', path, absolute };
+  if (!(await isExecutable(absolute))) return { state: 'not-executable', path, absolute };
+  return { state: existing === INGEST_PRE_COMMIT_HOOK ? 'current' : 'stale', path, absolute };
+}
+
+/** Where git runs the project's pre-commit hook from, or the state that says it is not ours to look at. */
+async function hookPlace(
+  projectPath: string,
+): Promise<{ state: 'found'; path: string; absolute: string } | Extract<IngestHook, { state: 'no-git' | 'git-failed' | 'outside' | 'in-project' }>> {
   try {
     await fs.access(join(projectPath, '.git'));
   } catch {
@@ -140,28 +158,18 @@ export async function ingestHookState(projectPath: string): Promise<IngestHook> 
     return { state: 'git-failed', reason: error instanceof Error ? error.message : String(error) };
   }
   const absolute = resolve(project, hookPath);
-  const within = (folder: string) => {
-    const rel = relative(folder, absolute);
-    return rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
-  };
   const shown = relative(project, absolute);
   // On Windows a hook on another drive has no relative path.
   const path = isAbsolute(shown) ? absolute : shown;
-  if (!within(resolve(project, commonDir))) {
-    if (!within(project)) return { state: 'outside', path: absolute, absolute };
-    if (!(await gitSucceeds(project, ['check-ignore', '-q', '--', path], { env }))) return { state: 'in-project', path, absolute };
-  }
-  let existing: string | undefined;
-  try {
-    existing = await readIfExists(absolute, (p) => fs.readFile(p, 'utf-8'));
-  } catch {
-    return { state: 'unreadable', path, absolute };
-  }
-  if (existing === undefined) return { state: 'missing', path, absolute };
-  if (!existing.includes('BoardSmith ingest synthesis')) return { state: 'foreign', path, absolute };
-  if (!(await isExecutable(absolute))) return { state: 'not-executable', path, absolute };
-  if (existing !== INGEST_PRE_COMMIT_HOOK) return { state: 'stale', path, absolute };
-  return { state: 'current', path, absolute };
+  if (contains(resolve(project, commonDir), absolute)) return { state: 'found', path, absolute };
+  if (!contains(project, absolute)) return { state: 'outside', path: absolute, absolute };
+  if (await gitSucceeds(project, ['check-ignore', '-q', '--', path], { env })) return { state: 'found', path, absolute };
+  return { state: 'in-project', path, absolute };
+}
+
+function contains(folder: string, file: string): boolean {
+  const rel = relative(folder, file);
+  return rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel);
 }
 
 /** On Windows X_OK only checks the file exists, so a hook there is never wrongly not executable. */

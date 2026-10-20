@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { gitSucceeds } from '../lib/git-output.js';
 import { readIfExists } from '../lib/read-if-exists.js';
-import { ingestHookState, installIngestHook } from '../lib/ingest-hook.js';
+import { ingestHookState, installIngestHook, type IngestHook } from '../lib/ingest-hook.js';
 import { join, relative, resolve } from 'node:path';
 import { styleText } from 'node:util';
 import {
@@ -325,46 +325,42 @@ async function sortConfigs(projectDir: string): Promise<{ built: string | undefi
 /** The ingest hook as a finding when `--fix` can bring it up to date, or as a note when it is not ours to touch. */
 async function ingestHookCheck(projectDir: string): Promise<{ findings: DoctorFinding[]; notes: string[] }> {
   const hook = await ingestHookState(projectDir);
-  if (hook.state === 'no-git') return { findings: [], notes: [] };
+  if (hook.state === 'no-git' || hook.state === 'current') return { findings: [], notes: [] };
+  if (hook.state === 'missing' || hook.state === 'not-executable' || hook.state === 'stale') {
+    const { path } = hook;
+    return { findings: [{ kind: 'ingest-hook-not-current', from: path, to: path, fixed: false, detail: HOOK_DETAIL[hook.state] }], notes: [] };
+  }
+  return { findings: [], notes: [hookNote(hook)] };
+}
+
+const HOOK_DETAIL = {
+  missing: 'no ingest pre-commit hook is installed, so commits do not run the ingest synthesis.',
+  'not-executable': 'the ingest pre-commit hook is not executable, so git skips it.',
+  stale: 'the ingest pre-commit hook is an older version than this BoardSmith writes.',
+};
+
+/** Why doctor leaves a hook it cannot bring up to date alone, and what the designer can do instead. */
+function hookNote(hook: Extract<IngestHook, { state: 'git-failed' | 'in-project' | 'outside' | 'foreign' | 'unreadable' }>): string {
   const byHand = 'or run boardsmith ingest-gaps yourself after transcription.';
   if (hook.state === 'git-failed') {
-    return { findings: [], notes: [
-      `Could not check the ingest pre-commit hook: ${hook.reason}. Fix what git reports, then run boardsmith doctor again; ${byHand}`,
-    ] };
+    return `Could not check the ingest pre-commit hook: ${hook.reason}. Fix what git reports, then run boardsmith doctor again; ${byHand}`;
   }
-  const { state, path } = hook;
-  if (state === 'in-project') {
-    return { findings: [], notes: [
+  const { path } = hook;
+  return {
+    'in-project':
       `Left ${path} alone: git runs hooks from a folder inside this project that git does not ignore (core.hooksPath), ` +
-        `so a hook written there would be committed and shared with everyone, and the ingest hook is not installed. ` +
-        `If that folder is meant to stay out of git, add it to .gitignore and run boardsmith doctor --fix; ${byHand}`,
-    ] };
-  }
-  if (state === 'outside') {
-    return { findings: [], notes: [
+      `so a hook written there would be committed and shared with everyone, and the ingest hook is not installed. ` +
+      `If that folder is meant to stay out of git, add it to .gitignore and run boardsmith doctor --fix; ${byHand}`,
+    outside:
       `Left ${path} alone: git runs hooks from a folder outside this project, which other repositories may share, ` +
-        `so the ingest hook is not installed. Run boardsmith ingest-gaps yourself after transcription.`,
-    ] };
-  }
-  if (state === 'foreign') {
-    return { findings: [], notes: [
+      `so the ingest hook is not installed. Run boardsmith ingest-gaps yourself after transcription.`,
+    foreign:
       `Left ${path} alone: BoardSmith did not write it, so the ingest hook is not installed. To use BoardSmith's, ` +
-        `move your commands elsewhere, delete ${path} and run boardsmith doctor --fix; ${byHand}`,
-    ] };
-  }
-  if (state === 'unreadable') {
-    return { findings: [], notes: [
+      `move your commands elsewhere, delete ${path} and run boardsmith doctor --fix; ${byHand}`,
+    unreadable:
       `Left ${path} alone: could not read ${path}, so doctor cannot tell whether BoardSmith wrote it. ` +
-        `Check that you can read it, then run boardsmith doctor again; ${byHand}`,
-    ] };
-  }
-  if (state === 'current') return { findings: [], notes: [] };
-  const detail = {
-    missing: 'no ingest pre-commit hook is installed, so commits do not run the ingest synthesis.',
-    'not-executable': 'the ingest pre-commit hook is not executable, so git skips it.',
-    stale: 'the ingest pre-commit hook is an older version than this BoardSmith writes.',
-  }[state];
-  return { findings: [{ kind: 'ingest-hook-not-current', from: path, to: path, fixed: false, detail }], notes: [] };
+      `Check that you can read it, then run boardsmith doctor again; ${byHand}`,
+  }[hook.state];
 }
 
 /**
