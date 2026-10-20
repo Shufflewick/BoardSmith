@@ -100,10 +100,8 @@ export function actionForSeat(
  * the returned object is never the live mutable state a caller could
  * continue to observe mutate via subsequent selection steps (CR-01).
  *
- * Single shared serializer reused by `PickHandler` (selection-step
- * responses) and the `debug:flow-state` op — one
- * wire shape for `PendingActionState` everywhere (Pit of Success: no
- * divergent per-host copies, mirroring `serializeFlowDebugInfo()` above).
+ * The persisted form, which holds each pick's value: what a seat is shown
+ * goes through `pendingActionForSeat` instead (#1204).
  */
 export function serializePendingActionState(s: PendingActionState): SerializedPendingActionState {
   return {
@@ -132,17 +130,12 @@ export function deserializePendingState(s: SerializedPendingActionState | Record
  * pending state, which completing the action needs.
  */
 export function pendingActionForSeat(pending: Record<string, unknown>): SeatPendingAction {
-  const s = pending as unknown as SerializedPendingActionState;
+  const { collectedArgs, repeating, branchesBeforePicks: _persistedOnly, ...shown } =
+    serializePendingActionState(pending as unknown as PendingActionState);
   return {
-    actionName: s.actionName,
-    playerPosition: s.playerPosition,
-    heldPicks: Object.keys(s.collectedArgs),
-    ...(s.repeating && { repeating: { selectionName: s.repeating.selectionName, iterationCount: s.repeating.iterationCount } }),
-    currentSelectionIndex: s.currentSelectionIndex,
-    ...(s.onSelectFired && { onSelectFired: [...s.onSelectFired] }),
-    ...(s.conditionHeld !== undefined && { conditionHeld: s.conditionHeld }),
-    ...(s.picksOnOffer && { picksOnOffer: [...s.picksOnOffer] }),
-    ...(s.stalePicks && { stalePicks: [...s.stalePicks] }),
+    ...shown,
+    heldPicks: Object.keys(collectedArgs),
+    ...(repeating && { repeating: { selectionName: repeating.selectionName, iterationCount: repeating.iterationCount } }),
   };
 }
 

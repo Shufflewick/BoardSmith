@@ -511,19 +511,12 @@ export interface PlayerGameState {
  * it holds, never what they hold. The engine keeps a held element as the real
  * element, so a card picked blind would otherwise reach the seat's page whole.
  */
-export interface SeatPendingAction {
-  actionName: string;
-  playerPosition: number;
-  /** The names of the picks answered so far. */
+export type SeatPendingAction = Omit<SerializedPendingActionState, 'collectedArgs' | 'repeating' | 'branchesBeforePicks'> & {
+  /** The names of the picks that hold a value so far: answered, or bound by the follow-up that started the action. */
   heldPicks: string[];
   /** The repeating pick still taking answers, and how many it has taken. */
   repeating?: { selectionName: string; iterationCount: number };
-  currentSelectionIndex: number;
-  onSelectFired?: number[];
-  conditionHeld?: boolean;
-  picksOnOffer?: string[];
-  stalePicks?: string[];
-}
+};
 
 /**
  * Plain-object, wire-safe snapshot of `PendingActionState` (see
@@ -531,11 +524,9 @@ export interface SeatPendingAction {
  *
  * `PendingActionState.onSelectFired` is a `Set<number>`, which does not
  * survive `JSON.stringify` (`JSON.stringify(new Set([1,2]))` produces `"{}"`).
- * This type replaces it with a plain `number[]`. This is the single shared
- * serialized shape reused by `PickHandler`'s
- * selection-step responses, and `SnapshotSessionHost`/`stateless-ops.ts`'s
- * `debug:flow-state` op — no divergent wire shapes across those channels
- * (CR-01/WR-01).
+ * This type replaces it with a plain `number[]`. It is what the host persists
+ * and `PickHandler`'s selection-step responses carry; a seat is shown
+ * `SeatPendingAction` instead, which holds no pick's value (#1204).
  */
 export interface SerializedPendingActionState {
   actionName: string;

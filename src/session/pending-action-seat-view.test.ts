@@ -127,6 +127,18 @@ describe("a seat's own pending action (#1204)", () => {
     expect(JSON.stringify(pending)).not.toContain('gold');
   });
 
+  it('does not say where a pick it hid came from (#1144)', async () => {
+    const session = createHeadlessSession(definition, { ...options, playerNames: ['Ann', 'Bob'] });
+    await session.start();
+    const queen = idsByName((session.playerState(1) as unknown as { view: Node }).view).get('QD')!;
+    const step = await session.send(1, { type: 'selectionStep', player: 1, selectionName: 'card', value: queen, actionName: 'hide' });
+    if (!step.success) throw new Error(step.error);
+
+    const pending = session.playerState(1).pendingAction!;
+    expect(pending.heldPicks).toEqual(['card']);
+    expect(pending).not.toHaveProperty('branchesBeforePicks');
+  });
+
   it('is shown only to its own seat', async () => {
     const session = await fishTwoPicks();
     expect(session.playerState(2).pendingAction).toBeUndefined();
