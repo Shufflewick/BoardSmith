@@ -1,9 +1,12 @@
 import {
   chunkMdPath,
+  readChunkMdIfExists,
+  relChunkMdPath,
 } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { styleText } from 'node:util';
+import { assertBareName } from '../lib/user-name.js';
 import {
   atomicWriteFile,
   readRunLedgerState,
@@ -319,11 +322,86 @@ export async function recomputeRepairGatePostRepair(input: {
 }): Promise<RepairGate> {
   const { projectDir, slug, stale, status } = input;
 
-  const drift = await driftCheckCommand({ project: projectDir, json: true });
+  const drift = await driftCheckCommand({ project: projectDir, quiet: true });
   const chunkDrift = drift.chunks.find((c) => c.chunk === slug);
   const driftState = chunkDrift?.state ?? 'unknown';
 
   return computeRepairGate({ status, stale, driftState });
+}
+
+// -------------------------------------------------------------------------------------------
+// #838 — the post-repair helpers as commands `verify/repair-dispatch.md` calls
+// -------------------------------------------------------------------------------------------
+
+/**
+ * `boardsmith verify-repair-round` — opens the next round of `episode` in a chunk's CHUNK.md by
+ * appending its `### Audit Round N` heading, or reports `triage` and writes nothing once that
+ * episode's budget is spent. The episode is passed in, not re-derived, because CHUNK.md alone
+ * cannot tell a fourth round of this pass from the first round of a new one.
+ */
+export async function verifyRepairRoundCommand(options: {
+  project?: string;
+  chunk: string;
+  episode: number;
+  json?: boolean;
+}): Promise<VerifyEpisodeRoundPlan> {
+  assertBareName('--chunk', options.chunk, "Pass the stale chunk's slug, the name of its directory under design/chunks/.");
+  const projectDir = resolve(options.project ?? process.cwd());
+  const chunkFile = chunkMdPath(projectDir, options.chunk);
+
+  const chunkMd = await readChunkMdIfExists(projectDir, options.chunk);
+  if (chunkMd === undefined) {
+    throw new Error(`Chunk "${options.chunk}" has no ${relChunkMdPath(options.chunk)} — check the --chunk slug.`);
+  }
+
+  const plan = planVerifyEpisodeRound(chunkMd, options.episode);
+  if (plan.disposition === 'round') await writeAppendedAuditRound(chunkFile, chunkMd, plan.heading);
+
+  if (options.json) {
+    console.log(JSON.stringify(plan, null, 2));
+  } else if (plan.disposition === 'round') {
+    console.log(styleText('green', `✓ ${options.chunk}: opened ${plan.heading}`));
+  } else {
+    console.log(styleText('yellow', `⚠ ${options.chunk}: ${plan.reason}`));
+  }
+  return plan;
+}
+
+/**
+ * `boardsmith verify-repair-gate` — re-derives one stale chunk's repair gate from post-repair
+ * code state, once its verify-episode rounds are closed. Read-only.
+ */
+export async function verifyRepairGateCommand(options: {
+  project?: string;
+  runId?: string;
+  chunk: string;
+  json?: boolean;
+}): Promise<RepairGate> {
+  const projectDir = resolve(options.project ?? process.cwd());
+
+  const impactStatus = await verifyImpactStatusCommand({ project: projectDir, runId: options.runId, quiet: true });
+  const entry = impactStatus.entries.find((e) => e.slug === options.chunk);
+  if (entry === undefined) {
+    throw new Error(
+      `Chunk "${options.chunk}" is not in run ${impactStatus.runId}'s impact map — run ` +
+        '`boardsmith verify-impact-status` to see which chunks it covers.',
+    );
+  }
+
+  const gate = await recomputeRepairGatePostRepair({
+    projectDir,
+    slug: entry.slug,
+    stale: entry.stale,
+    status: entry.status,
+  });
+
+  if (options.json) {
+    console.log(JSON.stringify(gate, null, 2));
+  } else {
+    console.log(styleText('green', `✓ ${options.chunk}: ${gate.disposition}`));
+    console.log(`  ${gate.reason}`);
+  }
+  return gate;
 }
 
 // -------------------------------------------------------------------------------------------
@@ -355,8 +433,8 @@ export interface VerifyRepairStatusResult {
  * plans its next verify-episode audit round (`resolveVerifyEpisodeNumber` +
  * `planVerifyEpisodeRound`, decision 17). This command computes and reports only — it never
  * dispatches a lens, never writes a `### Audit Round` heading, and never re-derives a repair
- * gate; those actions are `verify/repair-dispatch.md`'s orchestration, driven by an agent reading
- * each row this command reports (the same "CLI computes, subagent judges" split CHECK-01 already
+ * gate; `verify-repair-round` and `verify-repair-gate` do those last two, called by
+ * `verify/repair-dispatch.md`'s orchestration, an agent reading each row this command reports (the same "CLI computes, subagent judges" split CHECK-01 already
  * holds). Findings exit 0 — only a tool failure (unknown run, no chunks/ tree) is non-zero.
  */
 export async function verifyRepairStatusCommand(

@@ -15,6 +15,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import { defineComponent, h, nextTick } from 'vue';
 import { flushPromises } from '@vue/test-utils';
 import { useToast } from '../composables/useToast.js';
+import { ErrorCode } from '../../types/protocol.js';
 import PlayShell from './PlayShell.vue';
 import ControlsMenu from './ControlsMenu.vue';
 import {
@@ -88,7 +89,7 @@ describe('GameShell shows a host refusal of a demo control (#859)', () => {
   it('reads an op the host does not know as a control the table does not support', async () => {
     const { wrapper, answer } = await mountDemoTable();
     await wrapper.find('[aria-label="Step forward one move"]').trigger('click');
-    answer('demo-control', { success: false, error: "Unknown server op: 'demo-control'" });
+    answer('demo-control', { success: false, error: "Unknown server op: 'demo-control'", errorCode: ErrorCode.UNKNOWN_OP });
     await flushPromises();
     expect(shownToasts()).toEqual([
       ['error', 'This table does not support demo controls.'],

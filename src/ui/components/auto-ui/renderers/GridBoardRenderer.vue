@@ -13,14 +13,12 @@
  * boardInteraction.selectElement() on activation (same as click).
  */
 
-import { computed, watch, watchEffect, ref, inject, nextTick, type ComputedRef } from 'vue';
+import { computed, watch, watchEffect, ref, nextTick } from 'vue';
 import { resolveGridSize } from '../auto-ui-helpers.js';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import { useSelectableGrid } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
-import { resolvePresentation } from '../presentation.js';
-import type { PresentationOverlay } from '../presentation.js';
-import { GAME_CONTEXT_KEYS } from '../../../composables/useGameContext.js';
+import { usePresentationEntry } from '../../../composables/usePresentationEntry.js';
 import { boardCellStates } from './board-cell-states.js';
 import { toAlgebraicNotation } from '../../../composables/useGameGrid.js';
 import type { GameElement } from '../auto-ui-helpers.js';
@@ -76,13 +74,7 @@ const rowLabels = computed(() => {
   return declared ?? Array.from({ length: gridResult.value.rows }, (_, i) => String(i));
 });
 
-// Presentation overlay injection (D-04)
-// GridBoardRenderer is a container — overlay affects the board header label.
-// Individual cells are rendered via ElementRenderer → their renderer handles their own overlay.
-const overlay = inject(GAME_CONTEXT_KEYS.presentation, undefined) as ComputedRef<PresentationOverlay | undefined> | undefined;
-const presentationEntry = computed(() =>
-  resolvePresentation(props.element, overlay?.value)
-);
+const presentationEntry = usePresentationEntry(() => props.element);
 
 // Display label for board header — overlay label wins, then engine fallback
 const displayLabel = computed(

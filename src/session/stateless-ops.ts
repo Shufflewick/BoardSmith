@@ -12,7 +12,7 @@
 import type { Game, GameClass, TutorialDefinition, Annotation, FlowState, FollowUpOffer } from '../engine/index.js';
 import type { HistoryEntry } from '../engine/action/types.js';
 import { ErrorCode, type ChoiceWithRefs, type ValidElement } from '../types/protocol.js';
-import { canSeatAct, availableActionsForSeat, flowBoundaryKey, toPublicFlowState, PlayerFacingError } from '../engine/index.js';
+import { canSeatAct, availableActionsForSeat, flowBoundaryKey, PlayerFacingError } from '../engine/index.js';
 import { withDevDetail } from '../engine/action/rules-error.js';
 import { dueSeatOffers, describeRefused } from '../engine/flow/seat-activity.js';
 import type { BoundaryKeyState } from '../engine/index.js';
@@ -43,6 +43,8 @@ import { declaredGameOptionsOf } from './game-option-selection.js';
 import {
   offerFollowUp,
   buildPlayerState,
+  buildViews,
+  buildSpectatorView,
   buildActionTraces,
   computeElementDiff,
   type ElementChanges,
@@ -349,7 +351,7 @@ export interface OpFailure {
   /**
    * Structured error code. A failure forwarded from the runner or the pick
    * handler carries the code they gave (e.g. NOT_YOUR_TURN, ENGINE_ERROR,
-   * CHOICES_EVALUATION_ERROR), and a code is never invented for one that gave
+   * CHOICES_EVALUATION_ERROR for a pick's refusal), and a code is never invented for one that gave
    * none. The engine's own protocol refusals carry their own code
    * (STALE_SUBMISSION), and an op that crashed carries ENGINE_ERROR (#1045).
    */
@@ -637,29 +639,6 @@ type BotFlowState = {
     availableActions: string[];
   }>;
 };
-
-function buildViews(runner: GameRunner, playerCount: number): unknown[] {
-  const flowState = runner.getFlowState();
-  return Array.from({ length: playerCount }, (_, i) => ({
-    flowState: toPublicFlowState(flowState, i + 1),
-    state: buildPlayerState(runner, [], i + 1, { includeActionMetadata: true }),
-  }));
-}
-
-// Public observer view. Position 0 is the spectator sentinel (see utils.ts:418):
-// no player has seat 0, so only mode:'all' elements are visible — mode:'owner'/
-// 'hidden' element contents are omitted. includeActionMetadata:false ensures
-// spectators receive no action prompts. Built from `runner` (the caller's
-// current runner, whether freshly constructed by `handleStart` or restored via
-// `runnerFromSnapshot`/`GameRunner.fromSnapshot`) — zone visibility now
-// round-trips through serialization (SEC-01/F1/F7: `Space.toJSON`/
-// `_restoreZoneVisibility`), so both cases redact identically.
-function buildSpectatorView(runner: GameRunner): unknown {
-  return {
-    flowState: toPublicFlowState(runner.getFlowState(), 0),
-    state: buildPlayerState(runner, [], 0, { includeActionMetadata: false }),
-  };
-}
 
 function stateEnvelope(runner: GameRunner, playerCount: number): StateEnvelope {
   // getSnapshot() records the op's checkpoint, so it runs before any view is

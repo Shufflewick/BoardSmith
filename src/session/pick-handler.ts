@@ -58,16 +58,18 @@ function evaluateCandidates(
     return { candidates: executor.getChoices(selection, player, args) as AnnotatedCandidate[] };
   } catch (error) {
     // The shared crash handling (#1045): a PlayerFacingError travels, anything else is logged and replaced.
-    if (!(error instanceof PlayerFacingError)) {
-      console.error(`[BoardSmith] Evaluating '${selection.name}' of action '${actionName}' failed:`, error);
+    if (error instanceof PlayerFacingError) {
+      return {
+        refusal: {
+          success: false,
+          error: error.message,
+          errorCode: selection.type === 'choice' ? ErrorCode.CHOICES_EVALUATION_ERROR : ErrorCode.ELEMENTS_EVALUATION_ERROR,
+        },
+      };
     }
-    return {
-      refusal: {
-        success: false,
-        error: error instanceof PlayerFacingError ? error.message : withDevDetail(rulesErrorSentence(actionName), error),
-        errorCode: selection.type === 'choice' ? ErrorCode.CHOICES_EVALUATION_ERROR : ErrorCode.ELEMENTS_EVALUATION_ERROR,
-      },
-    };
+    console.error(`[BoardSmith] Evaluating '${selection.name}' of action '${actionName}' failed:`, error);
+    // A crash is ENGINE_ERROR, as on every other route (#1141), so a caller tells it from a refusal (#1156).
+    return { refusal: { success: false, error: withDevDetail(rulesErrorSentence(actionName), error), errorCode: ErrorCode.ENGINE_ERROR } };
   }
 }
 

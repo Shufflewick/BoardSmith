@@ -49,6 +49,9 @@ export enum ErrorCode {
   // Action errors
   ACTION_NOT_FOUND = 'ACTION_NOT_FOUND',
   ACTION_NOT_AVAILABLE = 'ACTION_NOT_AVAILABLE',
+  /** The host has no handler for this op at all (#1046): a table without
+   *  teaching support, say. Clients recognise it by this code, never the text. */
+  UNKNOWN_OP = 'UNKNOWN_OP',
   // Pick errors
   INVALID_PICK = 'INVALID_PICK',
   PICK_NOT_FOUND = 'PICK_NOT_FOUND',
@@ -68,8 +71,10 @@ export enum ErrorCode {
    *  the message. */
   STALE_SUBMISSION = 'STALE_SUBMISSION',
 
-  // Evaluation errors
+  // Evaluation refusals
+  /** A pick's `choices()` threw a PlayerFacingError: the rules saying no. A crash there is ENGINE_ERROR (#1156). */
   CHOICES_EVALUATION_ERROR = 'CHOICES_EVALUATION_ERROR',
+  /** A pick's `elements()` threw a PlayerFacingError: the rules saying no. A crash there is ENGINE_ERROR (#1156). */
   ELEMENTS_EVALUATION_ERROR = 'ELEMENTS_EVALUATION_ERROR',
 
   // Engine/execution errors
