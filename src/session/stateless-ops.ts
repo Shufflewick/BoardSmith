@@ -351,7 +351,7 @@ export interface OpFailure {
   /**
    * Structured error code. A failure forwarded from the runner or the pick
    * handler carries the code they gave (e.g. NOT_YOUR_TURN, ENGINE_ERROR,
-   * CHOICES_EVALUATION_ERROR), and a code is never invented for one that gave
+   * CHOICES_EVALUATION_ERROR for a pick's refusal), and a code is never invented for one that gave
    * none. The engine's own protocol refusals carry their own code
    * (STALE_SUBMISSION), and an op that crashed carries ENGINE_ERROR (#1045).
    */

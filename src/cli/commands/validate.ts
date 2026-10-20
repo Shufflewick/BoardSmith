@@ -15,6 +15,7 @@ import {
   ASSET_PATH_KEYS,
 } from '../lib/config-schema.js';
 import { agentsBlockProblems } from '../lib/agent-roles.js';
+import { mutationBlockProblems } from '../lib/mutation-budget.js';
 import {
   MAX_TABLE_RULES_ENCODED_BYTES,
   MAX_UPLOAD_ZIP_BYTES,
@@ -270,6 +271,7 @@ export function checkMetadataIssues(config: Record<string, unknown>): string[] {
   // Which agent each role is dispatched as (#454): a wrong mapping would send work to an agent
   // type the project never meant.
   issues.push(...agentsBlockProblems(config.agents));
+  issues.push(...mutationBlockProblems(config.mutation));
 
   // Unknown top-level keys — did-you-mean suggestions from the shared
   // allowed-key set (CLIX-02). Removed/renamed keys get pointed migration

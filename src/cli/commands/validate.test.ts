@@ -251,6 +251,13 @@ describe('validate.ts checkMetadataIssues', () => {
     ]);
   });
 
+  it('passes a "mutation" budget, and refuses one too small for its trials (#955)', () => {
+    expect(checkMetadataIssues({ ...validConfig(), mutation: { trials: 2, workers: 8 } })).toEqual([]);
+    expect(checkMetadataIssues({ ...validConfig(), mutation: { trials: 2, workers: 1 } })).toEqual([
+      '"mutation.workers" (1) must be at least "mutation.trials" (2), so every trial running at once has a test worker. Raise workers or lower trials.',
+    ]);
+  });
+
   // The manifest no longer describes UIs — src/ui/uis.ts does. A leftover `ui`
   // key is a migration signal, so it gets a pointed message rather than a
   // generic did-you-mean (matching the playerCount/categories precedent).

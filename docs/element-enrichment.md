@@ -117,18 +117,24 @@ This can happen if the element was removed after selection metadata was built.
 
 `findElement(gameView, { id })` is still available for cases outside the action flow:
 
+<!-- typecheck: game src/ui/find.ts -->
 ```typescript
-import { findElement } from 'boardsmith/ui';
+import { findElement, type GameViewElement } from 'boardsmith/ui';
 
 // Finding container elements for animations
-const deck = findElement(gameView, { id: deckId });
+export function findDeck(gameView: GameViewElement, deckId: number) {
+  return findElement(gameView, { id: deckId });
+}
 
 // Finding related elements not in a selection
-const parentContainer = findElement(gameView, { id: parentId });
+export function findParent(gameView: GameViewElement, parentId: number) {
+  return findElement(gameView, { id: parentId });
+}
 ```
 
 ## Type Imports
 
+<!-- typecheck: game src/ui/types.ts -->
 ```typescript
 import type {
   UseActionControllerReturn,

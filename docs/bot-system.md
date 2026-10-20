@@ -52,9 +52,21 @@ Seat numbers are 1-indexed everywhere: `--bot 1` makes the first seat a bot, and
 
 ### Programmatic Usage
 
+The examples on this page use `MyGame`, a game class like this one. A real game also registers its elements, actions and flow; [Getting Started](./getting-started.md) builds one.
+
+<!-- typecheck: game src/game.ts -->
 ```typescript
-import { createBot, parseBotLevel } from 'boardsmith/bot';
+import { Game } from 'boardsmith';
+
+export class MyGame extends Game<MyGame> {}
+```
+
+<!-- typecheck: game src/play.ts -->
+```typescript
+import { createBot } from 'boardsmith/bot';
 import { MyGame } from './game.js';
+
+const game = new MyGame({ playerCount: 2 });
 
 // Create a bot for player 1
 const bot = createBot(
@@ -65,12 +77,14 @@ const bot = createBot(
   'hard'                   // Difficulty level or iteration count
 );
 
-// Get the bot's move
+// Get the bot's move: null when its view of the game offers it nothing to search
 const move = await bot.play();
-console.log(`Bot plays: ${move.action}`, move.args);
+if (move) {
+  console.log(`Bot plays: ${move.action}`, move.args);
 
-// Execute the move
-game.continueFlow(move.action, move.args, 1);
+  // Execute the move
+  game.continueFlow(move.action, move.args, 1);
+}
 ```
 
 ## Custom Objectives
@@ -79,36 +93,36 @@ For games where win/loss isn't sufficient guidance, you can define objectives th
 
 ### Defining Objectives
 
+<!-- typecheck: game src/objectives.ts -->
 ```typescript
-import type { BotStrategy } from 'boardsmith/bot';
-import type { Game } from 'boardsmith';
+import { Piece, Space, type Game } from 'boardsmith';
+import { createBot, type BotStrategy } from 'boardsmith/bot';
+import { MyGame } from './game.js';
+
+const piecesOf = (g: Game, seat: number) => g.all(Piece).filter((piece) => piece.player?.seat === seat);
 
 const myGameBotStrategy: BotStrategy = {
   objectives: (game: Game, playerIndex: number) => ({
     // Positive weight = good for the player
     controlCenter: {
       checker: (g, p) => {
-        const center = g.board.cells.filter(c => c.isCentral);
-        const playerPieces = center.filter(c => c.piece?.player?.seat === p);
-        return Math.min(playerPieces.length / 2, 1); // partial credit for one piece
+        const inCenter = g.first(Space, 'center')?.all(Piece).filter((piece) => piece.player?.seat === p) ?? [];
+        return Math.min(inCenter.length / 2, 1); // partial credit for one piece
       },
       weight: 0.3,
     },
 
     // Negative weight = bad for the player
-    exposedKing: {
-      checker: (g, p) => {
-        const king = g.players.get(p)!.king;
-        return king.isExposed() ? 1 : 0;
-      },
+    lastPiece: {
+      checker: (g, p) => (piecesOf(g, p).length === 1 ? 1 : 0),
       weight: -0.5,
     },
 
     // Material advantage
     materialAdvantage: {
       checker: (g, p) => {
-        const myPieces = g.pieces.filter(pc => pc.player?.seat === p);
-        const oppPieces = g.pieces.filter(pc => pc.player?.seat !== p);
+        const myPieces = piecesOf(g, p);
+        const oppPieces = g.all(Piece).filter((piece) => piece.player !== undefined && piece.player.seat !== p);
         return myPieces.length > oppPieces.length ? 1 : 0;
       },
       weight: 0.4,
@@ -117,7 +131,8 @@ const myGameBotStrategy: BotStrategy = {
 };
 
 // Use with createBot
-const bot = createBot(game, MyGame, 'my-game', 1, 'medium', myGameBotStrategy);
+const game = new MyGame({ playerCount: 2 });
+export const bot = createBot(game, MyGame, 'my-game', 1, 'medium', myGameBotStrategy);
 ```
 
 ### Objective Evaluation
@@ -139,9 +154,21 @@ A playout that reaches the end of the game scores 1 for a win, 0 for a loss and
 
 A simplified version of the Checkers game's `bot.ts`:
 
+<!-- typecheck: game src/checkers-bot.ts -->
 ```typescript
+import { Piece, Space, type Game } from 'boardsmith';
 import type { BotStrategy } from 'boardsmith/bot';
-import type { Game } from 'boardsmith';
+
+class CheckerPiece extends Piece {
+  isKing = false;
+}
+
+// Seats are 1-indexed: in a two-player game the opponent of 1 is 2.
+const opponentOf = (seat: number) => (seat === 1 ? 2 : 1);
+const countPieces = (g: Game, seat: number) => g.all(CheckerPiece).filter((p) => p.player?.seat === seat).length;
+const countKings = (g: Game, seat: number) =>
+  g.all(CheckerPiece).filter((p) => p.player?.seat === seat && p.isKing).length;
+const getCenterCells = (g: Game) => g.all(Space).filter((cell) => cell.name?.startsWith('center') === true);
 
 export const checkersBotStrategy: BotStrategy = {
   objectives: (game: Game, playerIndex: number) => ({
@@ -149,7 +176,7 @@ export const checkersBotStrategy: BotStrategy = {
     morePieces: {
       checker: (g, p) => {
         const myPieces = countPieces(g, p);
-        const oppPieces = countPieces(g, 1 - p);
+        const oppPieces = countPieces(g, opponentOf(p));
         return myPieces > oppPieces ? 1 : 0;
       },
       weight: 0.5,
@@ -167,9 +194,8 @@ export const checkersBotStrategy: BotStrategy = {
     // Controlling the center is good
     centerControl: {
       checker: (g, p) => {
-        const centerCells = getCenterCells(g);
-        const myPiecesInCenter = centerCells.filter(
-          c => c.piece?.player?.seat === p
+        const myPiecesInCenter = getCenterCells(g).filter((cell) =>
+          cell.all(CheckerPiece).some((piece) => piece.player?.seat === p),
         );
         return myPiecesInCenter.length >= 2 ? 1 : 0;
       },
@@ -187,8 +213,8 @@ the game's `BotStrategy`, and the host's roster says which seats a bot plays.
 `createHeadlessSession` takes it as its third argument:
 
 ```typescript
-import { createHeadlessSession } from 'boardsmith/testing';
-import { gameDefinition } from './index.js'; // its `bot` field is myGameBotStrategy
+// createHeadlessSession comes from 'boardsmith/testing', and gameDefinition from
+// your src/rules/index.ts: its `bot` field is myGameBotStrategy
 
 const session = createHeadlessSession(
   gameDefinition,
@@ -366,7 +392,7 @@ function nearBooks(hand: Hand): number {
 When a move is legal to offer but cannot be resolved, say so:
 
 ```typescript
-import { NotSimulableError } from 'boardsmith';
+// NotSimulableError comes from 'boardsmith'
 
 Action.create('travel')
   .chooseFrom('direction', { choices: (ctx) => ctx.player.here.exits })
@@ -556,7 +582,7 @@ sampler through the same consistency check the search runs, without standing up 
 `MCTSBot`:
 
 ```typescript
-import { applyDeterminization } from 'boardsmith/bot';
+// applyDeterminization comes from 'boardsmith/bot'
 
 // Refused by name if the sampler writes anything this seat can see.
 applyDeterminization(sandboxForSeat(1), 1, myDeterminize, () => 0.5);

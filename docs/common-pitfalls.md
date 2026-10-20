@@ -800,7 +800,7 @@ Module-level variables don't survive across these boundaries.
 ### The Solution: Use `actionTempState()`
 
 ```typescript
-import { Action, actionTempState } from 'boardsmith';
+// Action and actionTempState come from 'boardsmith'
 
 Action.create('explore')
   .chooseElement('sector', { elementClass: Sector })
@@ -1155,9 +1155,8 @@ for (const d of unavailable) {
 ### In Tests
 
 ```typescript
-import { createTestGame } from 'boardsmith/testing';
-
-const testGame = await createTestGame(gameDefinition, { playerCount: 2 });
+// createTestGame comes from 'boardsmith/testing'; MyGame is your game class
+const testGame = createTestGame(MyGame, { playerCount: 2 });
 
 // Debug why action isn't available
 const debug = testGame.game.debugActionAvailability('attack', testGame.game.getPlayer(1)!);
@@ -1225,12 +1224,13 @@ If an element belongs to an opponent, its children may be hidden:
 Check with `isHiddenPlaceholder` (from `boardsmith/ui`) when iterating children.
 It is the same check the built-in renderers use, and it reads the marker where
 the engine puts it, in `attributes`:
+<!-- typecheck: game src/ui/equipment.ts -->
 ```typescript
-import { isHiddenPlaceholder } from 'boardsmith/ui';
+import { isHiddenPlaceholder, type GameViewElement } from 'boardsmith/ui';
 
-const visibleEquipment = merc.children?.filter(c =>
-  c.className === 'Equipment' && !isHiddenPlaceholder(c)
-);
+export function visibleEquipment(merc: GameViewElement): GameViewElement[] {
+  return (merc.children ?? []).filter((c) => c.className === 'Equipment' && !isHiddenPlaceholder(c));
+}
 ```
 
 ### Debugging Checklist
@@ -1691,7 +1691,7 @@ loop<MercGame>({
 Use `stateAwareLoop()` to automatically check for pending state before exiting:
 
 ```typescript
-import { stateAwareLoop } from 'boardsmith';
+// stateAwareLoop comes from 'boardsmith'
 
 stateAwareLoop<MercGame>({
   name: 'combat-action-loop',
@@ -1882,25 +1882,43 @@ Action.create('assignToSquad')
 
 If drag-drop isn't working with the automatic ActionPanel integration, you can use the simpler `drag()` and `drop()` helpers which give you more control:
 
+<!-- typecheck: board -->
 ```vue
-<script setup>
-import { useDragDrop } from 'boardsmith/ui';
+<script setup lang="ts">
+import { computed } from 'vue';
+import { findElements, useDragDrop, type TableBoardProps } from 'boardsmith/ui';
 import 'boardsmith/ui/animation/drag-drop.css';
 
+const props = defineProps<TableBoardProps>();
 const { drag, drop } = useDragDrop();
+const controller = props.actionController;
 
-const canDragCard = (cardId) =>
-  currentAction.value === 'moveCard' &&
-  currentPick.value?.name === 'card' &&
-  isCardSelectable(cardId);
+const cards = computed(() => findElements(props.gameView, { className: 'Card' }));
+const zones = computed(() => findElements(props.gameView, { className: 'Zone' }));
+
+const canDragCard = (cardId: number) =>
+  controller.currentAction.value === 'moveCard' &&
+  controller.currentPick.value?.name === 'card' &&
+  controller.validElements.value.some((valid) => valid.id === cardId);
 </script>
 
 <template>
   <div
     v-for="card in cards"
+    :key="card.id"
     v-bind="drag({ id: card.id }, { when: canDragCard(card.id) }).props"
     :class="drag({ id: card.id }, { when: canDragCard(card.id) }).classes"
-  />
+  >
+    {{ card.name }}
+  </div>
+  <div
+    v-for="zone in zones"
+    :key="zone.id"
+    v-bind="drop({ id: zone.id }).props"
+    :class="drop({ id: zone.id }).classes"
+  >
+    {{ zone.name }}
+  </div>
 </template>
 ```
 

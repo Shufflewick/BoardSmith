@@ -61,33 +61,37 @@ function tsxApiUrl(): string {
   }
 }
 
+/** One benchmark to run: a weight set and the games it plays. */
+export interface BenchmarkJob {
+  weights: ObjectiveWeight[];
+  config: BenchmarkConfig;
+}
+
 /**
  * Progress callback for parallel benchmarks
  */
 export type BenchmarkProgressCallback = (completed: number, total: number) => void;
 
 /**
- * Run benchmarks for a population of objective sets in parallel.
+ * Run benchmark jobs in parallel, one job per worker at a time.
  *
  * @param gameModulePath - Absolute path to the compiled game module (.js)
  * @param gameType - Game type identifier
- * @param population - Array of weight sets (each represents one individual)
- * @param config - Benchmark configuration (game count, MCTS iterations, etc.)
+ * @param jobs - Each weight set to benchmark, with its own benchmark configuration
  * @param options - Worker pool configuration
  * @param onProgress - Optional progress callback
- * @returns Array of fitness values in same order as population
+ * @returns Array of win rates in the same order as `jobs`
  * @throws When a candidate's benchmark fails or a worker stops unexpectedly; the
  *   remaining workers are terminated, so a failure is never scored as fitness 0.
  */
 export async function runParallelBenchmarks(
   gameModulePath: string,
   gameType: string,
-  population: ObjectiveWeight[][],
-  config: BenchmarkConfig,
+  jobs: BenchmarkJob[],
   options?: ParallelBenchmarkOptions,
   onProgress?: BenchmarkProgressCallback
 ): Promise<number[]> {
-  const populationSize = population.length;
+  const populationSize = jobs.length;
 
   if (populationSize === 0) {
     return [];
@@ -106,7 +110,7 @@ export async function runParallelBenchmarks(
   const workQueue: number[] = [];
   for (let i = 0; i < populationSize; i++) {
     // Skip empty objective sets (fitness = 0)
-    if (population[i].length === 0) {
+    if (jobs[i].weights.length === 0) {
       fitnesses[i] = 0;
       completedCount++;
     } else {
@@ -240,8 +244,8 @@ export async function runParallelBenchmarks(
         individualIndex: index,
         gameModulePath,
         gameType,
-        weights: population[index],
-        config,
+        weights: jobs[index].weights,
+        config: jobs[index].config,
       };
 
       workerState.worker.postMessage(request);

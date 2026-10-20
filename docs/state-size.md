@@ -300,7 +300,7 @@ or step) for an upper bound.
 Do not infer. Assert it in CI, against the budget your host publishes:
 
 ```ts
-import { createTestGame, measureSnapshotSize, assertStateBudget } from 'boardsmith/testing';
+// createTestGame, measureSnapshotSize and assertStateBudget come from 'boardsmith/testing'
 
 it('fits the host state budget for a full game', () => {
   const game = createTestGame(MyGame, { playerCount: 8 });
