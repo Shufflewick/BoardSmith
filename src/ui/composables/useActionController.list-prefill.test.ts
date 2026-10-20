@@ -29,6 +29,10 @@ const metadata: Record<string, EnrichedActionMetadata> = {
     name: 'pickOne', prompt: 'Pick one',
     selections: [{ name: 'one', type: 'choice', prompt: 'Which one?', choices: XYZ }],
   },
+  pickRepeat: {
+    name: 'pickRepeat', prompt: 'Pick again',
+    selections: [{ name: 'again', type: 'choice', prompt: 'Which again?', choices: XYZ, repeat: { hasOnEach: false } }],
+  },
 };
 
 async function prefilled(action: string, prefill: Record<string, unknown>, autoExecute = true) {
@@ -122,6 +126,12 @@ describe('a prefill the pick refuses, said in the pick\'s own words (#1298)', ()
     expect(controller.lastError.value).toMatch(/^Cannot prefill "Which one\?": .*takes one/);
   });
 
+  it("refuses a value no choice of a repeating pick names, though the server judges that pick's steps", async () => {
+    const { sendAction, controller } = await prefilled('pickRepeat', { again: 'nope' });
+    expect(sendAction).not.toHaveBeenCalled();
+    expect(controller.lastError.value).toMatch(/^Cannot prefill "Which again\?" with "nope"\. Pick one of: X, Y, Z\.$/);
+  });
+
   it('says a whole choice was given where its value was meant', async () => {
     const { controller } = await prefilled('pickOne', { one: { value: 'x', display: 'X' } });
     expect(controller.lastError.value).toMatch(/Did you mean to pass choice\.value/);
@@ -132,6 +142,13 @@ describe('a list fill the pick refuses by its count or its repeats (#1298)', () 
   it('refuses a repeated entry in a set', async () => {
     const { controller } = await prefilled('pickMany', {}, false);
     const result = await controller.fill('many', ['x', 'x']);
+    expect(result.valid).toBe(false);
+    expect(result.error).toMatch(/more than once/);
+  });
+
+  it('counts two spellings of one choice as a repeat', async () => {
+    const { controller } = await prefilled('pickMany', {}, false);
+    const result = await controller.fill('many', ['x', 'X']);
     expect(result.valid).toBe(false);
     expect(result.error).toMatch(/more than once/);
   });
