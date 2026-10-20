@@ -531,14 +531,13 @@ interface Runner {
   /**
    * With `bail`, a mutant's run stops after a confirmed test failure, including running workers. With
    * `coverage`, each test file writes which game code it ran into that directory (`readCoverage`);
-   * with `reach`, which project files its worker loaded (`readReach`). With `test`, only the test of
-   * exactly that full name runs.
+   * with `reach`, which project files its worker loaded (`readReach`).
    */
   run(
     scope: RunScope,
     mutant: { absPath: string; source: string } | null,
     timeoutMs: number,
-    options?: { bail?: boolean; coverage?: string; reach?: string; test?: string },
+    options?: { bail?: boolean; coverage?: string; reach?: string },
   ): Promise<RunResult>;
 }
 
@@ -694,10 +693,6 @@ async function installedVitestMajor(projectDir: string): Promise<number> {
   return Number(major);
 }
 
-/** Vitest's arguments that run only the test whose full name is exactly `test`, or none. */
-const exactTestArgs = (test: string | undefined) =>
-  test === undefined ? [] : ['--testNamePattern', `^${test.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`];
-
 /** A reported file's manifest path, else its project path when the run asked for it; undefined for a file the run is not about. */
 function pathInRun(projectDir: string, byRealPath: ReadonlyMap<string, string>, scope: RunScope): (realPath: string) => string | undefined {
   const inScope = scope === 'whole-suite' ? undefined : new Set(scope.map((f) => realpathSync(f.absPath)));
@@ -749,7 +744,6 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
         '--root', projectDir,
         '--config', configPath,
         ...(options.bail ? ['--bail=1'] : []),
-        ...exactTestArgs(options.test),
         ...(scope === 'whole-suite'
           ? []
           : scope.map((f) => relative(projectDir, realpathSync(f.absPath)).split(sep).join('/'))),
@@ -1285,8 +1279,8 @@ async function greenRunner(runner: Runner, projectDir: string, log: (line: strin
 
 /**
  * Runs `mutant` against every test file that loads its file, stopping at the first failure; `unreached`
- * when none does. With a `hint` (#954) whose test passed in the unmutated run and is one of those, that
- * test runs alone first, and only its own assertion failing kills the mutant; anything else (a pass, a
+ * when none does. With a `hint` (#954) whose test passed in the unmutated run and is in one of those, its
+ * file runs alone first, and only that test's own assertion failing kills the mutant; anything else (a pass, a
  * file that fails to load, a time-out) goes on to the full run, so a survivor still runs every test.
  * `killer` is the test that failed on its own assertion, for the next run's hint.
  */
@@ -1304,7 +1298,10 @@ async function runMutant(
   return { outcome: suiteNoticed(result) ? 'killed' : 'survived', ...(killer ? { killer: { file: killer.path, test: killer.fullName } } : {}) };
 }
 
-/** Whether `hint`'s test, one of `tests` that passed unmutated, fails on its own assertion when run alone under `mutant`. */
+/**
+ * Whether `hint`'s test, one of `tests` that passed unmutated, fails on its own assertion when its file runs alone under
+ * `mutant`. The whole file runs, since the test passed only after the tests before it in its file.
+ */
 async function hintKills(
   { runner, projectDir, timeoutMs, passed }: Omit<GreenRunner, 'testsLoading'>,
   mutant: LocatedMutant,
@@ -1313,7 +1310,7 @@ async function hintKills(
 ): Promise<boolean> {
   const absPath = join(projectDir, hint.file);
   if (!passed.has(testKey({ path: hint.file, fullName: hint.test })) || !tests.includes(absPath)) return false;
-  const trial = await runner.run([{ absPath }], mutant, timeoutMs, { bail: true, test: hint.test });
+  const trial = await runner.run([{ absPath }], mutant, timeoutMs, { bail: true });
   return trial.kind === 'ran' && trial.outcomes.some((o) => o.path === hint.file && o.fullName === hint.test && o.failedOnAssertion);
 }
 

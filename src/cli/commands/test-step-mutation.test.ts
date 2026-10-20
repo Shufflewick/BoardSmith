@@ -1121,9 +1121,20 @@ describe('the rule', () => { it('is on', () => { note('is on'); expect(enabled).
 
       const again = await hinted({ 'tests/broad.test.ts': BROAD, 'tests/killer.test.ts': KILLER }, KILLER_HINT);
       expect(again.result.summary).toMatchObject({ mutants: 1, killed: 1, survived: 0 });
-      // The broad file and the killer's neighbour never ran: the hinted test alone decided it.
-      expect(again.ran).toEqual(['killer loaded', 'killer is on']);
+      // The broad file never ran: the hinted test's own file decided it, run whole so its test sees the state it passed with.
+      expect(again.ran).toEqual(['killer loaded', 'killer neighbour', 'killer is on']);
       expect(again.hints).toEqual([KILLER_HINT]);
+    }, 120_000);
+
+    it('does not count a hinted test that needs an earlier test in its file as killing a mutant it does not notice', async () => {
+      const STATEFUL = `${notes('stateful')}let ready = false;
+it('sets up', () => { note('sets up'); ready = typeof enabled === 'boolean'; expect(ready).toBe(true); });
+it('relies on the setup', () => { note('relies'); expect(ready).toBe(true); });
+`;
+      const { result, ran } = await hinted({ 'tests/stateful.test.ts': STATEFUL }, { file: 'tests/stateful.test.ts', test: 'relies on the setup' });
+      // Nothing checks the rule's value, so the mutant survives; alone, the hinted test would fail for want of its setup.
+      expect(result.summary).toMatchObject({ mutants: 1, killed: 0, survived: 1 });
+      expect(ran.slice(0, 3)).toEqual(['stateful loaded', 'stateful sets up', 'stateful relies']);
     }, 120_000);
 
     it('runs every required test when the hinted test passes, and learns the test that really killed it', async () => {
