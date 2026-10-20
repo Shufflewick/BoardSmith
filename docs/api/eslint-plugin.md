@@ -64,8 +64,7 @@ Disallows filesystem access in game code.
 **Why:** File contents can change between runs, breaking determinism.
 
 ```typescript
-// Bad
-import fs from 'fs';
+// Bad: reading a file with Node's fs
 fs.readFileSync('data.json'); // Error: Filesystem access is not allowed
 
 // Good

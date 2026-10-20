@@ -44,7 +44,13 @@ describe('the game code the docs teach (#511)', () => {
   it('marks the getting-started rules for compiling', () => {
     expect(
       blocks.filter((block) => block.doc === 'docs/getting-started').map((block) => block.path),
-    ).toEqual(['src/rules/game.ts', 'src/rules/elements.ts', 'src/rules/actions.ts', 'src/rules/flow.ts']);
+    ).toEqual([
+      'tests/browser/smoke.spec.ts',
+      'src/rules/game.ts',
+      'src/rules/elements.ts',
+      'src/rules/actions.ts',
+      'src/rules/flow.ts',
+    ]);
   });
 
   it('marks the runtime API GameRunner examples for compiling (#1152)', () => {

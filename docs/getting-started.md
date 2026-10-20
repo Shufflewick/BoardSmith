@@ -340,6 +340,7 @@ is no longer read and can be deleted.
 The smoke test is your game's `tests/browser/smoke.spec.ts`, which `boardsmith
 init` writes:
 
+<!-- typecheck: game tests/browser/smoke.spec.ts -->
 ```ts
 import { defineSmokeTest } from 'boardsmith/testing/browser';
 
@@ -780,10 +781,8 @@ The UI uses Vue 3 and the `boardsmith/ui` package. `src/ui/uis.ts` lists the
 game's boards, and `App.vue` hands that registry to `GameShell`:
 
 ```ts
-// src/ui/uis.ts
-import { defineGameUIs, defaultUI } from 'boardsmith/ui';
-import GameTable from './components/GameTable.vue';
-
+// src/ui/uis.ts, which imports defineGameUIs and defaultUI from 'boardsmith/ui',
+// and GameTable from './components/GameTable.vue'
 export default defineGameUIs({ GameTable: defaultUI(GameTable) });
 ```
 

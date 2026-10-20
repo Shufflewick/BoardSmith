@@ -63,6 +63,28 @@ export function parseMarkedBlocks(file: string, text: string, kind: string): Mar
   return blocks.filter(([, blockKind]) => blockKind === kind).map(([, , path, code]) => ({ doc, path, code }));
 }
 
+/**
+ * The 1-based line of each opening fence in `text` whose block is a whole file
+ * but carries no marker: a ts block whose first code line (after blank and `//`
+ * lines) is an `import`, or a vue block that opens with its `<script>` (#1050).
+ */
+export function unmarkedFileBlocks(text: string): number[] {
+  const lines = text.split(/\r?\n/);
+  const unmarked: number[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const lang = /^```([a-z]*)\s*$/.exec(lines[i])?.[1];
+    if (lang === undefined) continue;
+    let end = i + 1;
+    while (end < lines.length && !lines[end].startsWith('```')) end++;
+    const first = lines.slice(i + 1, end).find((line) => line.trim() !== '' && !line.startsWith('//')) ?? '';
+    const isFile =
+      (['ts', 'typescript'].includes(lang) && /^import\b/.test(first)) || (lang === 'vue' && /^<script\b/.test(first));
+    if (isFile && !lines[i - 1]?.startsWith('<!-- typecheck:')) unmarked.push(i + 1);
+    i = end;
+  }
+  return unmarked;
+}
+
 /** The folders whose `*.md` files may mark blocks, relative to the repo root. */
 const MARKED_DIRS = ['docs', 'docs/api', 'src/cli/slash-command/aspects'];
 

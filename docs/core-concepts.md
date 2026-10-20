@@ -131,8 +131,8 @@ Production trusts the rule (#632).
 
 Extend base classes to add game-specific properties:
 
+<!-- typecheck: game src/rules/elements.ts -->
 ```typescript
-// elements.ts
 import { Card as BaseCard, Piece as BasePiece } from 'boardsmith';
 
 export class Card extends BaseCard {
@@ -146,7 +146,6 @@ export class Card extends BaseCard {
 }
 
 export class CheckerPiece extends BasePiece {
-  player!: CheckersPlayer;
   isKing: boolean = false;
 
   promote(): void {
@@ -582,14 +581,20 @@ element class that was never registered, it throws with the exact
 
 Use utility functions from `boardsmith/runtime` for state snapshots:
 
+<!-- typecheck: game src/snapshots.ts -->
 ```typescript
+import type { Game } from 'boardsmith';
 import { createSnapshot, createPlayerView } from 'boardsmith/runtime';
 
-// Get complete state snapshot
-const snapshot = createSnapshot(game, 'my-game');
+export function snapshots(game: Game, playerSeat: number) {
+  // Get complete state snapshot
+  const snapshot = createSnapshot(game, 'my-game');
 
-// Get player-specific view (with visibility applied)
-const playerView = createPlayerView(game, playerSeat);
+  // Get player-specific view (with visibility applied)
+  const playerView = createPlayerView(game, playerSeat);
+
+  return { snapshot, playerView };
+}
 ```
 
 ### Player Views

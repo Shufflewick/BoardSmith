@@ -537,6 +537,7 @@ it cannot find a controller:
 +  global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } }
 ```
 
+<!-- typecheck: game src/ui/context-keys.ts -->
 ```typescript
 import { GAME_CONTEXT_KEYS } from 'boardsmith/ui';
 ```
@@ -544,6 +545,7 @@ import { GAME_CONTEXT_KEYS } from 'boardsmith/ui';
 A custom UI reading the context should use `useGameContext()`, which throws
 outside a shell rather than returning a bag of `undefined`s:
 
+<!-- typecheck: game src/ui/context.ts -->
 ```typescript
 import { useGameContext } from 'boardsmith/ui';
 const { gameView, playerSeat, actionController } = useGameContext();
@@ -598,12 +600,12 @@ removed/changed API.
 
 ### Step 1: Update the headless test-harness import
 
-```typescript
-// Before — internal, test-only module path (never a public package export)
-import { createHeadlessSession } from './session/testing/headless-harness.js';
+Before, an internal, test-only module path (never a public package export).
+After, the public export from `boardsmith/testing` (`boardsmith/session` before r196):
 
-// After — public export from boardsmith/testing (boardsmith/session before r196)
-import { createHeadlessSession } from 'boardsmith/testing';
+```diff
+- import { createHeadlessSession } from './session/testing/headless-harness.js';
++ import { createHeadlessSession } from 'boardsmith/testing';
 ```
 
 The old module (`src/session/testing/headless-harness.ts`) is deleted — there
@@ -771,7 +773,7 @@ const animationEvents = createAnimationEvents({
 Before:
 
 ```typescript
-import { useCurrentView } from 'boardsmith/ui';
+// useCurrentView was imported from 'boardsmith/ui'
 const view = useCurrentView();
 ```
 
