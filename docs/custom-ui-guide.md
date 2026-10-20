@@ -94,32 +94,33 @@ const cardId = card.attributes.id;  // ✗ undefined
 
 Use the helper functions from `boardsmith/ui`:
 
+<!-- typecheck: game src/ui/find.ts -->
 ```typescript
-import {
-  findElement,
-  findElements,
-  findPlayerHand,
-  getElementId,
-} from 'boardsmith/ui';
+import { findElement, findElements, findPlayerHand, type GameViewElement } from 'boardsmith/ui';
 
-// Find by type (uses $type attribute)
-const deck = findElement(gameView, { type: 'deck' });
+export function lookups(gameView: GameViewElement, playerSeat: number, cardId: number) {
+  // Find by type (uses $type attribute)
+  const deck = findElement(gameView, { type: 'deck' });
 
-// Find by name
-const board = findElement(gameView, { name: 'mainBoard' });
+  // Find by name
+  const board = findElement(gameView, { name: 'mainBoard' });
 
-// Find player's hand
-const myHand = findPlayerHand(gameView, playerSeat);
+  // Find player's hand
+  const myHand = findPlayerHand(gameView, playerSeat);
 
-// Find by ID (recursive search)
-const card = findElement(gameView, { id: cardId });
+  // Find by ID (recursive search)
+  const card = findElement(gameView, { id: cardId });
 
-// Several criteria must all match
-const aceInHand = findElements(gameView, { className: 'Card', name: 'ace' });
+  // Several criteria must all match
+  const aceInHand = findElements(gameView, { className: 'Card', name: 'ace' });
+
+  return { deck, board, myHand, card, aceInHand };
+}
 ```
 
 ### Common Pattern: Extracting Data for Display
 
+<!-- typecheck: board -->
 ```vue
 <script setup lang="ts">
 import { computed } from 'vue';
@@ -279,18 +280,21 @@ function onSectorClick(sector: { id: number }) {
 
 Use the `actionNeedsWizardMode()` helper to check programmatically:
 
+<!-- typecheck: game src/ui/retreat.ts -->
 ```typescript
-import { actionNeedsWizardMode } from 'boardsmith/ui';
+import { actionNeedsWizardMode, type UseActionControllerReturn } from 'boardsmith/ui';
 
-const meta = actionController.getActionMetadata('retreat');
-const check = actionNeedsWizardMode(meta, {});
+export function retreat(actionController: UseActionControllerReturn): void {
+  const meta = actionController.getActionMetadata('retreat');
+  const check = actionNeedsWizardMode(meta, {});
 
-if (check.needed) {
-  console.log(check.reason);
-  // "Selection 'retreatSector' requires element selection from the game board"
-  actionController.start('retreat');
-} else {
-  actionController.execute('retreat', {});
+  if (check.needed) {
+    console.log(check.reason);
+    // "Selection 'retreatSector' requires element selection from the game board"
+    actionController.start('retreat');
+  } else {
+    actionController.execute('retreat', {});
+  }
 }
 ```
 
@@ -300,8 +304,10 @@ if (check.needed) {
 
 When an action uses `chooseElement()` or `chooseElements()`, the `actionController` provides `validElements` - a reactive computed of which elements can be selected:
 
+<!-- typecheck: board -->
 ```vue
 <script setup lang="ts">
+import { computed } from 'vue';
 import type { TableBoardProps } from 'boardsmith/ui';
 
 const props = defineProps<TableBoardProps>();
@@ -395,20 +401,26 @@ The `disabled` property is present only on items that are disabled (absent on se
 
 Bind `v-disabled-reason` and you get the Action Panel's exact behaviour:
 
+<!-- typecheck: board -->
 ```vue
 <script setup lang="ts">
-import { vDisabledReason } from 'boardsmith/ui';
+import { vDisabledReason, type TableBoardProps } from 'boardsmith/ui';
+
+const props = defineProps<TableBoardProps>();
+const controller = props.actionController;
 </script>
 
 <template>
-  <button
-    v-for="choice in actionController.getChoices(currentPick)"
-    :key="String(choice.value)"
-    v-disabled-reason="choice.disabled"
-    @click="actionController.fill(currentPick.name, choice.value)"
-  >
-    {{ choice.display }}
-  </button>
+  <template v-if="controller.currentPick.value">
+    <button
+      v-for="choice in controller.getChoices(controller.currentPick.value)"
+      :key="String(choice.value)"
+      v-disabled-reason="choice.disabled"
+      @click="controller.fill(controller.currentPick.value.name, choice.value)"
+    >
+      {{ choice.display }}
+    </button>
+  </template>
 </template>
 ```
 
@@ -479,8 +491,7 @@ Prefer `toggleMultiSelect()`/`confirmMultiSelect()` when the user builds up a se
 For bidirectional interaction between the board and ActionPanel:
 
 ```typescript
-import { useBoardInteraction } from 'boardsmith/ui';
-
+// useBoardInteraction comes from 'boardsmith/ui'; call it in a board's setup
 const boardInteraction = useBoardInteraction();
 
 // Check if element is highlighted (hovering in ActionPanel)
@@ -629,6 +640,7 @@ returns the cell's `{ row, col }`. An arrow key moves to the nearest cell in the
 same row or column, and Home/End go to the ends of the row. So the order of
 `cells` and any gaps in the board do not matter (#891).
 
+<!-- typecheck: board -->
 ```vue
 <script setup lang="ts">
 import { computed } from 'vue';
@@ -696,16 +708,20 @@ function onEquipmentClick(merc: any, equipment: any) {
 
 ### UI Side: Watching for Dependent Changes
 
+<!-- typecheck: game src/ui/equipment-watch.ts -->
 ```typescript
 import { watch } from 'vue';
+import type { UseActionControllerReturn } from 'boardsmith/ui';
 
 // When merc selection changes, equipment choices update automatically
-watch(
-  () => actionController.validElements.value,
-  (newElements) => {
-    console.log('Available equipment:', newElements.map(e => e.display));
-  }
-);
+export function logEquipmentChoices(actionController: UseActionControllerReturn): void {
+  watch(
+    () => actionController.validElements.value,
+    (newElements) => {
+      console.log('Available equipment:', newElements.map((e) => e.display));
+    },
+  );
+}
 ```
 
 ### Loading State for Dependent Choices
@@ -748,7 +764,7 @@ Sometimes UI panels need to react to action state. For example, showing a detail
 The `actionController.currentArgs` ref contains all args for the in-progress action, including followUp context:
 
 ```typescript
-import { computed } from 'vue';
+// computed comes from 'vue'
 
 // Get sector ID from current action (if any)
 const actionContextSectorId = computed(() => {
@@ -793,6 +809,7 @@ stale price unreachable — a copy of your own is exactly how one comes back.
 A component the board renders (a hand, a panel, a button row) does not receive the
 board's props. It reads the same values from the game context instead.
 
+<!-- typecheck: game src/reading-the-context-from-a-component-under-the-board-useplaycontext.ts -->
 ```typescript
 import { usePlayContext } from 'boardsmith/ui';
 
@@ -821,6 +838,7 @@ leaves the list when it commits. Since #321 a simultaneous step reports no
 `currentPlayer`, so `flowState.currentPlayer` cannot tell your board who is
 acting there; `dueSeats` can, in both kinds of step.
 
+<!-- typecheck: game src/showing-who-has-to-act-dueseats.ts -->
 ```typescript
 import { computed } from 'vue';
 import { useGameContext } from 'boardsmith/ui';
@@ -847,6 +865,7 @@ carries `turnDeadline`. Draw your countdown from it, never from `Date.now()`
 against a time of your own: a phone's clock can be off by seconds or minutes,
 and `turnDeadline` is already measured on the host's clock.
 
+<!-- typecheck: game src/counting-down-to-the-host-s-deadline-turndeadline.ts -->
 ```typescript
 import { computed } from 'vue';
 import { useGameContext } from 'boardsmith/ui';
@@ -904,6 +923,7 @@ error in the game frame's console naming the missing field.
 
 When a sector-related action starts (either from ActionPanel or via followUp), automatically show the sector's detail panel:
 
+<!-- typecheck: board -->
 ```vue
 <script setup lang="ts">
 import { computed, ref } from 'vue';
@@ -961,32 +981,39 @@ const activeSector = computed(() =>
 
 To run side effects when actions start or complete:
 
+<!-- typecheck: game src/ui/action-watch.ts -->
 ```typescript
 import { watch } from 'vue';
+import type { UseActionControllerReturn } from 'boardsmith/ui';
 
-// React when action starts
-watch(
-  () => actionController.currentAction.value,
-  (newAction, oldAction) => {
-    if (newAction && !oldAction) {
-      console.log('Action started:', newAction);
-      console.log('Initial args:', actionController.currentArgs.value);
-    }
-    if (!newAction && oldAction) {
-      console.log('Action completed/cancelled:', oldAction);
-    }
-  }
-);
+export function watchActions(
+  actionController: UseActionControllerReturn,
+  highlightElement: (targetId: unknown) => void,
+): void {
+  // React when action starts
+  watch(
+    () => actionController.currentAction.value,
+    (newAction, oldAction) => {
+      if (newAction && !oldAction) {
+        console.log('Action started:', newAction);
+        console.log('Initial args:', actionController.currentArgs.value);
+      }
+      if (!newAction && oldAction) {
+        console.log('Action completed/cancelled:', oldAction);
+      }
+    },
+  );
 
-// React to specific arg changes
-watch(
-  () => actionController.currentArgs.value?.targetId,
-  (targetId) => {
-    if (targetId) {
-      highlightElement(targetId);
-    }
-  }
-);
+  // React to specific arg changes
+  watch(
+    () => actionController.currentArgs.value?.targetId,
+    (targetId) => {
+      if (targetId) {
+        highlightElement(targetId);
+      }
+    },
+  );
+}
 ```
 
 ## Full-Board Modals: the `#bs-game-modal` Host
@@ -1049,7 +1076,7 @@ the deciding battle, say) calls `holdGameOverUntil` in its `setup`, with a
 function that says when its ending is on screen:
 
 ```ts
-import { holdGameOverUntil } from 'boardsmith/ui';
+// holdGameOverUntil comes from 'boardsmith/ui'; call it in a board's setup
 
 // The result is on screen once this viewer's replay of the final battle has
 // ended or been skipped.
@@ -1132,12 +1159,13 @@ size). Width is still fitted, but since the board *is* the region's width,
 that lands at 100% in the normal case. You do not wire this up; calling
 `useBoardSize()` is the whole opt-in.
 
+<!-- typecheck: board -->
 ```vue
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue';
 import { useBoardSize } from 'boardsmith/ui';
 
-const boardRef = ref(null);
+const boardRef = ref<HTMLElement | null>(null);
 const { boardStyle } = useBoardSize(boardRef);
 </script>
 
@@ -1270,6 +1298,7 @@ await actionController.execute('play', { card: card });
 
 ## Complete Example: Card Game Board
 
+<!-- typecheck: board -->
 ```vue
 <script setup lang="ts">
 import { computed, ref } from 'vue';
@@ -1277,6 +1306,7 @@ import {
   useBoardInteraction,
   findPlayerHand,
   findElement,
+  type GameViewElement,
   type TableBoardProps,
 } from 'boardsmith/ui';
 
@@ -1311,7 +1341,7 @@ function isCardPlayable(cardId: number): boolean {
   return true;
 }
 
-async function onCardClick(card: any) {
+async function onCardClick(card: GameViewElement) {
   if (!isCardPlayable(card.id)) return;
 
   // If in wizard mode, fill the selection
