@@ -23,9 +23,7 @@ all of it on one small drafting game, from the first report to a playable game.
 ## Usage
 
 ```typescript
-// src/sim/index.ts
-import { greedy } from 'boardsmith/sim';
-import type { MyGame } from '../rules/game.js';
+// src/sim/index.ts: greedy comes from 'boardsmith/sim', MyGame from '../rules/game.js'
 
 export const policies = {
   // Play the move that takes the most cards.
@@ -123,9 +121,7 @@ A game declares what the simulator measures with `defineMetrics` from
 needed for `boardsmith simulate` to report it.
 
 ```typescript
-// src/rules/metrics.ts
-import { defineMetrics } from 'boardsmith';
-import type { MyGame } from './game.js';
+// src/rules/metrics.ts: defineMetrics comes from 'boardsmith', MyGame from './game.js'
 
 export const metrics = defineMetrics(({ count, ratio, sample, category, segment, finalScore }) => ({
   held: count({ by: 'element' }),
@@ -205,9 +201,8 @@ Goblin,2,no,monster;green
 ```
 
 ```typescript
-// src/rules/game.ts
-import { parseCsv } from 'boardsmith';
-import cardsCsv from './data/cards.csv?raw';
+// src/rules/game.ts: parseCsv comes from 'boardsmith', and
+// cardsCsv is `import cardsCsv from './data/cards.csv?raw'`
 
 const cards = parseCsv(
   cardsCsv,

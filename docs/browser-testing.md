@@ -343,7 +343,7 @@ on its own port, inside the one process.
 and `boardsmith smoke` runs it alone (#453). The spec is one call:
 
 ```ts
-import { defineSmokeTest } from 'boardsmith/testing/browser';
+// defineSmokeTest comes from 'boardsmith/testing/browser'
 
 defineSmokeTest({ actions: ['draw', 'play'] });
 ```
@@ -567,7 +567,7 @@ the walk reports the reason it gives. `seats` says how many seats the walk
 plays, or which:
 
 ```ts
-import { defineSmokeTest, type SmokeInputView } from 'boardsmith/testing/browser';
+// defineSmokeTest and the SmokeInputView type come from 'boardsmith/testing/browser'
 
 // Another seat the walk plays, as the board's "Who else is here" list shows it.
 const anotherSeatHere = async ({ texts, otherSeats }: SmokeInputView) =>
@@ -674,7 +674,7 @@ spec tells the walk how, in `inputs`, by action and then by the field's pick
 name (the name the rules give `enterText` or `enterNumber`):
 
 ```ts
-import { defineSmokeTest, type SmokeInputView } from 'boardsmith/testing/browser';
+// defineSmokeTest and the SmokeInputView type come from 'boardsmith/testing/browser'
 
 // Another survivor in this square, as the board's "Who else is here" list shows them.
 const someoneHere = async ({ texts }: SmokeInputView) => (await texts('.nearby li'))[0];

@@ -220,17 +220,20 @@ advanceWhen: {
 
 Three named helpers ship in `src/engine/tutorial/predicates.ts` for common patterns:
 
+<!-- typecheck: game src/tutorial/steps.ts -->
 ```typescript
-import { afterFirstTurn, afterTurns, whenForced } from 'boardsmith';
+import { afterFirstTurn, afterTurns, whenForced, type TutorialStep } from 'boardsmith';
 
-// Advance after the learner's first action:
-{ id: 'intro', gate: { action: 'move' }, advanceWhen: { ...afterFirstTurn() } }
+export const steps: TutorialStep[] = [
+  // Advance after the learner's first action:
+  { id: 'intro', gate: { action: 'move' }, advanceWhen: { ...afterFirstTurn() } },
 
-// Advance after the learner has taken 3 turns:
-{ id: 'practice', gate: { action: 'move' }, advanceWhen: { ...afterTurns(3) } }
+  // Advance after the learner has taken 3 turns:
+  { id: 'practice', gate: { action: 'move' }, advanceWhen: { ...afterTurns(3) } },
 
-// Advance when an action becomes the ONLY option:
-{ id: 'forced-action', gate: { action: 'capture' }, advanceWhen: { ...whenForced('capture') } }
+  // Advance when an action becomes the ONLY option:
+  { id: 'forced-action', gate: { action: 'capture' }, advanceWhen: { ...whenForced('capture') } },
+];
 ```
 
 `afterTurns(n)` reads `game.getFlowState().position` (`iterations` + `playerIndex`). It counts rounds of the outermost `loop` around `eachPlayer`, so inner loops inside a turn (a multi-jump, an extra ask) count as one turn, and a turn counts once play passes to another seat. It assumes the learner acts first within each round and requires that outer `loop` node. If either assumption does not hold, write a custom predicate instead.
@@ -249,6 +252,7 @@ When a step's `advanceWhen` is already true at the moment the tutorial starts (o
 
 Import from `boardsmith/testing`:
 
+<!-- typecheck: game src/simulatetutorial-and-asserttutorialcompletes.ts -->
 ```typescript
 import {
   TestGame,
@@ -587,11 +591,7 @@ Both games anchor tutorial annotations to game elements, but via different ref f
 **Go Fish** uses a custom `GameTable.vue`. It must emit `anchorAttrs` explicitly. The go-fish custom UI spreads `anchorAttrs` on both individual cards and the rank card-group (the clickable group the learner interacts with to select a rank):
 
 ```vue
-<!-- ~/BoardSmithGames/go-fish/src/ui/components/GameTable.vue -->
-<script setup lang="ts">
-import { anchorAttrs } from 'boardsmith/ui';
-</script>
-
+<!-- ~/BoardSmithGames/go-fish/src/ui/components/GameTable.vue, which imports anchorAttrs from 'boardsmith/ui' -->
 <template>
   <!-- rank card-group: hint ring anchors here via { name: rank } -->
   <div
