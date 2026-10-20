@@ -13,7 +13,7 @@
  * pin that pattern so the template can't regress to the crashing shape.
  */
 import { describe, it, expect, afterEach, beforeEach, vi, type MockInstance } from 'vitest';
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -877,12 +877,24 @@ describe('initCommand --into-existing — scaffold into the repository you are i
   it('names where it installed the hook, which is where core.hooksPath points (#1186)', async () => {
     const repo = researchRepo('bs-init-1186-hook-');
     execSync('git config core.hooksPath githooks', { cwd: repo });
+    appendFileSync(join(repo, '.git', 'info', 'exclude'), 'githooks/\n');
     process.chdir(repo);
 
     await initCommand('sample-game', { withoutRulebook: true, intoExisting: true });
 
     expect(vi.mocked(console.log).mock.calls.flat().join('\n')).toContain(`installed the ingest pre-commit hook at ${join('githooks', 'pre-commit')}`);
     expect(existsSync(join(repo, 'githooks', 'pre-commit'))).toBe(true);
+  });
+
+  it('writes nothing into a hooks folder the repository tracks, and says why (#1301)', async () => {
+    const repo = researchRepo('bs-init-1301-hook-');
+    execSync('git config core.hooksPath .husky', { cwd: repo });
+    process.chdir(repo);
+
+    await initCommand('sample-game', { withoutRulebook: true, intoExisting: true });
+
+    expect(vi.mocked(console.log).mock.calls.flat().join('\n')).toContain(`Left ${join('.husky', 'pre-commit')} alone: git runs hooks from a folder inside this project that git does not ignore`);
+    expect(existsSync(join(repo, '.husky', 'pre-commit'))).toBe(false);
   });
 
   it('writes nothing into a hooks folder outside the repository, and names it (#1186)', async () => {

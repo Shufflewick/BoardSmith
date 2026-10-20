@@ -641,6 +641,7 @@ describe('boardsmith doctor', () => {
     it('reports a missing hook where core.hooksPath points, and --fix installs it there (#1186)', async () => {
       const projectDir = await gitProject();
       execSync('git config core.hooksPath githooks', { cwd: projectDir });
+      await fs.appendFile(join(projectDir, '.git', 'info', 'exclude'), 'githooks/\n');
       await fs.writeFile(hookPath(projectDir), INGEST_PRE_COMMIT_HOOK, { mode: 0o755 });
 
       const report = await doctorCommand({ project: projectDir });
@@ -649,6 +650,40 @@ describe('boardsmith doctor', () => {
       process.exitCode = undefined;
       await doctorCommand({ project: projectDir, fix: true });
       expect(await read(join(projectDir, 'githooks', 'pre-commit'))).toBe(INGEST_PRE_COMMIT_HOOK);
+    });
+
+    it('leaves a hooks folder the project tracks alone, with a note saying why (#1301)', async () => {
+      const projectDir = await gitProject();
+      execSync('git config core.hooksPath .husky', { cwd: projectDir });
+
+      const result = await doctorCommand({ project: projectDir });
+      expect(result.findings.filter((f) => f.kind === 'ingest-hook-not-current')).toEqual([]);
+      expect(result.notes).toHaveLength(1);
+      expect(result.notes[0]).toMatch(/^Left \.husky\/pre-commit alone: .*would be committed/);
+      expect(result.notes[0]).toMatch(/boardsmith ingest-gaps/);
+    });
+
+    it('says git could not name the hooks folder, in git\'s words, rather than nothing (#1301)', async () => {
+      const projectDir = await project();
+      await fs.writeFile(join(projectDir, '.git'), `gitdir: ${join(projectDir, 'pruned')}\n`);
+
+      const result = await doctorCommand({ project: projectDir });
+      expect(result.findings.filter((f) => f.kind === 'ingest-hook-not-current')).toEqual([]);
+      expect(result.notes).toHaveLength(1);
+      expect(result.notes[0]).toMatch(/^Could not check the ingest pre-commit hook: .*not a git repository/);
+    });
+
+    it.skipIf(process.platform === 'win32')('--fix says the execute bit did not stick, rather than that it was restored, on a filesystem that drops it (#1301)', async () => {
+      const projectDir = await gitProject();
+      await installIngestHook(projectDir);
+      await fs.chmod(hookPath(projectDir), 0o644);
+      // A filesystem that keeps no mode bits takes the chmod and changes nothing.
+      vi.spyOn(fs, 'chmod').mockResolvedValue(undefined);
+
+      await expect(doctorCommand({ project: projectDir, fix: true })).rejects.toThrow(
+        `Wrote ${join('.git', 'hooks', 'pre-commit')}, but git still skips it: its execute bit did not take`,
+      );
+      vi.restoreAllMocks();
     });
   });
 });
