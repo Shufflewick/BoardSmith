@@ -25,16 +25,20 @@ const metadata: Record<string, EnrichedActionMetadata> = {
     name: 'pickOrder', prompt: 'Order',
     selections: [{ name: 'order', type: 'choice', prompt: 'Which order?', choices: XYZ, orderedList: { min: 1, max: 3 } }],
   },
+  pickOne: {
+    name: 'pickOne', prompt: 'Pick one',
+    selections: [{ name: 'one', type: 'choice', prompt: 'Which one?', choices: XYZ }],
+  },
 };
 
-async function prefilled(action: string, prefill: Record<string, unknown>) {
+async function prefilled(action: string, prefill: Record<string, unknown>, autoExecute = true) {
   const sendAction = createMockSendAction();
   const controller = useActionController({
     sendAction,
     availableActions: ref(Object.keys(metadata)),
     actionMetadata: ref(metadata),
     isMyTurn: ref(true),
-    autoExecute: true,
+    autoExecute,
   });
   await controller.start(action, { prefill });
   for (let i = 0; i < 10; i++) await nextTick();
@@ -76,5 +80,23 @@ describe('an array prefill for a list pick (#964)', () => {
     const { sendAction, controller } = await prefilled('pickMany', { many: ['x', 'z'] });
     expect(sendAction).not.toHaveBeenCalled();
     expect(controller.lastError.value).toBe('Cannot prefill "Which?" with "X, Z": Z is spent.');
+  });
+});
+
+describe('the label a filled pick is shown by (#1298)', () => {
+  it.each([
+    ['pickCards', { cards: [9, 7] }, 'cards', 'Nine, Seven'],
+    ['pickMany', { many: ['x', 'y'] }, 'many', 'X, Y'],
+    ['pickOne', { one: 'x' }, 'one', 'X'],
+  ])('%s prefilled with %j reads its choices\' labels', async (action, prefill, pick, label) => {
+    const { controller } = await prefilled(action, prefill, false);
+    expect(controller.lastError.value).toBeNull();
+    expect(controller.getCollectedPick(pick)?.display).toBe(label);
+  });
+
+  it('reads a filled list by its entries\' labels', async () => {
+    const { controller } = await prefilled('pickMany', {}, false);
+    await controller.fill('many', ['x', 'y']);
+    expect(controller.getCollectedPick('many')?.display).toBe('X, Y');
   });
 });

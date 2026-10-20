@@ -592,21 +592,18 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /**
-   * Find the display value for a selection value from snapshot.
-   * Used to store display alongside value in collectedPicks.
+   * The label a pick's value is stored with in collectedPicks: what the pick's
+   * choices call it, from wherever they came, and each entry's for a list,
+   * joined as a repeat's are (#1298).
    */
-  function findDisplayForValue(selectionName: string, value: unknown): string {
-    // Get from snapshot - single source of truth
-    const snapshot = actionSnapshot.value?.pickSnapshots.get(selectionName);
-
-    if (snapshot?.choices) return labelOfPick(value, snapshot.choices);
-
-    if (snapshot?.validElements) {
-      const match = snapshot.validElements.find(e => e.id === value);
-      if (match && match.display) return match.display;
-    }
-
-    return getDisplayFromValue(value);
+  function labelForPick(
+    selection: EnrichedPickMetadata,
+    value: unknown,
+    choices: Array<{ value: unknown; display: string }> = getChoices(selection),
+  ): string {
+    return Array.isArray(value) && selectionTakesList(selection)
+      ? value.map((entry) => labelOfPick(entry, choices)).join(', ')
+      : labelOfPick(value, choices);
   }
 
   /**
@@ -921,7 +918,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     currentArgs.value[selection.name] = value;
     actionSnapshot.value?.collectedPicks.set(selection.name, {
       value,
-      display: findDisplayForValue(selection.name, value),
+      display: labelForPick(selection, value),
       skipped: false,
     });
     return true;
@@ -2029,6 +2026,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   ): Promise<ControllerActionResult> {
     const initialArgs = startOptions?.args ?? {};
     const prefillArgs = startOptions?.prefill ?? {};
+    // What the board could start this action with, read before opening it clears them (#1313).
+    const opening = startCandidates.value.get(actionName);
 
     // LIBX-04/CR-01: refuse to start a new action while the debug panel is
     // showing historical state.
@@ -2111,7 +2110,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     };
 
     for (const [name, value] of Object.entries(initialArgs)) {
-      actionSnapshot.value.collectedPicks.set(name, { value, display: getDisplayFromValue(value), skipped: false });
+      const selection = meta.selections.find((s) => s.name === name);
+      // A pick the board started with is labelled by the candidate it fetched (#1313).
+      const choices = opening?.pick === name
+        ? opening.elements.map((e) => ({ value: e.id, display: e.display || `Element ${e.id}` }))
+        : selection ? choicesIn(null, initialArgs, selection) : [];
+      const display = selection ? labelForPick(selection, value, choices) : getDisplayFromValue(value);
+      actionSnapshot.value.collectedPicks.set(name, { value, display, skipped: false });
     }
 
     // Fetch choices for the first selection that needs input
@@ -2227,7 +2232,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       // PIT OF SUCCESS: Store value+display together in snapshot
       // Single source of truth for display values
       if (actionSnapshot.value) {
-        const display = findDisplayForValue(selectionName, offered);
+        const display = labelForPick(selection, offered);
         actionSnapshot.value.collectedPicks.set(selectionName, {
           value: offered,
           display,
@@ -2409,7 +2414,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       currentArgs.value[selection.name] = value;
 
       if (actionSnapshot.value) {
-        const display = findDisplayForValue(selection.name, value);
+        const display = labelForPick(selection, value);
         actionSnapshot.value.collectedPicks.set(selection.name, {
           value,
           display,
