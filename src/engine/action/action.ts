@@ -492,7 +492,10 @@ export class ActionExecutor {
     checkPick?: (selection: Selection, value: unknown, before: Record<string, unknown>) => void,
   ): Record<string, unknown> {
     const game = reading ?? this.game;
-    const resolved = { ...args, ...this.resolveNonPickArgs(action, args, game) };
+    const nonPicks = this.resolveNonPickArgs(action, args, game);
+    const resolved = { ...args, ...nonPicks };
+    // What a check sees: the picks before, resolved, never a later one as sent.
+    const before: Record<string, unknown> = { ...nonPicks };
 
     // Each selection's value, with the selections before it already resolved
     // in view, so a `choices` callback that reads an earlier pick sees what it
@@ -504,8 +507,9 @@ export class ActionExecutor {
       if (value === null) delete resolved[selection.name];
       if (value === undefined || value === null) continue;
       const pick = this.resolveOne(selection, value, player, resolved, game);
-      checkPick?.(selection, pick, resolved);
+      checkPick?.(selection, pick, { ...before });
       resolved[selection.name] = pick;
+      before[selection.name] = pick;
     }
 
     return resolved;

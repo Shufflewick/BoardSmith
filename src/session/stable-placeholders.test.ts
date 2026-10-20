@@ -61,6 +61,16 @@ class PouchGame extends Game<PouchGame, Player> {
         .chooseElement<'card', Card>('card', { elements: inPouch, boardRef: (card) => ({ id: card.id, name: card.name }) })
         .chooseFrom('how', { choices: ['gently'] })
         .execute(() => {}),
+      // Points at the face-down card on the table from a plain choice.
+      Action.create<PouchGame>('gesture')
+        .chooseFrom('at', {
+          choices: ['there'],
+          boardRefs: (_choice, ctx) => {
+            const card = ctx.game.first(Space, 'table')!.first(Card)!;
+            return { refs: [{ ref: { id: card.id, name: card.name }, role: 'source' }] };
+          },
+        })
+        .execute(() => {}),
       Action.create<PouchGame>('stash')
         .chooseElement<'card', Card>('card', { elements: inPouch })
         .execute(({ card }) => {
@@ -82,7 +92,7 @@ class PouchGame extends Game<PouchGame, Player> {
     );
     this.setFlow({
       root: simultaneousActionStep({
-        actions: ['filch', 'peek', 'point', 'pocket', 'stash', 'discard', 'shake', 'drawBlind'],
+        actions: ['filch', 'peek', 'point', 'gesture', 'pocket', 'stash', 'discard', 'shake', 'drawBlind'],
         playerDone: () => false,
       }),
     });
@@ -233,6 +243,26 @@ describe("a table's stable per-seat placeholders (#715)", () => {
 
     expect(offer.validElements!.map((e) => e.refs?.map((r) => r.ref))).toEqual(offer.validElements!.map((e) => [{ id: e.id }]));
     expect(JSON.stringify(offer)).not.toMatch(/AS|KH/);
+  });
+
+  it('sends a ref to any card the seat cannot see by its id for it, not only a candidate (#1293)', async () => {
+    const start = await started();
+    const queen = findByName(viewOf(start, 1), 'table')!.children![0]!.id;
+    const offer = succeeded(await executeOp(definition, options, start.snapshot as never, null, {
+      type: 'resolveChoices', actionName: 'gesture', selectionName: 'at', player: 1, args: {},
+    }));
+
+    expect(offer.choices![0]!.refs).toEqual([{ ref: { id: queen }, role: 'source' }]);
+    expect(JSON.stringify(offer)).not.toMatch(/QD/);
+  });
+
+  it('answers a pick whose later picks are stale, as after the player changed an earlier one (#1293)', async () => {
+    const start = await started();
+    const [, kingPlaceholder] = await pouchIds(start, 1);
+    const how = succeeded(await executeOp(definition, options, start.snapshot as never, null, {
+      type: 'resolveChoices', actionName: 'peek', selectionName: 'how', player: 1, args: { card: kingPlaceholder, how: 'no longer offered' },
+    }));
+    expect(how.choices?.map((c) => c.value)).toEqual(['KH']);
   });
 
   it("never resolves a later pick's choices against a card the earlier pick does not offer (#1293)", async () => {

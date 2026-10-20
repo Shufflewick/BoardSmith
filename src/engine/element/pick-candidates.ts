@@ -99,7 +99,7 @@ export function formatChoiceCandidates(
 
     if (selection.boardRefs) {
       try {
-        choice.refs = selection.boardRefs(value, ctx).refs.map((r) => ({ ...r, ref: sight.safeRef(r.ref, value) }));
+        choice.refs = selection.boardRefs(value, ctx).refs.map((r) => (r.ref ? { ...r, ref: sight.safeRef(r.ref) } : r));
       } catch (e) {
         warnings.push({
           code: 'BOARD_REFS_ERROR',
@@ -176,8 +176,12 @@ interface SeatSight {
   idOf(element: ElementLike): number;
   /** "Card #1" for an element the seat cannot see, else undefined. */
   neutralLabel(value: unknown): string | undefined;
-  /** A game's ref, with an element the seat cannot see named by the seat's id for it, never its real id or name (#1293). */
-  safeRef(ref: ElementRef, of?: unknown): ElementRef;
+  /**
+   * A game's ref as the seat may be sent it (#1293): an element the seat
+   * cannot see, named by its id or as a hidden candidate by its name, goes
+   * by the seat's id for it, never its real id, name or notation.
+   */
+  safeRef(ref: ElementRef): ElementRef;
 }
 
 /**
@@ -187,14 +191,14 @@ interface SeatSight {
  * name never leave the server.
  */
 function seatSight(values: readonly unknown[], ctx: CandidateContext): SeatSight {
-  const hidden = values.filter((v): v is GameElement => isElement(v) && !v.isVisibleTo(ctx.player.seat));
-  if (hidden.length === 0) return { idOf: (element) => element.id, neutralLabel: () => undefined, safeRef: (ref) => ref };
   const seat = ctx.player.seat;
-  const hiddenById = new Map(hidden.map((element) => [element.id, element]));
-  // A ref names a hidden element by its real id, or by its name when it is that element's ref.
-  const named = (ref: ElementRef, of: unknown) =>
-    (ref.id !== undefined ? hiddenById.get(ref.id) : undefined)
-    ?? (ref.id === undefined && hidden.includes(of as GameElement) && ref.name === (of as GameElement).name ? (of as GameElement) : undefined);
+  const hidden = values.filter((v): v is GameElement => isElement(v) && !v.isVisibleTo(seat));
+  const hiddenByName = new Map(hidden.filter((element) => element.name).map((element) => [element.name, element]));
+  const safeRef = (ref: ElementRef): ElementRef => {
+    const element = ref.id !== undefined ? ctx.game.getElementById(ref.id) : ref.name !== undefined ? hiddenByName.get(ref.name) : undefined;
+    return element && !element.isVisibleTo(seat) ? { id: seatIdOf(element, seat) } : ref;
+  };
+  if (hidden.length === 0) return { idOf: (element) => element.id, neutralLabel: () => undefined, safeRef };
 
   const labels = new Map<unknown, string>();
   const perClass = new Map<string, number>();
@@ -207,10 +211,7 @@ function seatSight(values: readonly unknown[], ctx: CandidateContext): SeatSight
   return {
     idOf: (element) => (isElement(element) ? seatIdOf(element, seat) : element.id),
     neutralLabel: (value) => labels.get(value),
-    safeRef: (ref, of) => {
-      const element = named(ref, of);
-      return element ? { id: seatIdOf(element, seat) } : ref;
-    },
+    safeRef,
   };
 }
 
@@ -286,7 +287,7 @@ function refFor(
     return { id: sight.idOf(element), ...(element.notation && !hidden ? { notation: element.notation } : {}) };
   }
   try {
-    return sight.safeRef(boardRef(element as never, ctx), element);
+    return sight.safeRef(boardRef(element as never, ctx));
   } catch (e) {
     // CHOICES_ERROR is the reserved stable code for boardRef() failures.
     warnings.push({

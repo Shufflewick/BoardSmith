@@ -13,6 +13,7 @@ import type {
   ElementsSelection,
   Game,
   Player,
+  Selection,
 } from '../engine/index.js';
 import { PlayerFacingError } from '../engine/errors.js';
 import { rulesErrorSentence, withDevDetail } from '../engine/action/rules-error.js';
@@ -272,7 +273,7 @@ export class PickHandler<G extends Game = Game> {
 
     const executor = this.#runner.game.getActionExecutor();
     const sent = picksFromSeat(this.#runner.game, actionName, currentArgs, playerPosition);
-    const asked = this.#choiceContext(action, player, sent, picksHeldBy(pendingState, actionName));
+    const asked = this.#choiceContext(action, selection, player, sent, picksHeldBy(pendingState, actionName));
     if ('refusal' in asked) return asked.refusal;
     const { ctx } = asked;
 
@@ -311,6 +312,7 @@ export class PickHandler<G extends Game = Game> {
    */
   #choiceContext(
     action: ActionDefinition,
+    asked: Selection,
     player: Player,
     currentArgs: Record<string, unknown>,
     heldPicks: Record<string, unknown>,
@@ -320,12 +322,14 @@ export class PickHandler<G extends Game = Game> {
     if (refusal) return { refusal: { success: false, error: refusal, errorCode: ErrorCode.INVALID_PICK } };
     const followUp = this.#runner.followUpArgsFor(action.name, player.seat);
     const bound = { ...currentArgs, ...heldPicks, ...followUp };
-    // A pick only the client sends is checked as offered before a later pick is resolved against it,
-    // so no callback is handed a card the seat was never offered there (#1293).
-    const sentOnly = (name: string) => name in currentArgs && !(name in heldPicks) && !(name in followUp);
+    // A pick before the asked one that only the client sends is checked as offered before a later
+    // pick is resolved against it, so no callback is handed a card the seat was never offered (#1293).
+    const askedAt = action.selections.indexOf(asked);
+    const checked = (selection: Selection) => action.selections.indexOf(selection) < askedAt
+      && selection.name in currentArgs && !(selection.name in heldPicks) && !(selection.name in followUp);
     try {
       const args = executor.resolveArgs(action, bound, player, undefined, (selection, value, before) => {
-        if (!sentOnly(selection.name)) return;
+        if (!checked(selection)) return;
         const result = executor.validateSelection(selection, value, player, before, action.name);
         if (!result.valid) throw new PickNotOffered(result.errors.join('; '));
       });
