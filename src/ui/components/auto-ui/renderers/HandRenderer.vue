@@ -19,6 +19,7 @@ import { isHiddenPlaceholder } from '../../../../engine/element/hidden-placehold
 import { seatDisplayName } from '../../../../engine/element/seat-defaults.js';
 import { injectPlayerSeat } from '../../../composables/useGameContext.js';
 import { parseImageInfo, type ImageInfo } from '../../../utils/image.js';
+import { directChildren, getElementCount, isSizeHidden } from '../../../composables/useGameViewHelpers.js';
 import type { GameElement } from '../auto-ui-helpers.js';
 
 const props = defineProps<{
@@ -70,16 +71,16 @@ const hasOverlap = computed(() => props.element.attributes?.$overlap !== undefin
 // ---------------------------------------------------------------------------
 // Visible children
 // ---------------------------------------------------------------------------
+// Its own cards; a concealed hand's view also carries, after them, cards
+// granted to this seat from inside a hidden child, drawn apart (#1292).
 const visibleChildren = computed(() => {
   if (isHiddenPlaceholder(props.element)) return [];
-  return props.element.children ?? [];
+  return directChildren(props.element);
 });
+const grantedFromHidden = computed(() => (props.element.children ?? []).slice(visibleChildren.value.length));
 
 // Count display (for hidden hands that expose only childCount)
-const childCountDisplay = computed(() => {
-  if (props.element.childCount !== undefined) return props.element.childCount;
-  return visibleChildren.value.length;
-});
+const childCountDisplay = computed(() => (isSizeHidden(props.element) ? null : getElementCount(props.element)));
 
 // ---------------------------------------------------------------------------
 // Back image for hidden card placeholders (from defaultBackImage)
@@ -204,7 +205,7 @@ function handleDrop(event: DragEvent) {
       <span class="hand-label">
         {{ presentationEntry?.label ?? element.name ?? ownerLabel }}
       </span>
-      <span class="hand-count">({{ childCountDisplay }})</span>
+      <span v-if="childCountDisplay !== null" class="hand-count">({{ childCountDisplay }})</span>
     </div>
 
     <!-- Cards wrapper -->
@@ -260,6 +261,10 @@ function handleDrop(event: DragEvent) {
           />
         </template>
       </div>
+    </div>
+
+    <div v-if="grantedFromHidden.length > 0" class="hand-granted">
+      <ElementRenderer v-for="child in grantedFromHidden" :key="child.id" :element="child" />
     </div>
   </div>
 </template>
@@ -345,6 +350,13 @@ function handleDrop(event: DragEvent) {
 }
 
 /* Cards wrapper */
+.hand-granted {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--bsg-s2);
+  margin-top: var(--bsg-s2);
+}
+
 .hand-cards-wrapper {
   display: flex;
   flex-direction: column;

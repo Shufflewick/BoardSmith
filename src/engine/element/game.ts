@@ -4948,22 +4948,21 @@ export class Game<
       return children.length > 0 ? { ...rest, children } : rest;
     };
 
-    // A CONCEALED ZONE'S CHILDREN AS ANONYMOUS PLACEHOLDERS, for the count-only
-    // and owner-only zone branches below. Each keeps its class and only the
+    // A CONCEALED ZONE'S CHILDREN AS ANONYMOUS PLACEHOLDERS, for the zone
+    // branch below (count-only, owner-only and `exceptPlayers` zones). Each keeps its class and only the
     // safe layout $-keys of its attributes (identity-bearing image refs are
     // redacted), never its name, and takes this seat's placeholder id for it,
     // which never says what the card is and is reissued with its pile when
     // that is shuffled or a card enters or leaves it (#715, `seat-placeholders.ts`).
-    // __hidden is seeded here (not in redactHiddenElementAttrs) so the
-    // count-only CONTAINER branch keeps its distinct shape (no __hidden, has
-    // childCount). CR-02 (159): original -> placeholder id is recorded in
+    // __hidden is seeded here (not in redactHiddenElementAttrs) so the zone
+    // itself keeps its distinct shape (no __hidden, has childCount). CR-02 (159): original -> placeholder id is recorded in
     // `idRemap`, so an element-typed flow variable pointing at an anonymized
     // child can still be relinked to its placeholder on restore. A child whose
     // visibility reaches this seat goes out whole in its place (#758).
     //
     // A granted element below a hidden child follows all the placeholders
-    // (#961), with no id, name or count for the containers between. Both
-    // callers send the zone's childCount (#1208), which says how many trailing
+    // (#961), with no id, name or count for the containers between. The zone
+    // is sent with its childCount (#1208), which says how many trailing
     // entries are nested, so with one hidden child the seat knows which holds them.
     const placeholderChildren = (json: ElementJSON, element: GameElement, owner: number | undefined): ElementJSON[] => {
       const placeholders: ElementJSON[] = [];
@@ -5181,7 +5180,7 @@ export class Game<
       // If zone has hidden or count-only visibility, handle children specially
       if (zoneVisibility && !seatCanSeeZone) {
         if (zoneVisibility.mode === 'hidden') {
-          // D24/SPACE-03: true concealment. Unlike 'count-only' below, a
+          // D24/SPACE-03: true concealment. Unlike the placeholders below, a
           // 'hidden' zone must not leak even its exact child count to a
           // non-owner -- no `children` key, no `childCount` key at all (not
           // `childCount: 0`, which would still distinguish empty from full).
@@ -5205,23 +5204,13 @@ export class Game<
               : grantedBelowHidden(child, childJson, undefined);
           });
           return withOnly(ownJson, granted);
-        } else if (zoneVisibility.mode === 'count-only') {
-          // Count-only mode: create anonymized placeholders for children.
-          // This allows the UI to render the correct number and type of elements
-          // without revealing their identity (no real IDs or names that could be used to cheat)
-          const hiddenChildren = placeholderChildren(json, element, owner);
-          return {
-            // ownJson (not json): the container's own attributes must stay
-            // whitelist-redacted in this early return (CR-01).
-            ...ownJson,
-            children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
-            childCount: element._t.children.length,
-          };
         }
-        // Every other zone this seat cannot see (a non-owner of an owner zone,
-        // or a seat in `exceptPlayers` of any mode, #750) gets anonymous
-        // placeholders, which keep the ids its picks are offered by (#715).
-        // childCount, as its children may also carry nested grants (#1208).
+        // Every other zone this seat cannot see (count-only, a non-owner of an
+        // owner zone, or a seat in `exceptPlayers` of any mode, #750) gets
+        // anonymous placeholders, which render the right number and kind of
+        // children without their identity and keep the ids its picks are
+        // offered by (#715). childCount, as its children may also carry nested
+        // grants (#1208).
         const hiddenChildren = placeholderChildren(json, element, owner);
         return {
           // ownJson (not json): the container's own attributes must stay

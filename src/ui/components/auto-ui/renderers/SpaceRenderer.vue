@@ -15,6 +15,7 @@ import { computed } from 'vue';
 import { useElementBoardState } from '../../../composables/useElementBoardState.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
+import { getElementCount, isSizeHidden } from '../../../composables/useGameViewHelpers.js';
 import type { GameElement } from '../auto-ui-helpers.js';
 
 const props = defineProps<{
@@ -109,10 +110,8 @@ const layoutStyles = computed(() => {
 
 const children = computed(() => props.element.children ?? []);
 
-const childCountDisplay = computed(() => {
-  if (children.value.length > 0) return children.value.length;
-  return props.element.childCount ?? 0;
-});
+// Its own children, not the granted cards a concealed zone's view carries after them (#1292).
+const childCountDisplay = computed(() => (isSizeHidden(props.element) ? 0 : getElementCount(props.element)));
 
 const hasOverlap = computed(() => props.element.attributes?.$overlap !== undefined);
 const hasFan = computed(() => props.element.attributes?.$fan === true);

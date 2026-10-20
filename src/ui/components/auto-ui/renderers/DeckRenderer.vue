@@ -12,16 +12,13 @@ import { computed, inject, ref, type Ref } from 'vue';
 import { useElementBoardState } from '../../../composables/useElementBoardState.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
 import { parseImageInfo, type ImageInfo } from '../../../utils/image.js';
+import { directChildren, getElementCount, isSizeHidden as sizeIsHidden } from '../../../composables/useGameViewHelpers.js';
 import ElementRenderer from './ElementRenderer.vue';
 import CardBack from './CardBack.vue';
 import type { GameElement } from '../auto-ui-helpers.js';
 
-interface DeckElement extends GameElement {
-  zoneVisibility?: { mode: string };
-}
-
 const props = defineProps<{
-  element: DeckElement;
+  element: GameElement;
 }>();
 
 // ---------------------------------------------------------------------------
@@ -43,22 +40,17 @@ const {
 // ---------------------------------------------------------------------------
 const displayLabel = computed(() => props.element.name || props.element.className);
 
-const childCount = computed(() => {
-  if (props.element.childCount !== undefined) return props.element.childCount;
-  return (props.element.children ?? []).length;
-});
+const childCount = computed(() => getElementCount(props.element));
 
-// Stack visual: up to 3 cards from children. children[0] is the top card (#893),
+// Stack visual: up to 3 of its own cards. The first is the top card (#893),
 // so it is raised highest while staying first in reading order.
 const stackCards = computed(() => {
-  const top = (props.element.children ?? []).slice(0, 3);
+  const top = directChildren(props.element).slice(0, 3);
   return top.map((card, i) => ({ card, stackIndex: top.length - 1 - i }));
 });
 
 // A 'hidden' zone sends neither its cards nor their count (#1056): its size is unknown, not 0.
-const isSizeHidden = computed(
-  () => props.element.childCount === undefined && props.element.zoneVisibility?.mode === 'hidden',
-);
+const isSizeHidden = computed(() => sizeIsHidden(props.element));
 
 const isEmpty = computed(() => !isSizeHidden.value && childCount.value === 0);
 

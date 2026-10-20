@@ -312,7 +312,7 @@ export function reissuePlaceholders(pile: GameElement): void {
   for (const child of pile._t.children) {
     forEachInSubtree(child, (reissued) => {
       reissued._t.placeholderToken = reissued._ctx.ids.mint(reissued._ctx.sequence++);
-      // A nested partition root's token is that partition's write.
+      // The partition the element belongs to is written: a shuffle of the game reaches every root.
       markTouchedPartition(reissued);
     });
   }
@@ -1327,8 +1327,10 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   /**
-   * Get the effective owner for visibility purposes
-   * (this element's player, or inherited from parent)
+   * The nearest `player` up the tree: this element's, else its parent's
+   * owner. This is the real owner. A seat's view may read ownership
+   * differently: past an element the seat is not sent, only an element's own
+   * player counts (#1209). Ask `isVisibleTo` what a seat sees, not this.
    */
   getEffectiveOwner(): Player | undefined {
     if (this.player) return this.player;
