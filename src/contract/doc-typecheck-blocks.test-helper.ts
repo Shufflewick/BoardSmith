@@ -72,21 +72,29 @@ export function parseMarkedBlocks(file: string, text: string, kind: string): Mar
 export function unmarkedFileBlocks(text: string): number[] {
   const lines = text.split(/\r?\n/);
   const unmarked: number[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    const lang = /^```([a-z]*)\s*$/.exec(lines[i])?.[1];
-    if (lang === undefined) continue;
-    let end = i + 1;
-    while (end < lines.length && !lines[end].startsWith('```')) end++;
-    const first = lines.slice(i + 1, end).find((line) => line.trim() !== '' && !line.startsWith('//')) ?? '';
-    const isFile =
-      (['ts', 'typescript'].includes(lang) && /^import\b/.test(first)) || (lang === 'vue' && /^<script\b/.test(first));
-    const marker = lines[i - 1] ?? '';
-    // A `doc-test: file` block is compiled by the doc's own test (docs/balance-simulator.test.ts, #556).
-    const compiled = marker.startsWith('<!-- typecheck:') || marker.startsWith('<!-- doc-test: file ');
-    if (isFile && !compiled) unmarked.push(i + 1);
-    i = end;
-  }
+  let open: number | undefined;
+  lines.forEach((line, i) => {
+    if (!line.startsWith('```')) return;
+    if (open === undefined) {
+      open = i;
+      return;
+    }
+    const fileStart = FILE_START[lines[open].slice(3).trim()];
+    const isFile = fileStart?.test(firstCodeLine(lines.slice(open + 1, i))) ?? false;
+    if (isFile && !COMPILED_MARKER.test(lines[open - 1] ?? '')) unmarked.push(open + 1);
+    open = undefined;
+  });
   return unmarked;
+}
+
+/** How a block that is a whole file starts, by fence language. */
+const FILE_START: Record<string, RegExp> = { ts: /^import\b/, typescript: /^import\b/, vue: /^<script\b/ };
+
+// A `doc-test: file` block is compiled by the doc's own test (docs/balance-simulator.test.ts, #556).
+const COMPILED_MARKER = /^<!-- (typecheck:|doc-test: file )/;
+
+function firstCodeLine(block: readonly string[]): string {
+  return block.find((line) => line.trim() !== '' && !line.startsWith('//')) ?? '';
 }
 
 /** The folders whose `*.md` files may mark blocks, relative to the repo root. */
