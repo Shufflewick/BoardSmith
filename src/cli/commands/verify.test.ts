@@ -323,6 +323,29 @@ describe('boardsmith verify: a claim of green is refused when a test outside the
     expect(mutation.next).toMatch(/test that imports/);
   });
 
+  it('runs mutants side by side within the budget boardsmith.json sets (#955)', async () => {
+    const dir = await gameOnBranch(false);
+    await write(dir, { 'boardsmith.json': JSON.stringify({ name: 'fixture', backend: 'table', mutation: { trials: 2, workers: 2 } }) });
+    commitAll(dir, 'chunk-deal/mutation budget');
+    const lines: string[] = [];
+
+    const { result } = await runVerify({ projectDir: dir, checks: CHECKS, log: (l) => lines.push(l) });
+
+    expect(check(result, 'mutation').counts).toMatchObject({ mutants: 3, killed: 3, survived: 0 });
+    expect(lines).toContain('Running 2 mutants at a time, each with 1 test worker, of a budget of 2.');
+  });
+
+  it('fails the mutation check, saying what to write, when the budget in boardsmith.json is wrong (#955)', async () => {
+    const dir = await gameOnBranch(false);
+    await write(dir, { 'boardsmith.json': JSON.stringify({ name: 'fixture', backend: 'table', mutation: { trials: 3, workers: 1 } }) });
+    commitAll(dir, 'chunk-deal/mutation budget');
+
+    const { result } = await runVerify({ projectDir: dir, checks: CHECKS, log: () => {} });
+
+    expect(check(result, 'mutation').passed).toBe(false);
+    expect(check(result, 'mutation').summary).toMatch(/"mutation.workers" \(1\) must be at least "mutation.trials" \(3\)/);
+  });
+
   it('fails the mutation check on the main branch with no --base, rather than passing with nothing covered', async () => {
     const dir = await gameOnBranch(false);
     const started = git(dir, 'rev-parse', 'main').trim();

@@ -308,8 +308,25 @@ Vitest project "my-game" (vitest.config.ts) does not load the mutation check's m
 
 Vitest's browser mode is not yet tested with the mutation check.
 
-Stopping mutation verification with Ctrl+C or SIGTERM stops its Vitest process
-group and waits for it to close before removing that run's temporary files.
+Mutants run one at a time unless `boardsmith.json` sets a budget:
+
+```json
+"mutation": { "trials": 2, "workers": 8 }
+```
+
+Then `trials` mutants run at once, each in its own Vitest run with `workers / trials`
+test workers (rounded down), and the unmutated run first gets all `workers`.
+Outcomes are reported in the same order as a serial run. Vitest sizes its pools
+from `poolOptions` (`maxForks`, `maxThreads`, `minForks`, `minThreads`) before
+the worker count, and runs files of different pools at the same time, so with a
+budget the mutation check refuses a config that sets those, `poolMatchGlobs`,
+typecheck mode (`typecheck.enabled`), browser mode (`browser.enabled`), a
+different pool per project or a custom pool, rather than run more workers than
+the budget says. A setting can come from the config file or from an environment
+variable Vitest reads, such as `VITEST_MAX_FORKS`.
+
+Stopping mutation verification with Ctrl+C or SIGTERM stops every Vitest process
+group it started and waits for them to close before removing that run's temporary files.
 The interrupted command still exits by the signal, so it cannot record a pass.
 
 On the main branch itself, the merge base with main is the current commit, so
