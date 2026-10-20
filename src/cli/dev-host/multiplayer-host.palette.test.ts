@@ -149,3 +149,28 @@ describe('MultiplayerHost — each declared player option\'s default reaches eve
     ]);
   });
 });
+
+describe('MultiplayerHost — a player option named like a seat field does not replace it (#1304)', () => {
+  it('keeps the host\'s name, isBot and botLevel in playerConfigs', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let startOptions: any = null;
+    const host = new MultiplayerHost({
+      playerCount: 2,
+      minPlayers: 1,
+      maxPlayers: def.maxPlayers,
+      makeSeed: () => 'seat-fields-win',
+      botLevel: 'hard',
+      playerOptionDefaults: { name: 'Option', isBot: false, botLevel: 'easy' },
+      executeOp: (gameOptions, snap, pend, op, hostOptions) => {
+        if (op.type === 'start') startOptions = gameOptions;
+        return executeOp(def, gameOptions, snap, pend, op, hostOptions);
+      },
+      send: () => {},
+    });
+
+    await host.handleMessage('A', { type: 'hello' });
+
+    expect(startOptions.playerConfigs[1]).toMatchObject({ isBot: true, botLevel: 'hard' });
+    expect(startOptions.playerConfigs[1].name).not.toBe('Option');
+  });
+});

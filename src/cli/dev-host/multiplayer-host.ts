@@ -1356,11 +1356,12 @@ export class MultiplayerHost {
       // behave identically in dev. Without this a bot seat is invisible to such
       // games: they treat the bot seat as a human, build an interactive turn, and
       // the dev host's MCTS bot then finds "No available moves" and locks up.
+      // The seat's own fields go last, so a player option with the same key cannot replace them.
       playerConfigs: Array.from({ length: playerCount }, (_, i) => ({
+        ...perSeatOptions[i],
         name: seatDisplayName(i + 1, this.seats.get(i + 1)?.name),
         isBot: !humanSeats.has(i + 1),
         botLevel: this.opts.botLevel,
-        ...perSeatOptions[i],
       })),
     };
     this.injectPersistedStore(startGameOptions, humanSeats, playerCount);
