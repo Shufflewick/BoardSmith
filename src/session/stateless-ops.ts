@@ -16,7 +16,7 @@ import { canSeatAct, availableActionsForSeat, flowBoundaryKey, PlayerFacingError
 import { withDevDetail } from '../engine/action/rules-error.js';
 import { dueSeatOffers, describeRefused } from '../engine/flow/seat-activity.js';
 import type { BoundaryKeyState } from '../engine/index.js';
-import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState, WarningEntry } from './types.js';
+import type { HeatmapEntry, SerializedFlowDebugInfo, SeatPendingAction, WarningEntry } from './types.js';
 import { validateTutorialDefinition, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
 import { learnerSeatRefusal, startTutorial } from '../engine/tutorial/start.js';
 import { executeDebugCommand, type GameCommand } from './debug-command.js';
@@ -455,7 +455,7 @@ export interface OpSuccessFields {
   debugStateDiff: { diff: ElementDiff };
   debugActionTraces: { traces: unknown[]; flowContext: unknown };
   /** The asking seat's own pending action, beside the envelope's `flowDebugInfo`. */
-  debugFlowState: { pendingAction?: SerializedPendingActionState };
+  debugFlowState: { pendingAction?: SeatPendingAction };
   /** Each `registerDebug()` name and what its function returned (or the error it threw). */
   debugCustomData: { customDebug: Record<string, unknown> };
   debugRewind: Record<never, never>;

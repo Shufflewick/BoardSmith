@@ -39,6 +39,10 @@ async function startedHost() {
   return { host, executed };
 }
 
+
+// A seat's pending state after the first pick of a two-pick action.
+const HALF_MADE = { actionName: 'two', playerPosition: 2, collectedArgs: { first: 'a' }, currentSelectionIndex: 1 };
+
 describe('#738: an op naming another seat is refused', () => {
   const opsAsSeat2 = (host: SnapshotSessionHost): SeatOp[] => [
     { type: 'action', actionName: 'pass', player: 2, args: {}, boundaryKey: boundaryKeyOfHost(host) },
@@ -137,7 +141,7 @@ describe('#1100, #1102: a host-only op sent through handleOp is refused', () => 
       playerCount: 2,
       executeOp: stubExecuteOp(async (snap, pend, op) => {
         if (op.type === 'hint') return { success: true, hintAnnotation: { seat: op.seat, annotation: { text: 'pass' } } };
-        if (op.type === 'selectionStep') return { ...lastEnvelope, actionComplete: false, pendingState: { first: 'a' } };
+        if (op.type === 'selectionStep') return { ...lastEnvelope, actionComplete: false, pendingState: HALF_MADE };
         const res = await executeOp(passDef, { playerCount: 2, seed: 'bs1102' }, snap, pend, op);
         if (res.success && 'snapshot' in res) lastEnvelope = res;
         return res;
@@ -150,7 +154,7 @@ describe('#1100, #1102: a host-only op sent through handleOp is refused', () => 
     expect((await host.handleOp(2, {
       type: 'selectionStep', player: 2, selectionName: 'first', value: 'a', actionName: 'pass', boundaryKey: boundaryKeyOfHost(host),
     })).success).toBe(true);
-    expect(host.durableState().pendingStates['2']).toEqual({ first: 'a' });
+    expect(host.durableState().pendingStates['2']).toEqual(HALF_MADE);
     expect(host.transientTeachingState.get(2)?.hint).toBeDefined();
 
     expect((await host.restoreEarlier(earlier)).success).toBe(true);
