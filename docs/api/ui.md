@@ -165,6 +165,8 @@ A face-down pile's cards reach a seat as placeholders whose ids say nothing abou
 - `findPlayerHand()` - Find player's hand
 - `findAllHands()` - Find all hands
 - `getElementCount()` - Get element count
+- `isSizeHidden()` - Whether the seat is not told an element's size (a 'hidden' zone sends only what it grants)
+- `directChildren()` - An element's own children, without the granted cards a concealed zone's view carries after them
 - `getCards()` - Get cards from container
 - `getFirstCard()` - Get first card
 - `getElementOwner()` - Get element owner

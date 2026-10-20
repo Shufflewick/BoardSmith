@@ -18,6 +18,7 @@ export interface GameElement {
   attributes?: Record<string, unknown>;
   children?: GameElement[];
   childCount?: number;
+  zoneVisibility?: { mode: string };
 }
 
 /** The grid cell an element stands on, provided by ElementRenderer for a piece to drag on its behalf (#943). */
