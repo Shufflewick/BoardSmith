@@ -201,7 +201,12 @@ describe('formatActionName', () => {
     expect(formatActionName('')).toBe('');
   });
 
-  it('splits a run of capitals into one word per letter', () => {
-    expect(formatActionName('drawUSB')).toBe('Draw U S B');
+  it('keeps an acronym together, and a digit with the word before it (#1298)', () => {
+    expect(formatActionName('drawUSB')).toBe('Draw USB');
+    expect(formatActionName('USBDrive')).toBe('USB Drive');
+    expect(formatActionName('drawUSBCable')).toBe('Draw USB Cable');
+    expect(formatActionName('playMP3')).toBe('Play MP3');
+    expect(formatActionName('rollD6')).toBe('Roll D6');
+    expect(formatActionName('moveP2Piece')).toBe('Move P2 Piece');
   });
 });

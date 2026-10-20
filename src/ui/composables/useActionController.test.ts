@@ -1629,6 +1629,21 @@ describe('useActionController', () => {
       await controller.fill('card', 1);
     });
 
+    it("labels a pick a start fills from the board by the candidate's own words (#1313)", async () => {
+      const fetchPickChoices = vi.fn(async (action: string, pick: string) =>
+        action === 'movePiece' && pick === 'piece'
+          ? { success: true, validElements: [{ id: 100, display: 'White knight' }] }
+          : { success: true, validElements: [] });
+      const controller = useActionController({
+        sendAction, availableActions, actionMetadata, isMyTurn, autoExecute: false, playerSeat: ref(0), fetchPickChoices,
+      });
+      for (let i = 0; i < 5; i++) await nextTick();
+
+      await controller.start('movePiece', { args: { piece: 100 } });
+
+      expect(controller.getCollectedPick('piece')?.display).toBe('White knight');
+    });
+
     it('fetches only what each action can start with when no action is active (#1192)', async () => {
       const fetchPickChoices = vi.fn(async () => ({ success: true, validElements: [] }));
 
