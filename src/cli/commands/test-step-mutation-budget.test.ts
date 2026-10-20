@@ -102,7 +102,7 @@ async function seen(dir: string): Promise<Seen[]> {
 const memoryCache = (hints = new Map<string, KillerHint>()) => ({
   fingerprint: () => undefined, get: () => undefined, set: () => {}, save: async () => {},
   killerHint: (m: { source: string }) => hints.get(m.source),
-  setKillerHint: (m: { source: string }, hint: KillerHint) => { hints.set(m.source, hint); },
+  setKillerHint: (m: { source: string }, hint: KillerHint | undefined) => { if (hint) hints.set(m.source, hint); else hints.delete(m.source); },
 });
 
 function check(dir: string, budget: MutationBudget | undefined, contextChange?: () => Promise<string | undefined>, hints?: Map<string, KillerHint>) {

@@ -727,9 +727,14 @@ function limitWorkers(workers: number | undefined, env: NodeJS.ProcessEnv): stri
   return [`--maxWorkers=${workers}`, '--minWorkers=1'];
 }
 
+/** The real paths of the files a run asked for; undefined for the whole suite. */
+function realPaths(scope: RunScope): string[] | undefined {
+  return scope === 'whole-suite' ? undefined : scope.map((f) => realpathSync(f.absPath));
+}
+
 /** A reported file's manifest path, else its project path when the run asked for it; undefined for a file the run is not about. */
-function pathInRun(projectDir: string, byRealPath: ReadonlyMap<string, string>, scope: RunScope): (realPath: string) => string | undefined {
-  const inScope = scope === 'whole-suite' ? undefined : new Set(scope.map((f) => realpathSync(f.absPath)));
+function pathInRun(projectDir: string, byRealPath: ReadonlyMap<string, string>, scopePaths: string[] | undefined): (realPath: string) => string | undefined {
+  const inScope = scopePaths && new Set(scopePaths);
   return (realPath) => byRealPath.get(realPath) ?? (inScope?.has(realPath) === false ? undefined : relative(projectDir, realPath).split(sep).join('/'));
 }
 
@@ -775,15 +780,14 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
         await fs.writeFile(mutantPath, JSON.stringify({ file: realpathSync(mutant.absPath), source: mutant.source }));
         env.BOARDSMITH_MUTANT = mutantPath;
       }
+      const scopePaths = realPaths(scope);
       const args = [
         'run',
         '--root', projectDir,
         '--config', configPath,
         ...(options.bail ? ['--bail=1'] : []),
         ...workerFlags,
-        ...(scope === 'whole-suite'
-          ? []
-          : scope.map((f) => relative(projectDir, realpathSync(f.absPath)).split(sep).join('/'))),
+        ...(scopePaths ?? []).map((path) => relative(projectDir, path).split(sep).join('/')),
       ];
       const started = Date.now();
       checkStopped();
@@ -795,7 +799,7 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
       checkStopped();
       if (!finished) return { kind: 'timed-out' };
 
-      const read = await readReport(reportPath, projectDir, pathInRun(projectDir, byRealPath, scope));
+      const read = await readReport(reportPath, projectDir, pathInRun(projectDir, byRealPath, scopePaths));
       return { kind: 'ran', ...read, exitCode: finished.exitCode, ms: Date.now() - started };
     },
   };
@@ -1323,38 +1327,35 @@ async function greenRunner(runner: Runner, projectDir: string, log: (line: strin
 /**
  * Runs `mutant` against every test file that loads its file, stopping at the first failure; `unreached`
  * when none does. With a `hint` (#954) whose test passed in the unmutated run and is in one of those, its
- * file runs alone first, and only that test's own assertion failing kills the mutant; anything else (a pass, a
- * file that fails to load, a time-out) goes on to the full run, so a survivor still runs every test.
- * `killer` is the test that failed on its own assertion, for the next run's hint.
+ * file runs alone first, and a test of it that passed unmutated failing on its own assertion kills the mutant;
+ * a time-out is the mutant's verdict (#1308), and anything else (a pass, a file that fails to load) goes on to
+ * the full run, so a survivor still runs every test. `killer` is the test that failed on its own assertion,
+ * for the next run's hint, and undefined when none did.
  */
-async function runMutant(
-  { runner, projectDir, timeoutMs, workers, testsLoading, passed }: GreenRunner,
-  mutant: LocatedMutant,
-  hint?: KillerHint,
-): Promise<{ outcome: DiffOutcome; killer?: KillerHint }> {
-  const tests = testsLoading(mutant.file);
+async function runMutant(run: GreenRunner, mutant: LocatedMutant, hint?: KillerHint): Promise<{ outcome: DiffOutcome; killer?: KillerHint }> {
+  const tests = run.testsLoading(mutant.file);
   if (tests.length === 0) return { outcome: 'unreached' };
-  if (hint && (await hintKills({ runner, projectDir, timeoutMs, workers, passed }, mutant, tests, hint))) return { outcome: 'killed', killer: hint };
-  const result = await runner.run(tests.map((absPath) => ({ absPath })), mutant, timeoutMs, { bail: true, workers });
+  const trial = hint && (await hintTrial(run, mutant, tests, hint));
+  if (trial === 'timed-out') return { outcome: 'timed-out' };
+  if (trial) return { outcome: 'killed', killer: trial };
+  const result = await run.runner.run(tests.map((absPath) => ({ absPath })), mutant, run.timeoutMs, { bail: true, workers: run.workers });
   if (result.kind === 'timed-out') return { outcome: 'timed-out' };
   const killer = result.outcomes.find((o) => o.failedOnAssertion);
   return { outcome: suiteNoticed(result) ? 'killed' : 'survived', ...(killer ? { killer: { file: killer.path, test: killer.fullName } } : {}) };
 }
 
 /**
- * Whether `hint`'s test, one of `tests` that passed unmutated, fails on its own assertion when its file runs alone under
- * `mutant`. The whole file runs, since the test passed only after the tests before it in its file.
+ * Runs `hint`'s file alone under `mutant` when its test is one of `tests` that passed unmutated, and returns
+ * the test of that file that passed unmutated and now fails on its own assertion; 'timed-out' when the file
+ * ran past the limit. The whole file runs, since the hinted test passed only after the tests before it in its file.
  */
-async function hintKills(
-  { runner, projectDir, timeoutMs, workers, passed }: Omit<GreenRunner, 'testsLoading'>,
-  mutant: LocatedMutant,
-  tests: string[],
-  hint: KillerHint,
-): Promise<boolean> {
-  const absPath = join(projectDir, hint.file);
-  if (!passed.has(testKey({ path: hint.file, fullName: hint.test })) || !tests.includes(absPath)) return false;
-  const trial = await runner.run([{ absPath }], mutant, timeoutMs, { bail: true, workers });
-  return trial.kind === 'ran' && trial.outcomes.some((o) => o.path === hint.file && o.fullName === hint.test && o.failedOnAssertion);
+async function hintTrial(run: GreenRunner, mutant: LocatedMutant, tests: string[], hint: KillerHint): Promise<KillerHint | 'timed-out' | undefined> {
+  const absPath = join(run.projectDir, hint.file);
+  if (!run.passed.has(testKey({ path: hint.file, fullName: hint.test })) || !tests.includes(absPath)) return undefined;
+  const trial = await run.runner.run([{ absPath }], mutant, run.timeoutMs, { bail: true, workers: run.workers });
+  if (trial.kind === 'timed-out') return 'timed-out';
+  const killer = trial.outcomes.find((o) => o.path === hint.file && o.failedOnAssertion && run.passed.has(testKey(o)));
+  return killer && { file: killer.path, test: killer.fullName };
 }
 
 /** The preparation command observes a real survivor, without accepting a cached or reviewed verdict. */
@@ -1494,7 +1495,7 @@ async function runUnlessContextChanged(input: DiffMutationInput, run: GreenRunne
   if (outcome === 'timed-out' || outcome === 'unreached') return outcome;
   await requireSameContext(input, `while mutant ${done + 1} ran, so its outcome is not kept`);
   input.cache.set(mutant, outcome);
-  if (killer) input.cache.setKillerHint(mutant, killer);
+  input.cache.setKillerHint(mutant, killer);
   await save();
   return outcome;
 }
