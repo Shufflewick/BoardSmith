@@ -76,7 +76,8 @@ import {
   provisionalReferences,
   unreadableShorthand,
 } from '../lib/ledger-allocation.js';
-import { describeFinding, ledgerCheck } from './ledger-check.js';
+import { describeFinding, ledgerCheck, verifyResultsOnFile } from './ledger-check.js';
+import { reviewRoundVerifies } from '../lib/run-log-roles.js';
 import { type TestRunner, checkConstraints, runVitest, unranTestsProblem } from './constraint-check.js';
 import { chunkTests } from './verify.js';
 import { type TypeCheckRun, typeCheckProject } from './validate.js';
@@ -116,6 +117,8 @@ interface ChunkMergeResult {
   crossChunk: 'pending' | 'none' | 'not built alongside';
   /** Source files the merge vouched for (#403, #435), each with its chunks and why it needed to. */
   vouched: SharedFile[];
+  /** The review rounds left with no verify result in the main checkout, with how to record one (#1202, #1302). */
+  noVerifyResults?: string;
 }
 
 /** The merge's fixed facts, read once. Paths in git are repository-relative; `prefix` makes them. */
@@ -422,7 +425,7 @@ const tail = (output: string) => output.trimEnd().split('\n').slice(-25).join('\
  * (#985). The whole suite runs at publish (#984).
  */
 async function combinedTreeProblems(ctx: MergeContext, alongside: string[], { runTests, typeCheck }: Runners): Promise<string[]> {
-  const ledgers = await ledgerCheck(ctx.projectDir);
+  const ledgers = await ledgerCheck(ctx.projectDir, 'boardsmith chunk-merge');
   const problems = [
     ...(await verifiedProblem(ctx)),
     ...(await concurrencyProblems(ctx, alongside)),
@@ -700,20 +703,37 @@ async function recordCrossChunk(ctx: MergeContext, alongside: string[]): Promise
 /**
  * Copies the verify results of the branch's own commits from the worktree it is checked out in
  * into the main checkout, so review-gate still finds a review round's result once that worktree
- * is removed (#1001). A branch checked out in no worktree has no results apart from this checkout's.
+ * is removed (#1001). Then names each review round whose commit still has no result in the main
+ * checkout, copied or already there, with how to record one, so that shows now rather than at the
+ * cross-chunk review-gate (#1202, #1302).
  */
-async function copyVerifyResults(ctx: MergeContext): Promise<void> {
+async function copyVerifyResults(ctx: MergeContext): Promise<string | undefined> {
   const worktrees = (await git(ctx.top, ['worktree', 'list', '--porcelain'])).split('\n\n');
   const block = worktrees.find((w) => w.split('\n').includes(`branch refs/heads/${ctx.branch}`));
-  if (block === undefined) return;
-  const chunkProject = join(block.split('\n')[0].slice('worktree '.length), ctx.prefix);
-  const own = (await git(ctx.top, ['rev-list', ctx.branchCommit, `^${ctx.mainCommit}`])).split('\n').filter(Boolean);
-  for (const commit of own) {
-    const result = await readIfExists(verifyResultPath(chunkProject, commit), fs.readFile);
-    if (result === undefined) continue;
-    await fs.mkdir(verifyResultsDir(ctx.projectDir), { recursive: true });
-    await fs.writeFile(verifyResultPath(ctx.projectDir, commit), result);
+  if (block !== undefined) {
+    const chunkProject = join(block.split('\n')[0].slice('worktree '.length), ctx.prefix);
+    const own = (await git(ctx.top, ['rev-list', ctx.branchCommit, `^${ctx.mainCommit}`])).split('\n').filter(Boolean);
+    for (const commit of own) {
+      const result = await readIfExists(verifyResultPath(chunkProject, commit), fs.readFile);
+      if (result === undefined) continue;
+      await fs.mkdir(verifyResultsDir(ctx.projectDir), { recursive: true });
+      await fs.writeFile(verifyResultPath(ctx.projectDir, commit), result);
+    }
   }
+  const log = await readIfExists(designPath(ctx.projectDir, `${RUN_LOG_DIR}/${ctx.slug}.md`), (file) => fs.readFile(file, 'utf-8'));
+  const rounds = log === undefined ? [] : reviewRoundVerifies(log);
+  const onFile = await verifyResultsOnFile(ctx.projectDir, rounds.map((r) => r.commit));
+  const missing = rounds.filter(({ commit }) => onFile(commit) === undefined);
+  if (missing.length === 0) return undefined;
+  // On no branch, the commit the checkout is on is the one to come back to.
+  const mainLine = (await git(ctx.top, ['branch', '--show-current'])).trim() || (await git(ctx.top, ['rev-parse', 'HEAD'])).trim();
+  return (
+    `review-gate needs a verify result for each review round's commit, and this checkout has no verify result for ` +
+    `${missing.map(({ commit, round }) => `review round ${round}'s commit ${commit}`).join(', ')}` +
+    `${block === undefined ? ` (${ctx.branch} is checked out in no worktree to copy one from)` : ''}. ` +
+    `To record one, with a clean tree run \`git checkout ${missing[0].commit}\`, run \`npx boardsmith verify --chunk ${ctx.slug}\`, ` +
+    `then \`git checkout ${mainLine}\` again; do the same for each commit named.`
+  );
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -831,8 +851,8 @@ async function checkStartedMerge(ctx: MergeContext, left: string[], runners: Run
   }
   const crossChunk = await recordCrossChunk(ctx, alongside);
   await git(ctx.top, ['commit', '-q', '-m', commitMessage(ctx, allocated, alongside)]);
-  await copyVerifyResults(ctx);
-  return { merged: true, refusals: [], allocated, alongside, crossChunk, vouched: shared };
+  const noVerifyResults = await copyVerifyResults(ctx);
+  return { merged: true, refusals: [], allocated, alongside, crossChunk, vouched: shared, noVerifyResults };
 }
 
 /**
@@ -879,6 +899,7 @@ function report(slug: string, result: ChunkMergeResult): void {
         `file, recorded in ${DESIGN_DIR}/${MERGE_SIGNOFFS_MD}.`,
     );
   }
+  if (result.noVerifyResults !== undefined) console.log(styleText('yellow', `  ${result.noVerifyResults}`));
   if (result.crossChunk === 'pending') {
     console.log(
       `  ${slug} and ${result.alongside.join(', ')} share code or names, listed in ${DESIGN_DIR}/${CROSS_CHUNK_MD}. ` +

@@ -289,6 +289,51 @@ describe('useDragDrop — no-provider degrade-gracefully path (unchanged design)
 // drag()) to gate on `when`, returning inert props when it evaluates false.
 // ---------------------------------------------------------------------------
 
+describe('useDragDrop — a disabled candidate is not draggable (#1299)', () => {
+  let bi: BoardInteractionInstance;
+
+  beforeEach(() => {
+    bi = createBoardInteraction();
+    bi.setValidElements([{ id: 1, ref: { id: 1 }, disabled: 'Too expensive' }, { id: 2, ref: { id: 2 } }], () => {});
+  });
+
+  it('dragProps and drag() give a disabled candidate inert props and no bs-draggable class', () => {
+    const { api } = mountDragDrop(bi);
+
+    expect(api.dragProps({ id: 1 }).draggable).toBe(false);
+    expect('onDragstart' in api.drag({ id: 1 }).props).toBe(false);
+    expect(api.drag({ id: 1 }).classes['bs-draggable']).toBe(false);
+    expect(api.dragClasses({ id: 1 })['bs-draggable']).toBe(false);
+
+    expect(api.drag({ id: 2 }).props.draggable).toBe(true);
+    expect(api.drag({ id: 2 }).classes['bs-draggable']).toBe(true);
+  });
+
+  it('drag() asks `when` once for both its props and its classes', () => {
+    const { api } = mountDragDrop(bi);
+    const when = vi.fn(() => true);
+
+    api.drag({ id: 2 }, { when });
+
+    expect(when).toHaveBeenCalledTimes(1);
+  });
+
+  it('a candidate disabled after its props were bound cancels the browser drag and runs no onDragStart', () => {
+    const { api } = mountDragDrop(bi);
+    const onDragStart = vi.fn();
+    const props = api.dragProps({ id: 2 }, { onDragStart }) as DragProps;
+    bi.setValidElements([{ id: 2, ref: { id: 2 }, disabled: 'Too expensive' }], () => {});
+    const fakeEvent = makeFakeDragEvent();
+
+    props.onDragstart(fakeEvent as unknown as DragEvent);
+
+    expect(fakeEvent.preventDefault).toHaveBeenCalled();
+    expect(fakeEvent.dataTransfer.setData).not.toHaveBeenCalled();
+    expect(onDragStart).not.toHaveBeenCalled();
+    expect(bi.isDragging).toBe(false);
+  });
+});
+
 describe('useDragDrop — dragProps() honors the `when` option (UIX-04)', () => {
   let bi: BoardInteractionInstance;
 

@@ -8,6 +8,7 @@ Import from `boardsmith/testing` when writing tests for your game logic. This pa
 
 ## Usage
 
+<!-- typecheck: game src/imports.ts -->
 ```typescript
 import {
   TestGame,
@@ -78,10 +79,40 @@ There is one way to run an action and one way to assert it fails:
 
 ### Basic Test
 
+The examples test `GoFishGame` and `CheckersGame`, game classes like these. A real game also registers its elements, actions and flow; [Getting Started](../getting-started.md) builds one.
+
+<!-- typecheck: game src/game.ts -->
+```typescript
+import { Game, Hand, Player, type GameOptions } from 'boardsmith';
+
+export class GoFishPlayer extends Player<GoFishGame, GoFishPlayer> {
+  hand!: Hand;
+}
+
+export class GoFishGame extends Game<GoFishGame, GoFishPlayer> {
+  static PlayerClass = GoFishPlayer;
+
+  deckSize = 52;
+  score = 0;
+
+  constructor(options: GameOptions) {
+    super(options);
+    for (const player of this.players) {
+      player.hand = this.create(Hand, `hand-${player.seat}`);
+      player.hand.player = player;
+      player.hand.contentsVisibleToOwner();
+    }
+  }
+}
+
+export class CheckersGame extends Game<CheckersGame> {}
+```
+
+<!-- typecheck: game tests/game.test.ts -->
 ```typescript
 import { describe, test } from 'vitest';
 import { createTestGame, assertActionAvailable } from 'boardsmith/testing';
-import { GoFishGame } from '../src/game';
+import { GoFishGame } from '../src/game.js';
 
 describe('Go Fish', () => {
   test('player can ask for a card', () => {
@@ -105,9 +136,10 @@ Note: player seats throughout `boardsmith/testing` are **1-indexed** (`getPlayer
 
 Don't parse `getSnapshot()` JSON to check game-specific properties in tests. There are two correct read patterns, both on `TestGame`:
 
+<!-- typecheck: game tests/state.ts -->
 ```typescript
 import { createTestGame } from 'boardsmith/testing';
-import { GoFishGame } from '../src/game';
+import { GoFishGame } from '../src/game.js';
 
 const testGame = createTestGame(GoFishGame, { playerCount: 2 });
 
@@ -128,8 +160,11 @@ testGame.game.score;      // no JSON parsing required
 
 ### Running Individual Actions
 
+<!-- typecheck: game tests/actions.ts -->
 ```typescript
+import { expect } from 'vitest';
 import { createTestGame, assertActionFails } from 'boardsmith/testing';
+import { CheckersGame } from '../src/game.js';
 
 const testGame = createTestGame(CheckersGame, { playerCount: 2 });
 
@@ -176,8 +211,12 @@ const args = testGame.action('move', 1).select('destination', 'b4').buildArgs();
 
 When `assertActionAvailable()` fails, it doesn't just say an action is unavailable — it calls `game.debugActionAvailability()` and includes *why*: the failing condition and, for each selection, whether it passed and how many choices it had.
 
+<!-- typecheck: game tests/trace.ts -->
 ```typescript
-import { assertActionAvailable } from 'boardsmith/testing';
+import { assertActionAvailable, createTestGame } from 'boardsmith/testing';
+import { GoFishGame } from '../src/game.js';
+
+const testGame = createTestGame(GoFishGame, { playerCount: 2 });
 
 assertActionAvailable(testGame, 1, 'equipItem');
 // Error: Action "equipItem" is not available for player 1.
@@ -192,11 +231,14 @@ assertActionAvailable(testGame, 1, 'equipItem');
 
 ### Random Game Simulation
 
+<!-- typecheck: game tests/random.test.ts -->
 ```typescript
+import { expect, test } from 'vitest';
 import { simulateRandomGames } from 'boardsmith/testing';
+import { GoFishGame } from '../src/game.js';
 
 test('game always terminates', async () => {
-  const results = await simulateRandomGames(MyGame, {
+  const results = await simulateRandomGames(GoFishGame, {
     count: 100,
     playerCounts: [2],
     maxActions: 1000,
@@ -296,10 +338,12 @@ Remove it once the game can end, so a stop goes back to being `stuck`.
 
 ### Debugging Test Failures
 
+<!-- typecheck: game tests/debug.ts -->
 ```typescript
 import { createTestGame, toDebugString, traceAction, logAvailableActions } from 'boardsmith/testing';
+import { GoFishGame } from '../src/game.js';
 
-const testGame = createTestGame(MyGame, { playerCount: 2 });
+const testGame = createTestGame(GoFishGame, { playerCount: 2 });
 
 // Print current game state
 console.log(toDebugString(testGame.game));
@@ -344,8 +388,12 @@ post-`playerView` serialized tree the production UI actually receives
 (`game.toJSONForPlayer(seat)`), so a passing assertion means the real wire
 bytes are safe, not just that `element.isVisibleTo()` says so.
 
+<!-- typecheck: game tests/visibility.ts -->
 ```typescript
-import { isElementVisible, assertHidden, assertVisible } from 'boardsmith/testing';
+import { createTestGame, isElementVisible, assertHidden, assertVisible } from 'boardsmith/testing';
+import { GoFishGame } from '../src/game.js';
+
+const testGame = createTestGame(GoFishGame, { playerCount: 2 });
 
 const opponentHand = testGame.game.getPlayer(2)!.hand;
 
@@ -362,8 +410,12 @@ per-seat trees into `onlyInA` / `onlyInB` / `attributeDiffs` — useful for
 asserting "this element is visible to me but not my opponent" without manually
 walking both trees:
 
+<!-- typecheck: game tests/diff.ts -->
 ```typescript
-import { diffPlayerViews } from 'boardsmith/testing';
+import { createTestGame, diffPlayerViews } from 'boardsmith/testing';
+import { GoFishGame } from '../src/game.js';
+
+const testGame = createTestGame(GoFishGame, { playerCount: 2 });
 
 const diff = diffPlayerViews(testGame, 1, 2);
 // diff.onlyInA -- elements visible to seat 1 but hidden from seat 2 (e.g. seat 1's own hand)
@@ -403,10 +455,15 @@ the mounted tree raises, give it a turn to arrive, and raise it to the caller
 instead. A subject that holds no elements at all is refused for the same reason:
 a diff with nothing on one side of it cannot fail.
 
+<!-- typecheck: game tests/leak.test.ts -->
 ```typescript
-import { assertNoHiddenInfoLeak, preloadSeatRenderer } from 'boardsmith/testing';
+import { test } from 'vitest';
+import { assertNoHiddenInfoLeak, createTestGame, preloadSeatRenderer } from 'boardsmith/testing';
+import { GoFishGame } from '../src/game.js';
 
 await preloadSeatRenderer();
+
+const testGame = createTestGame(GoFishGame, { playerCount: 2 });
 
 test('opponent card rank/suit never appears in the DOM for seat 2', async () => {
   await assertNoHiddenInfoLeak(testGame, 2);
@@ -439,8 +496,8 @@ most for: its hidden information is per-partition and per-seat on every frame, s
 another seat's room is not redacted in your projection, it is absent from it.
 
 ```typescript
-import { createTestWorld, assertNoHiddenInfoLeak } from 'boardsmith/testing';
-import WorldBoard from '../src/ui/WorldBoard.vue';
+// createTestWorld and assertNoHiddenInfoLeak come from 'boardsmith/testing',
+// and WorldBoard from '../src/ui/WorldBoard.vue'
 
 const world = await createTestWorld({ definition: gameDefinition });
 await world.take(1, 'stash');
@@ -456,7 +513,7 @@ so for a custom-UI game a green result without this option is close to
 meaningless, which is exactly the case hidden information matters most:
 
 ```typescript
-import GameTable from '../src/ui/components/GameTable.vue';
+// GameTable is your board, from '../src/ui/components/GameTable.vue'
 
 await assertNoHiddenInfoLeak(testGame, 2, { component: GameTable });
 ```
@@ -583,9 +640,20 @@ Assert what actually animated — headlessly, no browser, no visual diffing —
 by turning on animation test mode before driving actions and reading back a
 structured trace afterward.
 
+<!-- typecheck: game tests/animation.test.ts -->
 ```typescript
-import { enableAnimationTestMode, getAnimationTrace, clearAnimationTrace, disableAnimationTestMode } from 'boardsmith/testing';
-// (also exported from 'boardsmith/ui' — same module, either import path works)
+import { afterEach, beforeEach, expect, test } from 'vitest';
+import {
+  createTestGame,
+  enableAnimationTestMode,
+  getAnimationTrace,
+  clearAnimationTrace,
+  disableAnimationTestMode,
+} from 'boardsmith/testing';
+// (the animation functions are also exported from 'boardsmith/ui' — same module, either import path works)
+import { GoFishGame } from '../src/game.js';
+
+const testGame = createTestGame(GoFishGame, { playerCount: 2 });
 
 beforeEach(() => enableAnimationTestMode());
 afterEach(() => disableAnimationTestMode());
@@ -619,19 +687,24 @@ completion the same way a real hosted session would, without any WebSocket
 or storage layer — the seeded-run building block behind CI smoke tests and
 reproducible agent benchmarking:
 
+<!-- typecheck: game tests/headless.ts -->
 ```typescript
+import type { GameDefinition } from 'boardsmith/session';
 import { createHeadlessSession } from 'boardsmith/testing';
-import { gameDefinition } from '../src/rules/game.js'; // your game's exported GameDefinitionLike
 
-const session = createHeadlessSession(
-  gameDefinition,
-  { playerCount: 2, seed: 'ci-seed-1' },
-  [{ seat: 2, level: 'easy' }], // optional bot seats
-);
+// gameDefinition is your game's exported definition (src/rules/index.ts)
+export async function playOne(gameDefinition: GameDefinition) {
+  const session = createHeadlessSession(
+    gameDefinition,
+    { playerCount: 2, seed: 'ci-seed-1' },
+    [{ seat: 2, level: 'easy' }], // optional bot seats
+  );
 
-await session.start();
-await session.send(1, { type: 'action', actionName: 'ask', player: 1, args: { target: 2, rank: '7' } });
-// session.broadcasts accumulates each structuredClone'd broadcast for assertions
+  await session.start();
+  await session.send(1, { type: 'action', actionName: 'ask', player: 1, args: { target: 2, rank: '7' } });
+  // session.broadcasts accumulates each structuredClone'd broadcast for assertions
+  return session.broadcasts;
+}
 ```
 
 For a project-level CI check with no test file to write at all, use the
@@ -720,14 +793,7 @@ failure messages (`assertActionAvailable`,
 `toDebugString`) — you don't need to call it manually just to get a
 readable diagnostic on a failing test.
 
-For mid-multi-step-action state (a player is partway through a
-multi-selection action), use `TestGame.getPendingAction(seat)`:
-
-```typescript
-const pending = testGame.getPendingAction(1); // PendingActionState | undefined
-pending?.actionName;       // the action currently being built
-pending?.completedSteps;   // selections already made
-```
+A half-finished multi-pick action lives in the session, not in `TestGame`: drive it pick by pick with the `selectionStep` op ([session.md](./session.md)).
 
 To see **why** a choice is disabled (not just that it is), use
 `TestGame.getActionSpaceWithChoices(seat)` — it composes the existing
@@ -746,28 +812,32 @@ A world is not a table and `TestGame` cannot drive one: a world keeps only named
 partitions resident, has no turn, and answers a seat with a PRUNED projection
 rather than a redacted whole tree. `createTestWorld` is the harness for it.
 
+<!-- typecheck: game tests/world.ts -->
 ```typescript
+import type { GameDefinition } from 'boardsmith/session';
 import { createTestWorld } from 'boardsmith/testing';
-import { gameDefinition } from '../src/rules/index.js';
 
-const world = await createTestWorld({ definition: gameDefinition });
+// gameDefinition is your world's exported definition (src/rules/index.ts)
+export async function explore(gameDefinition: GameDefinition, ship: number) {
+  const world = await createTestWorld({ definition: gameDefinition });
 
-await world.take(1, 'stash');              // take one of seat 1's offers
-await world.advanceClock(600_000);         // and run whatever falls due, at its own due
-await world.wake();                        // drop everything resident, rebuild from the store
+  await world.take(1, 'stash');              // take one of seat 1's offers
+  await world.advanceClock(600_000);         // and run whatever falls due, at its own due
+  await world.wake();                        // drop everything resident, rebuild from the store
 
-const seen = await world.getPlayerView(2);
-seen.state;              // the pruned per-seat tree a board is handed as `gameView`
-seen.offers;             // every action offered to this seat
-seen.availableActions;   // their names, as the world shell hands them to a board
-seen.disabledActions;    // name -> why it is offered but cannot be taken
-seen.canAct;             // does this seat hold an offer it can actually take?
-seen.revision;           // which committed state this frame is of
-seen.presence;           // the watching seats, as world_state.presence carries them
+  const seen = await world.getPlayerView(2);
+  seen.state;              // the pruned per-seat tree a board is handed as `gameView`
+  seen.offers;             // every action offered to this seat
+  seen.availableActions;   // their names, as the world shell hands them to a board
+  seen.disabledActions;    // name -> why it is offered but cannot be taken
+  seen.canAct;             // does this seat hold an offer it can actually take?
+  seen.revision;           // which committed state this frame is of
+  seen.presence;           // the watching seats, as world_state.presence carries them
 
-await world.resolvePick(2, 'build', 'crew', { ship });  // re-ask a pick with answers bound
-await world.quote(2, 'boost', { weeks: 2 });            // price a draft with the action's .quote()
-await world.unredactedElements();   // the whole world, which no single seat can see
+  await world.resolvePick(2, 'build', 'crew', { ship });  // re-ask a pick with answers bound
+  await world.quote(2, 'boost', { weeks: 2 });            // price a draft with the action's .quote()
+  await world.unredactedElements();   // the whole world, which no single seat can see
+}
 ```
 
 Options: `definition` (required), `seed`, `elementIdKey`, `budgets`, `now`, and

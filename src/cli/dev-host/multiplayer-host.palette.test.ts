@@ -122,3 +122,55 @@ describe('MultiplayerHost — declared color palette reaches per-seat color (D16
     expect(seat2?.color).toBe('#abcdef');
   });
 });
+
+describe('MultiplayerHost — each declared player option\'s default reaches every seat (#1304)', () => {
+  it('seeds every seat with the defaults beside its colour', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let startOptions: any = null;
+    const host = new MultiplayerHost({
+      playerCount: 2,
+      minPlayers: 1,
+      maxPlayers: def.maxPlayers,
+      makeSeed: () => 'player-option-defaults',
+      colorPalette: [{ value: '#123456', label: 'One' }, { value: '#abcdef', label: 'Two' }],
+      playerOptionDefaults: { handicap: 2, ready: false },
+      executeOp: (gameOptions, snap, pend, op, hostOptions) => {
+        if (op.type === 'start') startOptions = gameOptions;
+        return executeOp(def, gameOptions, snap, pend, op, hostOptions);
+      },
+      send: () => {},
+    });
+
+    await host.handleMessage('A', { type: 'hello' });
+
+    expect(startOptions.playerOptions).toEqual([
+      { handicap: 2, ready: false, color: '#123456' },
+      { handicap: 2, ready: false, color: '#abcdef' },
+    ]);
+  });
+});
+
+describe('MultiplayerHost — a player option named like a seat field does not replace it (#1304)', () => {
+  it('keeps the host\'s name, isBot and botLevel in playerConfigs', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let startOptions: any = null;
+    const host = new MultiplayerHost({
+      playerCount: 2,
+      minPlayers: 1,
+      maxPlayers: def.maxPlayers,
+      makeSeed: () => 'seat-fields-win',
+      botLevel: 'hard',
+      playerOptionDefaults: { name: 'Option', isBot: false, botLevel: 'easy' },
+      executeOp: (gameOptions, snap, pend, op, hostOptions) => {
+        if (op.type === 'start') startOptions = gameOptions;
+        return executeOp(def, gameOptions, snap, pend, op, hostOptions);
+      },
+      send: () => {},
+    });
+
+    await host.handleMessage('A', { type: 'hello' });
+
+    expect(startOptions.playerConfigs[1]).toMatchObject({ isBot: true, botLevel: 'hard' });
+    expect(startOptions.playerConfigs[1].name).not.toBe('Option');
+  });
+});

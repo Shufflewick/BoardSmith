@@ -35,6 +35,11 @@ re-check the code against the very text this verify pass just called into questi
 transcription is unavailable for a chunk, report SCOPE-LIMITED following PROV-02's pattern —
 there is no fallback to live slices, silent or otherwise (decision 10).
 
+Run `boardsmith verify-repair --project <dir> --run-id <runId> --json` once at the start of this step. Each row is one stale
+chunk: its `slicePaths` (or `scopeLimitedReason`), and in `roundPlan` this run's next round for
+that chunk. The run id is what Steps 4 to 6 pass on; CHUNK.md records each round under it, so a
+resumed session counts the rounds this run already opened.
+
 ## 3. Dispatch the three lenses by reference, plus the 4th where the build rule already says to
 
 Dispatch `${CLAUDE_SKILL_DIR}/../bs-shared/build/audit.md`'s three lens templates — fidelity,
@@ -70,20 +75,27 @@ slices and `RULINGS.md` directly, exactly as `build/audit.md` requires for a bui
 
 Follow `build/audit.md`'s "Persisting the Round — Write to the Findings Ledger BEFORE Repair
 Starts" exactly: append this round's `### Audit Round N` entry before repair begins, and follow
-its cold-resume rule for a partial or missing current-round entry. Then dispatch
+its cold-resume rule for a partial or missing current-round entry. Open
+every round of this verify run with `boardsmith verify-repair-round --project <dir> --run-id <runId> --chunk <slug> --json`, using the
+same run id from Step 2 each time, including each round `build/repair.md` loops back to `build/audit.md` for
+(its "Same-Group Loop-Back to Audit"). The command writes the round's heading into the Findings
+Ledger, in place of the plain heading `build/audit.md` would write, and the round's findings go
+under it. If it reports `alreadyOpen: true`, the round was opened before, by this run, and nothing
+is written under it yet, so it wrote nothing again: carry on with it. If it reports `triage`, it wrote nothing: the run's budget is spent, so go to
+`build/repair.md`'s "Round-3 User Triage" instead of opening another round. Then dispatch
 `${CLAUDE_SKILL_DIR}/../bs-shared/build/repair.md`'s bounded loop exactly as written — the two
 repair actions (fix, refute-with-citation), the three terminal dispositions
 (`fixed`/`deferred`/`refuted`), and `build/repair.md`'s own round-3 user triage with its three
 plain-language options. Cite `build/repair.md`'s "Repair Loop Bound" section for the round-count
-policy itself — this file states only that a fresh budget applies per verify-episode (below), it
+policy itself — this file states only that a fresh budget applies per verify run (below), it
 does not restate the bound's own governing sentence as a second policy statement of its own.
 
-## 5. The round bound is per-verify-episode, not per-chunk-lifetime (decision 17)
+## 5. The round bound is per verify run, not per-chunk-lifetime (decision 17)
 
-Each verify pass opens a **fresh 3-round budget** for a chunk, appended AFTER that chunk's
+Each verify run opens a **fresh 3-round budget** for a chunk, appended AFTER that chunk's
 existing rounds — never renumbering history. `state-machine.md` "Write Order" is the authority
 for round entries being append-only across a chunk's whole life; this file applies that rule to
-a new kind of round (a verify episode's), it does not re-derive the rule itself.
+a new kind of round (a verify run's), it does not re-derive the rule itself.
 
 **Why this matters concretely, not abstractly:** four of the real stale chunks in this
 milestone's own reference games — `best-seven-selection`, `table-and-draw`, `block`, `jab` —
@@ -93,15 +105,16 @@ route straight to round-3 triage on arrival here — CHECK-02 would be permanent
 exactly the chunks with the most audit history, and that fraction only grows as chunks mature.
 The bound is a loop guard against one session's audit/repair cycling forever, not a lifetime
 quota; a chunk re-checked against a changed rulebook is a new question, not a continuation of the
-old one. A reader of CHUNK.md must still be able to tell which rounds belong to which episode —
-the episode boundary is a counting rule, not a license to blur a verify round into the build's
-own round sequence.
+old one. A reader of CHUNK.md can tell which rounds belong to which run: each heading names its
+run id. The run boundary is a counting rule, not a license to blur a verify round into the
+build's own round sequence.
 
 ## 6. Re-derive the repair gate AFTER the loop closes — never Step 4's snapshot (decision 12)
 
-Once every finding across this chunk's verify-episode rounds has a disposition and no round
+Once every finding across this chunk's rounds for this run has a disposition and no round
 remains open, re-derive the repair-gate disposition from freshly re-checked post-repair code
-state — never reuse the pre-repair `ImpactMapEntry.gate` Step 4 already computed. **Repair MAY
+state — never reuse the pre-repair `ImpactMapEntry.gate` Step 4 already computed. Run
+`boardsmith verify-repair-gate --project <dir> --run-id <runId> --chunk <slug> --json`, which re-checks the chunk's code now. **Repair MAY
 change code, and that changes the gate's answer:** a chunk whose code changed during repair
 re-opens the human playtest gate (`reopen-playtest`); a chunk that passes the lenses with no code
 change closes without re-playtesting (`close-without-replaytest`). State this seam plainly rather

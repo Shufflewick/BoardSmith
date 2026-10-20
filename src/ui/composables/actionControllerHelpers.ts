@@ -160,12 +160,15 @@ export function labelOfPick(
   return choice ? choice.display : getDisplayFromValue(value);
 }
 
-/** An action's name as a fallback prompt: `playCard` reads as `Play Card`. */
+/**
+ * An action's name as a fallback prompt: `playCard` reads as `Play Card`, and
+ * an acronym or a digit stays with its word, `drawUSB` as `Draw USB` (#1298).
+ */
 export function formatActionName(name: string): string {
   return name
-    .replace(/([A-Z])/g, ' $1')
-    .replace(/^./, str => str.toUpperCase())
-    .trim();
+    .replace(/([a-z\d])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
+    .replace(/^./, str => str.toUpperCase());
 }
 
 // ============================================

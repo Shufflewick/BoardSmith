@@ -48,7 +48,7 @@ interface ResolvedAnnotation {
 const GAP = 8; // var(--bsg-s2)
 const BUBBLE_HEIGHT_ESTIMATE = 80;
 const RING_OFFSET = 3; // px outside the target rect
-const EDGE_MARGIN = 8; // var(--bsg-s2): clearance from the viewport's left edge
+const EDGE_MARGIN = 8; // var(--bsg-s2): clearance from the layer's left and right edges
 const CARET_INSET = 12; // keeps the caret off the card's rounded corner
 
 const overlayRoot = ref<HTMLElement | null>(null);
@@ -63,29 +63,33 @@ function readRadius(el: Element): string {
 function boardStyle(
   placement: Annotation['placement'],
   boardRect: DOMRect | null,
+  layer: LayerSize,
 ): Record<string, string> {
-  const left = `${boardRect ? boardRect.left + boardRect.width / 2 : window.innerWidth / 2}px`;
+  const left = `${boardRect ? boardRect.left + boardRect.width / 2 : layer.width / 2}px`;
   const top = boardRect?.top ?? 0;
-  const bottom = boardRect?.bottom ?? window.innerHeight;
+  const bottom = boardRect?.bottom ?? layer.height;
   if (placement === 'center') {
     return { left, top: `${(top + bottom) / 2}px`, transform: 'translate(-50%, -50%)' };
   }
-  return { left, top: `${boardTop(placement, top, bottom)}px`, transform: 'translateX(-50%)' };
+  return { left, top: `${boardTop(placement, top, bottom, layer.height)}px`, transform: 'translateX(-50%)' };
 }
 
-function boardTop(placement: Annotation['placement'], top: number, bottom: number): number {
+function boardTop(placement: Annotation['placement'], top: number, bottom: number, layerHeight: number): number {
   if (placement === 'bottom') return Math.max(top, bottom - BUBBLE_HEIGHT_ESTIMATE - GAP);
   if (placement === 'top' || props.untargeted === 'board-top') return top + GAP;
   // Below the board so the bubble never covers squares the player needs to read;
   // clamped so a very tall board cannot push it off-screen.
-  return Math.min(bottom + GAP, window.innerHeight - 56);
+  return Math.min(bottom + GAP, layerHeight - 56);
 }
 
-function resolve(ann: Annotation, boardRect: DOMRect | null): ResolvedAnnotation {
+/** The layer is fixed to the screen, so its size leaves out the scrollbars the window's size counts (#1300). */
+interface LayerSize { width: number; height: number }
+
+function resolve(ann: Annotation, boardRect: DOMRect | null, layer: LayerSize): ResolvedAnnotation {
   const selector = ann.target ? buildSelector(ann.target) : '';
   const targetEl = selector ? document.querySelector(selector) : null;
   if (!targetEl) {
-    return { text: ann.text, ring: null, anchorStyle: boardStyle(ann.placement, boardRect) };
+    return { text: ann.text, ring: null, anchorStyle: boardStyle(ann.placement, boardRect, layer) };
   }
 
   const rect = targetEl.getBoundingClientRect();
@@ -97,22 +101,28 @@ function resolve(ann: Annotation, boardRect: DOMRect | null): ResolvedAnnotation
     borderRadius: readRadius(targetEl),
   };
   if (ann.placement && ann.placement !== 'auto') {
-    return { text: ann.text, ring, anchorStyle: boardStyle(ann.placement, boardRect) };
+    return { text: ann.text, ring, anchorStyle: boardStyle(ann.placement, boardRect, layer) };
   }
 
   // Next to the target: below it, or above when it would run off the bottom.
-  // Only CSS knows the bubble's width, so CSS clamps the shift that centres it (#907).
+  // Only CSS knows the bubble's width, so CSS clamps the shift that centres it (#907, #1180).
   const centre = rect.left + rect.width / 2;
   const left = `${centre}px`;
-  const transform = `translateX(max(-50%, ${EDGE_MARGIN - centre}px))`;
-  // The same shift, undone for the caret, so it still points at the target.
-  const caret = { '--caret-left': `min(50%, ${Math.max(CARET_INSET, centre - EDGE_MARGIN)}px)` };
+  const roomLeft = centre - EDGE_MARGIN;
+  const roomRight = layer.width - EDGE_MARGIN - centre;
+  const shifted = {
+    // Right edge kept in first; the left bound wins on a bubble wider than the layer.
+    '--bsg-bubble-shift': `max(${-roomLeft}px, min(-50%, calc(${roomRight}px - 100%)))`,
+    transform: 'translateX(var(--bsg-bubble-shift))',
+    // The caret is the bubble's child: undoing the shift keeps it pointing at the target.
+    '--caret-left': `clamp(${CARET_INSET}px, calc(-1 * var(--bsg-bubble-shift)), calc(100% - ${CARET_INSET}px))`,
+  };
   const below = rect.top + rect.height + GAP;
-  if (below + BUBBLE_HEIGHT_ESTIMATE <= window.innerHeight) {
-    return { text: ann.text, ring, caretSide: 'top', anchorStyle: { left, top: `${below}px`, transform, ...caret } };
+  if (below + BUBBLE_HEIGHT_ESTIMATE <= layer.height) {
+    return { text: ann.text, ring, caretSide: 'top', anchorStyle: { left, top: `${below}px`, ...shifted } };
   }
   const above = Math.max(0, rect.top - GAP - BUBBLE_HEIGHT_ESTIMATE);
-  return { text: ann.text, ring, caretSide: 'bottom', anchorStyle: { left, top: `${above}px`, transform, ...caret } };
+  return { text: ann.text, ring, caretSide: 'bottom', anchorStyle: { left, top: `${above}px`, ...shifted } };
 }
 
 useOverlayTracking({
@@ -120,7 +130,10 @@ useOverlayTracking({
   content: toRef(props, 'annotations'),
   targetOf: (ann) => ann.target,
   measure: (boardRect) => {
-    resolvedAnnotations.value = props.annotations.map((ann) => resolve(ann, boardRect));
+    const layer = overlayRoot.value;
+    // Without the layer nothing is shown, so there is nothing to place.
+    const size = layer && { width: layer.clientWidth, height: layer.clientHeight };
+    resolvedAnnotations.value = size ? props.annotations.map((ann) => resolve(ann, boardRect, size)) : [];
   },
 });
 </script>

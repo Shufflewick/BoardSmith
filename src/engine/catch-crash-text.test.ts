@@ -22,6 +22,7 @@ import { ActionExecutor } from './action/action.js';
 import { rulesErrorSentence } from './action/rules-error.js';
 import { enumerateActionMoves } from './utils/enumerate-moves.js';
 import { GameRunner } from '../runtime/runner.js';
+import { PendingActionManager } from '../session/pending-action-manager.js';
 
 // Lets a test run as a deployed host does, where no dev detail travels (#1045).
 const devThrow = vi.hoisted(() => ({ enabled: true }));
@@ -188,21 +189,22 @@ describe('FlowHaltedError (#1120)', () => {
     expect(log.mock.calls.filter((call) => call.includes(cause))).toHaveLength(1);
   });
 
-  it("halting after a multi-step action on the runner's own route is refused like performAction's, its cause logged once", () => {
+  it("halting after a multi-step action's last pick is refused like performAction's, its cause logged once", async () => {
     devThrow.enabled = false;
     const cause = new Error(SECRET);
     const twoStep = Action.create('go').chooseFrom('color', { choices: ['red'] }).chooseFrom('size', { choices: ['S'] }).execute(() => {});
     const runner = new GameRunner({ GameClass: haltingGame(() => cause, twoStep), gameType: 'halt', gameOptions: { playerCount: 2, seed: 'halt' } });
     runner.start();
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
-    runner.startPendingAction('go', 1);
-    expect(runner.processSelectionStep(1, 'color', 'red').success).toBe(true);
-    const result = runner.processSelectionStep(1, 'size', 'S');
+    const picks = new PendingActionManager(runner);
+    picks.startPendingAction('go', 1);
+    expect((await picks.processSelectionStep(1, 'color', 'red')).success).toBe(true);
+    const result = await picks.processSelectionStep(1, 'size', 'S');
     expect(result.success).toBe(false);
     expect(result.error).toBe(new FlowHaltedError(cause).message);
     expect(result.error).not.toContain(SECRET);
     expect(log.mock.calls.filter((call) => call.includes(cause))).toHaveLength(1);
-    expect(runner.getPendingAction(1)).toBeUndefined();
+    expect(picks.getPendingAction(1)).toBeUndefined();
     expect(runner.actionHistory).toHaveLength(1);
   });
 

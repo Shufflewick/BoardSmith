@@ -124,6 +124,13 @@ export interface GameRunnerOptions<G extends Game, O extends GameOptions = GameO
    * them, so a save keeps the options it started with.
    */
   declaredGameOptions?: Readonly<Record<string, GameOptionDefinition>>;
+  /**
+   * Whoever runs this runner throws it away when an op fails and keeps the
+   * game from before the op, as a host does. A failed action then tells the
+   * player nothing was changed, even where the runner itself could not undo
+   * it (#1254).
+   */
+  discardsFailedOps?: boolean;
 }
 
 /**
@@ -152,28 +159,6 @@ export interface ActionExecutionResult {
    */
   data?: Record<string, unknown>;
   /** `ActionResult.message` returned by the action's `execute()` (BUG-012). */
-  message?: string;
-  /** A pick callback or `execute()` threw part way, so `runPickOp` says what it undid. */
-  partiallyApplied?: boolean;
-}
-
-/**
- * Result of one session-free selection step driven through
- * {@link GameRunner.processSelectionStep}. Carries the completed action's
- * `data`/`message` for exactly the same reason {@link ActionExecutionResult}
- * does — a multi-step action must return its computed value on the same terms
- * as a single-step one (BUG-017).
- */
-export interface PendingStepResult {
-  success: boolean;
-  error?: string;
-  /** Why a step failed, coded as the session route codes it (#1169). */
-  errorCode?: ErrorCode;
-  /** True once the final selection was supplied and the action executed. */
-  actionComplete?: boolean;
-  /** `ActionResult.data` from the completed action. Only set when `actionComplete`. */
-  data?: Record<string, unknown>;
-  /** `ActionResult.message` from the completed action. Only set when `actionComplete`. */
   message?: string;
   /** A pick callback or `execute()` threw part way, so `runPickOp` says what it undid. */
   partiallyApplied?: boolean;
@@ -245,6 +230,12 @@ function failureCode(result: ActionResult | undefined): ErrorCode {
 export function pickFailureCode(refused: { rulesError?: boolean }): ErrorCode {
   return refused.rulesError ? ErrorCode.ENGINE_ERROR : ErrorCode.INVALID_PICK;
 }
+
+/** What a player is told when a failed action could not be undone (checkpoints off, #808, #989). */
+const PARTIAL_CHANGES_KEPT =
+  'The action failed part way through, and the game may still hold its partial changes, ' +
+  'because per-action checkpoints are turned off for this session so it could not be undone. ' +
+  'Check the board before playing on, or restart the game from a save.';
 
 /** The kept history entries before action `actionIndex`, which a checkpoint there restores with. */
 function historyBefore(snapshot: GameStateSnapshot, actionIndex: number): HistoryEntry[] {
@@ -386,8 +377,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * `performAction`/`executeCollectedAction`: an execute() node immediately
    * following an action-step frequently runs INSIDE the completion of the
    * NEXT flow step, which for the multi-step / repeating-selection funnel
-   * (`completePendingAction` here, `PendingActionManager` on the session
-   * layer) happens via `continueFlowAfterPendingAction` -- called AFTER
+   * (`PendingActionManager`) happens via `continueFlowAfterPendingAction` -- called AFTER
    * `executeCollectedAction` already pushed to history. `captureCheckpoint()`
    * is the one chokepoint the executor already calls, via `getSnapshot()`,
    * once the WHOLE op (including any such trailing flow advance) has settled,
@@ -402,17 +392,6 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     }
   }
 
-  /**
-   * Per-player in-progress pending-action state for multi-step / repeating-
-   * selection actions driven directly through the runner. This mirrors
-   * `PendingActionManager`'s session-layer state machine, but is a session-free
-   * path built directly on `ActionExecutor.createPendingActionState` /
-   * `processSelectionStep` / `processRepeatingStep` / `executePendingAction` —
-   * there is no storage/broadcast callback plumbing here: `GameRunner` has no
-   * host. Cleared automatically when the action completes.
-   */
-  private pendingActions: Map<number, PendingActionState> = new Map();
-
   /** The state version just before the pick op in progress ran `execute()`, set by `executeCollectedAction` for `runPickOp`. */
   private versionBeforeExecute: number | undefined;
 
@@ -425,7 +404,10 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   readonly seed?: string;
 
+  readonly #discardsFailedOps: boolean;
+
   constructor(options: GameRunnerOptions<G, O>) {
+    this.#discardsFailedOps = options.discardsFailedOps ?? false;
     this.gameType = options.gameType;
     this.checkpointPolicy_ = {
       max: options.checkpoints?.max ?? Number.POSITIVE_INFINITY,
@@ -675,11 +657,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   private undoneError(error: string | undefined, restored: boolean): string {
     const kept = error === undefined ? '' : `${error} `;
-    if (restored) return kept + NOTHING_CHANGED;
-    return kept +
-      'The action failed part way through, and the game may still hold its partial changes, ' +
-      'because per-action checkpoints are turned off for this session so it could not be undone. ' +
-      'Check the board before playing on, or restart the game from a save.';
+    return kept + (restored || this.#discardsFailedOps ? NOTHING_CHANGED : PARTIAL_CHANGES_KEPT);
   }
 
   /** Put the game back to the head checkpoint, if there is one, and say whether it did. */
@@ -709,6 +687,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * (`partiallyApplied`): an `execute()` that refuses cleanly changed nothing,
    * as `performAction` takes it. `undone` says the game is as before the op;
    * the caller then puts the seat's pending action back as it was.
+   * @internal The pick-by-pick state machine's runner half: the session's PendingActionManager is its only caller (#1231).
    */
   runPickOp<R extends { success: boolean; error?: string; partiallyApplied?: boolean }>(run: () => R): { result: R; undone: boolean } {
     const recorded = this.actionCount;
@@ -971,13 +950,13 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   }
 
   /**
-   * Execute a fully-collected pending action, the one completion step shared by
-   * this runner's `completePendingAction` and `PendingActionManager`'s: record
-   * it and advance the flow when it succeeds. Run it inside `runPickOp`, which
+   * Execute a fully-collected pending action, the completion step of
+   * `PendingActionManager`: record it and advance the flow when it succeeds. Run it inside `runPickOp`, which
    * puts the game back when it fails (#44, #801, #1169). A flow that halts
    * after the action is refused, as in `performAction`, rather than thrown (#1120).
    * A pick that is no longer on offer, or the action's `validate`, refuses it
    * before anything runs: the step is undone and `onCancel` does not run (#1169).
+   * @internal The pick-by-pick state machine's runner half: the session's PendingActionManager is its only caller (#1231).
    */
   executeCollectedAction(pendingState: PendingActionState, playerPosition: number): ActionExecutionResult {
     const action = this.game.getAction(pendingState.actionName);
@@ -1018,30 +997,6 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   getFlowState(): FlowState | undefined {
     return this.game.getFlowState() ?? undefined;
-  }
-
-  /**
-   * Start tracking a multi-step / repeating-selection action for a player,
-   * session-free (no `PendingActionManager` involved). Uses
-   * `ActionExecutor.createPendingActionState` directly — the same primitive
-   * `PendingActionManager.startPendingAction` uses on the session layer.
-   *
-   * Returns `undefined` (does not throw) when the action or player is not
-   * found, matching the graceful-degradation convention of
-   * `getActionSpace`/`getActionSchema`.
-   */
-  startPendingAction(actionName: string, playerPosition: number): PendingActionState | undefined {
-    const action = this.game.getAction(actionName);
-    if (!action) return undefined;
-    if (!this.game.getPlayer(playerPosition)) return undefined;
-
-    const executor = this.game.getActionExecutor();
-    const pendingState = executor.createPendingActionState(actionName, playerPosition, true);
-    // A held follow-up's published args are the engine's, bound before any
-    // client pick, so every pick's callbacks see them.
-    this.bindFollowUpArgs(pendingState, playerPosition);
-    this.pendingActions.set(playerPosition, pendingState);
-    return pendingState;
   }
 
   /**
@@ -1086,10 +1041,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   /**
    * Why `seat` may not take the next pick of its pending action `actionName`
    * now, or `undefined` when it may. `pending` is the seat's open pending state,
-   * or `undefined` when the pick about to be processed starts the action. Every
-   * pending-action path (`processSelectionStep` here, and
-   * `PendingActionManager` for the `selectionStep` op) asks this before any pick is processed, then calls `markStalePicks`,
-   * and calls `notePickTaken` after each pick that leaves the action open.
+   * or `undefined` when the pick about to be processed starts the action.
+   * `PendingActionManager` asks this before any pick is processed, then calls `markStalePicks`;
+   * `takePick` calls `notePickTaken` after each pick that leaves the action open.
    *
    * First, the flow must offer the action to the seat (`refusalToAct`). Then
    * its `condition`, evaluated as hosts evaluate it to show the action (with
@@ -1162,6 +1116,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * `executePendingAction` to re-check (#767). Only another action can have
    * taken it in between, so a pick the action's own `onSelect` took off the
    * offer is never marked.
+   * @internal The pick-by-pick state machine's runner half: the session's PendingActionManager is its only caller (#1231).
    */
   markStalePicks(pending: PendingActionState, seat: number): void {
     if (!pending.picksOnOffer) return;
@@ -1252,53 +1207,19 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * was published with before any client pick: a follow-up runs with those,
    * and a pick they answer is passed over, whatever the client sends for it.
    * Every pending action is started through this.
+   * @internal The pick-by-pick state machine's runner half: the session's PendingActionManager is its only caller (#1231).
    */
   bindFollowUpArgs(pendingState: PendingActionState, seat: number): void {
     Object.assign(pendingState.collectedArgs, this.followUpArgsFor(pendingState.actionName, seat));
   }
 
   /**
-   * Process one selection step of a player's in-progress pending action
-   * (started via `startPendingAction`). Session-free mirror of
-   * `PendingActionManager.processSelectionStep` — handles both regular and
-   * repeating selections, and auto-completes + executes the action (recording
-   * it in `actionHistory` via `executeCollectedAction`) once every selection
-   * has been supplied.
-   *
-   * Clears the tracked pending state once the action is recorded. A step that
-   * fails keeps nothing: the game and the pending action are as before it (#1169).
-   */
-  processSelectionStep(
-    playerPosition: number,
-    selectionName: string,
-    value: unknown
-  ): PendingStepResult {
-    const pendingState = this.pendingActions.get(playerPosition);
-    if (!pendingState) {
-      return { success: false, error: 'No pending action for this player. Call startPendingAction first.', errorCode: ErrorCode.PICK_NOT_FOUND };
-    }
-
-    const refusal = this.refusalToPick(pendingState.actionName, playerPosition, pendingState);
-    if (refusal) return { success: false, ...refusal };
-    this.markStalePicks(pendingState, playerPosition);
-
-    const before = this.getPendingAction(playerPosition)!;
-    const { result, undone } = this.runPickOp((): PendingStepResult => {
-      const taken = this.takePick(pendingState, playerPosition, selectionName, value);
-      if (!taken.success) return { success: false, error: taken.error, errorCode: taken.errorCode, partiallyApplied: taken.partiallyApplied };
-      if (taken.complete) return this.completePendingAction(pendingState, playerPosition);
-      return { success: true, actionComplete: false };
-    });
-    if (undone) this.pendingActions.set(playerPosition, before);
-    return result;
-  }
-
-  /**
-   * Take one pick of a seat's open pick-by-pick action, the step both routes
-   * share (`processSelectionStep` here and `PendingActionManager`'s): check it
+   * Take one pick of a seat's open pick-by-pick action for
+   * `PendingActionManager`: check it
    * is the pick the action is at, make it, and say whether the action is now
    * complete. It does not run the action: the caller does, with
    * `executeCollectedAction`.
+   * @internal The pick-by-pick state machine's runner half: the session's PendingActionManager is its only caller (#1231).
    */
   takePick(pendingState: PendingActionState, playerPosition: number, selectionName: string, value: unknown) {
     const action = this.game.getAction(pendingState.actionName);
@@ -1338,63 +1259,6 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     const complete = step.done && executor.isPendingActionComplete(action, pendingState);
     if (!complete) this.notePickTaken(pendingState, playerPosition);
     return { success: true as const, complete, repeating, done: step.done, nextChoices: step.nextChoices, warnings: step.warnings };
-  }
-
-  /**
-   * Execute a fully-collected pending action and record it in `actionHistory`,
-   * clearing the tracked state for the player. Shared completion path for both
-   * regular and repeating selection steps in `processSelectionStep`, mirroring
-   * `PendingActionManager.#completePendingAction` minus the storage/broadcast
-   * side effects.
-   */
-  private completePendingAction(
-    pendingState: PendingActionState,
-    playerPosition: number
-  ): PendingStepResult & { actionComplete: true } {
-    const actionResult = this.executeCollectedAction(pendingState, playerPosition);
-    this.pendingActions.delete(playerPosition);
-
-    return {
-      success: actionResult.success,
-      error: actionResult.error,
-      errorCode: actionResult.errorCode,
-      actionComplete: true,
-      data: actionResult.data,
-      message: actionResult.message,
-      partiallyApplied: actionResult.partiallyApplied,
-    };
-  }
-
-  /**
-   * Get a read-only snapshot of a player's in-progress pending action —
-   * current selection index, completed selections, and accumulated
-   * repeating-selection state.
-   *
-   * Never returns the live mutable `PendingActionState` (RESEARCH.md
-   * Anti-Pattern): the top-level object, `collectedArgs`, and
-   * `repeating.accumulated` are always copied, and `onSelectFired` is a fresh
-   * `Set`, so reassigning/pushing into any of those containers on the
-   * returned value never affects subsequent calls or game state. This copy is
-   * NOT recursive, though — object/array values stored *inside*
-   * `collectedArgs` (e.g. a repeating selection accumulating structured
-   * picks) are copied by reference, so mutating a nested value in place would
-   * still corrupt the live internal state.
-   *
-   * Returns `undefined` when nothing is pending for the player, including for
-   * an out-of-range seat (no throw, matching `getActionSpace`/`getActionSchema`).
-   */
-  getPendingAction(playerPosition: number): PendingActionState | undefined {
-    const state = this.pendingActions.get(playerPosition);
-    if (!state) return undefined;
-
-    return {
-      ...state,
-      collectedArgs: { ...state.collectedArgs },
-      repeating: state.repeating
-        ? { ...state.repeating, accumulated: [...state.repeating.accumulated] }
-        : undefined,
-      onSelectFired: state.onSelectFired ? new Set(state.onSelectFired) : undefined,
-    };
   }
 
   /**
@@ -1520,6 +1384,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       checkpoints?: RunnerCheckpointPolicy;
       randomness?: RandomnessPolicy;
       undo?: UndoPolicy;
+      discardsFailedOps?: boolean;
     }
   ): GameRunner<G> {
     const tree = snapshotTree(snapshot);
@@ -1548,6 +1413,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       // draws for the rest of the session.
       randomness: options?.randomness,
       undo: options?.undo,
+      discardsFailedOps: options?.discardsFailedOps,
     });
 
     // Preserve action history for the undo op (which reads runner.actionHistory).

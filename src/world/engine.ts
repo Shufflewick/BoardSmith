@@ -75,6 +75,7 @@ import type {
 import type { ActionMetadata, PickMetadata } from "../session/types.js";
 import { buildPickMetadata } from "../engine/element/action-metadata.js";
 import { picksFromSeat } from "../engine/element/seat-placeholders.js";
+import { PARTITION_ROOT_RULE } from "../engine/element/game.js";
 import {
   formatChoiceCandidates,
   formatElementCandidates,
@@ -662,14 +663,14 @@ export class BoardSmithWorldEngine implements WorldEngine {
    */
   registerResident(name: string, root: GameElement): void {
     const taken = this.residentNames.get(root.id);
-    if (root.parent !== this.game || taken !== undefined) {
+    if (root._t.parent !== this.game || taken !== undefined) {
       throw worldRefusal(
         "invalid-partition-root",
         taken === undefined
-          ? `Partition "${name}" is not a direct child of the game: it sits inside another ` +
-              `element, so it would be stored twice and the world could not load again. ` +
-              `Create it with \`game.create(...)\`, or leave it out of the answer and let it ` +
-              `travel inside the partition that holds it.`
+          ? `Partition "${name}" is not in the game's own children (it sits inside another ` +
+              `element, or was removed), but ${PARTITION_ROOT_RULE} Create it with ` +
+              `\`game.create(...)\`, or leave it out of the answer and let it travel inside the ` +
+              `partition that holds it.`
           : `Partition "${name}" is the same element as partition "${taken}". One element can ` +
               `be one partition only; answer it under one name.`,
       );
@@ -1499,17 +1500,16 @@ export class BoardSmithWorldEngine implements WorldEngine {
     acting: Player,
     named: readonly string[],
   ): Readonly<Record<string, unknown>> {
-    // The check reads each projected element's parent too, so it is a read with reach-marking off (#1203).
+    // The callbacks it runs read the tree, so it is a read with reach-marking off (#1203).
     return this.game.readingOnly(() => {
-      const draft = this.game
+      // Each element pick is checked before a later pick is resolved against it (#1223).
+      return this.game
         .getActionExecutor()
-        .resolveArgs(definition, picksFromSeat(this.game, definition.name, args, acting.seat), acting, readOnlyProjection(this.game));
-      for (const selection of definition.selections) {
-        if (selection.type === "element" || selection.type === "elements") {
-          this.assertOfferable(definition.name, selection.name, draft[selection.name], args, named);
-        }
-      }
-      return draft;
+        .resolveArgs(definition, picksFromSeat(this.game, definition.name, args, acting.seat), acting, readOnlyProjection(this.game), (selection, value) => {
+          if (selection.type === "element" || selection.type === "elements") {
+            this.assertOfferable(definition.name, selection.name, value, args, named);
+          }
+        });
     });
   }
 
@@ -1751,7 +1751,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * the author knows which candidate list to narrow.
    */
   private partitionOf(element: GameElement): string {
-    for (let node: GameElement | undefined = element; node; node = node.parent) {
+    // The tree's own parent link: the `parent` getter marks the partition reached, a write a read may not make (#1221).
+    for (let node: GameElement | undefined = element; node; node = node._t.parent as GameElement | undefined) {
       const name = this.residentNames.get(node.id);
       if (name !== undefined) return name;
     }
@@ -3241,23 +3242,23 @@ export class BoardSmithWorldEngine implements WorldEngine {
    */
   private snapshotResident(): ReadonlyMap<
     string,
-    { readonly id: number; readonly parentId: number; readonly bytes: string }
+    { readonly id: number; readonly bytes: string }
   > {
     const before = new Map<
       string,
-      { readonly id: number; readonly parentId: number; readonly bytes: string }
+      { readonly id: number; readonly bytes: string }
     >();
     for (const [name, id] of this.residentIds) {
-      const point = this.game.partitionBaseline(id);
-      if (!point) {
+      const bytes = this.game.partitionBaseline(id);
+      if (bytes === undefined) {
         throw worldRefusal(
           "partition-vanished",
           `Partition "${name}" is in this engine's residency but the engine holds no restorable ` +
-            `copy of it -- it is no longer a partition root, or it hangs from nothing, so there is ` +
-            `no attachment point to restore it to if this command fails.`,
+            `copy of it -- it is no longer a partition root, or nothing has baselined it -- so ` +
+            `there is nothing to restore it from if this command fails.`,
         );
       }
-      before.set(name, { id, parentId: point.parentId, bytes: point.bytes });
+      before.set(name, { id, bytes });
     }
     return before;
   }
@@ -3293,7 +3294,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
   private rollback(
     before: ReadonlyMap<
       string,
-      { readonly id: number; readonly parentId: number; readonly bytes: string }
+      { readonly id: number; readonly bytes: string }
     >,
     declared: readonly string[],
     touched: ReadonlySet<number>,
@@ -3321,7 +3322,6 @@ export class BoardSmithWorldEngine implements WorldEngine {
       .filter(([name]) => changed.has(name))
       .map(([name, point]) => ({
         name,
-        parentId: point.parentId,
         id: point.id,
         json: JSON.parse(point.bytes) as ElementJSON,
       }));
@@ -3348,7 +3348,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     }
 
     for (const point of restoring) {
-      const root = this.game.adoptSubtree(point.parentId, point.json);
+      const root = this.game.adoptSubtree(this.game.id, point.json);
       this.residentIds.set(point.name, root.id);
       this.residentNames.set(root.id, point.name);
     }

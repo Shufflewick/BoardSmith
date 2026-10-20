@@ -19,8 +19,9 @@ export { DIFFICULTY_PRESETS, DEFAULT_CONFIG } from './types.js';
 // `applyDeterminization` is exported so a GAME can test its own sampler against
 // the same consistency check the search runs, without standing up an MCTSBot: it
 // is the only way for an author to see "you rewrote something the seat can see"
-// as a test failure instead of as a mid-session throw.
-export { DeterminizationError, applyDeterminization } from './determinization.js';
+// as a test failure instead of as a mid-session throw. `adoptSeatView` builds its
+// sandbox the way the bot does (#1291).
+export { DeterminizationError, adoptSeatView, applyDeterminization } from './determinization.js';
 
 /**
  * Create an MCTS bot for a game

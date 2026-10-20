@@ -131,8 +131,8 @@ Production trusts the rule (#632).
 
 Extend base classes to add game-specific properties:
 
+<!-- typecheck: game src/rules/elements.ts -->
 ```typescript
-// elements.ts
 import { Card as BaseCard, Piece as BasePiece } from 'boardsmith';
 
 export class Card extends BaseCard {
@@ -146,7 +146,6 @@ export class Card extends BaseCard {
 }
 
 export class CheckerPiece extends BasePiece {
-  player!: CheckersPlayer;
   isKing: boolean = false;
 
   promote(): void {
@@ -234,8 +233,12 @@ whose own visibility shows it to a seat (`addVisibleTo`, `showOnlyTo`,
 hidden, count-only or owner-only zone, such as a card in a box in a
 `contentsHidden()` deck. It arrives as a child of that zone, after the zone's
 placeholders (a `contentsHidden()` zone has none), and the containers between
-are not sent at all: no id, name or count, so the seat cannot tell which child
-holds it. A card directly in the zone keeps its own place among the
+are not sent at all: no id, name or count. A zone that sends placeholders
+(count-only, owner-only, `hideContentsFrom`) also sends its `childCount`
+(#1208), which tells the seat how many of the cards after the placeholders sit
+inside a hidden child, so with one hidden child the seat knows which child
+holds them. A `contentsHidden()` zone sends no count, so there the seat cannot
+tell. A card directly in the zone keeps its own place among the
 placeholders (#758). Below a hidden child, only an element's OWN grant counts:
 a rule it inherits from a zone in between (`contentsVisible()`,
 `hideContentsFrom(3)` on a box in the deck) sends nothing, since that box is
@@ -243,7 +246,17 @@ hidden from the seat. A granted element there with a zone rule of its own
 applies it to its contents as usual: a granted `Deck` arrives with its
 placeholders and `childCount`, a granted box with `contentsVisible()` with its
 contents. One with no zone rule of its own carries only its own granted
-contents, since the rule they inherit sits on a hidden box.
+contents, since the rule they inherit sits on a hidden box. For the same
+reason an owner rule there (`showToOwner()`, `contentsVisibleToOwner()`,
+`visibleAttributes`) finds the owner only through elements the seat is sent:
+an element's owner is its own `player`, or its parent's owner when the seat is
+sent the parent, never the owner of the hidden box or of anything above it.
+So no seat learns who owns that box, and none is shown another seat's
+owner-only content (#1209). An element there with no `player` on itself or on
+a sent element between it and the hidden box therefore has no owner in any
+seat's view: even its real owner is not shown what that rule would show them.
+Give it a `player` to show its owner. No catalogue game is affected, as their owner
+rules are only on top-level hands.
 `isVisibleTo(seat)` follows the same rule, so it is true exactly when the
 seat's view carries the element. Outside a concealed zone, nothing below an
 element hidden from the seat is sent, granted or not. A shuffle clears every
@@ -582,14 +595,20 @@ element class that was never registered, it throws with the exact
 
 Use utility functions from `boardsmith/runtime` for state snapshots:
 
+<!-- typecheck: game src/snapshots.ts -->
 ```typescript
+import type { Game } from 'boardsmith';
 import { createSnapshot, createPlayerView } from 'boardsmith/runtime';
 
-// Get complete state snapshot
-const snapshot = createSnapshot(game, 'my-game');
+export function snapshots(game: Game, playerSeat: number) {
+  // Get complete state snapshot
+  const snapshot = createSnapshot(game, 'my-game');
 
-// Get player-specific view (with visibility applied)
-const playerView = createPlayerView(game, playerSeat);
+  // Get player-specific view (with visibility applied)
+  const playerView = createPlayerView(game, playerSeat);
+
+  return { snapshot, playerView };
+}
 ```
 
 ### Player Views
@@ -737,10 +756,12 @@ behave.
 // every wake (#482).
 const game = new MyWorld({ playerCount: 200, seed, worldMode: true, elementIdKey: storedKey });
 
-game.definePartition(regionId);  // this subtree loads/checkpoints/evicts as a unit
+// this subtree loads/checkpoints/evicts as a unit; a root must be a direct
+// child of the game, and anything else throws (#1188)
+game.definePartition(regionId);
 
-// hydrate a partition the platform has in storage
-const region = game.adoptSubtree(parentId, storedRegionJson);
+// hydrate a partition the platform has in storage, back under the game
+const region = game.adoptSubtree(game.id, storedRegionJson);
 
 // after a command runs, ask which partitions it dirtied. ONE call, and it
 // consumes: it reports what changed AND re-baselines from the same pass, so a
@@ -749,7 +770,7 @@ const dirty = game.takeTouchedPartitions();
 
 // the pre-command copy to roll a refused command back to, out of the baseline
 // the previous take already captured -- nothing is serialized to get it
-const point = game.partitionBaseline(regionId);   // { parentId, bytes }
+const bytes = game.partitionBaseline(regionId);   // the region's serialized bytes
 
 game.evictSubtree(regionId);     // residency change, not a game move: no onExit fires
 ```

@@ -1,7 +1,7 @@
 {
-  "revision": 247,
-  "surfaceHash": "7f205bf27a6fcb74",
-  "payloadHash": "434e366607ffd36b",
+  "revision": 254,
+  "surfaceHash": "42fb28e08af7d80f",
+  "payloadHash": "0784e22c1b68bcca",
   "formatHash": "ed115e27605f2ca7",
   "history": [
     {
@@ -1919,6 +1919,62 @@
       "payloadHash": "434e366607ffd36b",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A seat now knows each card it cannot see by a placeholder id of its own (#715), instead of -1, -2, ... in view order: large negative numbers made with a key per seat. A card keeps its placeholder while its pile is untouched; when shuffle() shuffles the pile or a card enters or leaves it (a move into, out of or within a place some seat cannot see into), every card in that pile gets a new one, so neither an insert position nor which card left can be read from the ids. Cards in a contentsHidden() zone are offered to picks under such ids too. A seat's action, selection step and choices request, and a world command and pick, read placeholders back into real cards where they enter, and refuse a reissued placeholder (never retargeted), another seat's placeholder, and the real id of a card the seat only knows by placeholder, as a card that is not there. Stored format: an element whose placeholder was reissued carries placeholderToken in its full serialization (table snapshots and world partitions, never a seat view), minted from the creation counter, and a world's allocation stamp now stands above every stored token; an older runner would drop the tokens, so formatHash moves. No game needs a rebuild."
+    },
+    {
+      "revision": 248,
+      "date": "2026-10-19",
+      "surfaceHash": "7f205bf27a6fcb74",
+      "payloadHash": "434e366607ffd36b",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A hex cell hidden from a seat keeps its coordinates in the seat view, so AutoUI draws it where it is (#1198), and a hidden piece placed directly in a grid no longer keeps attributes named like the grid's coordinates, which showed where it was (#1199). AutoUI's hex board refuses a cell with no coordinates instead of drawing it at (0,0). No game needs a rebuild."
+    },
+    {
+      "revision": 249,
+      "date": "2026-10-19",
+      "surfaceHash": "7f205bf27a6fcb74",
+      "payloadHash": "51f21b4b479bcc9a",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A seat that cannot see into an owner-only zone, or a zone that hides its contents from that seat (hideContentsFrom), now gets the zone's childCount with its placeholders, as a count-only zone already did, so getElementCount no longer counts granted cards nested below a placeholder (#1208). A bot's search sandbox keeps that count. No game needs a rebuild."
+    },
+    {
+      "revision": 250,
+      "date": "2026-10-20",
+      "surfaceHash": "7f205bf27a6fcb74",
+      "payloadHash": "51f21b4b479bcc9a",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "In a seat's view an element's owner is its own player, or its parent's owner when the seat is sent the parent, so below a hidden box an owner rule (showToOwner, contentsVisibleToOwner, visibleAttributes) never uses the owner of the hidden box or of anything above it: no seat learns who owns the box and none is shown another seat's owner-only content. An element there with no player on itself or on a sent element between it and the hidden box is not shown even to its real owner (#1209). isVisibleTo agrees. No catalogue game is affected (their owner rules are only on top-level hands), and no game needs a rebuild."
+    },
+    {
+      "revision": 251,
+      "date": "2026-10-20",
+      "surfaceHash": "7f205bf27a6fcb74",
+      "payloadHash": "51f21b4b479bcc9a",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A pick's choices() or elements() that crashes (throws something that is not a PlayerFacingError) now answers a choices request with errorCode ENGINE_ERROR, as a crash does on every other route (#1141); CHOICES_EVALUATION_ERROR and ELEMENTS_EVALUATION_ERROR now mean only that the rules refused with a PlayerFacingError, so a host can tell a refusal from a crash by code (#1156). Messages are unchanged, and no saved-state or payload shape changes."
+    },
+    {
+      "revision": 252,
+      "date": "2026-10-20",
+      "surfaceHash": "42fb28e08af7d80f",
+      "payloadHash": "51f21b4b479bcc9a",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "ErrorCode gains UNKNOWN_OP: a host refuses an op it has no handler for with this code, so clients stop matching the text 'Unknown server op' (#1046, ShufflewickPub#651)."
+    },
+    {
+      "revision": 253,
+      "date": "2026-10-20",
+      "surfaceHash": "42fb28e08af7d80f",
+      "payloadHash": "ba6cfcc9fce4e62f",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The payload fingerprint now also records the flow state the spectator and each seat are actually sent (their own cut, #778), so a change to what a seat receives mints a revision. No engine behaviour changed; nothing needs rebuilding."
+    },
+    {
+      "revision": 254,
+      "date": "2026-10-20",
+      "surfaceHash": "42fb28e08af7d80f",
+      "payloadHash": "0784e22c1b68bcca",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "Coverage only, no engine behaviour changed: the payload fixture now hashes the whole view the executor publishes to each seat and the spectator (its state as well as its flow-state cut, all but the random game instance id), for every seat the fixture has, and the field names of the state it publishes, so a change to what a seat is sent moves payloadHash (#1296)."
     }
   ]
 }

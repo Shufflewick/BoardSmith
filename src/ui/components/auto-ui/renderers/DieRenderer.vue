@@ -22,7 +22,7 @@ let warnedNoDiceSupport = false;
 import { computed } from 'vue';
 import { ADD_DICE_SUPPORT_ADVICE, getDiePreviewComponent } from '../../dice/die-preview-registry.js';
 import { dieAriaLabel } from '../../dice/die-label.js';
-import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
+import { useElementBoardState } from '../../../composables/useElementBoardState.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
 import type { GameElement } from '../auto-ui-helpers.js';
 
@@ -42,45 +42,19 @@ if (import.meta.env.DEV && !Die3D && !warnedNoDiceSupport) {
   );
 }
 
-// Board interaction for all six required states
-const boardInteraction = tryUseBoardInteraction();
-
-// Element identity helper — passes notation from attributes (Pitfall 6)
-function elementIdentity() {
-  return {
-    id: props.element.id,
-    name: props.element.name,
-    notation: props.element.attributes?.notation as string | undefined,
-  };
-}
-
-const isBoardSelected = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isSelected(elementIdentity());
-});
-
-const isActionSelectable = computed(() => {
-  if (!boardInteraction) return false;
-  if (isBoardSelected.value) return false;
-  if (boardInteraction.isSelectableElement(elementIdentity())) return true;
-  if (boardInteraction.isDraggableSelectedElement(elementIdentity())) return true;
-  return false;
-});
-
-const isBoardHighlighted = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isHighlighted(elementIdentity());
-});
-
-const isDisabled = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isDisabledElement(elementIdentity()) !== false;
-});
+const {
+  boardInteraction,
+  identity: elementIdentity,
+  isHighlighted: isBoardHighlighted,
+  isSelected: isBoardSelected,
+  isActionSelectable,
+  isDisabled,
+} = useElementBoardState(() => props.element);
 
 // useSelectable — keyboard + click wiring (A11Y-01)
 const { onActivate: onClick, onKeydown, attrs: selectableAttrs } = useSelectable(
   elementIdentity,
-  boardInteraction ?? null,
+  boardInteraction,
   isActionSelectable,
   isDisabled,
   'die',

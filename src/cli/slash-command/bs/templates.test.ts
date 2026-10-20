@@ -706,12 +706,13 @@ describe('#293 — ledger templates agree with boardsmith ledger-check', () => {
   it('a freshly scaffolded project, every ledger copied from its template, passes the check', async () => {
     const dir = tempTree('bs-ledger-templates-');
     mkdirSync(join(dir, 'design'));
+    writeFileSync(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'game' }));
     execSync('git init', { cwd: dir, stdio: 'ignore' });
     mkdirSync(join(dir, 'design', 'run-log'));
     for (const [file, template] of Object.entries(LEDGERS)) {
       writeFileSync(join(dir, 'design', file), read(template));
     }
-    const result = await ledgerCheck(dir);
+    const result = await ledgerCheck(dir, 'boardsmith ledger-check');
     expect(result.findings).toEqual([]);
     expect(result.checked).toEqual([
       'RULINGS.md',

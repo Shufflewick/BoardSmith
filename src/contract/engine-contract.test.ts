@@ -31,9 +31,91 @@ const UPDATE_HINT = (dimension: string) =>
   + 'silently and shows up as a game misbehaving in production.\n\n'
   + 'See docs/engine-contract.md.';
 
-// Slow one-time setup lives here, where no test timeout applies (#354, #1194).
+// Slow one-time setup lives here, where no test timeout applies (#354, #1194),
+// every hash the tests below compare included (#1214, #1296). Each stand-in
+// result is settled here and read inside its own test, so one that throws fails
+// that test rather than the whole file.
 const fingerprints = await computeFingerprints();
 const fingerprintsAgain = await computeFingerprints();
+
+type Settled<R> = { value: R } | { error: unknown };
+
+/** `compute` run with `object`'s keys replaced by `standIns`, put back however it ends, and settled. */
+async function withReplaced<O extends object, R>(
+  object: O,
+  standIns: Partial<O>,
+  compute: () => Promise<R>,
+): Promise<Settled<R>> {
+  const originals = Object.keys(standIns).map((key) => [key, object[key as keyof O]] as const);
+  Object.assign(object, standIns);
+  try {
+    return { value: await compute() };
+  } catch (error) {
+    return { error };
+  } finally {
+    for (const [key, original] of originals) object[key as keyof O] = original;
+  }
+}
+
+/** A settled result's value, or its error thrown inside the test that reads it. */
+function valueOf<R>(settled: Settled<R>): R {
+  if ('error' in settled) throw settled.error;
+  return settled.value;
+}
+
+/** The world verbs the payload fixture calls while it is computed. */
+const drivenVerbs = new Set<string>();
+const engineMethods = BoardSmithWorldEngine.prototype as unknown as Record<string, Function>;
+const instrumented = await withReplaced(engineMethods, Object.fromEntries(WORLD_ENGINE_METHODS.map((name) => {
+  const original = engineMethods[name]!;
+  return [name, function instrumented(this: unknown, ...args: unknown[]) {
+    drivenVerbs.add(name);
+    return original.apply(this, args);
+  }];
+})), computePayloadHash);
+
+const nextDraw = SeededRandom.prototype.next;
+const payloadWithOtherDraws = await withReplaced(SeededRandom.prototype, { next: function shifted(this: SeededRandom) {
+  return (nextDraw.call(this) + 0.5) % 1;
+} }, computePayloadHash);
+
+const storedState = SeededRandom.prototype.getState;
+const payloadWithOtherStoredState = await withReplaced(SeededRandom.prototype, { getState: function renamed(this: SeededRandom) {
+  return storedState.call(this).replace('chacha20:', 'other:');
+} }, computePayloadHash);
+
+// The r46 shape exactly: the bytes are unchanged and the READER stops
+// accepting them. A raised floor is how that happened the first time.
+const formatReadRefusal = await withReplaced(Game.prototype, { adoptSubtree: function refusing(this: Game) {
+  throw new Error('element id 14 is already resident (simulated floor change)');
+} as typeof Game.prototype.adoptSubtree }, computeFormatHash);
+
+// A reader that stops restoring explicit visibility writes different bytes on
+// the way back out while writing identical bytes for anything it created
+// itself -- so only a ROUND TRIP over committed bytes can see it. Visibility is
+// the right field to drop precisely because it is NOT an attribute: an
+// attribute would be re-derived on the way out and the read-side loss would be
+// invisible again.
+const fromJSON = GameElement.fromJSON;
+const formatWithLossyReader = await withReplaced(GameElement as { fromJSON: typeof GameElement.fromJSON }, { fromJSON: function dropping(
+  json: Parameters<typeof fromJSON>[0],
+  ...rest: unknown[]
+) {
+  const { visibility: _dropped, ...withoutVisibility } = json as Record<string, unknown>;
+  return (fromJSON as (...args: unknown[]) => unknown).call(GameElement, withoutVisibility, ...rest) as ReturnType<typeof fromJSON>;
+} as typeof GameElement.fromJSON }, computeFormatHash);
+
+// What a seat is OFFERED and what a command DOES are covered by payloadHash and
+// by nothing, respectively. Neither is a byte a partition holds, and a format
+// hash that moved for them would refuse runner swaps that are perfectly safe --
+// which is the pin this whole mechanism exists to loosen.
+const worldEngine = BoardSmithWorldEngine.prototype as unknown as Record<string, unknown>;
+const formatWithOtherVerbs = await withReplaced(worldEngine, {
+  offersFor: async () => [],
+  applyCommand: async () => {
+    throw new Error('not a stored byte');
+  },
+}, computeFormatHash);
 
 describe('engine contract', () => {
   it('matches the committed surface fingerprint', () => {
@@ -108,27 +190,10 @@ describe('engine contract', () => {
       ).toEqual([...WORLD_ENGINE_METHODS].sort());
     });
 
-    it('drives exactly the world verbs it says it drives', async () => {
-      const called = new Set<string>();
-      const prototype = BoardSmithWorldEngine.prototype as unknown as Record<string, Function>;
-      const originals = new Map<string, Function>();
-
-      for (const name of WORLD_ENGINE_METHODS) {
-        const original = prototype[name]!;
-        originals.set(name, original);
-        prototype[name] = function instrumented(this: unknown, ...args: unknown[]) {
-          called.add(name);
-          return original.apply(this, args);
-        };
-      }
-      try {
-        await computePayloadHash();
-      } finally {
-        for (const [name, original] of originals) prototype[name] = original;
-      }
-
+    it('drives exactly the world verbs it says it drives', () => {
+      valueOf(instrumented);
       expect(
-        [...called].sort(),
+        [...drivenVerbs].sort(),
         'The payload fixture and WORLD_FIXTURE_COVERAGE disagree about what is fingerprinted.\n'
         + 'A verb marked `true` that was NOT called is a coverage claim that has quietly become '
         + 'false -- the fixture narrowed, and payloadHash goes on moving for other reasons while '
@@ -174,97 +239,26 @@ describe('engine contract', () => {
   // part of what a stored game means (#483). Neither is a runtime export or
   // something a seat receives, so the payload fixture reads both explicitly.
   describe('the payload fingerprint covers the seeded generator', () => {
-    it('moves when the generator draws a different sequence', async () => {
-      const before = await computePayloadHash();
-      const original = SeededRandom.prototype.next;
-      SeededRandom.prototype.next = function shifted(this: SeededRandom) {
-        return (original.call(this) + 0.5) % 1;
-      };
-      try {
-        expect(await computePayloadHash()).not.toBe(before);
-      } finally {
-        SeededRandom.prototype.next = original;
-      }
+    it('moves when the generator draws a different sequence', () => {
+      expect(valueOf(payloadWithOtherDraws)).not.toBe(fingerprints.payloadHash);
     });
 
-    it('moves when the generator writes its stored state differently', async () => {
-      const before = await computePayloadHash();
-      const original = SeededRandom.prototype.getState;
-      SeededRandom.prototype.getState = function renamed(this: SeededRandom) {
-        return original.call(this).replace('chacha20:', 'other:');
-      };
-      try {
-        expect(await computePayloadHash()).not.toBe(before);
-      } finally {
-        SeededRandom.prototype.getState = original;
-      }
+    it('moves when the generator writes its stored state differently', () => {
+      expect(valueOf(payloadWithOtherStoredState)).not.toBe(fingerprints.payloadHash);
     });
   });
 
   describe('the world serialization format fingerprint', () => {
-    it('refuses by name when the engine can no longer READ the committed corpus', async () => {
-      const original = Game.prototype.adoptSubtree;
-      // The r46 shape exactly: the bytes are unchanged and the READER stops
-      // accepting them. A raised floor is how that happened the first time.
-      Game.prototype.adoptSubtree = function refusing(this: Game, parentId: number, json: never) {
-        throw new Error('element id 14 is already resident (simulated floor change)');
-      } as typeof Game.prototype.adoptSubtree;
-      try {
-        await expect(computeFormatHash()).rejects.toThrow(
-          /CAN NO LONGER READ THE COMMITTED WORLD FORMAT FIXTURE/,
-        );
-      } finally {
-        Game.prototype.adoptSubtree = original;
-      }
+    it('refuses by name when the engine can no longer READ the committed corpus', () => {
+      expect(() => valueOf(formatReadRefusal)).toThrow(/CAN NO LONGER READ THE COMMITTED WORLD FORMAT FIXTURE/);
     });
 
-    it('moves when the reader gives back something different', async () => {
-      const before = await computeFormatHash();
-      const original = GameElement.fromJSON;
-      // A reader that stops restoring explicit visibility writes different
-      // bytes on the way back out while writing identical bytes for anything it
-      // created itself -- so only a ROUND TRIP over committed bytes can see it.
-      // Visibility is the right field to drop precisely because it is NOT an
-      // attribute: an attribute would be re-derived on the way out and the
-      // read-side loss would be invisible again.
-      (GameElement as { fromJSON: typeof GameElement.fromJSON }).fromJSON = function dropping(
-        json: Parameters<typeof original>[0],
-        ...rest: unknown[]
-      ) {
-        const { visibility: _dropped, ...withoutVisibility } = json as Record<string, unknown>;
-        return (original as (...args: unknown[]) => unknown).call(
-          GameElement,
-          withoutVisibility,
-          ...rest,
-        ) as ReturnType<typeof original>;
-      } as typeof GameElement.fromJSON;
-      try {
-        expect(await computeFormatHash()).not.toBe(before);
-      } finally {
-        (GameElement as { fromJSON: typeof GameElement.fromJSON }).fromJSON = original;
-      }
+    it('moves when the reader gives back something different', () => {
+      expect(valueOf(formatWithLossyReader)).not.toBe(fingerprints.formatHash);
     });
 
-    it('stands still for a change that touches no stored byte', async () => {
-      const before = await computeFormatHash();
-      const prototype = BoardSmithWorldEngine.prototype as unknown as Record<string, unknown>;
-      const offers = prototype.offersFor;
-      const apply = prototype.applyCommand;
-      // What a seat is OFFERED and what a command DOES are covered by
-      // payloadHash and by nothing, respectively. Neither is a byte a partition
-      // holds, and a format hash that moved for them would refuse runner swaps
-      // that are perfectly safe -- which is the pin this whole mechanism exists
-      // to loosen.
-      prototype.offersFor = async () => [];
-      prototype.applyCommand = async () => {
-        throw new Error('not a stored byte');
-      };
-      try {
-        expect(await computeFormatHash()).toBe(before);
-      } finally {
-        prototype.offersFor = offers;
-        prototype.applyCommand = apply;
-      }
+    it('stands still for a change that touches no stored byte', () => {
+      expect(valueOf(formatWithOtherVerbs)).toBe(fingerprints.formatHash);
     });
   });
 });

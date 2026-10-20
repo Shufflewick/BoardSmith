@@ -240,16 +240,15 @@ describe('world mode: marker keys in user data (#760)', () => {
 });
 
 describe('Game.adoptSubtree', () => {
-  it('grafts a serialized subtree under the named parent', () => {
+  it('grafts a serialized subtree directly under the game', () => {
     const game = new WorldGame({ playerCount: 2, seed: 'adopt-basic' , worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     const { roomB } = buildWorld(game);
     const bJson = roundTripJson(roomB.toJSON() as ElementJSON);
     game.evictSubtree(roomB.id);
 
-    const hall = game.create(Space, 'hall');
-    const adopted = game.adoptSubtree(hall.id, bJson);
+    const adopted = game.adoptSubtree(game.id, bJson);
 
-    expect(adopted.parent).toBe(hall);
+    expect(adopted.parent).toBe(game);
     expect(adopted.name).toBe('roomB');
     expect(adopted.all(Token).map((t) => t.name)).toEqual(['b0', 'b1', 'b2']);
     expect(game.getElementById(adopted.id)).toBe(adopted);
@@ -293,7 +292,8 @@ describe('Game.adoptSubtree', () => {
     game.evictSubtree(roomB.id);
 
     expect(() => game.adoptSubtree(99999, bJson)).toThrow(/99999/);
-    expect(() => game.adoptSubtree(99999, bJson)).toThrow(/not resident|hydrate/i);
+    // A key mismatch first, and a typo or a stale id too (#1268).
+    expect(() => game.adoptSubtree(99999, bJson)).toThrow(/names no resident element: stored bytes .* element id key .* otherwise the id is a typo or a stale one/);
   });
 
   it('refuses to adopt outside world mode, because branch refs would be grafted', () => {
@@ -377,6 +377,54 @@ describe('Game.adoptSubtree', () => {
   });
 });
 
+describe('a partition root hangs directly from the game (#1188)', () => {
+  const rootRefusal = /a partition root must be a direct child of the game/;
+
+  it('refuses to define a root inside another element', () => {
+    const game = new WorldGame({ playerCount: 2, seed: 'define-nested', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
+    const hall = game.create(Space, 'hall');
+    const room = hall.create(Room, 'room');
+
+    expect(() => game.definePartition(room.id)).toThrow(rootRefusal);
+    expect(() => game.definePartition(room.id)).toThrow(new RegExp(`"room" \\(id ${room.id}\\) as a partition: it sits inside "hall" \\(id ${hall.id}\\)`));
+    expect(game.partitionRoot(room.id)).toBeUndefined();
+  });
+
+  it('refuses to define a root inside another partition, which would be stored twice', () => {
+    const game = new WorldGame({ playerCount: 2, seed: 'define-in-partition', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
+    const region = game.create(Space, 'region');
+    const room = region.create(Room, 'room');
+    game.definePartition(region.id);
+
+    expect(() => game.definePartition(room.id)).toThrow(rootRefusal);
+    expect(game.partitionRoot(room.id)).toBeUndefined();
+  });
+
+  it('refuses to define a removed element as a root', () => {
+    const game = new WorldGame({ playerCount: 2, seed: 'define-removed', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
+    const room = game.create(Room, 'room');
+    room.remove();
+
+    expect(() => game.definePartition(room.id)).toThrow(rootRefusal);
+  });
+
+  it('refuses to adopt under a resident element that is not the game, and grafts nothing', () => {
+    const game = new WorldGame({ playerCount: 2, seed: 'adopt-nested', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
+    const { roomB } = buildWorld(game);
+    const bJson = roundTripJson(roomB.toJSON() as ElementJSON);
+    game.evictSubtree(roomB.id);
+    const hall = game.create(Space, 'hall');
+    const sequence = game._ctx.sequence;
+
+    expect(() => game.adoptSubtree(hall.id, bJson)).toThrow(rootRefusal);
+    expect(() => game.adoptSubtree(hall.id, bJson)).toThrow(new RegExp(`under parent id ${hall.id}, which is "hall", not the game: a partition root must be a direct child of the game`));
+    expect(hall.children).toHaveLength(0);
+    expect(game.getElementById(roomB.id)).toBeUndefined();
+    expect(game._ctx.sequence).toBe(sequence);
+    expect(game.adoptSubtree(game.id, bJson).parent).toBe(game);
+  });
+});
+
 describe('Game.evictSubtree', () => {
   it('detaches the subtree so it costs nothing to traverse', () => {
     const game = new WorldGame({ playerCount: 2, seed: 'evict' , worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
@@ -455,22 +503,17 @@ describe('Game.rebaselinePartitions', () => {
 });
 
 describe('shuffle partition marking (#962)', () => {
-  it('marks the partition of a nested root whose grant the shuffle cleared', () => {
+  it("marks the partition of a root whose grant a shuffle of the game cleared, though the command reached no partition", () => {
     const game = new WorldGame({ playerCount: 2, seed: 'shuffle-grant', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
-    const region = game.create(Space, 'region');
-    const hall = region.create(Space, 'hall');
-    const rooms = hall.createMany(4, Room, 'room');
-    game.definePartition(region.id);
+    const rooms = game.createMany(4, Room, 'room');
     for (const room of rooms) game.definePartition(room.id);
     rooms[1]!.addVisibleTo(2);
     game.takeTouchedPartitions();
 
-    (opened(game, region.id) as Space<WorldGame>).first(Space, 'hall')!.shuffle();
+    game.shuffle();
 
     expect(rooms[1]!._visibility).toBeUndefined();
-    const touched = game.takeTouchedPartitions();
-    expect(touched.has(region.id)).toBe(true);
-    expect(touched.has(rooms[1]!.id)).toBe(true);
+    expect(game.takeTouchedPartitions().has(rooms[1]!.id)).toBe(true);
   });
 });
 
@@ -779,7 +822,7 @@ describe('the dirty-set pass costs one serialization per partition, and no tree 
 
     // The bytes the previous take captured, at no cost: the pre-command copy
     // and the comparison the next take makes are the same string.
-    expect(baseline).toEqual({ parentId: game.id, bytes: before });
+    expect(baseline).toBe(before);
     expect(CountedRoom.serializations).toBe(0);
   });
 
@@ -794,7 +837,7 @@ describe('the dirty-set pass costs one serialization per partition, and no tree 
 
     // Mid-second-command the copy on file is what the FIRST command left, not
     // the world as it stood before the first one.
-    const baseline = JSON.parse(game.partitionBaseline(room.id)!.bytes) as ElementJSON;
+    const baseline = JSON.parse(game.partitionBaseline(room.id)!) as ElementJSON;
     expect(baseline.children![0]!.attributes.label).toBe('first command');
   });
 

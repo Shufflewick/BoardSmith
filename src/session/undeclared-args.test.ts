@@ -110,7 +110,7 @@ function duel() {
   runner.start();
   const game = runner.game as DuelGame;
   const stoneId = (name: string) => game.first(Stone, name)!.id;
-  return { runner, game, stoneId, manager: new PendingActionManager(runner, 1), picks: new PickHandler(runner, 1) };
+  return { runner, game, stoneId, manager: new PendingActionManager(runner), picks: new PickHandler(runner) };
 }
 
 /** Take the first jump with stone A, so the seat holds a jump chained from it. */
@@ -241,17 +241,6 @@ describe('a selection step carries only declared picks (#662)', () => {
 
     const step = await manager.processSelectionStep(1, 'to', 'A-to-1');
     expect(step).toMatchObject({ success: true, actionComplete: true });
-    expect(game.runs.at(-1)).toEqual({ action: 'jump', stone: 'A', to: 'A-to-1', chain: 1 });
-  });
-
-  it('keeps the engine\'s value on the session-free runner path too', () => {
-    const { runner, game, stoneId } = duel();
-    holdJump(runner, stoneId);
-
-    runner.startPendingAction('jump', 1);
-    expect(runner.processSelectionStep(1, 'stone', stoneId('B'))).toMatchObject({ success: true, actionComplete: false });
-    expect(runner.processSelectionStep(1, 'to', 'A-to-1')).toMatchObject({ success: true, actionComplete: true });
-
     expect(game.runs.at(-1)).toEqual({ action: 'jump', stone: 'A', to: 'A-to-1', chain: 1 });
   });
 

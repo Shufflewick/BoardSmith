@@ -570,11 +570,11 @@ export async function startWorldDevServer(
   ];
   if (options.context === 'monorepo') plugins.unshift(monorepoBoardsmithResolvePlugin());
 
-  // The pages in front of the world, released before the server they ride on
-  // closes, so their sockets closing is no departure.
+  // The pages in front of the world, forgotten before their sockets are ended,
+  // so their sockets closing is no departure (#1304).
   const pages: readonly HeldResource[] = [
-    { name: "the world's socket", close: () => worldSocket.close() },
     { name: 'the browser connections', close: () => run.connections.forgetAll() },
+    { name: "the world's socket", close: () => worldSocket.close() },
   ];
 
   // A HOST THAT CANNOT SERVE HOLDS NOTHING (#345). `devCommand` refuses a taken

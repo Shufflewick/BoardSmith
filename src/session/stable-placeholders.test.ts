@@ -31,6 +31,8 @@ class PouchGame extends Game<PouchGame, Player> {
       hand.player = player;
       hand.contentsVisibleToOwner();
     }
+    // Every seat sees the table; its one card lies face down there.
+    this.create(Space, 'table').create(Card, 'QD').hideFromAll();
 
     const inPouch = (ctx: { game: PouchGame }) => ctx.game.first(Pouch)!.all(Card);
     const handOf = (player: Player) => this.first(Space, `hand-${player.seat}`)!;
@@ -45,10 +47,39 @@ class PouchGame extends Game<PouchGame, Player> {
         // Reads the card it was handed, so a pick that resolved a hidden card would say which.
         .chooseFrom('how', { choices: ({ args }) => [args.card instanceof Card ? args.card.name! : 'no card'] })
         .execute(() => {}),
+      Action.create<PouchGame>('pocket')
+        .chooseElement<'card', Card>('card', {
+          elements: inPouch,
+          // Names the card it is handed, so being handed a card the seat cannot see would say which.
+          unavailable: (card) => (card instanceof Card ? `${card.name} was taken.` : `Card ${String(card)} was taken.`),
+        })
+        .execute(({ card }, { player }) => {
+          card.putInto(handOf(player));
+        }),
+      // Highlights each card by its own id, the obvious boardRef.
+      Action.create<PouchGame>('point')
+        .chooseElement<'card', Card>('card', { elements: inPouch, boardRef: (card) => ({ id: card.id, name: card.name }) })
+        .chooseFrom('how', { choices: ['gently'] })
+        .execute(() => {}),
+      // Points at the face-down card on the table from a plain choice.
+      Action.create<PouchGame>('gesture')
+        .chooseFrom('at', {
+          choices: ['there'],
+          boardRefs: (_choice, ctx) => {
+            const card = ctx.game.first(Space, 'table')!.first(Card)!;
+            return { refs: [{ ref: { id: card.id, name: card.name }, role: 'source' }] };
+          },
+        })
+        .execute(() => {}),
       Action.create<PouchGame>('stash')
         .chooseElement<'card', Card>('card', { elements: inPouch })
         .execute(({ card }) => {
           card.putInto(this.first(Stash)!);
+        }),
+      Action.create<PouchGame>('discard')
+        .chooseElement<'card', Card>('card', { elements: (ctx) => handOf(ctx.player).all(Card) })
+        .execute(({ card }) => {
+          card.putInto(this.first(Pouch)!);
         }),
       Action.create<PouchGame>('shake').execute(() => {
         this.first(Pouch)!.shuffle();
@@ -61,7 +92,7 @@ class PouchGame extends Game<PouchGame, Player> {
     );
     this.setFlow({
       root: simultaneousActionStep({
-        actions: ['filch', 'peek', 'stash', 'shake', 'drawBlind'],
+        actions: ['filch', 'peek', 'point', 'gesture', 'pocket', 'stash', 'discard', 'shake', 'drawBlind'],
         playerDone: () => false,
       }),
     });
@@ -144,6 +175,32 @@ describe("a table's stable per-seat placeholders (#715)", () => {
     expect(await pouchIds(taken, 1)).toHaveLength(1);
   });
 
+  it("hands a refused pick's unavailable sentence the placeholder the seat sent, not the hidden card it names (#1205)", async () => {
+    const start = await started();
+    const moved = succeeded(await act(start, 2, 'stash', { card: (await pouchIds(start, 2))[0] })) as unknown as Envelope;
+    // Seat 1's board names the stashed card by a placeholder that still names it, but `pocket` offers only the pouch.
+    const [stashed] = findByName(viewOf(moved, 1), 'stash')!.children!.map((c) => c.id);
+
+    expect(refusal(await act(moved, 1, 'pocket', { card: stashed }))).toBe(`Card ${stashed} was taken.`);
+  });
+
+  it("hands a refused pick's unavailable sentence the id of a face-down card on the seat's board, not the card (#1205)", async () => {
+    const start = await started();
+    // The table hides nothing, so the face-down card keeps its real id on seat 1's board.
+    const [faceDown] = findByName(viewOf(start, 1), 'table')!.children!.map((c) => c.id);
+
+    expect(refusal(await act(start, 1, 'pocket', { card: faceDown }))).toBe(`Card ${faceDown} was taken.`);
+  });
+
+  it("hands a refused pick's unavailable sentence nothing for a card's old id, sent after it was hidden again (#1293)", async () => {
+    const start = await started();
+    const filched = succeeded(await act(start, 1, 'filch', { card: (await pouchIds(start, 1))[0] })) as unknown as Envelope;
+    const [inHand] = findByName(viewOf(filched, 1), 'hand-1')!.children!.map((c) => c.id);
+    const discarded = succeeded(await act(filched, 1, 'discard', { card: inHand })) as unknown as Envelope;
+
+    expect(refusal(await act(discarded, 1, 'pocket', { card: inHand }))).toBe('Card undefined was taken.');
+  });
+
   it("refuses another seat's placeholder, as an action and as a selection step", async () => {
     const start = await started();
     const [, seat3King] = await pouchIds(start, 3);
@@ -176,6 +233,47 @@ describe("a table's stable per-seat placeholders (#715)", () => {
       type: 'resolveChoices', actionName: 'peek', selectionName: 'how', player: 1, args: { card: kingPlaceholder },
     }));
     expect(how.choices?.map((c) => c.value)).toEqual(['KH']);
+  });
+
+  it("sends a hidden card's board ref by the seat's id for it, whatever its boardRef returns (#1293)", async () => {
+    const start = await started();
+    const offer = succeeded(await executeOp(definition, options, start.snapshot as never, null, {
+      type: 'resolveChoices', actionName: 'point', selectionName: 'card', player: 1, args: {},
+    }));
+
+    expect(offer.validElements!.map((e) => e.refs?.map((r) => r.ref))).toEqual(offer.validElements!.map((e) => [{ id: e.id }]));
+    expect(JSON.stringify(offer)).not.toMatch(/AS|KH/);
+  });
+
+  it('sends a ref to any card the seat cannot see by its id for it, not only a candidate (#1293)', async () => {
+    const start = await started();
+    const queen = findByName(viewOf(start, 1), 'table')!.children![0]!.id;
+    const offer = succeeded(await executeOp(definition, options, start.snapshot as never, null, {
+      type: 'resolveChoices', actionName: 'gesture', selectionName: 'at', player: 1, args: {},
+    }));
+
+    expect(offer.choices![0]!.refs).toEqual([{ ref: { id: queen }, role: 'source' }]);
+    expect(JSON.stringify(offer)).not.toMatch(/QD/);
+  });
+
+  it('answers a pick whose later picks are stale, as after the player changed an earlier one (#1293)', async () => {
+    const start = await started();
+    const [, kingPlaceholder] = await pouchIds(start, 1);
+    const how = succeeded(await executeOp(definition, options, start.snapshot as never, null, {
+      type: 'resolveChoices', actionName: 'peek', selectionName: 'how', player: 1, args: { card: kingPlaceholder, how: 'no longer offered' },
+    }));
+    expect(how.choices?.map((c) => c.value)).toEqual(['KH']);
+  });
+
+  it("never resolves a later pick's choices against a card the earlier pick does not offer (#1293)", async () => {
+    const start = await started();
+    // The face-down card on the table reaches every seat under its real id, but peek offers only the pouch.
+    const queen = findByName(viewOf(start as unknown as Envelope, 1), 'table')!.children![0]!.id;
+
+    const asked = await executeOp(definition, options, start.snapshot as never, null, {
+      type: 'resolveChoices', actionName: 'peek', selectionName: 'how', player: 1, args: { card: queen },
+    });
+    expect(JSON.stringify(asked)).not.toMatch(/QD/);
   });
 
   it('reissues every card left in a hidden pile when one is moved out, in the board and the offer, and refuses a pick by a pre-move id', async () => {

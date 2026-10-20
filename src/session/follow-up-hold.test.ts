@@ -10,7 +10,7 @@
  * - there is no explicit decline: the seat drops its follow-up only by taking
  *   another action the step offers it.
  *
- * Each case is driven through the session-free GameRunner, the live session
+ * Each case is driven through a long-lived PendingActionManager, the live session
  * host (`SnapshotSessionHost`)
  * and the stateless op executor, so every host reads the same per-seat state.
  */
@@ -32,6 +32,7 @@ import {
 import type { GameStateSnapshot } from '../engine/utils/index.js';
 import { _clearShownWarnings } from '../utils/dev.js';
 import { GameRunner } from '../runtime/runner.js';
+import { PendingActionManager } from './pending-action-manager.js';
 import { MCTSBot } from '../bot/mcts-bot.js';
 import { createHeadlessSession } from '../testing/headless-session.js';
 import { executeOp, type GameDefinitionLike, type StateEnvelope } from './stateless-ops.js';
@@ -125,15 +126,16 @@ function runner(shape: Shape, decline = false): GameRunner<RaidGame> {
 }
 
 /** Take seat's own loot through the pending (pick by pick) path. */
-function lootByPicks(r: GameRunner<RaidGame>, seat: number) {
-  r.startPendingAction('loot', seat);
-  const first = r.processSelectionStep(seat, 'where', 'north');
+async function lootByPicks(r: GameRunner<RaidGame>, seat: number) {
+  const picks = new PendingActionManager(r);
+  picks.startPendingAction('loot', seat);
+  const first = await picks.processSelectionStep(seat, 'where', 'north');
   if (!first.success) return first;
-  return r.processSelectionStep(seat, 'what', 'gold');
+  return picks.processSelectionStep(seat, 'what', 'gold');
 }
 
-describe('GameRunner', () => {
-  it('simultaneous: two seats each hold their own follow-up; each takes its own, neither the other', () => {
+describe('GameRunner and PendingActionManager', () => {
+  it('simultaneous: two seats each hold their own follow-up; each takes its own, neither the other', async () => {
     const r = runner('simultaneous');
     expect(r.performAction('scout', 1, {}).success).toBe(true);
     expect(r.performAction('scout', 2, {}).success).toBe(true);
@@ -148,11 +150,11 @@ describe('GameRunner', () => {
     expect(awaiting.find((p) => p.playerIndex === 2)).toMatchObject({ completed: false, availableActions: [] });
 
     // Neither may take the other's (seat 3 holds none at all).
-    r.startPendingAction('loot', 3);
-    expect(r.processSelectionStep(3, 'where', 'north')).toMatchObject({ success: false, error: NOT_YOURS });
+    const picks = new PendingActionManager(r);
+    expect(await picks.processSelectionStep(3, 'where', 'north', 'loot')).toMatchObject({ success: false, error: NOT_YOURS });
 
-    expect(lootByPicks(r, 2)).toMatchObject({ success: true, actionComplete: true });
-    expect(lootByPicks(r, 1)).toMatchObject({ success: true, actionComplete: true });
+    expect(await lootByPicks(r, 2)).toMatchObject({ success: true, actionComplete: true });
+    expect(await lootByPicks(r, 1)).toMatchObject({ success: true, actionComplete: true });
     expect(r.game.looted).toEqual([2, 1]);
     expect(r.getFlowState()?.followUps).toBeUndefined();
     const after = r.getFlowState()!.awaitingPlayers!;
@@ -160,22 +162,22 @@ describe('GameRunner', () => {
     expect(after.find((p) => p.playerIndex === 2)?.completed).toBe(true);
   });
 
-  it('simultaneous: the step does not end while the last seat holds a follow-up', () => {
+  it('simultaneous: the step does not end while the last seat holds a follow-up', async () => {
     const r = runner('simultaneous');
     r.performAction('scout', 1, {});
-    lootByPicks(r, 1);
+    await lootByPicks(r, 1);
     r.performAction('scout', 2, {});
-    lootByPicks(r, 2);
+    await lootByPicks(r, 2);
     r.performAction('scout', 3, {});
 
     const state = r.getFlowState()!;
     expect(state.awaitingInput).toBe(true);
     expect(state.awaitingPlayers?.find((p) => p.playerIndex === 3)?.completed).toBe(false);
-    expect(lootByPicks(r, 3)).toMatchObject({ success: true });
+    expect(await lootByPicks(r, 3)).toMatchObject({ success: true });
     expect(r.game.looted).toEqual([1, 2, 3]);
   });
 
-  it('turn-based: the turn stays with the seat until it takes its follow-up', () => {
+  it('turn-based: the turn stays with the seat until it takes its follow-up', async () => {
     const r = runner('turn');
     expect(r.performAction('scout', 1, {}).success).toBe(true);
 
@@ -185,7 +187,7 @@ describe('GameRunner', () => {
     expect(held.followUps).toEqual([{ action: 'loot', args: { by: 1 }, seat: 1 }]);
     expect(r.refusalToAct('loot', 2)).toMatchObject({ errorCode: 'NOT_YOUR_TURN' });
 
-    expect(lootByPicks(r, 1)).toMatchObject({ success: true, actionComplete: true });
+    expect(await lootByPicks(r, 1)).toMatchObject({ success: true, actionComplete: true });
     expect(r.getFlowState()?.currentPlayer).toBe(2);
     expect(r.getFlowState()?.followUps).toBeUndefined();
   });
@@ -237,14 +239,14 @@ describe('GameRunner', () => {
       expect(enumerateLegalMoves(r.game, 2).some((m) => m.action === 'loot')).toBe(false);
     });
 
-    it(`${shape}: the hold survives a snapshot restore`, () => {
+    it(`${shape}: the hold survives a snapshot restore`, async () => {
       const r = runner(shape);
       r.performAction('scout', 1, {});
 
       const restored = GameRunner.fromSnapshot(JSON.parse(JSON.stringify(r.getSnapshot())), raidClass(shape, false));
 
       expect(restored.getFlowState()?.followUps).toEqual([{ action: 'loot', args: { by: 1 }, seat: 1 }]);
-      expect(lootByPicks(restored, 1)).toMatchObject({ success: true, actionComplete: true });
+      expect(await lootByPicks(restored, 1)).toMatchObject({ success: true, actionComplete: true });
     });
   }
 });

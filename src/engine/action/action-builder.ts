@@ -109,9 +109,11 @@ type DisabledOptions<G extends Game, A extends Record<string, unknown>, T, P> = 
   disabled?: (choice: T, context: PickContext<G, A>, prepared: P) => string | false;
   /**
    * The player-facing refusal for a submitted value that is no longer listed
-   * (#393). `value` is what was submitted: a choice's value, or an element if
-   * it still exists and otherwise the id sent. Without it the player reads a
-   * plain default and the engine's detail goes to the dev log.
+   * (#393). `value` is what was submitted: a choice's value; for an element,
+   * the element if it still exists and the player can see it, otherwise the
+   * id the player knows it by, or `undefined` for an id the player may no
+   * longer use (#1205, #1293). Without it the player reads a plain default
+   * and the engine's detail goes to the dev log.
    */
   unavailable?: (value: unknown, context: PickContext<G, A>) => string;
 };

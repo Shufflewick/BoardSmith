@@ -15,9 +15,10 @@
  * away. An action whose own picks (a repeat's `onEach`) end its condition
  * still completes, and a held follow-up is never gated by its condition.
  *
- * Each case is driven through all three pending-action paths: the session-free
- * GameRunner, the live session host (`SnapshotSessionHost`, which holds each
- * seat's pending state between ops), and the stateless `selectionStep` op.
+ * Each case is driven through all three pending-action paths: the pick-by-pick
+ * PendingActionManager on a runner, the live session host (`SnapshotSessionHost`,
+ * which holds each seat's pending state between ops), and the stateless
+ * `selectionStep` op.
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -29,6 +30,7 @@ import {
   type GameOptions,
 } from '../engine/index.js';
 import { GameRunner } from '../runtime/runner.js';
+import { PendingActionManager } from './pending-action-manager.js';
 import { createHeadlessSession } from '../testing/headless-session.js';
 import { executeOp, type GameDefinitionLike, type StateEnvelope } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
@@ -150,71 +152,76 @@ async function session() {
   };
 }
 
-describe('GameRunner', () => {
-  it("refuses to complete a pending action once another seat's move took its condition away", () => {
+describe('PendingActionManager on a runner, pick by pick', () => {
+  it("refuses to complete a pending action once another seat's move took its condition away", async () => {
     const r = runner();
-    r.startPendingAction('build', 1);
-    expect(r.processSelectionStep(1, 'where', 'north').success).toBe(true);
+    const picks = new PendingActionManager(r);
+    picks.startPendingAction('build', 1);
+    expect((await picks.processSelectionStep(1, 'where', 'north')).success).toBe(true);
 
     expect(r.performAction('take', 2, {}).success).toBe(true);
     const historyBefore = historyLabels(r.actionHistory);
 
-    const step = r.processSelectionStep(1, 'what', 'wall');
+    const step = await picks.processSelectionStep(1, 'what', 'wall');
 
     expect(step).toEqual({ success: false, error: STONE_GONE, errorCode: ErrorCode.ACTION_NOT_AVAILABLE });
     expect(r.game.ran).toEqual(['take:2']);
     expect(historyLabels(r.actionHistory)).toEqual(historyBefore);
   });
 
-  it('completes the refused pending action once its condition holds again', () => {
+  it('completes the refused pending action once its condition holds again', async () => {
     const r = runner();
-    r.startPendingAction('build', 1);
-    expect(r.processSelectionStep(1, 'where', 'north').success).toBe(true);
+    const picks = new PendingActionManager(r);
+    picks.startPendingAction('build', 1);
+    expect((await picks.processSelectionStep(1, 'where', 'north')).success).toBe(true);
     expect(r.performAction('take', 2, {}).success).toBe(true);
-    expect(r.processSelectionStep(1, 'what', 'wall')).toEqual({ success: false, error: STONE_GONE, errorCode: ErrorCode.ACTION_NOT_AVAILABLE });
+    expect(await picks.processSelectionStep(1, 'what', 'wall')).toEqual({ success: false, error: STONE_GONE, errorCode: ErrorCode.ACTION_NOT_AVAILABLE });
 
     r.game.stoneInQuarry = true;
 
-    expect(r.processSelectionStep(1, 'what', 'wall')).toMatchObject({ success: true, actionComplete: true });
+    expect(await picks.processSelectionStep(1, 'what', 'wall')).toMatchObject({ success: true, actionComplete: true });
     expect(r.game.ran).toEqual(['take:2', 'build:1']);
     expect(historyLabels(r.actionHistory)).toEqual(['take:2', 'build:1']);
   });
 
-  it('refuses the first pick of an action whose condition does not hold', () => {
+  it('refuses the first pick of an action whose condition does not hold', async () => {
     const r = runner();
+    const picks = new PendingActionManager(r);
     expect(r.performAction('take', 2, {}).success).toBe(true);
-    r.startPendingAction('build', 1);
+    picks.startPendingAction('build', 1);
 
-    expect(r.processSelectionStep(1, 'where', 'north')).toEqual({ success: false, error: STONE_GONE_AT_START, errorCode: ErrorCode.ACTION_NOT_AVAILABLE });
+    expect(await picks.processSelectionStep(1, 'where', 'north')).toEqual({ success: false, error: STONE_GONE_AT_START, errorCode: ErrorCode.ACTION_NOT_AVAILABLE });
     expect(r.game.ran).toEqual(['take:2']);
   });
 
-  it("completes an action whose own picks end its condition, with another seat's move in between", () => {
+  it("completes an action whose own picks end its condition, with another seat's move in between", async () => {
     const r = runner();
-    r.startPendingAction('dig', 1);
-    expect(r.processSelectionStep(1, 'spot', 'east').success).toBe(true);
+    const picks = new PendingActionManager(r);
+    picks.startPendingAction('dig', 1);
+    expect((await picks.processSelectionStep(1, 'spot', 'east')).success).toBe(true);
     expect(r.game.energy[1]).toBe(0);
 
     expect(r.performAction('rest', 2, {}).success).toBe(true);
-    const step = r.processSelectionStep(1, 'spot', 'stop');
+    const step = await picks.processSelectionStep(1, 'spot', 'stop');
 
     expect(step).toMatchObject({ success: true, actionComplete: true });
     expect(r.game.ran).toEqual(['rest:2', 'dig:1']);
     expect(historyLabels(r.actionHistory)).toEqual(['rest:2', 'dig:1']);
   });
 
-  it("refuses an action whose picks change the game once another seat's move took its condition away", () => {
+  it("refuses an action whose picks change the game once another seat's move took its condition away", async () => {
     const r = runner();
+    const picks = new PendingActionManager(r);
     r.game.energy[1] = 3;
-    r.startPendingAction('dig', 1);
-    expect(r.processSelectionStep(1, 'spot', 'east').success).toBe(true);
+    picks.startPendingAction('dig', 1);
+    expect((await picks.processSelectionStep(1, 'spot', 'east')).success).toBe(true);
     expect(r.game.energy[1]).toBe(2);
 
     // Another seat's move drains seat 1's energy: not the action's own doing.
     r.game.energy[1] = 0;
     expect(r.performAction('rest', 2, {}).success).toBe(true);
 
-    expect(r.processSelectionStep(1, 'spot', 'stop')).toEqual({
+    expect(await picks.processSelectionStep(1, 'spot', 'stop')).toEqual({
       success: false,
       error:
         "'dig' is no longer available to you: the game changed since your last choice, " +
@@ -224,23 +231,25 @@ describe('GameRunner', () => {
     expect(r.game.ran).toEqual(['rest:2']);
   });
 
-  it('completes a held follow-up pick by pick although its condition does not hold', () => {
+  it('completes a held follow-up pick by pick although its condition does not hold', async () => {
     const r = runner();
+    const picks = new PendingActionManager(r);
     expect(r.performAction('scout', 1, {}).success).toBe(true);
-    r.startPendingAction('loot', 1);
-    expect(r.processSelectionStep(1, 'where', 'north').success).toBe(true);
+    picks.startPendingAction('loot', 1);
+    expect((await picks.processSelectionStep(1, 'where', 'north')).success).toBe(true);
     expect(r.performAction('take', 2, {}).success).toBe(true);
 
-    expect(r.processSelectionStep(1, 'what', 'gold')).toMatchObject({ success: true, actionComplete: true });
+    expect(await picks.processSelectionStep(1, 'what', 'gold')).toMatchObject({ success: true, actionComplete: true });
     expect(historyLabels(r.actionHistory)).toEqual(['scout:1', 'take:2', 'loot:1']);
   });
 
-  it('still refuses a seat that does not hold the follow-up, as before', () => {
+  it('still refuses a seat that does not hold the follow-up, as before', async () => {
     const r = runner();
+    const picks = new PendingActionManager(r);
     expect(r.performAction('scout', 1, {}).success).toBe(true);
-    r.startPendingAction('loot', 2);
+    picks.startPendingAction('loot', 2);
 
-    expect(r.processSelectionStep(2, 'where', 'north')).toEqual({
+    expect(await picks.processSelectionStep(2, 'where', 'north')).toEqual({
       success: false,
       error: "'loot' is not one of your actions right now.",
       errorCode: ErrorCode.ACTION_NOT_AVAILABLE,
