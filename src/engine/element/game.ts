@@ -4959,8 +4959,10 @@ export class Game<
     // child can still be relinked to its placeholder on restore. A child whose
     // visibility reaches this seat goes out whole in its place (#758).
     //
-    // A granted element below one of the children follows all the placeholders
-    // (#961), so it tells nothing of which child holds it or where.
+    // A granted element below a hidden child follows all the placeholders
+    // (#961), with no id, name or count for the containers between. Both
+    // callers send the zone's childCount (#1208), which says how many trailing
+    // entries are nested, so with one hidden child the seat knows which holds them.
     const placeholderChildren = (json: ElementJSON, element: GameElement): ElementJSON[] => {
       const placeholders: ElementJSON[] = [];
       const nested: ElementJSON[] = [];
@@ -5214,12 +5216,14 @@ export class Game<
         // Every other zone this seat cannot see (a non-owner of an owner zone,
         // or a seat in `exceptPlayers` of any mode, #750) gets anonymous
         // placeholders, which keep the ids its picks are offered by (#715).
+        // childCount, as its children may also carry nested grants (#1208).
         const hiddenChildren = placeholderChildren(json, element);
         return {
           // ownJson (not json): the container's own attributes must stay
           // whitelist-redacted in this early return (CR-01).
           ...ownJson,
           children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
+          childCount: element._t.children.length,
         };
       }
 
