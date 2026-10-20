@@ -1,8 +1,8 @@
 /**
  * No test asserts how long something took (#360).
  *
- * The merge gate (`agent-policy merge`) runs the whole suite while other merges and
- * worktree suites run on the same machine, at load averages past 100. A test
+ * The merge gate (`agent-policy merge`) runs tests while other agents' runs share
+ * the same machine, at load averages past 100. A test
  * that asserts `elapsed < 1000` then fails with nothing regressed, refuses an
  * unrelated merge, and every agent has to prove the red is not theirs. #354,
  * #355, #360 and #363 were four of those in one day.

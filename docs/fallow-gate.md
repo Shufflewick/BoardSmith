@@ -349,8 +349,7 @@ The last full re-record was #545, for fallow 3.28.0. What it changed:
 ## The merge refuses baseline drift (#545)
 
 `.agent-policy.json`'s verify list runs
-`boardsmith audit --dupes-baseline --health-baseline --duplication` before the
-test suite, so `agent-policy verify` and `agent-policy merge`'s check of the
+`boardsmith audit --dupes-baseline --health-baseline --duplication`, so `agent-policy verify` and `agent-policy merge`'s check of the
 merged tree both fail when either baseline no longer describes the tree, or
 when a Vue template or style block is duplicated and `.jscpd-accepted.json`
 does not accept it (#596). Before #545, no gate ran the audit; under the fallow

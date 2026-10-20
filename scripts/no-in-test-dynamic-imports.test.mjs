@@ -2,9 +2,8 @@
  * No test loads a module with `import()` inside a function unless it says why (#365).
  *
  * A module's first load (compile and evaluation) is slow on a busy machine, and
- * the merge gate (`agent-policy merge`) runs the suite at load averages
- * past 100. When the
- * first load happens inside a test body, a helper a test calls, or a hook, it
+ * the merge gate (`agent-policy merge`) runs tests at load averages past 100.
+ * When the first load happens inside a test body, a helper a test calls, or a hook, it
  * counts against that test's timeout, and the test fails with nothing wrong.
  * #354, #355 and #363 were that. A static import, or a top-level `await
  * import()`, does the load while the file is collected, where no test timeout
