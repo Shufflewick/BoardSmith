@@ -363,7 +363,7 @@ describe('resolveColorOption: dev offers exactly the colours production does (#8
   });
 
   it('refuses a code colour option that differs from the engine palette when boardsmith.json declares none', () => {
-    const declared = { type: 'color' as const, label: 'Color', choices: [{ value: '#111111', label: 'Coal' }] };
+    const declared = { type: 'color' as const, label: 'Color' as const, choices: [{ value: '#111111', label: 'Coal' }] };
     expect(() => resolveColorOption({ playerOptions: { color: declared } }, {})).toThrow(
       /engine's default palette/,
     );
@@ -372,7 +372,7 @@ describe('resolveColorOption: dev offers exactly the colours production does (#8
   it('accepts a code colour option equal to the palette production offers, hex case aside', () => {
     const declared = {
       type: 'color' as const,
-      label: 'Color',
+      label: 'Color' as const,
       choices: [{ value: '#111111', label: 'Coal' }, { value: '#eeeeee', label: 'Snow' }],
     };
     expect(resolveColorOption({ playerOptions: { color: declared } }, configPalette).choices).toEqual(

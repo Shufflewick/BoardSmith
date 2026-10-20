@@ -5,7 +5,7 @@
  * carry, since dev and the live lobby must offer the same list.
  */
 import { describe, it, expect } from 'vitest';
-import { mergePlayerOptions } from './player-options.js';
+import { mergePlayerOptions, playerOptionDefaults } from './player-options.js';
 import { createColorOption, type PlayerOptionDefinition } from '../../session/index.js';
 
 const role: PlayerOptionDefinition = {
@@ -146,5 +146,18 @@ describe('the code types take only shapes the platform\'s manifest can carry (#9
     const seats: PlayerOptionDefinition = { type: 'number', label: 'Seats', default: 2, min: 1, max: 4, step: 1 };
     const ready: PlayerOptionDefinition = { type: 'boolean', label: 'Ready', description: 'Start at once', default: false };
     expect(mergePlayerOptions({ seats, ready }, [{ id: 'seats', ...seats }])).toEqual({ seats, ready });
+  });
+});
+
+describe('playerOptionDefaults (#1304)', () => {
+  it("gives each seat every select, number and boolean option's default, and no colour or exclusive one", () => {
+    const options: Record<string, PlayerOptionDefinition> = {
+      color: createColorOption(),
+      side: { type: 'select', label: 'Side', default: 'north', choices: [{ value: 'north', label: 'North' }, { value: 'south', label: 'South' }] },
+      handicap: { type: 'number', label: 'Handicap', default: 2, min: 0, max: 5 },
+      ready: { type: 'boolean', label: 'Ready', default: false },
+      dictator: { type: 'exclusive', label: 'Dictator', default: 'last', choices: [{ value: 'dictator', label: 'Dictator' }] },
+    };
+    expect(playerOptionDefaults(options)).toEqual({ side: 'north', handicap: 2, ready: false });
   });
 });

@@ -221,6 +221,8 @@ export interface MultiplayerHostOptions {
   designatedBotSeats?: number[];
   /** Seat colors offered in the lobby (1-indexed by position). */
   colorPalette?: Array<{ value: string; label: string }>;
+  /** What every seat's player options start as: each declared option's default, colour aside (#1304). */
+  playerOptionDefaults?: Record<string, unknown>;
   /**
    * The game options the first `start` op carries (the declared defaults,
    * overlaid by `--preset` and `--game-option`), already admitted by
@@ -681,10 +683,12 @@ export class MultiplayerHost {
     if (this.phase !== 'playing' || !this.session) return;
     this.session.host.setBotSeats(this.botSeats);
     // The lobby shows the roster too, so a change the message did not broadcast still reaches the pages (#887).
-    const roster = this.botSeats.map((b) => b.seat).sort().join();
-    if (roster === this.lobbyRoster) return;
-    this.lobbyRoster = roster;
+    if (this.rosterKey() === this.lobbyRoster) return;
     this.broadcastLobby();
+  }
+
+  private rosterKey(): string {
+    return this.botSeats.map((b) => b.seat).sort().join();
   }
 
   private async dispatch(clientId: string, msg: ClientInbound): Promise<void> {
@@ -947,18 +951,9 @@ export class MultiplayerHost {
   /** Take over a seat (works mid-game: claim an open/bot seat → it stops being bot). */
   private async handleJoin(clientId: string, msg: Extract<ClientInbound, { type: 'join' }>): Promise<void> {
     this.connected.add(clientId);
-    const info = this.seats.get(msg.seat);
-    if (!info) {
-      this.send(clientId, { type: 'error', message: `Seat ${msg.seat} does not exist.` });
-      return;
-    }
-    if (info.clientId && info.clientId !== clientId && info.connected) {
-      this.send(clientId, { type: 'error', message: `Seat ${msg.seat} is taken.` });
-      return;
-    }
-    // The page's frame is unchecked JSON, and a refusal here leaves no seat half assigned (#887).
-    if (![msg.name, msg.color].every((text) => text === undefined || typeof text === 'string')) {
-      this.send(clientId, { type: 'error', message: `Seat ${msg.seat} was not taken: its name and color must be text.` });
+    const refusal = this.joinRefusal(clientId, msg);
+    if (refusal !== undefined) {
+      this.send(clientId, { type: 'error', message: refusal });
       return;
     }
     const vacated = this.clientSeat.get(clientId);
@@ -966,16 +961,35 @@ export class MultiplayerHost {
     if (this.followShared()) await this.endFollow(FOLLOW_SHARED);
     this.send(clientId, { type: 'joined', seat: msg.seat });
     if (this.phase === 'playing') this.reinitSeat(clientId, msg.seat);
+    // A seat its player left by joining another goes to the bot, as `leave` gives it up (#1025),
+    // before the lobby is sent, so no page is shown it open and unplayed (#1304).
+    const covered = this.phase === 'playing' && vacated !== undefined && vacated !== msg.seat && this.coverWithBot(vacated);
     this.broadcastLobby();
-    if (vacated !== msg.seat) await this.coverLeftSeat(vacated);
-  }
-
-  /** A seat its player left by joining another goes to the bot, as `leave` gives it up (#1025). */
-  private async coverLeftSeat(seat: number | undefined): Promise<void> {
-    if (seat === undefined || this.phase !== 'playing' || this.followerClientId !== null) return;
-    this.addBotSeat(seat);
+    if (!covered) return;
     this.announceRoster();
     await this.session?.host.runBotTurns();
+  }
+
+  /** Why `clientId` cannot take the seat `msg` names, or undefined when it can. */
+  private joinRefusal(clientId: string, msg: Extract<ClientInbound, { type: 'join' }>): string | undefined {
+    const info = this.seats.get(msg.seat);
+    if (!info) return `Seat ${msg.seat} does not exist.`;
+    if (info.clientId && info.clientId !== clientId && info.connected) return `Seat ${msg.seat} is taken.`;
+    // The page's frame is unchecked JSON, and a refusal here leaves no seat half assigned (#887).
+    if (![msg.name, msg.color].every((text) => text === undefined || typeof text === 'string')) {
+      return `Seat ${msg.seat} was not taken: its name and color must be text.`;
+    }
+    return undefined;
+  }
+
+  /**
+   * THE RULE for a seat its player is no longer at: the bot plays it, unless a
+   * follower drives every seat, when no bot plays (#884). Whether it did (#1304).
+   */
+  private coverWithBot(seat: number): boolean {
+    if (this.followerClientId !== null) return false;
+    this.addBotSeat(seat);
+    return true;
   }
 
   /** Give up a seat mid-game → it reverts to bot so the game continues for others. */
@@ -988,8 +1002,7 @@ export class MultiplayerHost {
     const seat = this.clientSeat.get(clientId);
     this.releaseSeat(clientId);
     if (seat !== undefined && this.phase === 'playing') {
-      // A follower drives every seat, so while one follows no bot plays (#884).
-      if (this.followerClientId === null) this.addBotSeat(seat);
+      this.coverWithBot(seat);
       this.broadcastLobby();
       this.send(clientId, this.lobbyMessage(clientId));
       this.announceRoster();
@@ -1192,8 +1205,7 @@ export class MultiplayerHost {
 
   /** The grace ran out: the bot drives the seat until its player is back. */
   private coverAwaySeat(seat: number): void {
-    if (this.followerClientId !== null) return;
-    this.addBotSeat(seat);
+    if (!this.coverWithBot(seat)) return;
     this.announceRoster();
     if (this.phase !== 'playing') return;
     void this.session?.host.runBotTurns().catch((err: unknown) => {
@@ -1344,11 +1356,12 @@ export class MultiplayerHost {
       // behave identically in dev. Without this a bot seat is invisible to such
       // games: they treat the bot seat as a human, build an interactive turn, and
       // the dev host's MCTS bot then finds "No available moves" and locks up.
+      // The seat's own fields go last, so a player option with the same key cannot replace them.
       playerConfigs: Array.from({ length: playerCount }, (_, i) => ({
+        ...perSeatOptions[i],
         name: seatDisplayName(i + 1, this.seats.get(i + 1)?.name),
         isBot: !humanSeats.has(i + 1),
         botLevel: this.opts.botLevel,
-        ...perSeatOptions[i],
       })),
     };
     this.injectPersistedStore(startGameOptions, humanSeats, playerCount);
@@ -1560,12 +1573,12 @@ export class MultiplayerHost {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  /** Per-seat playerOptions for the start op: each seat's chosen/default color. */
+  /** Per-seat playerOptions for the start op: the declared defaults and each seat's chosen/default color. */
   private buildPerSeatOptions(): Array<Record<string, unknown>> {
     return Array.from({ length: this.opts.playerCount }, (_, i) => {
       const seat = this.seats.get(i + 1);
       const color = seat?.color ?? this.opts.colorPalette?.[i]?.value;
-      const perSeat: Record<string, unknown> = {};
+      const perSeat: Record<string, unknown> = { ...this.opts.playerOptionDefaults };
       if (color !== undefined) perSeat.color = color;
       return perSeat;
     });
@@ -1888,6 +1901,8 @@ export class MultiplayerHost {
   }
 
   private broadcastLobby(): void {
+    // The roster the pages were shown, so announcing it unchanged sends no second lobby (#1304).
+    this.lobbyRoster = this.rosterKey();
     for (const clientId of this.connected) this.send(clientId, this.lobbyMessage(clientId));
   }
 }
