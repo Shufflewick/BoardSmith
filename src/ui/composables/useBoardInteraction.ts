@@ -417,6 +417,8 @@ export function createBoardInteraction(): BoardInteraction {
     },
 
     startDrag(element) {
+      // A disabled candidate starts no drag, as a click on it chooses nothing (#1190).
+      if (findCandidate(element)?.disabled) return;
       state.draggedElement = element;
       state.isDragging = true;
       // Clear hover state when starting drag

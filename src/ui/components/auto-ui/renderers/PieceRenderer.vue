@@ -79,12 +79,13 @@ const isDragged = computed(() => {
 const standsOn = inject(STANDS_ON_KEY, () => undefined);
 
 // What a drag starts from: the piece if it is a candidate, else the candidate
-// square it stands on, whose pick the drag then starts (#943).
+// square it stands on, whose pick the drag then starts (#943). A disabled
+// candidate starts nothing, as a click on it chooses nothing (#1190).
 const dragIdentity = computed(() => {
   if (!boardInteraction) return null;
-  if (isActionSelectable.value) return elementIdentity();
+  if (isActionSelectable.value) return isDisabled.value ? null : elementIdentity();
   const square = standsOn();
-  return square && boardInteraction.isSelectableElement(square) ? square : null;
+  return square && boardInteraction.isSelectableElement(square) && !boardInteraction.isDisabledElement(square) ? square : null;
 });
 
 const canDrag = computed(() => dragIdentity.value !== null);

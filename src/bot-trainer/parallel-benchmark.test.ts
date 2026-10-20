@@ -64,6 +64,7 @@ vi.mock('os', async (importOriginal) => {
 const { runParallelBenchmarks } = await import('./parallel-benchmark.js');
 
 import type { ObjectiveWeight } from './types.js';
+import type { BenchmarkConfig } from './benchmark.js';
 
 const objectives = (weight: number): ObjectiveWeight[] => [{ id: `f${weight}`, weight }];
 
@@ -73,7 +74,7 @@ const run = (
   population: ObjectiveWeight[][],
   options?: { workerCount?: number },
   onProgress?: (completed: number, total: number) => void,
-) => runParallelBenchmarks('/game.js', 'test', population, config, options, onProgress);
+) => runParallelBenchmarks('/game.js', 'test', population.map((weights) => ({ weights, config })), options, onProgress);
 
 /**
  * The fake workers answer in microtasks, so the run has settled by the next
@@ -138,6 +139,15 @@ describe('runParallelBenchmarks', () => {
       weights: objectives(10),
       config,
     });
+  });
+
+  it("sends each job its own config, so jobs can play differently seeded games (#1031)", async () => {
+    const seeded = (seed: string): BenchmarkConfig => ({ ...config, seed });
+    await runParallelBenchmarks('/game.js', 'test', [
+      { weights: objectives(10), config: seeded('a') },
+      { weights: objectives(10), config: seeded('b') },
+    ], { workerCount: 1 });
+    expect(createdWorkers[0].received.map((request) => request.config)).toEqual([seeded('a'), seeded('b')]);
   });
 
   it('honours an explicit worker count', async () => {

@@ -234,8 +234,12 @@ whose own visibility shows it to a seat (`addVisibleTo`, `showOnlyTo`,
 hidden, count-only or owner-only zone, such as a card in a box in a
 `contentsHidden()` deck. It arrives as a child of that zone, after the zone's
 placeholders (a `contentsHidden()` zone has none), and the containers between
-are not sent at all: no id, name or count, so the seat cannot tell which child
-holds it. A card directly in the zone keeps its own place among the
+are not sent at all: no id, name or count. A zone that sends placeholders
+(count-only, owner-only, `hideContentsFrom`) also sends its `childCount`
+(#1208), which tells the seat how many of the cards after the placeholders sit
+inside a hidden child, so with one hidden child the seat knows which child
+holds them. A `contentsHidden()` zone sends no count, so there the seat cannot
+tell. A card directly in the zone keeps its own place among the
 placeholders (#758). Below a hidden child, only an element's OWN grant counts:
 a rule it inherits from a zone in between (`contentsVisible()`,
 `hideContentsFrom(3)` on a box in the deck) sends nothing, since that box is
