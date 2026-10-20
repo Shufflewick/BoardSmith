@@ -1,4 +1,4 @@
-import { resolve } from 'node:path';
+import { resolve, sep } from 'node:path';
 import vue from '@vitejs/plugin-vue';
 import { configDefaults, mergeConfig } from 'vitest/config';
 
@@ -54,8 +54,8 @@ export function defineGameViteConfig(overrides = {}) {
 }
 
 /**
- * vitest's rerun triggers and the project's own `boardsmith.json`, each under the root vitest runs
- * in, which a plugin learns from the config vitest hands it.
+ * vitest's rerun triggers and the project's own `boardsmith.json`, each under the project root
+ * (vite's `root`, not a `test.root` inside it), which a plugin learns from the config it is handed.
  *
  * @returns {import('vite').Plugin}
  */
@@ -63,7 +63,8 @@ function rerunTriggers() {
   return {
     name: 'boardsmith:rerun-triggers',
     config(config) {
-      const root = resolve(config.test?.root || config.root || process.cwd()).replace(/[\\*?[\]{}()!+@|]/g, '\\$&');
+      // vitest compares forward-slash paths, so a Windows root is written with them before glob characters are escaped.
+      const root = resolve(config.root || process.cwd()).split(sep).join('/').replace(/[\\*?[\]{}()!+@|]/g, '\\$&');
       return { test: { forceRerunTriggers: [...configDefaults.forceRerunTriggers, 'boardsmith.json'].map((trigger) => `${root}/${trigger}`) } };
     },
   };

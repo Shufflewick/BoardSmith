@@ -37,6 +37,13 @@ describe('defineGameViteConfig', () => {
     expect(config.test?.exclude).toEqual([...configDefaults.exclude, '.boardsmith/**', '.worktrees/**', '**/tests/browser/**']);
   });
 
+  it("anchors the rerun triggers at the project root, not a test root inside it (#1307)", () => {
+    // boardsmith.json, package.json and vite.config.ts sit at the project root, whatever folder the tests run from.
+    const plugin = defineGameViteConfig().plugins?.flat().find((p) => p && typeof p === 'object' && 'name' in p && p.name === 'boardsmith:rerun-triggers') as { config: (c: object) => { test: { forceRerunTriggers: string[] } } };
+    const { test } = plugin.config({ root: '/p/game', test: { root: '/p/game/tests' } });
+    expect(test.forceRerunTriggers).toEqual([...configDefaults.forceRerunTriggers, 'boardsmith.json'].map((t) => `/p/game/${t}`));
+  });
+
   it("keeps a game's own settings, adding its excludes to the shipped ones", () => {
     const config = defineGameViteConfig({ test: { setupFiles: ['./tests/setup.ts'], exclude: ['tests/tdd/**'] } });
     expect(config.test?.setupFiles).toEqual(['./tests/setup.ts']);
