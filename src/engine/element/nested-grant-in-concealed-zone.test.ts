@@ -106,7 +106,9 @@ describe('a granted element nested below a concealed child (#961)', () => {
 
     const json = zoneIn(game, 2, 'hand');
     expect(json.children!.map((c) => c.id)).toEqual([seatIdOf(crate, 2), gem.id]);
-    expect('childCount' in json).toBe(false);
+    // The hand holds one card, the crate; the gem inside it is not a second (#1208).
+    expect(json.childCount).toBe(1);
+    expect(getElementCount(json as GameViewElement)).toBe(1);
     expect(zoneIn(game, 3, 'hand').children!.map((c) => c.id)).toEqual([seatIdOf(crate, 3)]);
     // The owner sees the hand as it is.
     expect(zoneIn(game, 1, 'hand').children!.map((c) => c.id)).toEqual([crate.id]);
@@ -383,8 +385,8 @@ describe('isVisibleTo matches the seat view on random trees (#961)', () => {
   function checkChildCount(game: TestGame, view: ElementJSON, node: ElementJSON, seat: number, where: string): void {
     const element = game.getElementById(node.id);
     const zone = element instanceof Space && !isHiddenPlaceholder(node) ? element.getZoneVisibility() : undefined;
-    // A count-only zone the view carries but the seat cannot see into always says how many it holds.
-    const mustCount = zone?.mode === 'count-only' && !shows(zone, element!, seat, view);
+    // A zone the view carries with one placeholder per child, as the seat cannot see into it, always says how many it holds (#1208).
+    const mustCount = zone !== undefined && zone.mode !== 'hidden' && !shows(zone, element!, seat, view);
     if (mustCount || node.childCount !== undefined) expect(node.childCount, where).toBe(element!._t.children.length);
   }
 

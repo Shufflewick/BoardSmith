@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ObjectiveWeight, TrainingProgress } from './types.js';
 import type { WeightEvolverConfig } from './weight-evolver.js';
 import type { BenchmarkConfig } from './benchmark.js';
+import type { BenchmarkJob } from './parallel-benchmark.js';
 import { createSeededRandom } from '../utils/random.js';
 import { Game, Player, Action, actionStep, type GameOptions } from '../engine/index.js';
 import type { BotStrategy } from '../bot/index.js';
@@ -21,14 +22,9 @@ let fitnessOf: (objectives: ObjectiveWeight[], config?: BenchmarkConfig) => numb
 const benchmarkCalls: ObjectiveWeight[][][] = [];
 
 vi.mock('./parallel-benchmark.js', () => ({
-  runParallelBenchmarks: vi.fn(async (
-    _path: string,
-    _type: string,
-    population: ObjectiveWeight[][],
-    config: BenchmarkConfig,
-  ) => {
-    benchmarkCalls.push(population);
-    return population.map((individual) => fitnessOf(individual, config));
+  runParallelBenchmarks: vi.fn(async (_path: string, _type: string, jobs: BenchmarkJob[]) => {
+    benchmarkCalls.push(jobs.map((job) => job.weights));
+    return jobs.map((job) => fitnessOf(job.weights, job.config));
   }),
 }));
 
@@ -39,6 +35,9 @@ const { WeightEvolver } = await import('./weight-evolver.js');
 const { loadTrainingBundle } = await import('./training-bundle.js');
 const realLoader = await vi.importActual<typeof import('./training-bundle.js')>('./training-bundle.js');
 const { runParallelBenchmarks } = await import('./parallel-benchmark.js');
+
+/** The config of every job in every benchmark run, run by run. */
+const benchmarkConfigs = () => vi.mocked(runParallelBenchmarks).mock.calls.map((call) => call[2].map((job) => job.config));
 
 class EvolveGame extends Game<EvolveGame, Player> {
   constructor(options: GameOptions) {
@@ -228,32 +227,34 @@ describe('WeightEvolver.evolve', () => {
     await expect(evolver({ onProgress: undefined }).evolve(objectives(5))).resolves.toBeDefined();
   });
 
-  it('threads the benchmark game count and MCTS budget into every evaluation', async () => {
+  it('threads the benchmark game count and MCTS budget into every search evaluation', async () => {
     await evolver({ evolutionBenchmarkGames: 12, benchmarkMCTSIterations: 7 })
       .evolve(objectives(5));
-    for (const call of vi.mocked(runParallelBenchmarks).mock.calls) {
-      expect(call[3]).toMatchObject({ gameCount: 12, mctsIterations: 7 });
+    for (const config of benchmarkConfigs().flat()) {
+      expect(config).toMatchObject({ gameCount: 12, mctsIterations: 7 });
     }
   });
 
   it('benchmarks every evaluation reproducibly from the evolution seed, with no game clock (#699)', async () => {
     await evolver({ seed: 'repeat' }).evolve(objectives(5));
-    const configs = vi.mocked(runParallelBenchmarks).mock.calls.map((call) => call[3]);
-    expect(configs.map((c) => c.seed)).toEqual(['repeat-initial', 'repeat-gen-1', 'repeat-gen-2']);
-    expect(configs.every((c) => c.reproducible === true && c.timeout === undefined)).toBe(true);
+    const configs = benchmarkConfigs();
+    expect(configs.map((run) => [...new Set(run.map((c) => c.seed))])).toEqual([
+      ['repeat-initial'], ['repeat-gen-1'], ['repeat-gen-2'],
+    ]);
+    expect(configs.flat().every((c) => c.reproducible === true && c.timeout === undefined)).toBe(true);
   });
 
   it('plays new games at every stage of an unseeded evolution, with unseeded, clock-bounded searches (#699)', async () => {
     await evolver({ seed: undefined }).evolve(objectives(5));
-    const first = vi.mocked(runParallelBenchmarks).mock.calls.map((call) => call[3]);
+    const first = benchmarkConfigs().flat();
     expect(first.every((c) => c.reproducible !== true && c.timeout === 30000)).toBe(true);
-    const gameSeeds = first.map((c) => c.seed);
-    expect(new Set(gameSeeds).size).toBe(3);
+    const gameSeeds = benchmarkConfigs().map((run) => run[0].seed);
+    expect(new Set(gameSeeds).size).toBe(gameSeeds.length);
     expect(gameSeeds.every((seed) => typeof seed === 'string')).toBe(true);
 
     vi.mocked(runParallelBenchmarks).mockClear();
     await evolver({ seed: undefined }).evolve(objectives(5));
-    const again = vi.mocked(runParallelBenchmarks).mock.calls.map((call) => call[3].seed);
+    const again = benchmarkConfigs().flat().map((c) => c.seed);
     expect(again.some((seed) => gameSeeds.includes(seed))).toBe(false);
   });
 
@@ -304,26 +305,45 @@ describe('WeightEvolver confirms the search pick on fresh games before keeping i
     expect(accepted).toBeLessThanOrEqual(10);
   });
 
-  it('accepts a clearly stronger candidate, and reports the confirmation rates, not the search score', async () => {
+  it('accepts a clearly stronger candidate, and reports the confirmation rates over all its batches, not the search score', async () => {
     fitnessOf = noisy((individual) => (isOriginal(individual) ? 0.5 : 0.7));
     const result = await evolver({ ...defaultSearch, seed: 'stronger' }).evolve(original);
 
     expect(result.objectives).not.toEqual(original);
     const confirmation = result.confirmation!;
     expect(confirmation.accepted).toBe(true);
-    expect(confirmation.originalWinRate).toBe(noisy(() => 0.5)(original, { gameCount: 400, seed: 'stronger-confirm' }));
-    expect(confirmation.candidateWinRate).toBe(noisy(() => 0.7)(result.objectives, { gameCount: 400, seed: 'stronger-confirm' }));
+    const overBatches = (strength: number, weights: ObjectiveWeight[]) =>
+      Array.from({ length: 20 }, (_, b) => noisy(() => strength)(weights, { gameCount: 20, seed: `stronger-confirm-${b}` }))
+        .reduce((sum, rate) => sum + rate, 0) / 20;
+    expect(confirmation.originalWinRate).toBe(overBatches(0.5, original));
+    expect(confirmation.candidateWinRate).toBe(overBatches(0.7, result.objectives));
   });
 
-  it('plays the confirmation on a seed the search never used, both sets on the same games', async () => {
+  it('splits each set\'s 400 games into 20 separately seeded batches, both sets on the same games, on seeds the search never used (#1031)', async () => {
     fitnessOf = noisy((individual) => (isOriginal(individual) ? 0.5 : 0.7));
-    await evolver({ seed: 'fresh' }).evolve(original);
-    const calls = vi.mocked(runParallelBenchmarks).mock.calls;
-    const confirm = calls.at(-1)!;
-    expect(confirm[2]).toHaveLength(2);
-    expect(confirm[2][0]).toEqual(original);
-    expect(confirm[3]).toMatchObject({ gameCount: 400, seed: 'fresh-confirm', reproducible: true });
-    expect(calls.slice(0, -1).map((call) => call[3].seed)).not.toContain('fresh-confirm');
+    await evolver({ seed: 'fresh', benchmarkMCTSIterations: 7, maxActionsPerGame: 9 }).evolve(original);
+    const [confirm, ...search] = benchmarkConfigs().reverse();
+    const jobs = vi.mocked(runParallelBenchmarks).mock.calls.at(-1)![2];
+    const batchSeeds = Array.from({ length: 20 }, (_, b) => `fresh-confirm-${b}`);
+    const [originalJobs, candidateJobs] = [jobs.slice(0, 20), jobs.slice(20)];
+
+    expect(jobs).toHaveLength(40);
+    expect(originalJobs.every((job) => job.weights === original)).toBe(true);
+    expect(candidateJobs.every((job) => job.weights === candidateJobs[0].weights && job.weights !== original)).toBe(true);
+    expect(originalJobs.map((job) => job.config.seed)).toEqual(batchSeeds);
+    expect(candidateJobs.map((job) => job.config.seed)).toEqual(batchSeeds);
+    for (const config of confirm) {
+      expect(config).toMatchObject({ gameCount: 20, mctsIterations: 7, maxActions: 9, reproducible: true });
+    }
+    expect(search.flat().some((c) => c.seed!.includes('confirm'))).toBe(false);
+  });
+
+  it('gives the pool at least as many confirmation jobs as workers, so none sits idle (#1031)', async () => {
+    fitnessOf = noisy((individual) => (isOriginal(individual) ? 0.5 : 0.7));
+    await evolver({ seed: 'busy', workerCount: 16 }).evolve(original);
+    const [, , jobs, options] = vi.mocked(runParallelBenchmarks).mock.calls.at(-1)!;
+    expect(options).toEqual({ workerCount: 16 });
+    expect(jobs.length).toBeGreaterThanOrEqual(16);
   });
 
   it('confirms nothing when the search kept the original', async () => {
