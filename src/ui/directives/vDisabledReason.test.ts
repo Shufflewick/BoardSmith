@@ -214,10 +214,14 @@ describe('vDisabledReason', () => {
         }),
         { attachTo: document.body }
       );
-      wrapper.vm.trap.open();
+      try {
+        wrapper.vm.trap.open();
+        await nextTick();
 
-      expect(describedBy(wrapper.find('button').element)!.closest('[inert]')).toBeNull();
-      wrapper.unmount();
+        expect(describedBy(wrapper.find('button').element)!.closest('[inert]')).toBeNull();
+      } finally {
+        wrapper.unmount();
+      }
     });
   });
 
