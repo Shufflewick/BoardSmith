@@ -8,10 +8,11 @@ Import from `boardsmith/ui` when building the visual interface for your game. Th
 
 ## Usage
 
+<!-- typecheck: game src/ui/imports.ts -->
 ```typescript
+import { AutoUI } from 'boardsmith/ui/auto-ui';
 import {
   GameShell,
-  AutoUI,
   ActionPanel,
   useBoardInteraction,
   useFLIP,
@@ -43,10 +44,11 @@ import {
 
 ### Auto-UI Components
 
-- `AutoUI` - Automatic game UI from state
-- `AutoGameBoard` - Automatic board rendering
-- `AutoElement` - Automatic element rendering
-- `ActionPanel` - Action selection panel
+From `boardsmith/ui/auto-ui`, so a game that draws its own board does not bundle them:
+
+- `AutoUI` - Automatic game UI from state (also the entry's default export)
+- `AutoRenderer` - Automatic element rendering
+- `ActionPanel` - Action selection panel (also exported from `boardsmith/ui`)
 
 ### Composables
 
@@ -234,8 +236,7 @@ A face-down pile's cards reach a seat as placeholders whose ids say nothing abou
 
 ```ts
 // src/ui/uis.ts: every board the game has; exactly one is defaultUI().
-import { defineGameUIs, defaultUI } from 'boardsmith/ui';
-import MyBoard from './components/MyBoard.vue';
+// defineGameUIs and defaultUI come from 'boardsmith/ui', MyBoard from './components/MyBoard.vue'
 
 export default defineGameUIs({ MyBoard: defaultUI(MyBoard) });
 ```
@@ -258,17 +259,24 @@ declares with `defineProps<TableBoardProps>()`; see
 
 ### Drag and Drop
 
+<!-- typecheck: board -->
 ```vue
 <script setup lang="ts">
-import { useDragDrop } from 'boardsmith/ui';
+import { computed } from 'vue';
+import { findElements, useDragDrop, type TableBoardProps } from 'boardsmith/ui';
 import 'boardsmith/ui/animation/drag-drop.css';
 
+const props = defineProps<TableBoardProps>();
 const { drag, drop } = useDragDrop();
+const controller = props.actionController;
+
+const cards = computed(() => findElements(props.gameView, { className: 'Card' }));
+const zones = computed(() => findElements(props.gameView, { className: 'Zone' }));
 
 const canDragCard = (cardId: number) =>
-  currentAction.value === 'moveCard' &&
-  currentPick.value?.name === 'card' &&
-  isCardSelectable(cardId);
+  controller.currentAction.value === 'moveCard' &&
+  controller.currentPick.value?.name === 'card' &&
+  controller.validElements.value.some((valid) => valid.id === cardId);
 </script>
 
 <template>
@@ -280,12 +288,11 @@ const canDragCard = (cardId: number) =>
   >
     {{ card.name }}
   </div>
-
   <div
     v-for="zone in zones"
     :key="zone.id"
-    v-bind="drop({ name: zone.id }).props"
-    :class="drop({ name: zone.id }).classes"
+    v-bind="drop({ id: zone.id }).props"
+    :class="drop({ id: zone.id }).classes"
   >
     {{ zone.name }}
   </div>
@@ -294,13 +301,17 @@ const canDragCard = (cardId: number) =>
 
 ### FLIP Animations
 
+<!-- typecheck: board -->
 ```vue
 <script setup lang="ts">
-import { ref } from 'vue';
-import { useFLIP } from 'boardsmith/ui';
+import { computed, ref } from 'vue';
+import { findElements, useFLIP, type TableBoardProps } from 'boardsmith/ui';
 
+const props = defineProps<TableBoardProps>();
 const boardRef = ref<HTMLElement | null>(null);
 const handRef = ref<HTMLElement | null>(null);
+const pieces = computed(() => findElements(props.gameView, { className: 'Piece' }));
+const cards = computed(() => findElements(props.gameView, { className: 'Card' }));
 
 // Auto-animate when game state changes
 useFLIP({
@@ -309,19 +320,19 @@ useFLIP({
     { ref: handRef, selector: '[data-card-id]' },
   ],
   auto: true,
-  gameView: () => gameState.value.view,
+  gameView: () => props.gameView,
 });
 </script>
 
 <template>
   <div ref="boardRef" class="board">
     <div v-for="piece in pieces" :key="piece.id" :data-piece-id="piece.id">
-      {{ piece.type }}
+      {{ piece.name }}
     </div>
   </div>
   <div ref="handRef" class="hand">
     <div v-for="card in cards" :key="card.id" :data-card-id="card.id">
-      {{ card.rank }}
+      {{ card.attributes?.rank }}
     </div>
   </div>
 </template>
@@ -329,18 +340,26 @@ useFLIP({
 
 ### Flying Elements
 
+<!-- typecheck: board -->
 ```vue
 <script setup lang="ts">
-import { useFlyingElements, FlyingCardsOverlay } from 'boardsmith/ui';
+import { computed, ref } from 'vue';
+import { findElement, useFlyingElements, FlyingCardsOverlay, type GameViewElement, type TableBoardProps } from 'boardsmith/ui';
+
+const props = defineProps<TableBoardProps>();
+const deckRef = ref<HTMLElement | null>(null);
+const handRef = ref<HTMLElement | null>(null);
+const topCard = computed(() => findElement(props.gameView, { name: 'deck' })?.children?.[0]);
 
 const { fly, flyingElements } = useFlyingElements({ duration: 400 });
 
-async function dealCard(card: Card) {
+async function dealCard(card: GameViewElement | undefined) {
+  if (!card || !deckRef.value) return;
   await fly({
     id: `deal-${card.id}`,
-    startRect: deckRef.value!.getBoundingClientRect(),
-    endRect: () => handRef.value!.getBoundingClientRect(),
-    elementData: { rank: card.rank, suit: card.suit, faceUp: false },
+    startRect: deckRef.value,
+    endRect: () => handRef.value,
+    elementData: { rank: String(card.attributes?.rank), suit: String(card.attributes?.suit), faceUp: false },
     flip: true,
   });
 }
@@ -355,6 +374,7 @@ async function dealCard(card: Card) {
 
 ## CSS Assets
 
+<!-- typecheck: game src/ui/styles.ts -->
 ```typescript
 // Drag-drop styles
 import 'boardsmith/ui/animation/drag-drop.css';
