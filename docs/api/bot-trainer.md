@@ -16,13 +16,8 @@ return is refused with an error that names it, before any game is played.
 
 ## Usage
 
-```typescript
-import {
-  WeightEvolver,
-  readObjectiveWeights,
-  updateBotWeights,
-} from 'boardsmith/bot-trainer';
-```
+Import these from `boardsmith/bot-trainer`, in a Node script: the module starts
+worker threads, so it is not game code.
 
 ## Exports
 
@@ -137,8 +132,8 @@ export { benchmarkBot, weightedBot } from 'boardsmith/bot-trainer';
 ```
 
 ```typescript
-import { readFileSync, writeFileSync } from 'node:fs';
-import { WeightEvolver, readObjectiveWeights, updateBotWeights } from 'boardsmith/bot-trainer';
+// A Node script: readFileSync and writeFileSync come from 'node:fs', and
+// WeightEvolver, readObjectiveWeights and updateBotWeights from 'boardsmith/bot-trainer'.
 
 const botPath = './src/rules/bot.ts';
 const source = readFileSync(botPath, 'utf-8');

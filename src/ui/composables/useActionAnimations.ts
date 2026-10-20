@@ -275,6 +275,8 @@ interface CapturedAnimationState {
   stateChanged: boolean;
   /** The server accepted the action */
   accepted: boolean;
+  /** The auto-execution this was captured for; only its outcome settles it (#1026) */
+  run: number;
 }
 
 /** An element's own hiding-related attribute and inline styles, as they were before hiding. */
@@ -354,7 +356,7 @@ export interface UseActionAnimationsReturn {
    * Hook to pass to useActionController's onBeforeAutoExecute option.
    * Captures element positions before the action executes.
    */
-  onBeforeAutoExecute: (actionName: string, args: Record<string, unknown>) => Promise<void>;
+  onBeforeAutoExecute: (actionName: string, args: Record<string, unknown>, run: number) => Promise<void>;
 
   /**
    * Cancel all active animations.
@@ -454,7 +456,8 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
    */
   async function onBeforeAutoExecute(
     actionName: string,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
+    run: number,
   ): Promise<void> {
     abandonPending();
 
@@ -539,13 +542,14 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
       hidden,
       stateChanged: false,
       accepted: false,
+      run,
     };
   }
 
   // Each auto-executed action ends here once, right after its own before-hooks ran
-  actionController.onAfterAutoExecute((result) => {
+  actionController.onAfterAutoExecute((result, run) => {
     const captured = pendingAnimation;
-    if (!captured || captured.accepted) return;
+    if (!captured || captured.run !== run || captured.accepted) return;
     if (!result.success) {
       abandonPending();
       return;

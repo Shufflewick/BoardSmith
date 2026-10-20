@@ -1195,6 +1195,22 @@ describe('CHECK-02 no-fork guard — lens/repair prose sourced from build/*.md a
     expect(doc).toContain('${CLAUDE_SKILL_DIR}/../bs-shared/build/repair.md');
   });
 
+  it('repair-dispatch.md drives the repair steps through the verify-repair commands (#838)', () => {
+    const doc = read('verify/repair-dispatch.md');
+    expect(doc).toContain('boardsmith verify-repair --project <dir> --run-id <runId> --json');
+    expect(doc).toContain('boardsmith verify-repair-round --project <dir> --chunk <slug> --episode <episode> --json');
+    expect(doc).toContain('boardsmith verify-repair-gate --project <dir> --run-id <runId> --chunk <slug> --json');
+  });
+
+  it('repair-dispatch.md opens EVERY round of the episode with verify-repair-round, including each loop-back to audit, and sends triage to round-3 triage (#838)', () => {
+    const doc = read('verify/repair-dispatch.md');
+    const step4 = doc.slice(doc.indexOf('## 4.'), doc.indexOf('## 5.'));
+    expect(step4).toMatch(/every round of this verify episode/i);
+    expect(step4).toMatch(/including each round `build\/repair\.md` loops back to `build\/audit\.md` for/);
+    expect(step4).toMatch(/same episode number/i);
+    expect(step4).toMatch(/If it reports `triage`[\s\S]{0,200}"Round-3 User Triage"/);
+  });
+
   it('no file under bs/verify/ instructs reading ## Interpretation (decision 11)', () => {
     const NEGATORS = /\b(not|never|forbidden|do not|does not|no)\b/i;
     const files = verifyFiles();

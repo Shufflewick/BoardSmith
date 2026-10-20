@@ -25,7 +25,18 @@ Every headless agent follows the same five steps:
 5. **Assert** — read the resulting state back through a perspective-aware
    view.
 
+The examples drive `GoFishGame`, a game class like this one. A real game also registers its elements, actions and flow; [Getting Started](./getting-started.md) builds one.
+
+<!-- typecheck: game src/rules/game.ts -->
 ```typescript
+import { Game } from 'boardsmith';
+
+export class GoFishGame extends Game<GoFishGame> {}
+```
+
+<!-- typecheck: game tests/agent.ts -->
+```typescript
+import { enumerateLegalMoves } from 'boardsmith';
 import { createTestGame } from 'boardsmith/testing';
 import { GoFishGame } from '../src/rules/game.js';
 
@@ -54,6 +65,7 @@ console.log(view.flowState?.availableActions);
 `enumerateLegalMoves` is imported from `'boardsmith'` (the engine package),
 not from `'boardsmith/testing'`:
 
+<!-- typecheck: game src/imports.ts -->
 ```typescript
 import { enumerateLegalMoves } from 'boardsmith';
 ```
@@ -159,9 +171,13 @@ Validates a record of plain selection values (element objects, strings,
 numbers, …) against an action's declared selections and returns
 ready-to-submit args.
 
+<!-- typecheck: game tests/build-args.ts -->
 ```typescript
 import { buildActionArgs } from 'boardsmith';
+import { createTestGame } from 'boardsmith/testing';
+import { GoFishGame } from '../src/rules/game.js';
 
+const testGame = createTestGame(GoFishGame, { playerCount: 2 });
 const args = buildActionArgs('ask', { target: 2, rank: '7' }, testGame.game, 1);
 testGame.doAction(1, 'ask', args);
 ```
@@ -199,9 +215,13 @@ choices. This is the primitive tree-search agents (MCTS, minimax, random
 playout) need: a flat list of `{ action, args }` pairs, each one directly
 submittable.
 
+<!-- typecheck: game tests/enumerate.ts -->
 ```typescript
 import { enumerateLegalMoves } from 'boardsmith';
+import { createTestGame } from 'boardsmith/testing';
+import { GoFishGame } from '../src/rules/game.js';
 
+const testGame = createTestGame(GoFishGame, { playerCount: 2 });
 const moves = enumerateLegalMoves(testGame.game, 1);
 // [{ action: 'ask', args: { target: 2, rank: '7' } }, { action: 'ask', args: { target: 2, rank: 'K' } }, ...]
 
@@ -334,7 +354,7 @@ answers each op with that op's own result. If you only need to save and
 restore a game, `TestGame.getSnapshot()` (below) is enough.
 
 ```typescript
-import { createHeadlessSession } from 'boardsmith/testing';
+// createHeadlessSession comes from 'boardsmith/testing', gameDefinition from your src/rules/index.ts
 
 const session = createHeadlessSession(gameDefinition, { playerCount: 2, seed: 'repro' });
 await session.start();
@@ -481,6 +501,7 @@ correlate. `getState`/`getLobby`/`debug:logs`/`debug:flow-state` echo a
 
 ### `createDevHostClient` — drive the dev host from Node
 
+<!-- typecheck: game scripts/drive.ts -->
 ```typescript
 import { createDevHostClient } from 'boardsmith/client';
 
@@ -492,11 +513,12 @@ client.hello();                              // first: the host answers nothing 
 const lobby = await client.getLobby();
 client.join(2);                              // take over an open or bot seat
 const state = await client.getState();       // own-seat-only — no seat field to spoof
-await client.serverRequest('action', {
-  actionName: 'pass',
-  args: {},
-  boundaryKey, // flowBoundaryKey(view.flowState) of the state you acted on; see serverRequest's doc
-});
+
+// boundaryKey is flowBoundaryKey(view.flowState) of the state you acted on; see serverRequest's doc
+export function pass(boundaryKey: string) {
+  return client.serverRequest('action', { actionName: 'pass', args: {}, boundaryKey });
+}
+
 client.debugToggle();
 client.uiSwitch('auto');
 ```
@@ -518,8 +540,12 @@ versions, pass an explicit `wsImplementation` (e.g. the `ws` package) or
 you'll get an actionable error naming Node 22.4 and `wsImplementation`
 rather than a cryptic "WebSocket is not defined."
 
+<!-- typecheck: game scripts/drive-node.ts -->
 ```typescript
 import WebSocket from 'ws';
+import { createDevHostClient } from 'boardsmith/client';
+
+const url = 'ws://localhost:5173/__boardsmith/ws';
 const client = createDevHostClient(url, { wsImplementation: WebSocket as unknown as typeof globalThis.WebSocket });
 ```
 
@@ -540,23 +566,35 @@ interface WarningEntry {
 }
 ```
 
+<!-- typecheck: game tests/errors.ts -->
 ```typescript
 import { ErrorCode } from 'boardsmith/session';
+import type { HeadlessSession } from 'boardsmith/testing';
 
-const result = await session.send(seat, {
-  type: 'selectionStep',
-  player: seat,
-  selectionName,
-  value,
-  actionName,
-});
-if (!result.success) {
-  // Branch on errorCode, not on result.error's exact wording.
-  if (result.errorCode === ErrorCode.ACTION_NOT_AVAILABLE) {
-    // handle a known, stable failure category
+export async function step(
+  session: HeadlessSession,
+  seat: number,
+  actionName: string,
+  selectionName: string,
+  value: string | number,
+): Promise<void> {
+  const result = await session.send(seat, {
+    type: 'selectionStep',
+    player: seat,
+    selectionName,
+    value,
+    actionName,
+  });
+  if (!result.success) {
+    // Branch on errorCode, not on result.error's exact wording.
+    if (result.errorCode === ErrorCode.ACTION_NOT_AVAILABLE) {
+      // handle a known, stable failure category
+    }
+    return;
   }
+  // Warnings ride on a success: the op went through, with something worth knowing.
+  result.warnings?.forEach((w) => console.log(`[${w.source}] ${w.code}: ${w.message}`));
 }
-result.warnings?.forEach(w => console.log(`[${w.source}] ${w.code}: ${w.message}`));
 ```
 
 ### Persistence health: `onPersistenceError` / `lastPersistenceError` / `persistenceHealthy`
@@ -564,24 +602,31 @@ result.warnings?.forEach(w => console.log(`[${w.source}] ${w.code}: ${w.message}
 `SnapshotSessionHost`, which every host runs, surfaces storage failures as
 **observable state**, not just a console log an agent can't see:
 
+<!-- typecheck: game src/host.ts -->
 ```typescript
-import { SnapshotSessionHost } from 'boardsmith/session';
+import { SnapshotSessionHost, type SnapshotHostState, type SnapshotSessionAdapters } from 'boardsmith/session';
 
-const host = new SnapshotSessionHost({
-  playerCount: 2,
-  executeOp,
-  record,
-  push,
-  persist: (state) => storage.put(state),
-  onPersistenceError: (error, consecutiveFailures, healthy) => {
-    // error: { message, timestamp } — message never contains a stack trace
-    // consecutiveFailures: running count since the last successful save
-    // healthy: flips false after 3 consecutive failures
-  },
-});
+export function startHost(
+  { executeOp, record, push }: SnapshotSessionAdapters,
+  storage: { put(state: SnapshotHostState): Promise<void> },
+): SnapshotSessionHost {
+  const host = new SnapshotSessionHost({
+    playerCount: 2,
+    executeOp,
+    record,
+    push,
+    persist: (state) => storage.put(state),
+    onPersistenceError: (error, consecutiveFailures, healthy) => {
+      // error: { message, timestamp } — message never contains a stack trace
+      // consecutiveFailures: running count since the last successful save
+      // healthy: flips false after 3 consecutive failures
+    },
+  });
 
-host.lastPersistenceError; // most recent error, or null
-host.persistenceHealthy;   // false once 3 consecutive saves have failed
+  host.lastPersistenceError; // most recent error, or null
+  host.persistenceHealthy;   // false once 3 consecutive saves have failed
+  return host;
+}
 ```
 
 `persistenceHealthy` recovers to `true` on the very next successful save.

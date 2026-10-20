@@ -2092,9 +2092,7 @@ export class ActionExecutor {
         }
         pendingState.onSelectFired.add(pendingState.currentSelectionIndex);
       } catch (error) {
-        // Fail loud: a throwing onSelect aborts the action. Fire onCancel for
-        // selections whose onSelect already fired, then return an error.
-        this.fireOnCancelCallbacks(action, pendingState);
+        // Fail loud. onCancel runs only on the player's cancel, so it runs once per pick (#1189).
         const crashed = pickHookThrew(action, 'onSelect', selection, error);
         return { done: false, error: crashed.error, rulesError: crashed.rulesError, partiallyApplied: true };
       }
@@ -2260,10 +2258,8 @@ export class ActionExecutor {
     // Store the resolved value so downstream dependsOn filters see GameElements, not raw IDs
     pendingState.collectedArgs[selectionName] = resolvedValue;
 
-    // Fire onSelect if defined.
-    // A throwing onSelect must ABORT the action (fail loud): fire onCancel for
-    // any selections whose onSelect already ran, then return failure. The caller
-    // discards the pending action rather than committing it.
+    // Fire onSelect if defined. A throwing one fails the pick loud; onCancel
+    // runs only on the player's cancel, so it runs once per pick (#1189).
     if (selection.onSelect) {
       try {
         const ctx = this.createOnSelectContext();
@@ -2275,8 +2271,6 @@ export class ActionExecutor {
         }
         pendingState.onSelectFired.add(selectionIndex);
       } catch (error) {
-        // Compensate: run onCancel for selections whose onSelect already fired.
-        this.fireOnCancelCallbacks(action, pendingState);
         return pickHookThrew(action, 'onSelect', selection, error);
       }
     }

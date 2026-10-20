@@ -48,7 +48,7 @@ if (process.env.CHECK_KIND === 'scopes') {
   const run = () => process.env.CHECK_KIND === 'chunk'
     ? runMutationCheck({ ...input, claims: [], testFiles: [{ path: 'tests/busy.test.ts',
         absPath: join(projectDir, 'tests/busy.test.ts'), source: readFileSync(join(projectDir, 'tests/busy.test.ts'), 'utf8') }] })
-    : runDiffMutationCheck({ ...input, ...(process.env.BUDGET ? { budget: { trials: 2, workers: 2 } } : {}), cache: { fingerprint: () => undefined, get: () => undefined, set: () => {}, save: async () => {} } });
+    : runDiffMutationCheck({ ...input, ...(process.env.BUDGET ? { budget: { trials: 2, workers: 2 } } : {}), cache: { fingerprint: () => undefined, get: () => undefined, set: () => {}, killerHint: () => undefined, setKillerHint: () => {}, save: async () => {} } });
   try {
     if (process.env.NESTED) await withCommandBuildDir(projectDir, 'verify', run);
     else await run();
@@ -260,7 +260,7 @@ it('holds each trial worker open', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     const running = runDiffMutationCheck({
       projectDir: project, added: new Map([['src/rules.ts', new Set([1])]]), log: () => {},
-      cache: { fingerprint: () => undefined, get: () => undefined, set: () => {}, save: async () => {} },
+      cache: { fingerprint: () => undefined, get: () => undefined, set: () => {}, killerHint: () => undefined, setKillerHint: () => {}, save: async () => {} },
     });
     let finished = false;
     void running.then(() => { finished = true; }, () => { finished = true; });

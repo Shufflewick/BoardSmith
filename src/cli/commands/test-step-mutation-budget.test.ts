@@ -11,6 +11,7 @@ import { designProjectFixtures } from './design-project.test-helper.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 import { fixtureSandbox } from '../../testing/fixture-sandbox.test-helper.js';
 import type { MutationBudget } from '../lib/mutation-budget.js';
+import type { KillerHint } from '../lib/mutant-cache.js';
 
 vi.setConfig({ testTimeout: 180_000 });
 
@@ -97,11 +98,16 @@ async function seen(dir: string): Promise<Seen[]> {
   return Promise.all(names.filter((n) => n.endsWith('.json')).map(async (n) => JSON.parse(await fs.readFile(join(dir, 'trials/seen', n), 'utf8'))));
 }
 
-const memoryCache = () => ({ fingerprint: () => undefined, get: () => undefined, set: () => {}, save: async () => {} });
+/** Holds no outcomes, so every mutant runs, and keeps killer hints (#954) by mutated text in `hints`. */
+const memoryCache = (hints = new Map<string, KillerHint>()) => ({
+  fingerprint: () => undefined, get: () => undefined, set: () => {}, save: async () => {},
+  killerHint: (m: { source: string }) => hints.get(m.source),
+  setKillerHint: (m: { source: string }, hint: KillerHint) => { hints.set(m.source, hint); },
+});
 
-function check(dir: string, budget: MutationBudget | undefined, contextChange?: () => Promise<string | undefined>) {
+function check(dir: string, budget: MutationBudget | undefined, contextChange?: () => Promise<string | undefined>, hints?: Map<string, KillerHint>) {
   return runDiffMutationCheck({
-    projectDir: dir, added: new Map([['src/rules.ts', new Set([2, 5])]]), cache: memoryCache(), log: () => {},
+    projectDir: dir, added: new Map([['src/rules.ts', new Set([2, 5])]]), cache: memoryCache(hints), log: () => {},
     ...(budget ? { budget } : {}), ...(contextChange ? { contextChange } : {}),
   });
 }
@@ -122,6 +128,22 @@ describe('runDiffMutationCheck with a mutation budget (#955)', () => {
       // Two workers shared by two trials: each trial's Vitest runs one worker.
       expect(new Set(trials.map((t) => t.pool))).toEqual(new Set(['1']));
       expect(await fs.readdir(join(dir, '.boardsmith'))).toEqual([]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('keeps a killer hint for each killed mutant, whichever trial ran it, and a rerun killed by its hints keeps to the budget', async () => {
+    try {
+      const dir = await project(2);
+      const hints = new Map<string, KillerHint>();
+      await check(dir, { trials: 2, workers: 2 }, undefined, hints);
+      // Both killed mutants are on line 2, and only bid.test.ts tests bid.
+      expect([...hints.values()].map((h) => h.file)).toEqual(['tests/bid.test.ts', 'tests/bid.test.ts']);
+
+      const rerun = await check(dir, { trials: 2, workers: 2 }, undefined, hints);
+      expect(rerun.summary).toEqual({ files: 1, mutants: 5, killed: 2, survived: 3, timedOut: 0, equivalent: 0, unreached: 0 });
+      expect(new Set((await seen(dir)).map((t) => t.pool))).toEqual(new Set(['1']));
     } finally {
       vi.unstubAllEnvs();
     }

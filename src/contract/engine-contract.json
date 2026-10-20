@@ -1,5 +1,5 @@
 {
-  "revision": 249,
+  "revision": 250,
   "surfaceHash": "7f205bf27a6fcb74",
   "payloadHash": "51f21b4b479bcc9a",
   "formatHash": "ed115e27605f2ca7",
@@ -1935,6 +1935,14 @@
       "payloadHash": "51f21b4b479bcc9a",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A seat that cannot see into an owner-only zone, or a zone that hides its contents from that seat (hideContentsFrom), now gets the zone's childCount with its placeholders, as a count-only zone already did, so getElementCount no longer counts granted cards nested below a placeholder (#1208). A bot's search sandbox keeps that count. No game needs a rebuild."
+    },
+    {
+      "revision": 250,
+      "date": "2026-10-20",
+      "surfaceHash": "7f205bf27a6fcb74",
+      "payloadHash": "51f21b4b479bcc9a",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "In a seat's view an element's owner is its own player, or its parent's owner when the seat is sent the parent, so below a hidden box an owner rule (showToOwner, contentsVisibleToOwner, visibleAttributes) never uses the owner of the hidden box or of anything above it: no seat learns who owns the box and none is shown another seat's owner-only content. An element there with no player on itself or on a sent element between it and the hidden box is not shown even to its real owner (#1209). isVisibleTo agrees. No catalogue game is affected (their owner rules are only on top-level hands), and no game needs a rebuild."
     }
   ]
 }
