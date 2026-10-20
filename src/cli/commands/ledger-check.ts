@@ -970,6 +970,23 @@ async function readLedger(projectDir: string, file: string): Promise<string | un
   }
 }
 
+/** Checks each chunk's and skill's run log against its commits, its verify results and the project's role mapping. */
+async function checkRunLogs(projectDir: string, logs: string[], result: LedgerCheckResult): Promise<void> {
+  if (logs.length === 0) return;
+  await requireGitRepo(projectDir, 'compares each run log\'s timestamps against the commits that recorded them');
+  const config = await readProjectConfig(projectDir, 'boardsmith ledger-check');
+  // An untracked run log has no commit times: every line of it reads as not committed yet.
+  const trackedLogs = await trackedFiles(projectDir, logs.map((log) => `${DESIGN_DIR}/${log}`));
+  for (const log of logs) {
+    const text = (await readLedger(projectDir, log))!;
+    result.checked.push(log);
+    const rel = `${DESIGN_DIR}/${log}`;
+    const commits = trackedLogs.has(rel) ? await lineCommits(projectDir, rel) : [];
+    const verifyOnFile = await verifyResultsOnFile(projectDir, reviewRoundCommits(text));
+    result.findings.push(...checkRunLog(text, log, (line) => commits[line]?.time ?? null, Math.floor(Date.now() / 1000), verifyOnFile, config));
+  }
+}
+
 /**
  * Runs every ledger rule against `projectDir`'s `design/` as it stands on disk. `checked` lists
  * the ledgers read, then each verified CHUNK.md whose cited evidence was checked.
@@ -1002,22 +1019,7 @@ export async function ledgerCheck(projectDir: string): Promise<LedgerCheckResult
   }
 
   result.findings.push(...sharedRunLogs(await chunkSlugs(projectDir)));
-  const logs = await runLogFiles(projectDir);
-  if (logs.length > 0) {
-    await requireGitRepo(projectDir, 'compares each run log\'s timestamps against the commits that recorded them');
-  }
-  // Only a run log names agents, so only then does the project's role mapping matter.
-  const config = logs.length > 0 ? await readProjectConfig(projectDir, 'boardsmith ledger-check') : {};
-  // An untracked run log has no commit times: every line of it reads as not committed yet.
-  const trackedLogs = await trackedFiles(projectDir, logs.map((log) => `${DESIGN_DIR}/${log}`));
-  for (const log of logs) {
-    const text = (await readLedger(projectDir, log))!;
-    result.checked.push(log);
-    const rel = `${DESIGN_DIR}/${log}`;
-    const commits = trackedLogs.has(rel) ? await lineCommits(projectDir, rel) : [];
-    const verifyOnFile = await verifyResultsOnFile(projectDir, reviewRoundCommits(text));
-    result.findings.push(...checkRunLog(text, log, (line) => commits[line]?.time ?? null, Math.floor(Date.now() / 1000), verifyOnFile, config));
-  }
+  await checkRunLogs(projectDir, await runLogFiles(projectDir), result);
 
   const crossChunk = await readLedger(projectDir, CROSS_CHUNK_MD);
   if (crossChunk === undefined) {
