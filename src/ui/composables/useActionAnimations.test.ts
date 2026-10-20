@@ -94,7 +94,7 @@ function fakeController() {
     },
     /** Tell the composable how the action ended; resolves when any flight it starts has finished. */
     async settle(result: ControllerActionResult): Promise<void> {
-      await listener!(result);
+      await listener!(result, 1);
     },
   };
 }
@@ -159,7 +159,7 @@ describe('useActionAnimations', () => {
       makeElement('data-zone', 'hand');
       const { gameViewRef, onBeforeAutoExecute } = animate(moveConfig);
 
-      await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' });
+      await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' }, 1);
       enableAnimationTestMode();
       await reply(gameViewRef, fake);
 
@@ -182,7 +182,7 @@ describe('useActionAnimations', () => {
       makeElement('data-zone', 'hand');
       const { gameViewRef, onBeforeAutoExecute } = animate(moveConfig);
 
-      await onBeforeAutoExecute('moveCard', { cardId, zone: 'hand' });
+      await onBeforeAutoExecute('moveCard', { cardId, zone: 'hand' }, 1);
       enableAnimationTestMode();
       await reply(gameViewRef, fake);
 
@@ -236,7 +236,7 @@ describe('useActionAnimations', () => {
         vi.spyOn(destEl, 'getBoundingClientRect').mockReturnValue(new DOMRect(200, 200, 60, 84));
         const { gameViewRef, onBeforeAutoExecute, flyingElements } = animate(moveConfig);
 
-        await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' });
+        await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' }, 1);
         gameViewRef.value = fakeGameView();
         await nextTick();
         const flight = fake.settle({ success: true });
@@ -265,7 +265,7 @@ describe('useActionAnimations', () => {
       makeElement('data-card-id', '42');
       const { gameViewRef, onBeforeAutoExecute } = animate(moveConfig);
 
-      await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' });
+      await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' }, 1);
       enableAnimationTestMode();
 
       await expect(reply(gameViewRef, fake)).rejects.toThrow(/Could not find destination element/i);
@@ -279,7 +279,7 @@ describe('useActionAnimations', () => {
       const { onBeforeAutoExecute } = animate(moveConfig);
 
       await expect(
-        onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' }),
+        onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' }, 1),
       ).rejects.toThrow(/Could not find element for selector/i);
     });
 
@@ -289,7 +289,7 @@ describe('useActionAnimations', () => {
       const { onBeforeAutoExecute } = animate(moveConfig);
 
       await expect(
-        onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' }),
+        onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' }, 1),
       ).resolves.toBeUndefined();
 
       expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
@@ -302,7 +302,7 @@ describe('useActionAnimations', () => {
       makeElement('data-card-id', '42');
       const { gameViewRef, onBeforeAutoExecute } = animate(moveConfig);
 
-      await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' });
+      await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' }, 1);
       await reply(gameViewRef, fake);
 
       expect(consoleErrorSpy).toHaveBeenCalledTimes(1);
@@ -314,7 +314,7 @@ describe('useActionAnimations', () => {
       const card = makeElement('data-card-id', '42');
       const { gameViewRef, onBeforeAutoExecute } = animate({ ...moveConfig, hideDestination: true });
 
-      await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' });
+      await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' }, 1);
       expect(card.style.opacity).toBe('0');
 
       await expect(reply(gameViewRef, fake)).rejects.toThrow(/Could not find destination element/i);
@@ -336,11 +336,11 @@ describe('useActionAnimations', () => {
       const card = makeElement('data-card-id', '42');
       const { onBeforeAutoExecute } = animate(flipConfig);
 
-      await onBeforeAutoExecute('forcedPlay', { card: '42' });
+      await onBeforeAutoExecute('forcedPlay', { card: '42' }, 1);
       expect(card.style.opacity).toBe('0');
 
       // The player starts another action before this one was settled.
-      await onBeforeAutoExecute('pass', {});
+      await onBeforeAutoExecute('pass', {}, 1);
       await revealAndMutate(card);
 
       expect(card.style.opacity).toBe('');
@@ -351,7 +351,7 @@ describe('useActionAnimations', () => {
       const scope = effectScope();
       const { onBeforeAutoExecute } = scope.run(() => animate(flipConfig))!;
 
-      await onBeforeAutoExecute('forcedPlay', { card: '42' });
+      await onBeforeAutoExecute('forcedPlay', { card: '42' }, 1);
       scope.stop();
       await revealAndMutate(card);
 
@@ -472,11 +472,41 @@ describe('useActionAnimations', () => {
       const animations = useActionAnimations({
         gameView: ref<GameElement | null>(null), animations: [flipConfig], actionController: controller,
       });
-      controller.onBeforeAutoExecute(async (name, args) => { await animations.onBeforeAutoExecute(name, args); });
+      controller.onBeforeAutoExecute(async (name, args, run) => { await animations.onBeforeAutoExecute(name, args, run); });
 
       await controller.start('forcedPlay');
       await settle();
       expectOriginalLook(card);
+    });
+
+    it("a cancelled action that ends late leaves the next action's flight alone (#1026)", async () => {
+      const card = styledCard();
+      const { controller, animations, gameViewRef, answer } = playThroughController();
+      // A second hook in the game that waits on its first call, while the player cancels and plays again.
+      let release!: () => void;
+      const held = new Promise<void>((r) => { release = r; });
+      let firstCall = true;
+      controller.onBeforeAutoExecute(async () => {
+        if (!firstCall) return;
+        firstCall = false;
+        await held;
+      });
+
+      await controller.start('forcedPlay');
+      await settle();
+      controller.cancel();
+      await controller.start('forcedPlay');
+      await settle();
+      release();
+      await settle();
+      expect(card.style.opacity).toBe('0');
+
+      gameViewRef.value = fakeGameView();
+      await nextTick();
+      answer({ success: true });
+      await settle();
+      expect(animations.flyingElements.value).toHaveLength(1);
+      animations.cancelAll();
     });
 
     it('an update that is not the reply does not play the flight; the reply plays it exactly once', async () => {

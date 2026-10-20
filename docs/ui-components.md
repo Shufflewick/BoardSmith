@@ -1159,7 +1159,8 @@ const actionAnimations = useActionAnimations({
 
 // Returns an unregister function. Called inside setup(), the hook is also
 // unregistered automatically when the component's effect scope disposes.
-// A game may wrap this hook (to skip some actions, say); the outcome still arrives.
+// A game may wrap this hook (to skip some actions, say); pass all three
+// arguments through, since `run` is what matches the action to its outcome.
 props.actionController.onBeforeAutoExecute(actionAnimations.onBeforeAutoExecute);
 ```
 
@@ -1180,7 +1181,7 @@ When the composable detects a flip-in-place animation (`elementSelector === dest
 
 You don't need to set `hideDestination`, `flip`, or `crossfadeDuration` - they're configured automatically.
 
-**When it plays:** the composable listens to `actionController.onAfterAutoExecute` for each action's result. The flight plays only once the server has accepted the action and the state it produced has rendered; a state update from another seat while the action is in flight does not play it. If the server refuses the action, or it is cancelled before it is sent, the hidden element gets back exactly the inline styles it had and no flight plays.
+**When it plays:** the composable listens to `actionController.onAfterAutoExecute` for each action's result. The flight plays only once the server has accepted the action and the state it produced has rendered; a state update from another seat while the action is in flight does not play it. If the server refuses the action, or it is cancelled before it is sent, the hidden element gets back exactly the inline styles it had and no flight plays. Each outcome carries the `run` number the hook was given, so an action cancelled while a game's own hook was still waiting cannot undo the capture of the action the player started next (#1026).
 
 **Animation Config Options:**
 

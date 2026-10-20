@@ -227,6 +227,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     initialBeforeAutoExecute ? [initialBeforeAutoExecute] : []
   );
   const afterAutoExecuteListeners = ref<AfterAutoExecuteListener[]>([]);
+  // Counts auto-executions, so each one's hooks and outcome share a number no other has.
+  let autoExecuteRuns = 0;
 
   // Helper to get current value of potentially reactive options
   const getAutoFill = (): boolean => {
@@ -665,17 +667,19 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * Priority: pickSnapshots > static metadata (for execute() and tests)
    */
   function getChoices(selection: EnrichedPickMetadata): Array<{ value: unknown; display: string; disabled?: string }> {
-    return choicesIn(actionSnapshot.value, selection);
+    return choicesIn(actionSnapshot.value, currentArgs.value, selection);
   }
 
   /**
    * The choices a pick offers, read from `run` -- the snapshot of the run the
    * pick belongs to, or null for a pick of an action that is not open, which
    * has only its static metadata. A snapshot of another action is never `run`:
-   * its fetched choices are that action's, not this one's.
+   * its fetched choices are that action's, not this one's. `args` are the
+   * picks of that same run, which a `dependsOn` or `filterBy` pick reads (#1030).
    */
   function choicesIn(
     run: ActionStateSnapshot | null,
+    args: Record<string, unknown>,
     selection: EnrichedPickMetadata,
   ): Array<{ value: unknown; display: string; disabled?: string }> {
     let choices: Array<{ value: unknown; display: string; disabled?: string }> = [];
@@ -708,7 +712,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (choices.length === 0) {
       // Handle dependsOn with choicesByDependentValue
       if (selection.dependsOn && selection.choicesByDependentValue) {
-        const dependentValue = currentArgs.value[selection.dependsOn];
+        const dependentValue = args[selection.dependsOn];
         if (dependentValue !== undefined) {
           const depKey = String(dependentValue);
           choices = selection.choicesByDependentValue[depKey] || [];
@@ -716,7 +720,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       }
       // Handle dependsOn with elementsByDependentValue
       else if (selection.dependsOn && selection.elementsByDependentValue) {
-        const dependentValue = currentArgs.value[selection.dependsOn];
+        const dependentValue = args[selection.dependsOn];
         if (dependentValue !== undefined) {
           const depKey = String(dependentValue);
           const elements = selection.elementsByDependentValue[depKey] || [];
@@ -741,7 +745,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     // Apply filterBy if specified
     if (selection.filterBy && choices.length > 0) {
-      const filterValue = currentArgs.value[selection.filterBy.selectionName];
+      const filterValue = args[selection.filterBy.selectionName];
       if (filterValue !== undefined) {
         choices = choices.filter(choice => {
           const choiceValue = choice.value as Record<string, unknown>;
@@ -801,17 +805,23 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     selection: EnrichedPickMetadata,
     value: unknown,
     run: ActionStateSnapshot | null = actionSnapshot.value,
+    args: Record<string, unknown> = currentArgs.value,
   ): ResolvedPick {
-    const resolved = matchOffered(selection, value, run);
+    const resolved = matchOffered(selection, value, run, args);
     // A repeat's choices move with each step, so the server judges its picks.
     return selection.repeat ? { value: resolved.value, choice: resolved.choice } : resolved;
   }
 
   /** {@link resolvePick} before a repeat's refusals are set aside. */
-  function matchOffered(selection: EnrichedPickMetadata, value: unknown, run: ActionStateSnapshot | null): ResolvedPick {
+  function matchOffered(
+    selection: EnrichedPickMetadata,
+    value: unknown,
+    run: ActionStateSnapshot | null,
+    args: Record<string, unknown>,
+  ): ResolvedPick {
     const elementRefusal = selection.type === 'element' ? oneElementListRefusal(selection.name, value) : undefined;
     if (elementRefusal) return { value, refusal: elementRefusal };
-    const choices = choicesIn(run, selection);
+    const choices = choicesIn(run, args, selection);
     // With nothing on offer, the server judges it.
     if (choices.length === 0) return { value };
     const resolveOne = (v: unknown): ResolvedPick => {
@@ -1458,11 +1468,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (ready && getAutoExecute() && currentAction.value && !isExecuting.value && !pendingOnServer.value
         && !isViewingHistoryValue()) {
       const seq = actionStartTick.value;
-      await runBeforeAutoExecuteHooks(currentAction.value);
+      const run = ++autoExecuteRuns;
+      await runBeforeAutoExecuteHooks(currentAction.value, buildServerArgs(), run);
       const result: ControllerActionResult = actionMovedOn(seq)
         ? { success: false, error: 'Action was cancelled' }
         : await executeCurrentAction();
-      notifyAfterAutoExecute(result);
+      notifyAfterAutoExecute(result, run);
     }
   });
 
@@ -1477,10 +1488,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * another hook) splices the live array mid-for...of and would silently
    * skip the hook registered after it.
    */
-  async function runBeforeAutoExecuteHooks(actionName: string): Promise<void> {
+  async function runBeforeAutoExecuteHooks(actionName: string, args: Record<string, unknown>, run: number): Promise<void> {
     for (const hook of [...beforeAutoExecuteHooks.value]) {
       try {
-        await hook(actionName, buildServerArgs());
+        // A copy each, read before the first await: a later hook may run after the player moved on.
+        await hook(actionName, { ...args }, run);
       } catch (err) {
         console.error('[ActionController] beforeAutoExecute hook failed:', err);
       }
@@ -1488,10 +1500,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /** Tell every after-auto-execute listener how the action ended; one failing listener never stops the rest. */
-  function notifyAfterAutoExecute(result: ControllerActionResult): void {
+  function notifyAfterAutoExecute(result: ControllerActionResult, run: number): void {
     for (const listener of [...afterAutoExecuteListeners.value]) {
       Promise.resolve()
-        .then(() => listener(result))
+        .then(() => listener(result, run))
         .catch((err) => console.error('[ActionController] afterAutoExecute listener failed:', err));
     }
   }
@@ -1772,7 +1784,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       if (finalArgs[selection.name] === undefined) {
         // Try auto-fill (but not for optional selections - user must consciously choose or skip)
         if (getAutoFill()) {
-          const choices = choicesIn(run, selection);
+          const choices = choicesIn(run, finalArgs, selection);
           const enabledChoices = choices.filter(c => !c.disabled);
           if (enabledChoices.length === 1 && !selection.optional) {
             finalArgs[selection.name] = enabledChoices[0].value;
@@ -1787,14 +1799,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
           return { success: false, error };
         }
       } else {
-        // Skip client-side validation for filterBy/dependsOn selections when using
-        // direct execute() - the server will validate. This is needed because
-        // getChoices() relies on currentArgs which isn't populated in execute().
+        // The server judges a filterBy/dependsOn pick given to execute(): choices the
+        // open run fetched for it were fetched for that run's earlier picks, not these args.
         if (selection.filterBy || selection.dependsOn) {
           continue;
         }
 
-        const { value, refusal } = resolvePick(selection, finalArgs[selection.name], run);
+        const { value, refusal } = resolvePick(selection, finalArgs[selection.name], run, finalArgs);
         if (refusal) {
           setError(refusal);
           return { success: false, error: refusal };
@@ -2195,9 +2206,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
 
     // Add to accumulated with the label its button carried
-    const display = labelOfPick(value, repeatingState.value.currentChoices ?? []);
-    repeatingState.value.accumulated.push({ value, display });
-    repeatingState.value.awaitingServer = true;
+    const state = repeatingState.value;
+    const display = labelOfPick(value, state.currentChoices ?? []);
+    state.accumulated.push({ value, display });
+    state.awaitingServer = true;
 
     try {
       const result = await sendStep(stepFn, selection.name, value);
@@ -2261,9 +2273,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
       return { valid: true };
     } finally {
-      if (repeatingState.value) {
-        repeatingState.value.awaitingServer = false;
-      }
+      // This step's own state: by now repeatingState may belong to an action started since.
+      state.awaitingServer = false;
     }
   }
 
