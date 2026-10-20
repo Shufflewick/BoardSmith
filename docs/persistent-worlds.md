@@ -454,11 +454,13 @@ like the one that looks around the room. See
 result is an ordinary `ActionDefinition`, which is why it needs no world-only
 registry, panel or board bridge.
 
-### A partition root stays directly under the game (#1170)
+### A partition root stays directly under the game (#1170, #1188)
 
 A partition's root is created directly under the game, and that is where the
 store puts it back on every wake: a checkpoint writes the root's subtree, not
-where it sits. So an action may not move a root anywhere else. `reparent()`,
+where it sits. The engine refuses a root anywhere else: `definePartition` throws
+for an element that is not a direct child of the game, and `adoptSubtree` throws
+for any parent but the game. So an action may not move a root anywhere else. `reparent()`,
 `putInto()` or `remove()` on a partition root throws unless the destination is
 the game itself (reordering roots among the game's children is fine), and the
 command is refused as a `rules-error` with nothing it changed kept. To move a
