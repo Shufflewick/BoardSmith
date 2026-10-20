@@ -18,12 +18,16 @@ import { describe, it, expect, vi } from 'vitest';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { WebSocket as WsClient } from 'ws';
+
 import { devProject, EXIT_WITHIN_MS, spawnDev, type DevRunEnding } from './dev-project.test-helper.js';
 import { freePort } from '../lib/free-port.js';
 import { openWorldStore, worldStorePath } from '../dev-host/world-store.js';
 import { worldBudgets } from '../../world/index.js';
 import { scratchDir } from '../lib/project-paths.js';
 import { commandBuildDirs } from '../lib/command-build-dirs.test-helper.js';
+import { DEV_HOST_WS_PATH } from '../dev-host/socket-path.js';
+import { WORLD_WS_PATH } from './dev-world.js';
 
 /**
  * #391: WHAT `.boardsmith/` HOLDS THAT DEV DID NOT MAKE, AND MUST NOT REMOVE.
@@ -125,6 +129,46 @@ describe('boardsmith dev stopped while Vite optimises its dependencies (#366)', 
  * runs in middleware mode, where it registers no process handlers at all.
  */
 describe('boardsmith dev stopped with SIGTERM (#382)', () => {
+  /**
+   * #979: a page still connected when the stop arrives. Its socket used to stay
+   * open, so the HTTP server never finished closing and the build directory
+   * was left behind.
+   */
+  async function stopWithPageConnected(cwd: string, socketPath: string): Promise<void> {
+    const expectAuthorFilesKept = plantAuthorFiles(cwd);
+    const port = await freePort();
+    const run = spawnDev(cwd, port);
+    const ready = await new Promise<boolean>((resolve) => {
+      run.child.stdout.on('data', () => {
+        if (run.output().includes('Ready!')) resolve(true);
+      });
+      run.child.on('exit', () => resolve(false));
+    });
+    expect(ready, run.output()).toBe(true);
+    const page = new WsClient(`ws://127.0.0.1:${port}${socketPath}`);
+    await new Promise<void>((resolve, reject) => {
+      page.once('open', () => resolve());
+      page.once('error', reject);
+    });
+    const pageClosed = new Promise<void>((resolve) => page.once('close', () => resolve()));
+    run.child.kill('SIGTERM');
+    const ended = await run.ended;
+    expect(ended.stuck, ended.output).toBe(false);
+    expect(ended.output, 'the teardown reported something it could not close').not.toContain('Still open');
+    expect(ended.code, ended.output).toBe(0);
+    await pageClosed;
+    expect(commandBuildDirs(cwd, 'dev'), `the build directory was left behind:\n${ended.output}`).toEqual([]);
+    expectAuthorFilesKept();
+  }
+
+  it('a world project with a page connected: closes its socket and exits whole (#979)', async () => {
+    await stopWithPageConnected(await devProject(true), WORLD_WS_PATH);
+  });
+
+  it('a table project with a page connected: closes its socket and exits whole (#979)', async () => {
+    await stopWithPageConnected(await devProject(false), DEV_HOST_WS_PATH);
+  });
+
   it('a world project: runs the whole teardown before it exits', async () => {
     const cwd = await devProject(true);
     await expectStoppedWhole(cwd, 'SIGTERM');
