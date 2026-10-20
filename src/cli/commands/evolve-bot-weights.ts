@@ -190,7 +190,7 @@ function evolutionSettings(options: EvolveBotWeightsOptions) {
 function printExistingObjectives(objectives: readonly ObjectiveWeight[]): void {
   console.log(styleText('dim', '\nExisting objectives:'));
   for (const obj of objectives.slice(0, 5)) {
-    console.log(styleText('dim', `  ${obj.id}: weight=${obj.weight.toFixed(1)}`));
+    console.log(styleText('dim', `  ${obj.id}: weight=${obj.weight}`));
   }
   if (objectives.length > 5) {
     console.log(styleText('dim', `  ... and ${objectives.length - 5} more`));
@@ -217,7 +217,7 @@ function printEvolutionResult(result: WeightEvolutionResult): void {
     console.log(styleText('cyan', '\nOptimized weights:'));
     for (const obj of result.objectives.slice(0, 5)) {
       const sign = obj.weight > 0 ? '+' : '';
-      console.log(styleText('dim', `  ${obj.id}: ${sign}${obj.weight.toFixed(1)}`));
+      console.log(styleText('dim', `  ${obj.id}: ${sign}${obj.weight}`));
     }
   }
 }

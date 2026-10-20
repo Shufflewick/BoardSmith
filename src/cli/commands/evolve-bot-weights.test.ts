@@ -60,7 +60,7 @@ vi.mock('../../bot-trainer/index.js', async (importOriginal) => {
         bundleExportedGameClass,
       });
       // The search's lucky best score: 0.7, far above either confirmed rate.
-      const evolved = objectives.map((o) => ({ ...o, weight: o.weight + 1 }));
+      const evolved = objectives.map((o) => ({ ...o, weight: o.weight + 1.23456 }));
       return {
         initialFitness: 0.5,
         bestFitness: 0.7,
@@ -141,7 +141,7 @@ nextConfirmation = { games: 400, originalWinRate: 0.5, candidateWinRate: 0.52, a
 const evolved = await evolveIn(evolvedDir, { generations: '1', population: '1', mcts: '1', workers: '1' });
 
 nextConfirmation = { games: 400, originalWinRate: 0.5, candidateWinRate: 0.6, accepted: true };
-const improved = await evolveIn(projectWith(fixtureRules()), { generations: '1', population: '1', mcts: '1', workers: '1' });
+const improved = await evolveIn(projectWith(fixtureRules()), { generations: '1', population: '1', mcts: '1', workers: '1', verbose: true });
 
 const brokenDir = projectWith('export const gameDefinition = ;\n');
 const broken = await evolveIn(brokenDir, { generations: '1', population: '1' });
@@ -195,9 +195,14 @@ describe('evolve-bot-weights keeps bot.ts unless the confirmation accepts the ne
 
   it('writes the accepted weights, with the confirmation rates, not the search score, as the improvement', () => {
     expect(improved.error).toBeUndefined();
-    expect(improved.bot).toContain('weight: 6');
+    expect(improved.bot).toContain('weight: 6.23456');
     expect(improved.output).toContain('Improvement: +10.0% (60.0% against the original 50.0% over 400 fresh games each)');
     expect(improved.output).not.toContain('+20.0%');
+  });
+
+  it('shows the weights exactly as bot.ts holds them, unrounded (#1307)', () => {
+    expect(improved.output).toMatch(/^ {2}always: weight=5$/m);
+    expect(improved.output).toMatch(/^ {2}always: \+6\.23456$/m);
   });
 });
 

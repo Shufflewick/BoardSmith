@@ -597,7 +597,7 @@ class HiddenHandGame extends Game<HiddenHandGame, Player> {
 }
 
 describe('a reproducible benchmark is repeatable move for move (#699)', () => {
-  type RunConfig = { seed?: string; reproducible?: boolean; timeout?: number };
+  type RunConfig = { seed?: string; reproducible?: boolean; timeout?: number; gameCount?: number; game?: number };
   const race = (config: RunConfig) =>
     benchmarkBot(RaceGame, 'race', undefined, noWeights, { gameCount: 4, mctsIterations: 8, maxActions: 40, ...config });
 
@@ -654,6 +654,21 @@ describe('a reproducible benchmark is repeatable move for move (#699)', () => {
     const calls = vi.mocked(createBot).mock.calls;
     expect(calls.length).toBeGreaterThan(0);
     expect(calls.every((call) => call[6] === undefined)).toBe(true);
+  });
+
+  it('plays one game of the schedule on its own move for move as the whole benchmark plays it (#1307)', async () => {
+    // So a pool can share one benchmark's games out one at a time and still play the same games.
+    const whole = await movesOf({ seed: 'shared', reproducible: true, gameCount: 3 });
+    const oneByOne: string[] = [];
+    for (const game of [0, 1, 2]) oneByOne.push(...(await movesOf({ seed: 'shared', reproducible: true, gameCount: 3, game })));
+    expect(oneByOne).toEqual(whole);
+    expect((await race({ seed: 'shared', reproducible: true, gameCount: 3, game: 2 })).gamesAttempted).toBe(1);
+  });
+
+  it.each([3, -1, 1.5])('refuses game %s of a 3-game benchmark, naming the games it has (#1307)', async (game) => {
+    await expect(race({ seed: 'shared', reproducible: true, gameCount: 3, game })).rejects.toThrow(
+      `There is no benchmark game ${game}: a benchmark of 3 games has games 0 to 2.`,
+    );
   });
 
   it('refuses a game timeout on a reproducible benchmark, since a clock would make it unrepeatable', async () => {
