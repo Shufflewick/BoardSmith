@@ -230,15 +230,8 @@ describe('GoFish ask interaction tests', () => {
       props: {
         element: hiddenOpponentCard,
       },
-      global: {
-        provide: {
-          // Minimal provides: selectableElements/selectedElements use optional chaining
-          // and default to empty; boardInteraction warns but doesn't throw.
-          selectableElements: ref(new Set<number>()),
-          selectedElements: ref(new Set<number>()),
-          // No 'presentation' overlay → resolvePresentation receives undefined → safe
-        },
-      },
+      // No provides: without boardInteraction the card has no board state, and
+      // without a 'presentation' overlay resolvePresentation receives undefined.
     });
 
     await nextTick();

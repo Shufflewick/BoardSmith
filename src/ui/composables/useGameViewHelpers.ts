@@ -175,14 +175,37 @@ export function findAllHands(
   return findElements(gameView, { type: 'hand' });
 }
 
+/** What an element's size is read from. */
+type SizedElement = Pick<GameViewElement, 'childCount' | 'zoneVisibility'> & { children?: readonly unknown[] };
+
 /**
  * Get the count of children in an element, handling hidden contents.
- * A count-only zone's `childCount` wins over its `children`, which may also
- * carry granted cards nested below its children (#961).
+ * A concealed zone's `childCount` wins over its `children`, which may also
+ * carry granted cards nested below its children (#961, #1208). A zone whose
+ * size the seat is not told (`isSizeHidden`) counts only what it was sent.
  */
-export function getElementCount(element: GameViewElement | null | undefined): number {
+export function getElementCount(element: SizedElement | null | undefined): number {
   if (!element) return 0;
   return element.childCount ?? element.children?.length ?? 0;
+}
+
+/**
+ * Whether the seat is not told how many children `element` holds: a 'hidden'
+ * zone sends neither its cards nor their count, only the cards it grants the
+ * seat (#1056, #961).
+ */
+export function isSizeHidden(element: SizedElement | null | undefined): boolean {
+  return !!element && element.childCount === undefined && element.zoneVisibility?.mode === 'hidden';
+}
+
+/**
+ * An element's own children: without the cards a concealed zone's view
+ * carries after them, granted to the seat from inside a hidden child
+ * (#961, #1208).
+ */
+export function directChildren<T>(element: { childCount?: number; children?: T[] } | null | undefined): T[] {
+  const children = element?.children ?? [];
+  return element?.childCount === undefined ? children : children.slice(0, element.childCount);
 }
 
 /**

@@ -1,4 +1,7 @@
+import { promises as fs } from 'node:fs';
+import { join } from 'node:path';
 import { suggestKey } from './config-schema.js';
+import { readIfExists } from './read-if-exists.js';
 
 /**
  * The roles the bs- skills hand work to, and which Claude Code agent type each one is
@@ -127,4 +130,40 @@ export function agentTypeFor(config: Record<string, unknown>, role: Role): strin
 /** The roles `config` dispatches as `agent`: empty for an agent no role is mapped to now. */
 export function rolesDispatchedAs(config: Record<string, unknown>, agent: string): Role[] {
   return ROLES.filter((role) => agentTypeFor(config, role) === agent);
+}
+
+/**
+ * The project's boardsmith.json, for `reader.command` to read its `agents` block from, to do what
+ * `reader.purpose` says (a verb phrase: "check ..."). A project without one is refused, never read
+ * as having no block, so no role silently falls back to its default (#1202); so is one that is
+ * not a JSON object (#1302).
+ */
+export async function readProjectConfig(
+  projectDir: string,
+  reader: { command: string; purpose: string },
+): Promise<Record<string, unknown>> {
+  const { command, purpose } = reader;
+  const text = await readIfExists(join(projectDir, 'boardsmith.json'), (path) => fs.readFile(path, 'utf-8'));
+  if (text === undefined) {
+    throw new Error(
+      `${command} reads boardsmith.json to ${purpose}, and ${projectDir} has no boardsmith.json. ` +
+        "Run it in the game's directory, or pass --project <dir>.",
+    );
+  }
+  let config: unknown;
+  try {
+    config = JSON.parse(text);
+  } catch (error) {
+    throw new Error(`boardsmith.json in ${projectDir} is not valid JSON (${(error as Error).message}), so ${command} cannot ${purpose}. Fix it, then run ${command} again.`);
+  }
+  if (typeof config !== 'object' || config === null || Array.isArray(config)) {
+    throw new Error(`boardsmith.json in ${projectDir} holds ${jsonKind(config)}, not an object, so ${command} cannot ${purpose}. Fix it, then run ${command} again.`);
+  }
+  return config as Record<string, unknown>;
+}
+
+function jsonKind(value: unknown): string {
+  if (value === null) return 'null';
+  if (Array.isArray(value)) return 'a list';
+  return `a ${typeof value}`;
 }

@@ -42,8 +42,10 @@
 
 import { computed, type ComputedRef } from 'vue';
 import { findElement } from './useGameViewHelpers.js';
+import { cellCoordinateError, placedCells } from '../components/auto-ui/auto-ui-helpers.js';
 import type { GameViewElement, BaseElementAttributes } from '../types.js';
 import type { HexOrientation } from '../../engine/element/hex-grid.js';
+import { hexCoordinateNames } from '../../engine/element/hex-coordinates.js';
 
 export interface HexGridOptions {
   /** Function that returns the current game view */
@@ -139,7 +141,8 @@ export function hexCoordNames(board: { attributes?: Record<string, unknown> }): 
       `Give each cell axial coordinates in the attributes named by $qCoord/$rCoord, and set $coordSystem = 'axial' or leave it out.`,
     );
   }
-  return { q: (attrs.$qCoord as string | undefined) ?? 'q', r: (attrs.$rCoord as string | undefined) ?? 'r' };
+  const [q, r] = hexCoordinateNames(attrs);
+  return { q, r };
 }
 
 /**
@@ -184,12 +187,15 @@ export function useHexGrid<TCell = GameViewElement>(
     return attrs.$hexOrientation ?? defaultOrientation;
   });
 
-  // Get all cells
+  // Get all cells. One with no coordinates refuses the board, as AutoUI's does,
+  // rather than sitting at (0,0); a face-down one sent without them is left out (#1294).
   const cells = computed<TCell[]>(() => {
     if (!board.value?.children) return [];
-    return board.value.children.filter(
-      (c) => c.className === cellClassName
-    ) as unknown as TCell[];
+    const { q, r } = coordAttrs.value;
+    const scope = { ...board.value, children: board.value.children.filter((c) => c.className === cellClassName) };
+    const error = cellCoordinateError(scope, q, r, 'Hex board');
+    if (error) throw new Error(error);
+    return placedCells(scope, q, r) as unknown as TCell[];
   });
 
   // Cell attributes holding q and r: explicit options win over the board's own names
@@ -204,11 +210,7 @@ export function useHexGrid<TCell = GameViewElement>(
     const { q: qAttr, r: rAttr } = coordAttrs.value;
     for (const cell of cells.value) {
       const attrs = getAttrs(cell as unknown as GameViewElement);
-      const q = attrs[qAttr as keyof typeof attrs];
-      const r = attrs[rAttr as keyof typeof attrs];
-      if (q !== undefined && r !== undefined) {
-        map.set(`${q},${r}`, cell);
-      }
+      map.set(`${attrs[qAttr as keyof typeof attrs]},${attrs[rAttr as keyof typeof attrs]}`, cell);
     }
     return map;
   });
@@ -293,8 +295,8 @@ export function useHexGrid<TCell = GameViewElement>(
     const { q: qAttr, r: rAttr } = coordAttrs.value;
     for (const cell of cellList) {
       const attrs = getAttrs(cell as unknown as GameViewElement);
-      const q = (attrs[qAttr as keyof typeof attrs] as number | undefined) ?? 0;
-      const r = (attrs[rAttr as keyof typeof attrs] as number | undefined) ?? 0;
+      const q = attrs[qAttr as keyof typeof attrs] as number;
+      const r = attrs[rAttr as keyof typeof attrs] as number;
       const pos = getHexPosition(q, r);
 
       minX = Math.min(minX, pos.x - size);

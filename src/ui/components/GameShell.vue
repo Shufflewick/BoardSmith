@@ -43,7 +43,7 @@ import type { PickChoicesResult, PickStepResponse } from '../composables/useActi
 import type { GameState, PlayerState } from '../../client/types.js';
 import type { GameRootView } from '../types.js';
 import turnNotificationSound from '../assets/turn-notification.mp3';
-import { hostRefusal, usePlatformTransport } from '../composables/usePlatformTransport.js';
+import { hostRefusal, readHostReply, usePlatformTransport } from '../composables/usePlatformTransport.js';
 import { seatDisplay } from '../seat-display.js';
 import { seatDisplayName } from '../../engine/element/seat-defaults.js';
 
@@ -473,15 +473,12 @@ const displayedPlayerAt = (seat: number) => {
 /**
  * Narrow an untyped host response into the result type its caller expects.
  *
- * `platformRequest` returns `Record<string, unknown>` because the host is
- * across a postMessage boundary — nothing guarantees its shape. Only `success`
- * is normalized (it drives control flow, and a missing/garbage value must read
- * as failure, not as truthy). Everything else is passed through untouched so
- * `followUp` — which chains the next action, e.g. explore -> take equipment —
- * survives.
+ * Only `success` is normalized, by the one reader of a host reply (#1046).
+ * Everything else is passed through untouched so `followUp` — which chains the
+ * next action, e.g. explore -> take equipment — survives.
  */
 function hostResult<T extends { success: boolean }>(raw: Record<string, unknown>): T {
-  return { ...raw, success: raw.success === true } as T;
+  return { ...raw, success: readHostReply(raw).accepted } as T;
 }
 
 
@@ -800,7 +797,6 @@ const boardProps = computed(() =>
 setupDragDropOrchestration({
   boardInteraction,
   actionController,
-  availableActions,
   actionMetadata,
   isMyTurn,
 });

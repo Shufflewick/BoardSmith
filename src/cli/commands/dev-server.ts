@@ -78,7 +78,7 @@ interface HttpUpgradeServer {
 interface ClaimedWebSocketPath {
   /** Route this path's upgrades on `httpServer`. `serveVite` calls it. */
   attach(httpServer: HttpUpgradeServer, viteConfig: () => ResolvedConfig | undefined): void;
-  /** Stop accepting connections; called from the run's shutdown. */
+  /** Stop accepting connections and end the open ones; called from the run's shutdown. */
   close(): void;
 }
 
@@ -119,7 +119,11 @@ export function claimWebSocketPath(
         wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
       });
     },
-    close: () => wss.close(),
+    close: () => {
+      // `ws` leaves its clients open on close, and an open one keeps the HTTP server from closing (#979).
+      for (const client of wss.clients) client.terminate();
+      wss.close();
+    },
   };
 }
 
@@ -369,6 +373,12 @@ export async function serveVite(args: {
   // Through `vite.middlewares` on every request, because a `vite.config.ts`
   // restart replaces them on the same `vite` object.
   const httpServer = createHttpServer((req, res) => vite!.middlewares(req, res));
+  // An upgraded socket is no connection `closeAllConnections` ends, whoever took it or none did (#979, #1304).
+  const upgraded = new Set<Duplex>();
+  httpServer.on('upgrade', (_req, socket: Duplex) => {
+    upgraded.add(socket);
+    socket.once('close', () => upgraded.delete(socket));
+  });
   // Read on every upgrade, because a `vite.config.ts` restart can change it.
   for (const socket of args.sockets) socket.attach(httpServer, () => vite?.config);
   try {
@@ -398,6 +408,7 @@ export async function serveVite(args: {
           new Promise<void>((closed, reject) => {
             httpServer.close((error) => (error ? reject(error) : closed()));
             httpServer.closeAllConnections();
+            for (const socket of upgraded) socket.destroy();
           }),
       },
     ],

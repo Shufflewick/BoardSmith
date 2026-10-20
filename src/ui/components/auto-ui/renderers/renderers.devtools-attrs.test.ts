@@ -52,6 +52,7 @@ function makeSelectableMock(): BoardInteraction {
     // query methods
     isSelectableElement: (): boolean => true,
     isDisabledElement: (): string | false => false,
+    canStartDrag: (): boolean => true,
     candidateLabel: (): string | null => null,
     isSelected: (): boolean => false,
     isHighlighted: (): boolean => false,
@@ -63,7 +64,7 @@ function makeSelectableMock(): BoardInteraction {
     // mutation stubs (no-op)
     triggerElementSelect: () => {},
     selectElement: () => {},
-    startDrag: () => {},
+    startDrag: () => true,
     endDrag: () => {},
     triggerDrop: () => {},
     setValidElements: () => {},
@@ -220,10 +221,6 @@ describe('DieRenderer — DEV-01 devtools attrs', () => {
 // ---------------------------------------------------------------------------
 // CardRenderer
 // ---------------------------------------------------------------------------
-// Note: CardRenderer computes elementNotation as:
-//   (attributes.notation ?? element.name ?? null)
-// When no attributes.notation is set, elementNotation === element.name, so
-// anchorAttrs receives both name and notation set to element.name.
 
 describe('CardRenderer — DEV-01 devtools attrs', () => {
   const element = {
@@ -245,11 +242,11 @@ describe('CardRenderer — DEV-01 devtools attrs', () => {
     expect(root.getAttribute('data-element-id')).not.toBeNull();
   });
 
-  it('root has data-bs-el-notation when element carries a name (falls back to name)', () => {
+  // A card is identified like every other element, so its name is not passed off as a notation (#1052).
+  it('root has no data-bs-el-notation when the card has no notation', () => {
     const wrapper = mountWithInteraction(CardRenderer, { element }, makeSelectableMock());
     const root = wrapper.find('.card-container').element;
-    // CardRenderer's elementNotation falls back to element.name when attributes.notation is absent
-    expect(root.getAttribute('data-bs-el-notation')).toBe(element.name);
+    expect(root.hasAttribute('data-bs-el-notation')).toBe(false);
   });
 
   it('root has data-bs-el-name when element carries a name', () => {

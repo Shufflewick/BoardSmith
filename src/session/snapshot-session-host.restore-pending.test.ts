@@ -20,6 +20,7 @@ import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
 // mutation that belongs to an unfinished action.
 import { repeatingCollectDefinition as collectDef } from './testing/fixtures/repeating-collect-fixture.js';
 import { succeeded } from './op-result.test-helper.js';
+import type { SeatPendingAction } from './types.js';
 import { snapshotTree } from '../engine/utils/index.js';
 
 const options = { playerCount: 2, seed: 'bs320' };
@@ -103,8 +104,8 @@ describe('SnapshotSessionHost restores in-progress selections (#320)', () => {
 
     const second = restoredHost({ ...first.persisted.at(-1)!, playerViews: lastViews, botSeats: [] });
 
-    const views = second.broadcasts.at(-1) as Array<{ state: { pendingAction?: RepeatingPending } }>;
-    expect(views[0]!.state.pendingAction?.repeating?.accumulated).toEqual(['p1']);
+    const views = second.broadcasts.at(-1) as Array<{ state: { pendingAction?: SeatPendingAction } }>;
+    expect(views[0]!.state.pendingAction?.repeating?.iterationCount).toBe(1);
     expect(views[1]!.state.pendingAction).toBeUndefined();
   });
 

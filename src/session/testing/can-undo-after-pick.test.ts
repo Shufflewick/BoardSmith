@@ -147,7 +147,7 @@ async function observePickHandler(max: number, upTo: number): Promise<Observed> 
     checkpoints: { max },
   });
   runner.start();
-  const handler = new PickHandler(runner, 1);
+  const handler = new PickHandler(runner);
   let pending: Record<string, unknown> | null = null;
   for (const step of SCRIPT.slice(0, upTo)) {
     if (step.kind === 'action') {

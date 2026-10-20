@@ -118,3 +118,17 @@ export function mergePlayerOptions(
   }
   return merged;
 }
+
+/**
+ * What each seat starts with for the player options `options` declares: each
+ * select, number and boolean option's default (#1304). Colour is chosen per
+ * seat from its palette, and an exclusive option's default names which seat
+ * holds it, not a value every seat has, so neither is here.
+ */
+export function playerOptionDefaults(options: Record<string, PlayerOptionDefinition>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(options).flatMap(([key, option]) =>
+      option.type === 'select' || option.type === 'number' || option.type === 'boolean' ? [[key, option.default]] : [],
+    ),
+  );
+}

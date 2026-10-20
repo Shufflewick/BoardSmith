@@ -231,7 +231,7 @@ describe('an execute() that throws half-way with no checkpoint to roll back to (
 
   it('says the same on the pick-by-pick path', async () => {
     const runner = runnerWithoutCheckpoints();
-    const result = await new PendingActionManager(runner, 2).processSelectionStep(1, 'how', 'all', 'pickThenFail');
+    const result = await new PendingActionManager(runner).processSelectionStep(1, 'how', 'all', 'pickThenFail');
     expect(result.success).toBe(false);
     expect(runner.game.target.all(Token)).toHaveLength(3);
     expectPartialChangesReported(result.error);
@@ -270,7 +270,7 @@ describe('an execute() that throws after its picks were taken one at a time (#80
   it('the session\'s pending-action path leaves the game as it was', async () => {
     const runner = makeRunner();
     const messagesBefore = runner.game.messages.length;
-    const manager = new PendingActionManager(runner, 2);
+    const manager = new PendingActionManager(runner);
     manager.startPendingAction('pickThenFail', 1);
 
     const result = await manager.processSelectionStep(1, 'how', 'all');
@@ -335,7 +335,7 @@ describe('a second action that throws half-way, with no snapshot taken between (
     const runner = makeRunner();
     expect(runner.performAction('cleanMove', 1, {}).success).toBe(true);
     const messagesBefore = runner.game.messages.length;
-    const manager = new PendingActionManager(runner, 2);
+    const manager = new PendingActionManager(runner);
     manager.startPendingAction('pickThenFail', 2);
 
     const result = await manager.processSelectionStep(2, 'how', 'all');
@@ -349,7 +349,7 @@ describe('a second action that throws half-way, with no snapshot taken between (
     expect(runner.performAction('cleanMove', 1, {}).success).toBe(true);
     const messagesBefore = runner.game.messages.length;
 
-    const result = await new PendingActionManager(runner, 2).processSelectionStep(2, 'how', 'all', 'movingPickThenFail');
+    const result = await new PendingActionManager(runner).processSelectionStep(2, 'how', 'all', 'movingPickThenFail');
 
     expect(result.success).toBe(false);
     expectAfterFirstAction(runner, messagesBefore, result.error);

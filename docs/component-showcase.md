@@ -51,27 +51,41 @@ Auto-generated action UI from game metadata.
 
 ## Die3D
 
-3D dice with physics-based rolling animation.
+3D dice with physics-based rolling animation. `Die3D` has its own entry point,
+`boardsmith/ui/dice`, so only a game that rolls dice installs `three`.
 
+<!-- typecheck: board -->
 ```vue
 <template>
   <Die3D
     v-for="die in dice"
     :key="die.id"
     :die-id="die.id"
-    :value="die.attributes.value"
-    :roll-count="die.attributes.rollCount"
-    :sides="die.attributes.sides"
+    :value="die.attributes?.value ?? 1"
+    :roll-count="die.attributes?.rollCount ?? 0"
+    :sides="die.attributes?.sides ?? 6"
     :size="60"
   />
 </template>
 
-<script setup>
-// Dice come from gameView in a real game
-const dice = computed(() => {
-  const pool = props.gameView?.children?.find(c => c.className === 'DicePool');
-  return pool?.children?.filter(c => c.className === 'Die') || [];
-});
+<script setup lang="ts">
+import { computed } from 'vue';
+import type { DieSides } from 'boardsmith';
+import { findElements, type BaseElementAttributes, type GameViewElement, type TableBoardProps } from 'boardsmith/ui';
+import { Die3D } from 'boardsmith/ui/dice';
+
+const props = defineProps<TableBoardProps>();
+
+// The attributes a Die element carries in the game view
+interface DieAttributes extends BaseElementAttributes {
+  sides?: DieSides;
+  value?: number;
+  rollCount?: number;
+}
+
+const dice = computed(() =>
+  props.gameView ? (findElements(props.gameView, { className: 'Die' }) as GameViewElement<DieAttributes>[]) : [],
+);
 </script>
 ```
 
@@ -108,17 +122,22 @@ Renders the entire game state as a tree of elements. Useful for:
 
 ### Flying Cards
 
+<!-- typecheck: board -->
 ```vue
-<script setup>
+<script setup lang="ts">
+import { ref } from 'vue';
 import { useFlyingElements, FlyingCardsOverlay } from 'boardsmith/ui';
 
+const deckRef = ref<HTMLElement | null>(null);
+const handRef = ref<HTMLElement | null>(null);
 const { flyingElements, fly } = useFlyingElements();
 
 async function dealCard() {
+  if (!deckRef.value) return;
   await fly({
     id: 'deal-card',
-    startRect: deckRef.value.getBoundingClientRect(),
-    endRect: () => handRef.value.getBoundingClientRect(),
+    startRect: deckRef.value,
+    endRect: () => handRef.value,
     elementData: { rank: 'A', suit: 'S' },
     flip: true,
     duration: 400,
@@ -127,6 +146,8 @@ async function dealCard() {
 </script>
 
 <template>
+  <div ref="deckRef" class="deck" @click="dealCard" />
+  <div ref="handRef" class="hand" />
   <FlyingCardsOverlay :flying-cards="flyingElements" />
 </template>
 ```
@@ -135,12 +156,17 @@ async function dealCard() {
 
 For declarative fly-on-appear animations when elements enter the view:
 
+<!-- typecheck: board -->
 ```vue
-<script setup>
-import { useFlyingElements, FlyingCardsOverlay } from 'boardsmith/ui';
+<script setup lang="ts">
+import { computed, ref } from 'vue';
+import { findElement, useFlyingElements, FlyingCardsOverlay, type TableBoardProps } from 'boardsmith/ui';
 
-const starterCard = computed(() => findElement(gameView.value, el =>
-  el.className === 'Card' && el.attributes?.isStarter));
+const props = defineProps<TableBoardProps>();
+const deckRef = ref<HTMLElement | null>(null);
+const starterRef = ref<HTMLElement | null>(null);
+
+const starterCard = computed(() => findElement(props.gameView, { name: 'starter' }));
 
 const { flyingElements, flyOnAppear } = useFlyingElements();
 
@@ -149,14 +175,16 @@ const { isFlying } = flyOnAppear({
   sourceRef: deckRef,
   targetRef: starterRef,
   getElementData: (el) => ({
-    rank: el.attributes?.rank,
-    suit: el.attributes?.suit
+    rank: String(el.attributes?.rank),
+    suit: String(el.attributes?.suit),
   }),
   flip: true,
 });
 </script>
 
 <template>
+  <div ref="deckRef" class="deck" />
+  <div ref="starterRef" class="starter" :class="{ arriving: isFlying }" />
   <FlyingCardsOverlay :flying-cards="flyingElements" />
 </template>
 ```
@@ -167,44 +195,60 @@ Automatically flies elements when they appear in the view.
 
 Bidirectional interaction between board and action panel.
 
+<!-- typecheck: board -->
 ```vue
-<script setup>
-import { useBoardInteraction } from 'boardsmith/ui';
+<script setup lang="ts">
+import { computed } from 'vue';
+import { findElements, useBoardInteraction, type TableBoardProps } from 'boardsmith/ui';
 
+const props = defineProps<TableBoardProps>();
 const boardInteraction = useBoardInteraction();
-
-// In template:
-// :class="{
-//   'highlighted': boardInteraction?.isHighlighted(element),
-//   'selected': boardInteraction?.isSelected(element),
-//   'selectable': boardInteraction?.isSelectableElement(element),
-// }"
+const cards = computed(() => findElements(props.gameView, { className: 'Card' }));
 </script>
+
+<template>
+  <div
+    v-for="element in cards"
+    :key="element.id"
+    :class="{
+      highlighted: boardInteraction.isHighlighted(element),
+      selected: boardInteraction.isSelected(element),
+      selectable: boardInteraction.isSelectableElement(element),
+    }"
+  />
+</template>
 ```
 
 ## Grid Utilities
 
 ### Square Grid (Chess-style)
 
+<!-- typecheck: game src/ui/notation.ts -->
 ```typescript
 import { toAlgebraicNotation, fromAlgebraicNotation } from 'boardsmith/ui';
 
-toAlgebraicNotation(0, 0);    // "a1"
-toAlgebraicNotation(4, 3);    // "e4"
-fromAlgebraicNotation('e4');  // { col: 4, row: 3 }
+// (row, col), with row 0 at the top of an 8-row board by default
+toAlgebraicNotation(0, 0);                            // "a8"
+toAlgebraicNotation(4, 3);                            // "d4"
+toAlgebraicNotation(0, 0, { rowZeroAtTop: false });   // "a1"
+fromAlgebraicNotation('e4');                          // { row: 4, col: 4 }
 ```
 
 ### Hex Grid
 
+<!-- typecheck: game src/ui/hex.ts -->
 ```typescript
 import { hexToPixel, getHexPolygonPoints } from 'boardsmith/ui';
 
-const { x, y } = hexToPixel(q, r, size, 'flat');
-const points = getHexPolygonPoints(cx, cy, size, 'flat');
+// Center of the hex at axial (q, r) = (2, 1), 30px hexes, flat-top
+const { x, y } = hexToPixel(2, 1, 30, 'flat');
+// SVG polygon points around (0, 0): place it with transform="translate(x, y)"
+const points = getHexPolygonPoints(30, 'flat');
 ```
 
 ## Card Display
 
+<!-- typecheck: game src/ui/suits.ts -->
 ```typescript
 import { getSuitSymbol, getSuitColor, isRedSuit } from 'boardsmith/ui';
 
@@ -216,6 +260,7 @@ isRedSuit('D');      // true
 
 ## Theming
 
+<!-- typecheck: game src/ui/theme.ts -->
 ```typescript
 import { applyTheme } from 'boardsmith/ui';
 

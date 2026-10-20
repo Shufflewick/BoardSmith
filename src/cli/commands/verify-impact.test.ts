@@ -55,7 +55,7 @@ import {
   verifyClassifyStatusCommand,
   type ChunkVerdict,
 } from './verify-classify.js';
-import { verifyRepairStatusCommand } from './verify-repair.js';
+import { verifyRepairGateCommand, verifyRepairRoundCommand, verifyRepairStatusCommand } from './verify-repair.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1304,7 +1304,7 @@ describe('repair-gate — computeRepairGate (pure, total)', () => {
   });
 
   // Phase 176 Plan 02 (Pitfall 1 / Assumption A3) — `computeRepairGate` must be safe to invoke a
-  // SECOND time post-repair (`verify-repair.ts`'s `recomputeRepairGatePostRepair`). This proves
+  // SECOND time post-repair (`verify-repair-gate` asks for it again after repair). This proves
   // the assumption RESEARCH.md flagged as unverified: two calls with identical input are deeply
   // equal, and the function performs no I/O (it takes no path/handle and awaits nothing).
   it('idempotence (176-02 Pitfall 1 / Assumption A3): two computeRepairGate calls with equal input are deeply equal, and the function is synchronous (no I/O)', () => {
@@ -1362,6 +1362,7 @@ async function buildImpactTestProject(
       `Cites rulebook/x.md.\n\n` +
       `## Interpretation\n1. **Movement resolves by timing.** "${IMPACT_QUOTED_PASS1}" (p.1)\n\n` +
       `## Verified Against\n\n${VERIFIED_AGAINST_BEGIN}\n_Not yet recorded._\n${VERIFIED_AGAINST_END}\n\n` +
+      `## Findings Ledger\n\n` +
       `## Build Manifest\n\n| File | Status |\n|---|---|\n| src/movement.ts | NEW |\n\n` +
       `## Verified Commit Hash\n\n${firstSha}\n`,
   );
@@ -1546,6 +1547,21 @@ describe('line-level-handoff / repair-gate — verifyImpactStatusCommand over a 
     logSpy.mockRestore();
   });
 
+  it('end-to-end through verifyRepairGateCommand: re-derives the stale chunk\'s gate from post-repair code state, and --json prints exactly one JSON object', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const gate = await verifyRepairGateCommand({ project, runId, chunk: 'movement', json: true });
+    expect(gate.disposition).toBe('close-without-replaytest');
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(logSpy.mock.calls[0][0] as string)).toEqual(gate);
+
+    await expect(verifyRepairGateCommand({ project, runId, chunk: 'no-such-chunk' })).rejects.toThrow(
+      /no-such-chunk/,
+    );
+    logSpy.mockRestore();
+  });
+
   it('repair-gate: the human report string contains "1 of 2" and the stale slug, uncapped', async () => {
     const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -1572,6 +1588,114 @@ describe('line-level-handoff / repair-gate — verifyImpactStatusCommand over a 
     const source = await fs.readFile(join(__dirname, 'verify-impact.ts'), 'utf-8');
     const nonCommentLines = source.split('\n').filter((l) => !/^\s*[*/]/.test(l)).join('\n');
     expect((nonCommentLines.match(/createHash|git diff|revParse/gi) ?? []).length).toBe(0);
+  });
+});
+
+describe('verify-repair-round and verify-repair-gate, keyed to their verify run (#1302)', () => {
+  let root: string;
+  let logSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    root = tempTree('bs-verify-repair-run-');
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
+  });
+
+  const movementMd = (project: string) => join(project, DESIGN_DIR, 'chunks', 'movement', 'CHUNK.md');
+
+  /** The fixture's stale chunk, without the Findings Ledger every built chunk has. */
+  async function withoutFindingsLedger(project: string): Promise<void> {
+    const text = await fs.readFile(movementMd(project), 'utf-8');
+    await fs.writeFile(movementMd(project), text.replace('## Findings Ledger\n\n', ''));
+  }
+
+  it("opens the run's first round under the Findings Ledger, and reports it again, writing nothing, while it is empty", async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+
+    const first = await verifyRepairRoundCommand({ project, runId, chunk: 'movement' });
+    if (first.disposition !== 'round') throw new Error('expected a round');
+    expect(first.heading).toBe(`### Audit Round 1 (verify-repair run ${runId}, round 1 of 3)`);
+    const written = await fs.readFile(movementMd(project), 'utf-8');
+    expect(written.indexOf(first.heading)).toBeLessThan(written.indexOf('## Build Manifest'));
+
+    const again = await verifyRepairRoundCommand({ project, runId, chunk: 'movement' });
+    expect(again).toEqual({ ...first, alreadyOpen: true });
+    expect(await fs.readFile(movementMd(project), 'utf-8')).toBe(written);
+  });
+
+  it('reports the same round plan as verify-repair, which reads the run the same way', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+
+    const status = await verifyRepairStatusCommand({ project, runId });
+    const round = await verifyRepairRoundCommand({ project, runId, chunk: 'movement' });
+    expect(status.rows.find((r) => r.slug === 'movement')!.roundPlan).toEqual(round);
+  });
+
+  it('refuses a chunk this run did not mark stale, and one it does not cover, writing nothing', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+    const scoring = join(project, DESIGN_DIR, 'chunks', 'scoring', 'CHUNK.md');
+    const before = await fs.readFile(scoring, 'utf-8');
+
+    await expect(verifyRepairRoundCommand({ project, runId, chunk: 'scoring' })).rejects.toThrow(
+      `Chunk "scoring" is not stale in run ${runId}`,
+    );
+    await expect(verifyRepairRoundCommand({ project, runId, chunk: 'no-such-chunk' })).rejects.toThrow(
+      `Chunk "no-such-chunk" is not in run ${runId}'s impact map`,
+    );
+    expect(await fs.readFile(scoring, 'utf-8')).toBe(before);
+  });
+
+  it('refuses a stale chunk with no ## Findings Ledger, naming the file, rather than putting the round at its end', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+    await withoutFindingsLedger(project);
+    const before = await fs.readFile(movementMd(project), 'utf-8');
+
+    await expect(verifyRepairRoundCommand({ project, runId, chunk: 'movement' })).rejects.toThrow(
+      /chunks\/movement\/CHUNK\.md has no "## Findings Ledger" section/,
+    );
+    expect(await fs.readFile(movementMd(project), 'utf-8')).toBe(before);
+  });
+
+  it('verify-repair reports no round for a stale chunk with no ## Findings Ledger, warning why, as verify-repair-round would refuse it', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+    await withoutFindingsLedger(project);
+
+    const status = await verifyRepairStatusCommand({ project, runId });
+    expect(status.rows.find((r) => r.slug === 'movement')).toBeUndefined();
+    expect(status.warnings.join('\n')).toMatch(/chunks\/movement\/CHUNK\.md has no "## Findings Ledger" section/);
+  });
+
+  it("the gate reads the chunk's code as it is after repair, not as it was when the run was mapped", async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+    expect((await verifyRepairGateCommand({ project, runId, chunk: 'movement' })).disposition).toBe('close-without-replaytest');
+
+    await fs.writeFile(join(project, 'src', 'movement.ts'), 'export const movement = 3;\n');
+    execSync('git add -A', { cwd: project, stdio: 'ignore' });
+    execSync('git -c user.email=t@t -c user.name=t commit -m repair', { cwd: project, stdio: 'ignore' });
+
+    expect((await verifyRepairGateCommand({ project, runId, chunk: 'movement' })).disposition).toBe('reopen-playtest');
+  });
+
+  it('the gate refuses a chunk this run did not mark stale', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+    await expect(verifyRepairGateCommand({ project, runId, chunk: 'scoring' })).rejects.toThrow(
+      `Chunk "scoring" is not stale in run ${runId}`,
+    );
+  });
+
+  it('the gate prints a warning, not a tick, when it cannot say whether the code moved', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+    const text = await fs.readFile(movementMd(project), 'utf-8');
+    await fs.writeFile(movementMd(project), text.replace(/## Verified Commit Hash\n\n\S+/, '## Verified Commit Hash\n\nnot-a-hash'));
+
+    const gate = await verifyRepairGateCommand({ project, runId, chunk: 'movement' });
+    expect(gate.disposition).toBe('unknown-drift');
+    const printed = logSpy.mock.calls.map((c) => String(c[0])).join('\n');
+    expect(printed).toContain('⚠ movement: unknown-drift');
+    expect(printed).not.toContain('✓');
   });
 });
 

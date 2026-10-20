@@ -192,13 +192,13 @@ export interface CapabilityInputs {
 const MAX_FLOW_BUILDS = 256;
 
 /** A table this game can be built as: a seat count, and the options chosen away from their defaults. */
-interface FlowBuild {
+export interface TableBuild {
   playerCount: number;
   choices: Record<string, unknown>;
 }
 
 /** A build whose compiled flow has a step declaring `timeLimitMs`, and those steps' names. */
-interface TimedBuild extends FlowBuild {
+interface TimedBuild extends TableBuild {
   steps: string[];
 }
 
@@ -229,7 +229,7 @@ function optionChoiceSets(declared: Record<string, GameOptionDefinition>): Array
  * (none if it builds no flow). A constructor that throws is rethrown naming the
  * build, since the author may never have played that combination.
  */
-function timedStepsOf(definition: CapabilityInputs['definition'], build: FlowBuild): string[] {
+function timedStepsOf(definition: CapabilityInputs['definition'], build: TableBuild): string[] {
   const options = selectGameOptions(declaredGameOptionsOf(definition), build.choices);
   let game;
   try {
@@ -270,44 +270,82 @@ type TimedBuildSearch = { timed?: TimedBuild; refusal?: string };
 const timedBuildSearches = new WeakMap<CapabilityInputs['definition'], TimedBuildSearch>();
 
 function searchTimedBuild(definition: CapabilityInputs['definition']): TimedBuildSearch {
-  const { minPlayers, maxPlayers } = definition;
-  if (!Number.isInteger(minPlayers) || !Number.isInteger(maxPlayers)) return {};
-  const declared = declaredGameOptionsOf(definition) ?? {};
-  const seats = (maxPlayers as number) - (minPlayers as number) + 1;
-  const combinations = Object.values(declared).reduce((n, def) => n * (nonDefaultValues(def).length + 1), 1);
-  const tooMany = combinations * seats > MAX_FLOW_BUILDS;
-  const timed = firstTimedBuild(definition, tooMany ? [{}] : optionChoiceSets(declared));
-  return timed !== undefined || !tooMany ? { timed } : { refusal: tooManyBuildsRefusal(combinations, seats) };
+  // `tableContradictions` refuses a seat range that holds no seat count, by name.
+  if (seatRangeProblem(definition) !== undefined) return {};
+  const { builds, refusal } = tableBuilds(definition, 'to find every step that declares timeLimitMs');
+  for (const build of builds) {
+    const steps = timedStepsOf(definition, build);
+    if (steps.length > 0) return { timed: { ...build, steps } };
+  }
+  if (refusal === undefined) return {};
+  // Only when the defaults were built at every seat count does timing one of them end the search.
+  if (builds.length === 0) return { refusal };
+  return { refusal: `${refusal} If the game has timed steps, time a step with its default options, which ends the search at the first build.` };
 }
 
-/** The first of these choice sets, at any seat count, whose flow has a timed step. */
-function firstTimedBuild(
-  definition: CapabilityInputs['definition'],
-  sets: Array<Record<string, unknown>>,
-): TimedBuild | undefined {
-  for (const choices of sets) {
-    for (let playerCount = definition.minPlayers as number; playerCount <= (definition.maxPlayers as number); playerCount++) {
-      const steps = timedStepsOf(definition, { playerCount, choices });
-      if (steps.length > 0) return { playerCount, choices, steps };
-    }
+/** Why this game's seat range holds no seat count to build it at, or undefined when it holds one. */
+export function seatRangeProblem(definition: { minPlayers?: unknown; maxPlayers?: unknown }): string | undefined {
+  const { minPlayers, maxPlayers } = definition;
+  if (!Number.isInteger(minPlayers) || !Number.isInteger(maxPlayers)) {
+    return (
+      'Cannot determine player count: this game declares "backend": "table" and its gameDefinition ' +
+      'is missing minPlayers/maxPlayers. Declare both as integers in your gameDefinition ' +
+      '(src/rules/index.ts), e.g. minPlayers: 2, maxPlayers: 4.'
+    );
+  }
+  if ((minPlayers as number) < 1) {
+    return `minPlayers is ${minPlayers}, but a table needs at least one seat. Set minPlayers to 1 or more in your gameDefinition (src/rules/index.ts).`;
+  }
+  if ((minPlayers as number) > (maxPlayers as number)) {
+    return (
+      `minPlayers (${minPlayers}) is more than maxPlayers (${maxPlayers}), so there is no seat count to build this game at. ` +
+      'Set minPlayers to at most maxPlayers in your gameDefinition (src/rules/index.ts).'
+    );
   }
   return undefined;
 }
 
-/** Why a game with too many option combinations is not searched, and what to change. */
-function tooManyBuildsRefusal(combinations: number, seats: number): string {
+/**
+ * EVERY TABLE THIS GAME CAN BE BUILT AS, for a check that must build each (#812, #1303): each seat
+ * count with each combination of its boolean and select options, the all-defaults set first. A
+ * game builds its flow and its elements in its constructor, and may build them differently for a
+ * different table, so a check that builds only one table misses the others.
+ *
+ * Past `MAX_FLOW_BUILDS` builds there is a `refusal`, saying what to change, and `builds` keeps only
+ * the default options at each seat count, or nothing once the seat counts alone are too many.
+ * `purpose` finishes "This game would have to be built N times ...". A seat range that holds no
+ * seat count is refused with {@link seatRangeProblem}'s words.
+ */
+export function tableBuilds(
+  definition: { minPlayers?: unknown; maxPlayers?: unknown },
+  purpose: string,
+): { builds: TableBuild[]; refusal?: string } {
+  const problem = seatRangeProblem(definition);
+  if (problem !== undefined) return { builds: [], refusal: problem };
+  const minPlayers = definition.minPlayers as number;
+  const seats = (definition.maxPlayers as number) - minPlayers + 1;
+  const declared = declaredGameOptionsOf(definition) ?? {};
+  const combinations = Object.values(declared).reduce((n, def) => n * (nonDefaultValues(def).length + 1), 1);
+  const atEverySeat = (sets: Array<Record<string, unknown>>) =>
+    sets.flatMap((choices) => Array.from({ length: seats }, (_, i) => ({ playerCount: minPlayers + i, choices })));
+  if (combinations * seats <= MAX_FLOW_BUILDS) return { builds: atEverySeat(optionChoiceSets(declared)) };
+  const refusal = tooManyBuildsRefusal(combinations, seats, purpose);
+  return { builds: seats <= MAX_FLOW_BUILDS ? atEverySeat([{}]) : [], refusal };
+}
+
+/** Why a game with too many tables to build is not built at each, and what to change. */
+function tooManyBuildsRefusal(combinations: number, seats: number, purpose: string): string {
   return (
-    `This game would have to be built ${combinations * seats} times to find every step that declares timeLimitMs ` +
+    `This game would have to be built ${combinations * seats} times ${purpose} ` +
     `(${combinations} combinations of its boolean and select game options at each of its ${seats} ` +
-    `seat counts), and boardsmith builds it at most ${MAX_FLOW_BUILDS} times. A step's time limit can ` +
+    `seat counts), and boardsmith builds it at most ${MAX_FLOW_BUILDS} times. What a game builds can ` +
     'depend on the options and the seat count, so each is built. Declare fewer boolean or select ' +
-    'options or a narrower seat range, mark balance knobs designerOnly, or, if the game has timed ' +
-    'steps, time a step with its default options, which ends the search at the first build.'
+    'options or a narrower seat range, or mark balance knobs designerOnly.'
   );
 }
 
-/** The table a {@link TimedBuild} was found at, for a message: its seat count and non-default choices. */
-function describeBuild({ playerCount, choices }: FlowBuild): string {
+/** A table, for a message: its seat count and non-default choices. */
+export function describeBuild({ playerCount, choices }: TableBuild): string {
   const chosen = Object.entries(choices).map(([name, value]) => `${name}: ${JSON.stringify(value)}`);
   return `at ${playerCount} players with ` +
     (chosen.length === 0 ? 'the default game options' : `game options ${chosen.join(', ')}`);
@@ -465,13 +503,8 @@ function tableContradictions(definition: CapabilityInputs['definition']): string
     );
   }
 
-  if (!Number.isInteger(definition.minPlayers) || !Number.isInteger(definition.maxPlayers)) {
-    issues.push(
-      'Cannot determine player count: this game declares "backend": "table" and its gameDefinition ' +
-        'is missing minPlayers/maxPlayers. Declare both as integers in your gameDefinition ' +
-        '(src/rules/index.ts), e.g. minPlayers: 2, maxPlayers: 4.',
-    );
-  }
+  const seatProblem = seatRangeProblem(definition);
+  if (seatProblem !== undefined) issues.push(seatProblem);
 
   return issues;
 }

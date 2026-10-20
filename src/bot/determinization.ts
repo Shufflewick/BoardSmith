@@ -26,9 +26,9 @@ import type { GameElement } from '../engine/index.js';
 import type { DeterminizeSampler } from './types.js';
 import { changing } from '../engine/element/state-version.js';
 import { outermostConcealer } from '../engine/element/concealed-refs.js';
-import { hasZoneVisibility } from '../engine/element/game-element.js';
+import { hasZoneVisibility, hidesContents, isZoneVisibilityRestorer, readDynamicAttribute } from '../engine/element/game-element.js';
 import { canPlayerSee } from '../engine/element/visibility.js';
-import { isPlaceholderId } from '../engine/element/hidden-placeholder.js';
+import { HIDDEN_PLACEHOLDER_ATTRIBUTE, isPlaceholderId } from '../engine/element/hidden-placeholder.js';
 
 /**
  * A game's determinization sampler broke the one contract it has (#73).
@@ -51,6 +51,8 @@ interface KnownElement {
   className: string;
   attributes: Map<string, string>;
   parent: GameElement | undefined;
+  /** Its place among its parent's children. */
+  index: number;
 }
 
 /** Every element the sandbox currently claims to know, by id. */
@@ -111,7 +113,7 @@ function keyOf(key: string): string {
 function recordKnownWorld(game: Game): KnownWorld {
   const world: KnownWorld = new Map();
 
-  const visit = (element: GameElement): void => {
+  const visit = (element: GameElement, index: number): void => {
     const Class = element.constructor as { unserializableAttributes?: string[] };
     const unserializable = new Set(Class.unserializableAttributes ?? []);
     const attributes = new Map<string, string>();
@@ -124,11 +126,12 @@ function recordKnownWorld(game: Game): KnownWorld {
       className: element.constructor.name,
       attributes,
       parent: element._t.parent as GameElement | undefined,
+      index,
     });
-    for (const child of element._t.children) visit(child as GameElement);
+    element._t.children.forEach((child, i) => visit(child as GameElement, i));
   };
 
-  visit(game as unknown as GameElement);
+  visit(game as unknown as GameElement, 0);
   return world;
 }
 
@@ -232,15 +235,89 @@ function visibleNewElement(before: KnownWorld, after: KnownWorld, seat: number):
   return null;
 }
 
+/** Whether the seat was sent `element` face down, as a placeholder. */
+function isSentFaceDown(element: GameElement): boolean {
+  return readDynamicAttribute(element, HIDDEN_PLACEHOLDER_ATTRIBUTE) === true;
+}
+
 /**
- * Whether the seat's view says how many children this container holds, as
- * `redactTreeForSeat` decides: not inside something concealed, and either a
- * count-only element or one the seat can see that is not a zone whose 'hidden'
- * mode keeps its size secret.
+ * Make a game rebuilt from a seat's view read it as that seat was shown it
+ * (#1291). Two spellings of the view mean something else to a live game:
+ * - A grant with no visibility setting of its own (`addVisibleTo`, #758) is
+ *   sent as `{ mode: 'all', explicit: false }`, which a live game resolves from
+ *   the zone above, hidden ones included. It is given back the grant the
+ *   engine writes, for this seat (#1270).
+ * - An owner rule granted below a hidden container (#961) is sent with no
+ *   owner, and its count, as the seat cannot see into it. A live game takes the
+ *   owner of the zone it was lifted into instead, so it is sent count-only
+ *   (#1280): a count is all the seat was given.
+ * Running it again changes nothing.
  */
-function countVisibleTo(container: GameElement, seat: number): boolean {
-  if (outermostConcealer(container, seat)) return false;
-  if (!container.isVisibleTo(seat)) return container.getEffectiveVisibility().mode === 'count-only';
+export function adoptSeatView(game: Game, seat: number): void {
+  const visit = (element: GameElement): void => {
+    adoptGrant(element, seat);
+    adoptLiftedOwnerRule(element, seat);
+    for (const child of element._t.children) visit(child as GameElement);
+  };
+  visit(game as unknown as GameElement);
+}
+
+/** A grant with no setting of its own, sent as `all`, back as the grant the engine writes. */
+function adoptGrant(element: GameElement, seat: number): void {
+  const own = element._visibility;
+  if (own && !own.explicit && own.mode === 'all' && !own.addPlayers?.length) {
+    element._visibility = { mode: 'hidden', explicit: false, addPlayers: [seat] };
+  }
+}
+
+/** An owner rule the seat was sent a count of, as count-only, so no owner above it opens it. */
+function adoptLiftedOwnerRule(zone: GameElement, seat: number): void {
+  if (zone._viewChildCount === undefined || isSentFaceDown(zone) || !hasZoneVisibility(zone) || !isZoneVisibilityRestorer(zone)) return;
+  const rule = zone.getZoneVisibility();
+  if (rule?.mode === 'owner' && canPlayerSee(rule, seat, zone.getEffectiveOwner()?.seat)) {
+    zone._restoreZoneVisibility({ mode: 'count-only', explicit: true });
+  }
+}
+
+/**
+ * Whether the seat's view proves it was sent `container` with every child
+ * (#1291). Below a zone that hides its contents, a container with no zone rule
+ * of its own may be a grant lifted from inside a hidden element (#961), sent
+ * with only its own grants. The view proves it was not when the container
+ * holds a face-down placeholder, which a cut container never does, or sits
+ * among its zone's counted children, which the lifted ones trail (#1208).
+ */
+function sentWhole(container: GameElement, seat: number, sent: SentView): boolean {
+  if (hasZoneVisibility(container) && container.getZoneVisibility()) return true;
+  const known = sent.world.get(container._t.id);
+  if (!known?.parent) return true;
+  if (sent.holdsFaceDown.has(container)) return true;
+  const parent = known.parent;
+  if (!hidesContents(parent, seat, parent.getEffectiveOwner()?.seat)) return sentWhole(parent, seat, sent);
+  return parent._viewChildCount !== undefined && known.index < parent._viewChildCount;
+}
+
+/** The world as the seat was sent it, before sampling, and the containers sent a face-down child. */
+interface SentView {
+  world: KnownWorld;
+  holdsFaceDown: ReadonlySet<GameElement | undefined>;
+}
+
+function sentView(world: KnownWorld): SentView {
+  const holdsFaceDown = new Set<GameElement | undefined>();
+  for (const { element, parent } of world.values()) if (isSentFaceDown(element)) holdsFaceDown.add(parent);
+  return { world, holdsFaceDown };
+}
+
+/**
+ * Whether the seat's view says how many children this container holds (#1206).
+ * For one the seat cannot see, `redactTreeForSeat` sends a count-only
+ * element's count, kept as `_viewChildCount`. For one it can see, the view
+ * must prove it sent every child, as it was before sampling.
+ */
+function countVisibleTo(container: GameElement, seat: number, sent: SentView): boolean {
+  if (!container.isVisibleTo(seat)) return container._viewChildCount !== undefined;
+  if (!sentWhole(container, seat, sent)) return false;
   const zone = hasZoneVisibility(container) ? container.getZoneVisibility() : undefined;
   return zone?.mode !== 'hidden' || canPlayerSee(zone, seat, container.getEffectiveOwner()?.seat);
 }
@@ -252,16 +329,26 @@ function childCounts(world: KnownWorld): Map<GameElement | undefined, number> {
   return counts;
 }
 
+/**
+ * How many children the seat knows `element` holds. A count-only element
+ * arrives empty, with its count: a sampler may leave it so or fill it to that
+ * count. A zone sent with children holds as many as were sent, its lifted
+ * grants included (#1271).
+ */
+function knownCount(element: GameElement, sent: number): number {
+  return sent === 0 ? element._viewChildCount ?? 0 : sent;
+}
+
 /** The first container the seat can count whose number of children the sample changed, or `null`. */
 function childCountChange(before: KnownWorld, after: KnownWorld, seat: number): string | null {
+  const sent = sentView(before);
   const priorCounts = childCounts(before);
   const nowCounts = childCounts(after);
   for (const { element } of before.values()) {
     const prior = priorCounts.get(element) ?? 0;
     const now = nowCounts.get(element) ?? 0;
-    // A count-only element arrives empty, with its count: a sampler may leave it so or fill it to that count.
-    const known = element._viewChildCount ?? prior;
-    if (now === prior || now === known || !countVisibleTo(element, seat)) continue;
+    const known = knownCount(element, prior);
+    if (now === prior || now === known || !countVisibleTo(element, seat, sent)) continue;
     return (
       `${nameOf(element)} held ${known} element${known === 1 ? '' : 's'} and now holds ${now}. ` +
       `The seat can count what that container holds even where it cannot see them, ` +

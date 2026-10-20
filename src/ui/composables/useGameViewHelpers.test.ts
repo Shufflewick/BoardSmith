@@ -14,6 +14,8 @@ import {
   getPlayerAttribute,
   findAllHands,
   getElementCount,
+  isSizeHidden,
+  directChildren,
   getCards,
   getFirstCard,
   getElementOwner,
@@ -297,6 +299,24 @@ describe('getElementCount', () => {
   it('is 0 for a missing element', () => {
     expect(getElementCount(null)).toBe(0);
     expect(getElementCount(undefined)).toBe(0);
+  });
+});
+
+describe('isSizeHidden / directChildren (#1292)', () => {
+  const granted = card(11, 'A', 'S');
+
+  it('says a hidden zone sent with no count hides its size, though it carries a granted card', () => {
+    expect(isSizeHidden({ ...element(10, 'Vault', {}, [granted]), zoneVisibility: { mode: 'hidden' } })).toBe(true);
+    expect(isSizeHidden({ ...element(10, 'Deck'), zoneVisibility: { mode: 'hidden' }, childCount: 3 })).toBe(false);
+    expect(isSizeHidden(DECK)).toBe(false);
+    expect(isSizeHidden(null)).toBe(false);
+  });
+
+  it("returns a zone's own children, leaving out the granted cards sent after them", () => {
+    const deck = { ...element(10, 'Deck', {}, [element(-1, 'Box'), element(-2, 'Box'), granted]), childCount: 2 };
+    expect(directChildren(deck).map((c) => c.id)).toEqual([-1, -2]);
+    expect(directChildren(HAND_ONE).map((c) => c.id)).toEqual([11, 12]);
+    expect(directChildren(undefined)).toEqual([]);
   });
 });
 

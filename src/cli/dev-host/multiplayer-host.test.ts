@@ -206,6 +206,49 @@ describe('MultiplayerHost (always-live)', () => {
     expect(bots()).toEqual([false, true]);
   });
 
+  it('#1025: a player who moves to the bot seat by join alone leaves their old seat to a bot, which plays it', async () => {
+    const { host, lastOfType } = makeAltHost();
+    await host.handleMessage('A', { type: 'hello' }); // A = seat 1, due; seat 2 is the bot
+    await host.handleMessage('A', { type: 'join', seat: 2 }); // no leave first, as a scripted client may send
+    await host.settled();
+    expect(lastOfType('A', 'lobby').seats.map((s: any) => s.bot)).toEqual([true, false]);
+    // Seat 1's bot passed, so seat 2 (A) is due now.
+    expect(lastOfType('A', 'game_state').view.state.isMyTurn).toBe(true);
+  });
+
+  it('#1304: every lobby a seat-moving join sends already shows the seat left as played by the bot, and none repeats', async () => {
+    const { host, to, clear } = makeAltHost();
+    await host.handleMessage('A', { type: 'hello' });
+    await host.settled();
+    clear();
+    await host.handleMessage('A', { type: 'join', seat: 2 });
+    await host.settled();
+    const lobbies = to('A').filter((m) => m.type === 'lobby').map((m: any) => m.seats.map((s: any) => s.bot));
+    expect(lobbies).toEqual([[true, false]]);
+  });
+
+  it('#1304: a mid-game leave sends one lobby showing the bot on the seat, not the same lobby twice', async () => {
+    const { host, to, clear } = makeAltHost();
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('B', { type: 'hello' });
+    await host.handleMessage('B', { type: 'join', seat: 2 });
+    await host.settled();
+    clear();
+    await host.handleMessage('B', { type: 'leave' });
+    await host.settled();
+    const lobbies = to('A').filter((m) => m.type === 'lobby').map((m: any) => m.seats.map((s: any) => s.bot));
+    expect(lobbies).toEqual([[false, true]]);
+  });
+
+  it('#1025: a player who sends join for their own seat mid-game keeps it, and no bot takes it', async () => {
+    const { host, lastOfType } = makeAltHost();
+    await host.handleMessage('A', { type: 'hello' }); // A = seat 1, due
+    await host.handleMessage('A', { type: 'join', seat: 1 });
+    await host.settled();
+    expect(lastOfType('A', 'lobby').seats.map((s: any) => s.bot)).toEqual([false, true]);
+    expect(lastOfType('A', 'game_state').view.state.isMyTurn).toBe(true);
+  });
+
   it("#887: the lobby is sent again when an away seat's grace runs out and a bot covers it", async () => {
     const graces = manualGraceTimer();
     const { host, lastOfType } = makeHost({ reconnectTimer: graces.timer });
@@ -771,6 +814,20 @@ describe('MultiplayerHost — follow active seat', () => {
     await host.settled();
     // The follower drives seat 2 now; a bot passing it would have ended the game.
     expect(lastOfType('A', 'game_state').isComplete).toBe(false);
+    expectFollowingSeatTwo(lastOfType);
+  });
+
+  it('#1025: under --debug, a seat its player leaves by join alone while someone follows is not handed to a bot', async () => {
+    const { host, lastOfType, pass } = makeAltHost({ debug: true, playerCount: 3 });
+    await host.handleMessage('A', { type: 'hello' }); // A = seat 1
+    await host.handleMessage('B', { type: 'hello' });
+    await host.handleMessage('B', { type: 'join', seat: 2 }); // B = seat 2
+    await host.handleMessage('A', { type: 'follow', enabled: true }); // --debug keeps follow open to A
+    await pass('A', 'r1'); // seat 2 is due now
+    await host.handleMessage('B', { type: 'join', seat: 3 }); // no leave first
+    await host.settled();
+    // The follower drives seat 2 now; a bot would have passed it and moved the turn to seat 3.
+    expect(lastOfType('A', 'lobby').seats.map((s: any) => s.bot)).toEqual([false, false, false]);
     expectFollowingSeatTwo(lastOfType);
   });
 

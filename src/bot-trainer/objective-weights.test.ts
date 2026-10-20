@@ -61,9 +61,11 @@ describe('updateBotWeights', () => {
       .toContain('weight: -4,');
   });
 
-  it('rounds to one decimal so the generated file stays readable', () => {
-    expect(updateBotWeights(BOT_FILE, [objective('centre-control', 3.26789)]))
-      .toContain('weight: 3.3,');
+  it('writes the exact weights the confirmation measured, not a rounded set (#1031)', () => {
+    const measured = [objective('centre-control', 3.267891234567891), objective('card-advantage', -1e-7)];
+    const updated = updateBotWeights(BOT_FILE, measured);
+    expect(updated).toContain('weight: 3.267891234567891,');
+    expect(readObjectiveWeights(updated)).toEqual(measured);
   });
 
   it('keeps the trailing comment on a weight line', () => {

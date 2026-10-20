@@ -50,8 +50,13 @@ afterEach(() => {
 });
 
 describe('assertNoHiddenInfoLeak with an action open (#405)', () => {
-  it('passes the board as it stands, where no target is drawn', async () => {
-    await expect(assertNoHiddenInfoLeak(makeGame(), 1, { component: TargetBoard })).resolves.toBeUndefined();
+  it('passes the board of the seat whose turn it is not, where no target is drawn', async () => {
+    await expect(assertNoHiddenInfoLeak(makeGame(), 2, { component: TargetBoard })).resolves.toBeUndefined();
+  });
+
+  it('catches the same label before any action opens, where the board offers what peek starts with (#1192)', async () => {
+    await expect(assertNoHiddenInfoLeak(makeGame(), 1, { component: TargetBoard }))
+      .rejects.toThrow(/Hidden-info leak: "King" \(attribute "rank"\)/);
   });
 
   it("catches a target labelled with the face it hides, once the action is open", async () => {

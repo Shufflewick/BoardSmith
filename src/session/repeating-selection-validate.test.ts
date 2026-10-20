@@ -246,7 +246,7 @@ describe("a repeating chooseElement's validate (#352)", () => {
     const runner = new GameRunner({ GameClass: GemGame, gameType: 'gems', gameOptions: options });
     runner.start();
     const id = (name: string) => runner.game.heap.first(Gem, name)!.id;
-    const picks = new PendingActionManager(runner, options.playerCount);
+    const picks = new PendingActionManager(runner);
     picks.startPendingAction('take', 1);
     expect((await picks.processSelectionStep(1, 'gems', id('ruby'))).success).toBe(true);
     expect((await picks.processSelectionStep(1, 'gems', id('onyx'))).error).toContain('Onyx is cursed.');

@@ -350,19 +350,17 @@ describe('message text names a hidden element by its outermost concealer (#1165)
 
   it('keeps the text it was written with after the element is evicted with its partition (world)', () => {
     const game = makeGame(true);
-    const casket = game.vault.first(Space, 'casket')!;
-    game.definePartition(casket.id);
-    game.message('{{player}} hid {{card}}', { player: game.getPlayer(1)!, card: casket.first(Card, 'Crown')! });
-    game.evictSubtree(casket.id);
+    game.definePartition(game.vault.id);
+    game.message('{{player}} hid {{card}}', { player: game.getPlayer(1)!, card: game.vault.first(Card, 'Crown')! });
+    game.evictSubtree(game.vault.id);
     expect(textFor(game, 2)).toBe('Player 1 hid vault');
   });
 
   it('names the game for an element whose partition is not loaded when the message is written (world)', () => {
     const game = makeGame(true);
-    const casket = game.vault.first(Space, 'casket')!;
-    const crown = casket.first(Card, 'Crown')!;
-    game.definePartition(casket.id);
-    game.evictSubtree(casket.id);
+    const crown = game.vault.first(Card, 'Crown')!;
+    game.definePartition(game.vault.id);
+    game.evictSubtree(game.vault.id);
     game.message('{{card}} glints', { card: crown });
     for (const seat of [1, 2, null]) expect(textFor(game, seat)).toBe(`${String(game)} glints`);
   });

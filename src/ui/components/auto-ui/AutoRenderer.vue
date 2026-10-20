@@ -10,9 +10,9 @@
  *   4. Wire FlyingCardsOverlay for flying-element animations
  *   5. Wire useAutoRendererAnimations (added in Task 2)
  *
- * Interaction props (selectableElements, selectedElements) are removed here — they
- * are supplied by useBoardInteraction() which per-element renderers access via
- * tryUseBoardInteraction(). No dual path for interaction state.
+ * Interaction state is not provided here: per-element renderers read it from
+ * useBoardInteraction() through useElementBoardState(). No dual path for
+ * interaction state.
  */
 
 // Side-effect import: registers all 8 built-in renderers at module load (Pitfall 5 guard).
@@ -54,12 +54,8 @@ provide(DIE_ANIMATION_CONTEXT_KEY, dieAnimationContext);
 
 // ---------------------------------------------------------------------------
 // Provide context chain — consumed by all per-element renderers
-// selectableElements/selectedElements provided as empty refs since new renderers
-// use tryUseBoardInteraction() directly; provided for any legacy inject consumers.
 // ---------------------------------------------------------------------------
 provide('playerSeat', props.playerSeat);
-provide('selectableElements', ref(new Set<number>()));
-provide('selectedElements', ref(new Set<number>()));
 // Presentation overlay — provided as computed so injectors re-render when prop changes (D-04)
 provide('presentation', computed(() => props.presentation));
 

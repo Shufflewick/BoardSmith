@@ -8,6 +8,7 @@ Import from `boardsmith/runtime` when you need low-level game execution, seriali
 
 ## Usage
 
+<!-- typecheck: game src/imports.ts -->
 ```typescript
 import {
   GameRunner,
@@ -90,48 +91,55 @@ if (result.success) {
 
 ### Serializing Actions for Network
 
+<!-- typecheck: game src/network.ts -->
 ```typescript
+import type { Game, GameElement } from 'boardsmith';
 import { serializeAction, deserializeAction } from 'boardsmith/runtime';
 
 // On the client -- takes the real Player element (seats are 1-indexed) and
 // a game reference so GameElement args can be resolved to references
-const player = game.getPlayer(1)!;
-const serialized = serializeAction('play', player, {
-  card: cardElement, // GameElement reference
-  target: spaceElement,
-}, game);
-// { name: 'play', player: 1, args: { card: { __elementRef: '0/2/5' }, target: { __elementRef: '0/1' } } }
+export function sendPlay(game: Game, card: GameElement, target: GameElement, ws: WebSocket): void {
+  const player = game.getPlayer(1)!;
+  const serialized = serializeAction('play', player, { card, target }, game);
+  // { name: 'play', player: 1, args: { card: { __elementRef: '0/2/5' }, target: { __elementRef: '0/1' } } }
 
-// Send over WebSocket
-ws.send(JSON.stringify(serialized));
+  ws.send(JSON.stringify(serialized));
+}
 
 // On the server -- resolves back to the real Player element and GameElement args
-const received = JSON.parse(message);
-const deserialized = deserializeAction(received, game);
-// { actionName: 'play', player: <Player element>, args: { card: <Card element>, target: <Space element> } }
+export function receivePlay(game: Game, message: string) {
+  return deserializeAction(JSON.parse(message), game);
+  // { actionName: 'play', player: <Player element>, args: { card: <Card element>, target: <Space element> } }
+}
 ```
 
 ### Creating Player Views
 
+<!-- typecheck: game src/views.ts -->
 ```typescript
+import type { Game } from 'boardsmith';
 import { createSnapshot, createPlayerView, createAllPlayerViews } from 'boardsmith/runtime';
 
-// Create full snapshot (includes all hidden information)
-const fullSnapshot = createSnapshot(game);
+export function views(game: Game) {
+  // Create full snapshot (includes all hidden information)
+  const fullSnapshot = createSnapshot(game, 'my-game');
 
-// Create view for specific player (respects visibility) -- seats are 1-indexed
-const player1View = createPlayerView(game, 1);
-// Player 1 can see their own hand but not opponent's
+  // Create view for specific player (respects visibility) -- seats are 1-indexed
+  const player1View = createPlayerView(game, 1);
+  // Player 1 can see their own hand but not opponent's
 
-// Create views for all players at once -- returns a plain array (0-indexed
-// by array position, NOT by seat); each entry's `.player` field holds the
-// actual 1-indexed seat
-const allViews = createAllPlayerViews(game);
-// allViews[0].player === 1 (first player's view), allViews[1].player === 2, ...
+  // Create views for all players at once -- returns a plain array (0-indexed
+  // by array position, NOT by seat); each entry's `.player` field holds the
+  // actual 1-indexed seat
+  const allViews = createAllPlayerViews(game);
+  // allViews[0].player === 1 (first player's view), allViews[1].player === 2, ...
 
-// Views hide information the player shouldn't see
-console.log(player1View.state);
-// Cards in opponent's hand show as { type: 'card', faceDown: true }
+  // Views hide information the player shouldn't see
+  console.log(player1View.state);
+  // Cards in opponent's hand show as { type: 'card', faceDown: true }
+
+  return { fullSnapshot, allViews };
+}
 ```
 
 ### Serialization Details
@@ -145,14 +153,19 @@ argument keeps every shape an attribute keeps:
 - A circular value, or one nested past `GameElement.MAX_SERIALIZE_DEPTH`, is
   refused with an error naming the property path.
 
+<!-- typecheck: game src/codec.ts -->
 ```typescript
+import type { Game, GameElement } from 'boardsmith';
 import { serializeAction, deserializeAction, isSerializedReference } from 'boardsmith/runtime';
 
-const saved = JSON.parse(JSON.stringify(
-  serializeAction('bid', player, { bids: new Map([['ace', card]]), seats: new Set([1, 2]) }, game),
-));
-deserializeAction(saved, game).args;
-// { bids: Map { 'ace' => <Card element> }, seats: Set { 1, 2 } }
+export function roundTrip(game: Game, card: GameElement) {
+  const player = game.getPlayer(1)!;
+  const saved = JSON.parse(JSON.stringify(
+    serializeAction('bid', player, { bids: new Map([['ace', card]]), seats: new Set([1, 2]) }, game),
+  ));
+  return deserializeAction(saved, game).args;
+  // { bids: Map { 'ace' => <Card element> }, seats: Set { 1, 2 } }
+}
 
 isSerializedReference({ __elementRef: '0/1' }); // true
 isSerializedReference({ x: 1 }); // false

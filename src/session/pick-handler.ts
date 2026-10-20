@@ -13,9 +13,9 @@ import type {
   ElementsSelection,
   Game,
   Player,
+  Selection,
 } from '../engine/index.js';
-import { PlayerFacingError } from '../engine/errors.js';
-import { rulesErrorSentence, withDevDetail } from '../engine/action/rules-error.js';
+import { gameCodeThrew } from '../engine/action/action.js';
 import type { GameRunner } from '../runtime/index.js';
 import {
   ErrorCode,
@@ -55,19 +55,17 @@ function evaluateCandidates(
   args: Record<string, unknown>,
 ): { candidates: AnnotatedCandidate[] } | { refusal: PickChoicesResponse } {
   try {
-    return { candidates: executor.getChoices(selection, player, args) as AnnotatedCandidate[] };
+    // The action's name, so a running tutorial's per-pick gate greys what it does not allow (#1248).
+    return { candidates: executor.getChoices(selection, player, args, actionName) as AnnotatedCandidate[] };
   } catch (error) {
-    // The shared crash handling (#1045): a PlayerFacingError travels, anything else is logged and replaced.
-    if (!(error instanceof PlayerFacingError)) {
-      console.error(`[BoardSmith] Evaluating '${selection.name}' of action '${actionName}' failed:`, error);
-    }
-    return {
-      refusal: {
-        success: false,
-        error: error instanceof PlayerFacingError ? error.message : withDevDetail(rulesErrorSentence(actionName), error),
-        errorCode: selection.type === 'choice' ? ErrorCode.CHOICES_EVALUATION_ERROR : ErrorCode.ELEMENTS_EVALUATION_ERROR,
-      },
-    };
+    // The engine's own crash handling (#1045, #1248): a refusal travels, anything else is logged and replaced.
+    const thrown = gameCodeThrew(actionName, `Evaluating '${selection.name}' of action '${actionName}'`, error);
+    // A crash is ENGINE_ERROR, as on every other route (#1141), so a caller tells it from a refusal (#1156).
+    // A game that cannot simulate here is no refusal by its rules (#31).
+    const errorCode = thrown.rulesError || thrown.notSimulable
+      ? ErrorCode.ENGINE_ERROR
+      : selection.type === 'choice' ? ErrorCode.CHOICES_EVALUATION_ERROR : ErrorCode.ELEMENTS_EVALUATION_ERROR;
+    return { refusal: { success: false, error: thrown.error!, errorCode } };
   }
 }
 
@@ -159,6 +157,9 @@ function deadEnd(
   };
 }
 
+/** A pick the client sent that its action does not offer, refused before a later pick sees it. */
+class PickNotOffered extends Error {}
+
 /**
  * Handles pick choice resolution for game actions.
  *
@@ -168,11 +169,9 @@ function deadEnd(
  */
 export class PickHandler<G extends Game = Game> {
   readonly #runner: GameRunner<G>;
-  readonly #playerCount: number;
 
-  constructor(runner: GameRunner<G>, playerCount: number) {
+  constructor(runner: GameRunner<G>) {
     this.#runner = runner;
-    this.#playerCount = playerCount;
   }
 
   /**
@@ -195,7 +194,7 @@ export class PickHandler<G extends Game = Game> {
     initialArgs?: Record<string, unknown>,
     priorPendingState?: Record<string, unknown> | null,
   ): Promise<PickStepResult & { pendingState: Record<string, unknown> | null }> {
-    const manager = new PendingActionManager(this.#runner, this.#playerCount);
+    const manager = new PendingActionManager(this.#runner);
 
     if (priorPendingState) {
       manager.setPendingAction(playerPosition, deserializePendingState(priorPendingState));
@@ -222,7 +221,7 @@ export class PickHandler<G extends Game = Game> {
    */
   cancelPendingAction(playerPosition: number, priorPendingState: Record<string, unknown> | null): void {
     if (!priorPendingState) return;
-    const manager = new PendingActionManager(this.#runner, this.#playerCount);
+    const manager = new PendingActionManager(this.#runner);
     manager.setPendingAction(playerPosition, deserializePendingState(priorPendingState));
     manager.cancelPendingAction(playerPosition);
   }
@@ -247,7 +246,7 @@ export class PickHandler<G extends Game = Game> {
     currentArgs: Record<string, unknown> = {},
     pendingState: Record<string, unknown> | null = null,
   ): PickChoicesResponse {
-    const found = actionForSeat(this.#runner.game, this.#playerCount, playerPosition, actionName);
+    const found = actionForSeat(this.#runner.game, playerPosition, actionName);
     if ('refusal' in found) return found.refusal;
     const refusal = this.#refusalToPick(actionName, playerPosition, pendingState);
     if (refusal) return refusal;
@@ -267,7 +266,7 @@ export class PickHandler<G extends Game = Game> {
 
     const executor = this.#runner.game.getActionExecutor();
     const sent = picksFromSeat(this.#runner.game, actionName, currentArgs, playerPosition);
-    const asked = this.#choiceContext(action, player, sent, picksHeldBy(pendingState, actionName));
+    const asked = this.#choiceContext(action, selection, player, sent, picksHeldBy(pendingState, actionName));
     if ('refusal' in asked) return asked.refusal;
     const { ctx } = asked;
 
@@ -306,6 +305,7 @@ export class PickHandler<G extends Game = Game> {
    */
   #choiceContext(
     action: ActionDefinition,
+    asked: Selection,
     player: Player,
     currentArgs: Record<string, unknown>,
     heldPicks: Record<string, unknown>,
@@ -313,7 +313,23 @@ export class PickHandler<G extends Game = Game> {
     const executor = this.#runner.game.getActionExecutor();
     const refusal = executor.undeclaredArgsRefusal(action, currentArgs);
     if (refusal) return { refusal: { success: false, error: refusal, errorCode: ErrorCode.INVALID_PICK } };
-    const bound = { ...currentArgs, ...heldPicks, ...this.#runner.followUpArgsFor(action.name, player.seat) };
-    return { ctx: { game: this.#runner.game, player, args: executor.resolveArgs(action, bound, player) } };
+    const followUp = this.#runner.followUpArgsFor(action.name, player.seat);
+    const bound = { ...currentArgs, ...heldPicks, ...followUp };
+    // A pick before the asked one that only the client sends is checked as offered before a later
+    // pick is resolved against it, so no callback is handed a card the seat was never offered (#1293).
+    const askedAt = action.selections.indexOf(asked);
+    const checked = (selection: Selection) => action.selections.indexOf(selection) < askedAt
+      && selection.name in currentArgs && !(selection.name in heldPicks) && !(selection.name in followUp);
+    try {
+      const args = executor.resolveArgs(action, bound, player, undefined, (selection, value, before) => {
+        if (!checked(selection)) return;
+        const result = executor.validateSelection(selection, value, player, before, action.name);
+        if (!result.valid) throw new PickNotOffered(result.errors.join('; '));
+      });
+      return { ctx: { game: this.#runner.game, player, args } };
+    } catch (error) {
+      if (!(error instanceof PickNotOffered)) throw error;
+      return { refusal: { success: false, error: error.message, errorCode: ErrorCode.INVALID_PICK } };
+    }
   }
 }

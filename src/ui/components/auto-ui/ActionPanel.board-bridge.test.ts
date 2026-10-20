@@ -73,14 +73,14 @@ const tendAction: EnrichedActionMetadata = {
   selections: [{ name: 'plot', type: 'element', prompt: 'Choose a plot' }],
 };
 
-// Board-startable: its first pick is an element the metadata already names, so
-// clicking that element on the board starts the action through the BRIDGE's own
-// startAction -- the path the panel must not be fixed at the expense of.
+// Board-startable: clicking one of its plots on the board starts the action
+// through the BRIDGE's own startAction -- the path the panel must not be fixed
+// at the expense of.
 const harvestAction: EnrichedActionMetadata = {
   name: 'harvest',
   prompt: 'Harvest',
   selections: [
-    { name: 'plot', type: 'element', prompt: 'Choose a plot', validElements: [{ id: 21 }, { id: 22 }] },
+    { name: 'plot', type: 'element', prompt: 'Choose a plot' },
     {
       name: 'direction',
       type: 'choice',
@@ -111,9 +111,9 @@ interface Harness {
  */
 function mountHarness(): Harness {
   const sendAction = vi.fn().mockResolvedValue({ success: true });
-  const fetchPickChoices = vi.fn((_action: string, selectionName: string) =>
+  const fetchPickChoices = vi.fn((action: string, selectionName: string) =>
     selectionName === 'plot'
-      ? Promise.resolve({ success: true, validElements: [{ id: 11 }, { id: 12 }] })
+      ? Promise.resolve({ success: true, validElements: action === 'harvest' ? [{ id: 21 }, { id: 22 }] : [{ id: 11 }, { id: 12 }] })
       : Promise.resolve({ success: true, choices: COMPASS }),
   );
 
@@ -280,7 +280,8 @@ describe("ActionPanel's post-execute clear leaves a newer action alone (#445)", 
 
     expect(controller.currentAction.value).toBeNull();
     expect(board.currentAction).toBeNull();
-    expect(board.validElements).toEqual([]);
+    // Only what a click can start is left on the board (#1192).
+    expect(board.validElements.map(e => e.id)).toEqual([11, 12, 21, 22]);
     wrapper.unmount();
   });
 });

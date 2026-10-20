@@ -102,14 +102,14 @@ describe("the bridge's post-execute clear leaves a newer action alone (#445 on t
 
 type Surface = 'panel' | 'board';
 
-// `scout`'s first pick is an element the metadata names, so clicking it on the
-// board starts the action through the bridge.
+// `scout`'s first pick is an element pick, so clicking a unit on the board
+// starts the action through the bridge.
 const DIRECTIONS = [{ value: 'n', display: 'North' }];
 const scoutAction: EnrichedActionMetadata = {
   name: 'scout',
   prompt: 'Scout',
   selections: [
-    { name: 'unit', type: 'element', prompt: 'Which unit?', validElements: [{ id: 5 }, { id: 6 }] },
+    { name: 'unit', type: 'element', prompt: 'Which unit?' },
     { name: 'dir', type: 'choice', prompt: 'Which way?', choices: DIRECTIONS },
   ],
 };
@@ -140,9 +140,10 @@ interface ParityOptions {
 /** The real controller, bridge and board, with the real panel mounted over them. */
 function mountTable(opts: ParityOptions) {
   const sendAction = vi.fn(async () => ({ success: true }));
-  const fetchPickChoices = vi.fn(async (_action: string, selectionName: string) =>
-    selectionName === 'target' ? { success: true, choices: [TOWER] } : { success: true, choices: DIRECTIONS },
-  );
+  const fetchPickChoices = vi.fn(async (_action: string, selectionName: string) => {
+    if (selectionName === 'unit') return { success: true, validElements: [{ id: 5 }, { id: 6 }] };
+    return selectionName === 'target' ? { success: true, choices: [TOWER] } : { success: true, choices: DIRECTIONS };
+  });
   const availableActions = ref(opts.availableActions);
   const isViewingHistory = ref(opts.isViewingHistory ?? false);
   const completed = ref(opts.completed ?? false);
