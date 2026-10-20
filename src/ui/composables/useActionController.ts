@@ -145,6 +145,9 @@ import type {
 /** What the world would not say, when it did not say why (#248). */
 const QUOTE_UNANSWERED = 'The world would not say what this costs.';
 
+/** A prefill the pick refused, left queued so the pick waits for the player (#1298). */
+const REFUSED_PREFILL = Symbol('refused prefill');
+
 /**
  * ONE ANSWER, AS THE CONTROLLER HOLDS IT (#248).
  *
@@ -618,31 +621,54 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // The engine refuses a lone value for a list pick (#769), so say so before sending it.
     if (takesList && !Array.isArray(prefillValue)) return `Cannot prefill "${label}": it takes a list, so pass an array.`;
     const choices = getChoices(selection);
-    if (!resolved.refusal && choices.length > 0 && (resolved.choice || takesList)) return undefined;
-    return describeRejectedPrefill(label, takesList ? (resolved.value as unknown[]) : undefined, prefillValue, choices);
-  }
-
-  /** {@link prefillRefusal}'s message for a value it refuses; `entries` is a list pick's resolved entries. */
-  function describeRejectedPrefill(
-    label: string,
-    entries: unknown[] | undefined,
-    prefillValue: unknown,
-    choices: Array<{ value: unknown; display: string; disabled?: string }>,
-  ): string {
-    const shown = entries ? entries.map(v => labelOfPick(v, choices)).join(', ') : getDisplayFromValue(prefillValue);
+    const entries = takesList ? (resolved.value as unknown[]) : undefined;
+    const shown = entries ? entries.map(v => labelOfPick(v, choices)).join(', ') : labelOfPick(prefillValue, choices);
+    if (choices.length === 0) return `Cannot prefill "${label}" with "${shown}": it has no available choices.`;
     const disabledReason = (entries ?? [prefillValue]).map(v => findMatchingChoice(v, choices)?.disabled).find(Boolean);
     if (disabledReason) return `Cannot prefill "${label}" with "${shown}": ${disabledReason}.`;
+    if ('unmatched' in resolved) return describeUnmatchedPrefill(label, shown, entries && resolved.unmatched, choices);
+    // Any other refusal says what is wrong in its own words (#1298).
+    if (resolved.refusal) return `Cannot prefill "${label}": ${resolved.refusal}`;
+    const list = entries && listRefusal(selection, entries);
+    return list ? `Cannot prefill "${label}": ${list}` : undefined;
+  }
 
-    if (choices.length === 0) {
-      return `Cannot prefill "${label}" with "${shown}": it has no available choices.`;
-    }
-
+  /**
+   * {@link prefillRefusal}'s message for a value that matched no choice, and
+   * what would have done: a list's names its entry that matched nothing.
+   */
+  function describeUnmatchedPrefill(
+    label: string,
+    shown: string,
+    unmatchedEntry: unknown,
+    choices: Array<{ value: unknown; display: string; disabled?: string }>,
+  ): string {
     const MAX_LISTED = 5;
     const displays = choices.map(c => c.display);
     const listed = displays.slice(0, MAX_LISTED).join(', ');
     const remainder = displays.length - MAX_LISTED;
     const suffix = remainder > 0 ? `, and ${remainder} more` : '';
-    return `Cannot prefill "${label}" with "${shown}". Pick one of: ${listed}${suffix}.`;
+    const entry = unmatchedEntry === undefined ? '.' : `: ${JSON.stringify(unmatchedEntry)} is not one of its choices.`;
+    return `Cannot prefill "${label}" with "${shown}"${entry} Pick one of: ${listed}${suffix}.`;
+  }
+
+  /**
+   * Why a list breaks its pick's bounds, or null (#1298): too few or too many
+   * entries, or, for a set, an entry repeated more often than it is offered.
+   * An ordered list may repeat its entries (#249).
+   */
+  function listRefusal(selection: EnrichedPickMetadata, entries: readonly unknown[]): string | null {
+    const ordered = resolveOrderedListConfig(selection);
+    const bounds = ordered ?? resolveMultiSelectConfig(selection);
+    if (!bounds) return null;
+    const min = bounds.min ?? 1;
+    if (entries.length < min) return `"${selection.name}" takes at least ${min}, got ${entries.length}.`;
+    if (bounds.max !== undefined && entries.length > bounds.max) return `"${selection.name}" takes at most ${bounds.max}, got ${entries.length}.`;
+    if (ordered) return null;
+    const offered = getChoices(selection);
+    const repeated = entries.find((entry) =>
+      entries.filter((e) => valuesEqual(e, entry)).length > Math.max(1, offered.filter((c) => valuesEqual(c.value, entry)).length));
+    return repeated === undefined ? null : `"${selection.name}" names ${JSON.stringify(repeated)} more than once; each may be chosen once.`;
   }
 
   /**
@@ -783,6 +809,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     choice?: { value: unknown; display: string; disabled?: string };
     /** Why fill would refuse the value, when it would. */
     refusal?: string;
+    /** The entry, or the lone value, that matched nothing on offer. */
+    unmatched?: unknown;
   }
 
   /**
@@ -825,13 +853,18 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (choices.length === 0) return { value };
     const resolveOne = (v: unknown): ResolvedPick => {
       const choice = findMatchingChoice(v, choices);
-      if (!choice) return { value: v, refusal: `Invalid selection for "${selection.name}"` };
+      if (!choice) return { value: v, refusal: `Invalid selection for "${selection.name}"`, unmatched: v };
       return { value: choice.value, choice, refusal: choice.disabled && `Selection disabled: ${choice.disabled}` };
     };
     const takesItems = selectionTakesList(selection);
     if (Array.isArray(value) && takesItems) {
       const items = value.map(resolveOne);
-      return { value: items.map(i => i.value), refusal: items.find(i => i.refusal)?.refusal };
+      const refused = items.find(i => i.refusal);
+      return {
+        value: items.map(i => i.value),
+        refusal: refused?.refusal,
+        ...(refused && 'unmatched' in refused && { unmatched: refused.unmatched }),
+      };
     }
     const listRefusal = selection.type === 'choice' && !takesItems
       ? oneChoiceListRefusal(selection.name, value, choices)
@@ -904,17 +937,24 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   function consumePrefill(selection: EnrichedPickMetadata): boolean {
     const prefillValue = actionSnapshot.value?.prefills.get(selection.name);
     if (prefillValue === undefined) return false;
-
-    actionSnapshot.value?.prefills.delete(selection.name);
+    if (prefillValue === REFUSED_PREFILL) return true;
 
     const resolved = resolvePick(selection, prefillValue);
     const refusal = prefillRefusal(selection, prefillValue, resolved);
     if (refusal) {
+      // Kept queued, so no auto-fill puts one of our choices in its place (#226, #1298).
+      actionSnapshot.value?.prefills.set(selection.name, REFUSED_PREFILL);
       setError(refusal);
       return true;
     }
+    actionSnapshot.value?.prefills.delete(selection.name);
 
     const { value } = resolved;
+    // A pick the server takes step by step goes there, as a fill of it does, so its onSelect runs (#1298).
+    if (selection.hasOnSelect || pendingOnServer.value) {
+      void handleOnSelectFill(selection, value);
+      return true;
+    }
     currentArgs.value[selection.name] = value;
     actionSnapshot.value?.collectedPicks.set(selection.name, {
       value,
@@ -933,6 +973,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    */
   function tryAutoFillSelection(selection: EnrichedPickMetadata): boolean {
     if (!getAutoFill() || isExecuting.value) return false;
+    // A prefill the caller queued for this pick settles it, never a choice of ours (#226, #1298).
+    if (actionSnapshot.value?.prefills.has(selection.name)) return false;
 
     // AUTOEXEC-01 / F-02 (v4.8): a `.manual()` action must never resolve a
     // selection for the player. Auto-filling a single enabled choice would flip
@@ -2166,6 +2208,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         `(min ${orderedListCfg.min}, max ${orderedListCfg.max ?? 'unlimited'}) and requires an array. ` +
         `Use appendListEntry()/confirmMultiSelect(), or pass the whole array to fill().`
       );
+    }
+
+    if (Array.isArray(value) && selectionTakesList(selection)) {
+      const list = listRefusal(selection, value);
+      if (list) return `fill('${selectionName}', ...) rejected: ${list}`;
     }
 
     return editorRuleRefusal(selection, value);
