@@ -79,12 +79,15 @@ await runBrowserRegression(
         await onFreshPage(browser, hostUrl, { viewport }, (page) => span(surfaceOf(page)).waitFor({ state: 'attached' }), async (_page, surface) => {
           await check(`AutoRenderer's loading text is in the page but takes no space at ${width}px`, async () => {
             // Text and box in one read, so both describe the same element.
-            const { text, box } = await span(surface).evaluate((el) => {
+            const { text, box, barShift } = await span(surface).evaluate((el) => {
               const { width, height } = el.getBoundingClientRect();
-              return { text: el.textContent.trim(), box: { width, height } };
+              // A 1px box can still sit in the flow and push the bars below it down.
+              const barShift = el.nextElementSibling.getBoundingClientRect().top - el.parentElement.getBoundingClientRect().top;
+              return { text: el.textContent.trim(), box: { width, height }, barShift };
             });
             assert(text !== '', "AutoRenderer's loading span has no text, so there was nothing to measure; check that it still says \"Loading game…\"");
             assert(box.width <= 1 && box.height <= 1, `AutoRenderer's loading text "${text}" took ${JSON.stringify(box)}; check that it still has the sr-only class`);
+            assert(barShift === 0, `AutoRenderer's loading text "${text}" pushed the skeleton bars down ${barShift}px; check that the sr-only class still takes it out of the layout`);
           });
         });
       }
