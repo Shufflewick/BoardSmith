@@ -1,6 +1,6 @@
 {
-  "revision": 254,
-  "surfaceHash": "42fb28e08af7d80f",
+  "revision": 255,
+  "surfaceHash": "4f860d6db5854a90",
   "payloadHash": "0784e22c1b68bcca",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -1975,6 +1975,14 @@
       "payloadHash": "0784e22c1b68bcca",
       "formatHash": "ed115e27605f2ca7",
       "summary": "Coverage only, no engine behaviour changed: the payload fixture now hashes the whole view the executor publishes to each seat and the spectator (its state as well as its flow-state cut, all but the random game instance id), for every seat the fixture has, and the field names of the state it publishes, so a change to what a seat is sent moves payloadHash (#1296)."
+    },
+    {
+      "revision": 255,
+      "date": "2026-10-20",
+      "surfaceHash": "4f860d6db5854a90",
+      "payloadHash": "0784e22c1b68bcca",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "ActionExecutor.validateSelection takes an optional reading game, as getChoices does; a world quote or re-asked pick now refuses with stale-draft a draft whose earlier element pick names a declared element that pick's own elements no longer offer, before any later pick's callback is handed it (#1315)."
     }
   ]
 }
