@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
-import { BOOKKEEPING_RECORDS, MAX_STORED_OUTCOMES, gameBoardsmithRoot, mutantCachePath, openMutantCache, toolRevision } from './mutant-cache.js';
+import { BOOKKEEPING_RECORDS, MAX_STORED_OUTCOMES, captureExecutionContext, gameBoardsmithRoot, mutantCachePath, openMutantCache, toolRevision } from './mutant-cache.js';
 import { commitAll, git, initRepo, writeFiles as write } from './verify-result.test-helper.js';
 
 // Each test builds real git repositories, one `git` process per step. A hang guard, not a budget:
@@ -10,7 +10,7 @@ import { commitAll, git, initRepo, writeFiles as write } from './verify-result.t
 vi.setConfig({ testTimeout: 60_000 });
 
 const RULES = 'export const fee = (price: number) => price * 2;\n';
-const MUTANT = { file: 'src/rules.ts', source: 'export const fee = (price: number) => price / 2;\n' };
+const MUTANT = { file: 'src/rules.ts', source: 'export const fee = (price: number) => price / 2;\n', change: { offset: RULES.indexOf('*'), before: '*', after: '/' } };
 
 /** An installed BoardSmith of `version`, as npm lays one out under `node_modules`. */
 const installedBoardsmith = (version: string) => ({
@@ -121,7 +121,7 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
 
   it('keeps the outcomes of earlier runs it did not look up, so two checkouts verifying in turn do not evict each other', async () => {
     const dir = await project();
-    const other = { file: 'src/other.ts', source: 'export const other = 0;\n' };
+    const other = { file: 'src/other.ts', source: 'export const other = 0;\n', change: { offset: 21, before: '1', after: '0' } };
     const first = await openMutantCache(dir);
     first.set(MUTANT, 'killed');
     await first.save();
@@ -139,7 +139,7 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
   });
 
   it(`holds at most ${MAX_STORED_OUTCOMES} outcomes, dropping those of the run no later run has used`, async () => {
-    const mutant = (n: number) => ({ file: 'src/other.ts', source: `export const other = ${n};\n` });
+    const mutant = (n: number) => ({ file: 'src/other.ts', source: `export const other = ${n};\n`, change: { offset: 21, before: '1', after: String(n) } });
     /** Records MUTANT, then the outcomes that fill the cache, then one more run that may look MUTANT up. */
     async function fillThenOneMore(lookUpFirst: boolean): Promise<{ first: unknown; newest: unknown }> {
       const dir = await project();
@@ -177,7 +177,60 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
     const after = await openMutantCache(dir);
     expect(after.get(MUTANT)).toBeUndefined();
     expect(after.killerHint(MUTANT)).toEqual(hint);
-    expect(after.killerHint({ ...MUTANT, source: 'export const fee = (price: number) => price * 3;\n' })).toBeUndefined();
+    const otherChange = { file: MUTANT.file, source: 'export const fee = (price: number) => price - 2;\n', change: { ...MUTANT.change, after: '-' } };
+    expect(after.killerHint(otherChange)).toBeUndefined();
+  });
+
+  it('keeps a hint across an edit elsewhere in the mutated file (#1308)', async () => {
+    const dir = await project();
+    const hint = { file: 'tests/rules.test.ts', test: 'fee' };
+    const cache = await openMutantCache(dir);
+    cache.setKillerHint(MUTANT, hint);
+    await cache.save();
+    const above = '// a comment added above\n';
+    const edited = { file: MUTANT.file, source: above + MUTANT.source, change: { ...MUTANT.change, offset: MUTANT.change.offset + above.length } };
+    expect((await openMutantCache(dir)).killerHint(edited)).toEqual(hint);
+  });
+
+  it('forgets a hint the run set to none (#1308)', async () => {
+    const dir = await project();
+    const first = await openMutantCache(dir);
+    first.setKillerHint(MUTANT, { file: 'tests/rules.test.ts', test: 'fee' });
+    await first.save();
+    const second = await openMutantCache(dir);
+    second.setKillerHint(MUTANT, undefined);
+    await second.save();
+    expect((await openMutantCache(dir)).killerHint(MUTANT)).toBeUndefined();
+  });
+
+  it('keeps hints when outcomes cannot be cached, since a hint does not depend on the context (#1308)', async () => {
+    const dir = await project();
+    const context = { ...(await captureExecutionContext(dir)), unavailable: 'a linked package could not be read' };
+    const hint = { file: 'tests/rules.test.ts', test: 'fee' };
+    const cache = await openMutantCache(dir, context);
+    cache.set(MUTANT, 'killed');
+    cache.setKillerHint(MUTANT, hint);
+    await cache.save();
+    const after = await openMutantCache(dir, context);
+    expect(after.get(MUTANT)).toBeUndefined();
+    expect(after.killerHint(MUTANT)).toEqual(hint);
+  });
+
+  it("refreshes a mutant's hint when its outcome is reused, so the hint does not age out (#1308)", async () => {
+    const dir = await project();
+    const other = { file: 'src/other.ts', source: 'export const other = 2;\n', change: { offset: 21, before: '1', after: '2' } };
+    const first = await openMutantCache(dir);
+    first.set(MUTANT, 'killed');
+    first.setKillerHint(MUTANT, { file: 'tests/rules.test.ts', test: 'fee' });
+    await first.save();
+    const second = await openMutantCache(dir);
+    second.setKillerHint(other, { file: 'tests/other.test.ts', test: 'other' });
+    await second.save();
+    const reuse = await openMutantCache(dir);
+    expect(reuse.get(MUTANT)).toBe('killed');
+    await reuse.save();
+    const hints = JSON.parse(await fs.readFile(join(dirname(await mutantCachePath(dir)), 'killer-hints.json'), 'utf-8')) as { outcomes: [string, { file: string }][] };
+    expect(hints.outcomes.map(([, h]) => h.file)).toEqual(['tests/rules.test.ts', 'tests/other.test.ts']);
   });
 
   it('starts empty, without failing, when the file on disk is unreadable', async () => {
@@ -294,6 +347,17 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
       await record(dir, 'killed');
       expect(await lookup(dir)).toBe('killed');
       expect(await lookup(join(root, 'games', 'other'))).toBeUndefined();
+    });
+
+    it('never hands one game a hint another game in the same repository recorded for a file of the same name (#1308)', async () => {
+      const { root, dir } = await repository();
+      await write(root, { 'games/other/src/rules.ts': RULES });
+      commitAll(root, 'the same rules in both games');
+      const cache = await openMutantCache(dir);
+      cache.setKillerHint(MUTANT, { file: 'tests/rules.test.ts', test: 'fee' });
+      await cache.save();
+      expect((await openMutantCache(dir)).killerHint(MUTANT)).toBeDefined();
+      expect((await openMutantCache(join(root, 'games', 'other'))).killerHint(MUTANT)).toBeUndefined();
     });
 
     it('runs the mutant again when the install above the game, or the BoardSmith it resolves to, changed', async () => {

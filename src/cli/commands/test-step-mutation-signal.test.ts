@@ -251,7 +251,7 @@ it('holds each trial worker open', async () => {
     }
   });
 
-  it('keeps the timeout verdict and reaps the timed-out mutant group', async () => {
+  for (const hint of [undefined, { file: 'tests/busy.test.ts', test: 'holds an actual mutant worker open' }]) it(`keeps the timeout verdict and reaps the timed-out mutant group${hint ? ', with no full run after a hint trial timed out (#1308)' : ''}`, async () => {
     const { sandbox, project } = await mutationProject();
     for (const key of ['HOME', 'TMPDIR', 'PATH'] as const) vi.stubEnv(key, sandbox.env[key]!);
     vi.stubEnv('NODE_OPTIONS', sandbox.env.NODE_OPTIONS + ' --allow-child-process --allow-worker --allow-addons');
@@ -260,7 +260,7 @@ it('holds each trial worker open', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     const running = runDiffMutationCheck({
       projectDir: project, added: new Map([['src/rules.ts', new Set([1])]]), log: () => {},
-      cache: { fingerprint: () => undefined, get: () => undefined, set: () => {}, killerHint: () => undefined, setKillerHint: () => {}, save: async () => {} },
+      cache: { fingerprint: () => undefined, get: () => undefined, set: () => {}, killerHint: () => hint, setKillerHint: () => {}, save: async () => {} },
     });
     let finished = false;
     void running.then(() => { finished = true; }, () => { finished = true; });
@@ -272,6 +272,8 @@ it('holds each trial worker open', async () => {
       }
       vi.advanceTimersByTime(30_000);
       expect((await running).summary).toEqual({ files: 1, mutants: 1, killed: 0, survived: 0, timedOut: 1, equivalent: 0, unreached: 0 });
+      // One run only: a second would have started a worker of its own.
+      expect((await workerRecord(project))?.worker).toBe(owned.worker);
       expect(processGroup(owned.leader)).toEqual([]);
       expect(await fs.readdir(join(project, '.boardsmith'))).toEqual([]);
     } finally {
