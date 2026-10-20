@@ -1,11 +1,15 @@
 /**
  * A marker the doc-typecheck gates cannot act on must fail loud, never compile
  * nothing (#511 review): a misspelt kind, a game block that is not `.ts`, and
- * two game blocks that would land on one file.
+ * two game blocks that would land on one file. And a doc block that shows its
+ * imports is a file an author copies, so it must carry a marker (#1050).
  */
 import { describe, expect, it } from 'vitest';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 
-import { gameBlockFiles, parseMarkedBlocks } from './doc-typecheck-blocks.test-helper.js';
+import { gameBlockFiles, parseMarkedBlocks, unmarkedFileBlocks } from './doc-typecheck-blocks.test-helper.js';
+import { REPO_ROOT } from './vue-tsc-run.test-helper.js';
 
 const block = (marker: string, code = 'export {};\n') => `${marker}\n\`\`\`typescript\n${code}\`\`\`\n`;
 
@@ -39,5 +43,57 @@ describe('the doc typecheck markers (#511)', () => {
     expect(() => gameBlockFiles(parseMarkedBlocks('docs/a.md', text, 'game'))).toThrow(
       /docs\/a\.md marks two blocks "src\/a\.ts"/,
     );
+  });
+});
+
+describe('every doc block that shows its imports is compiled (#1050)', () => {
+  const fence = (lang: string, code: string) => `\`\`\`${lang}\n${code}\`\`\`\n`;
+
+  it('reports a ts block that opens with an import, or a vue block that opens with its script, by line', () => {
+    const text =
+      'Intro\n' +
+      fence('typescript', "import { Game } from 'boardsmith';\n") +
+      fence('ts', "// src/rules/game.ts\n\nimport { Game } from 'boardsmith';\n") +
+      fence('vue', '<script setup lang="ts">\n</script>\n') +
+      fence('vue', '<!-- src/ui/App.vue -->\n<script setup lang="ts">\n</script>\n');
+    expect(unmarkedFileBlocks(text)).toEqual([2, 5, 10, 14]);
+  });
+
+  it('reports a block whose import or script follows other lines: template, indented //, multi-line comments', () => {
+    const text =
+      fence('vue', '<template>\n  <GameShell />\n</template>\n\n<script setup lang="ts">\n</script>\n') +
+      fence('ts', "  // src/rules/game.ts\nimport { Game } from 'boardsmith';\n") +
+      fence('ts', "/*\n * src/rules/game.ts\n */\nimport { Game } from 'boardsmith';\n") +
+      fence('vue', '<!--\n  src/ui/App.vue\n-->\n<script setup lang="ts">\n</script>\n');
+    expect(unmarkedFileBlocks(text)).toEqual([1, 9, 13, 19]);
+  });
+
+  it('passes a marked block, a fragment without imports, a template-only vue block and other languages', () => {
+    const text =
+      "<!-- typecheck: game src/a.ts -->\n" +
+      fence('typescript', "import { Game } from 'boardsmith';\n") +
+      // docs/balance-simulator.test.ts writes these into a scaffolded game and compiles it (#556).
+      "<!-- doc-test: file src/rules/game.ts -->\n" +
+      fence('typescript', "import { Game } from 'boardsmith';\n") +
+      fence('typescript', 'game.players.length;\n') +
+      fence('vue', '<template><div /></template>\n') +
+      fence('bash', 'import x\n');
+    expect(unmarkedFileBlocks(text)).toEqual([]);
+  });
+
+  it('finds none in docs/*.md and docs/api/*.md', () => {
+    const unmarked = ['docs', 'docs/api'].flatMap((dir) =>
+      readdirSync(join(REPO_ROOT, dir))
+        .filter((name) => name.endsWith('.md'))
+        .flatMap((name) =>
+          unmarkedFileBlocks(readFileSync(join(REPO_ROOT, dir, name), 'utf8')).map((line) => `${dir}/${name}:${line}`),
+        ),
+    );
+    expect(
+      unmarked,
+      'These blocks show their imports, so an author copies them as a file, but nothing compiles them. Mark each ' +
+        'with "<!-- typecheck: game <path> -->" (or "<!-- typecheck: board -->" for a .vue file) on the line ' +
+        'above its fence and make it compile, or cut it to a fragment without imports (docs/typecheck.md).',
+    ).toEqual([]);
   });
 });

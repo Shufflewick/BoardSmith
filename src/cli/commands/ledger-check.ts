@@ -71,6 +71,7 @@ import { checkCrossChunkLedger } from './cross-chunk.js';
 import { type VerifyLookup, type VerifyOnFile, checkRunLogRoles, reviewRoundCommits, runLogEntries } from '../lib/run-log-roles.js';
 import { readVerifyResult, verifyResultPath, verifyResultsDir } from '../lib/verify-result.js';
 import { readIfExists, readListedText } from '../lib/read-if-exists.js';
+import { readProjectConfig } from '../lib/agent-roles.js';
 
 export type LedgerFindingKind =
   | 'duplicate-number'
@@ -620,20 +621,6 @@ async function verifyResultsOnFile(projectDir: string, commits: string[]): Promi
   return (commit) => found.get(commit);
 }
 
-/** The project's boardsmith.json; a project without one has no `agents` block, so every role is its bs- default. */
-async function readProjectConfig(projectDir: string): Promise<Record<string, unknown>> {
-  const text = await readIfExists(pathJoin(projectDir, 'boardsmith.json'), (path) => fs.readFile(path, 'utf-8'));
-  if (text === undefined) return {};
-  try {
-    return JSON.parse(text) as Record<string, unknown>;
-  } catch (error) {
-    throw new Error(
-      `boardsmith.json in ${projectDir} is not valid JSON (${(error as Error).message}), so the run logs' agents cannot be ` +
-        'checked against their roles. Fix it, then run ledger-check again.',
-    );
-  }
-}
-
 /** The skills that keep a run log of their own dispatches, by the work package it is named for. */
 const SKILL_RUN_LOGS = ['ingest-rules', 'verify-game'];
 
@@ -983,6 +970,23 @@ async function readLedger(projectDir: string, file: string): Promise<string | un
   }
 }
 
+/** Checks each chunk's and skill's run log against its commits, its verify results and the project's role mapping. */
+async function checkRunLogs(projectDir: string, logs: string[], result: LedgerCheckResult): Promise<void> {
+  if (logs.length === 0) return;
+  await requireGitRepo(projectDir, 'compares each run log\'s timestamps against the commits that recorded them');
+  const config = await readProjectConfig(projectDir, 'boardsmith ledger-check');
+  // An untracked run log has no commit times: every line of it reads as not committed yet.
+  const trackedLogs = await trackedFiles(projectDir, logs.map((log) => `${DESIGN_DIR}/${log}`));
+  for (const log of logs) {
+    const text = (await readLedger(projectDir, log))!;
+    result.checked.push(log);
+    const rel = `${DESIGN_DIR}/${log}`;
+    const commits = trackedLogs.has(rel) ? await lineCommits(projectDir, rel) : [];
+    const verifyOnFile = await verifyResultsOnFile(projectDir, reviewRoundCommits(text));
+    result.findings.push(...checkRunLog(text, log, (line) => commits[line]?.time ?? null, Math.floor(Date.now() / 1000), verifyOnFile, config));
+  }
+}
+
 /**
  * Runs every ledger rule against `projectDir`'s `design/` as it stands on disk. `checked` lists
  * the ledgers read, then each verified CHUNK.md whose cited evidence was checked.
@@ -1015,21 +1019,7 @@ export async function ledgerCheck(projectDir: string): Promise<LedgerCheckResult
   }
 
   result.findings.push(...sharedRunLogs(await chunkSlugs(projectDir)));
-  const logs = await runLogFiles(projectDir);
-  if (logs.length > 0) {
-    await requireGitRepo(projectDir, 'compares each run log\'s timestamps against the commits that recorded them');
-  }
-  // An untracked run log has no commit times: every line of it reads as not committed yet.
-  const trackedLogs = await trackedFiles(projectDir, logs.map((log) => `${DESIGN_DIR}/${log}`));
-  const config = await readProjectConfig(projectDir);
-  for (const log of logs) {
-    const text = (await readLedger(projectDir, log))!;
-    result.checked.push(log);
-    const rel = `${DESIGN_DIR}/${log}`;
-    const commits = trackedLogs.has(rel) ? await lineCommits(projectDir, rel) : [];
-    const verifyOnFile = await verifyResultsOnFile(projectDir, reviewRoundCommits(text));
-    result.findings.push(...checkRunLog(text, log, (line) => commits[line]?.time ?? null, Math.floor(Date.now() / 1000), verifyOnFile, config));
-  }
+  await checkRunLogs(projectDir, await runLogFiles(projectDir), result);
 
   const crossChunk = await readLedger(projectDir, CROSS_CHUNK_MD);
   if (crossChunk === undefined) {

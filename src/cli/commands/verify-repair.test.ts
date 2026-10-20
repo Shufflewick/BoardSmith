@@ -1,4 +1,3 @@
-import { DESIGN_DIR } from '../lib/project-paths.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { execSync } from 'node:child_process';
@@ -14,8 +13,11 @@ import {
   appendAuditRoundHeading,
   writeAppendedAuditRound,
   recomputeRepairGatePostRepair,
+  verifyRepairRoundCommand,
   VERIFY_EPISODE_ROUND_BUDGET,
 } from './verify-repair.js';
+import { createProgram } from '../cli.js';
+import { DESIGN_DIR, chunkMdPath } from '../lib/project-paths.js';
 import {
   readLedgerOrThrow,
   parseLedgerBody,
@@ -470,6 +472,12 @@ describe('post-repair gate — recomputeRepairGatePostRepair, over a real git fi
     expect(second.disposition).toBe('unknown-drift');
   });
 
+  it('prints nothing to stdout: the composed drift check is quiet, so a --json caller prints only its own result', async () => {
+    const { project, slug } = await buildRepairGateTestProject(root);
+    await recomputeRepairGatePostRepair({ projectDir: project, slug, stale: true, status: 'verified' });
+    expect(logSpy).not.toHaveBeenCalled();
+  });
+
   it(
     "structural guard: recomputeRepairGatePostRepair's parameter object has no driftState/gate member " +
       '— the pre-repair snapshot is unpassable',
@@ -484,4 +492,86 @@ describe('post-repair gate — recomputeRepairGatePostRepair, over a real git fi
       expect(paramBlock).not.toMatch(/\bgate\b/);
     },
   );
+});
+
+// -------------------------------------------------------------------------------------------
+// #838 — the post-repair helpers as registered commands
+// -------------------------------------------------------------------------------------------
+
+describe('verify-repair-round — opens the next verify-episode round in CHUNK.md', () => {
+  let root: string;
+  let logSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    root = tempTree('bs-verify-repair-round-');
+    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
+  });
+
+  it('appends the planned heading on each call of one episode, then reports triage and writes nothing once that episode\'s budget is spent', async () => {
+    const slug = 'table-and-draw';
+    const file = chunkMdPath(root, slug);
+    await fs.mkdir(join(file, '..'), { recursive: true });
+    await fs.writeFile(file, threeBuildRoundChunkMd(TABLE_AND_DRAW_ROUND_3), 'utf-8');
+
+    for (let round = 1; round <= VERIFY_EPISODE_ROUND_BUDGET; round++) {
+      const plan = await verifyRepairRoundCommand({ project: root, chunk: slug, episode: 1 });
+      if (plan.disposition !== 'round') throw new Error(`round ${round} should open a round`);
+      expect(plan.episodeRound).toBe(round);
+      expect(await fs.readFile(file, 'utf-8')).toContain(plan.heading);
+    }
+
+    const before = await fs.readFile(file, 'utf-8');
+    const plan = await verifyRepairRoundCommand({ project: root, chunk: slug, episode: 1 });
+    expect(plan.disposition).toBe('triage');
+    expect(await fs.readFile(file, 'utf-8')).toBe(before);
+  });
+
+  it('refuses a --chunk that is a path, writing nothing outside design/chunks/', async () => {
+    // `../..` resolves chunkMdPath to <project>/CHUNK.md, so plant one there to catch a write.
+    const outside = join(root, 'CHUNK.md');
+    await fs.writeFile(outside, threeBuildRoundChunkMd(TABLE_AND_DRAW_ROUND_3), 'utf-8');
+    expect(chunkMdPath(root, '../..')).toBe(outside);
+    const before = await fs.readFile(outside, 'utf-8');
+
+    await expect(verifyRepairRoundCommand({ project: root, chunk: '../..', episode: 1 })).rejects.toThrow(
+      /--chunk "\.\.\/\.\." is a path, not a name/,
+    );
+    expect(await fs.readFile(outside, 'utf-8')).toBe(before);
+  });
+
+  it('refuses a chunk with no CHUNK.md, naming the path', async () => {
+    await expect(verifyRepairRoundCommand({ project: root, chunk: 'nope', episode: 1 })).rejects.toThrow(
+      /chunks\/nope\/CHUNK\.md/,
+    );
+  });
+
+  it('surfaces the real read error for a CHUNK.md that exists but cannot be read, not the wrong-slug message', async () => {
+    const slug = 'table-and-draw';
+    // A folder where CHUNK.md should be fails with EISDIR, an error that is not "missing".
+    await fs.mkdir(chunkMdPath(root, slug), { recursive: true });
+    const error = await verifyRepairRoundCommand({ project: root, chunk: slug, episode: 1 }).catch((e: Error) => e);
+    expect(String(error)).toMatch(/Could not read .*EISDIR/);
+    expect(String(error)).not.toMatch(/check the --chunk slug/);
+  });
+});
+
+describe('cli — the post-repair commands are registered', () => {
+  it('registers verify-repair-round (requiring --episode) and verify-repair-gate, each requiring --chunk', () => {
+    const program = createProgram();
+    for (const name of ['verify-repair-round', 'verify-repair-gate']) {
+      const command = program.commands.find((c) => c.name() === name);
+      expect(command, `${name} is not registered`).toBeDefined();
+      const chunk = command!.options.find((o) => o.long === '--chunk');
+      expect(chunk?.mandatory).toBe(true);
+      expect(command!.helpInformation()).toMatch(/--json/);
+    }
+    const round = program.commands.find((c) => c.name() === 'verify-repair-round')!;
+    expect(round.options.find((o) => o.long === '--episode')?.mandatory).toBe(true);
+    const gate = program.commands.find((c) => c.name() === 'verify-repair-gate')!;
+    expect(gate.helpInformation()).toMatch(/--run-id/);
+  });
 });

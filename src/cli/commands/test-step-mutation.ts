@@ -47,7 +47,7 @@ import { codeRegions } from './test-step-sfc.js';
 import type { ChunkTestFile, TestStepFinding } from './test-step-check.js';
 import { COVERAGE_SETUP, coverageEnv, readCoverage, testKeyOf, type FileCoverage } from './test-step-coverage.js';
 import { GLOBAL_SETUP_MARK, REACH_SETUP, reachEnv, readReach } from './test-step-reach.js';
-import type { MutantCache } from '../lib/mutant-cache.js';
+import type { KillerHint, MutantCache } from '../lib/mutant-cache.js';
 import { readEquivalenceReview, type EquivalenceBasis, type EquivalenceReview, type EquivalentMutant } from '../lib/mutation-equivalences.js';
 import { sha256Hex } from '../lib/hash.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
@@ -693,6 +693,12 @@ async function installedVitestMajor(projectDir: string): Promise<number> {
   return Number(major);
 }
 
+/** A reported file's manifest path, else its project path when the run asked for it; undefined for a file the run is not about. */
+function pathInRun(projectDir: string, byRealPath: ReadonlyMap<string, string>, scope: RunScope): (realPath: string) => string | undefined {
+  const inScope = scope === 'whole-suite' ? undefined : new Set(scope.map((f) => realpathSync(f.absPath)));
+  return (realPath) => byRealPath.get(realPath) ?? (inScope?.has(realPath) === false ? undefined : relative(projectDir, realPath).split(sep).join('/'));
+}
+
 /**
  * `testFiles` names the chunk's test files by their manifest paths; a file outside them is named by
  * its path in the project. `workDir` is the directory this run of the check made for its generated
@@ -752,10 +758,7 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
       checkStopped();
       if (!finished) return { kind: 'timed-out' };
 
-      const read = await readReport(reportPath, projectDir, (realPath) =>
-        byRealPath.get(realPath) ??
-        (scope === 'whole-suite' ? relative(projectDir, realPath).split(sep).join('/') : undefined),
-      );
+      const read = await readReport(reportPath, projectDir, pathInRun(projectDir, byRealPath, scope));
       return { kind: 'ran', ...read, exitCode: finished.exitCode, ms: Date.now() - started };
     },
   };
@@ -1247,9 +1250,12 @@ const COUNTED: Readonly<Record<DiffOutcome, 'killed' | 'survived' | 'timedOut' |
 /** A runner whose unmutated run of the whole suite passed, and the time limit a mutant's run gets. */
 interface GreenRunner {
   runner: Runner;
+  projectDir: string;
   timeoutMs: number;
   /** The absolute paths of the test files that load the project file `file` (`readReach`). */
   testsLoading(file: string): string[];
+  /** Every test that passed in the unmutated run, by `testKey`. */
+  passed: ReadonlySet<string>;
 }
 
 /**
@@ -1267,17 +1273,45 @@ async function greenRunner(runner: Runner, projectDir: string, log: (line: strin
   if (unrecorded.length > 0) {
     log(`${unrecorded.length} of ${baseline.filesRun.size} test files run for every mutant, since what they load could not be told apart: ${unrecorded.join(', ')}`);
   }
-  return { runner, timeoutMs: Math.max(30_000, baseline.ms * 10), testsLoading };
+  const passed = new Set(baseline.outcomes.filter((o) => o.status === 'passed').map(testKey));
+  return { runner, projectDir, timeoutMs: Math.max(30_000, baseline.ms * 10), testsLoading, passed };
 }
 
-/** Runs `mutant` against every test file that loads its file, stopping at the first failure; `unreached` when none does. */
-async function runMutant({ runner, timeoutMs, testsLoading }: GreenRunner, mutant: LocatedMutant): Promise<DiffOutcome> {
+/**
+ * Runs `mutant` against every test file that loads its file, stopping at the first failure; `unreached`
+ * when none does. With a `hint` (#954) whose test passed in the unmutated run and is in one of those, its
+ * file runs alone first, and only that test's own assertion failing kills the mutant; anything else (a pass, a
+ * file that fails to load, a time-out) goes on to the full run, so a survivor still runs every test.
+ * `killer` is the test that failed on its own assertion, for the next run's hint.
+ */
+async function runMutant(
+  { runner, projectDir, timeoutMs, testsLoading, passed }: GreenRunner,
+  mutant: LocatedMutant,
+  hint?: KillerHint,
+): Promise<{ outcome: DiffOutcome; killer?: KillerHint }> {
   const tests = testsLoading(mutant.file);
-  if (tests.length === 0) return 'unreached';
+  if (tests.length === 0) return { outcome: 'unreached' };
+  if (hint && (await hintKills({ runner, projectDir, timeoutMs, passed }, mutant, tests, hint))) return { outcome: 'killed', killer: hint };
   const result = await runner.run(tests.map((absPath) => ({ absPath })), mutant, timeoutMs, { bail: true });
-  if (result.kind === 'timed-out') return 'timed-out';
-  // The runner has no chunk files, so the report names no file here: the verdict rests on vitest's exit code.
-  return suiteNoticed(result) ? 'killed' : 'survived';
+  if (result.kind === 'timed-out') return { outcome: 'timed-out' };
+  const killer = result.outcomes.find((o) => o.failedOnAssertion);
+  return { outcome: suiteNoticed(result) ? 'killed' : 'survived', ...(killer ? { killer: { file: killer.path, test: killer.fullName } } : {}) };
+}
+
+/**
+ * Whether `hint`'s test, one of `tests` that passed unmutated, fails on its own assertion when its file runs alone under
+ * `mutant`. The whole file runs, since the test passed only after the tests before it in its file.
+ */
+async function hintKills(
+  { runner, projectDir, timeoutMs, passed }: Omit<GreenRunner, 'testsLoading'>,
+  mutant: LocatedMutant,
+  tests: string[],
+  hint: KillerHint,
+): Promise<boolean> {
+  const absPath = join(projectDir, hint.file);
+  if (!passed.has(testKey({ path: hint.file, fullName: hint.test })) || !tests.includes(absPath)) return false;
+  const trial = await runner.run([{ absPath }], mutant, timeoutMs, { bail: true });
+  return trial.kind === 'ran' && trial.outcomes.some((o) => o.path === hint.file && o.fullName === hint.test && o.failedOnAssertion);
 }
 
 /** The preparation command observes a real survivor, without accepting a cached or reviewed verdict. */
@@ -1288,7 +1322,7 @@ export async function observeMutant(project: string, mutant: LocatedMutant): Pro
     runner = await createRunner(projectDir, [], workDir);
     const started = await greenRunner(runner, projectDir, () => {});
     if ('notGreen' in started) throw new Error(`The complete baseline is not green: ${started.notGreen.join('; ')}. Fix it before preparing equivalence.`);
-    return runMutant(started, mutant);
+    return (await runMutant(started, mutant)).outcome;
   }, () => runner?.stop());
 }
 
@@ -1366,10 +1400,11 @@ async function tallyMutants(
  */
 async function runUnlessContextChanged(input: DiffMutationInput, run: GreenRunner, mutant: LocatedMutant, done: number): Promise<DiffOutcome> {
   await requireSameContext(input, `after ${done} mutants had run or been reused`);
-  const outcome = await runMutant(run, mutant);
+  const { outcome, killer } = await runMutant(run, mutant, input.cache.killerHint(mutant));
   if (outcome === 'timed-out' || outcome === 'unreached') return outcome;
   await requireSameContext(input, `while mutant ${done + 1} ran, so its outcome is not kept`);
   input.cache.set(mutant, outcome);
+  if (killer) input.cache.setKillerHint(mutant, killer);
   await input.saveProgress?.();
   return outcome;
 }

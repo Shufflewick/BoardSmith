@@ -63,6 +63,38 @@ export function parseMarkedBlocks(file: string, text: string, kind: string): Mar
   return blocks.filter(([, blockKind]) => blockKind === kind).map(([, , path, code]) => ({ doc, path, code }));
 }
 
+/**
+ * The 1-based line of each opening fence in `text` whose block is a whole file
+ * but nothing compiles: a ts block with an `import` line, or a vue block with a
+ * `<script>` line, anywhere in it, with neither a `typecheck:` nor a
+ * `doc-test: file` marker above it (#1050).
+ */
+export function unmarkedFileBlocks(text: string): number[] {
+  const lines = text.split(/\r?\n/);
+  const unmarked: number[] = [];
+  let open: number | undefined;
+  lines.forEach((line, i) => {
+    if (!line.startsWith('```')) return;
+    if (open === undefined) {
+      open = i;
+      return;
+    }
+    const fileStart = FILE_START[lines[open].slice(3).trim()];
+    const isFile = lines.slice(open + 1, i).some((code) => fileStart?.test(code));
+    if (isFile && !COMPILED_MARKER.test(lines[open - 1] ?? '')) unmarked.push(open + 1);
+    open = undefined;
+  });
+  return unmarked;
+}
+
+// Any line, not only the first: comments, indents or a template above it must not hide a file.
+const IMPORT_LINE = /^\s*import\s/;
+/** The line that makes a block a whole file, by fence language. */
+const FILE_START: Record<string, RegExp> = { ts: IMPORT_LINE, typescript: IMPORT_LINE, vue: /^\s*<script\b/ };
+
+// A `doc-test: file` block is compiled by the doc's own test (docs/balance-simulator.test.ts, #556).
+const COMPILED_MARKER = /^<!-- (typecheck:|doc-test: file )/;
+
 /** The folders whose `*.md` files may mark blocks, relative to the repo root. */
 const MARKED_DIRS = ['docs', 'docs/api', 'src/cli/slash-command/aspects'];
 

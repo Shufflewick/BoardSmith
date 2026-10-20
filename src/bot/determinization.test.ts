@@ -820,3 +820,101 @@ describe('#1108 determinization: the sandbox keeps what the seat view says about
     expect(other.toJSON()).toEqual(one.toJSON());
   });
 });
+
+// #1206: a seat granted a container below a hidden deck's hidden child is sent
+// it inside the deck (#961). With a zone rule of its own that shows its
+// contents (the pouch), every card in it reaches the seat, whole or face down,
+// so the seat counts it. With none (the bag), its cards inherit the deck's
+// hidden rule and only the granted ones are sent, so the seat cannot count it.
+class CrateGame extends Game<CrateGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([HandCard, Space]);
+    const deck = this.create(Space<CrateGame>, 'deck');
+    deck.contentsHidden();
+    const crate = deck.create(Space<CrateGame>, 'crate');
+    const pouch = crate.create(Space<CrateGame>, 'pouch');
+    pouch.showOnlyTo(1);
+    pouch.contentsVisible();
+    pouch.create(HandCard, 'open', { rank: 1 });
+    pouch.create(HandCard, 'face-down', { rank: 2 }).hideFromAll();
+    const bag = crate.create(Space<CrateGame>, 'bag');
+    bag.showOnlyTo(1);
+    bag.create(HandCard, 'granted', { rank: 3 }).showOnlyTo(1);
+    bag.create(HandCard, 'withheld', { rank: 4 });
+    const chest = deck.create(Space<CrateGame>, 'chest');
+    chest.showOnlyTo(1);
+    const box = chest.create(Space<CrateGame>, 'box');
+    box.setVisibility('count-only');
+    for (const rank of [5, 6, 7, 8]) box.create(HandCard, `boxed-${rank}`, { rank });
+    this.setFlow({ root: actionStep({ actions: [], player: (ctx) => ctx.game.getPlayer(1)! }) });
+  }
+
+  granted(name: string): Space<CrateGame> {
+    return this.first(Space<CrateGame>, 'deck')!.first(Space<CrateGame>, name)!;
+  }
+
+  // By position: a count-only box is sent with no name.
+  get box(): Space<CrateGame> {
+    return this.granted('chest').first(Space<CrateGame>)!;
+  }
+}
+
+const crateOptions = { playerCount: 2, seed: 'crate', elementIdKey: '0000000000001206' };
+
+function crateSandboxForSeat1(): CrateGame {
+  const sandbox = new CrateGame(crateOptions);
+  sandbox.loadSerializedState(new CrateGame(crateOptions).toJSONForPlayer(1));
+  return sandbox;
+}
+
+describe('#1206 determinization: a granted container below a concealer keeps what the seat sees of it', () => {
+  it('refuses a sampler that adds a face-down card to a granted pouch the seat can count', () => {
+    const sandbox = crateSandboxForSeat1();
+    const pouch = sandbox.granted('pouch');
+
+    expect(() => applyDeterminization(sandbox, 1, () => {
+      pouch.create(HandCard, 'extra', { rank: 5 }).hideFromAll();
+    }, () => 0.5)).toThrow(
+      `Space#${pouch.id} "pouch" held 2 elements and now holds 3. The seat can count what that ` +
+      `container holds even where it cannot see them, so a sampler may not change how many it holds.`,
+    );
+  });
+
+  it('accepts a sampler that adds a card the seat cannot see to a granted bag it is sent only part of', () => {
+    const sandbox = crateSandboxForSeat1();
+    const bag = sandbox.granted('bag');
+    expect(bag.all(HandCard).map((card) => card.name)).toEqual(['granted']);
+
+    applyDeterminization(sandbox, 1, () => {
+      bag.create(HandCard, 'supposed', { rank: 4 });
+    }, () => 0.5);
+
+    expect(bag.count(HandCard)).toBe(2);
+  });
+
+  it('refuses a sampler that fills a count-only box sent in a granted chest with other than its count', () => {
+    for (const fill of [1, 7]) {
+      const sandbox = crateSandboxForSeat1();
+      const box = sandbox.box;
+
+      expect(() => applyDeterminization(sandbox, 1, () => {
+        for (let i = 0; i < fill; i++) box.create(HandCard, `supposed-${i}`, { rank: i });
+      }, () => 0.5)).toThrow(
+        `Space#${box.id} held 4 elements and now holds ${fill}. The seat can count what that ` +
+        `container holds even where it cannot see them, so a sampler may not change how many it holds.`,
+      );
+    }
+  });
+
+  it('accepts a sampler that fills a count-only box sent in a granted chest to its count', () => {
+    const sandbox = crateSandboxForSeat1();
+    const box = sandbox.box;
+
+    applyDeterminization(sandbox, 1, () => {
+      for (let i = 0; i < 4; i++) box.create(HandCard, `supposed-${i}`, { rank: i });
+    }, () => 0.5);
+
+    expect(box.count(HandCard)).toBe(4);
+  });
+});

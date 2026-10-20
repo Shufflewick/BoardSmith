@@ -12,6 +12,7 @@ import {
   lookUpId,
   ownGrantAllows,
   ownVisibilityAllows,
+  viewOwner,
   PILE_BRANCH,
   WITHHELD_PILE_BRANCH,
   readDynamicAttribute,
@@ -119,6 +120,12 @@ import { PersistentMap } from './persistent-map.js';
 import { PERSIST_KEY, PERSIST_PRIVATE_KEY } from '../../persistence/persistence.js';
 import { ENGINE_OWNED_GAME_FIELDS, describeEngineFieldShadow } from './engine-owned-fields.js';
 import { DEFAULT_COLOR_PALETTE, DEFAULT_COLOR_LABELS, seatDisplayName } from './seat-defaults.js';
+
+/** Why a partition root may hang only from the game (#795, #1170, #1188). */
+const PARTITION_ROOT_RULE =
+  'a partition root must be a direct child of the game. A world stores and wakes every ' +
+  'partition there, so a root anywhere else would be stored twice, inside its parent\'s ' +
+  'partition as well as on its own, or come back directly under the game at the next wake.';
 
 /** Every element id carried by a serialized subtree, and every placeholder token (#715), for `adoptSubtree`. */
 function collectJsonIds(json: ElementJSON, ids: number[], tokens: number[]): void {
@@ -388,9 +395,9 @@ function showsPlaceholders(zone: GameElement, seat: number): boolean {
   const state = hasZoneVisibility(zone) ? zone.getZoneVisibility() : undefined;
   return state !== undefined
     && redactedVisibilityFor(state, seat) === 'count-only'
-    && ownVisibilityAllows(zone, seat)
+    && ownVisibilityAllows(zone, seat, zone.getEffectiveOwner()?.seat)
     && outermostConcealer(zone, seat) === undefined
-    && zone._t.children.some((child) => !ownVisibilityAllows(child, seat));
+    && zone._t.children.some((child) => !ownVisibilityAllows(child, seat, child.getEffectiveOwner()?.seat));
 }
 
 /**
@@ -1710,7 +1717,7 @@ export class Game<
 
   /**
    * Declare a resident element a PARTITION ROOT: a subtree the platform loads,
-   * checkpoints and evicts as one unit.
+   * checkpoints and evicts as one unit. It must be a direct child of the game.
    *
    * The engine keeps no partition contents and no partition names — the
    * platform already knows what it hydrated. All the engine owes it is the
@@ -1735,6 +1742,17 @@ export class Game<
       throw new Error(
         `Cannot define the game root (id ${id}) as a partition: a partition is a subtree ` +
           `that can be evicted, and evicting the game would evict the world.`
+      );
+    }
+    const parent = element._t.parent;
+    if (parent !== this) {
+      throw new Error(
+        `Cannot define "${element.name ?? element.constructor.name}" (id ${id}) as a partition: it ` +
+          (!parent || parent === this.pile
+            ? `has been removed from the game`
+            : `sits inside "${parent.name ?? parent.constructor.name}" (id ${parent._t.id})`) +
+          `, and ${PARTITION_ROOT_RULE} Create the root with game.create(...), or leave it ` +
+          `undeclared and let it travel inside the partition that holds it.`
       );
     }
     this._partitionRootTable().set(id, element);
@@ -2127,10 +2145,11 @@ export class Game<
   }
 
   /**
-   * Graft one serialized subtree into the resident tree, under `parentId`.
+   * Graft one serialized subtree into the resident tree, under `parentId`,
+   * which must be the game's own id: a partition root hangs only from the game.
    *
    * This is the same restore path a snapshot uses (`GameElement.fromJSON`),
-   * pointed at a found parent instead of at the game root, so an adopted
+   * pointed at one subtree instead of the whole game, so an adopted
    * element is indistinguishable from one that was never evicted.
    *
    * Two passes that bracket `loadSerializedState`'s rebuild are deliberately
@@ -2164,11 +2183,17 @@ export class Game<
     if (!parent) {
       throw new Error(
         `Cannot adopt partition "${json.name ?? json.className}" under parent id ${parentId}: ` +
-          `no element with that id is resident. Hydrate the parent's partition first — a graft ` +
-          `needs its attachment point in the tree. A partition that hangs from the game itself ` +
-          `can only fail this way when the world was built with a different element id key ` +
-          `than the one its stored bytes were minted under (#482): pass the key stored with ` +
-          `this world.`
+          `no element with that id is resident. A partition hangs from the game, element ` +
+          `${this._t.id} here, so stored bytes naming another parent were minted under a ` +
+          `different element id key than this world was built with (#482): pass the key stored ` +
+          `with this world.`
+      );
+    }
+    if (parent !== this) {
+      throw new Error(
+        `Cannot adopt partition "${json.name ?? json.className}" under ` +
+          `"${parent.name ?? parent.constructor.name}" (id ${parentId}): ${PARTITION_ROOT_RULE} ` +
+          `Adopt it under the game (id ${this._t.id}).`
       );
     }
 
@@ -4908,12 +4933,13 @@ export class Game<
     // #961: below a hidden child of a concealed zone only an element's own grant
     // sends it, as a child of its nearest sent ancestor, and the hidden ones
     // between are left out. `deepestRevealed` is the same rule for `isVisibleTo`.
-    const grantedBelowHidden = (element: GameElement, json: ElementJSON): ElementJSON[] =>
+    // `owner` is `element`'s when it is sent, else undefined: past an unsent element only an element's own player counts (#1209).
+    const grantedBelowHidden = (element: GameElement, json: ElementJSON, owner: number | undefined): ElementJSON[] =>
       (json.children ?? []).flatMap((childJson, i) => {
         const child = element._t.children[i]!;
-        return ownGrantAllows(child, visibilityPosition)
-          ? [filterElement(childJson, child, true)]
-          : grantedBelowHidden(child, childJson);
+        return ownGrantAllows(child, visibilityPosition, viewOwner(child, owner))
+          ? [filterElement(childJson, child, owner, true)]
+          : grantedBelowHidden(child, childJson, undefined);
       });
 
     // `json` sent with only the given children, and no `children` key when there are none.
@@ -4935,18 +4961,20 @@ export class Game<
     // child can still be relinked to its placeholder on restore. A child whose
     // visibility reaches this seat goes out whole in its place (#758).
     //
-    // A granted element below one of the children follows all the placeholders
-    // (#961), so it tells nothing of which child holds it or where.
-    const placeholderChildren = (json: ElementJSON, element: GameElement): ElementJSON[] => {
+    // A granted element below a hidden child follows all the placeholders
+    // (#961), with no id, name or count for the containers between. Both
+    // callers send the zone's childCount (#1208), which says how many trailing
+    // entries are nested, so with one hidden child the seat knows which holds them.
+    const placeholderChildren = (json: ElementJSON, element: GameElement, owner: number | undefined): ElementJSON[] => {
       const placeholders: ElementJSON[] = [];
       const nested: ElementJSON[] = [];
       for (const [i, childJson] of (json.children ?? []).entries()) {
         const childElement = element._t.children[i]!;
-        if (ownVisibilityAllows(childElement, visibilityPosition)) {
-          placeholders.push(filterElement(childJson, childElement));
+        if (ownVisibilityAllows(childElement, visibilityPosition, viewOwner(childElement, owner))) {
+          placeholders.push(filterElement(childJson, childElement, owner));
           continue;
         }
-        nested.push(...grantedBelowHidden(childElement, childJson));
+        nested.push(...grantedBelowHidden(childElement, childJson, undefined));
         const syntheticId = placeholderIdOf(childElement, visibilityPosition);
         idRemap?.set(childElement.id, syntheticId);
         placeholders.push({
@@ -4958,13 +4986,15 @@ export class Game<
       return [...placeholders, ...nested];
     };
 
-    const filterElement = (json: ElementJSON, element: GameElement, belowHidden = false): ElementJSON => {
+    // `ownerAbove` is its parent's owner when this seat is sent the parent, else undefined (#1209).
+    const filterElement = (json: ElementJSON, element: GameElement, ownerAbove: number | undefined, belowHidden = false): ElementJSON => {
       const visibility = element.getEffectiveVisibility();
+      const owner = viewOwner(element, ownerAbove);
 
       // Handle count-only mode: show count but not contents
       // Preserve element name and safe $-prefixed system attributes (like $type) for AutoUI
       // rendering; redact identity-bearing image refs ($image, $images.face).
-      if (visibility.mode === 'count-only' && !ownVisibilityAllows(element, visibilityPosition)) {
+      if (visibility.mode === 'count-only' && !ownVisibilityAllows(element, visibilityPosition, owner)) {
         // Drop `name` — for a leaf element (e.g. a Card named "AS") the name is
         // identity-bearing. Seed __hidden so the SEC-02 regression guard
         // (collectAllHiddenAttrs) sweeps this surface too.
@@ -4979,7 +5009,7 @@ export class Game<
       }
 
       // Its ancestors were all visible, or this walk would not have reached it (#1123).
-      if (!ownVisibilityAllows(element, visibilityPosition)) {
+      if (!ownVisibilityAllows(element, visibilityPosition, owner)) {
         // Return a hidden placeholder.
         //
         // INTENTIONAL ASYMMETRY (WR-02, iteration 2): unlike the zone branches
@@ -5056,7 +5086,7 @@ export class Game<
         // structural answer, shared with `players`/`getPlayer`.
         const isOwner = isPlayerElement(element)
           ? element.seat === visibilityPosition
-          : element.getEffectiveOwner()?.seat === visibilityPosition;
+          : owner === visibilityPosition;
         // Checked for every seat, the owner's included, so a list naming an
         // engine field is refused at the first projection of any view.
         const isRoot = element === this;
@@ -5134,7 +5164,7 @@ export class Game<
       const zoneVisibility = hasZoneVisibility(element) ? element.getZoneVisibility() : undefined;
 
       // #961: with no zone rule of its own, a granted element's contents would inherit a hidden ancestor's, so only their own grants send them.
-      if (belowHidden && !zoneVisibility) return withOnly(ownJson, grantedBelowHidden(element, json));
+      if (belowHidden && !zoneVisibility) return withOnly(ownJson, grantedBelowHidden(element, json, owner));
 
       // SPACE-03 / F-09: a per-seat visibility GRANT (`addZoneVisibleTo`, i.e.
       // `zoneVisibility.addPlayers`) must reveal the zone's real contents to the
@@ -5144,9 +5174,8 @@ export class Game<
       // dead API on hidden zones and even hid contents from the granted seat).
       // When the seat CAN see, we fall through to normal child serialization
       // below (real children, each still subject to its own visibility).
-      const zoneOwnerSeat = (element as GameElement).getEffectiveOwner?.()?.seat;
       const seatCanSeeZone = zoneVisibility
-        ? canPlayerSee(zoneVisibility, visibilityPosition, zoneOwnerSeat)
+        ? canPlayerSee(zoneVisibility, visibilityPosition, owner)
         : true;
 
       // If zone has hidden or count-only visibility, handle children specially
@@ -5171,14 +5200,16 @@ export class Game<
           // #758, #961: granted elements are still sent, alone, so the zone's size stays secret.
           const granted = (json.children ?? []).flatMap((childJson, i) => {
             const child = element._t.children[i]!;
-            return ownVisibilityAllows(child, visibilityPosition) ? [filterElement(childJson, child)] : grantedBelowHidden(child, childJson);
+            return ownVisibilityAllows(child, visibilityPosition, viewOwner(child, owner))
+              ? [filterElement(childJson, child, owner)]
+              : grantedBelowHidden(child, childJson, undefined);
           });
           return withOnly(ownJson, granted);
         } else if (zoneVisibility.mode === 'count-only') {
           // Count-only mode: create anonymized placeholders for children.
           // This allows the UI to render the correct number and type of elements
           // without revealing their identity (no real IDs or names that could be used to cheat)
-          const hiddenChildren = placeholderChildren(json, element);
+          const hiddenChildren = placeholderChildren(json, element, owner);
           return {
             // ownJson (not json): the container's own attributes must stay
             // whitelist-redacted in this early return (CR-01).
@@ -5190,12 +5221,14 @@ export class Game<
         // Every other zone this seat cannot see (a non-owner of an owner zone,
         // or a seat in `exceptPlayers` of any mode, #750) gets anonymous
         // placeholders, which keep the ids its picks are offered by (#715).
-        const hiddenChildren = placeholderChildren(json, element);
+        // childCount, as its children may also carry nested grants (#1208).
+        const hiddenChildren = placeholderChildren(json, element, owner);
         return {
           // ownJson (not json): the container's own attributes must stay
           // whitelist-redacted in this early return (CR-01).
           ...ownJson,
           children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
+          childCount: element._t.children.length,
         };
       }
 
@@ -5205,7 +5238,7 @@ export class Game<
         for (let i = 0; i < ownJson.children.length; i++) {
           const childJson = ownJson.children[i];
           const childElement = element._t.children[i];
-          filteredChildren.push(filterElement(childJson, childElement));
+          filteredChildren.push(filterElement(childJson, childElement, owner));
         }
       }
 
@@ -5216,7 +5249,7 @@ export class Game<
     };
 
     // #1043: one pass for every reference in the view (attributes, settings, animation data).
-    let filteredState = concealRefsForSeat(filterElement(fullJson, this), this, visibilityPosition);
+    let filteredState = concealRefsForSeat(filterElement(fullJson, this, undefined), this, visibilityPosition);
 
     // Apply playerView transformation if defined
     const GameClass = this.constructor as typeof Game;

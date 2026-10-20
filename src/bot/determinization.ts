@@ -26,7 +26,7 @@ import type { GameElement } from '../engine/index.js';
 import type { DeterminizeSampler } from './types.js';
 import { changing } from '../engine/element/state-version.js';
 import { outermostConcealer } from '../engine/element/concealed-refs.js';
-import { hasZoneVisibility } from '../engine/element/game-element.js';
+import { hasZoneVisibility, hidesContents } from '../engine/element/game-element.js';
 import { canPlayerSee } from '../engine/element/visibility.js';
 import { isPlaceholderId } from '../engine/element/hidden-placeholder.js';
 
@@ -233,14 +233,30 @@ function visibleNewElement(before: KnownWorld, after: KnownWorld, seat: number):
 }
 
 /**
- * Whether the seat's view says how many children this container holds, as
- * `redactTreeForSeat` decides: not inside something concealed, and either a
- * count-only element or one the seat can see that is not a zone whose 'hidden'
- * mode keeps its size secret.
+ * Whether the nearest zone rule above `element` hides its contents from the
+ * seat. Then, with no zone rule of its own, `element` may have been a grant
+ * below a hidden child (#961), whose view carries only its granted contents.
+ */
+function inheritsConcealment(element: GameElement, seat: number): boolean {
+  if (hasZoneVisibility(element) && element.getZoneVisibility()) return false;
+  for (let at = element._t.parent; at; at = at._t.parent) {
+    // The sandbox knows only the owners the seat view sent (#1209).
+    if (hasZoneVisibility(at) && at.getZoneVisibility()) return hidesContents(at, seat, at.getEffectiveOwner()?.seat);
+  }
+  return false;
+}
+
+/**
+ * Whether the seat's view says how many children this container holds (#1206).
+ * For one the seat cannot see, the view decides: `redactTreeForSeat` sends a
+ * count-only element's count, kept as `_viewChildCount`. For one it can see,
+ * this is a cautious guess, not what the view says: a container with no zone
+ * rule of its own below a concealed zone is taken for a grant (#961) and not
+ * counted, so a #758 visible direct child of such a zone goes uncounted too.
  */
 function countVisibleTo(container: GameElement, seat: number): boolean {
-  if (outermostConcealer(container, seat)) return false;
-  if (!container.isVisibleTo(seat)) return container.getEffectiveVisibility().mode === 'count-only';
+  if (!container.isVisibleTo(seat)) return container._viewChildCount !== undefined;
+  if (inheritsConcealment(container, seat)) return false;
   const zone = hasZoneVisibility(container) ? container.getZoneVisibility() : undefined;
   return zone?.mode !== 'hidden' || canPlayerSee(zone, seat, container.getEffectiveOwner()?.seat);
 }
