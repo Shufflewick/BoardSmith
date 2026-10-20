@@ -2060,9 +2060,6 @@ export class ActionExecutor {
       };
     }
 
-    // Capture before accumulation -- onSelect fires on first iteration only
-    const isFirstIteration = pendingState.repeating.iterationCount === 0;
-
     // The pick is resolved and checked exactly as any other pick is (#507),
     // against the choices the picks before it left.
     const context: ActionContext = {
@@ -2091,11 +2088,19 @@ export class ActionExecutor {
     }
 
     // Add to accumulated values
-    pendingState.repeating.accumulated.push(pick);
-    pendingState.repeating.iterationCount++;
+    const repeating = pendingState.repeating;
+    repeating.accumulated.push(pick);
+    repeating.iterationCount++;
+    // A crashed onEach or until drops just this pick; onSelect has run and is not run again (#1317).
+    const dropPick = (hook: 'onEach' | 'until', error: unknown) => {
+      repeating.accumulated.pop();
+      repeating.iterationCount--;
+      const crashed = pickHookThrew(action, hook, selection, error);
+      return { done: true, error: crashed.error, rulesError: crashed.rulesError, partiallyApplied: true };
+    };
 
-    // Fire onSelect on first iteration only (after validation passes)
-    if (isFirstIteration && selection.onSelect) {
+    // Fire onSelect once per repeat, on its first pick (after validation passes)
+    if (selection.onSelect && !pendingState.onSelectFired?.has(pendingState.currentSelectionIndex)) {
       try {
         const ctx = this.createOnSelectContext();
         this.runPickCallback(pendingState, () => (selection.onSelect as (value: unknown, ctx: OnSelectContext) => void)(chosen, ctx));
@@ -2122,8 +2127,7 @@ export class ActionExecutor {
       try {
         this.runPickCallback(pendingState, () => repeatConfig.onEach!(context, chosen));
       } catch (error) {
-        const crashed = pickHookThrew(action, 'onEach', selection, error);
-        return { done: true, error: crashed.error, rulesError: crashed.rulesError, partiallyApplied: true };
+        return dropPick('onEach', error);
       }
     }
 
@@ -2143,8 +2147,7 @@ export class ActionExecutor {
       try {
         isDone = repeatConfig.until(context, chosen);
       } catch (error) {
-        const crashed = pickHookThrew(action, 'until', selection, error);
-        return { done: true, error: crashed.error, rulesError: crashed.rulesError, partiallyApplied: true };
+        return dropPick('until', error);
       }
     }
 
