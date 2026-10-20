@@ -745,10 +745,12 @@ behave.
 // every wake (#482).
 const game = new MyWorld({ playerCount: 200, seed, worldMode: true, elementIdKey: storedKey });
 
-game.definePartition(regionId);  // this subtree loads/checkpoints/evicts as a unit
+// this subtree loads/checkpoints/evicts as a unit; a root must be a direct
+// child of the game, and anything else throws (#1188)
+game.definePartition(regionId);
 
-// hydrate a partition the platform has in storage
-const region = game.adoptSubtree(parentId, storedRegionJson);
+// hydrate a partition the platform has in storage, back under the game
+const region = game.adoptSubtree(game.id, storedRegionJson);
 
 // after a command runs, ask which partitions it dirtied. ONE call, and it
 // consumes: it reports what changed AND re-baselines from the same pass, so a
