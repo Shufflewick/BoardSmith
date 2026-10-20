@@ -55,7 +55,7 @@ import {
   verifyClassifyStatusCommand,
   type ChunkVerdict,
 } from './verify-classify.js';
-import { verifyRepairStatusCommand } from './verify-repair.js';
+import { verifyRepairGateCommand, verifyRepairStatusCommand } from './verify-repair.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -1543,6 +1543,21 @@ describe('line-level-handoff / repair-gate — verifyImpactStatusCommand over a 
     const printed = logSpy.mock.calls[0][0] as string;
     expect(() => JSON.parse(printed)).not.toThrow();
 
+    logSpy.mockRestore();
+  });
+
+  it('end-to-end through verifyRepairGateCommand: re-derives the stale chunk\'s gate from post-repair code state, and --json prints exactly one JSON object', async () => {
+    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const gate = await verifyRepairGateCommand({ project, runId, chunk: 'movement', json: true });
+    expect(gate.disposition).toBe('close-without-replaytest');
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(logSpy.mock.calls[0][0] as string)).toEqual(gate);
+
+    await expect(verifyRepairGateCommand({ project, runId, chunk: 'no-such-chunk' })).rejects.toThrow(
+      /no-such-chunk/,
+    );
     logSpy.mockRestore();
   });
 
