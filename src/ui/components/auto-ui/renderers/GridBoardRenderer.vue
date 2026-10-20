@@ -14,7 +14,7 @@
  */
 
 import { computed, watch, watchEffect, ref, nextTick } from 'vue';
-import { resolveGridSize } from '../auto-ui-helpers.js';
+import { placedCells, resolveGridSize } from '../auto-ui-helpers.js';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import { useSelectableGrid } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
@@ -81,8 +81,11 @@ const displayLabel = computed(
   () => presentationEntry.value?.label ?? props.element.name ?? props.element.className
 );
 
-// All children passed to ElementRenderer for rendering
-const children = computed(() => props.element.children ?? []);
+// The cells the board places, which ElementRenderer draws (#1294); none on a board it cannot place.
+const children = computed(() => {
+  const attrs = props.element.attributes ?? {};
+  return gridResult.value.ok ? placedCells(props.element, attrs.$rowCoord as string, attrs.$colCoord as string) : [];
+});
 
 const {
   cellIdentity,

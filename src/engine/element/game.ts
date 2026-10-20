@@ -32,6 +32,7 @@ import { Die } from './die.js';
 import { DicePool } from './dice-pool.js';
 import { Grid, GridCell } from './grid.js';
 import { HexGrid, HexCell } from './hex-grid.js';
+import { hexCoordinateNames } from './hex-coordinates.js';
 import type { ElementAttributes, ElementContext, ElementClass, ElementJSON } from './types.js';
 
 /**
@@ -605,12 +606,13 @@ const SAFE_LAYOUT_KEYS = new Set([
   '$hexSize',
 ]);
 
-/** The attributes a cell's board names as its coordinates; none for anything that is not a grid or hex cell. */
+/** The attributes a cell's board names as its coordinates; none for anything that is not a space on a grid or hex grid. */
 function cellCoordinateNames(element: GameElement): (string | undefined)[] {
   const parent = element._t.parent;
-  // Only cells: a piece placed straight in a grid would give away where it is (#1199).
-  if (element instanceof GridCell && parent instanceof Grid) return [parent.$rowCoord, parent.$colCoord];
-  if (element instanceof HexCell && parent instanceof HexGrid) return [parent.$qCoord ?? 'q', parent.$rCoord ?? 'r'];
+  // Only cells, which are spaces: a piece placed straight in a grid would give away where it is (#1199).
+  if (!(element instanceof Space)) return [];
+  if (parent instanceof Grid) return [parent.$rowCoord, parent.$colCoord];
+  if (parent instanceof HexGrid) return hexCoordinateNames(parent);
   return [];
 }
 
@@ -636,7 +638,7 @@ function cellCoordinates(attrs: Record<string, unknown>, element: GameElement): 
  *   unknown $-keys → dropped (fail-safe)
  *   non-$ keys → dropped (callers seed __hidden/childCount themselves)
  *   SAFE_LAYOUT_KEYS → copied through as-is
- *   a GridCell's or HexCell's two coordinate attributes (named by its Grid or HexGrid) → copied through (#1055, #1198)
+ *   a space's two coordinate attributes on a Grid or HexGrid (named by the board) → copied through (#1055, #1198, #1294)
  */
 function redactHiddenElementAttrs(attrs: Record<string, unknown>, element: GameElement): Record<string, unknown> {
   const safe = cellCoordinates(attrs, element);
