@@ -1440,8 +1440,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   async function refreshStartCandidates(): Promise<void> {
     const request = ++startCandidatesRequest;
+    // What an earlier state offered may name elements that are gone, so it is never shown past it.
+    if (fetchedStartCandidates.value.size > 0) fetchedStartCandidates.value = new Map();
     const fetchFn = options.fetchPickChoices;
-    const offering = fetchFn && isMyTurn.value && !currentAction.value && !isViewingHistoryValue();
+    const offering = fetchFn && isMyTurn.value && !currentAction.value && !isExecuting.value
+      && !pendingFollowUp.value && !isViewingHistoryValue();
     const actions = offering ? availableActions.value ?? [] : [];
     const firstPicks = actions.flatMap((action) => {
       if (disabledActions?.value?.[action]) return [];
@@ -1464,7 +1467,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   watch(
-    [() => isMyTurn.value, currentAction, () => availableActions.value, () => actionMetadata.value, () => disabledActions?.value, () => gameView?.value, isViewingHistoryValue],
+    [
+      () => isMyTurn.value, currentAction, isExecuting, pendingFollowUp, () => playerSeat?.value,
+      () => availableActions.value, () => actionMetadata.value, () => disabledActions?.value, () => gameView?.value,
+      isViewingHistoryValue,
+    ],
     () => void refreshStartCandidates(),
     { immediate: true },
   );

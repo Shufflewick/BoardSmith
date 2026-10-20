@@ -471,7 +471,7 @@ describe('a turn that offers several actions and opens none, as Chess does (#119
     { id: 43, refs: [{ ref: { notation: 'e2' }, role: 'highlight' as const }] },
   ];
 
-  function chess() {
+  async function chess() {
     const fetchPickChoices = answerPicks({
       piece: { validElements: pieces },
       destination: {
@@ -486,7 +486,7 @@ describe('a turn that offers several actions and opens none, as Chess does (#119
       resign: { name: 'resign', selections: [] },
       offerDraw: { name: 'offerDraw', selections: [] },
     };
-    return wireAll(metadata, fetchPickChoices);
+    return { ...(await wireAll(metadata, fetchPickChoices)), fetchPickChoices };
   }
 
   it('offers on the board the pieces movePiece can start with', async () => {
@@ -513,6 +513,32 @@ describe('a turn that offers several actions and opens none, as Chess does (#119
     boardInteraction.triggerDrop({ id: 310, notation: 'e4' });
     await flushAll();
     expect(sendAction).toHaveBeenCalledWith('movePiece', { piece: 43, destination: 'e4' });
+  });
+
+  it('offers an element by the action that can start with it, when an earlier action disables it', async () => {
+    const fetchPickChoices = answerPicks({
+      piece: { validElements: [{ id: 42, disabled: 'pinned', refs: [{ ref: { id: 42 }, role: 'highlight' }] }] },
+      subject: { validElements: [{ id: 42, refs: [{ ref: { id: 42 }, role: 'highlight' }] }] },
+    });
+    const { controller, boardInteraction } = await wireAll({
+      movePiece: { name: 'movePiece', selections: [{ name: 'piece', type: 'element' }, { name: 'destination', type: 'choice' }] },
+      inspect: { name: 'inspect', selections: [{ name: 'subject', type: 'element' }, { name: 'detail', type: 'choice' }] },
+    }, fetchPickChoices);
+
+    boardInteraction.triggerElementSelect({ id: 42 });
+    await flushAll();
+    expect(controller.currentAction.value).toBe('inspect');
+    expect(controller.currentArgs.value).toEqual({ subject: 42 });
+  });
+
+  it('offers nothing from an earlier state while the new state\'s candidates are on their way', async () => {
+    const { boardInteraction, actionMetadata, fetchPickChoices } = await chess();
+    expect(boardInteraction.isSelectableElement({ id: 300, notation: 'd2' })).toBe(true);
+    fetchPickChoices.mockImplementation(() => new Promise(() => {}));
+
+    actionMetadata.value = { ...actionMetadata.value! };
+    await flushAll();
+    expect(boardInteraction.isSelectableElement({ id: 300, notation: 'd2' })).toBe(false);
   });
 
   it('offers nothing on the board on another seat\'s turn', async () => {

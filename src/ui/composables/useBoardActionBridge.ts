@@ -473,13 +473,15 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   const shownAction = computed(() => (isViewingHistory.value ? null : currentAction.value));
   const shownPick = computed(() => (isViewingHistory.value ? null : currentPick.value));
 
-  // With no pick open, the board offers what a click or drag can start (#1192).
+  // With no pick open, the board offers what a click or drag can start (#1192):
+  // per element, the first action that can start with it, enabled before disabled.
   function feedStartCandidates(): void {
     board.setDraggableSelectedElement(null);
     const offered = new Map<number, { action: string; pick: string; element: EnrichedValidElement }>();
-    if (isMyTurn.value && !isExecuting.value && !isViewingHistory.value) {
-      for (const [action, { pick, elements }] of controller.startCandidates.value) {
-        for (const element of elements) if (!offered.has(element.id)) offered.set(element.id, { action, pick, element });
+    for (const [action, { pick, elements }] of controller.startCandidates.value) {
+      for (const element of elements) {
+        const held = offered.get(element.id);
+        if (!held || (held.element.disabled && !element.disabled)) offered.set(element.id, { action, pick, element });
       }
     }
     board.setValidElements([...offered.values()].map(({ element }) => boardTarget(element)), (elementId: number) => {
@@ -488,13 +490,9 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     });
   }
 
-  watch([controller.startCandidates, isExecuting, () => isMyTurn.value], () => {
-    if (!shownPick.value) feedStartCandidates();
-  });
-
   // Feed the board substrate's selectable elements + click callback for the
   // current pick. This is the watcher whose absence broke board-centric play.
-  watch([shownPick, offeredElements, offeredChoices], ([selection]) => {
+  watch([shownPick, offeredElements, offeredChoices, controller.startCandidates], ([selection]) => {
     if (!selection) {
       feedStartCandidates();
       return;
