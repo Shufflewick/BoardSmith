@@ -588,9 +588,12 @@ sampler through the same consistency check the search runs, without standing up 
 applyDeterminization(sandboxForSeat(1), 1, myDeterminize, () => 0.5);
 ```
 
-Build the sandbox the way the bot does -- `new MyGame(options)` followed by
-`loadSerializedState(truth.toJSONForPlayer(seat))` -- so the test sees exactly the
-redaction the search sees.
+Build the sandbox the way the bot does -- `new MyGame(options)`, then
+`loadSerializedState(truth.toJSONForPlayer(seat))`, then `adoptSeatView(sandbox, seat)`
+(also from `boardsmith/bot`) -- so the test sees exactly the redaction the search
+sees. `adoptSeatView` makes the rebuilt game read the view as the seat was shown it:
+a card granted with `addVisibleTo` stays visible to that seat, and a zone the seat
+was sent only a count of stays counted.
 
 ### What the check costs
 

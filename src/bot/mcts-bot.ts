@@ -17,7 +17,7 @@ import type {
   DeterminizeSampler,
 } from './types.js';
 import { DEFAULT_CONFIG } from './types.js';
-import { applyDeterminization } from './determinization.js';
+import { adoptSeatView, applyDeterminization } from './determinization.js';
 import { SeededRandom, mintSeed } from '../utils/random.js';
 import { isDevMode } from '../utils/dev.js';
 
@@ -1423,6 +1423,8 @@ export class MCTSBot<G extends Game = Game> {
     // seat clone `createSeatSnapshot` has already filtered it to that seat's
     // audience, so the sandbox cannot see private lines the seat may not.
     game.loadSerializedState(snapshotTree(snapshot), { messageLog: snapshot.messageLog ?? [] });
+    // The tree is the seat's view: read it as the seat was shown it (#1291).
+    adoptSeatView(game, this.playerIndex);
 
     // Restore the element id sequence so newly created elements don't drift.
     if (snapshot.sequence !== undefined) {
