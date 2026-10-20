@@ -192,6 +192,17 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
     expect((await openMutantCache(dir)).killerHint(edited)).toEqual(hint);
   });
 
+  it('keeps apart the hints of the same change on two identical lines of one file (#1308)', async () => {
+    const dir = await project();
+    const first = { file: 'src/rules.ts', source: `${RULES}${RULES}`.replace('*', '/'), change: MUTANT.change };
+    const second = { file: 'src/rules.ts', source: `${RULES}${RULES.replace('*', '/')}`, change: { ...MUTANT.change, offset: RULES.length + MUTANT.change.offset } };
+    const cache = await openMutantCache(dir);
+    cache.setKillerHint(first, { file: 'tests/rules.test.ts', test: 'fee' });
+    cache.setKillerHint(second, undefined);
+    await cache.save();
+    expect((await openMutantCache(dir)).killerHint(first)).toEqual({ file: 'tests/rules.test.ts', test: 'fee' });
+  });
+
   it('forgets a hint the run set to none (#1308)', async () => {
     const dir = await project();
     const first = await openMutantCache(dir);

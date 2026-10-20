@@ -546,12 +546,18 @@ async function mutationFingerprints(projectDir: string, context: ExecutionContex
   return { fingerprint: (m) => sha256Hex(JSON.stringify([CACHE_FORMAT, boardsmith, process.version, tree, installed, linked, prefix, m.file, 'source' in m ? sha256Hex(m.source) : m.sourceHash])) };
 }
 
-/** The key of a mutant's killer hint: its game folder, file, the mutated text of the line it changes, and the change. */
+/**
+ * The key of a mutant's killer hint: its game folder, file, the mutated text of the line it changes, which
+ * of the file's lines with that unmutated text it is, and the change.
+ */
 function hintKey(prefix: string, { file, source, change }: MutantChange): string {
   const lineStart = source.lastIndexOf('\n', change.offset - 1) + 1;
   const lineEnd = source.indexOf('\n', change.offset + change.after.length);
   const line = source.slice(lineStart, lineEnd === -1 ? undefined : lineEnd);
-  return sha256Hex(JSON.stringify([prefix, file, line, change.offset - lineStart, change.before, change.after]));
+  const column = change.offset - lineStart;
+  const unmutated = line.slice(0, column) + change.before + line.slice(column + change.after.length);
+  const copy = source.slice(0, lineStart).split('\n').filter((l) => l === unmutated).length;
+  return sha256Hex(JSON.stringify([prefix, file, line, copy, column, change.before, change.after]));
 }
 
 /**
