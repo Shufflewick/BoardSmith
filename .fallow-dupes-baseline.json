@@ -3,7 +3,7 @@
   "clone_groups": [
     "src/session/testing/fixtures/bookkeeping-execute-fixture.ts:34-51|src/session/testing/fixtures/execute-barrier-fixture.ts:62-82",
     "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:100-114|src/ui/composables/useHexGrid.ts:300-315",
-    "src/ui/components/auto-ui/renderers/CardRenderer.vue:163-176|src/ui/components/auto-ui/renderers/HandRenderer.vue:170-180|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:37-47",
+    "src/ui/components/auto-ui/renderers/CardRenderer.vue:164-177|src/ui/components/auto-ui/renderers/HandRenderer.vue:170-180|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:37-47",
     "src/ui/components/auto-ui/renderers/HandRenderer.vue:431-437|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:263-269",
     "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue:118-136|src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:224-242",
     "src/session/stateless-ops.ts:1076-1092|src/session/stateless-ops.ts:1165-1179",
