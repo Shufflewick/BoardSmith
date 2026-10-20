@@ -80,7 +80,7 @@ const { attrs: selectableAttrs, onActivate, onKeydown } =
 // ── Drag-and-drop handlers ────────────────────────────────────────────────────
 function handleDragStart(event: DragEvent) {
   const dragged = dragIdentity.value;
-  if (!boardInteraction || !dragged) {
+  if (!boardInteraction || !dragged || !boardInteraction.startDrag(dragged)) {
     event.preventDefault();
     return;
   }
@@ -90,7 +90,6 @@ function handleDragStart(event: DragEvent) {
     name: props.element.name,
   }));
   event.dataTransfer!.effectAllowed = 'move';
-  boardInteraction.startDrag(dragged);
 }
 
 function handleDragEnd() {

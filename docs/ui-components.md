@@ -744,7 +744,8 @@ boardInteraction.isSelectableElement(element)  // Can be clicked to select
 boardInteraction.triggerElementSelect(element)
 
 // Drag and drop
-boardInteraction.startDrag(element)  // A disabled candidate starts no drag, as a click chooses nothing
+boardInteraction.canStartDrag(element)  // False for a disabled candidate, as a click on it chooses nothing; the auto-filled source still drags
+boardInteraction.startDrag(element)  // Returns false, starting nothing, when canStartDrag refuses: cancel the browser drag then
 boardInteraction.endDrag()
 boardInteraction.isDropTarget(element)
 boardInteraction.isDraggedElement(element)
@@ -1020,13 +1021,14 @@ function isZoneDropTarget(zoneName) { return isDropTarget({ name: zoneName }); }
 <!-- typecheck: board -->
 ```vue
 <script setup lang="ts">
-import { useBoardInteraction, useDragDrop, type TableBoardProps } from 'boardsmith/ui';
+import { computed } from 'vue';
+import { findElements, useBoardInteraction, useDragDrop, type TableBoardProps } from 'boardsmith/ui';
 import 'boardsmith/ui/animation/drag-drop.css';
 
 const props = defineProps<TableBoardProps>();
 const { drag } = useDragDrop();
 const board = useBoardInteraction();
-const { validElements } = props.actionController;
+const cards = computed(() => findElements(props.gameView, { className: 'Card' }));
 
 const canDrag = (cardId: number) =>
   board.isSelectableElement({ id: cardId }) || board.isDraggableSelectedElement({ id: cardId });
@@ -1034,7 +1036,7 @@ const canDrag = (cardId: number) =>
 
 <template>
   <div
-    v-for="card in validElements"
+    v-for="card in cards"
     :key="card.id"
     v-bind="drag({ id: card.id }, { when: canDrag(card.id) }).props"
     :class="drag({ id: card.id }, { when: canDrag(card.id) }).classes"

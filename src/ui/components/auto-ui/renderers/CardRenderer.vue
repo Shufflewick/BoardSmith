@@ -142,7 +142,7 @@ watch(
 // Drag handlers
 // ---------------------------------------------------------------------------
 function handleDragStart(event: DragEvent) {
-  if (!boardInteraction || !canDrag.value) {
+  if (!boardInteraction || !canDrag.value || !boardInteraction.startDrag(elementIdentity())) {
     event.preventDefault();
     return;
   }
@@ -151,8 +151,6 @@ function handleDragStart(event: DragEvent) {
 
   event.dataTransfer?.setData('boardsmith/element', JSON.stringify(elementIdentity()));
   event.dataTransfer!.effectAllowed = 'move';
-
-  boardInteraction.startDrag(elementIdentity());
 }
 
 function handleDragEnd() {

@@ -309,6 +309,15 @@ describe('useDragDrop — a disabled candidate is not draggable (#1299)', () => 
     expect(api.drag({ id: 2 }).classes['bs-draggable']).toBe(true);
   });
 
+  it('drag() asks `when` once for both its props and its classes', () => {
+    const { api } = mountDragDrop(bi);
+    const when = vi.fn(() => true);
+
+    api.drag({ id: 2 }, { when });
+
+    expect(when).toHaveBeenCalledTimes(1);
+  });
+
   it('a candidate disabled after its props were bound cancels the browser drag and runs no onDragStart', () => {
     const { api } = mountDragDrop(bi);
     const onDragStart = vi.fn();

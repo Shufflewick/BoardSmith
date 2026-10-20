@@ -350,8 +350,11 @@ export function useDragDrop(): UseDragDropReturn {
   /**
    * Get CSS classes for a draggable element.
    */
-  const dragClasses = (ref: ElementRef, options?: DragOptions): DragClasses => ({
-    'bs-draggable': mayDrag(ref, options),
+  const dragClasses = (ref: ElementRef, options?: DragOptions): DragClasses =>
+    classesFor(ref, mayDrag(ref, options));
+
+  const classesFor = (ref: ElementRef, draggable: boolean): DragClasses => ({
+    'bs-draggable': draggable,
     'bs-dragging': isDragging(ref),
   });
 
@@ -368,10 +371,13 @@ export function useDragDrop(): UseDragDropReturn {
    * Props are conditional (inert — draggable:false but onDragend retained —
    * when the condition is false; see inertDragProps/WR-06).
    */
-  const drag = (ref: ElementRef, options?: DragOptions): DragResult => ({
-    props: mayDrag(ref, options) ? dragPropsInner(ref, options) : inertDragProps(options),
-    classes: dragClasses(ref, options),
-  });
+  const drag = (ref: ElementRef, options?: DragOptions): DragResult => {
+    const draggable = mayDrag(ref, options);
+    return {
+      props: draggable ? dragPropsInner(ref, options) : inertDragProps(options),
+      classes: classesFor(ref, draggable),
+    };
+  };
 
   /**
    * Combined helper for drop targets - returns props and classes.
