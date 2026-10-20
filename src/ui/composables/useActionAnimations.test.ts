@@ -384,8 +384,11 @@ describe('useActionAnimations', () => {
       for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 0));
     }
 
-    /** The real controller auto-executing forcedPlay, with the server's answer held until `answer` is called. */
-    function playThroughController() {
+    /**
+     * The real controller auto-executing forcedPlay, with the server's answer held until `answer` is called.
+     * `registerFirst` adds a game's own before-hook ahead of the animations hook.
+     */
+    function playThroughController(registerFirst?: (controller: ReturnType<typeof useActionController>) => void) {
       let answer!: (result: ControllerActionResult) => void;
       let fail!: (err: Error) => void;
       const sendAction = createMockSendAction().mockImplementation(
@@ -404,6 +407,7 @@ describe('useActionAnimations', () => {
       const animations = useActionAnimations({
         gameView: gameViewRef, animations: [{ ...flipConfig, duration: 60_000 }], actionController: controller,
       });
+      registerFirst?.(controller);
       controller.onBeforeAutoExecute(animations.onBeforeAutoExecute);
       return {
         controller, animations, gameViewRef, sendAction,
@@ -479,35 +483,41 @@ describe('useActionAnimations', () => {
       expectOriginalLook(card);
     });
 
-    it("a cancelled action that ends late leaves the next action's flight alone (#1026)", async () => {
-      const card = styledCard();
-      const { controller, animations, gameViewRef, answer } = playThroughController();
-      // A second hook in the game that waits on its first call, while the player cancels and plays again.
-      let release!: () => void;
-      const held = new Promise<void>((r) => { release = r; });
-      let firstCall = true;
-      controller.onBeforeAutoExecute(async () => {
-        if (!firstCall) return;
-        firstCall = false;
-        await held;
-      });
+    it.each(['after', 'before'] as const)(
+      "a cancelled action that ends late leaves the next action's flight alone, game hook %s the animations hook (#1026)",
+      async (order) => {
+        const card = styledCard();
+        // A hook in the game that waits on its first call, while the player cancels and plays again.
+        let release!: () => void;
+        const held = new Promise<void>((r) => { release = r; });
+        let firstCall = true;
+        const gameHook = async () => {
+          if (!firstCall) return;
+          firstCall = false;
+          await held;
+        };
+        const { controller, animations, gameViewRef, answer } = playThroughController(
+          order === 'before' ? (c) => c.onBeforeAutoExecute(gameHook) : undefined,
+        );
+        if (order === 'after') controller.onBeforeAutoExecute(gameHook);
 
-      await controller.start('forcedPlay');
-      await settle();
-      controller.cancel();
-      await controller.start('forcedPlay');
-      await settle();
-      release();
-      await settle();
-      expect(card.style.opacity).toBe('0');
+        await controller.start('forcedPlay');
+        await settle();
+        controller.cancel();
+        await controller.start('forcedPlay');
+        await settle();
+        release();
+        await settle();
+        expect(card.style.opacity).toBe('0');
 
-      gameViewRef.value = fakeGameView();
-      await nextTick();
-      answer({ success: true });
-      await settle();
-      expect(animations.flyingElements.value).toHaveLength(1);
-      animations.cancelAll();
-    });
+        gameViewRef.value = fakeGameView();
+        await nextTick();
+        answer({ success: true });
+        await settle();
+        expect(animations.flyingElements.value).toHaveLength(1);
+        animations.cancelAll();
+      },
+    );
 
     it('an update that is not the reply does not play the flight; the reply plays it exactly once', async () => {
       const card = styledCard();

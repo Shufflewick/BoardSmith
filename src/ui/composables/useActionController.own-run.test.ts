@@ -121,13 +121,11 @@ describe('auto-execute hooks and listeners are told which run they belong to (#1
     return { controller, sendAction, hookRuns, lateHook, outcomes };
   }
 
-  it("a hook that runs after the player moved on is handed its own run's args", async () => {
-    const { lateHook, hookRuns } = await cancelDuringHookThenPlayAgain();
+  it('hooks after the waiting one are never called for a run the player moved on from', async () => {
+    const { lateHook, hookRuns, outcomes } = await cancelDuringHookThenPlayAgain();
 
-    expect(lateHook).toEqual([
-      { actionName: 'play', args: { card: 2 }, run: hookRuns[1] },
-      { actionName: 'play', args: { card: 1 }, run: hookRuns[0] },
-    ]);
+    expect(lateHook).toEqual([{ actionName: 'play', args: { card: 2 }, run: hookRuns[1] }]);
+    expect(outcomes.map((o) => o.run)).toContain(hookRuns[0]);
   });
 
   it('each outcome carries the run its hooks were given', async () => {

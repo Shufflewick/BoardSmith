@@ -1181,7 +1181,7 @@ When the composable detects a flip-in-place animation (`elementSelector === dest
 
 You don't need to set `hideDestination`, `flip`, or `crossfadeDuration` - they're configured automatically.
 
-**When it plays:** the composable listens to `actionController.onAfterAutoExecute` for each action's result. The flight plays only once the server has accepted the action and the state it produced has rendered; a state update from another seat while the action is in flight does not play it. If the server refuses the action, or it is cancelled before it is sent, the hidden element gets back exactly the inline styles it had and no flight plays. Each outcome carries the `run` number the hook was given, so an action cancelled while a game's own hook was still waiting cannot undo the capture of the action the player started next (#1026).
+**When it plays:** the composable listens to `actionController.onAfterAutoExecute` for each action's result. The flight plays only once the server has accepted the action and the state it produced has rendered; a state update from another seat while the action is in flight does not play it. If the server refuses the action, or it is cancelled before it is sent, the hidden element gets back exactly the inline styles it had and no flight plays. If the player cancels while a game's own before-hook is still waiting, no hook after it is called for that action, and its outcome carries the `run` number the hooks were given, so whether the game's hook is registered before or after this one, the cancelled action cannot undo or overwrite the capture of the action the player started next (#1026).
 
 **Animation Config Options:**
 

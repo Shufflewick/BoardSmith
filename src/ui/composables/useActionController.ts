@@ -1469,7 +1469,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         && !isViewingHistoryValue()) {
       const seq = actionStartTick.value;
       const run = ++autoExecuteRuns;
-      await runBeforeAutoExecuteHooks(currentAction.value, buildServerArgs(), run);
+      await runBeforeAutoExecuteHooks(currentAction.value, buildServerArgs(), run, seq);
       const result: ControllerActionResult = actionMovedOn(seq)
         ? { success: false, error: 'Action was cancelled' }
         : await executeCurrentAction();
@@ -1488,10 +1488,14 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * another hook) splices the live array mid-for...of and would silently
    * skip the hook registered after it.
    */
-  async function runBeforeAutoExecuteHooks(actionName: string, args: Record<string, unknown>, run: number): Promise<void> {
+  async function runBeforeAutoExecuteHooks(
+    actionName: string, args: Record<string, unknown>, run: number, seq: number,
+  ): Promise<void> {
     for (const hook of [...beforeAutoExecuteHooks.value]) {
+      // A run the player has left must not reach a hook that would overwrite the next run's capture (#1026).
+      if (actionMovedOn(seq)) return;
       try {
-        // A copy each, read before the first await: a later hook may run after the player moved on.
+        // A copy each, so one hook changing its args cannot change what the next hook sees.
         await hook(actionName, { ...args }, run);
       } catch (err) {
         console.error('[ActionController] beforeAutoExecute hook failed:', err);
