@@ -481,7 +481,27 @@ describe('boardsmith verify --chunk <slug>: the chunk\'s fast checks', () => {
       `Chunk "combat" changed files outside design/ in a step before spec, which writes no game code: ` +
         `${investigate.slice(0, 10)} (chunk-combat/step-investigate) changed src/rules.ts.`,
     );
-    expect(check(result, 'test').next).toMatch(/Commit game code under the step that writes it \(spec or build\)/);
+    expect(check(result, 'test').next).toMatch(/rewrite those commits on the chunk's branch.*a new commit on top, a revert included, does not clear this/);
+  });
+
+  it('keeps failing a chunk whose step before spec changed game code after later commits add passing tests, naming every such commit', async () => {
+    const dir = await gameOnBranch(false);
+    await write(dir, { 'design/chunks/combat/CHUNK.md': '# combat\n', 'src/rules.ts': `${await fs.readFile(join(dir, 'src', 'rules.ts'), 'utf-8')}export const tax = 1;\n` });
+    commitAll(dir, 'chunk-combat/step-investigate');
+    const investigate = git(dir, 'rev-parse', 'HEAD').trim();
+    await write(dir, { 'src/extra.ts': 'export const extra = 2;\n' });
+    commitAll(dir, 'chunk-combat/step-ask');
+    const ask = git(dir, 'rev-parse', 'HEAD').trim();
+    await write(dir, { 'tests/fee.test.ts': FEE_TEST });
+    commitAll(dir, 'chunk-combat/step-spec');
+
+    const { result } = await runVerify({ projectDir: dir, chunk: 'combat', log: () => {} });
+
+    expect(result.passed).toBe(false);
+    expect(check(result, 'test').summary).toBe(
+      `Chunk "combat" changed files outside design/ in a step before spec, which writes no game code: ` +
+        `${investigate.slice(0, 10)} (chunk-combat/step-investigate) changed src/rules.ts; ${ask.slice(0, 10)} (chunk-combat/step-ask) changed src/extra.ts.`,
+    );
   });
 
   it('passes an exempt chunk with no test of its own on typecheck alone, saying no test ran and why', async () => {

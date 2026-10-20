@@ -324,8 +324,9 @@ export async function chunkTests(projectDir: string, chunk: string, base: string
         `Chunk "${chunk}" changed files outside design/ in a step before spec, which writes no game code: ` +
         `${early.map((e) => `${commitName(e.commit)} changed ${e.files.join(', ')}`).join('; ')}.`,
       next:
-        'Commit game code under the step that writes it (spec or build), not investigate, redteam or ask: ' +
-        'move those changes out of the commits named, commit, then run `boardsmith verify --chunk ' + chunk + '` again.',
+        "Game code belongs to the step that writes it (spec or build): rewrite those commits on the chunk's branch before it merges, " +
+        'moving their changes outside design/ into the spec or build commit; a new commit on top, a revert included, does not clear this. ' +
+        'Then run `boardsmith verify --chunk ' + chunk + '` again.',
     };
   }
   const files = changed.filter((path) => isTestFile(path) && existsSync(join(projectDir, path)));
