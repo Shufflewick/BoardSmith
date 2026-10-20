@@ -37,6 +37,7 @@ Import from `boardsmith/client` when you want to:
 
 ### Driving the dev host
 
+<!-- typecheck: game scripts/drive.ts -->
 ```typescript
 import { createDevHostClient } from 'boardsmith/client';
 
@@ -51,6 +52,7 @@ const state = await client.getState();
 `GameShell` initialises the service and plays the turn chime itself. A game can
 change the player's settings:
 
+<!-- typecheck: game src/ui/sound.ts -->
 ```typescript
 import { audioService } from 'boardsmith/client';
 

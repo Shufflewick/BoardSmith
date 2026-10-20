@@ -1,5 +1,6 @@
 import { Command, Option } from 'commander';
 import { readBoardsmithVersion } from './lib/boardsmith-version.js';
+import { parsePositiveWholeNumber } from '../utils/positive-whole-number.js';
 import { initCommand } from './commands/init.js';
 import { addUiCommand } from './commands/add-ui.js';
 import { devCommand } from './commands/dev.js';
@@ -52,7 +53,11 @@ import {
   verifyRulingRecheckCommand,
   verifyRulingRecordCommand,
 } from './commands/verify-ruling-recheck.js';
-import { verifyRepairStatusCommand } from './commands/verify-repair.js';
+import {
+  verifyRepairGateCommand,
+  verifyRepairRoundCommand,
+  verifyRepairStatusCommand,
+} from './commands/verify-repair.js';
 import {
   verifyDeriveCheckCommand,
   verifyDeriveRecordCommand,
@@ -763,6 +768,34 @@ export function createProgram(): Command {
     .option('--run-id <id>', 'Report against a specific verify run instead of the most recent')
     .option('--json', 'Emit JSON instead of human-readable output')
     .action(discardResult(verifyRepairStatusCommand));
+
+  program
+    .command('verify-repair-round')
+    .description(
+      "Open a stale chunk's next verify-episode audit round by appending its ### Audit Round heading " +
+        "to CHUNK.md, or report triage and write nothing once the episode's 3-round budget is spent",
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .requiredOption('--chunk <slug>', 'The stale chunk to open a round for')
+    .requiredOption(
+      '--episode <n>',
+      "The verify episode, from this pass's `boardsmith verify-repair` report",
+      (raw: string) => parsePositiveWholeNumber('--episode', raw),
+    )
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(verifyRepairRoundCommand));
+
+  program
+    .command('verify-repair-gate')
+    .description(
+      "Re-derive a stale chunk's repair-gate disposition from its post-repair code state, once its " +
+        'verify-episode rounds are closed (read-only, machine-readable)',
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--run-id <id>', 'Report against a specific verify run instead of the most recent')
+    .requiredOption('--chunk <slug>', 'The stale chunk to re-derive the gate for')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(verifyRepairGateCommand));
 
   // CHECK-04 (177.1-CONTEXT.md decision 2): dual-enumeration derived-line check — two
   // independently-dispatched enumerators (the judgement and second-opinion roles) each read a

@@ -67,8 +67,9 @@ export function outermostConcealer(element: GameElement, position: number): Game
   const ancestors: GameElement[] = [];
   for (let ancestor = element._t.parent; ancestor; ancestor = ancestor._t.parent) ancestors.unshift(ancestor);
   return ancestors.find((ancestor) => {
-    // Searched outermost first, so every ancestor above this one is visible (#1123).
-    return !ownVisibilityAllows(ancestor, position) || hidesContents(ancestor, position);
+    // Searched outermost first, so every ancestor above this one is visible (#1123) and its owner is the view's.
+    const owner = ancestor.getEffectiveOwner()?.seat;
+    return !ownVisibilityAllows(ancestor, position, owner) || hidesContents(ancestor, position, owner);
   });
 }
 

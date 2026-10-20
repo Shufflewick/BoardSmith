@@ -397,27 +397,35 @@ game's state, so a later step can read it, such as from one action's `execute`
 to a later action. Write it only from an action's `execute` or a flow step,
 never from a candidate callback.
 
+<!-- typecheck: game src/rules/loot.ts -->
 ```typescript
-import { Action, actionTempState } from 'boardsmith';
+import { Action, actionTempState, type ActionDefinition } from 'boardsmith';
+import { Equipment, Sector } from './collect.js';
+import type { MyGame } from './game.js';
 
-Action.create('explore')
-  .chooseElement('sector', { elementClass: Sector })
-  .execute((args, ctx) => {
-    actionTempState(ctx, 'explore').set('sectorId', args.sector.id);
-  });
+export function createExploreSectorAction(): ActionDefinition {
+  return Action.create<MyGame>('explore')
+    .chooseElement('sector', { elementClass: Sector })
+    .execute((args, ctx) => {
+      actionTempState(ctx, 'explore').set('sectorId', args.sector.id);
+    });
+}
 
-Action.create('collectLoot')
-  .chooseElement('loot', {
-    elements: (ctx) => {
-      const sectorId = actionTempState(ctx, 'explore').get<number>('sectorId');
-      if (sectorId === undefined) return [];  // Asked before anything was explored
-      return ctx.game.getElementById(sectorId)!.all(Equipment);
-    },
-  })
-  .execute((args, ctx) => {
-    args.loot.putInto(ctx.player.stash);
-    actionTempState(ctx, 'explore').clear();  // Always clean up!
-  });
+export function createCollectLootAction(): ActionDefinition {
+  return Action.create<MyGame>('collectLoot')
+    .chooseElement('loot', {
+      elements: (ctx) => {
+        const sectorId = actionTempState(ctx, 'explore').get<number>('sectorId');
+        if (sectorId === undefined) return [];  // Asked before anything was explored
+        return ctx.game.getElementById(sectorId)!.all(Equipment);
+      },
+    })
+    .execute((args, ctx) => {
+      args.loot.remove();
+      ctx.player.gold += 1;
+      actionTempState(ctx, 'explore').clear();  // Always clean up!
+    });
+}
 ```
 
 **API:**
@@ -559,7 +567,7 @@ Action.create('attack')
 // In your custom Vue component:
 function attackTarget(targetId: number) {
   // Just send the element ID - it works!
-  props.action('attack', { target: targetId });
+  props.actionController.execute('attack', { target: targetId });
 }
 ```
 
@@ -983,8 +991,13 @@ dev log. To say it in the game's words, give `chooseFrom`, `chooseElement` or
 
 It receives `(value, context)`. `value` is what was submitted, so it is typed
 `unknown`: for a choice, the value sent; for an element, the element if it still
-exists, otherwise the id sent. Return the sentence the player reads, saying what
-happened and what to do next. An empty return is refused as an authoring error.
+exists and the player can see it, otherwise the id sent. An element the player
+cannot see (face down, or in a hidden hand or pile) is handed as the id the
+player knows it by, its placeholder when it has one (#715), so the sentence
+cannot name a card the player was never shown (#1205). Do not print that id: a
+placeholder is a meaningless negative number. Return the sentence the player
+reads, saying what happened and what to do next. An empty return is refused as
+an authoring error.
 
 #### `.condition()` is about availability, not arguments
 
@@ -2355,7 +2368,7 @@ sequence(
 Control player order with `TurnOrder` presets. Use the spread operator to apply them:
 
 ```typescript
-import { TurnOrder } from 'boardsmith';
+// TurnOrder, eachPlayer and actionStep come from 'boardsmith'
 
 // Default round-robin from player 1
 eachPlayer({
@@ -2646,17 +2659,17 @@ export class MyGame extends Game<MyGame, MyPlayer> {
 
 ### Sending Actions from Custom Components
 
-When building a custom game board in Vue, you can send actions using the `action` prop:
+When building a custom game board in Vue, you can send actions through the `actionController` prop:
 
+<!-- typecheck: board -->
 ```vue
 <script setup lang="ts">
-const props = defineProps<{
-  gameView: GameView;
-  action: (name: string, args: Record<string, unknown>) => Promise<{ success: boolean }>;
-}>();
+import type { TableBoardProps } from 'boardsmith/ui';
+
+const props = defineProps<TableBoardProps>();
 
 function attackTarget(targetId: number) {
-  props.action('attack', { target: targetId });
+  props.actionController.execute('attack', { target: targetId });
 }
 </script>
 ```
@@ -2679,7 +2692,7 @@ This means custom UIs can send element IDs even for `chooseFrom` selections:
 })
 
 // Custom UI can send the element ID directly
-props.action('attack', { target: target.id });  // Works!
+props.actionController.execute('attack', { target: target.id });  // Works!
 ```
 
 ### Detailed Validation Errors

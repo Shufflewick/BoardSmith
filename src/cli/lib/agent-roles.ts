@@ -1,4 +1,7 @@
+import { promises as fs } from 'node:fs';
+import { join } from 'node:path';
 import { suggestKey } from './config-schema.js';
+import { readIfExists } from './read-if-exists.js';
 
 /**
  * The roles the bs- skills hand work to, and which Claude Code agent type each one is
@@ -127,4 +130,23 @@ export function agentTypeFor(config: Record<string, unknown>, role: Role): strin
 /** The roles `config` dispatches as `agent`: empty for an agent no role is mapped to now. */
 export function rolesDispatchedAs(config: Record<string, unknown>, agent: string): Role[] {
   return ROLES.filter((role) => agentTypeFor(config, role) === agent);
+}
+
+/**
+ * The project's boardsmith.json, for `command` to read its `agents` block from. A project without
+ * one is refused, never read as having no block, so no role silently falls back to its default (#1202).
+ */
+export async function readProjectConfig(projectDir: string, command: string): Promise<Record<string, unknown>> {
+  const text = await readIfExists(join(projectDir, 'boardsmith.json'), (path) => fs.readFile(path, 'utf-8'));
+  if (text === undefined) {
+    throw new Error(
+      `${command} reads which agent each role is dispatched as from boardsmith.json, and ${projectDir} has no boardsmith.json. ` +
+        "Run it in the game's directory, or pass --project <dir>.",
+    );
+  }
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch (error) {
+    throw new Error(`boardsmith.json in ${projectDir} is not valid JSON (${(error as Error).message}). Fix it, then run ${command} again.`);
+  }
 }

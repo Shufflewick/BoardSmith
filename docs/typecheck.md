@@ -99,8 +99,15 @@ in every game.
   game and plays a turn, because a type check cannot see a `loop()` that throws
   when it is built. A board is marked `<!-- typecheck: board -->` instead, and
   `src/contract/aspect-boards-typecheck.test.ts` compiles it as a game's
-  `.vue` board (#570). Leave a block unmarked only when it is deliberately
-  partial. The aspect templates `/design-game` copies game code from
+  `.vue` board (#570). A block that shows its imports (a ```ts block with
+  an `import` line, or a ```vue block with a `<script>` line, anywhere in
+  it) is a file, so it must be marked (or carry the
+  `<!-- doc-test: file <path> -->` marker of `docs/balance-simulator.test.ts`,
+  which compiles and runs that page):
+  `src/contract/doc-typecheck-blocks.test-helper.test.ts` fails on one that is
+  not (#1050). A deliberately partial block is written without import lines; a
+  `//` comment can say where its names come from. The
+  aspect templates `/design-game` copies game code from
   (`src/cli/slash-command/aspects/*.md`) are read the same way (#645).
 - **Anything at runtime.** Types say nothing about a shape crossing a boundary
   the types do not describe.
