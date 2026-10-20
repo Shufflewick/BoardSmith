@@ -1494,9 +1494,10 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * typed as an element, or an element whose residency is an accident of who
    * else is in the world.
    *
-   * AND, BEFORE THE PICK ASKED (`through`), ONLY WHAT THAT PICK OFFERS (#1315),
-   * judged as a table's re-ask judges it: an element its own `choices` filter
-   * out is as stale as one outside the read, and no later callback sees it.
+   * AND, BEFORE THE PICK ASKED (`through`), ONLY WHAT THAT PICK OFFERS (#1315):
+   * an element its own `elements` leave out is as stale as one outside the
+   * read, and no later callback sees it. Membership only, so a list still being
+   * filled in, or an element shown greyed, is quoted as it was.
    */
   private resolveDraft(
     definition: ActionDefinition,
@@ -1521,10 +1522,11 @@ export class BoardSmithWorldEngine implements WorldEngine {
         if (selection.type !== "element" && selection.type !== "elements") return;
         // Residency first, so the pick's own callbacks never run on an element outside the read.
         if (!this.isDeclared(value, named)) throw stale(selection.name);
-        if (
-          definition.selections.indexOf(selection) < through &&
-          !executor.validateSelection(selection, value, acting, before, definition.name, reading).valid
-        ) {
+        if (definition.selections.indexOf(selection) >= through) return;
+        const offered = new Set(
+          executor.getChoices(selection, acting, before, undefined, reading).map((choice) => (choice.value as GameElement).id),
+        );
+        if (!(Array.isArray(value) ? value : [value]).every((item: GameElement) => offered.has(item.id))) {
           throw stale(selection.name);
         }
       }),

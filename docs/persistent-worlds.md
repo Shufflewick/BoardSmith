@@ -888,8 +888,8 @@ element, not the id the panel sent, and so is every element in a `chooseElements
 pick re-asked with earlier answers bound (`prompt`, `choices`/`elements`,
 `prepare`, `disabled`, `multiSelect`). Those elements are read-only, like
 everything else a read sees. A draft naming an element this action cannot offer
-the seat any more (outside what the read declared, or an earlier pick's element
-its own `elements` no longer offer) is refused with `stale-draft` before any later
+the seat any more (outside what the read declared, or not among the elements
+its pick's own `elements` offer now) is refused with `stale-draft` before any later
 pick's callback sees it, and a draft carrying a key none of the action's picks declares is refused
 with `undeclared-arg`, as the command itself is.
 
