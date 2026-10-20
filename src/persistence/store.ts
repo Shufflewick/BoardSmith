@@ -13,20 +13,21 @@
  * ## What it is NOT
  *
  * It is not a reimplementation of `convex/gamePersistence.ts`. The platform's
- * store owns quotas, scoping across campaigns, staging that settles inside the
- * same transaction as the play row, and a sweeper. None of that is emulated
- * and none of it is claimed: those are properties of a DEPLOYMENT, and a local
- * copy of them would be exactly the second implementation this whole directory
- * exists to avoid.
+ * store owns the per-game and per-campaign growth quotas, scoping across
+ * campaigns, staging that settles inside the same transaction as the play row,
+ * and a sweeper. None of that is emulated and none of it is claimed: those are
+ * properties of a DEPLOYMENT, and a local copy of them would be exactly the
+ * second implementation this whole directory exists to avoid.
  *
  * What IS emulated is the part a game author can get wrong on their own
  * machine, and only learns about after publishing:
  *
  *   - the SEAL. `player:<token>/<key>` is one player's row. A session is
  *     handed, and may write, sealed rows only for the players it acts for.
- *   - the WIRE CEILING and every shape rule, which are not this file's at all:
- *     `commit()` calls `readPersistCommit` from `persistence.ts`, the one the
- *     platform's Durable Object calls.
+ *   - the WIRE CEILING, the per-commit entry cap, the key rules and every
+ *     shape rule, which are not this file's at all: `commit()` calls
+ *     `readPersistCommit` from `persistence.ts`, the one the platform's Durable
+ *     Object calls.
  *
  * ## THE SEAL HAS NO BYPASS, AND THAT IS A DECISION (ShufflewickPub #47)
  *
