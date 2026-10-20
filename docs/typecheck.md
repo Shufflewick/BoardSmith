@@ -101,9 +101,12 @@ in every game.
   `src/contract/aspect-boards-typecheck.test.ts` compiles it as a game's
   `.vue` board (#570). A block that shows its imports (a ```ts block whose
   first code line is an `import`, or a ```vue block that opens with
-  `<script>`) is a file, so it must be marked:
+  `<script>`) is a file, so it must be marked (or carry the
+  `<!-- doc-test: file <path> -->` marker of `docs/balance-simulator.test.ts`,
+  which compiles and runs that page):
   `src/contract/doc-typecheck-blocks.test-helper.test.ts` fails on one that is
-  not (#1050). A deliberately partial block is written without imports. The
+  not (#1050). A deliberately partial block is written without import lines; a
+  `//` comment can say where its names come from. The
   aspect templates `/design-game` copies game code from
   (`src/cli/slash-command/aspects/*.md`) are read the same way (#645).
 - **Anything at runtime.** Types say nothing about a shape crossing a boundary
