@@ -15,6 +15,7 @@ import { parseImageInfo, type ImageInfo } from '../../../utils/image.js';
 import { directChildren, getElementCount, isSizeHidden as sizeIsHidden } from '../../../composables/useGameViewHelpers.js';
 import ElementRenderer from './ElementRenderer.vue';
 import CardBack from './CardBack.vue';
+import GrantedCards from './GrantedCards.vue';
 import type { GameElement } from '../auto-ui-helpers.js';
 
 const props = defineProps<{
@@ -129,6 +130,7 @@ const { attrs: selectableAttrs, onActivate, onKeydown } =
     <div v-else class="deck-empty">
       <span class="empty-text">Empty</span>
     </div>
+    <GrantedCards :element="element" />
   </div>
 </template>
 

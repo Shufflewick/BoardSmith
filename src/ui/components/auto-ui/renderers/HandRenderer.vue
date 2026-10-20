@@ -14,6 +14,7 @@ import { useElementBoardState } from '../../../composables/useElementBoardState.
 import { useSelectable } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
 import CardBack from './CardBack.vue';
+import GrantedCards from './GrantedCards.vue';
 import { usePresentationEntry } from '../../../composables/usePresentationEntry.js';
 import { isHiddenPlaceholder } from '../../../../engine/element/hidden-placeholder.js';
 import { seatDisplayName } from '../../../../engine/element/seat-defaults.js';
@@ -77,7 +78,6 @@ const visibleChildren = computed(() => {
   if (isHiddenPlaceholder(props.element)) return [];
   return directChildren(props.element);
 });
-const grantedFromHidden = computed(() => (props.element.children ?? []).slice(visibleChildren.value.length));
 
 // Count display (for hidden hands that expose only childCount); none when the size is not told.
 const sizeHidden = computed(() => isSizeHidden(props.element));
@@ -89,8 +89,8 @@ const handAriaLabel = computed(() =>
 // Back image for hidden card placeholders (from defaultBackImage)
 // ---------------------------------------------------------------------------
 const childBackImage = computed((): ImageInfo | null => {
-  // Check visible children for back image
-  for (const child of (props.element.children ?? [])) {
+  // Its own cards' back: a granted card may be of another deck.
+  for (const child of directChildren(props.element)) {
     const images = child.attributes?.$images as Record<string, unknown> | undefined;
     const back = parseImageInfo(images?.back);
     if (back) return back;
@@ -266,9 +266,7 @@ function handleDrop(event: DragEvent) {
       </div>
     </div>
 
-    <div class="hand-granted">
-      <ElementRenderer v-for="child in grantedFromHidden" :key="child.id" :element="child" />
-    </div>
+    <GrantedCards :element="element" />
   </div>
 </template>
 
@@ -353,17 +351,6 @@ function handleDrop(event: DragEvent) {
 }
 
 /* Cards wrapper */
-.hand-granted:empty {
-  display: none;
-}
-
-.hand-granted {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--bsg-s2);
-  margin-top: var(--bsg-s2);
-}
-
 .hand-cards-wrapper {
   display: flex;
   flex-direction: column;
