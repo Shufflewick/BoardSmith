@@ -320,8 +320,10 @@ Outcomes are reported in the same order as a serial run. Vitest sizes its pools
 from `poolOptions` (`maxForks`, `maxThreads`, `minForks`, `minThreads`) before
 the worker count, and runs files of different pools at the same time, so with a
 budget the mutation check refuses a config that sets those, `poolMatchGlobs`,
-a different pool per project or a custom pool, rather than run more workers
-than the budget says.
+typecheck mode (`typecheck.enabled`), browser mode (`browser.enabled`), a
+different pool per project or a custom pool, rather than run more workers than
+the budget says. A setting can come from the config file or from an environment
+variable Vitest reads, such as `VITEST_MAX_FORKS`.
 
 Stopping mutation verification with Ctrl+C or SIGTERM stops every Vitest process
 group it started and waits for them to close before removing that run's temporary files.

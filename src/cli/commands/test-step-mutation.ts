@@ -407,8 +407,8 @@ const budgetProblems = (ctx) => {
   if (pools.size > 1) settings.push(\`a different pool per project (\${[...pools].join(', ')})\`);
   if (![...pools].every((pool) => ['forks', 'threads', 'vmForks', 'vmThreads'].includes(pool))) settings.push(\`the custom pool \${[...pools].join(', ')}\`);
   if (settings.length === 0) return undefined;
-  return \`boardsmith.json "mutation" gives each Vitest run a budget of \${budget} test workers, but the project's Vitest config sets \${[...new Set(settings)].join(', ')}, \` +
-    'which Vitest uses to run workers outside that budget. Remove those settings from the Vitest config, or remove "mutation" from boardsmith.json to run mutants one at a time.';
+  return \`boardsmith.json "mutation" gives each Vitest run a budget of \${budget} test workers, but the project's Vitest config (or an environment variable such as VITEST_MAX_FORKS) sets \${[...new Set(settings)].join(', ')}, \` +
+    'which Vitest uses to run workers outside that budget. Remove those settings from the Vitest config and environment, or remove "mutation" from boardsmith.json to run mutants one at a time.';
 };
 const testsIn = (tasks) => tasks.flatMap((task) => (task.type === 'suite' ? testsIn(task.tasks) : [task]));
 const reporter = {

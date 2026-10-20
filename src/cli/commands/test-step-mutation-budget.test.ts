@@ -30,8 +30,9 @@ const SURVIVORS = [
 ];
 
 /**
- * Each test file enters the trial on load: it marks itself live, then waits until as many trials as
- * the budget allows are live, a trial being one runner's directory, which holds its mutant input (or gives up, which a serial run always does), and records what it saw.
+ * Each test file enters the trial on load: it marks itself live, waits until `trials` trials are live
+ * (a trial being one runner's directory, which holds its mutant input) or an earlier file met that,
+ * and records what it saw. The serial project writes trials: 1, so its barrier is met at once.
  */
 const TRIAL = `import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 const root = new URL('../trials/', import.meta.url).pathname;
@@ -50,12 +51,13 @@ export async function enterTrial() {
   // Recorded on entry too, so a trial stopped while it waits still shows it started.
   put(root + 'seen/' + process.pid + '.json', { mutantPath, mutant, pool: process.env.VITEST_POOL_ID, live: [] });
   let live = [];
-  for (let polls = 0; polls < 200; polls++) {
+  // No poll limit: a scheduler that never runs trials together fails on the test timeout instead.
+  for (;;) {
     live = readdirSync(root + 'active').filter((name) => !name.endsWith('.partial') && alive(Number(name))).map(readLive).filter(Boolean);
-    if (new Set(live.map(trialOf)).size >= trials || existsSync(root + 'met')) break;
+    if (new Set(live.map(trialOf)).size >= trials) { writeFileSync(root + 'met', ''); break; }
+    if (existsSync(root + 'met')) break;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  if (new Set(live.map(trialOf)).size >= trials) writeFileSync(root + 'met', '');
   put(root + 'seen/' + process.pid + '.json', { mutantPath, mutant, pool: process.env.VITEST_POOL_ID, live });
 }
 export const leaveTrial = () => rmSync(root + 'active/' + process.pid, { force: true });
