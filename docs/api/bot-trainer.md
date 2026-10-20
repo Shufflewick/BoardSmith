@@ -88,10 +88,12 @@ Scores that noisy make the highest one lucky: when no candidate is stronger
 than the original, the best still scores around 68% against the original's
 50% (#870). So before keeping the pick, the evolver plays it and the original
 again, on 400 new games each that the search never played, the same games for
-both. The pick is kept only if it wins a one-sided two-proportion test at 5%:
+both. Each set's 400 games are played as 20 separately seeded batches of 20,
+spread across the worker pool (#1031). The pick is kept only if it wins a one-sided two-proportion test at 5%:
 a pick no stronger than the original is kept at most about 1 run in 20, and a
 pick 10 points stronger is kept about 88% of the time (15 points: about 99%).
-Otherwise `bot.ts` is left as it was. The reported improvement is the
+Otherwise `bot.ts` is left as it was. A kept pick's weights are written to
+`bot.ts` exactly as measured, unrounded. The reported improvement is the
 confirmation's, not the search score.
 
 ### Reproducible runs
