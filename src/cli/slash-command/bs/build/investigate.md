@@ -34,19 +34,19 @@ handed off ("this scaffold step's concern is limited to... `/bs-build-chunk`'s o
 step owns the full required-reading discipline for chunk work"). Every investigate dispatch
 names, by exact filename, the docs relevant to this chunk:
 
-- `docs/core-concepts.md` — always.
-- `docs/common-pitfalls.md` — always.
-- `docs/actions-and-flow.md` — when the chunk involves actions.
-- `docs/custom-ui-guide.md` and `docs/ui-components.md` — for `ui: touches` or `ui: major`
+- `node_modules/boardsmith/docs/core-concepts.md` — always.
+- `node_modules/boardsmith/docs/common-pitfalls.md` — always.
+- `node_modules/boardsmith/docs/actions-and-flow.md` — when the chunk involves actions.
+- `node_modules/boardsmith/docs/custom-ui-guide.md` and `node_modules/boardsmith/docs/ui-components.md` — for `ui: touches` or `ui: major`
   chunks (this chunk's CHUNK.md `## ui:` tag).
-- `docs/dice-and-scoring.md` — for dice-mechanic chunks.
+- `node_modules/boardsmith/docs/dice-and-scoring.md` — for dice-mechanic chunks.
 - `DESIGN.md` — for `ui: touches` or `ui: major` chunks. (`DESIGN.md` does not exist until the
   first UI chunk's `ask` writes it, which is why `ingest/scaffold.md` could not name it —
   investigate is the first step downstream of that write.)
 
 Also carry `build/build.md`'s "## Boundaries" rule forward into this chunk's interpretation:
-`node_modules/boardsmith` is a live symlink to the client's real BoardSmith checkout — READ-ONLY,
-never patched. Any interpretation this step writes stays inside the game's own project source; it
+`node_modules/boardsmith` is the client's BoardSmith, an installed copy or a link to their
+checkout — READ-ONLY, never patched. Any interpretation this step writes stays inside the game's own project source; it
 never proposes a fix that lives under `node_modules/boardsmith`.
 
 ## Inputs to Read
@@ -80,9 +80,9 @@ the reads together rather than one after another (none depends on another):
   - RULINGS.md (rulings outrank the rulebook — read it as the composite source of truth
     together with the slices above)
   - DECISIONS.md
-  - {resolvedDocList} (e.g. docs/core-concepts.md, docs/common-pitfalls.md, and any of
-    docs/actions-and-flow.md / docs/custom-ui-guide.md / docs/ui-components.md /
-    docs/dice-and-scoring.md that apply to this chunk)
+  - {resolvedDocList} (e.g. node_modules/boardsmith/docs/core-concepts.md, node_modules/boardsmith/docs/common-pitfalls.md, and any of
+    node_modules/boardsmith/docs/actions-and-flow.md / node_modules/boardsmith/docs/custom-ui-guide.md / node_modules/boardsmith/docs/ui-components.md /
+    node_modules/boardsmith/docs/dice-and-scoring.md that apply to this chunk)
   - DESIGN.md (only if this chunk's `## ui:` tag is touches or major)
 
 WRITE directly into this chunk's CHUNK.md — do not return this content, write it yourself:

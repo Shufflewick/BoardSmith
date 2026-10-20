@@ -25,7 +25,7 @@ import { describe, it } from 'vitest';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { generateTsConfig } from '../cli/lib/project-scaffold.js';
+import { generateSmokeSpecTs, generateTsConfig } from '../cli/lib/project-scaffold.js';
 import { consumerInstall, declaredPeers } from './consumer-install.test-helper.js';
 import { expectCleanCompile } from './vue-tsc-run.test-helper.js';
 
@@ -81,6 +81,22 @@ describe("`boardsmith/testing` type-checks under a game's browser tsconfig (#411
       'A "Cannot find module \'node:...\'" or a missing `process` member means Node-only code is reachable from ' +
         'the entry\'s types: keep it behind a declaration, as package.json "imports" does for ' +
         '`#testing/project-test-utils` (see src/testing/project-test-utils.d.ts).',
+    );
+  }, 180_000);
+
+  it('reports zero vue-tsc errors for a game holding only the smoke spec `boardsmith init` writes (#1306)', () => {
+    const root = consumerInstall({ entryPoints: [], alsoInstalled: declaredPeers() });
+    mkdirSync(join(root, 'tests', 'browser'), { recursive: true });
+    writeFileSync(join(root, 'tests', 'browser', 'smoke.spec.ts'), generateSmokeSpecTs(['move']));
+    writeFileSync(join(root, 'game.tsconfig.json'), gameTsConfig());
+
+    expectCleanCompile(
+      root,
+      'game.tsconfig.json',
+      'a game whose only file is the smoke spec importing boardsmith/testing/browser, under the tsconfig ' +
+        '`boardsmith init` writes, which has no Node types',
+      'A "Cannot find name \'process\'" means a file the entry reaches reads `process` without referencing ' +
+        'src/types/node-globals.d.ts, so it compiles only when something else (the `boardsmith` entry) brings it in.',
     );
   }, 180_000);
 });

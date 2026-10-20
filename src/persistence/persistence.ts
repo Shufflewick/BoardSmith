@@ -247,7 +247,7 @@ export interface PersistStartPayload {
  * could not spell one: the store is the only other thing it is handed, so the
  * only way to name a sealed key would be to already hold a sealed key. A
  * campaign's FIRST mission holds none, so the capability
- * `docs/CAMPAIGNS.md` leads with was unreachable in the mode it was written
+ * ShufflewickPub's campaigns guide leads with was unreachable in the mode it was written
  * for. Issue #40's campaign example is what surfaced that -- prose could not.
  *
  * `playerId` is the same opaque token every other per-player handle carries:
