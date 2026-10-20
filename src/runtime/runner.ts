@@ -124,6 +124,13 @@ export interface GameRunnerOptions<G extends Game, O extends GameOptions = GameO
    * them, so a save keeps the options it started with.
    */
   declaredGameOptions?: Readonly<Record<string, GameOptionDefinition>>;
+  /**
+   * Whoever runs this runner throws it away when an op fails and keeps the
+   * game from before the op, as a host does. A failed action then tells the
+   * player nothing was changed, even where the runner itself could not undo
+   * it (#1254).
+   */
+  discardsFailedOps?: boolean;
 }
 
 /**
@@ -225,7 +232,7 @@ export function pickFailureCode(refused: { rulesError?: boolean }): ErrorCode {
 }
 
 /** What a player is told when a failed action could not be undone (checkpoints off, #808, #989). */
-export const PARTIAL_CHANGES_KEPT =
+const PARTIAL_CHANGES_KEPT =
   'The action failed part way through, and the game may still hold its partial changes, ' +
   'because per-action checkpoints are turned off for this session so it could not be undone. ' +
   'Check the board before playing on, or restart the game from a save.';
@@ -397,7 +404,10 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   readonly seed?: string;
 
+  readonly #discardsFailedOps: boolean;
+
   constructor(options: GameRunnerOptions<G, O>) {
+    this.#discardsFailedOps = options.discardsFailedOps ?? false;
     this.gameType = options.gameType;
     this.checkpointPolicy_ = {
       max: options.checkpoints?.max ?? Number.POSITIVE_INFINITY,
@@ -647,7 +657,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   private undoneError(error: string | undefined, restored: boolean): string {
     const kept = error === undefined ? '' : `${error} `;
-    return kept + (restored ? NOTHING_CHANGED : PARTIAL_CHANGES_KEPT);
+    return kept + (restored || this.#discardsFailedOps ? NOTHING_CHANGED : PARTIAL_CHANGES_KEPT);
   }
 
   /** Put the game back to the head checkpoint, if there is one, and say whether it did. */
@@ -1374,6 +1384,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       checkpoints?: RunnerCheckpointPolicy;
       randomness?: RandomnessPolicy;
       undo?: UndoPolicy;
+      discardsFailedOps?: boolean;
     }
   ): GameRunner<G> {
     const tree = snapshotTree(snapshot);
@@ -1402,6 +1413,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       // draws for the rest of the session.
       randomness: options?.randomness,
       undo: options?.undo,
+      discardsFailedOps: options?.discardsFailedOps,
     });
 
     // Preserve action history for the undo op (which reads runner.actionHistory).

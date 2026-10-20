@@ -82,7 +82,7 @@ export class PendingActionManager<G extends Game = Game> {
     errorCode?: ErrorCode;
     pendingState?: PendingActionState;
   } {
-    const found = actionForSeat(this.#runner.game, this.#runner.game.players.length, playerPosition, actionName);
+    const found = actionForSeat(this.#runner.game, playerPosition, actionName);
     if ('refusal' in found) return found.refusal;
 
     const executor = this.#runner.game.getActionExecutor();
@@ -195,13 +195,17 @@ export class PendingActionManager<G extends Game = Game> {
     if (this.#dropPendingAction(playerPosition)) this.#runner.captureCheckpoint();
   }
 
-  /** Drop a seat's pending action, running `onCancel` for each pick whose `onSelect` ran. True if there was one. */
+  /**
+   * Drop a seat's pending action, running `onCancel` for each pick whose
+   * `onSelect` ran. True if any did, when the game may have changed.
+   */
   #dropPendingAction(playerPosition: number): boolean {
     const pendingState = this.#pendingActions.get(playerPosition);
     if (!pendingState) return false;
-    const action = this.#runner.game.getAction(pendingState.actionName);
-    if (action) this.#runner.game.getActionExecutor().fireOnCancelCallbacks(action, pendingState);
     this.#pendingActions.delete(playerPosition);
+    const action = this.#runner.game.getAction(pendingState.actionName);
+    if (!action || !pendingState.onSelectFired?.size) return false;
+    this.#runner.game.getActionExecutor().fireOnCancelCallbacks(action, pendingState);
     return true;
   }
 

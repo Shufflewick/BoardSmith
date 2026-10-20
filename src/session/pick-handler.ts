@@ -61,7 +61,8 @@ function evaluateCandidates(
     // The engine's own crash handling (#1045, #1248): a refusal travels, anything else is logged and replaced.
     const thrown = gameCodeThrew(actionName, `Evaluating '${selection.name}' of action '${actionName}'`, error);
     // A crash is ENGINE_ERROR, as on every other route (#1141), so a caller tells it from a refusal (#1156).
-    const errorCode = thrown.rulesError
+    // A game that cannot simulate here is no refusal by its rules (#31).
+    const errorCode = thrown.rulesError || thrown.notSimulable
       ? ErrorCode.ENGINE_ERROR
       : selection.type === 'choice' ? ErrorCode.CHOICES_EVALUATION_ERROR : ErrorCode.ELEMENTS_EVALUATION_ERROR;
     return { refusal: { success: false, error: thrown.error!, errorCode } };
@@ -245,7 +246,7 @@ export class PickHandler<G extends Game = Game> {
     currentArgs: Record<string, unknown> = {},
     pendingState: Record<string, unknown> | null = null,
   ): PickChoicesResponse {
-    const found = actionForSeat(this.#runner.game, this.#runner.game.players.length, playerPosition, actionName);
+    const found = actionForSeat(this.#runner.game, playerPosition, actionName);
     if ('refusal' in found) return found.refusal;
     const refusal = this.#refusalToPick(actionName, playerPosition, pendingState);
     if (refusal) return refusal;
