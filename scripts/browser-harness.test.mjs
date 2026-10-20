@@ -171,6 +171,7 @@ describe('#533: every browser regression runs automatically', () => {
   const policy = JSON.parse(readFileSync(join(REPO, '.agent-policy.json'), 'utf8'));
 
   it('runs the browser suite at merge when UI, dev host, world or browser script files change', () => {
+    expect(policy.merge?.extraMergeSteps, 'merge.extraMergeSteps in .agent-policy.json').toBeDefined();
     const step = policy.merge.extraMergeSteps.find((s) => s.name === 'browser');
     expect(step).toMatchObject({ run: 'node bin/boardsmith.js test --browser' });
     const runsFor = (path) => new RegExp(step.whenChanged).test(path);
