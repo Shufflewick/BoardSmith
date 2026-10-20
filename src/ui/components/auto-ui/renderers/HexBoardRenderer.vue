@@ -70,12 +70,14 @@ const coord = (cell: GameElement, name: string) => cell.attributes![name] as num
  * Each cell's q/r (from its own coordinate attributes, named by the board) and
  * its pixel position, read once per change rather than by every reader (#1294).
  */
-const cellPlaces = computed(() => new Map(hexCells.value.map((cell) => {
+function place(cell: GameElement) {
   const q = coord(cell, qCoordName.value);
   const r = coord(cell, rCoordName.value);
-  return [cell, { q, r, ...hexToPixel(q, r, hexSize.value, orientation.value) }] as const;
-})));
-const placeOf = (cell: GameElement) => cellPlaces.value.get(cell)!;
+  return { q, r, ...hexToPixel(q, r, hexSize.value, orientation.value) };
+}
+const cellPlaces = computed(() => new Map(hexCells.value.map((cell) => [cell, place(cell)] as const)));
+// A cell from an earlier view (a handler still holding it) is placed directly.
+const placeOf = (cell: GameElement) => cellPlaces.value.get(cell) ?? place(cell);
 
 /** SVG polygon points string from standalone getHexPolygonPoints function */
 const hexPoints = computed(() =>

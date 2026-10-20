@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
 import GridBoardRenderer from './GridBoardRenderer.vue';
-import { Game, Grid, GridCell, Piece, Player } from '../../../../engine/index.js';
+import { Game, Grid, GridCell, Piece, Player, Space } from '../../../../engine/index.js';
 import type { GameElement } from '../auto-ui-helpers.js';
 
 class Square extends GridCell<BoardGame> {
@@ -50,5 +50,30 @@ describe('GridBoardRenderer with a cell hidden from the seat (#1055)', () => {
 
     expect(wrapper.find('.grid-error-panel').exists()).toBe(false);
     expect(wrapper.findAll('.grid-cell')).toHaveLength(9);
+  });
+
+  it('draws a grid built of plain spaces with one hidden from the seat, whose place it is still sent (#1294)', () => {
+    class Plot extends Space<PlotGame> {
+      y!: number;
+      x!: number;
+    }
+    class Field extends Grid<PlotGame> {
+      $rowCoord = 'y';
+      $colCoord = 'x';
+    }
+    class PlotGame extends Game<PlotGame, Player> {
+      constructor(options: { playerCount: number }) {
+        super(options);
+        const field = this.create(Field, 'field');
+        for (let y = 0; y < 2; y++) for (let x = 0; x < 2; x++) field.create(Plot, `p${y}${x}`, { y, x });
+        field.first(Plot, 'p11')!.hideFromAll();
+      }
+    }
+    const field = new PlotGame({ playerCount: 2 }).toJSONForPlayer(1).children!.find((c) => c.name === 'field') as GameElement;
+
+    const wrapper = mount(GridBoardRenderer, { props: { element: field } });
+
+    expect(wrapper.find('.grid-error-panel').exists()).toBe(false);
+    expect(wrapper.findAll('.grid-cell')).toHaveLength(4);
   });
 });
