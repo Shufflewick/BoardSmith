@@ -20,8 +20,6 @@ const SHIPPED = new Set(packedFiles(REPO_ROOT));
 
 const DOC_PATH = /\bdocs\/[\w/.-]+\.md\b/g;
 const INSTALLED = 'node_modules/boardsmith/';
-/** A `docs/...md` path of this package, not the tail of another repository's path such as `ShufflewickPub/docs/...`. */
-const OWN_DOC_PATH = /(?<![\w/])docs\/[\w/.-]+\.md\b/g;
 
 const SKILLS = join(REPO_ROOT, 'src/cli/slash-command');
 const SKILL_TEXT = readdirSync(SKILLS, { recursive: true, encoding: 'utf8' })
@@ -44,7 +42,7 @@ const DOC_LINKS = [...SHIPPED]
 /** Every `docs/...md` path a shipped source file names: the CLI's messages, the code it generates, and comments. */
 const SOURCE_DOCS = [...SHIPPED]
   .filter((path) => path.startsWith('src/') && /\.(ts|mts|mjs|js|vue)$/.test(path))
-  .flatMap((file) => (readFileSync(join(REPO_ROOT, file), 'utf8').match(OWN_DOC_PATH) ?? []).map((doc) => ({ file, doc })));
+  .flatMap((file) => (readFileSync(join(REPO_ROOT, file), 'utf8').match(DOC_PATH) ?? []).map((doc) => ({ file, doc })));
 
 describe('shipped docs (#996)', () => {
   it('the skills name the docs investigation reads', () => {

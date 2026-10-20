@@ -93,7 +93,7 @@ const words = (line: string) => line.trim().split(/\s+/).map((word) => word.repl
 
 describe('docs/balance-simulator.md, run block by block (#556)', () => {
   it('starts from boardsmith init --sim, which the project here was scaffolded with', () => {
-    expect(DOC).toMatch(/boardsmith init bazaar --sim/);
+    expect(DOC).toMatch(/^boardsmith init bazaar --sim$/m);
   });
 
   it('marks every TypeScript, CSV and command block, leaving out only the shell setup and the report excerpt', () => {

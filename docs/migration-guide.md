@@ -811,11 +811,11 @@ game.toJSON()            // truth is the only view
 game.toJSONForPlayer(seat)
 ```
 
-### Step 5: Update animation event handlers (optional skip support)
+### Step 5: Update animation event handlers (skip support)
 
 Animation handlers (`registerHandler`) work the same in v3.0. Handlers now receive an optional second argument `{ signal }` with an `AbortSignal` that fires when the user presses "Skip". Handlers can check `signal.aborted` between animation steps to bail out early.
 
-A later release made a third argument required: `{ skip: 'run' }` calls the handler with an already-aborted signal when the user skips, and `{ skip: 'drop' }` does not call it. Every handler passes one, so the "after" below shows it:
+A later release made a third argument required: `{ skip: 'run' }` calls the handler with an already-aborted signal when the user skips, and `{ skip: 'drop' }` does not call it. Every handler passes one, the "before" form included, so the "after" below shows it:
 
 ```typescript
 // Before
@@ -829,10 +829,10 @@ animations.registerHandler('combat', async (event, { signal }) => {
   await playAttack(event.data);
   if (signal.aborted) return;
   await showDamage(event.data);
-}, { skip: 'run' });
+}, { skip: 'drop' });
 ```
 
-Existing handlers that don't use the signal still work — the queue will unblock immediately when skip is pressed regardless.
+A handler that does not use the signal still works once it passes `{ skip }`: the queue unblocks immediately when skip is pressed regardless.
 
 ### New in v3.0: Wait-for-Handler
 
