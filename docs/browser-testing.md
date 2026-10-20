@@ -317,15 +317,15 @@ Two of them read as the worked examples:
   when an entry unmounts.
 
 ```sh
-boardsmith test --browser                # every one, as a thread merge runs them
+boardsmith test --browser                # every one, as a merge runs them
 node scripts/ordered-list-browser.mjs    # one, with its checks printed as it goes
 ```
 
 `boardsmith test --browser` (`vitest.browser.config.ts`, #533) runs one case per
 `scripts/*-browser.mjs`, found by name, that runs the script and expects it to
-exit 0. A thread merge runs it as its `browser` step when the merge changes
+exit 0. A merge runs it as its `browser` step when the merge changes
 `src/ui/`, `src/cli/dev-host/`, `src/world/` or a browser script
-(`thread.extraMergeSteps` in `.agent-policy.json`); `agent-policy verify` does not
+(`merge.extraMergeSteps` in `.agent-policy.json`); `agent-policy verify` does not
 run it, so run it by hand while working on those areas. They are **not**
 part of a plain `boardsmith test`, so the default suite needs no Chromium, and
 `--browser` skips the type check a plain run does first, since the merge's
