@@ -512,19 +512,29 @@ constructor(options) {
 
 ### 2. Custom Player Classes
 
+Declare a player's fields on a `Player` subclass, with no constructor: the engine constructs each player. Name the class in the game's `static PlayerClass`, and create elements that belong to a player (such as a hand) in the game's constructor.
+
+<!-- typecheck: game src/rules/game.ts -->
 ```typescript
+import { Game, Hand, Player, type GameOptions } from 'boardsmith';
+
 export class MyPlayer extends Player<MyGame, MyPlayer> {
   hand!: Hand;
-  score: number = 0;  // Auto-serialized
+  score = 0;  // Auto-serialized
   abilities: Record<string, number> = {};  // Auto-serialized
-
-  constructor(position: number, name: string, game: MyGame) {
-    super(position, name);
-    this.game = game;
-    this.hand = game.create(Hand, `hand-${this.seat}`);
-    this.hand.player = this;
-  }
   // No toJSON override needed - simple properties are auto-serialized
+}
+
+export class MyGame extends Game<MyGame, MyPlayer> {
+  static PlayerClass = MyPlayer;
+
+  constructor(options: GameOptions) {
+    super(options);
+    for (const player of this.players) {
+      player.hand = this.create(Hand, `hand-${player.seat}`);
+      player.hand.player = player;
+    }
+  }
 }
 ```
 

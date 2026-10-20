@@ -127,17 +127,19 @@ describe('assertNoHiddenInfoLeak — custom UI component', () => {
   it('catches a leak in a game\'s OWN board that AutoUI would never surface', async () => {
     const tg = makeGame();
 
+    // Seat 2, off turn: its AutoUI offers no `peek` targets, whose labels are
+    // the fixture's own leak (#405, #1192), so only the board under test can leak.
     // The load-bearing comparison: scanning via AutoUI passes...
-    await expect(assertNoHiddenInfoLeak(tg, 1)).resolves.not.toThrow();
+    await expect(assertNoHiddenInfoLeak(tg, 2)).resolves.not.toThrow();
 
     // ...while the very same game, scanned through the board its players
-    // actually see, fails — naming seat 2's secret card.
+    // actually see, fails — naming seat 1's secret card.
     await expect(
-      assertNoHiddenInfoLeak(tg, 1, {
+      assertNoHiddenInfoLeak(tg, 2, {
         component: LeakyBoard,
         componentProps: { fullTree: authoritativeView(tg) },
       }),
-    ).rejects.toThrow(/2-secret-card/);
+    ).rejects.toThrow(/1-secret-card/);
   });
 
   it('passes for a custom board that renders only the redacted per-seat view', async () => {

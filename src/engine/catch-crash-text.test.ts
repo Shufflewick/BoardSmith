@@ -196,7 +196,7 @@ describe('FlowHaltedError (#1120)', () => {
     const runner = new GameRunner({ GameClass: haltingGame(() => cause, twoStep), gameType: 'halt', gameOptions: { playerCount: 2, seed: 'halt' } });
     runner.start();
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const picks = new PendingActionManager(runner, 2);
+    const picks = new PendingActionManager(runner);
     picks.startPendingAction('go', 1);
     expect((await picks.processSelectionStep(1, 'color', 'red')).success).toBe(true);
     const result = await picks.processSelectionStep(1, 'size', 'S');

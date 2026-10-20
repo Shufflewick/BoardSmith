@@ -37,7 +37,7 @@ class OnSelectGame extends Game<OnSelectGame, Player> {
 }
 
 describe('pendingAction on the wire (CR-01)', () => {
-  it('a fired onSelect is published as a plain array, with the args picked so far', async () => {
+  it('a fired onSelect is published as a plain array, with the picks held so far', async () => {
     const session = createHeadlessSession(
       { gameClass: OnSelectGame, gameType: 'onselect-test', minPlayers: 2, maxPlayers: 2 },
       { playerCount: 2, seed: 'test', playerNames: ['Alice', 'Bob'] },
@@ -54,7 +54,7 @@ describe('pendingAction on the wire (CR-01)', () => {
     expect(pending).toBeDefined();
     expect(Array.isArray(pending!.onSelectFired)).toBe(true);
     expect(pending!.onSelectFired).toEqual([0]);
-    expect(pending!.collectedArgs.color).toBe('red');
+    expect(pending!.heldPicks).toEqual(['color']);
     // Nothing in it changes over a JSON round trip.
     expect(JSON.parse(JSON.stringify(pending))).toEqual(pending);
   });

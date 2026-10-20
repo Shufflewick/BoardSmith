@@ -1,7 +1,7 @@
 {
-  "revision": 249,
-  "surfaceHash": "0216afcb8a5822ba",
-  "payloadHash": "0aac4ab9ca52b5f9",
+  "revision": 255,
+  "surfaceHash": "869ce5eb83bfb570",
+  "payloadHash": "06a23811b8d27270",
   "formatHash": "ed115e27605f2ca7",
   "history": [
     {
@@ -1931,8 +1931,56 @@
     {
       "revision": 249,
       "date": "2026-10-19",
-      "surfaceHash": "0216afcb8a5822ba",
-      "payloadHash": "0aac4ab9ca52b5f9",
+      "surfaceHash": "7f205bf27a6fcb74",
+      "payloadHash": "51f21b4b479bcc9a",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A seat that cannot see into an owner-only zone, or a zone that hides its contents from that seat (hideContentsFrom), now gets the zone's childCount with its placeholders, as a count-only zone already did, so getElementCount no longer counts granted cards nested below a placeholder (#1208). A bot's search sandbox keeps that count. No game needs a rebuild."
+    },
+    {
+      "revision": 250,
+      "date": "2026-10-20",
+      "surfaceHash": "7f205bf27a6fcb74",
+      "payloadHash": "51f21b4b479bcc9a",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "In a seat's view an element's owner is its own player, or its parent's owner when the seat is sent the parent, so below a hidden box an owner rule (showToOwner, contentsVisibleToOwner, visibleAttributes) never uses the owner of the hidden box or of anything above it: no seat learns who owns the box and none is shown another seat's owner-only content. An element there with no player on itself or on a sent element between it and the hidden box is not shown even to its real owner (#1209). isVisibleTo agrees. No catalogue game is affected (their owner rules are only on top-level hands), and no game needs a rebuild."
+    },
+    {
+      "revision": 251,
+      "date": "2026-10-20",
+      "surfaceHash": "7f205bf27a6fcb74",
+      "payloadHash": "51f21b4b479bcc9a",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A pick's choices() or elements() that crashes (throws something that is not a PlayerFacingError) now answers a choices request with errorCode ENGINE_ERROR, as a crash does on every other route (#1141); CHOICES_EVALUATION_ERROR and ELEMENTS_EVALUATION_ERROR now mean only that the rules refused with a PlayerFacingError, so a host can tell a refusal from a crash by code (#1156). Messages are unchanged, and no saved-state or payload shape changes."
+    },
+    {
+      "revision": 252,
+      "date": "2026-10-20",
+      "surfaceHash": "42fb28e08af7d80f",
+      "payloadHash": "51f21b4b479bcc9a",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "ErrorCode gains UNKNOWN_OP: a host refuses an op it has no handler for with this code, so clients stop matching the text 'Unknown server op' (#1046, ShufflewickPub#651)."
+    },
+    {
+      "revision": 253,
+      "date": "2026-10-20",
+      "surfaceHash": "42fb28e08af7d80f",
+      "payloadHash": "ba6cfcc9fce4e62f",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The payload fingerprint now also records the flow state the spectator and each seat are actually sent (their own cut, #778), so a change to what a seat receives mints a revision. No engine behaviour changed; nothing needs rebuilding."
+    },
+    {
+      "revision": 254,
+      "date": "2026-10-20",
+      "surfaceHash": "42fb28e08af7d80f",
+      "payloadHash": "0784e22c1b68bcca",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "Coverage only, no engine behaviour changed: the payload fixture now hashes the whole view the executor publishes to each seat and the spectator (its state as well as its flow-state cut, all but the random game instance id), for every seat the fixture has, and the field names of the state it publishes, so a change to what a seat is sent moves payloadHash (#1296)."
+    },
+    {
+      "revision": 255,
+      "date": "2026-10-20",
+      "surfaceHash": "869ce5eb83bfb570",
+      "payloadHash": "06a23811b8d27270",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A world fan-out shares one body again between seats shown the same count-only pile (#1207). Since #715 each seat's placeholder ids are its own, so every seat shown a placeholder held a body of its own: 500 watchers of a plaza with a 52-card face-down deck were 500 bodies and 6.9 MB. viewsFor now answers each body with every placeholder's id taken out (the node carries placeholder: k where its id was), and each answered seat carries placeholders: its own ids, in order (WorldAudienceSeat.placeholders; the runner's WorldViews.of[player] is now { at, placeholders } rather than a bare index, so a reader that used of[player] as an index no longer compiles and must call seatView(bodies[at], placeholders)). That plaza is one 13 KB body and 0.45 MB in all, and no body carries any seat's ids. A body is NOT a seat's view until seatView(body, placeholders), new in boardsmith/world, puts that seat's ids back: a host must call it before sending, or send the ids beside the shared body and let the client call it. ResidentWorld.bodyFor, the dev host and TestWorld already do. viewFor is unchanged. Stored format unchanged; no game needs a rebuild."
     }

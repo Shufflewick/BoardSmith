@@ -28,35 +28,8 @@
     "run": "npx vitest run --shard={slice}",
     "reporter": "vitest"
   },
-  "thread": {
+  "merge": {
     "push": "origin",
-    "workspaces": [
-      {
-        "dir": ".",
-        "install": "npm install",
-        "requireInstalled": "node_modules",
-        "refreshWhenChanged": "^package(-lock)?\\.json$"
-      }
-    ],
-    "seed": [
-      ".env",
-      ".env.local",
-      ".dev.vars"
-    ],
-    "disposableIgnored": [
-      "node_modules/",
-      "dist/",
-      "*.tsbuildinfo",
-      "coverage/",
-      ".wrangler/",
-      ".fallow/*.bin",
-      ".fallow/cache/",
-      ".fallow/.gitignore",
-      "boardsmith-audit-report*.html",
-      ".treeshake-test-fixtures/",
-      "*.timestamp-*.mjs",
-      "*.log"
-    ],
     "extraMergeSteps": [
       {
         "name": "browser",

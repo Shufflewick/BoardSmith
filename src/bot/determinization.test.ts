@@ -10,7 +10,7 @@ import {
   type GameOptions,
 } from '../engine/index.js';
 import { MCTSBot } from './mcts-bot.js';
-import { DeterminizationError, applyDeterminization } from './determinization.js';
+import { DeterminizationError, adoptSeatView, applyDeterminization } from './determinization.js';
 import type { BotConfig, BotStrategy, DeterminizeSampler } from './types.js';
 
 // ============================================================================
@@ -818,5 +818,203 @@ describe('#1108 determinization: the sandbox keeps what the seat view says about
     const other = peekSandboxForSeat1(truth([8, 9], 4));
 
     expect(other.toJSON()).toEqual(one.toJSON());
+  });
+});
+
+// #1206: a seat granted a container below a hidden deck's hidden child is sent
+// it inside the deck (#961). With a zone rule of its own that shows its
+// contents (the pouch), every card in it reaches the seat, whole or face down,
+// so the seat counts it. With none (the bag), its cards inherit the deck's
+// hidden rule and only the granted ones are sent, so the seat cannot count it.
+class CrateGame extends Game<CrateGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([HandCard, Space]);
+    const deck = this.create(Space<CrateGame>, 'deck');
+    deck.contentsHidden();
+    const crate = deck.create(Space<CrateGame>, 'crate');
+    const pouch = crate.create(Space<CrateGame>, 'pouch');
+    pouch.showOnlyTo(1);
+    pouch.contentsVisible();
+    pouch.create(HandCard, 'open', { rank: 1 });
+    pouch.create(HandCard, 'face-down', { rank: 2 }).hideFromAll();
+    const bag = crate.create(Space<CrateGame>, 'bag');
+    bag.showOnlyTo(1);
+    bag.create(HandCard, 'granted', { rank: 3 }).showOnlyTo(1);
+    bag.create(HandCard, 'withheld', { rank: 4 });
+    const chest = deck.create(Space<CrateGame>, 'chest');
+    chest.showOnlyTo(1);
+    const box = chest.create(Space<CrateGame>, 'box');
+    box.setVisibility('count-only');
+    for (const rank of [5, 6, 7, 8]) box.create(HandCard, `boxed-${rank}`, { rank });
+    this.setFlow({ root: actionStep({ actions: [], player: (ctx) => ctx.game.getPlayer(1)! }) });
+  }
+
+  granted(name: string): Space<CrateGame> {
+    return this.first(Space<CrateGame>, 'deck')!.first(Space<CrateGame>, name)!;
+  }
+
+  // By position: a count-only box is sent with no name.
+  get box(): Space<CrateGame> {
+    return this.granted('chest').first(Space<CrateGame>)!;
+  }
+}
+
+const crateOptions = { playerCount: 2, seed: 'crate', elementIdKey: '0000000000001206' };
+
+function crateSandboxForSeat1(): CrateGame {
+  const sandbox = new CrateGame(crateOptions);
+  sandbox.loadSerializedState(new CrateGame(crateOptions).toJSONForPlayer(1));
+  adoptSeatView(sandbox, 1);
+  return sandbox;
+}
+
+describe('#1206 determinization: a granted container below a concealer keeps what the seat sees of it', () => {
+  it('refuses a sampler that adds a face-down card to a granted pouch the seat can count', () => {
+    const sandbox = crateSandboxForSeat1();
+    const pouch = sandbox.granted('pouch');
+
+    expect(() => applyDeterminization(sandbox, 1, () => {
+      pouch.create(HandCard, 'extra', { rank: 5 }).hideFromAll();
+    }, () => 0.5)).toThrow(
+      `Space#${pouch.id} "pouch" held 2 elements and now holds 3. The seat can count what that ` +
+      `container holds even where it cannot see them, so a sampler may not change how many it holds.`,
+    );
+  });
+
+  it('accepts a sampler that adds a card the seat cannot see to a granted bag it is sent only part of', () => {
+    const sandbox = crateSandboxForSeat1();
+    const bag = sandbox.granted('bag');
+    expect(bag.all(HandCard).map((card) => card.name)).toEqual(['granted']);
+
+    applyDeterminization(sandbox, 1, () => {
+      bag.create(HandCard, 'supposed', { rank: 4 });
+    }, () => 0.5);
+
+    expect(bag.count(HandCard)).toBe(2);
+  });
+
+  it('refuses a sampler that fills a count-only box sent in a granted chest with other than its count', () => {
+    for (const fill of [1, 7]) {
+      const sandbox = crateSandboxForSeat1();
+      const box = sandbox.box;
+
+      expect(() => applyDeterminization(sandbox, 1, () => {
+        for (let i = 0; i < fill; i++) box.create(HandCard, `supposed-${i}`, { rank: i });
+      }, () => 0.5)).toThrow(
+        `Space#${box.id} held 4 elements and now holds ${fill}. The seat can count what that ` +
+        `container holds even where it cannot see them, so a sampler may not change how many it holds.`,
+      );
+    }
+  });
+
+  it('accepts a sampler that fills a count-only box sent in a granted chest to its count', () => {
+    const sandbox = crateSandboxForSeat1();
+    const box = sandbox.box;
+
+    applyDeterminization(sandbox, 1, () => {
+      for (let i = 0; i < 4; i++) box.create(HandCard, `supposed-${i}`, { rank: i });
+    }, () => 0.5);
+
+    expect(box.count(HandCard)).toBe(4);
+  });
+});
+
+// #1291: the sandbox is rebuilt from the seat's view, and it reads only what
+// that view proves. A non-explicit grant (#1270), a visible direct child of a
+// concealed zone (#1274), and an owner rule lifted below a hidden container
+// (#1280) each used to come back different from what the seat was shown.
+class ShownGame extends Game<ShownGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([HandCard, Space]);
+    const deck = this.create(Space<ShownGame>, 'deck');
+    deck.contentsHidden();
+    deck.player = this.getPlayer(3)!;
+    // #1270: granted with addVisibleTo, which sets no visibility of its own.
+    const pouch = deck.create(Space<ShownGame>, 'pouch');
+    pouch.addVisibleTo(1);
+    pouch.contentsVisible();
+    pouch.create(HandCard, 'pouch-a', { rank: 1 });
+    pouch.create(HandCard, 'pouch-b', { rank: 2 });
+    // #1274: a visible direct child of the deck with no zone rule of its own.
+    const crate = deck.create(Space<ShownGame>, 'crate');
+    crate.showOnlyTo(1);
+    for (const rank of [3, 4, 5]) crate.create(HandCard, `crate-${rank}`, { rank });
+    // #1280: an owner rule granted below a hidden box, with no player of its own.
+    const box = deck.create(Space<ShownGame>, 'box');
+    const chest = box.create(Space<ShownGame>, 'chest');
+    chest.showOnlyTo(3);
+    chest.contentsVisibleToOwner();
+    chest.create(HandCard, 'coin', { rank: 6 });
+    // #1271: an opponent's hand, with a card granted to seat 1 inside a hidden box.
+    const hand = this.create(Space<ShownGame>, 'hand');
+    hand.player = this.getPlayer(2)!;
+    hand.contentsVisibleToOwner();
+    hand.create(HandCard, 'held', { rank: 7 });
+    hand.create(Space<ShownGame>, 'sleeve').create(HandCard, 'shown', { rank: 8 }).showOnlyTo(1);
+    this.setFlow({ root: actionStep({ actions: [], player: (ctx) => ctx.game.getPlayer(1)! }) });
+  }
+
+  get deck(): Space<ShownGame> {
+    return this.first(Space<ShownGame>, 'deck')!;
+  }
+}
+
+const shownOptions = { playerCount: 3, seed: 'shown', elementIdKey: '0000000000001291' };
+
+function shownSandboxFor(seat: number): ShownGame {
+  const sandbox = new ShownGame(shownOptions);
+  sandbox.loadSerializedState(new ShownGame(shownOptions).toJSONForPlayer(seat));
+  adoptSeatView(sandbox, seat);
+  return sandbox;
+}
+
+const countRefusal = (container: string, held: number, now: number) =>
+  `${container} held ${held} elements and now holds ${now}. The seat can count what that ` +
+  `container holds even where it cannot see them, so a sampler may not change how many it holds.`;
+
+describe('#1291 determinization: the sandbox reads what the seat view proves', () => {
+  it('keeps a container granted by addVisibleTo below a hidden deck visible to the seat (#1270)', () => {
+    const sandbox = shownSandboxFor(1);
+    const pouch = sandbox.deck.first(Space<ShownGame>, 'pouch')!;
+    expect(pouch.isVisibleTo(1)).toBe(true);
+
+    expect(() => applyDeterminization(sandbox, 1, () => {
+      pouch.create(HandCard, 'extra', { rank: 9 });
+    }, () => 0.5)).toThrow(`to Space#${pouch.id} "pouch". The seat can see that element itself`);
+  });
+
+  it('counts a visible direct child of a hidden deck, whose unseen cards it was sent face down (#1274)', () => {
+    const sandbox = shownSandboxFor(1);
+    const crate = sandbox.deck.first(Space<ShownGame>, 'crate')!;
+
+    expect(() => applyDeterminization(sandbox, 1, () => {
+      crate.create(HandCard, 'extra', { rank: 9 });
+    }, () => 0.5)).toThrow(countRefusal(`Space#${crate.id} "crate"`, 3, 4));
+  });
+
+  it('does not give a lifted owner rule the owner of the zone it was lifted into (#1280)', () => {
+    const sandbox = shownSandboxFor(3);
+    const chest = sandbox.deck.first(Space<ShownGame>, 'chest')!;
+    expect(chest.all(HandCard)).toHaveLength(1);
+    expect(chest.first(HandCard)!.isVisibleTo(3)).toBe(false);
+  });
+
+  it('says how many a zone was sent holding, its lifted grants included, when a sampler adds to it (#1271)', () => {
+    const sandbox = shownSandboxFor(1);
+    const hand = sandbox.first(Space<ShownGame>, 'hand')!;
+    expect(hand._t.children).toHaveLength(3);
+
+    expect(() => applyDeterminization(sandbox, 1, () => {
+      hand.create(HandCard, 'extra', { rank: 9 });
+    }, () => 0.5)).toThrow(countRefusal(`Space#${hand.id} "hand"`, 3, 4));
+  });
+
+  it('changes nothing when adopted twice', () => {
+    const once = shownSandboxFor(1);
+    const twice = shownSandboxFor(1);
+    adoptSeatView(twice, 1);
+    expect(twice.toJSON()).toEqual(once.toJSON());
   });
 });

@@ -15,25 +15,10 @@
  *
  * Throws, with what to do, on anything it cannot answer; cli.ts prints the message and exits 1.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { ESCALATION_LADDER, type Role, type WorkRole, agentTypeFor, defaultAgentType, nextRole, parseRole } from '../lib/agent-roles.js';
-
-function readProjectConfig(projectDir: string): Record<string, unknown> {
-  const path = join(projectDir, 'boardsmith.json');
-  if (!existsSync(path)) {
-    throw new Error(
-      `boardsmith agent reads which agent each role is dispatched as from boardsmith.json, and ${projectDir} has no boardsmith.json. ` +
-        "Run it in the game's directory, or pass --project <dir>.",
-    );
-  }
-  try {
-    return JSON.parse(readFileSync(path, 'utf-8')) as Record<string, unknown>;
-  } catch (error) {
-    throw new Error(`boardsmith.json in ${projectDir} is not valid JSON (${(error as Error).message}). Fix it, then run this again.`);
-  }
-}
+import { ESCALATION_LADDER, type Role, type WorkRole, agentTypeFor, defaultAgentType, nextRole, parseRole, readProjectConfig } from '../lib/agent-roles.js';
 
 /** Where Claude Code finds an agent a project can dispatch: the project's own, then the user's. */
 function isInstalled(projectDir: string, agentType: string): boolean {
@@ -76,6 +61,6 @@ export async function agentCommand(roleName: string, options: { project?: string
   const projectDir = resolve(options.project ?? process.cwd());
   const asked = parseRole(roleName);
   const role = options.escalate ? escalatedRole(asked) : asked;
-  const config = readProjectConfig(projectDir);
+  const config = await readProjectConfig(projectDir, { command: 'boardsmith agent', purpose: 'tell which agent each role is dispatched as' });
   console.log(`${role}: ${dispatchableAgent(projectDir, config, role)}`);
 }

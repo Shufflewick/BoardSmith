@@ -1,4 +1,4 @@
-import { GameElement, forEachInSubtree, markTouchedPartition, reissuePlaceholders } from './game-element.js';
+import { GameElement, forEachInSubtree, reissuePlaceholders } from './game-element.js';
 import { childrenChanged } from './cell-index.js';
 import { changing } from './state-version.js';
 import type { ElementClass, ElementAttributes, ElementContext, ElementJSON } from './types.js';
@@ -484,8 +484,6 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
       forEachInSubtree(child, (element) => {
         if (element._visibility === undefined) return;
         element.clearVisibility();
-        // A cleared grant on a nested partition root is that partition's write, not the shuffled space's.
-        markTouchedPartition(element);
       });
     }
     childrenChanged(this);

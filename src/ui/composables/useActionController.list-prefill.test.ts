@@ -2,7 +2,7 @@
  * #964: a pick that takes a list (chooseElements, multiSelect, ordered list)
  * can be prefilled with an array, each entry matched against the choices.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { ref, nextTick } from 'vue';
 import { useActionController, type EnrichedActionMetadata } from './useActionController.js';
 import { createMockSendAction } from './useActionController.test-helper.js';
@@ -25,16 +25,24 @@ const metadata: Record<string, EnrichedActionMetadata> = {
     name: 'pickOrder', prompt: 'Order',
     selections: [{ name: 'order', type: 'choice', prompt: 'Which order?', choices: XYZ, orderedList: { min: 1, max: 3 } }],
   },
+  pickOne: {
+    name: 'pickOne', prompt: 'Pick one',
+    selections: [{ name: 'one', type: 'choice', prompt: 'Which one?', choices: XYZ }],
+  },
+  pickRepeat: {
+    name: 'pickRepeat', prompt: 'Pick again',
+    selections: [{ name: 'again', type: 'choice', prompt: 'Which again?', choices: XYZ, repeat: { hasOnEach: false } }],
+  },
 };
 
-async function prefilled(action: string, prefill: Record<string, unknown>) {
+async function prefilled(action: string, prefill: Record<string, unknown>, autoExecute = true) {
   const sendAction = createMockSendAction();
   const controller = useActionController({
     sendAction,
     availableActions: ref(Object.keys(metadata)),
     actionMetadata: ref(metadata),
     isMyTurn: ref(true),
-    autoExecute: true,
+    autoExecute,
   });
   await controller.start(action, { prefill });
   for (let i = 0; i < 10; i++) await nextTick();
@@ -76,5 +84,123 @@ describe('an array prefill for a list pick (#964)', () => {
     const { sendAction, controller } = await prefilled('pickMany', { many: ['x', 'z'] });
     expect(sendAction).not.toHaveBeenCalled();
     expect(controller.lastError.value).toBe('Cannot prefill "Which?" with "X, Z": Z is spent.');
+  });
+});
+
+describe('the label a filled pick is shown by (#1298)', () => {
+  it.each([
+    ['pickCards', { cards: [9, 7] }, 'cards', 'Nine, Seven'],
+    ['pickMany', { many: ['x', 'y'] }, 'many', 'X, Y'],
+    ['pickOne', { one: 'x' }, 'one', 'X'],
+  ])('%s prefilled with %j reads its choices\' labels', async (action, prefill, pick, label) => {
+    const { controller } = await prefilled(action, prefill, false);
+    expect(controller.lastError.value).toBeNull();
+    expect(controller.getCollectedPick(pick)?.display).toBe(label);
+  });
+
+  it('reads a filled list by its entries\' labels', async () => {
+    const { controller } = await prefilled('pickMany', {}, false);
+    await controller.fill('many', ['x', 'y']);
+    expect(controller.getCollectedPick('many')?.display).toBe('X, Y');
+  });
+});
+
+describe('a prefill the pick refuses, said in the pick\'s own words (#1298)', () => {
+  it('names the entry that matched nothing', async () => {
+    const { controller } = await prefilled('pickMany', { many: ['nope', 'x'] });
+    expect(controller.lastError.value).toMatch(/"nope"/);
+  });
+
+  it.each([
+    ['pickMany', { many: [] }, /at least 1/],
+    ['pickOrder', { order: ['x', 'y', 'x', 'y'] }, /at most 3/],
+    ['pickMany', { many: ['x', 'x'] }, /more than once/],
+  ])('%s refuses %j by its count or its repeats', async (action, prefill, said) => {
+    const { sendAction, controller } = await prefilled(action, prefill);
+    expect(sendAction).not.toHaveBeenCalled();
+    expect(controller.lastError.value).toMatch(said);
+  });
+
+  it("keeps a refusal's own sentence for a list given to a one-value pick", async () => {
+    const { controller } = await prefilled('pickOne', { one: ['x'] });
+    expect(controller.lastError.value).toMatch(/^Cannot prefill "Which one\?": .*takes one/);
+  });
+
+  it("refuses a value no choice of a repeating pick names, though the server judges that pick's steps", async () => {
+    const { sendAction, controller } = await prefilled('pickRepeat', { again: 'nope' });
+    expect(sendAction).not.toHaveBeenCalled();
+    expect(controller.lastError.value).toMatch(/^Cannot prefill "Which again\?" with "nope"\. Pick one of: X, Y, Z\.$/);
+  });
+
+  it('says a whole choice was given where its value was meant', async () => {
+    const { controller } = await prefilled('pickOne', { one: { value: 'x', display: 'X' } });
+    expect(controller.lastError.value).toMatch(/Did you mean to pass choice\.value/);
+  });
+});
+
+describe('a list fill the pick refuses by its count or its repeats (#1298)', () => {
+  it('refuses a repeated entry in a set', async () => {
+    const { controller } = await prefilled('pickMany', {}, false);
+    const result = await controller.fill('many', ['x', 'x']);
+    expect(result.valid).toBe(false);
+    expect(result.error).toMatch(/more than once/);
+  });
+
+  it('counts two spellings of one choice as a repeat', async () => {
+    const { controller } = await prefilled('pickMany', {}, false);
+    const result = await controller.fill('many', ['x', 'X']);
+    expect(result.valid).toBe(false);
+    expect(result.error).toMatch(/more than once/);
+  });
+});
+
+describe('a prefill of a pick the server takes step by step (#1298)', () => {
+  it("goes to the server's step, as a fill of it does, so its onSelect runs there", async () => {
+    const hooked: Record<string, EnrichedActionMetadata> = {
+      pickHooked: {
+        name: 'pickHooked', prompt: 'Hooked',
+        selections: [{ name: 'hooked', type: 'choice', prompt: 'Which hook?', choices: XYZ, hasOnSelect: true }],
+      },
+    };
+    const pickStep = vi.fn(async () => ({ success: true, actionComplete: true }));
+    const controller = useActionController({
+      sendAction: createMockSendAction(),
+      availableActions: ref(Object.keys(hooked)),
+      actionMetadata: ref(hooked),
+      isMyTurn: ref(true),
+      playerSeat: ref(1),
+      pickStep,
+    });
+
+    await controller.start('pickHooked', { prefill: { hooked: 'x' } });
+    for (let i = 0; i < 10; i++) await nextTick();
+
+    expect(controller.lastError.value).toBeNull();
+    expect(pickStep).toHaveBeenCalledWith(1, 'hooked', 'x', 'pickHooked', expect.anything());
+  });
+});
+
+describe('a prefill queued for a later pick (#1298)', () => {
+  it('is not overridden by auto-filling that pick when the one before it is filled', async () => {
+    const twoPicks: Record<string, EnrichedActionMetadata> = {
+      pickTwo: {
+        name: 'pickTwo', prompt: 'Pick two',
+        selections: [
+          { name: 'first', type: 'choice', prompt: 'First?', choices: XYZ.slice(0, 2) },
+          { name: 'second', type: 'choice', prompt: 'Second?', choices: [XYZ[0], XYZ[2]] },
+        ],
+      },
+    };
+    const sendAction = createMockSendAction();
+    const controller = useActionController({
+      sendAction, availableActions: ref(['pickTwo']), actionMetadata: ref(twoPicks), isMyTurn: ref(true),
+    });
+    await controller.start('pickTwo', { prefill: { second: 'z' } });
+
+    await controller.fill('first', 'y');
+    for (let i = 0; i < 10; i++) await nextTick();
+
+    expect(sendAction).not.toHaveBeenCalled();
+    expect(controller.lastError.value).toBe('Cannot prefill "Second?" with "Z": Z is spent.');
   });
 });

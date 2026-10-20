@@ -110,7 +110,7 @@ function duel() {
   runner.start();
   const game = runner.game as DuelGame;
   const stoneId = (name: string) => game.first(Stone, name)!.id;
-  return { runner, game, stoneId, manager: new PendingActionManager(runner, 1), picks: new PickHandler(runner, 1) };
+  return { runner, game, stoneId, manager: new PendingActionManager(runner), picks: new PickHandler(runner) };
 }
 
 /** Take the first jump with stone A, so the seat holds a jump chained from it. */

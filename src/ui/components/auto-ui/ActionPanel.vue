@@ -680,9 +680,14 @@ const editorDescribedBy = computed(() => {
  * bar. The stylesheet still addresses them by the classes it always did.
  */
 const editorWrapperClass = computed(() => {
+  if (currentPick.value?.type !== 'text') return 'number-input';
+  return editorGrowth.value === 'box' ? ['text-input', 'text-input-multiline'] : 'text-input';
+});
+
+/** How far the editor may grow the bar: a multi-line box to what it needs, a one-line or number field by one row (#1300). */
+const editorGrowth = computed(() => {
   const pick = currentPick.value;
-  if (pick?.type !== 'text') return 'number-input';
-  return pick.multiline ? ['text-input', 'text-input-multiline'] : 'text-input';
+  return pick?.type === 'text' && pick.multiline ? 'box' : 'field';
 });
 
 const editorFieldAttrs = computed(() => ({
@@ -1995,16 +2000,18 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
              `data-bs-pick` names the pick the field answers, which is how the
              smoke walk finds the value a spec's `inputs` gives that field (#470).
 
-             `data-bs-grows-panel` marks a multi-line box: the one thing allowed
-             to grow the action bar past the strip the board reserves for it,
-             because six rows of text cannot be written in two (issue 444). The
-             shell's bar reads the mark, so the exception ends when this
-             unmounts. -->
+             `data-bs-grows-panel` marks the editor as the one thing allowed to
+             grow the action bar past the strip the board reserves for it (issue
+             444), and by how much: six rows of text cannot be written in two, so
+             a "box" grows to what it needs, while a one-line "field" stacks
+             label, hint and field + Done in three on a phone (#1058) and grows
+             one row (#1300). The shell's bar reads the mark, so the exception
+             ends when this unmounts. -->
         <div
           v-else-if="currentPick.type === 'number' || currentPick.type === 'text'"
           :class="editorWrapperClass"
           :data-bs-pick="currentPick.name"
-          :data-bs-grows-panel="(currentPick.type === 'text' && currentPick.multiline) || undefined"
+          :data-bs-grows-panel="editorGrowth"
         >
           <label class="selection-prompt" :for="editorInputId">
             {{ currentPick.prompt || `Enter ${currentPick.name}` }}

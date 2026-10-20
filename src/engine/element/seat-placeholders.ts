@@ -139,6 +139,11 @@ function itemFromSeat(selection: Selection, item: unknown, read: (id: number) =>
 /** No element has this id: what a reference the seat may not make becomes. */
 const NAMES_NOTHING = Number.MIN_SAFE_INTEGER;
 
+/** Whether an id read from a seat is one it may not make, which names nothing. */
+export function namesNothing(id: unknown): boolean {
+  return id === NAMES_NOTHING;
+}
+
 /** Reads ids `seat` sent into the server's, walking the id index for reissued tokens once at most. */
 function seatReader(game: Game, seat: number): (id: number) => number {
   const index = game._ctx._elementsById;

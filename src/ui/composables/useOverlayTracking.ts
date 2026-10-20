@@ -1,7 +1,7 @@
 /**
  * useOverlayTracking — keeps a viewport-fixed overlay (tutorial, hint, heatmap)
- * aligned with the board: re-measures when the content changes, when the board
- * region or a target resizes, and when the board region scrolls.
+ * aligned with the board: re-measures when the content changes, when the window,
+ * the board region or a target resizes, and when the board region scrolls.
  *
  * Every listener and observer is removed on unmount from the exact element it
  * was added to, never a re-queried one (#749).
@@ -48,21 +48,23 @@ export function useOverlayTracking<T>(options: {
   function rebuildObservers() {
     stop();
     if (!root.value) return;
-    const region = boardRegion();
-    if (!region) return;
 
     resizeObserver = new ResizeObserver(onChange);
-    const observed = new Set<Element>([region]);
+    // The root is fixed to the screen, so it resizes with the window (#1300).
+    const observed = new Set<Element>([root.value]);
     for (const item of content.value) {
       const target = targetOf(item);
       const selector = target ? buildSelector(target) : '';
       const el = selector ? document.querySelector(selector) : null;
       if (el) observed.add(el);
     }
+    const region = boardRegion();
+    if (region) {
+      observed.add(region);
+      region.addEventListener('scroll', onChange, { passive: true });
+      scrollRegion = region;
+    }
     for (const el of observed) resizeObserver.observe(el);
-
-    region.addEventListener('scroll', onChange, { passive: true });
-    scrollRegion = region;
   }
 
   function refresh() {

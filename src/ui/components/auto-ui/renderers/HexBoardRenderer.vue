@@ -28,16 +28,14 @@
  * position:relative container.
  */
 
-import { computed, inject, nextTick, watch, type ComputedRef } from 'vue';
+import { computed, nextTick, watch } from 'vue';
 import { hexToPixel, getHexPolygonPoints, hexCoordNames } from '../../../composables/useHexGrid.js';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import { useSelectableGrid } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
-import { resolvePresentation } from '../presentation.js';
-import type { PresentationOverlay } from '../presentation.js';
-import { GAME_CONTEXT_KEYS } from '../../../composables/useGameContext.js';
+import { usePresentationEntry } from '../../../composables/usePresentationEntry.js';
 import { boardCellStates } from './board-cell-states.js';
-import { cellCoordinateError, type GameElement } from '../auto-ui-helpers.js';
+import { cellCoordinateError, placedCells, type GameElement } from '../auto-ui-helpers.js';
 
 const props = defineProps<{
   element: GameElement;
@@ -69,12 +67,17 @@ const coord = (cell: GameElement, name: string) => cell.attributes![name] as num
 // ── Closed-form functions (no hand-rolled trig) ──────────────────────────────
 
 /**
- * Get pixel position for a hex cell using the standalone hexToPixel function.
- * Reads q/r from the cell's own coordinate attributes, using coord names from parent.
+ * Each cell's q/r (from its own coordinate attributes, named by the board) and
+ * its pixel position, read once per change rather than by every reader (#1294).
  */
-function getCellPosition(cell: GameElement): { x: number; y: number } {
-  return hexToPixel(coord(cell, qCoordName.value), coord(cell, rCoordName.value), hexSize.value, orientation.value);
+function place(cell: GameElement) {
+  const q = coord(cell, qCoordName.value);
+  const r = coord(cell, rCoordName.value);
+  return { q, r, ...hexToPixel(q, r, hexSize.value, orientation.value) };
 }
+const cellPlaces = computed(() => new Map(hexCells.value.map((cell) => [cell, place(cell)] as const)));
+// A cell from an earlier view (a handler still holding it) is placed directly.
+const placeOf = (cell: GameElement) => cellPlaces.value.get(cell) ?? place(cell);
 
 /** SVG polygon points string from standalone getHexPolygonPoints function */
 const hexPoints = computed(() =>
@@ -94,7 +97,7 @@ const svgBounds = computed(() => {
   let maxY = -Infinity;
 
   for (const cell of cells) {
-    const pos = getCellPosition(cell);
+    const pos = placeOf(cell);
     minX = Math.min(minX, pos.x - size);
     maxX = Math.max(maxX, pos.x + size);
     minY = Math.min(minY, pos.y - size);
@@ -165,13 +168,7 @@ function handleHexDrop(event: DragEvent, cell: GameElement) {
   boardInteraction.triggerDrop(cellIdentity(cell));
 }
 
-// Presentation overlay injection (D-04)
-// HexBoardRenderer is a container — overlay affects the board header label.
-// Hex cell pieces are rendered via ElementRenderer → their renderer handles their own overlay.
-const overlay = inject(GAME_CONTEXT_KEYS.presentation, undefined) as ComputedRef<PresentationOverlay | undefined> | undefined;
-const presentationEntry = computed(() =>
-  resolvePresentation(props.element, overlay?.value)
-);
+const presentationEntry = usePresentationEntry(() => props.element);
 
 // Display label for the board header — overlay label wins, then engine fallback
 const displayLabel = computed(
@@ -187,7 +184,7 @@ const displayLabel = computed(
 // NOTE (research Open Q3): tabindex on SVG <g> is spec-valid but Safari/VoiceOver
 // may not reliably focus <g> elements. Ships with tabindex-on-g first.
 // If manual VoiceOver/Safari testing fails, escalate to overlay <button> approach.
-const hexCells = computed(() => (coordError.value ? [] : props.element.children ?? []));
+const hexCells = computed(() => (coordError.value ? [] : placedCells(props.element, qCoordName.value, rCoordName.value)));
 
 // Grid width as the q-coordinate range + 1, for aria-colcount on the role="grid" SVG root (WR-02).
 const hexCols = computed(() => {
@@ -196,7 +193,7 @@ const hexCols = computed(() => {
   let maxQ = -Infinity;
   let minQ = Infinity;
   for (const cell of cells) {
-    const q = coord(cell, qCoordName.value);
+    const { q } = placeOf(cell);
     maxQ = Math.max(maxQ, q);
     minQ = Math.min(minQ, q);
   }
@@ -210,7 +207,7 @@ const hexRows = computed(() => {
   let maxR = -Infinity;
   let minR = Infinity;
   for (const cell of cells) {
-    const r = coord(cell, rCoordName.value);
+    const { r } = placeOf(cell);
     maxR = Math.max(maxR, r);
     minR = Math.min(minR, r);
   }
@@ -218,7 +215,8 @@ const hexRows = computed(() => {
 });
 
 function hexCellAxes(cell: GameElement) {
-  return { row: coord(cell, rCoordName.value), col: coord(cell, qCoordName.value) };
+  const { q, r } = placeOf(cell);
+  return { row: r, col: q };
 }
 
 // Hex cell activation: selectable AND passive selectElement branches.
@@ -267,7 +265,7 @@ watch(
 
 // Per-cell aria-label: coord + occupant names + state
 function hexCellAriaLabel(cell: GameElement): string {
-  const label = cell.name ?? `(${coord(cell, qCoordName.value)},${coord(cell, rCoordName.value)})`;
+  const label = cell.name ?? `(${placeOf(cell).q},${placeOf(cell).r})`;
   const pieces = cell.children ?? [];
   const occupant = pieces.length > 0
     ? `, ${pieces.map(p => p.name ?? 'piece').join(', ')}`
@@ -323,7 +321,7 @@ function hexCellAriaLabel(cell: GameElement): string {
         :aria-label="hexCellAriaLabel(cell)"
         :aria-selected="isCellSelected(cell) || undefined"
         :aria-disabled="isCellDisabled(cell) || undefined"
-        :transform="`translate(${getCellPosition(cell).x}, ${getCellPosition(cell).y})`"
+        :transform="`translate(${placeOf(cell).x}, ${placeOf(cell).y})`"
         @click="handleHexActivate(cell)"
         @dragover="handleHexDragOver($event, cell)"
         @drop="handleHexDrop($event, cell)"

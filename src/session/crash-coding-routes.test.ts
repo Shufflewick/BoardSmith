@@ -70,7 +70,7 @@ function setup(checkpoints = true) {
     checkpoints: { enabled: checkpoints },
   });
   runner.start();
-  return { runner, manager: new PendingActionManager(runner, 1), game: runner.game };
+  return { runner, manager: new PendingActionManager(runner), game: runner.game };
 }
 
 const where = (game: CrashGame) => game.to.all(Token).map((token) => token.name);

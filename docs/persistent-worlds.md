@@ -135,7 +135,7 @@ publishing platform — reads that object rather than the backend's name.
 **`gameDefinition.world`** implements it:
 
 ```ts
-import type { GameDefinition } from 'boardsmith/session';
+// GameDefinition is a type from 'boardsmith/session'
 
 export const gameDefinition: GameDefinition = {
   gameClass: GloamhallGame,
@@ -409,7 +409,7 @@ declaration names it, so a verb that could not say what it needs in advance woul
 have to be run against the whole world.
 
 ```ts
-import { worldAction } from 'boardsmith/world';
+// worldAction comes from 'boardsmith/world'
 
 export const tend = worldAction<VillageGame>('tend')
   .prompt("Spend a log putting timber back on a neighbour's land")
@@ -454,11 +454,13 @@ like the one that looks around the room. See
 result is an ordinary `ActionDefinition`, which is why it needs no world-only
 registry, panel or board bridge.
 
-### A partition root stays directly under the game (#1170)
+### A partition root stays directly under the game (#1170, #1188)
 
 A partition's root is created directly under the game, and that is where the
 store puts it back on every wake: a checkpoint writes the root's subtree, not
-where it sits. So an action may not move a root anywhere else. `reparent()`,
+where it sits. The engine refuses a root anywhere else: `definePartition` throws
+for an element that is not a direct child of the game, and `adoptSubtree` throws
+for any parent but the game. So an action may not move a root anywhere else. `reparent()`,
 `putInto()` or `remove()` on a partition root throws unless the destination is
 the game itself (reordering roots among the game's children is fine), and the
 command is refused as a `rules-error` with nothing it changed kept. To move a
@@ -938,7 +940,7 @@ unchanged.
 anything else and it does not.**
 
 ```ts
-import { PlayerFacingError } from 'boardsmith';
+// PlayerFacingError comes from 'boardsmith', worldAction from 'boardsmith/world'
 
 class VillageRefusal extends PlayerFacingError {}
 
@@ -981,7 +983,7 @@ internal identifier, or the text of an exception you did not write.
 ### `worldClockAction()`: the clock's own verbs
 
 ```ts
-import { worldClockAction } from 'boardsmith/world';
+// worldClockAction comes from 'boardsmith/world'
 
 export const settleBurn = worldClockAction<VillageGame>('settleBurn')
   .prompt('The clock: a slow burn reaching the fire')
@@ -3046,50 +3048,59 @@ runs on the rules the world kept.
 there is for writing a world's rules, and it is where a second world should
 start:
 
+<!-- typecheck: game tests/world.ts -->
 ```ts
+import type { GameDefinition } from 'boardsmith/session';
 import { createWorld, mintWorldElementIdKey } from 'boardsmith/world';
-import { gameDefinition } from '../src/rules/index.js';
 
-const ELEMENT_ID_KEY = mintWorldElementIdKey();
+// gameDefinition is your src/rules/index.ts export.
+export async function tendOnce(gameDefinition: GameDefinition) {
+  const ELEMENT_ID_KEY = mintWorldElementIdKey();
 
-const { runner, seatCount } = createWorld({
-  definition: gameDefinition,
-  seed: 'a-fixed-seed',
-  // Minted once per world and passed on every launch, as a host does (#482).
-  elementIdKey: ELEMENT_ID_KEY,
-  seats: new Map([['alice', 1], ['bob', 2]]),
-});
+  const { runner, seatCount } = createWorld({
+    definition: gameDefinition,
+    seed: 'a-fixed-seed',
+    // Minted once per world and passed on every launch, as a host does (#482).
+    elementIdKey: ELEMENT_ID_KEY,
+    seats: new Map([['alice', 1], ['bob', 2]]),
+  });
 
-// What a store would have to write. Genesis created these in the live game, so
-// they are already resident in this instance.
-const born = await runner.genesis();
+  // What a store would have to write. Genesis created these in the live game, so
+  // they are already resident in this instance.
+  const born = await runner.genesis();
 
-// A host walks the declaration: ask what is missing, supply it, ask again. The
-// loop ends when the walk names nothing. Everything genesis created is already
-// here, so this first ask answers nothing at all.
-const command = { name: 'tend', args: { neighbour: 7 } };
-// WHEN the dispatch is happening, as one fact: a seat's stamped arrival, or
-// `{ kind: 'scheduled', timing }` on the clock's road -- so the walk and the
-// handler cannot disagree about the instant, or about the fold (#271).
-const { needs } = await runner.declare(
-  command,
-  'alice',
-  {},
-  { kind: 'arrival', now: 1_800_000_000_000 },
-  [],
-);
+  // A host walks the declaration: ask what is missing, supply it, ask again. The
+  // loop ends when the walk names nothing. Everything genesis created is already
+  // here, so this first ask answers nothing at all.
+  const command = { name: 'tend', args: { neighbour: 7 } };
+  // WHEN the dispatch is happening, as one fact: a seat's stamped arrival, or
+  // `{ kind: 'scheduled', timing }` on the clock's road -- so the walk and the
+  // handler cannot disagree about the instant, or about the fold (#271).
+  // `partitions` is what to send; `seats` and `noticeBoxes` name the point reads to answer.
+  const { partitions, seats, noticeBoxes } = await runner.declare(
+    command,
+    'alice',
+    {},
+    { kind: 'arrival', now: 1_800_000_000_000 },
+    { declaredActivity: [], declaredNotices: [] },
+  );
 
-const result = await runner.apply({
-  player: 'alice',
-  command,
-  timing: null,
-  arrivedAt: 1_800_000_000_000,
-  allowance: { unkeyed: 0, keys: [], worldPending: 0 },
-  presence: [1],
-});
-// result.events, result.dirty, result.schedules, result.ending
+  const result = await runner.apply({
+    player: 'alice',
+    command,
+    timing: null,
+    arrivedAt: 1_800_000_000_000,
+    allowance: { unkeyed: 0, keys: [], worldPending: 0 },
+    presence: [1],
+    activity: null,
+    declaredActivity: [],
+    declaredNotices: [],
+  });
+  // result.events, result.dirty, result.schedules, result.ending
 
-const bytes = await runner.serialize([...result.dirty]);
+  const bytes = await runner.serialize([...result.dirty]);
+  return { seatCount, born, partitions, seats, noticeBoxes, bytes };
+}
 ```
 
 `runner.declareOffers(player, supplied)` and `runner.offersFor(player, stamp)`
@@ -3114,9 +3125,8 @@ the harness -- `createTestGame`'s sibling, with an in-memory store and a clock
 you move by hand:
 
 ```ts
-import { createTestWorld, assertNoHiddenInfoLeak, diffPlayerViews } from 'boardsmith/testing';
-import { gameDefinition } from '../src/rules/index.js';
-import GameBoard from '../src/ui/GameBoard.vue';
+// createTestWorld, assertNoHiddenInfoLeak and diffPlayerViews come from 'boardsmith/testing',
+// gameDefinition from '../src/rules/index.js' and GameBoard from '../src/ui/GameBoard.vue'
 
 const world = await createTestWorld({ definition: gameDefinition });
 

@@ -7,11 +7,11 @@
  * serves: the standalone road, resolving the library through its package
  * exports.
  */
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { mkdirSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { vi } from 'vitest';
+import { onTestFinished, vi } from 'vitest';
 
 import { initCommand, type InitOptions } from './init.js';
 import { collectOutput } from '../lib/child-output.js';
@@ -88,4 +88,15 @@ export function spawnDev(cwd: string, port: number, flags: readonly string[] = [
     });
   });
   return { child, output, ended };
+}
+
+/**
+ * Ends `child`, by its own handle, when the test that started it finishes, so a
+ * test that fails before it stops `boardsmith dev` leaves no server holding a
+ * port and a build directory (#1304). Call it inside a test.
+ */
+export function endsWithTest(child: ChildProcess): void {
+  onTestFinished(() => {
+    if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+  });
 }

@@ -70,11 +70,18 @@ export interface ControllerActionResult {
   followUp?: FollowUpOffer<EnrichedValidElement>;
 }
 
-/** Runs just before an action is auto-executed. */
-export type BeforeAutoExecuteHook = (actionName: string, args: Record<string, unknown>) => void | Promise<void>;
+/**
+ * Runs just before an action is auto-executed. `run` names this one
+ * auto-execution; the after-listeners are told how it ended under the same number (#1026).
+ */
+export type BeforeAutoExecuteHook = (actionName: string, args: Record<string, unknown>, run: number) => void | Promise<void>;
 
-/** Told how an auto-executed action ended: the server's result, or why it was never sent (#861). */
-export type AfterAutoExecuteListener = (result: ControllerActionResult) => void | Promise<void>;
+/**
+ * Told how an auto-executed action ended: the server's result, or why it was
+ * never sent (#861). `run` is the number its before-hooks were given, so an
+ * outcome that lands after another action started is not mistaken for that one's (#1026).
+ */
+export type AfterAutoExecuteListener = (result: ControllerActionResult, run: number) => void | Promise<void>;
 
 /** Whether a value filled into a pick was accepted, and why not when it was not. */
 export interface PickValidationResult {
@@ -367,6 +374,12 @@ export interface RepeatingState {
   currentChoices?: Array<{ value: unknown; display: string }>;
 }
 
+/** An action's opening element pick and the candidates it offers. */
+export interface StartCandidates {
+  pick: string;
+  elements: EnrichedValidElement[];
+}
+
 export interface UseActionControllerReturn {
   // === State ===
   /** Currently active action name */
@@ -386,6 +399,12 @@ export interface UseActionControllerReturn {
    * Re-runs when async-fetched choices arrive; use getChoices(pick) for an arbitrary pick.
    */
   currentChoices: ComputedRef<ChoiceWithRefs[]>;
+  /**
+   * With no action open, what a board click or drag can start (#1192): each
+   * available, enabled action that opens with an element pick, in
+   * `availableActions` order, with that pick's candidates. Empty off turn.
+   */
+  startCandidates: ComputedRef<ReadonlyMap<string, StartCandidates>>;
   /** Whether all selections are filled and action is ready */
   isReady: ComputedRef<boolean>;
   /** Whether the current seat has an action out to the server */

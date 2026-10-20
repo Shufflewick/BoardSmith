@@ -4,7 +4,7 @@
  * Run from the top of a BoardSmith checkout. It validates each game in the catalogue
  * (`~/BoardSmithGames`, or `--catalogue <folder>`) on the game's committed `main` against the
  * checkout it is run in; `src/cli/lib/catalogue-check.ts` says how, without touching the games'
- * shared checkouts. `.agent-policy.json` runs it in every verify and thread merge.
+ * shared checkouts. `.agent-policy.json` runs it in every verify and merge.
  */
 import { styleText } from 'node:util';
 import { gitOutput as git } from '../lib/git-output.js';

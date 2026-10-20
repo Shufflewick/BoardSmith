@@ -14,7 +14,8 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { reactive, ref } from 'vue';
-import { usePlatformTransport } from './usePlatformTransport.js';
+import { hostRefusal, readHostReply, usePlatformTransport } from './usePlatformTransport.js';
+import { ErrorCode } from '../../types/protocol.js';
 
 function makeTransport(overrides: Partial<Parameters<typeof usePlatformTransport>[0]> = {}) {
   const posted: unknown[] = [];
@@ -147,5 +148,30 @@ describe('usePlatformTransport', () => {
 
     expect(() => transport.request('action', { args: { piece: new LiveElement() } }))
       .toThrow(/not structured-cloneable/);
+  });
+});
+
+describe('readHostReply: the one reading of a host reply (#1046)', () => {
+  it('accepts only success: true', () => {
+    expect(readHostReply({ success: true })).toEqual({ accepted: true });
+  });
+
+  it('reads a reply with no success field as a refusal, not an acceptance', () => {
+    expect(readHostReply({ view: {} })).toEqual({ accepted: false, error: undefined, errorCode: undefined });
+    expect(hostRefusal({ view: {} }, 'Undo failed.')).toBe('Undo failed.');
+  });
+
+  it('carries the host reason and code, and drops ones that are not text', () => {
+    expect(readHostReply({ success: false, error: 'No demo is running.', errorCode: ErrorCode.NOT_YOUR_TURN }))
+      .toEqual({ accepted: false, error: 'No demo is running.', errorCode: ErrorCode.NOT_YOUR_TURN });
+    expect(readHostReply({ success: false, error: { x: 1 }, errorCode: 7 }))
+      .toEqual({ accepted: false, error: undefined, errorCode: undefined });
+  });
+
+  it('knows an op the host lacks by its code, not its wording', () => {
+    expect(hostRefusal({ success: false, error: 'whatever', errorCode: ErrorCode.UNKNOWN_OP }, 'failed', 'unsupported'))
+      .toBe('unsupported');
+    expect(hostRefusal({ success: false, error: "Unknown server op: 'hint'" }, 'failed', 'unsupported'))
+      .toBe("Unknown server op: 'hint'");
   });
 });

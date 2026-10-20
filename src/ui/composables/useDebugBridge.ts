@@ -21,6 +21,7 @@
  */
 import { inject } from 'vue';
 import { GAME_CONTEXT_KEYS } from './useGameContext.js';
+import { readHostReply } from './usePlatformTransport.js';
 import type { ElementDiff } from '../../session/stateless-ops.js';
 import type { PlayerState } from '../../client/types.js';
 
@@ -191,9 +192,8 @@ export function createDebugBridge(platformRequest: PlatformRequest | null): Debu
     failMessage: string,
   ): Promise<Record<string, unknown>> {
     const data = await sendRaw(op, payload);
-    if (!data.success) {
-      throw new Error((data.error as string) || failMessage);
-    }
+    const reply = readHostReply(data);
+    if (!reply.accepted) throw new Error(reply.error ?? failMessage);
     return data;
   }
 
@@ -206,7 +206,7 @@ export function createDebugBridge(platformRequest: PlatformRequest | null): Debu
     payload: Record<string, unknown>,
   ): Promise<Record<string, unknown> | null> {
     const data = await sendRaw(op, payload);
-    return data.success ? data : null;
+    return readHostReply(data).accepted ? data : null;
   }
 
   return {

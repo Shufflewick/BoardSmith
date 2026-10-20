@@ -36,6 +36,7 @@ import { getActiveStep, getGateReasonForValue } from '../tutorial/gate.js';
 import { findMatchingChoice, isSerializedElement, oneChoiceListRefusal, oneElementListRefusal, trySmartResolveChoice, valuesEqual } from './choice-matching.js';
 import { numberRuleErrors } from './number-rules.js';
 import { formatRepeatCandidates } from '../element/pick-candidates.js';
+import { namesNothing, seatIdOf } from '../element/seat-placeholders.js';
 import type { ChoiceWithRefs, WarningEntry } from '../../types/protocol.js';
 import { textRuleErrors } from './text-rules.js';
 import { actingFor, changing } from '../element/state-version.js';
@@ -82,7 +83,7 @@ type FedPick = { error?: string; applied: boolean; rulesError?: boolean };
  * move listing tries every value through these hooks, so a log per refusal
  * floods it (#31, #1120). `where` names the hook in the log.
  */
-function gameCodeThrew(actionName: string, where: string, error: unknown): ActionResult {
+export function gameCodeThrew(actionName: string, where: string, error: unknown): ActionResult {
   // #31: a game saying "I cannot resolve this from the information state I
   // have" is an expected answer inside a bot's redacted sandbox, not a crash.
   // Logging it printed a stack per rollout — measured at 198 MB in 15 seconds
@@ -478,15 +479,23 @@ export class ActionExecutor {
    *   projection so the elements it resolves cannot be written through
    *   (ShufflewickPub #384, #418). Everything else passes nothing and gets the
    *   live game.
+   * @param checkPick Run on each pick as it resolves, with the picks before it,
+   *   before any later pick is resolved against it; it throws to refuse it. A
+   *   read refuses a pick it could not offer, so no later pick's callback is
+   *   handed one (#1223, #1293).
    */
   resolveArgs(
     action: ActionDefinition,
     args: Record<string, unknown>,
     player?: Player,
     reading?: Game,
+    checkPick?: (selection: Selection, value: unknown, before: Record<string, unknown>) => void,
   ): Record<string, unknown> {
     const game = reading ?? this.game;
-    const resolved = { ...args, ...this.resolveNonPickArgs(action, args, game) };
+    const nonPicks = this.resolveNonPickArgs(action, args, game);
+    const resolved = { ...args, ...nonPicks };
+    // What a check sees: the picks before, resolved, never a later one as sent.
+    const before: Record<string, unknown> = { ...nonPicks };
 
     // Each selection's value, with the selections before it already resolved
     // in view, so a `choices` callback that reads an earlier pick sees what it
@@ -497,7 +506,10 @@ export class ActionExecutor {
       const value = args[selection.name];
       if (value === null) delete resolved[selection.name];
       if (value === undefined || value === null) continue;
-      resolved[selection.name] = this.resolveOne(selection, value, player, resolved, game);
+      const pick = this.resolveOne(selection, value, player, resolved, game);
+      checkPick?.(selection, pick, { ...before });
+      resolved[selection.name] = pick;
+      before[selection.name] = pick;
     }
 
     return resolved;
@@ -1157,7 +1169,12 @@ export class ActionExecutor {
     context: ActionContext,
     actionName: string | undefined,
   ): string {
-    const message: unknown = selection.unavailable!(value, context);
+    // A card the seat cannot see is handed as the id the seat knows it by, so the sentence cannot name it (#1205);
+    // an id the seat may no longer make, as nothing (#1293).
+    const shown = isElement(value) && !value.isVisibleTo(context.player)
+      ? seatIdOf(value, context.player.seat)
+      : namesNothing(value) ? undefined : value;
+    const message: unknown = selection.unavailable!(shown, context);
     if (typeof message === 'string' && message.trim() !== '') return message;
     const returned = typeof message === 'string' ? 'an empty string' : describeValidateReturn(message);
     throw new Error(
@@ -1546,11 +1563,10 @@ export class ActionExecutor {
     selection: Selection,
     pick: unknown
   ): FedPick {
-    const iterationsBefore = pendingState.repeating?.iterationCount ?? 0;
     const step = this.processRepeatingStep(action, player, pendingState, this.repeatPickValue(selection, pick));
     // A pick that got past validation has run onSelect/onEach, even when they
     // then failed, so the game may have changed.
-    const applied = !step.error || (pendingState.repeating?.iterationCount ?? 0) > iterationsBefore;
+    const applied = !step.error || step.partiallyApplied === true;
     return { error: step.error, applied, rulesError: step.rulesError };
   }
 
@@ -2089,9 +2105,9 @@ export class ActionExecutor {
         }
         pendingState.onSelectFired.add(pendingState.currentSelectionIndex);
       } catch (error) {
-        // Fail loud: a throwing onSelect aborts the action. Fire onCancel for
-        // selections whose onSelect already fired, then return an error.
-        this.fireOnCancelCallbacks(action, pendingState);
+        // Fail loud. onCancel runs only on the player's cancel, so it runs once per pick (#1189).
+        // The repeat's first pick is undone, so a retry runs onSelect again (#1241).
+        pendingState.repeating = undefined;
         const crashed = pickHookThrew(action, 'onSelect', selection, error);
         return { done: false, error: crashed.error, rulesError: crashed.rulesError, partiallyApplied: true };
       }
@@ -2232,7 +2248,7 @@ export class ActionExecutor {
     // If it's a repeating selection, delegate to processRepeatingStep
     if (this.isRepeatingSelection(selection)) {
       const result = this.processRepeatingStep(action, player, pendingState, value);
-      return { success: !result.error, error: result.error, rulesError: result.rulesError };
+      return { success: !result.error, error: result.error, rulesError: result.rulesError, partiallyApplied: result.partiallyApplied };
     }
 
     // Skipping an optional selection: a null/undefined value means "no choice".
@@ -2254,13 +2270,8 @@ export class ActionExecutor {
     if ('error' in pick) return { success: false, error: pick.error };
     const resolvedValue = pick.value;
 
-    // Store the resolved value so downstream dependsOn filters see GameElements, not raw IDs
-    pendingState.collectedArgs[selectionName] = resolvedValue;
-
-    // Fire onSelect if defined.
-    // A throwing onSelect must ABORT the action (fail loud): fire onCancel for
-    // any selections whose onSelect already ran, then return failure. The caller
-    // discards the pending action rather than committing it.
+    // Fire onSelect if defined. A throwing one fails the pick loud; onCancel
+    // runs only on the player's cancel, so it runs once per pick (#1189).
     if (selection.onSelect) {
       try {
         const ctx = this.createOnSelectContext();
@@ -2272,12 +2283,13 @@ export class ActionExecutor {
         }
         pendingState.onSelectFired.add(selectionIndex);
       } catch (error) {
-        // Compensate: run onCancel for selections whose onSelect already fired.
-        this.fireOnCancelCallbacks(action, pendingState);
         return pickHookThrew(action, 'onSelect', selection, error);
       }
     }
 
+    // Stored only once onSelect took it, so a failed one leaves no value behind to retry past (#1243).
+    // Resolved, so downstream dependsOn filters see GameElements, not raw IDs.
+    pendingState.collectedArgs[selectionName] = resolvedValue;
     pendingState.currentSelectionIndex++;
 
     return { success: true };

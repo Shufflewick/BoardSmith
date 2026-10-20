@@ -56,7 +56,7 @@ async function makeMove(runner: GameRunner<Game>, playerCount: number, seat: num
     expect(result.error).toBeUndefined();
     return;
   }
-  const picks = new PendingActionManager(runner, playerCount);
+  const picks = new PendingActionManager(runner);
   const action = runner.game.getAction(move.action)!;
   for (const selection of action.selections) {
     const value = move.args[selection.name];

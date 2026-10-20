@@ -120,7 +120,7 @@ function createOptionalManager() {
   });
   runner.start();
 
-  const manager = new PendingActionManager(runner, gameOptions.playerCount);
+  const manager = new PendingActionManager(runner);
   return { manager, game: runner.game };
 }
 
@@ -138,7 +138,7 @@ function createEquipManager() {
   });
   runner.start();
 
-  const manager = new PendingActionManager(runner, gameOptions.playerCount);
+  const manager = new PendingActionManager(runner);
   return { manager, game: runner.game, runner };
 }
 
@@ -156,7 +156,7 @@ function createManager() {
   });
   runner.start();
 
-  const manager = new PendingActionManager(runner, gameOptions.playerCount);
+  const manager = new PendingActionManager(runner);
   return { manager, game: runner.game, runner };
 }
 

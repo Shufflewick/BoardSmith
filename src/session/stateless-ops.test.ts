@@ -150,8 +150,8 @@ const twoStepGameDef: GameDefinitionLike = {
 const twoStepGameOptions = { playerCount: 2, seed: 'step-seed' };
 
 // ---------------------------------------------------------------------------
-// Inline game: a chooseFrom whose choices function throws, so getPickChoices
-// (via resolveChoices) returns CHOICES_EVALUATION_ERROR — proves errorCode
+// Inline game: a chooseFrom whose choices function crashes (ENGINE_ERROR) or
+// refuses (CHOICES_EVALUATION_ERROR) via resolveChoices — proves errorCode
 // threading is NOT limited to runner-sourced codes (pick-handler.ts also
 // produces one, previously dropped by errorResult()).
 // ---------------------------------------------------------------------------
@@ -167,16 +167,18 @@ class BadChoicesGame extends Game<BadChoicesGame, Player> {
     // membership, always call this with args:{} and must NOT throw or game
     // start/flow processing itself would fail. Only the resolveChoices op's
     // explicit currentArgs:{trigger:true} reaches the throwing branch, so the
-    // failure is isolated to getPickChoices's own try/catch (CHOICES_EVALUATION_ERROR).
+    // failure is isolated to getPickChoices's own try/catch.
     this.registerAction(
       Action.create('pick')
         // A pick of its own: a client may send only declared picks (#662).
         .chooseFrom('trigger', { choices: [false, true] })
+        .chooseFrom('refuse', { choices: [false, true] })
         .chooseFrom('option', {
           choices: (ctx) => {
             if (ctx.args.trigger) {
               throw new Error('choices boom');
             }
+            if (ctx.args.refuse) throw new PlayerFacingError('The market is closed.');
             return ['a', 'b'];
           },
         })
@@ -444,26 +446,27 @@ describe('executeOp', () => {
       expect((result.choices as unknown[]).length).toBeGreaterThan(0);
     });
 
-    it('surfaces CHOICES_EVALUATION_ERROR when the choices function throws (Pitfall 1 guard)', async () => {
-      const startResult = succeeded(await startGame(badChoicesGameDef, badChoicesGameOptions));
-      expect(startResult.success).toBe(true);
+    it('codes a crash in choices() ENGINE_ERROR and a PlayerFacingError from it CHOICES_EVALUATION_ERROR (#1156)', async () => {
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        const startResult = succeeded(await startGame(badChoicesGameDef, badChoicesGameOptions));
+        const resolve = async (args: Record<string, unknown>) => refused(await executeOp(
+          badChoicesGameDef,
+          badChoicesGameOptions,
+          startResult.snapshot,
+          null,
+          { type: 'resolveChoices', actionName: 'pick', player: 1, selectionName: 'option', args },
+        ));
 
-      const result = refused(await executeOp(
-        badChoicesGameDef,
-        badChoicesGameOptions,
-        startResult.snapshot,
-        null,
-        {
-          type: 'resolveChoices',
-          actionName: 'pick',
-          player: 1,
-          selectionName: 'option',
-          args: { trigger: true },
-        },
-      ));
-
-      expect(result.success).toBe(false);
-      expect(result.errorCode).toBe(ErrorCode.CHOICES_EVALUATION_ERROR);
+        expect(await resolve({ trigger: true })).toMatchObject({ errorCode: ErrorCode.ENGINE_ERROR, category: 'bundle' });
+        expect(await resolve({ refuse: true })).toMatchObject({
+          error: 'The market is closed.',
+          errorCode: ErrorCode.CHOICES_EVALUATION_ERROR,
+          category: 'bundle',
+        });
+      } finally {
+        consoleSpy.mockRestore();
+      }
     });
 
     it('carries structured warnings from a throwing boardRefs() while still succeeding (ERR-01)', async () => {
@@ -712,6 +715,32 @@ describe('executeOp', () => {
       // The tutorial step view for seat 1 should now be present in the player view
       const view = (result.playerViews as Array<{ state: { tutorial?: unknown } }>)?.[0];
       expect(view?.state?.tutorial).toBeDefined();
+    });
+
+    it("greys the choices a running tutorial's per-pick gate does not allow, in a choices fetch (#1248)", async () => {
+      class GatedGame extends Game<GatedGame, Player> {
+        constructor(options: GameOptions) {
+          super(options);
+          this.registerAction(
+            Action.create('move').chooseFrom('piece', { choices: [{ notation: 'c3' }, { notation: 'e5' }] }).execute(() => {}),
+          );
+          this.setFlow({ root: loop({ maxIterations: 10, do: actionStep({ actions: ['move'], player: (ctx) => ctx.game.getPlayer(1)! }) }) });
+        }
+      }
+      const gated: GameDefinitionLike = {
+        gameClass: GatedGame, gameType: 'gated', minPlayers: 2, maxPlayers: 2,
+        tutorial: { learnerSeat: 1, steps: [{ id: 'c3', gate: { action: 'move', selections: { piece: { notation: 'c3' } } } }] },
+      };
+      const start = succeeded(await startGame(gated, twoStepGameOptions));
+      const started = succeeded(await executeOp(gated, twoStepGameOptions, start.snapshot, null, { type: 'startTutorial', player: 1 }));
+
+      const pieces = succeeded(await executeOp(gated, twoStepGameOptions, started.snapshot, null, {
+        type: 'resolveChoices', actionName: 'move', selectionName: 'piece', player: 1, args: {},
+      }));
+
+      const at = (notation: string) => pieces.choices!.find((c) => (c.value as { notation: string }).notation === notation)!;
+      expect(at('c3').disabled).toBeUndefined();
+      expect(typeof at('e5').disabled).toBe('string');
     });
 
     it('fails with an error when the game has no tutorial definition', async () => {

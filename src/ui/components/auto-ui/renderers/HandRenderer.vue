@@ -9,17 +9,18 @@
  * lines 409-453 (named Phase 92 carry-forward; Pitfall 6).
  */
 
-import { computed, inject, type Ref, type ComputedRef } from 'vue';
-import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
+import { computed, inject, type Ref } from 'vue';
+import { useElementBoardState } from '../../../composables/useElementBoardState.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
 import CardBack from './CardBack.vue';
-import { resolvePresentation } from '../presentation.js';
+import GrantedCards from './GrantedCards.vue';
+import { usePresentationEntry } from '../../../composables/usePresentationEntry.js';
 import { isHiddenPlaceholder } from '../../../../engine/element/hidden-placeholder.js';
 import { seatDisplayName } from '../../../../engine/element/seat-defaults.js';
-import type { PresentationOverlay } from '../presentation.js';
-import { GAME_CONTEXT_KEYS, injectPlayerSeat } from '../../../composables/useGameContext.js';
+import { injectPlayerSeat } from '../../../composables/useGameContext.js';
 import { parseImageInfo, type ImageInfo } from '../../../utils/image.js';
+import { directChildren, getElementCount, isSizeHidden } from '../../../composables/useGameViewHelpers.js';
 import type { GameElement } from '../auto-ui-helpers.js';
 
 const props = defineProps<{
@@ -30,66 +31,19 @@ const props = defineProps<{
 // Inject context — exact keys provided by AutoRenderer.vue
 // ---------------------------------------------------------------------------
 const playerSeat = injectPlayerSeat();
-const selectableElements = inject<Ref<Set<number>>>('selectableElements');
-const selectedElements = inject<Ref<Set<number>>>('selectedElements');
 const defaultBackImage = inject<Ref<ImageInfo | null>>('defaultBackImage');
 
-// ---------------------------------------------------------------------------
-// Board interaction — whole-hand action-selectable state
-// ---------------------------------------------------------------------------
-const boardInteraction = tryUseBoardInteraction();
+const {
+  boardInteraction,
+  identity: elementIdentity,
+  isHighlighted: isBoardHighlighted,
+  isSelected: isBoardSelected,
+  isActionSelectable,
+  isDisabled,
+  isDropTarget,
+} = useElementBoardState(() => props.element);
 
-// ---------------------------------------------------------------------------
-// Presentation overlay injection (D-04)
-// ---------------------------------------------------------------------------
-const overlay = inject(GAME_CONTEXT_KEYS.presentation, undefined) as ComputedRef<PresentationOverlay | undefined> | undefined;
-const presentationEntry = computed(() =>
-  resolvePresentation(props.element, overlay?.value)
-);
-
-// ---------------------------------------------------------------------------
-// Selectable / selected state (from injected sets)
-// ---------------------------------------------------------------------------
-const isSelectable = computed(() => selectableElements?.value?.has(props.element.id) ?? false);
-const isSelected = computed(() => selectedElements?.value?.has(props.element.id) ?? false);
-
-// Element identity helper — passes notation from attributes (Pitfall 6)
-function elementIdentity() {
-  return {
-    id: props.element.id,
-    name: props.element.name,
-    notation: props.element.attributes?.notation as string | undefined,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Board state computeds — all six required states + drop-target (zone renderer)
-// ---------------------------------------------------------------------------
-const isBoardHighlighted = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isHighlighted(elementIdentity());
-});
-
-const isBoardSelected = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isSelected(elementIdentity());
-});
-
-const isActionSelectable = computed(() => {
-  if (!boardInteraction) return false;
-  if (isBoardSelected.value) return false;
-  return boardInteraction.isSelectableElement(elementIdentity());
-});
-
-const isDropTarget = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isDropTarget(elementIdentity());
-});
-
-const isDisabled = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isDisabledElement(elementIdentity()) !== false;
-});
+const presentationEntry = usePresentationEntry(() => props.element);
 
 // ---------------------------------------------------------------------------
 // Player info for header
@@ -118,23 +72,25 @@ const hasOverlap = computed(() => props.element.attributes?.$overlap !== undefin
 // ---------------------------------------------------------------------------
 // Visible children
 // ---------------------------------------------------------------------------
+// Its own cards; a concealed hand's view also carries, after them, cards
+// granted to this seat from inside a hidden child, drawn apart (#1292).
 const visibleChildren = computed(() => {
   if (isHiddenPlaceholder(props.element)) return [];
-  return props.element.children ?? [];
+  return directChildren(props.element);
 });
 
-// Count display (for hidden hands that expose only childCount)
-const childCountDisplay = computed(() => {
-  if (props.element.childCount !== undefined) return props.element.childCount;
-  return visibleChildren.value.length;
-});
+// Count display (for hidden hands that expose only childCount); none when the size is not told.
+const sizeHidden = computed(() => isSizeHidden(props.element));
+const childCountLabel = computed(() => (sizeHidden.value ? '' : `(${getElementCount(props.element)})`));
+const handAriaLabel = computed(() =>
+  sizeHidden.value ? ownerLabel.value : `${ownerLabel.value}, ${getElementCount(props.element)} cards`);
 
 // ---------------------------------------------------------------------------
 // Back image for hidden card placeholders (from defaultBackImage)
 // ---------------------------------------------------------------------------
 const childBackImage = computed((): ImageInfo | null => {
-  // Check visible children for back image
-  for (const child of (props.element.children ?? [])) {
+  // Its own cards' back: a granted card may be of another deck.
+  for (const child of directChildren(props.element)) {
     const images = child.attributes?.$images as Record<string, unknown> | undefined;
     const back = parseImageInfo(images?.back);
     if (back) return back;
@@ -204,7 +160,7 @@ const frontRowCards = computed(() => {
 // ---------------------------------------------------------------------------
 const { onActivate: handleSelect, onKeydown, attrs: selectableAttrs } = useSelectable(
   elementIdentity,
-  boardInteraction ?? null,
+  boardInteraction,
   isActionSelectable,
   isDisabled,
   'hand',
@@ -223,25 +179,16 @@ function handleDrop(event: DragEvent) {
   event.preventDefault();
   boardInteraction.triggerDrop(elementIdentity());
 }
-
-// Suppress unused warnings for injected values not used directly in script
-// (they drive CSS classes in the template)
-void isSelectable;
-void isSelected;
-void isBoardHighlighted;
-void isBoardSelected;
 </script>
 
 <template>
   <div
     v-bind="selectableAttrs"
     role="group"
-    :aria-label="`${ownerLabel}, ${childCountDisplay} cards`"
+    :aria-label="handAriaLabel"
     :class="[
       'hand-container',
       {
-        'is-selectable': isSelectable,
-        'is-selected': isSelected,
         'action-selectable': isActionSelectable,
         'is-board-highlighted': isBoardHighlighted,
         'is-board-selected': isBoardSelected,
@@ -261,7 +208,7 @@ void isBoardSelected;
       <span class="hand-label">
         {{ presentationEntry?.label ?? element.name ?? ownerLabel }}
       </span>
-      <span class="hand-count">({{ childCountDisplay }})</span>
+      <span class="hand-count">{{ childCountLabel }}</span>
     </div>
 
     <!-- Cards wrapper -->
@@ -318,6 +265,8 @@ void isBoardSelected;
         </template>
       </div>
     </div>
+
+    <GrantedCards :element="element" />
   </div>
 </template>
 
@@ -332,22 +281,6 @@ void isBoardSelected;
   transition: all var(--bsg-dur-base) var(--bsg-ease);
   overflow: visible;
   position: relative;
-}
-
-/* Selection states */
-.hand-container.is-selectable {
-  cursor: pointer;
-}
-
-.hand-container.is-selectable:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--bsg-shadow-sm);
-}
-
-.hand-container.is-selected {
-  outline: 3px solid var(--bsg-accent);
-  outline-offset: 2px;
-  box-shadow: var(--bsg-ring);
 }
 
 /* Whole-hand action-selectable — Slate dashed outline (THEME-02: outline not border) */

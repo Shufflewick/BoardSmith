@@ -107,11 +107,22 @@ const setCreed = worldAction<Colony>('setCreed')
     ctx.world.emit(COLONY, { creed: true }, 'The creed was set.');
   });
 
-/** The single-line field, unchanged, so a regression to it is visible here. */
+/**
+ * The single-line field, so a regression to it is visible here. Its refusal
+ * wraps over several lines on a phone, taller than the one row a field may
+ * grow the bar by (#1300).
+ */
 const setNickname = worldAction<Colony>('setNickname')
   .prompt('Pick a nickname')
   .needs(() => [COLONY])
-  .enterText('nickname', { prompt: 'Colony nickname', maxLength: 20 })
+  .enterText('nickname', {
+    prompt: 'Colony nickname',
+    maxLength: 20,
+    pattern: {
+      regex: /^[A-Z][a-z ]*$/,
+      message: 'A nickname is one capital letter and then lowercase letters and spaces, so that the old machines can carve it into the colony gate.',
+    },
+  })
   .execute(({ nickname }, ctx) => {
     ctx.game.board().nickname = nickname;
     ctx.world.emit(COLONY, { renamed: true }, 'The colony was renamed.');
@@ -521,8 +532,8 @@ async function driveThrough({ launch, hostUrl }) {
  * THE PANEL AND THE BOX ON EVERY KIND OF SCREEN (issue 444).
  *
  * The bar is capped at the strip the board reserves for it, so it never covers
- * the board; the one exception is this box, which may grow the bar while it is
- * open. The checks above run at one desktop size. These hold the cap and the
+ * the board; the one exception is a typed editor, which may grow the bar while
+ * it is open. The checks above run at one desktop size. These hold the cap and the
  * exception where they are tightest: a phone, where the bar's width is the
  * scarce axis, and a short landscape screen, which reserves one row and has
  * little height to grow into.
@@ -531,12 +542,33 @@ function screens() {
   // A function, not a constant: the run starts at a top-level await above this
   // line, before a `const` here would be initialised.
   return [
-    { width: 375, height: 812 },
-    { width: 390, height: 844 },
+    // fieldRows: rows a one-line or number editor may grow the bar past the strip (#1058).
+    { width: 375, height: 812, fieldRows: 1 },
+    { width: 390, height: 844, fieldRows: 1 },
     { width: 844, height: 390 },
     { width: 1280, height: 900 },
     { width: 1440, height: 900 },
   ];
+}
+
+/** One control row of the bar plus the gap after it: what a one-line or number field may grow the bar by (#1058, #1300). */
+function fieldRow(surface) {
+  return surface.locator('[data-testid="bs-actionbar"]').evaluate((el) => {
+    const style = getComputedStyle(el);
+    return parseFloat(style.getPropertyValue('--bsg-panel-row')) + parseFloat(style.getPropertyValue('--bsg-panel-gap'));
+  });
+}
+
+/** Run `body` with `editor` open, and close it however `body` ends, so a failed check leaves the next one at rest. */
+async function withEditorOpen(page, action, editor, body) {
+  const surface = surfaceOf(page);
+  await startAction(page, action, editor);
+  try {
+    return await body();
+  } finally {
+    await surface.locator('.cancel-btn').click();
+    await surface.locator(editor).waitFor({ state: 'detached', timeout: 10_000 });
+  }
 }
 
 async function onASmallerScreen(browser, hostUrl, viewport) {
@@ -548,13 +580,27 @@ async function onASmallerScreen(browser, hostUrl, viewport) {
       assert(!bar.scrolls, `the bar scrolls at rest (${bar.height}px tall): its actions do not fit the strip`);
     });
 
-    await check(`${size}: during a one-line pick the bar stays inside the strip, its submit in view`, async () => {
-      await startAction(page, 'setNickname');
-      const bar = await barGeometry(surface, ['.text-input .done-button']);
-      assert(bar.top >= bar.strip - 1, `the bar's top is at ${bar.top}, above the strip at ${bar.strip}`);
-      assert(bar.outside.length === 0, `not in view inside the bar: ${bar.outside.join(', ')}`);
-      await surface.locator('.cancel-btn').click();
-    });
+    // A one-line or number editor stacks label, hint and field + Done: three
+    // rows, one more than the strip holds on a phone, so it grows the bar too (#1058).
+    for (const [action, editor] of [['setNickname', '.text-input'], ['recycle', '.number-input']]) {
+      await check(`${size}: an open ${editor} shows the action, its label, field and submit without scrolling`, async () => {
+        const bar = await withEditorOpen(page, action, editor, async () => {
+          await surface.locator(`${editor} input`).focus();
+          return barGeometry(surface, [
+            '.config-title',
+            `${editor} .selection-prompt`,
+            `${editor} .input-hint`,
+            `${editor} input`,
+            `${editor} .done-button`,
+          ]);
+        });
+        const row = await fieldRow(surface);
+        assert(!bar.scrolls, `the bar scrolls (${bar.height}px tall): the editor is cut off`);
+        const allowed = bar.strip - (viewport.fieldRows ?? 0) * row - 1;
+        assert(bar.top >= allowed, `the bar's top is at ${bar.top}, above ${allowed} (the strip at ${bar.strip} less ${viewport.fieldRows ?? 0} row(s))`);
+        assert(bar.outside.length === 0, `not in view inside the bar: ${bar.outside.join(', ')}`);
+      });
+    }
 
     await check(`${size}: the open box keeps the action, its label, count and submit in view`, async () => {
       // The box may grow the bar past the strip, but it floats over the board:
@@ -591,29 +637,32 @@ async function onASmallerScreen(browser, hostUrl, viewport) {
 
     // A refusal the player cannot see is the silent Done of #229 again: the
     // bar caps its height, and the message used to land below that cap (#1159).
-    for (const [action, editor, value] of [
-      ['setCreed', '.text-input', 'Too short.'],
-      ['recycle', '.number-input', '1'],
+    for (const [action, editor, value, kind] of [
+      ['setCreed', '.text-input', 'Too short.', 'box'],
+      ['recycle', '.number-input', '1', 'field'],
+      ['setNickname', '.text-input', 'NO', 'field'],
     ]) {
       await check(`${size}: a refusal in ${editor} is in view inside the bar when it appears`, async () => {
-        await startAction(page, action, editor);
-        await surface.locator(`${editor} textarea, ${editor} input`).first().fill(value);
         // Bringing the message into view must scroll only the bar, never the page or the board.
         const scrolled = async () => [
           await page.evaluate(() => document.scrollingElement.scrollTop),
           ...(await surface.locator('html').evaluate(() =>
             [document.scrollingElement.scrollTop, document.querySelector('.boardregion')?.scrollTop ?? 0])),
         ];
-        const before = await scrolled();
-        await surface.locator(`${editor} .done-button`).click();
-        await surface.locator(`${editor} .selection-error`).waitFor({ timeout: 10_000 });
-        const bar = await barGeometry(surface, [`${editor} .selection-error`]);
-        const after = await scrolled();
-        // Closed before asserting, so the next editor's check starts from rest.
-        await surface.locator('.cancel-btn').click();
-        await surface.locator(editor).waitFor({ state: 'detached', timeout: 10_000 });
+        const { bar, before, after } = await withEditorOpen(page, action, editor, async () => {
+          await surface.locator(`${editor} textarea, ${editor} input`).first().fill(value);
+          const before = await scrolled();
+          await surface.locator(`${editor} .done-button`).click();
+          await surface.locator(`${editor} .selection-error`).waitFor({ timeout: 10_000 });
+          return { bar: await barGeometry(surface, [`${editor} .selection-error`]), before, after: await scrolled() };
+        });
         assert(bar.outside.length === 0, `not in view inside the bar: ${bar.outside.join(', ')}`);
         assert(after.join() === before.join(), `page, frame and board scroll moved from ${before} to ${after}`);
+        if (kind === 'field') {
+          // The message scrolls inside the bar rather than growing it past its one row (#1300).
+          const allowed = bar.strip - (await fieldRow(surface)) - 1;
+          assert(bar.top >= allowed, `the bar's top is at ${bar.top}, above ${allowed} (the strip at ${bar.strip} less one row)`);
+        }
       });
     }
   });

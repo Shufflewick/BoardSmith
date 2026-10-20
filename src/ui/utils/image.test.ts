@@ -49,8 +49,25 @@ describe('parseImageInfo', () => {
     expect(parseImageInfo({ sprite: '/back.png' })).toEqual({ type: 'url', src: '/back.png' });
   });
 
-  it('treats partial coordinates as a plain URL rather than guessing the other axis', () => {
-    expect(parseImageInfo({ sprite: '/cards.png', x: 10 })).toEqual({ type: 'url', src: '/cards.png' });
+  it('refuses partial coordinates rather than show the whole sheet (#1303)', () => {
+    expect(() => parseImageInfo({ sprite: '/cards.png', x: 10 })).toThrow(
+      "Sprite image '/cards.png' has 10 for x and nothing for y, but a sprite's place on its sheet is two numbers, x and y, in pixels.",
+    );
+  });
+
+  it('refuses coordinates and sizes that are not numbers, naming each (#1303)', () => {
+    expect(() => parseImageInfo({ sprite: '/cards.png', x: '0', y: 0, width: 238, height: 333, sheetWidth: 3094, sheetHeight: 1665 }))
+      .toThrow("Sprite image '/cards.png' has \"0\" for x and 0 for y");
+    expect(() => parseImageInfo({ sprite: '/cards.png', x: 0, y: 0, width: '238', height: 333, sheetWidth: 3094, sheetHeight: 1665 }))
+      .toThrow("Sprite image '/cards.png' at x 0, y 0 has \"238\" for width, which must be a number.");
+  });
+
+  it('treats coordinates given as undefined as no coordinates, as JSON drops them (#1303)', () => {
+    expect(parseImageInfo({ sprite: '/back.png', x: undefined, y: undefined })).toEqual({ type: 'url', src: '/back.png' });
+  });
+
+  it('refuses sizes with no place on the sheet (#1303)', () => {
+    expect(() => parseImageInfo({ sprite: '/cards.png', width: 238, height: 333 })).toThrow(/has nothing for x and nothing for y/);
   });
 
   it('returns null for a missing image', () => {
@@ -59,9 +76,12 @@ describe('parseImageInfo', () => {
     }
   });
 
-  it('returns null for an object that is not an image at all', () => {
-    expect(parseImageInfo({ foo: 'bar' })).toBeNull();
-    expect(parseImageInfo({ x: 1, y: 2 })).toBeNull();
+  it('refuses an image object with no sprite path, rather than draw nothing (#1303)', () => {
+    expect(() => parseImageInfo({ foo: 'bar' })).toThrow(
+      'An image object needs "sprite", the path of its image or sprite sheet, as text. This one has foo.',
+    );
+    expect(() => parseImageInfo({ x: 1, y: 2 })).toThrow(/needs "sprite".*This one has x, y\./);
+    expect(() => parseImageInfo({ sprite: 7, x: 0, y: 0 })).toThrow(/needs "sprite"/);
   });
 
   it('returns null for a number or boolean', () => {

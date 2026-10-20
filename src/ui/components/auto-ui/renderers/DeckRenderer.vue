@@ -9,93 +9,49 @@
  */
 
 import { computed, inject, ref, type Ref } from 'vue';
-import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
+import { useElementBoardState } from '../../../composables/useElementBoardState.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
 import { parseImageInfo, type ImageInfo } from '../../../utils/image.js';
+import { directChildren, getElementCount, isSizeHidden as sizeIsHidden } from '../../../composables/useGameViewHelpers.js';
 import ElementRenderer from './ElementRenderer.vue';
 import CardBack from './CardBack.vue';
+import GrantedCards from './GrantedCards.vue';
 import type { GameElement } from '../auto-ui-helpers.js';
 
-interface DeckElement extends GameElement {
-  zoneVisibility?: { mode: string };
-}
-
 const props = defineProps<{
-  element: DeckElement;
+  element: GameElement;
 }>();
 
 // ---------------------------------------------------------------------------
 // Inject context — exact keys provided by AutoRenderer.vue
 // ---------------------------------------------------------------------------
-const selectableElements = inject<Ref<Set<number>>>('selectableElements');
-const selectedElements = inject<Ref<Set<number>>>('selectedElements');
 const defaultBackImage = inject<Ref<ImageInfo | null>>('defaultBackImage', ref(null));
 
-// ---------------------------------------------------------------------------
-// Board interaction
-// ---------------------------------------------------------------------------
-const boardInteraction = tryUseBoardInteraction();
-
-// ---------------------------------------------------------------------------
-// Selectable / selected state
-// ---------------------------------------------------------------------------
-const isSelectable = computed(() => selectableElements?.value?.has(props.element.id) ?? false);
-const isSelected = computed(() => selectedElements?.value?.has(props.element.id) ?? false);
-
-// Element identity helper — passes notation from attributes (Pitfall 6)
-function elementIdentity() {
-  return {
-    id: props.element.id,
-    name: props.element.name,
-    notation: props.element.attributes?.notation as string | undefined,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Board state computeds — defensive guard (all six required states)
-// ---------------------------------------------------------------------------
-const isBoardHighlighted = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isHighlighted(elementIdentity());
-});
-
-const isBoardSelected = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isSelected(elementIdentity());
-});
-
-const isActionSelectable = computed(() => {
-  if (!boardInteraction) return false;
-  if (isBoardSelected.value) return false;
-  return boardInteraction.isSelectableElement(elementIdentity());
-});
-
-const isDisabled = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isDisabledElement(elementIdentity()) !== false;
-});
+const {
+  boardInteraction,
+  identity: elementIdentity,
+  isHighlighted: isBoardHighlighted,
+  isSelected: isBoardSelected,
+  isActionSelectable,
+  isDisabled,
+} = useElementBoardState(() => props.element);
 
 // ---------------------------------------------------------------------------
 // Display values
 // ---------------------------------------------------------------------------
 const displayLabel = computed(() => props.element.name || props.element.className);
 
-const childCount = computed(() => {
-  if (props.element.childCount !== undefined) return props.element.childCount;
-  return (props.element.children ?? []).length;
-});
+const childCount = computed(() => getElementCount(props.element));
 
-// Stack visual: up to 3 cards from children. children[0] is the top card (#893),
+// Stack visual: up to 3 of its own cards. The first is the top card (#893),
 // so it is raised highest while staying first in reading order.
 const stackCards = computed(() => {
-  const top = (props.element.children ?? []).slice(0, 3);
+  const top = directChildren(props.element).slice(0, 3);
   return top.map((card, i) => ({ card, stackIndex: top.length - 1 - i }));
 });
 
 // A 'hidden' zone sends neither its cards nor their count (#1056): its size is unknown, not 0.
-const isSizeHidden = computed(
-  () => props.element.childCount === undefined && props.element.zoneVisibility?.mode === 'hidden',
-);
+const isSizeHidden = computed(() => sizeIsHidden(props.element));
 
 const isEmpty = computed(() => !isSizeHidden.value && childCount.value === 0);
 
@@ -113,7 +69,7 @@ const ariaLabel = computed(() => {
   const name = props.element.name || props.element.className;
   const label = countText.value ? `${name}, ${countText.value.toLowerCase()}` : name;
   if (isDisabled.value) return `${label}, unavailable`;
-  if (isSelected.value || isBoardSelected.value) return `${label}, selected`;
+  if (isBoardSelected.value) return `${label}, selected`;
   if (isActionSelectable.value) return `${label}, selectable`;
   return label;
 });
@@ -130,8 +86,6 @@ const { attrs: selectableAttrs, onActivate, onKeydown } =
     :class="[
       'deck-container',
       {
-        'is-selectable': isSelectable,
-        'is-selected': isSelected,
         'action-selectable': isActionSelectable,
         'is-board-highlighted': isBoardHighlighted,
         'is-board-selected': isBoardSelected,
@@ -142,7 +96,7 @@ const { attrs: selectableAttrs, onActivate, onKeydown } =
     :data-zone-id="element.id"
     v-bind="selectableAttrs"
     :aria-label="ariaLabel"
-    :aria-pressed="(isSelected || isBoardSelected) || undefined"
+    :aria-pressed="isBoardSelected || undefined"
     @click="onActivate"
     @keydown="onKeydown"
   >
@@ -176,6 +130,7 @@ const { attrs: selectableAttrs, onActivate, onKeydown } =
     <div v-else class="deck-empty">
       <span class="empty-text">Empty</span>
     </div>
+    <GrantedCards :element="element" />
   </div>
 </template>
 
@@ -192,26 +147,6 @@ const { attrs: selectableAttrs, onActivate, onKeydown } =
   border: 1px solid var(--bsg-line);
   border-radius: 12px;
   transition: all var(--bsg-dur-base) var(--bsg-ease);
-}
-
-/* Selection states — outline never border; dashed = selectable, solid = selected */
-.deck-container.is-selectable {
-  cursor: pointer;
-  outline: 2px dashed var(--bsg-accent);
-  outline-offset: 2px;
-  background: var(--bsg-selectable);
-}
-
-.deck-container.is-selectable:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--bsg-shadow-sm);
-}
-
-.deck-container.is-selected {
-  outline: 2px solid var(--bsg-accent);
-  outline-offset: 2px;
-  background: var(--bsg-selected);
-  transform: scale(1.02);
 }
 
 /* action-selectable: dashed accent outline + selectable fill */
@@ -242,8 +177,6 @@ const { attrs: selectableAttrs, onActivate, onKeydown } =
 }
 
 /* Selected fill is solid accent — pin label/count ink to accent-ink so text stays legible in both themes */
-.deck-container.is-selected .deck-label,
-.deck-container.is-selected .deck-count,
 .deck-container.is-board-selected .deck-label,
 .deck-container.is-board-selected .deck-count {
   color: var(--bsg-accent-ink);

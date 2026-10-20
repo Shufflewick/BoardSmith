@@ -588,8 +588,8 @@ const outcomeOf = (code: number): AuditOutcome => (code === 0 ? 'pass' : 'fail')
 /**
  * Code-quality audits. Deliberately not part of `boardsmith lint`. The two
  * baseline checks and the template duplication check are also a merge gate:
- * `.agent-policy.json`'s verify list runs them, so `agent-policy verify` and a
- * thread merge refuse drift (#545, #596).
+ * `.agent-policy.json`'s verify list runs them, so `agent-policy verify` and
+ * `agent-policy merge` refuse drift (#545, #596).
  */
 function buildAudits(
   options: AuditOptions,

@@ -4,18 +4,23 @@
  * the #229 / #237 typed editors).
  *
  * The bar is capped at the strip the board region reserves, so it never covers
- * the board. A multi-line text box cannot be written in two rows: it needs six
- * rows of text plus its count and submit. So WHILE that editor is open, and
- * only then, the bar may grow past the strip and cover part of the board. The
- * board never refits (the reservation does not change), and the cap comes back
- * the moment the editor closes.
+ * the board. A typed editor may grow the bar past the strip WHILE it is open,
+ * and only then, covering part of the board; the board never refits (the
+ * reservation does not change), and the cap comes back the moment it closes.
  *
- * The editor marks itself (`data-bs-grows-panel`) and the shell's bar lifts its
- * cap for a bar that contains the mark (`:has(...)`). So the exception lives
- * exactly as long as the editor's DOM does: closing it by submitting, cancelling
- * or putting the bar down all unmount it. Held here: the mark appears with the
- * multi-line editor and nothing else, and leaves with it. The CSS that reads it
- * is held against PlayShell's real stylesheet; jsdom applies no styles.
+ * How far depends on the kind (#1300). A multi-line box needs six rows of text
+ * plus its count and submit, so it may grow the bar to what it needs, bounded
+ * by the screen. A one-line or number field stacks label, hint and field + Done
+ * in three rows on a phone (#1058), one more than the strip holds, so it may
+ * grow the bar by one row and no more, at every screen size.
+ *
+ * The editor marks itself (`data-bs-grows-panel="box"` or `"field"`) and the
+ * shell's bar lifts its cap for a bar that contains the mark (`:has(...)`). So
+ * the exception lives exactly as long as the editor's DOM does: closing it by
+ * submitting, cancelling or putting the bar down all unmount it. Held here:
+ * every typed editor carries the mark for its kind, and the mark leaves with
+ * it. The CSS that reads it is held against PlayShell's real stylesheet; jsdom
+ * applies no styles.
  */
 import { describe, it, expect } from 'vitest';
 import { nextTick } from 'vue';
@@ -26,6 +31,8 @@ import { mountPanelAt, submitText } from './action-panel-editor.test-helper.js';
 import type { EnrichedActionMetadata } from '../../composables/useActionControllerTypes.js';
 
 const MARK = '[data-bs-grows-panel]';
+const BOX = '[data-bs-grows-panel="box"]';
+const FIELD = '[data-bs-grows-panel="field"]';
 
 const setDescription: EnrichedActionMetadata = {
   name: 'setDescription',
@@ -47,20 +54,24 @@ const setTithe: EnrichedActionMetadata = {
   selections: [{ name: 'tithe', type: 'number', prompt: 'Tithe', min: 0, max: 10 }],
 };
 
-describe('a multi-line text editor may grow the panel past the strip, and only while it is open', () => {
-  it('marks the open multi-line editor', async () => {
+describe('a typed editor may grow the panel past the strip, and only while it is open', () => {
+  it('marks the open multi-line editor as a box', async () => {
     const { wrapper } = await mountPanelAt(setDescription);
     const marked = wrapper.findAll(MARK);
     expect(marked).toHaveLength(1);
+    expect(marked[0]!.attributes('data-bs-grows-panel')).toBe('box');
     expect(marked[0]!.find('textarea').exists()).toBe(true);
     wrapper.unmount();
   });
 
-  it('does not mark a one-line text field or a number field', async () => {
+  it('marks a one-line text field and a number field as fields (#1058, #1300)', async () => {
+    // Label, hint and field + Done are three rows; the strip holds two at 390px.
     for (const action of [setNickname, setTithe]) {
       const { wrapper } = await mountPanelAt(action);
-      expect(wrapper.find('.text-input, .number-input').exists(), action.name).toBe(true);
-      expect(wrapper.find(MARK).exists(), action.name).toBe(false);
+      const marked = wrapper.findAll(MARK);
+      expect(marked, action.name).toHaveLength(1);
+      expect(marked[0]!.attributes('data-bs-grows-panel'), action.name).toBe('field');
+      expect(marked[0]!.find('input').exists(), action.name).toBe(true);
       wrapper.unmount();
     }
   });
@@ -87,7 +98,7 @@ describe('a multi-line text editor may grow the panel past the strip, and only w
   });
 });
 
-describe("the shell's bar lifts its cap for the marked editor, and for nothing else", () => {
+describe("the shell's bar lifts its cap for a marked editor, and for nothing else", () => {
   const shell = fs.readFileSync(
     path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'PlayShell.vue'),
     'utf-8',
@@ -105,11 +116,24 @@ describe("the shell's bar lifts its cap for the marked editor, and for nothing e
     expect(rule('.actionbar')).toMatch(/max-height:\s*var\(--bsg-panel-reserved\);/);
   });
 
-  it('caps a bar holding the marked editor at the editor ceiling, never below the strip', () => {
-    const lifted = rule(`.actionbar:has(${MARK})`);
+  it('caps a bar holding a multi-line box at the editor ceiling, never below the strip', () => {
+    const lifted = rule(`.actionbar:has(${BOX})`);
     expect(lifted).toMatch(
       /max-height:\s*max\(var\(--bsg-panel-reserved\),\s*var\(--bsg-panel-editor-max\)\);/,
     );
+  });
+
+  it('caps a bar holding a one-line or number field one row past the strip, at every screen size (#1300)', () => {
+    expect(rule(`.actionbar:has(${FIELD})`)).toMatch(
+      /max-height:\s*max\(var\(--bsg-panel-reserved\),\s*var\(--bsg-panel-field-max\)\);/,
+    );
+    // Bounded by the screen, as the box's ceiling is.
+    const fieldMax = rule('.game-shell__game').match(/--bsg-panel-field-max\s*:\s*([^;]+);/)?.[1] ?? '';
+    expect(fieldMax.replace(/\s+/g, ' ')).toBe('min(calc(var(--bsg-panel-reserved) + var(--bsg-panel-row) + var(--bsg-panel-gap)), 60dvh)');
+    // One definition, for every tier: no media query restates it.
+    expect(style.match(/--bsg-panel-field-max\s*:/g)).toHaveLength(1);
+    // No rule lifts the cap for an unvalued mark, which would give a field the box's ceiling.
+    expect(style).not.toContain(`:has(${MARK})`);
   });
 
   it('sizes the editor ceiling to what the editor needs, bounded by the screen', () => {
@@ -131,8 +155,7 @@ describe("the shell's bar lifts its cap for the marked editor, and for nothing e
   it('never moves the board: nothing about the region changes with the editor', () => {
     // The reservation is the region's padding and nothing else sets it; no rule
     // keyed on the mark reaches the board region or the reservation token.
-    const lifted = rule(`.actionbar:has(${MARK})`);
-    expect(lifted).not.toMatch(/--bsg-panel-reserved\s*:/);
+    for (const mark of [BOX, FIELD]) expect(rule(`.actionbar:has(${mark})`)).not.toMatch(/--bsg-panel-reserved\s*:/);
     expect(style).not.toMatch(/boardregion[^{]*\[data-bs-grows-panel\]/);
     expect(style).not.toMatch(/:has\(\[data-bs-grows-panel\]\)[^{]*boardregion/);
   });

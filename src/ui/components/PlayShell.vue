@@ -695,13 +695,19 @@ const mobileToggleLabel = computed(() => {
   --bsg-panel-reserved: calc(2 * var(--bsg-panel-row) + var(--bsg-panel-gap)
                              + 2 * var(--bsg-panel-pad) + env(safe-area-inset-bottom));
 
-  /* The ONE exception to that cap: a multi-line text editor (#229, #237) cannot
-     be written in two rows, so while one is open the bar may grow to what the
-     editor needs and cover part of the board. The board does not refit -- the
-     reservation above is untouched -- and the cap returns when it closes. See
-     `.actionbar:has([data-bs-grows-panel])`.
+  /* The ONE exception to that cap: a typed editor (#229, #237). While one is
+     open the bar may grow past the strip and cover part of the board. The board
+     does not refit -- the reservation above is untouched -- and the cap returns
+     when it closes. See `.actionbar:has([data-bs-grows-panel=...])`.
 
-     What the editor needs is its box plus everything around it that must stay
+     A one-line or number field stacks label, hint and field + Done in three
+     rows on a phone (#1058), one more than the strip, so it may grow the bar by
+     that one row, at every size; anything more, such as a refusal, scrolls
+     inside the bar (#1300). Bounded by the screen, as the box's ceiling is. */
+  --bsg-panel-field-max: min(calc(var(--bsg-panel-reserved) + var(--bsg-panel-row) + var(--bsg-panel-gap)), 60dvh);
+
+  /* A multi-line box cannot be written in two rows, so it may grow the bar to
+     what it needs: its box plus everything around it that must stay
      on screen: the action's row, the field's label line, the count-and-submit
      row, and the bar's own padding (`--bsg-editor-chrome`). The box rests at six
      lines of its 0.9rem / 1.4 text plus its padding and border
@@ -925,13 +931,18 @@ const mobileToggleLabel = computed(() => {
   overflow-y: auto;
 }
 
-/* While a multi-line text editor is open, and only then, the bar may grow past
-   the strip (see --bsg-panel-editor-max). Keyed on the editor's own mark, so the
-   exception lives exactly as long as the editor's DOM: submitting, cancelling or
-   putting the bar down all unmount it and the strip cap is back. `max()` so a
-   very short screen can never cap the bar below the strip itself. */
-.actionbar:has([data-bs-grows-panel]) {
+/* While a typed editor is open, and only then, the bar may grow past
+   the strip (see --bsg-panel-field-max and --bsg-panel-editor-max). Keyed on the
+   editor's own mark, so the exception lives exactly as long as the editor's DOM:
+   submitting, cancelling or putting the bar down all unmount it and the strip
+   cap is back. `max()` so a very short screen can never cap the bar below the
+   strip itself. */
+.actionbar:has([data-bs-grows-panel="box"]) {
   max-height: max(var(--bsg-panel-reserved), var(--bsg-panel-editor-max));
+}
+
+.actionbar:has([data-bs-grows-panel="field"]) {
+  max-height: max(var(--bsg-panel-reserved), var(--bsg-panel-field-max));
 }
 
 /* Down: one row that must NOT wrap. A wrapped "collapsed" bar would be taller

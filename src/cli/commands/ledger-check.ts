@@ -68,9 +68,10 @@ import { LINE_LOCATION_HINT, type LineRange, fileLines, lineRangeProblem } from 
 import { type EntryField, type LedgerEntry, entryField, parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
 import { NUMBERED_LEDGER_SPECS, provisionalHeadings, provisionalReferences } from '../lib/ledger-allocation.js';
 import { checkCrossChunkLedger } from './cross-chunk.js';
-import { type VerifyLookup, type VerifyOnFile, checkRunLogRoles, reviewRoundCommits, runLogEntries } from '../lib/run-log-roles.js';
+import { type VerifyLookup, type VerifyOnFile, checkRunLogRoles, reviewRoundVerifies, runLogEntries } from '../lib/run-log-roles.js';
 import { readVerifyResult, verifyResultPath, verifyResultsDir } from '../lib/verify-result.js';
 import { readIfExists, readListedText } from '../lib/read-if-exists.js';
+import { readProjectConfig } from '../lib/agent-roles.js';
 
 export type LedgerFindingKind =
   | 'duplicate-number'
@@ -596,7 +597,7 @@ function misplacedRunLog(text: string): LedgerFinding[] {
  * it (a prefix of the full id), as a lookup. A commit with no result on this machine looks up as
  * undefined: the check then rests on the round's own line.
  */
-async function verifyResultsOnFile(projectDir: string, commits: string[]): Promise<VerifyLookup> {
+export async function verifyResultsOnFile(projectDir: string, commits: string[]): Promise<VerifyLookup> {
   let names: string[];
   try {
     names = (await fs.readdir(verifyResultsDir(projectDir))).filter((n) => /^[0-9a-f]{40,64}\.json$/.test(n));
@@ -618,20 +619,6 @@ async function verifyResultsOnFile(projectDir: string, commits: string[]): Promi
     }
   }
   return (commit) => found.get(commit);
-}
-
-/** The project's boardsmith.json; a project without one has no `agents` block, so every role is its bs- default. */
-async function readProjectConfig(projectDir: string): Promise<Record<string, unknown>> {
-  const text = await readIfExists(pathJoin(projectDir, 'boardsmith.json'), (path) => fs.readFile(path, 'utf-8'));
-  if (text === undefined) return {};
-  try {
-    return JSON.parse(text) as Record<string, unknown>;
-  } catch (error) {
-    throw new Error(
-      `boardsmith.json in ${projectDir} is not valid JSON (${(error as Error).message}), so the run logs' agents cannot be ` +
-        'checked against their roles. Fix it, then run ledger-check again.',
-    );
-  }
 }
 
 /** The skills that keep a run log of their own dispatches, by the work package it is named for. */
@@ -983,11 +970,29 @@ async function readLedger(projectDir: string, file: string): Promise<string | un
   }
 }
 
+/** Checks each chunk's and skill's run log against its commits, its verify results and the project's role mapping. */
+async function checkRunLogs(projectDir: string, command: string, logs: string[], result: LedgerCheckResult): Promise<void> {
+  if (logs.length === 0) return;
+  await requireGitRepo(projectDir, 'compares each run log\'s timestamps against the commits that recorded them');
+  const config = await readProjectConfig(projectDir, { command, purpose: "check each run log's agents against their roles" });
+  // An untracked run log has no commit times: every line of it reads as not committed yet.
+  const trackedLogs = await trackedFiles(projectDir, logs.map((log) => `${DESIGN_DIR}/${log}`));
+  for (const log of logs) {
+    const text = (await readLedger(projectDir, log))!;
+    result.checked.push(log);
+    const rel = `${DESIGN_DIR}/${log}`;
+    const commits = trackedLogs.has(rel) ? await lineCommits(projectDir, rel) : [];
+    const verifyOnFile = await verifyResultsOnFile(projectDir, reviewRoundVerifies(text).map((r) => r.commit));
+    result.findings.push(...checkRunLog(text, log, (line) => commits[line]?.time ?? null, Math.floor(Date.now() / 1000), verifyOnFile, config));
+  }
+}
+
 /**
  * Runs every ledger rule against `projectDir`'s `design/` as it stands on disk. `checked` lists
- * the ledgers read, then each verified CHUNK.md whose cited evidence was checked.
+ * the ledgers read, then each verified CHUNK.md whose cited evidence was checked. `command` is
+ * the command the user ran, which a refusal names (#1277).
  */
-export async function ledgerCheck(projectDir: string): Promise<LedgerCheckResult> {
+export async function ledgerCheck(projectDir: string, command: string): Promise<LedgerCheckResult> {
   const result: LedgerCheckResult = { checked: [], absent: [], findings: [] };
   // FILINGS.md is not an evidence source: a filing cites BoardSmith's own files, not the game's.
   const evidence: EvidenceSource[] = [];
@@ -1015,21 +1020,7 @@ export async function ledgerCheck(projectDir: string): Promise<LedgerCheckResult
   }
 
   result.findings.push(...sharedRunLogs(await chunkSlugs(projectDir)));
-  const logs = await runLogFiles(projectDir);
-  if (logs.length > 0) {
-    await requireGitRepo(projectDir, 'compares each run log\'s timestamps against the commits that recorded them');
-  }
-  // An untracked run log has no commit times: every line of it reads as not committed yet.
-  const trackedLogs = await trackedFiles(projectDir, logs.map((log) => `${DESIGN_DIR}/${log}`));
-  const config = await readProjectConfig(projectDir);
-  for (const log of logs) {
-    const text = (await readLedger(projectDir, log))!;
-    result.checked.push(log);
-    const rel = `${DESIGN_DIR}/${log}`;
-    const commits = trackedLogs.has(rel) ? await lineCommits(projectDir, rel) : [];
-    const verifyOnFile = await verifyResultsOnFile(projectDir, reviewRoundCommits(text));
-    result.findings.push(...checkRunLog(text, log, (line) => commits[line]?.time ?? null, Math.floor(Date.now() / 1000), verifyOnFile, config));
-  }
+  await checkRunLogs(projectDir, command, await runLogFiles(projectDir), result);
 
   const crossChunk = await readLedger(projectDir, CROSS_CHUNK_MD);
   if (crossChunk === undefined) {
@@ -1060,7 +1051,7 @@ export async function ledgerCheckCommand(
   options: { project?: string; json?: boolean } = {},
 ): Promise<void> {
   const projectDir = pathResolve(options.project ?? process.cwd());
-  const result = await ledgerCheck(projectDir);
+  const result = await ledgerCheck(projectDir, 'boardsmith ledger-check');
   if (result.findings.length > 0) process.exitCode = 1;
 
   if (options.json) {
