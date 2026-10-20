@@ -21,14 +21,14 @@
  * and scoring moves in it is worse than not searching them at all.
  */
 
-import type { Game } from '../engine/index.js';
+import { Space, type Game } from '../engine/index.js';
 import type { GameElement } from '../engine/index.js';
 import type { DeterminizeSampler } from './types.js';
 import { changing } from '../engine/element/state-version.js';
 import { outermostConcealer } from '../engine/element/concealed-refs.js';
-import { hasZoneVisibility, hidesContents } from '../engine/element/game-element.js';
+import { hasZoneVisibility, hidesContents, readDynamicAttribute } from '../engine/element/game-element.js';
 import { canPlayerSee } from '../engine/element/visibility.js';
-import { isPlaceholderId } from '../engine/element/hidden-placeholder.js';
+import { HIDDEN_PLACEHOLDER_ATTRIBUTE, isPlaceholderId } from '../engine/element/hidden-placeholder.js';
 
 /**
  * A game's determinization sampler broke the one contract it has (#73).
@@ -232,31 +232,72 @@ function visibleNewElement(before: KnownWorld, after: KnownWorld, seat: number):
   return null;
 }
 
+/** Whether the seat was sent `element` face down, as a placeholder. */
+function isSentFaceDown(element: GameElement): boolean {
+  return readDynamicAttribute(element, HIDDEN_PLACEHOLDER_ATTRIBUTE) === true;
+}
+
 /**
- * Whether the nearest zone rule above `element` hides its contents from the
- * seat. Then, with no zone rule of its own, `element` may have been a grant
- * below a hidden child (#961), whose view carries only its granted contents.
+ * Make a game rebuilt from a seat's view read it as that seat was shown it
+ * (#1291). Two spellings of the view mean something else to a live game:
+ * - A grant with no visibility setting of its own (`addVisibleTo`, #758) is
+ *   sent as `{ mode: 'all', explicit: false }`, which a live game resolves from
+ *   the zone above, hidden ones included. It is given back the grant the
+ *   engine writes, for this seat (#1270).
+ * - An owner rule granted below a hidden container (#961) is sent with no
+ *   owner, and its count, as the seat cannot see into it. A live game takes the
+ *   owner of the zone it was lifted into instead, so it is sent count-only
+ *   (#1280): a count is all the seat was given.
+ * Running it again changes nothing.
  */
-function inheritsConcealment(element: GameElement, seat: number): boolean {
-  if (hasZoneVisibility(element) && element.getZoneVisibility()) return false;
-  for (let at = element._t.parent; at; at = at._t.parent) {
-    // The sandbox knows only the owners the seat view sent (#1209).
-    if (hasZoneVisibility(at) && at.getZoneVisibility()) return hidesContents(at, seat, at.getEffectiveOwner()?.seat);
-  }
-  return false;
+export function adoptSeatView(game: Game, seat: number): void {
+  const visit = (element: GameElement): void => {
+    const own = element._visibility;
+    if (own && !own.explicit && own.mode === 'all' && !own.addPlayers?.length) {
+      element._visibility = { mode: 'hidden', explicit: false, addPlayers: [seat] };
+    }
+    if (element instanceof Space && element._viewChildCount !== undefined && !isSentFaceDown(element)) {
+      const zone = element.getZoneVisibility();
+      if (zone?.mode === 'owner' && canPlayerSee(zone, seat, element.getEffectiveOwner()?.seat)) {
+        element._restoreZoneVisibility({ mode: 'count-only', explicit: true });
+      }
+    }
+    for (const child of element._t.children) visit(child as GameElement);
+  };
+  visit(game as unknown as GameElement);
+}
+
+/** Whether `element`'s own zone rule hides its contents from the seat. */
+function concealsContents(element: GameElement, seat: number): boolean {
+  return hasZoneVisibility(element) && !!element.getZoneVisibility() && hidesContents(element, seat, element.getEffectiveOwner()?.seat);
+}
+
+/**
+ * Whether the seat's view proves it was sent `container` with every child
+ * (#1291). Below a zone that hides its contents, a container with no zone rule
+ * of its own may be a grant lifted from inside a hidden element (#961), sent
+ * with only its own grants. The view proves it was not when the container
+ * holds a face-down placeholder, which a cut container never does, or sits
+ * among its zone's counted children, which the lifted ones trail (#1208).
+ */
+function sentWhole(container: GameElement, seat: number): boolean {
+  if (hasZoneVisibility(container) && container.getZoneVisibility()) return true;
+  const parent = container._t.parent as GameElement | undefined;
+  if (!parent) return true;
+  if ((container._t.children as GameElement[]).some(isSentFaceDown)) return true;
+  if (!concealsContents(parent, seat)) return sentWhole(parent, seat);
+  return parent._viewChildCount !== undefined && parent._t.children.indexOf(container) < parent._viewChildCount;
 }
 
 /**
  * Whether the seat's view says how many children this container holds (#1206).
- * For one the seat cannot see, the view decides: `redactTreeForSeat` sends a
- * count-only element's count, kept as `_viewChildCount`. For one it can see,
- * this is a cautious guess, not what the view says: a container with no zone
- * rule of its own below a concealed zone is taken for a grant (#961) and not
- * counted, so a #758 visible direct child of such a zone goes uncounted too.
+ * For one the seat cannot see, `redactTreeForSeat` sends a count-only
+ * element's count, kept as `_viewChildCount`. For one it can see, the view
+ * must prove it sent every child (`whole`, taken before sampling).
  */
-function countVisibleTo(container: GameElement, seat: number): boolean {
+function countVisibleTo(container: GameElement, seat: number, whole: ReadonlySet<GameElement>): boolean {
   if (!container.isVisibleTo(seat)) return container._viewChildCount !== undefined;
-  if (inheritsConcealment(container, seat)) return false;
+  if (!whole.has(container)) return false;
   const zone = hasZoneVisibility(container) ? container.getZoneVisibility() : undefined;
   return zone?.mode !== 'hidden' || canPlayerSee(zone, seat, container.getEffectiveOwner()?.seat);
 }
@@ -269,15 +310,16 @@ function childCounts(world: KnownWorld): Map<GameElement | undefined, number> {
 }
 
 /** The first container the seat can count whose number of children the sample changed, or `null`. */
-function childCountChange(before: KnownWorld, after: KnownWorld, seat: number): string | null {
+function childCountChange(before: KnownWorld, after: KnownWorld, seat: number, whole: ReadonlySet<GameElement>): string | null {
   const priorCounts = childCounts(before);
   const nowCounts = childCounts(after);
   for (const { element } of before.values()) {
     const prior = priorCounts.get(element) ?? 0;
     const now = nowCounts.get(element) ?? 0;
     // A count-only element arrives empty, with its count: a sampler may leave it so or fill it to that count.
-    const known = element._viewChildCount ?? prior;
-    if (now === prior || now === known || !countVisibleTo(element, seat)) continue;
+    // A zone sent with children holds as many as were sent, its lifted grants included (#1271).
+    const known = prior === 0 ? element._viewChildCount ?? 0 : prior;
+    if (now === prior || now === known || !countVisibleTo(element, seat, whole)) continue;
     return (
       `${nameOf(element)} held ${known} element${known === 1 ? '' : 's'} and now holds ${now}. ` +
       `The seat can count what that container holds even where it cannot see them, ` +
@@ -288,7 +330,7 @@ function childCountChange(before: KnownWorld, after: KnownWorld, seat: number): 
 }
 
 /** The first way `after` contradicts `before`, or `null` if it does not. */
-function findContradiction(before: KnownWorld, after: KnownWorld, seat: number): string | null {
+function findContradiction(before: KnownWorld, after: KnownWorld, seat: number, whole: ReadonlySet<GameElement>): string | null {
   const countChange = placeholderCountChange(before, after);
   if (countChange) return countChange;
 
@@ -311,7 +353,7 @@ function findContradiction(before: KnownWorld, after: KnownWorld, seat: number):
     const change = attributeChange(id, prior, now);
     if (change) return change;
   }
-  return visibleNewElement(before, after, seat) ?? childCountChange(before, after, seat);
+  return visibleNewElement(before, after, seat) ?? childCountChange(before, after, seat, whole);
 }
 
 /**
@@ -336,6 +378,8 @@ export function applyDeterminization(
   rng: () => number,
 ): void {
   const before = recordKnownWorld(sandbox);
+  // Before sampling: a sampler may reorder a zone's children, which `sentWhole` reads.
+  const whole = new Set([...before.values()].map(({ element }) => element).filter((element) => sentWhole(element, seat)));
 
   try {
     changing(sandbox._ctx, () => sampler(sandbox, seat, rng));
@@ -351,7 +395,7 @@ export function applyDeterminization(
     );
   }
 
-  const contradiction = findContradiction(before, recordKnownWorld(sandbox), seat);
+  const contradiction = findContradiction(before, recordKnownWorld(sandbox), seat, whole);
   if (contradiction) {
     throw new DeterminizationError(
       `The determinize sampler for seat ${seat} produced a world that contradicts what the ` +
