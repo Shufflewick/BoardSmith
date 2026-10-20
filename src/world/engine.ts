@@ -1420,7 +1420,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
           );
         }
       }
-      return answer(acting, named, this.resolveDraft(definition, args, acting, named));
+      return answer(acting, named, this.resolveDraft(definition, args, acting, named, through));
     } finally {
       bindWorldFacilities(this.game, null);
     }
@@ -1493,45 +1493,49 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * submitted; a read refuses it here rather than handing a callback a number
    * typed as an element, or an element whose residency is an accident of who
    * else is in the world.
+   *
+   * AND, BEFORE THE PICK ASKED (`through`), ONLY WHAT THAT PICK OFFERS (#1315),
+   * judged as a table's re-ask judges it: an element its own `choices` filter
+   * out is as stale as one outside the read, and no later callback sees it.
    */
   private resolveDraft(
     definition: ActionDefinition,
     args: Readonly<Record<string, unknown>>,
     acting: Player,
     named: readonly string[],
+    through: number,
   ): Readonly<Record<string, unknown>> {
-    // The callbacks it runs read the tree, so it is a read with reach-marking off (#1203).
-    return this.game.readingOnly(() => {
-      // Each element pick is checked before a later pick is resolved against it (#1223).
-      return this.game
-        .getActionExecutor()
-        .resolveArgs(definition, picksFromSeat(this.game, definition.name, args, acting.seat), acting, readOnlyProjection(this.game), (selection, value) => {
-          if (selection.type === "element" || selection.type === "elements") {
-            this.assertOfferable(definition.name, selection.name, value, args, named);
-          }
-        });
-    });
-  }
-
-  /** One element selection of a resolved draft: unanswered, or every element it
-   *  names inside a partition this read declared. `stale-draft` otherwise. */
-  private assertOfferable(
-    action: string,
-    selection: string,
-    value: unknown,
-    answers: Readonly<Record<string, unknown>>,
-    named: readonly string[],
-  ): void {
-    if (value === undefined || value === null) return;
-    for (const item of Array.isArray(value) ? value : [value]) {
-      if (item instanceof GameElement && named.includes(this.partitionOf(item))) continue;
-      throw worldRefusal(
+    const executor = this.game.getActionExecutor();
+    const reading = readOnlyProjection(this.game);
+    const stale = (selection: string) =>
+      worldRefusal(
         "stale-draft",
-        `The draft of "${action}" answers "${selection}" with ${JSON.stringify(answers[selection])}, ` +
+        `The draft of "${definition.name}" answers "${selection}" with ${JSON.stringify(args[selection])}, ` +
           "which is not one of the elements this action can offer here now. Ask for the " +
           "action's offer again and pick from it.",
       );
-    }
+    // The callbacks it runs read the tree, so it is a read with reach-marking off (#1203).
+    return this.game.readingOnly(() =>
+      // Each element pick is checked before a later pick is resolved against it (#1223).
+      executor.resolveArgs(definition, picksFromSeat(this.game, definition.name, args, acting.seat), acting, reading, (selection, value, before) => {
+        if (selection.type !== "element" && selection.type !== "elements") return;
+        // Residency first, so the pick's own callbacks never run on an element outside the read.
+        if (!this.isDeclared(value, named)) throw stale(selection.name);
+        if (
+          definition.selections.indexOf(selection) < through &&
+          !executor.validateSelection(selection, value, acting, before, definition.name, reading).valid
+        ) {
+          throw stale(selection.name);
+        }
+      }),
+    );
+  }
+
+  /** Whether every element a resolved element pick names sits in a partition this read declared. */
+  private isDeclared(value: unknown, named: readonly string[]): boolean {
+    return (Array.isArray(value) ? value : [value]).every(
+      (item) => item instanceof GameElement && named.includes(this.partitionOf(item)),
+    );
   }
 
   /**

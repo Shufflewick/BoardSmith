@@ -911,6 +911,8 @@ export class ActionExecutor {
    *   included in the choices evaluated here, so a learner submitting a
    *   non-allowed target receives the gate reason via the existing
    *   "Selection disabled: <reason>" path.
+   * @param reading - The game the selection's callbacks see, as `getChoices`
+   *   takes it: a world's read of a draft passes its read-only projection.
    */
   validateSelection(
     selection: Selection,
@@ -918,17 +920,18 @@ export class ActionExecutor {
     player: Player,
     args: Record<string, unknown>,
     actionName?: string,
+    reading?: Game,
   ): ValidationResult {
     const errors: string[] = [];
     const context: ActionContext = {
-      game: this.game,
+      game: reading ?? this.game,
       player,
       args,
     };
 
     // Check if value is in valid choices (for choice/element)
     if (selection.type === 'choice' || selection.type === 'element') {
-      const choices = this.getChoices(selection, player, args, actionName);
+      const choices = this.getChoices(selection, player, args, actionName, reading);
 
       // A single `element` selection is never multiSelect, so an array is
       // never a valid submission shape for it (WR-08): it would otherwise reach
@@ -997,7 +1000,7 @@ export class ActionExecutor {
     // Validate elements selection (new "pit of success" type)
     // After resolveArgs, values are GameElement objects (not raw IDs)
     if (selection.type === 'elements') {
-      const annotatedElements = this.getChoices(selection, player, args, actionName);
+      const annotatedElements = this.getChoices(selection, player, args, actionName, reading);
 
       const validateElement = (elem: unknown): string | null => {
         if (typeof elem !== 'number' && !this.looksLikeSerializedElement(elem)) {
