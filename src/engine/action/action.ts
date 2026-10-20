@@ -36,7 +36,7 @@ import { getActiveStep, getGateReasonForValue } from '../tutorial/gate.js';
 import { findMatchingChoice, isSerializedElement, oneChoiceListRefusal, oneElementListRefusal, trySmartResolveChoice, valuesEqual } from './choice-matching.js';
 import { numberRuleErrors } from './number-rules.js';
 import { formatRepeatCandidates } from '../element/pick-candidates.js';
-import { seatIdOf } from '../element/seat-placeholders.js';
+import { namesNothing, seatIdOf } from '../element/seat-placeholders.js';
 import type { ChoiceWithRefs, WarningEntry } from '../../types/protocol.js';
 import { textRuleErrors } from './text-rules.js';
 import { actingFor, changing } from '../element/state-version.js';
@@ -479,15 +479,23 @@ export class ActionExecutor {
    *   projection so the elements it resolves cannot be written through
    *   (ShufflewickPub #384, #418). Everything else passes nothing and gets the
    *   live game.
+   * @param checkPick Run on each pick as it resolves, with the picks before it,
+   *   before any later pick is resolved against it; it throws to refuse it. A
+   *   read refuses a pick it could not offer, so no later pick's callback is
+   *   handed one (#1223, #1293).
    */
   resolveArgs(
     action: ActionDefinition,
     args: Record<string, unknown>,
     player?: Player,
     reading?: Game,
+    checkPick?: (selection: Selection, value: unknown, before: Record<string, unknown>) => void,
   ): Record<string, unknown> {
     const game = reading ?? this.game;
-    const resolved = { ...args, ...this.resolveNonPickArgs(action, args, game) };
+    const nonPicks = this.resolveNonPickArgs(action, args, game);
+    const resolved = { ...args, ...nonPicks };
+    // What a check sees: the picks before, resolved, never a later one as sent.
+    const before: Record<string, unknown> = { ...nonPicks };
 
     // Each selection's value, with the selections before it already resolved
     // in view, so a `choices` callback that reads an earlier pick sees what it
@@ -498,7 +506,10 @@ export class ActionExecutor {
       const value = args[selection.name];
       if (value === null) delete resolved[selection.name];
       if (value === undefined || value === null) continue;
-      resolved[selection.name] = this.resolveOne(selection, value, player, resolved, game);
+      const pick = this.resolveOne(selection, value, player, resolved, game);
+      checkPick?.(selection, pick, { ...before });
+      resolved[selection.name] = pick;
+      before[selection.name] = pick;
     }
 
     return resolved;
@@ -1158,8 +1169,11 @@ export class ActionExecutor {
     context: ActionContext,
     actionName: string | undefined,
   ): string {
-    // A card the seat cannot see is handed as the id the seat knows it by, so the sentence cannot name it (#1205).
-    const shown = isElement(value) && !value.isVisibleTo(context.player) ? seatIdOf(value, context.player.seat) : value;
+    // A card the seat cannot see is handed as the id the seat knows it by, so the sentence cannot name it (#1205);
+    // an id the seat may no longer make, as nothing (#1293).
+    const shown = isElement(value) && !value.isVisibleTo(context.player)
+      ? seatIdOf(value, context.player.seat)
+      : namesNothing(value) ? undefined : value;
     const message: unknown = selection.unavailable!(shown, context);
     if (typeof message === 'string' && message.trim() !== '') return message;
     const returned = typeof message === 'string' ? 'an empty string' : describeValidateReturn(message);
