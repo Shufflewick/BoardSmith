@@ -10,7 +10,7 @@
  */
 
 import { computed, inject, type Ref, type ComputedRef } from 'vue';
-import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
+import { useElementBoardState } from '../../../composables/useElementBoardState.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
 import CardBack from './CardBack.vue';
@@ -30,14 +30,16 @@ const props = defineProps<{
 // Inject context — exact keys provided by AutoRenderer.vue
 // ---------------------------------------------------------------------------
 const playerSeat = injectPlayerSeat();
-const selectableElements = inject<Ref<Set<number>>>('selectableElements');
-const selectedElements = inject<Ref<Set<number>>>('selectedElements');
 const defaultBackImage = inject<Ref<ImageInfo | null>>('defaultBackImage');
 
-// ---------------------------------------------------------------------------
-// Board interaction — whole-hand action-selectable state
-// ---------------------------------------------------------------------------
-const boardInteraction = tryUseBoardInteraction();
+const {
+  boardInteraction,
+  identity: elementIdentity,
+  isHighlighted: isBoardHighlighted,
+  isSelected: isBoardSelected,
+  isActionSelectable,
+  isDisabled,
+} = useElementBoardState(() => props.element);
 
 // ---------------------------------------------------------------------------
 // Presentation overlay injection (D-04)
@@ -47,49 +49,7 @@ const presentationEntry = computed(() =>
   resolvePresentation(props.element, overlay?.value)
 );
 
-// ---------------------------------------------------------------------------
-// Selectable / selected state (from injected sets)
-// ---------------------------------------------------------------------------
-const isSelectable = computed(() => selectableElements?.value?.has(props.element.id) ?? false);
-const isSelected = computed(() => selectedElements?.value?.has(props.element.id) ?? false);
-
-// Element identity helper — passes notation from attributes (Pitfall 6)
-function elementIdentity() {
-  return {
-    id: props.element.id,
-    name: props.element.name,
-    notation: props.element.attributes?.notation as string | undefined,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Board state computeds — all six required states + drop-target (zone renderer)
-// ---------------------------------------------------------------------------
-const isBoardHighlighted = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isHighlighted(elementIdentity());
-});
-
-const isBoardSelected = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isSelected(elementIdentity());
-});
-
-const isActionSelectable = computed(() => {
-  if (!boardInteraction) return false;
-  if (isBoardSelected.value) return false;
-  return boardInteraction.isSelectableElement(elementIdentity());
-});
-
-const isDropTarget = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isDropTarget(elementIdentity());
-});
-
-const isDisabled = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isDisabledElement(elementIdentity()) !== false;
-});
+const isDropTarget = computed(() => boardInteraction?.isDropTarget(elementIdentity()) ?? false);
 
 // ---------------------------------------------------------------------------
 // Player info for header
@@ -204,7 +164,7 @@ const frontRowCards = computed(() => {
 // ---------------------------------------------------------------------------
 const { onActivate: handleSelect, onKeydown, attrs: selectableAttrs } = useSelectable(
   elementIdentity,
-  boardInteraction ?? null,
+  boardInteraction,
   isActionSelectable,
   isDisabled,
   'hand',
@@ -223,13 +183,6 @@ function handleDrop(event: DragEvent) {
   event.preventDefault();
   boardInteraction.triggerDrop(elementIdentity());
 }
-
-// Suppress unused warnings for injected values not used directly in script
-// (they drive CSS classes in the template)
-void isSelectable;
-void isSelected;
-void isBoardHighlighted;
-void isBoardSelected;
 </script>
 
 <template>
@@ -240,8 +193,6 @@ void isBoardSelected;
     :class="[
       'hand-container',
       {
-        'is-selectable': isSelectable,
-        'is-selected': isSelected,
         'action-selectable': isActionSelectable,
         'is-board-highlighted': isBoardHighlighted,
         'is-board-selected': isBoardSelected,
@@ -332,22 +283,6 @@ void isBoardSelected;
   transition: all var(--bsg-dur-base) var(--bsg-ease);
   overflow: visible;
   position: relative;
-}
-
-/* Selection states */
-.hand-container.is-selectable {
-  cursor: pointer;
-}
-
-.hand-container.is-selectable:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--bsg-shadow-sm);
-}
-
-.hand-container.is-selected {
-  outline: 3px solid var(--bsg-accent);
-  outline-offset: 2px;
-  box-shadow: var(--bsg-ring);
 }
 
 /* Whole-hand action-selectable — Slate dashed outline (THEME-02: outline not border) */

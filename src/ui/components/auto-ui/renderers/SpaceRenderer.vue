@@ -12,7 +12,7 @@
  */
 
 import { computed } from 'vue';
-import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
+import { useElementBoardState } from '../../../composables/useElementBoardState.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
 import type { GameElement } from '../auto-ui-helpers.js';
@@ -21,45 +21,16 @@ const props = defineProps<{
   element: GameElement;
 }>();
 
-// Board interaction for all six required states + drop-target (zone renderer)
-const boardInteraction = tryUseBoardInteraction();
+const {
+  boardInteraction,
+  identity: elementIdentity,
+  isHighlighted: isBoardHighlighted,
+  isSelected: isBoardSelected,
+  isActionSelectable,
+  isDisabled,
+} = useElementBoardState(() => props.element);
 
-// Element identity helper — passes notation from attributes (Pitfall 6)
-function elementIdentity() {
-  return {
-    id: props.element.id,
-    name: props.element.name,
-    notation: props.element.attributes?.notation as string | undefined,
-  };
-}
-
-const isBoardSelected = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isSelected(elementIdentity());
-});
-
-const isActionSelectable = computed(() => {
-  if (!boardInteraction) return false;
-  if (isBoardSelected.value) return false;
-  if (boardInteraction.isSelectableElement(elementIdentity())) return true;
-  if (boardInteraction.isDraggableSelectedElement(elementIdentity())) return true;
-  return false;
-});
-
-const isBoardHighlighted = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isHighlighted(elementIdentity());
-});
-
-const isDropTarget = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isDropTarget(elementIdentity());
-});
-
-const isDisabled = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isDisabledElement(elementIdentity()) !== false;
-});
+const isDropTarget = computed(() => boardInteraction?.isDropTarget(elementIdentity()) ?? false);
 
 // Drop handlers — space zones are valid drop targets
 function handleDragOver(event: DragEvent) {
@@ -78,7 +49,7 @@ function handleDrop(event: DragEvent) {
 // useSelectable — keyboard + click wiring (A11Y-01)
 const { onActivate: onClick, onKeydown, attrs: selectableAttrs } = useSelectable(
   elementIdentity,
-  boardInteraction ?? null,
+  boardInteraction,
   isActionSelectable,
   isDisabled,
   'space',

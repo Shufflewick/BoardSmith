@@ -9,7 +9,7 @@
  */
 
 import { computed, inject, ref, type Ref } from 'vue';
-import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
+import { useElementBoardState } from '../../../composables/useElementBoardState.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
 import { parseImageInfo, type ImageInfo } from '../../../utils/image.js';
 import ElementRenderer from './ElementRenderer.vue';
@@ -27,53 +27,16 @@ const props = defineProps<{
 // ---------------------------------------------------------------------------
 // Inject context — exact keys provided by AutoRenderer.vue
 // ---------------------------------------------------------------------------
-const selectableElements = inject<Ref<Set<number>>>('selectableElements');
-const selectedElements = inject<Ref<Set<number>>>('selectedElements');
 const defaultBackImage = inject<Ref<ImageInfo | null>>('defaultBackImage', ref(null));
 
-// ---------------------------------------------------------------------------
-// Board interaction
-// ---------------------------------------------------------------------------
-const boardInteraction = tryUseBoardInteraction();
-
-// ---------------------------------------------------------------------------
-// Selectable / selected state
-// ---------------------------------------------------------------------------
-const isSelectable = computed(() => selectableElements?.value?.has(props.element.id) ?? false);
-const isSelected = computed(() => selectedElements?.value?.has(props.element.id) ?? false);
-
-// Element identity helper — passes notation from attributes (Pitfall 6)
-function elementIdentity() {
-  return {
-    id: props.element.id,
-    name: props.element.name,
-    notation: props.element.attributes?.notation as string | undefined,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Board state computeds — defensive guard (all six required states)
-// ---------------------------------------------------------------------------
-const isBoardHighlighted = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isHighlighted(elementIdentity());
-});
-
-const isBoardSelected = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isSelected(elementIdentity());
-});
-
-const isActionSelectable = computed(() => {
-  if (!boardInteraction) return false;
-  if (isBoardSelected.value) return false;
-  return boardInteraction.isSelectableElement(elementIdentity());
-});
-
-const isDisabled = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isDisabledElement(elementIdentity()) !== false;
-});
+const {
+  boardInteraction,
+  identity: elementIdentity,
+  isHighlighted: isBoardHighlighted,
+  isSelected: isBoardSelected,
+  isActionSelectable,
+  isDisabled,
+} = useElementBoardState(() => props.element);
 
 // ---------------------------------------------------------------------------
 // Display values
@@ -113,7 +76,7 @@ const ariaLabel = computed(() => {
   const name = props.element.name || props.element.className;
   const label = countText.value ? `${name}, ${countText.value.toLowerCase()}` : name;
   if (isDisabled.value) return `${label}, unavailable`;
-  if (isSelected.value || isBoardSelected.value) return `${label}, selected`;
+  if (isBoardSelected.value) return `${label}, selected`;
   if (isActionSelectable.value) return `${label}, selectable`;
   return label;
 });
@@ -130,8 +93,6 @@ const { attrs: selectableAttrs, onActivate, onKeydown } =
     :class="[
       'deck-container',
       {
-        'is-selectable': isSelectable,
-        'is-selected': isSelected,
         'action-selectable': isActionSelectable,
         'is-board-highlighted': isBoardHighlighted,
         'is-board-selected': isBoardSelected,
@@ -142,7 +103,7 @@ const { attrs: selectableAttrs, onActivate, onKeydown } =
     :data-zone-id="element.id"
     v-bind="selectableAttrs"
     :aria-label="ariaLabel"
-    :aria-pressed="(isSelected || isBoardSelected) || undefined"
+    :aria-pressed="isBoardSelected || undefined"
     @click="onActivate"
     @keydown="onKeydown"
   >
@@ -192,26 +153,6 @@ const { attrs: selectableAttrs, onActivate, onKeydown } =
   border: 1px solid var(--bsg-line);
   border-radius: 12px;
   transition: all var(--bsg-dur-base) var(--bsg-ease);
-}
-
-/* Selection states — outline never border; dashed = selectable, solid = selected */
-.deck-container.is-selectable {
-  cursor: pointer;
-  outline: 2px dashed var(--bsg-accent);
-  outline-offset: 2px;
-  background: var(--bsg-selectable);
-}
-
-.deck-container.is-selectable:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--bsg-shadow-sm);
-}
-
-.deck-container.is-selected {
-  outline: 2px solid var(--bsg-accent);
-  outline-offset: 2px;
-  background: var(--bsg-selected);
-  transform: scale(1.02);
 }
 
 /* action-selectable: dashed accent outline + selectable fill */

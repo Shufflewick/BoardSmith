@@ -8,9 +8,9 @@
  *   3. No-image visible card — white face with name label (sane floor)
  *   4. No-image hidden card — default back gradient
  *
- * Board interaction states (is-selectable, is-selected, action-selectable,
- * is-board-highlighted, is-board-selected) are reflected via
- * tryUseBoardInteraction — the substrate is never modified.
+ * Board interaction states (action-selectable, is-board-highlighted,
+ * is-board-selected, is-disabled) come from useElementBoardState — the
+ * substrate is never modified.
  *
  * Face/back image selection: hidden cards ALWAYS show the back image;
  * visible cards show the face image. The face URL is never exposed when
@@ -18,13 +18,13 @@
  */
 
 import { computed, inject, ref, watch, type Ref, type ComputedRef } from 'vue';
-import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
+import { useElementBoardState } from '../../../composables/useElementBoardState.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
 import { setTransformAwareDragImage } from '../../../composables/dragImage.js';
 import { resolvePresentation } from '../presentation.js';
 import { isHiddenPlaceholder } from '../../../../engine/element/hidden-placeholder.js';
 import type { PresentationOverlay } from '../presentation.js';
-import { GAME_CONTEXT_KEYS, injectPlayerSeat } from '../../../composables/useGameContext.js';
+import { GAME_CONTEXT_KEYS } from '../../../composables/useGameContext.js';
 import { getSpriteStyle, parseImageInfo, type ImageInfo } from '../../../utils/image.js';
 import CardBack from './CardBack.vue';
 import type { GameElement } from '../auto-ui-helpers.js';
@@ -36,13 +36,16 @@ const props = defineProps<{
 // ---------------------------------------------------------------------------
 // Inject context — exact keys provided by AutoRenderer.vue
 // ---------------------------------------------------------------------------
-const playerSeat = injectPlayerSeat();
-const selectableElements = inject<Ref<Set<number>>>('selectableElements');
-const selectedElements = inject<Ref<Set<number>>>('selectedElements');
 const defaultBackImage = inject<Ref<ImageInfo | null>>('defaultBackImage', ref(null));
 
-// Board interaction — always tryUse (never useBoardInteraction directly)
-const boardInteraction = tryUseBoardInteraction();
+const {
+  boardInteraction,
+  identity: elementIdentity,
+  isHighlighted: isBoardHighlighted,
+  isSelected: isBoardSelected,
+  isActionSelectable,
+  isDisabled,
+} = useElementBoardState(() => props.element);
 
 // ---------------------------------------------------------------------------
 // Presentation overlay — injected from AutoRenderer (D-04)
@@ -57,97 +60,14 @@ const presentationEntry = computed(() =>
 // Whether the seat is sent a placeholder for this card rather than the card.
 const isHidden = computed(() => isHiddenPlaceholder(props.element));
 
-// Suppress unused variable warning for playerSeat and selectableElements/selectedElements
-// (injected for context completeness per interface spec; element-level selectable state
-// comes via boardInteraction for cards; container injects consumed by parent hand/deck)
-void playerSeat;
-
-// ---------------------------------------------------------------------------
-// Selectable / selected state (from injected sets — passed down from AutoRenderer)
-// ---------------------------------------------------------------------------
-const isSelectable = computed(() => selectableElements?.value?.has(props.element.id) ?? false);
-const isSelected = computed(() => selectedElements?.value?.has(props.element.id) ?? false);
-
-// ---------------------------------------------------------------------------
-// Element notation (used in all boardInteraction calls)
-// Pitfall 6: prefer attributes.notation if present; fall back to element.name
-// ---------------------------------------------------------------------------
+// What the card is called: its notation when it has one, else its name.
 const elementNotation = computed(
   () => (props.element.attributes?.notation as string | undefined) ?? props.element.name ?? null,
 );
 
-// Element identity function — passed to the keyboard/click composable
-function elementIdentity() {
-  return {
-    id: props.element.id,
-    name: props.element.name,
-    notation: elementNotation.value || undefined,
-  };
-}
+const isDragged = computed(() => boardInteraction?.isDraggedElement(elementIdentity()) ?? false);
 
-// ---------------------------------------------------------------------------
-// Board state computeds — all with defensive !boardInteraction guard
-// ---------------------------------------------------------------------------
-const isBoardHighlighted = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isHighlighted({
-    id: props.element.id,
-    name: props.element.name,
-    notation: elementNotation.value || undefined,
-  });
-});
-
-const isBoardSelected = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isSelected({
-    id: props.element.id,
-    name: props.element.name,
-    notation: elementNotation.value || undefined,
-  });
-});
-
-const isActionSelectable = computed(() => {
-  if (!boardInteraction) return false;
-  // Don't show as action-selectable if already board-selected
-  if (isBoardSelected.value) return false;
-
-  const elementRef = {
-    id: props.element.id,
-    name: props.element.name,
-    notation: elementNotation.value || undefined,
-  };
-
-  if (boardInteraction.isSelectableElement(elementRef)) return true;
-  if (boardInteraction.isDraggableSelectedElement(elementRef)) return true;
-  return false;
-});
-
-const isDragged = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isDraggedElement({
-    id: props.element.id,
-    name: props.element.name,
-    notation: elementNotation.value || undefined,
-  });
-});
-
-const isDropTarget = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isDropTarget({
-    id: props.element.id,
-    name: props.element.name,
-    notation: elementNotation.value || undefined,
-  });
-});
-
-const isDisabled = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isDisabledElement({
-    id: props.element.id,
-    name: props.element.name,
-    notation: elementNotation.value || undefined,
-  }) !== false;
-});
+const isDropTarget = computed(() => boardInteraction?.isDropTarget(elementIdentity()) ?? false);
 
 // Keyboard/ARIA: tabindex 0 for both action-selectable and drop-target cards
 // so keyboard users can reach cards that are valid drag targets too.
@@ -163,7 +83,7 @@ const ariaLabel = computed(() => {
   const name = elementNotation.value || props.element.name || props.element.className;
   if (isDisabled.value) return `${name}, unavailable`;
   if (isDropTarget.value) return `${name}, drop target`;
-  if (isSelected.value) return `${name}, selected`;
+  if (isBoardSelected.value) return `${name}, selected`;
   if (isActionSelectable.value) return `${name}, selectable`;
   return name;
 });
@@ -289,8 +209,6 @@ function handleDrop(event: DragEvent) {
     :class="[
       'card-container',
       {
-        'is-selectable': isSelectable,
-        'is-selected': isSelected,
         'action-selectable': isActionSelectable,
         'is-board-highlighted': isBoardHighlighted,
         'is-board-selected': isBoardSelected,
@@ -306,7 +224,7 @@ function handleDrop(event: DragEvent) {
     :draggable="canDrag"
     v-bind="selectableAttrs"
     :aria-label="ariaLabel"
-    :aria-pressed="isSelected || undefined"
+    :aria-pressed="isBoardSelected || undefined"
     @click="onActivate"
     @keydown="onSelectKey"
     @dragstart="handleDragStart"
@@ -380,22 +298,6 @@ function handleDrop(event: DragEvent) {
   --card-h: calc(var(--card-w) * 1.4);
   display: inline-block;
   transition: transform var(--bsg-dur-base) var(--bsg-ease);
-}
-
-/* Selection states */
-.card-container.is-selectable {
-  cursor: pointer;
-}
-
-.card-container.is-selectable:hover {
-  transform: translateY(-2px);
-  box-shadow: var(--bsg-shadow-sm);
-}
-
-.card-container.is-selected {
-  outline: 3px solid var(--bsg-accent);
-  outline-offset: 2px;
-  box-shadow: var(--bsg-ring);
 }
 
 /* action-selectable: Slate dashed accent outline + translucent fill (T-93-03 XSS guard) */

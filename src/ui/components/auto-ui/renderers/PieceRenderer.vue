@@ -13,7 +13,7 @@
 import { computed, inject, ref, watch, type ComputedRef } from 'vue';
 import { resolvePieceVisual, type PieceVisual } from '../auto-ui-helpers.js';
 import { getSpriteStyle } from '../../../utils/image.js';
-import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
+import { useElementBoardState } from '../../../composables/useElementBoardState.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
 import { setTransformAwareDragImage } from '../../../composables/dragImage.js';
 import { resolvePresentation } from '../presentation.js';
@@ -25,8 +25,14 @@ const props = defineProps<{
   element: GameElement;
 }>();
 
-// Board interaction for selectable/dragging state
-const boardInteraction = tryUseBoardInteraction();
+const {
+  boardInteraction,
+  identity: elementIdentity,
+  isHighlighted,
+  isSelected: isBoardSelected,
+  isActionSelectable,
+  isDisabled,
+} = useElementBoardState(() => props.element);
 
 // ── Core: delegate all visual logic to Phase 92 helper ───────────────────────
 const pieceVisual = computed((): PieceVisual => resolvePieceVisual(props.element));
@@ -39,42 +45,7 @@ const presentationEntry = computed(() =>
   resolvePresentation(props.element, overlay?.value)
 );
 
-// Element identity helper — passes notation from attributes (Pitfall 6).
-// Piece elements may use a notation attribute for board-ref matching.
-function elementIdentity() {
-  return {
-    id: props.element.id,
-    name: props.element.name,
-    notation: props.element.attributes?.notation as string | undefined,
-  };
-}
-
-// ── Board interaction states (all six required — CF-1: piece MUST get action-selectable) ──
-const isBoardSelected = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isSelected(elementIdentity());
-});
-
-const isActionSelectable = computed(() => {
-  if (!boardInteraction) return false;
-  if (isBoardSelected.value) return false;
-  return boardInteraction.isSelectableElement(elementIdentity());
-});
-
-const isHighlighted = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isHighlighted(elementIdentity());
-});
-
-const isDisabled = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isDisabledElement(elementIdentity()) !== false;
-});
-
-const isDragged = computed(() => {
-  if (!boardInteraction) return false;
-  return boardInteraction.isDraggedElement(elementIdentity());
-});
+const isDragged = computed(() => boardInteraction?.isDraggedElement(elementIdentity()) ?? false);
 
 const standsOn = inject(STANDS_ON_KEY, () => undefined);
 
