@@ -49,6 +49,23 @@ describe('useOverlayTracking', () => {
     wrapper.unmount();
   });
 
+  it('observes its own root, which is fixed to the screen and so resizes with the window, board or no board (#1300)', async () => {
+    const { wrapper, region } = mountTracked([{ kind: 'element', ref: { id: 1 } }]);
+    await nextTick();
+    expect(observers[observers.length - 1].observe).toHaveBeenCalledWith(wrapper.element);
+    wrapper.unmount();
+
+    region.classList.remove('boardregion');
+    observers.length = 0;
+    const boardless = mountTracked([]);
+    boardless.region.classList.remove('boardregion');
+    boardless.content.value = [{ kind: 'element', ref: { id: 1 } }];
+    await nextTick();
+    await nextTick();
+    expect(observers[observers.length - 1].observe).toHaveBeenCalledWith(boardless.wrapper.element);
+    boardless.wrapper.unmount();
+  });
+
   it('re-measures when the board region scrolls', async () => {
     const { wrapper, region, measure } = mountTracked([{ kind: 'element', ref: { id: 1 } }]);
     await nextTick();

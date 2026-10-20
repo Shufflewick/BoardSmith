@@ -19,7 +19,7 @@
  * These are the honest, deterministic assertions for a jsdom environment.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { ref, nextTick } from 'vue';
 import HintOverlay from './HintOverlay.vue';
@@ -88,7 +88,7 @@ function mountOverlay(
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('HintOverlay', () => {
-  beforeEach(() => {
+  afterEach(() => {
     document
       .querySelectorAll('.boardregion')
       .forEach((el) => el.parentNode?.removeChild(el));
@@ -287,13 +287,27 @@ describe('HintOverlay unmount (#749)', () => {
 });
 
 describe('HintOverlay placement (#927)', () => {
-  // Board at viewport (0,100), 400x400: top 100, bottom 500, centre y 300.
-  function mountOnBoard(annotation: Annotation, extraHtml = '') {
+  // The layer is fixed to the screen, so a vertical scrollbar leaves it 15px narrower than jsdom's 1024px window (#1300).
+  const LAYER_WIDTH = 1009;
+
+  beforeEach(() => {
+    vi.spyOn(Element.prototype, 'clientWidth', 'get').mockReturnValue(LAYER_WIDTH);
+  });
+
+  afterEach(() => {
+    document.querySelectorAll('[data-test-fixture]').forEach((el) => el.remove());
+    vi.restoreAllMocks();
+  });
+
+  /** Board at viewport (0,100), 400x400: top 100, bottom 500, centre y 300. With `board: false`, no board region. */
+  function mountOnBoard(annotation: Annotation, extraHtml = '', targetRect?: DOMRect, board = true) {
     const fixture = document.createElement('div');
-    fixture.className = 'boardregion';
+    fixture.dataset.testFixture = '';
+    if (board) fixture.className = 'boardregion';
     fixture.innerHTML = extraHtml;
     document.body.appendChild(fixture);
     vi.spyOn(fixture, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 100, 400, 400));
+    if (targetRect) vi.spyOn(fixture.querySelector('[data-bs-el-id]')!, 'getBoundingClientRect').mockReturnValue(targetRect);
     return mount(HintOverlay, {
       global: { provide: { [GAME_CONTEXT_KEYS.gameState as symbol]: makeGameState(annotation) }, stubs: { Teleport: true } },
       attachTo: fixture,
@@ -304,11 +318,22 @@ describe('HintOverlay placement (#927)', () => {
     return (wrapper.find('.bsg-board-message--annotation').element as HTMLElement).style;
   }
 
+  const SHIFTED = 'translateX(var(--shift))';
+  // The caret undoes the bubble's own shift, so it still points at the target, kept clear of the rounded corner.
+  const CARET = 'clamp(12px, calc(-1 * var(--shift)), calc(100% - 12px))';
+
   it('centres an untargeted bubble on the board for placement="center"', async () => {
     const wrapper = mountOnBoard({ text: 'Think about it', placement: 'center' });
     await nextTick();
     expect(bubbleStyle(wrapper).top).toBe('300px');
     expect(bubbleStyle(wrapper).transform).toBe('translate(-50%, -50%)');
+    wrapper.unmount();
+  });
+
+  it('centres a bubble with no board on the layer, not on a window that counts the scrollbar (#1300)', async () => {
+    const wrapper = mountOnBoard({ text: 'Think about it', placement: 'center' }, '', undefined, false);
+    await nextTick();
+    expect(bubbleStyle(wrapper).left).toBe(`${LAYER_WIDTH / 2}px`);
     wrapper.unmount();
   });
 
@@ -324,44 +349,34 @@ describe('HintOverlay placement (#927)', () => {
   });
 
   it('keeps the left edge of a bubble next to a target at the left edge on screen (#907)', async () => {
-    const fixture = document.createElement('div');
-    fixture.className = 'boardregion';
-    fixture.innerHTML = '<div data-bs-el-id="907"></div>';
-    document.body.appendChild(fixture);
-    vi.spyOn(fixture, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 100, 400, 400));
     // Centre x = 10: half a 300px bubble centred there would start at -140.
-    vi.spyOn(fixture.querySelector('[data-bs-el-id="907"]')!, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 120, 20, 20));
-    const wrapper = mount(HintOverlay, {
-      global: { provide: { [GAME_CONTEXT_KEYS.gameState as symbol]: makeGameState({ text: 'Suggested move', target: { kind: 'element', ref: { id: 907 } } }) }, stubs: { Teleport: true } },
-      attachTo: fixture,
-    });
+    const wrapper = mountOnBoard(
+      { text: 'Suggested move', target: { kind: 'element', ref: { id: 907 } } },
+      '<div data-bs-el-id="907"></div>',
+      new DOMRect(0, 120, 20, 20),
+    );
     await nextTick();
     expect(bubbleStyle(wrapper).left).toBe('10px');
-    // Shift left by half the bubble's width, but never past 8px from the viewport's left edge.
-    expect(bubbleStyle(wrapper).transform).toBe('translateX(max(-2px, min(-50%, calc(1006px - 100%))))');
-    // The caret still points at the target, kept clear of the card's rounded corner.
-    expect(bubbleStyle(wrapper).getPropertyValue('--caret-left')).toBe('clamp(12px, min(2px, max(50%, calc(100% - 1006px))), calc(100% - 12px))');
+    expect(bubbleStyle(wrapper).transform).toBe(SHIFTED);
+    // Shift left by half the bubble's width, but never past 8px from the layer's left edge.
+    expect(bubbleStyle(wrapper).getPropertyValue('--shift')).toBe('max(-2px, min(-50%, calc(991px - 100%)))');
+    expect(bubbleStyle(wrapper).getPropertyValue('--caret-left')).toBe(CARET);
     wrapper.unmount();
   });
 
-  it('keeps the right edge of a bubble next to a target at the right edge on screen (#1180)', async () => {
-    const fixture = document.createElement('div');
-    fixture.className = 'boardregion';
-    fixture.innerHTML = '<div data-bs-el-id="1180"></div>';
-    document.body.appendChild(fixture);
-    vi.spyOn(fixture, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 100, 400, 400));
-    // jsdom's viewport is 1024px wide; centre x = 1014 leaves 2px for the bubble's right half.
-    vi.spyOn(fixture.querySelector('[data-bs-el-id="1180"]')!, 'getBoundingClientRect').mockReturnValue(new DOMRect(1004, 120, 20, 20));
-    const wrapper = mount(HintOverlay, {
-      global: { provide: { [GAME_CONTEXT_KEYS.gameState as symbol]: makeGameState({ text: 'Suggested move', target: { kind: 'element', ref: { id: 1180 } } }) }, stubs: { Teleport: true } },
-      attachTo: fixture,
-    });
+  it('keeps the right edge of a bubble next to a target 8px inside the layer, clear of the scrollbar (#1180, #1300)', async () => {
+    // Centre x = 999 leaves 2px of the 1009px layer for the bubble's right half.
+    const wrapper = mountOnBoard(
+      { text: 'Suggested move', target: { kind: 'element', ref: { id: 1180 } } },
+      '<div data-bs-el-id="1180"></div>',
+      new DOMRect(989, 120, 20, 20),
+    );
     await nextTick();
-    expect(bubbleStyle(wrapper).left).toBe('1014px');
+    expect(bubbleStyle(wrapper).left).toBe('999px');
+    expect(bubbleStyle(wrapper).transform).toBe(SHIFTED);
     // Shift left by half the bubble's width, or more, so its right edge stays 8px in.
-    expect(bubbleStyle(wrapper).transform).toBe('translateX(max(-1006px, min(-50%, calc(2px - 100%))))');
-    // The caret moves by the same amount, still kept clear of the rounded corner.
-    expect(bubbleStyle(wrapper).getPropertyValue('--caret-left')).toBe('clamp(12px, min(1006px, max(50%, calc(100% - 2px))), calc(100% - 12px))');
+    expect(bubbleStyle(wrapper).getPropertyValue('--shift')).toBe('max(-991px, min(-50%, calc(2px - 100%)))');
+    expect(bubbleStyle(wrapper).getPropertyValue('--caret-left')).toBe(CARET);
     wrapper.unmount();
   });
 
