@@ -1563,11 +1563,10 @@ export class ActionExecutor {
     selection: Selection,
     pick: unknown
   ): FedPick {
-    const iterationsBefore = pendingState.repeating?.iterationCount ?? 0;
     const step = this.processRepeatingStep(action, player, pendingState, this.repeatPickValue(selection, pick));
     // A pick that got past validation has run onSelect/onEach, even when they
     // then failed, so the game may have changed.
-    const applied = !step.error || (pendingState.repeating?.iterationCount ?? 0) > iterationsBefore;
+    const applied = !step.error || step.partiallyApplied === true;
     return { error: step.error, applied, rulesError: step.rulesError };
   }
 
@@ -2107,6 +2106,8 @@ export class ActionExecutor {
         pendingState.onSelectFired.add(pendingState.currentSelectionIndex);
       } catch (error) {
         // Fail loud. onCancel runs only on the player's cancel, so it runs once per pick (#1189).
+        // The repeat's first pick is undone, so a retry runs onSelect again (#1241).
+        pendingState.repeating = undefined;
         const crashed = pickHookThrew(action, 'onSelect', selection, error);
         return { done: false, error: crashed.error, rulesError: crashed.rulesError, partiallyApplied: true };
       }
@@ -2269,9 +2270,6 @@ export class ActionExecutor {
     if ('error' in pick) return { success: false, error: pick.error };
     const resolvedValue = pick.value;
 
-    // Store the resolved value so downstream dependsOn filters see GameElements, not raw IDs
-    pendingState.collectedArgs[selectionName] = resolvedValue;
-
     // Fire onSelect if defined. A throwing one fails the pick loud; onCancel
     // runs only on the player's cancel, so it runs once per pick (#1189).
     if (selection.onSelect) {
@@ -2289,6 +2287,9 @@ export class ActionExecutor {
       }
     }
 
+    // Stored only once onSelect took it, so a failed one leaves no value behind to retry past (#1243).
+    // Resolved, so downstream dependsOn filters see GameElements, not raw IDs.
+    pendingState.collectedArgs[selectionName] = resolvedValue;
     pendingState.currentSelectionIndex++;
 
     return { success: true };

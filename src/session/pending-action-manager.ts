@@ -189,19 +189,22 @@ export class PendingActionManager<G extends Game = Game> {
   }
 
   /**
-   * Cancel a pending action for a player.
+   * Cancel a pending action for a player. Its `onCancel` callbacks may move
+   * elements, so the game after them is checkpointed: a later action that
+   * fails rolls back to the cancel, not to before it (#1253).
    */
   cancelPendingAction(playerPosition: number): void {
+    if (this.#dropPendingAction(playerPosition)) this.#runner.captureCheckpoint();
+  }
+
+  /** Drop a seat's pending action, running `onCancel` for each pick whose `onSelect` ran. True if there was one. */
+  #dropPendingAction(playerPosition: number): boolean {
     const pendingState = this.#pendingActions.get(playerPosition);
-    if (pendingState) {
-      // Fire onCancel for selections where onSelect had fired
-      const action = this.#runner.game.getAction(pendingState.actionName);
-      if (action) {
-        const executor = this.#runner.game.getActionExecutor();
-        executor.fireOnCancelCallbacks(action, pendingState);
-      }
-      this.#pendingActions.delete(playerPosition);
-    }
+    if (!pendingState) return false;
+    const action = this.#runner.game.getAction(pendingState.actionName);
+    if (action) this.#runner.game.getActionExecutor().fireOnCancelCallbacks(action, pendingState);
+    this.#pendingActions.delete(playerPosition);
+    return true;
   }
 
   /**
@@ -243,7 +246,8 @@ export class PendingActionManager<G extends Game = Game> {
       game.getAction(pendingState.actionName)!, game.getPlayer(playerPosition)!, pendingState, selectionName, initialArgs,
     );
     if (refused === undefined) return undefined;
-    this.cancelPendingAction(playerPosition);
+    // Inside the pick op, which restores its own checkpoint: no new one here.
+    this.#dropPendingAction(playerPosition);
     return { success: false, error: refused.error, errorCode: pickFailureCode(refused) };
   }
 

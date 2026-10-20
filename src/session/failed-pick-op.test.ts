@@ -72,10 +72,13 @@ class UndoGame extends Game<UndoGame, Player> {
         .chooseFrom('first', first)
         .chooseFrom('items', { choices: ['x', 'done'], onSelect: crash, repeat: { until: (_ctx, item) => item === 'done' } })
         .execute(() => {}),
+      Action.create('repeatMoveCrash')
+        .chooseFrom('items', { choices: ['x', 'done'], onSelect: () => { move('one'); crash(); }, repeat: { until: (_ctx, item) => item === 'done' } })
+        .execute(() => {}),
     );
     this.setFlow({
       root: simultaneousActionStep({
-        actions: ['gather', 'gatherRefused', 'pairRefused', 'pairCrash', 'askRefused', 'askVetoed', 'tap', 'smash', 'pairSelectCrash', 'pairRepeatCrash'],
+        actions: ['gather', 'gatherRefused', 'pairRefused', 'pairCrash', 'askRefused', 'askVetoed', 'tap', 'smash', 'pairSelectCrash', 'pairRepeatCrash', 'repeatMoveCrash'],
         playerDone: () => false,
       }),
     });
@@ -345,6 +348,41 @@ describe("another seat's failed action after a seat's pick (#1185)", () => {
   }
 });
 
+describe("another seat's failed action after a seat cancelled its pick (#1253)", () => {
+  for (const [name, route] of Object.entries(routes)) {
+    it(`rolls back to the cancel, not to before it, on the ${name} route`, async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const r = runner();
+      const seat = route('pairRefused', r);
+      expect((await seat.pick('first', 'a')).success).toBe(true);
+      seat.cancel();
+      expect(moved(r.game)).toEqual([]);
+
+      const smash = r.performAction('smash', 2, {});
+
+      expect(smash).toMatchObject({ success: false, errorCode: ErrorCode.ENGINE_ERROR });
+      expect(smash.error).toMatch(/ Nothing was changed\.$/);
+      expect(moved(r.game)).toEqual([]);
+      expect(seat.pending()).toBeUndefined();
+      expect(r.game.cancels).toBe(1);
+      expect(r.actionHistory).toHaveLength(0);
+    });
+  }
+});
+
+describe('a whole submission whose repeating pick moved, then crashed in onSelect (#1241)', () => {
+  it('is rolled back, as a pick that changed the game', () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const r = runner();
+
+    const result = r.performAction('repeatMoveCrash', 1, { items: ['x', 'done'] });
+
+    expect(result).toMatchObject({ success: false, errorCode: ErrorCode.ENGINE_ERROR });
+    expect(result.error).toMatch(/ Nothing was changed\.$/);
+    expect(moved(r.game)).toEqual([]);
+  });
+});
+
 describe('the platform route (a failed op returns an error and no state)', () => {
   const def: GameDefinitionLike = { gameClass: UndoGame, gameType: 'undo', minPlayers: 2, maxPlayers: 2 };
   const options = { playerCount: 2, seed: 'undo' };
@@ -394,6 +432,20 @@ describe('checkpoints off: onCancel runs once per pick (#1189)', () => {
 
         expect(seat.game.cancels).toBe(1);
         expect(moved(seat.game)).toEqual([]);
+      });
+
+      it(`keeps no value of a pick whose onSelect crashed in '${action}', so a retry runs it again, on the ${name} route (#1241, #1243)`, async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const r = runner(false);
+        const seat = route(action, r);
+        expect((await seat.pick('first', 'a')).success).toBe(true);
+        const before = held(seat);
+
+        expect((await seat.pick(selection, value)).success).toBe(false);
+        expect(held(seat)).toEqual(before);
+
+        expect(await seat.pick(selection, value)).toMatchObject({ success: false, errorCode: ErrorCode.ENGINE_ERROR });
+        expect(r.actionHistory).toHaveLength(0);
       });
     }
   }
