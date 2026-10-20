@@ -1972,8 +1972,7 @@ export class Game<
   }
 
   /**
-   * One resident partition AS OF THE LAST TAKE: where it hangs, and the bytes
-   * it had (ShufflewickPub #316).
+   * One resident partition's bytes AS OF THE LAST TAKE (ShufflewickPub #316).
    *
    * The platform needs a pre-command copy of every resident partition to roll
    * a refused command back to, and used to serialize the whole resident set
@@ -2175,11 +2174,15 @@ export class Game<
   adoptSubtree(parentId: number, json: ElementJSON): GameElement {
     this._requireWorldMode('adoptSubtree');
     if (parentId !== this._t.id) {
+      const named = this.getElementById(parentId);
       throw new Error(
-        `Cannot adopt partition "${json.name ?? json.className}" under parent id ${parentId}: ` +
-          `${PARTITION_ROOT_RULE} Adopt it under the game (id ${this._t.id}). An id that is not the ` +
-          `game's is a typo, a stale or evicted id, or bytes minted under a different element id ` +
-          `key than this world was built with (#482), when the key stored with this world is the fix.`
+        `Cannot adopt partition "${json.name ?? json.className}" under parent id ${parentId}, ` +
+          (named
+            ? `which is "${named.name ?? named.constructor.name}", not the game: ${PARTITION_ROOT_RULE} `
+            : `which names no resident element: stored bytes naming another parent were minted ` +
+              `under a different element id key than this world was built with (#482), so pass ` +
+              `the key stored with this world; otherwise the id is a typo or a stale one. `) +
+          `Adopt it under the game (id ${this._t.id}).`
       );
     }
 

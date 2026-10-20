@@ -667,9 +667,10 @@ export class BoardSmithWorldEngine implements WorldEngine {
       throw worldRefusal(
         "invalid-partition-root",
         taken === undefined
-          ? `Partition "${name}" sits inside another element, but ${PARTITION_ROOT_RULE} ` +
-              `Create it with \`game.create(...)\`, or leave it out of the answer and let it ` +
-              `travel inside the partition that holds it.`
+          ? `Partition "${name}" is not in the game's own children (it sits inside another ` +
+              `element, or was removed), but ${PARTITION_ROOT_RULE} Create it with ` +
+              `\`game.create(...)\`, or leave it out of the answer and let it travel inside the ` +
+              `partition that holds it.`
           : `Partition "${name}" is the same element as partition "${taken}". One element can ` +
               `be one partition only; answer it under one name.`,
       );
@@ -3253,8 +3254,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
         throw worldRefusal(
           "partition-vanished",
           `Partition "${name}" is in this engine's residency but the engine holds no restorable ` +
-            `copy of it -- it is no longer a partition root -- so there is nothing to restore it ` +
-            `from if this command fails.`,
+            `copy of it -- it is no longer a partition root, or nothing has baselined it -- so ` +
+            `there is nothing to restore it from if this command fails.`,
         );
       }
       before.set(name, { id, bytes });

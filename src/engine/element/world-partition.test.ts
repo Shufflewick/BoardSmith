@@ -292,8 +292,8 @@ describe('Game.adoptSubtree', () => {
     game.evictSubtree(roomB.id);
 
     expect(() => game.adoptSubtree(99999, bJson)).toThrow(/99999/);
-    // Not only a key mismatch: a typo or a stale id reads the same (#1268).
-    expect(() => game.adoptSubtree(99999, bJson)).toThrow(/a typo, a stale or evicted id, or bytes minted under a different element id key/);
+    // A key mismatch first, and a typo or a stale id too (#1268).
+    expect(() => game.adoptSubtree(99999, bJson)).toThrow(/names no resident element: stored bytes .* element id key .* otherwise the id is a typo or a stale one/);
   });
 
   it('refuses to adopt outside world mode, because branch refs would be grafted', () => {
@@ -417,7 +417,7 @@ describe('a partition root hangs directly from the game (#1188)', () => {
     const sequence = game._ctx.sequence;
 
     expect(() => game.adoptSubtree(hall.id, bJson)).toThrow(rootRefusal);
-    expect(() => game.adoptSubtree(hall.id, bJson)).toThrow(new RegExp(`under parent id ${hall.id}: a partition root must be a direct child of the game`));
+    expect(() => game.adoptSubtree(hall.id, bJson)).toThrow(new RegExp(`under parent id ${hall.id}, which is "hall", not the game: a partition root must be a direct child of the game`));
     expect(hall.children).toHaveLength(0);
     expect(game.getElementById(roomB.id)).toBeUndefined();
     expect(game._ctx.sequence).toBe(sequence);
