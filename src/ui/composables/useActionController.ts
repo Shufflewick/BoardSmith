@@ -620,16 +620,36 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const takesList = selectionTakesList(selection);
     // The engine refuses a lone value for a list pick (#769), so say so before sending it.
     if (takesList && !Array.isArray(prefillValue)) return `Cannot prefill "${label}": it takes a list, so pass an array.`;
-    const choices = getChoices(selection);
     const entries = takesList ? (resolved.value as unknown[]) : undefined;
+    return prefillChoiceRefusal(label, prefillValue, resolved, entries, getChoices(selection))
+      ?? prefillRuleRefusal(selection, label, resolved, entries);
+  }
+
+  /** A prefill its pick's choices refuse: none on offer, a disabled one, or one that matches nothing. */
+  function prefillChoiceRefusal(
+    label: string,
+    prefillValue: unknown,
+    resolved: ResolvedPick,
+    entries: unknown[] | undefined,
+    choices: Array<{ value: unknown; display: string; disabled?: string }>,
+  ): string | undefined {
     const shown = entries ? entries.map(v => labelOfPick(v, choices)).join(', ') : labelOfPick(prefillValue, choices);
     if (choices.length === 0) return `Cannot prefill "${label}" with "${shown}": it has no available choices.`;
     const disabledReason = (entries ?? [prefillValue]).map(v => findMatchingChoice(v, choices)?.disabled).find(Boolean);
     if (disabledReason) return `Cannot prefill "${label}" with "${shown}": ${disabledReason}.`;
     if ('unmatched' in resolved) return describeUnmatchedPrefill(label, shown, entries && resolved.unmatched, choices);
-    // Any other refusal says what is wrong in its own words (#1298).
+    return undefined;
+  }
+
+  /** A prefill that matched its choices and still breaks a rule: a refusal in its own words, or its list's bounds (#1298). */
+  function prefillRuleRefusal(
+    selection: EnrichedPickMetadata,
+    label: string,
+    resolved: ResolvedPick,
+    entries: unknown[] | undefined,
+  ): string | undefined {
     if (resolved.refusal) return `Cannot prefill "${label}": ${resolved.refusal}`;
-    const list = entries && listRefusal(selection, entries);
+    const list = entries && listBoundsRefusal(selection, entries);
     return list ? `Cannot prefill "${label}": ${list}` : undefined;
   }
 
@@ -657,7 +677,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * entries, or, for a set, an entry repeated more often than it is offered.
    * An ordered list may repeat its entries (#249).
    */
-  function listRefusal(selection: EnrichedPickMetadata, entries: readonly unknown[]): string | null {
+  function listBoundsRefusal(selection: EnrichedPickMetadata, entries: readonly unknown[]): string | null {
     const ordered = resolveOrderedListConfig(selection);
     const bounds = ordered ?? resolveMultiSelectConfig(selection);
     if (!bounds) return null;
@@ -972,25 +992,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * @returns true if auto-fill was applied, false otherwise
    */
   function tryAutoFillSelection(selection: EnrichedPickMetadata): boolean {
-    if (!getAutoFill() || isExecuting.value) return false;
-    // A prefill the caller queued for this pick settles it, never a choice of ours (#226, #1298).
-    if (actionSnapshot.value?.prefills.has(selection.name)) return false;
-
-    // AUTOEXEC-01 / F-02 (v4.8): a `.manual()` action must never resolve a
-    // selection for the player. Auto-filling a single enabled choice would flip
-    // `isReady` true with no player input and the auto-execute watcher would
-    // then silently play the action (the D7 silent auto-draw). For a manual
-    // action the player picks every choice deliberately; their final pick is
-    // what flips `isReady` and executes. Suppressing auto-fill here (not
-    // auto-execute) keeps that single deliberate tap and preserves custom-UI ↔
-    // ActionPanel parity — both funnel through this one controller.
-    if (currentActionMeta.value?.manual) return false;
-
-    // Tutorial auto-fill suppression: when a step wants the learner to perform
-    // the click, preserve the teaching interaction instead of auto-resolving.
-    // The global `getAutoFill()` knob is separate; this is an additional,
-    // per-selection suppressor that applies only to the active taught selection.
-    if (isTutorialSuppressingAutoFill(selection.name)) return false;
+    if (autoFillHeldBack(selection)) return false;
 
     const choices = getChoices(selection);
     const enabledChoices = choices.filter(c => !c.disabled);
@@ -1010,6 +1012,29 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
 
     return true;
+  }
+
+  /** Whether anything rules out auto-filling `selection` before its choices are looked at. */
+  function autoFillHeldBack(selection: EnrichedPickMetadata): boolean {
+    if (!getAutoFill() || isExecuting.value) return true;
+    // A prefill the caller queued for this pick settles it, never a choice of ours (#226, #1298).
+    if (actionSnapshot.value?.prefills.has(selection.name)) return true;
+
+    // AUTOEXEC-01 / F-02 (v4.8): a `.manual()` action must never resolve a
+    // selection for the player. Auto-filling a single enabled choice would flip
+    // `isReady` true with no player input and the auto-execute watcher would
+    // then silently play the action (the D7 silent auto-draw). For a manual
+    // action the player picks every choice deliberately; their final pick is
+    // what flips `isReady` and executes. Suppressing auto-fill here (not
+    // auto-execute) keeps that single deliberate tap and preserves custom-UI ↔
+    // ActionPanel parity — both funnel through this one controller.
+    if (currentActionMeta.value?.manual) return true;
+
+    // Tutorial auto-fill suppression: when a step wants the learner to perform
+    // the click, preserve the teaching interaction instead of auto-resolving.
+    // The global `getAutoFill()` knob is separate; this is an additional,
+    // per-selection suppressor that applies only to the active taught selection.
+    return isTutorialSuppressingAutoFill(selection.name);
   }
 
   /**
@@ -2062,6 +2087,22 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * auto-execute watcher / executeCurrentAction(), which callers can observe via
    * `lastError` or the `beforeAutoExecuteHooks` mechanism, not via this return value.
    */
+  /** The label a pick an action starts with is shown by; one the board started from, its candidate's (#1313). */
+  function startArgLabel(
+    meta: EnrichedActionMetadata,
+    initialArgs: Record<string, unknown>,
+    opening: StartCandidates | undefined,
+    name: string,
+    value: unknown,
+  ): string {
+    const selection = meta.selections.find((s) => s.name === name);
+    if (!selection) return getDisplayFromValue(value);
+    const choices = opening?.pick === name
+      ? opening.elements.map((e) => ({ value: e.id, display: e.display || `Element ${e.id}` }))
+      : choicesIn(null, initialArgs, selection);
+    return labelForPick(selection, value, choices);
+  }
+
   async function start(
     actionName: string,
     startOptions?: { args?: Record<string, unknown>; prefill?: Record<string, unknown> }
@@ -2152,13 +2193,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     };
 
     for (const [name, value] of Object.entries(initialArgs)) {
-      const selection = meta.selections.find((s) => s.name === name);
-      // A pick the board started with is labelled by the candidate it fetched (#1313).
-      const choices = opening?.pick === name
-        ? opening.elements.map((e) => ({ value: e.id, display: e.display || `Element ${e.id}` }))
-        : selection ? choicesIn(null, initialArgs, selection) : [];
-      const display = selection ? labelForPick(selection, value, choices) : getDisplayFromValue(value);
-      actionSnapshot.value.collectedPicks.set(name, { value, display, skipped: false });
+      actionSnapshot.value.collectedPicks.set(name, { value, display: startArgLabel(meta, initialArgs, opening, name, value), skipped: false });
     }
 
     // Fetch choices for the first selection that needs input
@@ -2210,12 +2245,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       );
     }
 
-    if (Array.isArray(value) && selectionTakesList(selection)) {
-      const list = listRefusal(selection, value);
-      if (list) return `fill('${selectionName}', ...) rejected: ${list}`;
-    }
+    return listFillRefusal(selection, value) ?? editorRuleRefusal(selection, value);
+  }
 
-    return editorRuleRefusal(selection, value);
+  /** A list fill that breaks its pick's bounds (#1298), or null. */
+  function listFillRefusal(selection: EnrichedPickMetadata, value: unknown): string | null {
+    const list = Array.isArray(value) && selectionTakesList(selection) ? listBoundsRefusal(selection, value) : null;
+    return list && `fill('${selection.name}', ...) rejected: ${list}`;
   }
 
   async function fill(selectionName: string, value: unknown): Promise<PickValidationResult> {
