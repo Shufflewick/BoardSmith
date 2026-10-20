@@ -24,11 +24,13 @@
  *
  * ```vue
  * <script setup>
- * import { useDragDrop } from 'boardsmith/ui';
+ * import { useBoardInteraction, useDragDrop } from 'boardsmith/ui';
  * import 'boardsmith/ui/animation/drag-drop.css';
  *
  * const { drag, drop } = useDragDrop();
- * const canDrag = (id) => currentAction.value === 'move' && isSelectable(id);
+ * const board = useBoardInteraction();
+ * // Not the open action's name: with none open, a drag can start an action.
+ * const canDrag = (id) => board.isSelectableElement({ id }) || board.isDraggableSelectedElement({ id });
  * </script>
  *
  * <template>
@@ -38,8 +40,8 @@
  *     {{ card.name }}
  *   </div>
  *   <div v-for="zone in zones"
- *        v-bind="drop({ name: zone.id }).props"
- *        :class="drop({ name: zone.id }).classes">
+ *        v-bind="drop({ id: zone.id }).props"
+ *        :class="drop({ id: zone.id }).classes">
  *     {{ zone.name }}
  *   </div>
  * </template>
@@ -64,15 +66,15 @@
  * const { drop, isOver } = useDragDrop();
  *
  * // Via CSS class (automatic with drop().classes)
- * <div :class="drop({ name: 'zone' }).classes">  <!-- includes bs-drop-hover -->
+ * <div :class="drop({ id: zone.id }).classes">  <!-- includes bs-drop-hover -->
  *
  * // Via function (for custom logic)
- * <div :class="{ 'my-hover-class': isOver({ name: 'zone' }) }">
+ * <div :class="{ 'my-hover-class': isOver({ id: zone.id }) }">
  * ```
  *
  * ## CSS Classes
  *
- * - `.bs-draggable` - Element can be dragged (when condition passes)
+ * - `.bs-draggable` - Element can be dragged (`when` passes and it is not a disabled candidate)
  * - `.bs-dragging` - Element is currently being dragged
  * - `.bs-drop-target` - Element is a valid drop target for current drag
  * - `.bs-drop-hover` - A dragged element is hovering over this drop target
@@ -149,7 +151,7 @@ export interface DragOptions {
  * Apply with :class="drag(...).classes" or :class="dragClasses(...)"
  */
 export interface DragClasses {
-  /** True when element can be dragged (condition passes) */
+  /** True when element can be dragged (`when` passes and it is not a disabled candidate) */
   'bs-draggable': boolean;
   /** True when element is currently being dragged */
   'bs-dragging': boolean;
@@ -189,9 +191,9 @@ export interface DropResult {
 
 export interface UseDragDropReturn {
   /**
-   * Returns props to make an element draggable. Honors `options.when` (UIX-04):
-   * when it evaluates false, returns inert `{ draggable: false }` with no drag
-   * handlers attached, instead of silently ignoring the option.
+   * Returns props to make an element draggable. Honors `options.when` (UIX-04)
+   * and the board's rule that a disabled candidate drags for nothing (#1299):
+   * when either refuses, returns inert `{ draggable: false }` with no dragstart.
    */
   dragProps: (ref: ElementRef, options?: DragOptions) => DragProps | InertDragProps;
   /** Returns props to make an element a drop target */
@@ -214,8 +216,8 @@ export interface UseDragDropReturn {
    * PIT OF SUCCESS: Combined props + classes for drop targets.
    * Returns props and CSS classes in one call.
    * @example
-   * <div v-bind="drop({ name: 'zone' }).props"
-   *      :class="drop({ name: 'zone' }).classes">
+   * <div v-bind="drop({ id: zone.id }).props"
+   *      :class="drop({ id: zone.id }).classes">
    */
   drop: (ref: ElementRef) => DropResult;
   /** Returns just the CSS classes for draggable elements */
@@ -228,12 +230,7 @@ export function useDragDrop(): UseDragDropReturn {
   const boardInteraction = tryUseBoardInteraction();
 
   const dragProps = (ref: ElementRef, options?: DragOptions): DragProps | InertDragProps => {
-    // UIX-04: honor the documented `when` option (mirrors drag()'s existing
-    // inert-props gate) — reuse evalCondition(), don't re-derive when-logic.
-    if (!evalCondition(options)) {
-      return inertDragProps(options);
-    }
-    return dragPropsInner(ref, options);
+    return mayDrag(ref, options) ? dragPropsInner(ref, options) : inertDragProps(options);
   };
 
   /** Shared inert shape for both dragProps() and drag() (WR-06): draggable is
@@ -257,6 +254,11 @@ export function useDragDrop(): UseDragDropReturn {
         warnNoProvider();
         return;
       }
+      // The props may predate a broadcast that disabled this candidate.
+      if (!boardInteraction.startDrag(ref)) {
+        e.preventDefault();
+        return;
+      }
       const target = e.currentTarget as HTMLElement;
 
       // Transform-aware drag ghost (shared with auto-UI element renderers for visual parity).
@@ -264,7 +266,6 @@ export function useDragDrop(): UseDragDropReturn {
 
       e.dataTransfer?.setData('boardsmith/element', JSON.stringify(ref));
       e.dataTransfer!.effectAllowed = 'move';
-      boardInteraction.startDrag(ref);
       options?.onDragStart?.();
     },
     onDragend: () => {
@@ -342,11 +343,18 @@ export function useDragDrop(): UseDragDropReturn {
     return typeof options.when === 'function' ? options.when() : options.when;
   };
 
+  /** The caller's `when`, and the board's own rule that a disabled candidate drags for nothing (#1299). */
+  const mayDrag = (ref: ElementRef, options?: DragOptions): boolean =>
+    evalCondition(options) && (boardInteraction?.canStartDrag(ref) ?? true);
+
   /**
    * Get CSS classes for a draggable element.
    */
-  const dragClasses = (ref: ElementRef, options?: DragOptions): DragClasses => ({
-    'bs-draggable': evalCondition(options),
+  const dragClasses = (ref: ElementRef, options?: DragOptions): DragClasses =>
+    classesFor(ref, mayDrag(ref, options));
+
+  const classesFor = (ref: ElementRef, draggable: boolean): DragClasses => ({
+    'bs-draggable': draggable,
     'bs-dragging': isDragging(ref),
   });
 
@@ -363,10 +371,13 @@ export function useDragDrop(): UseDragDropReturn {
    * Props are conditional (inert — draggable:false but onDragend retained —
    * when the condition is false; see inertDragProps/WR-06).
    */
-  const drag = (ref: ElementRef, options?: DragOptions): DragResult => ({
-    props: evalCondition(options) ? dragPropsInner(ref, options) : inertDragProps(options),
-    classes: dragClasses(ref, options),
-  });
+  const drag = (ref: ElementRef, options?: DragOptions): DragResult => {
+    const draggable = mayDrag(ref, options);
+    return {
+      props: draggable ? dragPropsInner(ref, options) : inertDragProps(options),
+      classes: classesFor(ref, draggable),
+    };
+  };
 
   /**
    * Combined helper for drop targets - returns props and classes.
