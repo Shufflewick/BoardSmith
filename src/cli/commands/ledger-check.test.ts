@@ -284,6 +284,7 @@ async function project(files: Record<string, string>, objectFormat = 'sha1'): Pr
   const tree = tempTree('bs-ledger-check-');
   const dir = join(tree, 'proj');
   await fs.mkdir(join(dir, 'design'), { recursive: true });
+  await fs.writeFile(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'proj' }));
   execSync(`git init --object-format=${objectFormat}`, { cwd: dir, stdio: 'ignore' });
   for (const [name, text] of Object.entries(files)) {
     await fs.mkdir(dirname(join(dir, 'design', name)), { recursive: true });
@@ -332,6 +333,13 @@ describe('ledgerCheck — the whole project', () => {
     const result = await ledgerCheck(dir);
     expect(located(result.findings)).toEqual(['run-log/core-loop.md:run-role']);
     expect(result.findings[0].detail).toMatch(/"Agent: senior", the agent this project dispatches as the review role, not as judgement/);
+  });
+
+  it('refuses a project with no boardsmith.json, as boardsmith agent does, rather than check run logs against default roles (#1202)', async () => {
+    const dir = await project({ 'run-log/core-loop.md': dispatch(1, '2026-09-23T10:00:00Z', 'closed', '2026-09-23T11:00:00Z') });
+    await fs.rm(join(dir, 'boardsmith.json'));
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    await expect(ledgerCheck(dir)).rejects.toThrow(/has no boardsmith\.json.*--project <dir>/s);
   });
 
   it('refuses a boardsmith.json that is not JSON, saying which file to fix (#1001)', async () => {
