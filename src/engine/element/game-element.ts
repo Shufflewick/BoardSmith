@@ -2220,9 +2220,9 @@ export interface ZoneVisibilityOwner {
 
 /**
  * The seat that owns `element` as a seat's view resolves it (#1209): its own
- * player, or else `above`, its parent's owner when the view carries the
- * parent, and undefined below an element the view does not carry. So a hidden
- * container's owner, or one above it, changes nothing sent below it.
+ * player, or else `above`: its parent's owner when the view carries the
+ * parent, else undefined. So a hidden container's owner, or one above it,
+ * changes nothing sent below it.
  */
 export function viewOwner(element: GameElement, above: number | undefined): number | undefined {
   return element.player?.seat ?? above;
@@ -2263,8 +2263,9 @@ export function ownGrantAllows(element: GameElement, seat: number, owner: number
  * visibility allows the seat (#758). Below a hidden child of a concealed zone,
  * only an element's own grant carries it (#961), since an open zone rule
  * there sits on a container the seat cannot see. A granted element there with
- * a zone rule of its own applies that rule to its contents, as usual. Below an
- * element the seat is not sent, only an element's own player is its owner (#1209).
+ * a zone rule of its own applies that rule to its contents, as usual. An
+ * element's owner is its own player, or its parent's owner when the seat is
+ * sent the parent, else none (#1209).
  */
 export function deepestRevealed(element: GameElement, seat: number): GameElement | undefined {
   const chain: GameElement[] = [];

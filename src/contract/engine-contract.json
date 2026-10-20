@@ -1934,7 +1934,7 @@
       "surfaceHash": "7f205bf27a6fcb74",
       "payloadHash": "434e366607ffd36b",
       "formatHash": "ed115e27605f2ca7",
-      "summary": "A seat's view resolves who owns an element only through containers the seat is sent (#1209). Below a hidden box an owner rule (showToOwner, contentsVisibleToOwner, visibleAttributes) uses only the element's own player, never the owner of the hidden box or of anything above it, so no seat learns who owns the box and none is shown another seat's owner-only content. An element there with no player of its own is not shown even to its real owner. isVisibleTo agrees. No catalogue game is affected (their owner rules are only on top-level hands), and no game needs a rebuild."
+      "summary": "In a seat's view an element's owner is its own player, or its parent's owner when the seat is sent the parent, so below a hidden box an owner rule (showToOwner, contentsVisibleToOwner, visibleAttributes) never uses the owner of the hidden box or of anything above it: no seat learns who owns the box and none is shown another seat's owner-only content. An element there with no player on itself or on a sent element between it and the hidden box is not shown even to its real owner (#1209). isVisibleTo agrees. No catalogue game is affected (their owner rules are only on top-level hands), and no game needs a rebuild."
     }
   ]
 }

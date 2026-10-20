@@ -4984,7 +4984,7 @@ export class Game<
       return [...placeholders, ...nested];
     };
 
-    // `ownerAbove` is the owner of the element's nearest ancestor this seat is sent.
+    // `ownerAbove` is its parent's owner when this seat is sent the parent, else undefined (#1209).
     const filterElement = (json: ElementJSON, element: GameElement, ownerAbove: number | undefined, belowHidden = false): ElementJSON => {
       const visibility = element.getEffectiveVisibility();
       const owner = viewOwner(element, ownerAbove);
