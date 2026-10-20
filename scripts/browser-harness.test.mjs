@@ -171,7 +171,7 @@ describe('#533: every browser regression runs automatically', () => {
   const policy = JSON.parse(readFileSync(join(REPO, '.agent-policy.json'), 'utf8'));
 
   it('runs the browser suite at merge when UI, dev host, world or browser script files change', () => {
-    const step = policy.thread.extraMergeSteps.find((s) => s.name === 'browser');
+    const step = policy.merge.extraMergeSteps.find((s) => s.name === 'browser');
     expect(step).toMatchObject({ run: 'node bin/boardsmith.js test --browser' });
     const runsFor = (path) => new RegExp(step.whenChanged).test(path);
     for (const path of ['src/ui/components/GameShell.vue', 'src/cli/dev-host/bridge.ts', 'src/world/engine.ts', 'scripts/ordered-list-browser.mjs']) {
