@@ -6,7 +6,7 @@
     "src/ui/components/auto-ui/renderers/CardRenderer.vue:163-176|src/ui/components/auto-ui/renderers/HandRenderer.vue:170-180|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:37-47",
     "src/ui/components/auto-ui/renderers/HandRenderer.vue:431-437|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:263-269",
     "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue:118-136|src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:224-242",
-    "src/session/stateless-ops.ts:1078-1094|src/session/stateless-ops.ts:1167-1181",
+    "src/session/stateless-ops.ts:1076-1092|src/session/stateless-ops.ts:1165-1179",
     "src/ui/composables/useFLIP.ts:273-284|src/ui/composables/useFLIP.ts:320-334",
     "src/ui/components/auto-ui/renderers/HandRenderer.vue:166-180|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:34-47",
     "src/ui/composables/useHexGrid.ts:270-277|src/ui/composables/useHexGrid.ts:427-434",
