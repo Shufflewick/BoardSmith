@@ -127,7 +127,7 @@ function runner(shape: Shape, decline = false): GameRunner<RaidGame> {
 
 /** Take seat's own loot through the pending (pick by pick) path. */
 async function lootByPicks(r: GameRunner<RaidGame>, seat: number) {
-  const picks = new PendingActionManager(r, gameOptions.playerCount);
+  const picks = new PendingActionManager(r);
   picks.startPendingAction('loot', seat);
   const first = await picks.processSelectionStep(seat, 'where', 'north');
   if (!first.success) return first;
@@ -150,7 +150,7 @@ describe('GameRunner and PendingActionManager', () => {
     expect(awaiting.find((p) => p.playerIndex === 2)).toMatchObject({ completed: false, availableActions: [] });
 
     // Neither may take the other's (seat 3 holds none at all).
-    const picks = new PendingActionManager(r, gameOptions.playerCount);
+    const picks = new PendingActionManager(r);
     expect(await picks.processSelectionStep(3, 'where', 'north', 'loot')).toMatchObject({ success: false, error: NOT_YOURS });
 
     expect(await lootByPicks(r, 2)).toMatchObject({ success: true, actionComplete: true });

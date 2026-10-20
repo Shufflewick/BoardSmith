@@ -92,7 +92,7 @@ describe('an action that refreshes the awaiting seats and then fails (#972)', ()
     const runner = started();
     const before = awaiting(runner);
 
-    expect((await new PendingActionManager(runner, 2).processSelectionStep(1, 'x', 'a', 'pickThenFail')).success).toBe(false);
+    expect((await new PendingActionManager(runner).processSelectionStep(1, 'x', 'a', 'pickThenFail')).success).toBe(false);
 
     expect(awaiting(runner)).toEqual(before);
   });
@@ -102,7 +102,7 @@ describe('an action that refreshes the awaiting seats and then fails (#972)', ()
     const runner = GameRunner.fromSnapshot(saved, WaitGame);
     const before = awaiting(runner);
 
-    const step = await new PendingActionManager(runner, 2).processSelectionStep(1, 'x', 'a', 'pickThenFail');
+    const step = await new PendingActionManager(runner).processSelectionStep(1, 'x', 'a', 'pickThenFail');
     expect(step.success).toBe(false);
     expect(awaiting(runner)).toEqual(before);
 
@@ -118,7 +118,7 @@ describe("a pick-by-pick action whose onEach makes its own seat done and refresh
     expect(whole.performAction('settle', 1, { picks: ['x'] }).success).toBe(true);
 
     const byPick = started();
-    expect(await new PendingActionManager(byPick, 2).processSelectionStep(1, 'picks', 'x', 'settle')).toMatchObject({ success: true, actionComplete: true });
+    expect(await new PendingActionManager(byPick).processSelectionStep(1, 'picks', 'x', 'settle')).toMatchObject({ success: true, actionComplete: true });
 
     expect(byPick.getFlowState()).toEqual(whole.getFlowState());
     expect(awaiting(byPick)).toEqual([
@@ -129,7 +129,7 @@ describe("a pick-by-pick action whose onEach makes its own seat done and refresh
 
   it('runs the flow on once the other seat settles too', async () => {
     const runner = started();
-    const picks = new PendingActionManager(runner, 2);
+    const picks = new PendingActionManager(runner);
     await picks.processSelectionStep(1, 'picks', 'x', 'settle');
 
     expect((await picks.processSelectionStep(2, 'picks', 'x', 'settle')).success).toBe(true);
