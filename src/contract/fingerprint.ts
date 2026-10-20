@@ -55,8 +55,10 @@
  *   COVERED, TABLE SIDE: board serialization, every visibility mode the
  *   platform depends on, flow state, available actions, both sequential and
  *   simultaneous turns, the serialized flow POSITION with its element
- *   bindings, and the NAMES of the fields a seat's broadcast state carries
- *   (#356), though not their values.
+ *   bindings, the NAMES of the fields a seat's broadcast state carries
+ *   (#356), and the whole view the executor publishes to each seat and the
+ *   spectator, flow-state cut and state alike, at both turns (#968, #1296),
+ *   all but the random game instance id.
  *
  *   COVERED, WORLD SIDE -- BOTH HALVES OF WHAT A SEAT RECEIVES, and no more.
  *
@@ -1881,7 +1883,7 @@ function throughStorage(json: unknown): unknown {
 export async function computePayloadHash(): Promise<string> {
   const engine = await import('../engine/index.js');
   const { GameRunner } = await import('../runtime/index.js');
-  const { buildPlayerState, buildViews, buildSpectatorView } = await import('../session/utils.js');
+  const { buildViews, buildSpectatorView } = await import('../session/utils.js');
   const {
     Game, Space, Piece, Player, Deck, Hand, Action,
     actionStep, simultaneousActionStep, sequence, eachPlayer, setVar,
@@ -1960,10 +1962,11 @@ export async function computePayloadHash(): Promise<string> {
   }
 
   // Booted through GameRunner rather than by constructing the Game directly,
-  // because GameRunner.start() is what actually initialises the flow — and
-  // because `runner.getAllPlayerViews()` is the exact call the ShufflewickPub
-  // executor makes. Fingerprinting the executor's own code path is the point:
-  // a view shape that only this fixture ever produces would prove nothing.
+  // because GameRunner.start() is what actually initialises the flow. What a
+  // seat is sent is read below from `buildViews`/`buildSpectatorView`, the
+  // views the executor publishes; `runner.getAllPlayerViews()` (whose flow
+  // state is a seat's `{ awaitingInput, isMyTurn, availableActions }`) is
+  // fingerprinted too. A view shape only this fixture produced would prove nothing.
   const runner = new GameRunner({
     GameClass: FixtureGame,
     gameType: 'engine-contract-fixture',
@@ -2048,18 +2051,33 @@ export async function computePayloadHash(): Promise<string> {
 
   // The whole-game flow state at the same point. The executor hands it to the
   // platform beside the views and the platform stores it; each seat is sent
-  // only its own cut of it (#778), which `seatFlowStates` records (#968).
+  // only its own cut of it (#778), which `seatViews` records (#968).
   // The per-seat views above resolve turns through `awaitingPlayers` and so
   // could not see #321: a simultaneous step also published a single-seat
   // `currentPlayer` / `availableActions` left over from before it.
   const openingFlowState = runner.getFlowState();
 
-  // WHAT THE SPECTATOR AND EACH SEAT ARE SENT (#968), read from the views the
-  // executor publishes, so a change to a seat's cut moves `payloadHash`.
-  const seatFlowStates = (): unknown[] =>
-    [buildSpectatorView(runner), ...buildViews(runner, 2)]
-      .map((view) => (view as { flowState: unknown }).flowState);
-  const openingSeatFlowStates = seatFlowStates();
+  // WHAT THE SPECTATOR AND EACH SEAT ARE SENT (#968): the whole of each view
+  // the executor publishes, its state as well as its flow state (#1296), for
+  // every seat the fixture has. The game instance id is random by design, so
+  // it is left out; its NAME is hashed with the other field names below.
+  const seatCount = game.players.length;
+  const published = (): { flowState: unknown; state: Record<string, unknown> }[] =>
+    [buildSpectatorView(runner), ...buildViews(runner, seatCount)] as { flowState: unknown; state: Record<string, unknown> }[];
+  const seatViews = (): unknown[] =>
+    published().map(({ flowState, state }) => {
+      const { gameInstanceId, ...rest } = state;
+      // Anywhere else it would make the hash differ from run to run while each run agrees with itself.
+      if (JSON.stringify({ flowState, rest }).includes(String(gameInstanceId))) {
+        throw new Error(
+          'The engine-contract fixture found the random game instance id inside a published view '
+          + 'other than as its own field, so payloadHash would change on every run. Keep it to '
+          + 'PlayerGameState.gameInstanceId.',
+        );
+      }
+      return { flowState, state: rest };
+    });
+  const openingSeatViews = seatViews();
 
   // WHICH FIELDS A SEAT'S BROADCAST STATE CARRIES (#356). The session layer
   // wraps each view in a `PlayerGameState`, and GameShell reads fields of it
@@ -2067,9 +2085,10 @@ export async function computePayloadHash(): Promise<string> {
   // how it knows the element ids behind an open pick went stale. A field there
   // is a TYPE, so on its own it moved neither hash -- the KNOWN LIMIT above --
   // and an engine that stopped sending one would silently leave every open pick
-  // standing across an undo or a new game. The NAMES are hashed, not the
-  // values: a game instance id is random by design.
-  const publishedStateFields = Object.keys(buildPlayerState(runner, ['Alice', 'Bob'], 1)).sort();
+  // standing across an undo or a new game. The views above hash every value
+  // but the game instance id, which is random by design; its NAME is hashed
+  // here, with every field a seat's published state carries (#1296).
+  const publishedStateFields = Object.keys(published()[1]!.state).sort();
 
   // Views are captured at the SIMULTANEOUS step, where both seats are on the
   // clock — that is the coverage assertCoversFlowLayer pins, and advancing
@@ -2094,7 +2113,7 @@ export async function computePayloadHash(): Promise<string> {
   // and an engine that went back to omitting it would move this hash.
   const sequentialViews = runner.getAllPlayerViews();
   assertSeatThatCannotAct(sequentialViews);
-  const sequentialSeatFlowStates = seatFlowStates();
+  const sequentialSeatViews = seatViews();
 
   // THE OUTCOME THE SNAPSHOT RECORDS (#536). A host that cannot run the game
   // reads the winners from the stored snapshot, so the field is part of what
@@ -2118,7 +2137,8 @@ export async function computePayloadHash(): Promise<string> {
   const nextDraws = [game.random(), game.random(), game.random(), game.random()];
 
   // The parts hashed together: the per-player payload the platform ships, the
-  // names of the fields the session layer wraps it in (#356, above), the
+  // whole view each seat and the spectator is published at both turns (#968,
+  // #1296, above), the names of the fields the session layer wraps it in (#356), the
   // serialized flow position the platform STORES and restores (not reachable
   // from the views — createPlayerView omits `position` — so a
   // flow-serialization regression was previously invisible here), the world
@@ -2145,8 +2165,8 @@ export async function computePayloadHash(): Promise<string> {
     canonicalize({
       views,
       openingFlowState,
-      openingSeatFlowStates,
-      sequentialSeatFlowStates,
+      openingSeatViews,
+      sequentialSeatViews,
       publishedStateFields,
       flowPosition,
       sequentialViews,
