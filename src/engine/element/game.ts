@@ -32,6 +32,7 @@ import { Die } from './die.js';
 import { DicePool } from './dice-pool.js';
 import { Grid, GridCell } from './grid.js';
 import { HexGrid, HexCell } from './hex-grid.js';
+import { hexCoordinateNames } from './hex-coordinates.js';
 import type { ElementAttributes, ElementContext, ElementClass, ElementJSON } from './types.js';
 
 /**
@@ -610,7 +611,7 @@ function cellCoordinateNames(element: GameElement): (string | undefined)[] {
   const parent = element._t.parent;
   // Only cells: a piece placed straight in a grid would give away where it is (#1199).
   if (element instanceof GridCell && parent instanceof Grid) return [parent.$rowCoord, parent.$colCoord];
-  if (element instanceof HexCell && parent instanceof HexGrid) return [parent.$qCoord ?? 'q', parent.$rCoord ?? 'r'];
+  if (element instanceof HexCell && parent instanceof HexGrid) return hexCoordinateNames(parent);
   return [];
 }
 

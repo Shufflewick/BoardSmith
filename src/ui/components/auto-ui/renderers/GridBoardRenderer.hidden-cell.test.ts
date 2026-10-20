@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
 import GridBoardRenderer from './GridBoardRenderer.vue';
-import { Game, Grid, GridCell, Player } from '../../../../engine/index.js';
+import { Game, Grid, GridCell, Piece, Player } from '../../../../engine/index.js';
 import type { GameElement } from '../auto-ui-helpers.js';
 
 class Square extends GridCell<BoardGame> {
@@ -14,6 +14,8 @@ class Board extends Grid<BoardGame> {
   $rowCoord = 'rank';
   $colCoord = 'file';
 }
+
+class Token extends Piece<BoardGame> {}
 
 class BoardGame extends Game<BoardGame, Player> {
   board!: Board;
@@ -31,6 +33,17 @@ describe('GridBoardRenderer with a cell hidden from the seat (#1055)', () => {
   it('renders the seat view of the board, hidden cell included, without refusing it', () => {
     const game = new BoardGame({ playerCount: 2 });
     game.board.first(Square, { rank: 2, file: 2 })!.hideFromAll();
+    const board = game.toJSONForPlayer(1).children!.find((c) => c.name === 'board') as GameElement;
+
+    const wrapper = mount(GridBoardRenderer, { props: { element: board } });
+
+    expect(wrapper.find('.grid-error-panel').exists()).toBe(false);
+    expect(wrapper.findAll('.grid-cell')).toHaveLength(9);
+  });
+
+  it('leaves out a piece placed straight on the board and hidden, whose place it is not sent, and draws the rest (#1294)', () => {
+    const game = new BoardGame({ playerCount: 2 });
+    game.board.create(Token, 'stray').hideFromAll();
     const board = game.toJSONForPlayer(1).children!.find((c) => c.name === 'board') as GameElement;
 
     const wrapper = mount(GridBoardRenderer, { props: { element: board } });
