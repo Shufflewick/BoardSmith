@@ -105,3 +105,38 @@ describe('#740 -- small store defects', () => {
     expect(read?.dropped).toEqual(['hand-edited']);
   });
 });
+
+describe('#949 -- the dev store refuses what Convex refuses, first error first', () => {
+  function refusal(commit: { public?: { entries: unknown[] }; private?: { entries: unknown[] } }) {
+    const outcome = new PersistenceStore().commit({ players: SEATED, commit, gameVersion: 'dev', now: () => 1 });
+    return outcome.ok ? null : outcome.reason;
+  }
+  const entries = (n: number, prefix: string) => Array.from({ length: n }, (_, i) => ({ key: `${prefix}${i}`, value: i }));
+
+  it('refuses more than 25 entries counted across both channels, before any key check', () => {
+    expect(refusal({ public: { entries: [...entries(12, 'a'), { key: 'bad key!', value: 1 }] }, private: { entries: entries(13, 'b') } })).toBe(
+      'A game-over commit may carry at most 25 entries, got 26. Write fewer, larger records, or spread them across sessions.',
+    );
+  });
+
+  it('accepts exactly 25 entries', () => {
+    expect(refusal({ public: { entries: entries(12, 'a') }, private: { entries: entries(13, 'b') } })).toBeNull();
+  });
+
+  it('reports a badly formed key before a later duplicate, as Convex does', () => {
+    expect(refusal({ public: { entries: [{ key: 'bad key!', value: 1 }, { key: 'x', value: 1 }, { key: 'x', value: 2 }] } })).toBe(
+      'Entry key "bad key!" contains characters that are not allowed. Keys may use letters, digits, and the characters . _ : @ / - only.',
+    );
+  });
+
+  it('refuses an empty key', () => {
+    expect(refusal({ public: { entries: [{ key: '', value: 1 }] } })).toBe('An entry key must not be empty.');
+  });
+
+  it('refuses a key over 128 characters and accepts one of exactly 128', () => {
+    expect(refusal({ public: { entries: [{ key: 'k'.repeat(129), value: 1 }] } })).toBe(
+      `Entry key "${'k'.repeat(32)}..." is 129 characters, over the 128-character limit.`,
+    );
+    expect(refusal({ public: { entries: [{ key: 'k'.repeat(128), value: 1 }] } })).toBeNull();
+  });
+});
