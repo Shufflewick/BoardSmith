@@ -532,11 +532,14 @@ function verifyOnFileProblem(name: string, commit: string, found: VerifyOnFile):
 /** The commit a review round's "Verify: <commit> passed" names, or undefined when it names none. */
 const roundCommit = (e: LedgerEntry) => /^([0-9a-f]{7,64}) passed$/.exec(valueOf(e, 'Verify') ?? '')?.[1];
 
-/** The commit each review round's "Verify: <commit> passed" names, for looking up its result on file. */
-export function reviewRoundCommits(text: string): string[] {
+/** Each review round that names a commit in "Verify: <commit> passed", by its own id, for looking up its result on file. */
+export function reviewRoundVerifies(text: string): { round: string; commit: string }[] {
   return runLogEntries(text)
     .filter((e) => e.kind === 'Review Round')
-    .flatMap((e) => roundCommit(e) ?? []);
+    .flatMap((e) => {
+      const commit = roundCommit(e);
+      return commit === undefined ? [] : [{ round: e.id, commit }];
+    });
 }
 
 /**

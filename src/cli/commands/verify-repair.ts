@@ -270,6 +270,14 @@ export async function writeAppendedAuditRound(
 // #838 — the post-repair helpers as commands `verify/repair-dispatch.md` calls
 // -------------------------------------------------------------------------------------------
 
+/** Why a stale chunk cannot take an audit round, said the same way by verify-repair and verify-repair-round. */
+function noFindingsLedger(slug: string): string {
+  return (
+    `${relChunkMdPath(slug)} has no "## Findings Ledger" section, so its rounds have nowhere to go. ` +
+    'Add the section build/audit.md describes, then run verify-repair-round again.'
+  );
+}
+
 /** The run's impact-map entry for a chunk it marked stale, or a refusal naming what is wrong. */
 async function staleEntryOf(projectDir: string, runId: string | undefined, chunk: string): Promise<{ runId: string; entry: ImpactMapEntry }> {
   const impactStatus = await verifyImpactStatusCommand({ project: projectDir, runId, quiet: true });
@@ -302,12 +310,7 @@ export async function verifyRepairRoundCommand(options: {
     throw new Error(`Chunk "${options.chunk}" has no ${relChunkMdPath(options.chunk)} — check the --chunk slug.`);
   }
 
-  if (!FINDINGS_LEDGER_RE.test(chunkMd)) {
-    throw new Error(
-      `${relChunkMdPath(options.chunk)} has no "## Findings Ledger" section, so the round has nowhere to go. ` +
-        'Add the section build/audit.md describes, then run verify-repair-round again.',
-    );
-  }
+  if (!FINDINGS_LEDGER_RE.test(chunkMd)) throw new Error(noFindingsLedger(options.chunk));
 
   const plan = planVerifyRunRound(chunkMd, runId);
   if (plan.disposition === 'round' && !plan.alreadyOpen) {
@@ -341,9 +344,8 @@ export async function verifyRepairGateCommand(options: {
   if (options.json) {
     console.log(JSON.stringify(gate, null, 2));
   } else {
-    // Only a gate that says what to do with the chunk is a result; the others need a person.
-    const decided = gate.disposition === 'reopen-playtest' || gate.disposition === 'close-without-replaytest';
-    console.log(decided ? styleText('green', `✓ ${options.chunk}: ${gate.disposition}`) : styleText('yellow', `⚠ ${options.chunk}: ${gate.disposition}`));
+    // Only a gate that settles the chunk clears its marker; the others need a person.
+    console.log(gate.clearMarker ? styleText('green', `✓ ${options.chunk}: ${gate.disposition}`) : styleText('yellow', `⚠ ${options.chunk}: ${gate.disposition}`));
     console.log(`  ${gate.reason}`);
   }
   return gate;
@@ -421,6 +423,10 @@ export async function verifyRepairStatusCommand(
         continue;
       }
 
+      if (!FINDINGS_LEDGER_RE.test(chunkMd)) {
+        warnings.push(`[repair-status] ${noFindingsLedger(entry.slug)}`);
+        continue;
+      }
       const roundPlan = planVerifyRunRound(chunkMd, runId);
 
       rows.push({

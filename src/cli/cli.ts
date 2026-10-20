@@ -759,7 +759,7 @@ export function createProgram(): Command {
   program
     .command('verify-repair')
     .description(
-      "Report each rules-stale chunk's fresh staged slice paths and its next verify-episode audit " +
+      "Report each rules-stale chunk's fresh staged slice paths and its next audit " +
         'round plan (read-only, machine-readable) — dispatching the audit lenses and the repair ' +
         'loop itself is verify/repair-dispatch.md\'s job, never this command\'s',
     )

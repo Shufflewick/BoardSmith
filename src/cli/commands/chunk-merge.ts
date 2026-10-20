@@ -77,7 +77,7 @@ import {
   unreadableShorthand,
 } from '../lib/ledger-allocation.js';
 import { describeFinding, ledgerCheck, verifyResultsOnFile } from './ledger-check.js';
-import { reviewRoundCommits } from '../lib/run-log-roles.js';
+import { reviewRoundVerifies } from '../lib/run-log-roles.js';
 import { type TestRunner, checkConstraints, runVitest, unranTestsProblem } from './constraint-check.js';
 import { chunkTests } from './verify.js';
 import { type TypeCheckRun, typeCheckProject } from './validate.js';
@@ -721,11 +721,12 @@ async function copyVerifyResults(ctx: MergeContext): Promise<string | undefined>
     }
   }
   const log = await readIfExists(designPath(ctx.projectDir, `${RUN_LOG_DIR}/${ctx.slug}.md`), (file) => fs.readFile(file, 'utf-8'));
-  const rounds = log === undefined ? [] : reviewRoundCommits(log);
-  const onFile = await verifyResultsOnFile(ctx.projectDir, rounds);
-  const missing = rounds.map((commit, i) => ({ commit, round: i + 1 })).filter(({ commit }) => onFile(commit) === undefined);
+  const rounds = log === undefined ? [] : reviewRoundVerifies(log);
+  const onFile = await verifyResultsOnFile(ctx.projectDir, rounds.map((r) => r.commit));
+  const missing = rounds.filter(({ commit }) => onFile(commit) === undefined);
   if (missing.length === 0) return undefined;
-  const mainLine = (await git(ctx.top, ['branch', '--show-current'])).trim();
+  // On no branch, the commit the checkout is on is the one to come back to.
+  const mainLine = (await git(ctx.top, ['branch', '--show-current'])).trim() || (await git(ctx.top, ['rev-parse', 'HEAD'])).trim();
   return (
     `review-gate needs a verify result for each review round's commit, and this checkout has no verify result for ` +
     `${missing.map(({ commit, round }) => `review round ${round}'s commit ${commit}`).join(', ')}` +

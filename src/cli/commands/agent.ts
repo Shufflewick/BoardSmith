@@ -61,6 +61,6 @@ export async function agentCommand(roleName: string, options: { project?: string
   const projectDir = resolve(options.project ?? process.cwd());
   const asked = parseRole(roleName);
   const role = options.escalate ? escalatedRole(asked) : asked;
-  const config = await readProjectConfig(projectDir, { command: 'boardsmith agent', why: 'to tell which agent each role is dispatched as' });
+  const config = await readProjectConfig(projectDir, { command: 'boardsmith agent', purpose: 'tell which agent each role is dispatched as' });
   console.log(`${role}: ${dispatchableAgent(projectDir, config, role)}`);
 }

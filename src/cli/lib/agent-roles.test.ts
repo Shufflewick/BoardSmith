@@ -89,7 +89,7 @@ describe('the "agents" block of boardsmith.json (#454)', () => {
 });
 
 describe('readProjectConfig (#1302)', () => {
-  const reader = { command: 'boardsmith agent', why: 'to tell which agent each role is dispatched as' };
+  const reader = { command: 'boardsmith agent', purpose: 'tell which agent each role is dispatched as' };
 
   it('refuses a boardsmith.json that holds anything but an object, saying what it holds and why it was read', async () => {
     for (const [text, holds] of [['null', 'null'], ['[]', 'a list'], ['"x"', 'a string'], ['3', 'a number']]) {

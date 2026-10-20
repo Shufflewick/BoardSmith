@@ -68,7 +68,7 @@ import { LINE_LOCATION_HINT, type LineRange, fileLines, lineRangeProblem } from 
 import { type EntryField, type LedgerEntry, entryField, parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
 import { NUMBERED_LEDGER_SPECS, provisionalHeadings, provisionalReferences } from '../lib/ledger-allocation.js';
 import { checkCrossChunkLedger } from './cross-chunk.js';
-import { type VerifyLookup, type VerifyOnFile, checkRunLogRoles, reviewRoundCommits, runLogEntries } from '../lib/run-log-roles.js';
+import { type VerifyLookup, type VerifyOnFile, checkRunLogRoles, reviewRoundVerifies, runLogEntries } from '../lib/run-log-roles.js';
 import { readVerifyResult, verifyResultPath, verifyResultsDir } from '../lib/verify-result.js';
 import { readIfExists, readListedText } from '../lib/read-if-exists.js';
 import { readProjectConfig } from '../lib/agent-roles.js';
@@ -974,7 +974,7 @@ async function readLedger(projectDir: string, file: string): Promise<string | un
 async function checkRunLogs(projectDir: string, command: string, logs: string[], result: LedgerCheckResult): Promise<void> {
   if (logs.length === 0) return;
   await requireGitRepo(projectDir, 'compares each run log\'s timestamps against the commits that recorded them');
-  const config = await readProjectConfig(projectDir, { command, why: "to check each run log's agents against their roles" });
+  const config = await readProjectConfig(projectDir, { command, purpose: "check each run log's agents against their roles" });
   // An untracked run log has no commit times: every line of it reads as not committed yet.
   const trackedLogs = await trackedFiles(projectDir, logs.map((log) => `${DESIGN_DIR}/${log}`));
   for (const log of logs) {
@@ -982,7 +982,7 @@ async function checkRunLogs(projectDir: string, command: string, logs: string[],
     result.checked.push(log);
     const rel = `${DESIGN_DIR}/${log}`;
     const commits = trackedLogs.has(rel) ? await lineCommits(projectDir, rel) : [];
-    const verifyOnFile = await verifyResultsOnFile(projectDir, reviewRoundCommits(text));
+    const verifyOnFile = await verifyResultsOnFile(projectDir, reviewRoundVerifies(text).map((r) => r.commit));
     result.findings.push(...checkRunLog(text, log, (line) => commits[line]?.time ?? null, Math.floor(Date.now() / 1000), verifyOnFile, config));
   }
 }

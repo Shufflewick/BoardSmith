@@ -253,6 +253,19 @@ describe('chunkMerge: the combined tree is checked, not the branch alone', () =>
     );
   });
 
+  it('names the commit to go back to when the main checkout is on no branch (#1302)', async () => {
+    const worktree = await buildOnBranch('trading', 150);
+    const [verified] = await verifiedCommits(worktree);
+    await reviewRounds(worktree, 'trading', [verified]);
+    git(main, 'worktree', 'remove', '--force', worktree);
+    git(main, 'checkout', '-q', '--detach');
+
+    const merge = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+
+    expect(merge.refusals).toEqual([]);
+    expect(merge.noVerifyResults).toContain(`then \`git checkout ${head()}\` again`);
+  });
+
   it('names only the rounds left without a result when it copied some of them (#1302)', async () => {
     const worktree = await buildOnBranch('trading', 150);
     const [verified] = await verifiedCommits(worktree);
