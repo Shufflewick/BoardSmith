@@ -727,8 +727,14 @@ function limitWorkers(workers: number | undefined, env: NodeJS.ProcessEnv): stri
   return [`--maxWorkers=${workers}`, '--minWorkers=1'];
 }
 
+/** The real paths of the files a run asked for; undefined for the whole suite. */
+function realPaths(scope: RunScope): string[] | undefined {
+  return scope === 'whole-suite' ? undefined : scope.map((f) => realpathSync(f.absPath));
+}
+
 /** A reported file's manifest path, else its project path when the run asked for it; undefined for a file the run is not about. */
-function pathInRun(projectDir: string, byRealPath: ReadonlyMap<string, string>, inScope: ReadonlySet<string> | undefined): (realPath: string) => string | undefined {
+function pathInRun(projectDir: string, byRealPath: ReadonlyMap<string, string>, scopePaths: string[] | undefined): (realPath: string) => string | undefined {
+  const inScope = scopePaths && new Set(scopePaths);
   return (realPath) => byRealPath.get(realPath) ?? (inScope?.has(realPath) === false ? undefined : relative(projectDir, realPath).split(sep).join('/'));
 }
 
@@ -774,7 +780,7 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
         await fs.writeFile(mutantPath, JSON.stringify({ file: realpathSync(mutant.absPath), source: mutant.source }));
         env.BOARDSMITH_MUTANT = mutantPath;
       }
-      const scopePaths = scope === 'whole-suite' ? undefined : scope.map((f) => realpathSync(f.absPath));
+      const scopePaths = realPaths(scope);
       const args = [
         'run',
         '--root', projectDir,
@@ -793,7 +799,7 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
       checkStopped();
       if (!finished) return { kind: 'timed-out' };
 
-      const read = await readReport(reportPath, projectDir, pathInRun(projectDir, byRealPath, scopePaths && new Set(scopePaths)));
+      const read = await readReport(reportPath, projectDir, pathInRun(projectDir, byRealPath, scopePaths));
       return { kind: 'ran', ...read, exitCode: finished.exitCode, ms: Date.now() - started };
     },
   };

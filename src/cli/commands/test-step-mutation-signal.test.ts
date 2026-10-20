@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { fixtureSandbox } from '../../testing/fixture-sandbox.test-helper.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 import { runDiffMutationCheck } from './test-step-mutation.js';
+import type { KillerHint } from '../lib/mutant-cache.js';
 
 vi.setConfig({ testTimeout: 120_000 });
 
@@ -139,6 +140,41 @@ async function waitForWorker(project: string, child: ChildProcess, output: () =>
   return owned;
 }
 
+/** Runs one mutant that loops, with `hint` naming its looping test, and checks it is timed out after one run, its group gone. */
+async function keepsTimeoutVerdict(hint: KillerHint | undefined): Promise<void> {
+  const { sandbox, project } = await mutationProject();
+  for (const key of ['HOME', 'TMPDIR', 'PATH'] as const) vi.stubEnv(key, sandbox.env[key]!);
+  vi.stubEnv('NODE_OPTIONS', sandbox.env.NODE_OPTIONS + ' --allow-child-process --allow-worker --allow-addons');
+  vi.stubEnv('CANCEL_PHASE', 'mutant');
+  const guard = setTimeout(() => vi.runAllTimers(), 90_000);
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  const running = runDiffMutationCheck({
+    projectDir: project, added: new Map([['src/rules.ts', new Set([1])]]), log: () => {},
+    cache: { fingerprint: () => undefined, get: () => undefined, set: () => {}, killerHint: () => hint, setKillerHint: () => {}, save: async () => {} },
+  });
+  let finished = false;
+  void running.then(() => { finished = true; }, () => { finished = true; });
+  let owned: WorkerRecord | undefined;
+  try {
+    while (!(owned = await workerRecord(project))) {
+      if (finished) { await running; throw new Error('Mutation verification ended before the timeout fixture started.'); }
+      await delay(10);
+    }
+    vi.advanceTimersByTime(30_000);
+    expect((await running).summary).toEqual({ files: 1, mutants: 1, killed: 0, survived: 0, timedOut: 1, equivalent: 0, unreached: 0 });
+    // One run only: a second would have started a worker of its own.
+    expect((await workerRecord(project))?.worker).toBe(owned.worker);
+    expect(processGroup(owned.leader)).toEqual([]);
+    expect(await fs.readdir(join(project, '.boardsmith'))).toEqual([]);
+  } finally {
+    vi.useRealTimers();
+    clearTimeout(guard);
+    vi.unstubAllEnvs();
+    await stopOwnedGroup(owned);
+    await running.catch(() => {});
+  }
+}
+
 describe('mutation verification cancellation (#712)', () => {
   for (const { kind, phase, signal, target, nested, holdGroup } of [
     { kind: 'diff', phase: 'mutant', signal: 'SIGINT', target: 'parent', holdGroup: false },
@@ -251,39 +287,10 @@ it('holds each trial worker open', async () => {
     }
   });
 
-  for (const hint of [undefined, { file: 'tests/busy.test.ts', test: 'holds an actual mutant worker open' }]) it(`keeps the timeout verdict and reaps the timed-out mutant group${hint ? ', with no full run after a hint trial timed out (#1308)' : ''}`, async () => {
-    const { sandbox, project } = await mutationProject();
-    for (const key of ['HOME', 'TMPDIR', 'PATH'] as const) vi.stubEnv(key, sandbox.env[key]!);
-    vi.stubEnv('NODE_OPTIONS', sandbox.env.NODE_OPTIONS + ' --allow-child-process --allow-worker --allow-addons');
-    vi.stubEnv('CANCEL_PHASE', 'mutant');
-    const guard = setTimeout(() => vi.runAllTimers(), 90_000);
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
-    const running = runDiffMutationCheck({
-      projectDir: project, added: new Map([['src/rules.ts', new Set([1])]]), log: () => {},
-      cache: { fingerprint: () => undefined, get: () => undefined, set: () => {}, killerHint: () => hint, setKillerHint: () => {}, save: async () => {} },
-    });
-    let finished = false;
-    void running.then(() => { finished = true; }, () => { finished = true; });
-    let owned: WorkerRecord | undefined;
-    try {
-      while (!(owned = await workerRecord(project))) {
-        if (finished) { await running; throw new Error('Mutation verification ended before the timeout fixture started.'); }
-        await delay(10);
-      }
-      vi.advanceTimersByTime(30_000);
-      expect((await running).summary).toEqual({ files: 1, mutants: 1, killed: 0, survived: 0, timedOut: 1, equivalent: 0, unreached: 0 });
-      // One run only: a second would have started a worker of its own.
-      expect((await workerRecord(project))?.worker).toBe(owned.worker);
-      expect(processGroup(owned.leader)).toEqual([]);
-      expect(await fs.readdir(join(project, '.boardsmith'))).toEqual([]);
-    } finally {
-      vi.useRealTimers();
-      clearTimeout(guard);
-      vi.unstubAllEnvs();
-      await stopOwnedGroup(owned);
-      await running.catch(() => {});
-    }
-  });
+  it('keeps the timeout verdict and reaps the timed-out mutant group', () => keepsTimeoutVerdict(undefined));
+
+  it('keeps the timeout verdict of a hint trial, with no full run after it (#1308)', () =>
+    keepsTimeoutVerdict({ file: 'tests/busy.test.ts', test: 'holds an actual mutant worker open' }));
 
   for (const repeat of [false, true]) {
     it(`finishes asynchronous and synchronous nested cleanup before reraising the first signal${repeat ? ' when signalled again' : ''}`, async () => {
