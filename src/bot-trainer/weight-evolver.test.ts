@@ -227,7 +227,7 @@ describe('WeightEvolver.evolve', () => {
     await expect(evolver({ onProgress: undefined }).evolve(objectives(5))).resolves.toBeDefined();
   });
 
-  it('threads the benchmark game count and MCTS budget into every evaluation', async () => {
+  it('threads the benchmark game count and MCTS budget into every search evaluation', async () => {
     await evolver({ evolutionBenchmarkGames: 12, benchmarkMCTSIterations: 7 })
       .evolve(objectives(5));
     for (const config of benchmarkConfigs().flat()) {
@@ -321,7 +321,7 @@ describe('WeightEvolver confirms the search pick on fresh games before keeping i
 
   it('splits each set\'s 400 games into 20 separately seeded batches, both sets on the same games, on seeds the search never used (#1031)', async () => {
     fitnessOf = noisy((individual) => (isOriginal(individual) ? 0.5 : 0.7));
-    await evolver({ seed: 'fresh' }).evolve(original);
+    await evolver({ seed: 'fresh', benchmarkMCTSIterations: 7, maxActionsPerGame: 9 }).evolve(original);
     const [confirm, ...search] = benchmarkConfigs().reverse();
     const jobs = vi.mocked(runParallelBenchmarks).mock.calls.at(-1)![2];
     const batchSeeds = Array.from({ length: 20 }, (_, b) => `fresh-confirm-${b}`);
@@ -332,7 +332,9 @@ describe('WeightEvolver confirms the search pick on fresh games before keeping i
     expect(candidateJobs.every((job) => job.weights === candidateJobs[0].weights && job.weights !== original)).toBe(true);
     expect(originalJobs.map((job) => job.config.seed)).toEqual(batchSeeds);
     expect(candidateJobs.map((job) => job.config.seed)).toEqual(batchSeeds);
-    expect(confirm.every((c) => c.gameCount === 20 && c.reproducible === true)).toBe(true);
+    for (const config of confirm) {
+      expect(config).toMatchObject({ gameCount: 20, mctsIterations: 7, maxActions: 9, reproducible: true });
+    }
     expect(search.flat().some((c) => c.seed!.includes('confirm'))).toBe(false);
   });
 
