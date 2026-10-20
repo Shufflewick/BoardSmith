@@ -49,6 +49,9 @@ export enum ErrorCode {
   // Action errors
   ACTION_NOT_FOUND = 'ACTION_NOT_FOUND',
   ACTION_NOT_AVAILABLE = 'ACTION_NOT_AVAILABLE',
+  /** The host has no handler for this op at all (#1046): a table without
+   *  teaching support, say. Clients recognise it by this code, never the text. */
+  UNKNOWN_OP = 'UNKNOWN_OP',
   // Pick errors
   INVALID_PICK = 'INVALID_PICK',
   PICK_NOT_FOUND = 'PICK_NOT_FOUND',

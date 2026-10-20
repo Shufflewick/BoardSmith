@@ -10,6 +10,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { ref } from 'vue';
 import { useTeachingActions, type TeachingActionsOptions } from './useTeachingActions.js';
+import { ErrorCode } from '../../types/protocol.js';
 
 function harness(overrides: Partial<TeachingActionsOptions> = {}) {
   const platformRequest = vi.fn().mockResolvedValue({ success: true });
@@ -194,7 +195,7 @@ describe('a refusal the host resolves (#859)', () => {
     ['exit-tutorial', 'This table does not support tutorials.'],
   ] as const)('%s on a host without the op says the table does not support it', async (action, text) => {
     const h = harness({
-      platformRequest: vi.fn().mockImplementation(async (op: string) => ({ success: false, error: `Unknown server op: '${op}'` })),
+      platformRequest: vi.fn().mockImplementation(async (op: string) => ({ success: false, error: `Unknown server op: '${op}'`, errorCode: ErrorCode.UNKNOWN_OP })),
     });
     await h.handleTeachingAction(action);
     expect(h.errors).toEqual([text]);
