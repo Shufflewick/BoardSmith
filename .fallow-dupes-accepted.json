@@ -16,22 +16,6 @@
       ]
     },
     {
-      "content": "39398bdc869b7980",
-      "lines": 40,
-      "files": [
-        "src/ui/components/auto-ui/renderers/DeckRenderer.vue",
-        "src/ui/components/auto-ui/renderers/HandRenderer.vue"
-      ]
-    },
-    {
-      "content": "395afb5c9f7f098e",
-      "lines": 26,
-      "files": [
-        "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue",
-        "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue"
-      ]
-    },
-    {
       "content": "39b9c20cb69fe9e8",
       "lines": 15,
       "files": [
@@ -68,7 +52,7 @@
       ]
     },
     {
-      "content": "806a13393664a96d",
+      "content": "79e88b99026bf0f6",
       "lines": 14,
       "files": [
         "src/ui/components/auto-ui/renderers/CardRenderer.vue",
@@ -85,46 +69,11 @@
       ]
     },
     {
-      "content": "85e75d6a8123fe2e",
-      "lines": 9,
+      "content": "8f5bf71f34883775",
+      "lines": 20,
       "files": [
-        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
-        "src/ui/components/auto-ui/renderers/DeckRenderer.vue",
-        "src/ui/components/auto-ui/renderers/HandRenderer.vue"
-      ]
-    },
-    {
-      "content": "8f23a79b3b91febe",
-      "lines": 15,
-      "files": [
-        "src/ui/components/auto-ui/renderers/DeckRenderer.vue",
-        "src/ui/components/auto-ui/renderers/HandRenderer.vue",
-        "src/ui/components/auto-ui/renderers/PieceRenderer.vue"
-      ]
-    },
-    {
-      "content": "92e39fc1f52e0c32",
-      "lines": 19,
-      "files": [
-        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
-        "src/ui/components/auto-ui/renderers/HandRenderer.vue"
-      ]
-    },
-    {
-      "content": "94d2217b30b2606a",
-      "lines": 21,
-      "files": [
-        "src/ui/components/auto-ui/renderers/DieRenderer.vue",
-        "src/ui/components/auto-ui/renderers/PieceRenderer.vue",
-        "src/ui/components/auto-ui/renderers/SpaceRenderer.vue"
-      ]
-    },
-    {
-      "content": "a65a466bf25aee08",
-      "lines": 33,
-      "files": [
-        "src/ui/components/auto-ui/renderers/DieRenderer.vue",
-        "src/ui/components/auto-ui/renderers/SpaceRenderer.vue"
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue",
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue"
       ]
     },
     {
@@ -157,14 +106,6 @@
       ]
     },
     {
-      "content": "c3ce706ae9b61683",
-      "lines": 18,
-      "files": [
-        "src/ui/components/auto-ui/renderers/DieRenderer.vue",
-        "src/ui/components/auto-ui/renderers/PieceRenderer.vue"
-      ]
-    },
-    {
       "content": "c5a0dad62bc6ae6b",
       "lines": 19,
       "files": [
@@ -177,14 +118,6 @@
       "lines": 8,
       "files": [
         "src/ui/composables/useHexGrid.ts"
-      ]
-    },
-    {
-      "content": "cbae561ae95f8dd8",
-      "lines": 12,
-      "files": [
-        "src/ui/components/auto-ui/renderers/HandRenderer.vue",
-        "src/ui/components/auto-ui/renderers/SpaceRenderer.vue"
       ]
     },
     {
