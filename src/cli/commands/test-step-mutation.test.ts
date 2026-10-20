@@ -16,6 +16,7 @@ import { designProjectFixtures } from './design-project.test-helper.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 import { plantOtherRuns } from '../lib/command-build-dirs.test-helper.js';
 import { fixtureSandbox } from '../../testing/fixture-sandbox.test-helper.js';
+import type { KillerHint } from '../lib/mutant-cache.js';
 
 const lines = (...n: number[]) => new Set(n);
 
@@ -611,13 +612,16 @@ export function fee(price: number): number {
 `;
 
   /** A cache that holds nothing and keeps what it is given, standing in for `openMutantCache`. */
-  function memoryCache(held: Map<string, 'killed' | 'survived'> = new Map()) {
+  function memoryCache(held: Map<string, 'killed' | 'survived'> = new Map(), hints: Map<string, KillerHint> = new Map()) {
     const key = (m: { file: string; source: string }) => `${m.file}\0${m.source}`;
     return {
       held,
+      hints,
       fingerprint: () => undefined,
       get: (m: { file: string; source: string }) => held.get(key(m)),
       set: (m: { file: string; source: string }, outcome: 'killed' | 'survived') => void held.set(key(m), outcome),
+      killerHint: (m: { file: string; source: string }) => hints.get(key(m)),
+      setKillerHint: (m: { file: string; source: string }, hint: KillerHint) => void hints.set(key(m), hint),
       save: async () => {},
     };
   }
@@ -1082,6 +1086,79 @@ export default defineConfig({ test: { include: ['tests/**/*.test.ts'], setupFile
       // The setup file did not turn selection off: a.ts's mutants still ran only against a.test.ts.
       expect(ran.filter((r) => r.startsWith('a.ts '))).toEqual(['a.ts a']);
       expect(ran).toContain('seed.ts seed');
+    }, 120_000);
+  });
+
+  // #954: a mutant run again (its outcome no longer reusable) first tries the one test that killed it last time.
+  describe('tries the test that killed a mutant before first, as advice, never as a verdict (#954)', () => {
+    /** A test file's first lines: under a mutant, it notes `<name> <what>` in tests/ran when it loads and as each test runs. */
+    const notes = (name: string) => `import { appendFileSync } from 'node:fs';
+import { describe, it, expect } from 'vitest';
+import { enabled } from '../src/rules';
+const note = (what: string) => { if (process.env.BOARDSMITH_MUTANT) appendFileSync(new URL('./ran', import.meta.url), '${name} ' + what + '\\n'); };
+note('loaded');
+`;
+    const BROAD = `${notes('broad')}it('reads the rule', () => { note('reads'); expect(typeof enabled).toBe('boolean'); });\n`;
+    const KILLER = `${notes('killer')}it('a neighbour', () => { note('neighbour'); expect(1).toBe(1); });
+describe('the rule', () => { it('is on', () => { note('is on'); expect(enabled).toBe(true); }); });
+`;
+    const KILLER_HINT: KillerHint = { file: 'tests/killer.test.ts', test: 'the rule is on' };
+
+    /** One mutant (`true -> false`), run with `hints` held for it; returns the result, the hints after, and what ran under it. */
+    async function hinted(tests: Record<string, string>, hint?: KillerHint) {
+      const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': 'export const enabled = true;\n', ...tests });
+      const cache = memoryCache();
+      if (hint) cache.hints.set('src/rules.ts\0export const enabled = false;\n', hint);
+      const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), cache, log: () => {} });
+      const ran = (await fs.readFile(join(project, 'tests/ran'), 'utf-8').catch(() => '')).split('\n').filter(Boolean);
+      return { result, hints: [...cache.hints.values()], ran };
+    }
+
+    it('learns the test that killed a mutant, and next time runs only that test first, which kills it', async () => {
+      const first = await hinted({ 'tests/broad.test.ts': BROAD, 'tests/killer.test.ts': KILLER });
+      expect(first.result.summary).toMatchObject({ mutants: 1, killed: 1 });
+      expect(first.hints).toEqual([KILLER_HINT]);
+
+      const again = await hinted({ 'tests/broad.test.ts': BROAD, 'tests/killer.test.ts': KILLER }, KILLER_HINT);
+      expect(again.result.summary).toMatchObject({ mutants: 1, killed: 1, survived: 0 });
+      // The broad file and the killer's neighbour never ran: the hinted test alone decided it.
+      expect(again.ran).toEqual(['killer loaded', 'killer is on']);
+      expect(again.hints).toEqual([KILLER_HINT]);
+    }, 120_000);
+
+    it('runs every required test when the hinted test passes, and learns the test that really killed it', async () => {
+      const broadHint = { file: 'tests/broad.test.ts', test: 'reads the rule' };
+      const { result, hints, ran } = await hinted({ 'tests/broad.test.ts': BROAD, 'tests/killer.test.ts': KILLER }, broadHint);
+      expect(result.summary).toMatchObject({ mutants: 1, killed: 1 });
+      // The hint was tried first, alone, then the full run reached the real killer.
+      expect(ran.slice(0, 2)).toEqual(['broad loaded', 'broad reads']);
+      expect(ran).toContain('killer is on');
+      expect(hints).toEqual([KILLER_HINT]);
+    }, 120_000);
+
+    it('completes the whole required suite for a survivor, even after its hinted test passes', async () => {
+      const OTHER = `${notes('other')}it('also reads it', () => { note('reads'); expect(enabled === true || enabled === false).toBe(true); });\n`;
+      const { result, ran } = await hinted({ 'tests/broad.test.ts': BROAD, 'tests/other.test.ts': OTHER }, { file: 'tests/broad.test.ts', test: 'reads the rule' });
+      expect(result.summary).toMatchObject({ mutants: 1, killed: 0, survived: 1 });
+      expect(ran.filter((r) => r === 'broad reads')).toHaveLength(2);
+      expect(ran).toContain('other reads');
+    }, 120_000);
+
+    it('skips a hint whose test no longer exists, and does not count a hinted file that breaks on load as a kill', async () => {
+      const gone = await hinted({ 'tests/broad.test.ts': BROAD, 'tests/killer.test.ts': KILLER }, { file: 'tests/killer.test.ts', test: 'a test since deleted' });
+      expect(gone.result.summary).toMatchObject({ mutants: 1, killed: 1 });
+      // No trial of the killer file: it loaded once, in the full run.
+      expect(gone.ran.filter((r) => r === 'killer loaded')).toHaveLength(1);
+      expect(gone.hints).toEqual([KILLER_HINT]);
+
+      const SETUP = `${notes('setup')}if (!enabled) throw new Error('setup needs the rule');
+it('needs setup', () => { note('needs setup'); expect(1).toBe(1); });
+`;
+      const broken = await hinted({ 'tests/setup.test.ts': SETUP, 'tests/killer.test.ts': KILLER }, { file: 'tests/setup.test.ts', test: 'needs setup' });
+      expect(broken.result.summary).toMatchObject({ mutants: 1, killed: 1 });
+      // The hinted file failed to load, which proves nothing about its test, so the full run went on to the killer.
+      expect(broken.ran[0]).toBe('setup loaded');
+      expect(broken.ran).toContain('killer is on');
     }, 120_000);
   });
 
