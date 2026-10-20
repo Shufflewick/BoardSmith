@@ -136,6 +136,19 @@ describe('debug bridge response validation', () => {
   });
 });
 
+describe('debug bridge reads a host reply the way every other reader does (#1046)', () => {
+  it('treats a reply without success: true as a refusal, even a truthy one', async () => {
+    const info = { path: [0], awaiting: {}, description: 'phase: play' };
+    const { bridge } = bridgeWith(async () => ({ success: 'yes', flowDebugInfo: info }));
+    expect(await bridge.flowState()).toBeNull();
+  });
+
+  it('falls back to its own message when the host error is not text', async () => {
+    const { bridge } = bridgeWith(async () => ({ error: { detail: 'x' } }));
+    await expect(bridge.moveCardToTop(1)).rejects.toThrow(/^Failed to move card$/);
+  });
+});
+
 describe('debug bridge refusals that are answers, not failures', () => {
   it('reports no flow position when the host declines to give one', async () => {
     const { bridge } = bridgeWith(async () => ({ success: false, error: 'no flow' }));

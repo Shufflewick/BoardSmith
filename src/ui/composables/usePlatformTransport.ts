@@ -1,5 +1,6 @@
 import { toCloneablePayload } from '../components/platformRequestClone.js';
 import type { BoundaryKeyState } from '../../engine/flow/boundary-key.js';
+import { ErrorCode } from '../../types/protocol.js';
 
 /** How long a host request waits before it is answered as a failure. */
 const REQUEST_TIMEOUT_MS = 20_000;
@@ -113,6 +114,25 @@ export function usePlatformTransport(options: PlatformTransportOptions): Platfor
   return { request, handleResponse, rejectAll, pendingCount: () => pending.size };
 }
 
+/** A host reply, read: accepted, or refused with the host's reason and code when it gave them as text. */
+export type HostReply =
+  | { accepted: true }
+  | { accepted: false; error: string | undefined; errorCode: string | undefined };
+
+/**
+ * The one reading of a host reply (#1046). The reply crosses a postMessage
+ * boundary, so only `success: true` is acceptance: a missing or garbage
+ * `success` is a refusal, never a pass.
+ */
+export function readHostReply(reply: Record<string, unknown>): HostReply {
+  if (reply.success === true) return { accepted: true };
+  return {
+    accepted: false,
+    error: typeof reply.error === 'string' && reply.error !== '' ? reply.error : undefined,
+    errorCode: typeof reply.errorCode === 'string' ? reply.errorCode : undefined,
+  };
+}
+
 /**
  * What to tell the player about a host op's response, or null when the host accepted it.
  *
@@ -120,9 +140,8 @@ export function usePlatformTransport(options: PlatformTransportOptions): Platfor
  * at all (a production table without teaching support) reads as `unsupported`.
  */
 export function hostRefusal(result: Record<string, unknown>, failed: string, unsupported = failed): string | null {
-  if (result.success !== false) return null;
-  const error = typeof result.error === 'string' ? result.error : '';
-  // The dev bridge and ShufflewickPub's GameSession both answer an op they lack this way.
-  if (error.startsWith('Unknown server op')) return unsupported;
-  return error || failed;
+  const reply = readHostReply(result);
+  if (reply.accepted) return null;
+  if (reply.errorCode === ErrorCode.UNKNOWN_OP) return unsupported;
+  return reply.error ?? failed;
 }
