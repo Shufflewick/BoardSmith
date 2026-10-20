@@ -860,7 +860,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       }
       sources ??= this.buildSourceGame();
       assertMintedUnderThisKey(name, stored.parentId, sources.id);
-      const root = readOnlyProjection(sources.adoptSubtree(sources.id, stored.json as ElementJSON));
+      const root = readOnlyProjection(sources.adoptSubtree(stored.json as ElementJSON));
       read.set(name, root);
       return root;
     });
@@ -3361,7 +3361,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     }
 
     for (const point of restoring) {
-      const root = this.game.adoptSubtree(this.game.id, point.json);
+      const root = this.game.adoptSubtree(point.json);
       this.residentIds.set(point.name, root.id);
       this.residentNames.set(root.id, point.name);
     }
@@ -3388,12 +3388,12 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // an element is. This engine does: what it is handed is what its own
     // `serializePartitions` wrote, and `adoptSubtree` is the reader.
     // BEFORE ADOPTING: bytes minted under another key are the platform's to
-    // answer for, and would otherwise surface as a missing parent charged to
-    // the game (#482).
+    // answer for, and `adoptSubtree` reads no parent id that could catch them
+    // (#482, #1316).
     assertMintedUnderThisKey(name, stored.parentId, this.game.id);
     let root: GameElement;
     try {
-      root = this.game.adoptSubtree(stored.parentId, stored.json as ElementJSON);
+      root = this.game.adoptSubtree(stored.json as ElementJSON);
     } catch (error) {
       // A STALE STAMP IS THE PLATFORM'S FAULT, AND MUST SAY SO (#224).
       // `adoptSubtree` proves it from the bytes and throws its own class, and an
