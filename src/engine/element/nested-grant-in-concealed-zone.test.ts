@@ -15,10 +15,15 @@ import type { GameViewElement } from '../../ui/types.js';
 
 class Card extends Piece<TestGame> {}
 class Box extends Space<TestGame> {}
+/** A box whose `secret` only its owner is sent (`visibleAttributes`). */
+class SecretBox extends Box {
+  static override visibleAttributes = [];
+  secret = 'gold';
+}
 class TestGame extends Game<TestGame, Player> {
   constructor(options: GameOptions) {
     super(options);
-    this.registerElements([Card, Box]);
+    this.registerElements([Card, Box, SecretBox]);
   }
 }
 
@@ -258,11 +263,11 @@ describe('a granted element nested below a concealed child (#961)', () => {
   });
 });
 
-/** The owner `view` gives `element` (#1209): its own player, or that of its nearest ancestor the view carries. */
+/** The owner `view` gives `element` (#1209): its own player, or its parent's when the view carries the parent, else none. */
 function seenOwner(view: ElementJSON, element: GameElement): number | undefined {
   if (element.player) return element.player.seat;
-  for (let at = element._t.parent; at; at = at._t.parent) if (revealedIn(view, at)) return seenOwner(view, at);
-  return undefined;
+  const parent = element._t.parent;
+  return parent && revealedIn(view, parent) ? seenOwner(view, parent) : undefined;
 }
 
 /** Whether a visibility rule on `element` shows the seat whose view is `view`, written out apart from the engine's. */
@@ -335,7 +340,7 @@ describe('isVisibleTo matches the seat view on random trees (#961)', () => {
     const grow = (parent: Game | Box, depth: number) => {
       for (let i = 0; i < 2; i++) {
         const leaf = depth === 4 || next() < 0.3;
-        const element: GameElement = leaf ? parent.create(Card, `e${elements.length}`) : parent.create(Box, `e${elements.length}`);
+        const element: GameElement = leaf ? parent.create(Card, `e${elements.length}`) : parent.create(SecretBox, `e${elements.length}`);
         if (next() < 0.3) element.player = game.getPlayer(1 + Math.floor(next() * 3))!;
         pick(owns)(element);
         elements.push(element);
@@ -360,6 +365,20 @@ describe('isVisibleTo matches the seat view on random trees (#961)', () => {
     if (hidden && (inConcealedZone(element, seat, view) || !revealedIn(view, element._t.parent!))) expect(ids.has(element.id), where).toBe(false);
   }
 
+  /**
+   * Safety, judged by the element's real owner (`getEffectiveOwner`), not by how the view resolves owners:
+   * an owner rule (`showToOwner`, `contentsVisibleToOwner`, `visibleAttributes`) shows only that owner,
+   * and any other seat is shown the element only through a rule that names it.
+   */
+  function checkOwnerOnly(view: ElementJSON, element: GameElement, seat: number, where: string): void {
+    const realOwner = element.getEffectiveOwner()?.seat;
+    const rule = element.getEffectiveVisibility();
+    if (revealedIn(view, element) && rule.mode === 'owner' && !rule.addPlayers?.includes(seat)) expect(seat, `${where}, by an owner rule`).toBe(realOwner);
+    const find = (node: ElementJSON): ElementJSON | undefined =>
+      node.id === element.id ? node : node.children?.map(find).find((n) => n !== undefined);
+    if (find(view)?.attributes?.secret !== undefined) expect(seat, `${where}, its secret`).toBe(realOwner);
+  }
+
   /** A node's `childCount`, where sent, is its element's real number of children. */
   function checkChildCount(game: TestGame, view: ElementJSON, node: ElementJSON, seat: number, where: string): void {
     const element = game.getElementById(node.id);
@@ -375,7 +394,11 @@ describe('isVisibleTo matches the seat view on random trees (#961)', () => {
       for (const seat of SEATS) {
         const view = game.toJSONForPlayer(seat);
         const ids = new Set(idsIn(view));
-        for (const element of elements) checkElement(view, ids, element, seat ?? -1, `${element.name} for seat ${seat}, seed ${seed}`);
+        for (const element of elements) {
+          const where = `${element.name} for seat ${seat}, seed ${seed}`;
+          checkElement(view, ids, element, seat ?? -1, where);
+          checkOwnerOnly(view, element, seat ?? -1, where);
+        }
         forEachNode(view, (node) => checkChildCount(game, view, node, seat ?? -1, `${node.name} for seat ${seat}, seed ${seed}`));
       }
     }

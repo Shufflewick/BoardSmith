@@ -4909,13 +4909,13 @@ export class Game<
     // #961: below a hidden child of a concealed zone only an element's own grant
     // sends it, as a child of its nearest sent ancestor, and the hidden ones
     // between are left out. `deepestRevealed` is the same rule for `isVisibleTo`.
-    // `owner` is that of the nearest sent ancestor, as a hidden one's owner is not the seat's to learn (#1209).
+    // `owner` is `element`'s when it is sent, else undefined: past an unsent element only an element's own player counts (#1209).
     const grantedBelowHidden = (element: GameElement, json: ElementJSON, owner: number | undefined): ElementJSON[] =>
       (json.children ?? []).flatMap((childJson, i) => {
         const child = element._t.children[i]!;
         return ownGrantAllows(child, visibilityPosition, viewOwner(child, owner))
           ? [filterElement(childJson, child, owner, true)]
-          : grantedBelowHidden(child, childJson, owner);
+          : grantedBelowHidden(child, childJson, undefined);
       });
 
     // `json` sent with only the given children, and no `children` key when there are none.
@@ -4948,7 +4948,7 @@ export class Game<
           placeholders.push(filterElement(childJson, childElement, owner));
           continue;
         }
-        nested.push(...grantedBelowHidden(childElement, childJson, owner));
+        nested.push(...grantedBelowHidden(childElement, childJson, undefined));
         const syntheticId = placeholderIdOf(childElement, visibilityPosition);
         idRemap?.set(childElement.id, syntheticId);
         placeholders.push({
@@ -5176,7 +5176,7 @@ export class Game<
             const child = element._t.children[i]!;
             return ownVisibilityAllows(child, visibilityPosition, viewOwner(child, owner))
               ? [filterElement(childJson, child, owner)]
-              : grantedBelowHidden(child, childJson, owner);
+              : grantedBelowHidden(child, childJson, undefined);
           });
           return withOnly(ownJson, granted);
         } else if (zoneVisibility.mode === 'count-only') {

@@ -245,9 +245,13 @@ placeholders and `childCount`, a granted box with `contentsVisible()` with its
 contents. One with no zone rule of its own carries only its own granted
 contents, since the rule they inherit sits on a hidden box. For the same
 reason an owner rule there (`showToOwner()`, `contentsVisibleToOwner()`,
-`visibleAttributes`) takes its owner from the element's own `player`, or else
-from the nearest container the seat is sent, never from a hidden box between,
-so no seat learns who owns that box (#1209).
+`visibleAttributes`) uses only the element's own `player`, never the owner of
+the hidden box or of anything above it, so no seat learns who owns that box
+and none is shown another seat's owner-only content (#1209). An element there
+with no `player` of its own therefore has no owner in any seat's view: even
+its real owner is not shown what that rule would show them. Give it a
+`player` to show its owner. No catalogue game is affected, as their owner
+rules are only on top-level hands.
 `isVisibleTo(seat)` follows the same rule, so it is true exactly when the
 seat's view carries the element. Outside a concealed zone, nothing below an
 element hidden from the seat is sent, granted or not. A shuffle clears every

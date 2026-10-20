@@ -81,20 +81,45 @@ describe('an owner rule below a hidden container (#1209)', () => {
     expect(views()).toEqual(before);
   });
 
-  it('still shows the owner contents whose owner the view carries: the chest its own, the deck its own', () => {
-    const { game, deck, crate, chest, coin } = setup();
+  /** No seat is sent the coin or the chest's secret, and none is told it may see the coin. */
+  function expectShownToNobody(game: TestGame, coin: Card): void {
+    for (const seat of SEATS) {
+      const chestJson = deckIn(game, seat).children![0]!;
+      expect((chestJson.children ?? []).map((c) => c.id), `seat ${seat}`).not.toContain(coin.id);
+      expect(chestJson.attributes, `seat ${seat}`).not.toHaveProperty('secret');
+      expect(coin.isVisibleTo(seat ?? -1), `seat ${seat}`).toBe(false);
+    }
+  }
+
+  it("does not show the deck's owner the chest's owner-only contents through the crate it cannot see", () => {
+    const { game, deck, chest, coin } = setup();
     chest.contentsVisibleToOwner();
     deck.player = game.getPlayer(3)!;
 
-    expect(deckIn(game, 3).children![0]!.children!.map((c) => c.id)).toEqual([coin.id]);
-    expect(deckIn(game, 3).children![0]!.attributes).toHaveProperty('secret', 'gold');
-    expect(coin.isVisibleTo(3)).toBe(true);
-    expect(coin.isVisibleTo(1)).toBe(false);
+    expectShownToNobody(game, coin);
+  });
 
-    chest.player = game.getPlayer(1)!;
-    expect(deckIn(game, 1).children![0]!.children!.map((c) => c.id)).toEqual([coin.id]);
-    expect(coin.isVisibleTo(1)).toBe(true);
-    expect(coin.isVisibleTo(3)).toBe(false);
-    expect(crate.isVisibleTo(1)).toBe(false);
+  it('shows nobody the owner-only contents of an unowned chest below an unowned hidden crate', () => {
+    const { game, deck, crate, chest, coin } = setup();
+    chest.contentsVisibleToOwner();
+    deck.player = game.getPlayer(3)!;
+    crate.player = undefined;
+
+    expectShownToNobody(game, coin);
+  });
+
+  it("shows the chest's own owner its owner-only contents and attributes", () => {
+    const { game, crate, chest, coin } = setup();
+    chest.contentsVisibleToOwner();
+    chest.player = game.getPlayer(2)!;
+
+    expect(deckIn(game, 2).children![0]!.children!.map((c) => c.id)).toEqual([coin.id]);
+    expect(deckIn(game, 2).children![0]!.attributes).toHaveProperty('secret', 'gold');
+    expect(coin.isVisibleTo(2)).toBe(true);
+    for (const seat of [1, 3, null]) {
+      expect((deckIn(game, seat).children![0]!.children ?? []).map((c) => c.id), `seat ${seat}`).not.toContain(coin.id);
+      expect(coin.isVisibleTo(seat ?? -1), `seat ${seat}`).toBe(false);
+    }
+    expect(crate.isVisibleTo(2)).toBe(false);
   });
 });
