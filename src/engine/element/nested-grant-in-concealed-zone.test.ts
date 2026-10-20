@@ -381,22 +381,24 @@ describe('isVisibleTo matches the seat view on random trees (#961)', () => {
     }
   });
 
+  /** Gives `element` each owner in turn, and checks the seat's view stays `view` while the element stays hidden from it. */
+  function checkOwnerIrrelevant(game: TestGame, element: GameElement, seat: number | null, view: ElementJSON, where: string): void {
+    const real = element.player;
+    for (const owner of [undefined, ...game.all(Player)]) {
+      element.player = owner;
+      // Owning it may show the element itself to the seat, which is the element's own rule.
+      if (!element.isVisibleTo(seat ?? -1)) expect(game.toJSONForPlayer(seat), `${where}, owned by ${owner?.seat}`).toEqual(view);
+    }
+    element.player = real;
+  }
+
   it("never depends on the owner of an element the seat's view does not carry (#1209), across 60 trees", () => {
     for (let seed = 1; seed <= 60; seed++) {
       const { game, elements } = randomTree(seed);
       for (const seat of SEATS) {
         const view = game.toJSONForPlayer(seat);
-        for (const element of elements.filter((e) => !e.isVisibleTo(seat ?? -1))) {
-          const real = element.player;
-          for (const owner of [undefined, ...game.all(Player)]) {
-            element.player = owner;
-            // Owning it may show the element itself to the seat, which is the element's own rule.
-            if (!element.isVisibleTo(seat ?? -1)) {
-              expect(game.toJSONForPlayer(seat), `${element.name} owned by ${owner?.seat} for seat ${seat}, seed ${seed}`).toEqual(view);
-            }
-          }
-          element.player = real;
-        }
+        const hidden = elements.filter((e) => !e.isVisibleTo(seat ?? -1));
+        for (const element of hidden) checkOwnerIrrelevant(game, element, seat, view, `${element.name} for seat ${seat}, seed ${seed}`);
       }
     }
   });
