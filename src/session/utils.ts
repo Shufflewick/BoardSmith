@@ -10,7 +10,7 @@ import { describeCheckpointAbsence } from '../runtime/index.js';
 import { ErrorCode } from '../types/protocol.js';
 import type { GameRunner } from '../runtime/index.js';
 import type { HistoryEntry } from '../engine/action/types.js';
-import type { PlayerGameState, ActionMetadata, PickMetadata, SerializedFlowDebugInfo, SerializedPendingActionState } from './types.js';
+import type { PlayerGameState, ActionMetadata, PickMetadata, SerializedFlowDebugInfo, SerializedPendingActionState, SeatPendingAction } from './types.js';
 import type { ElementJSON } from '../engine/index.js';
 
 // Re-exported for the session barrel
@@ -125,14 +125,25 @@ export function deserializePendingState(s: SerializedPendingActionState | Record
 }
 
 /**
- * A seat's own pending action as its client is shown it: without
- * `branchesBeforePicks`, which names where this action's callbacks moved
- * elements from, face-down cards and the pile included (#1144, #655). It stays
- * in the persisted pending state, which completing the action needs.
+ * A seat's own pending action as its client is shown it: the names of the
+ * picks it holds, never their values, which can be a blind pick's real element
+ * (#1204), and never `branchesBeforePicks`, which names where this action's
+ * callbacks moved elements from (#1144, #655). Both stay in the persisted
+ * pending state, which completing the action needs.
  */
-export function pendingActionForSeat(pending: Record<string, unknown>): SerializedPendingActionState {
-  const { branchesBeforePicks: _persistedOnly, ...shown } = pending as unknown as SerializedPendingActionState;
-  return shown;
+export function pendingActionForSeat(pending: Record<string, unknown>): SeatPendingAction {
+  const s = pending as unknown as SerializedPendingActionState;
+  return {
+    actionName: s.actionName,
+    playerPosition: s.playerPosition,
+    heldPicks: Object.keys(s.collectedArgs),
+    ...(s.repeating && { repeating: { selectionName: s.repeating.selectionName, iterationCount: s.repeating.iterationCount } }),
+    currentSelectionIndex: s.currentSelectionIndex,
+    ...(s.onSelectFired && { onSelectFired: [...s.onSelectFired] }),
+    ...(s.conditionHeld !== undefined && { conditionHeld: s.conditionHeld }),
+    ...(s.picksOnOffer && { picksOnOffer: [...s.picksOnOffer] }),
+    ...(s.stalePicks && { stalePicks: [...s.stalePicks] }),
+  };
 }
 
 /**

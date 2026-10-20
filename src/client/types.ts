@@ -12,7 +12,7 @@ import type { AnimationEvent, PublicFlowState, FollowUpOffer, TutorialStepView }
 // `PlayerGameState`, so borrowing the server's own payload types is what keeps
 // the two from silently drifting apart again — see the fields at the end of
 // PlayerState.
-import type { PlayerGameState, SerializedFlowDebugInfo, SerializedPendingActionState } from '../session/types.js';
+import type { PlayerGameState, SerializedFlowDebugInfo, SeatPendingAction } from '../session/types.js';
 
 /**
  * What a seat is sent of the flow: the engine's `PublicFlowState`, never its
@@ -120,7 +120,7 @@ export interface PlayerState {
    * `undefined` when none is in progress. Mirrors
    * `PlayerGameState.pendingAction` — always the per-seat value, never shared.
    */
-  pendingAction?: SerializedPendingActionState;
+  pendingAction?: SeatPendingAction;
 }
 
 export interface GameState {

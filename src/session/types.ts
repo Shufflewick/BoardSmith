@@ -499,13 +499,30 @@ export interface PlayerGameState {
    * seat must never receive another seat's accumulated pending-action args
    * (T-123-07, the phase's flagged hidden-info leak threat).
    *
-   * Merged into the seat's view by `SnapshotSessionHost.mergeTransientState`. Always
-   * the JSON-safe serialized form (`SerializedPendingActionState`), never the
-   * live engine `PendingActionState` (its `onSelectFired: Set<number>` does
-   * not survive `JSON.stringify` — see `serializePendingActionState()` in
-   * `session/utils.ts`, CR-01).
+   * Merged into the seat's view by `SnapshotSessionHost.mergeTransientState`,
+   * as `pendingActionForSeat()` in `session/utils.ts` shapes it: which picks
+   * are held, never their values (#1204).
    */
-  pendingAction?: SerializedPendingActionState;
+  pendingAction?: SeatPendingAction;
+}
+
+/**
+ * A seat's own pending action as its client is shown it (#1204): which picks
+ * it holds, never what they hold. The engine keeps a held element as the real
+ * element, so a card picked blind would otherwise reach the seat's page whole.
+ */
+export interface SeatPendingAction {
+  actionName: string;
+  playerPosition: number;
+  /** The names of the picks answered so far. */
+  heldPicks: string[];
+  /** The repeating pick still taking answers, and how many it has taken. */
+  repeating?: { selectionName: string; iterationCount: number };
+  currentSelectionIndex: number;
+  onSelectFired?: number[];
+  conditionHeld?: boolean;
+  picksOnOffer?: string[];
+  stalePicks?: string[];
 }
 
 /**
@@ -534,7 +551,7 @@ export interface SerializedPendingActionState {
   conditionHeld?: boolean;
   picksOnOffer?: string[];
   stalePicks?: string[];
-  /** Persisted only: `pendingActionForSeat` leaves it out of what a seat is shown (#1144). */
+  /** Persisted only: a seat is never shown it (#1144). */
   branchesBeforePicks?: Record<number, string | null>;
 }
 
