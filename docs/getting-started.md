@@ -316,14 +316,16 @@ Mutants run one at a time unless `boardsmith.json` sets a budget:
 
 Then `trials` mutants run at once, each in its own Vitest run with `workers / trials`
 test workers (rounded down), and the unmutated run first gets all `workers`.
-Outcomes are reported in the same order as a serial run. Vitest sizes its pools
+Outcomes are reported in the same order as a serial run. Vitest 2 and 3 size their pools
 from `poolOptions` (`maxForks`, `maxThreads`, `minForks`, `minThreads`) before
-the worker count, and runs files of different pools at the same time, so with a
+the worker count, and run files of different pools at the same time, so with a
 budget the mutation check refuses a config that sets those, `poolMatchGlobs`,
 typecheck mode (`typecheck.enabled`), browser mode (`browser.enabled`), a
 different pool per project or a custom pool, rather than run more workers than
-the budget says. A setting can come from the config file or from an environment
-variable Vitest reads, such as `VITEST_MAX_FORKS`.
+the budget says. Vitest 4 runs each project's files with that project's own
+`maxWorkers`, so under Vitest 4 it also refuses a `maxWorkers` over the run's share.
+A setting can come from the config file or from an environment
+variable Vitest reads, such as `VITEST_MAX_FORKS` or `VITEST_MAX_WORKERS`.
 
 Stopping mutation verification with Ctrl+C or SIGTERM stops every Vitest process
 group it started and waits for them to close before removing that run's temporary files.
