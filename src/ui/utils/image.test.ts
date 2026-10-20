@@ -62,6 +62,10 @@ describe('parseImageInfo', () => {
       .toThrow("Sprite image '/cards.png' at x 0, y 0 has \"238\" for width, which must be a number.");
   });
 
+  it('treats coordinates given as undefined as no coordinates, as JSON drops them (#1303)', () => {
+    expect(parseImageInfo({ sprite: '/back.png', x: undefined, y: undefined })).toEqual({ type: 'url', src: '/back.png' });
+  });
+
   it('refuses sizes with no place on the sheet (#1303)', () => {
     expect(() => parseImageInfo({ sprite: '/cards.png', width: 238, height: 333 })).toThrow(/has nothing for x and nothing for y/);
   });

@@ -278,6 +278,8 @@ function searchTimedBuild(definition: CapabilityInputs['definition']): TimedBuil
     if (steps.length > 0) return { timed: { ...build, steps } };
   }
   if (refusal === undefined) return {};
+  // Only when the defaults were built at every seat count does timing one of them end the search.
+  if (builds.length === 0) return { refusal };
   return { refusal: `${refusal} If the game has timed steps, time a step with its default options, which ends the search at the first build.` };
 }
 

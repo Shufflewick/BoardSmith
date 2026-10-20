@@ -55,6 +55,7 @@ import {
   ThrowsAtThreeGame,
   OptionSpriteGame,
   FlowSpriteGame,
+  BrokenFlowSpriteGame,
 } from './sprite-images.fixture.js';
 import { withDeclaredGameOptions } from '../../session/game-option-selection.js';
 import boardsmithSchema from '../lib/boardsmith.schema.json' with { type: 'json' };
@@ -1105,8 +1106,9 @@ describe('validate.ts sprite images (#1021)', () => {
   it('reports a build that throws and keeps every problem found at the others (#1303)', () => {
     const result = checkSpriteImages(definition(ThrowsAtThreeGame, 2, 4));
     expect(result.passed).toBe(false);
+    // Found at every table that built, so it is not marked as found at some only.
     expect(result.details).toEqual([
-      expect.stringMatching(/^Card '2H', \$image \(only at 2 players with the default game options; at 4 players with the default game options\): /),
+      expect.stringMatching(/^Card '2H', \$image: /),
       'Building this game at 3 players with the default game options threw: three players is not a table this game knows',
     ]);
   });
@@ -1115,6 +1117,14 @@ describe('validate.ts sprite images (#1021)', () => {
     const jokers = { id: 'jokers', type: 'boolean', label: 'Jokers', default: false };
     const result = checkSpriteImages(withDeclaredGameOptions(definition(OptionSpriteGame), [jokers]));
     expect(result.details).toEqual([expect.stringMatching(/^Card 'joker', \$image \(only at 2 players with game options jokers: true\): /)]);
+  });
+
+  it('says the flow would not start, and still checks what the constructor built (#1303)', () => {
+    const result = checkSpriteImages(definition(BrokenFlowSpriteGame));
+    expect(result.details).toEqual([
+      expect.stringMatching(/^Card 'built', \$image: /),
+      expect.stringMatching(/^Starting this game's flow at 2 players with the default game options threw: /),
+    ]);
   });
 
   it('starts the flow, so elements its opening creates are checked too (#1303)', () => {

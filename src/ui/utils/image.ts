@@ -74,7 +74,8 @@ export function parseImageInfo(image: unknown): ImageInfo | null {
   }
 
   // Just sprite path (no coordinates or sizes = use as URL)
-  if (!['x', 'y', ...SPRITE_SIZES].some((key) => key in spriteObj)) return { type: 'url', src: sprite };
+  // A key set to undefined is no key: JSON, which carries the view, drops it.
+  if (['x', 'y', ...SPRITE_SIZES].every((key) => spriteObj[key] === undefined)) return { type: 'url', src: sprite };
 
   const { x, y } = spriteObj;
   if (!isPixels(x) || !isPixels(y)) {

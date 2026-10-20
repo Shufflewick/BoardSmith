@@ -94,3 +94,12 @@ export class FlowSpriteGame extends Game<FlowSpriteGame, Player> {
     this.setFlow({ root: sequence(execute(() => { deck.create(Card, 'dealt', { $image: NO_SHEET_SIZE }); })) });
   }
 }
+
+/** Builds a card with a bad sprite, then a flow whose opening throws (#1303). */
+export class BrokenFlowSpriteGame extends Game<BrokenFlowSpriteGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.create(Deck, 'deck').create(Card, 'built', { $image: NO_SHEET_SIZE });
+    this.setFlow({ root: sequence(execute(() => { throw new Error('the opening is broken'); })) });
+  }
+}

@@ -320,4 +320,9 @@ describe('a table seat range must hold a seat count (#1303)', () => {
     const [message] = contradictions('table', { ...tableDefinition, minPlayers: 2, maxPlayers: 1000 });
     expect(message).toMatch(/^This game would have to be built 999 times to find every step that declares timeLimitMs/);
   });
+
+  it('does not tell a game too wide to build at all to time a step with its default options, which builds nothing either', () => {
+    const [message] = contradictions('table', { ...timedDefinition, minPlayers: 2, maxPlayers: 1000 });
+    expect(message).not.toMatch(/time a step with its default options/);
+  });
 });

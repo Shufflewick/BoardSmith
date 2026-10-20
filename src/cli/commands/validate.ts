@@ -1468,16 +1468,19 @@ export function checkSpriteImages(gameDefinition: GameDefinition): ValidationRes
   if (refusal !== undefined) return { name, passed: false, message: `Sprite images were not checked: ${refusal}` };
   const problems = new Map<string, SpriteProblem>();
   const failedBuilds: string[] = [];
+  let built = 0;
   for (const build of builds) {
     const game = startedGame(gameDefinition, build, failedBuilds);
-    if (game !== undefined) addSpriteProblems(game, build, problems);
+    if (game === undefined) continue;
+    built += 1;
+    addSpriteProblems(game, build, problems);
   }
   if (problems.size === 0 && failedBuilds.length === 0) return { name, passed: true, message: 'Every sprite has its size and its sheet size.' };
   const message = [
     problems.size > 0 ? `${problems.size} sprite image(s) are missing a size, so they would draw as empty elements.` : '',
-    failedBuilds.length > 0 ? `${failedBuilds.length} table(s) could not be built, so their sprites were not checked.` : '',
+    failedBuilds.length > 0 ? `${failedBuilds.length} table(s) could not be built or started, so their sprites were not all checked.` : '',
   ].filter(Boolean).join(' ');
-  return { name, passed: false, message, details: [...[...problems.values()].map((p) => describeSpriteProblem(p, builds.length)), ...failedBuilds] };
+  return { name, passed: false, message, details: [...[...problems.values()].map((p) => describeSpriteProblem(p, built)), ...failedBuilds] };
 }
 
 /** One bad image, and the tables it was found at. */
@@ -1505,18 +1508,26 @@ function describeSpriteProblem({ image, reason, builds }: SpriteProblem, tables:
   return `${image}${only}: ${reason}`;
 }
 
-/** The game built as `build` with its flow started, or undefined after adding why it could not be to `failures`. */
+/**
+ * The game built as `build`, with its flow started when it has one, since the flow's opening
+ * creates elements too (#1303). Why it could not be built, or started, is added to `failures`; a
+ * game whose flow would not start is still returned, so what its constructor built is checked.
+ */
 function startedGame(gameDefinition: GameDefinition, build: TableBuild, failures: string[]) {
   const options = selectGameOptions(declaredGameOptionsOf(gameDefinition), build.choices);
+  let game;
   try {
-    const game = constructGame(gameDefinition.gameClass, { ...options, playerCount: build.playerCount, seed: 'sprite-images' });
-    // The flow's opening creates elements too (#1303).
-    if (game.getFlow() !== undefined) game.startFlow();
-    return game;
+    game = constructGame(gameDefinition.gameClass, { ...options, playerCount: build.playerCount, seed: 'sprite-images' });
   } catch (error) {
     failures.push(`Building this game ${describeBuild(build)} threw: ${(error as Error).message}`);
     return undefined;
   }
+  try {
+    if (game.getFlow() !== undefined) game.startFlow();
+  } catch (error) {
+    failures.push(`Starting this game's flow ${describeBuild(build)} threw: ${(error as Error).message}`);
+  }
+  return game;
 }
 
 /** Each of this element's `$image` and `$images` that `parseImageInfo` refuses, named and with its reason. */
@@ -1551,7 +1562,17 @@ export async function validateSpriteImages(rules: ProjectRules): Promise<Validat
       message: `Sprite images were not checked: your rules could not be loaded: ${(error as Error).message.replace(/\.$/, '')}. Fix that and run boardsmith validate again.`,
     };
   }
-  const result = checkSpriteImages(gameDefinition);
+  let result: ValidationResult;
+  try {
+    result = checkSpriteImages(gameDefinition);
+  } catch (error) {
+    spinner.fail('Sprite images could not be checked');
+    return {
+      name: 'Sprite images',
+      passed: false,
+      message: `Sprite images were not checked: reading the built game's elements threw: ${(error as Error).message.replace(/\.$/, '')}. Fix that and run boardsmith validate again.`,
+    };
+  }
   if (result.passed) spinner.succeed('Sprite images OK');
   else spinner.fail('Sprite images are not all usable');
   return result;
