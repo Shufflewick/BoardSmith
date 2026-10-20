@@ -677,6 +677,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * (`partiallyApplied`): an `execute()` that refuses cleanly changed nothing,
    * as `performAction` takes it. `undone` says the game is as before the op;
    * the caller then puts the seat's pending action back as it was.
+   * @internal The pick-by-pick state machine's runner half: the session's PendingActionManager is its only caller (#1231).
    */
   runPickOp<R extends { success: boolean; error?: string; partiallyApplied?: boolean }>(run: () => R): { result: R; undone: boolean } {
     const recorded = this.actionCount;
@@ -945,6 +946,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * after the action is refused, as in `performAction`, rather than thrown (#1120).
    * A pick that is no longer on offer, or the action's `validate`, refuses it
    * before anything runs: the step is undone and `onCancel` does not run (#1169).
+   * @internal The pick-by-pick state machine's runner half: the session's PendingActionManager is its only caller (#1231).
    */
   executeCollectedAction(pendingState: PendingActionState, playerPosition: number): ActionExecutionResult {
     const action = this.game.getAction(pendingState.actionName);
@@ -1104,6 +1106,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * `executePendingAction` to re-check (#767). Only another action can have
    * taken it in between, so a pick the action's own `onSelect` took off the
    * offer is never marked.
+   * @internal The pick-by-pick state machine's runner half: the session's PendingActionManager is its only caller (#1231).
    */
   markStalePicks(pending: PendingActionState, seat: number): void {
     if (!pending.picksOnOffer) return;
@@ -1194,6 +1197,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * was published with before any client pick: a follow-up runs with those,
    * and a pick they answer is passed over, whatever the client sends for it.
    * Every pending action is started through this.
+   * @internal The pick-by-pick state machine's runner half: the session's PendingActionManager is its only caller (#1231).
    */
   bindFollowUpArgs(pendingState: PendingActionState, seat: number): void {
     Object.assign(pendingState.collectedArgs, this.followUpArgsFor(pendingState.actionName, seat));
@@ -1205,6 +1209,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * is the pick the action is at, make it, and say whether the action is now
    * complete. It does not run the action: the caller does, with
    * `executeCollectedAction`.
+   * @internal The pick-by-pick state machine's runner half: the session's PendingActionManager is its only caller (#1231).
    */
   takePick(pendingState: PendingActionState, playerPosition: number, selectionName: string, value: unknown) {
     const action = this.game.getAction(pendingState.actionName);

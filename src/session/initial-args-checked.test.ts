@@ -99,7 +99,7 @@ function shop() {
   runner.start();
   const game = runner.game as ShopGame;
   const gemId = (name: string) => game.first(Gem, name)!.id;
-  return { runner, game, gemId, manager: new PendingActionManager(runner, 1) };
+  return { runner, game, gemId, manager: new PendingActionManager(runner) };
 }
 
 describe('initialArgs are checked as picks (#658)', () => {

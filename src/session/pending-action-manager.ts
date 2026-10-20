@@ -66,12 +66,10 @@ export interface PickStepResult {
  */
 export class PendingActionManager<G extends Game = Game> {
   readonly #runner: GameRunner<G>;
-  readonly #playerCount: number;
   readonly #pendingActions: Map<number, PendingActionState> = new Map();
 
-  constructor(runner: GameRunner<G>, playerCount: number) {
+  constructor(runner: GameRunner<G>) {
     this.#runner = runner;
-    this.#playerCount = playerCount;
   }
 
   /**
@@ -84,7 +82,7 @@ export class PendingActionManager<G extends Game = Game> {
     errorCode?: ErrorCode;
     pendingState?: PendingActionState;
   } {
-    const found = actionForSeat(this.#runner.game, this.#playerCount, playerPosition, actionName);
+    const found = actionForSeat(this.#runner.game, this.#runner.game.players.length, playerPosition, actionName);
     if ('refusal' in found) return found.refusal;
 
     const executor = this.#runner.game.getActionExecutor();

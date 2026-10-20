@@ -83,7 +83,7 @@ type FedPick = { error?: string; applied: boolean; rulesError?: boolean };
  * move listing tries every value through these hooks, so a log per refusal
  * floods it (#31, #1120). `where` names the hook in the log.
  */
-function gameCodeThrew(actionName: string, where: string, error: unknown): ActionResult {
+export function gameCodeThrew(actionName: string, where: string, error: unknown): ActionResult {
   // #31: a game saying "I cannot resolve this from the information state I
   // have" is an expected answer inside a bot's redacted sandbox, not a crash.
   // Logging it printed a stack per rollout — measured at 198 MB in 15 seconds
@@ -2248,7 +2248,7 @@ export class ActionExecutor {
     // If it's a repeating selection, delegate to processRepeatingStep
     if (this.isRepeatingSelection(selection)) {
       const result = this.processRepeatingStep(action, player, pendingState, value);
-      return { success: !result.error, error: result.error, rulesError: result.rulesError };
+      return { success: !result.error, error: result.error, rulesError: result.rulesError, partiallyApplied: result.partiallyApplied };
     }
 
     // Skipping an optional selection: a null/undefined value means "no choice".

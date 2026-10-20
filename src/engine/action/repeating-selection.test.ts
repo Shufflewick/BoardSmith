@@ -92,7 +92,7 @@ describe('a repeating element selection (#325)', () => {
   it('step by step: execute receives the picked ELEMENTS, not their ids', async () => {
     const runner = gemRunner();
     const id = (name: string) => runner.game.heap.first(Gem, name)!.id;
-    const picks = new PendingActionManager(runner, 1);
+    const picks = new PendingActionManager(runner);
     picks.startPendingAction('take', 1);
     expect((await picks.processSelectionStep(1, 'gems', id('opal'))).success).toBe(true);
     const done = await picks.processSelectionStep(1, 'gems', id('ruby'));
