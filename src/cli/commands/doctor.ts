@@ -375,19 +375,22 @@ async function fixAll(projectDir: string, findings: DoctorFinding[]): Promise<vo
   }
 }
 
+/** Write the current hook, and refuse loudly when it could not be written or git would still skip it. */
+async function fixIngestHook(projectDir: string, path: string): Promise<void> {
+  const installed = await installIngestHook(projectDir);
+  if (installed.result === 'installed') return;
+  if (installed.result === 'skipped-not-executable') {
+    throw new Error(
+      `Wrote ${path}, but its filesystem does not keep the execute bit, so git still skips it. ` +
+        'Move the project to a filesystem that keeps file permissions, or run boardsmith ingest-gaps yourself after transcription.',
+    );
+  }
+  throw new Error(`Could not write ${path}. Check that you can write to its folder, then run boardsmith doctor --fix again.`);
+}
+
 /** Resolve one finding `--fix` is allowed to resolve. */
 async function fix(projectDir: string, f: DoctorFinding): Promise<void> {
-  if (f.kind === 'ingest-hook-not-current') {
-    const installed = await installIngestHook(projectDir);
-    if (installed.result === 'installed') return;
-    if (installed.result === 'skipped-not-executable') {
-      throw new Error(
-        `Wrote ${f.from}, but its filesystem does not keep the execute bit, so git still skips it. ` +
-          'Move the project to a filesystem that keeps file permissions, or run boardsmith ingest-gaps yourself after transcription.',
-      );
-    }
-    throw new Error(`Could not write ${f.from}. Check that you can write to its folder, then run boardsmith doctor --fix again.`);
-  }
+  if (f.kind === 'ingest-hook-not-current') return fixIngestHook(projectDir, f.from);
   if (f.kind === 'test-config-missing' || f.kind === 'test-run-collects-worktrees') {
     const { built, outdated } = await sortConfigs(projectDir);
     for (const config of outdated) await fs.rm(join(projectDir, config));
