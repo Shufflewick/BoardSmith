@@ -99,9 +99,9 @@ in every game.
   game and plays a turn, because a type check cannot see a `loop()` that throws
   when it is built. A board is marked `<!-- typecheck: board -->` instead, and
   `src/contract/aspect-boards-typecheck.test.ts` compiles it as a game's
-  `.vue` board (#570). A block that shows its imports (a ```ts block whose
-  first code line is an `import`, or a ```vue block that opens with
-  `<script>`) is a file, so it must be marked (or carry the
+  `.vue` board (#570). A block that shows its imports (a ```ts block with
+  an `import` line, or a ```vue block with a `<script>` line, anywhere in
+  it) is a file, so it must be marked (or carry the
   `<!-- doc-test: file <path> -->` marker of `docs/balance-simulator.test.ts`,
   which compiles and runs that page):
   `src/contract/doc-typecheck-blocks.test-helper.test.ts` fails on one that is

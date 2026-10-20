@@ -59,6 +59,15 @@ describe('every doc block that shows its imports is compiled (#1050)', () => {
     expect(unmarkedFileBlocks(text)).toEqual([2, 5, 10, 14]);
   });
 
+  it('reports a block whose import or script follows other lines: template, indented //, multi-line comments', () => {
+    const text =
+      fence('vue', '<template>\n  <GameShell />\n</template>\n\n<script setup lang="ts">\n</script>\n') +
+      fence('ts', "  // src/rules/game.ts\nimport { Game } from 'boardsmith';\n") +
+      fence('ts', "/*\n * src/rules/game.ts\n */\nimport { Game } from 'boardsmith';\n") +
+      fence('vue', '<!--\n  src/ui/App.vue\n-->\n<script setup lang="ts">\n</script>\n');
+    expect(unmarkedFileBlocks(text)).toEqual([1, 9, 13, 19]);
+  });
+
   it('passes a marked block, a fragment without imports, a template-only vue block and other languages', () => {
     const text =
       "<!-- typecheck: game src/a.ts -->\n" +

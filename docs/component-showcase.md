@@ -51,27 +51,41 @@ Auto-generated action UI from game metadata.
 
 ## Die3D
 
-3D dice with physics-based rolling animation.
+3D dice with physics-based rolling animation. `Die3D` has its own entry point,
+`boardsmith/ui/dice`, so only a game that rolls dice installs `three`.
 
+<!-- typecheck: board -->
 ```vue
 <template>
   <Die3D
     v-for="die in dice"
     :key="die.id"
     :die-id="die.id"
-    :value="die.attributes.value"
-    :roll-count="die.attributes.rollCount"
-    :sides="die.attributes.sides"
+    :value="die.attributes?.value ?? 1"
+    :roll-count="die.attributes?.rollCount ?? 0"
+    :sides="die.attributes?.sides ?? 6"
     :size="60"
   />
 </template>
 
-<script setup>
-// Dice come from gameView in a real game
-const dice = computed(() => {
-  const pool = props.gameView?.children?.find(c => c.className === 'DicePool');
-  return pool?.children?.filter(c => c.className === 'Die') || [];
-});
+<script setup lang="ts">
+import { computed } from 'vue';
+import type { DieSides } from 'boardsmith';
+import { findElements, type BaseElementAttributes, type GameViewElement, type TableBoardProps } from 'boardsmith/ui';
+import { Die3D } from 'boardsmith/ui/dice';
+
+const props = defineProps<TableBoardProps>();
+
+// The attributes a Die element carries in the game view
+interface DieAttributes extends BaseElementAttributes {
+  sides?: DieSides;
+  value?: number;
+  rollCount?: number;
+}
+
+const dice = computed(() =>
+  props.gameView ? (findElements(props.gameView, { className: 'Die' }) as GameViewElement<DieAttributes>[]) : [],
+);
 </script>
 ```
 

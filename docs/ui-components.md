@@ -10,6 +10,10 @@ The main wrapper component that provides the complete game UI structure: player 
 
 The board itself is not a slot. `GameShell` renders the default UI from the game's registry in `src/ui/uis.ts` (see [Dev-time UI switcher](#dev-time-ui-switcher)) and hands it the props listed under [Board props](#board-props).
 
+A game's `src/ui/App.vue` renders it, importing `GameShell` from `boardsmith/ui`
+and `uis` from `./uis.js`. Its template, with two of the shell's slots filled
+(`portraitFor` stands for the game's own helper):
+
 ```vue
 <template>
   <GameShell
@@ -42,11 +46,6 @@ The board itself is not a slot. `GameShell` renders the default UI from the game
     </template>
   </GameShell>
 </template>
-
-<script setup lang="ts">
-import { GameShell } from 'boardsmith/ui';
-import uis from './uis.js';
-</script>
 ```
 
 #### Players-panel order
@@ -285,17 +284,16 @@ should do the same.
 
 Automatic UI generation from game state. A production-ready UI for any game — ideal for simple games or as a starting point before investing in a custom UI.
 
-```vue
-<template>
-  <AutoUI
-    :game-view="gameView"
-    :player-seat="playerSeat"
-  />
-</template>
+`boardsmith dev` always offers it as `Auto` in the UI switcher. To ship it,
+make it the game's default UI in `src/ui/uis.ts`:
 
-<script setup lang="ts">
-import { AutoUI } from 'boardsmith/ui';
-</script>
+<!-- typecheck: game src/ui/uis.ts -->
+```ts
+import { defaultUI, defineGameUIs } from 'boardsmith/ui';
+// AutoUI has its own entry point, so a game with a custom UI never ships it
+import { AutoUI } from 'boardsmith/ui/auto-ui';
+
+export default defineGameUIs({ Auto: defaultUI(AutoUI) });
 ```
 
 The auto-generated UI includes:
@@ -2010,36 +2008,31 @@ The `actionController` provides error state that your UI should handle gracefull
 
 ### Displaying Action Errors
 
+<!-- typecheck: board -->
 ```vue
 <template>
   <div class="game-board">
     <!-- Error toast/banner -->
     <Transition name="fade">
-      <div v-if="actionController.lastError.value" class="error-banner">
+      <div v-if="actionController.lastError.value" class="error-banner" role="alert">
         {{ actionController.lastError.value }}
-        <button @click="dismissError">×</button>
+        <button aria-label="Dismiss" @click="dismissError">×</button>
       </div>
     </Transition>
 
     <!-- Game content -->
-    <GameTable ... />
   </div>
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{
-  actionController: UseActionControllerReturn;
-}>();
+import type { TableBoardProps } from 'boardsmith/ui';
 
-// Error auto-dismisses after 5 seconds
-watch(() => props.actionController.lastError.value, (error) => {
-  if (error) {
-    setTimeout(() => {
-      // Error clears automatically on next successful action
-      // Or clear manually if your UI needs it
-    }, 5000);
-  }
-});
+const props = defineProps<TableBoardProps>();
+
+// The next action clears the error itself; this lets the player hide it sooner.
+function dismissError() {
+  props.actionController.lastError.value = null;
+}
 </script>
 
 <style>
@@ -2149,6 +2142,7 @@ async function handleAction(name: string, args: Record<string, unknown>) {
 
 Check availability before showing interactive elements:
 
+<!-- typecheck: board -->
 ```vue
 <template>
   <!-- Only show clickable cards that are valid selections -->
@@ -2162,15 +2156,24 @@ Check availability before showing interactive elements:
     }"
     @click="isCardPlayable(card) && playCard(card)"
   >
-    {{ card.rank }}{{ card.suit }}
+    {{ card.attributes?.rank }}{{ card.attributes?.suit }}
   </div>
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{
-  actionController: UseActionControllerReturn;
-  availableActions: string[];
-}>();
+import { computed } from 'vue';
+import { findElements, type BaseElementAttributes, type GameViewElement, type TableBoardProps } from 'boardsmith/ui';
+
+const props = defineProps<TableBoardProps>();
+
+interface CardAttributes extends BaseElementAttributes {
+  rank?: string;
+  suit?: string;
+}
+
+const myHand = computed(() =>
+  props.gameView ? (findElements(props.gameView, { className: 'Card' }) as GameViewElement<CardAttributes>[]) : [],
+);
 
 // Check if card can be played
 function isCardPlayable(card: GameViewElement): boolean {
@@ -2184,6 +2187,14 @@ function isCardPlayable(card: GameViewElement): boolean {
   }
 
   return true;
+}
+
+function playCard(card: GameViewElement) {
+  if (props.actionController.currentPick.value?.name === 'card') {
+    void props.actionController.fill('card', card.id);
+  } else {
+    void props.actionController.start('play', { args: { card: card.id } });
+  }
 }
 </script>
 ```

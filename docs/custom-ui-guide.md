@@ -251,12 +251,13 @@ After calling `start()`, BoardSmith:
 6. Auto-completes the action when selection is made
 
 **In your board component**, highlight selectable elements:
+<!-- typecheck: board -->
 ```vue
 <template>
   <div
     v-for="sector in sectors"
     :key="sector.id"
-    :class="{ selectable: boardInteraction?.isSelectableElement(sector) }"
+    :class="{ selectable: boardInteraction.isSelectableElement(sector) }"
     @click="onSectorClick(sector)"
   >
     {{ sector.name }}
@@ -264,12 +265,16 @@ After calling `start()`, BoardSmith:
 </template>
 
 <script setup lang="ts">
-import { useBoardInteraction } from 'boardsmith/ui';
+import { computed } from 'vue';
+import { findElements, useBoardInteraction, type GameViewElement, type TableBoardProps } from 'boardsmith/ui';
 
+const props = defineProps<TableBoardProps>();
 const boardInteraction = useBoardInteraction();
 
-function onSectorClick(sector: { id: number }) {
-  if (boardInteraction?.isSelectableElement(sector)) {
+const sectors = computed(() => (props.gameView ? findElements(props.gameView, { className: 'Sector' }) : []));
+
+function onSectorClick(sector: GameViewElement) {
+  if (boardInteraction.isSelectableElement(sector)) {
     boardInteraction.triggerElementSelect(sector);
   }
 }
@@ -335,6 +340,7 @@ const selectableCards = computed(() => {
 
 ### Highlighting Selectable Elements
 
+<!-- typecheck: board -->
 ```vue
 <template>
   <div
@@ -347,11 +353,25 @@ const selectableCards = computed(() => {
     }"
     @click="onCardClick(card)"
   >
-    {{ card.rank }}{{ card.suit }}
+    {{ card.attributes?.rank }}{{ card.attributes?.suit }}
   </div>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
+import { findElements, type BaseElementAttributes, type GameViewElement, type TableBoardProps } from 'boardsmith/ui';
+
+const props = defineProps<TableBoardProps>();
+
+interface CardAttributes extends BaseElementAttributes {
+  rank?: string;
+  suit?: string;
+}
+
+const myCards = computed(() =>
+  props.gameView ? (findElements(props.gameView, { className: 'Card' }) as GameViewElement<CardAttributes>[]) : [],
+);
+
 function isSelectable(cardId: number): boolean {
   return props.actionController.validElements.value
     .some(ve => ve.id === cardId);
@@ -513,6 +533,7 @@ boardInteraction.currentPickName // 'destination' | null
 
 ### Complete Board Integration Example
 
+<!-- typecheck: board -->
 ```vue
 <template>
   <div class="board">
@@ -521,13 +542,11 @@ boardInteraction.currentPickName // 'destination' | null
       :key="piece.id"
       class="piece"
       :class="{
-        highlighted: boardInteraction?.isHighlighted(piece),
-        selected: boardInteraction?.isSelected(piece),
-        selectable: boardInteraction?.isSelectableElement(piece),
+        highlighted: boardInteraction.isHighlighted(piece),
+        selected: boardInteraction.isSelected(piece),
+        selectable: boardInteraction.isSelectableElement(piece),
       }"
       @click="onPieceClick(piece)"
-      @mouseenter="onPieceHover(piece)"
-      @mouseleave="onPieceLeave"
     >
       {{ piece.name }}
     </div>
@@ -535,15 +554,18 @@ boardInteraction.currentPickName // 'destination' | null
 </template>
 
 <script setup lang="ts">
-import { useBoardInteraction, type TableBoardProps } from 'boardsmith/ui';
+import { computed } from 'vue';
+import { findElements, useBoardInteraction, type GameViewElement, type TableBoardProps } from 'boardsmith/ui';
 
 const props = defineProps<TableBoardProps>();
 
 const boardInteraction = useBoardInteraction();
 
-function onPieceClick(piece: any) {
+const pieces = computed(() => (props.gameView ? findElements(props.gameView, { className: 'Piece' }) : []));
+
+function onPieceClick(piece: GameViewElement) {
   // If in wizard mode and piece is selectable, trigger selection
-  if (boardInteraction?.isSelectableElement(piece)) {
+  if (boardInteraction.isSelectableElement(piece)) {
     boardInteraction.triggerElementSelect(piece);
     return;
   }
@@ -564,6 +586,7 @@ the DOM. Use `anchorAttrs(ref, type)` (from `boardsmith/ui`) rather than
 hand-writing `data-bs-el-id` yourself — it's the single source for every
 `data-bs-el-*` attribute name:
 
+<!-- typecheck: board -->
 ```vue
 <template>
   <div v-for="piece in pieces" :key="piece.id" v-bind="anchorAttrs({ id: piece.id }, 'piece')">
@@ -572,7 +595,12 @@ hand-writing `data-bs-el-id` yourself — it's the single source for every
 </template>
 
 <script setup lang="ts">
-import { anchorAttrs } from 'boardsmith/ui';
+import { computed } from 'vue';
+import { anchorAttrs, findElements, type TableBoardProps } from 'boardsmith/ui';
+
+const props = defineProps<TableBoardProps>();
+
+const pieces = computed(() => (props.gameView ? findElements(props.gameView, { className: 'Piece' }) : []));
 </script>
 ```
 
