@@ -331,9 +331,9 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * JSON in both directions and never learns that the constraint exists.
  */
 export function readPersistCommit(commit: PersistCommit): PersistCommitResult {
-  const publicRaw = rawEntries(commit.public, PERSIST_KEY);
+  const publicRaw = channelEntries(commit.public, PERSIST_KEY);
   if (typeof publicRaw === "string") return { kind: "invalid", reason: publicRaw };
-  const privateRaw = rawEntries(commit.private, PERSIST_PRIVATE_KEY);
+  const privateRaw = channelEntries(commit.private, PERSIST_PRIVATE_KEY);
   if (typeof privateRaw === "string") return { kind: "invalid", reason: privateRaw };
 
   const count = publicRaw.length + privateRaw.length;
@@ -391,7 +391,7 @@ export function readPersistCommit(commit: PersistCommit): PersistCommitResult {
  * The entry cap and the byte ceiling are NOT applied here: they bound the
  * whole commit, and the commit carries both channels.
  */
-function rawEntries(raw: unknown, attributeName: string): unknown[] | string {
+function channelEntries(raw: unknown, attributeName: string): unknown[] | string {
   if (raw === undefined || raw === null) return [];
   if (!isPlainObject(raw)) {
     return `the game's "${attributeName}" attribute must be an object of the form { entries: [...] }`;
