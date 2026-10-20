@@ -242,12 +242,7 @@ export default defineGameUIs({ MyBoard: defaultUI(MyBoard) });
 ```
 
 ```vue
-<!-- src/ui/App.vue -->
-<script setup lang="ts">
-import { GameShell } from 'boardsmith/ui';
-import uis from './uis.js';
-</script>
-
+<!-- src/ui/App.vue, whose <script setup> imports GameShell from 'boardsmith/ui' and uis from './uis.js' -->
 <template>
   <GameShell :uis="uis" />
 </template>

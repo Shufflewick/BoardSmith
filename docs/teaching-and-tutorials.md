@@ -591,11 +591,7 @@ Both games anchor tutorial annotations to game elements, but via different ref f
 **Go Fish** uses a custom `GameTable.vue`. It must emit `anchorAttrs` explicitly. The go-fish custom UI spreads `anchorAttrs` on both individual cards and the rank card-group (the clickable group the learner interacts with to select a rank):
 
 ```vue
-<!-- ~/BoardSmithGames/go-fish/src/ui/components/GameTable.vue -->
-<script setup lang="ts">
-import { anchorAttrs } from 'boardsmith/ui';
-</script>
-
+<!-- ~/BoardSmithGames/go-fish/src/ui/components/GameTable.vue, which imports anchorAttrs from 'boardsmith/ui' -->
 <template>
   <!-- rank card-group: hint ring anchors here via { name: rank } -->
   <div

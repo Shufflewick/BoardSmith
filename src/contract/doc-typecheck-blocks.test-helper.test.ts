@@ -54,8 +54,9 @@ describe('every doc block that shows its imports is compiled (#1050)', () => {
       'Intro\n' +
       fence('typescript', "import { Game } from 'boardsmith';\n") +
       fence('ts', "// src/rules/game.ts\n\nimport { Game } from 'boardsmith';\n") +
-      fence('vue', '<script setup lang="ts">\n</script>\n');
-    expect(unmarkedFileBlocks(text)).toEqual([2, 5, 10]);
+      fence('vue', '<script setup lang="ts">\n</script>\n') +
+      fence('vue', '<!-- src/ui/App.vue -->\n<script setup lang="ts">\n</script>\n');
+    expect(unmarkedFileBlocks(text)).toEqual([2, 5, 10, 14]);
   });
 
   it('passes a marked block, a fragment without imports, a template-only vue block and other languages', () => {

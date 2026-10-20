@@ -990,9 +990,7 @@ Or use your own class names alongside the library classes:
 #### Migration from Verbose Pattern
 
 **Before (verbose):**
-```vue
-<!-- The old pattern, shown for comparison only -->
-<script setup>
+```ts
 const { dragProps, dropProps, isDragging, isDropTarget } = useDragDrop();
 
 const isDragDropCardSelection = computed(() =>
@@ -1001,8 +999,9 @@ const isDragDropCardSelection = computed(() =>
 
 function isCardDragging(cardId) { return isDragging({ id: cardId }); }
 function isZoneDropTarget(zoneName) { return isDropTarget({ name: zoneName }); }
-</script>
+```
 
+```vue
 <template>
   <div
     v-bind="isDragDropCardSelection && isSelectable(card.id) ? dragProps({ id: card.id }) : {}"

@@ -66,8 +66,9 @@ export function parseMarkedBlocks(file: string, text: string, kind: string): Mar
 /**
  * The 1-based line of each opening fence in `text` whose block is a whole file
  * but nothing compiles: a ts block whose first code line (after blank and `//`
- * lines) is an `import`, or a vue block that opens with its `<script>`, with
- * neither a `typecheck:` nor a `doc-test: file` marker above it (#1050).
+ * lines) is an `import`, or a vue block that opens with its `<script>` (after
+ * blank and whole-line `<!-- -->` lines), with neither a `typecheck:` nor a
+ * `doc-test: file` marker above it (#1050).
  */
 export function unmarkedFileBlocks(text: string): number[] {
   const lines = text.split(/\r?\n/);
@@ -93,8 +94,11 @@ const FILE_START: Record<string, RegExp> = { ts: /^import\b/, typescript: /^impo
 // A `doc-test: file` block is compiled by the doc's own test (docs/balance-simulator.test.ts, #556).
 const COMPILED_MARKER = /^<!-- (typecheck:|doc-test: file )/;
 
+// A whole-line `<!-- ... -->` is how a vue block names its file, so it is skipped like `//`.
+const COMMENT_LINE = /^(\/\/|\s*<!--.*-->\s*$)/;
+
 function firstCodeLine(block: readonly string[]): string {
-  return block.find((line) => line.trim() !== '' && !line.startsWith('//')) ?? '';
+  return block.find((line) => line.trim() !== '' && !COMMENT_LINE.test(line)) ?? '';
 }
 
 /** The folders whose `*.md` files may mark blocks, relative to the repo root. */
