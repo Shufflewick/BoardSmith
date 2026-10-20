@@ -6,7 +6,7 @@
     "src/ui/components/auto-ui/renderers/DieRenderer.vue:46-78|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:25-57",
     "src/ui/components/auto-ui/renderers/DieRenderer.vue:46-64|src/ui/components/auto-ui/renderers/PieceRenderer.vue:40-60|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:25-43",
     "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:97-111|src/ui/composables/useHexGrid.ts:298-313",
-    "src/ui/components/auto-ui/renderers/CardRenderer.vue:261-274|src/ui/components/auto-ui/renderers/HandRenderer.vue:214-224|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:65-75",
+    "src/ui/components/auto-ui/renderers/CardRenderer.vue:264-277|src/ui/components/auto-ui/renderers/HandRenderer.vue:214-224|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:65-75",
     "src/ui/components/auto-ui/renderers/DeckRenderer.vue:62-76|src/ui/components/auto-ui/renderers/HandRenderer.vue:73-87|src/ui/components/auto-ui/renderers/PieceRenderer.vue:53-67",
     "src/ui/components/auto-ui/renderers/HandRenderer.vue:498-504|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:291-297",
     "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue:123-141|src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:226-244",
@@ -25,8 +25,8 @@
     "src/cli/commands/verify-classify.ts:1568-1575|src/cli/commands/verify-classify.ts:783-790",
     "src/ui/composables/useFLIP.ts:331-339|src/ui/composables/useFLIP.ts:477-484",
     "src/ui/components/auto-ui/renderers/DieRenderer.vue:70-87|src/ui/components/auto-ui/renderers/PieceRenderer.vue:64-77",
-    "src/engine/element/game.ts:3755-3761|src/engine/element/game.ts:3785-3791",
-    "src/engine/element/game.ts:3827-3831|src/engine/element/game.ts:3859-3863",
+    "src/engine/element/game.ts:3779-3785|src/engine/element/game.ts:3809-3815",
+    "src/engine/element/game.ts:3851-3855|src/engine/element/game.ts:3883-3887",
     "src/ui/components/auto-ui/renderers/CardRenderer.vue:42-58|src/ui/components/auto-ui/renderers/HandRenderer.vue:35-53"
   ],
   "clone_fingerprints": [

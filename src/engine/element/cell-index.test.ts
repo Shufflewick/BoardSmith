@@ -220,12 +220,12 @@ function restoredFresh(game: CellGame): CellGame {
   return fresh;
 }
 
-/** Both grids, each with its cell class and coordinate names. */
+/** The grids in the tree (a world may have evicted one), each with its cell class and coordinate names. */
 function gridsOf(game: CellGame) {
-  return [
+  return ([
     { grid: game.board, cellClass: Square, keys: ['file', 'rank'] },
     { grid: game.hexes, cellClass: Hex, keys: ['q', 'r'] },
-  ] as const;
+  ] as const).filter(({ grid }) => game.getElementById(grid.id) === grid);
 }
 
 /** Every coordinate query on both grids answers as a search of the grid does. */
@@ -247,13 +247,13 @@ function expectLookupsMatchSearch(game: CellGame): void {
 function operations(game: CellGame, step: number, random: () => number) {
   const pick = <T>(items: readonly T[]): T => items[Math.floor(random() * items.length)];
   const coordinate = () => Math.floor(random() * 6);
-  const { grid, cellClass, keys } = pick(gridsOf(game));
+  const grids = gridsOf(game);
+  if (grids.length === 0) return [];
+  const { grid, cellClass, keys } = pick(grids);
   const inGrid = [...grid.all(cellClass as never)] as (Square | Hex)[];
   const held = [...game.holding.all(cellClass as never)] as (Square | Hex)[];
-  // A world refuses to move a partition root (#1170), and the world run below makes evicted cells roots.
-  const movable = inGrid.filter((cell) => game.partitionRoot(cell.id) === undefined);
   return [
-    () => movable.length > 0 && pick(movable).reparent(game.holding),
+    () => inGrid.length > 0 && pick(inGrid).reparent(game.holding),
     () => {
       if (held.length === 0) return;
       const cell = pick(held) as unknown as Record<string, number> & (Square | Hex);
@@ -286,26 +286,30 @@ describe('the index never answers differently from a search while the rule holds
       }
     });
 
-    it(`over a random run in a world, with cells evicted and adopted back (seed ${seed})`, () => {
+    // A partition root hangs directly from the game (#1188), so a world evicts and adopts a whole grid.
+    it(`over a random run in a world, with grids evicted and adopted back (seed ${seed})`, () => {
       devMode.override = false;
       const random = mulberry32(seed);
       const game = new CellGame({ playerCount: 2, worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
-      const evicted: { parentId: number; json: ElementJSON }[] = [];
+      game.definePartition(game.board.id);
+      game.definePartition(game.hexes.id);
+      const evicted: ElementJSON[] = [];
 
       for (let step = 0; step < 150; step++) {
-        const { grid, cellClass } = gridsOf(game)[Math.floor(random() * 2)];
-        const inGrid = [...grid.all(cellClass as never)] as (Square | Hex)[];
+        const grids = gridsOf(game);
         const residency = [
           () => {
-            if (inGrid.length === 0) return;
-            const cell = inGrid[Math.floor(random() * inGrid.length)];
-            game.definePartition(cell.id);
-            evicted.push({ parentId: grid.id, json: JSON.parse(JSON.stringify(cell.toJSON())) as ElementJSON });
-            game.evictSubtree(cell.id);
+            if (grids.length === 0) return;
+            const { grid } = grids[Math.floor(random() * grids.length)];
+            evicted.push(JSON.parse(JSON.stringify(grid.toJSON())) as ElementJSON);
+            game.evictSubtree(grid.id);
           },
           () => {
             const back = evicted.splice(Math.floor(random() * evicted.length), 1)[0];
-            if (back) game.adoptSubtree(back.parentId, back.json);
+            if (!back) return;
+            const grid = game.adoptSubtree(game.id, back);
+            if (grid instanceof Board) game.board = grid;
+            else game.hexes = grid as Hexes;
           },
         ];
         const choices = [...operations(game, step, random), ...residency];

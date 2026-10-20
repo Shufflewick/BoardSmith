@@ -110,6 +110,7 @@ async function setUp(): Promise<void> {
   const tree = tempTree('bs-chunk-merge-');
   main = join(tree, 'game');
   await write(main, {
+    'boardsmith.json': JSON.stringify({ name: 'game' }),
     'CLAUDE.md': CLAUDE_MD,
     'tests/budget.test.ts': '// measures the world partition\n',
     'src/core.ts': 'export const PARTITION_BYTES = 100;\n',
@@ -218,6 +219,31 @@ describe('chunkMerge: the combined tree is checked, not the branch alone', () =>
     expect((await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck })).refusals).toEqual([]);
 
     expect(await read(main, `.boardsmith/verify/${result}`)).toBe(await read(worktree, `.boardsmith/verify/${result}`));
+  });
+
+  it('says so, naming verify --chunk, when the branch is checked out in no worktree, so no verify result is copied (#1202)', async () => {
+    const worktree = await buildOnBranch('trading', 150);
+    git(main, 'worktree', 'remove', '--force', worktree);
+
+    const merge = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+
+    expect(merge.refusals).toEqual([]);
+    expect(merge.noVerifyResults).toMatch(/chunk\/trading is checked out in no worktree.*`boardsmith verify --chunk trading`/);
+  });
+
+  it("says so when the chunk's worktree has no verify result for any of the branch's commits (#1202)", async () => {
+    const worktree = await buildOnBranch('trading', 150);
+    await fs.rm(join(worktree, '.boardsmith/verify'), { recursive: true });
+
+    const merge = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+
+    expect(merge.refusals).toEqual([]);
+    expect(merge.noVerifyResults).toMatch(/has no verify result for any of chunk\/trading's commits.*`boardsmith verify --chunk trading`/);
+  });
+
+  it('says nothing about verify results when it copied one (#1202)', async () => {
+    await buildOnBranch('trading', 150);
+    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck })).noVerifyResults).toBeUndefined();
   });
 
   it('refuses a merge whose combined tree breaks a constraint each branch passed alone, and leaves main as it was', async () => {

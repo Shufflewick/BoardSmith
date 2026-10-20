@@ -419,6 +419,30 @@ describe('drag-drop follows the board and the action panel (#724)', () => {
     expect(sendAction).toHaveBeenCalledWith('move', { piece: 42, destination: 'm2' });
   });
 
+  it('dragging a disabled candidate of the open pick starts no drag, as a click on it chooses nothing (#1190)', async () => {
+    const pieces = [
+      { id: 42, disabled: 'blocked', refs: [{ ref: { notation: 'd4' }, role: 'highlight' as const }] },
+      { id: 43, refs: [{ ref: { notation: 'f4' }, role: 'highlight' as const }] },
+      { id: 44, refs: [{ ref: { notation: 'h4' }, role: 'highlight' as const }] },
+    ];
+    const fetchPickChoices = answerPicks({ piece: { validElements: pieces } });
+    const metadata: Record<string, EnrichedActionMetadata> = {
+      move: { name: 'move', selections: [{ name: 'piece', type: 'element', validElements: pieces }, { name: 'destination', type: 'choice' }] },
+    };
+    const { controller, boardInteraction, sendAction } = await wireAll(metadata, fetchPickChoices);
+    expect(controller.currentPick.value?.name).toBe('piece');
+
+    boardInteraction.startDrag({ id: 300, name: 'd4', notation: 'd4' });
+    await flushAll();
+    expect(boardInteraction.isDragging).toBe(false);
+    expect(boardInteraction.isDropTarget({ notation: 'f4' })).toBe(false);
+
+    boardInteraction.triggerDrop({ id: 301, name: 'f4', notation: 'f4' });
+    await flushAll();
+    expect(controller.currentArgs.value).toEqual({});
+    expect(sendAction).not.toHaveBeenCalled();
+  });
+
   it('dragging a disabled element starts no action', async () => {
     const fetchPickChoices = vi.fn().mockResolvedValue({ success: true, choices: [] });
     const metadata: Record<string, EnrichedActionMetadata> = {

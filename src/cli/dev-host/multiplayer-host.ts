@@ -961,11 +961,21 @@ export class MultiplayerHost {
       this.send(clientId, { type: 'error', message: `Seat ${msg.seat} was not taken: its name and color must be text.` });
       return;
     }
+    const vacated = this.clientSeat.get(clientId);
     this.assignSeat(clientId, msg.seat, msg.name, msg.color);
     if (this.followShared()) await this.endFollow(FOLLOW_SHARED);
     this.send(clientId, { type: 'joined', seat: msg.seat });
     if (this.phase === 'playing') this.reinitSeat(clientId, msg.seat);
     this.broadcastLobby();
+    if (vacated !== msg.seat) await this.coverLeftSeat(vacated);
+  }
+
+  /** A seat its player left by joining another goes to the bot, as `leave` gives it up (#1025). */
+  private async coverLeftSeat(seat: number | undefined): Promise<void> {
+    if (seat === undefined || this.phase !== 'playing' || this.followerClientId !== null) return;
+    this.addBotSeat(seat);
+    this.announceRoster();
+    await this.session?.host.runBotTurns();
   }
 
   /** Give up a seat mid-game → it reverts to bot so the game continues for others. */

@@ -46,7 +46,7 @@ export interface UpdateWeightsOptions {
 
 /**
  * `source` with each objective's weight replaced by the one `weights` gives
- * its id, rounded to one decimal place. Everything else is left as written.
+ * its id, exactly as given (#1031). Everything else is left as written.
  *
  * Throws, naming them, when `weights` has an id that `source` has no
  * objective for.
@@ -72,7 +72,7 @@ export function updateBotWeights(
   for (const literal of [...found].reverse()) {
     const weight = weightById.get(literal.id);
     if (weight === undefined) continue;
-    result = result.slice(0, literal.start) + String(Math.round(weight * 10) / 10) + result.slice(literal.end);
+    result = result.slice(0, literal.start) + String(weight) + result.slice(literal.end);
   }
 
   if (options.addMetadata && options.evolutionStats) {
