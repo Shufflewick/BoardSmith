@@ -190,7 +190,7 @@ describe('the id index holds every element in the game tree and the pile', () =>
     game.definePartition(room.id);
     const json = JSON.parse(JSON.stringify(room.toJSON())) as ElementJSON;
     game.evictSubtree(room.id);
-    game.adoptSubtree(game.id, json);
+    game.adoptSubtree(json);
     expect(unindexed(game)).toEqual([]);
   });
 });
@@ -241,7 +241,7 @@ describe.each([
     // Stored bytes holding the id the refused create was given.
     json.children = json.children!.map((child) => (child.id === token.id ? { ...child, id } : child));
 
-    const adopted = game.adoptSubtree(game.id, json);
+    const adopted = game.adoptSubtree(json);
     expect(game.atId(id)?._t.parent).toBe(adopted);
   });
 });
@@ -271,7 +271,7 @@ describe('atId in world mode', () => {
     const { game, room, token } = world();
     const json = JSON.parse(JSON.stringify(room.toJSON())) as ElementJSON;
     game.evictSubtree(room.id);
-    const adopted = game.adoptSubtree(game.id, json);
+    const adopted = game.adoptSubtree(json);
     game.takeTouchedPartitions();
 
     const found = game.atId(token.id);

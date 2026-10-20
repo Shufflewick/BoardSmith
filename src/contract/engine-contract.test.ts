@@ -206,7 +206,7 @@ describe('engine contract', () => {
       const original = Game.prototype.adoptSubtree;
       // The r46 shape exactly: the bytes are unchanged and the READER stops
       // accepting them. A raised floor is how that happened the first time.
-      Game.prototype.adoptSubtree = function refusing(this: Game, parentId: number, json: never) {
+      Game.prototype.adoptSubtree = function refusing(this: Game) {
         throw new Error('element id 14 is already resident (simulated floor change)');
       } as typeof Game.prototype.adoptSubtree;
       try {

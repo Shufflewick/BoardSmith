@@ -162,9 +162,9 @@ describe('world mode: element references are id-based, not positional', () => {
 
     // Hydration order differs from construction order, which is exactly what
     // a world does: partitions load when a command names them.
-    game.adoptSubtree(game.id, cJson);
-    game.adoptSubtree(game.id, aJson);
-    const adoptedB = game.adoptSubtree(game.id, bJson);
+    game.adoptSubtree(cJson);
+    game.adoptSubtree(aJson);
+    const adoptedB = game.adoptSubtree(bJson);
 
     const restoredB1 = adoptedB.all(Token).find((t) => t.name === 'b1')!;
     const restoredB2 = adoptedB.all(Token).find((t) => t.name === 'b2')! as Token;
@@ -191,9 +191,9 @@ describe('world mode: element references are id-based, not positional', () => {
     expect(recordedBranch).toBe(b1.branch());
 
     const game = new WorldGame({ playerCount: 2, seed: 'branch-hazard', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
-    game.adoptSubtree(game.id, cJson);
-    const adoptedA = game.adoptSubtree(game.id, aJson);
-    const adoptedB = game.adoptSubtree(game.id, bJson);
+    game.adoptSubtree(cJson);
+    const adoptedA = game.adoptSubtree(aJson);
+    const adoptedB = game.adoptSubtree(bJson);
 
     const restoredB2 = adoptedB.all(Token).find((t) => t.name === 'b2')! as Token;
     const restoredA1 = adoptedA.all(Token).find((t) => t.name === 'a1')!;
@@ -215,7 +215,7 @@ describe('world mode: element references are id-based, not positional', () => {
     game.evictSubtree(roomB.id);
     game.evictSubtree(roomC.id);
 
-    const adoptedB = game.adoptSubtree(game.id, bJson);
+    const adoptedB = game.adoptSubtree(bJson);
     const restoredB2 = adoptedB.all(Token).find((t) => t.name === 'b2')!;
 
     // roomA is not resident, so the id cannot resolve. The ref is kept
@@ -246,7 +246,7 @@ describe('Game.adoptSubtree', () => {
     const bJson = roundTripJson(roomB.toJSON() as ElementJSON);
     game.evictSubtree(roomB.id);
 
-    const adopted = game.adoptSubtree(game.id, bJson);
+    const adopted = game.adoptSubtree(bJson);
 
     expect(adopted.parent).toBe(game);
     expect(adopted.name).toBe('roomB');
@@ -267,7 +267,7 @@ describe('Game.adoptSubtree', () => {
     const cursorOf = (id: number) => worldElementIds(TEST_WORLD_ELEMENT_ID_KEY).cursorOf(id);
     expect(cursorOf(highToken.id)).toBeGreaterThan(20);
 
-    const adopted = game.adoptSubtree(game.id, highJson);
+    const adopted = game.adoptSubtree(highJson);
     const adoptedIds = new Set([adopted.id, ...adopted.all(Token).map((t) => t.id)]);
 
     const fresh = game.create(Space, 'fresh');
@@ -281,18 +281,8 @@ describe('Game.adoptSubtree', () => {
     const { roomB } = buildWorld(game);
     const bJson = roundTripJson(roomB.toJSON() as ElementJSON);
 
-    expect(() => game.adoptSubtree(game.id, bJson)).toThrow(/already resident/i);
-    expect(() => game.adoptSubtree(game.id, bJson)).toThrow(new RegExp(String(roomB.id)));
-  });
-
-  it('names the missing parent when parentId is not resident', () => {
-    const game = new WorldGame({ playerCount: 2, seed: 'missing-parent' , worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
-    const { roomB } = buildWorld(game);
-    const bJson = roundTripJson(roomB.toJSON() as ElementJSON);
-    game.evictSubtree(roomB.id);
-
-    expect(() => game.adoptSubtree(99999, bJson)).toThrow(/99999/);
-    expect(() => game.adoptSubtree(99999, bJson)).toThrow(/no element with that id is resident/);
+    expect(() => game.adoptSubtree(bJson)).toThrow(/already resident/i);
+    expect(() => game.adoptSubtree(bJson)).toThrow(new RegExp(String(roomB.id)));
   });
 
   it('refuses to adopt outside world mode, because branch refs would be grafted', () => {
@@ -300,7 +290,7 @@ describe('Game.adoptSubtree', () => {
     const { roomB } = buildWorld(game);
     const bJson = roundTripJson(roomB.toJSON() as ElementJSON);
 
-    expect(() => game.adoptSubtree(game.id, bJson)).toThrow(/worldMode: true/);
+    expect(() => game.adoptSubtree(bJson)).toThrow(/worldMode: true/);
   });
 
   it('keeps a Space handler registered in its own class constructor', () => {
@@ -311,7 +301,7 @@ describe('Game.adoptSubtree', () => {
 
     const roomJson = roundTripJson(room.toJSON() as ElementJSON);
     game.evictSubtree(room.id);
-    const adopted = game.adoptSubtree(game.id, roomJson) as Room;
+    const adopted = game.adoptSubtree(roomJson) as Room;
 
     token.putInto(adopted);
     expect(adopted.entered).toEqual(['spoon']);
@@ -336,7 +326,7 @@ describe('Game.adoptSubtree', () => {
       });
     }
 
-    game.adoptSubtree(game.id, bJson);
+    game.adoptSubtree(bJson);
     expect(childReads).toBe(0);
   });
 
@@ -349,7 +339,7 @@ describe('Game.adoptSubtree', () => {
     piled.remove();
     bJson.children![0].id = piled.id;
 
-    expect(() => game.adoptSubtree(game.id, bJson)).toThrow(new RegExp(`element id ${piled.id} is already resident`));
+    expect(() => game.adoptSubtree(bJson)).toThrow(new RegExp(`element id ${piled.id} is already resident`));
   });
 
   it('refuses an adoption carrying the pile\'s own id after an in-place restore', () => {
@@ -360,7 +350,7 @@ describe('Game.adoptSubtree', () => {
     game.loadSerializedState(game.toJSON());
     bJson.children![0].id = game.pile.id;
 
-    expect(() => game.adoptSubtree(game.id, bJson)).toThrow(new RegExp(`element id ${game.pile.id} is already resident`));
+    expect(() => game.adoptSubtree(bJson)).toThrow(new RegExp(`element id ${game.pile.id} is already resident`));
   });
 
   it('refuses an adoption whose ids were adopted before, then still accepts it after an eviction', () => {
@@ -368,11 +358,11 @@ describe('Game.adoptSubtree', () => {
     const { roomB } = buildWorld(game);
     const bJson = roundTripJson(roomB.toJSON() as ElementJSON);
     game.evictSubtree(roomB.id);
-    const adopted = game.adoptSubtree(game.id, bJson);
+    const adopted = game.adoptSubtree(bJson);
 
-    expect(() => game.adoptSubtree(game.id, bJson)).toThrow(/already resident/);
+    expect(() => game.adoptSubtree(bJson)).toThrow(/already resident/);
     game.evictSubtree(adopted.id);
-    expect(game.adoptSubtree(game.id, bJson).name).toBe('roomB');
+    expect(game.adoptSubtree(bJson).name).toBe('roomB');
   });
 });
 
@@ -407,20 +397,14 @@ describe('a partition root hangs directly from the game (#1188)', () => {
     expect(() => game.definePartition(room.id)).toThrow(rootRefusal);
   });
 
-  it('refuses to adopt under a resident element that is not the game, and grafts nothing', () => {
+  it('grafts a partition under the game, the only place a root hangs from', () => {
     const game = new WorldGame({ playerCount: 2, seed: 'adopt-nested', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
     const { roomB } = buildWorld(game);
     const bJson = roundTripJson(roomB.toJSON() as ElementJSON);
     game.evictSubtree(roomB.id);
-    const hall = game.create(Space, 'hall');
-    const sequence = game._ctx.sequence;
+    game.create(Space, 'hall');
 
-    expect(() => game.adoptSubtree(hall.id, bJson)).toThrow(rootRefusal);
-    expect(() => game.adoptSubtree(hall.id, bJson)).toThrow(new RegExp(`under "hall" \\(id ${hall.id}\\)`));
-    expect(hall.children).toHaveLength(0);
-    expect(game.getElementById(roomB.id)).toBeUndefined();
-    expect(game._ctx.sequence).toBe(sequence);
-    expect(game.adoptSubtree(game.id, bJson).parent).toBe(game);
+    expect(game.adoptSubtree(bJson).parent).toBe(game);
   });
 });
 
@@ -597,7 +581,7 @@ describe('moveToInternal partition marking', () => {
     game.evictSubtree(roomB.id);
     game.takeTouchedPartitions();
 
-    game.adoptSubtree(game.id, bJson);
+    game.adoptSubtree(bJson);
 
     // The platform already knows what it hydrated; the engine owes it only
     // the move-touched half.
@@ -696,7 +680,7 @@ describe('attribute writes mark the partition they land in', () => {
 
     // Eviction and reload, from the store alone.
     for (const id of rooms.keys()) game.evictSubtree(id);
-    const restoredA = game.adoptSubtree(game.id, store.get(roomA.id)!);
+    const restoredA = game.adoptSubtree(store.get(roomA.id)!);
 
     const restoredA0 = restoredA.all(Token).find((t) => t.name === 'a0')!;
     expect(restoredA0.label).toBe('smuggled');
@@ -821,7 +805,7 @@ describe('the dirty-set pass costs one serialization per partition, and no tree 
 
     // The bytes the previous take captured, at no cost: the pre-command copy
     // and the comparison the next take makes are the same string.
-    expect(baseline).toEqual({ parentId: game.id, bytes: before });
+    expect(baseline).toBe(before);
     expect(CountedRoom.serializations).toBe(0);
   });
 
@@ -836,7 +820,7 @@ describe('the dirty-set pass costs one serialization per partition, and no tree 
 
     // Mid-second-command the copy on file is what the FIRST command left, not
     // the world as it stood before the first one.
-    const baseline = JSON.parse(game.partitionBaseline(room.id)!.bytes) as ElementJSON;
+    const baseline = JSON.parse(game.partitionBaseline(room.id)!) as ElementJSON;
     expect(baseline.children![0]!.attributes.label).toBe('first command');
   });
 
