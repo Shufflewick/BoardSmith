@@ -62,6 +62,9 @@ describe('every doc block that shows its imports is compiled (#1050)', () => {
     const text =
       "<!-- typecheck: game src/a.ts -->\n" +
       fence('typescript', "import { Game } from 'boardsmith';\n") +
+      // docs/balance-simulator.test.ts writes these into a scaffolded game and compiles it (#556).
+      "<!-- doc-test: file src/rules/game.ts -->\n" +
+      fence('typescript', "import { Game } from 'boardsmith';\n") +
       fence('typescript', 'game.players.length;\n') +
       fence('vue', '<template><div /></template>\n') +
       fence('bash', 'import x\n');

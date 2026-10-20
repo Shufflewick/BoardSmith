@@ -55,8 +55,12 @@ describe('the game code the docs teach (#511)', () => {
 
   it('marks the runtime API GameRunner examples for compiling (#1152)', () => {
     expect(blocks.filter((block) => block.doc === 'docs/api/runtime').map((block) => block.path)).toEqual([
+      'src/imports.ts',
       'src/game.ts',
       'src/run.ts',
+      'src/network.ts',
+      'src/views.ts',
+      'src/codec.ts',
       'src/history.ts',
     ]);
   });

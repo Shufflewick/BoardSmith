@@ -65,8 +65,9 @@ export function parseMarkedBlocks(file: string, text: string, kind: string): Mar
 
 /**
  * The 1-based line of each opening fence in `text` whose block is a whole file
- * but carries no marker: a ts block whose first code line (after blank and `//`
- * lines) is an `import`, or a vue block that opens with its `<script>` (#1050).
+ * but nothing compiles: a ts block whose first code line (after blank and `//`
+ * lines) is an `import`, or a vue block that opens with its `<script>`, with
+ * neither a `typecheck:` nor a `doc-test: file` marker above it (#1050).
  */
 export function unmarkedFileBlocks(text: string): number[] {
   const lines = text.split(/\r?\n/);
@@ -79,7 +80,10 @@ export function unmarkedFileBlocks(text: string): number[] {
     const first = lines.slice(i + 1, end).find((line) => line.trim() !== '' && !line.startsWith('//')) ?? '';
     const isFile =
       (['ts', 'typescript'].includes(lang) && /^import\b/.test(first)) || (lang === 'vue' && /^<script\b/.test(first));
-    if (isFile && !lines[i - 1]?.startsWith('<!-- typecheck:')) unmarked.push(i + 1);
+    const marker = lines[i - 1] ?? '';
+    // A `doc-test: file` block is compiled by the doc's own test (docs/balance-simulator.test.ts, #556).
+    const compiled = marker.startsWith('<!-- typecheck:') || marker.startsWith('<!-- doc-test: file ');
+    if (isFile && !compiled) unmarked.push(i + 1);
     i = end;
   }
   return unmarked;
