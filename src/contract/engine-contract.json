@@ -1934,7 +1934,7 @@
       "surfaceHash": "7f205bf27a6fcb74",
       "payloadHash": "434e366607ffd36b",
       "formatHash": "ed115e27605f2ca7",
-      "summary": "applyNoticeWrites(notices, read, { seatCount, budgets, declaredNotices }) now also requires the boxes the command's walk declared, and refuses a take or a whenFull 'refuse' send to any other box with undeclared-notice-box before reading any box, so a forged result cannot empty a seat's box or fail late as notice-box-full (#975). dispatchStep's result gains answers, the walk's WorldWalkAnswers; pass answers.declaredNotices. Platform: pass declaredNotices at games/src/world-session.ts and treat the throw as a refused command; re-vendor. No game needs a rebuild."
+      "summary": "applyNoticeWrites(notices, read, { seatCount, budgets, declaredNotices }) now also requires the boxes the command's walk declared, and refuses a take or a whenFull 'refuse' send to any other box with undeclared-notice-box before reading any box, so a forged result cannot empty a seat's box or fail late as notice-box-full (#975). dispatchStep's result gains answers, what the declaration walk answered; pass answers.declaredNotices. Platform: pass declaredNotices at games/src/world-session.ts and treat the throw as a refused command; re-vendor. No game needs a rebuild."
     }
   ]
 }
