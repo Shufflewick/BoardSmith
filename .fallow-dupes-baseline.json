@@ -11,7 +11,7 @@
     "src/ui/components/auto-ui/renderers/HandRenderer.vue:498-504|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:291-297",
     "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue:123-141|src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:226-244",
     "src/ui/components/auto-ui/renderers/CardRenderer.vue:63-69|src/ui/components/auto-ui/renderers/DeckRenderer.vue:37-43|src/ui/components/auto-ui/renderers/HandRenderer.vue:46-54",
-    "src/session/stateless-ops.ts:1097-1113|src/session/stateless-ops.ts:1186-1200",
+    "src/session/stateless-ops.ts:1076-1092|src/session/stateless-ops.ts:1165-1179",
     "src/ui/composables/useFLIP.ts:273-284|src/ui/composables/useFLIP.ts:320-334",
     "src/ui/components/auto-ui/renderers/HandRenderer.vue:210-224|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:62-75",
     "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue:76-93|src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:165-190",
