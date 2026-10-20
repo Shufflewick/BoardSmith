@@ -712,7 +712,7 @@ describe('#293 — ledger templates agree with boardsmith ledger-check', () => {
     for (const [file, template] of Object.entries(LEDGERS)) {
       writeFileSync(join(dir, 'design', file), read(template));
     }
-    const result = await ledgerCheck(dir);
+    const result = await ledgerCheck(dir, 'boardsmith ledger-check');
     expect(result.findings).toEqual([]);
     expect(result.checked).toEqual([
       'RULINGS.md',

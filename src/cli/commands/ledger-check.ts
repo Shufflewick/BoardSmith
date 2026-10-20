@@ -597,7 +597,7 @@ function misplacedRunLog(text: string): LedgerFinding[] {
  * it (a prefix of the full id), as a lookup. A commit with no result on this machine looks up as
  * undefined: the check then rests on the round's own line.
  */
-async function verifyResultsOnFile(projectDir: string, commits: string[]): Promise<VerifyLookup> {
+export async function verifyResultsOnFile(projectDir: string, commits: string[]): Promise<VerifyLookup> {
   let names: string[];
   try {
     names = (await fs.readdir(verifyResultsDir(projectDir))).filter((n) => /^[0-9a-f]{40,64}\.json$/.test(n));
@@ -971,10 +971,10 @@ async function readLedger(projectDir: string, file: string): Promise<string | un
 }
 
 /** Checks each chunk's and skill's run log against its commits, its verify results and the project's role mapping. */
-async function checkRunLogs(projectDir: string, logs: string[], result: LedgerCheckResult): Promise<void> {
+async function checkRunLogs(projectDir: string, command: string, logs: string[], result: LedgerCheckResult): Promise<void> {
   if (logs.length === 0) return;
   await requireGitRepo(projectDir, 'compares each run log\'s timestamps against the commits that recorded them');
-  const config = await readProjectConfig(projectDir, 'boardsmith ledger-check');
+  const config = await readProjectConfig(projectDir, { command, why: "to check each run log's agents against their roles" });
   // An untracked run log has no commit times: every line of it reads as not committed yet.
   const trackedLogs = await trackedFiles(projectDir, logs.map((log) => `${DESIGN_DIR}/${log}`));
   for (const log of logs) {
@@ -989,9 +989,10 @@ async function checkRunLogs(projectDir: string, logs: string[], result: LedgerCh
 
 /**
  * Runs every ledger rule against `projectDir`'s `design/` as it stands on disk. `checked` lists
- * the ledgers read, then each verified CHUNK.md whose cited evidence was checked.
+ * the ledgers read, then each verified CHUNK.md whose cited evidence was checked. `command` is
+ * the command the user ran, which a refusal names (#1277).
  */
-export async function ledgerCheck(projectDir: string): Promise<LedgerCheckResult> {
+export async function ledgerCheck(projectDir: string, command: string): Promise<LedgerCheckResult> {
   const result: LedgerCheckResult = { checked: [], absent: [], findings: [] };
   // FILINGS.md is not an evidence source: a filing cites BoardSmith's own files, not the game's.
   const evidence: EvidenceSource[] = [];
@@ -1019,7 +1020,7 @@ export async function ledgerCheck(projectDir: string): Promise<LedgerCheckResult
   }
 
   result.findings.push(...sharedRunLogs(await chunkSlugs(projectDir)));
-  await checkRunLogs(projectDir, await runLogFiles(projectDir), result);
+  await checkRunLogs(projectDir, command, await runLogFiles(projectDir), result);
 
   const crossChunk = await readLedger(projectDir, CROSS_CHUNK_MD);
   if (crossChunk === undefined) {
@@ -1050,7 +1051,7 @@ export async function ledgerCheckCommand(
   options: { project?: string; json?: boolean } = {},
 ): Promise<void> {
   const projectDir = pathResolve(options.project ?? process.cwd());
-  const result = await ledgerCheck(projectDir);
+  const result = await ledgerCheck(projectDir, 'boardsmith ledger-check');
   if (result.findings.length > 0) process.exitCode = 1;
 
   if (options.json) {

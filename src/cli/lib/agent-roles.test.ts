@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { promises as fs } from 'node:fs';
+import { join } from 'node:path';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import {
   ESCALATION_LADDER,
   ROLES,
@@ -7,6 +10,7 @@ import {
   defaultAgentType,
   nextRole,
   parseRole,
+  readProjectConfig,
 } from './agent-roles.js';
 
 describe('the roles (#454)', () => {
@@ -81,5 +85,25 @@ describe('the "agents" block of boardsmith.json (#454)', () => {
     expect(() => agentTypeFor({ agents: { judgment: 'senior' } }, 'judgement')).toThrow(
       /boardsmith\.json has a problem in "agents": Unknown role "judgment"/,
     );
+  });
+});
+
+describe('readProjectConfig (#1302)', () => {
+  const reader = { command: 'boardsmith agent', why: 'to tell which agent each role is dispatched as' };
+
+  it('refuses a boardsmith.json that holds anything but an object, saying what it holds and why it was read', async () => {
+    for (const [text, holds] of [['null', 'null'], ['[]', 'a list'], ['"x"', 'a string'], ['3', 'a number']]) {
+      const dir = tempTree('bs-project-config-');
+      await fs.writeFile(join(dir, 'boardsmith.json'), text);
+      await expect(readProjectConfig(dir, reader), text).rejects.toThrow(
+        `boardsmith.json in ${dir} holds ${holds}, not an object, so boardsmith agent cannot tell which agent each role is dispatched as. Fix it, then run boardsmith agent again.`,
+      );
+    }
+  });
+
+  it('reads an object', async () => {
+    const dir = tempTree('bs-project-config-');
+    await fs.writeFile(join(dir, 'boardsmith.json'), '{ "agents": {} }');
+    expect(await readProjectConfig(dir, reader)).toEqual({ agents: {} });
   });
 });
