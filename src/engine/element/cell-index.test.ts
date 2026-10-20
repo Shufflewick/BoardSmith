@@ -307,7 +307,7 @@ describe('the index never answers differently from a search while the rule holds
           () => {
             const back = evicted.splice(Math.floor(random() * evicted.length), 1)[0];
             if (!back) return;
-            const grid = game.adoptSubtree(back);
+            const grid = game.adoptSubtree(game.id, back);
             if (grid instanceof Board) game.board = grid;
             else game.hexes = grid as Hexes;
           },

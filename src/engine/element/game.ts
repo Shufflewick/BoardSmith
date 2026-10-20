@@ -2141,9 +2141,8 @@ export class Game<
   }
 
   /**
-   * Graft one serialized subtree into the resident tree, under the game: a
-   * partition root hangs only from the game. Whether the bytes were minted
-   * under this world's element id key is checked where they are read (#482).
+   * Graft one serialized subtree into the resident tree, under `parentId`,
+   * which must be the game's own id: a partition root hangs only from the game.
    *
    * This is the same restore path a snapshot uses (`GameElement.fromJSON`),
    * pointed at one subtree instead of the whole game, so an adopted
@@ -2173,8 +2172,16 @@ export class Game<
    *
    * @returns the grafted subtree's root, now a partition root.
    */
-  adoptSubtree(json: ElementJSON): GameElement {
+  adoptSubtree(parentId: number, json: ElementJSON): GameElement {
     this._requireWorldMode('adoptSubtree');
+    if (parentId !== this._t.id) {
+      throw new Error(
+        `Cannot adopt partition "${json.name ?? json.className}" under parent id ${parentId}: ` +
+          `${PARTITION_ROOT_RULE} Adopt it under the game (id ${this._t.id}). An id that is not the ` +
+          `game's is a typo, a stale or evicted id, or bytes minted under a different element id ` +
+          `key than this world was built with (#482), when the key stored with this world is the fix.`
+      );
+    }
 
     // Ids arriving from storage were minted by an earlier run of the id
     // counter, which is a bare `_ctx.sequence++` with no registry behind it.

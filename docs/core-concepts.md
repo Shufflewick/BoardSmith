@@ -761,7 +761,7 @@ const game = new MyWorld({ playerCount: 200, seed, worldMode: true, elementIdKey
 game.definePartition(regionId);
 
 // hydrate a partition the platform has in storage, back under the game
-const region = game.adoptSubtree(storedRegionJson);
+const region = game.adoptSubtree(game.id, storedRegionJson);
 
 // after a command runs, ask which partitions it dirtied. ONE call, and it
 // consumes: it reports what changed AND re-baselines from the same pass, so a

@@ -110,7 +110,7 @@ describe('#482 -- adoption reads stored ids back to the counter', () => {
     const { rooms, next, rootId } = storedRooms();
     const woken = world();
     woken.adoptWorldIdAllocation(next);
-    for (const room of rooms) woken.adoptSubtree(room);
+    for (const room of rooms) woken.adoptSubtree(rootId, room);
 
     const fresh = woken.create(Room, 'fresh');
     expect(rooms.map((room) => room.id)).not.toContain(fresh.id);
@@ -121,7 +121,7 @@ describe('#482 -- adoption reads stored ids back to the counter', () => {
     const { rooms, next, rootId } = storedRooms();
     const woken = world();
     woken.adoptWorldIdAllocation(next);
-    for (const room of rooms) woken.adoptSubtree(room);
+    for (const room of rooms) woken.adoptSubtree(rootId, room);
     expect(woken.worldIdAllocation()).toBe(next);
   });
 
@@ -130,7 +130,7 @@ describe('#482 -- adoption reads stored ids back to the counter', () => {
     const woken = world();
     // Adopted in an order whose largest id is not the latest-minted room: the
     // counter has to come from the decoded value, or the next mint collides.
-    for (const room of rooms) woken.adoptSubtree(room);
+    for (const room of rooms) woken.adoptSubtree(rootId, room);
     expect(woken.worldIdAllocation()).toBe(next);
   });
 
@@ -138,7 +138,7 @@ describe('#482 -- adoption reads stored ids back to the counter', () => {
     const { rooms, rootId } = storedRooms();
     const stale = world();
     stale.adoptWorldIdAllocation(WORLD_PARTITION_ID_FLOOR + 2);
-    expect(() => stale.adoptSubtree(rooms[4]!)).toThrow(/id allocation stamp/);
+    expect(() => stale.adoptSubtree(rootId, rooms[4]!)).toThrow(/id allocation stamp/);
   });
 
   /** A room whose coins were shuffled after it was built, so its tokens stand above every id in it (#715). */
@@ -155,7 +155,7 @@ describe('#482 -- adoption reads stored ids back to the counter', () => {
   it('advances an undeclared counter past the stored placeholder tokens too, so nothing is minted as one', () => {
     const { room, next, rootId, tokens } = shuffledRoom();
     const woken = world();
-    woken.adoptSubtree(room);
+    woken.adoptSubtree(rootId, room);
 
     expect(woken.worldIdAllocation()).toBe(next);
     expect(tokens).not.toContain(woken.create(Coin, 'fresh').id);
@@ -165,7 +165,13 @@ describe('#482 -- adoption reads stored ids back to the counter', () => {
     const { room, rootId, tokens } = shuffledRoom();
     const stale = world();
     stale.adoptWorldIdAllocation(Math.max(...tokens.map((token) => worldElementIds(KEY).cursorOf(token))));
-    expect(() => stale.adoptSubtree(room)).toThrow(/id allocation stamp/);
+    expect(() => stale.adoptSubtree(rootId, room)).toThrow(/id allocation stamp/);
+  });
+
+  it('cannot find the root a stored partition hangs from under another key', () => {
+    const { rooms, rootId } = storedRooms(KEY);
+    const wrong = world(OTHER_KEY);
+    expect(() => wrong.adoptSubtree(rootId, rooms[0]!)).toThrow(/element id key/);
   });
 });
 

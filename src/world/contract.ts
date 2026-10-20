@@ -219,7 +219,7 @@
  *
  * ### First implementation step
  *
- * In BoardSmith: `Game.adoptSubtree(json)` and
+ * In BoardSmith: `Game.adoptSubtree(parentId, json)` and
  * `Game.evictSubtree(id)`, grafting and removing one serialized subtree through
  * the existing element-restore path, plus the `moveToInternal` marking. Then a
  * `BoardSmithWorldEngine` here whose `applyCommand` is: ensure the named
