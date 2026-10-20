@@ -133,6 +133,7 @@ import {
 } from "./notices.js";
 import { devWarn, evaluateCondition, GameElement } from "../engine/index.js";
 import { failedExecute } from "../engine/action/action.js";
+import type { AnnotatedChoice } from "../engine/action/types.js";
 import { readOnlyProjection } from "./readonly.js";
 import { assertAnsweredAllocations, assertCreatedRoots } from "./migration.js";
 import { worldBudgets, type WorldBudgets } from "./budgets.js";
@@ -1508,35 +1509,41 @@ export class BoardSmithWorldEngine implements WorldEngine {
   ): Readonly<Record<string, unknown>> {
     const executor = this.game.getActionExecutor();
     const reading = readOnlyProjection(this.game);
-    const stale = (selection: string) =>
-      worldRefusal(
-        "stale-draft",
-        `The draft of "${definition.name}" answers "${selection}" with ${JSON.stringify(args[selection])}, ` +
-          "which is not one of the elements this action can offer here now. Ask for the " +
-          "action's offer again and pick from it.",
-      );
     // The callbacks it runs read the tree, so it is a read with reach-marking off (#1203).
     return this.game.readingOnly(() =>
       // Each element pick is checked before a later pick is resolved against it (#1223).
       executor.resolveArgs(definition, picksFromSeat(this.game, definition.name, args, acting.seat), acting, reading, (selection, value, before) => {
         if (selection.type !== "element" && selection.type !== "elements") return;
-        // Residency first, so the pick's own callbacks never run on an element outside the read.
-        if (!this.isDeclared(value, named)) throw stale(selection.name);
-        if (definition.selections.indexOf(selection) >= through) return;
-        const offered = new Set(
-          executor.getChoices(selection, acting, before, undefined, reading).map((choice) => (choice.value as GameElement).id),
-        );
-        if (!(Array.isArray(value) ? value : [value]).every((item: GameElement) => offered.has(item.id))) {
-          throw stale(selection.name);
-        }
+        const judged = definition.selections.indexOf(selection) < through;
+        this.assertOfferable(definition.name, selection.name, value, args, named,
+          judged ? () => executor.getChoices(selection, acting, before, undefined, reading) : undefined);
       }),
     );
   }
 
-  /** Whether every element a resolved element pick names sits in a partition this read declared. */
-  private isDeclared(value: unknown, named: readonly string[]): boolean {
-    return (Array.isArray(value) ? value : [value]).every(
-      (item) => item instanceof GameElement && named.includes(this.partitionOf(item)),
+  /** One element selection of a resolved draft: every element it names inside a
+   *  partition this read declared and, when `offered` is given, among what the
+   *  pick offers. `stale-draft` otherwise. */
+  private assertOfferable(
+    action: string,
+    selection: string,
+    value: unknown,
+    answers: Readonly<Record<string, unknown>>,
+    named: readonly string[],
+    offered: (() => readonly AnnotatedChoice<unknown>[]) | undefined,
+  ): void {
+    const items = Array.isArray(value) ? value : [value];
+    // Residency first, so the pick's own callbacks never run on an element outside the read.
+    if (items.every((item) => item instanceof GameElement && named.includes(this.partitionOf(item)))) {
+      if (offered === undefined) return;
+      const ids = new Set(offered().map((choice) => (choice.value as GameElement).id));
+      if (items.every((item: GameElement) => ids.has(item.id))) return;
+    }
+    throw worldRefusal(
+      "stale-draft",
+      `The draft of "${action}" answers "${selection}" with ${JSON.stringify(answers[selection])}, ` +
+        "which is not one of the elements this action can offer here now. Ask for the " +
+        "action's offer again and pick from it.",
     );
   }
 
