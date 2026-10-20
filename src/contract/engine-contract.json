@@ -1,7 +1,7 @@
 {
-  "revision": 248,
+  "revision": 249,
   "surfaceHash": "7f205bf27a6fcb74",
-  "payloadHash": "434e366607ffd36b",
+  "payloadHash": "51f21b4b479bcc9a",
   "formatHash": "ed115e27605f2ca7",
   "history": [
     {
@@ -1927,6 +1927,14 @@
       "payloadHash": "434e366607ffd36b",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A hex cell hidden from a seat keeps its coordinates in the seat view, so AutoUI draws it where it is (#1198), and a hidden piece placed directly in a grid no longer keeps attributes named like the grid's coordinates, which showed where it was (#1199). AutoUI's hex board refuses a cell with no coordinates instead of drawing it at (0,0). No game needs a rebuild."
+    },
+    {
+      "revision": 249,
+      "date": "2026-10-19",
+      "surfaceHash": "7f205bf27a6fcb74",
+      "payloadHash": "51f21b4b479bcc9a",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A seat that cannot see into an owner-only zone, or a zone that hides its contents from that seat (hideContentsFrom), now gets the zone's childCount with its placeholders, as a count-only zone already did, so getElementCount no longer counts granted cards nested below a placeholder (#1208). A bot's search sandbox keeps that count. No game needs a rebuild."
     }
   ]
 }
