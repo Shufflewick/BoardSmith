@@ -9,16 +9,15 @@
  * lines 409-453 (named Phase 92 carry-forward; Pitfall 6).
  */
 
-import { computed, inject, type Ref, type ComputedRef } from 'vue';
+import { computed, inject, type Ref } from 'vue';
 import { useElementBoardState } from '../../../composables/useElementBoardState.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
 import CardBack from './CardBack.vue';
-import { resolvePresentation } from '../presentation.js';
+import { usePresentationEntry } from '../../../composables/usePresentationEntry.js';
 import { isHiddenPlaceholder } from '../../../../engine/element/hidden-placeholder.js';
 import { seatDisplayName } from '../../../../engine/element/seat-defaults.js';
-import type { PresentationOverlay } from '../presentation.js';
-import { GAME_CONTEXT_KEYS, injectPlayerSeat } from '../../../composables/useGameContext.js';
+import { injectPlayerSeat } from '../../../composables/useGameContext.js';
 import { parseImageInfo, type ImageInfo } from '../../../utils/image.js';
 import type { GameElement } from '../auto-ui-helpers.js';
 
@@ -41,13 +40,7 @@ const {
   isDisabled,
 } = useElementBoardState(() => props.element);
 
-// ---------------------------------------------------------------------------
-// Presentation overlay injection (D-04)
-// ---------------------------------------------------------------------------
-const overlay = inject(GAME_CONTEXT_KEYS.presentation, undefined) as ComputedRef<PresentationOverlay | undefined> | undefined;
-const presentationEntry = computed(() =>
-  resolvePresentation(props.element, overlay?.value)
-);
+const presentationEntry = usePresentationEntry(() => props.element);
 
 const isDropTarget = computed(() => boardInteraction?.isDropTarget(elementIdentity()) ?? false);
 

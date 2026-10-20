@@ -10,15 +10,13 @@
  *   #2: Single shadow on outermost .piece only — no stacking on inner elements.
  */
 
-import { computed, inject, ref, watch, type ComputedRef } from 'vue';
+import { computed, inject, ref, watch } from 'vue';
 import { resolvePieceVisual, type PieceVisual } from '../auto-ui-helpers.js';
 import { getSpriteStyle } from '../../../utils/image.js';
 import { useElementBoardState } from '../../../composables/useElementBoardState.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
 import { setTransformAwareDragImage } from '../../../composables/dragImage.js';
-import { resolvePresentation } from '../presentation.js';
-import type { PresentationOverlay } from '../presentation.js';
-import { GAME_CONTEXT_KEYS } from '../../../composables/useGameContext.js';
+import { usePresentationEntry } from '../../../composables/usePresentationEntry.js';
 import { STANDS_ON_KEY, type GameElement } from '../auto-ui-helpers.js';
 
 const props = defineProps<{
@@ -37,13 +35,7 @@ const {
 // ── Core: delegate all visual logic to Phase 92 helper ───────────────────────
 const pieceVisual = computed((): PieceVisual => resolvePieceVisual(props.element));
 
-// ── Presentation overlay injection (D-04) ────────────────────────────────────
-// Resolved AFTER visibility filtering; resolvePresentation strips image/stats
-// for hidden placeholders (PRESENT-02).
-const overlay = inject(GAME_CONTEXT_KEYS.presentation, undefined) as ComputedRef<PresentationOverlay | undefined> | undefined;
-const presentationEntry = computed(() =>
-  resolvePresentation(props.element, overlay?.value)
-);
+const presentationEntry = usePresentationEntry(() => props.element);
 
 const isDragged = computed(() => boardInteraction?.isDraggedElement(elementIdentity()) ?? false);
 

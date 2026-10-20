@@ -28,14 +28,12 @@
  * position:relative container.
  */
 
-import { computed, inject, nextTick, watch, type ComputedRef } from 'vue';
+import { computed, nextTick, watch } from 'vue';
 import { hexToPixel, getHexPolygonPoints, hexCoordNames } from '../../../composables/useHexGrid.js';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import { useSelectableGrid } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
-import { resolvePresentation } from '../presentation.js';
-import type { PresentationOverlay } from '../presentation.js';
-import { GAME_CONTEXT_KEYS } from '../../../composables/useGameContext.js';
+import { usePresentationEntry } from '../../../composables/usePresentationEntry.js';
 import { boardCellStates } from './board-cell-states.js';
 import { cellCoordinateError, type GameElement } from '../auto-ui-helpers.js';
 
@@ -165,13 +163,7 @@ function handleHexDrop(event: DragEvent, cell: GameElement) {
   boardInteraction.triggerDrop(cellIdentity(cell));
 }
 
-// Presentation overlay injection (D-04)
-// HexBoardRenderer is a container — overlay affects the board header label.
-// Hex cell pieces are rendered via ElementRenderer → their renderer handles their own overlay.
-const overlay = inject(GAME_CONTEXT_KEYS.presentation, undefined) as ComputedRef<PresentationOverlay | undefined> | undefined;
-const presentationEntry = computed(() =>
-  resolvePresentation(props.element, overlay?.value)
-);
+const presentationEntry = usePresentationEntry(() => props.element);
 
 // Display label for the board header — overlay label wins, then engine fallback
 const displayLabel = computed(

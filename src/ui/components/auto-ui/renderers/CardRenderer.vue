@@ -17,14 +17,12 @@
  * the element is a hidden placeholder (T-93-04).
  */
 
-import { computed, inject, ref, watch, type Ref, type ComputedRef } from 'vue';
+import { computed, inject, ref, watch, type Ref } from 'vue';
 import { useElementBoardState } from '../../../composables/useElementBoardState.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
 import { setTransformAwareDragImage } from '../../../composables/dragImage.js';
-import { resolvePresentation } from '../presentation.js';
+import { usePresentationEntry } from '../../../composables/usePresentationEntry.js';
 import { isHiddenPlaceholder } from '../../../../engine/element/hidden-placeholder.js';
-import type { PresentationOverlay } from '../presentation.js';
-import { GAME_CONTEXT_KEYS } from '../../../composables/useGameContext.js';
 import { getSpriteStyle, parseImageInfo, type ImageInfo } from '../../../utils/image.js';
 import CardBack from './CardBack.vue';
 import type { GameElement } from '../auto-ui-helpers.js';
@@ -47,15 +45,7 @@ const {
   isDisabled,
 } = useElementBoardState(() => props.element);
 
-// ---------------------------------------------------------------------------
-// Presentation overlay — injected from AutoRenderer (D-04)
-// Resolved AFTER engine visibility filtering; resolvePresentation strips
-// image/stats for hidden placeholders (PRESENT-02).
-// ---------------------------------------------------------------------------
-const overlay = inject(GAME_CONTEXT_KEYS.presentation, undefined) as ComputedRef<PresentationOverlay | undefined> | undefined;
-const presentationEntry = computed(() =>
-  resolvePresentation(props.element, overlay?.value)
-);
+const presentationEntry = usePresentationEntry(() => props.element);
 
 // Whether the seat is sent a placeholder for this card rather than the card.
 const isHidden = computed(() => isHiddenPlaceholder(props.element));
