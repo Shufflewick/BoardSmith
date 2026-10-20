@@ -1,6 +1,6 @@
 import { constants as fsConstants, promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { gitOutput, gitSucceeds } from './git-output.js';
+import { gitOutput } from './git-output.js';
 import { DESIGN_DIR, RULEBOOK_DIR } from './project-paths.js';
 import { readIfExists } from './read-if-exists.js';
 
@@ -105,10 +105,31 @@ export type IngestHook =
 /** One member per state, so a check of `state` narrows to it. */
 type HookAt<State> = State extends string ? { state: State; path: string; absolute: string } : never;
 
-/** The project's own repository, not one an inherited GIT_DIR, GIT_WORK_TREE or GIT_COMMON_DIR names (#1301). */
-function ownRepositoryEnv(): NodeJS.ProcessEnv {
-  const { GIT_DIR: _dir, GIT_WORK_TREE: _workTree, GIT_COMMON_DIR: _commonDir, ...env } = process.env;
+/**
+ * The project's own repository: without the variables git clears when it enters another one, such as an
+ * inherited GIT_DIR or a core.hooksPath passed down in GIT_CONFIG_PARAMETERS (#1301).
+ */
+async function ownRepositoryEnv(project: string): Promise<NodeJS.ProcessEnv> {
+  const env = { ...process.env };
+  for (const name of (await gitOutput(project, ['rev-parse', '--local-env-vars'])).split('\n')) delete env[name];
   return env;
+}
+
+/** What git said, without the command that was run, for a message that adds its own full stop. */
+function gitReason(error: unknown): string {
+  const said = (error as { stderr?: string }).stderr || (error instanceof Error ? error.message : String(error));
+  return said.replace(/\.$/, '');
+}
+
+/** Whether git ignores `path`. A failure of git is not an answer, so it throws (#1301). */
+async function ignored(project: string, path: string, env: NodeJS.ProcessEnv): Promise<boolean> {
+  try {
+    await gitOutput(project, ['check-ignore', '-q', '--', path], { env });
+    return true;
+  } catch (error) {
+    if ((error as { code?: unknown }).code === 1) return false;
+    throw error;
+  }
 }
 
 /**
@@ -149,13 +170,14 @@ async function hookPlace(
   }
   // Git names real paths, so the project's must be real too, or every relative path runs through `..` (#1301).
   const project = await fs.realpath(projectPath);
-  const env = ownRepositoryEnv();
+  let env: NodeJS.ProcessEnv;
   let commonDir: string;
   let hookPath: string;
   try {
+    env = await ownRepositoryEnv(project);
     [commonDir, hookPath] = (await gitOutput(project, ['rev-parse', '--git-common-dir', '--git-path', 'hooks/pre-commit'], { env })).trim().split('\n');
   } catch (error) {
-    return { state: 'git-failed', reason: error instanceof Error ? error.message : String(error) };
+    return { state: 'git-failed', reason: gitReason(error) };
   }
   const absolute = resolve(project, hookPath);
   const shown = relative(project, absolute);
@@ -163,8 +185,11 @@ async function hookPlace(
   const path = isAbsolute(shown) ? absolute : shown;
   if (contains(resolve(project, commonDir), absolute)) return { state: 'found', path, absolute };
   if (!contains(project, absolute)) return { state: 'outside', path: absolute, absolute };
-  if (await gitSucceeds(project, ['check-ignore', '-q', '--', path], { env })) return { state: 'found', path, absolute };
-  return { state: 'in-project', path, absolute };
+  try {
+    return { state: (await ignored(project, path, env)) ? 'found' : 'in-project', path, absolute };
+  } catch (error) {
+    return { state: 'git-failed', reason: gitReason(error) };
+  }
 }
 
 function contains(folder: string, file: string): boolean {

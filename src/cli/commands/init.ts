@@ -316,7 +316,7 @@ async function installHookAndReport(projectPath: string): Promise<void> {
     );
   } else if (hook.result === 'skipped-not-executable') {
     console.log(
-      styleText('yellow', `  Wrote ${hook.path}, but its filesystem does not keep the execute bit, so git will skip it. Move the project to a filesystem that keeps file permissions, or ${byHand}.`),
+      styleText('yellow', `  Wrote ${hook.path}, but git will skip it: its execute bit did not take, as on a filesystem that keeps no permissions or is mounted noexec. Move the project to a filesystem that lets files run, or ${byHand}.`),
     );
   } else if (hook.result === 'installed') {
     console.log(styleText('dim', `  (installed the ingest pre-commit hook at ${hook.path})`));

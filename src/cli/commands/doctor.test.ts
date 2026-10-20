@@ -681,7 +681,7 @@ describe('boardsmith doctor', () => {
       vi.spyOn(fs, 'chmod').mockResolvedValue(undefined);
 
       await expect(doctorCommand({ project: projectDir, fix: true })).rejects.toThrow(
-        `Wrote ${join('.git', 'hooks', 'pre-commit')}, but its filesystem does not keep the execute bit, so git still skips it.`,
+        `Wrote ${join('.git', 'hooks', 'pre-commit')}, but git still skips it: its execute bit did not take`,
       );
       vi.restoreAllMocks();
     });

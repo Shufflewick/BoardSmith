@@ -381,8 +381,8 @@ async function fixIngestHook(projectDir: string, path: string): Promise<void> {
   if (installed.result === 'installed') return;
   if (installed.result === 'skipped-not-executable') {
     throw new Error(
-      `Wrote ${path}, but its filesystem does not keep the execute bit, so git still skips it. ` +
-        'Move the project to a filesystem that keeps file permissions, or run boardsmith ingest-gaps yourself after transcription.',
+      `Wrote ${path}, but git still skips it: its execute bit did not take, as on a filesystem that keeps no permissions or is mounted noexec. ` +
+        'Move the project to a filesystem that lets files run, or run boardsmith ingest-gaps yourself after transcription.',
     );
   }
   throw new Error(`Could not write ${path}. Check that you can write to its folder, then run boardsmith doctor --fix again.`);

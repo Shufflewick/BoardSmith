@@ -116,6 +116,23 @@ describe('installIngestHook', () => {
     await expect(fs.access(join(other, '.git', 'hooks', 'pre-commit'))).rejects.toThrow();
   });
 
+  it('ignores every repository-local variable git itself would, such as a core.hooksPath passed down from a `git -c` (#1301)', async () => {
+    const p = await gitProject();
+    vi.stubEnv('GIT_CONFIG_PARAMETERS', "'core.hookspath'='elsewhere'");
+
+    expect(await ingestHookState(p)).toMatchObject({ state: 'missing', path: join('.git', 'hooks', 'pre-commit') });
+  });
+
+  it('says git failed when it cannot tell whether the hooks folder is ignored, rather than calling it tracked (#1301)', async () => {
+    const p = await gitProject();
+    execSync('git config core.hooksPath githooks', { cwd: p });
+    await fs.writeFile(join(p, '.git', 'index'), 'not an index');
+
+    const hook = await ingestHookState(p);
+    expect(hook.state).toBe('git-failed');
+    expect(hook.state === 'git-failed' && hook.reason).toMatch(/index/);
+  });
+
   it('names a worktree\'s shared hook relative to the real folder, when the project is reached through a symlink (#1301)', async () => {
     const p = await gitProject();
     execSync('git -c user.email=t@t -c user.name=t commit --allow-empty -m base', { cwd: p, stdio: 'ignore' });
@@ -134,7 +151,8 @@ describe('installIngestHook', () => {
 
     const hook = await ingestHookState(p);
     expect(hook.state).toBe('git-failed');
-    expect(hook.state === 'git-failed' && hook.reason).toMatch(/not a git repository/);
+    // Git's own words, without the command that produced them or a closing full stop the message adds its own after.
+    expect(hook.state === 'git-failed' && hook.reason).toMatch(/^fatal: not a git repository.*[^.]$/);
     expect(await installIngestHook(p)).toMatchObject({ result: 'skipped-git-failed' });
   });
 
