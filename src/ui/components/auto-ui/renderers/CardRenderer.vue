@@ -41,23 +41,20 @@ const {
   identity: elementIdentity,
   isHighlighted: isBoardHighlighted,
   isSelected: isBoardSelected,
-  isActionSelectable,
+  isActionSelectable: isCandidate,
+  isDraggableSelected,
   isDisabled,
+  isDropTarget,
+  isDragged,
 } = useElementBoardState(() => props.element);
+
+// A card can be dragged, so it also offers the auto-filled first pick to drag on.
+const isActionSelectable = computed(() => isCandidate.value || isDraggableSelected.value);
 
 const presentationEntry = usePresentationEntry(() => props.element);
 
 // Whether the seat is sent a placeholder for this card rather than the card.
 const isHidden = computed(() => isHiddenPlaceholder(props.element));
-
-// What the card is called: its notation when it has one, else its name.
-const elementNotation = computed(
-  () => (props.element.attributes?.notation as string | undefined) ?? props.element.name ?? null,
-);
-
-const isDragged = computed(() => boardInteraction?.isDraggedElement(elementIdentity()) ?? false);
-
-const isDropTarget = computed(() => boardInteraction?.isDropTarget(elementIdentity()) ?? false);
 
 // Keyboard/ARIA: tabindex 0 for both action-selectable and drop-target cards
 // so keyboard users can reach cards that are valid drag targets too.
@@ -70,7 +67,7 @@ const isInteractiveForTabindex = computed(
 
 // aria-label: name + current interaction state (spec: "<name>, <state>")
 const ariaLabel = computed(() => {
-  const name = elementNotation.value || props.element.name || props.element.className;
+  const name = (props.element.attributes?.notation as string | undefined) || props.element.name || props.element.className;
   if (isDisabled.value) return `${name}, unavailable`;
   if (isDropTarget.value) return `${name}, drop target`;
   if (isBoardSelected.value) return `${name}, selected`;
@@ -151,18 +148,10 @@ function handleDragStart(event: DragEvent) {
 
   setTransformAwareDragImage(event, event.currentTarget as HTMLElement);
 
-  event.dataTransfer?.setData('boardsmith/element', JSON.stringify({
-    id: props.element.id,
-    name: props.element.name,
-    notation: elementNotation.value,
-  }));
+  event.dataTransfer?.setData('boardsmith/element', JSON.stringify(elementIdentity()));
   event.dataTransfer!.effectAllowed = 'move';
 
-  boardInteraction.startDrag({
-    id: props.element.id,
-    name: props.element.name,
-    notation: elementNotation.value || undefined,
-  });
+  boardInteraction.startDrag(elementIdentity());
 }
 
 function handleDragEnd() {
@@ -184,11 +173,7 @@ function handleDrop(event: DragEvent) {
 
   event.preventDefault();
 
-  boardInteraction.triggerDrop({
-    id: props.element.id,
-    name: props.element.name,
-    notation: elementNotation.value || undefined,
-  });
+  boardInteraction.triggerDrop(elementIdentity());
 }
 
 

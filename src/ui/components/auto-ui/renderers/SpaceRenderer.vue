@@ -28,9 +28,8 @@ const {
   isSelected: isBoardSelected,
   isActionSelectable,
   isDisabled,
+  isDropTarget,
 } = useElementBoardState(() => props.element);
-
-const isDropTarget = computed(() => boardInteraction?.isDropTarget(elementIdentity()) ?? false);
 
 // Drop handlers — space zones are valid drop targets
 function handleDragOver(event: DragEvent) {

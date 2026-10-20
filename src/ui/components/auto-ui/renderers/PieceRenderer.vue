@@ -28,16 +28,19 @@ const {
   identity: elementIdentity,
   isHighlighted,
   isSelected: isBoardSelected,
-  isActionSelectable,
+  isActionSelectable: isCandidate,
+  isDraggableSelected,
   isDisabled,
+  isDragged,
 } = useElementBoardState(() => props.element);
+
+// A piece can be dragged, so it also offers the auto-filled first pick to drag on.
+const isActionSelectable = computed(() => isCandidate.value || isDraggableSelected.value);
 
 // ── Core: delegate all visual logic to Phase 92 helper ───────────────────────
 const pieceVisual = computed((): PieceVisual => resolvePieceVisual(props.element));
 
 const presentationEntry = usePresentationEntry(() => props.element);
-
-const isDragged = computed(() => boardInteraction?.isDraggedElement(elementIdentity()) ?? false);
 
 const standsOn = inject(STANDS_ON_KEY, () => undefined);
 

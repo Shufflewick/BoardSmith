@@ -38,11 +38,10 @@ const {
   isSelected: isBoardSelected,
   isActionSelectable,
   isDisabled,
+  isDropTarget,
 } = useElementBoardState(() => props.element);
 
 const presentationEntry = usePresentationEntry(() => props.element);
-
-const isDropTarget = computed(() => boardInteraction?.isDropTarget(elementIdentity()) ?? false);
 
 // ---------------------------------------------------------------------------
 // Player info for header

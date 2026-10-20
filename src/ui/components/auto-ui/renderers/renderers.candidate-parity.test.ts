@@ -126,12 +126,17 @@ describe.each(ELEMENT_CASES)('%s — anchored candidate hook (#189)', (_name, co
 });
 
 // Each renderer once worked out its own board state, and the copies drifted (#1052).
-describe.each(ELEMENT_CASES)('%s — board state (#1052)', (_name, component, props, opts) => {
-  it('counts the draggable-selected element as selectable', () => {
+// The auto-filled first pick is offered only where it can be dragged on.
+const DRAGGABLE = new Set(['CardRenderer', 'PieceRenderer']);
+
+describe.each(ELEMENT_CASES)('%s — board state (#1052)', (name, component, props, opts) => {
+  it(`${DRAGGABLE.has(name) ? 'offers' : 'does not offer'} the draggable-selected element`, () => {
     const board = createBoardInteraction();
     board.setDraggableSelectedElement({ id: CANDIDATE_ID });
     const wrapper = mountWith(component, props, board, opts);
-    expect(wrapper.find(`[data-element-id="${CANDIDATE_ID}"]`).classes()).toContain('action-selectable');
+    const root = wrapper.find(`[data-element-id="${CANDIDATE_ID}"]`);
+    expect(root.classes().includes('action-selectable')).toBe(DRAGGABLE.has(name));
+    expect(root.attributes('tabindex')).toBe(DRAGGABLE.has(name) ? '0' : '-1');
     wrapper.unmount();
   });
 });
