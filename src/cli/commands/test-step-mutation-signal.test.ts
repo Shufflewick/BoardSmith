@@ -48,7 +48,7 @@ if (process.env.CHECK_KIND === 'scopes') {
   const run = () => process.env.CHECK_KIND === 'chunk'
     ? runMutationCheck({ ...input, claims: [], testFiles: [{ path: 'tests/busy.test.ts',
         absPath: join(projectDir, 'tests/busy.test.ts'), source: readFileSync(join(projectDir, 'tests/busy.test.ts'), 'utf8') }] })
-    : runDiffMutationCheck({ ...input, cache: { fingerprint: () => undefined, get: () => undefined, set: () => {}, save: async () => {} } });
+    : runDiffMutationCheck({ ...input, ...(process.env.BUDGET ? { budget: { trials: 2, workers: 2 } } : {}), cache: { fingerprint: () => undefined, get: () => undefined, set: () => {}, save: async () => {} } });
   try {
     if (process.env.NESTED) await withCommandBuildDir(projectDir, 'verify', run);
     else await run();
@@ -201,6 +201,55 @@ describe('mutation verification cancellation (#712)', () => {
       }
     });
   }
+
+  it('stops every concurrent trial group on SIGINT (#955)', async () => {
+    const { sandbox, project } = await mutationProject();
+    // Two mutants of line 1, each held open in its own trial.
+    await fs.writeFile(join(project, 'src/rules.ts'), 'export const enabled = 1 > 0;\n');
+    await fs.writeFile(join(project, 'tests/busy.test.ts'), `import { it, expect } from 'vitest';
+import { renameSync, writeFileSync } from 'node:fs';
+import { enabled } from '../src/rules';
+it('holds each trial worker open', async () => {
+  if (process.env.BOARDSMITH_MUTANT) {
+    const record = new URL('./trial-' + process.pid + '.partial', import.meta.url);
+    writeFileSync(record, JSON.stringify({ worker: process.pid, leader: process.ppid, workDir: process.env.BOARDSMITH_MUTANT }));
+    renameSync(record, new URL('./trial-' + process.pid + '.json', import.meta.url));
+    await new Promise(() => setInterval(() => {}, 1000));
+  }
+  expect(enabled).toBe(true);
+});`);
+    const child = spawn(process.execPath, ['driver.mjs'], {
+      cwd: project, env: {
+        ...sandbox.env, BUDGET: 'yes',
+        NODE_OPTIONS: sandbox.env.NODE_OPTIONS + ' --allow-child-process --allow-worker --allow-addons',
+      }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'], detached: true,
+    });
+    let output = '';
+    child.stdout!.on('data', (chunk) => { output += chunk; });
+    child.stderr!.on('data', (chunk) => { output += chunk; });
+    const ended = new Promise<NodeJS.Signals | null>((resolve) => child.on('close', (_code, signal) => resolve(signal)));
+    const guard = setTimeout(() => child.kill('SIGKILL'), 90_000);
+    const records = async (): Promise<WorkerRecord[]> => Promise.all((await fs.readdir(join(project, 'tests')))
+      .filter((name) => /^trial-\d+\.json$/.test(name)).map(async (name) => JSON.parse(await fs.readFile(join(project, 'tests', name), 'utf8'))));
+    let owned: WorkerRecord[] = [];
+    try {
+      while ((owned = await records()).length < 2) {
+        if (child.exitCode !== null || child.signalCode !== null) throw new Error(`Mutation driver exited before two trials started:\n${output}`);
+        await delay(10);
+      }
+      expect(new Set(owned.map((o) => o.leader)).size).toBe(2);
+      expect(new Set(owned.map((o) => o.workDir)).size).toBe(2);
+      child.kill('SIGINT');
+      expect(await ended, output).toBe('SIGINT');
+      for (const { leader } of owned) expect(processGroup(leader), 'a trial group survived the interrupted parent').toEqual([]);
+      expect(await fs.readdir(join(project, '.boardsmith'))).toEqual([]);
+    } finally {
+      clearTimeout(guard);
+      if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+      await ended;
+      for (const record of owned) await stopOwnedGroup(record);
+    }
+  });
 
   it('keeps the timeout verdict and reaps the timed-out mutant group', async () => {
     const { sandbox, project } = await mutationProject();

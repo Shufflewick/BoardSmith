@@ -48,6 +48,7 @@ import type { ChunkTestFile, TestStepFinding } from './test-step-check.js';
 import { COVERAGE_SETUP, coverageEnv, readCoverage, testKeyOf, type FileCoverage } from './test-step-coverage.js';
 import { GLOBAL_SETUP_MARK, REACH_SETUP, reachEnv, readReach } from './test-step-reach.js';
 import type { MutantCache } from '../lib/mutant-cache.js';
+import type { MutationBudget } from '../lib/mutation-budget.js';
 import { readEquivalenceReview, type EquivalenceBasis, type EquivalenceReview, type EquivalentMutant } from '../lib/mutation-equivalences.js';
 import { sha256Hex } from '../lib/hash.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
@@ -390,12 +391,37 @@ ${importBase}
 const projectDir = ${JSON.stringify(projectDir)};
 const writeReport = (report) => writeFileSync(${JSON.stringify(join(workDir, REPORT_NAME))}, JSON.stringify(report));
 const STATUS = { pass: 'passed', fail: 'failed' };
+// Vitest 2 sizes each pool from the root poolOptions before maxWorkers, and runs each pool's files at once (#955).
+const budgetProblems = (ctx) => {
+  const budget = Number(process.env.BOARDSMITH_WORKERS);
+  if (!budget) return undefined;
+  const configs = [ctx.config, ...ctx.projects.map((project) => project.config)];
+  const settings = configs.flatMap((config) => [
+    ...Object.entries(config.poolOptions ?? {}).flatMap(([pool, options]) =>
+      ['maxThreads', 'maxForks', 'minThreads', 'minForks'].filter((key) => options?.[key] !== undefined).map((key) => \`poolOptions.\${pool}.\${key}\`)),
+    ...(config.poolMatchGlobs?.length > 0 ? ['poolMatchGlobs'] : []),
+    ...(config.typecheck?.enabled ? ['typecheck.enabled'] : []),
+    ...(config.browser?.enabled ? ['browser.enabled'] : []),
+  ]);
+  const pools = new Set(ctx.projects.map((project) => project.config.pool));
+  if (pools.size > 1) settings.push(\`a different pool per project (\${[...pools].join(', ')})\`);
+  if (![...pools].every((pool) => ['forks', 'threads', 'vmForks', 'vmThreads'].includes(pool))) settings.push(\`the custom pool \${[...pools].join(', ')}\`);
+  if (settings.length === 0) return undefined;
+  return \`boardsmith.json "mutation" gives each Vitest run a budget of \${budget} test workers, but the project's Vitest config sets \${[...new Set(settings)].join(', ')}, \` +
+    'which Vitest uses to run workers outside that budget. Remove those settings from the Vitest config, or remove "mutation" from boardsmith.json to run mutants one at a time.';
+};
 const testsIn = (tasks) => tasks.flatMap((task) => (task.type === 'suite' ? testsIn(task.tasks) : [task]));
 const reporter = {
   onInit(ctx) {
     this.ctx = ctx;
     if (process.env.BOARDSMITH_REACH && [ctx.config, ...ctx.projects.map((project) => project.config)].some((config) => config.globalSetup?.length > 0)) {
       writeFileSync(process.env.BOARDSMITH_REACH + '/${GLOBAL_SETUP_MARK}', '');
+    }
+    const overBudget = budgetProblems(ctx);
+    if (overBudget) {
+      this.refused = true;
+      writeReport({ refused: overBudget });
+      throw new Error(overBudget);
     }
     const unhooked = ctx.projects.filter((project) => !(project.vite ?? project.server).config.plugins.some((p) => p.name === 'boardsmith-mutant'));
     if (unhooked.length === 0) return;
@@ -531,13 +557,14 @@ interface Runner {
   /**
    * With `bail`, a mutant's run stops after a confirmed test failure, including running workers. With
    * `coverage`, each test file writes which game code it ran into that directory (`readCoverage`);
-   * with `reach`, which project files its worker loaded (`readReach`).
+   * with `reach`, which project files its worker loaded (`readReach`). With `workers`, vitest runs at
+   * most that many test workers, and the reporter refuses a config that would run more (#955).
    */
   run(
     scope: RunScope,
     mutant: { absPath: string; source: string } | null,
     timeoutMs: number,
-    options?: { bail?: boolean; coverage?: string; reach?: string },
+    options?: { bail?: boolean; coverage?: string; reach?: string; workers?: number },
   ): Promise<RunResult>;
 }
 
@@ -727,6 +754,8 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
       delete env.BOARDSMITH_MUTANT;
       delete env.BOARDSMITH_COVERAGE;
       delete env.BOARDSMITH_REACH;
+      delete env.BOARDSMITH_WORKERS;
+      if (options.workers) env.BOARDSMITH_WORKERS = String(options.workers);
       if (options.coverage) Object.assign(env, coverageEnv(options.coverage, projectDir));
       if (options.reach) Object.assign(env, reachEnv(options.reach, projectDir));
       if (mutant) {
@@ -738,6 +767,7 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
         '--root', projectDir,
         '--config', configPath,
         ...(options.bail ? ['--bail=1'] : []),
+        ...(options.workers ? [`--maxWorkers=${options.workers}`, '--minWorkers=1'] : []),
         ...(scope === 'whole-suite'
           ? []
           : scope.map((f) => relative(projectDir, realpathSync(f.absPath)).split(sep).join('/'))),
@@ -1207,6 +1237,8 @@ interface DiffMutationInput {
   contextChange?: () => Promise<string | undefined>;
   /** Saves the outcomes found so far, called after each mutant that ran in an unchanged context, so an interrupted run keeps them (#940). */
   saveProgress?: () => Promise<void>;
+  /** How many mutants run at once and the test workers they share (boardsmith.json "mutation", #955); one at a time without it. */
+  budget?: MutationBudget;
 }
 
 interface DiffMutationResult {
@@ -1244,10 +1276,11 @@ const COUNTED: Readonly<Record<DiffOutcome, 'killed' | 'survived' | 'timedOut' |
   unreached: 'unreached',
 });
 
-/** A runner whose unmutated run of the whole suite passed, and the time limit a mutant's run gets. */
+/** A runner whose unmutated run of the whole suite passed, and the time limit and test workers a mutant's run gets. */
 interface GreenRunner {
   runner: Runner;
   timeoutMs: number;
+  workers?: number;
   /** The absolute paths of the test files that load the project file `file` (`readReach`). */
   testsLoading(file: string): string[];
 }
@@ -1257,24 +1290,27 @@ interface GreenRunner {
  * (`test-step-reach.ts`). Returns the runner when it passed; otherwise names what failed, since a
  * mutant proves nothing on a red suite.
  */
-async function greenRunner(runner: Runner, projectDir: string, log: (line: string) => void): Promise<GreenRunner | { notGreen: string[] }> {
+async function greenRunner(runner: Runner, projectDir: string, log: (line: string) => void, budget?: MutationBudget): Promise<GreenRunner | { notGreen: string[] }> {
   const reachDir = join(runner.workDir, 'reach');
   await fs.mkdir(reachDir);
-  const baseline = await runner.run('whole-suite', null, 10 * 60_000, { reach: reachDir });
+  const baseline = await runner.run('whole-suite', null, 10 * 60_000, { reach: reachDir, workers: budget?.workers });
   if (baseline.kind !== 'ran') throw new Error('The unmutated test run did not finish within 10 minutes.');
   if (suiteNoticed(baseline)) return { notGreen: redParts(baseline) };
   const { testsLoading, unrecorded } = await readReach(reachDir, projectDir, baseline.filesRun);
   if (unrecorded.length > 0) {
     log(`${unrecorded.length} of ${baseline.filesRun.size} test files run for every mutant, since what they load could not be told apart: ${unrecorded.join(', ')}`);
   }
-  return { runner, timeoutMs: Math.max(30_000, baseline.ms * 10), testsLoading };
+  // A trial has 1/trials of the workers the baseline had.
+  const trials = budget?.trials ?? 1;
+  const workers = budget && Math.floor(budget.workers / trials);
+  return { runner, timeoutMs: Math.max(30_000, baseline.ms * 10 * trials), workers, testsLoading };
 }
 
 /** Runs `mutant` against every test file that loads its file, stopping at the first failure; `unreached` when none does. */
-async function runMutant({ runner, timeoutMs, testsLoading }: GreenRunner, mutant: LocatedMutant): Promise<DiffOutcome> {
+async function runMutant({ runner, timeoutMs, workers, testsLoading }: GreenRunner, mutant: LocatedMutant): Promise<DiffOutcome> {
   const tests = testsLoading(mutant.file);
   if (tests.length === 0) return 'unreached';
-  const result = await runner.run(tests.map((absPath) => ({ absPath })), mutant, timeoutMs, { bail: true });
+  const result = await runner.run(tests.map((absPath) => ({ absPath })), mutant, timeoutMs, { bail: true, workers });
   if (result.kind === 'timed-out') return 'timed-out';
   // The runner has no chunk files, so the report names no file here: the verdict rests on vitest's exit code.
   return suiteNoticed(result) ? 'killed' : 'survived';
@@ -1322,34 +1358,45 @@ export async function runDiffMutationCheck(
   const known = mutants.map((m) => candidates.has(input.cache.fingerprint(m) ?? '') ? undefined : input.cache.get(m));
   if (!known.includes(undefined)) return tallyMutants(input, mutants, known, undefined, summary, review);
 
-  let runner: Runner | undefined;
+  const runners: Runner[] = [];
   return withCommandBuildDir(projectDir, 'verify-mutation', async (workDir) => {
-    runner = await createRunner(projectDir, [], workDir);
-    const started = await greenRunner(runner, projectDir, input.log);
+    // Each trial owns a runner, so its mutant input, report and process group are its own; all are made before any runs, for the stop below.
+    runners.push(await createRunner(projectDir, [], workDir));
+    for (let trial = 2; trial <= (input.budget?.trials ?? 1); trial++) {
+      const trialDir = join(workDir, `trial-${trial}`);
+      await fs.mkdir(trialDir);
+      runners.push(await createRunner(projectDir, [], trialDir));
+    }
+    const started = await greenRunner(runners[0], projectDir, input.log, input.budget);
     if ('notGreen' in started) return { summary, reused: 0, survivors: [], unreached: [], equivalents: [], notGreen: started.notGreen };
-    return tallyMutants(input, mutants, known, started, summary, review);
-  }, () => runner?.stop());
+    if (input.budget) {
+      input.log(`Running ${input.budget.trials} mutants at a time, each with ${started.workers} test worker${started.workers === 1 ? '' : 's'}, of a budget of ${input.budget.workers}.`);
+    }
+    return tallyMutants(input, mutants, known, runners.map((runner) => ({ ...started, runner })), summary, review);
+  }, () => stopAll(runners));
+}
+
+async function stopAll(runners: Runner[]): Promise<void> {
+  await Promise.all(runners.map((runner) => runner.stop()));
 }
 
 /**
- * Counts each mutant's outcome into `summary`: the one `known` holds for it, or else the outcome of
- * running it on `run`, which every mutant `known` does not hold needs. Returns the survivors and
- * the mutants no test reaches.
+ * Counts each mutant's outcome into `summary`, in the order the mutants were made: the one `known`
+ * holds for it, or else the outcome of running it on one of `runs`, which every mutant `known` does
+ * not hold needs. Returns the survivors and the mutants no test reaches.
  */
 async function tallyMutants(
   input: DiffMutationInput,
   mutants: LocatedMutant[],
   known: (DiffOutcome | undefined)[],
-  run: GreenRunner | undefined,
+  runs: GreenRunner[] | undefined,
   summary: DiffMutationResult['summary'],
   review: EquivalenceReview | undefined,
 ): Promise<DiffMutationResult> {
   const result: DiffMutationResult = { summary, reused: known.filter((k) => k !== undefined).length, survivors: [], unreached: [], equivalents: [] };
+  const outcomes = await outcomesOf(input, mutants, known, runs);
   for (const [i, mutant] of mutants.entries()) {
-    const stored = known[i];
-    const label = `mutant ${i + 1}/${mutants.length}: ${mutant.file}:${mutant.line} ${mutant.description}`;
-    input.log(stored === undefined ? label : `${label} (reused: ${stored})`);
-    const outcome = stored ?? (await runUnlessContextChanged(input, run!, mutant, i));
+    const outcome = outcomes[i];
     summary.mutants++;
     summary[COUNTED[outcome]]++;
     if (outcome === 'survived') await countSurvivor(input, mutant, review, result);
@@ -1360,17 +1407,53 @@ async function tallyMutants(
 }
 
 /**
+ * Each mutant's outcome: the one `known` holds, or the outcome of running it. Each of `runs` takes
+ * the next mutant as it finishes one, so as many run at once as there are runs. The first failure
+ * starts no more, stops every run still going, waits for their process groups to go, and is thrown.
+ */
+async function outcomesOf(
+  input: DiffMutationInput,
+  mutants: LocatedMutant[],
+  known: (DiffOutcome | undefined)[],
+  runs: GreenRunner[] | undefined,
+): Promise<DiffOutcome[]> {
+  const outcomes: DiffOutcome[] = [];
+  let next = 0;
+  let failure: { error: unknown } | undefined;
+  // Saves one at a time: the cache writes one temporary file per process.
+  let saving = Promise.resolve();
+  const save = () => (saving = saving.then(() => input.saveProgress?.()));
+  const work = async (run: GreenRunner | undefined) => {
+    while (!failure && next < mutants.length) {
+      const i = next++;
+      const mutant = mutants[i];
+      const stored = known[i];
+      const label = `mutant ${i + 1}/${mutants.length}: ${mutant.file}:${mutant.line} ${mutant.description}`;
+      input.log(stored === undefined ? label : `${label} (reused: ${stored})`);
+      outcomes[i] = stored ?? (await runUnlessContextChanged(input, run!, mutant, i, save));
+    }
+  };
+  await Promise.all((runs ?? [undefined]).map((run) => work(run).catch(async (error: unknown) => {
+    if (failure) return;
+    failure = { error };
+    await stopAll((runs ?? []).map((r) => r.runner));
+  })));
+  if (failure) throw failure.error;
+  return outcomes;
+}
+
+/**
  * Runs `mutant` and keeps its outcome, unless what the tests run with changed since the run began,
  * before it ran or while it ran: then the run is mixed and stops here, keeping nothing of it (#932, #940).
  * A timed-out mutant is not kept, nor an unreached one, which no run decided.
  */
-async function runUnlessContextChanged(input: DiffMutationInput, run: GreenRunner, mutant: LocatedMutant, done: number): Promise<DiffOutcome> {
+async function runUnlessContextChanged(input: DiffMutationInput, run: GreenRunner, mutant: LocatedMutant, done: number, save: () => Promise<void>): Promise<DiffOutcome> {
   await requireSameContext(input, `after ${done} mutants had run or been reused`);
   const outcome = await runMutant(run, mutant);
   if (outcome === 'timed-out' || outcome === 'unreached') return outcome;
   await requireSameContext(input, `while mutant ${done + 1} ran, so its outcome is not kept`);
   input.cache.set(mutant, outcome);
-  await input.saveProgress?.();
+  await save();
   return outcome;
 }
 
