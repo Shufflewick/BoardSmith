@@ -2,10 +2,10 @@
   "kind": "dupes",
   "clone_groups": [
     "src/session/testing/fixtures/bookkeeping-execute-fixture.ts:34-51|src/session/testing/fixtures/execute-barrier-fixture.ts:62-82",
-    "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:98-112|src/ui/composables/useHexGrid.ts:300-315",
+    "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:100-114|src/ui/composables/useHexGrid.ts:300-315",
     "src/ui/components/auto-ui/renderers/CardRenderer.vue:163-176|src/ui/components/auto-ui/renderers/HandRenderer.vue:170-180|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:37-47",
     "src/ui/components/auto-ui/renderers/HandRenderer.vue:431-437|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:263-269",
-    "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue:118-136|src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:222-240",
+    "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue:118-136|src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:224-242",
     "src/session/stateless-ops.ts:1076-1092|src/session/stateless-ops.ts:1165-1179",
     "src/ui/composables/useFLIP.ts:273-284|src/ui/composables/useFLIP.ts:320-334",
     "src/ui/components/auto-ui/renderers/HandRenderer.vue:166-180|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:34-47",
@@ -17,9 +17,9 @@
     "src/engine/element/game-element.ts:1153-1159|src/engine/element/game-element.ts:1214-1220",
     "src/cli/commands/verify-classify.ts:1568-1575|src/cli/commands/verify-classify.ts:783-790",
     "src/ui/composables/useFLIP.ts:331-339|src/ui/composables/useFLIP.ts:477-484",
-    "src/engine/element/game.ts:3781-3787|src/engine/element/game.ts:3811-3817",
-    "src/engine/element/game.ts:3853-3857|src/engine/element/game.ts:3885-3889",
-    "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue:74-88|src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:166-185"
+    "src/engine/element/game.ts:3782-3788|src/engine/element/game.ts:3812-3818",
+    "src/engine/element/game.ts:3854-3858|src/engine/element/game.ts:3886-3890",
+    "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue:74-88|src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:168-187"
   ],
   "clone_fingerprints": [
     "dup:3551213f:2",
@@ -40,7 +40,7 @@
     "dup:339cf224:2",
     "dup:ea6e3faa:2",
     "dup:60e2d102:2",
-    "dup:683b0b29:2"
+    "dup:ed56af0b:2"
   ],
   "normalized_clone_fingerprints": [
     "dup:c77b3abb6f87acd9-r5:2",
@@ -53,14 +53,14 @@
     "dup:c77b3abb6f87acd9-r11:2",
     "dup:c77b3abb6f87acd9-r1:2",
     "dup:c77b3abb6f87acd9-r15:2",
-    "dup:c77b3abb6f87acd9-r2:2",
     "dup:c77b3abb6f87acd9-r3:2",
+    "dup:c77b3abb6f87acd9-r4:2",
     "dup:c77b3abb6f87acd9-r16:2",
     "dup:c77b3abb6f87acd9-r10:2",
     "dup:c77b3abb6f87acd9-r6:2",
     "dup:c77b3abb6f87acd9-r13:2",
     "dup:c77b3abb6f87acd9-r7:2",
     "dup:c77b3abb6f87acd9-r8:2",
-    "dup:c77b3abb6f87acd9-r4:2"
+    "dup:c77b3abb6f87acd9-r2:2"
   ]
 }
