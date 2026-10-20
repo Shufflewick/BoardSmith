@@ -16,9 +16,9 @@
  *   - element -> element            (drag piece, drop onto a valid target element)
  *   - element -> elements           (drop onto any valid element of a multi-pick)
  *   - element -> choice WITH filterBy    (destinations narrowed by the dragged piece)
- *   - element -> choice WITHOUT filterBy (any choice carrying a targetRef)
- * For choice destinations, each choice must carry a `targetRef` so the board
- * knows which element the choice maps to.
+ *   - element -> choice WITHOUT filterBy (any choice with board refs)
+ * For choice destinations, each choice's `boardRefs` must name an element (role
+ * 'target', else its first ref) so the board knows where the choice is dropped.
  *
  * ## Quick Start (Pit of Success API)
  *
