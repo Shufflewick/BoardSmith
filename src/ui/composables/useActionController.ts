@@ -627,6 +627,14 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       ?? prefillRuleRefusal(selection, label, resolved, entries);
   }
 
+  /**
+   * Whether a prefill matched no choice. A repeat's refusals are set aside for
+   * the server, so a lone value is judged by the choice it names.
+   */
+  function matchedNothing(resolved: ResolvedPick, entries: unknown[] | undefined): boolean {
+    return 'unmatched' in resolved || (!entries && !resolved.choice && !resolved.refusal);
+  }
+
   /** A prefill its pick's choices refuse: none on offer, a disabled one, or one that matches nothing. */
   function prefillChoiceRefusal(
     label: string,
@@ -639,11 +647,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (choices.length === 0) return `Cannot prefill "${label}" with "${shown}": it has no available choices.`;
     const disabledReason = (entries ?? [prefillValue]).map(v => findMatchingChoice(v, choices)?.disabled).find(Boolean);
     if (disabledReason) return `Cannot prefill "${label}" with "${shown}": ${disabledReason}.`;
-    // A repeat's refusals are set aside for the server, so a lone value is judged by the choice it names.
-    if ('unmatched' in resolved || (!entries && !resolved.choice && !resolved.refusal)) {
-      return describeUnmatchedPrefill(label, shown, entries && resolved.unmatched, choices);
-    }
-    return undefined;
+    return matchedNothing(resolved, entries) ? describeUnmatchedPrefill(label, shown, entries && resolved.unmatched, choices) : undefined;
   }
 
   /** A prefill that matched its choices and still breaks a rule: a refusal in its own words, or its list's bounds (#1298). */
@@ -694,7 +698,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (entries.length < min) return `"${selection.name}" takes at least ${min}, got ${entries.length}.`;
     if (bounds.max !== undefined && entries.length > bounds.max) return `"${selection.name}" takes at most ${bounds.max}, got ${entries.length}.`;
     if (ordered) return null;
-    // Counted by each value's matched choice, so it is one pass over each list.
+    const repeated = repeatedEntry(entries, offered);
+    return repeated === undefined ? null : `"${selection.name}" names ${JSON.stringify(repeated.entry)} more than once; each may be chosen once.`;
+  }
+
+  /** The first entry of a set given more often than it is offered, counted by the choice it matches in one pass. */
+  function repeatedEntry(entries: readonly unknown[], offered: Array<{ value: unknown }>): { entry: unknown } | undefined {
     const counts = new Map<unknown, { given: number; offered: number }>();
     const keyOf = (value: unknown) => findMatchingChoice(value, offered) ?? value;
     for (const choice of offered) {
@@ -708,11 +717,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       const count = counts.get(key) ?? { given: 0, offered: 1 };
       count.given++;
       counts.set(key, count);
-      if (count.given > Math.max(1, count.offered)) {
-        return `"${selection.name}" names ${JSON.stringify(entry)} more than once; each may be chosen once.`;
-      }
+      if (count.given > Math.max(1, count.offered)) return { entry };
     }
-    return null;
+    return undefined;
   }
 
   /**
