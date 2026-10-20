@@ -79,8 +79,11 @@ const visibleChildren = computed(() => {
 });
 const grantedFromHidden = computed(() => (props.element.children ?? []).slice(visibleChildren.value.length));
 
-// Count display (for hidden hands that expose only childCount)
-const childCountDisplay = computed(() => (isSizeHidden(props.element) ? null : getElementCount(props.element)));
+// Count display (for hidden hands that expose only childCount); none when the size is not told.
+const sizeHidden = computed(() => isSizeHidden(props.element));
+const childCountLabel = computed(() => (sizeHidden.value ? '' : `(${getElementCount(props.element)})`));
+const handAriaLabel = computed(() =>
+  sizeHidden.value ? ownerLabel.value : `${ownerLabel.value}, ${getElementCount(props.element)} cards`);
 
 // ---------------------------------------------------------------------------
 // Back image for hidden card placeholders (from defaultBackImage)
@@ -182,7 +185,7 @@ function handleDrop(event: DragEvent) {
   <div
     v-bind="selectableAttrs"
     role="group"
-    :aria-label="`${ownerLabel}, ${childCountDisplay} cards`"
+    :aria-label="handAriaLabel"
     :class="[
       'hand-container',
       {
@@ -205,7 +208,7 @@ function handleDrop(event: DragEvent) {
       <span class="hand-label">
         {{ presentationEntry?.label ?? element.name ?? ownerLabel }}
       </span>
-      <span v-if="childCountDisplay !== null" class="hand-count">({{ childCountDisplay }})</span>
+      <span class="hand-count">{{ childCountLabel }}</span>
     </div>
 
     <!-- Cards wrapper -->
@@ -263,7 +266,7 @@ function handleDrop(event: DragEvent) {
       </div>
     </div>
 
-    <div v-if="grantedFromHidden.length > 0" class="hand-granted">
+    <div class="hand-granted">
       <ElementRenderer v-for="child in grantedFromHidden" :key="child.id" :element="child" />
     </div>
   </div>
@@ -350,6 +353,10 @@ function handleDrop(event: DragEvent) {
 }
 
 /* Cards wrapper */
+.hand-granted:empty {
+  display: none;
+}
+
 .hand-granted {
   display: flex;
   flex-wrap: wrap;
