@@ -694,6 +694,16 @@ async function installedVitestMajor(projectDir: string): Promise<number> {
   return Number(major);
 }
 
+/** Vitest's arguments that run only the test whose full name is exactly `test`, or none. */
+const exactTestArgs = (test: string | undefined) =>
+  test === undefined ? [] : ['--testNamePattern', `^${test.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`];
+
+/** A reported file's manifest path, else its project path when the run asked for it; undefined for a file the run is not about. */
+function pathInRun(projectDir: string, byRealPath: ReadonlyMap<string, string>, scope: RunScope): (realPath: string) => string | undefined {
+  const inScope = scope === 'whole-suite' ? undefined : new Set(scope.map((f) => realpathSync(f.absPath)));
+  return (realPath) => byRealPath.get(realPath) ?? (inScope?.has(realPath) === false ? undefined : relative(projectDir, realPath).split(sep).join('/'));
+}
+
 /**
  * `testFiles` names the chunk's test files by their manifest paths; a file outside them is named by
  * its path in the project. `workDir` is the directory this run of the check made for its generated
@@ -739,7 +749,7 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
         '--root', projectDir,
         '--config', configPath,
         ...(options.bail ? ['--bail=1'] : []),
-        ...(options.test === undefined ? [] : ['--testNamePattern', `^${options.test.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`]),
+        ...exactTestArgs(options.test),
         ...(scope === 'whole-suite'
           ? []
           : scope.map((f) => relative(projectDir, realpathSync(f.absPath)).split(sep).join('/'))),
@@ -754,11 +764,7 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
       checkStopped();
       if (!finished) return { kind: 'timed-out' };
 
-      const inScope = scope === 'whole-suite' ? undefined : new Set(scope.map((f) => realpathSync(f.absPath)));
-      const read = await readReport(reportPath, projectDir, (realPath) =>
-        byRealPath.get(realPath) ??
-        (inScope === undefined || inScope.has(realPath) ? relative(projectDir, realPath).split(sep).join('/') : undefined),
-      );
+      const read = await readReport(reportPath, projectDir, pathInRun(projectDir, byRealPath, scope));
       return { kind: 'ran', ...read, exitCode: finished.exitCode, ms: Date.now() - started };
     },
   };
@@ -1291,15 +1297,24 @@ async function runMutant(
 ): Promise<{ outcome: DiffOutcome; killer?: KillerHint }> {
   const tests = testsLoading(mutant.file);
   if (tests.length === 0) return { outcome: 'unreached' };
-  const isHint = (o: Outcome) => o.path === hint?.file && o.fullName === hint.test;
-  if (hint && passed.has(testKey({ path: hint.file, fullName: hint.test })) && tests.includes(join(projectDir, hint.file))) {
-    const trial = await runner.run([{ absPath: join(projectDir, hint.file) }], mutant, timeoutMs, { bail: true, test: hint.test });
-    if (trial.kind === 'ran' && trial.outcomes.some((o) => isHint(o) && o.failedOnAssertion)) return { outcome: 'killed', killer: hint };
-  }
+  if (hint && (await hintKills({ runner, projectDir, timeoutMs, passed }, mutant, tests, hint))) return { outcome: 'killed', killer: hint };
   const result = await runner.run(tests.map((absPath) => ({ absPath })), mutant, timeoutMs, { bail: true });
   if (result.kind === 'timed-out') return { outcome: 'timed-out' };
   const killer = result.outcomes.find((o) => o.failedOnAssertion);
   return { outcome: suiteNoticed(result) ? 'killed' : 'survived', ...(killer ? { killer: { file: killer.path, test: killer.fullName } } : {}) };
+}
+
+/** Whether `hint`'s test, one of `tests` that passed unmutated, fails on its own assertion when run alone under `mutant`. */
+async function hintKills(
+  { runner, projectDir, timeoutMs, passed }: Omit<GreenRunner, 'testsLoading'>,
+  mutant: LocatedMutant,
+  tests: string[],
+  hint: KillerHint,
+): Promise<boolean> {
+  const absPath = join(projectDir, hint.file);
+  if (!passed.has(testKey({ path: hint.file, fullName: hint.test })) || !tests.includes(absPath)) return false;
+  const trial = await runner.run([{ absPath }], mutant, timeoutMs, { bail: true, test: hint.test });
+  return trial.kind === 'ran' && trial.outcomes.some((o) => o.path === hint.file && o.fullName === hint.test && o.failedOnAssertion);
 }
 
 /** The preparation command observes a real survivor, without accepting a cached or reviewed verdict. */
