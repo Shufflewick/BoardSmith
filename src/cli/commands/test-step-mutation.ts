@@ -720,6 +720,13 @@ async function installedVitestMajor(projectDir: string): Promise<number> {
   return Number(major);
 }
 
+/** The vitest flags that hold a run to `workers` test workers, with `env` telling the reporter to refuse a config that would run more (#955). */
+function limitWorkers(workers: number | undefined, env: NodeJS.ProcessEnv): string[] {
+  if (!workers) return [];
+  env.BOARDSMITH_WORKERS = String(workers);
+  return [`--maxWorkers=${workers}`, '--minWorkers=1'];
+}
+
 /**
  * `testFiles` names the chunk's test files by their manifest paths; a file outside them is named by
  * its path in the project. `workDir` is the directory this run of the check made for its generated
@@ -755,7 +762,7 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
       delete env.BOARDSMITH_COVERAGE;
       delete env.BOARDSMITH_REACH;
       delete env.BOARDSMITH_WORKERS;
-      if (options.workers) env.BOARDSMITH_WORKERS = String(options.workers);
+      const workerFlags = limitWorkers(options.workers, env);
       if (options.coverage) Object.assign(env, coverageEnv(options.coverage, projectDir));
       if (options.reach) Object.assign(env, reachEnv(options.reach, projectDir));
       if (mutant) {
@@ -767,7 +774,7 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
         '--root', projectDir,
         '--config', configPath,
         ...(options.bail ? ['--bail=1'] : []),
-        ...(options.workers ? [`--maxWorkers=${options.workers}`, '--minWorkers=1'] : []),
+        ...workerFlags,
         ...(scope === 'whole-suite'
           ? []
           : scope.map((f) => relative(projectDir, realpathSync(f.absPath)).split(sep).join('/'))),
