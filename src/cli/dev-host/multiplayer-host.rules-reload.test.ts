@@ -591,3 +591,21 @@ describe('#388: a demo move that comes due while the edited rules are still buil
     await table.ask('demo-stop', {});
   }, 30_000);
 });
+
+describe('#1304: a seat change sent while an edit that will not build is building', () => {
+  it('is refused, as it would run bot turns on the rules the edit replaced', async () => {
+    const table = await serveTable(brokenEdit, turnsBefore, 2);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    for (const message of [{ type: 'join', seat: 2 }, { type: 'leave' }] as const) {
+      const reloaded = table.saveHeldUntil(table.server.received((m) => m.type === message.type));
+      const answer = table.page.next((f) => ['error', 'joined', 'lobby'].includes(f.type));
+      table.page.send(message);
+      await reloaded;
+      const refused = await answer;
+      expect(refused, message.type).toMatchObject({ type: 'error' });
+      expect(refused.message).toContain('Your edited rules did not load, so this table is still running the ones it had');
+    }
+  }, 30_000);
+});

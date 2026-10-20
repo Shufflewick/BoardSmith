@@ -3,7 +3,7 @@
  * engine's own palette and names, so there is one player-colour list (#814).
  */
 import { describe, it, expect } from 'vitest';
-import { createColorOption } from './colors.js';
+import { createColorOption, type ColorOptionDefinition } from './colors.js';
 import { DEFAULT_COLOR_PALETTE } from '../engine/index.js';
 
 describe('createColorOption', () => {
@@ -33,5 +33,14 @@ describe('createColorOption', () => {
 
   it('gives each call its own choices array', () => {
     expect(createColorOption().choices).not.toBe(createColorOption().choices);
+  });
+});
+
+describe('the colour option\'s label (#1304)', () => {
+  it('is always "Color": nothing reads another, so the type takes no other', () => {
+    // @ts-expect-error a hand-written colour option cannot carry a label that would be silently ignored
+    const relabelled: ColorOptionDefinition = { type: 'color', label: 'Team colour', choices: [] };
+    expect(createColorOption().label).toBe('Color');
+    expect(relabelled.type).toBe('color');
   });
 });

@@ -373,6 +373,12 @@ export async function serveVite(args: {
   // Through `vite.middlewares` on every request, because a `vite.config.ts`
   // restart replaces them on the same `vite` object.
   const httpServer = createHttpServer((req, res) => vite!.middlewares(req, res));
+  // An upgraded socket is no connection `closeAllConnections` ends, whoever took it or none did (#979, #1304).
+  const upgraded = new Set<Duplex>();
+  httpServer.on('upgrade', (_req, socket: Duplex) => {
+    upgraded.add(socket);
+    socket.once('close', () => upgraded.delete(socket));
+  });
   // Read on every upgrade, because a `vite.config.ts` restart can change it.
   for (const socket of args.sockets) socket.attach(httpServer, () => vite?.config);
   try {
@@ -402,6 +408,7 @@ export async function serveVite(args: {
           new Promise<void>((closed, reject) => {
             httpServer.close((error) => (error ? reject(error) : closed()));
             httpServer.closeAllConnections();
+            for (const socket of upgraded) socket.destroy();
           }),
       },
     ],
