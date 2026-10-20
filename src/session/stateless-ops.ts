@@ -39,6 +39,8 @@ import { PickHandler } from './pick-handler.js';
 import { picksFromSeat } from '../engine/element/seat-placeholders.js';
 import { missingFieldError } from './parse-executor-op.js';
 import { runnerFromSnapshot } from './runner-from-snapshot.js';
+import { PARTIAL_CHANGES_KEPT } from '../runtime/runner.js';
+import { NOTHING_CHANGED } from '../engine/action/rules-error.js';
 import { declaredGameOptionsOf } from './game-option-selection.js';
 import {
   offerFollowUp,
@@ -856,7 +858,7 @@ function handleAction(
   const actionResult = runner.performAction(op.actionName, op.player, args);
 
   if (!actionResult.success) {
-    return errorResult(actionResult.error ?? 'Action failed', 'bundle', actionResult.errorCode);
+    return errorResult(failedOpError(actionResult.error ?? 'Action failed'), 'bundle', actionResult.errorCode);
   }
 
   // This is the CR-01 fix: stateless-ops was the only non-test path missing this pump.
@@ -921,7 +923,7 @@ async function handleSelectionStep(
   );
 
   if (!step.success) {
-    return errorResult(step.error ?? 'Selection step failed', 'bundle', step.errorCode);
+    return errorResult(failedOpError(step.error ?? 'Selection step failed'), 'bundle', step.errorCode);
   }
 
   // Fired after every selection step (not just actionComplete) so predicates
@@ -1605,6 +1607,15 @@ function handleDebugCommand(
 // ---------------------------------------------------------------------------
 // Main dispatch
 // ---------------------------------------------------------------------------
+
+/**
+ * A failed op's error as the host's player reads it. A failed op returns no
+ * state, so the host keeps the game from before it and nothing it did is kept,
+ * even where the runner could not undo it (#1254).
+ */
+function failedOpError(error: string): string {
+  return error.endsWith(PARTIAL_CHANGES_KEPT) ? error.slice(0, -PARTIAL_CHANGES_KEPT.length) + NOTHING_CHANGED : error;
+}
 
 /**
  * Execute one operation against the given snapshot and return the new snapshot

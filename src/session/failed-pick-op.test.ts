@@ -320,7 +320,10 @@ describe("another seat's move between a seat's picks (#1177)", () => {
         type: 'action', player: 2, actionName: 'tap', args: {}, boundaryKey: boundaryKeyOf(first.snapshot),
       }));
 
-      expect(await step(tapped.snapshot, first.pendingState, 'two')).toMatchObject({ success: false, errorCode: ErrorCode.ENGINE_ERROR });
+      const failed = await step(tapped.snapshot, first.pendingState, 'two');
+      expect(failed).toMatchObject({ success: false, errorCode: ErrorCode.ENGINE_ERROR });
+      // The host keeps the game from before the op, so nothing it did is kept (#1254).
+      expect((failed as { error: string }).error).toMatch(/ Nothing was changed\.$/);
 
       const done = succeeded(await step(tapped.snapshot, first.pendingState, 'done'));
       const game = GameRunner.fromSnapshot(done.snapshot as GameStateSnapshot, UndoGame).game;
@@ -368,6 +371,23 @@ describe("another seat's failed action after a seat cancelled its pick (#1253)",
       expect(r.actionHistory).toHaveLength(0);
     });
   }
+});
+
+describe('a failed action op on the platform route with checkpoints off (#1254)', () => {
+  it('says nothing was changed, as the host keeps the game from before the op', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const def: GameDefinitionLike = { gameClass: UndoGame, gameType: 'undo', minPlayers: 2, maxPlayers: 2, checkpoints: { enabled: false } };
+    const options = { playerCount: 2, seed: 'undo' };
+    const start = succeeded(await executeOp(def, options, null, null, { type: 'start' }));
+
+    const smash = await executeOp(def, options, start.snapshot, null, {
+      type: 'action', player: 2, actionName: 'smash', args: {}, boundaryKey: boundaryKeyOf(start.snapshot),
+    });
+
+    expect(smash).toMatchObject({ success: false, errorCode: ErrorCode.ENGINE_ERROR });
+    expect((smash as { error: string }).error).toMatch(/ Nothing was changed\.$/);
+    expect((smash as { error: string }).error).not.toMatch(/partial changes/);
+  });
 });
 
 describe('a whole submission whose repeating pick moved, then crashed in onSelect (#1241)', () => {

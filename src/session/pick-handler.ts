@@ -56,7 +56,8 @@ function evaluateCandidates(
   args: Record<string, unknown>,
 ): { candidates: AnnotatedCandidate[] } | { refusal: PickChoicesResponse } {
   try {
-    return { candidates: executor.getChoices(selection, player, args) as AnnotatedCandidate[] };
+    // The action's name, so a running tutorial's per-pick gate greys what it does not allow (#1248).
+    return { candidates: executor.getChoices(selection, player, args, actionName) as AnnotatedCandidate[] };
   } catch (error) {
     // The shared crash handling (#1045): a PlayerFacingError travels, anything else is logged and replaced.
     if (error instanceof PlayerFacingError) {

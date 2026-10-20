@@ -224,6 +224,12 @@ export function pickFailureCode(refused: { rulesError?: boolean }): ErrorCode {
   return refused.rulesError ? ErrorCode.ENGINE_ERROR : ErrorCode.INVALID_PICK;
 }
 
+/** What a player is told when a failed action could not be undone (checkpoints off, #808, #989). */
+export const PARTIAL_CHANGES_KEPT =
+  'The action failed part way through, and the game may still hold its partial changes, ' +
+  'because per-action checkpoints are turned off for this session so it could not be undone. ' +
+  'Check the board before playing on, or restart the game from a save.';
+
 /** The kept history entries before action `actionIndex`, which a checkpoint there restores with. */
 function historyBefore(snapshot: GameStateSnapshot, actionIndex: number): HistoryEntry[] {
   const base = snapshot.actionHistoryBase ?? 0;
@@ -641,11 +647,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   private undoneError(error: string | undefined, restored: boolean): string {
     const kept = error === undefined ? '' : `${error} `;
-    if (restored) return kept + NOTHING_CHANGED;
-    return kept +
-      'The action failed part way through, and the game may still hold its partial changes, ' +
-      'because per-action checkpoints are turned off for this session so it could not be undone. ' +
-      'Check the board before playing on, or restart the game from a save.';
+    return kept + (restored ? NOTHING_CHANGED : PARTIAL_CHANGES_KEPT);
   }
 
   /** Put the game back to the head checkpoint, if there is one, and say whether it did. */
