@@ -221,24 +221,76 @@ describe('chunkMerge: the combined tree is checked, not the branch alone', () =>
     expect(await read(main, `.boardsmith/verify/${result}`)).toBe(await read(worktree, `.boardsmith/verify/${result}`));
   });
 
-  it('says so, naming verify --chunk, when the branch is checked out in no worktree, so no verify result is copied (#1202)', async () => {
+  /** Records review rounds in `slug`'s run log on its branch, one per commit, each naming that commit's verify. */
+  async function reviewRounds(worktree: string, slug: string, commits: string[]): Promise<void> {
+    const log = await read(worktree, `design/run-log/${slug}.md`);
+    const rounds = commits.map((commit, i) =>
+      `### Review Round ${i + 1}\n- Step: audit\n- Reviewed: Dispatch 1\n- Level: full\n- Verify: ${commit.slice(0, 12)} passed\n` +
+      '- Agents: fidelity=bs-judgement\n- Outcome: changes requested\n');
+    await write(worktree, { [`design/run-log/${slug}.md`]: `${log}\n${rounds.join('\n')}` });
+    git(worktree, 'add', '-A');
+    git(worktree, 'commit', '-q', '-m', `chunk-${slug}/review`);
+  }
+
+  /** The commits whose verify results the chunk's worktree holds. */
+  const verifiedCommits = async (worktree: string) =>
+    (await fs.readdir(join(worktree, '.boardsmith/verify'))).map((name) => name.slice(0, -'.json'.length));
+
+  it("names each review round's commit the main checkout has no verify result for, with how to record one there (#1302)", async () => {
     const worktree = await buildOnBranch('trading', 150);
+    const [verified] = await verifiedCommits(worktree);
+    await reviewRounds(worktree, 'trading', [verified]);
+    git(main, 'worktree', 'remove', '--force', worktree);
+    const mainBranch = git(main, 'branch', '--show-current').trim();
+
+    const merge = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+
+    expect(merge.refusals).toEqual([]);
+    const short = verified.slice(0, 12);
+    expect(merge.noVerifyResults).toContain(`this checkout has no verify result for review round 1's commit ${short}`);
+    expect(merge.noVerifyResults).toContain(
+      `with a clean tree run \`git checkout ${short}\`, run \`npx boardsmith verify --chunk trading\`, then \`git checkout ${mainBranch}\` again`,
+    );
+  });
+
+  it('names the commit to go back to when the main checkout is on no branch (#1302)', async () => {
+    const worktree = await buildOnBranch('trading', 150);
+    const [verified] = await verifiedCommits(worktree);
+    await reviewRounds(worktree, 'trading', [verified]);
+    git(main, 'worktree', 'remove', '--force', worktree);
+    git(main, 'checkout', '-q', '--detach');
+
+    const merge = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+
+    expect(merge.refusals).toEqual([]);
+    expect(merge.noVerifyResults).toContain(`then \`git checkout ${head()}\` again`);
+  });
+
+  it('names only the rounds left without a result when it copied some of them (#1302)', async () => {
+    const worktree = await buildOnBranch('trading', 150);
+    const [verified] = await verifiedCommits(worktree);
+    const unverified = git(worktree, 'rev-parse', 'HEAD').trim();
+    await reviewRounds(worktree, 'trading', [verified, unverified]);
+
+    const merge = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+
+    expect(merge.refusals).toEqual([]);
+    expect(merge.noVerifyResults).toContain(`review round 2's commit ${unverified.slice(0, 12)}`);
+    expect(merge.noVerifyResults).not.toContain(verified.slice(0, 12));
+  });
+
+  it('says nothing when the main checkout already has a result for each round, though it copied none (#1302)', async () => {
+    const worktree = await buildOnBranch('trading', 150);
+    const [verified] = await verifiedCommits(worktree);
+    await reviewRounds(worktree, 'trading', [verified]);
+    await fs.mkdir(join(main, '.boardsmith/verify'), { recursive: true });
+    await fs.copyFile(join(worktree, '.boardsmith/verify', `${verified}.json`), join(main, '.boardsmith/verify', `${verified}.json`));
     git(main, 'worktree', 'remove', '--force', worktree);
 
     const merge = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
 
     expect(merge.refusals).toEqual([]);
-    expect(merge.noVerifyResults).toMatch(/chunk\/trading is checked out in no worktree.*`boardsmith verify --chunk trading`/);
-  });
-
-  it("says so when the chunk's worktree has no verify result for any of the branch's commits (#1202)", async () => {
-    const worktree = await buildOnBranch('trading', 150);
-    await fs.rm(join(worktree, '.boardsmith/verify'), { recursive: true });
-
-    const merge = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
-
-    expect(merge.refusals).toEqual([]);
-    expect(merge.noVerifyResults).toMatch(/has no verify result for any of chunk\/trading's commits.*`boardsmith verify --chunk trading`/);
+    expect(merge.noVerifyResults).toBeUndefined();
   });
 
   it('says nothing about verify results when it copied one (#1202)', async () => {

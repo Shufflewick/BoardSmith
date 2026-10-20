@@ -1198,17 +1198,19 @@ describe('CHECK-02 no-fork guard — lens/repair prose sourced from build/*.md a
   it('repair-dispatch.md drives the repair steps through the verify-repair commands (#838)', () => {
     const doc = read('verify/repair-dispatch.md');
     expect(doc).toContain('boardsmith verify-repair --project <dir> --run-id <runId> --json');
-    expect(doc).toContain('boardsmith verify-repair-round --project <dir> --chunk <slug> --episode <episode> --json');
+    expect(doc).toContain('boardsmith verify-repair-round --project <dir> --run-id <runId> --chunk <slug> --json');
     expect(doc).toContain('boardsmith verify-repair-gate --project <dir> --run-id <runId> --chunk <slug> --json');
   });
 
-  it('repair-dispatch.md opens EVERY round of the episode with verify-repair-round, including each loop-back to audit, and sends triage to round-3 triage (#838)', () => {
+  it('repair-dispatch.md opens EVERY round of the run with verify-repair-round, including each loop-back to audit, carries on with a round still open, and sends triage to round-3 triage (#838, #1302)', () => {
     const doc = read('verify/repair-dispatch.md');
     const step4 = doc.slice(doc.indexOf('## 4.'), doc.indexOf('## 5.'));
-    expect(step4).toMatch(/every round of this verify episode/i);
+    expect(step4).toMatch(/every round of this verify run/i);
     expect(step4).toMatch(/including each round `build\/repair\.md` loops back to `build\/audit\.md` for/);
-    expect(step4).toMatch(/same episode number/i);
+    expect(step4).toMatch(/same run id/i);
+    expect(step4).toMatch(/`alreadyOpen: true`[\s\S]{0,300}carry on with it/);
     expect(step4).toMatch(/If it reports `triage`[\s\S]{0,200}"Round-3 User Triage"/);
+    expect(doc).not.toMatch(/--episode|episode number/);
   });
 
   it('no file under bs/verify/ instructs reading ## Interpretation (decision 11)', () => {

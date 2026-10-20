@@ -1,6 +1,5 @@
 import { Command, Option } from 'commander';
 import { readBoardsmithVersion } from './lib/boardsmith-version.js';
-import { parsePositiveWholeNumber } from '../utils/positive-whole-number.js';
 import { initCommand } from './commands/init.js';
 import { addUiCommand } from './commands/add-ui.js';
 import { devCommand } from './commands/dev.js';
@@ -760,7 +759,7 @@ export function createProgram(): Command {
   program
     .command('verify-repair')
     .description(
-      "Report each rules-stale chunk's fresh staged slice paths and its next verify-episode audit " +
+      "Report each rules-stale chunk's fresh staged slice paths and its next audit " +
         'round plan (read-only, machine-readable) — dispatching the audit lenses and the repair ' +
         'loop itself is verify/repair-dispatch.md\'s job, never this command\'s',
     )
@@ -772,16 +771,13 @@ export function createProgram(): Command {
   program
     .command('verify-repair-round')
     .description(
-      "Open a stale chunk's next verify-episode audit round by appending its ### Audit Round heading " +
-        "to CHUNK.md, or report triage and write nothing once the episode's 3-round budget is spent",
+      "Open a stale chunk's next audit round for a verify run by writing its ### Audit Round heading " +
+        "into CHUNK.md's Findings Ledger (a round still empty is reported, not written again), or " +
+        "report triage and write nothing once the run's 3-round budget is spent",
     )
     .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--run-id <id>', 'Open the round for a specific verify run instead of the most recent')
     .requiredOption('--chunk <slug>', 'The stale chunk to open a round for')
-    .requiredOption(
-      '--episode <n>',
-      "The verify episode, from this pass's `boardsmith verify-repair` report",
-      (raw: string) => parsePositiveWholeNumber('--episode', raw),
-    )
     .option('--json', 'Emit JSON instead of human-readable output')
     .action(discardResult(verifyRepairRoundCommand));
 
@@ -789,7 +785,7 @@ export function createProgram(): Command {
     .command('verify-repair-gate')
     .description(
       "Re-derive a stale chunk's repair-gate disposition from its post-repair code state, once its " +
-        'verify-episode rounds are closed (read-only, machine-readable)',
+        "verify run's rounds are closed (read-only, machine-readable)",
     )
     .option('--project <dir>', 'Project directory (defaults to cwd)')
     .option('--run-id <id>', 'Report against a specific verify run instead of the most recent')
