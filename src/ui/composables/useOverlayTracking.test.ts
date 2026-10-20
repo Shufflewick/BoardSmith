@@ -54,15 +54,25 @@ describe('useOverlayTracking', () => {
     await nextTick();
     expect(observers[observers.length - 1].observe).toHaveBeenCalledWith(wrapper.element);
     wrapper.unmount();
+    region.remove();
 
-    region.classList.remove('boardregion');
-    observers.length = 0;
     const boardless = mountTracked([]);
     boardless.region.classList.remove('boardregion');
+    const addListener = vi.spyOn(boardless.region, 'addEventListener');
     boardless.content.value = [{ kind: 'element', ref: { id: 1 } }];
     await nextTick();
     await nextTick();
-    expect(observers[observers.length - 1].observe).toHaveBeenCalledWith(boardless.wrapper.element);
+    const observer = observers[observers.length - 1];
+    expect(observer.observe).toHaveBeenCalledWith(boardless.wrapper.element);
+    expect(addListener).not.toHaveBeenCalledWith('scroll', expect.anything(), expect.anything());
+
+    // A resize of the root, which the window's resize is, re-measures with no board.
+    boardless.measure.mockClear();
+    const ResizeObserverMock = vi.mocked(globalThis.ResizeObserver);
+    const onResize = ResizeObserverMock.mock.calls[ResizeObserverMock.mock.calls.length - 1]![0];
+    onResize([], observer as unknown as ResizeObserver);
+    await nextTick();
+    expect(boardless.measure).toHaveBeenCalledWith(null);
     boardless.wrapper.unmount();
   });
 

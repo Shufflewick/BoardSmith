@@ -124,9 +124,12 @@ describe("the shell's bar lifts its cap for a marked editor, and for nothing els
   });
 
   it('caps a bar holding a one-line or number field one row past the strip, at every screen size (#1300)', () => {
-    expect(rule(`.actionbar:has(${FIELD})`)).toMatch(/max-height:\s*var\(--bsg-panel-field-max\);/);
+    expect(rule(`.actionbar:has(${FIELD})`)).toMatch(
+      /max-height:\s*max\(var\(--bsg-panel-reserved\),\s*var\(--bsg-panel-field-max\)\);/,
+    );
+    // Bounded by the screen, as the box's ceiling is.
     const fieldMax = rule('.game-shell__game').match(/--bsg-panel-field-max\s*:\s*([^;]+);/)?.[1] ?? '';
-    expect(fieldMax.replace(/\s+/g, ' ')).toBe('calc(var(--bsg-panel-reserved) + var(--bsg-panel-row) + var(--bsg-panel-gap))');
+    expect(fieldMax.replace(/\s+/g, ' ')).toBe('min(calc(var(--bsg-panel-reserved) + var(--bsg-panel-row) + var(--bsg-panel-gap)), 60dvh)');
     // One definition, for every tier: no media query restates it.
     expect(style.match(/--bsg-panel-field-max\s*:/g)).toHaveLength(1);
     // No rule lifts the cap for an unvalued mark, which would give a field the box's ceiling.

@@ -287,11 +287,19 @@ describe('HintOverlay unmount (#749)', () => {
 });
 
 describe('HintOverlay placement (#927)', () => {
-  // The layer is fixed to the screen, so a vertical scrollbar leaves it 15px narrower than jsdom's 1024px window (#1300).
+  // The layer is fixed to the screen, so scrollbars leave it 15px smaller each way than jsdom's 1024x768 window (#1300).
   const LAYER_WIDTH = 1009;
+  const LAYER_HEIGHT = 753;
+
+  /** The layer's own size; every other element reports none, so only a read of the layer can pass. */
+  const layerOnly = (size: number) =>
+    function (this: Element) {
+      return this.classList.contains('bsg-annotation-layer') ? size : 0;
+    };
 
   beforeEach(() => {
-    vi.spyOn(Element.prototype, 'clientWidth', 'get').mockReturnValue(LAYER_WIDTH);
+    vi.spyOn(Element.prototype, 'clientWidth', 'get').mockImplementation(layerOnly(LAYER_WIDTH));
+    vi.spyOn(Element.prototype, 'clientHeight', 'get').mockImplementation(layerOnly(LAYER_HEIGHT));
   });
 
   afterEach(() => {
@@ -318,9 +326,9 @@ describe('HintOverlay placement (#927)', () => {
     return (wrapper.find('.bsg-board-message--annotation').element as HTMLElement).style;
   }
 
-  const SHIFTED = 'translateX(var(--shift))';
+  const SHIFTED = 'translateX(var(--bsg-bubble-shift))';
   // The caret undoes the bubble's own shift, so it still points at the target, kept clear of the rounded corner.
-  const CARET = 'clamp(12px, calc(-1 * var(--shift)), calc(100% - 12px))';
+  const CARET = 'clamp(12px, calc(-1 * var(--bsg-bubble-shift)), calc(100% - 12px))';
 
   it('centres an untargeted bubble on the board for placement="center"', async () => {
     const wrapper = mountOnBoard({ text: 'Think about it', placement: 'center' });
@@ -359,7 +367,7 @@ describe('HintOverlay placement (#927)', () => {
     expect(bubbleStyle(wrapper).left).toBe('10px');
     expect(bubbleStyle(wrapper).transform).toBe(SHIFTED);
     // Shift left by half the bubble's width, but never past 8px from the layer's left edge.
-    expect(bubbleStyle(wrapper).getPropertyValue('--shift')).toBe('max(-2px, min(-50%, calc(991px - 100%)))');
+    expect(bubbleStyle(wrapper).getPropertyValue('--bsg-bubble-shift')).toBe('max(-2px, min(-50%, calc(991px - 100%)))');
     expect(bubbleStyle(wrapper).getPropertyValue('--caret-left')).toBe(CARET);
     wrapper.unmount();
   });
@@ -375,8 +383,21 @@ describe('HintOverlay placement (#927)', () => {
     expect(bubbleStyle(wrapper).left).toBe('999px');
     expect(bubbleStyle(wrapper).transform).toBe(SHIFTED);
     // Shift left by half the bubble's width, or more, so its right edge stays 8px in.
-    expect(bubbleStyle(wrapper).getPropertyValue('--shift')).toBe('max(-991px, min(-50%, calc(2px - 100%)))');
+    expect(bubbleStyle(wrapper).getPropertyValue('--bsg-bubble-shift')).toBe('max(-991px, min(-50%, calc(2px - 100%)))');
     expect(bubbleStyle(wrapper).getPropertyValue('--caret-left')).toBe(CARET);
+    wrapper.unmount();
+  });
+
+  it('puts a bubble above a target when below it would run under a horizontal scrollbar the window counts (#1300)', async () => {
+    // Below would end at 650 + 20 + 8 + 80 = 758: inside the 768px window, past the 753px layer.
+    const wrapper = mountOnBoard(
+      { text: 'Suggested move', target: { kind: 'element', ref: { id: 1300 } } },
+      '<div data-bs-el-id="1300"></div>',
+      new DOMRect(100, 650, 20, 20),
+    );
+    await nextTick();
+    expect(wrapper.find('.bsg-board-message__caret--bottom').exists()).toBe(true);
+    expect(bubbleStyle(wrapper).top).toBe('562px');
     wrapper.unmount();
   });
 

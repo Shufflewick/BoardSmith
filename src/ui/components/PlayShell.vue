@@ -703,8 +703,8 @@ const mobileToggleLabel = computed(() => {
      A one-line or number field stacks label, hint and field + Done in three
      rows on a phone (#1058), one more than the strip, so it may grow the bar by
      that one row, at every size; anything more, such as a refusal, scrolls
-     inside the bar (#1300). */
-  --bsg-panel-field-max: calc(var(--bsg-panel-reserved) + var(--bsg-panel-row) + var(--bsg-panel-gap));
+     inside the bar (#1300). Bounded by the screen, as the box's ceiling is. */
+  --bsg-panel-field-max: min(calc(var(--bsg-panel-reserved) + var(--bsg-panel-row) + var(--bsg-panel-gap)), 60dvh);
 
   /* A multi-line box cannot be written in two rows, so it may grow the bar to
      what it needs: its box plus everything around it that must stay
@@ -942,7 +942,7 @@ const mobileToggleLabel = computed(() => {
 }
 
 .actionbar:has([data-bs-grows-panel="field"]) {
-  max-height: var(--bsg-panel-field-max);
+  max-height: max(var(--bsg-panel-reserved), var(--bsg-panel-field-max));
 }
 
 /* Down: one row that must NOT wrap. A wrapped "collapsed" bar would be taller

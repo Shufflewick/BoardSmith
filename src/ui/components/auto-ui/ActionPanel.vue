@@ -680,9 +680,14 @@ const editorDescribedBy = computed(() => {
  * bar. The stylesheet still addresses them by the classes it always did.
  */
 const editorWrapperClass = computed(() => {
+  if (currentPick.value?.type !== 'text') return 'number-input';
+  return editorGrowth.value === 'box' ? ['text-input', 'text-input-multiline'] : 'text-input';
+});
+
+/** How far the editor may grow the bar: a multi-line box to what it needs, a one-line or number field by one row (#1300). */
+const editorGrowth = computed(() => {
   const pick = currentPick.value;
-  if (pick?.type !== 'text') return 'number-input';
-  return pick.multiline ? ['text-input', 'text-input-multiline'] : 'text-input';
+  return pick?.type === 'text' && pick.multiline ? 'box' : 'field';
 });
 
 const editorFieldAttrs = computed(() => ({
@@ -2006,7 +2011,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           v-else-if="currentPick.type === 'number' || currentPick.type === 'text'"
           :class="editorWrapperClass"
           :data-bs-pick="currentPick.name"
-          :data-bs-grows-panel="currentPick.type === 'text' && currentPick.multiline ? 'box' : 'field'"
+          :data-bs-grows-panel="editorGrowth"
         >
           <label class="selection-prompt" :for="editorInputId">
             {{ currentPick.prompt || `Enter ${currentPick.name}` }}

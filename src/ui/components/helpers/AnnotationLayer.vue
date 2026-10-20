@@ -63,31 +63,33 @@ function readRadius(el: Element): string {
 function boardStyle(
   placement: Annotation['placement'],
   boardRect: DOMRect | null,
-  layerWidth: number,
+  layer: LayerSize,
 ): Record<string, string> {
-  const left = `${boardRect ? boardRect.left + boardRect.width / 2 : layerWidth / 2}px`;
+  const left = `${boardRect ? boardRect.left + boardRect.width / 2 : layer.width / 2}px`;
   const top = boardRect?.top ?? 0;
-  const bottom = boardRect?.bottom ?? window.innerHeight;
+  const bottom = boardRect?.bottom ?? layer.height;
   if (placement === 'center') {
     return { left, top: `${(top + bottom) / 2}px`, transform: 'translate(-50%, -50%)' };
   }
-  return { left, top: `${boardTop(placement, top, bottom)}px`, transform: 'translateX(-50%)' };
+  return { left, top: `${boardTop(placement, top, bottom, layer.height)}px`, transform: 'translateX(-50%)' };
 }
 
-function boardTop(placement: Annotation['placement'], top: number, bottom: number): number {
+function boardTop(placement: Annotation['placement'], top: number, bottom: number, layerHeight: number): number {
   if (placement === 'bottom') return Math.max(top, bottom - BUBBLE_HEIGHT_ESTIMATE - GAP);
   if (placement === 'top' || props.untargeted === 'board-top') return top + GAP;
   // Below the board so the bubble never covers squares the player needs to read;
   // clamped so a very tall board cannot push it off-screen.
-  return Math.min(bottom + GAP, window.innerHeight - 56);
+  return Math.min(bottom + GAP, layerHeight - 56);
 }
 
-// The layer is fixed to the screen, so its width leaves out a scrollbar that window.innerWidth counts (#1300).
-function resolve(ann: Annotation, boardRect: DOMRect | null, layerWidth: number): ResolvedAnnotation {
+/** The layer is fixed to the screen, so its size leaves out the scrollbars the window's size counts (#1300). */
+interface LayerSize { width: number; height: number }
+
+function resolve(ann: Annotation, boardRect: DOMRect | null, layer: LayerSize): ResolvedAnnotation {
   const selector = ann.target ? buildSelector(ann.target) : '';
   const targetEl = selector ? document.querySelector(selector) : null;
   if (!targetEl) {
-    return { text: ann.text, ring: null, anchorStyle: boardStyle(ann.placement, boardRect, layerWidth) };
+    return { text: ann.text, ring: null, anchorStyle: boardStyle(ann.placement, boardRect, layer) };
   }
 
   const rect = targetEl.getBoundingClientRect();
@@ -99,7 +101,7 @@ function resolve(ann: Annotation, boardRect: DOMRect | null, layerWidth: number)
     borderRadius: readRadius(targetEl),
   };
   if (ann.placement && ann.placement !== 'auto') {
-    return { text: ann.text, ring, anchorStyle: boardStyle(ann.placement, boardRect, layerWidth) };
+    return { text: ann.text, ring, anchorStyle: boardStyle(ann.placement, boardRect, layer) };
   }
 
   // Next to the target: below it, or above when it would run off the bottom.
@@ -107,16 +109,16 @@ function resolve(ann: Annotation, boardRect: DOMRect | null, layerWidth: number)
   const centre = rect.left + rect.width / 2;
   const left = `${centre}px`;
   const roomLeft = centre - EDGE_MARGIN;
-  const roomRight = layerWidth - EDGE_MARGIN - centre;
+  const roomRight = layer.width - EDGE_MARGIN - centre;
   const shifted = {
     // Right edge kept in first; the left bound wins on a bubble wider than the layer.
-    '--shift': `max(${-roomLeft}px, min(-50%, calc(${roomRight}px - 100%)))`,
-    transform: 'translateX(var(--shift))',
+    '--bsg-bubble-shift': `max(${-roomLeft}px, min(-50%, calc(${roomRight}px - 100%)))`,
+    transform: 'translateX(var(--bsg-bubble-shift))',
     // The caret is the bubble's child: undoing the shift keeps it pointing at the target.
-    '--caret-left': `clamp(${CARET_INSET}px, calc(-1 * var(--shift)), calc(100% - ${CARET_INSET}px))`,
+    '--caret-left': `clamp(${CARET_INSET}px, calc(-1 * var(--bsg-bubble-shift)), calc(100% - ${CARET_INSET}px))`,
   };
   const below = rect.top + rect.height + GAP;
-  if (below + BUBBLE_HEIGHT_ESTIMATE <= window.innerHeight) {
+  if (below + BUBBLE_HEIGHT_ESTIMATE <= layer.height) {
     return { text: ann.text, ring, caretSide: 'top', anchorStyle: { left, top: `${below}px`, ...shifted } };
   }
   const above = Math.max(0, rect.top - GAP - BUBBLE_HEIGHT_ESTIMATE);
@@ -130,7 +132,8 @@ useOverlayTracking({
   measure: (boardRect) => {
     const layer = overlayRoot.value;
     // Without the layer nothing is shown, so there is nothing to place.
-    resolvedAnnotations.value = layer ? props.annotations.map((ann) => resolve(ann, boardRect, layer.clientWidth)) : [];
+    const size = layer && { width: layer.clientWidth, height: layer.clientHeight };
+    resolvedAnnotations.value = size ? props.annotations.map((ann) => resolve(ann, boardRect, size)) : [];
   },
 });
 </script>
