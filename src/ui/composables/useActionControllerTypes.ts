@@ -374,6 +374,12 @@ export interface RepeatingState {
   currentChoices?: Array<{ value: unknown; display: string }>;
 }
 
+/** An action's opening element pick and the candidates it offers. */
+export interface StartCandidates {
+  pick: string;
+  elements: EnrichedValidElement[];
+}
+
 export interface UseActionControllerReturn {
   // === State ===
   /** Currently active action name */
@@ -393,6 +399,12 @@ export interface UseActionControllerReturn {
    * Re-runs when async-fetched choices arrive; use getChoices(pick) for an arbitrary pick.
    */
   currentChoices: ComputedRef<ChoiceWithRefs[]>;
+  /**
+   * With no action open, what a board click or drag can start (#1192): each
+   * available, enabled action that opens with an element pick, in
+   * `availableActions` order, with that pick's candidates. Empty off turn.
+   */
+  startCandidates: ComputedRef<ReadonlyMap<string, StartCandidates>>;
   /** Whether all selections are filled and action is ready */
   isReady: ComputedRef<boolean>;
   /** Whether the current seat has an action out to the server */

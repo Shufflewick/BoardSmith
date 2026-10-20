@@ -19,7 +19,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { defineComponent, h, nextTick, provide, ref } from 'vue';
+import { defineComponent, h, nextTick, provide, ref, type Ref } from 'vue';
 import ActionPanel from '../ActionPanel.vue';
 import AutoUI from '../AutoUI.vue';
 import { useActionController } from '../../../composables/useActionController.js';
@@ -76,6 +76,7 @@ interface Harness {
   board: BoardInteraction;
   wrapper: ReturnType<typeof mount>;
   sendAction: ReturnType<typeof vi.fn>;
+  isMyTurn: Ref<boolean>;
 }
 
 /** Mount the real panel and the real AutoUI board over one bridge, as a shell does. */
@@ -92,6 +93,7 @@ function mountHarness(): Harness {
   );
 
   let board!: BoardInteraction;
+  const isMyTurn = ref(true);
 
   const Host = defineComponent({
     name: 'CandidateHookHost',
@@ -102,7 +104,7 @@ function mountHarness(): Harness {
         sendAction,
         availableActions: ref(AVAILABLE),
         actionMetadata: ref(METADATA),
-        isMyTurn: ref(true),
+        isMyTurn,
         autoFill: false,
         autoExecute: true,
         fetchPickChoices,
@@ -111,7 +113,7 @@ function mountHarness(): Harness {
       useBoardActionBridge({
         controller,
         boardInteraction: board,
-        isMyTurn: ref(true),
+        isMyTurn,
         autoEndTurn: ref(false),
         actionMetadata: ref(METADATA),
         availableActions: ref(AVAILABLE),
@@ -132,7 +134,7 @@ function mountHarness(): Harness {
   });
 
   const wrapper = mount(Host, { attachTo: document.body });
-  return { board, wrapper, sendAction };
+  return { board, wrapper, sendAction, isMyTurn };
 }
 
 describe('an anchored candidate carries a stable hook (#189)', () => {
@@ -182,8 +184,8 @@ describe('an anchored candidate carries a stable hook (#189)', () => {
     wrapper.unmount();
   });
 
-  it('leaves no candidate hook behind when the pick is over', async () => {
-    const { board, wrapper } = mountHarness();
+  it('leaves only the hooks that start the action when the pick is over, and none off turn', async () => {
+    const { board, wrapper, isMyTurn } = mountHarness();
     await flush();
 
     await wrapper.find('[data-bs-action="tend"]').trigger('click');
@@ -192,7 +194,12 @@ describe('an anchored candidate carries a stable hook (#189)', () => {
 
     board.clear();
     await flush();
+    // Each holding still starts `tend` from the board (#1192).
+    expect(board.currentAction).toBeNull();
+    expect(wrapper.findAll('[data-bs-candidate]')).toHaveLength(2);
 
+    isMyTurn.value = false;
+    await flush();
     expect(wrapper.findAll('[data-bs-candidate]')).toHaveLength(0);
     wrapper.unmount();
   });

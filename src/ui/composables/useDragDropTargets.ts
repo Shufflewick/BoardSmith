@@ -37,55 +37,14 @@ import type {
   EnrichedActionMetadata,
   EnrichedValidElement,
 } from './useActionControllerTypes.js';
-import { isChoosableElement } from './useBoardActionBridge.js';
+import { findStartCandidate, isChoosableElement } from './useBoardActionBridge.js';
 import { devWarn } from '../../utils/dev.js';
 
 export interface DragDropOrchestrationOptions {
   boardInteraction: BoardInteraction;
   actionController: UseActionControllerReturn;
-  availableActions: Ref<string[] | undefined>;
   actionMetadata: Ref<Record<string, EnrichedActionMetadata> | undefined>;
   isMyTurn: Ref<boolean | undefined> | Ref<boolean>;
-}
-
-/**
- * Find an available action whose FIRST selection is a single element that
- * accepts the dragged element, so a drag can START that action.
- *
- * Priority:
- *  1. Actions whose first selection explicitly lists the dragged element in its
- *     static `validElements` (strong signal this action is for this piece).
- *  2. Actions with an element first selection but no static `validElements`
- *     (validElements are only known after the action starts — let the controller
- *     validate on start; an invalid start simply yields no drop targets).
- */
-function findDragStartAction(
-  dragged: ElementRef,
-  availableActions: Ref<string[] | undefined>,
-  actionMetadata: Ref<Record<string, EnrichedActionMetadata> | undefined>,
-): { action: EnrichedActionMetadata; firstSel: EnrichedPickMetadata; elementId: number | undefined } | null {
-  const metas = (availableActions.value ?? [])
-    .map(name => actionMetadata.value?.[name])
-    .filter((m): m is EnrichedActionMetadata => !!m);
-
-  // Pass 1: explicit validElements match.
-  for (const action of metas) {
-    const firstSel = action.selections[0];
-    if (firstSel?.type !== 'element') continue;
-    const matched = firstSel.validElements?.find(e => isChoosableElement(e, dragged));
-    if (matched) return { action, firstSel, elementId: matched.id };
-  }
-
-  // Pass 2: element first selection with no static validElements to check against.
-  for (const action of metas) {
-    const firstSel = action.selections[0];
-    if (firstSel?.type !== 'element') continue;
-    if (!firstSel.validElements || firstSel.validElements.length === 0) {
-      return { action, firstSel, elementId: dragged.id };
-    }
-  }
-
-  return null;
 }
 
 /**
@@ -104,7 +63,7 @@ function findDragStartAction(
  * Action Panel and custom UIs read through `useBoardInteraction` / `useDragDrop`.
  */
 export function setupDragDropOrchestration(options: DragDropOrchestrationOptions): WatchStopHandle {
-  const { boardInteraction, actionController, availableActions, actionMetadata, isMyTurn } = options;
+  const { boardInteraction, actionController, actionMetadata, isMyTurn } = options;
 
   /** Wire the board's candidates for the current pick as drop targets. Returns true if any were wired. */
   async function wireCurrentPick(): Promise<boolean> {
@@ -198,19 +157,16 @@ export function setupDragDropOrchestration(options: DragDropOrchestrationOptions
         return;
       }
 
-      // Case B: no action in progress — find one the dragged element can start.
-      const match = findDragStartAction(dragged, availableActions, actionMetadata);
+      // Case B: no action in progress — start the one the dragged element can
+      // start, by the same rule a click on it uses (#1192).
+      const match = findStartCandidate(actionController, dragged);
       if (!match) {
         warnNoTargets(dragged, null);
         return;
       }
 
       try {
-        if (match.elementId !== undefined) {
-          await actionController.start(match.action.name, { args: { [match.firstSel.name]: match.elementId } });
-        } else {
-          await actionController.start(match.action.name);
-        }
+        await actionController.start(match.action, { args: { [match.pick]: match.element.id } });
       } catch {
         // Element wasn't valid for this action after server validation — leave no
         // drop targets. (start() resolves; a throw here is defensive.)
@@ -218,14 +174,14 @@ export function setupDragDropOrchestration(options: DragDropOrchestrationOptions
       }
 
       // Sync the current-action signal so custom boards can react.
-      syncCurrentActionPick(match.action.name);
+      syncCurrentActionPick(match.action);
 
       // The action may have auto-completed (single-option pick auto-filled then
       // auto-executed). If so there is nothing to drop onto — done.
       if (!actionController.currentAction.value) return;
 
       if (!(await wireCurrentPick())) {
-        warnNoTargets(dragged, match.action.name);
+        warnNoTargets(dragged, match.action);
       }
     },
   );

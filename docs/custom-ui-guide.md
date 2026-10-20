@@ -338,6 +338,22 @@ const selectableCards = computed(() => {
 </script>
 ```
 
+With no action open, `startCandidates` says what a click can start: each available action whose first pick is an element pick, with that pick's candidates. The board already uses it (a click or drag on a candidate starts the action), so read it only to draw your own start affordance:
+
+<!-- typecheck: board -->
+```vue
+<script setup lang="ts">
+import { computed } from 'vue';
+import type { TableBoardProps } from 'boardsmith/ui';
+
+const props = defineProps<TableBoardProps>();
+
+// Element ids that start movePiece, while no action is open.
+const movablePieceIds = computed(() =>
+  props.actionController.startCandidates.value.get('movePiece')?.elements.map(ve => ve.id) ?? []);
+</script>
+```
+
 ### Highlighting Selectable Elements
 
 <!-- typecheck: board -->

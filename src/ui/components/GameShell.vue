@@ -797,7 +797,6 @@ const boardProps = computed(() =>
 setupDragDropOrchestration({
   boardInteraction,
   actionController,
-  availableActions,
   actionMetadata,
   isMyTurn,
 });
