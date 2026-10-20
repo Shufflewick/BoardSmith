@@ -191,14 +191,14 @@ interface SeatSight {
  * name never leave the server.
  */
 function seatSight(values: readonly unknown[], ctx: CandidateContext): SeatSight {
-  const seat = ctx.player.seat;
-  const hidden = values.filter((v): v is GameElement => isElement(v) && !v.isVisibleTo(seat));
+  const hidden = values.filter((v): v is GameElement => isElement(v) && !v.isVisibleTo(ctx.player.seat));
   const hiddenByName = new Map(hidden.filter((element) => element.name).map((element) => [element.name, element]));
   const safeRef = (ref: ElementRef): ElementRef => {
     const element = ref.id !== undefined ? ctx.game.getElementById(ref.id) : ref.name !== undefined ? hiddenByName.get(ref.name) : undefined;
-    return element && !element.isVisibleTo(seat) ? { id: seatIdOf(element, seat) } : ref;
+    return element && !element.isVisibleTo(ctx.player.seat) ? { id: seatIdOf(element, ctx.player.seat) } : ref;
   };
   if (hidden.length === 0) return { idOf: (element) => element.id, neutralLabel: () => undefined, safeRef };
+  const seat = ctx.player.seat;
 
   const labels = new Map<unknown, string>();
   const perClass = new Map<string, number>();
