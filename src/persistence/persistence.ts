@@ -160,6 +160,18 @@ export const PLAYER_KEY_PREFIX = "player:";
 export const PERSIST_MAX_COMMIT_BYTES = 2 * 1024 * 1024;
 
 /**
+ * Convex's per-commit entry cap and key rules, restated from
+ * `convex/persistenceQuotas.ts` (`PERSIST_MAX_ENTRIES_PER_COMMIT`,
+ * `PERSIST_MAX_KEY_LENGTH`, `PERSIST_KEY_PATTERN`) so `boardsmith dev` refuses
+ * what production refuses, with the same message and in the same order
+ * (#949). Convex stays the authoritative gate; these only move its refusal
+ * earlier.
+ */
+const PERSIST_MAX_ENTRIES_PER_COMMIT = 25;
+const PERSIST_MAX_KEY_LENGTH = 128;
+const PERSIST_KEY_PATTERN = /^[A-Za-z0-9._:@/-]+$/;
+
+/**
  * One entry as it goes to Convex: `value` already serialized, or `null` to
  * delete the key.
  *
@@ -319,14 +331,29 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * JSON in both directions and never learns that the constraint exists.
  */
 export function readPersistCommit(commit: PersistCommit): PersistCommitResult {
-  const publicSide = parseCommit(commit.public, PERSIST_KEY);
-  if (publicSide.kind === "invalid") return publicSide;
-  const privateSide = parseCommit(commit.private, PERSIST_PRIVATE_KEY);
-  if (privateSide.kind === "invalid") return privateSide;
+  const publicRaw = channelEntries(commit.public, PERSIST_KEY);
+  if (typeof publicRaw === "string") return { kind: "invalid", reason: publicRaw };
+  const privateRaw = channelEntries(commit.private, PERSIST_PRIVATE_KEY);
+  if (typeof privateRaw === "string") return { kind: "invalid", reason: privateRaw };
 
-  const publicEntries = publicSide.kind === "ok" ? publicSide.entries : [];
-  const privateEntries = privateSide.kind === "ok" ? privateSide.entries : [];
-  if (publicEntries.length === 0 && privateEntries.length === 0) return { kind: "absent" };
+  const count = publicRaw.length + privateRaw.length;
+  if (count === 0) return { kind: "absent" };
+  // Convex counts the merged commit before any per-entry check (convex/gamePersistence.ts validateCommitShape).
+  if (count > PERSIST_MAX_ENTRIES_PER_COMMIT) {
+    return {
+      kind: "invalid",
+      reason:
+        `A game-over commit may carry at most ${PERSIST_MAX_ENTRIES_PER_COMMIT} entries, ` +
+        `got ${count}. Write fewer, larger records, or spread them across sessions.`,
+    };
+  }
+
+  const publicSide = parseEntries(publicRaw, PERSIST_KEY);
+  if (publicSide.kind !== "ok") return publicSide;
+  const privateSide = parseEntries(privateRaw, PERSIST_PRIVATE_KEY);
+  if (privateSide.kind !== "ok") return privateSide;
+  const publicEntries = publicSide.entries;
+  const privateEntries = privateSide.entries;
 
   const collision = crossChannelCollision(publicEntries, privateEntries);
   if (collision) {
@@ -356,38 +383,34 @@ export function readPersistCommit(commit: PersistCommit): PersistCommitResult {
 }
 
 /**
- * Validate and serialize one channel's raw attribute value. Shape errors name
- * the attribute they came from (`attributeName`), because "the game's persist
- * attribute is malformed" is not actionable when a game writes on both.
+ * One channel's raw `entries` (empty when the attribute is unset), or why the
+ * attribute is malformed. Shape errors name the attribute they came from
+ * (`attributeName`), because "the game's persist attribute is malformed" is
+ * not actionable when a game writes on both.
  *
- * The byte ceiling is NOT applied here: it bounds the REQUEST, and the request
- * carries both channels.
+ * The entry cap and the byte ceiling are NOT applied here: they bound the
+ * whole commit, and the commit carries both channels.
  */
-function parseCommit(raw: unknown, attributeName: string): PersistCommitResult {
-  if (raw === undefined || raw === null) return { kind: "absent" };
+function channelEntries(raw: unknown, attributeName: string): unknown[] | string {
+  if (raw === undefined || raw === null) return [];
   if (!isPlainObject(raw)) {
-    return {
-      kind: "invalid",
-      reason: `the game's "${attributeName}" attribute must be an object of the form { entries: [...] }`,
-    };
+    return `the game's "${attributeName}" attribute must be an object of the form { entries: [...] }`;
   }
   if (!Array.isArray(raw.entries)) {
-    return {
-      kind: "invalid",
-      reason: `the game's "${attributeName}.entries" must be an array of { key, value } records`,
-    };
+    return `the game's "${attributeName}.entries" must be an array of { key, value } records`;
   }
-  if (raw.entries.length === 0) return { kind: "absent" };
-  return parseEntries(raw.entries, attributeName);
+  return raw.entries;
 }
 
-/** Convert a commit's non-empty `entries`, refusing the first bad or repeated one. */
+/** Convert one channel's `entries`, refusing the first bad or repeated one. */
 function parseEntries(rawEntries: unknown[], attributeName: string): PersistCommitResult {
   const entries: PersistCommitEntry[] = [];
   const seen = new Set<string>();
   for (let i = 0; i < rawEntries.length; i++) {
     const converted = toCommitEntry(rawEntries[i], i, attributeName);
     if (typeof converted === "string") return { kind: "invalid", reason: converted };
+    const keyError = keyFormatError(converted.key);
+    if (keyError) return { kind: "invalid", reason: keyError };
     const sealed = sealedKeyOnPublicChannel(converted.key, i, attributeName);
     if (sealed) return { kind: "invalid", reason: sealed };
     // Production's wording (convex/gamePersistence.ts validateCommitShape), so the dev store refuses what Convex refuses.
@@ -403,6 +426,24 @@ function parseEntries(rawEntries: unknown[], attributeName: string): PersistComm
     entries.push(converted);
   }
   return { kind: "ok", entries };
+}
+
+/** Why Convex would refuse this key, in its words (convex/gamePersistence.ts validateKey), or `null`. */
+function keyFormatError(key: string): string | null {
+  if (key.length === 0) return "An entry key must not be empty.";
+  if (key.length > PERSIST_MAX_KEY_LENGTH) {
+    return (
+      `Entry key "${key.slice(0, 32)}..." is ${key.length} characters, over the ` +
+      `${PERSIST_MAX_KEY_LENGTH}-character limit.`
+    );
+  }
+  if (!PERSIST_KEY_PATTERN.test(key)) {
+    return (
+      `Entry key "${key}" contains characters that are not allowed. Keys may use ` +
+      `letters, digits, and the characters . _ : @ / - only.`
+    );
+  }
+  return null;
 }
 
 /**
@@ -435,7 +476,7 @@ function sealedKeyOnPublicChannel(
  * Checked HERE rather than left to Convex's duplicate-key rejection because
  * the message matters: Convex would say "a single commit names the key twice",
  * which sends a publisher looking for one bug in one attribute. Duplicates
- * WITHIN one channel are refused in `parseCommit` with Convex's own message;
+ * WITHIN one channel are refused in `parseEntries` with Convex's own message;
  * this is the failure the platform introduced by adding a second channel, so
  * it is the platform's to explain.
  */

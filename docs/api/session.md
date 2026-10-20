@@ -16,6 +16,7 @@ ShufflewickPub all run it.
 
 ## Usage
 
+<!-- typecheck: game src/imports.ts -->
 ```typescript
 import {
   SnapshotSessionHost,
@@ -126,8 +127,7 @@ a simulation plays the game exactly as a host does. Pass the game's exported
 strategy apply.
 
 ```typescript
-import { createHeadlessSession } from 'boardsmith/testing';
-import { gameDefinition } from './index.js';
+// createHeadlessSession comes from 'boardsmith/testing', gameDefinition from your src/rules/index.ts
 
 const session = createHeadlessSession(gameDefinition, {
   playerCount: 2,
@@ -257,14 +257,20 @@ A host built with a `persist` adapter hands it the whole durable state after
 every op that changes the game. Store that value as given, and build the host
 again from it with `SnapshotSessionHost.restore`:
 
+<!-- typecheck: game src/host/save.ts -->
 ```typescript
-import { SnapshotSessionHost, type SnapshotHostState } from 'boardsmith/session';
+import { SnapshotSessionHost, type SnapshotHostState, type SnapshotSessionAdapters } from 'boardsmith/session';
 
 let saved: SnapshotHostState | null = null;
-const host = new SnapshotSessionHost({ ...adapters, persist: (state) => { saved = state; } });
+
+export function startHost(adapters: SnapshotSessionAdapters): SnapshotSessionHost {
+  return new SnapshotSessionHost({ ...adapters, persist: (state) => { saved = state; } });
+}
 
 // Later, in a new process:
-const restored = SnapshotSessionHost.restore(adapters, { ...saved!, botSeats: [] });
+export function restoreHost(adapters: SnapshotSessionAdapters): SnapshotSessionHost {
+  return SnapshotSessionHost.restore(adapters, { ...saved!, botSeats: [] });
+}
 ```
 
 `host.durableState()` returns the same value on demand. The restore refuses a
@@ -330,8 +336,14 @@ them through `flowStateOf(state)`, `isCompleteOf(state)` and `winnersOf(state)`
 A host that builds frames outside `SnapshotSessionHost`'s `push` keeps a `StatePushGate` and
 asks it before every push. It is exported from `boardsmith/session`.
 
+<!-- typecheck: game src/host/push.ts -->
 ```typescript
-import { StatePushGate } from 'boardsmith/session';
+import { StatePushGate, type PlayerGameState } from 'boardsmith/session';
+
+interface Frame {
+  view: { state: PlayerGameState };
+  serverNow: number;
+}
 
 const gate = new StatePushGate<string, Frame>({
   // Where the PlayerGameState sits in your frame.
@@ -342,14 +354,21 @@ const gate = new StatePushGate<string, Frame>({
 });
 
 // The push path, per socket:
-if (gate.shouldPush(socketId, frame)) socket.send(JSON.stringify(frame));
+export function push(socketId: string, socket: WebSocket, frame: Frame): void {
+  if (gate.shouldPush(socketId, frame)) socket.send(JSON.stringify(frame));
+}
 
 // A frame sent outside the push path (connect, reconnect, an answer to a
 // request) is recorded, in the same shape the push path builds:
-gate.recordSent(socketId, frame);
+export function sendDirect(socketId: string, socket: WebSocket, frame: Frame): void {
+  socket.send(JSON.stringify(frame));
+  gate.recordSent(socketId, frame);
+}
 
 // When the socket closes:
-gate.forget(socketId);
+export function closed(socketId: string): void {
+  gate.forget(socketId);
+}
 ```
 
 Animation events are compared by id, not by content: the engine empties its
@@ -365,13 +384,23 @@ refuses a key the op does not declare (a schema that strips unknown keys would
 silently lose a `boundaryKey`), requires `boundaryKey` on every submission op,
 and its error names the field and the fix. It never throws.
 
+<!-- typecheck: game src/host/executor.ts -->
 ```typescript
-import { executeOp, parseExecutorOp, ErrorCode, type OpResultFor } from 'boardsmith/session';
+import { executeOp, parseExecutorOp, type GameDefinition } from 'boardsmith/session';
 
-const parsed = parseExecutorOp(await request.json());
-if (!parsed.ok) return new Response(parsed.error, { status: 400 });
+export async function handle(
+  request: Request,
+  definition: GameDefinition,
+  gameOptions: { playerCount: number },
+  snapshot: unknown,
+  pendingState: Record<string, unknown> | null,
+): Promise<Response> {
+  const parsed = parseExecutorOp(await request.json());
+  if (!parsed.ok) return new Response(parsed.error, { status: 400 });
 
-const result = await executeOp(definition, gameOptions, snapshot, pendingState, parsed.op);
+  const result = await executeOp(definition, gameOptions, snapshot, pendingState, parsed.op);
+  return Response.json(result);
+}
 ```
 
 `executeOp` returns `OpResultFor<T>` for the op type it was given, so each

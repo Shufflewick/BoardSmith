@@ -71,8 +71,10 @@ export enum ErrorCode {
    *  the message. */
   STALE_SUBMISSION = 'STALE_SUBMISSION',
 
-  // Evaluation errors
+  // Evaluation refusals
+  /** A pick's `choices()` threw a PlayerFacingError: the rules saying no. A crash there is ENGINE_ERROR (#1156). */
   CHOICES_EVALUATION_ERROR = 'CHOICES_EVALUATION_ERROR',
+  /** A pick's `elements()` threw a PlayerFacingError: the rules saying no. A crash there is ENGINE_ERROR (#1156). */
   ELEMENTS_EVALUATION_ERROR = 'ELEMENTS_EVALUATION_ERROR',
 
   // Engine/execution errors

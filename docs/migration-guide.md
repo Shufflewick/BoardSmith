@@ -10,6 +10,17 @@ Code player options can now be `number` and `boolean` too, typed as
 `NumberPlayerOption` and `BooleanPlayerOption` from `boardsmith/session`, the
 same shapes `boardsmith.json` already accepted (#1197).
 
+## A zone a seat cannot see into says how many it holds (#1208)
+
+A seat that cannot see into an owner-only zone, or into a zone that hides its
+contents from that seat (`hideContentsFrom`), now gets the zone's `childCount`
+alongside its placeholders, as a count-only zone already did. Its `children`
+can carry granted cards nested below a placeholder (#961), so
+`children.length` could count more cards than the zone holds; `childCount` and
+`getElementCount` count only the zone's direct children. The seat now learns,
+for these zones too, how many of its granted cards sit inside a hidden child,
+so with one hidden child it knows which child holds them.
+
 ## A hidden card's placeholder id is stable and the seat's own (#715)
 
 A card in a zone a seat cannot see used to reach that seat as `-1`, `-2`, ...
@@ -537,6 +548,7 @@ it cannot find a controller:
 +  global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } }
 ```
 
+<!-- typecheck: game src/ui/context-keys.ts -->
 ```typescript
 import { GAME_CONTEXT_KEYS } from 'boardsmith/ui';
 ```
@@ -544,6 +556,7 @@ import { GAME_CONTEXT_KEYS } from 'boardsmith/ui';
 A custom UI reading the context should use `useGameContext()`, which throws
 outside a shell rather than returning a bag of `undefined`s:
 
+<!-- typecheck: game src/ui/context.ts -->
 ```typescript
 import { useGameContext } from 'boardsmith/ui';
 const { gameView, playerSeat, actionController } = useGameContext();
@@ -598,12 +611,12 @@ removed/changed API.
 
 ### Step 1: Update the headless test-harness import
 
-```typescript
-// Before — internal, test-only module path (never a public package export)
-import { createHeadlessSession } from './session/testing/headless-harness.js';
+Before, an internal, test-only module path (never a public package export).
+After, the public export from `boardsmith/testing` (`boardsmith/session` before r196):
 
-// After — public export from boardsmith/testing (boardsmith/session before r196)
-import { createHeadlessSession } from 'boardsmith/testing';
+```diff
+- import { createHeadlessSession } from './session/testing/headless-harness.js';
++ import { createHeadlessSession } from 'boardsmith/testing';
 ```
 
 The old module (`src/session/testing/headless-harness.ts`) is deleted — there
@@ -771,7 +784,7 @@ const animationEvents = createAnimationEvents({
 Before:
 
 ```typescript
-import { useCurrentView } from 'boardsmith/ui';
+// useCurrentView was imported from 'boardsmith/ui'
 const view = useCurrentView();
 ```
 
