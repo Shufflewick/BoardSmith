@@ -240,7 +240,8 @@ function visibleNewElement(before: KnownWorld, after: KnownWorld, seat: number):
 function inheritsConcealment(element: GameElement, seat: number): boolean {
   if (hasZoneVisibility(element) && element.getZoneVisibility()) return false;
   for (let at = element._t.parent; at; at = at._t.parent) {
-    if (hasZoneVisibility(at) && at.getZoneVisibility()) return hidesContents(at, seat);
+    // The sandbox knows only the owners the seat view sent (#1209).
+    if (hasZoneVisibility(at) && at.getZoneVisibility()) return hidesContents(at, seat, at.getEffectiveOwner()?.seat);
   }
   return false;
 }
