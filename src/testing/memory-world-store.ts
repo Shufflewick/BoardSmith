@@ -47,7 +47,7 @@ import {
 
 /** One stored partition, as this store holds it: the bytes as a STRING, so a
  *  test cannot hand the engine the same object twice and prove adoption works
- *  without ever running it (`docs/TEST-FIXTURES.md`). */
+ *  without ever running it (`ShufflewickPub/docs/TEST-FIXTURES.md`). */
 interface PartitionRow {
   readonly parentId: number;
   json: string;

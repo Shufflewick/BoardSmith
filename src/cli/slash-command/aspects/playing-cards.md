@@ -1,6 +1,6 @@
 # Playing Cards Aspect
 
-**Documentation:** Read `docs/core-concepts.md` (Deck, Hand, Card sections) and `docs/ui-components.md` (useCardDisplay) before using this template.
+**Documentation:** Read `node_modules/boardsmith/docs/core-concepts.md` (Deck, Hand, Card sections) and `node_modules/boardsmith/docs/ui-components.md` (useCardDisplay) before using this template.
 
 ## Element Setup (game.ts)
 
@@ -148,7 +148,7 @@ const deckCount = computed(() => deck.value?.children?.length ?? 0);
 
 // The game is over when the flow completes. GameShell then draws its game-over
 // card, with the winners, over this board; to draw your own ending instead, see
-// "The End of the Game" in docs/custom-ui-guide.md. During time travel
+// "The End of the Game" in node_modules/boardsmith/docs/custom-ui-guide.md. During time travel
 // flowState is null, so this is false.
 const isGameOver = computed(() => props.state?.flowState?.complete === true);
 

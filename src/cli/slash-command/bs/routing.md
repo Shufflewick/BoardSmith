@@ -209,7 +209,7 @@ Detail saying "never launched" remains evidence that no launch occurred. Never
 invent roles or agent types. Timestamps, ordering, duplicate numbers, and citations
 are still checked. These entries supply no routing or retry history to new work,
 and a new retry or review cannot name one as its routing source. Every new dispatch
-uses the current fields below, even in an old file; see `docs/migration-guide.md`
+uses the current fields below, even in an old file; see `node_modules/boardsmith/docs/migration-guide.md`
 "Historical run logs keep their unrecorded routing facts" for the exact conditions.
 
 Each work package's run log (`design/run-log/<id>.md`, from `templates/RUN-LOG.template.md`)

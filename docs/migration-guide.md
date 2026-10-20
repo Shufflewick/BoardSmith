@@ -482,7 +482,8 @@ old name gets the same silent miss, so rename it:
 
 Every prop of a component exported from `boardsmith/ui`,
 `boardsmith/ui/auto-ui` or `boardsmith/ui/dice` now has to survive that round
-trip; `src/ui/public-prop-names.test.ts` fails on one that does not.
+trip; `src/ui/public-prop-names.test.ts` in the BoardSmith repository fails on
+one that does not.
 
 ## Engine contract r106: a test wires a table's actions with `useTableActionWiring`
 
@@ -703,8 +704,6 @@ missing-anchor bug in your board names the actual component, not a generic
 
 v3.0 replaces the server-side theatre view system with a client-side animation timeline. Animation events are now pure data signals -- the server broadcasts truth immediately and never waits on animation playback.
 
-For the complete list of removed APIs, see [BREAKING.md](../BREAKING.md).
-
 ### What Changed
 
 The theatre view system (server-managed frozen snapshot, mutation capture, acknowledgment round-trips) has been removed entirely. In its place:
@@ -814,10 +813,12 @@ game.toJSONForPlayer(seat)
 
 ### Step 5: Update animation event handlers (optional skip support)
 
-Animation handlers (`registerHandler`) work the same in v3.0. Handlers now receive an optional second argument `{ signal }` with an `AbortSignal` that fires when the user presses "Skip". Handlers can check `signal.aborted` between animation steps to bail out early:
+Animation handlers (`registerHandler`) work the same in v3.0. Handlers now receive an optional second argument `{ signal }` with an `AbortSignal` that fires when the user presses "Skip". Handlers can check `signal.aborted` between animation steps to bail out early.
+
+A later release made a third argument required: `{ skip: 'run' }` calls the handler with an already-aborted signal when the user skips, and `{ skip: 'drop' }` does not call it. Every handler passes one, so the "after" below shows it:
 
 ```typescript
-// Before (still works)
+// Before
 animations.registerHandler('combat', async (event) => {
   await playAttack(event.data);
   await showDamage(event.data);
@@ -828,7 +829,7 @@ animations.registerHandler('combat', async (event, { signal }) => {
   await playAttack(event.data);
   if (signal.aborted) return;
   await showDamage(event.data);
-});
+}, { skip: 'run' });
 ```
 
 Existing handlers that don't use the signal still work — the queue will unblock immediately when skip is pressed regardless.

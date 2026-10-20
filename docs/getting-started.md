@@ -32,7 +32,7 @@ new game links to the BoardSmith that ran `init`, so `init` refuses to run from
 a one-off download in npm's `_npx` cache, which npm clears.
 
 ```bash
-npx boardsmith init my-game
+boardsmith init my-game
 cd my-game
 npm install
 ```
@@ -94,7 +94,7 @@ transcription.
 To balance the rules before building anything to look at, pass `--sim`:
 
 ```bash
-npx boardsmith init my-game --sim
+boardsmith init my-game --sim
 cd my-game
 npm install
 boardsmith simulate --policy greedy
@@ -127,7 +127,7 @@ It is what a game IS, not something a run selects, so it is chosen once, when
 the project is created:
 
 ```bash
-npx boardsmith init my-world --world
+boardsmith init my-world --world
 cd my-world
 npm install
 boardsmith test
