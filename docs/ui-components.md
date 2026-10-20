@@ -737,7 +737,7 @@ boardInteraction.isSelectableElement(element)  // Can be clicked to select
 boardInteraction.triggerElementSelect(element)
 
 // Drag and drop
-boardInteraction.startDrag(element)
+boardInteraction.startDrag(element)  // A disabled candidate starts no drag, as a click chooses nothing
 boardInteraction.endDrag()
 boardInteraction.isDropTarget(element)
 boardInteraction.isDraggedElement(element)
