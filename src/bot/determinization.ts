@@ -21,12 +21,12 @@
  * and scoring moves in it is worse than not searching them at all.
  */
 
-import { Space, type Game } from '../engine/index.js';
+import type { Game } from '../engine/index.js';
 import type { GameElement } from '../engine/index.js';
 import type { DeterminizeSampler } from './types.js';
 import { changing } from '../engine/element/state-version.js';
 import { outermostConcealer } from '../engine/element/concealed-refs.js';
-import { hasZoneVisibility, hidesContents, readDynamicAttribute } from '../engine/element/game-element.js';
+import { hasZoneVisibility, hidesContents, isZoneVisibilityRestorer, readDynamicAttribute } from '../engine/element/game-element.js';
 import { canPlayerSee } from '../engine/element/visibility.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE, isPlaceholderId } from '../engine/element/hidden-placeholder.js';
 
@@ -51,6 +51,8 @@ interface KnownElement {
   className: string;
   attributes: Map<string, string>;
   parent: GameElement | undefined;
+  /** Its place among its parent's children. */
+  index: number;
 }
 
 /** Every element the sandbox currently claims to know, by id. */
@@ -111,7 +113,7 @@ function keyOf(key: string): string {
 function recordKnownWorld(game: Game): KnownWorld {
   const world: KnownWorld = new Map();
 
-  const visit = (element: GameElement): void => {
+  const visit = (element: GameElement, index: number): void => {
     const Class = element.constructor as { unserializableAttributes?: string[] };
     const unserializable = new Set(Class.unserializableAttributes ?? []);
     const attributes = new Map<string, string>();
@@ -124,11 +126,12 @@ function recordKnownWorld(game: Game): KnownWorld {
       className: element.constructor.name,
       attributes,
       parent: element._t.parent as GameElement | undefined,
+      index,
     });
-    for (const child of element._t.children) visit(child as GameElement);
+    element._t.children.forEach((child, i) => visit(child as GameElement, i));
   };
 
-  visit(game as unknown as GameElement);
+  visit(game as unknown as GameElement, 0);
   return world;
 }
 
@@ -253,7 +256,7 @@ function isSentFaceDown(element: GameElement): boolean {
 export function adoptSeatView(game: Game, seat: number): void {
   const visit = (element: GameElement): void => {
     adoptGrant(element, seat);
-    if (element instanceof Space) adoptLiftedOwnerRule(element, seat);
+    adoptLiftedOwnerRule(element, seat);
     for (const child of element._t.children) visit(child as GameElement);
   };
   visit(game as unknown as GameElement);
@@ -268,17 +271,12 @@ function adoptGrant(element: GameElement, seat: number): void {
 }
 
 /** An owner rule the seat was sent a count of, as count-only, so no owner above it opens it. */
-function adoptLiftedOwnerRule(zone: Space<Game>, seat: number): void {
-  if (zone._viewChildCount === undefined || isSentFaceDown(zone)) return;
+function adoptLiftedOwnerRule(zone: GameElement, seat: number): void {
+  if (zone._viewChildCount === undefined || isSentFaceDown(zone) || !hasZoneVisibility(zone) || !isZoneVisibilityRestorer(zone)) return;
   const rule = zone.getZoneVisibility();
   if (rule?.mode === 'owner' && canPlayerSee(rule, seat, zone.getEffectiveOwner()?.seat)) {
     zone._restoreZoneVisibility({ mode: 'count-only', explicit: true });
   }
-}
-
-/** Whether `element`'s own zone rule hides its contents from the seat. */
-function concealsContents(element: GameElement, seat: number): boolean {
-  return hasZoneVisibility(element) && !!element.getZoneVisibility() && hidesContents(element, seat, element.getEffectiveOwner()?.seat);
 }
 
 /**
@@ -289,24 +287,37 @@ function concealsContents(element: GameElement, seat: number): boolean {
  * holds a face-down placeholder, which a cut container never does, or sits
  * among its zone's counted children, which the lifted ones trail (#1208).
  */
-function sentWhole(container: GameElement, seat: number): boolean {
+function sentWhole(container: GameElement, seat: number, sent: SentView): boolean {
   if (hasZoneVisibility(container) && container.getZoneVisibility()) return true;
-  const parent = container._t.parent as GameElement | undefined;
-  if (!parent) return true;
-  if ((container._t.children as GameElement[]).some(isSentFaceDown)) return true;
-  if (!concealsContents(parent, seat)) return sentWhole(parent, seat);
-  return parent._viewChildCount !== undefined && parent._t.children.indexOf(container) < parent._viewChildCount;
+  const known = sent.world.get(container._t.id);
+  if (!known?.parent) return true;
+  if (sent.holdsFaceDown.has(container)) return true;
+  const parent = known.parent;
+  if (!hidesContents(parent, seat, parent.getEffectiveOwner()?.seat)) return sentWhole(parent, seat, sent);
+  return parent._viewChildCount !== undefined && known.index < parent._viewChildCount;
+}
+
+/** The world as the seat was sent it, before sampling, and the containers sent a face-down child. */
+interface SentView {
+  world: KnownWorld;
+  holdsFaceDown: ReadonlySet<GameElement | undefined>;
+}
+
+function sentView(world: KnownWorld): SentView {
+  const holdsFaceDown = new Set<GameElement | undefined>();
+  for (const { element, parent } of world.values()) if (isSentFaceDown(element)) holdsFaceDown.add(parent);
+  return { world, holdsFaceDown };
 }
 
 /**
  * Whether the seat's view says how many children this container holds (#1206).
  * For one the seat cannot see, `redactTreeForSeat` sends a count-only
  * element's count, kept as `_viewChildCount`. For one it can see, the view
- * must prove it sent every child (`whole`, taken before sampling).
+ * must prove it sent every child, as it was before sampling.
  */
-function countVisibleTo(container: GameElement, seat: number, whole: ReadonlySet<GameElement>): boolean {
+function countVisibleTo(container: GameElement, seat: number, sent: SentView): boolean {
   if (!container.isVisibleTo(seat)) return container._viewChildCount !== undefined;
-  if (!whole.has(container)) return false;
+  if (!sentWhole(container, seat, sent)) return false;
   const zone = hasZoneVisibility(container) ? container.getZoneVisibility() : undefined;
   return zone?.mode !== 'hidden' || canPlayerSee(zone, seat, container.getEffectiveOwner()?.seat);
 }
@@ -329,14 +340,15 @@ function knownCount(element: GameElement, sent: number): number {
 }
 
 /** The first container the seat can count whose number of children the sample changed, or `null`. */
-function childCountChange(before: KnownWorld, after: KnownWorld, seat: number, whole: ReadonlySet<GameElement>): string | null {
+function childCountChange(before: KnownWorld, after: KnownWorld, seat: number): string | null {
+  const sent = sentView(before);
   const priorCounts = childCounts(before);
   const nowCounts = childCounts(after);
   for (const { element } of before.values()) {
     const prior = priorCounts.get(element) ?? 0;
     const now = nowCounts.get(element) ?? 0;
     const known = knownCount(element, prior);
-    if (now === prior || now === known || !countVisibleTo(element, seat, whole)) continue;
+    if (now === prior || now === known || !countVisibleTo(element, seat, sent)) continue;
     return (
       `${nameOf(element)} held ${known} element${known === 1 ? '' : 's'} and now holds ${now}. ` +
       `The seat can count what that container holds even where it cannot see them, ` +
@@ -347,7 +359,7 @@ function childCountChange(before: KnownWorld, after: KnownWorld, seat: number, w
 }
 
 /** The first way `after` contradicts `before`, or `null` if it does not. */
-function findContradiction(before: KnownWorld, after: KnownWorld, seat: number, whole: ReadonlySet<GameElement>): string | null {
+function findContradiction(before: KnownWorld, after: KnownWorld, seat: number): string | null {
   const countChange = placeholderCountChange(before, after);
   if (countChange) return countChange;
 
@@ -370,7 +382,7 @@ function findContradiction(before: KnownWorld, after: KnownWorld, seat: number, 
     const change = attributeChange(id, prior, now);
     if (change) return change;
   }
-  return visibleNewElement(before, after, seat) ?? childCountChange(before, after, seat, whole);
+  return visibleNewElement(before, after, seat) ?? childCountChange(before, after, seat);
 }
 
 /**
@@ -395,8 +407,6 @@ export function applyDeterminization(
   rng: () => number,
 ): void {
   const before = recordKnownWorld(sandbox);
-  // Before sampling: a sampler may reorder a zone's children, which `sentWhole` reads.
-  const whole = new Set([...before.values()].map(({ element }) => element).filter((element) => sentWhole(element, seat)));
 
   try {
     changing(sandbox._ctx, () => sampler(sandbox, seat, rng));
@@ -412,7 +422,7 @@ export function applyDeterminization(
     );
   }
 
-  const contradiction = findContradiction(before, recordKnownWorld(sandbox), seat, whole);
+  const contradiction = findContradiction(before, recordKnownWorld(sandbox), seat);
   if (contradiction) {
     throw new DeterminizationError(
       `The determinize sampler for seat ${seat} produced a world that contradicts what the ` +

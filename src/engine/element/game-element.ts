@@ -2185,7 +2185,7 @@ interface ZoneVisibilityRestorer {
  * the same reason as {@link hasZoneVisibility}: `Space` imports from this
  * module.
  */
-function isZoneVisibilityRestorer(value: unknown): value is ZoneVisibilityRestorer {
+export function isZoneVisibilityRestorer(value: unknown): value is ZoneVisibilityRestorer {
   return (
     typeof value === 'object' &&
     value !== null &&
