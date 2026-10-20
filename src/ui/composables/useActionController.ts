@@ -113,6 +113,7 @@ export type {
   UseActionControllerOptions,
   RepeatingState,
   UseActionControllerReturn,
+  StartCandidates,
 } from './useActionControllerTypes.js';
 
 import type {
@@ -132,6 +133,7 @@ import type {
   UseActionControllerOptions,
   RepeatingState,
   UseActionControllerReturn,
+  StartCandidates,
   AfterAutoExecuteListener,
   BeforeAutoExecuteHook,
 } from './useActionControllerTypes.js';
@@ -1425,6 +1427,51 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // Enrich with full element data from gameView
     return enrichElementsList(elements);
   });
+
+  // === Start candidates (#1192) ===
+  // The server's action metadata never lists an element pick's candidates, so
+  // with several actions on offer and none open nothing on the board could start
+  // one. While no action is open, each available, enabled action that opens with
+  // an element pick has that pick's candidates fetched with the same request an
+  // open pick makes, keyed in availableActions order, so a board click and a
+  // drag find the same action.
+  const fetchedStartCandidates = ref<ReadonlyMap<string, StartCandidates>>(new Map());
+  let startCandidatesRequest = 0;
+
+  async function refreshStartCandidates(): Promise<void> {
+    const request = ++startCandidatesRequest;
+    const fetchFn = options.fetchPickChoices;
+    const offering = fetchFn && isMyTurn.value && !currentAction.value && !isViewingHistoryValue();
+    const actions = offering ? availableActions.value ?? [] : [];
+    const firstPicks = actions.flatMap((action) => {
+      if (disabledActions?.value?.[action]) return [];
+      const pick = getActionMetadata(action)?.selections[0];
+      return pick?.type === 'element' ? [{ action, pick: pick.name }] : [];
+    });
+    const player = playerSeat?.value ?? 0;
+    const answers = await Promise.all(firstPicks.map(async ({ action, pick }) => {
+      try {
+        const result = await fetchFn!(action, pick, player, {});
+        if (result.success) return [action, { pick, elements: result.validElements ?? [] }] as const;
+        console.error(`[BoardSmith] Could not fetch what '${action}' can start with:`, result.error);
+      } catch (err) {
+        console.error(`[BoardSmith] Could not fetch what '${action}' can start with:`, err);
+      }
+      return null;
+    }));
+    if (request !== startCandidatesRequest) return;
+    fetchedStartCandidates.value = new Map(answers.filter((a) => a !== null));
+  }
+
+  watch(
+    [() => isMyTurn.value, currentAction, () => availableActions.value, () => actionMetadata.value, () => disabledActions?.value, () => gameView?.value, isViewingHistoryValue],
+    () => void refreshStartCandidates(),
+    { immediate: true },
+  );
+
+  const startCandidates = computed((): ReadonlyMap<string, StartCandidates> => new Map(
+    [...fetchedStartCandidates.value].map(([action, { pick, elements }]) => [action, { pick, elements: enrichElementsList(elements) }]),
+  ));
 
   // === Auto-fill Watch ===
   // When a pick changes, fetch choices if needed and auto-fill if only one choice
@@ -2808,6 +2855,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     resumeFollowUp,
     // Reactive choices for the current pick (re-runs when async-fetched choices arrive).
     currentChoices,
+    startCandidates,
 
     // Methods
     execute,

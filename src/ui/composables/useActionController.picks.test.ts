@@ -1723,9 +1723,10 @@ describe('useActionController picks', () => {
       function startCancelStart() {
         const a = held();
         const b = held();
-        const fetchPickChoices = vi.fn()
-          .mockReturnValueOnce(a.promise)
-          .mockReturnValueOnce(b.promise);
+        // Answered by pick, as the server does: the turn's other actions' opening picks are fetched too (#1192).
+        const destinations = [a.promise, b.promise];
+        const fetchPickChoices = vi.fn((_action: string, pick: string) =>
+          pick === 'destination' ? destinations.shift()! : Promise.resolve({ success: true, validElements: [] }));
         actionMetadata.value = {
           ...createTestMetadata(),
           move: {
