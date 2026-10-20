@@ -145,7 +145,8 @@ export type ElementContext = {
   _seatView?: boolean;
   /**
    * Internal: the elements the platform has declared partition roots
-   * (`Game#definePartition`, which `Game#adoptSubtree` calls for every graft),
+   * (`Game#definePartition` for a root built in memory, `Game#adoptSubtree`
+   * for one grafted from storage),
    * BY ID. A map rather than a set of ids because every pass over the roots
    * used to re-find each one with `getElementById`, a depth-first walk of the
    * whole resident world, which made a per-command O(resident) pass O(resident²)

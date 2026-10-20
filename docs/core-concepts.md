@@ -770,7 +770,7 @@ const dirty = game.takeTouchedPartitions();
 
 // the pre-command copy to roll a refused command back to, out of the baseline
 // the previous take already captured -- nothing is serialized to get it
-const point = game.partitionBaseline(regionId);   // { parentId, bytes }
+const bytes = game.partitionBaseline(regionId);   // the region's serialized bytes
 
 game.evictSubtree(regionId);     // residency change, not a game move: no onExit fires
 ```

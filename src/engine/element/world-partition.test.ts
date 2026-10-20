@@ -292,7 +292,8 @@ describe('Game.adoptSubtree', () => {
     game.evictSubtree(roomB.id);
 
     expect(() => game.adoptSubtree(99999, bJson)).toThrow(/99999/);
-    expect(() => game.adoptSubtree(99999, bJson)).toThrow(/no element with that id is resident/);
+    // A key mismatch first, and a typo or a stale id too (#1268).
+    expect(() => game.adoptSubtree(99999, bJson)).toThrow(/names no resident element: stored bytes .* element id key .* otherwise the id is a typo or a stale one/);
   });
 
   it('refuses to adopt outside world mode, because branch refs would be grafted', () => {
@@ -416,7 +417,7 @@ describe('a partition root hangs directly from the game (#1188)', () => {
     const sequence = game._ctx.sequence;
 
     expect(() => game.adoptSubtree(hall.id, bJson)).toThrow(rootRefusal);
-    expect(() => game.adoptSubtree(hall.id, bJson)).toThrow(new RegExp(`under "hall" \\(id ${hall.id}\\)`));
+    expect(() => game.adoptSubtree(hall.id, bJson)).toThrow(new RegExp(`under parent id ${hall.id}, which is "hall", not the game: a partition root must be a direct child of the game`));
     expect(hall.children).toHaveLength(0);
     expect(game.getElementById(roomB.id)).toBeUndefined();
     expect(game._ctx.sequence).toBe(sequence);
@@ -821,7 +822,7 @@ describe('the dirty-set pass costs one serialization per partition, and no tree 
 
     // The bytes the previous take captured, at no cost: the pre-command copy
     // and the comparison the next take makes are the same string.
-    expect(baseline).toEqual({ parentId: game.id, bytes: before });
+    expect(baseline).toBe(before);
     expect(CountedRoom.serializations).toBe(0);
   });
 
@@ -836,7 +837,7 @@ describe('the dirty-set pass costs one serialization per partition, and no tree 
 
     // Mid-second-command the copy on file is what the FIRST command left, not
     // the world as it stood before the first one.
-    const baseline = JSON.parse(game.partitionBaseline(room.id)!.bytes) as ElementJSON;
+    const baseline = JSON.parse(game.partitionBaseline(room.id)!) as ElementJSON;
     expect(baseline.children![0]!.attributes.label).toBe('first command');
   });
 

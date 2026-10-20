@@ -123,7 +123,7 @@ import { ENGINE_OWNED_GAME_FIELDS, describeEngineFieldShadow } from './engine-ow
 import { DEFAULT_COLOR_PALETTE, DEFAULT_COLOR_LABELS, seatDisplayName } from './seat-defaults.js';
 
 /** Why a partition root may hang only from the game (#795, #1170, #1188). */
-const PARTITION_ROOT_RULE =
+export const PARTITION_ROOT_RULE =
   'a partition root must be a direct child of the game. A world stores and wakes every ' +
   'partition there, so a root anywhere else would be stored twice, inside its parent\'s ' +
   'partition as well as on its own, or come back directly under the game at the next wake.';
@@ -1727,9 +1727,8 @@ export class Game<
    * platform cannot see. Registering a root is what makes those moves
    * attributable.
    *
-   * {@link adoptSubtree} calls this for every graft, so the explicit call is
-   * for world genesis: the run that builds a world in memory before any of it
-   * has been through storage.
+   * This is for a root built in memory (world genesis, or one made on
+   * demand); {@link adoptSubtree} registers the root it grafts itself.
    */
   definePartition(id: number): void {
     this._requireWorldMode('definePartition');
@@ -1973,8 +1972,7 @@ export class Game<
   }
 
   /**
-   * One resident partition AS OF THE LAST TAKE: where it hangs, and the bytes
-   * it had (ShufflewickPub #316).
+   * One resident partition's bytes AS OF THE LAST TAKE (ShufflewickPub #316).
    *
    * The platform needs a pre-command copy of every resident partition to roll
    * a refused command back to, and used to serialize the whole resident set
@@ -1984,18 +1982,13 @@ export class Game<
    * wants them (the end of the previous command), so handing them over costs
    * nothing and cannot disagree with what the next take compares against.
    *
-   * `undefined` when `id` is not a partition root, when nothing has baselined
-   * it, or when it hangs from nothing — a partition with no parent has no
-   * attachment point to restore it to, and the caller must say so rather than
-   * be handed bytes it cannot graft.
+   * A root always hangs from the game, which is where `adoptSubtree` puts it
+   * back. `undefined` when `id` is not a partition root or nothing has
+   * baselined it.
    */
-  partitionBaseline(id: number): { readonly parentId: number; readonly bytes: string } | undefined {
-    const root = this._ctx._partitionRoots?.get(id);
-    const bytes = this._ctx._partitionBaselines?.get(id);
-    if (!root || bytes === undefined) return undefined;
-    const parent = root._t.parent;
-    if (!parent) return undefined;
-    return { parentId: parent._t.id, bytes };
+  partitionBaseline(id: number): string | undefined {
+    if (!this._ctx._partitionRoots?.has(id)) return undefined;
+    return this._ctx._partitionBaselines?.get(id);
   }
 
   /**
@@ -2180,21 +2173,15 @@ export class Game<
    */
   adoptSubtree(parentId: number, json: ElementJSON): GameElement {
     this._requireWorldMode('adoptSubtree');
-
-    const parent = this.getElementById(parentId);
-    if (!parent) {
+    if (parentId !== this._t.id) {
+      const named = this.getElementById(parentId);
       throw new Error(
-        `Cannot adopt partition "${json.name ?? json.className}" under parent id ${parentId}: ` +
-          `no element with that id is resident. A partition hangs from the game, element ` +
-          `${this._t.id} here, so stored bytes naming another parent were minted under a ` +
-          `different element id key than this world was built with (#482): pass the key stored ` +
-          `with this world.`
-      );
-    }
-    if (parent !== this) {
-      throw new Error(
-        `Cannot adopt partition "${json.name ?? json.className}" under ` +
-          `"${parent.name ?? parent.constructor.name}" (id ${parentId}): ${PARTITION_ROOT_RULE} ` +
+        `Cannot adopt partition "${json.name ?? json.className}" under parent id ${parentId}, ` +
+          (named
+            ? `which is "${named.name ?? named.constructor.name}", not the game: ${PARTITION_ROOT_RULE} `
+            : `which names no resident element: stored bytes naming another parent were minted ` +
+              `under a different element id key than this world was built with (#482), so pass ` +
+              `the key stored with this world; otherwise the id is a typo or a stale one. `) +
           `Adopt it under the game (id ${this._t.id}).`
       );
     }
@@ -2272,10 +2259,10 @@ export class Game<
     const sequenceBeforeAdoption = this._ctx.sequence;
     const element = GameElement.fromJSON(json, this._ctx, this._ctx.classRegistry);
     this._ctx.sequence = sequenceBeforeAdoption;
-    element._t.parent = parent;
+    element._t.parent = this;
     element.game = this;
-    parent._t.children.push(element);
-    childrenChanged(parent);
+    this._t.children.push(element);
+    childrenChanged(this);
     forEachInSubtree(element, (adopted) => this._ctx._elementsById.set(adopted._t.id, adopted));
 
     element.resolveElementReferences(this);
