@@ -2,7 +2,7 @@
  * Shared utility functions for game hosting
  */
 
-import { Player, canSeatAct, availableActionsForSeat, followUpForSeat, isSeatExpiry, type FlowState, type Game, type ActionDefinition, type ActionTrace, type PendingActionState, type FollowUpAction, type FollowUpOffer } from '../engine/index.js';
+import { Player, canSeatAct, availableActionsForSeat, followUpForSeat, toPublicFlowState, isSeatExpiry, type FlowState, type Game, type ActionDefinition, type ActionTrace, type PendingActionState, type FollowUpAction, type FollowUpOffer } from '../engine/index.js';
 import { buildActionMetadata, buildPickMetadata } from '../engine/element/action-metadata.js';
 import { getActiveTutorialStepView } from '../engine/tutorial/gate.js';
 import { devWarn } from '../utils/dev.js';
@@ -970,4 +970,28 @@ export function buildActionTraces(
 export function debuggingOffMessage(requestName: string): string {
   return `Debugging is not turned on for this session, so '${requestName}' was refused. ` +
     'Debug tools run only in a session whose host turns debugging on, such as `boardsmith dev`.';
+}
+
+/** Each seat's published view, indexed by seat - 1: its cut of the flow state and its state. */
+export function buildViews(runner: GameRunner, playerCount: number): unknown[] {
+  const flowState = runner.getFlowState();
+  return Array.from({ length: playerCount }, (_, i) => ({
+    flowState: toPublicFlowState(flowState, i + 1),
+    state: buildPlayerState(runner, [], i + 1, { includeActionMetadata: true }),
+  }));
+}
+
+// Public observer view. Position 0 is the spectator sentinel: no player has
+// seat 0, so only mode:'all' elements are visible — mode:'owner'/'hidden'
+// element contents are omitted. includeActionMetadata:false ensures
+// spectators receive no action prompts. Built from `runner` (the caller's
+// current runner, whether freshly constructed by `handleStart` or restored via
+// `runnerFromSnapshot`/`GameRunner.fromSnapshot`) — zone visibility now
+// round-trips through serialization (SEC-01/F1/F7: `Space.toJSON`/
+// `_restoreZoneVisibility`), so both cases redact identically.
+export function buildSpectatorView(runner: GameRunner): unknown {
+  return {
+    flowState: toPublicFlowState(runner.getFlowState(), 0),
+    state: buildPlayerState(runner, [], 0, { includeActionMetadata: false }),
+  };
 }
