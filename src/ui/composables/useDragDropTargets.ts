@@ -103,15 +103,15 @@ export function setupDragDropOrchestration(options: DragDropOrchestrationOptions
         `  1. An available action's FIRST selection must be an 'element' that accepts the dragged element, AND\n` +
         `  2. the NEXT selection must expose board targets, i.e. one of:\n` +
         `       • an 'element' / 'elements' pick  → drop onto any valid element, or\n` +
-        `       • a 'choice' pick whose choices carry refs with role 'target'  → drop onto that destination.\n\n` +
+        `       • a 'choice' pick whose choices carry board refs  → drop onto the ref with role 'target', else the first ref.\n\n` +
         `Observed:\n` +
         `  Dragged element: ${JSON.stringify(dragged)}\n` +
         `  Matched action: ${matchedAction ?? 'none (no action has a first element selection accepting this element)'}\n` +
         `  Current pick: ${pick ? `'${pick.name}' (type '${pick.type}')` : 'none'}\n\n` +
         (pick?.type === 'choice'
-          ? `This choice pick exposed no refs with role 'target' on its choices, so the board has nowhere to drop onto. ` +
+          ? `This choice pick exposed no board refs on its choices, so the board has nowhere to drop onto. ` +
             `Provide boardRefs() returning refs: [{ ref, role: 'target' }] per choice.`
-          : `If your action uses a choice destination, ensure each choice's boardRefs() returns refs with role 'target'.`),
+          : `If your action uses a choice destination, ensure each choice's boardRefs() returns a ref to drop onto.`),
     );
   }
 

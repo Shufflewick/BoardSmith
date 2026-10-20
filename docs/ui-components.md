@@ -893,20 +893,19 @@ Use the pit-of-success API with the library's CSS for minimal boilerplate:
 ```vue
 <script setup lang="ts">
 import { computed } from 'vue';
-import { findElements, useDragDrop, type TableBoardProps } from 'boardsmith/ui';
+import { findElements, useBoardInteraction, useDragDrop, type TableBoardProps } from 'boardsmith/ui';
 import 'boardsmith/ui/animation/drag-drop.css';
 
 const props = defineProps<TableBoardProps>();
 const { drag, drop } = useDragDrop();
-const controller = props.actionController;
+const board = useBoardInteraction();
 
 const cards = computed(() => findElements(props.gameView, { className: 'Card' }));
 const zones = computed(() => findElements(props.gameView, { className: 'Zone' }));
 
+// A candidate of the open pick, an action's first pick when none is open, or the auto-filled card to drag on.
 const canDragCard = (cardId: number) =>
-  controller.currentAction.value === 'moveCard' &&
-  controller.currentPick.value?.name === 'card' &&
-  controller.validElements.value.some((valid) => valid.id === cardId);
+  board.isSelectableElement({ id: cardId }) || board.isDraggableSelectedElement({ id: cardId });
 </script>
 
 <template>
@@ -977,7 +976,7 @@ Or use your own class names alongside the library classes:
 | `isDropTarget` | `(ref) => boolean` | Check if element is valid drop target |
 
 **DragOptions:**
-- `when?: boolean | (() => boolean)` - Condition for enabling drag. When false, props are empty and `.bs-draggable` is not applied.
+- `when?: boolean | (() => boolean)` - Condition for enabling drag. When false, props are inert and `.bs-draggable` is not applied. A disabled candidate of the pick in progress is never draggable, whatever `when` says, as a click on it chooses nothing; the auto-filled source of the pick still drags on (#1299).
 
 **ElementRef:**
 - Can include `id`, `name`, or `notation` to identify the element.
@@ -1021,17 +1020,16 @@ function isZoneDropTarget(zoneName) { return isDropTarget({ name: zoneName }); }
 <!-- typecheck: board -->
 ```vue
 <script setup lang="ts">
-import { useDragDrop, type TableBoardProps } from 'boardsmith/ui';
+import { useBoardInteraction, useDragDrop, type TableBoardProps } from 'boardsmith/ui';
 import 'boardsmith/ui/animation/drag-drop.css';
 
 const props = defineProps<TableBoardProps>();
 const { drag } = useDragDrop();
-const { currentAction, currentPick, validElements } = props.actionController;
+const board = useBoardInteraction();
+const { validElements } = props.actionController;
 
 const canDrag = (cardId: number) =>
-  currentAction.value === 'moveCard' &&
-  currentPick.value?.name === 'card' &&
-  validElements.value.some((valid) => valid.id === cardId);
+  board.isSelectableElement({ id: cardId }) || board.isDraggableSelectedElement({ id: cardId });
 </script>
 
 <template>

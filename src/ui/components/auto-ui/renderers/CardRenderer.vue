@@ -44,6 +44,7 @@ const {
   isActionSelectable: isCandidate,
   isDraggableSelected,
   isDisabled,
+  canStartDrag,
   isDropTarget,
   isDragged,
 } = useElementBoardState(() => props.element);
@@ -59,7 +60,7 @@ const isHidden = computed(() => isHiddenPlaceholder(props.element));
 // Keyboard/ARIA: tabindex 0 for both action-selectable and drop-target cards
 // so keyboard users can reach cards that are valid drag targets too.
 // A disabled candidate starts no drag, as a click on it chooses nothing (#1190).
-const canDrag = computed(() => isActionSelectable.value && !isDisabled.value);
+const canDrag = computed(() => isActionSelectable.value && canStartDrag.value);
 
 const isInteractiveForTabindex = computed(
   () => isActionSelectable.value || isDropTarget.value,

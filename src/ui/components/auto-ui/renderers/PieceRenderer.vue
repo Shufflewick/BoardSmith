@@ -31,6 +31,7 @@ const {
   isActionSelectable: isCandidate,
   isDraggableSelected,
   isDisabled,
+  canStartDrag,
   isDragged,
 } = useElementBoardState(() => props.element);
 
@@ -44,14 +45,14 @@ const presentationEntry = usePresentationEntry(() => props.element);
 
 const standsOn = inject(STANDS_ON_KEY, () => undefined);
 
-// What a drag starts from: the piece if it is a candidate, else the candidate
-// square it stands on, whose pick the drag then starts (#943). A disabled
-// candidate starts nothing, as a click on it chooses nothing (#1190).
+// What a drag starts from: the piece if it may start one, else the candidate
+// square it stands on, whose pick the drag then starts (#943, #1299). A
+// disabled candidate starts nothing, as a click on it chooses nothing (#1190).
 const dragIdentity = computed(() => {
   if (!boardInteraction) return null;
-  if (isActionSelectable.value) return isDisabled.value ? null : elementIdentity();
+  if (isActionSelectable.value && canStartDrag.value) return elementIdentity();
   const square = standsOn();
-  return square && boardInteraction.isSelectableElement(square) && !boardInteraction.isDisabledElement(square) ? square : null;
+  return square && boardInteraction.isSelectableElement(square) && boardInteraction.canStartDrag(square) ? square : null;
 });
 
 const canDrag = computed(() => dragIdentity.value !== null);
