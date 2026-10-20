@@ -22,7 +22,8 @@ worker threads, so it is not game code.
 ## Exports
 
 - `WeightEvolver` - Evolves weights with a µ+λ strategy, benchmarking each
-  candidate in worker threads
+  candidate in worker threads, each game of a benchmark played by whichever
+  worker is free
 - `readObjectiveWeights(source)` - The `{ id, weight }` of every objective in a
   bot.ts source. Refuses a weight that is not written as a number, and an id
   two objectives share
@@ -88,8 +89,8 @@ Scores that noisy make the highest one lucky: when no candidate is stronger
 than the original, the best still scores around 68% against the original's
 50% (#870). So before keeping the pick, the evolver plays it and the original
 again, on 400 new games each that the search never played, the same games for
-both. Each set's 400 games are played as 20 separately seeded batches of 20,
-spread across the worker pool (#1031). The pick is kept only if it wins a one-sided two-proportion test at 5%:
+both. Like every benchmark, they are shared out across the worker pool one game
+at a time (#1307), and a seeded run plays the same games on any machine. The pick is kept only if it wins a one-sided two-proportion test at 5%:
 a pick no stronger than the original is kept at most about 1 run in 20, and a
 pick 10 points stronger is kept about 88% of the time (15 points: about 99%).
 Otherwise `bot.ts` is left as it was. A kept pick's weights are written to

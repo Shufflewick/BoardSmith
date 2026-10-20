@@ -17,15 +17,15 @@ if (!parentPort) {
  * Message format for benchmark requests
  */
 export interface BenchmarkRequest {
-  /** Index of this individual in the population (for tracking) */
-  individualIndex: number;
+  /** Which piece of the coordinator's work this is: one game of one weight set */
+  piece: number;
   /** Path to the game's training bundle (see `TrainingBundle`) */
   gameModulePath: string;
   /** Game type identifier */
   gameType: string;
   /** The weights to give the game's own objectives, by id */
   weights: ObjectiveWeight[];
-  /** Benchmark configuration */
+  /** Benchmark configuration, naming the one `game` to play */
   config: BenchmarkConfig;
 }
 
@@ -33,10 +33,8 @@ export interface BenchmarkRequest {
  * Message format for benchmark results
  */
 export interface BenchmarkResponse {
-  /** Index of this individual in the population */
-  individualIndex: number;
-  /** Win rate achieved */
-  winRate: number;
+  /** The piece of work this answers */
+  piece: number;
   /** Number of wins */
   wins: number;
   /** Number of losses */
@@ -56,8 +54,8 @@ export interface BenchmarkResponse {
  * Error response format
  */
 export interface BenchmarkErrorResponse {
-  /** Index of this individual in the population */
-  individualIndex: number;
+  /** The piece of work this answers */
+  piece: number;
   /** Error message */
   error: string;
 }
@@ -66,7 +64,7 @@ export interface BenchmarkErrorResponse {
  * Message handler for incoming benchmark requests.
  */
 parentPort.on('message', async (request: BenchmarkRequest) => {
-  const { individualIndex, gameModulePath, gameType, weights, config } = request;
+  const { piece, gameModulePath, gameType, weights, config } = request;
 
   try {
     const bundle = await loadTrainingBundle(gameModulePath);
@@ -82,8 +80,7 @@ parentPort.on('message', async (request: BenchmarkRequest) => {
 
     // Post result back to parent
     const response: BenchmarkResponse = {
-      individualIndex,
-      winRate: result.winRate,
+      piece,
       wins: result.wins,
       losses: result.losses,
       draws: result.draws,
@@ -93,10 +90,10 @@ parentPort.on('message', async (request: BenchmarkRequest) => {
   } catch (error) {
     // Post error back to parent
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error(`Benchmark worker error for individual ${individualIndex}: ${errorMessage}`);
+    console.error(`Benchmark worker error for piece ${piece}: ${errorMessage}`);
 
     const errorResponse: BenchmarkErrorResponse = {
-      individualIndex,
+      piece,
       error: errorMessage,
     };
     parentPort!.postMessage(errorResponse);

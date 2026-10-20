@@ -12,23 +12,26 @@ import type { projectGameOptions as Declared } from '#testing/project-game-optio
 import type { GameOptionDefinition } from '../types/protocol.js';
 import { parseGameOptionList } from '../session/game-option-selection.js';
 
-/** Each boardsmith.json read so far, by path: a simulation starts thousands of test games. */
-const parsed = new Map<string, Record<string, GameOptionDefinition>>();
+/**
+ * Each boardsmith.json parsed so far, by path, with the text it was parsed from: a simulation starts
+ * thousands of test games, and a file edited since (a watch-mode rerun) is parsed again.
+ */
+const parsed = new Map<string, { text: string; declared: Record<string, GameOptionDefinition> }>();
 
 export const projectGameOptions: typeof Declared = () => {
   const file = projectFile(process.cwd());
   if (file === undefined) return undefined;
-  let declared = parsed.get(file);
-  if (declared === undefined) {
-    let config: { gameOptions?: unknown };
-    try {
-      config = JSON.parse(readFileSync(file, 'utf-8')) as { gameOptions?: unknown };
-    } catch {
-      throw new Error(`${file} is not valid JSON, so the game's options cannot be read from it. Fix the file.`);
-    }
-    declared = parseGameOptionList(config.gameOptions);
-    parsed.set(file, declared);
+  const text = readFileSync(file, 'utf-8');
+  const cached = parsed.get(file);
+  if (cached?.text === text) return cached.declared;
+  let config: { gameOptions?: unknown };
+  try {
+    config = JSON.parse(text) as { gameOptions?: unknown };
+  } catch {
+    throw new Error(`${file} is not valid JSON, so the game's options cannot be read from it. Fix the file.`);
   }
+  const declared = parseGameOptionList(config.gameOptions);
+  parsed.set(file, { text, declared });
   return declared;
 };
 
