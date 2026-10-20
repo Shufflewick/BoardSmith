@@ -1501,15 +1501,14 @@ export class BoardSmithWorldEngine implements WorldEngine {
   ): Readonly<Record<string, unknown>> {
     // The check reads each projected element's parent too, so it is a read with reach-marking off (#1203).
     return this.game.readingOnly(() => {
-      const draft = this.game
+      // Each element pick is checked before a later pick is resolved against it (#1223).
+      return this.game
         .getActionExecutor()
-        .resolveArgs(definition, picksFromSeat(this.game, definition.name, args, acting.seat), acting, readOnlyProjection(this.game));
-      for (const selection of definition.selections) {
-        if (selection.type === "element" || selection.type === "elements") {
-          this.assertOfferable(definition.name, selection.name, draft[selection.name], args, named);
-        }
-      }
-      return draft;
+        .resolveArgs(definition, picksFromSeat(this.game, definition.name, args, acting.seat), acting, readOnlyProjection(this.game), (selection, value) => {
+          if (selection.type === "element" || selection.type === "elements") {
+            this.assertOfferable(definition.name, selection.name, value, args, named);
+          }
+        });
     });
   }
 
