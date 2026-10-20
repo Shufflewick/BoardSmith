@@ -132,7 +132,9 @@ export class WeightEvolver {
   ) {
     this.gameModulePath = gameModulePath;
     this.gameType = gameType;
-    this.config = { ...DEFAULT_CONFIG, ...config };
+    // A setting passed as undefined keeps its default, as an omitted one does.
+    const given = Object.fromEntries(Object.entries(config).filter(([, value]) => value !== undefined));
+    this.config = { ...DEFAULT_CONFIG, ...given };
     this.evolutionSeed = config.seed ?? mintSeed();
   }
 

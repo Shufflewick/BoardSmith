@@ -237,6 +237,19 @@ describe('WeightEvolver.evolve', () => {
     }
   });
 
+  it('uses the default for a setting passed as undefined (#1307)', async () => {
+    const progress: TrainingProgress[] = [];
+    await evolver({
+      evolutionGenerations: undefined, evolutionBenchmarkGames: undefined, benchmarkMCTSIterations: undefined,
+      maxActionsPerGame: undefined, evolutionSigma: undefined, evolutionMu: undefined, evolutionLambda: undefined,
+      onProgress: (p) => progress.push(p),
+    }).evolve(objectives(5));
+    expect(benchmarkConfigs()[0]).toEqual([expect.objectContaining({ gameCount: 50, mctsIterations: 100, maxActions: 1000 })]);
+    expect(benchmarkConfigs()[1]).toHaveLength(25);
+    expect(progress.at(-1)!.totalIterations).toBe(5);
+    expect(benchmarkCalls[1].flat().every((o) => Number.isFinite(o.weight))).toBe(true);
+  });
+
   it('benchmarks every evaluation reproducibly from the evolution seed, with no game clock (#699)', async () => {
     await evolver({ seed: 'repeat' }).evolve(objectives(5));
     const configs = benchmarkConfigs();
