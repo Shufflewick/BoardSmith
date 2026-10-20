@@ -252,11 +252,6 @@ describe('useHexGrid', () => {
     expect(grid(gameView(cells)).getCellAt(9, 9)).toBeUndefined();
   });
 
-  it('skips cells that carry no coordinates', () => {
-    const nameless = { id: 7, className: 'Cell', name: 'nowhere', attributes: {}, children: [] } as GameViewElement;
-    expect(grid(gameView([...cells, nameless])).cellMap.value.size).toBe(3);
-  });
-
   describe('coordinate attribute names', () => {
     const colRow = (col: number, row: number): GameViewElement =>
       ({ id: col * 100 + row, className: 'Cell', name: `${col},${row}`, attributes: { col, row }, children: [] } as GameViewElement);
@@ -386,5 +381,25 @@ describe('useHexGrid', () => {
     expect(hex.cellMap.value.size).toBe(0);
     expect(hex.getCellAt(0, 0)).toBeUndefined();
     expect(hex.hexGridBounds.value.width).toBe(400);
+  });
+});
+
+// The custom-UI path refuses as the AutoUI board does, rather than placing it at (0,0) or dropping it (#1294).
+describe('useHexGrid with a cell that has no coordinates', () => {
+  const unplaced = { id: 99, className: 'Cell', name: 'lost', attributes: { q: 1 }, children: [] } as unknown as GameViewElement;
+
+  it('refuses the board, naming the cell and the missing coordinate', () => {
+    const grid = useHexGrid({ gameView: () => gameView([cell(0, 0), unplaced]) });
+
+    expect(() => grid.cells.value).toThrow('Hex board "board" can\'t render: cell "lost" has no numeric "r"; give every cell numeric q and r values');
+    const fresh = useHexGrid({ gameView: () => gameView([cell(0, 0), unplaced]) });
+    expect(() => fresh.hexGridBounds.value).toThrow('cell "lost" has no numeric "r"');
+  });
+
+  it('leaves out a face-down cell sent without its place', () => {
+    const faceDown = { id: -5, className: 'Cell', attributes: { __hidden: true }, children: [] } as unknown as GameViewElement;
+    const grid = useHexGrid({ gameView: () => gameView([cell(0, 0), faceDown]) });
+
+    expect(grid.cells.value.map((c) => c.id)).toEqual([0]);
   });
 });

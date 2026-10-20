@@ -287,6 +287,25 @@ describe('dev host bridge', () => {
 
       expect(posted).toEqual([{ kind: 'server_response', seat: 1 }]);
     });
+
+    it('refuses an unknown wire op with the UNKNOWN_OP code, so no client matches its text (#1046)', async () => {
+      const replies: Record<string, unknown>[] = [];
+      const session = createDevSession({
+        debug: () => false,
+        playerCount: 2,
+        executeOp: (snap, pend, op) =>
+          executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op),
+        postGameState: () => {},
+        postServerResponse: (_seat, _requestId, reply) => replies.push(reply),
+      });
+      await session.start();
+
+      await session.handleServerRequest(1, 'req-x', 'teleport', {});
+
+      expect(replies).toEqual([
+        { success: false, error: "Unknown server op: 'teleport'", errorCode: ErrorCode.UNKNOWN_OP },
+      ]);
+    });
   });
 
   // ── teachingDisabled threading (Plan 111-02) ─────────────────────────────

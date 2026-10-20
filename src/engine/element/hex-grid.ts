@@ -5,6 +5,7 @@ import type { ElementLayout } from './grid.js';
 import type { GameElement } from './game-element.js';
 import type { ElementClass, ElementFinder } from './types.js';
 import { firstCell } from './cell-index.js';
+import { hexCoordinateNames } from './hex-coordinates.js';
 
 /**
  * Hex orientation options
@@ -120,7 +121,7 @@ export class HexGrid<G extends Game = any, P extends Player = any> extends Space
     classNameOrFinder?: ElementClass<F> | ElementFinder<F>,
     ...finders: ElementFinder<F>[]
   ): F | undefined {
-    return firstCell(this, HexCell, [this.$qCoord ?? 'q', this.$rCoord ?? 'r'], classNameOrFinder, finders, () =>
+    return firstCell(this, HexCell, hexCoordinateNames(this), classNameOrFinder, finders, () =>
       super.first(classNameOrFinder as ElementClass<F>, ...finders),
     );
   }

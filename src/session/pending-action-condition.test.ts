@@ -155,7 +155,7 @@ async function session() {
 describe('PendingActionManager on a runner, pick by pick', () => {
   it("refuses to complete a pending action once another seat's move took its condition away", async () => {
     const r = runner();
-    const picks = new PendingActionManager(r, 3);
+    const picks = new PendingActionManager(r);
     picks.startPendingAction('build', 1);
     expect((await picks.processSelectionStep(1, 'where', 'north')).success).toBe(true);
 
@@ -171,7 +171,7 @@ describe('PendingActionManager on a runner, pick by pick', () => {
 
   it('completes the refused pending action once its condition holds again', async () => {
     const r = runner();
-    const picks = new PendingActionManager(r, 3);
+    const picks = new PendingActionManager(r);
     picks.startPendingAction('build', 1);
     expect((await picks.processSelectionStep(1, 'where', 'north')).success).toBe(true);
     expect(r.performAction('take', 2, {}).success).toBe(true);
@@ -186,7 +186,7 @@ describe('PendingActionManager on a runner, pick by pick', () => {
 
   it('refuses the first pick of an action whose condition does not hold', async () => {
     const r = runner();
-    const picks = new PendingActionManager(r, 3);
+    const picks = new PendingActionManager(r);
     expect(r.performAction('take', 2, {}).success).toBe(true);
     picks.startPendingAction('build', 1);
 
@@ -196,7 +196,7 @@ describe('PendingActionManager on a runner, pick by pick', () => {
 
   it("completes an action whose own picks end its condition, with another seat's move in between", async () => {
     const r = runner();
-    const picks = new PendingActionManager(r, 3);
+    const picks = new PendingActionManager(r);
     picks.startPendingAction('dig', 1);
     expect((await picks.processSelectionStep(1, 'spot', 'east')).success).toBe(true);
     expect(r.game.energy[1]).toBe(0);
@@ -211,7 +211,7 @@ describe('PendingActionManager on a runner, pick by pick', () => {
 
   it("refuses an action whose picks change the game once another seat's move took its condition away", async () => {
     const r = runner();
-    const picks = new PendingActionManager(r, 3);
+    const picks = new PendingActionManager(r);
     r.game.energy[1] = 3;
     picks.startPendingAction('dig', 1);
     expect((await picks.processSelectionStep(1, 'spot', 'east')).success).toBe(true);
@@ -233,7 +233,7 @@ describe('PendingActionManager on a runner, pick by pick', () => {
 
   it('completes a held follow-up pick by pick although its condition does not hold', async () => {
     const r = runner();
-    const picks = new PendingActionManager(r, 3);
+    const picks = new PendingActionManager(r);
     expect(r.performAction('scout', 1, {}).success).toBe(true);
     picks.startPendingAction('loot', 1);
     expect((await picks.processSelectionStep(1, 'where', 'north')).success).toBe(true);
@@ -245,7 +245,7 @@ describe('PendingActionManager on a runner, pick by pick', () => {
 
   it('still refuses a seat that does not hold the follow-up, as before', async () => {
     const r = runner();
-    const picks = new PendingActionManager(r, 3);
+    const picks = new PendingActionManager(r);
     expect(r.performAction('scout', 1, {}).success).toBe(true);
     picks.startPendingAction('loot', 2);
 

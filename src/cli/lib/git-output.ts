@@ -5,18 +5,21 @@ import { execFile } from 'node:child_process';
  * paths come back as written (`core.quotePath=false`) everywhere, a path with non-ASCII characters
  * read here matches the same path read anywhere else, and a whole-project diff or listing fits in
  * the buffer. A non-zero exit rejects with an error naming the git command and what git said,
- * carrying git's exit status as `code` for a caller that tells one non-zero exit from another.
+ * carrying git's exit status as `code` for a caller that tells one non-zero exit from another, and
+ * what git said as `stderr` for a caller that shows it without the command.
+ * `options.env` replaces the inherited environment, as `execFile`'s does.
  */
-export function gitOutput(dir: string, args: string[]): Promise<string> {
+export function gitOutput(dir: string, args: string[], options: { env?: NodeJS.ProcessEnv } = {}): Promise<string> {
   return new Promise((resolvePromise, reject) => {
     execFile(
       'git',
       ['-c', 'core.quotePath=false', ...args],
-      { cwd: dir, maxBuffer: 256 * 1024 * 1024 },
+      { cwd: dir, maxBuffer: 256 * 1024 * 1024, env: options.env },
       (error, stdout, stderr) => {
         if (error) {
-          const message = `git ${args.join(' ')} failed: ${(String(stderr) || error.message).trim()}`;
-          reject(Object.assign(new Error(message), { code: error.code }));
+          const said = String(stderr).trim();
+          const message = `git ${args.join(' ')} failed: ${said || error.message.trim()}`;
+          reject(Object.assign(new Error(message), { code: error.code, stderr: said }));
         } else resolvePromise(String(stdout));
       },
     );

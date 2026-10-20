@@ -709,7 +709,9 @@ describe('useBoardActionBridge — disabled actions', () => {
     const validElements: EnrichedValidElement[] = [
       { id: 5, refs: [{ ref: { id: 5, notation: '0,0' }, role: 'highlight' }] },
     ];
-    const { controller, start } = makeController({ pick: null, action: null, validElements });
+    const { controller, start } = makeController({
+      pick: null, action: null, startCandidates: { placeStone: { pick: cellPick.name, elements: validElements } },
+    });
 
     useBoardActionBridge({
       controller,
@@ -717,12 +719,7 @@ describe('useBoardActionBridge — disabled actions', () => {
       isMyTurn: ref(true),
       // Auto mode off, so the only route to `start` is the element click below.
       autoEndTurn: ref(false),
-      actionMetadata: ref({
-        placeStone: {
-          name: 'placeStone',
-          selections: [{ ...cellPick, validElements }],
-        },
-      }),
+      actionMetadata: ref({ placeStone: { name: 'placeStone', selections: [cellPick] } }),
       availableActions: ref(['placeStone']),
       disabledActions: ref({ placeStone: 'The board is full.' }),
       isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
@@ -742,7 +739,9 @@ describe('useBoardActionBridge — disabled actions', () => {
       { id: 5, disabled: 'Surrounded.', refs: [{ ref: { id: 5 }, role: 'highlight' }] },
       { id: 6, refs: [{ ref: { id: 6 }, role: 'highlight' }] },
     ];
-    const { controller, start } = makeController({ pick: null, action: null, validElements });
+    const { controller, start } = makeController({
+      pick: null, action: null, startCandidates: { placeStone: { pick: cellPick.name, elements: validElements } },
+    });
 
     useBoardActionBridge({
       controller,
@@ -750,7 +749,7 @@ describe('useBoardActionBridge — disabled actions', () => {
       isMyTurn: ref(true),
       autoEndTurn: ref(false),
       actionMetadata: ref({
-        placeStone: { name: 'placeStone', selections: [{ ...cellPick, validElements }] },
+        placeStone: { name: 'placeStone', selections: [cellPick] },
         pass: { name: 'pass', selections: [] },
       }),
       availableActions: ref(['placeStone', 'pass']),
@@ -869,14 +868,16 @@ describe('useBoardActionBridge dragged piece for a filterBy pick (#965)', () => 
 describe('useBoardActionBridge refs a click starts an action by (#945)', () => {
   function wireTwoActions(validElements: EnrichedValidElement[]) {
     const board = createBoardInteraction();
-    const { controller, start } = makeController({ pick: null, action: null, validElements });
+    const { controller, start } = makeController({
+      pick: null, action: null, startCandidates: { assign: { pick: 'squad', elements: validElements } },
+    });
     useBoardActionBridge({
       controller,
       boardInteraction: board,
       isMyTurn: ref(true),
       autoEndTurn: ref(false),
       actionMetadata: ref({
-        assign: { name: 'assign', selections: [{ name: 'squad', type: 'element', validElements }] },
+        assign: { name: 'assign', selections: [{ name: 'squad', type: 'element' }] },
         pass: { name: 'pass', selections: [] },
       }),
       availableActions: ref(['assign', 'pass']),

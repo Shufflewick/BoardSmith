@@ -126,6 +126,29 @@ export function isChoosableElement(ve: EnrichedValidElement, target: ElementRef)
 }
 
 /**
+ * The action a board click or drag on `target` starts while none is open, and
+ * the candidate it starts with (#1192): the first action whose opening pick
+ * offers `target`, by the same match that fills an open pick.
+ */
+export function findStartCandidate(
+  controller: UseActionControllerReturn,
+  target: ElementRef,
+): { action: string; pick: string; element: EnrichedValidElement } | undefined {
+  for (const [action, { pick, elements }] of controller.startCandidates.value) {
+    const element = elements.find(e => isChoosableElement(e, target));
+    if (element) return { action, pick, element };
+  }
+  return undefined;
+}
+
+/** A valid element as the board substrate holds it. */
+function boardTarget(ve: EnrichedValidElement): { id: number; ref: ElementRef; disabled?: string; display: string } {
+  // The display is the panel's wording, carried to the board because the board
+  // may be the only surface this candidate appears on (#189).
+  return { id: ve.id, ref: elementClickRef(ve), disabled: ve.disabled, display: ve.display ?? String(ve.id) };
+}
+
+/**
  * Wire the action controller to the board-interaction substrate. Call ONCE from
  * GameShell setup; it sets up reactive watchers that live for the GameShell
  * lifetime. No-op when boardInteraction is undefined.
@@ -450,12 +473,28 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   const shownAction = computed(() => (isViewingHistory.value ? null : currentAction.value));
   const shownPick = computed(() => (isViewingHistory.value ? null : currentPick.value));
 
+  // With no pick open, the board offers what a click or drag can start (#1192):
+  // per element, the first action that can start with it, enabled before disabled.
+  function feedStartCandidates(): void {
+    board.setDraggableSelectedElement(null);
+    const offered = new Map<number, { action: string; pick: string; element: EnrichedValidElement }>();
+    for (const [action, { pick, elements }] of controller.startCandidates.value) {
+      for (const element of elements) {
+        const held = offered.get(element.id);
+        if (!held || (held.element.disabled && !element.disabled)) offered.set(element.id, { action, pick, element });
+      }
+    }
+    board.setValidElements([...offered.values()].map(({ element }) => boardTarget(element)), (elementId: number) => {
+      const start = offered.get(elementId);
+      if (start) void startAction(start.action, { args: { [start.pick]: elementId } });
+    });
+  }
+
   // Feed the board substrate's selectable elements + click callback for the
   // current pick. This is the watcher whose absence broke board-centric play.
-  watch([shownPick, offeredElements, offeredChoices], ([selection]) => {
+  watch([shownPick, offeredElements, offeredChoices, controller.startCandidates], ([selection]) => {
     if (!selection) {
-      board.setValidElements([], () => {});
-      board.setDraggableSelectedElement(null);
+      feedStartCandidates();
       return;
     }
 
@@ -468,14 +507,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     let onSelect: ((id: number) => void) | null = null;
 
     if (selection.type === 'element' || selection.type === 'elements') {
-      validElems = offeredElements.value.map(ve => ({
-        id: ve.id,
-        ref: elementClickRef(ve),
-        disabled: ve.disabled,
-        // The wording the panel would have used, carried to the board because
-        // the board is now the only surface this candidate appears on (#189).
-        display: ve.display ?? String(ve.id),
-      }));
+      validElems = offeredElements.value.map(boardTarget);
       onSelect = (elementId: number) => {
         const multiSelect = currentMultiSelect.value;
         if (selection.type === 'elements' && multiSelect) {
@@ -571,6 +603,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
       });
     } else {
       board.clear();
+      feedStartCandidates();
     }
   }, { immediate: true });
 
@@ -603,14 +636,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
 
     if (!isMyTurn.value || isExecuting.value) return;
 
-    const elementAction = actionsWithMetadata.value.find(action => {
-      const firstSel = action.selections[0];
-      if (firstSel?.type !== 'element') return false;
-      return firstSel.validElements?.some(e => isChoosableElement(e, selected));
-    });
-    if (!elementAction) return;
-    const firstSel = elementAction.selections[0];
-    const validElem = firstSel.validElements?.find(e => isChoosableElement(e, selected));
-    if (validElem) void startAction(elementAction.name, { args: { [firstSel.name]: validElem.id } });
+    const start = findStartCandidate(controller, selected);
+    if (start) void startAction(start.action, { args: { [start.pick]: start.element.id } });
   });
 }

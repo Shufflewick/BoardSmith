@@ -308,6 +308,16 @@ async function installHookAndReport(projectPath: string): Promise<void> {
   const byHand = 'run `boardsmith ingest-gaps` manually after transcription';
   if (hook.result === 'skipped-no-git') {
     console.log(styleText('yellow', `  Could not install the ingest pre-commit hook: this folder has no git repository, so ${byHand}.`));
+  } else if (hook.result === 'skipped-git-failed') {
+    console.log(styleText('yellow', `  Could not install the ingest pre-commit hook: ${hook.reason}. Fix what git reports, or ${byHand}.`));
+  } else if (hook.result === 'skipped-in-project') {
+    console.log(
+      styleText('yellow', `  Left ${hook.path} alone: git runs hooks from a folder inside this project that git does not ignore (core.hooksPath), so a hook written there would be committed, and the ingest hook is not installed. If that folder is meant to stay out of git, add it to .gitignore and run \`boardsmith doctor --fix\`, or ${byHand}.`),
+    );
+  } else if (hook.result === 'skipped-not-executable') {
+    console.log(
+      styleText('yellow', `  Wrote ${hook.path}, but git will skip it: its execute bit did not take, as on a filesystem that keeps no permissions or is mounted noexec. Move the project to a filesystem that lets files run, or ${byHand}.`),
+    );
   } else if (hook.result === 'installed') {
     console.log(styleText('dim', `  (installed the ingest pre-commit hook at ${hook.path})`));
   } else if (hook.result === 'skipped-existing') {

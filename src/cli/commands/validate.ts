@@ -15,6 +15,7 @@ import {
   ASSET_PATH_KEYS,
 } from '../lib/config-schema.js';
 import { agentsBlockProblems } from '../lib/agent-roles.js';
+import { mutationBlockProblems } from '../lib/mutation-budget.js';
 import {
   MAX_TABLE_RULES_ENCODED_BYTES,
   MAX_UPLOAD_ZIP_BYTES,
@@ -30,6 +31,7 @@ import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { runToolCapturingStdout } from '../lib/run-tool.js';
 import { resolveWorldMode, WORLD_AUTHORING_DOC } from '../lib/world-project.js';
 import { GAME_BACKENDS, capabilityContradictions, isGameBackend } from '../../session/index.js';
+import { type TableBuild, describeBuild, tableBuilds } from '../../session/capabilities.js';
 import type { GameDefinition } from '../../session/index.js';
 import { declaredGameOptionsOf, selectGameOptions } from '../../session/game-option-selection.js';
 import { constructGame } from '../../engine/element/game.js';
@@ -125,14 +127,16 @@ async function runValidation(
   // 6. Required files check
   results.push(await validateRequiredFiles(cwd, worldMode, config));
 
+  const rules = projectRules(cwd);
+
   // 7. Choice cardinality — the panel offers hierarchy, never free text (#172).
-  results.push(await validateChoiceCardinality(cwd, worldMode));
+  results.push(await validateChoiceCardinality(rules, worldMode));
 
   // 8. The compiled rules agree with boardsmith.json, exactly as build requires.
-  results.push(await validateRulesAgreement(cwd));
+  results.push(await validateRulesAgreement(rules));
 
   // 9. Every sprite the table builds carries the sizes getSpriteStyle needs (#1021).
-  if (!worldMode) results.push(await validateSpriteImages(cwd));
+  if (!worldMode) results.push(await validateSpriteImages(rules));
 
   return { results, worldMode };
 }
@@ -270,6 +274,7 @@ export function checkMetadataIssues(config: Record<string, unknown>): string[] {
   // Which agent each role is dispatched as (#454): a wrong mapping would send work to an agent
   // type the project never meant.
   issues.push(...agentsBlockProblems(config.agents));
+  issues.push(...mutationBlockProblems(config.mutation));
 
   // Unknown top-level keys — did-you-mean suggestions from the shared
   // allowed-key set (CLIX-02). Removed/renamed keys get pointed migration
@@ -1265,11 +1270,11 @@ export function buildChoiceCardinalityResult(
  * warning that the check could not run, never as a pass: a check that did not
  * run has not found the game clean (#306).
  */
-export async function validateChoiceCardinality(cwd: string, isWorld: boolean): Promise<ValidationResult> {
+export async function validateChoiceCardinality(rules: ProjectRules, isWorld: boolean): Promise<ValidationResult> {
   const spinner = ora('Checking choice cardinality...').start();
 
   try {
-    const findings = isWorld ? await auditWorld(cwd) : await auditTable(await loadProjectRules(cwd));
+    const findings = isWorld ? await auditWorld(rules.cwd) : await auditTable(await rules.load());
 
     const result = buildChoiceCardinalityResult(findings, isWorld ? 'world' : 'table');
     if (result.passed) spinner.succeed('Choice cardinality OK');
@@ -1332,6 +1337,18 @@ function auditTable(gameDefinition: GameDefinition): Promise<UnboundedChoiceStep
  */
 async function loadProjectRules(cwd: string): Promise<GameDefinition> {
   return withProjectBundle(cwd, 'simulate', () => [], async (bundle) => bundle.gameDefinition);
+}
+
+/** A project's folder and its compiled rules, bundled at most once however many checks read them (#1303). */
+export interface ProjectRules {
+  cwd: string;
+  load(): Promise<GameDefinition>;
+}
+
+/** The {@link ProjectRules} of the project in `cwd`: nothing is bundled until a check asks. */
+export function projectRules(cwd: string): ProjectRules {
+  let loading: Promise<GameDefinition> | undefined;
+  return { cwd, load: () => (loading ??= loadProjectRules(cwd)) };
 }
 
 /**
@@ -1409,13 +1426,13 @@ export function checkRulesAgreement(
 }
 
 /** Load the compiled rules and run {@link checkRulesAgreement} against boardsmith.json. */
-async function validateRulesAgreement(cwd: string): Promise<ValidationResult> {
+async function validateRulesAgreement(rules: ProjectRules): Promise<ValidationResult> {
   const spinner = ora('Checking rules against boardsmith.json...').start();
-  const config = JSON.parse(readFileSync(join(cwd, 'boardsmith.json'), 'utf-8')) as Record<string, unknown>;
+  const config = JSON.parse(readFileSync(join(rules.cwd, 'boardsmith.json'), 'utf-8')) as Record<string, unknown>;
 
   let result: ValidationResult;
   try {
-    const gameDefinition = await loadProjectRules(cwd);
+    const gameDefinition = await rules.load();
     // Constructs the game at every seat count with every combination of its
     // boolean and select options to read its flow, so a constructor that
     // throws for any of them is reported here too, naming the combination.
@@ -1439,47 +1456,85 @@ async function validateRulesAgreement(cwd: string): Promise<ValidationResult> {
 // ---------------------------------------------------------------------------
 
 /**
- * Build the game at every seat count it supports, with its default options, and
- * run every element's `$image` and `$images` through `parseImageInfo`, the parse
- * every renderer uses. Sprite data from plain JS or JSON is not type-checked, and
- * a sprite missing a size renders as an empty card with no message.
+ * Build the game as every table it can be (each seat count with each combination of its boolean
+ * and select options, #1303), start its flow, and run every element's `$image` and `$images`
+ * through `parseImageInfo`, the parse every renderer uses. Sprite data from plain JS or JSON is not
+ * type-checked, and a sprite missing a size renders as an empty card with no message. A table that
+ * cannot be built is reported, and the others are still checked.
  */
 export function checkSpriteImages(gameDefinition: GameDefinition): ValidationResult {
   const name = 'Sprite images';
-  const { minPlayers, maxPlayers } = gameDefinition;
-  if (!Number.isInteger(minPlayers) || !Number.isInteger(maxPlayers)) {
-    throw new Error('your gameDefinition does not declare whole-number minPlayers and maxPlayers, so there is no seat count to build it at');
+  const { builds, refusal } = tableBuilds(gameDefinition, 'to check every sprite it creates');
+  if (refusal !== undefined) return { name, passed: false, message: `Sprite images were not checked: ${refusal}` };
+  const problems = new Map<string, SpriteProblem>();
+  const failedBuilds: string[] = [];
+  let built = 0;
+  for (const build of builds) {
+    const game = startedGame(gameDefinition, build, failedBuilds);
+    if (game === undefined) continue;
+    built += 1;
+    addSpriteProblems(game, build, problems);
   }
-  const options = selectGameOptions(declaredGameOptionsOf(gameDefinition), {});
-  const problems = new Map<string, { image: string; reason: string; seats: Set<number> }>();
-  for (let playerCount = minPlayers!; playerCount <= maxPlayers!; playerCount++) {
-    const game = constructGame(gameDefinition.gameClass, { ...options, playerCount, seed: 'sprite-images' });
-    for (const element of [game, ...game.all(), ...game.pile.all()]) {
-      for (const { image, reason } of spriteProblemsOf(element)) {
-        const key = JSON.stringify([image, reason]);
-        const problem = problems.get(key) ?? { image, reason, seats: new Set<number>() };
-        problem.seats.add(playerCount);
-        problems.set(key, problem);
-      }
+  if (problems.size === 0 && failedBuilds.length === 0) return { name, passed: true, message: 'Every sprite has its size and its sheet size.' };
+  const message = [
+    problems.size > 0 ? `${problems.size} sprite image(s) are missing a size, so they would draw as empty elements.` : '',
+    failedBuilds.length > 0 ? `${failedBuilds.length} table(s) could not be built or started, so their sprites were not all checked.` : '',
+  ].filter(Boolean).join(' ');
+  return { name, passed: false, message, details: [...[...problems.values()].map((p) => describeSpriteProblem(p, built)), ...failedBuilds] };
+}
+
+/** One bad image, and the tables it was found at. */
+interface SpriteProblem {
+  image: string;
+  reason: string;
+  builds: TableBuild[];
+}
+
+/** Records each of `game`'s refused images as found at `build`. */
+function addSpriteProblems(game: Game, build: TableBuild, problems: Map<string, SpriteProblem>): void {
+  for (const element of [game, ...game.all(), ...game.pile.all()]) {
+    for (const { image, reason } of spriteProblemsOf(element)) {
+      const key = JSON.stringify([image, reason]);
+      const problem = problems.get(key) ?? { image, reason, builds: [] };
+      if (!problem.builds.includes(build)) problem.builds.push(build);
+      problems.set(key, problem);
     }
   }
-  if (problems.size === 0) return { name, passed: true, message: 'Every sprite has its size and its sheet size.' };
-  const seatCounts = maxPlayers! - minPlayers! + 1;
-  return {
-    name,
-    passed: false,
-    message: `${problems.size} sprite image(s) are missing a size, so they would draw as empty elements.`,
-    details: [...problems.values()].map(({ image, reason, seats }) => {
-      const only = seats.size < seatCounts ? ` (at ${[...seats].join(', ')} players only)` : '';
-      return `${image}${only}: ${reason}`;
-    }),
-  };
+}
+
+/** A problem's line, naming the tables it was found at when it was not found at every one. */
+function describeSpriteProblem({ image, reason, builds }: SpriteProblem, tables: number): string {
+  const only = builds.length < tables ? ` (only ${builds.map(describeBuild).join('; ')})` : '';
+  return `${image}${only}: ${reason}`;
+}
+
+/**
+ * The game built as `build`, with its flow started when it has one, since the flow's opening
+ * creates elements too (#1303). Why it could not be built, or started, is added to `failures`; a
+ * game whose flow would not start is still returned, so what its constructor built is checked.
+ */
+function startedGame(gameDefinition: GameDefinition, build: TableBuild, failures: string[]) {
+  const options = selectGameOptions(declaredGameOptionsOf(gameDefinition), build.choices);
+  let game;
+  try {
+    game = constructGame(gameDefinition.gameClass, { ...options, playerCount: build.playerCount, seed: 'sprite-images' });
+  } catch (error) {
+    failures.push(`Building this game ${describeBuild(build)} threw: ${(error as Error).message}`);
+    return undefined;
+  }
+  try {
+    if (game.getFlow() !== undefined) game.startFlow();
+  } catch (error) {
+    failures.push(`Starting this game's flow ${describeBuild(build)} threw: ${(error as Error).message}`);
+  }
+  return game;
 }
 
 /** Each of this element's `$image` and `$images` that `parseImageInfo` refuses, named and with its reason. */
 function spriteProblemsOf(element: GameElement): Array<{ image: string; reason: string }> {
+  // Never by its place in the tree, which moves with the seat count and the options (#1303).
   const label = element.name === undefined
-    ? `${element.constructor.name} at ${element.branch()}`
+    ? `An unnamed ${element.constructor.name}`
     : `${element.constructor.name} '${element.name}'`;
   const images: Array<[string, unknown]> = [['$image', element.$image]];
   for (const [side, image] of Object.entries(element.$images ?? {})) images.push([`$images.${side}`, image]);
@@ -1493,20 +1548,32 @@ function spriteProblemsOf(element: GameElement): Array<{ image: string; reason: 
   });
 }
 
-/** Load the compiled rules and run {@link checkSpriteImages} on them. */
-export async function validateSpriteImages(cwd: string): Promise<ValidationResult> {
+/** Run {@link checkSpriteImages} on the project's compiled rules. */
+export async function validateSpriteImages(rules: ProjectRules): Promise<ValidationResult> {
   const spinner = ora('Checking sprite images...').start();
+  let gameDefinition: GameDefinition;
   try {
-    const result = checkSpriteImages(await loadProjectRules(cwd));
-    if (result.passed) spinner.succeed('Sprite images OK');
-    else spinner.fail('Sprite images are missing sizes');
-    return result;
+    gameDefinition = await rules.load();
   } catch (error) {
     spinner.fail('Sprite images could not be checked');
     return {
       name: 'Sprite images',
       passed: false,
-      message: `Your sprite images could not be checked, because loading or building the game failed: ${(error as Error).message.replace(/\.$/, '')}. Fix that and run boardsmith validate again.`,
+      message: `Sprite images were not checked: your rules could not be loaded: ${(error as Error).message.replace(/\.$/, '')}. Fix that and run boardsmith validate again.`,
     };
   }
+  let result: ValidationResult;
+  try {
+    result = checkSpriteImages(gameDefinition);
+  } catch (error) {
+    spinner.fail('Sprite images could not be checked');
+    return {
+      name: 'Sprite images',
+      passed: false,
+      message: `Sprite images were not checked: reading the built game's elements threw: ${(error as Error).message.replace(/\.$/, '')}. Fix that and run boardsmith validate again.`,
+    };
+  }
+  if (result.passed) spinner.succeed('Sprite images OK');
+  else spinner.fail('Sprite images are not all usable');
+  return result;
 }

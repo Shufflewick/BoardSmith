@@ -284,6 +284,7 @@ async function project(files: Record<string, string>, objectFormat = 'sha1'): Pr
   const tree = tempTree('bs-ledger-check-');
   const dir = join(tree, 'proj');
   await fs.mkdir(join(dir, 'design'), { recursive: true });
+  await fs.writeFile(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'proj' }));
   execSync(`git init --object-format=${objectFormat}`, { cwd: dir, stdio: 'ignore' });
   for (const [name, text] of Object.entries(files)) {
     await fs.mkdir(dirname(join(dir, 'design', name)), { recursive: true });
@@ -305,7 +306,7 @@ function commitAt(dir: string, iso: string): void {
 async function committedProject(files: Record<string, string>): Promise<{ result: LedgerCheckResult; found: string[] }> {
   const dir = await project(files);
   commitAt(dir, '2026-09-23T12:00:00Z');
-  const result = await ledgerCheck(dir);
+  const result = await ledgerCheck(dir, 'boardsmith ledger-check');
   return { result, found: result.findings.map((f) => `${f.ledger}:${f.entry}:${f.kind}`) };
 }
 
@@ -329,16 +330,34 @@ describe('ledgerCheck — the whole project', () => {
     });
     await fs.writeFile(join(dir, 'boardsmith.json'), JSON.stringify({ agents: { review: 'senior' } }));
     commitAt(dir, '2026-09-23T12:00:00Z');
-    const result = await ledgerCheck(dir);
+    const result = await ledgerCheck(dir, 'boardsmith ledger-check');
     expect(located(result.findings)).toEqual(['run-log/core-loop.md:run-role']);
     expect(result.findings[0].detail).toMatch(/"Agent: senior", the agent this project dispatches as the review role, not as judgement/);
+  });
+
+  it('refuses a project with no boardsmith.json, as boardsmith agent does, rather than check run logs against default roles (#1202)', async () => {
+    const dir = await project({ 'run-log/core-loop.md': dispatch(1, '2026-09-23T10:00:00Z', 'closed', '2026-09-23T11:00:00Z') });
+    await fs.rm(join(dir, 'boardsmith.json'));
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    await expect(ledgerCheck(dir, 'boardsmith ledger-check')).rejects.toThrow(/has no boardsmith\.json.*--project <dir>/s);
+  });
+
+  it('names the command that ran it, and why it reads boardsmith.json, when chunk-merge finds no boardsmith.json (#1277)', async () => {
+    const dir = await project({ 'run-log/core-loop.md': dispatch(1, '2026-09-23T10:00:00Z', 'closed', '2026-09-23T11:00:00Z') });
+    await fs.rm(join(dir, 'boardsmith.json'));
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    await expect(ledgerCheck(dir, 'boardsmith chunk-merge')).rejects.toThrow(
+      /^boardsmith chunk-merge reads boardsmith\.json to check each run log's agents against their roles, and .* has no boardsmith\./,
+    );
   });
 
   it('refuses a boardsmith.json that is not JSON, saying which file to fix (#1001)', async () => {
     const dir = await project({ 'run-log/core-loop.md': dispatch(1, '2026-09-23T10:00:00Z', 'closed', '2026-09-23T11:00:00Z') });
     await fs.writeFile(join(dir, 'boardsmith.json'), '{ "agents": ');
     commitAt(dir, '2026-09-23T12:00:00Z');
-    await expect(ledgerCheck(dir)).rejects.toThrow(/boardsmith\.json in .* is not valid JSON .*Fix it/);
+    await expect(ledgerCheck(dir, 'boardsmith ledger-check')).rejects.toThrow(
+      /boardsmith\.json in .* is not valid JSON .*, so boardsmith ledger-check cannot check each run log's agents against their roles\. Fix it/,
+    );
   });
 
   it('compares each chunk run log\'s times against the commit that recorded each line', async () => {
@@ -347,7 +366,7 @@ describe('ledgerCheck — the whole project', () => {
     });
     // Committed at 10:30, so a finish at 11:00 was typed before it happened.
     commitAt(dir, '2026-09-23T10:30:00Z');
-    const result = await ledgerCheck(dir);
+    const result = await ledgerCheck(dir, 'boardsmith ledger-check');
     expect(located(result.findings)).toEqual(['run-log/core-loop.md:run-timestamp']);
     expect(result.findings[0].detail).toMatch(/Finished at/);
   });
@@ -358,7 +377,7 @@ describe('ledgerCheck — the whole project', () => {
       'sha256',
     );
     commitAt(dir, '2026-09-23T10:30:00Z');
-    const result = await ledgerCheck(dir);
+    const result = await ledgerCheck(dir, 'boardsmith ledger-check');
     expect(located(result.findings)).toEqual(['run-log/core-loop.md:run-timestamp']);
   });
 
@@ -368,7 +387,7 @@ describe('ledgerCheck — the whole project', () => {
       'run-log/auctions.md': dispatch(1, '2026-09-23T09:00:00Z', 'closed', '2026-09-23T08:00:00Z'),
     });
     commitAt(dir, '2026-09-23T12:00:00Z');
-    const result = await ledgerCheck(dir);
+    const result = await ledgerCheck(dir, 'boardsmith ledger-check');
     expect(result.checked).toEqual(['run-log/auctions.md', 'run-log/trading.md']);
     expect(located(result.findings)).toEqual(['run-log/auctions.md:run-timestamp']);
   });
@@ -378,7 +397,7 @@ describe('ledgerCheck — the whole project', () => {
       'RUN.md': ['# Run', 'Run Status: active', '## Run Log', dispatch(1, '2026-09-23T10:00:00Z', 'pending', 'pending')].join('\n'),
     });
     commitAt(dir, '2026-09-23T12:00:00Z');
-    const result = await ledgerCheck(dir);
+    const result = await ledgerCheck(dir, 'boardsmith ledger-check');
     expect(located(result.findings)).toEqual(['RUN.md:run-log-misplaced']);
     expect(result.findings[0].detail).toContain('design/run-log/<slug>.md');
   });
@@ -440,7 +459,7 @@ describe('ledgerCheck — the whole project', () => {
     commitAt(dir, '2026-09-23T12:00:00Z');
     await fs.mkdir(join(dir, 'src'), { recursive: true });
     await fs.writeFile(join(dir, 'src', 'x.ts'), '// Decisions 2 and @a.1\n');
-    expect(located((await ledgerCheck(dir)).findings)).toEqual(['src/x.ts:provisional-on-main-line']);
+    expect(located((await ledgerCheck(dir, 'boardsmith ledger-check')).findings)).toEqual(['src/x.ts:provisional-on-main-line']);
   });
 
   it('passes over a link to a folder, and refuses a file it cannot read rather than finding no citation in it (#1049)', async () => {
@@ -448,10 +467,10 @@ describe('ledgerCheck — the whole project', () => {
     commitAt(dir, '2026-09-23T12:00:00Z');
     await fs.mkdir(join(dir, 'src'), { recursive: true });
     await fs.symlink('../design', join(dir, 'src', 'design-link'));
-    expect(located((await ledgerCheck(dir)).findings)).toEqual([]);
+    expect(located((await ledgerCheck(dir, 'boardsmith ledger-check')).findings)).toEqual([]);
 
     await fs.writeFile(join(dir, 'src', 'x.ts'), '// Decisions 2 and @a.1\n', { mode: 0o000 });
-    await expect(ledgerCheck(dir)).rejects.toThrow(`Could not read ${join(dir, 'src', 'x.ts')} (EACCES)`);
+    await expect(ledgerCheck(dir, 'boardsmith ledger-check')).rejects.toThrow(`Could not read ${join(dir, 'src', 'x.ts')} (EACCES)`);
   });
 
   it('accepts provisional ids in a chunk\'s own worktree, where a parallel branch writes them', async () => {
@@ -463,7 +482,7 @@ describe('ledgerCheck — the whole project', () => {
     await fs.mkdir(join(worktree, 'src'), { recursive: true });
     await fs.writeFile(join(worktree, 'src', 'trading.ts'), '// Ruling @trading.1\n');
     commitAt(worktree, '2026-09-23T12:30:00Z');
-    expect((await ledgerCheck(worktree)).findings).toEqual([]);
+    expect((await ledgerCheck(worktree, 'boardsmith ledger-check')).findings).toEqual([]);
   });
 
   it('passes a committed log whose times precede their commits, and reports absent ledgers', async () => {
@@ -472,7 +491,7 @@ describe('ledgerCheck — the whole project', () => {
       'RULINGS.md': ruling(1),
     });
     commitAt(dir, '2026-09-23T12:00:00Z');
-    const result = await ledgerCheck(dir);
+    const result = await ledgerCheck(dir, 'boardsmith ledger-check');
     expect(result.findings).toEqual([]);
     expect(result.checked).toEqual(['RULINGS.md', 'run-log/core-loop.md']);
     expect(result.absent).toEqual(['DECISIONS.md', 'FILINGS.md', 'QUESTIONS.md', 'RUN.md', 'CROSS-CHUNK.md']);
@@ -494,7 +513,7 @@ describe('ledgerCheck — the whole project', () => {
       ].join('\n'),
     });
     commitAt(dir, '2026-09-25T19:40:00Z');
-    expect((await ledgerCheck(dir)).findings).toEqual([]);
+    expect((await ledgerCheck(dir, 'boardsmith ledger-check')).findings).toEqual([]);
   });
 
   it('still checks historical clocks and refuses new old-template dispatches in the same file (#710)', async () => {
@@ -505,7 +524,7 @@ describe('ledgerCheck — the whole project', () => {
     const newEntry = old.replace('Dispatch 1', 'Dispatch 2').replace('09:00:00Z', '11:00:00Z');
     await fs.appendFile(join(dir, 'design', 'run-log/core-loop.md'), newEntry);
     commitAt(dir, '2026-10-02T12:00:00Z');
-    const findings = (await ledgerCheck(dir)).findings;
+    const findings = (await ledgerCheck(dir, 'boardsmith ledger-check')).findings;
     expect(findings.map((f) => [f.entry, f.kind])).toEqual([
       ['Dispatch 1', 'run-timestamp'],
       ['Dispatch 2', 'run-role'],
@@ -522,7 +541,7 @@ describe('ledgerCheck — the whole project', () => {
       'FILINGS.md': filing(1, 'posted', 'n/a — not posted'),
     });
     commitAt(dir, '2026-09-23T12:00:00Z');
-    const result: LedgerCheckResult = await ledgerCheck(dir);
+    const result: LedgerCheckResult = await ledgerCheck(dir, 'boardsmith ledger-check');
     expect(located(result.findings)).toEqual([
       'RULINGS.md:duplicate-number',
       'DECISIONS.md:supersession-target-missing',
@@ -566,22 +585,22 @@ describe('ledgerCheck — the whole project', () => {
 
     const unverified = await project({ 'run-log/core-loop.md': log });
     commitAt(unverified, '2026-09-23T12:00:00Z');
-    expect((await ledgerCheck(unverified)).findings).toEqual([]);
+    expect((await ledgerCheck(unverified, 'boardsmith ledger-check')).findings).toEqual([]);
 
     await writeVerifyResult(unverified, result(false));
-    const [finding, ...others] = (await ledgerCheck(unverified)).findings;
+    const [finding, ...others] = (await ledgerCheck(unverified, 'boardsmith ledger-check')).findings;
     expect(others).toEqual([]);
     expect(`${finding.ledger}:${finding.entry}:${finding.kind}`).toBe('run-log/core-loop.md:Review Round 1:review-round');
     expect(finding.detail).toContain(`the latest verify of that commit (.boardsmith/verify/${commit}.json) failed`);
 
     await writeVerifyResult(unverified, result(true));
-    expect((await ledgerCheck(unverified)).findings).toEqual([]);
+    expect((await ledgerCheck(unverified, 'boardsmith ledger-check')).findings).toEqual([]);
   });
 
   it('refuses a chunk named like a skill that keeps its own run log, since the two would share one file (#454)', async () => {
     const dir = await project({ 'chunks/verify-game/CHUNK.md': 'Status: proposed\n', 'chunks/trading/CHUNK.md': 'Status: proposed\n' });
     commitAt(dir, '2026-09-23T12:00:00Z');
-    const findings = (await ledgerCheck(dir)).findings;
+    const findings = (await ledgerCheck(dir, 'boardsmith ledger-check')).findings;
     expect(findings.map((f) => `${f.ledger}:${f.entry}:${f.kind}`)).toEqual(['run-log/verify-game.md:chunk verify-game:run-log-shared']);
     expect(findings[0].detail).toMatch(/\/bs-verify-game keeps its own dispatches in design\/run-log\/verify-game\.md.*Rename the chunk/);
   });
@@ -591,7 +610,7 @@ describe('ledgerCheck — the whole project', () => {
     const dir = join(tree, 'proj');
     await fs.mkdir(join(dir, 'design', 'run-log'), { recursive: true });
     await fs.writeFile(join(dir, 'design', 'run-log', 'core-loop.md'), dispatch(1, '2026-09-23T10:00:00Z', 'pending', 'pending'));
-    await expect(ledgerCheck(dir)).rejects.toThrow(/not a git repository/);
+    await expect(ledgerCheck(dir, 'boardsmith ledger-check')).rejects.toThrow(/not a git repository/);
   });
 });
 
@@ -623,7 +642,7 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
       '.boardsmith/scratch/food-invariant.mjs': '// harness\n',
     });
     commitAt(dir, '2026-09-23T12:00:00Z');
-    const found = evidence((await ledgerCheck(dir)).findings);
+    const found = evidence((await ledgerCheck(dir, 'boardsmith ledger-check')).findings);
     expect(found).toHaveLength(1);
     expect(found[0].ledger).toBe('DECISIONS.md');
     expect(found[0].entry).toBe('line 2');
@@ -642,7 +661,7 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
       'design/chunks/world-shell/evidence/after.png': 'png',
     });
     commitAt(dir, '2026-09-23T12:00:00Z');
-    const result = await ledgerCheck(dir);
+    const result = await ledgerCheck(dir, 'boardsmith ledger-check');
     expect(evidence(result.findings)).toEqual([]);
     expect(result.checked).toContain('chunks/world-shell/CHUNK.md');
   });
@@ -655,7 +674,7 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
     const loop = join(dir, '.boardsmith/scratch/loop.mjs');
     await fs.mkdir(join(loop, '..'), { recursive: true });
     await fs.symlink(loop, loop);
-    await expect(ledgerCheck(dir)).rejects.toThrow(`Could not read ${loop} (ELOOP)`);
+    await expect(ledgerCheck(dir, 'boardsmith ledger-check')).rejects.toThrow(`Could not read ${loop} (ELOOP)`);
   });
 
   it('fails a verified chunk that cites a missing file, an untracked file, or a path outside the project', async () => {
@@ -668,7 +687,7 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
     commitAt(dir, '2026-09-23T12:00:00Z');
     await fs.mkdir(join(dir, 'design/chunks/world-shell/evidence'), { recursive: true });
     await fs.writeFile(join(dir, 'design/chunks/world-shell/evidence/new.mjs'), '// not added\n');
-    const found = evidence((await ledgerCheck(dir)).findings);
+    const found = evidence((await ledgerCheck(dir, 'boardsmith ledger-check')).findings);
     expect(found.map((f) => f.ledger)).toEqual(Array(3).fill('chunks/world-shell/CHUNK.md'));
     expect(found[0].detail).toMatch(/does not exist/);
     expect(found[1].detail).toMatch(/git add/);
@@ -682,7 +701,7 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
     commitAt(dir, '2026-09-21T12:00:00Z');
     await fs.rm(join(dir, 'src/rules/flow.ts'));
     commitAt(dir, '2026-09-22T12:00:00Z');
-    expect(evidence((await ledgerCheck(dir)).findings)).toEqual([]);
+    expect(evidence((await ledgerCheck(dir, 'boardsmith ledger-check')).findings)).toEqual([]);
   });
 
   it('still fails a citation of a file that was not in git when the citing line was committed (#398)', async () => {
@@ -696,7 +715,7 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
     );
     commitAt(dir, '2026-09-22T12:00:00Z');
     await fs.appendFile(join(dir, 'design/DECISIONS.md'), '### Decision 14\n- Decision: see `src/rules/flow.ts` again.\n');
-    const found = evidence((await ledgerCheck(dir)).findings);
+    const found = evidence((await ledgerCheck(dir, 'boardsmith ledger-check')).findings);
     expect(found.map((f) => f.entry)).toEqual(['line 2', 'line 4', 'line 6']);
     for (const f of found) expect(f.detail).toMatch(/does not exist/);
   });
@@ -708,7 +727,7 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
     commitAt(dir, '2026-09-23T12:00:00Z');
     vi.stubEnv('HOME', dirname(dir));
     try {
-      const found = evidence((await ledgerCheck(dir)).findings);
+      const found = evidence((await ledgerCheck(dir, 'boardsmith ledger-check')).findings);
       expect(found).toHaveLength(1);
       expect(found[0].detail).toMatch(/outside the project/);
     } finally {
@@ -721,7 +740,7 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
       'design/DECISIONS.md': "### Decision 4\n- Decision: the host loads it with `import { beat } from './heartbeat.js'`.\n",
     });
     commitAt(dir, '2026-09-23T12:00:00Z');
-    expect(evidence((await ledgerCheck(dir)).findings)).toEqual([]);
+    expect(evidence((await ledgerCheck(dir, 'boardsmith ledger-check')).findings)).toEqual([]);
   });
 
   it('reads a claim\'s Source path exactly as claim-quote-check does, so a claim that passes one passes the other (#409)', async () => {
@@ -746,7 +765,7 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
     });
     commitAt(dir, '2026-09-23T12:00:00Z');
     expect((await checkClaimQuotes(dir, 'world-shell')).refusals).toEqual([]);
-    expect(evidence((await ledgerCheck(dir)).findings)).toEqual([]);
+    expect(evidence((await ledgerCheck(dir, 'boardsmith ledger-check')).findings)).toEqual([]);
   });
 
   it('refuses a claim\'s Source path that leaves the project in both checks (#409)', async () => {
@@ -758,7 +777,7 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
     });
     commitAt(dir, '2026-09-23T12:00:00Z');
     expect((await checkClaimQuotes(dir, 'world-shell')).refusals[0]).toMatch(/outside this project/);
-    const found = evidence((await ledgerCheck(dir)).findings);
+    const found = evidence((await ledgerCheck(dir, 'boardsmith ledger-check')).findings);
     expect(found).toHaveLength(1);
     expect(found[0].detail).toMatch(/outside the project/);
   });
@@ -767,7 +786,7 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
   const decision = (citation: string) => `### Decision 7\n- Decision: measured with \`${citation}\`.\n`;
   const fiveLines = ['one', 'two', 'three', 'four', 'five', ''].join('\n');
   async function expectNoCitationFindings(dir: string): Promise<void> {
-    const { findings } = await ledgerCheck(dir);
+    const { findings } = await ledgerCheck(dir, 'boardsmith ledger-check');
     expect(evidence(findings)).toEqual([]);
     expect(citedLines(findings)).toEqual([]);
   }
@@ -778,7 +797,7 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
       '.boardsmith/scratch/probe.mjs': fiveLines,
     });
     commitAt(dir, '2026-09-23T12:00:00Z');
-    const found = evidence((await ledgerCheck(dir)).findings);
+    const found = evidence((await ledgerCheck(dir, 'boardsmith ledger-check')).findings);
     expect(found.map((f) => f.entry)).toEqual(['line 2', 'line 4']);
     for (const f of found) expect(f.detail).toMatch(/gitignored/);
   });
@@ -798,7 +817,7 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
       'src/rules/game.ts': fiveLines,
     });
     commitAt(dir, '2026-09-23T12:00:00Z');
-    const [pastEnd, ...notRanges] = citedLines((await ledgerCheck(dir)).findings);
+    const [pastEnd, ...notRanges] = citedLines((await ledgerCheck(dir, 'boardsmith ledger-check')).findings);
     expect([pastEnd, ...notRanges].map((f) => `${f.ledger} ${f.entry}`)).toEqual(
       ['line 2', 'line 4', 'line 6'].map((entry) => `DECISIONS.md ${entry}`),
     );
@@ -826,7 +845,7 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
     await fs.writeFile(join(dir, 'src/rules/game.ts'), fiveLines);
     commitAt(dir, '2026-09-21T12:00:00Z');
     await fs.appendFile(join(dir, 'design/DECISIONS.md'), decision('src/rules/game.ts:7'));
-    const found = citedLines((await ledgerCheck(dir)).findings);
+    const found = citedLines((await ledgerCheck(dir, 'boardsmith ledger-check')).findings);
     expect(found.map((f) => f.entry)).toEqual(['line 2', 'line 4']);
     expect(found[0].detail).toMatch(/line 6, but src\/rules\/late\.ts has 5 lines/);
     expect(found[1].detail).toMatch(/line 7, but src\/rules\/game\.ts has 5 lines/);
@@ -885,7 +904,7 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
       },
       { 'src/engine/flow/engine.ts': engineTs },
     );
-    const { findings } = await ledgerCheck(dir);
+    const { findings } = await ledgerCheck(dir, 'boardsmith ledger-check');
     const [missing] = evidence(findings);
     expect(evidence(findings)).toHaveLength(1);
     expect(missing.entry).toBe('line 2');
@@ -927,7 +946,7 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
       `../src/rules/other.ts@${base}:1`,
       '../src/rules/damage.ts@abcdef0:1',
     ]);
-    const { findings } = await ledgerCheck(dir);
+    const { findings } = await ledgerCheck(dir, 'boardsmith ledger-check');
     const [pastEnd] = citedLines(findings);
     expect(citedLines(findings)).toHaveLength(1);
     expect(pastEnd.detail).toMatch(/line 9, but src\/rules\/damage\.ts had 5 lines at [0-9a-f]{10} \(base of chunk-game-end\)/);
@@ -940,7 +959,7 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
   it('fails a pinned citation outside a chunk\'s CHUNK.md, which has no chunk history (#426)', async () => {
     const dir = await tree({ 'design/DECISIONS.md': decision('src/rules/game.ts@abcdef0:2'), 'src/rules/game.ts': fiveLines });
     commitAt(dir, '2026-09-23T12:00:00Z');
-    const [pinned, ...others] = (await ledgerCheck(dir)).findings;
+    const [pinned, ...others] = (await ledgerCheck(dir, 'boardsmith ledger-check')).findings;
     expect(others).toEqual([]);
     expect(pinned).toMatchObject({ ledger: 'DECISIONS.md', entry: 'line 2', kind: 'evidence-not-committed' });
     expect(pinned.detail).toMatch(/pins a commit, and only a chunk's CHUNK\.md may.*as it is now/);
@@ -951,7 +970,7 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
       'design/chunks/world-shell/CHUNK.md': chunk('built', '- tests/not-written-yet.test.ts'),
     });
     commitAt(dir, '2026-09-23T12:00:00Z');
-    expect(evidence((await ledgerCheck(dir)).findings)).toEqual([]);
+    expect(evidence((await ledgerCheck(dir, 'boardsmith ledger-check')).findings)).toEqual([]);
   });
 });
 

@@ -22,6 +22,7 @@ import {
   validateChoiceCardinality,
   checkRulesAgreement,
   checkSpriteImages,
+  projectRules,
   validateSpriteImages,
   validateRequiredFiles,
   successGuidance,
@@ -50,7 +51,13 @@ import {
   PiledSpriteGame,
   ThreeSeatSpriteGame,
   TwinSpriteGame,
+  UnnamedSpriteGame,
+  ThrowsAtThreeGame,
+  OptionSpriteGame,
+  FlowSpriteGame,
+  BrokenFlowSpriteGame,
 } from './sprite-images.fixture.js';
+import { withDeclaredGameOptions } from '../../session/game-option-selection.js';
 import boardsmithSchema from '../lib/boardsmith.schema.json' with { type: 'json' };
 
 const schema = boardsmithSchema as { properties: Record<string, Record<string, unknown>> };
@@ -248,6 +255,13 @@ describe('validate.ts checkMetadataIssues', () => {
     const issues = checkMetadataIssues({ ...validConfig(), agents: { judgment: 'senior' } });
     expect(issues).toEqual([
       'Unknown role "judgment" in "agents"; did you mean "judgement"? The roles are mechanical, bounded, judgement, review and second-opinion.',
+    ]);
+  });
+
+  it('passes a "mutation" budget, and refuses one too small for its trials (#955)', () => {
+    expect(checkMetadataIssues({ ...validConfig(), mutation: { trials: 2, workers: 8 } })).toEqual([]);
+    expect(checkMetadataIssues({ ...validConfig(), mutation: { trials: 2, workers: 1 } })).toEqual([
+      '"mutation.workers" (1) must be at least "mutation.trials" (2), so every trial running at once has a test worker. Raise workers or lower trials.',
     ]);
   });
 
@@ -877,7 +891,7 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
     const cwd = freshProject(wideRules);
     expect(existsSync(join(cwd, '.boardsmith'))).toBe(false);
 
-    const result = await validateChoiceCardinality(cwd, false);
+    const result = await validateChoiceCardinality(projectRules(cwd), false);
 
     expect(result.passed).toBe(false);
     expect(result.severity).toBe('warning');
@@ -886,7 +900,7 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
 
   it('removes the temp dir it made once the check is done', async () => {
     const cwd = freshProject(wideRules);
-    await validateChoiceCardinality(cwd, false);
+    await validateChoiceCardinality(projectRules(cwd), false);
     expect(readdirSync(join(cwd, '.boardsmith'))).toEqual([]);
   }, 30_000);
 
@@ -895,7 +909,7 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
   it('lets two validates of the same game run at once, and both leave nothing behind', async () => {
     const cwd = freshProject(wideRules);
 
-    const results = await Promise.all([validateChoiceCardinality(cwd, false), validateChoiceCardinality(cwd, false)]);
+    const results = await Promise.all([validateChoiceCardinality(projectRules(cwd), false), validateChoiceCardinality(projectRules(cwd), false)]);
 
     for (const result of results) expect(result.details!.join('\n')).toContain('shout');
     expect(readdirSync(join(cwd, '.boardsmith'))).toEqual([]);
@@ -908,7 +922,7 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
     const other = makeCommandBuildDir(cwd, 'validate');
     writeFileSync(join(other, 'simulate-bundle.mjs'), 'export {};');
 
-    const result = await validateChoiceCardinality(cwd, false);
+    const result = await validateChoiceCardinality(projectRules(cwd), false);
 
     expect(result.details!.join('\n')).toContain('shout');
     expect(existsSync(join(other, 'simulate-bundle.mjs')), 'validate removed another run’s bundle').toBe(true);
@@ -918,13 +932,13 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
   it('plays the game at the seat count its definition starts from', async () => {
     const cwd = freshProject(rulesFor('ThreeSeatWideGame', ', minPlayers: 3, maxPlayers: 4'));
 
-    const result = await validateChoiceCardinality(cwd, false);
+    const result = await validateChoiceCardinality(projectRules(cwd), false);
 
     expect(result.details!.join('\n')).toContain('shout');
   }, 30_000);
 
   it('says it could not run when a table game declares no minPlayers to play it at', async () => {
-    const result = await validateChoiceCardinality(freshProject(rulesFor('WideGame', '')), false);
+    const result = await validateChoiceCardinality(projectRules(freshProject(rulesFor('WideGame', ''))), false);
 
     expectNotRun(result, /could not run.*minPlayers/is);
   }, 30_000);
@@ -939,7 +953,7 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
 
   // #323: a world gets a real verdict, driven the way a host drives it.
   it('drives a world and reports the flat list it offers, with a world’s way out', async () => {
-    const result = await validateChoiceCardinality(freshProject(worldRulesFor(['shout', 'mark']), 'world'), true);
+    const result = await validateChoiceCardinality(projectRules(freshProject(worldRulesFor(['shout', 'mark']), 'world')), true);
 
     expect(result).toMatchObject({ passed: false, severity: 'warning' });
     expect(result.details).toEqual([expect.stringContaining("'shout' step 'verb' offered 40")]);
@@ -947,19 +961,19 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
   }, 30_000);
 
   it('passes a world whose every list is short', async () => {
-    const result = await validateChoiceCardinality(freshProject(worldRulesFor(['nod']), 'world'), true);
+    const result = await validateChoiceCardinality(projectRules(freshProject(worldRulesFor(['nod']), 'world')), true);
 
     expect(result.passed).toBe(true);
   }, 30_000);
 
   it('says it could not run when a world offers nothing it could drive', async () => {
-    const result = await validateChoiceCardinality(freshProject(worldRulesFor(['say']), 'world'), true);
+    const result = await validateChoiceCardinality(projectRules(freshProject(worldRulesFor(['say']), 'world')), true);
 
     expectNotRun(result, /could not run.*no seat was offered/is);
   }, 30_000);
 
   it('does not report a pass when the check could not run, and says why', async () => {
-    const result = await validateChoiceCardinality(freshProject(null), false);
+    const result = await validateChoiceCardinality(projectRules(freshProject(null)), false);
 
     expectNotRun(result, /could not run/i);
   }, 30_000);
@@ -1025,13 +1039,15 @@ describe('validate.ts sprite images (#1021)', () => {
   it('builds the game at every seat count it supports', () => {
     const result = checkSpriteImages(definition(ThreeSeatSpriteGame, 2, 4));
 
-    expect(result.details).toEqual([expect.stringMatching(/^Card '3H', \$image \(at 3 players only\): Sprite image .* is missing sheetWidth, sheetHeight\./)]);
+    expect(result.details).toEqual([
+      expect.stringMatching(/^Card '3H', \$image \(only at 3 players with the default game options\): Sprite image .* is missing sheetWidth, sheetHeight\./),
+    ]);
   });
 
   it('counts each seat count once when same-named cards share a bad sprite', () => {
     const result = checkSpriteImages(definition(TwinSpriteGame, 2, 4));
 
-    expect(result.details).toEqual([expect.stringMatching(/^Card '3H', \$image \(at 3 players only\): /)]);
+    expect(result.details).toEqual([expect.stringMatching(/^Card '3H', \$image \(only at 3 players with the default game options\): /)]);
   });
 
   it('loads the project rules and runs the check on them', async () => {
@@ -1044,7 +1060,7 @@ describe('validate.ts sprite images (#1021)', () => {
       "export const gameDefinition = { gameClass: MissingSheetSizeGame, gameType: 'fixture', displayName: 'Fixture', minPlayers: 2, maxPlayers: 2 };",
     ].join('\n'));
 
-    const result = await validateSpriteImages(cwd);
+    const result = await validateSpriteImages(projectRules(cwd));
 
     expect(result.passed).toBe(false);
     expect(result.details!.join('\n')).toContain("Card '2H', $images.face");
@@ -1054,16 +1070,73 @@ describe('validate.ts sprite images (#1021)', () => {
     const cwd = tempTree('bs-validate-sprites-');
     writeFileSync(join(cwd, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table' }));
 
-    const result = await validateSpriteImages(cwd);
+    const result = await validateSpriteImages(projectRules(cwd));
 
     expect(result.passed).toBe(false);
-    expect(result.message).toMatch(/could not be checked.*run boardsmith validate again/is);
+    // The rules never loaded, so nothing was built: the message says which (#1303).
+    expect(result.message).toMatch(/^Sprite images were not checked: your rules could not be loaded: .*run boardsmith validate again/is);
+    expect(result.message).not.toMatch(/building/);
   }, 30_000);
 
-  it('says it cannot build a game that declares no seat range', () => {
+  it('fails, not run, for a game that declares no seat range', () => {
     const noSeats = { gameClass: GoodSpriteGame, gameType: 'fixture', displayName: 'Fixture' } as GameDefinition;
 
-    expect(() => checkSpriteImages(noSeats)).toThrow(/minPlayers and maxPlayers/);
+    const result = checkSpriteImages(noSeats);
+    expect(result.passed).toBe(false);
+    expect(result.message).toMatch(/^Sprite images were not checked: .*minPlayers\/maxPlayers/);
+  });
+
+  it('fails, not run, for a seat range with no seat count in it (#1303)', () => {
+    const result = checkSpriteImages(definition(GoodSpriteGame, 4, 2));
+    expect(result.passed).toBe(false);
+    expect(result.message).toMatch(/^Sprite images were not checked: minPlayers \(4\) is more than maxPlayers \(2\)/);
+  });
+
+  it('fails, not run, rather than build a seat range too wide to build each (#1303)', () => {
+    const result = checkSpriteImages(definition(GoodSpriteGame, 2, 1000));
+    expect(result.passed).toBe(false);
+    expect(result.message).toMatch(/^Sprite images were not checked: This game would have to be built 999 times to check every sprite it creates/);
+  });
+
+  it('names an unnamed element by its class alone, so one bad sprite is one problem at every seat count (#1303)', () => {
+    const result = checkSpriteImages(definition(UnnamedSpriteGame, 2, 3));
+    expect(result.details).toEqual([expect.stringMatching(/^An unnamed Card, \$image: Sprite image .* is missing sheetWidth, sheetHeight\./)]);
+  });
+
+  it('reports a build that throws and keeps every problem found at the others (#1303)', () => {
+    const result = checkSpriteImages(definition(ThrowsAtThreeGame, 2, 4));
+    expect(result.passed).toBe(false);
+    // Found at every table that built, so it is not marked as found at some only.
+    expect(result.details).toEqual([
+      expect.stringMatching(/^Card '2H', \$image: /),
+      'Building this game at 3 players with the default game options threw: three players is not a table this game knows',
+    ]);
+  });
+
+  it('builds every combination of the game\'s boolean and select options too (#1303)', () => {
+    const jokers = { id: 'jokers', type: 'boolean', label: 'Jokers', default: false };
+    const result = checkSpriteImages(withDeclaredGameOptions(definition(OptionSpriteGame), [jokers]));
+    expect(result.details).toEqual([expect.stringMatching(/^Card 'joker', \$image \(only at 2 players with game options jokers: true\): /)]);
+  });
+
+  it('says the flow would not start, and still checks what the constructor built (#1303)', () => {
+    const result = checkSpriteImages(definition(BrokenFlowSpriteGame));
+    expect(result.details).toEqual([
+      expect.stringMatching(/^Card 'built', \$image: /),
+      expect.stringMatching(/^Starting this game's flow at 2 players with the default game options threw: /),
+    ]);
+  });
+
+  it('starts the flow, so elements its opening creates are checked too (#1303)', () => {
+    const result = checkSpriteImages(definition(FlowSpriteGame));
+    expect(result.details).toEqual([expect.stringMatching(/^Card 'dealt', \$image: /)]);
+  });
+
+  it('loads the rules once for every check that reads them (#1303)', () => {
+    const rules = projectRules(tempTree('bs-validate-loader-'));
+    const first = rules.load();
+    first.catch(() => {});
+    expect(rules.load()).toBe(first);
   });
 });
 

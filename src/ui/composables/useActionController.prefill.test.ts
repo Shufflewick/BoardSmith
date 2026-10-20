@@ -118,6 +118,8 @@ describe('useActionController prefill', () => {
   it('consumes both prefills and submits the action once', async () => {
     const fetchPickChoices = createFetchPickChoices();
     const controller = createController(fetchPickChoices);
+    await flush();
+    const before = fetchPickChoices.mock.calls.length;
 
     await controller.start('build', {
       prefill: { plot: 41, building: 'university' },
@@ -125,9 +127,10 @@ describe('useActionController prefill', () => {
     await flush();
 
     expect(controller.currentPick.value).toBeNull();
-    // One request per selection: the watcher joins the fetch start() has in
-    // flight rather than issuing its own.
-    expect(fetchPickChoices).toHaveBeenCalledTimes(2);
+    // One request per selection while the action is open: the watcher joins the
+    // fetch start() has in flight rather than issuing its own.
+    const sentAt = sendAction.mock.invocationCallOrder[0];
+    expect(fetchPickChoices.mock.invocationCallOrder.filter(order => order < sentAt).length - before).toBe(2);
     expect(sendAction).toHaveBeenCalledTimes(1);
     expect(sendAction).toHaveBeenCalledWith('build', {
       plot: 41,

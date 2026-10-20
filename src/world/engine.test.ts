@@ -30,6 +30,7 @@ import { worldAction, worldClockAction } from "./action.js";
 import type { StoredPartition, WorldPartitionSource } from "./contract.js";
 import { worldBudgets } from "./budgets.js";
 import { WorldRefusal } from "./refusals.js";
+import { readOnlyProjection } from "./readonly.js";
 import {
   Holding,
   VillageFixture,
@@ -3045,5 +3046,27 @@ describe("#1170: a command cannot move a partition root", () => {
       view.state.children?.find((child) => child.name === room)?.children?.map((child) => child.name) ?? [];
     expect(tokensIn("room-one")).toEqual([]);
     expect(tokensIn("room-two")).toEqual(["token-two", "token-one"]);
+  });
+});
+
+describe("#1221: finding an element's partition reaches nothing", () => {
+  const partitionOf = (engine: BoardSmithWorldEngine, element: GameElement): string =>
+    (engine as unknown as { partitionOf(element: GameElement): string }).partitionOf(element);
+
+  it("names a live card's partition outside a read and marks no partition reached", () => {
+    const engine = genesisEngine();
+    const game = (engine as unknown as { game: Game }).game;
+    const token = game.first(Token, "token-one")!;
+    game._ctx._reachedPartitions!.partitions.clear();
+
+    expect(partitionOf(engine, token)).toBe(ROOM_ONE);
+    expect([...game._ctx._reachedPartitions!.partitions]).toEqual([]);
+  });
+
+  it("names a projected card's partition outside a read", () => {
+    const engine = genesisEngine();
+    const game = (engine as unknown as { game: Game }).game;
+
+    expect(partitionOf(engine, readOnlyProjection(game.first(Token, "token-one")!))).toBe(ROOM_ONE);
   });
 });

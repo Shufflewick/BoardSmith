@@ -157,6 +157,18 @@
       },
       "examples": [{ "judgement": "senior", "review": "reviewer" }]
     },
+    "mutation": {
+      "x-convex-sink": false,
+      "type": "object",
+      "description": "How many mutation trials `boardsmith verify` runs at once (trials), and the total Vitest test workers they share (workers, at least trials). The unmutated baseline runs with all the workers, each trial with workers / trials, rounded down. Without it, trials run one at a time. Read by verify.ts (`lib/mutation-budget.ts`); never published.",
+      "additionalProperties": false,
+      "required": ["trials", "workers"],
+      "properties": {
+        "trials": { "type": "integer", "minimum": 1 },
+        "workers": { "type": "integer", "minimum": 1 }
+      },
+      "examples": [{ "trials": 2, "workers": 8 }]
+    },
     "publisher": {
       "x-convex-sink": false,
       "type": "string",

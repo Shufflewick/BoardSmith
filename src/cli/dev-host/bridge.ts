@@ -30,7 +30,7 @@ import {
 } from '../../session/index.js';
 import { record, getEntries } from './log-capture.js';
 import { pageText } from './socket-message.js';
-import type { WarningEntry } from '../../types/protocol.js';
+import { ErrorCode, type WarningEntry } from '../../types/protocol.js';
 
 /** The structured warnings a successful op carried (a pick or a choices query), or none. */
 function warningsOf(result: OpResult): readonly WarningEntry[] {
@@ -451,6 +451,7 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
       opts.postServerResponse(seat, requestId, {
         success: false,
         error: `Unknown server op: '${wireOp}'`,
+        errorCode: ErrorCode.UNKNOWN_OP,
       });
       return;
     }

@@ -204,6 +204,8 @@ describe('world-action callbacks receive element selections as elements (#418)',
       await expect(world.resolvePick(1, 'survey', 'look', { room })).rejects.toMatchObject({
         code: 'stale-draft',
       });
+      // A later pick answered too is never resolved against the refused one (#1223).
+      await expect(world.quote(1, 'survey', { room, look: 'stare' })).rejects.toMatchObject({ code: 'stale-draft' });
     }
     expect(seen.size).toBe(0);
     await world.close();

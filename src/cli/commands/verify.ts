@@ -73,6 +73,7 @@ import {
 import { isChunkCode, isTestFile, parseSpecManifest } from './test-step-check.js';
 import { runSmoke } from './smoke.js';
 import { runDiffMutationCheck } from './test-step-mutation.js';
+import { mutationBudget } from '../lib/mutation-budget.js';
 import { buildProject } from './build.js';
 import { type TypeCheckRun, typeCheckProject, validateProject } from './validate.js';
 import { readIfExists } from '../lib/read-if-exists.js';
@@ -511,6 +512,7 @@ async function mutationCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
     log: ctx.log,
     contextChange: ctx.contextChange,
     saveProgress: ctx.saveMutantProgress,
+    budget: mutationBudget(JSON.parse(readFileSync(join(ctx.projectDir, 'boardsmith.json'), 'utf-8'))),
   });
   return mutationVerdict(since, run);
 }

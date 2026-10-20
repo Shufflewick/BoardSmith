@@ -208,8 +208,15 @@ export interface BoardInteractionActions {
   /** Trigger element selection (called by board when clicking a valid element) */
   triggerElementSelect: (element: { id?: number; name?: string; notation?: string }) => void;
 
-  /** Start dragging an element (called by board when drag starts) */
-  startDrag: (element: ElementRef) => void;
+  /**
+   * Whether a drag may begin from this element: a disabled candidate chooses
+   * nothing, so it drags for nothing, unless it is the auto-filled source of
+   * the pick in progress (#1190, #1299).
+   */
+  canStartDrag: (element: ElementRef) => boolean;
+
+  /** Start dragging an element (called by board when drag starts). Returns false, starting nothing, when {@link canStartDrag} refuses it. */
+  startDrag: (element: ElementRef) => boolean;
 
   /** End drag operation (called when drag ends or is cancelled) */
   endDrag: () => void;
@@ -341,6 +348,14 @@ export function createBoardInteraction(): BoardInteraction {
     return findIndexed(candidateIndex.value, element);
   }
 
+  function isDraggableSelected(element: { id?: number; name?: string; notation?: string }): boolean {
+    return state.draggableSelectedElement !== null && matchesRef(element, state.draggableSelectedElement);
+  }
+
+  function canStartDrag(element: ElementRef): boolean {
+    return isDraggableSelected(element) || !findCandidate(element)?.disabled;
+  }
+
   const actions: BoardInteractionActions = {
     setHoveredChoice(choice) {
       state.hoveredChoice = choice;
@@ -416,11 +431,15 @@ export function createBoardInteraction(): BoardInteraction {
       }
     },
 
+    canStartDrag,
+
     startDrag(element) {
+      if (!canStartDrag(element)) return false;
       state.draggedElement = element;
       state.isDragging = true;
       // Clear hover state when starting drag
       state.hoveredChoice = null;
+      return true;
     },
 
     endDrag() {
@@ -465,10 +484,7 @@ export function createBoardInteraction(): BoardInteraction {
       state.draggableSelectedElement = element;
     },
 
-    isDraggableSelectedElement(element) {
-      if (!state.draggableSelectedElement) return false;
-      return matchesRef(element, state.draggableSelectedElement);
-    },
+    isDraggableSelectedElement: isDraggableSelected,
 
     setHoveredDropTarget(element) {
       state.hoveredDropTarget = element;

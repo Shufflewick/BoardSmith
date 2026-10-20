@@ -17,6 +17,8 @@
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
+import { createConnection } from 'node:net';
+import type { Server } from 'node:http';
 import { mkdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -212,6 +214,26 @@ describe('a dev host stops with a page still connected (#979)', () => {
     await expect(stop()).resolves.toBeUndefined();
     await pageClosed;
     await hmrClosed;
+  }, 30000);
+});
+
+describe('a dev host stops with an upgraded socket no listener took (#1304)', () => {
+  it('ends that socket too, and the HTTP server finishes closing', async () => {
+    const { port } = await serveEmpty(() => {});
+    // An upgrade to a path nothing claims: neither our sockets nor Vite's HMR completes or ends it.
+    const raw = createConnection({ port, host: '127.0.0.1' });
+    await new Promise<void>((resolve) => raw.once('connect', () => resolve()));
+    raw.write('GET /nobody-claims-this HTTP/1.1\r\nHost: 127.0.0.1\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n' +
+      'Sec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n');
+    const ended = new Promise<void>((resolve) => raw.once('close', () => resolve()));
+    raw.on('error', () => {});
+    await new Promise((r) => setTimeout(r, 300));
+    process.stderr.write(`DBG destroyed before stop: ${raw.destroyed}\n`);
+    const stop = stopServed!;
+    stopServed = null;
+    // Rejects naming what is still open when a close never finishes.
+    await expect(stop()).resolves.toBeUndefined();
+    await ended;
   }, 30000);
 });
 
