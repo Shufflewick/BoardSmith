@@ -921,8 +921,9 @@ export type WorldAudienceSeat =
  * So `bodies` holds each distinct answer once and a seat says WHICH ONE IS
  * THEIRS, with its own placeholder ids for what it cannot see (#1207): a
  * shared body carries no seat's ids, so a body is a seat's view only once
- * `seatView` has put that seat's back. The host reads that as permission to encode once and send the same
- * bytes to everybody naming the same index -- which is the whole point, and the
+ * `seatView` has put that seat's back. The host reads that as permission to
+ * project once and send the same answer to everybody naming the same index,
+ * each with its own ids put back -- which is the whole point, and the
  * reason this is a table rather than a per-seat map that happens to repeat
  * itself: a host cannot discover the repetition without doing the encoding it
  * would be trying to avoid.

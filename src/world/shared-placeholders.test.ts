@@ -13,6 +13,7 @@ import { describe, it, expect, expectTypeOf } from "vitest";
 import { Game, Piece, Player, Space } from "../engine/index.js";
 import type { ElementJSON, GameOptions } from "../engine/index.js";
 import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
+import { sharePlaceholders } from "../engine/element/seat-placeholders.js";
 import { BoardSmithWorldEngine } from "./engine.js";
 import { seatView } from "./index.js";
 import type { StoredPartition, WorldAudienceViews, WorldPartitionSource } from "./contract.js";
@@ -165,5 +166,14 @@ describe("#1207 -- seats shown the same count-only pile share one body", () => {
       readonly at: number;
       readonly placeholders: readonly number[];
     }>();
+  });
+
+  it("passes on a body with no board as it is, as another engine may answer", () => {
+    const body = { state: null, phase: "closed" };
+    expect(seatView(body, [])).toBe(body);
+  });
+
+  it("does not type a shared body as a seat's tree, since a placeholder in it has no id", () => {
+    expectTypeOf<ReturnType<typeof sharePlaceholders>["view"]>().not.toMatchTypeOf<ElementJSON>();
   });
 });
