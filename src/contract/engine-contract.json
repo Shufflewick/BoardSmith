@@ -1,7 +1,7 @@
 {
   "revision": 254,
   "surfaceHash": "42fb28e08af7d80f",
-  "payloadHash": "127282badf0cc660",
+  "payloadHash": "0784e22c1b68bcca",
   "formatHash": "ed115e27605f2ca7",
   "history": [
     {
@@ -1972,9 +1972,9 @@
       "revision": 254,
       "date": "2026-10-20",
       "surfaceHash": "42fb28e08af7d80f",
-      "payloadHash": "127282badf0cc660",
+      "payloadHash": "0784e22c1b68bcca",
       "formatHash": "ed115e27605f2ca7",
-      "summary": "Coverage only, no engine behaviour changed: the payload fixture now hashes the whole view the executor publishes to each seat and the spectator (its state as well as its flow-state cut, all but the random game instance id), for every seat the fixture has, so a change to what a seat is sent moves payloadHash (#1296)."
+      "summary": "Coverage only, no engine behaviour changed: the payload fixture now hashes the whole view the executor publishes to each seat and the spectator (its state as well as its flow-state cut, all but the random game instance id), for every seat the fixture has, and the field names of the state it publishes, so a change to what a seat is sent moves payloadHash (#1296)."
     }
   ]
 }

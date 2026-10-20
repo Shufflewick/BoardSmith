@@ -1883,7 +1883,7 @@ function throughStorage(json: unknown): unknown {
 export async function computePayloadHash(): Promise<string> {
   const engine = await import('../engine/index.js');
   const { GameRunner } = await import('../runtime/index.js');
-  const { buildPlayerState, buildViews, buildSpectatorView } = await import('../session/utils.js');
+  const { buildViews, buildSpectatorView } = await import('../session/utils.js');
   const {
     Game, Space, Piece, Player, Deck, Hand, Action,
     actionStep, simultaneousActionStep, sequence, eachPlayer, setVar,
@@ -2062,10 +2062,19 @@ export async function computePayloadHash(): Promise<string> {
   // every seat the fixture has. The game instance id is random by design, so
   // it is left out; its NAME is hashed with the other field names below.
   const seatCount = game.players.length;
+  const published = (): { flowState: unknown; state: Record<string, unknown> }[] =>
+    [buildSpectatorView(runner), ...buildViews(runner, seatCount)] as { flowState: unknown; state: Record<string, unknown> }[];
   const seatViews = (): unknown[] =>
-    [buildSpectatorView(runner), ...buildViews(runner, seatCount)].map((view) => {
-      const { flowState, state } = view as { flowState: unknown; state: Record<string, unknown> };
-      const { gameInstanceId: _random, ...rest } = state;
+    published().map(({ flowState, state }) => {
+      const { gameInstanceId, ...rest } = state;
+      // Anywhere else it would make the hash differ from run to run while each run agrees with itself.
+      if (JSON.stringify({ flowState, rest }).includes(String(gameInstanceId))) {
+        throw new Error(
+          'The engine-contract fixture found the random game instance id inside a published view '
+          + 'other than as its own field, so payloadHash would change on every run. Keep it to '
+          + 'PlayerGameState.gameInstanceId.',
+        );
+      }
       return { flowState, state: rest };
     });
   const openingSeatViews = seatViews();
@@ -2076,9 +2085,10 @@ export async function computePayloadHash(): Promise<string> {
   // how it knows the element ids behind an open pick went stale. A field there
   // is a TYPE, so on its own it moved neither hash -- the KNOWN LIMIT above --
   // and an engine that stopped sending one would silently leave every open pick
-  // standing across an undo or a new game. The NAMES are hashed, not the
-  // values: a game instance id is random by design.
-  const publishedStateFields = Object.keys(buildPlayerState(runner, ['Alice', 'Bob'], 1)).sort();
+  // standing across an undo or a new game. The views above hash every value
+  // but the game instance id, which is random by design; its NAME is hashed
+  // here, with every field a seat's published state carries (#1296).
+  const publishedStateFields = Object.keys(published()[1]!.state).sort();
 
   // Views are captured at the SIMULTANEOUS step, where both seats are on the
   // clock — that is the coverage assertCoversFlowLayer pins, and advancing

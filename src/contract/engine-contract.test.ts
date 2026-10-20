@@ -32,61 +32,63 @@ const UPDATE_HINT = (dimension: string) =>
   + 'See docs/engine-contract.md.';
 
 // Slow one-time setup lives here, where no test timeout applies (#354, #1194),
-// every hash the tests below compare included (#1214).
+// every hash the tests below compare included (#1214, #1296). Each stand-in
+// result is settled here and read inside its own test, so one that throws fails
+// that test rather than the whole file.
 const fingerprints = await computeFingerprints();
 const fingerprintsAgain = await computeFingerprints();
 
-/** `compute` run with `object[key]` replaced by `standIn`, put back however it ends. */
-async function withReplaced<O extends object, K extends keyof O, R>(
+type Settled<R> = { value: R } | { error: unknown };
+
+/** `compute` run with `object`'s keys replaced by `standIns`, put back however it ends, and settled. */
+async function withReplaced<O extends object, R>(
   object: O,
-  key: K,
-  standIn: O[K],
+  standIns: Partial<O>,
   compute: () => Promise<R>,
-): Promise<R> {
-  const original = object[key];
-  object[key] = standIn;
+): Promise<Settled<R>> {
+  const originals = Object.keys(standIns).map((key) => [key, object[key as keyof O]] as const);
+  Object.assign(object, standIns);
   try {
-    return await compute();
+    return { value: await compute() };
+  } catch (error) {
+    return { error };
   } finally {
-    object[key] = original;
+    for (const [key, original] of originals) object[key as keyof O] = original;
   }
+}
+
+/** A settled result's value, or its error thrown inside the test that reads it. */
+function valueOf<R>(settled: Settled<R>): R {
+  if ('error' in settled) throw settled.error;
+  return settled.value;
 }
 
 /** The world verbs the payload fixture calls while it is computed. */
 const drivenVerbs = new Set<string>();
-{
-  const prototype = BoardSmithWorldEngine.prototype as unknown as Record<string, Function>;
-  const originals = new Map<string, Function>();
-  for (const name of WORLD_ENGINE_METHODS) {
-    const original = prototype[name]!;
-    originals.set(name, original);
-    prototype[name] = function instrumented(this: unknown, ...args: unknown[]) {
-      drivenVerbs.add(name);
-      return original.apply(this, args);
-    };
-  }
-  try {
-    await computePayloadHash();
-  } finally {
-    for (const [name, original] of originals) prototype[name] = original;
-  }
-}
+const engineMethods = BoardSmithWorldEngine.prototype as unknown as Record<string, Function>;
+const instrumented = await withReplaced(engineMethods, Object.fromEntries(WORLD_ENGINE_METHODS.map((name) => {
+  const original = engineMethods[name]!;
+  return [name, function instrumented(this: unknown, ...args: unknown[]) {
+    drivenVerbs.add(name);
+    return original.apply(this, args);
+  }];
+})), computePayloadHash);
 
 const nextDraw = SeededRandom.prototype.next;
-const payloadWithOtherDraws = await withReplaced(SeededRandom.prototype, 'next', function shifted(this: SeededRandom) {
+const payloadWithOtherDraws = await withReplaced(SeededRandom.prototype, { next: function shifted(this: SeededRandom) {
   return (nextDraw.call(this) + 0.5) % 1;
-}, computePayloadHash);
+} }, computePayloadHash);
 
 const storedState = SeededRandom.prototype.getState;
-const payloadWithOtherStoredState = await withReplaced(SeededRandom.prototype, 'getState', function renamed(this: SeededRandom) {
+const payloadWithOtherStoredState = await withReplaced(SeededRandom.prototype, { getState: function renamed(this: SeededRandom) {
   return storedState.call(this).replace('chacha20:', 'other:');
-}, computePayloadHash);
+} }, computePayloadHash);
 
 // The r46 shape exactly: the bytes are unchanged and the READER stops
 // accepting them. A raised floor is how that happened the first time.
-const formatReadRefusal = await withReplaced(Game.prototype, 'adoptSubtree', function refusing(this: Game) {
+const formatReadRefusal = await withReplaced(Game.prototype, { adoptSubtree: function refusing(this: Game) {
   throw new Error('element id 14 is already resident (simulated floor change)');
-} as typeof Game.prototype.adoptSubtree, () => computeFormatHash().then(() => undefined, (error: unknown) => error));
+} as typeof Game.prototype.adoptSubtree }, computeFormatHash);
 
 // A reader that stops restoring explicit visibility writes different bytes on
 // the way back out while writing identical bytes for anything it created
@@ -95,23 +97,25 @@ const formatReadRefusal = await withReplaced(Game.prototype, 'adoptSubtree', fun
 // attribute would be re-derived on the way out and the read-side loss would be
 // invisible again.
 const fromJSON = GameElement.fromJSON;
-const formatWithLossyReader = await withReplaced(GameElement as { fromJSON: typeof GameElement.fromJSON }, 'fromJSON', function dropping(
+const formatWithLossyReader = await withReplaced(GameElement as { fromJSON: typeof GameElement.fromJSON }, { fromJSON: function dropping(
   json: Parameters<typeof fromJSON>[0],
   ...rest: unknown[]
 ) {
   const { visibility: _dropped, ...withoutVisibility } = json as Record<string, unknown>;
   return (fromJSON as (...args: unknown[]) => unknown).call(GameElement, withoutVisibility, ...rest) as ReturnType<typeof fromJSON>;
-} as typeof GameElement.fromJSON, computeFormatHash);
+} as typeof GameElement.fromJSON }, computeFormatHash);
 
 // What a seat is OFFERED and what a command DOES are covered by payloadHash and
 // by nothing, respectively. Neither is a byte a partition holds, and a format
 // hash that moved for them would refuse runner swaps that are perfectly safe --
 // which is the pin this whole mechanism exists to loosen.
 const worldEngine = BoardSmithWorldEngine.prototype as unknown as Record<string, unknown>;
-const formatWithOtherVerbs = await withReplaced(worldEngine, 'offersFor', async () => [], () =>
-  withReplaced(worldEngine, 'applyCommand', async () => {
+const formatWithOtherVerbs = await withReplaced(worldEngine, {
+  offersFor: async () => [],
+  applyCommand: async () => {
     throw new Error('not a stored byte');
-  }, computeFormatHash));
+  },
+}, computeFormatHash);
 
 describe('engine contract', () => {
   it('matches the committed surface fingerprint', () => {
@@ -187,6 +191,7 @@ describe('engine contract', () => {
     });
 
     it('drives exactly the world verbs it says it drives', () => {
+      valueOf(instrumented);
       expect(
         [...drivenVerbs].sort(),
         'The payload fixture and WORLD_FIXTURE_COVERAGE disagree about what is fingerprinted.\n'
@@ -235,26 +240,25 @@ describe('engine contract', () => {
   // something a seat receives, so the payload fixture reads both explicitly.
   describe('the payload fingerprint covers the seeded generator', () => {
     it('moves when the generator draws a different sequence', () => {
-      expect(payloadWithOtherDraws).not.toBe(fingerprints.payloadHash);
+      expect(valueOf(payloadWithOtherDraws)).not.toBe(fingerprints.payloadHash);
     });
 
     it('moves when the generator writes its stored state differently', () => {
-      expect(payloadWithOtherStoredState).not.toBe(fingerprints.payloadHash);
+      expect(valueOf(payloadWithOtherStoredState)).not.toBe(fingerprints.payloadHash);
     });
   });
 
   describe('the world serialization format fingerprint', () => {
     it('refuses by name when the engine can no longer READ the committed corpus', () => {
-      expect(formatReadRefusal).toBeInstanceOf(Error);
-      expect((formatReadRefusal as Error).message).toMatch(/CAN NO LONGER READ THE COMMITTED WORLD FORMAT FIXTURE/);
+      expect(() => valueOf(formatReadRefusal)).toThrow(/CAN NO LONGER READ THE COMMITTED WORLD FORMAT FIXTURE/);
     });
 
     it('moves when the reader gives back something different', () => {
-      expect(formatWithLossyReader).not.toBe(fingerprints.formatHash);
+      expect(valueOf(formatWithLossyReader)).not.toBe(fingerprints.formatHash);
     });
 
     it('stands still for a change that touches no stored byte', () => {
-      expect(formatWithOtherVerbs).toBe(fingerprints.formatHash);
+      expect(valueOf(formatWithOtherVerbs)).toBe(fingerprints.formatHash);
     });
   });
 });
