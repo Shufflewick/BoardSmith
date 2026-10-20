@@ -12,6 +12,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { defineComponent, ref, nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
 import { vDisabledReason, isDisabled } from './vDisabledReason.js';
+import { useFocusTrap } from '../composables/useFocusTrap.js';
 import {
   useDisabledReasonTooltip,
   hideDisabledReason,
@@ -166,6 +167,56 @@ describe('vDisabledReason', () => {
       await nextTick();
 
       expect(tooltip.text.value).toBe('You need 3 wood; you have 2.');
+      wrapper.unmount();
+    });
+
+    it('is hidden, so the reason never shows at the bottom of the page', () => {
+      const { btn, wrapper } = mountButton('Blocked.');
+
+      expect(describedBy(btn.element)!.hidden).toBe(true);
+      wrapper.unmount();
+    });
+
+    it('leaves another control\'s open tooltip alone when its reason changes', async () => {
+      const reasonA = ref('Reason A.');
+      const wrapper = mount(
+        defineComponent({
+          directives: { disabledReason: vDisabledReason },
+          setup: () => ({ reasonA }),
+          template: `
+            <div>
+              <button id="a" v-disabled-reason="reasonA">a</button>
+              <button id="b" v-disabled-reason="'Reason B.'">b</button>
+            </div>`,
+        })
+      );
+      await wrapper.find('#b').trigger('mouseenter');
+
+      reasonA.value = 'Reason A, recomputed.';
+      await nextTick();
+
+      expect(tooltip.text.value).toBe('Reason B.');
+      expect(tooltip.anchor.value).toBe(wrapper.find('#b').element);
+      wrapper.unmount();
+    });
+
+    // Chromium reads an inert describedby target, but Firefox and Safari were
+    // never shown to, so the reason must not depend on it (#1028).
+    it('stays out of the inert background while a focus-trapped dialog is open', async () => {
+      const wrapper = mount(
+        defineComponent({
+          directives: { disabledReason: vDisabledReason },
+          setup() {
+            const dialog = ref<HTMLElement | null>(null);
+            return { dialog, trap: useFocusTrap(dialog) };
+          },
+          template: `<div ref="dialog" role="dialog"><button v-disabled-reason="'Blocked.'">go</button></div>`,
+        }),
+        { attachTo: document.body }
+      );
+      wrapper.vm.trap.open();
+
+      expect(describedBy(wrapper.find('button').element)!.closest('[inert]')).toBeNull();
       wrapper.unmount();
     });
   });

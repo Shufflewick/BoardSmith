@@ -116,6 +116,8 @@ function attach(el: HTMLElement, reason: string): void {
   const description = el.ownerDocument.createElement('span');
   description.id = `bs-disabled-reason-${++descriptionCount}`;
   description.hidden = true;
+  // A dialog's focus trap must not make it inert: not every browser reads an inert describedby target (#1028).
+  description.setAttribute('data-bs-outside-modal', '');
   description.textContent = reason;
   el.ownerDocument.body.appendChild(description);
 
