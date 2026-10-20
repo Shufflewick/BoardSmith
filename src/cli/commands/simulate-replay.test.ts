@@ -19,7 +19,7 @@ import { stripVTControlCharacters } from 'node:util';
 import { CommanderError } from 'commander';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { createProgram } from '../cli.js';
-import { validateChoiceCardinality } from './validate.js';
+import { projectRules, validateChoiceCardinality } from './validate.js';
 import { scoreProject } from './simulate-project.test-helper.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -184,7 +184,7 @@ describe('a printed replay command plays the game that failed (#322)', () => {
   it('boardsmith validate: the choice cardinality check names a command that replays its failure', async () => {
     const cwd = deadEndProject();
 
-    const result = await validateChoiceCardinality(cwd, false);
+    const result = await validateChoiceCardinality(projectRules(cwd), false);
     const failure = /seed (\S+): (.+?)\. "(boardsmith [^"]+)" shows the same failure/s.exec(result.message);
     expect(failure, result.message).not.toBeNull();
     const [, seed, reason, command] = failure!;

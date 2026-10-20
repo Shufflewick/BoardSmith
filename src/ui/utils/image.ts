@@ -52,7 +52,9 @@ const SPRITE_SIZES = ['width', 'height', 'sheetWidth', 'sheetHeight'] as const;
  * // => { type: 'sprite', sprite: '/cards.png', x: 0, y: 0, width: 238, height: 333, sheetWidth: 3094, sheetHeight: 1665 }
  * ```
  *
- * @throws if a sprite with coordinates lacks its width, height, sheetWidth or sheetHeight
+ * @throws for an image object that is not one of the two shapes: `{ sprite }` alone, shown whole
+ *   as a URL, or `{ sprite, x, y, width, height, sheetWidth, sheetHeight }` with every one a number.
+ *   Anything else would draw the wrong thing, or nothing, with no message (#864, #1303).
  */
 export function parseImageInfo(image: unknown): ImageInfo | null {
   if (!image) return null;
@@ -62,30 +64,49 @@ export function parseImageInfo(image: unknown): ImageInfo | null {
     return { type: 'url', src: image };
   }
 
-  // Sprite object
-  if (typeof image === 'object' && image !== null) {
-    const spriteObj = image as SpriteData;
-
-    // Full sprite with coordinates
-    if (spriteObj.sprite && typeof spriteObj.x === 'number' && typeof spriteObj.y === 'number') {
-      const missing = SPRITE_SIZES.filter((key) => typeof spriteObj[key] !== 'number');
-      if (missing.length > 0) {
-        throw new Error(
-          `Sprite image '${spriteObj.sprite}' at x ${spriteObj.x}, y ${spriteObj.y} is missing ${missing.join(', ')}. `
-          + 'Give each sprite its own width and height and the whole sheet image\'s sheetWidth and sheetHeight, in pixels.',
-        );
-      }
-      const { sprite, x, y, width, height, sheetWidth, sheetHeight } = spriteObj;
-      return { type: 'sprite', sprite, x, y, width, height, sheetWidth, sheetHeight };
-    }
-
-    // Just sprite path (no coordinates = use as URL)
-    if (spriteObj.sprite) {
-      return { type: 'url', src: spriteObj.sprite };
-    }
+  if (typeof image !== 'object') return null;
+  const spriteObj = image as Record<string, unknown>;
+  const { sprite } = spriteObj;
+  if (typeof sprite !== 'string' || sprite === '') {
+    throw new Error(
+      `An image object needs "sprite", the path of its image or sprite sheet, as text. This one has ${Object.keys(spriteObj).join(', ') || 'nothing'}.`,
+    );
   }
 
-  return null;
+  // Just sprite path (no coordinates or sizes = use as URL)
+  if (!['x', 'y', ...SPRITE_SIZES].some((key) => key in spriteObj)) return { type: 'url', src: sprite };
+
+  const { x, y } = spriteObj;
+  if (!isPixels(x) || !isPixels(y)) {
+    throw new Error(
+      `Sprite image '${sprite}' has ${shown(x)} for x and ${shown(y)} for y, but a sprite's place on its sheet is two numbers, x and y, in pixels. `
+      + 'Give both, or leave out every coordinate and size to show the whole image.',
+    );
+  }
+  const missing = SPRITE_SIZES.filter((key) => spriteObj[key] === undefined);
+  if (missing.length > 0) {
+    throw new Error(
+      `Sprite image '${sprite}' at x ${x}, y ${y} is missing ${missing.join(', ')}. `
+      + 'Give each sprite its own width and height and the whole sheet image\'s sheetWidth and sheetHeight, in pixels.',
+    );
+  }
+  const notNumbers = SPRITE_SIZES.filter((key) => !isPixels(spriteObj[key]));
+  if (notNumbers.length > 0) {
+    throw new Error(
+      `Sprite image '${sprite}' at x ${x}, y ${y} has ${notNumbers.map((key) => `${shown(spriteObj[key])} for ${key}`).join(', ')}, which must be ${notNumbers.length === 1 ? 'a number' : 'numbers'}.`,
+    );
+  }
+  const { width, height, sheetWidth, sheetHeight } = spriteObj as unknown as SpriteData;
+  return { type: 'sprite', sprite, x, y, width, height, sheetWidth, sheetHeight };
+}
+
+function isPixels(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
+
+/** A value as a message shows it: nothing, or as JSON writes it. */
+function shown(value: unknown): string {
+  return value === undefined ? 'nothing' : JSON.stringify(value);
 }
 
 /**
