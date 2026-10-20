@@ -47,7 +47,7 @@
 import { existsSync, promises as fs, readFileSync } from 'node:fs';
 import { join, relative, resolve as pathResolve } from 'node:path';
 import { styleText } from 'node:util';
-import { chunkBeforeSpec, chunkVerifyBase } from '../lib/chunk-commits.js';
+import { chunkBeforeSpec, chunkVerifyBase, commitName, preSpecCodeChanges } from '../lib/chunk-commits.js';
 import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { type MutantCache, captureExecutionContext, executionContextChange, openMutantCache } from '../lib/mutant-cache.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
@@ -312,9 +312,22 @@ async function unpassedSuite(
 /**
  * The tests a chunk's fast checks run (#985): the test files among `changed` (project-relative,
  * since the chunk's base `base`) that exist. With none, the outcome `noChunkTests` gives instead.
+ * A step before spec that changed a file outside `design/` fails it first (#1201).
  * `--chunk` runs them on the chunk's commit, and chunk-merge on the combined tree (#987).
  */
 export async function chunkTests(projectDir: string, chunk: string, base: string, changed: readonly string[]): Promise<string[] | VerifyCheckOutcome> {
+  const early = await preSpecCodeChanges(projectDir, chunk);
+  if (early.length > 0) {
+    return {
+      passed: false,
+      summary:
+        `Chunk "${chunk}" changed files outside design/ in a step before spec, which writes no game code: ` +
+        `${early.map((e) => `${commitName(e.commit)} changed ${e.files.join(', ')}`).join('; ')}.`,
+      next:
+        'Commit game code under the step that writes it (spec or build), not investigate, redteam or ask: ' +
+        'move those changes out of the commits named, commit, then run `boardsmith verify --chunk ' + chunk + '` again.',
+    };
+  }
   const files = changed.filter((path) => isTestFile(path) && existsSync(join(projectDir, path)));
   return files.length > 0 ? files : noChunkTests(projectDir, chunk, base);
 }

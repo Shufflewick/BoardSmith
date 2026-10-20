@@ -1,4 +1,5 @@
 import { gitOutput as git } from './git-output.js';
+import { DESIGN_DIR } from './project-paths.js';
 
 /**
  * A chunk's own commits, and the commit it started from.
@@ -78,8 +79,25 @@ const BEFORE_SPEC = new Set(['step-investigate', 'step-redteam', 'step-ask']);
  * (#995). Read from its `chunk-<slug>/step-<name>` commits, the record of which steps it finished.
  */
 export async function chunkBeforeSpec(projectDir: string, slug: string): Promise<boolean> {
-  const prefix = `chunk-${slug}/`;
-  return (await chunkLog(projectDir, slug)).every((c) => BEFORE_SPEC.has(c.subject.slice(prefix.length).split(/[\s:]/)[0]));
+  return (await chunkLog(projectDir, slug)).every((c) => isBeforeSpec(slug, c.subject));
+}
+
+const isBeforeSpec = (slug: string, subject: string) => BEFORE_SPEC.has(subject.slice(`chunk-${slug}/`.length).split(/[\s:]/)[0]);
+
+/**
+ * The chunk's commits named for a step before spec that changed files outside `design/`, oldest
+ * first, each with those files (project-relative). Those steps write only design files, so game
+ * code cannot arrive under their name and skip the tests spec writes (#1201).
+ */
+export async function preSpecCodeChanges(projectDir: string, slug: string): Promise<{ commit: ChunkCommit; files: string[] }[]> {
+  const found: { commit: ChunkCommit; files: string[] }[] = [];
+  for (const c of (await chunkLog(projectDir, slug)).reverse()) {
+    if (!isBeforeSpec(slug, c.subject)) continue;
+    const changed = await git(projectDir, ['diff-tree', '--root', '--no-commit-id', '--name-only', '-r', '--relative', c.hash]);
+    const files = changed.split('\n').filter((f) => f !== '' && !f.startsWith(`${DESIGN_DIR}/`));
+    if (files.length > 0) found.push({ commit: { hash: c.hash, label: c.subject }, files });
+  }
+  return found;
 }
 
 /** The first parent of the oldest of `commits` (newest first): the code as it stood before the chunk. */

@@ -464,6 +464,26 @@ describe('boardsmith verify --chunk <slug>: the chunk\'s fast checks', () => {
     expect(check(result, 'test').next).toMatch(/Write the chunk's tests \(its spec step\).*boardsmith verify --chunk combat/);
   });
 
+  // #1201: a step before spec writes only design files, so game code cannot arrive untested under its name.
+  it('fails a chunk whose step before spec changed a file outside design/, naming the commit and file', async () => {
+    const dir = await gameOnBranch(false);
+    await write(dir, {
+      'design/chunks/combat/CHUNK.md': '# combat\n',
+      'src/rules.ts': `${await fs.readFile(join(dir, 'src', 'rules.ts'), 'utf-8')}export const tax = 1;\n`,
+    });
+    commitAll(dir, 'chunk-combat/step-investigate');
+    const investigate = git(dir, 'rev-parse', 'HEAD').trim();
+
+    const { result } = await runVerify({ projectDir: dir, chunk: 'combat', log: () => {} });
+
+    expect(result.passed).toBe(false);
+    expect(check(result, 'test').summary).toBe(
+      `Chunk "combat" changed files outside design/ in a step before spec, which writes no game code: ` +
+        `${investigate.slice(0, 10)} (chunk-combat/step-investigate) changed src/rules.ts.`,
+    );
+    expect(check(result, 'test').next).toMatch(/Commit game code under the step that writes it \(spec or build\)/);
+  });
+
   it('passes an exempt chunk with no test of its own on typecheck alone, saying no test ran and why', async () => {
     const dir = await gameOnBranch(false);
     await chunkWithoutTests(dir, '| exempt | a restyle, no rules change | n/a |');
