@@ -168,9 +168,15 @@ describe("#1207 -- seats shown the same count-only pile share one body", () => {
     }>();
   });
 
-  it("passes on a body with no board as it is, as another engine may answer", () => {
-    const body = { state: null, phase: "closed" };
-    expect(seatView(body, [])).toBe(body);
+  it("passes on any body it is handed no ids for as it is, as another engine may answer", () => {
+    for (const body of [
+      { state: null, phase: "closed" },
+      { state: "lobby" },
+      { state: 3 },
+      { state: { placeholder: 0, children: [{ placeholder: 1 }] } },
+    ]) {
+      expect(seatView(body, []), JSON.stringify(body)).toBe(body);
+    }
   });
 
   it("does not type a shared body as a seat's tree, since a placeholder in it has no id", () => {

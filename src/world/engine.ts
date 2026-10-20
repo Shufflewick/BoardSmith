@@ -3621,14 +3621,13 @@ function shareGroups(
  * them, so a host calls this last, before the view goes to that seat.
  */
 export function seatView(body: unknown, placeholders: readonly number[]): unknown {
-  const { state } = (body ?? {}) as { state?: SharedElementJSON | null };
-  if (state === undefined || state === null) {
-    if (placeholders.length > 0) {
-      throw new Error(`This view holds no board, and was handed ${placeholders.length} placeholder ids for it.`);
-    }
-    return body;
+  // Another engine's body may be any shape, and it is never handed ids.
+  if (placeholders.length === 0) return body;
+  const { state } = (body ?? {}) as { state?: unknown };
+  if (typeof state !== "object" || state === null) {
+    throw new Error(`This view holds no board, and was handed ${placeholders.length} placeholder ids for it.`);
   }
-  return { ...(body as object), state: fillPlaceholders(state, placeholders) };
+  return { ...(body as object), state: fillPlaceholders(state as SharedElementJSON, placeholders) };
 }
 
 /**
