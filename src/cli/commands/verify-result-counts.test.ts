@@ -85,7 +85,8 @@ describe('boardsmith verify: a result counts only for a commit on a clean tree',
 describe('boardsmith verify: a run counts only when what the tests run with stayed the same (#932)', () => {
   /** A BoardSmith checkout outside the game's repository, linked in as the one the game loads. */
   async function linkedBoardsmith(dir: string): Promise<string> {
-    const bs = join(tempTree('bs-verify-linked-'), 'BoardSmith');
+    const tree = tempTree('bs-verify-linked-');
+    const bs = join(tree, 'BoardSmith');
     await write(bs, { 'package.json': '{ "name": "boardsmith", "version": "0.0.0" }\n', 'index.js': 'export {};\n' });
     initRepo(bs);
     commitAll(bs, 'start');
