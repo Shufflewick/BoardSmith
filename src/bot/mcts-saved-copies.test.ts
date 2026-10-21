@@ -172,7 +172,8 @@ async function search(
   const bot = new MCTSBot(game, GameClass, 'stone-game', seat, {
     iterations: 150,
     timeout: Infinity,
-    async: false,
+    // Yields between steps: vitest 3 fails the run when a 19x19 search holds its worker for over a minute (#1333).
+    async: true,
     seed: 'saved-copies-search',
     ...options.config,
   }, options.botStrategy ?? strategy);
