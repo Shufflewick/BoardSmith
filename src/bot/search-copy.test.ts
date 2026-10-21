@@ -84,4 +84,10 @@ describe('searchCopyForSeat (#1362)', () => {
       }),
     ).toThrow(/contradicts what the seat can see/);
   });
+
+  it('refuses, by name, a seat the game does not have', () => {
+    expect(() => searchCopyForSeat(truthWithSecondSeatToMove(), 3, 'search')).toThrow(
+      'searchCopyForSeat was given seat 3, but this game has seats 1 to 2. Seats count from 1.',
+    );
+  });
 });

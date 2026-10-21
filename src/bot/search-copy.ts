@@ -107,8 +107,12 @@ export function restoreSeatCopy<G extends Game>(
  * @param sample - The game's sampler and its [0, 1) source; without it the copy
  *   keeps what the seat was not told redacted
  * @throws {DeterminizationError} if the sampler throws, or contradicts the view
+ * @throws {Error} if the game has no such seat
  */
 export function searchCopyForSeat<G extends Game>(game: G, seat: number, seed: string, sample?: WorldSample): G {
+  if (game.getPlayer(seat) === undefined) {
+    throw new Error(`searchCopyForSeat was given seat ${seat}, but this game has seats 1 to ${game.players.length}. Seats count from 1.`);
+  }
   // The restore reads neither the game type nor the bot's search seed.
   const snapshot = createSeatSnapshot(game, '', undefined, { forSeat: seat, reseed: seed });
   return restoreSeatCopy(
