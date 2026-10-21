@@ -148,9 +148,11 @@ await runBrowserRegression(
 
       for (const viewport of VIEWPORTS) {
         await page.setViewportSize(viewport);
+        // Coverage is waited for too: after a resize the closed debug drawer slides to its phone position over the bubbles.
         const seen = await waitUntil(
           () => measure(frame),
-          (now) => now !== null && now.frameWidth <= viewport.width && TARGETS.every((_, i) => misses(now, i).length === 0),
+          (now) => now !== null && now.frameWidth <= viewport.width
+            && TARGETS.every((_, i) => misses(now, i).length === 0 && now.shown[i].coveredBy === null),
         );
         for (const [i, { side }] of TARGETS.entries()) {
           await check(`the bubble for a target at ${side} stays 8px inside the layer and points at it at ${viewport.width}px`, async () => {
