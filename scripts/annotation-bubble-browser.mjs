@@ -131,23 +131,29 @@ function misses(seen, i) {
   ].filter(([ok]) => !ok).map(([, why]) => why);
 }
 
-/** What is drawn on top at the middle of the modal annotation's bubble and of the action bar, and how many rings show. */
+/**
+ * What is drawn on top at the middle of the modal annotation's bubble, of a bubble
+ * about the board (the right edge's), and of the action bar; at the upper half of
+ * the bar's edge toggle, which overhangs the board; and how many rings show.
+ */
 function topmost(frame) {
   return frame.locator('body').evaluate((body) => {
     const doc = body.ownerDocument;
     // The game-over card makes the page behind it inert, and hit testing skips inert elements, so lift it while asking what is drawn on top.
     const inert = [...doc.querySelectorAll('[inert]')];
     for (const el of inert) el.removeAttribute('inert');
-    const onTop = (el) => {
+    const onTop = (el, down = 0.5) => {
       if (!el) return 'nothing (it is not shown)';
       const r = el.getBoundingClientRect();
-      const top = doc.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      const top = doc.elementFromPoint(r.left + r.width / 2, r.top + r.height * down);
       return top && el.contains(top) ? 'itself' : `${top?.tagName}.${top?.className}`;
     };
     const bubbles = doc.querySelectorAll('.bsg-annotation-layer .bsg-board-message__content--annotation');
     const seen = {
       bubble: onTop(bubbles[3]),
+      board: onTop(bubbles[1]),
       bar: onTop(doc.querySelector('[data-testid="bs-actionbar"]')),
+      toggle: onTop(doc.querySelector('.bar-edge'), 0.25),
       rings: doc.querySelectorAll('.bsg-tutorial-ring').length,
     };
     for (const el of inert) el.setAttribute('inert', '');
@@ -213,8 +219,9 @@ await runBrowserRegression(
       await check('a bubble about the board is drawn under an open game modal (#1346)', async () => {
         assert(underModal.bubble === 'DIV.test-modal', `the middle of the bubble shows ${underModal.bubble}, not the modal`);
       });
-      await check('the action bar is drawn above an open game modal (#1346)', async () => {
+      await check('the action bar and its edge toggle are drawn above an open game modal (#1346)', async () => {
         assert(underModal.bar === 'itself', `the middle of the action bar shows ${underModal.bar}`);
+        assert(underModal.toggle === 'itself', `the upper half of the bar's edge toggle shows ${underModal.toggle}`);
       });
 
       await frame.locator('.test-modal').evaluate((modal) => {
@@ -226,6 +233,9 @@ await runBrowserRegression(
         assert(inModal.rings === 4, `${inModal.rings} rings show, not one for each of the 4 targets`);
         assert(inModal.bubble === 'itself', `the middle of the bubble shows ${inModal.bubble}`);
       });
+      await check('a bubble about the board stays under the modal while another target is inside it (#1346)', async () => {
+        assert(inModal.board === 'DIV.test-modal', `the middle of the right edge's bubble shows ${inModal.board}, not the modal`);
+      });
 
       await frame.locator('.test-modal').evaluate((modal) => modal.remove());
       await remeasure(frame);
@@ -235,6 +245,7 @@ await runBrowserRegression(
         assert(ended, 'the game-over card never appeared');
         assert(underScrim.bubble.startsWith('DIV.game-over'), `the middle of the bubble shows ${underScrim.bubble}, not the game-over scrim`);
         assert(underScrim.bar === 'itself', `the middle of the action bar shows ${underScrim.bar}`);
+        assert(underScrim.toggle === 'itself', `the upper half of the bar's edge toggle shows ${underScrim.toggle}`);
       });
     } finally {
       await browser.close();

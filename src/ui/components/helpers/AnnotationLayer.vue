@@ -22,12 +22,13 @@
  * announced. Reduced motion: no ring animation.
  *
  * Z-index 31: above the action bar (z-30) (#1341), below game modals and the
- * game-over scrim (z-32), which cover bubbles about the board. While a target
- * is inside an open game modal the layer rises to 33, so its ring shows (#1346).
+ * game-over scrim (z-32), which cover bubbles about the board. An annotation
+ * whose target is inside an open game modal is drawn in a second layer at 33, so
+ * its ring shows over the modal while the rest stay under it (#1346).
  * Always below the mobile scrim (z-45) and modals (z-50).
  */
 
-import { ref, toRef } from 'vue';
+import { computed, ref, toRef, type ComponentPublicInstance } from 'vue';
 import BoardMessage from './BoardMessage.vue';
 import type { Annotation } from '../../../engine/tutorial/types.js';
 import { buildSelector } from './overlay-utils.js';
@@ -47,7 +48,7 @@ interface ResolvedAnnotation {
   anchorStyle: Record<string, string>;
   caretSide?: 'top' | 'bottom';
   /** The target is inside an open game modal (#bs-game-modal). */
-  inModal?: boolean;
+  inModal: boolean;
 }
 
 const GAP = 8; // var(--bsg-s2)
@@ -94,7 +95,7 @@ function resolve(ann: Annotation, boardRect: DOMRect | null, layer: LayerSize): 
   const selector = ann.target ? buildSelector(ann.target) : '';
   const targetEl = selector ? document.querySelector(selector) : null;
   if (!targetEl) {
-    return { text: ann.text, ring: null, anchorStyle: boardStyle(ann.placement, boardRect, layer) };
+    return { text: ann.text, ring: null, inModal: false, anchorStyle: boardStyle(ann.placement, boardRect, layer) };
   }
 
   const rect = targetEl.getBoundingClientRect();
@@ -133,6 +134,14 @@ function resolve(ann: Annotation, boardRect: DOMRect | null, layer: LayerSize): 
   return { text: ann.text, ring, inModal, caretSide: 'bottom', anchorStyle: { left, top: `${above}px`, ...lifted } };
 }
 
+/** Whether each layer is the one over game modals; the second is drawn only while it has something to show. */
+const layers = computed(() => (resolvedAnnotations.value.some((r) => r.inModal) ? [false, true] : [false]));
+
+/** The base layer is the one measured and tracked. */
+function setRoot(el: Element | ComponentPublicInstance | null, overModal: boolean) {
+  if (!overModal) overlayRoot.value = el as HTMLElement | null;
+}
+
 useOverlayTracking({
   root: overlayRoot,
   content: toRef(props, 'annotations'),
@@ -148,31 +157,36 @@ useOverlayTracking({
 
 <template>
   <Teleport to="body">
-    <div
-      v-if="annotations.length > 0"
-      ref="overlayRoot"
-      class="bsg-annotation-layer"
-      :class="[overlayClass, { 'bsg-annotation-layer--over-modal': resolvedAnnotations.some((r) => r.inModal) }]"
-    >
-      <template v-for="(resolved, i) in resolvedAnnotations" :key="i">
-        <div
-          v-if="resolved.ring"
-          class="bsg-tutorial-ring"
-          :style="resolved.ring"
-          aria-hidden="true"
-        >
-          <!-- Non-color cue (WCAG 2.2 AA 1.4.1): an "i" chip pinned to the ring corner. -->
-          <span class="bsg-tutorial-ring__chip" aria-hidden="true">i</span>
-        </div>
-        <BoardMessage
-          v-if="resolved.text"
-          variant="annotation"
-          :visible="true"
-          :anchor-style="resolved.anchorStyle"
-          :caret-side="resolved.caretSide"
-        >{{ resolved.text }}</BoardMessage>
-      </template>
-    </div>
+    <template v-if="annotations.length > 0">
+      <div
+        v-for="overModal in layers"
+        :key="String(overModal)"
+        :ref="(el) => setRoot(el, overModal)"
+        class="bsg-annotation-layer"
+        :class="[overlayClass, { 'bsg-annotation-layer--over-modal': overModal }]"
+      >
+        <template v-for="(resolved, i) in resolvedAnnotations" :key="i">
+          <template v-if="resolved.inModal === overModal">
+            <div
+              v-if="resolved.ring"
+              class="bsg-tutorial-ring"
+              :style="resolved.ring"
+              aria-hidden="true"
+            >
+              <!-- Non-color cue (WCAG 2.2 AA 1.4.1): an "i" chip pinned to the ring corner. -->
+              <span class="bsg-tutorial-ring__chip" aria-hidden="true">i</span>
+            </div>
+            <BoardMessage
+              v-if="resolved.text"
+              variant="annotation"
+              :visible="true"
+              :anchor-style="resolved.anchorStyle"
+              :caret-side="resolved.caretSide"
+            >{{ resolved.text }}</BoardMessage>
+          </template>
+        </template>
+      </div>
+    </template>
   </Teleport>
 </template>
 

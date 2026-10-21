@@ -902,16 +902,19 @@ const mobileToggleLabel = computed(() => {
 /* The frame: the out-of-flow box the bar and its edge toggle share. The bar used
    to carry this positioning itself; the toggle needs a parent the bar's own
    overflow scroller cannot clip, and giving the pair a wrapper is what lets the
-   toggle ride the bar's top edge with nothing measuring the bar's height. */
+   toggle ride the bar's top edge with nothing measuring the bar's height.
+   No z-index here: the toggle overhangs the board, and must out-rank a game
+   modal and the game-over scrim (z-32) that the bar itself sits under (#1346). */
 .actionbar-frame {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  z-index: 30;
 }
 
 .actionbar {
+  position: relative;
+  z-index: 30;
   background: var(--bsg-surface);
   /* The top rule is an inset shadow, not a border, so it takes no height from
      the two rows the reservation is sized for. */
@@ -981,7 +984,8 @@ const mobileToggleLabel = computed(() => {
   top: 0;
   right: 12px;
   transform: translateY(-50%);
-  z-index: 1;
+  /* Ties the game modal host and game-over scrim, and wins as the later element (#1346). */
+  z-index: 32;
   width: 26px;
   height: 26px;
   border-radius: 50%;
