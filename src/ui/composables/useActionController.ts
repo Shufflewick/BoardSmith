@@ -298,6 +298,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   const stepOutstanding = (): boolean => stepSeq !== null && !actionMovedOn(stepSeq);
   const STEP_OUTSTANDING = 'Still waiting for the server to answer your last pick.';
   const REPEAT_HELD = 'The server already holds this answer, so it cannot be cleared now. Cancel the action to start it again.';
+  const NOT_A_PICK = 'This value was set by the game, not picked by you, so it cannot be cleared.';
   // Not set as lastError: the player moved on themselves, so there is nothing to report.
   const MOVED_ON: PickValidationResult = { valid: false, error: 'The action changed before the server answered this pick.' };
 
@@ -2672,8 +2673,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
     const selections = currentActionMeta.value?.selections ?? [];
     const index = selections.findIndex(s => s.name === selectionName);
-    // Not a pick (a follow-up's server-bound arg, say), so the player has nothing to clear.
-    if (index === -1) return true;
+    // Not a pick (a follow-up's server-bound arg, say): true would have the caller clear the board, cancelling the action (#1366).
+    if (index === -1) {
+      setError(NOT_A_PICK);
+      return false;
+    }
     if (serverHoldsRepeat(selections.slice(index))) {
       setError(REPEAT_HELD);
       return false;
