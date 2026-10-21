@@ -335,10 +335,13 @@ async function loadFixtures(script) {
  *                    project's directory; returns `summarise`
  */
 export async function runBrowserRegression(run, body) {
+  const table = run.table === true ? {} : run.table?.files;
+  if (run.table !== undefined && (table === null || typeof table !== 'object')) {
+    throw new Error(`${run.script}: \`table\` is \`true\` or \`{ files: { <path in the project>: <text> } }\`, not ${JSON.stringify(run.table)}.`);
+  }
   const { withFixtureWorld, withFixtureTable } = await loadFixtures(run.script);
   const chromium = await loadChromium();
   const drive = ({ hostUrl, fixture }) => body({ launch: () => launchChromium(chromium), hostUrl, fixture });
-  const table = run.table === true ? {} : run.table?.files;
   process.exit(await (table ? withFixtureTable(drive, table) : withFixtureWorld(run.fixture, drive)));
 }
 
