@@ -169,8 +169,9 @@ const BUILTIN_READ_NAMES: ReadonlyArray<readonly [object, ReadonlyArray<string |
  * Taken by identity, so an override that answers live state is projected as before.
  */
 const FRESH_ARRAY_BUILDERS = new WeakSet<object>(
-  (["concat", "filter", "flat", "flatMap", "map", "slice", "toReversed", "toSorted", "toSpliced", "with"] as const).map(
-    (name) => Array.prototype[name],
+  ["concat", "filter", "flat", "flatMap", "map", "slice", "toReversed", "toSorted", "toSpliced", "with"].map(
+    // Read by name, not typed: a game's tsconfig lib may predate toSorted and its kin.
+    (name) => (Array.prototype as unknown as Record<string, object>)[name],
   ),
 );
 
