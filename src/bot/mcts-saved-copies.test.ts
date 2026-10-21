@@ -172,8 +172,7 @@ async function search(
   const bot = new MCTSBot(game, GameClass, 'stone-game', seat, {
     iterations: 150,
     timeout: Infinity,
-    // Yields between steps: vitest 3 fails the run when a 19x19 search holds its worker for over a minute (#1333).
-    async: true,
+    async: false,
     seed: 'saved-copies-search',
     ...options.config,
   }, options.botStrategy ?? strategy);
@@ -301,7 +300,8 @@ describe('MCTS saved copies (#633)', () => {
     const game = startedGame(GameClass, 40);
     // Short playouts keep each step cheap. 6000 steps reach only about 565 nodes in a
     // fairly explored tree, and the budget holds about 670 copies, so it takes more (#732).
-    const config = { iterations: 9000, playoutDepth: 0 };
+    // Yields between steps: vitest 3 fails the run when a search holds its worker for over a minute (#1333).
+    const config = { iterations: 9000, playoutDepth: 0, async: true };
     const withDefault = await search(GameClass, game, { config });
 
     expect(withDefault.budget).toBe(32 * 1024 * 1024);
