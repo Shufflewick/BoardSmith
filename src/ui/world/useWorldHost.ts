@@ -261,22 +261,21 @@ function answerOf<T extends { readonly ok: boolean }>(
   return answer as T;
 }
 
-/** This seat's own view out of a state frame, or why the page cannot read it. */
-function seatViewOf(
+/** What a state frame puts on screen: this seat's own view, or a refusal saying why the page cannot read it. */
+function shownBy(
   data: Extract<WorldHostMessage, { type: 'world_state' }>,
-): { ok: true; view: unknown } | { ok: false; message: string } {
+): { phase: WorldPhase; view: unknown; notice: string | null } {
+  const unreadable = (notice: string) => ({ phase: 'refused' as const, view: null, notice });
   if (!Array.isArray(data.placeholders)) {
-    return {
-      ok: false,
-      message:
-        "The host sent this seat's view without its placeholder ids, so this page cannot show it. " +
+    return unreadable(
+      "The host sent this seat's view without its placeholder ids, so this page cannot show it. " +
         'Update the host: every world_state frame carries `placeholders`, `[]` when the view holds none.',
-    };
+    );
   }
   try {
-    return { ok: true, view: seatView(data.view, data.placeholders) };
+    return { phase: data.phase, view: seatView(data.view, data.placeholders), notice: data.notice };
   } catch (error) {
-    return { ok: false, message: `The host sent a view this page cannot read. ${(error as Error).message}` };
+    return unreadable(`The host sent a view this page cannot read. ${(error as Error).message}`);
   }
 }
 
@@ -449,7 +448,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
 
   function takeState(data: Extract<WorldHostMessage, { type: 'world_state' }>): void {
     // Read before anything changes, so a frame the page cannot read leaves no half-taken state (#1326).
-    const shown = seatViewOf(data);
+    const shown = shownBy(data);
     heardFromHost.value = true;
     hostSilent.value = false;
     if (helloTimer !== null) {
@@ -457,8 +456,8 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
       helloTimer = null;
     }
 
-    phase.value = shown.ok ? data.phase : 'refused';
-    view.value = shown.ok ? shown.view : null;
+    phase.value = shown.phase;
+    view.value = shown.view;
     // WHO IS LOOKING, WHICH IS THE OTHER HALF OF "WHAT IS ON SCREEN" (#272).
     //
     // A state frame that names a different seat is a SEAT SWITCH -- the dev
@@ -475,7 +474,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     seat.value = data.seat;
     if (switched) forgetTheSeatThatLeft();
     takeRevision(data.revision, switched);
-    notice.value = shown.ok ? data.notice : shown.message;
+    notice.value = shown.notice;
     worldName.value = data.worldName;
     presence.value = data.presence;
     // Absent is not empty: a host with no names to give leaves the shell with
