@@ -329,7 +329,8 @@ async function loadFixtures(script) {
  * @param run.script  the script's own filename, for the refusal's command line
  * @param run.fixture the world project, as `withFixtureWorld` takes it
  * @param run.table   instead of `fixture`: `true` serves `boardsmith init`'s table
- *                    sample through `boardsmith dev` (`withFixtureTable`, #703)
+ *                    sample through `boardsmith dev` (`withFixtureTable`, #703), and
+ *                    `{ files }` serves it with those files written over it (#1318)
  * @param body        called with `{ launch, hostUrl, fixture }`, `fixture` being the served
  *                    project's directory; returns `summarise`
  */
@@ -337,7 +338,8 @@ export async function runBrowserRegression(run, body) {
   const { withFixtureWorld, withFixtureTable } = await loadFixtures(run.script);
   const chromium = await loadChromium();
   const drive = ({ hostUrl, fixture }) => body({ launch: () => launchChromium(chromium), hostUrl, fixture });
-  process.exit(await (run.table === true ? withFixtureTable(drive) : withFixtureWorld(run.fixture, drive)));
+  const table = run.table === true ? {} : run.table?.files;
+  process.exit(await (table ? withFixtureTable(drive, table) : withFixtureWorld(run.fixture, drive)));
 }
 
 /**
