@@ -717,6 +717,32 @@ describe('executeOp', () => {
       expect(view?.state?.tutorial).toBeDefined();
     });
 
+    it("greys the choices a running tutorial's per-pick gate does not allow, in a choices fetch (#1248)", async () => {
+      class GatedGame extends Game<GatedGame, Player> {
+        constructor(options: GameOptions) {
+          super(options);
+          this.registerAction(
+            Action.create('move').chooseFrom('piece', { choices: [{ notation: 'c3' }, { notation: 'e5' }] }).execute(() => {}),
+          );
+          this.setFlow({ root: loop({ maxIterations: 10, do: actionStep({ actions: ['move'], player: (ctx) => ctx.game.getPlayer(1)! }) }) });
+        }
+      }
+      const gated: GameDefinitionLike = {
+        gameClass: GatedGame, gameType: 'gated', minPlayers: 2, maxPlayers: 2,
+        tutorial: { learnerSeat: 1, steps: [{ id: 'c3', gate: { action: 'move', selections: { piece: { notation: 'c3' } } } }] },
+      };
+      const start = succeeded(await startGame(gated, twoStepGameOptions));
+      const started = succeeded(await executeOp(gated, twoStepGameOptions, start.snapshot, null, { type: 'startTutorial', player: 1 }));
+
+      const pieces = succeeded(await executeOp(gated, twoStepGameOptions, started.snapshot, null, {
+        type: 'resolveChoices', actionName: 'move', selectionName: 'piece', player: 1, args: {},
+      }));
+
+      const at = (notation: string) => pieces.choices!.find((c) => (c.value as { notation: string }).notation === notation)!;
+      expect(at('c3').disabled).toBeUndefined();
+      expect(typeof at('e5').disabled).toBe('string');
+    });
+
     it('fails with an error when the game has no tutorial definition', async () => {
       const startResult = succeeded(await startGame(simpleGameDef, simpleGameOptions));
       expect(startResult.success).toBe(true);

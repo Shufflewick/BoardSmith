@@ -11,7 +11,7 @@ import type { UseActionControllerReturn } from './useActionControllerTypes.js';
 describe('UseActionControllerReturn', () => {
   it('has exactly the reviewed public members', () => {
     expectTypeOf<keyof UseActionControllerReturn>().toEqualTypeOf<
-      | 'currentAction' | 'currentArgs' | 'currentPick' | 'validElements' | 'currentChoices'
+      | 'currentAction' | 'currentArgs' | 'currentPick' | 'validElements' | 'currentChoices' | 'startCandidates'
       | 'isReady' | 'isExecuting' | 'lastError' | 'errorTick' | 'isLoadingChoices'
       | 'repeatingState' | 'pendingFollowUp' | 'pendingOnServer' | 'heldFollowUp'
       | 'resumeFollowUp' | 'actionCompletedTick' | 'actionStartTick' | 'lastActionResult'

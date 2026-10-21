@@ -70,7 +70,7 @@ async function wireAll(
     runnerIdentity: ref({ gameInstanceId: 'game-a', restoreEpoch: 0 }),
   });
   setupDragDropOrchestration({
-    boardInteraction, actionController: made.controller, availableActions: made.availableActions,
+    boardInteraction, actionController: made.controller,
     actionMetadata: made.actionMetadata, isMyTurn: made.isMyTurn,
   });
   await flushAll();
@@ -339,7 +339,7 @@ describe('drag-drop follows the board and the action panel (#724)', () => {
       },
     });
     const metadata: Record<string, EnrichedActionMetadata> = {
-      move: { name: 'move', selections: [{ name: 'piece', type: 'element', validElements: pieces }, { name: 'dest', type: 'choice' }] },
+      move: { name: 'move', selections: [{ name: 'piece', type: 'element' }, { name: 'dest', type: 'choice' }] },
       pass: { name: 'pass', selections: [] },
     };
     return wireAll(metadata, fetchPickChoices);
@@ -444,21 +444,131 @@ describe('drag-drop follows the board and the action panel (#724)', () => {
   });
 
   it('dragging a disabled element starts no action', async () => {
-    const fetchPickChoices = vi.fn().mockResolvedValue({ success: true, choices: [] });
-    const metadata: Record<string, EnrichedActionMetadata> = {
-      move: {
-        name: 'move',
-        selections: [
-          { name: 'piece', type: 'element', validElements: [{ id: 1, disabled: 'pinned', refs: [{ ref: { id: 1 }, role: 'highlight' }] }, { id: 2, refs: [{ ref: { id: 2 }, role: 'highlight' }] }] },
-          { name: 'dest', type: 'choice' },
-        ],
-      },
-      pass: { name: 'pass', selections: [] },
-    };
-    const { controller, boardInteraction } = await wireAll(metadata, fetchPickChoices);
+    const { controller, boardInteraction } = await twoActions([
+      { id: 1, disabled: 'pinned', refs: [{ ref: { id: 1 }, role: 'highlight' }] },
+      { id: 2, refs: [{ ref: { id: 2 }, role: 'highlight' }] },
+    ]);
 
     boardInteraction.startDrag({ id: 1 });
     await flushAll();
     expect(controller.currentAction.value).toBeNull();
+  });
+
+  it('dragging an element no action can start with starts nothing', async () => {
+    const { controller, boardInteraction } = await twoActions([{ id: 2, refs: [{ ref: { id: 2 }, role: 'highlight' }] }]);
+
+    boardInteraction.startDrag({ id: 7 });
+    await flushAll();
+    expect(controller.currentAction.value).toBeNull();
+  });
+});
+
+// The server's metadata never lists an element pick's candidates, so with
+// several actions on offer and none open the board must ask for them (#1192).
+describe('a turn that offers several actions and opens none, as Chess does (#1192)', () => {
+  const pieces = [
+    { id: 42, refs: [{ ref: { notation: 'd2' }, role: 'highlight' as const }] },
+    { id: 43, refs: [{ ref: { notation: 'e2' }, role: 'highlight' as const }] },
+  ];
+
+  async function chess() {
+    const fetchPickChoices = answerPicks({
+      piece: { validElements: pieces },
+      destination: {
+        choices: [
+          { value: 'e3', display: 'e3', refs: [{ ref: { notation: 'e3' }, role: 'target' }] },
+          { value: 'e4', display: 'e4', refs: [{ ref: { notation: 'e4' }, role: 'target' }] },
+        ],
+      },
+    });
+    const metadata: Record<string, EnrichedActionMetadata> = {
+      movePiece: { name: 'movePiece', selections: [{ name: 'piece', type: 'element' }, { name: 'destination', type: 'choice' }] },
+      resign: { name: 'resign', selections: [] },
+      offerDraw: { name: 'offerDraw', selections: [] },
+    };
+    return { ...(await wireAll(metadata, fetchPickChoices)), fetchPickChoices };
+  }
+
+  it('offers on the board the pieces movePiece can start with', async () => {
+    const { controller, boardInteraction } = await chess();
+    expect(controller.currentAction.value).toBeNull();
+    expect(boardInteraction.isSelectableElement({ id: 300, notation: 'd2' })).toBe(true);
+    expect(boardInteraction.isSelectableElement({ id: 302, notation: 'a2' })).toBe(false);
+  });
+
+  it('clicking a piece starts movePiece with that piece', async () => {
+    const { controller, boardInteraction } = await chess();
+
+    boardInteraction.triggerElementSelect({ id: 300, notation: 'd2' });
+    await flushAll();
+    expect(controller.currentAction.value).toBe('movePiece');
+    expect(controller.currentArgs.value).toEqual({ piece: 42 });
+  });
+
+  it('dragging a piece starts movePiece with that piece, and a drop completes the move', async () => {
+    const { boardInteraction, sendAction } = await chess();
+
+    boardInteraction.startDrag({ id: 301, notation: 'e2' });
+    await flushAll();
+    boardInteraction.triggerDrop({ id: 310, notation: 'e4' });
+    await flushAll();
+    expect(sendAction).toHaveBeenCalledWith('movePiece', { piece: 43, destination: 'e4' });
+  });
+
+  it('offers an element by the action that can start with it, when an earlier action disables it', async () => {
+    const fetchPickChoices = answerPicks({
+      piece: { validElements: [{ id: 42, disabled: 'pinned', refs: [{ ref: { id: 42 }, role: 'highlight' }] }] },
+      subject: { validElements: [{ id: 42, refs: [{ ref: { id: 42 }, role: 'highlight' }] }] },
+    });
+    const { controller, boardInteraction } = await wireAll({
+      movePiece: { name: 'movePiece', selections: [{ name: 'piece', type: 'element' }, { name: 'destination', type: 'choice' }] },
+      inspect: { name: 'inspect', selections: [{ name: 'subject', type: 'element' }, { name: 'detail', type: 'choice' }] },
+    }, fetchPickChoices);
+
+    boardInteraction.triggerElementSelect({ id: 42 });
+    await flushAll();
+    expect(controller.currentAction.value).toBe('inspect');
+    expect(controller.currentArgs.value).toEqual({ subject: 42 });
+  });
+
+  it('offers nothing from an earlier state while the new state\'s candidates are on their way', async () => {
+    const { boardInteraction, actionMetadata, fetchPickChoices } = await chess();
+    expect(boardInteraction.isSelectableElement({ id: 300, notation: 'd2' })).toBe(true);
+    fetchPickChoices.mockImplementation(() => new Promise(() => {}));
+
+    actionMetadata.value = { ...actionMetadata.value! };
+    await flushAll();
+    expect(boardInteraction.isSelectableElement({ id: 300, notation: 'd2' })).toBe(false);
+  });
+
+  it('offers nothing on the board on another seat\'s turn', async () => {
+    const fetchPickChoices = answerPicks({ piece: { validElements: pieces } });
+    const { boardInteraction } = await wireAll({
+      movePiece: { name: 'movePiece', selections: [{ name: 'piece', type: 'element' }, { name: 'destination', type: 'choice' }] },
+      resign: { name: 'resign', selections: [] },
+    }, fetchPickChoices, false);
+    expect(boardInteraction.isSelectableElement({ id: 300, notation: 'd2' })).toBe(false);
+  });
+});
+
+describe('the no-drop-targets warning (#1299)', () => {
+  it('states the rule the board uses for a choice: the ref with role target, else the first ref', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const pieces = [{ id: 1, refs: [{ ref: { id: 1 }, role: 'highlight' as const }] }, { id: 2, refs: [{ ref: { id: 2 }, role: 'highlight' as const }] }];
+    const fetchPickChoices = answerPicks({
+      piece: { validElements: pieces },
+      dest: { choices: [{ value: 'a1', display: 'A1' }, { value: 'a2', display: 'A2' }] },
+    });
+    const { boardInteraction } = await wireAll({
+      place: { name: 'place', selections: [{ name: 'piece', type: 'element', validElements: pieces }, { name: 'dest', type: 'choice' }] },
+    }, fetchPickChoices);
+
+    boardInteraction.startDrag({ id: 1 });
+    await flushAll();
+
+    const message = warn.mock.calls.map((call) => String(call[0])).find((text) => text.includes('no drop targets'));
+    expect(message).toContain("the ref with role 'target', else the first ref");
+    expect(message).not.toContain("refs with role 'target'");
+    warn.mockRestore();
   });
 });

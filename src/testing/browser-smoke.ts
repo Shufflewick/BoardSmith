@@ -1,3 +1,4 @@
+/// <reference path="../types/node-globals.d.ts" />
 /**
  * THE IN-BROWSER SMOKE TEST (#453), `boardsmith/testing/browser`.
  *

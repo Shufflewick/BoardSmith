@@ -362,7 +362,20 @@ class BoardRefsGame extends Game<BoardRefsGame, Player> {
     );
 
     // Element pick whose elements() crashes or refuses, as pickThrowChoices does for a choice (#1156).
-    this.registerAction(
+    this.registerActions(
+      // The same for a list of elements (#1248).
+      Action.create('pickThrowElementsMulti')
+        .chooseFrom('trigger', { choices: [false, true] })
+        .chooseFrom('refuse', { choices: [false, true] })
+        .chooseElements('squares', {
+          prompt: 'Choose squares',
+          elements: (ctx) => {
+            if (ctx.args.trigger) throw new Error('elements boom');
+            if (ctx.args.refuse) throw new PlayerFacingError(CHOICES_REFUSAL);
+            return [...ctx.game.all(Square)].filter(s => s.name !== 'board');
+          },
+        })
+        .execute(() => ({ success: true })),
       Action.create('pickThrowElements')
         .chooseFrom('trigger', { choices: [false, true] })
         .chooseFrom('refuse', { choices: [false, true] })
@@ -388,6 +401,7 @@ class BoardRefsGame extends Game<BoardRefsGame, Player> {
           'selectSquareThrowBoardRef',
           'pickThrowChoices',
           'pickThrowElements',
+          'pickThrowElementsMulti',
         ],
       }),
     });
@@ -539,14 +553,17 @@ describe('PickHandler structured warnings (ERR-01)', () => {
   test.each([
     ['pickThrowChoices', 'option', ErrorCode.CHOICES_EVALUATION_ERROR],
     ['pickThrowElements', 'sq', ErrorCode.ELEMENTS_EVALUATION_ERROR],
+    ['pickThrowElementsMulti', 'squares', ErrorCode.ELEMENTS_EVALUATION_ERROR],
   ])('%s: a crash is coded ENGINE_ERROR and a PlayerFacingError its own refusal code (#1156)', async (action, pick, refusalCode) => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const crash = await pickChoices(session, action, pick, 1, { trigger: true });
       expect(crash).toMatchObject({ success: false, errorCode: ErrorCode.ENGINE_ERROR });
-      expect('warnings' in crash).toBe(false);
+      expect(consoleSpy).toHaveBeenCalled();
+      consoleSpy.mockClear();
       const refusal = await pickChoices(session, action, pick, 1, { refuse: true });
       expect(refusal).toMatchObject({ success: false, error: CHOICES_REFUSAL, errorCode: refusalCode });
+      expect(consoleSpy).not.toHaveBeenCalled();
     } finally {
       consoleSpy.mockRestore();
     }

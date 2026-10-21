@@ -9,15 +9,15 @@ import type {
 import type { GameStateSnapshot, SeatSnapshot } from '../engine/utils/index.js';
 import { canSeatAct, dueSeats, availableActionsForSeat, followUpForSeat } from '../engine/index.js';
 import { isElement } from '../engine/element/game-element.js';
-import { createSnapshot, createSeatSnapshot, snapshotTree } from '../engine/utils/index.js';
+import { createSnapshot, createSeatSnapshot } from '../engine/utils/index.js';
 import { enumerateActionMoves } from '../engine/utils/enumerate-moves.js';
-import { constructGame } from '../engine/element/game.js';
 import type {
   BotConfig, BotMove, BotMoveStats, MCTSNode, BotStrategy, Objective, ThreatResponse,
   DeterminizeSampler,
 } from './types.js';
 import { DEFAULT_CONFIG } from './types.js';
 import { applyDeterminization } from './determinization.js';
+import { restoreSeatCopy } from './search-copy.js';
 import { SeededRandom, mintSeed } from '../utils/random.js';
 import { isDevMode } from '../utils/dev.js';
 
@@ -357,12 +357,11 @@ export class MCTSBot<G extends Game = Game> {
     // full-search one. For perfect-information games (no hidden zones) the
     // redacted view is byte-identical to the full view, so this is a no-op.
     this.rootSnapshot = this.captureSnapshot();
-    this.searchGame = this.restoreGame(this.rootSnapshot) as G;
-    this.dropSavedCopies();
     // #73: the first world. Every later iteration gets its own from
     // `restoreSearchGameToRoot`, so the tree's statistics average over worlds
     // rather than describing the one this root happened to draw.
-    this.sampleWorld();
+    this.searchGame = this.restoreGame(this.rootSnapshot, this.rootSnapshot.randomState, true);
+    this.dropSavedCopies();
     const flowState = this.searchGame.getFlowState() ?? liveFlowState;
 
     // Cache UCT constant once per move (not per selectChild call)
@@ -1051,11 +1050,10 @@ export class MCTSBot<G extends Game = Game> {
    * args resolve by element id, and ids are stable across restore, so making
    * the tree path's moves on the fresh instance is sound (see `rebindArgs`).
    */
-  private resumeSearchGame(copy?: string): void {
+  private resumeSearchGame(copy?: string, sampleWorld = false): void {
     if (!this.rootSnapshot || !this.searchGame) return;
     const rngState = this.searchGame.getRandomState();
-    this.searchGame = this.restoreGame(copy === undefined ? this.rootSnapshot : JSON.parse(copy)) as G;
-    this.searchGame.setRandomState(rngState);
+    this.searchGame = this.restoreGame(copy === undefined ? this.rootSnapshot : JSON.parse(copy), rngState, sampleWorld);
     this.resumedRandomState = rngState;
     // F-07: drop any baseline captured last iteration — it was cloned from the
     // now-discarded searchGame instance. It is re-captured fresh during this
@@ -1068,11 +1066,10 @@ export class MCTSBot<G extends Game = Game> {
    * a world sampler, after every step (see runSearch).
    */
   private restoreSearchGameToRoot(): void {
-    this.resumeSearchGame();
     // #73: a fresh world for the next iteration. Re-sampling HERE — per
     // playout, not per move — is what makes the tree's statistics describe the
     // seat's uncertainty instead of one hypothesis it happened to draw.
-    this.sampleWorld();
+    this.resumeSearchGame(undefined, true);
   }
 
   /**
@@ -1121,15 +1118,15 @@ export class MCTSBot<G extends Game = Game> {
 
   /**
    * Draw one world consistent with this seat's information set into
-   * `searchGame`, if the game declared a sampler (#73).
+   * `game`, if the game declared a sampler (#73).
    *
    * No-op for every game without one, which is why a game with no hidden state
    * pays nothing for this feature existing.
    */
-  private sampleWorld(): void {
-    if (!this.determinize || !this.searchGame) return;
+  private sampleWorld(game: Game): void {
+    if (!this.determinize) return;
     applyDeterminization(
-      this.searchGame,
+      game,
       this.playerIndex,
       this.determinize,
       () => this.rng.next(),
@@ -1310,7 +1307,7 @@ export class MCTSBot<G extends Game = Game> {
    */
   private cloneSearchGame(game: G): G {
     const snapshot = createSnapshot(game, this.gameType, [], this.seed);
-    return this.restoreGame(snapshot) as G;
+    return this.restoreGame(snapshot);
   }
 
 
@@ -1384,69 +1381,9 @@ export class MCTSBot<G extends Game = Game> {
     return createSeatSnapshot(this.game, this.gameType, this.seed, { forSeat: this.playerIndex, reseed: String(this.rng.next()) });
   }
 
-  /**
-   * Restore a game from a snapshot — fully STATE-AUTHORITATIVE, NO replay.
-   *
-   * Mirrors `GameRunner.fromSnapshot`: the snapshot carries the complete
-   * authoritative state (element tree, flow position, sequence counter, seeded
-   * RNG), so we adopt those directly instead of replaying action history.
-   * Replay was unsound for the search root: selection-step /
-   * pending-completed actions mutate the tree via `Piece.putInto` and are not
-   * recorded in action history, so a root carrying such a mutation lost it on
-   * every clone and the bot searched from a wrong position. Adopting the
-   * serialized tree keeps those mutations.
-   */
-  private restoreGame(snapshot: GameStateSnapshot): Game {
-    // The game's own constructor options, custom ones (playerConfigs) and its
-    // element id key included, with the search game's own seed (#776). Every
-    // snapshot this bot restores is one it captured itself, and
-    // `createSeatSnapshot` and `createSnapshot` always record them. They are required: element ids are
-    // minted under the game's own key (#447), which only these options carry,
-    // and `snapshot.seed` is the BOT's search seed, not the search game's.
-    const gameOptions = snapshot.gameOptions;
-    if (gameOptions === undefined) {
-      throw new Error(
-        'MCTS bot cannot restore a snapshot without gameOptions: the search game must be built ' +
-          "with the game's own options and seed. Capture it with createSeatSnapshot, which records them.",
-      );
-    }
-
-    const game = constructGame(this.GameClass, gameOptions as any);
-
-    // Adopt the authoritative element tree (clears + rebuilds children, re-points
-    // the game's own serialized refs, resolves element references).
-    //
-    // The message log rides beside the tree, not in it. The search game gets it
-    // so a game whose rules read `game.messages` evaluates the same way inside
-    // the search as it does outside — a silently empty log there would make the
-    // bot reason over a different world than the one it is playing in. On a
-    // seat clone `createSeatSnapshot` has already filtered it to that seat's
-    // audience, so the sandbox cannot see private lines the seat may not.
-    game.loadSerializedState(snapshotTree(snapshot), { messageLog: snapshot.messageLog ?? [] });
-
-    // Restore the element id sequence so newly created elements don't drift.
-    if (snapshot.sequence !== undefined) {
-      game._ctx.sequence = snapshot.sequence;
-    }
-
-    // Restore the snapshot's RNG position: the search game's own, never the live game's (#776).
-    game.setRandomState(snapshot.randomState);
-
-    // Restore the authoritative flow position. Every element the flow holds
-    // (flow variables and frame data, `forEach` items included) was written as
-    // a marker by getPosition; restoreFlowState relinks it to the freshly
-    // loaded tree. `hiddenIdRemap` (CR-02, 159) is only ever present on a
-    // redacted (`forSeat`) snapshot: it lets a marker that pointed at a
-    // now-anonymized hidden-zone child relink to its redacted placeholder, and
-    // passing it is what allows a missing element to relink to its concealing
-    // zone at all (#947); a restore with no map refuses instead. A
-    // DESCENDANT clone's snapshot is written from the already-redacted search
-    // game, whose markers hold its own ids, so it needs no remap.
-    if (snapshot.flowState) {
-      game.restoreFlowState(snapshot.flowState, snapshot.hiddenIdRemap);
-    }
-
-    return game;
+  /** Restore this seat's search copy from `snapshot` (see `restoreSeatCopy`), drawing a fresh world into it when `sampleWorld`. */
+  private restoreGame(snapshot: GameStateSnapshot, randomState = snapshot.randomState, sampleWorld = false): G {
+    return restoreSeatCopy(this.GameClass, snapshot, this.playerIndex, randomState, sampleWorld ? (game) => this.sampleWorld(game) : undefined);
   }
 
   /**

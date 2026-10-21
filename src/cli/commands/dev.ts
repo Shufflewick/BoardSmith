@@ -912,6 +912,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
       botLevel,
       designatedBotSeats: botPlayers,
       colorPalette,
+      playerOptions: gameDefinition.playerOptions,
       baseGameOptions,
       // D13/DEVHOST-01: lets a host `configure` wire message (Plan 03's
       // selector) validate and apply a selection after startup.
@@ -1004,8 +1005,9 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
       sockets: [hostSocket],
       release: () => hostSocket.close(),
     }), (opened) => [
-      { name: "the game's socket", close: () => hostSocket.close() },
+      // The pages are forgotten before their sockets are ended, so their closing is no departure (#1304).
       { name: 'the browser connections', close: () => clients.clear() },
+      { name: "the game's socket", close: () => hostSocket.close() },
       ...opened.resources,
     ]);
     const { vite } = served;

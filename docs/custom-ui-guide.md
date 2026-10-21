@@ -200,7 +200,7 @@ await actionController.start('dropEquipment', {
 
 **Important: `start()`'s result only covers its synchronous pre-checks.** `start()` returns a `Promise<ControllerActionResult>` (the same shape `execute()` returns), but `{ success: true }` only means "the seat is not viewing past game state, the action is not disabled, it is in `availableActions`, its metadata resolved, and no arg is a list for a pick that takes one element: wizard mode has begun." It is **not** the eventual server outcome of the action the user goes on to complete. If you ignore the return value entirely, you still get feedback: GameShell centrally watches for failures and surfaces a toast (see below), so callers that fire-and-forget `start()` are not silently swallowing pre-check failures. But `{ success: true }` from `start()` never tells you the wizard-mode action ultimately succeeded — only `execute()`'s (or the wizard's terminal `fill()`/auto-execute) result reflects that. If you need to react to the final server-confirmed outcome, use `execute()` directly instead of `start()`.
 
-**Every action failure surfaces automatically — you don't have to wire your own toast.** GameShell watches `actionController.errorTick` centrally (a monotonic counter bumped on every failure — so even retrying the exact same failed selection re-toasts) and shows a `--bsg-danger` toast with the `lastError` message (plus an assertive live-region announcement) for any failed action, whether it was initiated from the shipped ActionPanel or from a custom UI through `useBoardInteraction` — both paths share the same `useActionController` instance, so this is automatic parity, not something you opt into. Do not add a second toast call in your custom UI for the same failure; it would duplicate the one GameShell already shows.
+**Every action failure surfaces automatically — you don't have to wire your own toast.** GameShell watches `actionController.errorTick` centrally (a monotonic counter bumped on every failure — so even retrying the exact same failed selection re-toasts) and shows a `--bsg-danger` toast with the `lastError` message (plus an assertive live-region announcement) for any failed action, whether it was initiated from the shipped ActionPanel or from a custom UI through `useBoardInteraction` — both paths share the same `useActionController` instance, so this is automatic parity, not something you opt into. Do not add a second toast call in your custom UI for the same failure; it would duplicate the one GameShell already shows. One refusal is not a failure: a second `execute()` while the first is still being sent (a double-click) returns `{ success: false, error: 'Action already executing' }` without a toast and leaves `lastError` alone, since the player did nothing wrong.
 
 **When to use which:**
 
@@ -335,6 +335,22 @@ const selectableCards = computed(() => {
     rank: ve.element?.attributes?.rank,
   }));
 });
+</script>
+```
+
+With no action open, `startCandidates` says what a click can start: each available action whose first pick is an element pick, with that pick's candidates. The board already uses it (a click or drag on a candidate starts the action), so read it only to draw your own start affordance:
+
+<!-- typecheck: board -->
+```vue
+<script setup lang="ts">
+import { computed } from 'vue';
+import type { TableBoardProps } from 'boardsmith/ui';
+
+const props = defineProps<TableBoardProps>();
+
+// Element ids that start movePiece, while no action is open.
+const movablePieceIds = computed(() =>
+  props.actionController.startCandidates.value.get('movePiece')?.elements.map(ve => ve.id) ?? []);
 </script>
 ```
 
@@ -1096,7 +1112,7 @@ is scrolled; a `position: absolute; inset: 0` wrapper fills that layer), or set
 Then no card is drawn, but the shell still announces the result. Either form
 works in a template: `provides-own-game-over-ui` or `providesOwnGameOverUi`.
 (Every public component prop is named so its kebab-case form camelizes back to
-it, which `src/ui/public-prop-names.test.ts` holds, #433.)
+it, which `src/ui/public-prop-names.test.ts` in the BoardSmith repository holds, #433.)
 
 **When it is shown.** By default, the moment the flow completes. A board that
 holds its result back on purpose (until the player has watched a replay of
@@ -1178,6 +1194,18 @@ For these boards, use `useBoardSize()`: it measures `.boardregion` (the
 ancestor GameShell sizes to the visible viewport) and pins your board root to
 the region's available width, so wrapping works and growth is
 vertical-scroll only. It re-measures on region resize and window resize.
+The width is the one the region has with its vertical scrollbar showing,
+whether or not it shows, and the zoom fit reads the same width, so in a
+browser without `scrollbar-gutter` (Safari before 18.2) a scrollbar coming
+or going moves neither the pin nor the zoom.
+The pin is capped at `100cqw` (`.boardregion` is an inline-size container),
+so while the region narrows, as it does while the sidebar opens, the board
+never runs past it in the frames before the pin is re-measured. Where the
+region reserves no scrollbar gutter, browsers resolve `100cqw` as if its
+vertical scrollbar were not there, so the cap takes that scrollbar's width off
+(`calc(100cqw - 15px)`, say). The same
+container is what a `cqw` unit or an unnamed `@container` query in your board
+resolves against when nothing closer is a container.
 
 Calling it also tells GameShell which model your board is in, so the startup
 zoom-fit stops fitting your board's **height**: a pinned board that grows
@@ -1199,6 +1227,31 @@ const { boardStyle } = useBoardSize(boardRef);
 
 <template>
   <div ref="boardRef" class="my-board" :style="boardStyle">...</div>
+</template>
+```
+
+`useBoardSize()` also returns `zoom`, a read-only ref holding the zoom
+GameShell applies to the board (the controls-menu slider or the fit; 1 outside
+GameShell, and 1 in a browser without CSS `zoom`, such as Firefox before 126,
+where the shell applies no zoom and offers no slider). The region is not zoomed and your board is, so a board that fits
+more of itself to the region, such as its height, divides region pixels by
+`zoom` to get its own. Watch `zoom` to re-fit: a zoom change does not resize
+anything a `ResizeObserver` can see.
+
+<!-- typecheck: board -->
+```vue
+<script setup lang="ts">
+import { computed, ref } from 'vue';
+import { useBoardSize } from 'boardsmith/ui';
+
+const boardRef = ref<HTMLElement | null>(null);
+const { boardStyle, zoom } = useBoardSize(boardRef);
+const regionHeight = ref(600); // measured from .boardregion, which is not zoomed
+const boardHeight = computed(() => regionHeight.value / zoom.value);
+</script>
+
+<template>
+  <div ref="boardRef" :style="[boardStyle, { height: `${boardHeight}px` }]">...</div>
 </template>
 ```
 
@@ -1239,13 +1292,13 @@ board:
   rather than growing over the board. So a board that fits itself above the
   strip is never covered, at rest or mid-pick. The one exception is a typed
   editor (a text or number pick): while it is open the panel may grow over the
-  bottom of the board to what the editor needs, bounded at 60% of the
-  screen's height. A one-line or number field grows it only where it does not
-  fit the strip, which is on a phone, by about one row (its label and hint
-  stack above the field and submit); everywhere else it stays inside the
-  strip. A multi-line text box (`multiline: true`) grows it at every size: it
-  needs six lines of text plus the action, the field's label, the count and
-  the submit. On a short screen the
+  bottom of the board. A one-line or number field may grow it by one row and
+  no more, at every size: that is the row it needs on a phone, where its label
+  and hint stack above the field and submit, and anything taller, such as a
+  refusal message, scrolls inside the panel. A multi-line text box
+  (`multiline: true`) may grow it to what the box needs, bounded at 60% of the
+  screen's height: six lines of text plus the action, the field's label, the
+  count and the submit. On a short screen the
   box gives way (down to a few lines) rather than the submit button leaving
   the panel. Your board does not refit, and the part of it under the open
   panel cannot be scrolled into view until the editor closes, when the panel
@@ -1373,7 +1426,7 @@ async function onCardClick(card: GameViewElement) {
   if (!isCardPlayable(card.id)) return;
 
   // If in wizard mode, fill the selection
-  if (boardInteraction?.isSelectableElement(card)) {
+  if (boardInteraction.isSelectableElement(card)) {
     boardInteraction.triggerElementSelect(card);
     return;
   }
@@ -1406,8 +1459,8 @@ async function drawCard() {
         class="card"
         :class="{
           playable: isCardPlayable(card.id),
-          highlighted: boardInteraction?.isHighlighted(card),
-          selected: boardInteraction?.isSelected(card),
+          highlighted: boardInteraction.isHighlighted(card),
+          selected: boardInteraction.isSelected(card),
         }"
         @click="onCardClick(card)"
       >

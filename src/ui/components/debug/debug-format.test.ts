@@ -123,6 +123,7 @@ describe('formatState', () => {
 describe('formatHistoryEntry', () => {
   it('names an action the way the action panel does', () => {
     expect(formatHistoryEntry({ name: 'playCard', player: 1, args: {} })).toBe('Play Card');
+    expect(formatHistoryEntry({ name: 'drawUSB', player: 1, args: {} })).toBe('Draw USB');
   });
 
   it('says that the host closed a seat at a deadline, which took no action', () => {

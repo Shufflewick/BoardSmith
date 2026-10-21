@@ -5,7 +5,7 @@
  * for HEAD on a clean tree. Their tests are about sign-offs, not about the checks, so they record a
  * passing result with `recordPassingVerify`: it commits the project as it stands and writes a result
  * for that commit through the same `buildVerifyResult` and `writeVerifyResult` the command uses.
- * `verify.test.ts` drives the real command, so the shape written here is the shape it writes.
+ * The `verify*.test.ts` files drive the real command, so the shape written here is the shape it writes.
  */
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, promises as fs, readFileSync, realpathSync } from 'node:fs';

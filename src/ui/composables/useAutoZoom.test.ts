@@ -91,19 +91,20 @@ function fakeBoard(width: number, height: number, appliedZoom = 1) {
   return { el, setSize: (w: number, h: number) => { size.width = w; size.height = h; } };
 }
 
-/** Mutable fake region: clientWidth/clientHeight are getter-backed over a
- *  mutable size object so a test can drive a post-startup region resize
- *  (mirrors fakeBoard's shape). */
-function fakeRegion(clientWidth: number, clientHeight: number, reservedPanel = 0) {
-  const size = { width: clientWidth, height: clientHeight };
+/** Mutable fake region: its computed width (what the fit reads) and its
+ *  clientHeight can change, so a test can drive a post-startup region resize. */
+function fakeRegion(width: number, clientHeight: number, reservedPanel = 0) {
+  const size = { height: clientHeight };
   const el = document.createElement('div');
   // The Action Panel's CONSTANT reserved footprint is the region's padding-bottom
   // (--bsg-panel-reserved in GameShell.vue). The fit subtracts region padding and
   // knows nothing about a panel — see the module docblock (#13).
   el.style.paddingBottom = `${reservedPanel}px`;
-  Object.defineProperty(el, 'clientWidth', { get: () => size.width, configurable: true });
+  el.style.width = `${width}px`;
+  // jsdom recomputes a style change only for an element in the document.
+  document.body.appendChild(el);
   Object.defineProperty(el, 'clientHeight', { get: () => size.height, configurable: true });
-  return { el, setSize: (w: number, h: number) => { size.width = w; size.height = h; } };
+  return { el, setSize: (w: number, h: number) => { el.style.width = `${w}px`; size.height = h; } };
 }
 
 /** Controllable ResizeObserver stub: jsdom has none, and the composable's
@@ -179,6 +180,7 @@ describe('useAutoZoom', () => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    document.body.innerHTML = '';
   });
 
   it('AZ-2: fits at startup from element measurements', async () => {

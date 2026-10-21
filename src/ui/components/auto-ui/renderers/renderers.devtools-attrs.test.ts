@@ -52,6 +52,7 @@ function makeSelectableMock(): BoardInteraction {
     // query methods
     isSelectableElement: (): boolean => true,
     isDisabledElement: (): string | false => false,
+    canStartDrag: (): boolean => true,
     candidateLabel: (): string | null => null,
     isSelected: (): boolean => false,
     isHighlighted: (): boolean => false,
@@ -63,7 +64,7 @@ function makeSelectableMock(): BoardInteraction {
     // mutation stubs (no-op)
     triggerElementSelect: () => {},
     selectElement: () => {},
-    startDrag: () => {},
+    startDrag: () => true,
     endDrag: () => {},
     triggerDrop: () => {},
     setValidElements: () => {},

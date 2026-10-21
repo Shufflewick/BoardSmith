@@ -301,3 +301,28 @@ describe('timed steps that depend on game options (#812)', () => {
     expect(capabilities('table', optionTimedDefinition([{ ...designerBlitz, default: true }])).timedSteps).toBe(true);
   });
 });
+
+describe('a table seat range must hold a seat count (#1303)', () => {
+  const contradictions = (backend: GameBackend, definition: Parameters<typeof capabilityContradictions>[0]['definition']) =>
+    capabilityContradictions({ backend, definition, declared: {} });
+
+  it('refuses a minPlayers above maxPlayers, and one below a single seat, naming both numbers', () => {
+    expect(contradictions('table', { ...tableDefinition, minPlayers: 4, maxPlayers: 2 })).toEqual([
+      'minPlayers (4) is more than maxPlayers (2), so there is no seat count to build this game at. ' +
+        'Set minPlayers to at most maxPlayers in your gameDefinition (src/rules/index.ts).',
+    ]);
+    expect(contradictions('table', { ...tableDefinition, minPlayers: 0, maxPlayers: 2 })).toEqual([
+      'minPlayers is 0, but a table needs at least one seat. Set minPlayers to 1 or more in your gameDefinition (src/rules/index.ts).',
+    ]);
+  });
+
+  it('refuses a seat range too wide to build each seat count, rather than building it', () => {
+    const [message] = contradictions('table', { ...tableDefinition, minPlayers: 2, maxPlayers: 1000 });
+    expect(message).toMatch(/^This game would have to be built 999 times to find every step that declares timeLimitMs/);
+  });
+
+  it('does not tell a game too wide to build at all to time a step with its default options, which builds nothing either', () => {
+    const [message] = contradictions('table', { ...timedDefinition, minPlayers: 2, maxPlayers: 1000 });
+    expect(message).not.toMatch(/time a step with its default options/);
+  });
+});

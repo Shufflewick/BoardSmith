@@ -10,15 +10,20 @@ import { toWireJson } from './wire-json.js';
 
 /**
  * The messages that run the table's rules, and so are refused rather than run
- * when a saved edit they were held for does not load (#379). Everything else a
- * page sends (hello, the lobby, seats, the debug relay) still runs, on the
- * rules the table kept.
+ * when a saved edit they were held for does not load (#379). A seat change is
+ * one mid-game, since the bot then plays the seat left (#1304), and Table
+ * setup's player options deal a game (#1323). Everything else
+ * a page sends (hello, the lobby, the debug relay) still runs, on the rules the
+ * table kept.
  */
 const RUNS_THE_RULES: ReadonlySet<ClientInbound['type']> = new Set([
   'server_request',
   'restart',
   'configure',
+  'setPlayerOptions',
   'fireDeadline',
+  'join',
+  'leave',
 ]);
 
 interface DevHostConnectionOptions {

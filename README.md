@@ -30,10 +30,10 @@ new game links to the BoardSmith that ran `init`, so `init` refuses to run from
 a one-off download in npm's `_npx` cache, which npm clears.
 
 ```bash
-npx boardsmith init my-game
+boardsmith init my-game
 cd my-game
 npm install
-npx boardsmith dev
+boardsmith dev
 ```
 
 `boardsmith init my-game --sim` starts the game as a simulator with no UI, to
@@ -45,7 +45,7 @@ multiplayer on the same port. Every browser tab is a real player, so open a
 second tab to take the second seat.
 
 `boardsmith verify`, the check before calling a change done, opens the game in
-Chromium. Run `npx boardsmith install-browser` once per machine to download it;
+Chromium. Run `boardsmith install-browser` once per machine to download it;
 BoardSmith's own test suite needs it too.
 
 ## Documentation

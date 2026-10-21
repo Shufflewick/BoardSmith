@@ -347,6 +347,23 @@ describe('useActionController', () => {
       expect(controller.isReady.value).toBe(false);
     });
 
+    it('leaves an arg that is not one of the action\'s picks, as skip() does (#1359)', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      await controller.start('playCard', { args: { boundByServer: 'x' } });
+      controller.clear('boundByServer');
+
+      expect(controller.currentArgs.value.boundByServer).toBe('x');
+      warnSpy.mockRestore();
+    });
+
     it('should cancel an action', async () => {
       const controller = useActionController({
         sendAction,
@@ -1629,8 +1646,23 @@ describe('useActionController', () => {
       await controller.fill('card', 1);
     });
 
-    it('should not fetch choices when no action is active', async () => {
-      const fetchPickChoices = vi.fn();
+    it("labels a pick a start fills from the board by the candidate's own words (#1313)", async () => {
+      const fetchPickChoices = vi.fn(async (action: string, pick: string) =>
+        action === 'movePiece' && pick === 'piece'
+          ? { success: true, validElements: [{ id: 100, display: 'White knight' }] }
+          : { success: true, validElements: [] });
+      const controller = useActionController({
+        sendAction, availableActions, actionMetadata, isMyTurn, autoExecute: false, playerSeat: ref(0), fetchPickChoices,
+      });
+      for (let i = 0; i < 5; i++) await nextTick();
+
+      await controller.start('movePiece', { args: { piece: 100 } });
+
+      expect(controller.getCollectedPick('piece')?.display).toBe('White knight');
+    });
+
+    it('fetches only what each action can start with when no action is active (#1192)', async () => {
+      const fetchPickChoices = vi.fn(async () => ({ success: true, validElements: [] }));
 
       const controller = useActionController({
         sendAction,
@@ -1638,12 +1670,17 @@ describe('useActionController', () => {
         actionMetadata,
         isMyTurn,
         autoExecute: false,
+        playerSeat: ref(0),
         fetchPickChoices,
       });
 
       await controller.fill('card', 1);
+      await nextTick();
 
-      expect(fetchPickChoices).not.toHaveBeenCalled();
+      expect(fetchPickChoices.mock.calls).toEqual([
+        ['movePiece', 'piece', 0, {}],
+        ['attack', 'attacker', 0, {}],
+      ]);
     });
   });
 

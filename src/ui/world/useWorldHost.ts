@@ -1,5 +1,6 @@
 import { ref, shallowRef, type Ref, type ShallowRef } from 'vue';
 import { isOriginAllowed } from '../components/GameShellInit.js';
+import { seatView } from '../../engine/element/seat-placeholders.js';
 import { createOrderBook, type OrderBook, type PendingOrder } from './orderBook.js';
 import {
   WORLD_COMMAND_TIMEOUT_MS,
@@ -52,6 +53,7 @@ export interface WorldHostOptions {
 
 export interface WorldHost {
   phase: Ref<WorldPhase>;
+  /** This seat's own view: the frame's shared body with its placeholder ids put back (#1326). */
   view: ShallowRef<unknown>;
   seat: Ref<number | null>;
   /**
@@ -135,12 +137,11 @@ export interface WorldHost {
   /**
    * RE-ASK ONE PICK with the arguments bound so far (ShufflewickPub #378).
    *
-   * A world's offer arrives whole, with every selection's candidates already
-   * resolved against nothing bound. That is right for a candidate LIST -- a
-   * world action may not declare a dependent selection -- and wrong for a
-   * selection's SHAPE, which may read an earlier selection's value: a crew whose
-   * size is the chosen ship's cargo hold resolved to the unbounded fallback, and
-   * the panel was left holding a limit the game never meant.
+   * A world's offer resolves only the first selection's candidates, against
+   * nothing bound, and carries every later selection's shape (#1345, #1355). A
+   * later selection's list and SHAPE may read an earlier selection's value -- a
+   * crew whose size is the chosen ship's cargo hold -- so it is asked here with
+   * the answers so far.
    */
   resolvePick(
     action: string,
@@ -257,6 +258,24 @@ function answerOf<T extends { readonly ok: boolean }>(
   // until something says what shape it is, and the message type that named this
   // payload key is what says so.
   return answer as T;
+}
+
+/** What a state frame puts on screen: this seat's own view, or a refusal saying why the page cannot read it. */
+function shownBy(
+  data: Extract<WorldHostMessage, { type: 'world_state' }>,
+): { phase: WorldPhase; view: unknown; notice: string | null } {
+  const unreadable = (notice: string) => ({ phase: 'refused' as const, view: null, notice });
+  if (!Array.isArray(data.placeholders)) {
+    return unreadable(
+      "The host sent this seat's view without its placeholder ids, so this page cannot show it. " +
+        'Update the host: every world_state frame carries `placeholders`, `[]` when the view holds none.',
+    );
+  }
+  try {
+    return { phase: data.phase, view: seatView(data.view, data.placeholders), notice: data.notice };
+  } catch (error) {
+    return unreadable(`The host sent a view this page cannot read. ${(error as Error).message}`);
+  }
 }
 
 export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
@@ -427,6 +446,8 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
   }
 
   function takeState(data: Extract<WorldHostMessage, { type: 'world_state' }>): void {
+    // Read before anything changes, so a frame the page cannot read leaves no half-taken state (#1326).
+    const shown = shownBy(data);
     heardFromHost.value = true;
     hostSilent.value = false;
     if (helloTimer !== null) {
@@ -434,8 +455,8 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
       helloTimer = null;
     }
 
-    phase.value = data.phase;
-    view.value = data.view;
+    phase.value = shown.phase;
+    view.value = shown.view;
     // WHO IS LOOKING, WHICH IS THE OTHER HALF OF "WHAT IS ON SCREEN" (#272).
     //
     // A state frame that names a different seat is a SEAT SWITCH -- the dev
@@ -452,7 +473,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     seat.value = data.seat;
     if (switched) forgetTheSeatThatLeft();
     takeRevision(data.revision, switched);
-    notice.value = data.notice;
+    notice.value = shown.notice;
     worldName.value = data.worldName;
     presence.value = data.presence;
     // Absent is not empty: a host with no names to give leaves the shell with
@@ -462,7 +483,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     // THE FIRST MOMENT AN UNCERTAIN ORDER CAN BE ASKED ABOUT (#195): the world
     // is answering this page and it holds a seat, which is what a command needs
     // to be dispatched at all.
-    if (!recovered && data.phase === 'watching' && data.seat !== null) {
+    if (!recovered && phase.value === 'watching' && data.seat !== null) {
       recovered = true;
       void recover(data.seat);
     }

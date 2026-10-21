@@ -113,6 +113,8 @@ export interface GameViewElement<TAttributes extends BaseElementAttributes = Bas
   children?: GameViewElement<TAttributes>[];
   /** Count of children (used when contents are hidden from player) */
   childCount?: number;
+  /** The zone's rule for its contents, as this seat is shown it. */
+  zoneVisibility?: { mode: string };
 }
 
 /**

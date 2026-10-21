@@ -26,10 +26,12 @@ import { rulesErrorSentence } from "../engine/action/rules-error.js";
 import type { ActionDefinition, ElementJSON, GameOptions } from "../engine/index.js";
 import { assertWorldEngineConformance } from "./engine-conformance.test-helper.js";
 import { BoardSmithWorldEngine } from "./engine.js";
+import { seatView } from "../engine/element/seat-placeholders.js";
 import { worldAction, worldClockAction } from "./action.js";
 import type { StoredPartition, WorldPartitionSource } from "./contract.js";
 import { worldBudgets } from "./budgets.js";
 import { WorldRefusal } from "./refusals.js";
+import { readOnlyProjection } from "./readonly.js";
 import {
   Holding,
   VillageFixture,
@@ -2956,7 +2958,7 @@ describe("ShufflewickPub #411/#413 -- one body for every seat that holds the sam
 
     const seat = answered.seats[0]!;
     if (seat.refused) throw new Error("p1 was refused");
-    const room = roomIn(answered.bodies[seat.at])!;
+    const room = roomIn(seatView(answered.bodies[seat.at], seat.placeholders))!;
     expect(room.childCount).toBe(2);
     expect(room.children!.map((child) => child.name)).toEqual([undefined, undefined, "nested-gem"]);
     expect(room.children!.slice(0, 2).every((child) => child.id < 0)).toBe(true);
@@ -3045,5 +3047,27 @@ describe("#1170: a command cannot move a partition root", () => {
       view.state.children?.find((child) => child.name === room)?.children?.map((child) => child.name) ?? [];
     expect(tokensIn("room-one")).toEqual([]);
     expect(tokensIn("room-two")).toEqual(["token-two", "token-one"]);
+  });
+});
+
+describe("#1221: finding an element's partition reaches nothing", () => {
+  const partitionOf = (engine: BoardSmithWorldEngine, element: GameElement): string =>
+    (engine as unknown as { partitionOf(element: GameElement): string }).partitionOf(element);
+
+  it("names a live card's partition outside a read and marks no partition reached", () => {
+    const engine = genesisEngine();
+    const game = (engine as unknown as { game: Game }).game;
+    const token = game.first(Token, "token-one")!;
+    game._ctx._reachedPartitions!.partitions.clear();
+
+    expect(partitionOf(engine, token)).toBe(ROOM_ONE);
+    expect([...game._ctx._reachedPartitions!.partitions]).toEqual([]);
+  });
+
+  it("names a projected card's partition outside a read", () => {
+    const engine = genesisEngine();
+    const game = (engine as unknown as { game: Game }).game;
+
+    expect(partitionOf(engine, readOnlyProjection(game.first(Token, "token-one")!))).toBe(ROOM_ONE);
   });
 });

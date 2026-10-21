@@ -20,7 +20,7 @@ import {
   registerCreatedElementClass,
 } from './game-element.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE } from './hidden-placeholder.js';
-import { concealRefsForSeat, nameableFor, outermostConcealer } from './concealed-refs.js';
+import { concealRefsForSeat, nameableFor } from './concealed-refs.js';
 import { placeholderIdOf } from './seat-placeholders.js';
 import { childrenChanged } from './cell-index.js';
 import { oncePerState, stateChanged } from './state-version.js';
@@ -32,6 +32,7 @@ import { Die } from './die.js';
 import { DicePool } from './dice-pool.js';
 import { Grid, GridCell } from './grid.js';
 import { HexGrid, HexCell } from './hex-grid.js';
+import { hexCoordinateNames } from './hex-coordinates.js';
 import type { ElementAttributes, ElementContext, ElementClass, ElementJSON } from './types.js';
 
 /**
@@ -122,7 +123,7 @@ import { ENGINE_OWNED_GAME_FIELDS, describeEngineFieldShadow } from './engine-ow
 import { DEFAULT_COLOR_PALETTE, DEFAULT_COLOR_LABELS, seatDisplayName } from './seat-defaults.js';
 
 /** Why a partition root may hang only from the game (#795, #1170, #1188). */
-const PARTITION_ROOT_RULE =
+export const PARTITION_ROOT_RULE =
   'a partition root must be a direct child of the game. A world stores and wakes every ' +
   'partition there, so a root anywhere else would be stored twice, inside its parent\'s ' +
   'partition as well as on its own, or come back directly under the game at the next wake.';
@@ -387,20 +388,6 @@ function savedPile(game: Game): { pile?: ElementJSON[] } {
 }
 
 /**
- * Whether `seat`'s view shows a child of `zone` as a placeholder, as
- * `redactTreeForSeat` decides: the view reaches the zone, the zone keeps its
- * contents from the seat while counting them, and a child is not granted to it.
- */
-function showsPlaceholders(zone: GameElement, seat: number): boolean {
-  const state = hasZoneVisibility(zone) ? zone.getZoneVisibility() : undefined;
-  return state !== undefined
-    && redactedVisibilityFor(state, seat) === 'count-only'
-    && ownVisibilityAllows(zone, seat, zone.getEffectiveOwner()?.seat)
-    && outermostConcealer(zone, seat) === undefined
-    && zone._t.children.some((child) => !ownVisibilityAllows(child, seat, child.getEffectiveOwner()?.seat));
-}
-
-/**
  * Run a serialization whose result goes to a seat, so a reference into the
  * pile is written without its position and the pile itself is left out
  * (#655). The saved state keeps both.
@@ -605,12 +592,13 @@ const SAFE_LAYOUT_KEYS = new Set([
   '$hexSize',
 ]);
 
-/** The attributes a cell's board names as its coordinates; none for anything that is not a grid or hex cell. */
+/** The attributes a cell's board names as its coordinates; none for anything that is not a space on a grid or hex grid. */
 function cellCoordinateNames(element: GameElement): (string | undefined)[] {
   const parent = element._t.parent;
-  // Only cells: a piece placed straight in a grid would give away where it is (#1199).
-  if (element instanceof GridCell && parent instanceof Grid) return [parent.$rowCoord, parent.$colCoord];
-  if (element instanceof HexCell && parent instanceof HexGrid) return [parent.$qCoord ?? 'q', parent.$rCoord ?? 'r'];
+  // Only cells, which are spaces: a piece placed straight in a grid would give away where it is (#1199).
+  if (!(element instanceof Space)) return [];
+  if (parent instanceof Grid) return [parent.$rowCoord, parent.$colCoord];
+  if (parent instanceof HexGrid) return hexCoordinateNames(parent);
   return [];
 }
 
@@ -636,7 +624,7 @@ function cellCoordinates(attrs: Record<string, unknown>, element: GameElement): 
  *   unknown $-keys → dropped (fail-safe)
  *   non-$ keys → dropped (callers seed __hidden/childCount themselves)
  *   SAFE_LAYOUT_KEYS → copied through as-is
- *   a GridCell's or HexCell's two coordinate attributes (named by its Grid or HexGrid) → copied through (#1055, #1198)
+ *   a space's two coordinate attributes on a Grid or HexGrid (named by the board) → copied through (#1055, #1198, #1294)
  */
 function redactHiddenElementAttrs(attrs: Record<string, unknown>, element: GameElement): Record<string, unknown> {
   const safe = cellCoordinates(attrs, element);
@@ -1725,9 +1713,8 @@ export class Game<
    * platform cannot see. Registering a root is what makes those moves
    * attributable.
    *
-   * {@link adoptSubtree} calls this for every graft, so the explicit call is
-   * for world genesis: the run that builds a world in memory before any of it
-   * has been through storage.
+   * This is for a root built in memory (world genesis, or one made on
+   * demand); {@link adoptSubtree} registers the root it grafts itself.
    */
   definePartition(id: number): void {
     this._requireWorldMode('definePartition');
@@ -1971,8 +1958,7 @@ export class Game<
   }
 
   /**
-   * One resident partition AS OF THE LAST TAKE: where it hangs, and the bytes
-   * it had (ShufflewickPub #316).
+   * One resident partition's bytes AS OF THE LAST TAKE (ShufflewickPub #316).
    *
    * The platform needs a pre-command copy of every resident partition to roll
    * a refused command back to, and used to serialize the whole resident set
@@ -1982,18 +1968,13 @@ export class Game<
    * wants them (the end of the previous command), so handing them over costs
    * nothing and cannot disagree with what the next take compares against.
    *
-   * `undefined` when `id` is not a partition root, when nothing has baselined
-   * it, or when it hangs from nothing — a partition with no parent has no
-   * attachment point to restore it to, and the caller must say so rather than
-   * be handed bytes it cannot graft.
+   * A root always hangs from the game, which is where `adoptSubtree` puts it
+   * back. `undefined` when `id` is not a partition root or nothing has
+   * baselined it.
    */
-  partitionBaseline(id: number): { readonly parentId: number; readonly bytes: string } | undefined {
-    const root = this._ctx._partitionRoots?.get(id);
-    const bytes = this._ctx._partitionBaselines?.get(id);
-    if (!root || bytes === undefined) return undefined;
-    const parent = root._t.parent;
-    if (!parent) return undefined;
-    return { parentId: parent._t.id, bytes };
+  partitionBaseline(id: number): string | undefined {
+    if (!this._ctx._partitionRoots?.has(id)) return undefined;
+    return this._ctx._partitionBaselines?.get(id);
   }
 
   /**
@@ -2145,8 +2126,9 @@ export class Game<
   }
 
   /**
-   * Graft one serialized subtree into the resident tree, under `parentId`,
-   * which must be the game's own id: a partition root hangs only from the game.
+   * Graft one serialized subtree into the resident tree, under the game: a
+   * partition root hangs only from the game. Whether the bytes were minted
+   * under this world's element id key is checked where they are read (#482).
    *
    * This is the same restore path a snapshot uses (`GameElement.fromJSON`),
    * pointed at one subtree instead of the whole game, so an adopted
@@ -2176,26 +2158,8 @@ export class Game<
    *
    * @returns the grafted subtree's root, now a partition root.
    */
-  adoptSubtree(parentId: number, json: ElementJSON): GameElement {
+  adoptSubtree(json: ElementJSON): GameElement {
     this._requireWorldMode('adoptSubtree');
-
-    const parent = this.getElementById(parentId);
-    if (!parent) {
-      throw new Error(
-        `Cannot adopt partition "${json.name ?? json.className}" under parent id ${parentId}: ` +
-          `no element with that id is resident. A partition hangs from the game, element ` +
-          `${this._t.id} here, so stored bytes naming another parent were minted under a ` +
-          `different element id key than this world was built with (#482): pass the key stored ` +
-          `with this world.`
-      );
-    }
-    if (parent !== this) {
-      throw new Error(
-        `Cannot adopt partition "${json.name ?? json.className}" under ` +
-          `"${parent.name ?? parent.constructor.name}" (id ${parentId}): ${PARTITION_ROOT_RULE} ` +
-          `Adopt it under the game (id ${this._t.id}).`
-      );
-    }
 
     // Ids arriving from storage were minted by an earlier run of the id
     // counter, which is a bare `_ctx.sequence++` with no registry behind it.
@@ -2270,13 +2234,14 @@ export class Game<
     const sequenceBeforeAdoption = this._ctx.sequence;
     const element = GameElement.fromJSON(json, this._ctx, this._ctx.classRegistry);
     this._ctx.sequence = sequenceBeforeAdoption;
-    element._t.parent = parent;
+    element._t.parent = this;
     element.game = this;
-    parent._t.children.push(element);
-    childrenChanged(parent);
+    this._t.children.push(element);
+    childrenChanged(this);
     forEachInSubtree(element, (adopted) => this._ctx._elementsById.set(adopted._t.id, adopted));
 
     element.resolveElementReferences(this);
+    this._runAdoptedRestoreHooks(element);
 
     this._partitionRootTable().set(element._t.id, element);
     // Baselined from the GRAFTED tree, not from the incoming bytes: the two
@@ -2285,6 +2250,16 @@ export class Game<
     this._baselinePartition(element._t.id);
 
     return element;
+  }
+
+  /** Runs `afterRestore` over a grafted partition, and undoes the graft if a hook throws so the adoption can be tried again (#1349). */
+  private _runAdoptedRestoreHooks(element: GameElement): void {
+    try {
+      element._afterRestoreSubtree();
+    } catch (error) {
+      this.evictSubtree(element._t.id);
+      throw error;
+    }
   }
 
   /**
@@ -4767,7 +4742,8 @@ export class Game<
    * (ShufflewickPub #408, widened by #411, regrouped by #413).
    *
    * One string per seat, in the order asked. Seats whose strings are equal are
-   * given byte-identical projections; `null` for the whole audience means the
+   * given byte-identical projections, but for their placeholder ids (below);
+   * `null` for the whole audience means the
    * tree consults something about a seat that this cannot summarise, so no two
    * seats may be assumed alike.
    *
@@ -4816,16 +4792,16 @@ export class Game<
    *   any animation event addressed to an audience (#23), or numbered
    *     differently for two asking seats (#489).
    *
-   * A SEAT SHOWN A PLACEHOLDER HOLDS A PROJECTION OF ITS OWN (#715): its
-   * placeholder ids are made with its own key, so its signature names the seat.
+   * EXCEPT THE PLACEHOLDER IDS. A seat shown a card it cannot see knows it by
+   * a placeholder id of its own (#715), so two seats with equal strings hold
+   * the same projection once those ids are taken out (`sharePlaceholders`),
+   * and each is sent its own ids beside it (#1207).
    */
   projectionSignaturesFor(seats: readonly number[]): readonly string[] | null {
     if (this.rootDiffersBySeat(seats)) return null;
 
     /** Every state the tree declares, in one fixed order for every seat. */
     const declared: VisibilityState[] = [];
-    /** Every zone that declares a state and holds something, which a seat may be shown as placeholders. */
-    const zones: GameElement[] = [];
     const collect = (element: GameElement): boolean => {
       const ElementClass = element.constructor as typeof GameElement;
       if (ElementClass.visibleAttributes !== undefined) return false;
@@ -4836,7 +4812,6 @@ export class Game<
       if (hasZoneVisibility(element)) {
         const zone = element.getZoneVisibility();
         if (zone !== undefined) declared.push(zone);
-        if (zone !== undefined && element._t.children.length > 0) zones.push(element);
       }
       return element._t.children.every(collect);
     };
@@ -4852,7 +4827,7 @@ export class Game<
       }
       // A comma between the modes, because they are four fixed words and a
       // separator is what makes one seat's list unreadable as another's.
-      signatures.push(zones.some((zone) => showsPlaceholders(zone, seat)) ? `seat ${seat}` : spelled.join(','));
+      signatures.push(spelled.join(','));
     }
     return signatures;
   }
@@ -4904,14 +4879,16 @@ export class Game<
    * rewrite it in place, and a batch shares every attribute bag it had no
    * reason to redact -- so one seat's rewrite would reach the next seat's view.
    * Nothing the engine can read decides whether a hook writes.
+   *
+   * `idRemaps`, when given, is `toJSONForPlayer`'s `idRemap` for each player in turn.
    */
-  toJSONForPlayers(players: readonly (P | number | null)[]): SeatViewJSON[] {
+  toJSONForPlayers(players: readonly (P | number | null)[], idRemaps?: readonly Map<number, number>[]): SeatViewJSON[] {
     const GameClass = this.constructor as typeof Game;
     if (GameClass.playerView !== undefined) {
-      return players.map((player) => this.toJSONForPlayer(player));
+      return players.map((player, i) => this.toJSONForPlayer(player, idRemaps?.[i]));
     }
     const fullJson = serializeForSeat(this._ctx, () => this.toJSON());
-    return players.map((player) => this.redactTreeForSeat(fullJson, player));
+    return players.map((player, i) => this.redactTreeForSeat(fullJson, player, idRemaps?.[i]));
   }
 
   /**
@@ -4948,22 +4925,21 @@ export class Game<
       return children.length > 0 ? { ...rest, children } : rest;
     };
 
-    // A CONCEALED ZONE'S CHILDREN AS ANONYMOUS PLACEHOLDERS, for the count-only
-    // and owner-only zone branches below. Each keeps its class and only the
+    // A CONCEALED ZONE'S CHILDREN AS ANONYMOUS PLACEHOLDERS, for the zone
+    // branch below (count-only, owner-only and `exceptPlayers` zones). Each keeps its class and only the
     // safe layout $-keys of its attributes (identity-bearing image refs are
     // redacted), never its name, and takes this seat's placeholder id for it,
     // which never says what the card is and is reissued with its pile when
     // that is shuffled or a card enters or leaves it (#715, `seat-placeholders.ts`).
-    // __hidden is seeded here (not in redactHiddenElementAttrs) so the
-    // count-only CONTAINER branch keeps its distinct shape (no __hidden, has
-    // childCount). CR-02 (159): original -> placeholder id is recorded in
+    // __hidden is seeded here (not in redactHiddenElementAttrs) so the zone
+    // itself keeps its distinct shape (no __hidden, has childCount). CR-02 (159): original -> placeholder id is recorded in
     // `idRemap`, so an element-typed flow variable pointing at an anonymized
     // child can still be relinked to its placeholder on restore. A child whose
     // visibility reaches this seat goes out whole in its place (#758).
     //
     // A granted element below a hidden child follows all the placeholders
-    // (#961), with no id, name or count for the containers between. Both
-    // callers send the zone's childCount (#1208), which says how many trailing
+    // (#961), with no id, name or count for the containers between. The zone
+    // is sent with its childCount (#1208), which says how many trailing
     // entries are nested, so with one hidden child the seat knows which holds them.
     const placeholderChildren = (json: ElementJSON, element: GameElement, owner: number | undefined): ElementJSON[] => {
       const placeholders: ElementJSON[] = [];
@@ -5181,7 +5157,7 @@ export class Game<
       // If zone has hidden or count-only visibility, handle children specially
       if (zoneVisibility && !seatCanSeeZone) {
         if (zoneVisibility.mode === 'hidden') {
-          // D24/SPACE-03: true concealment. Unlike 'count-only' below, a
+          // D24/SPACE-03: true concealment. Unlike the placeholders below, a
           // 'hidden' zone must not leak even its exact child count to a
           // non-owner -- no `children` key, no `childCount` key at all (not
           // `childCount: 0`, which would still distinguish empty from full).
@@ -5205,23 +5181,13 @@ export class Game<
               : grantedBelowHidden(child, childJson, undefined);
           });
           return withOnly(ownJson, granted);
-        } else if (zoneVisibility.mode === 'count-only') {
-          // Count-only mode: create anonymized placeholders for children.
-          // This allows the UI to render the correct number and type of elements
-          // without revealing their identity (no real IDs or names that could be used to cheat)
-          const hiddenChildren = placeholderChildren(json, element, owner);
-          return {
-            // ownJson (not json): the container's own attributes must stay
-            // whitelist-redacted in this early return (CR-01).
-            ...ownJson,
-            children: hiddenChildren.length > 0 ? hiddenChildren : undefined,
-            childCount: element._t.children.length,
-          };
         }
-        // Every other zone this seat cannot see (a non-owner of an owner zone,
-        // or a seat in `exceptPlayers` of any mode, #750) gets anonymous
-        // placeholders, which keep the ids its picks are offered by (#715).
-        // childCount, as its children may also carry nested grants (#1208).
+        // Every other zone this seat cannot see (count-only, a non-owner of an
+        // owner zone, or a seat in `exceptPlayers` of any mode, #750) gets
+        // anonymous placeholders, which render the right number and kind of
+        // children without their identity and keep the ids its picks are
+        // offered by (#715). childCount, as its children may also carry nested
+        // grants (#1208).
         const hiddenChildren = placeholderChildren(json, element, owner);
         return {
           // ownJson (not json): the container's own attributes must stay
@@ -5358,6 +5324,10 @@ export class Game<
    * state-authoritative restore (runner, bot, scratch copies), so that direct
    * tree mutations (e.g. `Piece.putInto` inside a completed pending action,
    * which is not recorded in actionHistory) survive a snapshot round-trip.
+   *
+   * It does not run the elements' `afterRestore` hooks: the caller runs
+   * `_afterRestoreSubtree()` once it has also put back the sequence, random
+   * state and flow, so every hook sees the whole restored game (#1352).
    */
   loadSerializedState(
     json: ReturnType<Game['toJSON']>,
@@ -5620,6 +5590,12 @@ export class Game<
     this.pile.resolveElementReferences(this);
     // `_`-prefixed, so not walked above; the buffer holds elements live, as `toJSON` expects (#752).
     for (const event of this._animationEvents) event.data = decodeValue(event.data, this) as Record<string, unknown>;
+  }
+
+  /** Runs `afterRestore` over the tree and the pile; the caller of `loadSerializedState` calls it last, once everything it restores is back (#1352). */
+  override _afterRestoreSubtree(): void {
+    super._afterRestoreSubtree();
+    this.pile._afterRestoreSubtree();
   }
 }
 

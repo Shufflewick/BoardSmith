@@ -16,11 +16,13 @@ export type {
   DifficultyLevel,
 } from './types.js';
 export { DIFFICULTY_PRESETS, DEFAULT_CONFIG } from './types.js';
-// `applyDeterminization` is exported so a GAME can test its own sampler against
-// the same consistency check the search runs, without standing up an MCTSBot: it
-// is the only way for an author to see "you rewrote something the seat can see"
-// as a test failure instead of as a mid-session throw.
-export { DeterminizationError, applyDeterminization } from './determinization.js';
+// `searchCopyForSeat` is exported so a GAME can test its own sampler and
+// `afterRestore` hooks on the copy the search builds, without standing up an
+// MCTSBot: it is how an author sees "you rewrote something the seat can see" as a
+// test failure instead of as a mid-session throw (#1362).
+export { DeterminizationError } from './determinization.js';
+export { searchCopyForSeat } from './search-copy.js';
+export type { WorldSample } from './search-copy.js';
 
 /**
  * Create an MCTS bot for a game

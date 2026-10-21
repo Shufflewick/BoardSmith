@@ -163,4 +163,20 @@ describe("#270 — a dependent choice does not take the verb out of the offer", 
 
     expect(offers.map((offer) => offer.name).sort()).toEqual(["look", "skippable"]);
   });
+
+  it("offers an action whose optional first question comes before an empty required one, as a table does (#1351)", async () => {
+    // The required pick's candidates may narrow on the optional answer (#270),
+    // and a table's availability stops at an optional step for that reason.
+    const plotless = worldAction<KitGame>("plotless")
+      .needs(() => [KIT])
+      .chooseFrom("note", { choices: () => ["quick"], optional: true })
+      .chooseFrom("plot", { choices: () => [] as string[] })
+      .execute(() => {});
+    const engine = await warmEngine([look, plotless]);
+
+    const offers = await engine.offersFor("player-a", STAMP);
+
+    expect(offers.map((offer) => offer.name).sort()).toEqual(["look", "plotless"]);
+    expect(offers.find((offer) => offer.name === "plotless")?.disabled).toBeUndefined();
+  });
 });

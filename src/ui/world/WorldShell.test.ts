@@ -79,6 +79,7 @@ function stateFrame(over: Record<string, unknown> = {}) {
     // lets AutoUI be a world's default board. Who is looking is NOT in it
     // (ShufflewickPub #408); `seat` beside it is where that lives.
     view: { phase: 'watching', state: { said: 'the fire is low' } },
+    placeholders: [],
     seat: 4,
     // #244: the offers ride their own frame now, and `tell` below splits this
     // literal into the two the host actually sends. Composed together here
@@ -566,6 +567,26 @@ describe('WorldShell — the shared chrome (#170)', () => {
     }, 'It is too dark to see anything.');
     expect(said.messages).toContain('It is too dark to see anything.');
     expect(said.types).toContain('error');
+  });
+
+  it('speaks a refusal execute() makes before sending, for a button that ignores the result (#1342)', async () => {
+    const { toasts } = useToast();
+    const before = toasts.value.length;
+    const { wrapper, posted, done } = await watching();
+    tell(wrapper, stateFrame({
+      revision: 2,
+      actions: [{ name: 'look', selections: [] }, { name: 'move', selections: [], disabled: 'the door is barred' }],
+    }));
+    await flushPromises();
+
+    await (wrapper.vm as any).actionController.execute('move', { to: 'cellar' });
+    await flushPromises();
+
+    const said = toasts.value.slice(before);
+    expect(posted.some((m) => m.type === 'world_command')).toBe(false);
+    expect(said.map((t) => t.message)).toEqual(['the door is barred']);
+    expect(said.map((t) => t.type)).toEqual(['error']);
+    done();
   });
 
   it('names the fix rather than rendering blank when the registry resolves to nothing', async () => {

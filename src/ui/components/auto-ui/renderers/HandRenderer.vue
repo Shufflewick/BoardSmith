@@ -14,11 +14,13 @@ import { useElementBoardState } from '../../../composables/useElementBoardState.
 import { useSelectable } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
 import CardBack from './CardBack.vue';
+import GrantedCards from './GrantedCards.vue';
 import { usePresentationEntry } from '../../../composables/usePresentationEntry.js';
 import { isHiddenPlaceholder } from '../../../../engine/element/hidden-placeholder.js';
 import { seatDisplayName } from '../../../../engine/element/seat-defaults.js';
 import { injectPlayerSeat } from '../../../composables/useGameContext.js';
 import { parseImageInfo, type ImageInfo } from '../../../utils/image.js';
+import { directChildren, getElementCount, isSizeHidden } from '../../../composables/useGameViewHelpers.js';
 import type { GameElement } from '../auto-ui-helpers.js';
 
 const props = defineProps<{
@@ -70,23 +72,25 @@ const hasOverlap = computed(() => props.element.attributes?.$overlap !== undefin
 // ---------------------------------------------------------------------------
 // Visible children
 // ---------------------------------------------------------------------------
+// Its own cards; a concealed hand's view also carries, after them, cards
+// granted to this seat from inside a hidden child, drawn apart (#1292).
 const visibleChildren = computed(() => {
   if (isHiddenPlaceholder(props.element)) return [];
-  return props.element.children ?? [];
+  return directChildren(props.element);
 });
 
-// Count display (for hidden hands that expose only childCount)
-const childCountDisplay = computed(() => {
-  if (props.element.childCount !== undefined) return props.element.childCount;
-  return visibleChildren.value.length;
-});
+// Count display (for hidden hands that expose only childCount); none when the size is not told.
+const sizeHidden = computed(() => isSizeHidden(props.element));
+const childCountLabel = computed(() => (sizeHidden.value ? '' : `(${getElementCount(props.element)})`));
+const handAriaLabel = computed(() =>
+  sizeHidden.value ? ownerLabel.value : `${ownerLabel.value}, ${getElementCount(props.element)} cards`);
 
 // ---------------------------------------------------------------------------
 // Back image for hidden card placeholders (from defaultBackImage)
 // ---------------------------------------------------------------------------
 const childBackImage = computed((): ImageInfo | null => {
-  // Check visible children for back image
-  for (const child of (props.element.children ?? [])) {
+  // Its own cards' back: a granted card may be of another deck.
+  for (const child of directChildren(props.element)) {
     const images = child.attributes?.$images as Record<string, unknown> | undefined;
     const back = parseImageInfo(images?.back);
     if (back) return back;
@@ -181,7 +185,7 @@ function handleDrop(event: DragEvent) {
   <div
     v-bind="selectableAttrs"
     role="group"
-    :aria-label="`${ownerLabel}, ${childCountDisplay} cards`"
+    :aria-label="handAriaLabel"
     :class="[
       'hand-container',
       {
@@ -204,7 +208,7 @@ function handleDrop(event: DragEvent) {
       <span class="hand-label">
         {{ presentationEntry?.label ?? element.name ?? ownerLabel }}
       </span>
-      <span class="hand-count">({{ childCountDisplay }})</span>
+      <span class="hand-count">{{ childCountLabel }}</span>
     </div>
 
     <!-- Cards wrapper -->
@@ -261,6 +265,8 @@ function handleDrop(event: DragEvent) {
         </template>
       </div>
     </div>
+
+    <GrantedCards :element="element" />
   </div>
 </template>
 

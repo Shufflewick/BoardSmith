@@ -4,7 +4,7 @@
  */
 import type { ObjectiveWeight, TrainingProgress } from './types.js';
 import { loadTrainingBundle } from './training-bundle.js';
-import { runParallelBenchmarks } from './parallel-benchmark.js';
+import { runParallelBenchmarks, type BenchmarkJob } from './parallel-benchmark.js';
 import { createSeededRandom, mintSeed } from '../utils/random.js';
 import { generateOffspring, selectBest } from './evolution.js';
 
@@ -77,12 +77,6 @@ export interface WeightConfirmation {
 
 /** Games each set plays in the confirmation, split evenly between the seats. */
 const CONFIRMATION_GAMES = 400;
-/**
- * Separately seeded batches each set's confirmation games are split into, so they
- * spread across the pool (#1031). Fixed, not the worker count, so a seeded run
- * confirms the same way on any machine.
- */
-const CONFIRMATION_BATCHES = 20;
 /** One-sided 95% critical value of the standard normal. */
 const Z_95 = 1.645;
 
@@ -100,7 +94,9 @@ function confirmsImprovement(originalWinRate: number, candidateWinRate: number, 
   return candidateWinRate - originalWinRate > Z_95 * Math.sqrt((2 * pooled * (1 - pooled)) / games);
 }
 
-const DEFAULT_CONFIG: Required<Omit<WeightEvolverConfig, 'seed' | 'onProgress' | 'workerCount' | 'gameTimeout'>> = {
+type Defaulted = Required<Omit<WeightEvolverConfig, 'seed' | 'onProgress' | 'workerCount' | 'gameTimeout'>>;
+
+const DEFAULT_CONFIG: Defaulted = {
   evolutionGenerations: 5,
   evolutionLambda: 20,
   evolutionMu: 5,
@@ -117,7 +113,7 @@ const DEFAULT_CONFIG: Required<Omit<WeightEvolverConfig, 'seed' | 'onProgress' |
 export class WeightEvolver {
   private gameModulePath: string;
   private gameType: string;
-  private config: WeightEvolverConfig;
+  private config: WeightEvolverConfig & Defaulted;
   /** What mutation, selection and the benchmark games are seeded from: the configured seed, or a fresh one per evolver. */
   private evolutionSeed: string;
 
@@ -136,7 +132,9 @@ export class WeightEvolver {
   ) {
     this.gameModulePath = gameModulePath;
     this.gameType = gameType;
-    this.config = { ...DEFAULT_CONFIG, ...config };
+    // A setting passed as undefined keeps its default, as an omitted one does.
+    const given = Object.fromEntries(Object.entries(config).filter(([, value]) => value !== undefined));
+    this.config = { ...DEFAULT_CONFIG, ...given };
     this.evolutionSeed = config.seed ?? mintSeed();
   }
 
@@ -167,9 +165,9 @@ export class WeightEvolver {
     // Benchmark initial objectives to get baseline
     this.config.onProgress?.({
       iteration: 0,
-      totalIterations: this.config.evolutionGenerations ?? 5,
+      totalIterations: this.config.evolutionGenerations,
       gamesCompleted: 0,
-      totalGames: this.config.evolutionBenchmarkGames ?? 50,
+      totalGames: this.config.evolutionBenchmarkGames,
       bestWinRate: 0,
       objectiveCount: objectives.length,
       message: 'Benchmarking initial objectives...',
@@ -178,15 +176,7 @@ export class WeightEvolver {
     const initialFitnesses = await runParallelBenchmarks(
       this.gameModulePath,
       this.gameType,
-      [{
-        weights: objectives,
-        config: {
-          gameCount: this.config.evolutionBenchmarkGames ?? 50,
-          mctsIterations: this.config.benchmarkMCTSIterations ?? 100,
-          maxActions: this.config.maxActionsPerGame,
-          ...this.benchmarkSeeding('initial'),
-        },
-      }],
+      [{ weights: objectives, config: this.benchmarkConfig('initial', this.config.evolutionBenchmarkGames) }],
       { workerCount: this.config.workerCount }
     );
 
@@ -206,33 +196,27 @@ export class WeightEvolver {
     { objectives: candidate, bestFitness }: { objectives: ObjectiveWeight[]; bestFitness: number },
   ): Promise<{ objectives: ObjectiveWeight[]; confirmation?: WeightConfirmation }> {
     if (candidate === original) return { objectives: original };
-    const generations = this.config.evolutionGenerations ?? 5;
-    this.config.onProgress?.({
-      iteration: generations,
-      totalIterations: generations,
-      gamesCompleted: 0,
-      totalGames: 2 * CONFIRMATION_BATCHES,
-      bestWinRate: bestFitness,
-      objectiveCount: candidate.length,
-      message: `Confirming the best weights against the original on ${CONFIRMATION_GAMES} fresh games each...`,
-    });
-    // Both sets play the same batches, so they meet the same games.
-    const batches = Array.from({ length: CONFIRMATION_BATCHES }, (_, batch) => ({
-      gameCount: CONFIRMATION_GAMES / CONFIRMATION_BATCHES,
-      mctsIterations: this.config.benchmarkMCTSIterations ?? 100,
-      maxActions: this.config.maxActionsPerGame,
-      ...this.benchmarkSeeding(`confirm-${batch}`),
-    }));
-    const winRates = await runParallelBenchmarks(
+    const generations = this.config.evolutionGenerations;
+    const progress = (gamesCompleted: number, totalGames: number) =>
+      this.config.onProgress?.({
+        iteration: generations,
+        totalIterations: generations,
+        gamesCompleted,
+        totalGames,
+        bestWinRate: bestFitness,
+        objectiveCount: candidate.length,
+        message: `Confirming the best weights against the original on ${CONFIRMATION_GAMES} fresh games each...`,
+      });
+    progress(0, 2 * CONFIRMATION_GAMES);
+    // Both sets play the same games.
+    const config = this.benchmarkConfig('confirm', CONFIRMATION_GAMES);
+    const [originalWinRate, candidateWinRate] = await runParallelBenchmarks(
       this.gameModulePath,
       this.gameType,
-      [original, candidate].flatMap((weights) => batches.map((config) => ({ weights, config }))),
+      [{ weights: original, config }, { weights: candidate, config }],
       { workerCount: this.config.workerCount },
+      progress,
     );
-    // Equal batches, so a set's win rate over all its games is the mean of its batches'.
-    const overBatches = (rates: number[]) => rates.reduce((sum, rate) => sum + rate, 0) / CONFIRMATION_BATCHES;
-    const originalWinRate = overBatches(winRates.slice(0, CONFIRMATION_BATCHES));
-    const candidateWinRate = overBatches(winRates.slice(CONFIRMATION_BATCHES));
     const accepted = confirmsImprovement(originalWinRate, candidateWinRate, CONFIRMATION_GAMES);
     return {
       objectives: accepted ? candidate : original,
@@ -247,11 +231,8 @@ export class WeightEvolver {
     initialObjectives: ObjectiveWeight[],
     initialFitness: number
   ): Promise<{ objectives: ObjectiveWeight[]; bestFitness: number }> {
-    const generations = this.config.evolutionGenerations ?? 5;
-    const mu = this.config.evolutionMu ?? 5;
-    const lambda = this.config.evolutionLambda ?? 20;
-    let sigma = this.config.evolutionSigma ?? 0.2;
-    const benchmarkGames = this.config.evolutionBenchmarkGames ?? 50;
+    const { evolutionGenerations: generations, evolutionMu: mu, evolutionLambda: lambda } = this.config;
+    let sigma = this.config.evolutionSigma;
 
     // Initialize parent population with slight variations
     const rng = createSeededRandom(`${this.evolutionSeed}-init`);
@@ -282,12 +263,14 @@ export class WeightEvolver {
 
       // Combine parents + offspring
       const population = [...parents, ...offspring];
+      const config = this.benchmarkConfig(`gen-${gen}`, this.config.evolutionBenchmarkGames);
+      const games = population.length * config.gameCount;
 
       this.config.onProgress?.({
         iteration: gen,
         totalIterations: generations,
         gamesCompleted: 0,
-        totalGames: population.length,
+        totalGames: games,
         bestWinRate: bestFitness,
         objectiveCount: bestObjectives.length,
         message: `Evolution ${gen}/${generations}: Evaluating ${population.length} candidates...`,
@@ -297,15 +280,7 @@ export class WeightEvolver {
       const fitnesses = await runParallelBenchmarks(
         this.gameModulePath,
         this.gameType,
-        population.map((weights) => ({
-          weights,
-          config: {
-            gameCount: benchmarkGames,
-            mctsIterations: this.config.benchmarkMCTSIterations ?? 100,
-            maxActions: this.config.maxActionsPerGame,
-            ...this.benchmarkSeeding(`gen-${gen}`),
-          },
-        })),
+        population.map((weights) => ({ weights, config })),
         { workerCount: this.config.workerCount },
         (completed, total) => {
           this.config.onProgress?.({
@@ -315,7 +290,7 @@ export class WeightEvolver {
             totalGames: total,
             bestWinRate: bestFitness,
             objectiveCount: bestObjectives.length,
-            message: `Evolution ${gen}/${generations}: Evaluated ${completed}/${total}`,
+            message: `Evolution ${gen}/${generations}: Played ${completed}/${total} games`,
           });
         }
       );
@@ -337,8 +312,8 @@ export class WeightEvolver {
       this.config.onProgress?.({
         iteration: gen,
         totalIterations: generations,
-        gamesCompleted: population.length,
-        totalGames: population.length,
+        gamesCompleted: games,
+        totalGames: games,
         bestWinRate: bestFitness,
         objectiveCount: bestObjectives.length,
         message: `Evolution ${gen}/${generations}: Best fitness ${(bestFitness * 100).toFixed(1)}%`,
@@ -349,14 +324,17 @@ export class WeightEvolver {
   }
 
   /**
-   * A benchmark's game seed, derived from the evolution's own and named by
-   * `stage`. A seeded evolution's benchmarks are also reproducible; an
-   * unseeded one's keep their clock bound (see {@link WeightEvolverConfig.seed}).
+   * The benchmark of `gameCount` games for `stage`, its game seed derived from the
+   * evolution's own and named by `stage`. A seeded evolution's benchmarks are also
+   * reproducible; an unseeded one's keep their clock bound (see {@link WeightEvolverConfig.seed}).
    */
-  private benchmarkSeeding(stage: string): { seed: string; reproducible: true } | { seed: string; timeout: number } {
+  private benchmarkConfig(stage: string, gameCount: number): BenchmarkJob['config'] {
     const seed = `${this.evolutionSeed}-${stage}`;
-    return this.config.seed === undefined
-      ? { seed, timeout: this.config.gameTimeout ?? 30000 }
-      : { seed, reproducible: true };
+    return {
+      gameCount,
+      mctsIterations: this.config.benchmarkMCTSIterations,
+      maxActions: this.config.maxActionsPerGame,
+      ...(this.config.seed === undefined ? { seed, timeout: this.config.gameTimeout ?? 30000 } : { seed, reproducible: true }),
+    };
   }
 }

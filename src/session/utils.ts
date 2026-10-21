@@ -10,7 +10,7 @@ import { describeCheckpointAbsence } from '../runtime/index.js';
 import { ErrorCode } from '../types/protocol.js';
 import type { GameRunner } from '../runtime/index.js';
 import type { HistoryEntry } from '../engine/action/types.js';
-import type { PlayerGameState, ActionMetadata, PickMetadata, SerializedFlowDebugInfo, SerializedPendingActionState } from './types.js';
+import type { PlayerGameState, ActionMetadata, PickMetadata, SerializedFlowDebugInfo, SerializedPendingActionState, SeatPendingAction } from './types.js';
 import type { ElementJSON } from '../engine/index.js';
 
 // Re-exported for the session barrel
@@ -70,10 +70,10 @@ export interface SeatActionRefusal {
  */
 export function actionForSeat(
   game: Game,
-  playerCount: number,
   seat: number,
   actionName: string,
 ): { action: ActionDefinition } | { refusal: SeatActionRefusal } {
+  const playerCount = game.players.length;
   if (seat < 1 || seat > playerCount) {
     return {
       refusal: {
@@ -100,10 +100,8 @@ export function actionForSeat(
  * the returned object is never the live mutable state a caller could
  * continue to observe mutate via subsequent selection steps (CR-01).
  *
- * Single shared serializer reused by `PickHandler` (selection-step
- * responses) and the `debug:flow-state` op — one
- * wire shape for `PendingActionState` everywhere (Pit of Success: no
- * divergent per-host copies, mirroring `serializeFlowDebugInfo()` above).
+ * The persisted form, which holds each pick's value: what a seat is shown
+ * goes through `pendingActionForSeat` instead (#1204).
  */
 export function serializePendingActionState(s: PendingActionState): SerializedPendingActionState {
   return {
@@ -125,14 +123,20 @@ export function deserializePendingState(s: SerializedPendingActionState | Record
 }
 
 /**
- * A seat's own pending action as its client is shown it: without
- * `branchesBeforePicks`, which names where this action's callbacks moved
- * elements from, face-down cards and the pile included (#1144, #655). It stays
- * in the persisted pending state, which completing the action needs.
+ * A seat's own pending action as its client is shown it: the names of the
+ * picks it holds, never their values, which can be a blind pick's real element
+ * (#1204), and never `branchesBeforePicks`, which names where this action's
+ * callbacks moved elements from (#1144, #655). Both stay in the persisted
+ * pending state, which completing the action needs.
  */
-export function pendingActionForSeat(pending: Record<string, unknown>): SerializedPendingActionState {
-  const { branchesBeforePicks: _persistedOnly, ...shown } = pending as unknown as SerializedPendingActionState;
-  return shown;
+export function pendingActionForSeat(pending: Record<string, unknown>): SeatPendingAction {
+  const { collectedArgs, repeating, branchesBeforePicks: _persistedOnly, ...shown } =
+    serializePendingActionState(pending as unknown as PendingActionState);
+  return {
+    ...shown,
+    heldPicks: Object.keys(collectedArgs),
+    ...(repeating && { repeating: { selectionName: repeating.selectionName, iterationCount: repeating.iterationCount } }),
+  };
 }
 
 /**
