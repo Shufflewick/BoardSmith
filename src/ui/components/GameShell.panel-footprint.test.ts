@@ -240,3 +240,14 @@ describe('#230: minimizing the bar reserves one row and gives the rest back', ()
     },
   );
 });
+
+describe('#1341: the tutorial and hint bubbles stack above the action bar, under the demo controls', () => {
+  it('orders action bar < annotation layer < demo controls', () => {
+    const layer = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'helpers/AnnotationLayer.vue'), 'utf-8')
+      .match(/\.bsg-annotation-layer \{[^}]*z-index:\s*(\d+);/);
+    expect(layer, 'z-index not declared on .bsg-annotation-layer').not.toBeNull();
+    const annotations = Number(layer![1]);
+    expect(annotations).toBeGreaterThan(Number(declaration('.actionbar-frame', 'z-index')));
+    expect(Number(declaration('.bsg-demo-controls', 'z-index'))).toBeGreaterThan(annotations);
+  });
+});

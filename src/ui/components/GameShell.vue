@@ -1786,7 +1786,7 @@ defineExpose({
   bottom: calc(var(--bsg-panel-reserved) + var(--bsg-panel-gap));
   left: 50%;
   transform: translateX(-50%);
-  z-index: 21; /* above the board + narration overlay (z-20), below modals */
+  z-index: 32; /* above the tutorial and hint bubbles (z-31), below modals */
   display: flex;
   align-items: center;
   gap: 6px;
