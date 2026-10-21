@@ -1870,9 +1870,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
   }
 
-  /** Why execute() would send nothing for this action now, or undefined when it may send. */
+  /** Why execute() refuses this action with an error now, or undefined when it does not. */
   function executeRefusal(actionName: string): string | undefined {
-    if (isExecuting.value) return 'Action already executing';
     if (isViewingHistoryValue()) return 'Cannot execute an action while viewing historical state.';
     if (!isMyTurn.value) return 'Not your turn';
     if (isCommitted()) return 'You have already submitted your action for this step';
@@ -1883,6 +1882,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   async function execute(actionName: string, args: Record<string, unknown> = {}): Promise<ControllerActionResult> {
+    // A double-click lands here while the first send is out: not the player's mistake, so no toast (#1348).
+    if (isExecuting.value) return { success: false, error: 'Action already executing' };
     // A custom UI button often ignores the result, so the refusal must reach the shell's toast (#1342).
     const refused = executeRefusal(actionName);
     if (refused) {

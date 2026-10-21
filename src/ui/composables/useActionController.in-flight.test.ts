@@ -49,6 +49,9 @@ describe('execute() guards itself, whoever calls it (#855)', () => {
 
     expect(sendAction).toHaveBeenCalledTimes(1);
     expect(await second).toEqual({ success: false, error: 'Action already executing' });
+    // A double-click is not the player's mistake, so nothing reaches the toast (#1348).
+    expect(controller.lastError.value).toBeNull();
+    expect(controller.errorTick.value).toBe(0);
   });
 
   it('refuses to send while viewing history', async () => {
