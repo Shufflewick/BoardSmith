@@ -500,6 +500,8 @@ describe("readOnlyProjection over built-in objects (#1171)", () => {
 describe("readOnlyProjection over arrays a standard method builds (#1327)", () => {
   it("answers filter, map, slice, concat, flat, flatMap, toSorted, toReversed, toSpliced and with as the caller's own plain array", () => {
     const projection = readOnlyProjection({ a: [3, 1, 2], nested: [[1], [2]] });
+    // This repo's tsconfig lib predates ES2023, though the runtime has these methods.
+    const es2023 = projection.a as unknown as Record<"toSorted" | "toReversed" | "toSpliced" | "with", (...args: number[]) => number[]>;
     const built = [
       projection.a.filter((value) => value > 1),
       projection.a.map((value) => value * 2),
@@ -507,10 +509,10 @@ describe("readOnlyProjection over arrays a standard method builds (#1327)", () =
       projection.a.concat([4]),
       projection.nested.flat(),
       projection.a.flatMap((value) => [value]),
-      projection.a.toSorted(),
-      projection.a.toReversed(),
-      projection.a.toSpliced(0, 1),
-      projection.a.with(0, 9),
+      es2023.toSorted(),
+      es2023.toReversed(),
+      es2023.toSpliced(0, 1),
+      es2023.with(0, 9),
     ];
 
     expect(built.map((array) => structuredClone(array))).toEqual([
