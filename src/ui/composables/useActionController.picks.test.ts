@@ -1913,6 +1913,42 @@ describe('useActionController picks', () => {
     expect(controller.currentPick.value?.prompt).toBe('Fuel for the dory');
   });
 
+  it("drops a later pick's fetched prompt and bounds when an earlier pick is cleared, so the old answer's are not shown (#1354)", async () => {
+    actionMetadata.value = {
+      ...createTestMetadata(),
+      board: {
+        name: 'board',
+        selections: [
+          { name: 'ship', type: 'choice', prompt: 'Ship', choices: [{ value: 'dory', display: 'Dory' }, { value: 'skiff', display: 'Skiff' }] },
+          { name: 'crew', type: 'choice', prompt: 'Crew' },
+        ],
+      },
+    };
+    availableActions.value = [...(availableActions.value ?? []), 'board'];
+    const crew = [{ value: 'ann', display: 'Ann' }, { value: 'bo', display: 'Bo' }];
+    const fetchPickChoices = vi.fn(async (_action: string, pick: string, _player: number, args: Record<string, unknown>): Promise<PickChoicesResult> => {
+      if (pick !== 'crew') return { success: true, choices: [{ value: 'dory', display: 'Dory' }, { value: 'skiff', display: 'Skiff' }] };
+      return args.ship === 'dory'
+        ? { success: true, prompt: 'Crew for dory', choices: crew, multiSelect: { min: 1, max: 1 } }
+        : { success: false, error: 'The skiff has no crew list yet' };
+    });
+    const controller = useActionController({
+      sendAction, availableActions, actionMetadata, isMyTurn,
+      autoExecute: false, autoFill: false, playerSeat: ref(0), fetchPickChoices,
+    });
+
+    await controller.start('board');
+    await controller.fill('ship', 'dory');
+    expect(controller.currentPick.value?.prompt).toBe('Crew for dory');
+
+    controller.clear('ship');
+    await controller.fill('ship', 'skiff');
+
+    expect(controller.currentPick.value?.name).toBe('crew');
+    expect(controller.currentPick.value?.prompt).toBe('Crew');
+    expect(controller.currentPick.value?.multiSelect).toBeUndefined();
+  });
+
   describe('multiSelect validation', () => {
     // Note: Current implementation validates array elements individually,
     // which means multiSelect arrays pass if any element matches a choice.

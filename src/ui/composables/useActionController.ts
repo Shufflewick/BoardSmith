@@ -2626,6 +2626,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // Remove from snapshot
     if (actionSnapshot.value) {
       actionSnapshot.value.collectedPicks.delete(selectionName);
+      // A later pick was fetched against the cleared answer, so it is asked again (#1354).
+      const selections = currentActionMeta.value?.selections ?? [];
+      const index = selections.findIndex(s => s.name === selectionName);
+      for (const later of index === -1 ? [] : selections.slice(index + 1)) {
+        actionSnapshot.value.pickSnapshots.delete(later.name);
+      }
+      snapshotVersion.value++;
     }
 
     // Drop an in-progress draft for this selection, if any
