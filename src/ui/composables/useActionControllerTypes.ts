@@ -444,6 +444,12 @@ export interface UseActionControllerReturn {
    */
   pendingOnServer: Readonly<Ref<boolean>>;
   /**
+   * True while a pick step of the current action (an onSelect or repeating
+   * pick) is on its way to the server and its reply has not landed. The server
+   * may already hold the action then, so `cancel()` tells the server too.
+   */
+  stepOutstanding: Readonly<Ref<boolean>>;
+  /**
    * The follow-up the server holds for this seat (the `heldFollowUp` option),
    * or `undefined`. While it is held the seat keeps its turn, so a UI that lets
    * the player cancel it must offer a way to start it again: `resumeFollowUp`.

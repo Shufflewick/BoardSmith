@@ -308,6 +308,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     resolveAction(actionName, player, { success: true, data: result.data, message: result.message, followUp: result.followUp });
   }
 
+  /** A reply to a step of an action since cancelled or replaced: only a completion is published. */
+  function lateStepReply(actionName: string, player: number, result: PickStepResponse): null {
+    if (result.success && result.actionComplete) resolveStep(actionName, player, result);
+    return null;
+  }
+
   /**
    * Send one pick step of the current action. Resolves null when the action
    * moved on before the reply, which then touches nothing current. A step that
@@ -326,9 +332,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     stepSeq.value = seq;
     try {
       const result = await stepFn(player, selectionName, value, actionName, buildServerArgs());
-      if (!actionMovedOn(seq)) return result;
-      if (result.success && result.actionComplete) resolveStep(actionName, player, result);
-      return null;
+      if (actionMovedOn(seq)) return lateStepReply(actionName, player, result);
+      // Set before the step stops being outstanding, so the action never reads unheld in between (#1388).
+      pendingOnServer.value ||= result.success;
+      return result;
     } catch (err) {
       // A failed step of an abandoned action is nothing the player needs told.
       if (actionMovedOn(seq)) return null;
@@ -392,7 +399,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // Repeating selections state
   const repeatingState = ref<RepeatingState | null>(null);
 
-  // Tracks whether the current action has server-side pending state (via pickStep/onSelect routing)
+  // Tracks whether the current action has server-side pending state (via pickStep/onSelect routing).
+  // Once a step is accepted every later pick must continue it: sending the whole action would repeat its picks (#325).
   const pendingOnServer = ref(false);
 
   // Pit of Success: Client-owned action state snapshot
@@ -2443,11 +2451,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         return { valid: false, error };
       }
 
-      // The server now holds this action pending, with this pick's onEach
-      // already run. Every later pick must continue it: sending the whole
-      // action instead would make the repeat's picks a second time (#325).
-      pendingOnServer.value = true;
-
       // Check if action is complete (termination condition met)
       if (result.actionComplete) {
         // Capture the action name before it is nulled below, then publish the
@@ -2520,9 +2523,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         setError(error);
         return { valid: false, error };
       }
-
-      // Mark that we now have server-side pending state
-      pendingOnServer.value = true;
 
       if (result.actionComplete) {
         // Capture the action name BEFORE clearing currentAction — it is nulled below
@@ -3054,6 +3054,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // availableActions as "stale, cancel it" — doing so cancels live followUp chains
     // (e.g. explore -> take equipment) the instant a state broadcast arrives.
     pendingOnServer: readonly(pendingOnServer),
+    // True while a pick step of the current action is on its way to the server.
+    // The server may already hold the action, so cancelling it then tells the server too.
+    stepOutstanding: computed(stepOutstanding),
     heldFollowUp: heldFollowUpOffer,
     resumeFollowUp,
     // Reactive choices for the current pick (re-runs when async-fetched choices arrive).

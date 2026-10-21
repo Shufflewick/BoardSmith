@@ -424,19 +424,23 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   // staying a deliberate press.
   //
   // Except an action the server already holds (a follow-up, a repeating pick
-  // after its first step, an onSelect pick): cancelling it sends cancel_action
-  // to the LIVE game and throws the chain away for good, so it stays open, as
-  // the availableActions teardown above spares it. The controller still refuses
+  // after its first step, an onSelect pick), or may hold because a step is still
+  // out (#1388): cancelling it sends cancel_action to the LIVE game and throws
+  // the chain away for good, so it stays open, as the availableActions teardown
+  // above spares a held one. A step refused while history is on screen leaves
+  // the action unheld, and it is cancelled then. The controller still refuses
   // every commit to it while history is on screen.
   watch(() => isViewingHistory.value, (browsing) => {
-    if (!browsing) {
-      scheduleAutoStart(/* skipNoSelections */ true);
-      return;
-    }
-    if (!currentAction.value || controller.pendingOnServer?.value) return;
-    controller.cancel();
-    board.clear();
+    if (!browsing) scheduleAutoStart(/* skipNoSelections */ true);
   });
+  watch(
+    () => isViewingHistory.value && currentAction.value !== null && !controller.pendingOnServer.value && !controller.stepOutstanding.value,
+    (unheldInHistory) => {
+      if (!unheldInHistory) return;
+      controller.cancel();
+      board.clear();
+    },
+  );
 
   // Retry auto-start when an execution completes (next action may auto-start).
   watch(isExecuting, (executing, wasExecuting) => {
