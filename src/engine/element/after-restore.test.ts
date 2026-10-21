@@ -38,13 +38,20 @@ class Page extends Space<PageGame> {
   }
 }
 
+let fragileHookFails = true;
+class FragilePage extends Page {
+  protected override afterRestore(): void {
+    if (fragileHookFails) throw new Error('hook failed');
+  }
+}
+
 class PageGame extends Game<PageGame, Player> {
   front!: Page;
   back!: Page;
 
   constructor(options: GameOptions) {
     super(options);
-    this.registerElements([Page]);
+    this.registerElements([Page, FragilePage]);
     this.front = this.create(Page, 'front');
     this.back = this.create(Page, 'back');
     this.front.data = deepFreeze({ kind: 'a', items: [1, 2] });
@@ -119,14 +126,7 @@ describe('afterRestore (#1349)', () => {
   });
 
   it('leaves nothing adopted when a hook throws, so the adoption can be tried again', () => {
-    let failing = true;
-    class FragilePage extends Page {
-      protected override afterRestore(): void {
-        if (failing) throw new Error('hook failed');
-      }
-    }
     const game = new PageGame({ playerCount: 2, seed: 'world', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
-    game.registerElements([FragilePage]);
     const room = game.create(Space, 'room');
     room.create(FragilePage, 'stored');
     game.definePartition(room.id);
@@ -136,7 +136,7 @@ describe('afterRestore (#1349)', () => {
     expect(() => game.adoptSubtree(stored)).toThrow('hook failed');
     expect(game.getElementById(room.id)).toBeUndefined();
 
-    failing = false;
+    fragileHookFails = false;
     expect(game.adoptSubtree(stored).first(FragilePage)).toBeDefined();
   });
 
