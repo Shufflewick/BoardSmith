@@ -868,3 +868,30 @@ describe('A held pick whose step reply lands while history is on screen sends no
     wrapper.unmount();
   });
 });
+
+describe('Opening history while an action\'s first step is still out keeps the action open (#1388)', () => {
+  it('sends no cancel to the live game and keeps muster open past its crew step', async () => {
+    let reply!: () => void;
+    const outstanding = new Promise<PickStepResponse>((resolve) => { reply = () => resolve({ success: true }); });
+    const { controller, wrapper, isViewingHistory, cancelPendingAction } = mountHarness(() => outstanding);
+    await flush();
+    await controller.start('muster');
+    await flush();
+    // Not awaited: the crew pick's onSelect step is the one still out when history opens.
+    void controller.fill('crew', 'ann');
+    await flush();
+    isViewingHistory.value = true;
+    await flush();
+    expect(cancelPendingAction).not.toHaveBeenCalled();
+
+    reply();
+    await flush();
+    isViewingHistory.value = false;
+    await flush();
+
+    expect(cancelPendingAction).not.toHaveBeenCalled();
+    expect(controller.currentAction.value).toBe('muster');
+    expect(controller.currentPick.value?.name).toBe('plot');
+    wrapper.unmount();
+  });
+});

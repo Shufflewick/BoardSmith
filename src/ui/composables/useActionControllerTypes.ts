@@ -438,7 +438,8 @@ export interface UseActionControllerReturn {
 
   /**
    * True while the current action is server-pending — a followUp started via
-   * startFollowUp, or an onSelect-routed selection. These actions are never in
+   * startFollowUp, or one with a pick step (onSelect or repeating) sent to the
+   * server, whether or not its reply has landed. These actions are never in
    * availableActions by design, so UIs must not treat their absence from
    * availableActions as a reason to cancel the current action.
    */

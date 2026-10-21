@@ -394,6 +394,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   // Tracks whether the current action has server-side pending state (via pickStep/onSelect routing)
   const pendingOnServer = ref(false);
+  // The server holds the action once a step reaches it, so a step still out counts too (#1388).
+  const heldOnServer = computed(() => pendingOnServer.value || stepOutstanding());
 
   // Pit of Success: Client-owned action state snapshot
   // When start() is called, we clone the metadata so we don't depend on server broadcasts
@@ -2739,8 +2741,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   function cancel(): void {
-    // The server holds the action once a step reaches it, so a step still out counts too
-    if ((pendingOnServer.value || stepOutstanding()) && options.cancelPendingAction) {
+    if (heldOnServer.value && options.cancelPendingAction) {
       const player = playerSeat?.value ?? 0;
       options.cancelPendingAction(player).catch(err => {
         console.error('[ActionController] Failed to cancel pending action on server:', err);
@@ -3049,11 +3050,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     repeatingState,
     pendingFollowUp,         // Use to prevent starting new actions during followUp transition
     // True while the current action is a server-pending action (a followUp started
-    // via startFollowUp, or an onSelect-routed selection). Such actions are NEVER
+    // via startFollowUp, or one with a pick step sent to the server, answered or not). Such actions are NEVER
     // in availableActions by design, so UIs must NOT treat their absence from
     // availableActions as "stale, cancel it" — doing so cancels live followUp chains
     // (e.g. explore -> take equipment) the instant a state broadcast arrives.
-    pendingOnServer: readonly(pendingOnServer),
+    pendingOnServer: heldOnServer,
     heldFollowUp: heldFollowUpOffer,
     resumeFollowUp,
     // Reactive choices for the current pick (re-runs when async-fetched choices arrive).

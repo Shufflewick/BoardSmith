@@ -423,8 +423,8 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   // position the way the runner watcher above does, a no-selection action
   // staying a deliberate press.
   //
-  // Except an action the server already holds (a follow-up, a repeating pick
-  // after its first step, an onSelect pick): cancelling it sends cancel_action
+  // Except an action the server already holds (a follow-up, or a repeating or
+  // onSelect pick whose step was sent, even if its reply is still out): cancelling it sends cancel_action
   // to the LIVE game and throws the chain away for good, so it stays open, as
   // the availableActions teardown above spares it. The controller still refuses
   // every commit to it while history is on screen.
