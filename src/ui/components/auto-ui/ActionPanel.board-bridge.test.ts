@@ -324,7 +324,10 @@ describe("ActionPanel's clear of a pick while a later pick's step is out (#1364)
     const crewFill = controller.fill('crew', 'ann');
     await flush();
 
-    await wrapper.find('.clear-selection-btn').trigger('click');
+    // The panel offers no clear the controller would refuse (#1373 review F2).
+    expect(wrapper.find('.selected-value').exists()).toBe(true);
+    expect(wrapper.find('.clear-selection-btn').exists()).toBe(false);
+    expect(controller.clear('ship')).toBe(false);
     await flush();
 
     expect(controller.currentAction.value).toBe('board');
