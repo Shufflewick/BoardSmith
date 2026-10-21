@@ -211,7 +211,8 @@ export interface ActionStateSnapshot {
 
 /** A choice fetch still out, with the answers to the picks before it that it was asked against. */
 export interface ChoiceFetch {
-  request: Promise<void>;
+  /** Resolves false when the result was dropped: the action moved on or an earlier answer changed. */
+  request: Promise<boolean>;
   askedAgainst: (CollectedPick | undefined)[];
 }
 

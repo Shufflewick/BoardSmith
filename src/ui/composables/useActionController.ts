@@ -1068,8 +1068,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
 
     const seq = actionStartTick.value;
-    await fetchChoicesForPick(selection.name);
-    if (actionMovedOn(seq)) return;
+    const kept = await fetchChoicesForPick(selection.name);
+    if (!kept || actionMovedOn(seq)) return;
 
     if (tryAutoFillSelection(selection)) {
       // Recursively handle next selection
@@ -1088,9 +1088,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * that knows a fetch is outstanding, so callers never have to mark a pick as
    * fetched themselves. Awaiting this function is always enough to have the
    * choices in hand (#226: the prefill watcher used to skip an in-flight fetch
-   * and then judged the player's prefill against an empty choice list).
+   * and then judged the player's prefill against an empty choice list), unless
+   * it resolves false: the fetch was dropped because the action moved on or an
+   * earlier answer it was asked against was cleared or changed (#1358).
    */
-  function fetchChoicesForPick(selectionName: string): Promise<void> {
+  function fetchChoicesForPick(selectionName: string): Promise<boolean> {
     const fetches = actionSnapshot.value?.choiceFetches;
     const askedAgainst = answersBefore(selectionName);
     const inFlight = fetches?.get(selectionName);
@@ -1130,13 +1132,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (actionSnapshot.value?.pickSnapshots.delete(selectionName)) snapshotVersion.value++;
   }
 
-  async function requestChoicesForPick(selectionName: string, askedAgainst: (CollectedPick | undefined)[]): Promise<void> {
+  async function requestChoicesForPick(selectionName: string, askedAgainst: (CollectedPick | undefined)[]): Promise<boolean> {
     const fetchFn = options.fetchPickChoices;
     if (!fetchFn) {
-      return;
+      return true;
     }
     if (!currentAction.value) {
-      return;
+      return true;
     }
 
     // Get pick metadata - check snapshot first (for followUp actions), then live metadata
@@ -1150,7 +1152,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const selection = meta?.selections.find(s => s.name === selectionName);
     if (!selection) {
       console.warn(`[ActionController] fetchChoicesForPick: pick "${selectionName}" not found in metadata`);
-      return;
+      return true;
     }
 
     // A number or text pick is asked too: a world's offer leaves out a later pick's function prompt (#1350).
@@ -1174,7 +1176,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         buildServerArgs()
       );
 
-      if (superseded()) return;
+      if (superseded()) return false;
 
       const fetchDuration = Date.now() - fetchStartTime;
 
@@ -1205,7 +1207,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         setError(result.error ?? describeUndescribablePick(selection));
       }
     } catch (err) {
-      if (superseded()) return;
+      if (superseded()) return false;
       const fetchDuration = Date.now() - fetchStartTime;
       console.error(
         `[BoardSmith] Error fetching pick choices for '${selectionName}' after ${fetchDuration}ms:`,
@@ -1214,9 +1216,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       forgetPickSnapshot(selectionName);
       setError(describeUndescribablePick(selection));
     } finally {
-      // Only a request of the current action ends its loading state (#663).
-      if (!actionMovedOn(seq)) isLoadingChoices.value = false;
+      // Only a request of the current action ends its loading state (#663), and not while one asked against newer answers is out (#1358).
+      const out = actionSnapshot.value?.choiceFetches.get(selectionName);
+      if (!actionMovedOn(seq) && (!out || sameAnswers(out.askedAgainst, askedAgainst))) isLoadingChoices.value = false;
     }
+    return true;
   }
 
 
@@ -1606,10 +1610,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // against an empty snapshot is discarded, and an auto-fill judged against
     // one choice that is really two picks for the player (#226). A fetch
     // started by start()/fill() is normally still in flight when this watcher
-    // first runs, so join it, unless it was asked against earlier answers since
-    // cleared or changed (#1358); otherwise start one for a pick not fetched yet.
-    if (actionSnapshot.value?.choiceFetches.has(sel.name) || !actionSnapshot.value?.pickSnapshots.has(sel.name)) {
-      await fetchChoicesForPick(sel.name);
+    // first runs, so join it; otherwise start one for a pick not fetched yet.
+    // A fetch dropped because an earlier answer changed is asked again (#1358).
+    while (actionSnapshot.value?.choiceFetches.has(sel.name) || !actionSnapshot.value?.pickSnapshots.has(sel.name)) {
+      if (await fetchChoicesForPick(sel.name) || actionMovedOn(seq) || currentPick.value?.name !== sel.name) break;
     }
 
     // The action can be cancelled, replaced or advanced while choices load.
@@ -2566,13 +2570,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   /**
    * Fetch the pick after `afterName`, resolving that pick, or false when the
-   * action moved on meanwhile. Null, without waiting, when there is no next pick.
+   * action moved on or an earlier answer changed meanwhile. Null, without waiting, when there is no next pick.
    */
   function fetchNextPick(afterName: string): Promise<EnrichedPickMetadata | false> | null {
     const nextSel = getNextSelection(afterName);
     if (!nextSel) return null;
     const seq = actionStartTick.value;
-    return fetchChoicesForPick(nextSel.name).then(() => (!actionMovedOn(seq) && nextSel));
+    return fetchChoicesForPick(nextSel.name).then(kept => (kept && !actionMovedOn(seq) && nextSel));
   }
 
   /** Get the next selection after the given one */
