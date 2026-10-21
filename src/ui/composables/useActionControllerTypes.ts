@@ -129,14 +129,9 @@ export interface ResolvedAction {
   result: ControllerActionResult;
 }
 
-/** Result from fetching pick choices */
-export interface PickChoicesResult {
+/** Result from fetching pick choices: the pick as resolved server-side, which the controller snapshots */
+export interface PickChoicesResult extends PickSnapshot {
   success: boolean;
-  choices?: Array<{ value: unknown; display: string; refs?: RefWithRole[]; disabled?: string }>;
-  validElements?: EnrichedValidElement[];
-  multiSelect?: { min: number; max?: number };
-  /** Ordered-list entry bounds for this step (#249), resolved server-side */
-  orderedList?: { min: number; max?: number };
   error?: string;
 }
 
@@ -171,6 +166,8 @@ export interface PickSnapshot {
   multiSelect?: { min: number; max?: number };
   /** Ordered-list entry bounds (#249), evaluated when fetched */
   orderedList?: { min: number; max?: number };
+  /** The pick's prompt, evaluated when fetched, for one the metadata could not word yet (#1350) */
+  prompt?: string;
 }
 
 /**
