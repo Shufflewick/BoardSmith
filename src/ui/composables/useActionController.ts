@@ -2654,22 +2654,23 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (pickDraft.value?.identity === draftIdentityFor(name)) pickDraft.value = null;
   }
 
-  function clear(selectionName: string): void {
-    const selections = currentActionMeta.value?.selections ?? [];
-    const index = selections.findIndex(s => s.name === selectionName);
-    // Not a pick (a follow-up's server-bound arg, say), so the player has nothing to clear.
-    if (index === -1) return;
+  function clear(selectionName: string): boolean {
     // The step's reply would write its pick back, answered against the value cleared here (#1364).
     if (stepOutstanding()) {
       setError(STEP_OUTSTANDING);
-      return;
+      return false;
     }
+    const selections = currentActionMeta.value?.selections ?? [];
+    const index = selections.findIndex(s => s.name === selectionName);
+    // Not a pick (a follow-up's server-bound arg, say), so the player has nothing to clear.
+    if (index === -1) return true;
     forgetAnswer(selectionName);
     // Later picks were answered and fetched against the old value, so they are asked again (#1354, #1359).
     for (const later of selections.slice(index + 1)) {
       forgetAnswer(later.name);
       forgetPickSnapshot(later.name);
     }
+    return true;
   }
 
   /**

@@ -1103,10 +1103,8 @@ function getSelectionDisplay(selectionName: string, value: unknown): string {
 
 // Clear a specific selection; the controller clears every selection after it too
 function clearSelection(selectionName: string) {
-  actionController.clear(selectionName);
-
-  // Clear board interaction
-  boardInteraction?.clear();
+  // A refused clear keeps the action, so the board must keep it too (#1364).
+  if (actionController.clear(selectionName)) boardInteraction?.clear();
 }
 
 // Auto-start, stale-action cleanup, and execution-complete retry now live in

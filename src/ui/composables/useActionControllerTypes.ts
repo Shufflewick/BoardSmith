@@ -520,8 +520,8 @@ export interface UseActionControllerReturn {
   fill: (selectionName: string, value: unknown) => Promise<PickValidationResult>;
   /** Skip an optional selection */
   skip: (selectionName: string) => void;
-  /** Clear a selection's value and the value of every selection after it, since those were answered against the old value. Refused while a pick step awaits the server. */
-  clear: (selectionName: string) => void;
+  /** Clear a selection's value and the value of every selection after it, since those were answered against the old value. False, with lastError set, when refused because a pick step still awaits the server. */
+  clear: (selectionName: string) => boolean;
   /** Cancel the current action */
   cancel: () => void;
 
