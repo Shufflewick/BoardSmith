@@ -1187,6 +1187,58 @@ it('needs setup', () => { note('needs setup'); expect(1).toBe(1); });
     }, 120_000);
   });
 
+  // #1329: a mutant runs against a subset of the suite, so a failure there counts only if that subset passes unmutated.
+  describe('trusts a failure in a subset of the suite only when that subset passes unmutated (#1329)', () => {
+    // One file at a time, in name order, so tests/a.test.ts always runs before tests/b.test.ts and leaves a file behind for it.
+    const IN_ORDER = `import { defineConfig } from 'vitest/config';
+class ByName { async shard(files) { return files; } async sort(files) { return [...files].sort((x, y) => (x.moduleId < y.moduleId ? -1 : 1)); } }
+export default defineConfig({ test: { include: ['tests/**/*.test.ts'], fileParallelism: false, sequence: { sequencer: ByName } } });
+`;
+    const SETS_UP = `import { writeFileSync } from 'node:fs';
+import { it, expect } from 'vitest';
+writeFileSync(new URL('./ready', import.meta.url), '');
+it('sets up', () => { expect(1).toBe(1); });
+`;
+    // Nothing here checks the rule's value, so a mutant of it survives in an honest run.
+    const NEEDS_SETUP = `import { existsSync, rmSync } from 'node:fs';
+import { it, expect } from 'vitest';
+import { enabled } from '../src/rules';
+const ready = existsSync(new URL('./ready', import.meta.url));
+rmSync(new URL('./ready', import.meta.url), { force: true });
+it('reads the rule', () => { expect(ready).toBe(true); expect(typeof enabled).toBe('boolean'); });
+`;
+
+    async function sharedState(setUp: string, hint?: KillerHint) {
+      const project = await makeProject({
+        'vitest.config.ts': IN_ORDER,
+        'src/rules.ts': 'export const enabled = true;\n',
+        'tests/a.test.ts': setUp,
+        'tests/b.test.ts': NEEDS_SETUP,
+      });
+      const cache = memoryCache();
+      if (hint) cache.hints.set('src/rules.ts\0export const enabled = false;\n', hint);
+      const run = runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), cache, log: () => {} });
+      return { run, cache };
+    }
+
+    it('refuses to count a kill from the test files that load the mutated file when they fail unmutated without the rest of the suite', async () => {
+      // tests/a.test.ts never loads src/rules.ts, so the mutant's run leaves it out, and tests/b.test.ts fails for want of its setup.
+      const { run, cache } = await sharedState(SETS_UP);
+      await expect(run).rejects.toThrow(
+        'The test files that load src/rules.ts fail when run without the rest of the suite, though the whole suite passes: tests/b.test.ts > reads the rule.',
+      );
+      expect([...cache.held.values()]).toEqual([]);
+    }, 120_000);
+
+    it('skips a hint whose file fails unmutated when run alone, and lets the full run decide', async () => {
+      // tests/a.test.ts loads src/rules.ts too, so the full run holds both files and passes unmutated; tests/b.test.ts alone does not.
+      const { run, cache } = await sharedState(`import '../src/rules';\n${SETS_UP}`, { file: 'tests/b.test.ts', test: 'reads the rule' });
+      const result = await run;
+      expect(result.summary).toMatchObject({ mutants: 1, killed: 0, survived: 1 });
+      expect(cache.hints.size).toBe(0);
+    }, 120_000);
+  });
+
   it('runs nothing when no changed line can be mutated', async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
     const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(3)]]), cache: memoryCache(), log: () => {} });
