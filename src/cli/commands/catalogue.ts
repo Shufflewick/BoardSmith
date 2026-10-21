@@ -25,13 +25,16 @@ export function catalogueReport(run: CatalogueRun): { ok: boolean; text: string 
       `${failure.slug} FAILED boardsmith validate on its ${failure.ref} (${failure.commit.slice(0, 8)}) against this BoardSmith tree:`,
       (failure.output ?? '').trimEnd(),
       `Either this BoardSmith change broke ${failure.slug}, or its ${failure.ref} was already broken. Fix the change, or fix the game in ${failure.dir} and push its ${failure.ref}.`,
-      `If this change needs a change to ${failure.slug}, commit it in ${failure.dir} on a branch with the same name as this BoardSmith branch: the check uses that branch instead of main.`,
+      ...(failure.ref === 'main'
+        ? [`If this change needs a change to ${failure.slug}, commit it in ${failure.dir} on a branch with the same name as this BoardSmith branch: the check uses that branch instead of main.`]
+        : []),
     );
   }
-  for (const result of run.results.filter((r) => r.ref !== 'main')) {
+  // Only a passing run lands, so only then is there a game branch to merge after it.
+  for (const repo of failures.length === 0 ? run.paired : []) {
     lines.push(
       '',
-      `${result.slug} was checked on its branch ${result.ref}, not its main. Merge that branch into its main in ${result.dir} right after this BoardSmith change lands.`,
+      `${repo.slug} was checked on its branch ${repo.ref}, not its main. Merge that branch into its main in ${repo.dir} right after this BoardSmith change lands.`,
     );
   }
   if (run.notChecked.length > 0) {

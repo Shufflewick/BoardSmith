@@ -19,6 +19,7 @@ describe('the catalogue report (#591)', () => {
     const report = catalogueReport({
       results: [{ ...hex, status: 'cached' }, { ...cribbage, status: 'passed' }],
       notChecked: [{ slug: 'LacunaExpanse', reason: 'pins its own boardsmith (file:./vendor/b.tgz)' }],
+      paired: [],
     });
     expect(report.ok).toBe(true);
     expect(report.text).toContain('hex: validates against this tree (passed before on these inputs)');
@@ -30,6 +31,7 @@ describe('the catalogue report (#591)', () => {
     const report = catalogueReport({
       results: [{ ...hex, status: 'passed' }, { ...cribbage, status: 'failed', output: 'TS2322: TableBoardProps\n' }],
       notChecked: [],
+      paired: [],
     });
     expect(report.ok).toBe(false);
     expect(report.text).toContain('cribbage FAILED boardsmith validate on its main (a06bf140) against this BoardSmith tree');
@@ -45,18 +47,22 @@ describe("the report of a game checked on its paired branch (#1322)", () => {
   const mud = { slug: 'example-mud', dir: '/games/example-mud', commit: '6f246020000000000000000000000000000000000', ref: 'i975-notice-boxes' };
 
   it('names the branch a game passed on, and says it must land on the game right after this change', () => {
-    const report = catalogueReport({ results: [{ ...hex, status: 'passed' }, { ...mud, status: 'passed' }], notChecked: [] });
+    const legacy = { slug: 'legacy', dir: '/games/legacy', commit: mud.commit, ref: mud.ref };
+    const report = catalogueReport({ results: [{ ...hex, status: 'passed' }, { ...mud, status: 'passed' }], notChecked: [], paired: [mud, legacy] });
     expect(report.ok).toBe(true);
     expect(report.text).toContain('example-mud: validates against this tree, on its branch i975-notice-boxes');
     expect(report.text).toContain(
       'example-mud was checked on its branch i975-notice-boxes, not its main. Merge that branch into its main in /games/example-mud right after this BoardSmith change lands.',
     );
+    expect(report.text).toContain('legacy was checked on its branch i975-notice-boxes');
     expect(report.text).not.toContain('hex was checked');
   });
 
-  it('names the branch a game failed on', () => {
-    const report = catalogueReport({ results: [{ ...mud, status: 'failed', output: 'TS2554\n' }], notChecked: [] });
+  it('names the branch a game failed on, without telling the reader to merge it or to make it (review F2, F3)', () => {
+    const report = catalogueReport({ results: [{ ...mud, status: 'failed', output: 'TS2554\n' }], notChecked: [], paired: [mud] });
     expect(report.text).toContain('example-mud FAILED boardsmith validate on its i975-notice-boxes (6f246020) against this BoardSmith tree');
+    expect(report.text).not.toContain('Merge that branch');
+    expect(report.text).not.toContain('on a branch with the same name');
   });
 });
 

@@ -7,17 +7,17 @@
  * This check asks the question where the cause is, in BoardSmith's own verify.
  *
  * For each game in the catalogue (`~/BoardSmithGames`, a plain folder of separate game
- * repositories) whose committed `main` links `boardsmith` to a checkout, it runs
- * `boardsmith validate` (the publish bar, which includes the vue-tsc type check) on that game's
- * `main`, against the tree it is given:
+ * repositories) whose committed `main` (or paired branch, below) links `boardsmith` to a checkout,
+ * it runs `boardsmith validate` (the publish bar, which includes the vue-tsc type check) on that
+ * commit, against the tree it is given:
  *
- * - The game is exported from its `main` commit with `git archive` into a temporary folder. The
+ * - The game is exported from that commit with `git archive` into a temporary folder. The
  *   shared checkout is only read: no worktree is registered in it, nothing is written to it, and its
  *   uncommitted work is not what is checked.
  * - The export gets a `node_modules` of links into the shared checkout's install, so nothing is
  *   reinstalled, except `boardsmith`, which links to the tree under check, and any catalogue game
  *   the install links to (example-legacy-world's `example-legacy`), which links to that game's own
- *   export at its `main`. `.bin` entries are copied as the links npm wrote, so `.bin/boardsmith`
+ *   export. `.bin` entries are copied as the links npm wrote, so `.bin/boardsmith`
  *   reaches the tree too. Dot folders such as `.vite` are left out, so a tool's cache is written in
  *   the export, never in the shared install.
  * - The tree is the one passed in, never `~/BoardSmith` by path: a thread merge validates its
@@ -32,11 +32,13 @@
  * A game repository with a branch of the same name as the tree's checked-out branch is checked, and
  * linked, at that branch instead of its `main` (#1322). That is how a BoardSmith change that needs a
  * game change lands: BoardSmith merges first, then the game branch merges onto the game's `main`,
- * which the report reminds the reader to do. A tree not on a branch (a merge validating its detached
- * merge commit) checks every game's `main`. ShufflewickPub is not touched: it checks the commits it
+ * which the report reminds the reader to do. A merge validating its detached merge commit pairs the
+ * one branch at that commit's second parent; any other detached tree checks every game's `main`.
+ * The export still links the shared checkout's install, so a game branch's new dependencies must
+ * be installed there. ShufflewickPub is not touched: it checks the commits it
  * pins against the engine it vendors, so it moves both once the game branch is on `main`.
  *
- * A pass is cached (`catalogueCachePath`) under the game's `main` commit and install record, those
+ * A pass is cached (`catalogueCachePath`) under the game's commit and install record, those
  * of each catalogue game it links to, and the tree's content and install record. The tree is named
  * by its git TREE, not its commit, so a thread merge of a branch whose tree it just verified finds
  * every game already passed. A failure is never cached.
@@ -91,6 +93,8 @@ export interface CatalogueRun {
   results: CatalogueGameResult[];
   /** The folders in the catalogue that are not checked, and why each is not. */
   notChecked: { slug: string; reason: string }[];
+  /** Every repository read at its paired branch rather than its main, checked, linked or skipped. */
+  paired: Omit<CatalogueGameResult, 'status' | 'output'>[];
 }
 
 export interface CatalogueOptions {
@@ -151,8 +155,8 @@ async function whyNotLinked(repo: CatalogueRepo): Promise<string | undefined> {
 async function readFolder(slug: string, dir: string, paired: string | undefined): Promise<{ repo?: CatalogueRepo; notChecked?: string }> {
   if (!existsSync(join(dir, '.git'))) return { notChecked: 'not a git repository' };
   if (!(await gitSucceeds(dir, ['rev-parse', '--verify', '--quiet', 'refs/heads/main^{commit}']))) return { notChecked: 'has no main branch' };
-  const hasPaired = paired !== undefined && (await gitSucceeds(dir, ['rev-parse', '--verify', '--quiet', `refs/heads/${paired}^{commit}`]));
-  const ref = hasPaired ? (paired as string) : 'main';
+  const onPaired = paired !== undefined && (await gitSucceeds(dir, ['rev-parse', '--verify', '--quiet', `refs/heads/${paired}^{commit}`]));
+  const ref = onPaired ? paired : 'main';
   const repo = { slug, dir, ref, commit: (await git(dir, ['rev-parse', `refs/heads/${ref}^{commit}`])).trim() };
   return { repo, notChecked: await whyNotLinked(repo) };
 }
@@ -257,11 +261,17 @@ async function requireBoardsmithTree(tree: string): Promise<string> {
   return real;
 }
 
-/** The branch checked out in `tree`, other than main, or undefined on main or with no branch. */
+/**
+ * The branch `tree` checks: the one checked out, or, on a detached merge commit, the one branch at
+ * its second parent, which is what `agent-policy merge` validates. Undefined for main or none.
+ */
 async function pairedBranch(tree: string): Promise<string | undefined> {
-  if (!(await gitSucceeds(tree, ['symbolic-ref', '-q', 'HEAD']))) return undefined;
-  const branch = (await git(tree, ['symbolic-ref', '--short', 'HEAD'])).trim();
-  return branch === 'main' ? undefined : branch;
+  let branches: string[] = [];
+  if (await gitSucceeds(tree, ['symbolic-ref', '-q', 'HEAD'])) branches = [(await git(tree, ['symbolic-ref', '--short', 'HEAD'])).trim()];
+  else if (await gitSucceeds(tree, ['rev-parse', '--verify', '--quiet', 'HEAD^2'])) {
+    branches = (await git(tree, ['for-each-ref', '--points-at', 'HEAD^2', '--format=%(refname:short)', 'refs/heads'])).split('\n').filter(Boolean);
+  }
+  return branches.length === 1 && branches[0] !== 'main' ? branches[0] : undefined;
 }
 
 /** The cache file, in the git common directory every checkout of the tree's repository shares. */
@@ -499,5 +509,5 @@ export async function checkCatalogue(options: CatalogueOptions): Promise<Catalog
   const results = games.map((game): CatalogueGameResult => ran.get(game.slug) ?? { ...named(game), status: 'cached' });
   // A cached pass is saved again too, so the passes in use stay at the front of the file.
   await savePasses(cachePath, keys.filter((_, i) => results[i].status !== 'failed'));
-  return { results, notChecked };
+  return { results, notChecked, paired: repos.filter((r) => r.ref !== 'main').map(named) };
 }

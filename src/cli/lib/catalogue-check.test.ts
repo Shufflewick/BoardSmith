@@ -246,6 +246,34 @@ describe("a game's branch paired with the BoardSmith branch (#1322)", () => {
     expect(statusOf(run)).toEqual({ legacy: 'passed', 'legacy-world': 'passed' });
   });
 
+  it("checks the paired branch on the detached merge commit a merge validates, which merges the tree's branch (#1322 review F1)", async () => {
+    const fx = fixture();
+    await makeTree(fx.tree);
+    git(fx.tree, 'switch', '-q', '-c', BRANCH);
+    await writeFiles(fx.tree, { 'src/engine.ts': 'export const declared = true;' });
+    commitAll(fx.tree, 'the BoardSmith change');
+    await pairedGame(fx, 'example-mud');
+    git(fx.tree, 'switch', '-q', '--detach', 'main');
+    git(fx.tree, 'merge', '-q', '--no-ff', '-m', `Merge branch '${BRANCH}'`, BRANCH);
+
+    const run = await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue });
+
+    expect(run.results).toEqual([expect.objectContaining({ ref: BRANCH, status: 'passed' })]);
+  });
+
+  it('lists every repository used at its paired branch, a skipped one a game links to included (#1322 review F3)', async () => {
+    const fx = fixture();
+    await makeTree(fx.tree);
+    git(fx.tree, 'switch', '-q', '-c', BRANCH);
+    const legacy = await pairedGame(fx, 'legacy');
+    await makeGame(fx, 'legacy-world', { links: ['legacy'] });
+
+    const run = await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue, skip: { legacy: 'slow (#1)' } });
+
+    expect(statusOf(run)).toEqual({ 'legacy-world': 'passed' });
+    expect(run.paired).toEqual([{ slug: 'legacy', dir: legacy.dir, ref: BRANCH, commit: legacy.fixed }]);
+  });
+
   it("checks main when the tree is on another branch or on none", async () => {
     const fx = fixture();
     await makeTree(fx.tree);
