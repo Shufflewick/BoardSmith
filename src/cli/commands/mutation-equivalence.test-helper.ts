@@ -1,10 +1,14 @@
 import { execFileSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
-import { vi } from 'vitest';
+import { expect, vi } from 'vitest';
 import { fixtureSandbox } from '../../testing/fixture-sandbox.test-helper.js';
 import { linkGameModules } from '../../testing/installed-modules.test-helper.js';
+import { sha256Hex } from '../lib/hash.js';
+import { openMutantCache } from '../lib/mutant-cache.js';
 import { writeFiles } from '../lib/verify-result.test-helper.js';
+import { generateMutants, runDiffMutationCheck } from './test-step-mutation.js';
+import { VERIFY_CHECKS } from './verify.js';
 
 export const EQUIVALENCE_LEDGER = 'design/MUTATION-EQUIVALENCES.json';
 export const CLASSIFIER = `export type Seat = 1 | 2;
@@ -62,3 +66,36 @@ it.each([[1, true], [2, false]] as const)('classifies legal seat %i', (seat, exp
   git('commit', '-qm', 'classifier and exhaustive behavioral tests');
   return { project, git, allowed, base };
 }
+
+export const added = new Map([['src/classify.ts', new Set([1, 2, 3, 4])]]);
+
+/** Records the classifier's surviving `<` to `<=` mutant as equivalent, in a signed commit. */
+export async function approveClassifier(fixture: Awaited<ReturnType<typeof equivalenceProject>>) {
+  const { project, git } = fixture;
+  const cache = await openMutantCache(project);
+  const before = await runDiffMutationCheck({ projectDir: project, added, cache, log: () => {} });
+  expect(before.summary).toMatchObject({ mutants: 3, killed: 2, survived: 1, timedOut: 0 });
+  expect(before.survivors[0]).toHaveProperty('id', expect.stringMatching(/^[a-f0-9]{64}$/));
+  await cache.save();
+  const id = before.survivors[0].id!;
+  const equivalent = generateMutants('src/classify.ts', CLASSIFIER, added.get('src/classify.ts')!).find((m) => m.description === '< -> <=')!;
+  const ledger = { format: 1, entries: [{
+    id, file: equivalent.file, line: equivalent.line, description: equivalent.description,
+    originalSourceHash: sha256Hex(CLASSIFIER), mutantSourceHash: sha256Hex(equivalent.source), contract: CONTRACT, proof: PROOF,
+    change: { offset: CLASSIFIER.indexOf('<'), before: '<', after: '<=' },
+  }] };
+  await fs.mkdir(join(project, 'design'));
+  await fs.writeFile(join(project, EQUIVALENCE_LEDGER), JSON.stringify(ledger));
+  git('add', EQUIVALENCE_LEDGER);
+  git('commit', '-S', '-q', '-m', 'review complete legal domain and equivalence proof');
+  return { id, equivalent, ledger };
+}
+
+/** The verify checks, with those this fixture has no part in standing in as passing. */
+export const checks = {
+  ...VERIFY_CHECKS,
+  typecheck: async () => ({ passed: true, summary: 'outside this mutation fixture' }),
+  build: async () => ({ passed: true, summary: 'outside this mutation fixture' }),
+  validate: async () => ({ passed: true, summary: 'outside this mutation fixture' }),
+  smoke: async () => ({ passed: true, summary: 'outside this mutation fixture' }),
+};
