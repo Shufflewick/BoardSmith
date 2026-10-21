@@ -47,16 +47,30 @@ describe('execute() refusals before sending set lastError (#1342)', () => {
     expect(controller.lastError.value).toBe(error);
     expect(controller.errorTick.value).toBe(1);
   });
+});
 
-  it('while another execute is still out', async () => {
-    const { controller, sendAction } = controllerWith();
+describe('a second execute() while one is in flight (#1348)', () => {
+  it('is refused without an error, since a double-click is not a player mistake', async () => {
+    let resolveSend!: (result: ControllerActionResult) => void;
+    const sendAction = vi.fn((): Promise<ControllerActionResult> => new Promise((resolve) => { resolveSend = resolve; }));
+    const controller = useActionController({
+      sendAction,
+      availableActions: ref(['draw']),
+      actionMetadata: ref(metadata),
+      isMyTurn: ref(true),
+    });
 
-    void controller.execute('draw');
-    const result = await controller.execute('draw');
+    const first = controller.execute('draw');
+    const second = await controller.execute('draw');
 
-    expect(result).toEqual({ success: false, error: 'Action already executing' });
+    expect(second).toEqual({ success: false, error: 'Action already executing' });
     expect(sendAction).toHaveBeenCalledTimes(1);
-    expect(controller.lastError.value).toBe('Action already executing');
-    expect(controller.errorTick.value).toBe(1);
+    expect(controller.lastError.value).toBeNull();
+    expect(controller.errorTick.value).toBe(0);
+
+    resolveSend({ success: true });
+    expect(await first).toEqual({ success: true });
+    expect(controller.lastError.value).toBeNull();
+    expect(controller.errorTick.value).toBe(0);
   });
 });
