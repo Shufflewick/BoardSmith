@@ -20,7 +20,7 @@
     },
     {
       "name": "catalogue",
-      "run": "node bin/boardsmith.js catalogue --skip 'WindupWarfare=validate does not finish (Shufflewick/WindupWarfare#100)' --skip 'one-two-punch=it calls player.setCurrent(), which #780 removes (Shufflewick/one-two-punch#2)' --skip 'seven=its bot-search test calls createSnapshot without the reseed #776 requires (Shufflewick/seven#2)' --skip 'sotf=its harness follows #789 on a branch that waits on its quest-forgery question (Shufflewick/sotf#75)' --skip 'example-mud=its tests read the runner of[player] as an index, which #1207 changes (Shufflewick/example-mud#2)' --skip 'example-legacy-world=its tests read the runner of[player] as an index, which #1207 changes (Shufflewick/example-legacy-world#3)' --skip 'example-rts=its tests read the runner of[player] as an index, which #1207 changes (Shufflewick/example-rts#2)'"
+      "run": "node bin/boardsmith.js catalogue --skip 'WindupWarfare=validate does not finish (Shufflewick/WindupWarfare#100)' --skip 'one-two-punch=it calls player.setCurrent(), which #780 removes (Shufflewick/one-two-punch#2)' --skip 'seven=its bot-search test calls createSnapshot without the reseed #776 requires (Shufflewick/seven#2)' --skip 'sotf=its harness follows #789 on a branch that waits on its quest-forgery question (Shufflewick/sotf#75)'"
     }
   ],
   "slice": {

@@ -175,13 +175,20 @@ export function applyNoticeWrite(
  * game code, so `perSeat`, the number of sends, each notice's size and every
  * seat are re-checked against `host` before any box is read, as
  * `planSchedules` re-checks timers: a forged result is refused, never stored.
+ * Nor about which boxes it touched (#975): a take or a `refuse` send to a box
+ * outside `host.declaredNotices`, the walk's own answers, is refused too.
  */
 export async function applyNoticeWrites(
   notices: WorldNoticeWrites,
   read: (seat: number) => WorldNoticeBox | Promise<WorldNoticeBox>,
-  host: { readonly seatCount: number; readonly budgets: WorldBudgets },
+  host: {
+    readonly seatCount: number;
+    readonly budgets: WorldBudgets;
+    readonly declaredNotices: readonly DeclaredNoticeBox[];
+  },
 ): Promise<readonly SettledNoticeBox[]> {
   assertNoticeWrites(notices, host.seatCount, host.budgets);
+  assertDeclaredBoxes(notices.writes, host.declaredNotices);
   const boxes = new Map<number, WorldNoticeBox>();
   for (const write of notices.writes) {
     const before = boxes.get(write.seat) ?? (await read(write.seat));
@@ -197,6 +204,22 @@ function assertNoticeWrites(notices: WorldNoticeWrites, seatCount: number, budge
     worldRefusal("invalid-notice", `This dispatch's result carries a notice write that ${why}`);
   assertNoticeBatch(refuse, notices, budgets);
   for (const write of notices.writes) assertNoticeWriteShape(refuse, write, seatCount, budgets);
+}
+
+/** Refuse a take or a `refuse` send to a box the command's walk did not
+ *  declare, as the child refuses it at the line. */
+function assertDeclaredBoxes(writes: readonly WorldNoticeWrite[], declared: readonly DeclaredNoticeBox[]): void {
+  for (const write of writes) {
+    if (write.kind === "send" && write.whenFull !== "refuse") continue;
+    if (declared.some(({ seat }) => seat === write.seat)) continue;
+    const what = write.kind === "take" ? "takes" : "sends a notice that refuses when full to";
+    throw worldRefusal(
+      "undeclared-notice-box",
+      `This dispatch's result ${what} seat ${write.seat}'s notice box, which the command did not ` +
+        "declare. Nothing was changed. A take, or a send with `whenFull: \"refuse\"`, needs the " +
+        `box declared with \`.noticeBox(...)\` naming seat ${write.seat}.`,
+    );
+  }
 }
 
 /** The batch as a whole: a box size this host keeps, a list of objects, and no

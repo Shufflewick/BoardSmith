@@ -375,7 +375,7 @@ export default hookProjects(entries, dirname(path), ${vitestMajor >= 3 ? 'dirnam
  * setup (`GLOBAL_SETUP_MARK`). It records each test's name the way vitest's JSON reporter does (its describe
  * titles and its own, joined by spaces), since `testKeyOf` matches that name to the coverage run's.
  */
-function wrapperConfig(workDir: string, projectDir: string, projectConfig: string | undefined): string {
+function wrapperConfig(workDir: string, projectDir: string, projectConfig: string | undefined, vitestMajor: number): string {
   const importBase = projectConfig
     ? `import base from ${JSON.stringify(relative(workDir, projectConfig).split(sep).join('/'))};`
     : 'const base = {};';
@@ -392,11 +392,11 @@ const projectDir = ${JSON.stringify(projectDir)};
 const writeReport = (report) => writeFileSync(${JSON.stringify(join(workDir, REPORT_NAME))}, JSON.stringify(report));
 const STATUS = { pass: 'passed', fail: 'failed' };
 // Vitest 2 sizes each pool from the root poolOptions before maxWorkers, and runs each pool's files at once (#955).
-const budgetProblems = (ctx) => {
+// Vitest 4 runs a project's files with that project's own maxWorkers.
+const budgetProblems = (ctx, configs) => {
   const budget = Number(process.env.BOARDSMITH_WORKERS);
   if (!budget) return undefined;
-  const configs = [ctx.config, ...ctx.projects.map((project) => project.config)];
-  const settings = configs.flatMap((config) => [
+  const settings = configs.flatMap((config) => [${vitestMajor >= 4 ? "\n    ...(config.maxWorkers > budget ? ['maxWorkers'] : [])," : ''}
     ...Object.entries(config.poolOptions ?? {}).flatMap(([pool, options]) =>
       ['maxThreads', 'maxForks', 'minThreads', 'minForks'].filter((key) => options?.[key] !== undefined).map((key) => \`poolOptions.\${pool}.\${key}\`)),
     ...(config.poolMatchGlobs?.length > 0 ? ['poolMatchGlobs'] : []),
@@ -405,19 +405,21 @@ const budgetProblems = (ctx) => {
   ]);
   const pools = new Set(ctx.projects.map((project) => project.config.pool));
   if (pools.size > 1) settings.push(\`a different pool per project (\${[...pools].join(', ')})\`);
-  if (![...pools].every((pool) => ['forks', 'threads', 'vmForks', 'vmThreads'].includes(pool))) settings.push(\`the custom pool \${[...pools].join(', ')}\`);
+  const custom = [...pools].filter((pool) => !['forks', 'threads', 'vmForks', 'vmThreads'].includes(pool));
+  if (custom.length > 0) settings.push(\`the custom pool \${custom.join(', ')}\`);
   if (settings.length === 0) return undefined;
-  return \`boardsmith.json "mutation" gives each Vitest run a budget of \${budget} test workers, but the project's Vitest config (or an environment variable such as VITEST_MAX_FORKS) sets \${[...new Set(settings)].join(', ')}, \` +
+  return \`boardsmith.json "mutation" gives each Vitest run a budget of \${budget} test workers, but the project's Vitest config (or an environment variable such as VITEST_MAX_FORKS or VITEST_MAX_WORKERS) sets \${[...new Set(settings)].join(', ')}, \` +
     'which Vitest uses to run workers outside that budget. Remove those settings from the Vitest config and environment, or remove "mutation" from boardsmith.json to run mutants one at a time.';
 };
 const testsIn = (tasks) => tasks.flatMap((task) => (task.type === 'suite' ? testsIn(task.tasks) : [task]));
 const reporter = {
   onInit(ctx) {
     this.ctx = ctx;
-    if (process.env.BOARDSMITH_REACH && [ctx.config, ...ctx.projects.map((project) => project.config)].some((config) => config.globalSetup?.length > 0)) {
+    const configs = [ctx.config, ...ctx.projects.map((project) => project.config)];
+    if (process.env.BOARDSMITH_REACH && configs.some((config) => config.globalSetup?.length > 0)) {
       writeFileSync(process.env.BOARDSMITH_REACH + '/${GLOBAL_SETUP_MARK}', '');
     }
-    const overBudget = budgetProblems(ctx);
+    const overBudget = budgetProblems(ctx, configs);
     if (overBudget) {
       this.refused = true;
       writeReport({ refused: overBudget });
@@ -692,7 +694,7 @@ async function readReport(
 export async function writeRunConfig(projectDir: string, workDir: string, vitestMajor: number): Promise<string> {
   const configPath = join(workDir, 'vitest.config.mts');
   const projectConfig = VITEST_CONFIG_NAMES.map((n) => join(projectDir, n)).find((p) => existsSync(p));
-  await fs.writeFile(configPath, wrapperConfig(workDir, projectDir, projectConfig));
+  await fs.writeFile(configPath, wrapperConfig(workDir, projectDir, projectConfig, vitestMajor));
   await fs.writeFile(join(workDir, OVERLAY_NAME), overlayModule(workDir));
   await fs.writeFile(join(workDir, WORKSPACE_NAME), workspaceModule(projectDir, vitestMajor));
   return configPath;
@@ -720,16 +722,24 @@ async function installedVitestMajor(projectDir: string): Promise<number> {
   return Number(major);
 }
 
-/** The vitest flags that hold a run to `workers` test workers, with `env` telling the reporter to refuse a config that would run more (#955). */
-function limitWorkers(workers: number | undefined, env: NodeJS.ProcessEnv): string[] {
+/**
+ * The vitest flags that hold a run to `workers` test workers, with `env` telling the reporter to
+ * refuse a config that would run more (#955). Vitest 4 removed `--minWorkers` and rejects it.
+ */
+export function limitWorkers(workers: number | undefined, vitestMajor: number, env: NodeJS.ProcessEnv): string[] {
   if (!workers) return [];
   env.BOARDSMITH_WORKERS = String(workers);
-  return [`--maxWorkers=${workers}`, '--minWorkers=1'];
+  return vitestMajor >= 4 ? [`--maxWorkers=${workers}`] : [`--maxWorkers=${workers}`, '--minWorkers=1'];
+}
+
+/** The real paths of the files a run asked for; undefined for the whole suite. */
+function realPaths(scope: RunScope): string[] | undefined {
+  return scope === 'whole-suite' ? undefined : scope.map((f) => realpathSync(f.absPath));
 }
 
 /** A reported file's manifest path, else its project path when the run asked for it; undefined for a file the run is not about. */
-function pathInRun(projectDir: string, byRealPath: ReadonlyMap<string, string>, scope: RunScope): (realPath: string) => string | undefined {
-  const inScope = scope === 'whole-suite' ? undefined : new Set(scope.map((f) => realpathSync(f.absPath)));
+function pathInRun(projectDir: string, byRealPath: ReadonlyMap<string, string>, scopePaths: string[] | undefined): (realPath: string) => string | undefined {
+  const inScope = scopePaths && new Set(scopePaths);
   return (realPath) => byRealPath.get(realPath) ?? (inScope?.has(realPath) === false ? undefined : relative(projectDir, realPath).split(sep).join('/'));
 }
 
@@ -743,7 +753,8 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
   const { command: vitestBin } = toolCommand('vitest', [], projectDir);
   const mutantPath = join(workDir, 'mutant.json');
   const reportPath = join(workDir, REPORT_NAME);
-  const configPath = await writeRunConfig(projectDir, workDir, await installedVitestMajor(projectDir));
+  const vitestMajor = await installedVitestMajor(projectDir);
+  const configPath = await writeRunConfig(projectDir, workDir, vitestMajor);
   await fs.writeFile(join(workDir, COVERAGE_SETUP_NAME), COVERAGE_SETUP);
   await fs.writeFile(join(workDir, REACH_SETUP_NAME), REACH_SETUP);
 
@@ -768,22 +779,21 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
       delete env.BOARDSMITH_COVERAGE;
       delete env.BOARDSMITH_REACH;
       delete env.BOARDSMITH_WORKERS;
-      const workerFlags = limitWorkers(options.workers, env);
+      const workerFlags = limitWorkers(options.workers, vitestMajor, env);
       if (options.coverage) Object.assign(env, coverageEnv(options.coverage, projectDir));
       if (options.reach) Object.assign(env, reachEnv(options.reach, projectDir));
       if (mutant) {
         await fs.writeFile(mutantPath, JSON.stringify({ file: realpathSync(mutant.absPath), source: mutant.source }));
         env.BOARDSMITH_MUTANT = mutantPath;
       }
+      const scopePaths = realPaths(scope);
       const args = [
         'run',
         '--root', projectDir,
         '--config', configPath,
         ...(options.bail ? ['--bail=1'] : []),
         ...workerFlags,
-        ...(scope === 'whole-suite'
-          ? []
-          : scope.map((f) => relative(projectDir, realpathSync(f.absPath)).split(sep).join('/'))),
+        ...(scopePaths ?? []).map((path) => relative(projectDir, path).split(sep).join('/')),
       ];
       const started = Date.now();
       checkStopped();
@@ -795,7 +805,7 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
       checkStopped();
       if (!finished) return { kind: 'timed-out' };
 
-      const read = await readReport(reportPath, projectDir, pathInRun(projectDir, byRealPath, scope));
+      const read = await readReport(reportPath, projectDir, pathInRun(projectDir, byRealPath, scopePaths));
       return { kind: 'ran', ...read, exitCode: finished.exitCode, ms: Date.now() - started };
     },
   };
@@ -1323,38 +1333,35 @@ async function greenRunner(runner: Runner, projectDir: string, log: (line: strin
 /**
  * Runs `mutant` against every test file that loads its file, stopping at the first failure; `unreached`
  * when none does. With a `hint` (#954) whose test passed in the unmutated run and is in one of those, its
- * file runs alone first, and only that test's own assertion failing kills the mutant; anything else (a pass, a
- * file that fails to load, a time-out) goes on to the full run, so a survivor still runs every test.
- * `killer` is the test that failed on its own assertion, for the next run's hint.
+ * file runs alone first, and a test of it that passed unmutated failing on its own assertion kills the mutant;
+ * a time-out is the mutant's verdict (#1308), and anything else (a pass, a file that fails to load) goes on to
+ * the full run, so a survivor still runs every test. `killer` is the test that failed on its own assertion,
+ * for the next run's hint, and undefined when none did.
  */
-async function runMutant(
-  { runner, projectDir, timeoutMs, workers, testsLoading, passed }: GreenRunner,
-  mutant: LocatedMutant,
-  hint?: KillerHint,
-): Promise<{ outcome: DiffOutcome; killer?: KillerHint }> {
-  const tests = testsLoading(mutant.file);
+async function runMutant(run: GreenRunner, mutant: LocatedMutant, hint?: KillerHint): Promise<{ outcome: DiffOutcome; killer?: KillerHint }> {
+  const tests = run.testsLoading(mutant.file);
   if (tests.length === 0) return { outcome: 'unreached' };
-  if (hint && (await hintKills({ runner, projectDir, timeoutMs, workers, passed }, mutant, tests, hint))) return { outcome: 'killed', killer: hint };
-  const result = await runner.run(tests.map((absPath) => ({ absPath })), mutant, timeoutMs, { bail: true, workers });
+  const trial = hint && (await hintTrial(run, mutant, tests, hint));
+  if (trial === 'timed-out') return { outcome: 'timed-out' };
+  if (trial) return { outcome: 'killed', killer: trial };
+  const result = await run.runner.run(tests.map((absPath) => ({ absPath })), mutant, run.timeoutMs, { bail: true, workers: run.workers });
   if (result.kind === 'timed-out') return { outcome: 'timed-out' };
   const killer = result.outcomes.find((o) => o.failedOnAssertion);
   return { outcome: suiteNoticed(result) ? 'killed' : 'survived', ...(killer ? { killer: { file: killer.path, test: killer.fullName } } : {}) };
 }
 
 /**
- * Whether `hint`'s test, one of `tests` that passed unmutated, fails on its own assertion when its file runs alone under
- * `mutant`. The whole file runs, since the test passed only after the tests before it in its file.
+ * Runs `hint`'s file alone under `mutant` when its test is one of `tests` that passed unmutated, and returns
+ * the test of that file that passed unmutated and now fails on its own assertion; 'timed-out' when the file
+ * ran past the limit. The whole file runs, since the hinted test passed only after the tests before it in its file.
  */
-async function hintKills(
-  { runner, projectDir, timeoutMs, workers, passed }: Omit<GreenRunner, 'testsLoading'>,
-  mutant: LocatedMutant,
-  tests: string[],
-  hint: KillerHint,
-): Promise<boolean> {
-  const absPath = join(projectDir, hint.file);
-  if (!passed.has(testKey({ path: hint.file, fullName: hint.test })) || !tests.includes(absPath)) return false;
-  const trial = await runner.run([{ absPath }], mutant, timeoutMs, { bail: true, workers });
-  return trial.kind === 'ran' && trial.outcomes.some((o) => o.path === hint.file && o.fullName === hint.test && o.failedOnAssertion);
+async function hintTrial(run: GreenRunner, mutant: LocatedMutant, tests: string[], hint: KillerHint): Promise<KillerHint | 'timed-out' | undefined> {
+  const absPath = join(run.projectDir, hint.file);
+  if (!run.passed.has(testKey({ path: hint.file, fullName: hint.test })) || !tests.includes(absPath)) return undefined;
+  const trial = await run.runner.run([{ absPath }], mutant, run.timeoutMs, { bail: true, workers: run.workers });
+  if (trial.kind === 'timed-out') return 'timed-out';
+  const killer = trial.outcomes.find((o) => o.path === hint.file && o.failedOnAssertion && run.passed.has(testKey(o)));
+  return killer && { file: killer.path, test: killer.fullName };
 }
 
 /** The preparation command observes a real survivor, without accepting a cached or reviewed verdict. */
@@ -1450,7 +1457,8 @@ async function tallyMutants(
 /**
  * Each mutant's outcome: the one `known` holds, or the outcome of running it. Each of `runs` takes
  * the next mutant as it finishes one, so as many run at once as there are runs. The first failure
- * starts no more, stops every run still going, waits for their process groups to go, and is thrown.
+ * starts no more, stops every run still going, waits for every run to end, and is thrown; a failure
+ * to stop is logged, not thrown in its place.
  */
 async function outcomesOf(
   input: DiffMutationInput,
@@ -1460,6 +1468,7 @@ async function outcomesOf(
 ): Promise<DiffOutcome[]> {
   const outcomes: DiffOutcome[] = [];
   let next = 0;
+  let finished = 0;
   let failure: { error: unknown } | undefined;
   // Saves one at a time: the cache writes one temporary file per process.
   let saving = Promise.resolve();
@@ -1471,13 +1480,14 @@ async function outcomesOf(
       const stored = known[i];
       const label = `mutant ${i + 1}/${mutants.length}: ${mutant.file}:${mutant.line} ${mutant.description}`;
       input.log(stored === undefined ? label : `${label} (reused: ${stored})`);
-      outcomes[i] = stored ?? (await runUnlessContextChanged(input, run!, mutant, i, save));
+      outcomes[i] = stored ?? (await runUnlessContextChanged(input, run!, mutant, { index: i, finished }, save));
+      finished++;
     }
   };
   await Promise.all((runs ?? [undefined]).map((run) => work(run).catch(async (error: unknown) => {
     if (failure) return;
     failure = { error };
-    await stopAll((runs ?? []).map((r) => r.runner));
+    await stopAll((runs ?? []).map((r) => r.runner)).catch((stopError: unknown) => input.log((stopError as Error).message));
   })));
   if (failure) throw failure.error;
   return outcomes;
@@ -1488,13 +1498,15 @@ async function outcomesOf(
  * before it ran or while it ran: then the run is mixed and stops here, keeping nothing of it (#932, #940).
  * A timed-out mutant is not kept, nor an unreached one, which no run decided.
  */
-async function runUnlessContextChanged(input: DiffMutationInput, run: GreenRunner, mutant: LocatedMutant, done: number, save: () => Promise<void>): Promise<DiffOutcome> {
-  await requireSameContext(input, `after ${done} mutants had run or been reused`);
+async function runUnlessContextChanged(
+  input: DiffMutationInput, run: GreenRunner, mutant: LocatedMutant, at: { index: number; finished: number }, save: () => Promise<void>,
+): Promise<DiffOutcome> {
+  await requireSameContext(input, `after ${at.finished} mutants had run or been reused`);
   const { outcome, killer } = await runMutant(run, mutant, input.cache.killerHint(mutant));
   if (outcome === 'timed-out' || outcome === 'unreached') return outcome;
-  await requireSameContext(input, `while mutant ${done + 1} ran, so its outcome is not kept`);
+  await requireSameContext(input, `while mutant ${at.index + 1} ran, so its outcome is not kept`);
   input.cache.set(mutant, outcome);
-  if (killer) input.cache.setKillerHint(mutant, killer);
+  input.cache.setKillerHint(mutant, killer);
   await save();
   return outcome;
 }

@@ -51,7 +51,7 @@ describe('selectGameOptions keeps engine-owned and host-owned fields out of a se
   });
 
   it('names every GameOptions field and every option the session itself supplies', () => {
-    for (const key of ['playerCount', 'playerNames', 'seed', 'elementIdKey', 'colors', 'colorLabels', 'tutorial', 'randomness', 'worldMode', 'playerConfigs', 'playerOptions', 'playerIsBot', 'persist']) {
+    for (const key of ['playerCount', 'playerNames', 'seed', 'elementIdKey', 'colors', 'colorLabels', 'tutorial', 'randomness', 'worldMode', 'playerConfigs', 'playerOptions', 'playerIsBot', 'exclusiveSeats', 'persist']) {
       expect(HOST_OWNED_GAME_OPTION_KEYS).toContain(key);
     }
   });

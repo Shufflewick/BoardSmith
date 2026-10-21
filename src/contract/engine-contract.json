@@ -1,5 +1,5 @@
 {
-  "revision": 255,
+  "revision": 256,
   "surfaceHash": "869ce5eb83bfb570",
   "payloadHash": "06a23811b8d27270",
   "formatHash": "ed115e27605f2ca7",
@@ -1979,6 +1979,14 @@
     {
       "revision": 255,
       "date": "2026-10-20",
+      "surfaceHash": "42fb28e08af7d80f",
+      "payloadHash": "0784e22c1b68bcca",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "applyNoticeWrites(notices, read, { seatCount, budgets, declaredNotices }) now also requires the boxes the command's walk declared, and refuses a take or a whenFull 'refuse' send to any other box with undeclared-notice-box before reading any box, so a forged result cannot empty a seat's box or fail late as notice-box-full (#975). dispatchStep's result gains answers, what the declaration walk answered; pass answers.declaredNotices. Platform: pass declaredNotices at games/src/world-session.ts and treat the throw as a refused command; re-vendor. No game needs a rebuild."
+    },
+    {
+      "revision": 256,
+      "date": "2026-10-21",
       "surfaceHash": "869ce5eb83bfb570",
       "payloadHash": "06a23811b8d27270",
       "formatHash": "ed115e27605f2ca7",

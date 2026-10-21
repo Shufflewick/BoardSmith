@@ -621,7 +621,7 @@ export function fee(price: number): number {
       get: (m: { file: string; source: string }) => held.get(key(m)),
       set: (m: { file: string; source: string }, outcome: 'killed' | 'survived') => void held.set(key(m), outcome),
       killerHint: (m: { file: string; source: string }) => hints.get(key(m)),
-      setKillerHint: (m: { file: string; source: string }, hint: KillerHint) => void hints.set(key(m), hint),
+      setKillerHint: (m: { file: string; source: string }, hint: KillerHint | undefined) => void (hint ? hints.set(key(m), hint) : hints.delete(key(m))),
       save: async () => {},
     };
   }
@@ -1131,10 +1131,12 @@ describe('the rule', () => { it('is on', () => { note('is on'); expect(enabled).
 it('sets up', () => { note('sets up'); ready = typeof enabled === 'boolean'; expect(ready).toBe(true); });
 it('relies on the setup', () => { note('relies'); expect(ready).toBe(true); });
 `;
-      const { result, ran } = await hinted({ 'tests/stateful.test.ts': STATEFUL }, { file: 'tests/stateful.test.ts', test: 'relies on the setup' });
+      const { result, ran, hints } = await hinted({ 'tests/stateful.test.ts': STATEFUL }, { file: 'tests/stateful.test.ts', test: 'relies on the setup' });
       // Nothing checks the rule's value, so the mutant survives; alone, the hinted test would fail for want of its setup.
       expect(result.summary).toMatchObject({ mutants: 1, killed: 0, survived: 1 });
       expect(ran.slice(0, 3)).toEqual(['stateful loaded', 'stateful sets up', 'stateful relies']);
+      // The hint no longer kills, so it is dropped rather than tried again next time (#1308).
+      expect(hints).toEqual([]);
     }, 120_000);
 
     it('runs every required test when the hinted test passes, and learns the test that really killed it', async () => {
@@ -1149,10 +1151,22 @@ it('relies on the setup', () => { note('relies'); expect(ready).toBe(true); });
 
     it('completes the whole required suite for a survivor, even after its hinted test passes', async () => {
       const OTHER = `${notes('other')}it('also reads it', () => { note('reads'); expect(enabled === true || enabled === false).toBe(true); });\n`;
-      const { result, ran } = await hinted({ 'tests/broad.test.ts': BROAD, 'tests/other.test.ts': OTHER }, { file: 'tests/broad.test.ts', test: 'reads the rule' });
+      const { result, ran, hints } = await hinted({ 'tests/broad.test.ts': BROAD, 'tests/other.test.ts': OTHER }, { file: 'tests/broad.test.ts', test: 'reads the rule' });
       expect(result.summary).toMatchObject({ mutants: 1, killed: 0, survived: 1 });
       expect(ran.filter((r) => r === 'broad reads')).toHaveLength(2);
       expect(ran).toContain('other reads');
+      expect(hints).toEqual([]);
+    }, 120_000);
+
+    it('counts an earlier test of the hinted file failing on its own assertion as the kill, and learns it (#1308)', async () => {
+      const EARLY = `${notes('early')}it('checks the rule', () => { note('checks'); expect(enabled).toBe(true); });
+it('reads it later', () => { note('later'); expect(typeof enabled).toBe('boolean'); });
+`;
+      const { result, ran, hints } = await hinted({ 'tests/broad.test.ts': BROAD, 'tests/early.test.ts': EARLY }, { file: 'tests/early.test.ts', test: 'reads it later' });
+      expect(result.summary).toMatchObject({ mutants: 1, killed: 1 });
+      // The trial alone decided it: no full run followed.
+      expect(ran).toEqual(['early loaded', 'early checks']);
+      expect(hints).toEqual([{ file: 'tests/early.test.ts', test: 'checks the rule' }]);
     }, 120_000);
 
     it('skips a hint whose test no longer exists, and does not count a hinted file that breaks on load as a kill', async () => {

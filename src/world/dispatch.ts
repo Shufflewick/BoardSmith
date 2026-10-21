@@ -89,6 +89,9 @@ export interface WorldDispatchHost<R extends { readonly schedules?: readonly Sch
 /** What the command did, and the queue writes its schedules come to. */
 export interface WorldDispatchStepResult<R> {
   readonly result: R;
+  /** What the walk answered, which the host checks the result's notice writes
+   *  against (#975). */
+  readonly answers: WorldWalkAnswers;
   /** Events to insert and pending event ids they displace. A refused plan is
    *  thrown, never returned. */
   readonly plan: { readonly events: readonly PlannedEvent[]; readonly replaced: readonly string[] };
@@ -142,5 +145,5 @@ export async function dispatchStep<R extends { readonly schedules?: readonly Sch
     replaces: planning.replaces,
   });
   if (!plan.ok) throw plan.refusal;
-  return { result, plan: { events: plan.events, replaced: plan.replaced } };
+  return { result, answers, plan: { events: plan.events, replaced: plan.replaced } };
 }

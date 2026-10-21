@@ -888,8 +888,9 @@ element, not the id the panel sent, and so is every element in a `chooseElements
 pick re-asked with earlier answers bound (`prompt`, `choices`/`elements`,
 `prepare`, `disabled`, `multiSelect`). Those elements are read-only, like
 everything else a read sees. A draft naming an element this action cannot offer
-the seat any more is refused with `stale-draft` rather than handed over as a bare
-number, and a draft carrying a key none of the action's picks declares is refused
+the seat any more (outside what the read declared, or not among the elements
+its pick's own `elements` offer now) is refused with `stale-draft` before any later
+pick's callback sees it, and a draft carrying a key none of the action's picks declares is refused
 with `undeclared-arg`, as the command itself is.
 
 **The number being typed is in there.** That is the point: the panel sends the
@@ -1234,11 +1235,14 @@ next one's to read. On ShufflewickPub it is also deleted when the holder's
 account is erased.
 
 A host drives all of this with one function, `applyNoticeWrites(result.notices,
-readBox, { seatCount, budgets })`, which applies a dispatch's sends and takes in
-order and answers each touched seat's box, so every host agrees about what a
-full box does. The result comes from game code, so it first re-checks `perSeat`,
-the number of sends, each notice's size and every seat against the host's own
-budgets and seat count, and refuses a result they do not admit. The
+readBox, { seatCount, budgets, declaredNotices })`, which applies a dispatch's
+sends and takes in order and answers each touched seat's box, so every host
+agrees about what a full box does. The result comes from game code, so it first
+re-checks `perSeat`, the number of sends, each notice's size and every seat
+against the host's own budgets and seat count, and refuses a result they do not
+admit. It also refuses a take or a `refuse` send to a box that is not in
+`declaredNotices`, the boxes the command's walk declared (`dispatchStep` answers
+them as `answers.declaredNotices`), with `undeclared-notice-box`. The
 `WorldStore` interface carries `noticeBox(seat)` and a checkpoint's `notices`;
 `boardsmith dev` keeps boxes in its local store, and `TestWorld.noticeBox(seat)`
 shows a test what is waiting.

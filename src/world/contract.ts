@@ -678,7 +678,8 @@ export interface WorldCommandResult {
    * (ShufflewickPub #521).
    *
    * Sends and takes in the order the handler made them. A host applies them
-   * with `applyNoticeWrites`, reading each touched seat's box once, and writes
+   * with `applyNoticeWrites`, which refuses a take or a `refuse` send to a box
+   * the walk did not declare, reading each touched seat's box once, and writes
    * the boxes IN THE SAME TRANSACTION as this dispatch's checkpoint -- a
    * refused command sends nothing and takes nothing, so a notice exists
    * exactly when the command that sent it does.

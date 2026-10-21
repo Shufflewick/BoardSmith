@@ -11,7 +11,7 @@
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -77,6 +77,12 @@ describe('withFixtureTable (#703)', () => {
     expect(seen.status).toBe(200);
     await expect(fetch(seen.hostUrl), 'the dev host outlived its fixture').rejects.toThrow();
     expect(existsSync(seen.fixture), 'the fixture outlived its host').toBe(false);
+  }, CASE_GUARD_MS);
+
+  it('writes the files it is given over the sample before it serves it (#1318)', async () => {
+    const files = { 'src/ui/components/Edges.vue': '<template><div /></template>\n' };
+    const written = await withFixtureTable(async ({ fixture }) => Object.keys(files).map((path) => readFileSync(join(fixture, path), 'utf8')), files);
+    expect(written).toEqual(Object.values(files));
   }, CASE_GUARD_MS);
 
   it('stops boardsmith dev and removes the project when its process is sent SIGTERM', async () => {
