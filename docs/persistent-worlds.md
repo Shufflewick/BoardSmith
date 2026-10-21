@@ -708,8 +708,9 @@ An array a standard method builds from what a declaration read (`filter`, `map`,
 like any local value. What it holds is still read-only, so `structuredClone`
 copies it only when its items are plain values such as numbers and strings. An
 item that is an object or array from the world is still a projection, and
-cloning the array throws `DataCloneError`; copy those items first (for example
-`map((item) => ({ ...item }))`).
+cloning the array throws `DataCloneError`. A spread copy (`{ ...item }`,
+`[...item]`) is plain only at its own level, so copy every object and array
+inside the item too before cloning.
 
 ### Selections: what an action asks a player for
 
