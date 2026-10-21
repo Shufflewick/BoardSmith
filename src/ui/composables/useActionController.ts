@@ -1870,7 +1870,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
   }
 
-  /** Why execute() would send nothing for this action now, or undefined when it may send. */
+  /** Why execute() refuses this action with an error now, or undefined when it does not. */
   function executeRefusal(actionName: string): string | undefined {
     if (isViewingHistoryValue()) return 'Cannot execute an action while viewing historical state.';
     if (!isMyTurn.value) return 'Not your turn';
