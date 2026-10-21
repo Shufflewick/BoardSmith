@@ -2247,6 +2247,8 @@ export class Game<
     // can differ in key order, and a baseline that disagreed with the live
     // serialization would report a fresh adoption dirty before anything wrote.
     this._baselinePartition(element._t.id);
+    // After the baseline, so a hook that wrongly writes state shows the partition dirty instead of hiding it.
+    element._afterRestoreSubtree();
 
     return element;
   }
@@ -5575,6 +5577,8 @@ export class Game<
     this.pile.resolveElementReferences(this);
     // `_`-prefixed, so not walked above; the buffer holds elements live, as `toJSON` expects (#752).
     for (const event of this._animationEvents) event.data = decodeValue(event.data, this) as Record<string, unknown>;
+    this._afterRestoreSubtree();
+    this.pile._afterRestoreSubtree();
   }
 }
 

@@ -1669,6 +1669,35 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   /**
+   * Runs on this element each time a restore rebuilds it from saved state
+   * (#1349): a cold restore, undo, rewind, a bot's search copy, and a world
+   * partition adopted from storage. It runs once the whole restored tree is
+   * decoded, so element references and other elements' attributes hold their
+   * real values. It does not run on construction or on replay, where the
+   * game's own code writes every value again.
+   *
+   * Use it to re-apply what the saved bytes cannot carry, such as freezing an
+   * attribute the game never edits in place (`deepFreeze` is the game's own helper):
+   *
+   * ```ts
+   * protected override afterRestore(): void {
+   *   if (!this.isAttributeRedacted('data') && this.data) deepFreeze(this.data);
+   * }
+   * ```
+   *
+   * - It must not change any saved value: a restore that wrote state would
+   *   make the restored game differ from the one that was saved.
+   * - In a per-seat copy, reading an attribute the seat was not told throws
+   *   {@link RedactedAttributeError}, so ask {@link isAttributeRedacted} first.
+   */
+  protected afterRestore(): void {}
+
+  /** Runs `afterRestore` on every element of this subtree; engine-internal, called once a restore has decoded it. */
+  _afterRestoreSubtree(): void {
+    forEachInSubtree(this, (element) => element.afterRestore());
+  }
+
+  /**
    * Create an element tree from JSON
    */
   static fromJSON<T extends GameElement>(
