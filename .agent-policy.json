@@ -23,6 +23,27 @@
       "run": "node bin/boardsmith.js catalogue --skip 'WindupWarfare=validate does not finish (Shufflewick/WindupWarfare#100)' --skip 'one-two-punch=it calls player.setCurrent(), which #780 removes (Shufflewick/one-two-punch#2)' --skip 'seven=its bot-search test calls createSnapshot without the reseed #776 requires (Shufflewick/seven#2)' --skip 'sotf=its harness follows #789 on a branch that waits on its quest-forgery question (Shufflewick/sotf#75)'"
     }
   ],
+  "untested": [
+    ".planning/*.md",
+    ".planning/codebase/**/*.md",
+    ".planning/debug/**/*.md",
+    ".planning/milestones/**/*.md",
+    ".planning/research/**/*.md",
+    ".planning/todos/**/*.md",
+    ".planning/ui-reviews/**/*.md",
+    ".planning/phases/*/*.md",
+    ".planning/phases/*/*-MEASUREMENT/**/*.md",
+    ".planning/phases/*/*-EXPERIMENTS/**/*.md",
+    ".planning/phases/*/*-PROOF/**/*.md",
+    ".planning/phases/*/*-EVIDENCE/**/*.md",
+    ".planning/phases/176-stale-chunk-repair/176-FIXTURES/**/*.md",
+    "planning/**/*.md",
+    "docs/plans/**/*.md",
+    "docs/superpowers/**/*.md",
+    "CLAUDE.md",
+    "scripts/ingest-harness/__fixtures__/README.md",
+    "scripts/ingest-harness/__fixtures__/interactive-nonconforming/**/*.md"
+  ],
   "slice": {
     "count": 20,
     "run": "npx vitest run --shard={slice}",

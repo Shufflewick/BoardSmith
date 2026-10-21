@@ -14,15 +14,15 @@
  * Everything runs while the file is collected, where no test timeout applies
  * (#363): each simulate bundles the rules.
  */
-import { readFileSync, rmSync } from 'node:fs';
+import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { smokeProject } from '../src/cli/commands/smoke-project.test-helper.js';
 import { spawnCli } from '../src/cli/spawn-cli.test-helper.js';
 import { applyFileStep, balanceSimulatorSteps } from './balance-simulator-steps.js';
+import DOC from './balance-simulator.md';
 
-const DOC = readFileSync(join(import.meta.dirname, 'balance-simulator.md'), 'utf-8');
 const steps = balanceSimulatorSteps();
 
 interface SimulateRun {

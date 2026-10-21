@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { promises as fs } from 'node:fs';
-import { join } from 'node:path';
+import { SKILL_FILES, skillMarkdown } from '../slash-command/skill-markdown.test-helper.js';
 import {
   NUMBERED_LEDGER_SPECS,
   allocateProvisional,
@@ -132,11 +131,10 @@ describe('quoted ids are never citations (#437)', () => {
   });
 
   it('finds no citation in any shipped template or skill file, so they pass chunk-merge unchanged', async () => {
-    const root = new URL('../slash-command/bs/', import.meta.url).pathname;
-    const markdown = (await fs.readdir(root, { recursive: true })).filter((f) => f.endsWith('.md'));
+    const markdown = SKILL_FILES.filter((f) => f.startsWith('bs/')).map((f) => f.slice('bs/'.length));
     expect(markdown.length).toBeGreaterThan(10);
     for (const file of markdown) {
-      const text = await fs.readFile(join(root, file), 'utf-8');
+      const text = skillMarkdown(`bs/${file}`);
       expect({ file, cites: provisionalReferences(file, text) }).toEqual({ file, cites: [] });
     }
   });
