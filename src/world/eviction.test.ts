@@ -68,10 +68,10 @@ describe('ResidentWorld eviction (#747)', () => {
     // vault:1 was evicted after its stash landed; the stash survived and the
     // room comes back for a view and for the next command.
     const views = await world.run(() => world.viewsFor([worldSeatPlayer(1)]));
-    expect(JSON.stringify(views.bodyFor(worldSeatPlayer(1)))).toContain('"tally":"*"');
+    expect(JSON.stringify(views.seatFor(worldSeatPlayer(1)).view)).toContain('"tally":"*"');
     await take(1, 'stash');
     const again = await world.run(() => world.viewsFor([worldSeatPlayer(1)]));
-    expect(JSON.stringify(again.bodyFor(worldSeatPlayer(1)))).toContain('"tally":"**"');
+    expect(JSON.stringify(again.seatFor(worldSeatPlayer(1)).view)).toContain('"tally":"**"');
     expect(world.residency().length).toBeLessThanOrEqual(2);
     await world.close();
   });

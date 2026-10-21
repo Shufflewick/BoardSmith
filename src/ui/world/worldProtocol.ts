@@ -159,8 +159,18 @@ interface WorldStateMessage {
   readonly source: typeof WORLD_HOST_SOURCE;
   readonly type: 'world_state';
   readonly phase: WorldPhase;
-  /** This player's own projection of the world. `null` before the first one. */
+  /**
+   * The world's projection for this player, as `viewsFor` answered it: a body
+   * every seat shown the same thing shares byte for byte, so a host encodes it
+   * once (#1207). `null` before the first one.
+   */
   readonly view: unknown;
+  /**
+   * This player's own ids for the placeholders in `view`, in order, exactly as
+   * `viewsFor` answered them beside it (#1326). The page puts them back with
+   * `seatView` before anything reads the view; `[]` when it holds none.
+   */
+  readonly placeholders: readonly number[];
   /** The seat this player holds, or `null` before the world has said. */
   readonly seat: number | null;
   /**

@@ -14,7 +14,7 @@
 // measure that output shrinks with input, which a type cannot express.
 import { expect, it } from "vitest";
 import type { WorldCommandStamp, WorldEngine, WorldEventStamp } from "./contract.js";
-import { seatView } from "./engine.js";
+import { seatView } from "../engine/element/seat-placeholders.js";
 
 /** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
  *  The clock's road passes its whole occurrence instead. */

@@ -74,7 +74,7 @@ import type {
 } from "../engine/index.js";
 import type { ActionMetadata, PickMetadata } from "../session/types.js";
 import { buildPickMetadata } from "../engine/element/action-metadata.js";
-import { fillPlaceholders, picksFromSeat, placeholderIdOf, sharePlaceholders, type SharedElementJSON } from "../engine/element/seat-placeholders.js";
+import { picksFromSeat, placeholderIdOf, sharePlaceholders } from "../engine/element/seat-placeholders.js";
 import { PARTITION_ROOT_RULE } from "../engine/element/game.js";
 import {
   formatChoiceCandidates,
@@ -3626,21 +3626,6 @@ function shareGroups(
     keyOf.push(key);
   }
   return { groups, keyOf };
-}
-
-/**
- * ONE SEAT'S VIEW OUT OF A `viewsFor` ANSWER (#1207): the body it holds, with
- * its own placeholder ids put back. A body several seats share carries none of
- * them, so a host calls this last, before the view goes to that seat.
- */
-export function seatView(body: unknown, placeholders: readonly number[]): unknown {
-  // Another engine's body may be any shape, and it is never handed ids.
-  if (placeholders.length === 0) return body;
-  const { state } = (body ?? {}) as { state?: unknown };
-  if (typeof state !== "object" || state === null) {
-    throw new Error(`This view holds no board, and was handed ${placeholders.length} placeholder ids for it.`);
-  }
-  return { ...(body as object), state: fillPlaceholders(state as SharedElementJSON, placeholders) };
 }
 
 /**
