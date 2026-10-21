@@ -1232,7 +1232,8 @@ const { boardStyle } = useBoardSize(boardRef);
 
 `useBoardSize()` also returns `zoom`, a read-only ref holding the zoom
 GameShell applies to the board (the controls-menu slider or the fit; 1 outside
-GameShell). The region is not zoomed and your board is, so a board that fits
+GameShell, and 1 in a browser without CSS `zoom`, such as Firefox before 126,
+where the shell applies no zoom and offers no slider). The region is not zoomed and your board is, so a board that fits
 more of itself to the region, such as its height, divides region pixels by
 `zoom` to get its own. Watch `zoom` to re-fit: a zoom change does not resize
 anything a `ResizeObserver` can see.

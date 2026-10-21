@@ -32,6 +32,8 @@
  *          game states the model once, by calling `useBoardSize()`.
  *   #1332: `useBoardSize().zoom` is the shell's applied zoom and changes with
  *          the slider, so a board fitted to the region can convert its pixels.
+ *   #1361: where the browser has no CSS zoom, the shell applies none, so
+ *          `useBoardSize().zoom` stays 1 and the slider cannot be set.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { defineComponent, h, ref, shallowRef, nextTick, watch, type Component, type Ref } from 'vue';
@@ -41,6 +43,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { useAutoZoom, ZOOM_MIN } from './useAutoZoom';
 import { useBoardSize } from './useBoardSize';
+import { withoutCssZoom } from './css-zoom.test-helper.js';
 
 /** The measured mobile case from the B20 report: a 375×812 viewport, a
  *  375×765 board region, and a board whose printed text cannot be truncated
@@ -234,6 +237,21 @@ describe('B20: useBoardSize pins the board; useAutoZoom stops height-fitting it'
 
     expect(seen).toEqual([0.8, 2]);
     shell.wrapper.unmount();
+  });
+
+  it('#1361: where the browser has no CSS zoom, useBoardSize().zoom stays 1 and the slider cannot be set', async () => {
+    const restore = withoutCssZoom();
+    try {
+      const shell = mountShell(PinnedBoard);
+      // The same overflow the #1332 case fits to 0.5.
+      await settle(shell.wrapper, 750);
+      expect(boardZoom!.value).toBe(1);
+      expect(() => shell.api.setZoom(0.8)).toThrow(/cannot apply a zoom/);
+      expect(boardZoom!.value).toBe(1);
+      shell.wrapper.unmount();
+    } finally {
+      restore();
+    }
   });
 });
 
