@@ -325,17 +325,33 @@ const CELL_METADATA: Record<string, EnrichedActionMetadata> = {
   },
 };
 
-/** The real controller and board, driven through the mutators alone. */
+/** The real controller, bridge and board, driven through the mutators. The bridge marks the board (#1380). */
 function cellTable() {
   const board = createBoardInteraction();
-  const controller = useActionController({
-    sendAction: vi.fn(async () => ({ success: true })),
-    availableActions: ref(['mark', 'markMany']),
-    actionMetadata: ref(CELL_METADATA),
-    isMyTurn: ref(true),
-    autoFill: false,
-    autoExecute: false,
-  });
+  const availableActions = ref(['mark', 'markMany']);
+  const actionMetadata = ref(CELL_METADATA);
+  const controller = effectScope().run(() => {
+    const c = useActionController({
+      sendAction: vi.fn(async () => ({ success: true })),
+      availableActions,
+      actionMetadata,
+      isMyTurn: ref(true),
+      autoFill: false,
+      autoExecute: false,
+    });
+    useBoardActionBridge({
+      controller: c,
+      boardInteraction: board,
+      isMyTurn: ref(true),
+      autoEndTurn: ref(false),
+      actionMetadata,
+      availableActions,
+      disabledActions: ref(undefined),
+      isViewingHistory: ref(false),
+      runnerIdentity: ref(undefined),
+    });
+    return c;
+  })!;
   const mutators = createActionMutators(controller, board, {
     isViewingHistory: () => false,
     isMyTurn: () => true,
