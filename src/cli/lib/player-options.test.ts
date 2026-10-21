@@ -184,9 +184,9 @@ describe('seatOptionsRefusal (#1323)', () => {
   });
 
   const holder = { ...personal, dictator: 'dictator' };
-  const constructorOption: Record<string, PlayerOptionDefinition> = {
-    constructor: { type: 'boolean', label: 'Constructor', default: false },
-  };
+  const constructorOption = Object.fromEntries<PlayerOptionDefinition>([
+    ['constructor', { type: 'boolean', label: 'Constructor', default: false }],
+  ]);
   it.each<[string, unknown, RegExp, Record<string, PlayerOptionDefinition>?]>([
     ['a table of the wrong size', table(holder), /one set of player options for each of the 2 seats/],
     ['a table that is not a list', { 1: holder, 2: personal }, /one set of player options for each of the 2 seats/],
