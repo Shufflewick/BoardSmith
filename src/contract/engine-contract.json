@@ -1,6 +1,6 @@
 {
-  "revision": 262,
-  "surfaceHash": "b6df8a9e36ac4679",
+  "revision": 263,
+  "surfaceHash": "82496f56c69aa362",
   "payloadHash": "7418fecc0604b2a0",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -2039,6 +2039,14 @@
       "payloadHash": "7418fecc0604b2a0",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A world's offer (offersFor, offerPartitions) now runs the declaration rounds and candidates of an action's picks only through the first required pick (#1345). A pick after it may read that pick, so it is offered by its shape alone (name, prompt, bounds, no choices or validElements) and its round first runs when the panel re-asks it with the picks before it bound. Previously the offer ran every pick's round with nothing bound, so a later pick's needs: that read an earlier pick crashed the whole offer as a rules error. Platform: re-vendor so such an action is offered. Payload and stored format unchanged; no game needs a rebuild."
+    },
+    {
+      "revision": 263,
+      "date": "2026-10-21",
+      "surfaceHash": "82496f56c69aa362",
+      "payloadHash": "7418fecc0604b2a0",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "boardsmith/world exports plainCopy, which answers a detached plain copy of plain data a world callback read through its read-only view, without the per-property cost of reading through the view (#1347)."
     }
   ]
 }

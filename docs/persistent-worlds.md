@@ -717,8 +717,28 @@ like any local value. What it holds is still read-only, so `structuredClone`
 copies it only when its items are plain values such as numbers and strings. An
 item that is an object or array from the world is still a projection, and
 cloning the array throws `DataCloneError`. A spread copy (`{ ...item }`,
-`[...item]`) is plain only at its own level, so copy every object and array
-inside the item too before cloning.
+`[...item]`) is plain only at its own level.
+
+To copy plain data a declaration (or any other world callback) read, such as a
+JSON payload saved on a `Space`, use `plainCopy` from `boardsmith/world`
+(#1347). It answers a fresh copy, all the way down, that you can change, clone
+or `JSON.stringify` like any local value, and changing it never reaches the
+world:
+
+```ts
+const saved = plainCopy((world.partition("room:1") as Room).data);
+const bytes = JSON.stringify(saved).length;
+```
+
+It reads the data itself rather than through the read-only view, so it costs
+about what `structuredClone` of the same data costs. `JSON.stringify` straight
+through the read-only view was measured at 12 to 36 times a plain
+`JSON.stringify`, since every property it reads goes through the view.
+
+`plainCopy` copies only plain objects, arrays and primitive values such as
+strings, numbers, booleans and `null`. It throws a `TypeError` naming the path when it meets anything else (an
+element, a `Map`, a function, a getter, or an object that contains itself), and
+it never runs a getter or a method on the world's data.
 
 ### Selections: what an action asks a player for
 

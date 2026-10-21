@@ -610,3 +610,58 @@ export function readOnlyProjection<T>(value: T): T {
   minted.add(projection);
   return projection as T;
 }
+
+/**
+ * A DETACHED PLAIN COPY OF DATA A CALLBACK READ (#1347).
+ *
+ * Serializing through a projection pays a trap per property and mints a proxy
+ * per nested object, measured at 12-36x a plain `JSON.stringify`. This walks
+ * the real data instead and answers a fresh copy, so nothing it hands back
+ * reaches the world. Only plain data is copied: a class instance, a built-in
+ * object, a function and an accessor are refused unrun, since running one
+ * against the live object is the write this module exists to prevent.
+ */
+export function plainCopy<T>(value: T): T {
+  return copyPlain(value, [], new Set()) as T;
+}
+
+function copyPlain(value: unknown, path: string[], within: Set<object>): unknown {
+  if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+  const subject = sources.get(value) ?? value;
+  if (typeof subject === "function") refuseCopy(path, "is a function");
+  if (within.has(subject)) refuseCopy(path, "refers back to an object that contains it");
+  const prototype = Object.getPrototypeOf(subject) as object | null;
+  const isArray = Array.isArray(subject);
+  if (isArray ? prototype !== Array.prototype : prototype !== Object.prototype && prototype !== null) {
+    refuseCopy(path, `is a ${kindOf(subject, prototype)}`);
+  }
+  within.add(subject);
+  const copy: Record<string, unknown> = isArray ? (new Array((subject as unknown[]).length) as never) : {};
+  for (const key of Object.keys(subject)) {
+    const held = Object.getOwnPropertyDescriptor(subject, key)!;
+    path.push(key);
+    if (!("value" in held)) refuseCopy(path, "is a getter");
+    const item = copyPlain(held.value, path, within);
+    // An own "__proto__" key, as JSON.parse makes, would set the copy's prototype if assigned.
+    if (key === "__proto__") Object.defineProperty(copy, key, { value: item, enumerable: true, writable: true, configurable: true });
+    else copy[key] = item;
+    path.pop();
+  }
+  within.delete(subject);
+  return copy;
+}
+
+function kindOf(subject: object, prototype: object | null): string {
+  const tag = Object.prototype.toString.call(subject).slice("[object ".length, -1);
+  if (tag !== "Object" && tag !== "Array") return tag;
+  const named = prototype === null ? undefined : Object.getOwnPropertyDescriptor(prototype, "constructor")?.value;
+  return typeof named === "function" && named.name !== "" ? named.name : "class instance";
+}
+
+function refuseCopy(path: string[], what: string): never {
+  const where = path.length === 0 ? "the value itself" : `the value at "${path.join(".")}"`;
+  throw new TypeError(
+    `plainCopy copies plain data only (plain objects, arrays and primitive values such as strings and numbers), but ${where} ${what}. ` +
+      "Copy only the plain fields you need, or read the rest through the read-only view as it is.",
+  );
+}

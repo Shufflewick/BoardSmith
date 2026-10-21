@@ -68,6 +68,7 @@ const VALUES = [
   'occurrencesDue',
   'ownerOf',
   'partitionBytes',
+  'plainCopy',
   'planEviction',
   'planMigration',
   'planSchedules',
