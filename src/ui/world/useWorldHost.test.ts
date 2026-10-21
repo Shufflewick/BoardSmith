@@ -144,6 +144,25 @@ describe('useWorldHost', () => {
     });
   });
 
+  it('says so on screen when a state frame comes without placeholder ids, rather than throwing in the listener (#1326)', () => {
+    const host = make();
+    const { placeholders: _omitted, ...withoutIds } = stateFrame({ seat: 4, revision: 9 });
+    deliver(host, withoutIds);
+    expect(host.phase.value).toBe('refused');
+    expect(host.view.value).toBeNull();
+    expect(host.notice.value).toContain('placeholders');
+    expect(host.seat.value).toBe(4);
+  });
+
+  it('says so on screen when a state frame holds a different number of ids than placeholders (#1326)', () => {
+    const host = make();
+    const shared = { state: { id: 0, className: 'Game', children: [{ className: 'Card', placeholder: 0 }, { className: 'Card', placeholder: 1 }] } };
+    deliver(host, stateFrame({ view: shared, placeholders: [-41] }));
+    expect(host.phase.value).toBe('refused');
+    expect(host.view.value).toBeNull();
+    expect(host.notice.value).toContain('This view has 2 placeholders and was handed 1 ids');
+  });
+
   /**
    * #244: AN OFFER SET IS ABOUT ONE COMMITTED STATE, AND SAYS WHICH.
    *

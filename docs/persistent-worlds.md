@@ -1586,8 +1586,8 @@ holds (`placeholders`, in order); the runner's `of[player]` is
 `{ at, placeholders }`, so a seat's body index never comes without its ids.
 `seatView(bodies[at], placeholders)` from `boardsmith/world` is that seat's
 view. A host sends the shared body as the `world_state` frame's `view` and the
-seat's ids as its `placeholders` (#1326), so the body is still encoded once per
-group on the wire; the world client calls `seatView` before anything reads the
+seat's ids as its `placeholders` (#1326), so a host can encode the body once per
+group; the world client calls `seatView` before anything reads the
 view. A host that serves the view some other way calls `seatView` itself before
 sending. No shared body carries
 any seat's ids, and a seat is given ids only for the placeholders in its own body.

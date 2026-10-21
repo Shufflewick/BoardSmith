@@ -261,6 +261,25 @@ function answerOf<T extends { readonly ok: boolean }>(
   return answer as T;
 }
 
+/** This seat's own view out of a state frame, or why the page cannot read it. */
+function seatViewOf(
+  data: Extract<WorldHostMessage, { type: 'world_state' }>,
+): { ok: true; view: unknown } | { ok: false; message: string } {
+  if (!Array.isArray(data.placeholders)) {
+    return {
+      ok: false,
+      message:
+        "The host sent this seat's view without its placeholder ids, so this page cannot show it. " +
+        'Update the host: every world_state frame carries `placeholders`, `[]` when the view holds none.',
+    };
+  }
+  try {
+    return { ok: true, view: seatView(data.view, data.placeholders) };
+  } catch (error) {
+    return { ok: false, message: `The host sent a view this page cannot read. ${(error as Error).message}` };
+  }
+}
+
 export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
   const post =
     options.post ?? ((message: WorldUiMessage) => window.parent.postMessage(message, '*'));
@@ -429,6 +448,8 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
   }
 
   function takeState(data: Extract<WorldHostMessage, { type: 'world_state' }>): void {
+    // Read before anything changes, so a frame the page cannot read leaves no half-taken state (#1326).
+    const shown = seatViewOf(data);
     heardFromHost.value = true;
     hostSilent.value = false;
     if (helloTimer !== null) {
@@ -436,8 +457,8 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
       helloTimer = null;
     }
 
-    phase.value = data.phase;
-    view.value = seatView(data.view, data.placeholders);
+    phase.value = shown.ok ? data.phase : 'refused';
+    view.value = shown.ok ? shown.view : null;
     // WHO IS LOOKING, WHICH IS THE OTHER HALF OF "WHAT IS ON SCREEN" (#272).
     //
     // A state frame that names a different seat is a SEAT SWITCH -- the dev
@@ -454,7 +475,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     seat.value = data.seat;
     if (switched) forgetTheSeatThatLeft();
     takeRevision(data.revision, switched);
-    notice.value = data.notice;
+    notice.value = shown.ok ? data.notice : shown.message;
     worldName.value = data.worldName;
     presence.value = data.presence;
     // Absent is not empty: a host with no names to give leaves the shell with
@@ -464,7 +485,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     // THE FIRST MOMENT AN UNCERTAIN ORDER CAN BE ASKED ABOUT (#195): the world
     // is answering this page and it holds a seat, which is what a command needs
     // to be dispatched at all.
-    if (!recovered && data.phase === 'watching' && data.seat !== null) {
+    if (!recovered && phase.value === 'watching' && data.seat !== null) {
       recovered = true;
       void recover(data.seat);
     }
