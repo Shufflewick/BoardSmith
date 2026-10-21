@@ -1951,6 +1951,22 @@ describe('useActionController picks', () => {
     expect(controller.actionSnapshot.value?.pickSnapshots.has('ship')).toBe(true);
   });
 
+  it('clears the answers to the picks after a cleared one, so they are asked again against the new value (#1359)', async () => {
+    const controller = boardWithCrewForDory();
+    await controller.start('board');
+    await controller.fill('ship', 'dory');
+    await controller.fill('crew', ['ann']);
+    expect(controller.currentArgs.value).toEqual({ ship: 'dory', crew: ['ann'] });
+
+    controller.clear('ship');
+    await controller.fill('ship', 'skiff');
+
+    expect(controller.currentArgs.value).toEqual({ ship: 'skiff' });
+    expect(controller.actionSnapshot.value?.collectedPicks.has('crew')).toBe(false);
+    expect(controller.currentPick.value?.name).toBe('crew');
+    expect(controller.isReady.value).toBe(false);
+  });
+
   it("drops a pick's fetched prompt and bounds when its re-ask is refused, so the old answer's are not shown (#1354)", async () => {
     const controller = boardWithCrewForDory();
     await controller.start('board');
