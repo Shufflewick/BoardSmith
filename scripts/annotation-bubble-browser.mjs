@@ -90,8 +90,9 @@ function measure(frame) {
       layer: { ...box(layer), width: layer.clientWidth },
       shown: names.map((name, i) => {
         const caret = bubbles[i]?.querySelector('.bsg-board-message__caret');
+        const target = doc.querySelector(`[data-bs-el-name="${name}"]`);
         return {
-          target: box(doc.querySelector(`[data-bs-el-name="${name}"]`)),
+          target: target ? box(target) : null,
           bubble: bubbles[i] ? box(bubbles[i]) : null,
           caret: caret ? { ...box(caret), side: caret.className.match(/caret--(\w+)/)?.[1] } : null,
         };
@@ -104,6 +105,7 @@ function measure(frame) {
 function misses(seen, i) {
   const { layer, shown } = seen;
   const { target, bubble, caret } = shown[i];
+  if (!target) return [`the board shows no target named ${TARGETS[i].name}`];
   if (!bubble) return ['no bubble is shown'];
   if (!caret) return ['the bubble has no caret'];
   const found = [];
