@@ -188,6 +188,11 @@ export const WORLD_REFUSALS = {
     why: "#662, #665: a seat's command, its declaration walk, a quote, or a pick re-asked with earlier answers bound carried a key none of the action's picks declares. A client sends picks and nothing else, so the args are refused before any of the action's declarations or callbacks see them, rather than reaching the rules and coming back as the game's own refusal. A scheduled event is not checked: the clock's verbs ask no picks and their args are the bundle's own. One request refused; the world is unaffected",
   },
 
+  "missing-pick": {
+    owner: "caller",
+    why: "#1328: a seat's command, or its declaration walk, left out (or sent null for) a pick the action requires. A round declared after a selection reads that selection, so the command is refused before any declaration round sees its args, rather than reaching game code with the pick unbound and coming back as a crash in the rules. One request refused; the world is unaffected",
+  },
+
   // ---- GAME: the bundle's own doing; dead-letters, never parks ----
   "rules-error": {
     owner: "game",

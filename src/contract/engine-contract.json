@@ -1,6 +1,6 @@
 {
-  "revision": 258,
-  "surfaceHash": "869ce5eb83bfb570",
+  "revision": 259,
+  "surfaceHash": "900feac3b56c4157",
   "payloadHash": "7418fecc0604b2a0",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -2007,6 +2007,14 @@
       "payloadHash": "7418fecc0604b2a0",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A world declaration's filter, map, slice, concat, flat, flatMap, toSorted, toReversed, toSpliced or with on a read-only array now answers a plain array of the caller's own, so structuredClone and writes to it work as they do for a spread copy; its elements stay read-only (#1327). Platform: re-vendor so worlds that clone such an array (Lacuna Expanse NPC successor steps) stop failing with DataCloneError. Surface, payload and stored format unchanged; no game needs a rebuild."
+    },
+    {
+      "revision": 259,
+      "date": "2026-10-21",
+      "surfaceHash": "900feac3b56c4157",
+      "payloadHash": "7418fecc0604b2a0",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A seat's world command that leaves out a required pick, or sends null for one, is now refused before any of the action's declaration rounds read its args, with the new caller-owned refusal missing-pick (a new WORLD_REFUSALS key) and the sentence 'Missing required selection: <pick>' (#1328). commandNeeds with a player and applyCommand both refuse it, so a needs() round after a selection always sees that selection bound; previously the walk ran with the pick unbound and a round reading it crashed as a rules error. An optional pick may still be left out, and a scheduled event is not checked. Platform: re-vendor so a seat sent such a command reads the refusal instead of the generic rules-error sentence. Payload and stored format unchanged; no game needs a rebuild."
     }
   ]
 }
