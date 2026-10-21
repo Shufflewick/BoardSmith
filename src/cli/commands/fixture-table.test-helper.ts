@@ -17,9 +17,9 @@
  * @module
  */
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { linkGameModules } from '../../testing/installed-modules.test-helper.js';
 import { Started, startDev } from '../lib/started-processes.js';
@@ -36,8 +36,11 @@ interface ServedTable {
   readonly fixture: string;
 }
 
-/** Scaffold `boardsmith init`'s table sample in `parent` and install it the way a real game is. */
-function writeTableFixture(parent: string): string {
+/** Each file a regression puts over the sample, by its path in the project. */
+type TableFiles = Readonly<Record<string, string>>;
+
+/** Scaffold `boardsmith init`'s table sample in `parent`, write `files` over it, and install it the way a real game is. */
+function writeTableFixture(parent: string, files: TableFiles): string {
   const init = spawnSync(process.execPath, [join(REPO_ROOT, 'bin', 'boardsmith.js'), 'init', 'table-fixture', '--without-rulebook'], {
     cwd: parent,
     encoding: 'utf8',
@@ -48,6 +51,10 @@ function writeTableFixture(parent: string): string {
     throw new Error(`boardsmith init could not scaffold the table fixture (${why}):\n${init.stdout}${init.stderr}`);
   }
   const dir = join(parent, 'table-fixture');
+  for (const [path, text] of Object.entries(files)) {
+    mkdirSync(dirname(join(dir, path)), { recursive: true });
+    writeFileSync(join(dir, path), text);
+  }
   linkGameModules(dir);
   return dir;
 }
@@ -58,14 +65,15 @@ function writeTableFixture(parent: string): string {
  * `started.finish` stops the host before it removes the project, whether the
  * body passed, threw, or this process was signalled while it ran.
  *
- * @param body called with the served fixture; its return value is passed on
+ * @param body  called with the served fixture; its return value is passed on
+ * @param files written over the sample before it is served, such as a regression's own rules and board (#1318)
  */
-export async function withFixtureTable<T>(body: (served: ServedTable) => Promise<T>): Promise<T> {
+export async function withFixtureTable<T>(body: (served: ServedTable) => Promise<T>, files: TableFiles = {}): Promise<T> {
   // `realpathSync`: on macOS the temp root is a symlink, and Vite resolves the project by its real path.
   const parent = realpathSync(mkdtempSync(join(tmpdir(), 'bs-table-fixture-')));
   const started = new Started();
   try {
-    const fixture = writeTableFixture(parent);
+    const fixture = writeTableFixture(parent, files);
     const hostUrl = await startDev(started, fixture);
     if (typeof hostUrl !== 'string') throw new Error(`${hostUrl.summary}\n${hostUrl.next}`);
     const interrupted = started.interrupted.then((signal) => {
