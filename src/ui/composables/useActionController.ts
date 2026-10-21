@@ -2627,18 +2627,23 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
   }
 
+  /** Forget one pick's answer and any draft of it. */
+  function forgetAnswer(name: string): void {
+    delete currentArgs.value[name];
+    actionSnapshot.value?.collectedPicks.delete(name);
+    if (multiSelectDraft.value?.selectionName === name) multiSelectDraft.value = null;
+    if (pickDraft.value?.identity === draftIdentityFor(name)) pickDraft.value = null;
+  }
+
   function clear(selectionName: string): void {
+    forgetAnswer(selectionName);
     const selections = currentActionMeta.value?.selections ?? [];
     const index = selections.findIndex(s => s.name === selectionName);
+    if (index === -1) return;
     // Later picks were answered and fetched against the old value, so they are asked again (#1354, #1359).
-    const cleared = index === -1 ? [selectionName] : selections.slice(index).map(s => s.name);
-
-    for (const name of cleared) {
-      delete currentArgs.value[name];
-      actionSnapshot.value?.collectedPicks.delete(name);
-      if (name !== selectionName) forgetPickSnapshot(name);
-      if (multiSelectDraft.value?.selectionName === name) multiSelectDraft.value = null;
-      if (pickDraft.value?.identity === draftIdentityFor(name)) pickDraft.value = null;
+    for (const later of selections.slice(index + 1)) {
+      forgetAnswer(later.name);
+      forgetPickSnapshot(later.name);
     }
   }
 
