@@ -396,6 +396,24 @@ describe("ActionPanel's clear chip does what controller.clear() does (#1371)", (
     wrapper.unmount();
   });
 
+  it('refuses to clear a pick the server holds once an onSelect step went, keeping the action there and here (#1371 review F1)', async () => {
+    const { board, controller, wrapper, cancelPendingAction } = mountHarness(() => Promise.resolve({ success: true }));
+    await flush();
+    await controller.start('board');
+    await controller.fill('ship', 'dory');
+    await controller.fill('crew', 'ann');
+    await flush();
+
+    await wrapper.find('.clear-selection-btn').trigger('click');
+    await flush();
+
+    expect(controller.lastError.value).toBe('The server already holds this answer, so it cannot be cleared now. Cancel the action to start it again.');
+    expect(controller.currentArgs.value).toEqual({ ship: 'dory', crew: 'ann' });
+    expect(board.currentAction).toBe('board');
+    expect(cancelPendingAction).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
   it.each([
     ['the panel chip', (h: Harness) => h.wrapper.find('.clear-selection-btn').trigger('click')],
     ['controller.clear()', (h: Harness) => h.controller.clear('direction')],
