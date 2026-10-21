@@ -21,11 +21,14 @@
  * root has NO aria-hidden, so the bubble's role=status / aria-live=polite is
  * announced. Reduced motion: no ring animation.
  *
- * Z-index 31: above the action bar, game modals and game-over scrim (z-30),
- * below the mobile scrim (z-45) and modals (z-50) (#1341).
+ * Z-index 31: above the action bar (z-30) (#1341), below game modals and the
+ * game-over scrim (z-32), which cover bubbles about the board. An annotation
+ * whose target is inside an open game modal is drawn in a second layer at 33, so
+ * its ring shows over the modal while the rest stay under it (#1346).
+ * Always below the mobile scrim (z-45) and modals (z-50).
  */
 
-import { ref, toRef } from 'vue';
+import { computed, ref, toRef, type ComponentPublicInstance } from 'vue';
 import BoardMessage from './BoardMessage.vue';
 import type { Annotation } from '../../../engine/tutorial/types.js';
 import { buildSelector } from './overlay-utils.js';
@@ -44,6 +47,8 @@ interface ResolvedAnnotation {
   ring: Record<string, string> | null;
   anchorStyle: Record<string, string>;
   caretSide?: 'top' | 'bottom';
+  /** The target is inside an open game modal (#bs-game-modal). */
+  inModal: boolean;
 }
 
 const GAP = 8; // var(--bsg-s2)
@@ -90,10 +95,11 @@ function resolve(ann: Annotation, boardRect: DOMRect | null, layer: LayerSize): 
   const selector = ann.target ? buildSelector(ann.target) : '';
   const targetEl = selector ? document.querySelector(selector) : null;
   if (!targetEl) {
-    return { text: ann.text, ring: null, anchorStyle: boardStyle(ann.placement, boardRect, layer) };
+    return { text: ann.text, ring: null, inModal: false, anchorStyle: boardStyle(ann.placement, boardRect, layer) };
   }
 
   const rect = targetEl.getBoundingClientRect();
+  const inModal = targetEl.closest('#bs-game-modal') !== null;
   const ring = {
     left: `${rect.left - RING_OFFSET}px`,
     top: `${rect.top - RING_OFFSET}px`,
@@ -102,7 +108,7 @@ function resolve(ann: Annotation, boardRect: DOMRect | null, layer: LayerSize): 
     borderRadius: readRadius(targetEl),
   };
   if (ann.placement && ann.placement !== 'auto') {
-    return { text: ann.text, ring, anchorStyle: boardStyle(ann.placement, boardRect, layer) };
+    return { text: ann.text, ring, inModal, anchorStyle: boardStyle(ann.placement, boardRect, layer) };
   }
 
   // Next to the target: below it, or above when it would run off the bottom.
@@ -120,12 +126,25 @@ function resolve(ann: Annotation, boardRect: DOMRect | null, layer: LayerSize): 
   };
   const below = rect.top + rect.height + GAP;
   if (below + BUBBLE_HEIGHT_ESTIMATE <= layer.height) {
-    return { text: ann.text, ring, caretSide: 'top', anchorStyle: { left, top: `${below}px`, ...shifted } };
+    return { text: ann.text, ring, inModal, caretSide: 'top', anchorStyle: { left, top: `${below}px`, ...shifted } };
   }
   // Only CSS knows the bubble's height: lift it by that height, but never past the layer's top (#1331).
   const above = rect.top - GAP;
   const lifted = { ...shifted, transform: `translate(var(--bsg-bubble-shift), max(-100%, ${-above}px))` };
-  return { text: ann.text, ring, caretSide: 'bottom', anchorStyle: { left, top: `${above}px`, ...lifted } };
+  return { text: ann.text, ring, inModal, caretSide: 'bottom', anchorStyle: { left, top: `${above}px`, ...lifted } };
+}
+
+/** The base layer, and the one over game modals while it has something to show; none with nothing to annotate. */
+const layers = computed(() => {
+  if (props.annotations.length === 0) return [];
+  const base = { overModal: false, items: resolvedAnnotations.value.filter((r) => !r.inModal) };
+  const overModal = { overModal: true, items: resolvedAnnotations.value.filter((r) => r.inModal) };
+  return overModal.items.length > 0 ? [base, overModal] : [base];
+});
+
+/** The base layer is the one measured and tracked. */
+function setRoot(el: Element | ComponentPublicInstance | null, overModal: boolean) {
+  if (!overModal) overlayRoot.value = el as HTMLElement | null;
 }
 
 useOverlayTracking({
@@ -144,12 +163,13 @@ useOverlayTracking({
 <template>
   <Teleport to="body">
     <div
-      v-if="annotations.length > 0"
-      ref="overlayRoot"
+      v-for="layer in layers"
+      :key="String(layer.overModal)"
+      :ref="(el) => setRoot(el, layer.overModal)"
       class="bsg-annotation-layer"
-      :class="overlayClass"
+      :class="[overlayClass, { 'bsg-annotation-layer--over-modal': layer.overModal }]"
     >
-      <template v-for="(resolved, i) in resolvedAnnotations" :key="i">
+      <template v-for="(resolved, i) in layer.items" :key="i">
         <div
           v-if="resolved.ring"
           class="bsg-tutorial-ring"
@@ -180,6 +200,10 @@ useOverlayTracking({
   z-index: 31;
   pointer-events: none;
   overflow: visible;
+}
+
+.bsg-annotation-layer--over-modal {
+  z-index: 33;
 }
 
 .bsg-tutorial-ring {

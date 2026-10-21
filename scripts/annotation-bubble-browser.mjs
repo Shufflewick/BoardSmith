@@ -18,7 +18,7 @@
  * `node scripts/annotation-bubble-browser.mjs`; a missing Chromium says to run
  * `boardsmith install-browser`.
  */
-import { assert, check, runBrowserRegression, summarise, waitUntil } from './browser-harness.mjs';
+import { assert, check, playTableSampleToTheEnd, runBrowserRegression, summarise, waitUntil } from './browser-harness.mjs';
 
 const EDGE_MARGIN = 8;
 
@@ -30,6 +30,9 @@ const TARGETS = [
   { name: 'edge-right', side: 'the right edge', caret: 'top' },
   { name: 'edge-bottom', side: 'the bottom', caret: 'bottom' },
 ];
+
+/** Not on the board until the regression opens a game modal holding it (#1346). */
+const MODAL_ANNOTATION = { text: 'Inside the modal.', target: { kind: 'element', ref: { name: 'in-modal' } } };
 
 const RULES = `export { TableFixtureGame, TableFixturePlayer } from './game.js';
 export * from './elements.js';
@@ -48,8 +51,9 @@ export const gameDefinition = {
     learnerSeat: 1,
     steps: [{
       id: 'edges',
-      gate: { action: 'draw' },
-      content: ${JSON.stringify(TARGETS.map(({ name }) => ({ text: TEXT, target: { kind: 'element', ref: { name } } })))},
+      // Every move passes, and the step never advances, so the game can be played to its end under it (#1346).
+      gate: { anyMove: () => true },
+      content: ${JSON.stringify([...TARGETS.map(({ name }) => ({ text: TEXT, target: { kind: 'element', ref: { name } } })), MODAL_ANNOTATION])},
     }],
   },
 };
@@ -127,6 +131,41 @@ function misses(seen, i) {
   ].filter(([ok]) => !ok).map(([, why]) => why);
 }
 
+/**
+ * What is drawn on top at the middle of the modal annotation's bubble, of a bubble
+ * about the board (the right edge's), and of the action bar; at the upper half of
+ * the bar's edge toggle, which overhangs the board; and how many rings show.
+ */
+function topmost(frame) {
+  return frame.locator('body').evaluate((body) => {
+    const doc = body.ownerDocument;
+    // The game-over card makes the page behind it inert, and hit testing skips inert elements, so lift it while asking what is drawn on top.
+    const inert = [...doc.querySelectorAll('[inert]')];
+    for (const el of inert) el.removeAttribute('inert');
+    const onTop = (el, down = 0.5) => {
+      if (!el) return 'nothing (it is not shown)';
+      const r = el.getBoundingClientRect();
+      const top = doc.elementFromPoint(r.left + r.width / 2, r.top + r.height * down);
+      return top && el.contains(top) ? 'itself' : `${top?.tagName}.${top?.className}`;
+    };
+    const bubbles = doc.querySelectorAll('.bsg-annotation-layer .bsg-board-message__content--annotation');
+    const seen = {
+      bubble: onTop(bubbles[3]),
+      board: onTop(bubbles[1]),
+      bar: onTop(doc.querySelector('[data-testid="bs-actionbar"]')),
+      toggle: onTop(doc.querySelector('.bar-edge'), 0.25),
+      rings: doc.querySelectorAll('.bsg-tutorial-ring').length,
+    };
+    for (const el of inert) el.setAttribute('inert', '');
+    return seen;
+  });
+}
+
+/** Re-place the bubbles, as the board region scrolling would. */
+function remeasure(frame) {
+  return frame.locator('[data-testid="bs-board"]').evaluate((region) => region.dispatchEvent(new Event('scroll')));
+}
+
 const VIEWPORTS = [{ width: 1440, height: 900 }, { width: 390, height: 844 }];
 
 await runBrowserRegression(
@@ -167,6 +206,47 @@ await runBrowserRegression(
           });
         }
       }
+
+      // A game modal and the game-over scrim cover bubbles about the board, but never the action bar (#1346).
+      await page.setViewportSize(VIEWPORTS[0]);
+      await frame.locator('#bs-game-modal').evaluate((host) => {
+        const modal = host.ownerDocument.createElement('div');
+        modal.className = 'test-modal';
+        modal.style.cssText = 'position: absolute; inset: 0; background: teal';
+        host.append(modal);
+      });
+      const underModal = await waitUntil(() => topmost(frame), (now) => now.bubble === 'DIV.test-modal');
+      await check('a bubble about the board is drawn under an open game modal (#1346)', async () => {
+        assert(underModal.bubble === 'DIV.test-modal', `the middle of the bubble shows ${underModal.bubble}, not the modal`);
+      });
+      await check('the action bar and its edge toggle are drawn above an open game modal (#1346)', async () => {
+        assert(underModal.bar === 'itself', `the middle of the action bar shows ${underModal.bar}`);
+        assert(underModal.toggle === 'itself', `the upper half of the bar's edge toggle shows ${underModal.toggle}`);
+      });
+
+      await frame.locator('.test-modal').evaluate((modal) => {
+        modal.innerHTML = '<div data-bs-el-name="in-modal" style="position: absolute; left: 40%; top: 30%; width: 60px; height: 40px; background: gold"></div>';
+      });
+      await remeasure(frame);
+      const inModal = await waitUntil(() => topmost(frame), (now) => now.bubble === 'itself' && now.rings === 4);
+      await check('a target inside an open game modal gets its ring and a bubble drawn above the modal (#1346)', async () => {
+        assert(inModal.rings === 4, `${inModal.rings} rings show, not one for each of the 4 targets`);
+        assert(inModal.bubble === 'itself', `the middle of the bubble shows ${inModal.bubble}`);
+      });
+      await check('a bubble about the board stays under the modal while another target is inside it (#1346)', async () => {
+        assert(inModal.board === 'DIV.test-modal', `the middle of the right edge's bubble shows ${inModal.board}, not the modal`);
+      });
+
+      await frame.locator('.test-modal').evaluate((modal) => modal.remove());
+      await remeasure(frame);
+      const ended = await playTableSampleToTheEnd(frame);
+      const underScrim = await waitUntil(() => topmost(frame), (now) => now.bubble.startsWith('DIV.game-over'));
+      await check('the game-over scrim covers a bubble about the board, and the action bar stays above it (#1346)', async () => {
+        assert(ended, 'the game-over card never appeared');
+        assert(underScrim.bubble.startsWith('DIV.game-over'), `the middle of the bubble shows ${underScrim.bubble}, not the game-over scrim`);
+        assert(underScrim.bar === 'itself', `the middle of the action bar shows ${underScrim.bar}`);
+        assert(underScrim.toggle === 'itself', `the upper half of the bar's edge toggle shows ${underScrim.toggle}`);
+      });
     } finally {
       await browser.close();
     }

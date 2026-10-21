@@ -104,7 +104,7 @@ describe('the layout', () => {
     expect(modal.parentElement).toBe(board.parentElement);
   });
 
-  it('keeps modal controls above the action panel as it grows without resizing the board', async () => {
+  it('keeps the game modal host and game-over scrim above the action panel as it grows without resizing the board', async () => {
     const wrapper = mountShell();
     await nextTick();
     const bar = wrapper.get('[data-testid="bs-actionbar"]').element;
@@ -112,11 +112,13 @@ describe('the layout', () => {
     expect(observer).toBeDefined();
     vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue({height:260} as DOMRect);
     observer!.callback(); await nextTick();
-    expect(wrapper.get('#bs-game-modal').attributes('style')).toContain('bottom: 260px');
+    // The clearance is set where both the modal host and the game-over scrim inherit it (#1346).
+    const viewport = wrapper.get('.board-viewport');
+    expect(viewport.attributes('style')).toContain('--bsg-bar-clearance: 260px');
     expect(wrapper.get('[data-testid="bs-board"]').attributes('style')).toBeUndefined();
     vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue({height:80} as DOMRect);
     observer!.callback(); await nextTick();
-    expect(wrapper.get('#bs-game-modal').attributes('style')).toContain('bottom: 80px');
+    expect(viewport.attributes('style')).toContain('--bsg-bar-clearance: 80px');
     wrapper.unmount(); expect(observer!.disconnect).toHaveBeenCalled();
   });
 
