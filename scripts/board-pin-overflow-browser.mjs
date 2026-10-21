@@ -18,13 +18,18 @@
  * point, so the pin and the zoom flipped every frame. Both now measure the
  * region with its vertical scrollbar showing, whether or not it shows.
  *
+ * Without a gutter, Chromium and WebKit also resolve `100cqw` as if the
+ * region's vertical scrollbar were not there, so the #1336 cap was a scrollbar
+ * too wide and a stale pin overflowed while the region narrowed (#1353).
+ *
  * Served from `boardsmith init`'s table sample with a board that calls
  * `useBoardSize`, in Chromium with classic (space-taking) scrollbars. The
  * board is first moved across the region's overflow point with the region's
  * gutter turned off, which is how such a Safari lays the region out. Then the
  * sidebar is widened a quarter pixel per frame, so the region crosses several
  * whole pixels with no resize event, and each frame is read before the
- * ResizeObserver can re-pin.
+ * ResizeObserver can re-pin; once with the gutter, and once without it and
+ * with the vertical scrollbar showing.
  *
  * Runs under `boardsmith test --browser`, or by hand with
  * `node scripts/board-pin-overflow-browser.mjs`; a missing Chromium says to run
@@ -114,14 +119,30 @@ function crossTheOverflowPoint(frame) {
   });
 }
 
-/** Widen the sidebar 0.25px a frame and, each frame, read the region before the ResizeObserver runs. */
-function narrowTheRegion(frame) {
-  return frame.locator('body').evaluate(async (body) => {
+/**
+ * Widen the sidebar 0.25px a frame and, each frame, read the region before the
+ * ResizeObserver runs. `scrolling` first turns the region's gutter off and makes
+ * the board taller than the region, so its vertical scrollbar shows (#1353);
+ * both are put back after.
+ */
+function narrowTheRegion(frame, scrolling = false) {
+  return frame.locator('body').evaluate(async (body, scrolling) => {
     const doc = body.ownerDocument;
     const win = doc.defaultView;
     const region = doc.querySelector('.boardregion');
     const sidebar = doc.querySelector('.sidebar');
+    const board = doc.querySelector('.pinned-board');
     const nextFrame = () => new Promise((settle) => win.requestAnimationFrame(settle));
+    const noGutter = doc.createElement('style');
+    if (scrolling) {
+      noGutter.textContent = '.boardregion { scrollbar-gutter: auto !important; }';
+      // Off while the board is short, so the region widens and the pin is re-measured, as it is from mount in such a browser.
+      doc.head.append(noGutter);
+      for (let i = 0; i < 5; i++) await nextFrame();
+      board.style.height = `${region.scrollHeight + 40}px`;
+      for (let i = 0; i < 5; i++) await nextFrame();
+    }
+    const scrollbarShows = region.scrollHeight > region.clientHeight;
 
     const start = sidebar.getBoundingClientRect().width;
     const regionBefore = region.clientWidth;
@@ -134,8 +155,12 @@ function narrowTheRegion(frame) {
         overflows.push(`at +${step * 0.25}px: content ${region.scrollWidth}px wide in a ${region.clientWidth}px region`);
       }
     }
-    return { overflows, narrowedBy: regionBefore - region.clientWidth };
-  });
+    const narrowedBy = regionBefore - region.clientWidth;
+    noGutter.remove();
+    board.style.height = '';
+    await nextFrame();
+    return { overflows, narrowedBy, scrollbarShows };
+  }, scrolling);
 }
 
 /** Once layout settles: the board's rendered width, the region's available width, and whether it scrolls sideways. */
@@ -191,6 +216,14 @@ await runBrowserRegression(
       });
       await check('the pinned board never overflows the region sideways while the region narrows', async () => {
         assert(seen.overflows.length === 0, `the region scrolled sideways ${seen.overflows.length} times: ${seen.overflows.join('; ')}`);
+      });
+      const scrolling = await narrowTheRegion(frame, true);
+      await check('without a gutter, the region shows its vertical scrollbar and narrows', async () => {
+        assert(scrolling.scrollbarShows && scrolling.narrowedBy >= 5,
+          `the scrollbar ${scrolling.scrollbarShows ? 'showed' : 'did not show'} and the region narrowed by ${scrolling.narrowedBy}px`);
+      });
+      await check('without a gutter and with the vertical scrollbar showing, the pinned board never overflows the region sideways while it narrows', async () => {
+        assert(scrolling.overflows.length === 0, `the region scrolled sideways ${scrolling.overflows.length} times: ${scrolling.overflows.join('; ')}`);
       });
       const settled = await settledBoard(frame);
       await check('the pinned board still fills the region once it settles', async () => {

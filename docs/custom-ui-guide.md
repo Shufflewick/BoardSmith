@@ -1200,7 +1200,10 @@ browser without `scrollbar-gutter` (Safari before 18.2) a scrollbar coming
 or going moves neither the pin nor the zoom.
 The pin is capped at `100cqw` (`.boardregion` is an inline-size container),
 so while the region narrows, as it does while the sidebar opens, the board
-never runs past it in the frames before the pin is re-measured. The same
+never runs past it in the frames before the pin is re-measured. Where the
+region reserves no scrollbar gutter, browsers resolve `100cqw` as if its
+vertical scrollbar were not there, so the cap takes that scrollbar's width off
+(`calc(100cqw - 15px)`, say). The same
 container is what a `cqw` unit or an unnamed `@container` query in your board
 resolves against when nothing closer is a container.
 

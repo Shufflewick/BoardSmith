@@ -82,3 +82,20 @@ export function regionWidth(region: HTMLElement): number {
   region.style.overflowY = overflowY;
   return width;
 }
+
+/**
+ * How much wider than `regionWidth` the region's `100cqw` resolves (#1353).
+ * Where the region reserves no scrollbar gutter (Safari before 18.2, or
+ * `scrollbar-gutter: auto`), Chromium and WebKit resolve `100cqw` as if the
+ * vertical scrollbar were not there, so a cap at `100cqw` would be a
+ * scrollbar too wide. 0 where `100cqw` is the region's width.
+ */
+export function cqwOverhang(region: HTMLElement): number {
+  const probe = document.createElement('div');
+  probe.style.cssText = 'position: absolute; width: 100cqw; height: 0';
+  region.append(probe);
+  // Read before regionWidth forces the scrollbar, which would change what 100cqw resolves to.
+  const cqw = parseFloat(getComputedStyle(probe).width) || 0;
+  probe.remove();
+  return Math.max(0, cqw - regionWidth(region));
+}
