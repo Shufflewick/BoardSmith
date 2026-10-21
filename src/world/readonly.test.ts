@@ -496,3 +496,37 @@ describe("readOnlyProjection over built-in objects (#1171)", () => {
     ]);
   });
 });
+
+describe("readOnlyProjection over arrays a standard method builds (#1327)", () => {
+  it("answers filter, map, slice, concat, flat, flatMap, toSorted, toReversed, toSpliced and with as the caller's own plain array", () => {
+    const projection = readOnlyProjection({ a: [3, 1, 2], nested: [[1], [2]] });
+    const built = [
+      projection.a.filter((value) => value > 1),
+      projection.a.map((value) => value * 2),
+      projection.a.slice(1),
+      projection.a.concat([4]),
+      projection.nested.flat(),
+      projection.a.flatMap((value) => [value]),
+      projection.a.toSorted(),
+      projection.a.toReversed(),
+      projection.a.toSpliced(0, 1),
+      projection.a.with(0, 9),
+    ];
+
+    expect(built.map((array) => structuredClone(array))).toEqual([
+      [3, 2], [6, 2, 4], [1, 2], [3, 1, 2, 4], [1, 2], [3, 1, 2], [1, 2, 3], [2, 1, 3], [1, 2], [9, 1, 2],
+    ]);
+    built[0].push(7);
+    expect(built[0]).toEqual([3, 2, 7]);
+  });
+
+  it("still answers what a built array holds read-only, so a write cannot reach the world through it", () => {
+    const { here } = world();
+    here.tags = ["calm"];
+    const projection = readOnlyProjection({ rooms: [here] });
+
+    const [room] = projection.rooms.filter(() => true);
+    expect(() => room.tags.push("leaked")).toThrow(WorldRefusal);
+    expect(here.tags).toEqual(["calm"]);
+  });
+});

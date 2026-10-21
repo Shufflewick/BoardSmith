@@ -159,6 +159,21 @@ const BUILTIN_READ_NAMES: ReadonlyArray<readonly [object, ReadonlyArray<string |
   [Object.getPrototypeOf([].keys()) as object, ["next"]],
 ];
 
+/**
+ * THE ARRAY METHODS THAT ANSWER A FRESH ARRAY OF THEIR OWN (#1327).
+ *
+ * Run with the projection as receiver, each reads every element through the
+ * traps, so what it builds holds projections only. The array itself belongs to
+ * the caller and reaches nothing in the world, so projecting it again would only
+ * make a local value refuse `structuredClone` and writes a spread copy accepts.
+ * Taken by identity, so an override that answers live state is projected as before.
+ */
+const FRESH_ARRAY_BUILDERS = new WeakSet<object>(
+  (["concat", "filter", "flat", "flatMap", "map", "slice", "toReversed", "toSorted", "toSpliced", "with"] as const).map(
+    (name) => Array.prototype[name],
+  ),
+);
+
 const BUILTIN_READS = new WeakSet<object>();
 for (const [prototype, names] of BUILTIN_READ_NAMES) {
   for (const name of names) {
@@ -443,9 +458,11 @@ function projectedProperty(
       // on its own internals and is refused there. Blocking assignment alone
       // would leave every mutating method open.
       () =>
-        function (this: unknown, ...args: unknown[]) {
-          return readOnlyProjection(Reflect.apply(call, projection, args));
-        }
+        FRESH_ARRAY_BUILDERS.has(call)
+          ? (...args: unknown[]) => Reflect.apply(call, projection, args)
+          : function (this: unknown, ...args: unknown[]) {
+              return readOnlyProjection(Reflect.apply(call, projection, args));
+            }
     : // The real collection is keyed by real objects, and its forEach hands back live entries (#978).
       // shortcut: a plain function used as a key is wrapped as a callback and misses; name the key methods if a game needs one.
       () => (...args: unknown[]) => readOnlyProjection(Reflect.apply(call, target, throughTheDoor(args)));

@@ -1,5 +1,5 @@
 {
-  "revision": 257,
+  "revision": 258,
   "surfaceHash": "869ce5eb83bfb570",
   "payloadHash": "7418fecc0604b2a0",
   "formatHash": "ed115e27605f2ca7",
@@ -1999,6 +1999,14 @@
       "payloadHash": "7418fecc0604b2a0",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The world_state frame now carries placeholders: the seat's own ids for the placeholders in view, in order, and the world client puts them back with seatView before anything reads the view (#1326). A host sends the shared viewsFor body as view and of[player].placeholders beside it, so a body shown to many seats is encoded once on the wire instead of once per seat. placeholders is required: send [] when the view holds none (and on a refused frame). A world UI built on an earlier revision fills in no ids, so it must still be sent seatView(bodies[at], placeholders) as view. seatView moved out of the world engine module and is still exported from boardsmith/world. ResidentWorld.viewsFor's bodyFor is now seatFor, answering { view, placeholders } with view unfilled. Stored format unchanged; no game needs a rebuild."
+    },
+    {
+      "revision": 258,
+      "date": "2026-10-21",
+      "surfaceHash": "869ce5eb83bfb570",
+      "payloadHash": "7418fecc0604b2a0",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A world declaration's filter, map, slice, concat, flat, flatMap, toSorted, toReversed, toSpliced or with on a read-only array now answers a plain array of the caller's own, so structuredClone and writes to it work as they do for a spread copy; its elements stay read-only (#1327). Platform: re-vendor so worlds that clone such an array (Lacuna Expanse NPC successor steps) stop failing with DataCloneError. Surface, payload and stored format unchanged; no game needs a rebuild."
     }
   ]
 }
