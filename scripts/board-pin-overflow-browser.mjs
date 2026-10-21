@@ -19,7 +19,7 @@
  * `node scripts/board-pin-overflow-browser.mjs`; a missing Chromium says to run
  * `boardsmith install-browser`.
  */
-import { assert, check, runBrowserRegression, summarise } from './browser-harness.mjs';
+import { assert, check, openTableSample, runBrowserRegression, summarise } from './browser-harness.mjs';
 
 const PINNED_BOARD = `<script setup lang="ts">
 import { ref } from 'vue';
@@ -84,10 +84,7 @@ await runBrowserRegression(
     const browser = await launch({ classicScrollbars: true });
     try {
       const page = await browser.newPage({ viewport: { width: 1025, height: 900 } });
-      await page.goto(hostUrl);
-      await page.locator('.dev-host__frame').waitFor({ timeout: 60_000 });
-      const frame = page.frameLocator('.dev-host__frame');
-      await frame.locator('.pinned-board .chip').first().waitFor({ timeout: 60_000 });
+      const frame = await openTableSample(page, hostUrl);
 
       const seen = await narrowTheRegion(frame);
 
