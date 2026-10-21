@@ -298,14 +298,22 @@ function runProblem(
   return `, but those ids became ${plural(kind)}${listed(became.map(String))}, which are not one unbroken run of numbers. ${listFix(kind, ids)}`;
 }
 
-/** A `.N` standing alone: not part of a word or number (`p.20`, `0.5`), nor a unit (`.5em`). */
-const LONE_SHORTHAND = new RegExp(`(?<![\\w@.)\\]])${SHORTHAND}(?!\\w)`, 'g');
+/** A `.N` standing alone: not part of a word or number (`p.20`, `0.5`), a unit (`.5em`) or a quote (`'.2'`). */
+const LONE_SHORTHAND = new RegExp(`(?<![\\w@.)\\]'"\`\\\\])${SHORTHAND}(?!\\w)`, 'g');
+/** A line break that ends a paragraph: a blank line, or one holding only a comment or quote marker. */
+const PARAGRAPH_BREAK = /\n[ \t\r]*(?:(?:\*|\/\/|#|>)[ \t\r]*)?\n/;
+/** A line of source code that is not a comment line, so not the comment's prose. */
+const CODE_LINE = /\n(?![ \t]*(?:\*|\/\/|#))/;
+
+/** Whether `between`, the text from a citation to a `.N`, stays in one paragraph of prose. */
+const oneParagraph = (path: string, between: string): boolean =>
+  !PARAGRAPH_BREAK.test(between) && (path.endsWith('.md') || !CODE_LINE.test(between));
 
 /**
- * Each `.N` no citation list read, after a provisional id in the same paragraph, whose slug's id N
- * the merge allocated (#1363): `Decision @a.2 supersedes .1`. The merge cannot tell it from prose,
- * so it refuses it rather than leave it naming nothing. A `.N` straight after a kind word is
- * `unreadableShorthand`'s.
+ * Each `.N` no citation list read, after a provisional id in the same paragraph of prose, whose
+ * slug's id N the merge allocated (#1363): `Decision @a.2 supersedes .1`. The merge cannot tell it
+ * from prose, so it refuses it rather than leave it naming nothing. A `.N` straight after a kind
+ * word is `unreadableShorthand`'s.
  */
 function strayShorthand(
   path: string,
@@ -319,7 +327,7 @@ function strayShorthand(
   for (const m of citable.matchAll(LONE_SHORTHAND)) {
     if (read.has(m.index) || afterKind.has(m.index + m[0].length)) continue;
     const before = citations.filter((c) => c.index < m.index).at(-1);
-    if (before === undefined || /\n[ \t]*\n/.test(citable.slice(before.index, m.index))) continue;
+    if (before === undefined || !oneParagraph(path, citable.slice(before.index, m.index))) continue;
     const after = before.id ?? before.written;
     const id = `${after.slice(0, after.lastIndexOf('.'))}${m[0]}`;
     if (!(id in mapping)) continue;

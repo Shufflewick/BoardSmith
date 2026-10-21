@@ -335,6 +335,33 @@ describe('a shortened id outside its provisional id\'s list (#1363)', () => {
     const notes = 'Decision @a.1 halves it to .5, per p.2 and 0.2 and .2em.\n\n.2 of the deck is drawn.\nDecision @a.1 and Decision .2\n';
     expect(allocate(notes).problems).toEqual([]);
   });
+
+  it('reads no id in code past the comment that cites the provisional id, or in a quoted .N', () => {
+    const code = "// Decision @a.1: halve the rate, split on '.2'\nconst rate = .2;\n";
+    const result = allocateProvisional(
+      { 'design/DECISIONS.md': '### Decision @a.1\n\n### Decision @a.2\n', 'src/game.ts': code },
+      [{ spec: DECISIONS, path: 'design/DECISIONS.md' }],
+    );
+    expect(result.problems).toEqual([]);
+  });
+
+  it('reads a blank comment line, and a blank line in a CRLF file, as the end of the paragraph', () => {
+    const files = {
+      'design/DECISIONS.md': '### Decision @a.1\n\n### Decision @a.2\n',
+      'src/game.ts': '/**\n * Decision @a.1 sets the deck.\n *\n * .2 of the deck is drawn.\n */\n',
+      'design/notes.md': 'Decision @a.1 sets the deck.\r\n\r\n.2 of the deck is drawn.\r\n',
+    };
+    expect(allocateProvisional(files, [{ spec: DECISIONS, path: 'design/DECISIONS.md' }]).problems).toEqual([]);
+  });
+
+  it('refuses a .N on a later comment line of the same paragraph', () => {
+    const files = {
+      'design/DECISIONS.md': '### Decision @a.1\n\n### Decision @a.2\n',
+      'src/game.ts': '// Decision @a.1 sets the deck, and\n// .2 draws from it.\nexport const x = 1;\n',
+    };
+    const result = allocateProvisional(files, [{ spec: DECISIONS, path: 'design/DECISIONS.md' }]);
+    expect(result.problems.map((p) => p.detail)).toEqual([expect.stringMatching(/^writes "\.2" after Decision @a\.1,/)]);
+  });
 });
 
 describe('shorthand the merge cannot read (#446)', () => {
