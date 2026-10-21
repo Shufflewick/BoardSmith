@@ -190,7 +190,7 @@ export const WORLD_REFUSALS = {
 
   "missing-pick": {
     owner: "caller",
-    why: "#1328: a seat's command, or its declaration walk, left out (or sent null for) a pick the action requires. A round declared after a selection reads that selection, so the command is refused before any declaration round sees its args, rather than reaching game code with the pick unbound and coming back as a crash in the rules. One request refused; the world is unaffected",
+    why: "#1328, #1338: a seat's command, or its declaration walk, left out (or sent null for) a pick the action requires, or a pick re-asked with earlier answers bound left out a required pick before it. A round declared after a selection reads that selection, so the request is refused before any declaration round sees its args, rather than reaching game code with the pick unbound and coming back as a crash in the rules. A quote is not checked: it prices a draft. One request refused; the world is unaffected",
   },
 
   // ---- GAME: the bundle's own doing; dead-letters, never parks ----

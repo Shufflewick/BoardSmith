@@ -1064,7 +1064,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
     const seat = this.seatFor(player);
     // A SEAT'S ARGS ARE ITS PICKS (#665, #1328), refused as the caller's before
     // the walk or the handler sees them, as `commandNeeds` refuses them.
-    this.refuseCommandArgs(this.actionFor(command.name, seat), command.args);
+    const definition = this.actionFor(command.name, seat);
+    this.refuseArgs(definition, command.args, definition.selections.length);
     // The acting player is the schedule OWNER: their events are charged to
     // their budget, and a bundle cannot charge them to somebody else because
     // it never gets to name one.
@@ -1372,7 +1373,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // EVERY ROUND UP TO AND INCLUDING THIS SELECTION'S, with the args bound. A
     // later round may read what an earlier one loaded, and with arguments in hand
     // a round can name a partition the empty-args offer could not.
-    return this.answeringRead(player, definition, index, args, stamp, (acting, named, draft) =>
+    return this.answeringRead(player, definition, index, index, args, stamp, (acting, named, draft) =>
       this.pickOf(definition, index, acting, named, draft),
     );
   }
@@ -1391,6 +1392,10 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * and `selections.length` (the execute round) for a quote, which reads the state
    * the purchase writes to.
    *
+   * `boundBefore` is how many leading picks must be bound when required (#1338):
+   * a pick's own index, so its rounds see the picks before it, and 0 for a quote,
+   * whose rounds run on a draft where any pick may be absent.
+   *
    * `answer` is handed the DRAFT, not the args as they came in (#418): each
    * selection's value resolved the way dispatch resolves it, so a callback typed
    * to receive an element receives one. See `resolveDraft`.
@@ -1399,11 +1404,12 @@ export class BoardSmithWorldEngine implements WorldEngine {
     player: string,
     definition: ActionDefinition,
     through: number,
+    boundBefore: number,
     args: Readonly<Record<string, unknown>>,
     stamp: WorldOfferStamp,
     answer: (acting: Player, named: readonly string[], draft: Readonly<Record<string, unknown>>) => T,
   ): Promise<T> {
-    this.refuseUndeclaredArgs(definition, args);
+    this.refuseArgs(definition, args, boundBefore);
     const seat = this.seatFor(player);
     const acting = readOnlyProjection(this.playerFor(seat));
     const named: string[] = [];
@@ -1458,7 +1464,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // THE WHOLE WALK, INCLUDING THE EXECUTE ROUND, because a price is read from
     // the state the purchase writes to and that partition is usually named by the
     // round after the last selection.
-    return this.answeringRead(player, definition, definition.selections.length, args, stamp,
+    return this.answeringRead(player, definition, definition.selections.length, 0, args, stamp,
       (acting, _named, draft) =>
         // READ-ONLY FOR THE WHOLE CALLBACK, exactly as a pick's own callbacks are
         // (ShufflewickPub #384/#295): the projection refuses a write and
@@ -1564,7 +1570,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
   ): readonly string[] {
     const definition = this.offerableAction(action);
     this.quoteOf(definition);
-    return this.unmetThrough(player, definition, definition.selections.length, args, now);
+    return this.unmetThrough(player, definition, definition.selections.length, 0, args, now);
   }
 
   /** This action's quote, or the refusal that it has none. Asking an action that
@@ -1600,13 +1606,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
     now: number,
   ): readonly string[] {
     const definition = this.offerableAction(action);
-    return this.unmetThrough(
-      player,
-      definition,
-      this.selectionIndex(definition, selection),
-      args,
-      now,
-    );
+    const index = this.selectionIndex(definition, selection);
+    return this.unmetThrough(player, definition, index, index, args, now);
   }
 
   /**
@@ -1622,10 +1623,11 @@ export class BoardSmithWorldEngine implements WorldEngine {
     player: string,
     definition: ActionDefinition,
     through: number,
+    boundBefore: number,
     args: Readonly<Record<string, unknown>>,
     now: number,
   ): readonly string[] {
-    this.refuseUndeclaredArgs(definition, args);
+    this.refuseArgs(definition, args, boundBefore);
     const seat = this.seatFor(player);
     for (let step = 0; step <= through; step++) {
       for (const round of definition.world!.needs) {
@@ -1637,26 +1639,20 @@ export class BoardSmithWorldEngine implements WorldEngine {
     return [];
   }
 
-  /** A seat's args may carry only the action's picks (#662, #665): a command,
-   *  its declaration walk, a quote and a re-asked pick all refuse any other key
-   *  with this one caller-owned refusal, before a declaration or callback sees
-   *  the args. */
-  private refuseUndeclaredArgs(
+  /** A seat's args carry only the action's picks (#662, #665), and every
+   *  required one of the first `boundBefore` (#1328, #1338): all of them for a
+   *  command, those before the asked pick for a re-asked pick, none for a quote.
+   *  Refused before a declaration or callback sees the args. */
+  private refuseArgs(
     definition: ActionDefinition,
     args: Readonly<Record<string, unknown>>,
+    boundBefore: number,
   ): void {
     const refusal = this.game.getActionExecutor().undeclaredArgsRefusal(definition, args);
     if (refusal !== undefined) throw worldRefusal("undeclared-arg", refusal);
-  }
-
-  /** A whole command's args are every required pick and nothing else (#1328),
-   *  so a command's rounds see every required pick bound. */
-  private refuseCommandArgs(
-    definition: ActionDefinition,
-    args: Readonly<Record<string, unknown>>,
-  ): void {
-    this.refuseUndeclaredArgs(definition, args);
-    const missing = definition.selections.find((pick) => !pick.optional && (args[pick.name] === undefined || args[pick.name] === null));
+    const missing = definition.selections
+      .slice(0, boundBefore)
+      .find((pick) => !pick.optional && (args[pick.name] === undefined || args[pick.name] === null));
     if (missing !== undefined) {
       throw worldRefusal("missing-pick", `Missing required selection: ${missing.name}`);
     }
@@ -1822,7 +1818,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // A SEAT'S ARGS ARE ITS PICKS (#665, #1328), refused before a declaration
     // sees them. The clock's args are the bundle's own data: a seatless action
     // asks no picks.
-    if (seat !== null) this.refuseCommandArgs(definition, command.args);
+    if (seat !== null) this.refuseArgs(definition, command.args, definition.selections.length);
     assertClockIsTimed(command.name, seat, when);
     // WHICH OF THE HOST'S ANSWERS THIS WALK HAS ACCOUNTED FOR SO FAR.
     //

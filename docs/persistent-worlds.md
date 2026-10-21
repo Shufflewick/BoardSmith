@@ -508,8 +508,13 @@ differently each time -- or write into a partition nothing checkpointed.
 **A command's rounds see every required pick bound.** A seat's command that
 leaves out a required pick, or sends `null` for one, is refused with
 `missing-pick` before any round reads its args. An optional pick may still be
-absent. A quote or a re-asked pick is not a command: its rounds run on the
-player's draft, so a pick not chosen yet is absent there.
+absent. A pick re-asked with earlier answers bound is refused the same way when
+it leaves out a required pick BEFORE it, so a selection's own `needs:` sees the
+picks before it when the pick is re-asked. The offer is not: it is enumerated
+with nothing bound, so there every round runs with every pick absent (#1345).
+A quote is not checked either: its rounds, the execute round included, run on
+the player's draft, so any pick not chosen yet is absent there and a round a
+quote walks must not assume one is bound.
 
 **This replaces the fixpoint for the write path, and it has no ceiling.** There
 is no number to tune and no unsettled refusal to explain, because the walk's
@@ -919,7 +924,9 @@ player is still answering, so every selection is `undefined` until they bind it 
 and an omitted optional number reaches both `.quote()` and `execute` as
 `undefined`, which is how "skip for one week" and "zero weeks" stay two different
 answers the whole way down. Return `null` for a draft there is nothing to say
-about yet.
+about yet. The action's `needs()` rounds run on the same partial draft while it
+is quoted, the execute round included, so a round that reads a pick must answer
+for it being absent too.
 
 **Each selection's value is what `execute` would get.** A `chooseElement` is the
 element, not the id the panel sent, and so is every element in a `chooseElements`
@@ -2832,7 +2839,7 @@ your game.
 | `order-outcome-unknown` | A repeat arrived for an order minted before this world's receipt floor, so nothing can say whether it committed. Refused rather than run, because running it is the second spend the identity exists to prevent. |
 | `stale-draft` | A quote, or a pick re-asked with earlier answers bound, was asked about a draft whose element selection names nothing this action can offer the seat now: the element was taken since the offer was sent, or the id was never in an offer. Ask for the offer again. |
 | `undeclared-arg` | A seat's command, a quote, or a pick re-asked with earlier answers bound, was sent a key none of the action's picks declares. A client sends only picks. Refused before any of the action's declarations or callbacks run. A scheduled event is not checked: the clock's verbs ask no picks, and their args are the bundle's own. |
-| `missing-pick` | A seat's command left out a pick the action requires, or sent `null` for it. Refused, with `Missing required selection: <pick>`, before any of the action's declaration rounds read its args, so a round after a selection always sees that selection bound. An optional pick may be left out. |
+| `missing-pick` | A seat's command left out a pick the action requires, or sent `null` for it, or a pick re-asked with earlier answers bound left out a required pick before it. Refused, with `Missing required selection: <pick>`, before any of the action's declaration rounds read its args, so a command's rounds see every required pick bound and a re-asked pick's rounds see every required pick before it. An optional pick may be left out. A quote is not checked: it prices a draft. |
 
 **`game`**: your bundle's own doing. Fix these; the same bundle does the same
 thing next time.

@@ -1,6 +1,6 @@
 {
-  "revision": 260,
-  "surfaceHash": "d5524da34a73a537",
+  "revision": 261,
+  "surfaceHash": "8038c52ebe4c2cc7",
   "payloadHash": "7418fecc0604b2a0",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -2023,6 +2023,14 @@
       "payloadHash": "7418fecc0604b2a0",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A world action can load partitions read-only with .reads() (also on worldClockAction): they are loaded like .needs() rounds but never reported dirty, so they are not saved, and a command that changes one is refused with the new game-owned refusal read-only-write (a new WORLD_REFUSALS key) and rolled back (#1334). Platform: re-vendor so worlds using .reads() stop rewriting partitions they only look at. Payload and stored format unchanged; games that do not use .reads() need no rebuild."
+    },
+    {
+      "revision": 261,
+      "date": "2026-10-21",
+      "surfaceHash": "8038c52ebe4c2cc7",
+      "payloadHash": "7418fecc0604b2a0",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A world pick re-asked with earlier answers bound (resolvePick, pickPartitions) that leaves out a required pick before the asked one, or sends null for it, is now refused with the caller-owned missing-pick refusal and 'Missing required selection: <pick>' before any declaration round reads its args, as a command is since #1328 and as a table's makePicksBefore does (#1338). Previously the walk ran with the pick unbound and a selection's own needs: that read it crashed as a rules error. A quote is not checked: its rounds, the execute round included, run on the draft, where any pick may be absent, and the docs say so. Platform: re-vendor so the panel reads the refusal instead of the generic rules-error sentence. Payload and stored format unchanged; no game needs a rebuild."
     }
   ]
 }

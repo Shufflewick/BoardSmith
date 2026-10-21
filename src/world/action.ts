@@ -895,8 +895,9 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    *
    * Called before any selection it is round one, answered with nothing loaded.
    * Called after the last selection it is the execute round. A command missing
-   * a required pick is refused before any round runs (#1328), but a quote's walk
-   * runs on the draft, where a pick may be absent. Between them, put
+   * a required pick is refused before any round runs (#1328), and so is a
+   * re-asked pick missing a required pick before it (#1338), but a quote's walk
+   * runs on the draft, where any pick may be absent. Between them, put
    * the declaration ON the selection it belongs to (`needs:` in its options),
    * so the order in the source is the order the engine walks.
    *
