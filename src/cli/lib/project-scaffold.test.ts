@@ -335,7 +335,8 @@ describe('generateTsConfig — vite/client types (Phase 149 dry-run Defect 1)', 
     expect(importMetaEnvErrors([]).length).toBeGreaterThan(0);
     // With vite/client: the ImportMeta.env access resolves cleanly.
     expect(importMetaEnvErrors(['vite/client'])).toEqual([]);
-  });
+    // Two type-checks of the UI graph take seconds; a busy run must not fail them on time alone.
+  }, 60_000);
 });
 
 describe('generatePackageJson — explicit vite devDependency (Phase 149 dry-run Defect 1)', () => {

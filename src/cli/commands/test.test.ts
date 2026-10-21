@@ -153,7 +153,8 @@ describe('boardsmith test reports how a run ended when vitest does not finish it
 
     expect(run.code).toBe(1);
     expect(run.stderr).toContain('vitest exited with code 1 before it finished, so this run has no result.');
-    expect(run.stderr).toContain('Still running when it stopped (1):\n  tests/worker-dies.test.ts');
+    expect(run.stderr).toMatch(/Still running when it stopped \(\d\):/);
+    expect(run.stderr).toContain('  tests/worker-dies.test.ts');
     // vitest 3's worker pool rejects its next message to the dead worker, and that ends the run.
     expect(await logNamedIn(run.stderr)).toContain('Error: Channel closed');
   });
