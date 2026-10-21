@@ -60,8 +60,8 @@ export function useWorldSeat({ host, boardInteraction }: WorldSeatOptions): Worl
    *
    * Everything it needs is injected, and nothing in it knows what a table is. The
    * one piece that has to be a world's own is `fetchPickChoices`: a world's offer
-   * arrives with every selection's candidates resolved, so the answer is already
-   * in hand and no round trip happens. See `useWorldPlay` for why that is an
+   * arrives with its first selection's candidates resolved, so that answer is
+   * already in hand and no round trip happens. See `useWorldPlay` for why that is an
    * adapter rather than a change to the controller.
    *
    * `pickStep` and `cancelPendingAction` are absent because a world has no

@@ -1132,7 +1132,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * this instant. That is the JSON box wearing a form's clothes.
    *
    * This answers the seat's ACTIONS, in the table's own `ActionMetadata` shape,
-   * with each selection's candidates already resolved -- so `tend` offers the
+   * with its first selection's candidates already resolved -- so `tend` offers the
    * two to four neighbouring holdings that exist right now, as element IDs the
    * board bridge wires straight to a click.
    *
@@ -1156,7 +1156,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
    *
    * ## What it costs
    *
-   * `O(actions) x (condition + each selection's own candidates)`. There is no
+   * `O(actions) x (condition + the first selection's candidates)`. There is no
    * term that scales with the world: it scales with what the declaration named,
    * and the declaration is authored, finite and readable. The hydration is the
    * union of the actions' round-one declarations, which for every game in the
@@ -1187,11 +1187,11 @@ export class BoardSmithWorldEngine implements WorldEngine {
    *
    * The read path's `commandPartitions`, and it exists for the same reason: a
    * host reads storage and the engine does not, so the engine names and the
-   * host supplies. It walks every action the seat could be offered -- round
-   * one, then each selection's own round -- and answers the first unmet round
-   * of each, unioned, because the actions are independent of one another and
-   * batching them keeps an offer to one storage round trip per LEVEL rather
-   * than one per action.
+   * host supplies. It walks every action the seat could be offered -- the rounds
+   * before its first selection, which is all an offer reads (#1355) -- and
+   * answers the first unmet round of each, unioned, because the actions are
+   * independent of one another and batching them keeps an offer to one storage
+   * round trip per LEVEL rather than one per action.
    *
    * Conditions run only in the stamped offer context. Declaration has no clock
    * or presence snapshot, so it cannot decide availability. It declares the
@@ -1236,15 +1236,14 @@ export class BoardSmithWorldEngine implements WorldEngine {
     seat: number,
     now: number,
   ): readonly string[] {
-    for (let step = 0; step <= offeredThrough(definition); step++) {
-      for (const round of definition.world!.needs) {
-        if (round.before !== step) continue;
-        const unmet = this.unmetOnASeatsRead(round, seat, {}, now);
-        // ONE ROUND AT A TIME. A later round may read what an earlier one
-        // loaded, so there is nothing to say about it until the host has
-        // supplied this one.
-        if (unmet.length > 0) return unmet;
-      }
+    // Only the first pick's place: the offer asks nothing past it (#1355).
+    for (const round of definition.world!.needs) {
+      if (round.before !== 0) continue;
+      const unmet = this.unmetOnASeatsRead(round, seat, {}, now);
+      // ONE ROUND AT A TIME. A later round may read what an earlier one
+      // loaded, so there is nothing to say about it until the host has
+      // supplied this one.
+      if (unmet.length > 0) return unmet;
     }
     return [];
   }
@@ -1274,30 +1273,19 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // round one.
       if (!this.conditionHolds(definition, acting)) return null;
 
-      // ONE ROUND, THEN ONE SELECTION, IN THE AUTHOR'S ORDER.
-      //
       // Deliberately NOT `isActionAvailable`, and the reason is the whole of
       // why `viewFor` refuses `createPlayerView`: that helper enumerates every
       // selection of every registered action in one pass, against whatever
       // happens to be resident, and a world's partitions are absent until a
-      // declaration names them. Interleaving is what makes enumeration possible
-      // at all here -- selection i's candidates are evaluated with selection
-      // i's declaration resident and not before.
+      // declaration names them. The first pick's candidates are evaluated with
+      // round one resident and not before.
       //
-      // AND ONLY THROUGH THE FIRST REQUIRED PICK (#1345). A later pick's round and
-      // candidates may read that pick, so they wait for the re-ask with it bound,
-      // which refuses them without it (#1338); the offer carries their shape.
-      const selections: PickMetadata[] = [];
-      for (let index = 0; index < definition.selections.length; index++) {
-        if (index > offeredThrough(definition)) {
-          selections.push(this.pickShapeOf(definition, index, acting));
-          continue;
-        }
-        if (index > 0) {
-          await this.hydrateRounds(definition, index, seat, {}, named, namedSeats, null, arrivalAt(stamp.now));
-        }
-        selections.push(this.pickOf(definition, index, acting, named));
-      }
+      // AND ONLY THE FIRST PICK (#1345, #1355). A later pick's round and
+      // candidates may read an earlier pick, required or optional, so they wait
+      // for the re-ask with it bound (#1338); the offer carries their shape.
+      const selections = definition.selections.map((_, index) =>
+        index === 0 ? this.pickOf(definition, 0, acting, named) : this.pickShapeOf(definition, index, acting),
+      );
       const satisfiable = askable(selections[0]);
       // THE REASON IT CANNOT BE TAKEN OUTRANKS WHETHER IT HAS AN ANSWER (#187).
       //
@@ -1352,16 +1340,14 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * ONE PICK, RE-ASKED WITH THE ARGUMENTS BOUND SO FAR (ShufflewickPub #378).
    *
    * A world's offer is enumerated in ONE frame with `args: {}`, and that is the
-   * whole cost model rather than an oversight: a world action may not declare a
-   * dependent selection, so every question it asks can be answered before any
-   * of them is. What that does not cover is a selection whose SHAPE -- its
-   * `multiSelect` bounds, its `choices` callback -- reads an argument an earlier
-   * selection binds. Evaluated with nothing bound, a cap that depends on the
-   * chosen ship is the unbounded fallback, and the browser is left holding a
-   * limit the game never meant.
+   * whole cost model rather than an oversight. It resolves only the first
+   * selection: any later one -- its round, its candidates, its `multiSelect`
+   * bounds -- may read an argument an earlier selection binds, so the offer
+   * carries its shape only (#1345, #1350, #1355).
    *
-   * So the panel re-asks, the same way a table's does: `fetchPickChoices` hands
-   * over the args bound so far and gets this selection back. It is a READ --
+   * So the panel asks for it, the same way a table's does: `fetchPickChoices`
+   * hands over the args bound so far, none when only skipped optional picks
+   * precede it, and gets this selection back. It is a READ --
    * the same read-only facilities an offer runs under -- and it is paid only
    * while somebody is actually mid-action.
    *
@@ -1721,7 +1707,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
   }
 
   /** A pick's shape with no candidates, read-only as `pickOf`: what an offer
-   *  carries for a pick past the first required one (#1345). Its function
+   *  carries for every pick after the first (#1345, #1355). Its function
    *  `prompt`, `multiSelect` and `orderedList` may read the picks before it,
    *  so they are left to the re-ask, as its round and candidates are (#1350). */
   private pickShapeOf(definition: ActionDefinition, index: number, acting: Player): PickMetadata {
@@ -3794,9 +3780,9 @@ function pruneRoster(json: ElementJSON, roster: ReadonlySet<number>): ElementJSO
 /**
  * THE FIRST QUESTION DECIDES THE OFFER, AND ONLY THE FIRST (BoardSmith #270).
  *
- * An offer's picks are enumerated with `args: {}`, which is the right
- * question to ask the FIRST one -- that is exactly what the player will have in
- * hand when they are asked it -- and the wrong question to ask any other. A
+ * An offer enumerates only the first pick, with `args: {}`, which is exactly
+ * what the player will have in hand when they are asked it (#1355). Asking any
+ * other pick that way was the wrong question: a
  * second selection narrowed by the first has nothing to narrow by yet, so the
  * natural `if (args.slot === undefined) return []` came back candidateless and
  * took the whole verb out of the seat's offer, with no diagnostic anywhere and
@@ -3839,8 +3825,8 @@ function warnDropped(definition: ActionDefinition, seat: number): null {
     `World action '${definition.name}' was dropped from seat ${seat}'s offer: its FIRST ` +
     `question '${first.name}' has no selectable candidate (every candidate is either absent ` +
     `or disabled).\n` +
-    `  A later selection is never the reason -- it is asked with nothing bound and re-asked ` +
-    `once the seat answers this one (#270).\n` +
+    `  A later selection is never the reason -- it is asked only once the seat reaches it, ` +
+    `with the answers so far (#270, #1355).\n` +
     `  If the verb should be there, give '${first.name}' a candidate. If it should not, prefer ` +
     `.condition() / .disabled(), so the seat reads a reason instead of a missing verb.`,
   );
@@ -3896,13 +3882,6 @@ function offerOf(
       quote: definition.world?.quote === undefined ? undefined : true,
     }),
   };
-}
-
-/** The last pick an offer enumerates: the first required one, since a later
- *  pick's round may read it and a re-ask without it is refused (#1338, #1345). */
-function offeredThrough(definition: ActionDefinition): number {
-  const required = definition.selections.findIndex((pick) => !pick.optional);
-  return required === -1 ? Math.max(definition.selections.length - 1, 0) : required;
 }
 
 /** The fields that have a value, as an object to spread. See `offerOf` for why

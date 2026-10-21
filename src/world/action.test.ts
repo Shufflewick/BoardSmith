@@ -978,7 +978,7 @@ describe("#665 — a seat sends only an action's picks, on every road", () => {
       await expect(engine.resolvePick("p1", "build", "plot", {}, stamp)).resolves.toBeDefined();
     });
 
-    it("#1345 — the offer stops at the first required pick: a later pick's round and candidates wait for the re-ask", async () => {
+    it("#1345, #1355 — the offer stops at the first pick, optional or not: a later pick's round and candidates wait for the re-ask", async () => {
       const { engine, read } = sizing();
       await engine.hydrate([holdingPartition(1)]);
       expect(engine.offerPartitions("p1", STAMP.now)).toEqual([]);
@@ -986,7 +986,7 @@ describe("#665 — a seat sends only an action's picks, on every road", () => {
       expect(read).toEqual([]);
       expect(offer.selections.map((pick) => [pick.name, pick.choices?.length])).toEqual([
         ["note", 1],
-        ["plot", 2],
+        ["plot", undefined],
         ["size", undefined],
       ]);
     });

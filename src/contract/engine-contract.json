@@ -1,5 +1,5 @@
 {
-  "revision": 266,
+  "revision": 267,
   "surfaceHash": "d615bc0c99f7b4b9",
   "payloadHash": "7418fecc0604b2a0",
   "formatHash": "ed115e27605f2ca7",
@@ -2071,6 +2071,14 @@
       "payloadHash": "7418fecc0604b2a0",
       "formatHash": "ed115e27605f2ca7",
       "summary": "An element's afterRestore hook now runs last on every restore: after the turn order (flow) and random state are back on a cold restore, undo, rewind, a failed action's rollback and a scratch copy, and in a bot's search copy after its determinize sampler filled in the hidden values, so the hook sees the same state on every path and sampled values come back frozen as in the real game. Game.loadSerializedState no longer runs the hooks itself (#1352). Surface, payload and stored format unchanged; no game needs a rebuild."
+    },
+    {
+      "revision": 267,
+      "date": "2026-10-21",
+      "surfaceHash": "d615bc0c99f7b4b9",
+      "payloadHash": "7418fecc0604b2a0",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A world's offer (offersFor, offerPartitions) now runs the round and candidates of an action's first pick only (#1355). Since r262 it ran them through the first required pick, so a required pick after an optional one was read with that optional pick unbound, and a list or round built from it threw during the offer or sent the panel an empty list. Every later pick is now offered by its shape and asked on the re-ask (resolvePick) with the answers so far. The bundled panel (useWorldPlay) now re-asks any pick but the first even with nothing bound, as when the optional pick before it was skipped. Platform: re-vendor so such an action is offered and its later picks asked. Payload and stored format unchanged; no game needs a rebuild."
     }
   ]
 }

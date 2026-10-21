@@ -24,7 +24,8 @@ import WorldShell from '../ui/world/WorldShell.vue';
 import { WORLD_HOST_SOURCE } from '../ui/world/worldProtocol.js';
 import { defaultUI, defineGameUIs } from '../ui/game-uis.js';
 import { createTestWorld, type TestWorld } from './test-world.js';
-import { vaultBundle } from './test-world.test-helper.js';
+import { vaultBundle, vaultWorldBlock, type VaultWorld } from './test-world.test-helper.js';
+import { worldAction } from '../world/index.js';
 import { TargetBoard } from './dom-leak.test-helper.js';
 import { assertNoHiddenInfoLeak, preloadSeatRenderer, renderAsSeat, shellProvidedKeys, worldShellContext } from './dom-leak.js';
 import { expectSameKeysAsTheShell, KeyProbe, keysProbedIn, namesOf, refusal } from './provided-keys.test-helper.js';
@@ -182,6 +183,28 @@ describe('startAction opens an action on a world seat (#413)', () => {
     expect(controller.currentAction.value).toBe('inspect');
     expect(controller.awaitingConfirmation.value).toBe(true);
     expect(controller.actionQuote.value).toEqual(['One look, free']);
+  });
+
+  it('asks the world for a required pick once the optional pick before it is skipped (#1355)', async () => {
+    const plots: Record<string, string[]> = { quick: ['commons@1,1'], none: ['commons@1,1', 'commons@2,2'] };
+    const build = worldAction<VaultWorld>('build')
+      .chooseFrom('note', { choices: ['quick'], optional: true })
+      .chooseFrom('plot', { choices: ({ args }) => plots[(args.note as string | undefined) ?? 'none']! })
+      .execute(() => {});
+    const world = await createTestWorld({
+      definition: { ...vaultBundle(), world: { ...vaultWorldBlock(), actions: [build] } },
+    });
+    worlds.push(world);
+    const wrapper = await render(
+      renderAsSeat(world, SEAT, { component: PlayContextBoard, startAction: { name: 'build' } }),
+    );
+    const controller = wrapper.props('actionController') as UseActionControllerReturn;
+
+    controller.skip('note');
+    await flushPromises();
+
+    expect(controller.currentPick.value?.name).toBe('plot');
+    expect(controller.currentChoices.value.map((choice) => choice.value)).toEqual(['commons@1,1', 'commons@2,2']);
   });
 
   it('scans a world board with the action open', async () => {

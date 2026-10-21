@@ -290,14 +290,14 @@ interface WorldResponseMessage {
 /**
  * ONE PICK, RE-ASKED WITH THE ARGUMENTS BOUND SO FAR (ShufflewickPub #378).
  *
- * A world's offer is enumerated in one frame with nothing bound, which is the
- * cost model and not an oversight. What it cannot carry is a selection whose
- * SHAPE reads an earlier selection's value -- a crew whose size is the chosen
- * ship's cargo hold. Evaluated with nothing bound, that cap is the unbounded
- * fallback, and the panel was left holding a limit the game never meant.
+ * A world's offer resolves only the first selection, with nothing bound, which
+ * is the cost model and not an oversight. Every later selection may read an
+ * earlier answer -- a crew whose size is the chosen ship's cargo hold -- so the
+ * offer carries its shape only (#1345, #1355).
  *
- * So the panel asks again once it has something to ask with, exactly as a
- * table's does. One round trip per pick, and only while somebody is mid-action.
+ * So the panel asks for it when the player reaches it, with the answers so far,
+ * exactly as a table's does. One round trip per pick, and only while somebody
+ * is mid-action.
  */
 interface WorldPickResultMessage {
   readonly source: typeof WORLD_HOST_SOURCE;

@@ -10,27 +10,25 @@
  *
  * ## The four places a world's answer differs
  *
- * 1. **The offer arrives whole.** A table's protocol is step-wise -- the panel
- *    asks the server for each pick's choices as the player walks the action --
- *    because a table's selections may depend on one another. A world's is
- *    single-shot: `WorldActionOffer` is `ActionMetadata` with every selection's
- *    `choices`/`validElements` already filled in, affordable precisely because a
- *    world action may not declare a dependent selection (#169).
+ * 1. **The offer arrives with its first pick answered.** A table's protocol is
+ *    step-wise -- the panel asks the server for each pick's choices as the
+ *    player walks the action. A world's offer is `ActionMetadata` with the first
+ *    selection's `choices`/`validElements` already filled in and every later
+ *    selection's shape only (#1345, #1355).
  *
- *    That is why `fetchPickChoices` here is LOCAL while nothing is bound. It is
+ *    That is why `fetchPickChoices` here is LOCAL for the first pick while
+ *    nothing is bound. It is
  *    a function, not a network call, and nothing in the controller assumes
  *    otherwise. The alternative -- teaching the controller to seed
  *    `pickSnapshots` from static metadata -- was rejected: it would give a TABLE
  *    two sources for one value, which is the divergence shape
  *    `useBoardActionBridge` exists to forbid.
  *
- *    ONCE SOMETHING IS BOUND IT DOES GO TO THE WORLD (ShufflewickPub #378). A
- *    selection's candidate LIST cannot depend on another selection -- that is
- *    what "no dependent selection" means -- but its SHAPE can: a crew whose size
- *    is the chosen ship's cargo hold. The one-shot offer resolved that against
- *    empty args, so the panel was handed the unbounded fallback and every
- *    checkbox was disabled. Re-asking costs one round trip per later pick, and
- *    only while somebody is actually mid-action.
+ *    ANY OTHER PICK GOES TO THE WORLD (ShufflewickPub #378). A later
+ *    selection's list and SHAPE may read an earlier answer -- a crew whose size
+ *    is the chosen ship's cargo hold -- so it is asked with the answers so far.
+ *    Re-asking costs one round trip per later pick, and only while somebody is
+ *    actually mid-action.
  *
  *    It is also not optional. `validElements` reads only `pickSnapshots`, and
  *    `useBoardActionBridge` feeds the board off `validElements`, so an offer
@@ -308,11 +306,13 @@ export function useWorldPlay(host: WorldSeatHost): WorldPlay {
           `${offer.selections.map((s) => `"${s.name}"`).join(', ') || '(none)'}.`,
       };
     }
-    // NOTHING BOUND YET, SO THE OFFER IS ALREADY THE ANSWER. A world's offer
-    // arrives with its selections' candidates resolved against empty args, so
-    // the first pick of any action -- and every pick of a single-selection one,
-    // which is most of them -- costs no round trip at all.
-    if (Object.keys(currentArgs).length === 0) {
+    // THE FIRST PICK WITH NOTHING BOUND IS ALREADY ANSWERED. A world's offer
+    // resolves only its first pick's candidates, against empty args, so that
+    // pick -- the only one of a single-selection action, which is most of them
+    // -- costs no round trip. A later pick is asked even with nothing bound
+    // (a skipped optional pick binds nothing): the offer carries its shape only
+    // (#1345, #1355).
+    if (selection === offer.selections[0] && Object.keys(currentArgs).length === 0) {
       return {
         success: true,
         choices: selection.choices,
@@ -325,7 +325,7 @@ export function useWorldPlay(host: WorldSeatHost): WorldPlay {
       };
     }
 
-    // SOMETHING IS BOUND, SO ASK AGAIN (ShufflewickPub #378). A selection's
+    // OTHERWISE ASK AGAIN (ShufflewickPub #378). A selection's
     // SHAPE may read an earlier selection's value -- a crew whose size is the
     // chosen ship's cargo hold -- and the offer was enumerated before any ship
     // existed. The candidates come back with it, evaluated against the same
@@ -369,9 +369,9 @@ export function useWorldPlay(host: WorldSeatHost): WorldPlay {
  * channel the world's own already travels, in the words the table's
  * `PickHandler` uses for the same state.
  *
- * Only with args BOUND, which is the only place this is knowable: a pick
- * answered off the offer frame was evaluated with nothing bound, where an empty
- * list means "not narrowed yet" rather than "nothing".
+ * Only on a re-ask, which carries every answer the player has given: the
+ * offer's own first pick is drawn as it stands, and the offer decides whether
+ * an empty one is offered at all.
  */
 function answeredPick(
   offer: WorldActionOffer,

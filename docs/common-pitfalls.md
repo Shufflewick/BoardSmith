@@ -100,11 +100,11 @@ submitted either way.
 - **A step that declares `dependsOn` or `filterBy`.** That declaration asks the
   engine to walk the whole path, so it re-asks the dependent step once per value
   of the step it depends on, with that value bound. See below.
-- **Every selection of a persistent-world action.** A world's offer is
-  enumerated in a single frame, so each selection's candidates are produced with
-  `args: {}` once. The guard above is what that frame needs, and the candidates
-  are re-asked with the args bound as soon as the player answers
-  ([Persistent Worlds](./persistent-worlds.md)).
+- **The first selection of a persistent-world action.** A world's offer is
+  enumerated in a single frame with `args: {}`, and it produces only the first
+  selection's candidates. A later selection is asked when the player reaches it,
+  with the answers so far bound, so it sees an optional pick the player skipped
+  as `undefined` ([Persistent Worlds](./persistent-worlds.md)).
 
 In both cases the callback is called with its input `undefined`, so it must not
 assume otherwise:
