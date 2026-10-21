@@ -8,9 +8,6 @@ import {
   incrementCounter,
   isTrackComplete,
   trackPoints,
-  MonotonicTrack,
-  UniqueTrack,
-  CounterTrack,
 } from './track.js';
 
 describe('track functions (#779)', () => {
@@ -128,9 +125,6 @@ describe('track size (#786)', () => {
     monotonicTrack: (maxEntries: number) => monotonicTrack({ id: 't', direction: 'increasing', maxEntries, completionBonus: 5 }),
     uniqueTrack: (maxEntries: number) => uniqueTrack({ id: 't', maxEntries, completionBonus: 5 }),
     counterTrack: (maxEntries: number) => counterTrack({ id: 't', maxEntries, completionBonus: 5 }),
-    MonotonicTrack: (maxEntries: number) => new MonotonicTrack({ id: 't', direction: 'increasing', maxEntries, completionBonus: 5 }),
-    UniqueTrack: (maxEntries: number) => new UniqueTrack({ id: 't', maxEntries, completionBonus: 5 }),
-    CounterTrack: (maxEntries: number) => new CounterTrack({ id: 't', maxEntries, completionBonus: 5 }),
   };
 
   for (const [name, make] of Object.entries(makers)) {
