@@ -10,10 +10,13 @@ import {
   Space,
   Action,
   actionStep,
+  enumerateLegalMoves,
   RedactedAttributeError,
+  type FlowState,
   type GameOptions,
 } from '../index.js';
 import { GameRunner } from '../../runtime/index.js';
+import { MCTSBot } from '../../bot/index.js';
 import { TEST_WORLD_ELEMENT_ID_KEY } from './world-element-id-key.test-helper.js';
 
 type PageData = { kind: string; items: number[] };
@@ -25,6 +28,9 @@ function deepFreeze<T>(value: T): T {
   return Object.freeze(value);
 }
 
+/** What each hook saw of the game around it (#1352). */
+const hookSaw: Array<{ random: string; flow: FlowState | undefined }> = [];
+
 class Page extends Space<PageGame> {
   data: PageData | null = null;
   /** Another element, so the hook can show it sees the tree decoded. */
@@ -35,6 +41,7 @@ class Page extends Space<PageGame> {
   protected override afterRestore(): void {
     if (this.data) deepFreeze(this.data);
     this._seenNextData = this.next?.data;
+    hookSaw.push({ random: this.game.getRandomState(), flow: this.game.getFlowState() });
   }
 }
 
@@ -61,12 +68,25 @@ class PageGame extends Game<PageGame, Player> {
 
     this.registerAction(
       Action.create('write').execute((_args, ctx) => {
+        ctx.game.random();
         (ctx.game as PageGame).front.data = deepFreeze({ kind: 'c', items: [4] });
         return { success: true };
       }),
     );
+    this.registerAction(
+      Action.create('drawThenFail').execute((_args, ctx) => {
+        ctx.game.random();
+        throw new Error('fails after a draw');
+      }),
+    );
+    // A repeating pick is enumerated on a scratch copy of the game.
+    this.registerAction(
+      Action.create('stack')
+        .chooseFrom('picks', { choices: ['x'], repeat: { until: () => true } })
+        .execute(() => {}),
+    );
     this.setFlow({
-      root: actionStep({ actions: ['write'], player: (ctx) => ctx.game.getPlayer(1)!, repeatUntil: () => false, maxMoves: 10 }),
+      root: actionStep({ actions: ['write', 'drawThenFail', 'stack'], player: (ctx) => ctx.game.getPlayer(1)!, repeatUntil: () => false, maxMoves: 10 }),
     });
   }
 }
@@ -140,6 +160,91 @@ describe('afterRestore (#1349)', () => {
     expect(game.adoptSubtree(stored).first(FragilePage)).toBeDefined();
   });
 
+  it('runs once a cold restore has put back turn order and random state (#1352)', () => {
+    const runner = startedRunner();
+    expect(runner.performAction('write', 1, {}).success).toBe(true);
+    hookSaw.length = 0;
+
+    const restored = GameRunner.fromSnapshot<PageGame>(roundTripJson(runner.getSnapshot()), PageGame);
+
+    expect(hookSaw.length).toBeGreaterThan(0);
+    for (const saw of hookSaw) {
+      expect(saw.random).toBe(restored.game.getRandomState());
+      expect(saw.flow).toEqual(restored.game.getFlowState());
+    }
+  });
+
+  it('runs once a failed action rolled back turn order and random state (#1352)', () => {
+    const runner = startedRunner();
+    hookSaw.length = 0;
+
+    expect(runner.performAction('drawThenFail', 1, {}).success).toBe(false);
+
+    expect(hookSaw.length).toBeGreaterThan(0);
+    for (const saw of hookSaw) {
+      expect(saw.random).toBe(runner.game.getRandomState());
+      expect(saw.flow).toEqual(runner.game.getFlowState());
+    }
+  });
+
+  it('runs on a scratch copy once its turn order and random state are back (#1352)', () => {
+    const game = startedRunner().game;
+    hookSaw.length = 0;
+
+    expect(enumerateLegalMoves(game, 1)).toContainEqual({ action: 'stack', args: { picks: ['x'] } });
+
+    expect(hookSaw.length).toBeGreaterThan(0);
+    for (const saw of hookSaw) {
+      expect(saw.random).toBe(game.getRandomState());
+      expect(saw.flow).toEqual(game.getFlowState());
+    }
+  });
+
+  it('runs on a bot search copy after its sampler filled in hidden values, so they are frozen there too (#1352)', async () => {
+    class HiddenPage extends Space<HiddenGame> {
+      static override visibleAttributes = ['name'];
+      data: PageData | null = null;
+      protected override afterRestore(): void {
+        if (!this.isAttributeRedacted('data') && this.data) deepFreeze(this.data);
+      }
+    }
+    const frozenWhenRead: boolean[] = [];
+    class HiddenGame extends Game<HiddenGame, Player> {
+      constructor(options: GameOptions) {
+        super(options);
+        this.registerElements([HiddenPage]);
+        this.create(HiddenPage, 'page').data = deepFreeze({ kind: 'real', items: [] });
+        this.registerAction(
+          Action.create('read').execute((_args, ctx) => {
+            frozenWhenRead.push(Object.isFrozen(ctx.game.first(HiddenPage)!.data));
+            ctx.game.finish([]);
+          }),
+        );
+        this.setFlow({ root: actionStep({ actions: ['read'], player: (ctx) => ctx.game.getPlayer(1)! }) });
+      }
+    }
+    const game = new HiddenGame({ playerCount: 2, seed: 'hidden' });
+    game.startFlow();
+    const bot = new MCTSBot(
+      game,
+      HiddenGame,
+      'hidden',
+      1,
+      { iterations: 4, playoutDepth: 1, seed: 'search', async: false, timeout: Infinity, usePNS: false },
+      {
+        determinize: (sandbox) => {
+          const page = sandbox.first(HiddenPage)!;
+          if (page.isAttributeRedacted('data')) page.data = { kind: 'sampled', items: [] };
+        },
+      },
+    );
+
+    await bot.play();
+
+    expect(frozenWhenRead.length).toBeGreaterThan(0);
+    expect(frozenWhenRead.every(Boolean)).toBe(true);
+  });
+
   it('runs in a per-seat copy, where a withheld attribute must be asked about first', () => {
     class SecretPage extends Space<SecretGame> {
       static override visibleAttributes = ['name'];
@@ -164,9 +269,12 @@ describe('afterRestore (#1349)', () => {
     game.create(SecretPage, 'guarded').data = { kind: 's', items: [] };
     const careful = new SecretGame(options);
     careful.loadSerializedState(game.toJSONForPlayer(1));
+    careful._afterRestoreSubtree();
     expect(careful.first(SecretPage)!.isAttributeRedacted('data')).toBe(true);
 
     game.create(CarelessPage, 'careless').data = { kind: 's', items: [] };
-    expect(() => new SecretGame(options).loadSerializedState(game.toJSONForPlayer(1))).toThrow(RedactedAttributeError);
+    const careless = new SecretGame(options);
+    careless.loadSerializedState(game.toJSONForPlayer(1));
+    expect(() => careless._afterRestoreSubtree()).toThrow(RedactedAttributeError);
   });
 });
