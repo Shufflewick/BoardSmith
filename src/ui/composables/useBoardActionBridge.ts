@@ -575,6 +575,31 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     }
   }, { immediate: true });
 
+  // The board marks the last standing choice answer, however it was given: a panel or board click, a custom UI's
+  // fill(), auto-fill, a prefill, or a clear() taking later answers back (#1371, #1377, #1380).
+  const answeredMark = computed(() => {
+    const args = currentArgs.value;
+    const marks = (currentActionMeta.value?.selections ?? [])
+      .filter(s => s.type === 'choice' && s.name in args)
+      .map(s => answerMark(args[s.name], controller.getChoices(s) as ChoiceWithRefs[]))
+      .filter(ref => ref !== undefined);
+    return marks.at(-1) ?? null;
+  });
+  const answeredCount = () => Object.keys(currentArgs.value).length;
+  // A clear() re-marks even when the mark stands, dropping what the board showed for the answers taken back.
+  const remarks = (wasMark: ElementRef | null, wasAnswered: number) => answeredMark.value !== wasMark || answeredCount() < wasAnswered;
+
+  // History hides a held action with the board's mark, a choice's or a custom board's own. On return the board shows
+  // what it would have shown had history never opened: that mark, unless the answers given meanwhile re-mark (#1383).
+  let hidden: { start: number; shown: ElementRef | null; mark: ElementRef | null; answered: number } | null = null;
+  function hideMark(start: number): void {
+    hidden = currentAction.value ? { start, shown: board.selectedElement, mark: answeredMark.value, answered: answeredCount() } : null;
+  }
+  function showHiddenMark(start: number): void {
+    if (hidden?.start === start) board.selectElement(remarks(hidden.mark, hidden.answered) ? answeredMark.value : hidden.shown);
+    hidden = null;
+  }
+
   // Mirror the controller's action into the board substrate + expose the choice
   // callback so custom UIs can trigger non-element choices (e.g. suit selection).
   //
@@ -584,7 +609,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   // and never runs, so the board stays cleared by createActionMutators().startAction, and
   // the external-cancel watcher below reads that empty board as the player
   // cancelling.
-  watch([shownAction, controller.actionStartTick], ([action]) => {
+  watch([shownAction, controller.actionStartTick], ([action, start]) => {
     if (action) {
       const pickName = currentPick.value?.name ?? null;
       const pickIndex = currentActionMeta.value?.selections.findIndex(s => s.name === pickName) ?? 0;
@@ -601,7 +626,9 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
             `Fill selections in order, or trigger the choice once '${selectionName}' is the active selection.`,
         );
       });
+      showHiddenMark(start);
     } else {
+      hideMark(start);
       board.clear();
       feedStartCandidates();
     }
@@ -620,25 +647,10 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     });
   });
 
-  // The board marks the last standing choice answer, however it was given: a panel or board click, a custom UI's
-  // fill(), auto-fill, a prefill, or a clear() taking later answers back (#1371, #1377, #1380). None while history is
-  // on screen, as the action is hidden then, so a held action's mark comes back on return (#1381).
-  const answeredMark = computed(() => {
-    if (!shownAction.value) return null;
-    const args = currentArgs.value;
-    const marks = (currentActionMeta.value?.selections ?? [])
-      .filter(s => s.type === 'choice' && s.name in args)
-      .map(s => answerMark(args[s.name], controller.getChoices(s) as ChoiceWithRefs[]))
-      .filter(ref => ref !== undefined);
-    return marks.at(-1) ?? null;
+  // Not while history is on screen, where the board shows the past: the return marks (#1381, #1383).
+  watch(() => [answeredMark.value, answeredCount()] as const, (_, [wasMark, wasAnswered]) => {
+    if (!isViewingHistory.value && remarks(wasMark, wasAnswered)) board.selectElement(answeredMark.value);
   });
-  watch(
-    () => [answeredMark.value, Object.keys(currentArgs.value).length] as const,
-    ([mark, answered], [wasMark, wasAnswered]) => {
-      // A clear() re-marks even when the mark stands, dropping what the board showed for the answers taken back.
-      if (mark !== wasMark || answered < wasAnswered) board.selectElement(mark);
-    },
-  );
 
   // Board element clicked: dispatch selection, or auto-start an action whose
   // first element selection accepts the clicked element.

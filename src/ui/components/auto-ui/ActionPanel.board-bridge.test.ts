@@ -136,9 +136,21 @@ const driftAction: EnrichedActionMetadata = {
   ],
 };
 
-const AVAILABLE = ['move', 'tend', 'harvest', 'wait', 'board', 'steer', 'chart', 'drift'];
+// A marked choice, a plot, a heading with one way to go, which auto-fill answers, then a pick to keep the action open.
+const sightAction: EnrichedActionMetadata = {
+  name: 'sight',
+  prompt: 'Sight',
+  selections: [
+    ...steerAction.selections,
+    { name: 'heading', type: 'choice', prompt: 'Then which way?', choices: [COMPASS[1]] },
+    { name: 'wake', type: 'choice', prompt: 'And the wake?', choices: COMPASS },
+  ],
+};
+
+const AVAILABLE = ['move', 'tend', 'harvest', 'wait', 'board', 'steer', 'chart', 'drift', 'sight'];
 const METADATA: Record<string, EnrichedActionMetadata> = {
   move: moveAction, tend: tendAction, harvest: harvestAction, wait: waitAction, board: boardAction, steer: steerAction, chart: chartAction, drift: driftAction,
+  sight: sightAction,
 };
 
 interface Harness {
@@ -668,6 +680,124 @@ describe('Coming back from history puts back the board mark of an action the ser
     expect(wrapper.find('.selected-value .value-display').text()).toBe('North');
     expect(board.currentPickName).toBe('plot');
     expect(board.selectedElement).toEqual({ notation: 'n' });
+    wrapper.unmount();
+  });
+});
+
+describe('Coming back from history puts back the board mark of an element pick the server holds (#1383)', () => {
+  it('marks the plot a custom board marked when clicked, once the live game is back on screen', async () => {
+    const { board, controller, wrapper, isViewingHistory } = mountHarness(() => Promise.resolve({ success: true }), {
+      action: 'harvest',
+      args: {},
+      display: {},
+      metadata: harvestAction,
+    });
+    await flush();
+    // A custom board marks the plot it was clicked on, as checkers does.
+    board.selectElement({ id: 21 });
+    board.triggerElementSelect({ id: 21 });
+    await flush();
+    expect(controller.pendingOnServer.value).toBe(true);
+    expect(controller.currentArgs.value).toEqual({ plot: 21 });
+    expect(board.selectedElement).toEqual({ id: 21 });
+
+    isViewingHistory.value = true;
+    await flush();
+    expect(board.currentAction).toBeNull();
+    expect(board.selectedElement).toBeNull();
+
+    isViewingHistory.value = false;
+    await flush();
+
+    expect(board.currentPickName).toBe('direction');
+    expect(board.selectedElement).toEqual({ id: 21 });
+    wrapper.unmount();
+  });
+
+  it('puts back no mark once the held action ends while history is on screen and the player starts it again', async () => {
+    const { board, controller, wrapper, isViewingHistory } = mountHarness(() => Promise.resolve({ success: true }), {
+      action: 'harvest',
+      args: {},
+      display: {},
+      metadata: harvestAction,
+    });
+    await flush();
+    board.selectElement({ id: 21 });
+    board.triggerElementSelect({ id: 21 });
+    await flush();
+    expect(controller.pendingOnServer.value).toBe(true);
+
+    isViewingHistory.value = true;
+    await flush();
+    controller.cancel();
+    await flush();
+    isViewingHistory.value = false;
+    await flush();
+    await controller.start('harvest');
+    await flush();
+
+    expect(controller.currentArgs.value).toEqual({});
+    expect(board.currentPickName).toBe('plot');
+    expect(board.selectedElement).toBeNull();
+    wrapper.unmount();
+  });
+
+  // The held pick's step is still out when history opens, and its reply lands while history is on screen.
+  function replyWhileInHistory(action: 'harvest' | 'sight') {
+    let reply!: () => void;
+    const outstanding = new Promise<PickStepResponse>((resolve) => { reply = () => resolve({ success: true }); });
+    let step = 0;
+    // Sight's first step (the direction) goes through at once; harvest's (the plot) is the one left out.
+    const late = action === 'sight' ? 2 : 1;
+    const harness = mountHarness(() => (++step === late ? outstanding : Promise.resolve({ success: true })), {
+      action,
+      args: {},
+      display: {},
+      metadata: METADATA[action],
+    }, true);
+    return { ...harness, reply };
+  }
+
+  it('keeps the plot a custom board marked when the server takes it while history is on screen', async () => {
+    const { board, controller, wrapper, isViewingHistory, reply } = replyWhileInHistory('harvest');
+    await flush();
+    board.selectElement({ id: 21 });
+    board.triggerElementSelect({ id: 21 });
+    await flush();
+    isViewingHistory.value = true;
+    await flush();
+
+    reply();
+    await flush();
+    expect(controller.currentArgs.value).toEqual({ plot: 21 });
+    isViewingHistory.value = false;
+    await flush();
+
+    expect(board.currentPickName).toBe('direction');
+    expect(board.selectedElement).toEqual({ id: 21 });
+    wrapper.unmount();
+  });
+
+  it('draws no mark on the past board for a choice auto-fill answers there, and marks that choice on return (review F1, F2)', async () => {
+    const { board, controller, wrapper, isViewingHistory, reply } = replyWhileInHistory('sight');
+    await flush();
+    await controller.fill('direction', 'north');
+    await flush();
+    board.selectElement({ id: 11 });
+    board.triggerElementSelect({ id: 11 });
+    await flush();
+    isViewingHistory.value = true;
+    await flush();
+
+    reply();
+    await flush();
+    expect(controller.currentArgs.value).toEqual({ direction: 'north', plot: 11, heading: 'south' });
+    expect(board.selectedElement).toBeNull();
+    isViewingHistory.value = false;
+    await flush();
+
+    expect(board.currentPickName).toBe('wake');
+    expect(board.selectedElement).toEqual({ notation: 's' });
     wrapper.unmount();
   });
 });
