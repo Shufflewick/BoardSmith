@@ -584,14 +584,20 @@ sampler through the same consistency check the search runs, without standing up 
 ```typescript
 // applyDeterminization comes from 'boardsmith/bot'
 
+const sandbox = sandboxForSeat(1);
 // Refused by name if the sampler writes anything this seat can see.
-applyDeterminization(sandboxForSeat(1), 1, myDeterminize, () => 0.5);
+applyDeterminization(sandbox, 1, myDeterminize, () => 0.5);
+// The bot runs the elements' afterRestore hooks last, on the sampled world.
+sandbox._afterRestoreSubtree();
 ```
 
 Build the sandbox the way the bot does -- `new MyGame(options)`, then
 `loadSerializedState(truth.toJSONForPlayer(seat))`, then `adoptSeatView(sandbox, seat)`
 (also from `boardsmith/bot`) -- so the test sees exactly the redaction the search
-sees. `adoptSeatView` makes the rebuilt game read the view as the seat was shown it:
+sees. `loadSerializedState` does not run `afterRestore` hooks: the bot runs them
+itself, after the sampler, so the sampler sees the copy before any hook has and
+the hooks see the world it drew. Call `_afterRestoreSubtree()` after
+`applyDeterminization`, as above, so the test does the same. `adoptSeatView` makes the rebuilt game read the view as the seat was shown it:
 a card granted with `addVisibleTo` stays visible to that seat, and a zone the seat
 was sent only a count of stays counted.
 
