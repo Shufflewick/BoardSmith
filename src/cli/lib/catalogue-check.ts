@@ -29,6 +29,13 @@
  * that cannot pass for a known reason is left out only by an explicit `skip` naming that reason,
  * which the report lists.
  *
+ * A game repository with a branch of the same name as the tree's checked-out branch is checked, and
+ * linked, at that branch instead of its `main` (#1322). That is how a BoardSmith change that needs a
+ * game change lands: BoardSmith merges first, then the game branch merges onto the game's `main`,
+ * which the report reminds the reader to do. A tree not on a branch (a merge validating its detached
+ * merge commit) checks every game's `main`. ShufflewickPub is not touched: it checks the commits it
+ * pins against the engine it vendors, so it moves both once the game branch is on `main`.
+ *
  * A pass is cached (`catalogueCachePath`) under the game's `main` commit and install record, those
  * of each catalogue game it links to, and the tree's content and install record. The tree is named
  * by its git TREE, not its commit, so a thread merge of a branch whose tree it just verified finds
@@ -55,12 +62,14 @@ const CACHE_FORMAT = 1;
 /** How many passes the cache keeps: many runs' worth for every game, at about 70 bytes each. */
 const MAX_STORED_PASSES = 5_000;
 
-/** A catalogue repository with a `main` branch. */
+/** A catalogue repository with a `main` branch, at the branch it is checked on. */
 interface CatalogueRepo {
   slug: string;
   /** The shared checkout, by real path. */
   dir: string;
-  /** The commit `main` names. */
+  /** `main`, or the branch paired with the tree's branch. */
+  ref: string;
+  /** The commit `ref` names. */
   commit: string;
 }
 
@@ -68,7 +77,9 @@ export interface CatalogueGameResult {
   slug: string;
   /** The shared checkout, where a failure is fixed. */
   dir: string;
-  /** The `main` commit that was checked. */
+  /** The branch that was checked: `main`, or the one paired with the tree's branch. */
+  ref: string;
+  /** The commit of `ref` that was checked. */
   commit: string;
   /** `cached` is a pass recorded earlier for exactly these inputs. */
   status: 'passed' | 'cached' | 'failed';
@@ -120,29 +131,34 @@ function linksToCheckout(spec: string): boolean {
   return /^(file|link):/.test(spec) && !/\.(tgz|tar\.gz|tar)$/.test(spec);
 }
 
-/** Why `repo`'s main is not a game to check, or undefined when its main links boardsmith to a checkout. */
+/** Why `repo` is not a game to check, or undefined when it links boardsmith to a checkout at its commit. */
 async function whyNotLinked(repo: CatalogueRepo): Promise<string | undefined> {
   let pkg: { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
   try {
-    pkg = JSON.parse(await git(repo.dir, ['show', 'main:package.json']));
+    pkg = JSON.parse(await git(repo.dir, ['show', `${repo.commit}:package.json`]));
   } catch {
-    return 'main has no readable package.json';
+    return `${repo.ref} has no readable package.json`;
   }
   const spec = pkg.dependencies?.boardsmith ?? pkg.devDependencies?.boardsmith;
   if (spec === undefined) return 'does not depend on boardsmith';
   return linksToCheckout(spec) ? undefined : `pins its own boardsmith (${spec})`;
 }
 
-/** One catalogue folder: the repository it is, if it has a main, and why it is not checked, if it is not. */
-async function readFolder(slug: string, dir: string): Promise<{ repo?: CatalogueRepo; notChecked?: string }> {
+/**
+ * One catalogue folder: the repository it is, if it has a main, at `paired` if it has that branch,
+ * and why it is not checked, if it is not.
+ */
+async function readFolder(slug: string, dir: string, paired: string | undefined): Promise<{ repo?: CatalogueRepo; notChecked?: string }> {
   if (!existsSync(join(dir, '.git'))) return { notChecked: 'not a git repository' };
-  if (!(await gitSucceeds(dir, ['rev-parse', '--verify', '--quiet', 'main^{commit}']))) return { notChecked: 'has no main branch' };
-  const repo = { slug, dir, commit: (await git(dir, ['rev-parse', 'main^{commit}'])).trim() };
+  if (!(await gitSucceeds(dir, ['rev-parse', '--verify', '--quiet', 'refs/heads/main^{commit}']))) return { notChecked: 'has no main branch' };
+  const hasPaired = paired !== undefined && (await gitSucceeds(dir, ['rev-parse', '--verify', '--quiet', `refs/heads/${paired}^{commit}`]));
+  const ref = hasPaired ? (paired as string) : 'main';
+  const repo = { slug, dir, ref, commit: (await git(dir, ['rev-parse', `refs/heads/${ref}^{commit}`])).trim() };
   return { repo, notChecked: await whyNotLinked(repo) };
 }
 
 /** The catalogue's repositories, the games among them to check, and every other folder with the reason. */
-async function readCatalogue(root: string): Promise<{ repos: CatalogueRepo[]; games: CatalogueRepo[]; notChecked: CatalogueRun['notChecked'] }> {
+async function readCatalogue(root: string, paired: string | undefined): Promise<{ repos: CatalogueRepo[]; games: CatalogueRepo[]; notChecked: CatalogueRun['notChecked'] }> {
   if (!existsSync(root)) throw catalogueMissing(root, `There is no catalogue folder at ${root}`);
   const repos: CatalogueRepo[] = [];
   const games: CatalogueRepo[] = [];
@@ -150,12 +166,12 @@ async function readCatalogue(root: string): Promise<{ repos: CatalogueRepo[]; ga
   for (const slug of (await fs.readdir(root)).sort()) {
     // stat, not the directory entry: a game the catalogue holds as a link to a checkout is a game too.
     if (!(await readIfExists(join(root, slug), fs.stat))?.isDirectory()) continue;
-    const folder = await readFolder(slug, realpathSync(join(root, slug)));
+    const folder = await readFolder(slug, realpathSync(join(root, slug)), paired);
     if (folder.repo !== undefined) repos.push(folder.repo);
     if (folder.notChecked !== undefined) notChecked.push({ slug, reason: folder.notChecked });
     else if (folder.repo !== undefined) games.push(folder.repo);
   }
-  if (games.length === 0) throw catalogueMissing(root, `The catalogue at ${root} holds no game whose main links boardsmith to a checkout`);
+  if (games.length === 0) throw catalogueMissing(root, `The catalogue at ${root} holds no game whose main or paired branch links boardsmith to a checkout`);
   return { repos, games, notChecked };
 }
 
@@ -241,6 +257,13 @@ async function requireBoardsmithTree(tree: string): Promise<string> {
   return real;
 }
 
+/** The branch checked out in `tree`, other than main, or undefined on main or with no branch. */
+async function pairedBranch(tree: string): Promise<string | undefined> {
+  if (!(await gitSucceeds(tree, ['symbolic-ref', '-q', 'HEAD']))) return undefined;
+  const branch = (await git(tree, ['symbolic-ref', '--short', 'HEAD'])).trim();
+  return branch === 'main' ? undefined : branch;
+}
+
 /** The cache file, in the git common directory every checkout of the tree's repository shares. */
 export async function catalogueCachePath(tree: string): Promise<string> {
   const common = (await git(tree, ['rev-parse', '--path-format=absolute', '--git-common-dir'])).trim();
@@ -322,10 +345,10 @@ class Children {
 }
 
 /**
- * Writes the files of `repo` at its `main` commit into the empty folder `dest`, by way of a tar
+ * Writes the files of `repo` at its commit into the empty folder `dest`, by way of a tar
  * file beside it: git writes the archive itself, so its bytes never pass through a string.
  */
-async function exportMain(repo: CatalogueRepo, dest: string, children: Children): Promise<void> {
+async function exportCommit(repo: CatalogueRepo, dest: string, children: Children): Promise<void> {
   const archive = `${dest}.tar`;
   await git(repo.dir, ['archive', '--format=tar', '-o', archive, repo.commit]);
   const untar = await children.run('tar', ['-x', '-f', archive, '-C', dest], dest);
@@ -373,7 +396,7 @@ async function pooled<T, R>(items: T[], limit: number, work: (item: T) => Promis
   return results;
 }
 
-const named = ({ slug, dir, commit }: CatalogueRepo) => ({ slug, dir, commit });
+const named = ({ slug, dir, ref, commit }: CatalogueRepo) => ({ slug, dir, ref, commit });
 
 /** `games` less those `skip` names, which join `notChecked` with their reasons. */
 function applySkips(
@@ -401,7 +424,7 @@ function describeLimit(ms: number): string {
 }
 
 /**
- * Validates each of `games` in an export of its main, in a work folder that is removed when the run
+ * Validates each of `games` in an export of its commit, in a work folder that is removed when the run
  * ends, and ends every process the run started if a signal stops it first.
  */
 async function runGames(
@@ -422,7 +445,7 @@ async function runGames(
         exports.set(r.slug, (async () => {
           const dest = join(work, r.slug);
           await fs.mkdir(dest);
-          await exportMain(r, dest, children);
+          await exportCommit(r, dest, children);
           await linkInstall(r, dest, tree, await linksOf(r));
           return dest;
         })());
@@ -452,7 +475,7 @@ async function runGames(
 /** Each catalogue game validated against `tree`, from the cache where these inputs passed before. */
 export async function checkCatalogue(options: CatalogueOptions): Promise<CatalogueRun> {
   const tree = await requireBoardsmithTree(options.tree);
-  const catalogue = await readCatalogue(options.catalogueRoot);
+  const catalogue = await readCatalogue(options.catalogueRoot, await pairedBranch(tree));
   const { repos } = catalogue;
   const { games, notChecked } = applySkips(catalogue.games, catalogue.notChecked, options.skip ?? {});
   const byDir = new Map(repos.map((r) => [r.dir, r]));

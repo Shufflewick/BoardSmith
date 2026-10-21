@@ -2,7 +2,8 @@
  * `boardsmith catalogue` — does this BoardSmith tree break a catalogue game? (#591)
  *
  * Run from the top of a BoardSmith checkout. It validates each game in the catalogue
- * (`~/BoardSmithGames`, or `--catalogue <folder>`) on the game's committed `main` against the
+ * (`~/BoardSmithGames`, or `--catalogue <folder>`) on the game's committed `main`, or its branch
+ * named as the checkout's branch (#1322), against the
  * checkout it is run in; `src/cli/lib/catalogue-check.ts` says how, without touching the games'
  * shared checkouts. `.agent-policy.json` runs it in every verify and merge.
  */
@@ -14,15 +15,23 @@ import { DEFAULT_CATALOGUE_ROOT, DEFAULT_GAME_TIME_LIMIT_MS, checkCatalogue, typ
 export function catalogueReport(run: CatalogueRun): { ok: boolean; text: string } {
   const lines: string[] = [];
   for (const result of run.results.filter((r) => r.status !== 'failed')) {
-    lines.push(`  ${result.slug}: validates against this tree${result.status === 'cached' ? ' (passed before on these inputs)' : ''}`);
+    const branch = result.ref === 'main' ? '' : `, on its branch ${result.ref}`;
+    lines.push(`  ${result.slug}: validates against this tree${branch}${result.status === 'cached' ? ' (passed before on these inputs)' : ''}`);
   }
   const failures = run.results.filter((r) => r.status === 'failed');
   for (const failure of failures) {
     lines.push(
       '',
-      `${failure.slug} FAILED boardsmith validate on its main (${failure.commit.slice(0, 8)}) against this BoardSmith tree:`,
+      `${failure.slug} FAILED boardsmith validate on its ${failure.ref} (${failure.commit.slice(0, 8)}) against this BoardSmith tree:`,
       (failure.output ?? '').trimEnd(),
-      `Either this BoardSmith change broke ${failure.slug}, or its main was already broken. Fix the change, or fix the game in ${failure.dir} and push its main.`,
+      `Either this BoardSmith change broke ${failure.slug}, or its ${failure.ref} was already broken. Fix the change, or fix the game in ${failure.dir} and push its ${failure.ref}.`,
+      `If this change needs a change to ${failure.slug}, commit it in ${failure.dir} on a branch with the same name as this BoardSmith branch: the check uses that branch instead of main.`,
+    );
+  }
+  for (const result of run.results.filter((r) => r.ref !== 'main')) {
+    lines.push(
+      '',
+      `${result.slug} was checked on its branch ${result.ref}, not its main. Merge that branch into its main in ${result.dir} right after this BoardSmith change lands.`,
     );
   }
   if (run.notChecked.length > 0) {
