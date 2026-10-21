@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * A PINNED BOARD NEVER OVERFLOWS ITS REGION SIDEWAYS WHILE THE REGION NARROWS (#1336).
+ * A PINNED BOARD NEVER OVERFLOWS ITS REGION SIDEWAYS WHILE THE REGION NARROWS (#1336),
+ * AND ITS WIDTH AND ZOOM DO NOT DEPEND ON THE REGION'S VERTICAL SCROLLBAR (#1343).
  *
  * `useBoardSize` pins a board to `.boardregion`'s width, and the pin is
  * re-measured by a ResizeObserver, which runs after layout. When the region
@@ -9,8 +10,18 @@
  * the region showed a horizontal scrollbar, lost its height to it, and the
  * browser reported `ResizeObserver loop completed with undelivered notifications`.
  *
+ * In a browser without `scrollbar-gutter` (Safari before 18.2) and with classic
+ * scrollbars, the region loses the scrollbar's width while its vertical
+ * scrollbar shows. The pin followed that width, so it changed as the scrollbar
+ * came and went, and the zoom fit read a pin from the other scrollbar state, at
+ * about 0.98 or 1.02. That zoom moved the board across the region's overflow
+ * point, so the pin and the zoom flipped every frame. Both now measure the
+ * region with its vertical scrollbar showing, whether or not it shows.
+ *
  * Served from `boardsmith init`'s table sample with a board that calls
  * `useBoardSize`, in Chromium with classic (space-taking) scrollbars. The
+ * board is first moved across the region's overflow point with the region's
+ * gutter turned off, which is how such a Safari lays the region out. Then the
  * sidebar is widened a quarter pixel per frame, so the region crosses several
  * whole pixels with no resize event, and each frame is read before the
  * ResizeObserver can re-pin.
@@ -46,6 +57,62 @@ import Pinned from './components/Pinned.vue';
 
 export default defineGameUIs({ Pinned: defaultUI(Pinned) });
 `;
+
+/**
+ * With the region's gutter off, make the board just shorter, just taller, then
+ * just shorter than the region's room for it, and last give it an aspect ratio
+ * that makes it taller than that room at the region's full width and shorter at
+ * that width less a scrollbar. Ten frames after each, read the pin, the zoom,
+ * and whether the region scrolls either way. Puts the gutter and the board back.
+ */
+function crossTheOverflowPoint(frame) {
+  return frame.locator('body').evaluate(async (body) => {
+    const doc = body.ownerDocument;
+    const win = doc.defaultView;
+    const region = doc.querySelector('.boardregion');
+    const board = doc.querySelector('.pinned-board');
+    const zoomed = doc.querySelector('.game-shell__zoom-container');
+    const nextFrame = () => new Promise((settle) => win.requestAnimationFrame(settle));
+    const noGutter = doc.createElement('style');
+    noGutter.textContent = '.boardregion { scrollbar-gutter: auto !important; }';
+    doc.head.append(noGutter);
+    let loopErrors = 0;
+    const countLoop = (event) => { if (/ResizeObserver loop/.test(event.message)) loopErrors += 1; };
+    win.addEventListener('error', countLoop);
+    await nextFrame();
+
+    const cs = win.getComputedStyle(region);
+    const room = region.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    const width = region.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    const steps = [
+      { height: `${room - 4}px` },
+      { height: `${room + 4}px` },
+      { height: `${room - 4}px` },
+      { height: 'auto', aspectRatio: `${width - 7} / ${room}` },
+    ];
+    const seen = [];
+    for (const step of steps) {
+      Object.assign(board.style, step);
+      const frames = [];
+      for (let i = 0; i < 10; i++) {
+        await nextFrame();
+        frames.push({
+          pin: board.style.width,
+          zoom: win.getComputedStyle(zoomed).zoom,
+          down: region.scrollHeight > region.clientHeight,
+          sideways: region.scrollWidth > region.clientWidth,
+        });
+      }
+      seen.push({ step, frames });
+    }
+
+    win.removeEventListener('error', countLoop);
+    noGutter.remove();
+    Object.assign(board.style, { height: '', aspectRatio: '' });
+    await nextFrame();
+    return { seen, loopErrors };
+  });
+}
 
 /** Widen the sidebar 0.25px a frame and, each frame, read the region before the ResizeObserver runs. */
 function narrowTheRegion(frame) {
@@ -95,6 +162,28 @@ await runBrowserRegression(
       const page = await browser.newPage({ viewport: { width: 1025, height: 900 } });
       const frame = await openTableSample(page, hostUrl);
 
+      const crossing = await crossTheOverflowPoint(frame);
+      const frames = crossing.seen.flatMap((step) => step.frames);
+      const pins = [...new Set(frames.map((f) => f.pin))];
+      const zooms = [...new Set(frames.map((f) => f.zoom))];
+      await check('without a gutter, the region scrolls down only while the board is taller than its room', async () => {
+        const shows = crossing.seen.slice(0, 3).map((step) => step.frames.at(-1).down);
+        assert(shows.join() === 'false,true,false', `the region scrolled down: ${shows.join(', ')}`);
+      });
+      await check('without a gutter, the pin stays the same whether or not the vertical scrollbar shows', async () => {
+        assert(pins.length === 1, `the pin was ${pins.join(', then ')}`);
+      });
+      await check('without a gutter, the zoom stays at 1, even for a board whose height follows its width', async () => {
+        assert(zooms.length === 1 && zooms[0] === '1', `the zoom was ${zooms.join(', then ')}`);
+      });
+      await check('without a gutter, the region never scrolls sideways', async () => {
+        const at = frames.findIndex((f) => f.sideways);
+        assert(at === -1, `the region scrolled sideways on frame ${at % 10} of step ${Math.floor(at / 10) + 1}`);
+      });
+      await check('without a gutter, the browser reports no ResizeObserver loop', async () => {
+        assert(crossing.loopErrors === 0, `${crossing.loopErrors} ResizeObserver loop errors`);
+      });
+
       const seen = await narrowTheRegion(frame);
 
       await check('widening the sidebar narrows the region', async () => {
@@ -120,6 +209,6 @@ await runBrowserRegression(
     } finally {
       await browser.close();
     }
-    return summarise('the pinned board in a narrowing region');
+    return summarise('the pinned board as its region narrows and its scrollbar comes and goes');
   },
 );
