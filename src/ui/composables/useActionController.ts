@@ -1133,11 +1133,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return;
     }
 
-    // Skip fetch for number/text picks - they don't have choices
-    if (selection.type === 'number' || selection.type === 'text') {
-      return;
-    }
-
+    // A number or text pick is asked too: a world's offer leaves out a later pick's function prompt (#1350).
     const player = playerSeat?.value ?? 0;
 
     // If the action is gone or replaced after the round trip, discard the
@@ -1586,15 +1582,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // against an empty snapshot is discarded, and an auto-fill judged against
     // one choice that is really two picks for the player (#226). A fetch
     // started by start()/fill() is normally still in flight when this watcher
-    // first runs, so join it; otherwise start one for a pick that has no
-    // choices yet.
+    // first runs, so join it; otherwise start one for a pick not fetched yet.
     const inFlight = actionSnapshot.value?.choiceFetches.get(sel.name);
     if (inFlight) {
       await inFlight;
-    } else if (
-      !actionSnapshot.value?.pickSnapshots.has(sel.name) &&
-      (sel.type === 'choice' || sel.type === 'element' || sel.type === 'elements')
-    ) {
+    } else if (!actionSnapshot.value?.pickSnapshots.has(sel.name)) {
       await fetchChoicesForPick(sel.name);
     }
 
@@ -2551,13 +2543,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /**
-   * Fetch choices for the pick after `afterName`, resolving that pick, or
-   * false when the action moved on meanwhile. Null, without waiting, when
-   * there is no next pick with choices to fetch.
+   * Fetch the pick after `afterName`, resolving that pick, or false when the
+   * action moved on meanwhile. Null, without waiting, when there is no next pick.
    */
   function fetchNextPick(afterName: string): Promise<EnrichedPickMetadata | false> | null {
     const nextSel = getNextSelection(afterName);
-    if (!nextSel || (nextSel.type !== 'choice' && nextSel.type !== 'element' && nextSel.type !== 'elements')) return null;
+    if (!nextSel) return null;
     const seq = actionStartTick.value;
     return fetchChoicesForPick(nextSel.name).then(() => (!actionMovedOn(seq) && nextSel));
   }

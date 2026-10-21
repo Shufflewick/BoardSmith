@@ -1886,6 +1886,33 @@ describe('useActionController picks', () => {
     expect(controller.currentPick.value?.prompt).toBe('Size for commons');
   });
 
+  it("asks a later NUMBER pick for its prompt too, since a world's offer leaves a function one out (#1350)", async () => {
+    actionMetadata.value = {
+      ...createTestMetadata(),
+      refuel: {
+        name: 'refuel',
+        selections: [
+          { name: 'ship', type: 'choice', prompt: 'Ship', choices: [{ value: 'dory', display: 'Dory' }] },
+          { name: 'amount', type: 'number' },
+        ],
+      },
+    };
+    availableActions.value = [...(availableActions.value ?? []), 'refuel'];
+    const fetchPickChoices = vi.fn(async (_action: string, pick: string): Promise<PickChoicesResult> =>
+      pick === 'amount'
+        ? { success: true, prompt: 'Fuel for the dory' }
+        : { success: true, choices: [{ value: 'dory', display: 'Dory' }] });
+    const controller = useActionController({
+      sendAction, availableActions, actionMetadata, isMyTurn,
+      autoExecute: false, autoFill: false, playerSeat: ref(0), fetchPickChoices,
+    });
+
+    await controller.start('refuel');
+    await controller.fill('ship', 'dory');
+
+    expect(controller.currentPick.value?.prompt).toBe('Fuel for the dory');
+  });
+
   describe('multiSelect validation', () => {
     // Note: Current implementation validates array elements individually,
     // which means multiSelect arrays pass if any element matches a choice.
