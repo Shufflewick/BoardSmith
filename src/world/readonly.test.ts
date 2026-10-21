@@ -496,3 +496,49 @@ describe("readOnlyProjection over built-in objects (#1171)", () => {
     ]);
   });
 });
+
+describe("readOnlyProjection over arrays a standard method builds (#1327)", () => {
+  it("answers filter, map, slice, concat, flat, flatMap, toSorted, toReversed, toSpliced and with as the caller's own plain array", () => {
+    const projection = readOnlyProjection({ a: [3, 1, 2], nested: [[1], [2]] });
+    // This repo's tsconfig lib predates ES2023, though the runtime has these methods.
+    const es2023 = projection.a as unknown as Record<"toSorted" | "toReversed" | "toSpliced" | "with", (...args: number[]) => number[]>;
+    const built = [
+      projection.a.filter((value) => value > 1),
+      projection.a.map((value) => value * 2),
+      projection.a.slice(1),
+      projection.a.concat([4]),
+      projection.nested.flat(),
+      projection.a.flatMap((value) => [value]),
+      es2023.toSorted(),
+      es2023.toReversed(),
+      es2023.toSpliced(0, 1),
+      es2023.with(0, 9),
+    ];
+
+    expect(built.map((array) => structuredClone(array))).toEqual([
+      [3, 2], [6, 2, 4], [1, 2], [3, 1, 2, 4], [1, 2], [3, 1, 2], [1, 2, 3], [2, 1, 3], [1, 2], [9, 1, 2],
+    ]);
+    built[0].push(7);
+    expect(built[0]).toEqual([3, 2, 7]);
+  });
+
+  it("still answers what a built array holds read-only, so a write cannot reach the world through it", () => {
+    const { here } = world();
+    here.tags = ["calm"];
+    const projection = readOnlyProjection({ rooms: [here] });
+
+    const [room] = projection.rooms.filter(() => true);
+    expect(() => room.tags.push("leaked")).toThrow(WorldRefusal);
+    expect(here.tags).toEqual(["calm"]);
+  });
+
+  it("answers an ElementCollection's own filter and slice as the caller's, as its inherited map is", () => {
+    const { game, here } = world();
+    const rooms = readOnlyProjection(game).all(Room);
+
+    const built = [rooms.filter(() => true), rooms.slice(0), rooms.map((room) => room)];
+    for (const array of built) array.push(readOnlyProjection(here));
+    expect(built.map((array) => array.length)).toEqual([3, 3, 3]);
+    expect(() => built[0][0].tags.push("leaked")).toThrow(WorldRefusal);
+  });
+});
