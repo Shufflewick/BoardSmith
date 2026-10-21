@@ -58,6 +58,10 @@
  * - Re-fits triggered by the region observer are rAF-coalesced into a single
  *   `measureAndFit()` per frame, so a cascade of layout changes (e.g. the
  *   sidebar collapsing plus a window resize) never thrashes.
+ *
+ * A browser without CSS `zoom` (Firefox before 126) drops the container's
+ * `zoom`, so there the shell fits none, offers no slider (`zoomSupported`)
+ * and `zoomLevel` stays 1, the zoom actually applied (#1361).
  */
 import { ref, watch, onUnmounted, type Ref } from 'vue';
 import { provideBoardRegionPin, regionWidth } from './boardRegionPin.js';
@@ -115,6 +119,7 @@ export function useAutoZoom(options: {
   const { boardEl, boardUi, regionEl, boardFailed } = options;
 
   const zoomLevel = ref(1.0);
+  const zoomSupported = 'zoom' in document.documentElement.style;
 
   /** Non-zero while a `useBoardSize()`-pinned board is mounted below the shell.
    *  Such a board is width-fit only (see the module docblock). The game opts in
@@ -132,7 +137,7 @@ export function useAutoZoom(options: {
   function measureAndFit(): boolean {
     const board = boardEl.value;
     const region = regionEl.value;
-    if (!board || !region || boardFailed.value) return false;
+    if (!zoomSupported || !board || !region || boardFailed.value) return false;
 
     const appliedZoom = parseFloat(getComputedStyle(board).zoom) || 1;
     const rect = board.getBoundingClientRect();
@@ -242,6 +247,7 @@ export function useAutoZoom(options: {
    *  takes manual control, so neither startup nor the persistent
    *  available-space re-fit ever stomps the user's choice. */
   function setZoom(value: number) {
+    if (!zoomSupported) throw new Error('This browser cannot apply a zoom (it has no CSS zoom), so the shell offers no zoom slider.');
     endStartup();
     userControlled = true;
     // A frame already queued by a prior scheduleRefit is intentionally left to
@@ -259,5 +265,5 @@ export function useAutoZoom(options: {
     measureAndFit();
   }
 
-  return { zoomLevel, setZoom, fitZoom, measureAndFit };
+  return { zoomLevel, zoomSupported, setZoom, fitZoom, measureAndFit };
 }

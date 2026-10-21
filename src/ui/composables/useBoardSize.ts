@@ -54,7 +54,7 @@ export function useBoardSize(boardEl: Ref<HTMLElement | null>) {
   // time, not on first measurement: calling useBoardSize IS the declaration,
   // and the fit must not depend on which composable measured first.
   /** The zoom GameShell applies to the board (the controls-menu slider or
-   *  the fit), 1 outside a shell. The region is not zoomed and the board is,
+   *  the fit), 1 outside a shell or without CSS zoom (#1361). The region is not zoomed and the board is,
    *  so a board fitting itself to the region divides region pixels by this.
    *  Watch it to re-fit: a zoom change resizes nothing a ResizeObserver sees. */
   const zoom = registerBoardRegionPin();

@@ -276,7 +276,7 @@ const zoomContainerEl = computed(() => playShell.value?.zoomContainerEl ?? null)
 const boardBoundary = ref<InstanceType<typeof BoardErrorBoundary> | null>(null);
 // No boundary mounted means no board, so nothing has failed.
 const boardFailed = computed(() => boardBoundary.value?.failed ?? false);
-const { zoomLevel, setZoom, fitZoom } = useAutoZoom({
+const { zoomLevel, zoomSupported, setZoom, fitZoom } = useAutoZoom({
   boardEl: zoomContainerEl,
   boardUi: selectedUiComponent,
   regionEl: boardregionEl,
@@ -1601,6 +1601,7 @@ defineExpose({
           align="left"
           v-model:auto-end-turn="autoEndTurn"
           :zoom="zoomLevel"
+          :zoom-supported="zoomSupported"
           @update:zoom="setZoom"
           @fit-zoom="fitZoom"
           :can-undo="gatedCanUndo"

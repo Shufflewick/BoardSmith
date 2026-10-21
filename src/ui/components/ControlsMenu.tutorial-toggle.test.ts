@@ -37,6 +37,7 @@ function mountMenu(props: Record<string, unknown> = {}) {
     props: {
       autoEndTurn: false,
       zoom: 1,
+      zoomSupported: true,
       canUndo: false,
       hasTutorial: true,
       ...props,

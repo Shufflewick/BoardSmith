@@ -22,6 +22,8 @@ const props = withDefaults(defineProps<{
   autoEndTurn: boolean;
   /** Current zoom level; a fitted board can sit below the slider's minimum (#1162). */
   zoom: number;
+  /** False where the browser has no CSS zoom, so the menu offers none (#1361). */
+  zoomSupported: boolean;
   /** Whether the undo action is currently available */
   canUndo: boolean;
   /** Open the popover upward (for a bottom-anchored trigger, e.g. the action bar). */
@@ -250,7 +252,7 @@ function handleUndo() {
 
       <!-- Zoom: fitted once at game startup; the slider adjusts manually and
            "Fit" re-fits the board to the available space on demand. -->
-      <div class="mi zoom-mi" role="menuitem">
+      <div v-if="zoomSupported" class="mi zoom-mi" role="menuitem">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M21 21l-4-4" stroke-linecap="round"/></svg>
         Zoom
         <span class="r">
