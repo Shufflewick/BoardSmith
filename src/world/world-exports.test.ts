@@ -80,6 +80,7 @@ const VALUES = [
   'resumeDueOf',
   'runDueOccurrences',
   'scheduleBudget',
+  'seatView',
   'settleDeclaration',
   'walkDeclaration',
   'worldAction',
