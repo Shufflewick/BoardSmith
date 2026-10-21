@@ -127,7 +127,7 @@ function layOut(wrapper: ReturnType<typeof mountShell>['wrapper'], minContentWid
   const region = wrapper.find('main.boardregion').element as HTMLElement;
   const zoom = wrapper.find('.zoom-container').element as HTMLElement;
   region.style.paddingBottom = `${PANEL_RESERVED}px`;
-  Object.defineProperty(region, 'clientWidth', { get: () => REGION.width, configurable: true });
+  region.style.width = `${REGION.width}px`;
   Object.defineProperty(region, 'clientHeight', { get: () => REGION.height, configurable: true });
   zoom.getBoundingClientRect = () => {
     const boardRoot = zoom.firstElementChild as HTMLElement | null;

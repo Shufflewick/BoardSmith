@@ -1194,6 +1194,10 @@ For these boards, use `useBoardSize()`: it measures `.boardregion` (the
 ancestor GameShell sizes to the visible viewport) and pins your board root to
 the region's available width, so wrapping works and growth is
 vertical-scroll only. It re-measures on region resize and window resize.
+The width is the one the region has with its vertical scrollbar showing,
+whether or not it shows, and the zoom fit reads the same width, so in a
+browser without `scrollbar-gutter` (Safari before 18.2) a scrollbar coming
+or going moves neither the pin nor the zoom.
 The pin is capped at `100cqw` (`.boardregion` is an inline-size container),
 so while the region narrows, as it does while the sidebar opens, the board
 never runs past it in the frames before the pin is re-measured. The same

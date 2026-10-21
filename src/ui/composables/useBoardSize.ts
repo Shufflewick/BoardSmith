@@ -47,7 +47,7 @@
  * returned `zoom` to do that conversion (#1332).
  */
 import { ref, computed, watch, onBeforeUnmount, type Ref } from 'vue';
-import { registerBoardRegionPin } from './boardRegionPin.js';
+import { registerBoardRegionPin, regionWidth } from './boardRegionPin.js';
 
 export function useBoardSize(boardEl: Ref<HTMLElement | null>) {
   // Declare the model to the shell for this scope's lifetime. Done at call
@@ -59,8 +59,9 @@ export function useBoardSize(boardEl: Ref<HTMLElement | null>) {
    *  Watch it to re-fit: a zoom change resizes nothing a ResizeObserver sees. */
   const zoom = registerBoardRegionPin();
 
-  /** Region width available to the board (region client box minus horizontal
-   *  padding), in CSS pixels. 0 until the first successful measurement. */
+  /** Width available to the board, in CSS pixels: the region's content box
+   *  with its vertical scrollbar showing, whether or not it shows (#1343), or
+   *  the parent's client box less padding outside a region. 0 until measured. */
   const availWidth = ref(0);
 
   /** True when the width came from a `.boardregion`, which is a size
@@ -80,12 +81,16 @@ export function useBoardSize(boardEl: Ref<HTMLElement | null>) {
 
   function measure() {
     const region = boardEl.value?.closest('.boardregion') as HTMLElement | null | undefined;
-    const host = region ?? boardEl.value?.parentElement;
-    if (!host) return;
-    const cs = getComputedStyle(host);
-    const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
     inRegion.value = !!region;
-    availWidth.value = Math.max(0, host.clientWidth - padX);
+    if (region) {
+      availWidth.value = regionWidth(region);
+      return;
+    }
+    const parent = boardEl.value?.parentElement;
+    if (!parent) return;
+    const cs = getComputedStyle(parent);
+    const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+    availWidth.value = Math.max(0, parent.clientWidth - padX);
   }
 
   let regionObserver: ResizeObserver | null = null;

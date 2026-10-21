@@ -65,3 +65,20 @@ export function registerBoardRegionPin(): Readonly<Ref<number>> {
   onScopeDispose(() => { channel.pinnedBoards.value -= 1; });
   return channel.zoom;
 }
+
+/**
+ * The width `.boardregion` gives a board: its content box with its vertical
+ * scrollbar showing, whether or not it shows now (#1343). The pin and the fit
+ * both read this, so a scrollbar coming or going changes neither of them. In a
+ * browser without `scrollbar-gutter` it would otherwise change both, at
+ * different moments, and they flipped each other every frame. The computed
+ * width is the exact content box `100cqw` resolves to, where `clientWidth`
+ * rounds to a whole pixel.
+ */
+export function regionWidth(region: HTMLElement): number {
+  const overflowY = region.style.overflowY;
+  region.style.overflowY = 'scroll';
+  const width = parseFloat(getComputedStyle(region).width) || 0;
+  region.style.overflowY = overflowY;
+  return width;
+}

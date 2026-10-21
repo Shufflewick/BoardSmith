@@ -3,9 +3,11 @@
  * useBoardSize — pin a content-flow board to the visible board-region width.
  *
  * Behaviors under test:
- *   BS-1: measures the nearest .boardregion ancestor's client width minus its
- *         horizontal padding into availWidth/boardStyle, and caps the pin at
- *         the region's own width so a stale pin cannot overflow it (#1336).
+ *   BS-1: measures the nearest .boardregion ancestor's content width into
+ *         availWidth/boardStyle, and caps the pin at the region's own width so
+ *         a stale pin cannot overflow it (#1336). The width is the one the
+ *         region has with its vertical scrollbar showing, whether or not it
+ *         shows, so the scrollbar coming or going never moves the pin (#1343).
  *   BS-2: boardStyle is empty until a measurement succeeds (no width-0 flash),
  *         and falls back to the parent element when no .boardregion exists
  *         (e.g. unit-test harnesses / non-GameShell hosts).
@@ -22,13 +24,11 @@ import { defineComponent, h, ref, nextTick, type Ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import { useBoardSize } from './useBoardSize';
 
-/** A fake .boardregion with the layout jsdom doesn't compute. */
-function fakeRegion(clientWidth: number, padding = 0): HTMLElement {
+/** A fake .boardregion whose content box is `width` wide. */
+function fakeRegion(width: number): HTMLElement {
   const el = document.createElement('main');
   el.className = 'boardregion';
-  el.style.paddingLeft = `${padding}px`;
-  el.style.paddingRight = `${padding}px`;
-  Object.defineProperty(el, 'clientWidth', { value: clientWidth, configurable: true });
+  el.style.width = `${width}px`;
   return el;
 }
 
@@ -76,19 +76,36 @@ describe('useBoardSize', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
     document.body.innerHTML = '';
   });
 
-  it('BS-1: pins to the region client width minus horizontal padding', async () => {
-    const board = boardInRegion(fakeRegion(800, 24));
+  it('BS-1: pins to the region content width', async () => {
+    const board = boardInRegion(fakeRegion(752.5));
     const boardEl = ref<HTMLElement | null>(board);
     const { api, wrapper } = mountBoardSize(boardEl);
     await nextTick(); // flush: 'post' watcher measures
 
-    expect(api.availWidth.value).toBe(800 - 48);
+    expect(api.availWidth.value).toBe(752.5);
     // 100cqw is the region's content box at layout time, so a pin measured
     // before the region narrowed never runs past it (#1336).
-    expect(api.boardStyle.value).toEqual({ width: 'min(752px, 100cqw)' });
+    expect(api.boardStyle.value).toEqual({ width: 'min(752.5px, 100cqw)' });
+    wrapper.unmount();
+  });
+
+  it('BS-1: pins to the width the region has with its vertical scrollbar showing, and leaves its overflow as it was (#1343)', async () => {
+    const region = fakeRegion(752);
+    region.style.overflowY = 'auto';
+    const realStyle = window.getComputedStyle.bind(window);
+    // jsdom has no scrollbar: a 15px one shows while overflow-y is scroll.
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((el) => el === region
+      ? ({ width: region.style.overflowY === 'scroll' ? '737px' : '752px' } as CSSStyleDeclaration)
+      : realStyle(el));
+    const { api, wrapper } = mountBoardSize(ref(boardInRegion(region)));
+    await nextTick();
+
+    expect(api.availWidth.value).toBe(737);
+    expect(region.style.overflowY).toBe('auto');
     wrapper.unmount();
   });
 
@@ -124,11 +141,11 @@ describe('useBoardSize', () => {
     const observer = FakeResizeObserver.instances[0]!;
     expect(observer.observed).toContain(region);
 
-    Object.defineProperty(region, 'clientWidth', { value: 600, configurable: true });
+    region.style.width = '600px';
     observer.fire();
     expect(api.availWidth.value).toBe(600);
 
-    Object.defineProperty(region, 'clientWidth', { value: 1024, configurable: true });
+    region.style.width = '1024px';
     window.dispatchEvent(new Event('resize'));
     expect(api.availWidth.value).toBe(1024);
     wrapper.unmount();
@@ -156,7 +173,7 @@ describe('useBoardSize', () => {
     // Unmount: observer disconnected and the window listener removed.
     wrapper.unmount();
     expect(observerB.disconnected).toBe(true);
-    Object.defineProperty(regionB, 'clientWidth', { value: 100, configurable: true });
+    regionB.style.width = '100px';
     window.dispatchEvent(new Event('resize'));
     expect(api.availWidth.value).toBe(640); // unchanged — listener is gone
   });
