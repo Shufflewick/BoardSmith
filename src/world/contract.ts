@@ -254,12 +254,11 @@ import type { ActionMetadata, PickMetadata } from "../session/types.js";
  * legal this instant. An enumerated offer answers the second question, which is
  * the one a player is actually asking.
  *
- * ITS CANDIDATES ARE ALREADY RESOLVED. A table fetches each pick's choices on
- * demand, because a table's protocol is step-wise; a world's is single-shot, so
- * an offer carries `selections[i].choices` / `.validElements` filled in. That is
- * affordable exactly because a world action may not declare a dependent
- * selection -- see `assertWorldAction` -- so no selection's candidates are a
- * function of another's value and the whole offer is one pass.
+ * ITS FIRST PICK'S CANDIDATES ARE ALREADY RESOLVED. An offer carries
+ * `selections[0].choices` / `.validElements` filled in, so most verbs, which
+ * ask one question, cost no round trip. Every later selection carries its shape
+ * only (name, type, and a prompt or bounds given as a value) and is re-asked
+ * with `resolvePick` when the player reaches it (#1345, #1350, #1355).
  */
 export interface WorldActionOffer extends ActionMetadata {
   /**
@@ -1264,11 +1263,10 @@ export interface WorldEngine {
   /**
    * THAT PICK, RE-EVALUATED with the args bound so far (#378).
    *
-   * A world's offer is enumerated in one frame with nothing bound -- the whole
-   * cost model -- so a selection whose `multiSelect` bounds or `choices`
-   * callback read an earlier selection's value cannot be answered there. The
-   * panel asks again once it has something to ask with, exactly as a table's
-   * does. A READ, under the same read-only facilities an offer runs under.
+   * A world's offer resolves only the first selection, with nothing bound --
+   * the whole cost model -- so the panel asks for every later one when the
+   * player reaches it, with the answers so far (#1345, #1355). A READ, under
+   * the same read-only facilities an offer runs under.
    */
   resolvePick(
     player: string,

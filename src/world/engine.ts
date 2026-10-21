@@ -1156,7 +1156,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
    *
    * ## What it costs
    *
-   * `O(actions) x (condition + each selection's own candidates)`. There is no
+   * `O(actions) x (condition + the first selection's candidates)`. There is no
    * term that scales with the world: it scales with what the declaration named,
    * and the declaration is authored, finite and readable. The hydration is the
    * union of the actions' round-one declarations, which for every game in the
@@ -1187,11 +1187,11 @@ export class BoardSmithWorldEngine implements WorldEngine {
    *
    * The read path's `commandPartitions`, and it exists for the same reason: a
    * host reads storage and the engine does not, so the engine names and the
-   * host supplies. It walks every action the seat could be offered -- round
-   * one, then each selection's own round -- and answers the first unmet round
-   * of each, unioned, because the actions are independent of one another and
-   * batching them keeps an offer to one storage round trip per LEVEL rather
-   * than one per action.
+   * host supplies. It walks every action the seat could be offered -- the rounds
+   * before its first selection, which is all an offer reads (#1355) -- and
+   * answers the first unmet round of each, unioned, because the actions are
+   * independent of one another and batching them keeps an offer to one storage
+   * round trip per LEVEL rather than one per action.
    *
    * Conditions run only in the stamped offer context. Declaration has no clock
    * or presence snapshot, so it cannot decide availability. It declares the
@@ -1340,16 +1340,14 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * ONE PICK, RE-ASKED WITH THE ARGUMENTS BOUND SO FAR (ShufflewickPub #378).
    *
    * A world's offer is enumerated in ONE frame with `args: {}`, and that is the
-   * whole cost model rather than an oversight: a world action may not declare a
-   * dependent selection, so every question it asks can be answered before any
-   * of them is. What that does not cover is a selection whose SHAPE -- its
-   * `multiSelect` bounds, its `choices` callback -- reads an argument an earlier
-   * selection binds. Evaluated with nothing bound, a cap that depends on the
-   * chosen ship is the unbounded fallback, and the browser is left holding a
-   * limit the game never meant.
+   * whole cost model rather than an oversight. It resolves only the first
+   * selection: any later one -- its round, its candidates, its `multiSelect`
+   * bounds -- may read an argument an earlier selection binds, so the offer
+   * carries its shape only (#1345, #1350, #1355).
    *
-   * So the panel re-asks, the same way a table's does: `fetchPickChoices` hands
-   * over the args bound so far and gets this selection back. It is a READ --
+   * So the panel asks for it, the same way a table's does: `fetchPickChoices`
+   * hands over the args bound so far, none when only skipped optional picks
+   * precede it, and gets this selection back. It is a READ --
    * the same read-only facilities an offer runs under -- and it is paid only
    * while somebody is actually mid-action.
    *

@@ -769,10 +769,10 @@ export class ResidentWorld {
    * ONE SELECTION, RE-EVALUATED WITH THE ARGS BOUND SO FAR (ShufflewickPub
    * #378).
    *
-   * A world's offer is enumerated in one frame with nothing bound, so a
-   * selection whose `multiSelect` bounds or `choices` callback read an earlier
-   * selection's value cannot be answered there: the panel asks again once it has
-   * something to ask with, exactly as a table's does.
+   * A world's offer resolves only the first selection, with nothing bound, so
+   * the panel asks for every later one when the player reaches it, with the
+   * answers so far -- none, when only skipped optional picks precede it
+   * (#1345, #1355).
    *
    * It is a READ. Nothing is dispatched and nothing is checkpointed -- what it
    * changes is what is LOADED, which is residency and not state, and a partition
