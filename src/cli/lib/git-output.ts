@@ -38,6 +38,26 @@ export function gitSucceeds(dir: string, args: string[]): Promise<boolean> {
 }
 
 /**
+ * Runs git in the project's own repository at `dir`: without the variables git clears when it enters
+ * another one, such as an inherited GIT_DIR or a core.hooksPath passed down in GIT_CONFIG_PARAMETERS
+ * (#1301, #1321). For a command run on a game project, which may be started from inside another
+ * repository's hook or `git -c` alias.
+ */
+export async function projectGitOutput(dir: string, args: string[]): Promise<string> {
+  const env = { ...process.env };
+  for (const name of (await gitOutput(dir, ['rev-parse', '--local-env-vars'])).split('\n')) delete env[name];
+  return gitOutput(dir, args, { env });
+}
+
+/** `gitSucceeds`, in the project's own repository as `projectGitOutput` runs it. */
+export function projectGitSucceeds(dir: string, args: string[]): Promise<boolean> {
+  return projectGitOutput(dir, args).then(
+    () => true,
+    () => false,
+  );
+}
+
+/**
  * A `git blame --porcelain` (or `--line-porcelain`) header line: the commit and the line's number in
  * the file as it is now; undefined for any other line. A hash is 40 characters in a SHA-1
  * repository and 64 in a SHA-256 one, and a line not committed yet has an all-zero hash.

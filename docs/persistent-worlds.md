@@ -1235,11 +1235,14 @@ next one's to read. On ShufflewickPub it is also deleted when the holder's
 account is erased.
 
 A host drives all of this with one function, `applyNoticeWrites(result.notices,
-readBox, { seatCount, budgets })`, which applies a dispatch's sends and takes in
-order and answers each touched seat's box, so every host agrees about what a
-full box does. The result comes from game code, so it first re-checks `perSeat`,
-the number of sends, each notice's size and every seat against the host's own
-budgets and seat count, and refuses a result they do not admit. The
+readBox, { seatCount, budgets, declaredNotices })`, which applies a dispatch's
+sends and takes in order and answers each touched seat's box, so every host
+agrees about what a full box does. The result comes from game code, so it first
+re-checks `perSeat`, the number of sends, each notice's size and every seat
+against the host's own budgets and seat count, and refuses a result they do not
+admit. It also refuses a take or a `refuse` send to a box that is not in
+`declaredNotices`, the boxes the command's walk declared (`dispatchStep` answers
+them as `answers.declaredNotices`), with `undeclared-notice-box`. The
 `WorldStore` interface carries `noticeBox(seat)` and a checkpoint's `notices`;
 `boardsmith dev` keeps boxes in its local store, and `TestWorld.noticeBox(seat)`
 shows a test what is waiting.
@@ -1575,6 +1578,16 @@ and a room everybody is granted is a single body for the whole audience. The
 engine decides that STRUCTURALLY, from the visibility each element declares,
 because deciding it by comparing encoded bodies would cost the encoding the
 sharing removes.
+
+**A count-only pile shares too (#1207).** A seat knows a card it cannot see by a
+placeholder id of its own (#715), so the body seats share has each placeholder's
+id taken out, and `viewsFor` answers each seat its own ids beside the body it
+holds (`placeholders`, in order); the runner's `of[player]` is
+`{ at, placeholders }`, so a seat's body index never comes without its ids.
+`seatView(bodies[at], placeholders)` from `boardsmith/world` is that seat's
+view, and a host calls it last, before sending: the world client reads the board
+straight from the view it is sent and fills in no ids. No shared body carries
+any seat's ids, and a seat is given ids only for the placeholders in its own body.
 
 **The authoring lever is still the visibility you declare.** Two kinds of
 declaration are per-seat output whatever the audience, because neither is decided

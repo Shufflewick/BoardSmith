@@ -20,7 +20,7 @@ import {
   registerCreatedElementClass,
 } from './game-element.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE } from './hidden-placeholder.js';
-import { concealRefsForSeat, nameableFor, outermostConcealer } from './concealed-refs.js';
+import { concealRefsForSeat, nameableFor } from './concealed-refs.js';
 import { placeholderIdOf } from './seat-placeholders.js';
 import { childrenChanged } from './cell-index.js';
 import { oncePerState, stateChanged } from './state-version.js';
@@ -385,20 +385,6 @@ function savedPile(game: Game): { pile?: ElementJSON[] } {
   const piled = game.pile._t.children;
   if (game._ctx._worldMode || game._ctx._seatView || piled.length === 0) return {};
   return { pile: piled.map((child) => child.toJSON()) };
-}
-
-/**
- * Whether `seat`'s view shows a child of `zone` as a placeholder, as
- * `redactTreeForSeat` decides: the view reaches the zone, the zone keeps its
- * contents from the seat while counting them, and a child is not granted to it.
- */
-function showsPlaceholders(zone: GameElement, seat: number): boolean {
-  const state = hasZoneVisibility(zone) ? zone.getZoneVisibility() : undefined;
-  return state !== undefined
-    && redactedVisibilityFor(state, seat) === 'count-only'
-    && ownVisibilityAllows(zone, seat, zone.getEffectiveOwner()?.seat)
-    && outermostConcealer(zone, seat) === undefined
-    && zone._t.children.some((child) => !ownVisibilityAllows(child, seat, child.getEffectiveOwner()?.seat));
 }
 
 /**
@@ -4745,7 +4731,8 @@ export class Game<
    * (ShufflewickPub #408, widened by #411, regrouped by #413).
    *
    * One string per seat, in the order asked. Seats whose strings are equal are
-   * given byte-identical projections; `null` for the whole audience means the
+   * given byte-identical projections, but for their placeholder ids (below);
+   * `null` for the whole audience means the
    * tree consults something about a seat that this cannot summarise, so no two
    * seats may be assumed alike.
    *
@@ -4794,16 +4781,16 @@ export class Game<
    *   any animation event addressed to an audience (#23), or numbered
    *     differently for two asking seats (#489).
    *
-   * A SEAT SHOWN A PLACEHOLDER HOLDS A PROJECTION OF ITS OWN (#715): its
-   * placeholder ids are made with its own key, so its signature names the seat.
+   * EXCEPT THE PLACEHOLDER IDS. A seat shown a card it cannot see knows it by
+   * a placeholder id of its own (#715), so two seats with equal strings hold
+   * the same projection once those ids are taken out (`sharePlaceholders`),
+   * and each is sent its own ids beside it (#1207).
    */
   projectionSignaturesFor(seats: readonly number[]): readonly string[] | null {
     if (this.rootDiffersBySeat(seats)) return null;
 
     /** Every state the tree declares, in one fixed order for every seat. */
     const declared: VisibilityState[] = [];
-    /** Every zone that declares a state and holds something, which a seat may be shown as placeholders. */
-    const zones: GameElement[] = [];
     const collect = (element: GameElement): boolean => {
       const ElementClass = element.constructor as typeof GameElement;
       if (ElementClass.visibleAttributes !== undefined) return false;
@@ -4814,7 +4801,6 @@ export class Game<
       if (hasZoneVisibility(element)) {
         const zone = element.getZoneVisibility();
         if (zone !== undefined) declared.push(zone);
-        if (zone !== undefined && element._t.children.length > 0) zones.push(element);
       }
       return element._t.children.every(collect);
     };
@@ -4830,7 +4816,7 @@ export class Game<
       }
       // A comma between the modes, because they are four fixed words and a
       // separator is what makes one seat's list unreadable as another's.
-      signatures.push(zones.some((zone) => showsPlaceholders(zone, seat)) ? `seat ${seat}` : spelled.join(','));
+      signatures.push(spelled.join(','));
     }
     return signatures;
   }
@@ -4882,14 +4868,16 @@ export class Game<
    * rewrite it in place, and a batch shares every attribute bag it had no
    * reason to redact -- so one seat's rewrite would reach the next seat's view.
    * Nothing the engine can read decides whether a hook writes.
+   *
+   * `idRemaps`, when given, is `toJSONForPlayer`'s `idRemap` for each player in turn.
    */
-  toJSONForPlayers(players: readonly (P | number | null)[]): SeatViewJSON[] {
+  toJSONForPlayers(players: readonly (P | number | null)[], idRemaps?: readonly Map<number, number>[]): SeatViewJSON[] {
     const GameClass = this.constructor as typeof Game;
     if (GameClass.playerView !== undefined) {
-      return players.map((player) => this.toJSONForPlayer(player));
+      return players.map((player, i) => this.toJSONForPlayer(player, idRemaps?.[i]));
     }
     const fullJson = serializeForSeat(this._ctx, () => this.toJSON());
-    return players.map((player) => this.redactTreeForSeat(fullJson, player));
+    return players.map((player, i) => this.redactTreeForSeat(fullJson, player, idRemaps?.[i]));
   }
 
   /**

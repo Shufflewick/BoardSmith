@@ -1020,7 +1020,7 @@ For asymmetric games where exactly one player must have a specific role (e.g., 1
 }
 ```
 
-The platform needs `choices` and a string `default`; the game reads the default (here `"last"`) itself. The `ExclusivePlayerOption` and `StandardPlayerOption` types require the same shape in code, and `NumberPlayerOption` and `BooleanPlayerOption` type the `number` and `boolean` options.
+The platform needs `choices` and a string `default`. The default names the seat that holds the option when the table opens: `"last"` is the last seat, a seat number is that seat, and anything else is the first seat; the host can then give it to another seat. At start, the holder's `playerOptions[id]` is the first choice's value (here `"dictator"`), no other seat has the key, and the game options carry `exclusiveSeats`, mapping each exclusive option's id to its holder's seat. `boardsmith dev` starts a table the same way, and its Table setup sets each seat's player options and which seat holds each exclusive option, refusing a value the platform's lobby would refuse. The `ExclusivePlayerOption` and `StandardPlayerOption` types require the same shape in code, and `NumberPlayerOption` and `BooleanPlayerOption` type the `number` and `boolean` options.
 
 ### Presets
 

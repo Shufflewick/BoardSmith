@@ -74,7 +74,7 @@ import type {
 } from "../engine/index.js";
 import type { ActionMetadata, PickMetadata } from "../session/types.js";
 import { buildPickMetadata } from "../engine/element/action-metadata.js";
-import { picksFromSeat } from "../engine/element/seat-placeholders.js";
+import { fillPlaceholders, picksFromSeat, placeholderIdOf, sharePlaceholders, type SharedElementJSON } from "../engine/element/seat-placeholders.js";
 import { PARTITION_ROOT_RULE } from "../engine/element/game.js";
 import {
   formatChoiceCandidates,
@@ -2249,6 +2249,15 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * does one whose rooms are owner-only, which is decided against a reader's
    * ownership rather than by anything in the visibility state.
    *
+   * AND A COUNT-ONLY PILE NO LONGER SPLITS A GROUP (#1207). Each seat knows a
+   * card it cannot see by a placeholder id of its own (#715), so a seat shown
+   * one was a body of its own: 500 watchers of a plaza with a face-down deck
+   * were 500 bodies and 6.9 MB. A group's body now has each placeholder's id
+   * taken out (`sharePlaceholders`), and each seat is answered its own ids for
+   * them beside it, in `placeholders`; `seatView` puts them back. That plaza
+   * is one body of 13 KB and 500 lists of 52 ids, 0.45 MB in all, and no body
+   * holds any seat's id.
+   *
    * ONE SEAT'S PROJECTION IS STILL ONE SEAT'S FATE (#310). A view can throw for
    * one player while every other view in the batch is perfectly computable, the
    * observed case being a declaration reaching a deliberately absent partition
@@ -2278,19 +2287,25 @@ export class BoardSmithWorldEngine implements WorldEngine {
       asking,
     );
     const keys = [...sharing.groups.keys()];
+    const shownAs = keys.map(() => new Map<number, number>());
     const answered = projectGroups(
       keys,
       sharing.groups,
-      this.game.toJSONForPlayers(keys.map((key) => sharing.groups.get(key)!.seat)),
-      (state, named) => this.projectView(state, named),
+      this.game.toJSONForPlayers(keys.map((key) => sharing.groups.get(key)!.seat), shownAs),
+      (state, named, group) => {
+        const { state: seen, phase } = this.projectView(state, named);
+        // After the prune, so a seat is given ids only for what its body holds.
+        const shared = sharePlaceholders(seen, shownAs[group]!, this.game);
+        return { body: { state: shared.view, phase }, cards: shared.cards };
+      },
     );
 
-    for (const [index, { at }] of asking.entries()) {
+    for (const [index, { at, seat }] of asking.entries()) {
       const player = seats[at]!.player;
       const answer = answered.answerOf.get(sharing.keyOf[index]!)!;
       seats[at] =
         "at" in answer
-          ? { player, refused: false, at: answer.at }
+          ? { player, refused: false, at: answer.at, placeholders: answer.cards.map((card) => placeholderIdOf(card, seat)) }
           : { player, refused: true, failure: answer.failure };
     }
     return { bodies: answered.bodies, seats };
@@ -3614,6 +3629,21 @@ function shareGroups(
 }
 
 /**
+ * ONE SEAT'S VIEW OUT OF A `viewsFor` ANSWER (#1207): the body it holds, with
+ * its own placeholder ids put back. A body several seats share carries none of
+ * them, so a host calls this last, before the view goes to that seat.
+ */
+export function seatView(body: unknown, placeholders: readonly number[]): unknown {
+  // Another engine's body may be any shape, and it is never handed ids.
+  if (placeholders.length === 0) return body;
+  const { state } = (body ?? {}) as { state?: unknown };
+  if (typeof state !== "object" || state === null) {
+    throw new Error(`This view holds no board, and was handed ${placeholders.length} placeholder ids for it.`);
+  }
+  return { ...(body as object), state: fillPlaceholders(state as SharedElementJSON, placeholders) };
+}
+
+/**
  * One projection per group, and one failure per group that could not be.
  *
  * #310's rule is per seat, and a group IS a set of seats: they were put
@@ -3625,17 +3655,17 @@ function projectGroups(
   keys: readonly string[],
   groups: ReadonlyMap<string, WorldSeatProjection>,
   states: readonly ElementJSON[],
-  project: (state: ElementJSON, named: readonly string[]) => unknown,
+  project: (state: ElementJSON, named: readonly string[], group: number) => { body: unknown; cards: readonly GameElement[] },
 ): {
   readonly bodies: readonly unknown[];
-  readonly answerOf: ReadonlyMap<string, { at: number } | { failure: unknown }>;
+  readonly answerOf: ReadonlyMap<string, { at: number; cards: readonly GameElement[] } | { failure: unknown }>;
 } {
   const bodies: unknown[] = [];
-  const answerOf = new Map<string, { at: number } | { failure: unknown }>();
+  const answerOf = new Map<string, { at: number; cards: readonly GameElement[] } | { failure: unknown }>();
   for (const [index, key] of keys.entries()) {
     try {
-      const body = project(states[index]!, groups.get(key)!.named);
-      answerOf.set(key, { at: bodies.length });
+      const { body, cards } = project(states[index]!, groups.get(key)!.named, index);
+      answerOf.set(key, { at: bodies.length, cards });
       bodies.push(body);
     } catch (error) {
       answerOf.set(key, { failure: error });

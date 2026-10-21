@@ -234,16 +234,20 @@ describe('a pending action records its picks where they were before the action (
     expect(host.snapshot!.actionHistory.map((entry) => 'name' in entry && entry.name)).toEqual(['stow']);
   });
 
-  it('records what a pick callback moved before it threw, where the move stays with checkpoints off', async () => {
+  it('drops a pick whose callback threw, keeping its move with checkpoints off, and records the picks after it where they were (#1317)', async () => {
     const live = new GameRunner({ ...options, checkpoints: { enabled: false } });
     live.start();
     const picks = new PendingActionManager(live);
+    const before = new GameRunner(options).game;
+    const ref = (name: string) => ({ __elementRef: before.from.first(Token, name)!.branch() });
 
     picks.startPendingAction('jostle', 1);
     expect((await picks.processSelectionStep(1, 'tokens', idOf(live.game, 'first'))).error).toMatch(/"jostle" action could not be/);
+    expect(live.game.to.first(Token, 'first')).toBeDefined();
     expect((await picks.processSelectionStep(1, 'tokens', idOf(live.game, 'second'))).error).toBeUndefined();
+    expect((await picks.processSelectionStep(1, 'tokens', idOf(live.game, 'third'))).error).toBeUndefined();
 
-    expect(live.actionHistory).toEqual([{ name: 'jostle', player: 1, args: argsBefore(['tokens', 'tokens']) }]);
+    expect(live.actionHistory).toEqual([{ name: 'jostle', player: 1, args: { tokens: [ref('second'), ref('third')] } }]);
   });
 
   it('undoes a pick callback that moved a token and threw, and its note of where the token was (#1169)', async () => {
