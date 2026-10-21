@@ -1446,8 +1446,12 @@ function of another's value, so the whole offer is one pass and there is no
 product to enumerate.
 
 Seatless actions are filtered out here. An action whose `condition` is false is
-not offered, and neither is one whose **first** non-optional selection has no
-candidates at all -- a pick that would open on nothing.
+not offered, and neither is one whose **first** selection is required and has no
+candidates at all -- a pick that would open on nothing. An optional first
+selection can always be skipped, so its action is offered even when a later
+required selection is empty with nothing bound: that selection may narrow on the
+optional answer, and a table's availability stops at an optional step for the
+same reason (BoardSmith #1351).
 
 **A later selection never decides the offer** (BoardSmith #270). The offer's
 selections are enumerated in the same frame with `args: {}`, which is the right
