@@ -24,7 +24,7 @@ import { isDevThrowEnabled } from '../../utils/dev.js';
 import { isElement, type GameElement } from './game-element.js';
 import { seatIdOf } from './seat-placeholders.js';
 import { labelOfValue } from '../action/choice-matching.js';
-import { hidesFrom, NEUTRAL_DISABLED, seatText } from '../action/seat-text.js';
+import { hidesFrom, seatText } from '../action/seat-text.js';
 import type { ElementRef } from '../../types/protocol.js';
 import type {
   ChoiceSelection,
@@ -94,9 +94,10 @@ export function formatChoiceCandidates(
     const neutral = sight.neutralLabel(value);
     const engineLabel = neutral ?? labelOfValue(value);
     const authored = label ?? selection.display?.(value);
+    // Only the choice itself: `display` is handed nothing else, and a label is part of what `choices` returned.
     const display = authored === undefined
       ? engineLabel
-      : seatText(authored, engineLabel, sight.hides(value), `display or label for selection '${selection.name}'`);
+      : seatText(authored, engineLabel, hidesFrom(ctx.player.seat, value), `display or label for selection '${selection.name}'`);
     const choice: ChoiceWithRefs = {
       value: neutral === undefined ? value : { id: sight.idOf(value as GameElement), className: (value as GameElement).constructor.name },
       display,
@@ -114,7 +115,7 @@ export function formatChoiceCandidates(
       }
     }
 
-    if (disabled !== false) choice.disabled = sight.reason(disabled, value, selection.name);
+    if (disabled !== false) choice.disabled = disabled;
     return choice;
   });
 }
@@ -142,7 +143,7 @@ export function formatElementCandidates(
     const element = elementRaw as ElementLike;
     const validElem: ValidElement = { id: sight.idOf(element), display: labels[index]! };
     validElem.refs = [{ ref: refFor(element, selection, ctx, warnings, sight), role: 'highlight' }];
-    if (disabled !== false) validElem.disabled = sight.reason(disabled, element, selection.name);
+    if (disabled !== false) validElem.disabled = disabled;
     return validElem;
   });
 }
@@ -181,10 +182,6 @@ interface SeatSight {
   idOf(element: ElementLike): number;
   /** "Card #1" for an element the seat cannot see, else undefined. */
   neutralLabel(value: unknown): string | undefined;
-  /** Whether a callback about this candidate was handed an element the seat cannot see: the candidate, or an earlier pick (#1293). */
-  hides(value: unknown): boolean;
-  /** A candidate's disabled reason as the seat may read it (#1293). */
-  reason(disabled: string, value: unknown, selectionName: string): string;
   /**
    * A game's ref as the seat may be sent it (#1293): an element the seat
    * cannot see, named by its id or as a hidden candidate by its name, goes
@@ -201,16 +198,12 @@ interface SeatSight {
  */
 function seatSight(values: readonly unknown[], ctx: CandidateContext): SeatSight {
   const hidden = values.filter((v): v is GameElement => isElement(v) && !v.isVisibleTo(ctx.player.seat));
-  const argsHidden = hidesFrom(ctx.player.seat, ctx.args);
-  const hides = (value: unknown) => argsHidden || hidesFrom(ctx.player.seat, value);
-  const reason = (disabled: string, value: unknown, selectionName: string) =>
-    seatText(disabled, NEUTRAL_DISABLED, hides(value), `disabled for selection '${selectionName}'`);
   const hiddenByName = new Map(hidden.filter((element) => element.name).map((element) => [element.name, element]));
   const safeRef = (ref: ElementRef): ElementRef => {
     const element = ref.id !== undefined ? ctx.game.getElementById(ref.id) : ref.name !== undefined ? hiddenByName.get(ref.name) : undefined;
     return element && !element.isVisibleTo(ctx.player.seat) ? { id: seatIdOf(element, ctx.player.seat) } : ref;
   };
-  if (hidden.length === 0) return { idOf: (element) => element.id, neutralLabel: () => undefined, hides, reason, safeRef };
+  if (hidden.length === 0) return { idOf: (element) => element.id, neutralLabel: () => undefined, safeRef };
   const seat = ctx.player.seat;
 
   const labels = new Map<unknown, string>();
@@ -224,8 +217,6 @@ function seatSight(values: readonly unknown[], ctx: CandidateContext): SeatSight
   return {
     idOf: (element) => (isElement(element) ? seatIdOf(element, seat) : element.id),
     neutralLabel: (value) => labels.get(value),
-    hides,
-    reason,
     safeRef,
   };
 }
@@ -264,8 +255,8 @@ function labelElements(
       return sight.neutralLabel(element) ?? (element.name || String(element.id));
     }
   });
-  // Every call was handed the whole list, so one hidden candidate is in all of them.
-  if (!elements.some((element) => sight.hides(element))) return authored;
+  // Every call was handed the whole list and the earlier picks, so one hidden element is in all of them.
+  if (!hidesFrom(ctx.player.seat, [ctx.args, elements])) return authored;
   const engine = engineLabels(elements, sight);
   return authored.map((label, index) => seatText(label, engine[index]!, true, `display for selection '${selection.name}'`));
 }

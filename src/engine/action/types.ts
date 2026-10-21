@@ -298,7 +298,7 @@ export interface ChoiceSelection<T = unknown> extends BaseSelection<T>, Disabled
   type: 'choice';
   /** Choices - can be static array or function. Each is a value or a {@link LabelledChoice}. */
   choices: unknown[] | ((context: ActionContext) => unknown[]);
-  /** Display function for choices. Not shown for a choice the player cannot see, or while `args` holds one (#1293). */
+  /** Display function for choices. Not shown for a choice that is or holds a card the player cannot see (#1293). */
   display?: (choice: T) => string;
   /** Get board element references for highlighting (source/target) */
   boardRefs?: (choice: T, context: ActionContext) => ChoiceBoardRefs;

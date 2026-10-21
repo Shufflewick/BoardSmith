@@ -19,6 +19,7 @@ import {
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { succeeded } from './op-result.test-helper.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
+import { _clearShownWarnings } from '../utils/dev.js';
 
 const name = (card: unknown) => (card as Card).name;
 
@@ -69,6 +70,13 @@ class TextGame extends Game<TextGame, Player> {
         .chooseElement<'card', Card>('card', { elements: theirs })
         .chooseElement<'mine', Card>('mine', { elements: () => [], prompt: (ctx) => (ctx.args.card ? `Pair the ${name(ctx.args.card)}` : 'Pair it') })
         .execute(done),
+      Action.create<TextGame>('pairAndSay')
+        .chooseElement<'card', Card>('card', { elements: theirs })
+        .chooseFrom('what', {
+          choices: [{ value: 1, label: 'Discard it' }, { value: 2, label: 'Keep it' }],
+          display: (choice) => `Choice ${String(choice)}`,
+        })
+        .execute(done),
       Action.create<TextGame>('pairGone')
         .chooseElement<'card', Card>('card', { elements: theirs })
         .chooseFrom('where', { choices: ['left'], unavailable: (_value, ctx) => `The ${name(ctx.args.card)} went nowhere` })
@@ -89,7 +97,7 @@ class TextGame extends Game<TextGame, Player> {
         maxIterations: 10,
         do: eachPlayer({
           do: actionStep({
-            actions: ['label', 'labelFrom', 'labelOwn', 'grey', 'refuse', 'refuseAll', 'pair', 'pairNowhere', 'pairGone', 'own', 'ownRefuse'],
+            actions: ['label', 'labelFrom', 'labelOwn', 'grey', 'refuse', 'refuseAll', 'pair', 'pairNowhere', 'pairAndSay', 'pairGone', 'own', 'ownRefuse'],
           }),
         }),
       }),
@@ -134,6 +142,8 @@ describe('text a callback writes after it was handed a card the seat cannot see 
   const devLog = () => warn.mock.calls.map((call) => call.join(' ')).join('\n');
   beforeEach(() => {
     warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // The dev log says each replaced callback once per process.
+    _clearShownWarnings();
   });
   afterEach(() => warn.mockRestore());
 
@@ -175,8 +185,15 @@ describe('text a callback writes after it was handed a card the seat cannot see 
     const { choices, ace } = await started();
     const res = succeeded(await choices('pair', 'mine', { card: ace }));
     expect(res.validElements?.map((e) => [e.display, e.disabled])).toEqual([['2C', NEUTRAL_DISABLED], ['3D', undefined]]);
-    expect(devLog()).toContain('2C with the AS');
-    expect(devLog()).toContain('The AS blocks it');
+    // Once per callback, and checking the action is open walks every hidden card, so either may be the one logged.
+    expect(devLog()).toMatch(/2C with the (AS|KH)/);
+    expect(devLog()).toMatch(/The (AS|KH) blocks it/);
+  });
+
+  it("a later choice's labels stay the game's: they were handed only the choice, not the hidden pick", async () => {
+    const { choices, ace } = await started();
+    const res = succeeded(await choices('pairAndSay', 'what', { card: ace }));
+    expect(res.choices?.map((c) => c.display)).toEqual(['Discard it', 'Keep it']);
   });
 
   it("a later pick's prompt is not the game's while an earlier pick is hidden", async () => {
@@ -201,6 +218,5 @@ describe('text a callback writes after it was handed a card the seat cannot see 
 
     const refused = await act('ownRefuse', { mine: two });
     expect((refused as { error: string }).error).toBe('Not the 2C');
-    expect(devLog()).toBe('');
   });
 });

@@ -8,7 +8,7 @@
  * the callback was handed one, the seat reads the engine's own text and the
  * author's goes to the dev log.
  */
-import { isDevThrowEnabled } from '../../utils/dev.js';
+import { devWarn } from '../../utils/dev.js';
 import { isElement } from '../element/game-element.js';
 
 /** The reason a seat reads for a choice it cannot take when the game's own reason may name a hidden card. */
@@ -26,7 +26,8 @@ export function hidesFrom(seat: number, value: unknown): boolean {
 
 /**
  * The text the seat reads: the author's, or `neutral` when the callback that
- * wrote it was handed an element the seat cannot see.
+ * wrote it was handed an element the seat cannot see. The dev log says so once
+ * per callback, since a pick is evaluated many times.
  *
  * @param source - The callback, such as `display for selection 'card'`, named in the dev log.
  */
@@ -37,11 +38,10 @@ export function seatText<N extends string | undefined>(
   source: string,
 ): string | N {
   if (!handedHidden) return authored;
-  if (isDevThrowEnabled()) {
-    console.warn(
-      `[BoardSmith] ${source} was handed a card the player cannot see, so the player read the engine's text ` +
-        `instead of "${authored}". Text a player reads cannot depend on a card they cannot see (#1293).`,
-    );
-  }
+  devWarn(
+    `seat-text:${source}`,
+    `${source} was handed a card the player cannot see, so the player reads the engine's text ` +
+      `instead of "${authored}". Text a player reads cannot depend on a card they cannot see (#1293).`,
+  );
   return neutral;
 }

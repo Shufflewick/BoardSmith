@@ -700,8 +700,15 @@ export class ActionExecutor {
         : {};
     const { disabled } = rule;
     const prepared = disabled && rule.prepare ? rule.prepare(context) : undefined;
+    const argsHidden = disabled !== undefined && hidesFrom(player.seat, args);
     return candidates.map((candidate) => {
-      const gameDisabled = disabled ? disabled(candidate.value, context, prepared) : false;
+      const reason = disabled ? disabled(candidate.value, context, prepared) : false;
+      const gameDisabled = reason === false ? false : seatText(
+        reason,
+        NEUTRAL_DISABLED,
+        argsHidden || hidesFrom(player.seat, candidate.value),
+        `disabled for selection '${selection.name}'` + (actionName ? ` of action '${actionName}'` : ''),
+      );
       // OR-in gate reason: only when no game-defined reason already applies.
       if (tutorialStep && gameDisabled === false) {
         const gateReason = getGateReasonForValue(tutorialStep, actionName!, candidate.value, selection.name);
@@ -1110,10 +1117,7 @@ export class ActionExecutor {
       const detail = this.notOfferedDetail(selection, value, choices);
       return { refusal: this.unavailableRefusal(selection, value, context, actionName, detail) };
     }
-    if (match.disabled !== false) {
-      const handedHidden = hidesFrom(context.player.seat, [match.value, context.args]);
-      return { refusal: `Selection disabled: ${seatText(match.disabled, NEUTRAL_DISABLED, handedHidden, `disabled for selection '${selection.name}'`)}` };
-    }
+    if (match.disabled !== false) return { refusal: `Selection disabled: ${match.disabled}` };
     return { match };
   }
 
