@@ -100,7 +100,8 @@ export function computeFitZoom(
   // Width-only: the height boxes are irrelevant, and an unmeasurable height
   // (a tall board under a tall Action Panel) must not suppress the fit.
   // A pinned board narrower than the region has a stale pin, so zooming it up would overflow sideways (#1369).
-  if (fitAxis === 'width') return clamp(Math.min(1, widthFit));
+  // Layout is in 1/64px units, so a board under half a unit wider is rounding from dividing out the zoom (#1374).
+  if (fitAxis === 'width') return natural.width - avail.width < 1 / 128 ? 1 : clamp(widthFit);
   if (natural.height < 1 || avail.height < 1) return null;
   return clamp(Math.min(widthFit, avail.height / natural.height));
 }
@@ -155,7 +156,7 @@ export function useAutoZoom(options: {
     const fit = computeFitZoom(natural, avail, pinnedBoards.value > 0 ? 'width' : 'both');
     if (fit == null) return false;
     // Ignore sub-visible zoom-ups from layout rounding, but never keep a zoom above the fit: the board would overflow (#1357).
-    // A fit of exactly 1 is no rounding, so it always applies: a pinned board's overflow clearing must not leave it at 0.997 (#1374).
+    // A pinned board that fits has a fit of exactly 1, so it always applies: an overflow clearing must not leave it at 0.997 (#1374).
     if (fit < zoomLevel.value || fit - zoomLevel.value > 0.005 || fit === 1) zoomLevel.value = fit;
     return true;
   }

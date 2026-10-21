@@ -214,8 +214,9 @@ describe('B20: useBoardSize pins the board; useAutoZoom stops height-fitting it'
     await settle(shell.wrapper, REGION.width + 1);
     expect(shell.api.zoomLevel.value).toBeCloseTo(REGION.width / (REGION.width + 1), 5);
 
-    // The overflow clears and the region lays out again: the fit is 1.
-    await settle(shell.wrapper);
+    // The overflow clears and the region lays out again. Dividing out the zoom
+    // measured the board this much wider than the region in Chromium (#1374 review F1).
+    await settle(shell.wrapper, REGION.width + 0.00003);
     expect(shell.api.zoomLevel.value).toBe(1);
     shell.wrapper.unmount();
   });

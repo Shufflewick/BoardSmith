@@ -64,6 +64,13 @@ describe('computeFitZoom (AZ-1)', () => {
     expect(computeFitZoom({ width: 950, height: 400 }, { width: 1000, height: 600 }, 'width')).toBe(1);
   });
 
+  it("#1374: 'width' reads a pinned board less than half a layout unit wider than the region as fitting it", () => {
+    // Dividing out the zoom measured a fitting board this much wider in Chromium; layout cannot overflow by under 1/64px.
+    expect(computeFitZoom({ width: 765.406031, height: 400 }, { width: 765.406, height: 600 }, 'width')).toBe(1);
+    // One whole layout unit is a real overflow.
+    expect(computeFitZoom({ width: 400 + 1 / 64, height: 400 }, { width: 400, height: 600 }, 'width')).toBeLessThan(1);
+  });
+
   it("B20: 'width' still fits when the height boxes are unmeasurable", () => {
     // A tall board under a taller-than-region Action Panel allowance yields a
     // non-positive avail height; that must not suppress the width fit.

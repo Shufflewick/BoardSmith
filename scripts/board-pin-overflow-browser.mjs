@@ -200,8 +200,8 @@ function widenTheRegionInSteps(frame) {
 }
 
 /**
- * Make the board one pixel wider than its pin and narrow the region a pixel, so
- * the fit drops a hair under 1; then clear the overflow and widen the region
+ * Make the board one pixel wider than its pin and the region a pixel narrower,
+ * so the fit drops a hair under 1; then clear the overflow and widen the region
  * back (#1374). Ten frames after each, read the zoom.
  */
 function overflowBrieflyThenClear(frame) {
