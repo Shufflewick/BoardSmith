@@ -236,10 +236,10 @@ describe("#378 — one pick, re-asked with the arguments bound so far", () => {
     // nothing resident, so the pick's own round is what it asks for.
     const engine = newEngine();
 
-    expect(engine.pickPartitions("player-a", "deploy", "crew", {}, STAMP.now)).toEqual([FLEET]);
+    expect(engine.pickPartitions("player-a", "deploy", "crew", { ship: "dory" }, STAMP.now)).toEqual([FLEET]);
 
     await engine.hydrate([FLEET]);
-    expect(engine.pickPartitions("player-a", "deploy", "crew", {}, STAMP.now)).toEqual([]);
+    expect(engine.pickPartitions("player-a", "deploy", "crew", { ship: "dory" }, STAMP.now)).toEqual([]);
   });
 });
 
