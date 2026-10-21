@@ -166,14 +166,17 @@ const BUILTIN_READ_NAMES: ReadonlyArray<readonly [object, ReadonlyArray<string |
  * traps, so what it builds holds projections only. The array itself belongs to
  * the caller and reaches nothing in the world, so projecting it again would only
  * make a local value refuse `structuredClone` and writes a spread copy accepts.
- * Taken by identity, so an override that answers live state is projected as before.
+ * Taken by identity, so an override that answers live state is projected as before;
+ * ElementCollection's own filter and slice only narrow the type of Array's.
  */
-const FRESH_ARRAY_BUILDERS = new WeakSet<object>(
-  ["concat", "filter", "flat", "flatMap", "map", "slice", "toReversed", "toSorted", "toSpliced", "with"].map(
+const FRESH_ARRAY_BUILDERS = new WeakSet<object>([
+  ...["concat", "filter", "flat", "flatMap", "map", "slice", "toReversed", "toSorted", "toSpliced", "with"].map(
     // Read by name, not typed: a game's tsconfig lib may predate toSorted and its kin.
     (name) => (Array.prototype as unknown as Record<string, object>)[name],
   ),
-);
+  ElementCollection.prototype.filter,
+  ElementCollection.prototype.slice,
+]);
 
 const BUILTIN_READS = new WeakSet<object>();
 for (const [prototype, names] of BUILTIN_READ_NAMES) {

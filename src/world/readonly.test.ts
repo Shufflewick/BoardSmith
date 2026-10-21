@@ -531,4 +531,14 @@ describe("readOnlyProjection over arrays a standard method builds (#1327)", () =
     expect(() => room.tags.push("leaked")).toThrow(WorldRefusal);
     expect(here.tags).toEqual(["calm"]);
   });
+
+  it("answers an ElementCollection's own filter and slice as the caller's, as its inherited map is", () => {
+    const { game, here } = world();
+    const rooms = readOnlyProjection(game).all(Room);
+
+    const built = [rooms.filter(() => true), rooms.slice(0), rooms.map((room) => room)];
+    for (const array of built) array.push(readOnlyProjection(here));
+    expect(built.map((array) => array.length)).toEqual([3, 3, 3]);
+    expect(() => built[0][0].tags.push("leaked")).toThrow(WorldRefusal);
+  });
 });
