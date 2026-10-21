@@ -1233,7 +1233,7 @@ import { useBoardSize } from 'boardsmith/ui';
 
 const boardRef = ref<HTMLElement | null>(null);
 const { boardStyle, zoom } = useBoardSize(boardRef);
-const regionHeight = ref(600); // measured from .boardregion, in screen pixels
+const regionHeight = ref(600); // measured from .boardregion, which is not zoomed
 const boardHeight = computed(() => regionHeight.value / zoom.value);
 </script>
 

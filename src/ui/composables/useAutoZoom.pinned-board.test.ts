@@ -78,20 +78,12 @@ function flushRaf() {
   fns.forEach((fn) => fn());
 }
 
+/** The zoom the last mounted PinnedBoard was handed by useBoardSize. */
+let boardZoom: Readonly<Ref<number>> | null = null;
+
 /** A board that opts into the region pin, exactly as the guide documents. */
 const PinnedBoard = defineComponent({
   name: 'PinnedBoard',
-  setup() {
-    const boardRef = ref<HTMLElement | null>(null);
-    const { boardStyle } = useBoardSize(boardRef);
-    return () => h('div', { ref: boardRef, class: 'my-board', style: boardStyle.value });
-  },
-});
-
-/** The zoom the last mounted ZoomReadingBoard was handed by useBoardSize. */
-let boardZoom: Readonly<Ref<number>> | null = null;
-const ZoomReadingBoard = defineComponent({
-  name: 'ZoomReadingBoard',
   setup() {
     const boardRef = ref<HTMLElement | null>(null);
     const { boardStyle, zoom } = useBoardSize(boardRef);
@@ -223,40 +215,21 @@ describe('B20: useBoardSize pins the board; useAutoZoom stops height-fitting it'
     expect(shell.api.zoomLevel.value).toBeCloseTo((REGION.height - PANEL_RESERVED) / NATURAL.height, 5);
     shell.wrapper.unmount();
   });
-});
 
-describe('#1332: a pinned board reads the shell zoom', () => {
-  beforeEach(() => {
-    FakeResizeObserver.instances = [];
-    rafQueue = [];
-    boardZoom = null;
-    vi.stubGlobal('ResizeObserver', FakeResizeObserver);
-    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
-      rafQueue.push(() => cb(0));
-      return rafQueue.length;
-    });
-    vi.stubGlobal('cancelAnimationFrame', () => {});
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    document.body.innerHTML = '';
-  });
-
-  it('useBoardSize().zoom is the zoom the shell applies, and follows the slider', async () => {
-    const shell = mountShell(ZoomReadingBoard);
-    await settle(shell.wrapper);
-    expect(boardZoom!.value).toBe(shell.api.zoomLevel.value);
+  it('#1332: useBoardSize().zoom follows the fit and the slider', async () => {
+    const shell = mountShell(PinnedBoard);
+    await settle(shell.wrapper, 750);
+    expect(boardZoom!.value).toBe(ZOOM_MIN); // the fit's 375/750
 
     const seen: number[] = [];
-    watch(boardZoom!, (z) => seen.push(z));
-    shell.api.setZoom(0.5);
+    const stop = watch(boardZoom!, (z) => seen.push(z));
+    shell.api.setZoom(0.8);
     await nextTick();
     shell.api.setZoom(2);
     await nextTick();
+    stop();
 
-    expect(seen).toEqual([0.5, 2]);
-    expect(boardZoom!.value).toBe(2);
+    expect(seen).toEqual([0.8, 2]);
     shell.wrapper.unmount();
   });
 });
