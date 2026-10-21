@@ -22,6 +22,7 @@ class StockGame extends Game<StockGame, Player> {
           choices: (ctx) => (ctx.args.ship === 'dory' ? ['net', 'oar', 'stop'] : ['sail', 'stop']),
           repeatUntil: 'stop',
         })
+        .chooseFrom('port', { choices: ['north', 'south'] })
         .execute((args, ctx) => {
           (ctx.game as StockGame).stocked.push({ ...args });
           return { success: true };
@@ -52,7 +53,7 @@ async function stockShip(ship: string) {
   return { session, controller };
 }
 
-const HELD = 'The server already holds your picks for this action, so an earlier pick cannot be changed now. Cancel the action to start it again.';
+const HELD = 'The server already holds this answer, so it cannot be cleared now. Cancel the action to start it again.';
 
 describe('clearing a pick at or before a repeating pick (#1365)', () => {
   it('is refused once the repeating pick has sent a step, so the action cannot commit with the cleared answer', async () => {
@@ -67,8 +68,24 @@ describe('clearing a pick at or before a repeating pick (#1365)', () => {
     expect(controller.repeatingState.value?.accumulated.map((a) => a.value)).toEqual(['net', 'oar']);
 
     await controller.fill('gear', 'stop');
+    await controller.fill('port', 'north');
     await settle();
-    expect(session.readGame().stocked).toEqual([{ ship: 'dory', gear: ['net', 'oar', 'stop'] }]);
+    expect(session.readGame().stocked).toEqual([{ ship: 'dory', gear: ['net', 'oar', 'stop'], port: 'north' }]);
+  });
+
+  it('is refused once the repeating pick is done, as the server still holds its steps (#1365 review F1)', async () => {
+    const { session, controller } = await stockShip('dory');
+    await controller.fill('gear', 'net');
+    await controller.fill('gear', 'stop');
+    expect(controller.repeatingState.value).toBeNull();
+
+    expect(controller.clear('ship')).toBe(false);
+    expect(controller.clear('gear')).toBe(false);
+    expect(controller.lastError.value).toBe(HELD);
+    await controller.fill('port', 'south');
+    await settle();
+
+    expect(session.readGame().stocked).toEqual([{ ship: 'dory', gear: ['net', 'stop'], port: 'south' }]);
   });
 
   it('resets a repeating pick the server holds nothing of, so it is asked again against the new answer', async () => {
@@ -83,8 +100,9 @@ describe('clearing a pick at or before a repeating pick (#1365)', () => {
     expect(controller.getChoices(controller.currentPick.value!).map((c) => c.value)).toEqual(['sail', 'stop']);
     await controller.fill('gear', 'sail');
     await controller.fill('gear', 'stop');
+    await controller.fill('port', 'north');
     await settle();
 
-    expect(session.readGame().stocked).toEqual([{ ship: 'skiff', gear: ['sail', 'stop'] }]);
+    expect(session.readGame().stocked).toEqual([{ ship: 'skiff', gear: ['sail', 'stop'], port: 'north' }]);
   });
 });
