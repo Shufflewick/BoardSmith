@@ -171,24 +171,23 @@ export function exclusiveSeats(
   );
 }
 
+function numberRefusal(option: Extract<SeatOption, { type: 'number' }>, value: unknown): string | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return `${option.label} must be a number, not ${JSON.stringify(value)}.`;
+  if (option.min !== undefined && value < option.min) return `${option.label} is ${value}, below its min of ${option.min}.`;
+  if (option.max !== undefined && value > option.max) return `${option.label} is ${value}, above its max of ${option.max}.`;
+  return undefined;
+}
+
 /** Why `value` cannot be `option`'s value, or undefined when it can. */
 function valueRefusal(option: SeatOption, value: unknown): string | undefined {
-  const shown = JSON.stringify(value);
-  switch (option.type) {
-    case 'boolean':
-      return typeof value === 'boolean' ? undefined : `${option.label} must be true or false, not ${shown}.`;
-    case 'number':
-      if (typeof value !== 'number' || !Number.isFinite(value)) return `${option.label} must be a number, not ${shown}.`;
-      if (option.min !== undefined && value < option.min) return `${option.label} is ${value}, below its min of ${option.min}.`;
-      if (option.max !== undefined && value > option.max) return `${option.label} is ${value}, above its max of ${option.max}.`;
-      return undefined;
-    default: {
-      const values = option.choices.map((c) => c.value);
-      return values.includes(value as string)
-        ? undefined
-        : `${option.label} is ${shown}, which is none of its choices (${values.join(', ')}).`;
-    }
+  if (option.type === 'number') return numberRefusal(option, value);
+  if (option.type === 'boolean') {
+    return typeof value === 'boolean' ? undefined : `${option.label} must be true or false, not ${JSON.stringify(value)}.`;
   }
+  const values = option.choices.map((c) => c.value);
+  return values.includes(value as string)
+    ? undefined
+    : `${option.label} is ${JSON.stringify(value)}, which is none of its choices (${values.join(', ')}).`;
 }
 
 /** Why `seat`'s options cannot be set, or undefined when they can. */
