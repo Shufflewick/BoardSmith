@@ -1034,7 +1034,7 @@ async function runCounted(
     throw apartError(
       `The chunk test files ${scope.map((f) => f.path).join(', ')} fail when run without the chunk's other test files, though together they pass`,
       red,
-      '`boardsmith test-step-check`',
+      '`boardsmith test-step-check <slug>`',
     );
   }
   const result = await run.runner.run(scope, mutant, run.timeoutMs);
@@ -1223,7 +1223,12 @@ export async function runMutationCheck(
 
     const tracked = baseline.outcomes.filter((o) => o.status === 'passed');
     const run: ApartRunner = {
-      runner, projectDir, timeoutMs: Math.max(30_000, baseline.ms * 10), suiteSize: input.testFiles.length, apart: new Map(),
+      runner,
+      // Unresolved, as the test files' absPaths are, so a message names them by their project paths.
+      projectDir: input.projectDir,
+      timeoutMs: Math.max(30_000, baseline.ms * 10),
+      suiteSize: input.testFiles.length,
+      apart: new Map(),
     };
     const files = new Set<string>();
     const mutants = await chunkMutants(projectDir, input, files);

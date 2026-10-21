@@ -621,6 +621,19 @@ it('needs setup', () => { bid(3, 4); expect(ready).toBe(true); });
     const REFUSAL =
       'The chunk test files tests/b.test.ts fail when run without the chunk\'s other test files, though together they pass: tests/b.test.ts > needs setup.';
 
+    // tests/a.test.ts fails under every mutant of bid, so after the first mutant runs both files, later ones run tests/b.test.ts alone.
+    const killsFirst = (b: string) =>
+      chunkCheck(
+        {
+          'tests/a.test.ts': `${WRITES_READY}import { it, expect } from 'vitest';
+import { bid } from '../src/rules';
+it('a higher offer wins', () => { expect(bid(3, 4)).toBe(true); expect(bid(3, 3)).toBe(false); expect(bid(4, 3)).toBe(false); });
+`,
+          'tests/b.test.ts': b,
+        },
+        { added: new Map([['src/rules.ts', lines(1, 2, 3)]]) },
+      );
+
     async function chunkCheck(files: Record<string, string>, options: { pin?: string; added?: Map<string, Set<number>> }) {
       const project = await makeProject({ 'vitest.config.ts': IN_ORDER, 'src/rules.ts': RULES, ...files });
       return runMutationCheck({
@@ -633,23 +646,18 @@ it('needs setup', () => { bid(3, 4); expect(ready).toBe(true); });
     }
 
     it('refuses to count a kill from the files still holding a live test when they fail unmutated without the others', async () => {
-      // The first mutant runs both files and fails tests/a.test.ts, so later mutants run tests/b.test.ts alone, without its setup.
-      const run = chunkCheck(
-        {
-          'tests/a.test.ts': `${WRITES_READY}import { it, expect } from 'vitest';
-import { bid } from '../src/rules';
-it('a higher offer wins', () => { expect(bid(3, 4)).toBe(true); expect(bid(3, 3)).toBe(false); expect(bid(4, 3)).toBe(false); });
-`,
-          'tests/b.test.ts': NEEDS_SETUP,
-        },
-        { added: new Map([['src/rules.ts', lines(1, 2, 3)]]) },
-      );
-      await expect(run).rejects.toThrow(REFUSAL);
+      await expect(killsFirst(NEEDS_SETUP)).rejects.toThrow(REFUSAL);
     }, 120_000);
 
     it('refuses to credit a pin that fails unmutated when run alone', async () => {
       const run = chunkCheck({ 'tests/a.test.ts': SETS_UP, 'tests/b.test.ts': NEEDS_SETUP }, { pin: 'tests/b.test.ts' });
       await expect(run).rejects.toThrow(REFUSAL);
+    }, 120_000);
+
+    it('names the files of an unmutated run that never finishes by their project paths (#1340 review F4)', async () => {
+      // tests/b.test.ts waits forever without tests/a.test.ts's setup, so its run alone is stopped at the check's time limit.
+      const hangs = NEEDS_SETUP.replace("it('needs setup', () => { bid(3, 4); expect(ready).toBe(true); });", "it('needs setup', async () => { bid(3, 4); if (!ready) await new Promise(() => {}); }, 600_000);");
+      await expect(killsFirst(hangs)).rejects.toThrow('The unmutated run of tests/b.test.ts did not finish within 30 seconds, though the whole suite did.');
     }, 120_000);
   });
 });
