@@ -1913,7 +1913,8 @@ describe('useActionController picks', () => {
     expect(controller.currentPick.value?.prompt).toBe('Fuel for the dory');
   });
 
-  it("drops a later pick's fetched prompt and bounds when an earlier pick is cleared, so the old answer's are not shown (#1354)", async () => {
+  /** A ship pick, then a crew pick whose prompt and bounds the server fills in for the dory only. */
+  function boardWithCrewForDory() {
     actionMetadata.value = {
       ...createTestMetadata(),
       board: {
@@ -1932,21 +1933,36 @@ describe('useActionController picks', () => {
         ? { success: true, prompt: 'Crew for dory', choices: crew, multiSelect: { min: 1, max: 1 } }
         : { success: false, error: 'The skiff has no crew list yet' };
     });
-    const controller = useActionController({
+    return useActionController({
       sendAction, availableActions, actionMetadata, isMyTurn,
       autoExecute: false, autoFill: false, playerSeat: ref(0), fetchPickChoices,
     });
+  }
 
+  it("drops a later pick's fetched snapshot when an earlier pick is cleared, so it is asked again (#1354)", async () => {
+    const controller = boardWithCrewForDory();
     await controller.start('board');
     await controller.fill('ship', 'dory');
     expect(controller.currentPick.value?.prompt).toBe('Crew for dory');
 
     controller.clear('ship');
+
+    expect(controller.actionSnapshot.value?.pickSnapshots.has('crew')).toBe(false);
+    expect(controller.actionSnapshot.value?.pickSnapshots.has('ship')).toBe(true);
+  });
+
+  it("drops a pick's fetched prompt and bounds when its re-ask is refused, so the old answer's are not shown (#1354)", async () => {
+    const controller = boardWithCrewForDory();
+    await controller.start('board');
+    await controller.fill('ship', 'dory');
+    expect(controller.currentPick.value?.prompt).toBe('Crew for dory');
+
     await controller.fill('ship', 'skiff');
 
     expect(controller.currentPick.value?.name).toBe('crew');
     expect(controller.currentPick.value?.prompt).toBe('Crew');
     expect(controller.currentPick.value?.multiSelect).toBeUndefined();
+    expect(controller.lastError.value).toBe('The skiff has no crew list yet');
   });
 
   describe('multiSelect validation', () => {

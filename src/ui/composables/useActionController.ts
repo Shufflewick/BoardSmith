@@ -1110,6 +1110,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return request;
   }
 
+  /** A refused re-ask leaves no answer to an earlier question in place of its own (#1354). */
+  function forgetPickSnapshot(selectionName: string): void {
+    if (actionSnapshot.value?.pickSnapshots.delete(selectionName)) snapshotVersion.value++;
+  }
+
   async function requestChoicesForPick(selectionName: string): Promise<void> {
     const fetchFn = options.fetchPickChoices;
     if (!fetchFn) {
@@ -1173,6 +1178,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         snapshotVersion.value++;
       } else if (!result.success) {
         console.error(`[BoardSmith] Failed to fetch pick choices for '${selectionName}' after ${fetchDuration}ms:`, result.error);
+        forgetPickSnapshot(selectionName);
         // SAID TO THE PLAYER, not only to the console (#227). A dependent
         // selection's list and bounds come from a round trip, and a refused one
         // left the panel quietly holding whatever the one-shot metadata carried
@@ -1188,6 +1194,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         `[BoardSmith] Error fetching pick choices for '${selectionName}' after ${fetchDuration}ms:`,
         err
       );
+      forgetPickSnapshot(selectionName);
       setError(describeUndescribablePick(selection));
     } finally {
       // Only a request of the current action ends its loading state (#663).
@@ -2625,8 +2632,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const selections = run.metadata.selections;
     const index = selections.findIndex(s => s.name === selectionName);
     if (index === -1) return;
-    for (const later of selections.slice(index + 1)) run.pickSnapshots.delete(later.name);
-    snapshotVersion.value++;
+    for (const later of selections.slice(index + 1)) forgetPickSnapshot(later.name);
   }
 
   function clear(selectionName: string): void {
