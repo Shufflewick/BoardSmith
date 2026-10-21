@@ -1306,6 +1306,10 @@ interface GreenRunner {
   testsLoading(file: string): string[];
   /** Every test that passed in the unmutated run, by `testKey`. */
   passed: ReadonlySet<string>;
+  /** How many test files the unmutated run ran. */
+  suiteSize: number;
+  /** What fails in an unmutated run of a set of test files without the rest of the suite (`redApart`), by their sorted paths; shared by every trial. */
+  apart: Map<string, Promise<string[]>>;
 }
 
 /**
@@ -1327,7 +1331,10 @@ async function greenRunner(runner: Runner, projectDir: string, log: (line: strin
   const trials = budget?.trials ?? 1;
   const workers = budget && Math.floor(budget.workers / trials);
   const passed = new Set(baseline.outcomes.filter((o) => o.status === 'passed').map(testKey));
-  return { runner, projectDir, timeoutMs: Math.max(30_000, baseline.ms * 10 * trials), workers, testsLoading, passed };
+  return {
+    runner, projectDir, timeoutMs: Math.max(30_000, baseline.ms * 10 * trials), workers, testsLoading, passed,
+    suiteSize: baseline.filesRun.size, apart: new Map(),
+  };
 }
 
 /**
@@ -1336,7 +1343,9 @@ async function greenRunner(runner: Runner, projectDir: string, log: (line: strin
  * file runs alone first, and a test of it that passed unmutated failing on its own assertion kills the mutant;
  * a time-out is the mutant's verdict (#1308), and anything else (a pass, a file that fails to load) goes on to
  * the full run, so a survivor still runs every test. `killer` is the test that failed on its own assertion,
- * for the next run's hint, and undefined when none did.
+ * for the next run's hint, and undefined when none did. A run of fewer files than the whole suite counts its
+ * failures only when those files pass unmutated on their own (`redApart`, #1329): the full run's files are
+ * refused otherwise, and a hinted file that fails alone is not tried.
  */
 async function runMutant(run: GreenRunner, mutant: LocatedMutant, hint?: KillerHint): Promise<{ outcome: DiffOutcome; killer?: KillerHint }> {
   const tests = run.testsLoading(mutant.file);
@@ -1344,6 +1353,15 @@ async function runMutant(run: GreenRunner, mutant: LocatedMutant, hint?: KillerH
   const trial = hint && (await hintTrial(run, mutant, tests, hint));
   if (trial === 'timed-out') return { outcome: 'timed-out' };
   if (trial) return { outcome: 'killed', killer: trial };
+  const red = await redApart(run, tests);
+  if (red.length > 0) {
+    throw new Error(
+      `The test files that load ${mutant.file} fail when run without the rest of the suite, though the whole suite passes: ${red.join('; ')}. ` +
+        'A test there depends on what another test file leaves behind (shared state under isolate: false, or the order files run in), ' +
+        'so the mutation check cannot tell a failure the mutant caused from one it did not. ' +
+        'Make each of those test files set up what it needs itself, then run `boardsmith verify` again.',
+    );
+  }
   const result = await run.runner.run(tests.map((absPath) => ({ absPath })), mutant, run.timeoutMs, { bail: true, workers: run.workers });
   if (result.kind === 'timed-out') return { outcome: 'timed-out' };
   const killer = result.outcomes.find((o) => o.failedOnAssertion);
@@ -1351,13 +1369,36 @@ async function runMutant(run: GreenRunner, mutant: LocatedMutant, hint?: KillerH
 }
 
 /**
- * Runs `hint`'s file alone under `mutant` when its test is one of `tests` that passed unmutated, and returns
+ * What fails when `tests` run unmutated without the rest of the suite, as `redParts` names it: none for the whole
+ * suite, whose unmutated run passed. Each set of files runs once per check, so a failure under a mutant there is
+ * trusted only when the files pass on their own (#1329).
+ */
+function redApart(run: GreenRunner, tests: string[]): Promise<string[]> {
+  if (tests.length === run.suiteSize) return Promise.resolve([]);
+  const key = [...tests].sort().join('\0');
+  const known = run.apart.get(key);
+  if (known) return known;
+  const red = run.runner.run(tests.map((absPath) => ({ absPath })), null, run.timeoutMs, { bail: true, workers: run.workers }).then((result) => {
+    if (result.kind === 'timed-out') {
+      const names = tests.map((path) => relative(run.projectDir, path).split(sep).join('/')).join(', ');
+      throw new Error(`The unmutated run of ${names} did not finish within ${Math.round(run.timeoutMs / 1000)} seconds, though the whole suite did. Run \`boardsmith test\` on those files to see why.`);
+    }
+    return suiteNoticed(result) ? redParts(result) : [];
+  });
+  run.apart.set(key, red);
+  return red;
+}
+
+/**
+ * Runs `hint`'s file alone under `mutant` when its test is one of `tests` that passed unmutated, and the file
+ * passes unmutated on its own (`redApart`), and returns
  * the test of that file that passed unmutated and now fails on its own assertion; 'timed-out' when the file
  * ran past the limit. The whole file runs, since the hinted test passed only after the tests before it in its file.
  */
 async function hintTrial(run: GreenRunner, mutant: LocatedMutant, tests: string[], hint: KillerHint): Promise<KillerHint | 'timed-out' | undefined> {
   const absPath = join(run.projectDir, hint.file);
   if (!run.passed.has(testKey({ path: hint.file, fullName: hint.test })) || !tests.includes(absPath)) return undefined;
+  if ((await redApart(run, [absPath])).length > 0) return undefined;
   const trial = await run.runner.run([{ absPath }], mutant, run.timeoutMs, { bail: true, workers: run.workers });
   if (trial.kind === 'timed-out') return 'timed-out';
   const killer = trial.outcomes.find((o) => o.path === hint.file && o.failedOnAssertion && run.passed.has(testKey(o)));
