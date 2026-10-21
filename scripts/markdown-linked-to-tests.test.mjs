@@ -15,12 +15,15 @@
 import { describe, it, expect } from 'vitest';
 import { createVitest } from 'vitest/node';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import policy from '../.agent-policy.json';
+
+// Links this guard to the Markdown and the tests it checks, so `--changed` runs it when one changes; nothing loads.
+import.meta.glob(['/**/*.md', '/.planning/**/*.md', '/src/**/*.test.ts', '/docs/**/*.test.ts', '/scripts/**/*.test.mjs']);
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const { untested = [] } = JSON.parse(readFileSync(join(ROOT, '.agent-policy.json'), 'utf-8'));
+const { untested = [] } = policy;
 // agent-policy matches a pattern with no `/` against the file's name in any folder.
 const untestedPathspecs = untested.map((pattern) => `:(glob)${pattern.includes('/') ? '' : '**/'}${pattern}`);
 const gitFiles = (...pathspecs) =>
@@ -33,7 +36,10 @@ const untestedMarkdown = new Set(untestedPathspecs.length ? gitFiles(...untested
 const vitest = await createVitest('test', { watch: false, related: markdown.map((file) => join(ROOT, file)) }, { root: ROOT });
 await vitest.getRelevantTestSpecifications();
 const { moduleGraph } = vitest.projects[0].vite;
-const imported = new Set(markdown.filter((file) => moduleGraph.getModulesByFile(join(ROOT, file))?.size));
+const GUARD = fileURLToPath(import.meta.url);
+const importedByATest = (file) =>
+  [...(moduleGraph.getModulesByFile(join(ROOT, file)) ?? [])].some((mod) => [...mod.importers].some((importer) => importer.file !== GUARD));
+const imported = new Set(markdown.filter(importedByATest));
 await vitest.close();
 
 describe('Markdown and the tests that read it (#1370)', () => {

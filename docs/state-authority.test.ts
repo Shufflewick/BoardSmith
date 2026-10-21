@@ -15,13 +15,24 @@
  */
 import { describe, it, expect } from 'vitest';
 
-/** Every prose doc that describes how state is stored or restored, keyed `./<name>`. */
+/** Every prose doc that describes how state is stored or restored. */
+const STATE_MODEL_DOCS = [
+  'agent-control.md',
+  'architecture.md',
+  'core-concepts.md',
+  'nomenclature.md',
+  'state-size.md',
+] as const;
+
 const DOCS = import.meta.glob<string>(
   ['./agent-control.md', './architecture.md', './core-concepts.md', './nomenclature.md', './state-size.md'],
   { eager: true, import: 'default' },
 );
-const STATE_MODEL_DOCS = Object.keys(DOCS).map((key) => key.slice(2));
-const read = (name: string) => DOCS[`./${name}`];
+const read = (name: string) => {
+  const text = DOCS[`./${name}`];
+  if (text === undefined) throw new Error(`docs/${name} is missing, or not in the import.meta.glob list above.`);
+  return text;
+};
 
 /**
  * Claims that assert the abandoned model. Each is matched case-insensitively
