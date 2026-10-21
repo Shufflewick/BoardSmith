@@ -1129,6 +1129,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return a.length === b.length && a.every((pick, i) => pick === b[i]);
   }
 
+  /** Whether a fetch other than this pick's against these answers is out and not dropped for a changed earlier answer. */
+  function anotherFetchInUse(selectionName: string, askedAgainst: (CollectedPick | undefined)[]): boolean {
+    return [...(actionSnapshot.value?.choiceFetches ?? [])].some(([name, out]) =>
+      !(name === selectionName && sameAnswers(out.askedAgainst, askedAgainst)) && sameAnswers(out.askedAgainst, answersBefore(name)));
+  }
+
   /** A refused re-ask leaves no answer to an earlier question in place of its own (#1354). */
   function forgetPickSnapshot(selectionName: string): void {
     if (actionSnapshot.value?.pickSnapshots.delete(selectionName)) snapshotVersion.value++;
@@ -1218,9 +1224,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       forgetPickSnapshot(selectionName);
       setError(describeUndescribablePick(selection));
     } finally {
-      // Only a request of the current action ends its loading state (#663), and not while one asked against newer answers is out (#1358).
-      const out = actionSnapshot.value?.choiceFetches.get(selectionName);
-      if (!actionMovedOn(seq) && (!out || sameAnswers(out.askedAgainst, askedAgainst))) isLoadingChoices.value = false;
+      // Only a request of the current action ends its loading state (#663), and not while another still in use is out (#1358, #1367).
+      if (!actionMovedOn(seq) && !anotherFetchInUse(selectionName, askedAgainst)) isLoadingChoices.value = false;
     }
     return true;
   }

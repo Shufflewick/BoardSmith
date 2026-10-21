@@ -2045,6 +2045,38 @@ describe('useActionController picks', () => {
     expect(controller.isLoadingChoices.value).toBe(false);
   });
 
+  it("keeps loading while a later pick's fetch is out after an earlier pick's settles (#1367)", async () => {
+    actionMetadata.value = {
+      ...createTestMetadata(),
+      board: {
+        name: 'board',
+        selections: [
+          { name: 'ship', type: 'choice', prompt: 'Ship', choices: [{ value: 'dory', display: 'Dory' }] },
+          { name: 'crew', type: 'choice', prompt: 'Crew', choices: [{ value: 'ann', display: 'Ann' }] },
+        ],
+      },
+    };
+    availableActions.value = [...(availableActions.value ?? []), 'board'];
+    const held = new Map<string, (result: PickChoicesResult) => void>();
+    const fetchPickChoices = vi.fn((_action: string, pick: string) =>
+      new Promise<PickChoicesResult>(resolve => { held.set(pick, resolve); }));
+    const controller = useActionController({
+      sendAction, availableActions, actionMetadata, isMyTurn,
+      autoExecute: false, playerSeat: ref(0), fetchPickChoices,
+    });
+
+    const started = controller.start('board');
+    const filled = controller.fill('ship', 'dory');
+    await vi.waitFor(() => expect(held.has('crew')).toBe(true));
+    held.get('ship')?.({ success: true, choices: [{ value: 'dory', display: 'Dory' }, { value: 'skiff', display: 'Skiff' }] });
+    await started;
+    expect(controller.isLoadingChoices.value).toBe(true);
+
+    held.get('crew')?.({ success: true, choices: [{ value: 'ann', display: 'Ann' }, { value: 'bo', display: 'Bo' }] });
+    await filled;
+    expect(controller.isLoadingChoices.value).toBe(false);
+  });
+
   it("does not auto-fill the next pick from a fill whose answer was cleared while its fetch was out (#1358 review F1)", async () => {
     const { controller, settle } = boardWithHeldCrew();
     await controller.start('board');
