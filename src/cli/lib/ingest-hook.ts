@@ -120,10 +120,13 @@ function gitReason(error: unknown): string {
   return said.replace(/\.$/, '');
 }
 
-/** Whether git ignores `path`. A failure of git is not an answer, so it throws (#1301). */
+/**
+ * Whether git's ignore rules cover `path`. A failure of git is not an answer, so it throws (#1301).
+ * Without the index, which check-ignore would read `path` against as a pattern; `tracked` covers it (#1321).
+ */
 async function ignored(project: string, path: string): Promise<boolean> {
   try {
-    await projectGitOutput(project, ['check-ignore', '-q', '--', path]);
+    await projectGitOutput(project, ['check-ignore', '--no-index', '-q', '--', path]);
     return true;
   } catch (error) {
     if ((error as { code?: unknown }).code === 1) return false;
@@ -131,9 +134,9 @@ async function ignored(project: string, path: string): Promise<boolean> {
   }
 }
 
-/** Whether git tracks `path`, which `check-ignore` does not see: an ignore rule never untracks a file (#1321). */
+/** Whether git tracks `path`, read literally: an ignore rule never untracks a file (#1321). */
 async function tracked(project: string, path: string): Promise<boolean> {
-  return (await projectGitOutput(project, ['ls-files', '--', path])) !== '';
+  return (await projectGitOutput(project, ['--literal-pathspecs', 'ls-files', '--', path])) !== '';
 }
 
 /**
@@ -225,7 +228,8 @@ async function landing(path: string): Promise<string> {
     if (error.code === 'ENOENT' || error.code === 'EINVAL') return undefined;
     throw error;
   });
-  if (target !== undefined) return landing(resolve(dirname(path), target));
+  // The system reads a link's relative target from the folder the link really sits in.
+  if (target !== undefined) return landing(resolve(await landing(dirname(path)), target));
   return join(await landing(dirname(path)), basename(path));
 }
 

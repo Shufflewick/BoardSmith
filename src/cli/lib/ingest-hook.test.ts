@@ -240,6 +240,29 @@ describe('installIngestHook', () => {
     expect(await fs.readdir(shared)).toEqual([]);
   });
 
+  it('follows a dangling hook symlink from its real folder, as the system does, when the hooks folder is itself a symlink (#1321 review)', async () => {
+    const p = await gitProject();
+    const shared = join(dir, 'shared', 'hooks');
+    await fs.mkdir(shared, { recursive: true });
+    await fs.rm(join(p, '.git', 'hooks'), { recursive: true, force: true });
+    await fs.symlink(shared, join(p, '.git', 'hooks'));
+    await fs.symlink(join('..', 'scripts', 'pre-commit'), join(shared, 'pre-commit'));
+
+    expect(await ingestHookState(p)).toMatchObject({ state: 'outside', path: join(realpathSync(dir), 'shared', 'scripts', 'pre-commit') });
+    await expect(fs.access(join(p, '.git', 'scripts'))).rejects.toThrow();
+  });
+
+  it('reads a hooks folder name with glob characters literally (#1321 review)', async () => {
+    const p = await gitProject();
+    execSync('git config core.hooksPath "hooks[ci]"', { cwd: p });
+    await fs.mkdir(join(p, 'hooksc'));
+    await fs.writeFile(join(p, 'hooksc', 'pre-commit'), '#!/bin/sh\n');
+    execSync('git add hooksc/pre-commit', { cwd: p });
+    await fs.writeFile(join(p, '.gitignore'), '/hooks?ci?/\n');
+
+    expect(await ingestHookState(p)).toMatchObject({ state: 'missing', path: join('hooks[ci]', 'pre-commit') });
+  });
+
   it('says a committed hook is tracked, even once its folder is ignored, since ignoring cannot untrack it (#1321)', async () => {
     const p = await gitProject();
     execSync('git config core.hooksPath .githooks', { cwd: p });
