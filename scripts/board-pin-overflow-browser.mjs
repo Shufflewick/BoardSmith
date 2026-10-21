@@ -163,6 +163,37 @@ function narrowTheRegion(frame, scrolling = false) {
   }, scrolling);
 }
 
+/**
+ * Narrow the sidebar in three steps, one a frame, each before the zoom's queued
+ * re-fit runs, so that re-fit reads the wider region against the last pin, as
+ * when the sidebar's width transition or a host frame widens the region (#1357).
+ * The last step is under half a percent of the region. Ten frames later, read
+ * the zoom and whether the region scrolls sideways.
+ */
+function widenTheRegionInSteps(frame) {
+  return frame.locator('body').evaluate(async (body) => {
+    const doc = body.ownerDocument;
+    const win = doc.defaultView;
+    const region = doc.querySelector('.boardregion');
+    const sidebar = doc.querySelector('.sidebar');
+    const zoomed = doc.querySelector('.game-shell__zoom-container');
+    const nextFrame = () => new Promise((settle) => win.requestAnimationFrame(settle));
+    sidebar.style.transition = 'none';
+    const start = sidebar.getBoundingClientRect().width;
+    const regionBefore = region.clientWidth;
+    for (const narrowedBy of [50, 60, 62]) {
+      await nextFrame();
+      sidebar.style.width = `${start - narrowedBy}px`;
+    }
+    for (let i = 0; i < 10; i++) await nextFrame();
+    return {
+      widenedBy: region.clientWidth - regionBefore,
+      zoom: win.getComputedStyle(zoomed).zoom,
+      sideways: region.scrollWidth > region.clientWidth,
+    };
+  });
+}
+
 /** Once layout settles: the board's rendered width, the region's available width, and whether it scrolls sideways. */
 function settledBoard(frame) {
   return frame.locator('body').evaluate(async (body) => {
@@ -228,6 +259,11 @@ await runBrowserRegression(
       const settled = await settledBoard(frame);
       await check('the pinned board still fills the region once it settles', async () => {
         assert(Math.abs(settled.board - settled.available) <= 1, `the board is ${settled.board}px wide in ${settled.available}px of region`);
+      });
+      const widened = await widenTheRegionInSteps(frame);
+      await check('once the region has widened in steps, the zoom is back at 1 and the region does not scroll sideways', async () => {
+        assert(widened.widenedBy >= 60 && widened.zoom === '1' && !widened.sideways,
+          `the region widened by ${widened.widenedBy}px and the zoom is ${widened.zoom}${widened.sideways ? ', so the region scrolls sideways' : ''}`);
       });
 
       await frame.getByRole('button', { name: 'Game controls' }).click();

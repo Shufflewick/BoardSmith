@@ -153,8 +153,8 @@ export function useAutoZoom(options: {
 
     const fit = computeFitZoom(natural, avail, pinnedBoards.value > 0 ? 'width' : 'both');
     if (fit == null) return false;
-    // Epsilon guard: ignore sub-visible deltas from layout rounding.
-    if (Math.abs(fit - zoomLevel.value) > 0.005) zoomLevel.value = fit;
+    // Ignore sub-visible zoom-ups from layout rounding, but never keep a zoom above the fit: the board would overflow (#1357).
+    if (fit < zoomLevel.value || fit - zoomLevel.value > 0.005) zoomLevel.value = fit;
     return true;
   }
 
