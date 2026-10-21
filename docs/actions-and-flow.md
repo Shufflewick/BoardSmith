@@ -1001,6 +1001,30 @@ meaningless negative number. Return the sentence the player
 reads, saying what happened and what to do next. An empty return is refused as
 an authoring error.
 
+#### Text a player reads never names a card they cannot see
+
+Callbacks are handed the real element even when the acting player cannot see
+it (face down, in another player's hand, in a hidden pile), because a rule may
+need to decide on a card picked blind. Text a callback writes for the player
+could name that card, so it is not shown when the callback was handed one, as
+the value it judges, as an earlier pick in `args`, or among the candidates a
+`display` receives (#1293):
+
+| Callback | What the player reads instead |
+|---|---|
+| a selection's `display`, or a `{ value, label }` choice's label | the engine's label: "Card #1" for a hidden card, else its notation or name |
+| a selection's `disabled` reason | "You cannot choose this one right now. Choose another." |
+| a selection's `validate` message | `Invalid <selection name>` |
+| the action's `.validate()` message | `Action '<name>' is not allowed with these choices` |
+| a pick's `prompt` function | no prompt: the panel shows its own, such as "Select card" |
+| `unavailable` | the standard "no longer available" sentence |
+
+The rule still decides with the real card: a `disabled` candidate stays greyed
+and a `validate` that refuses still refuses. Your own text goes to the dev log,
+so you can see what was replaced. What a callback returns as a value, such as
+the `choices` list, is not text the engine can judge, so keep hidden facts out
+of those yourself.
+
 #### `.condition()` is about availability, not arguments
 
 `.condition()` decides whether the action appears. It is evaluated **twice**:

@@ -292,7 +292,9 @@ so the board and the action panel always agree on which card is which.
   and a world's stored partitions all keep it.
 - **Picks use it.** A `chooseElement` or `chooseFrom` candidate the seat cannot
   see goes out under the id the seat's board carries for it, with a neutral
-  label such as "Card #1" unless the selection has its own `display`. A card in
+  label such as "Card #1", even when the selection has its own `display`
+  (#1293, see `actions-and-flow.md` § "Text a player reads never names a card
+  they cannot see"). A card in
   a `contentsHidden()` zone, which the board does not draw at all, is offered
   the same way, so a blind pick from a hidden pile works and its real id is
   never sent.
