@@ -868,10 +868,10 @@ it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
       );
     }, 120_000);
 
-    it("resolves a workspace file's root against the project, as the installed Vitest 2 does", async () => {
+    it("resolves a workspace file's root against that file, as the installed Vitest 3 does", async () => {
       const result = await diffCheck({
         'vitest.config.ts': "import { defineConfig } from 'vitest/config';\nexport default defineConfig({ test: { workspace: './config/projects.mts' } });\n",
-        'config/projects.mts': "export default [{ extends: '../project.config.mts', root: '.', test: { name: 'nested' } }];\n",
+        'config/projects.mts': "export default [{ extends: '../project.config.mts', root: '..', test: { name: 'nested' } }];\n",
       });
       expect(result.notGreen).toBeUndefined();
       expect(result.survivors).toEqual([]);
@@ -913,7 +913,7 @@ it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
       );
     });
 
-    // No Vitest 3 is installed here, so these read the generated config the way Vitest 3 would.
+    // These read the generated config the way each Vitest major would, whichever one is installed.
     describe('the generated config, as Vitest 3 reads it', () => {
       const HOOK = 'boardsmith-mutant';
       const hasHook = (project: { plugins?: Array<{ name?: string }> }) => project.plugins?.some((p) => p.name === HOOK) ?? false;

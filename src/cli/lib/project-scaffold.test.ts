@@ -335,7 +335,8 @@ describe('generateTsConfig — vite/client types (Phase 149 dry-run Defect 1)', 
     expect(importMetaEnvErrors([]).length).toBeGreaterThan(0);
     // With vite/client: the ImportMeta.env access resolves cleanly.
     expect(importMetaEnvErrors(['vite/client'])).toEqual([]);
-  });
+    // Two type-checks of the UI graph take seconds; a busy run must not fail them on time alone.
+  }, 60_000);
 });
 
 describe('generatePackageJson — explicit vite devDependency (Phase 149 dry-run Defect 1)', () => {
@@ -363,11 +364,17 @@ describe('generatePackageJson — axe-core scaffold devDependency', () => {
     expect(parsed.devDependencies).toHaveProperty('@vue/test-utils');
   });
 
-  it('includes jsdom in devDependencies (CR-02 regression: the a11y example runs in `@vitest-environment jsdom`, which vitest v2 does not bundle)', () => {
+  it('includes jsdom in devDependencies (CR-02 regression: the a11y example runs in `@vitest-environment jsdom`, which vitest does not bundle)', () => {
     const parsed = JSON.parse(generatePackageJson(config, PROJECT_PATH));
     // Without jsdom installed, `boardsmith test` in a fresh scaffold is red out of the
     // box: requesting the jsdom environment fails with `Cannot find package 'jsdom'`.
     expect(parsed.devDependencies).toHaveProperty('jsdom');
+  });
+
+  it('pins the vitest BoardSmith itself is tested with (#1333: vitest 2 never read its results cache)', () => {
+    const parsed = JSON.parse(generatePackageJson(config, PROJECT_PATH));
+    const own = JSON.parse(readFileSync(join(boardsmithPackageRoot(), 'package.json'), 'utf8'));
+    expect(parsed.devDependencies.vitest).toBe(own.devDependencies.vitest);
   });
 });
 

@@ -53,7 +53,9 @@ interface SpawnResult {
  */
 export async function spawnCli(args: string[], cwd: string = REPO_ROOT): Promise<SpawnResult> {
   try {
-    const { stdout, stderr } = await execFileAsync(process.execPath, [CLI_BIN, ...args], { cwd });
+    // vitest 3 sets FORCE_TTY="" in its workers, and the vitest a CLI starts reads any FORCE_TTY as a terminal and prints colours.
+    const { FORCE_TTY: _workerTty, ...env } = process.env;
+    const { stdout, stderr } = await execFileAsync(process.execPath, [CLI_BIN, ...args], { cwd, env });
     return { code: 0, stdout, stderr };
   } catch (err) {
     const e = err as { code?: number; stdout?: string; stderr?: string };
