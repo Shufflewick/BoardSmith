@@ -882,6 +882,8 @@ const mobileToggleLabel = computed(() => {
   /* A size container, so useBoardSize can cap a board's pin at 100cqw, this
      content box at layout time, and a stale pin cannot overflow it (#1336). */
   container-type: inline-size;
+  /* regionWidth reads the computed width as the content box, whatever a game sets globally (#1343). */
+  box-sizing: content-box;
   padding: var(--bsg-s1);
   /* The Action Panel's reserved footprint is LAYOUT, not arithmetic: the region's
      own padding excludes it, so the fit's `region.clientHeight - padding` already

@@ -50,15 +50,17 @@
  * - The board element carries CSS `zoom`, so its getBoundingClientRect() is
  *   scaled. Natural size = rect / the *applied* zoom read from computed style
  *   (not the ref, which may not have flushed to the DOM yet).
- * - Available space is the region's client box minus its padding — and the
- *   region's padding-bottom is the Action Panel's reserved footprint, so a
- *   fitted board sits fully above that footprint with no panel term needed.
+ * - Available space is the region's content box — and the region's
+ *   padding-bottom is the Action Panel's reserved footprint, so a fitted board
+ *   sits fully above that footprint with no panel term needed. Its width is
+ *   taken with the vertical scrollbar showing, the same width useBoardSize
+ *   pins to, so the scrollbar coming or going never moves the fit (#1343).
  * - Re-fits triggered by the region observer are rAF-coalesced into a single
  *   `measureAndFit()` per frame, so a cascade of layout changes (e.g. the
  *   sidebar collapsing plus a window resize) never thrashes.
  */
 import { ref, watch, onUnmounted, type Ref } from 'vue';
-import { provideBoardRegionPin } from './boardRegionPin.js';
+import { provideBoardRegionPin, regionWidth } from './boardRegionPin.js';
 
 /** The slider's range. */
 export const ZOOM_MIN = 0.5;
@@ -138,9 +140,7 @@ export function useAutoZoom(options: {
 
     const regionStyle = getComputedStyle(region);
     const avail = {
-      width: region.clientWidth
-        - (parseFloat(regionStyle.paddingLeft) || 0)
-        - (parseFloat(regionStyle.paddingRight) || 0),
+      width: regionWidth(region),
       height: region.clientHeight
         - (parseFloat(regionStyle.paddingTop) || 0)
         - (parseFloat(regionStyle.paddingBottom) || 0),

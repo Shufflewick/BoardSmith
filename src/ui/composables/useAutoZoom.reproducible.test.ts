@@ -86,7 +86,7 @@ function mountShell() {
   // Layout jsdom does not compute. The region's padding-bottom is the panel's
   // constant reserved footprint — the only channel the panel has into the fit.
   region.style.paddingBottom = `${PANEL_RESERVED}px`;
-  Object.defineProperty(region, 'clientWidth', { get: () => REGION.width, configurable: true });
+  region.style.width = `${REGION.width}px`;
   Object.defineProperty(region, 'clientHeight', { get: () => REGION.height, configurable: true });
   zoom.getBoundingClientRect = () =>
     ({ width: BOARD.width, height: boardHeight.value } as DOMRect);
