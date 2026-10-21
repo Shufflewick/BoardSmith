@@ -522,6 +522,8 @@ export interface UseActionControllerReturn {
   skip: (selectionName: string) => void;
   /** Clear a selection's value and the value of every selection after it, since those were answered against the old value. False, with lastError set, when refused because the name is not one of the action's picks (a follow-up's server-bound value, say), because a pick step still awaits the server, or because a repeating pick at or after it has steps the server holds (a finished repeat included). */
   clear: (selectionName: string) => boolean;
+  /** Whether clear() would take this value back: false for a value that is not a pick, and for a pick at or before an answer the server holds (a pick the held follow-up answered included). Draw a clear control only where this is true, as the action panel does. A pick step still out is not counted, since it settles on its own. */
+  canClear: (selectionName: string) => boolean;
   /** Cancel the current action */
   cancel: () => void;
 

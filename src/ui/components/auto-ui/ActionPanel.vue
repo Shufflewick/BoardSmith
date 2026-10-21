@@ -1586,9 +1586,9 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           <template v-for="(value, key) in displayableArgs" :key="key">
             <div class="selected-value from-board">
               <span class="value-display">{{ getSelectionDisplay(key as string, value) }}</span>
-              <!-- Only a pick can be cleared; a follow-up's server-bound value cannot (#1366). -->
+              <!-- The controller's rule, so the panel and a custom UI offer the same clears (#1366, #1373). -->
               <button
-                v-if="currentActionMeta?.selections.some(s => s.name === key)"
+                v-if="actionController.canClear(key as string)"
                 class="clear-selection-btn"
                 @click="clearSelection(key as string)"
                 :aria-label="`Clear ${(key as string).replace(/([A-Z])/g, ' $1').trim().toLowerCase()}`"

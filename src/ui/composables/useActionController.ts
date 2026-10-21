@@ -2671,23 +2671,30 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       s.name in currentArgs.value || (s.name === repeating?.selectionName && repeating.accumulated.length > 0));
   }
 
-  function clear(selectionName: string): boolean {
-    // The step's reply would write its pick back, answered against the value cleared here (#1364).
-    if (stepOutstanding()) {
-      setError(STEP_OUTSTANDING);
-      return false;
-    }
+  /** Why this value cannot be cleared, or undefined when it can; the panel's clear button and clear() both ask it (#1373). */
+  function clearRefusal(selectionName: string): string | undefined {
     const selections = currentActionMeta.value?.selections ?? [];
     const index = selections.findIndex(s => s.name === selectionName);
     // Not a pick (a follow-up's server-bound arg, say): true would have the caller clear the board, cancelling the action (#1366).
-    if (index === -1) {
-      setError(NOT_A_PICK);
+    if (index === -1) return NOT_A_PICK;
+    // A pick the held follow-up answered is held too, so the server would not use a new answer (#1373).
+    if (serverHoldsAnswer(selections.slice(index))) return ANSWER_HELD;
+    return undefined;
+  }
+
+  function canClear(selectionName: string): boolean {
+    return clearRefusal(selectionName) === undefined;
+  }
+
+  function clear(selectionName: string): boolean {
+    // The step's reply would write its pick back, answered against the value cleared here (#1364).
+    const refusal = stepOutstanding() ? STEP_OUTSTANDING : clearRefusal(selectionName);
+    if (refusal) {
+      setError(refusal);
       return false;
     }
-    if (serverHoldsAnswer(selections.slice(index))) {
-      setError(ANSWER_HELD);
-      return false;
-    }
+    const selections = currentActionMeta.value!.selections;
+    const index = selections.findIndex(s => s.name === selectionName);
     forgetAnswer(selectionName);
     // Later picks were answered and fetched against the old value, so they are asked again (#1354, #1359).
     for (const later of selections.slice(index + 1)) {
@@ -3041,6 +3048,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     fill,
     skip,
     clear,
+    canClear,
     cancel,
 
     // The current editor's draft (shared source of truth for a typed value that
