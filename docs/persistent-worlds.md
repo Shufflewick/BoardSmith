@@ -569,7 +569,9 @@ worldAction<HallGame>('survey')
 
 A command that changes a partition it loaded only with `.reads()`, by an
 attribute write or by moving an element into or out of it, is refused with
-`read-only-write`, and nothing it changed is kept. A partition named by both a
+`read-only-write`, and nothing it changed is kept. To catch every such change,
+the engine compares each `.reads()` partition's bytes after the command, which
+costs serializing it in memory but never a storage write. A partition named by both a
 `.reads()` and a `.needs()` round is writable. `worldClockAction()` has
 `.reads()` too.
 

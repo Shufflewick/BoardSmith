@@ -2628,6 +2628,11 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // then meant "mutated, and durably so once anything else checkpointed the
     // same partition". The only way out of this block without the rollback is
     // the successful return at its end.
+    // Nothing saves a partition only `.reads()` named, so its bytes are always
+    // compared, however the handler reached it (#1334).
+    for (const name of named) {
+      if (!writable.has(name)) this.game.reachPartition(this.residentIds.get(name)!);
+    }
     bindWorldFacilities(this.game, facilities);
     try {
       const result =
@@ -2717,6 +2722,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     touched: ReadonlySet<number>,
   ): string[] {
     const dirty = new Set<string>(writable);
+    const readOnly = new Set(named.filter((name) => !writable.has(name)));
     for (const id of touched) {
       const name = this.residentNames.get(id);
       if (name === undefined) {
@@ -2727,7 +2733,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
             `the partition store, or its changes cannot be checkpointed.`,
         );
       }
-      if (!writable.has(name) && named.includes(name)) {
+      if (readOnly.has(name)) {
         throw worldRefusal(
           "read-only-write",
           `Action "${action}" changed partition "${name}", which it loads with .reads() and so ` +

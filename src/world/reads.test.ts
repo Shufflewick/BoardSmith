@@ -4,10 +4,12 @@
 // and saved whether or not it changed. `.reads()` loads one the action only
 // looks at: it is never reported dirty, and a write to it refuses the command.
 import { describe, expect, it } from "vitest";
+import { Piece } from "../engine/index.js";
 import { worldAction, worldClockAction } from "./action.js";
 import {
   COMMONS,
   Commons,
+  Holding,
   STAMP,
   VillageFixture,
   applyThroughWalk as apply,
@@ -16,6 +18,8 @@ import {
   neighboursOf,
   newVillageEngine,
 } from "./village.test-helper.js";
+
+class Shed extends Piece<VillageFixture> {}
 
 /** Reads both neighbours' standing timber, and writes only the seat's own holding. */
 const survey = worldAction<VillageFixture>("survey")
@@ -41,6 +45,29 @@ const both = worldAction<VillageFixture>("both")
   .needs(({ player }) => [holdingPartition(neighboursOf(player.seat)[0]!)])
   .execute((_args, ctx) => {
     ctx.game.holdingOf(neighboursOf(ctx.player.seat)[0]!).standing += 1;
+  });
+
+/** Keeps a neighbour's holding from one command, and writes it in a later one
+ *  without going through any query or accessor. */
+let kept: Holding | undefined;
+const keep = worldAction<VillageFixture>("keep")
+  .needs(({ player }) => [holdingPartition(neighboursOf(player.seat)[0]!)])
+  .execute((_args, ctx) => {
+    kept = ctx.game.holdingOf(neighboursOf(ctx.player.seat)[0]!);
+  });
+const writeKept = worldAction<VillageFixture>("writeKept")
+  .reads(({ player }) => [holdingPartition(neighboursOf(player.seat)[0]!)])
+  .execute(() => {
+    kept!.standing += 1;
+  });
+
+/** Moves a shed from the seat's own holding into a neighbour's it only reads. */
+const dump = worldAction<VillageFixture>("dump")
+  .needs(({ player }) => [holdingPartition(player.seat)])
+  .reads(({ player }) => [holdingPartition(neighboursOf(player.seat)[0]!)])
+  .execute((_args, ctx) => {
+    const shed = ctx.game.holdingOf(ctx.player.seat).create(Shed, "shed");
+    shed.putInto(ctx.game.holdingOf(neighboursOf(ctx.player.seat)[0]!));
   });
 
 /** The clock's verb: reads a holding, writes the commons. */
@@ -76,6 +103,23 @@ describe("a world action's read-only partitions", () => {
     });
     expect(game.holdingOf(2).woodpile).toBe(before.own);
     expect(game.holdingOf(neighbour).standing).toBe(before.theirs);
+  });
+
+  it("refuses a write through an element kept from an earlier command", async () => {
+    const { engine } = newVillageEngine([keep, writeKept]);
+    await apply(engine, "p2", { name: "keep", args: {} });
+
+    await expect(apply(engine, "p2", { name: "writeKept", args: {} })).rejects.toMatchObject({
+      code: "read-only-write",
+    });
+  });
+
+  it("refuses moving an element into one", async () => {
+    const { engine } = newVillageEngine([dump]);
+
+    await expect(apply(engine, "p2", { name: "dump", args: {} })).rejects.toMatchObject({
+      code: "read-only-write",
+    });
   });
 
   it("treats a partition named by both .reads() and .needs() as writable", async () => {
