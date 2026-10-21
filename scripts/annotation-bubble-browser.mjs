@@ -103,24 +103,21 @@ function measure(frame) {
 
 /** Every way a target's bubble misses: off the layer's 8px margin, or a caret that does not point at it. */
 function misses(seen, i) {
-  const { layer, shown } = seen;
-  const { target, bubble, caret } = shown[i];
+  const { target, bubble, caret } = seen.shown[i];
   if (!target) return [`the board shows no target named ${TARGETS[i].name}`];
-  if (!bubble) return ['no bubble is shown'];
-  if (!caret) return ['the bubble has no caret'];
-  const found = [];
-  const minLeft = layer.left + EDGE_MARGIN;
-  const maxRight = layer.left + layer.width - EDGE_MARGIN;
-  if (bubble.left < minLeft - 0.5) found.push(`its left edge is at ${bubble.left.toFixed(1)}px, inside the ${minLeft}px margin`);
-  if (bubble.right > maxRight + 0.5) found.push(`its right edge is at ${bubble.right.toFixed(1)}px, past the ${maxRight}px margin`);
-  if (Math.abs(caret.centre - target.centre) > 1) {
-    found.push(`its caret is at x=${caret.centre.toFixed(1)}px, the target's centre at x=${target.centre.toFixed(1)}px`);
-  }
+  if (!bubble || !caret) return ['no bubble with a caret is shown'];
+  const minLeft = seen.layer.left + EDGE_MARGIN;
+  const maxRight = seen.layer.left + seen.layer.width - EDGE_MARGIN;
   const want = TARGETS[i].caret;
-  if (caret.side !== want) found.push(`its caret is on its ${caret.side} side, not its ${want} side`);
   // A bubble above its target is placed by an 80px height estimate, so its tip is not checked yet (#1331).
-  if (want === 'top' && caret.top < target.bottom - 0.5) found.push(`its caret's tip (y=${caret.top.toFixed(1)}) is not below the target (bottom y=${target.bottom.toFixed(1)})`);
-  return found;
+  const tipBelow = want !== 'top' || caret.top >= target.bottom - 0.5;
+  return [
+    [bubble.left >= minLeft - 0.5, `its left edge is at ${bubble.left.toFixed(1)}px, inside the ${minLeft}px margin`],
+    [bubble.right <= maxRight + 0.5, `its right edge is at ${bubble.right.toFixed(1)}px, past the ${maxRight}px margin`],
+    [Math.abs(caret.centre - target.centre) <= 1, `its caret is at x=${caret.centre.toFixed(1)}px, the target's centre at x=${target.centre.toFixed(1)}px`],
+    [caret.side === want, `its caret is on its ${caret.side} side, not its ${want} side`],
+    [tipBelow, `its caret's tip (y=${caret.top.toFixed(1)}) is not below the target (bottom y=${target.bottom.toFixed(1)})`],
+  ].filter(([ok]) => !ok).map(([, why]) => why);
 }
 
 const VIEWPORTS = [{ width: 1440, height: 900 }, { width: 390, height: 844 }];
