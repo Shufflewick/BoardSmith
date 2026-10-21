@@ -914,8 +914,8 @@ function selectionValues(
     return judgedOnce(walk, selection, seen, () => numberInputPicks(game, actionDef, player, selection, seen));
   }
   const choices = judgedOnce(walk, selection, seen, () => _getChoices(game, actionDef.name, selection, player, seen));
-  if (choices.values === null || choices.values.length === 0) return { values: null, judged: choices.judged };
-  return _valuesToTry(game, player, selection, { values: choices.values, judged: choices.judged }, seen, walk.random);
+  if (choices.values.length === 0) return { values: null, judged: choices.judged };
+  return _valuesToTry(game, player, selection, choices, seen, walk.random);
 }
 
 /**
@@ -924,18 +924,18 @@ function selectionValues(
  * repeated path would get the same answer. A walk without `judged` judges
  * every time. Only the judging is kept; a multiSelect's draw is still made anew.
  */
-function judgedOnce(
+function judgedOnce<T extends SelectionOffer>(
   walk: ActionWalk,
   selection: Selection,
   seen: Record<string, unknown>,
-  judge: () => SelectionOffer,
-): SelectionOffer {
+  judge: () => T,
+): T {
   if (!walk.judged) return judge();
   const { offers, ids } = walk.judged;
   const key = [selection.name, ...Object.entries(seen).map(([name, value]) => `${name}=${pickKey(value, ids)}`)].join('|');
   let offer = offers.get(key);
   if (!offer) offers.set(key, (offer = judge()));
-  return offer;
+  return offer as T;
 }
 
 /**
