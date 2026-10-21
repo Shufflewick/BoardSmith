@@ -197,6 +197,7 @@ function mountHarness(pickStep?: () => Promise<PickStepResponse>, heldFollowUp?:
         pickStep,
         cancelPendingAction,
         heldFollowUp: ref(heldFollowUp),
+        isViewingHistory,
       });
       provide(GAME_CONTEXT_KEYS.actionController, controller);
       useBoardActionBridge({
@@ -684,6 +685,22 @@ describe('Coming back from history puts back the board mark of an action the ser
   });
 });
 
+// The held pick's step is still out when history opens, and its reply lands while history is on screen.
+function replyWhileInHistory(action: 'harvest' | 'sight') {
+  let reply!: () => void;
+  const outstanding = new Promise<PickStepResponse>((resolve) => { reply = () => resolve({ success: true }); });
+  // Sight's first step (the direction) goes through at once; harvest's (the plot) is the one left out.
+  const late = action === 'sight' ? 2 : 1;
+  const pickStep = vi.fn((..._step: unknown[]) => (pickStep.mock.calls.length === late ? outstanding : Promise.resolve<PickStepResponse>({ success: true })));
+  const harness = mountHarness(pickStep, {
+    action,
+    args: {},
+    display: {},
+    metadata: METADATA[action],
+  }, true);
+  return { ...harness, reply, pickStep };
+}
+
 describe('Coming back from history puts back the board mark of an element pick the server holds (#1383)', () => {
   it('marks the plot a custom board marked when clicked, once the live game is back on screen', async () => {
     const { board, controller, wrapper, isViewingHistory } = mountHarness(() => Promise.resolve({ success: true }), {
@@ -742,22 +759,6 @@ describe('Coming back from history puts back the board mark of an element pick t
     wrapper.unmount();
   });
 
-  // The held pick's step is still out when history opens, and its reply lands while history is on screen.
-  function replyWhileInHistory(action: 'harvest' | 'sight') {
-    let reply!: () => void;
-    const outstanding = new Promise<PickStepResponse>((resolve) => { reply = () => resolve({ success: true }); });
-    let step = 0;
-    // Sight's first step (the direction) goes through at once; harvest's (the plot) is the one left out.
-    const late = action === 'sight' ? 2 : 1;
-    const harness = mountHarness(() => (++step === late ? outstanding : Promise.resolve({ success: true })), {
-      action,
-      args: {},
-      display: {},
-      metadata: METADATA[action],
-    }, true);
-    return { ...harness, reply };
-  }
-
   it('keeps the plot a custom board marked when the server takes it while history is on screen', async () => {
     const { board, controller, wrapper, isViewingHistory, reply } = replyWhileInHistory('harvest');
     await flush();
@@ -791,13 +792,39 @@ describe('Coming back from history puts back the board mark of an element pick t
 
     reply();
     await flush();
-    expect(controller.currentArgs.value).toEqual({ direction: 'north', plot: 11, heading: 'south' });
+    expect(controller.currentArgs.value).toEqual({ direction: 'north', plot: 11 });
     expect(board.selectedElement).toBeNull();
     isViewingHistory.value = false;
     await flush();
 
     expect(board.currentPickName).toBe('wake');
     expect(board.selectedElement).toEqual({ notation: 's' });
+    wrapper.unmount();
+  });
+});
+
+describe('A held pick whose step reply lands while history is on screen sends no auto-filled pick until the player returns (#1385)', () => {
+  it('sends the one-choice heading to the live game only once the live game is back on screen', async () => {
+    const { controller, wrapper, isViewingHistory, reply, pickStep } = replyWhileInHistory('sight');
+    await flush();
+    await controller.fill('direction', 'north');
+    await flush();
+    // Not awaited: the plot's step is the one still out when history opens.
+    void controller.fill('plot', 11);
+    await flush();
+    isViewingHistory.value = true;
+    await flush();
+
+    reply();
+    await flush();
+    expect(pickStep.mock.calls.map(call => call[1])).toEqual(['direction', 'plot']);
+
+    isViewingHistory.value = false;
+    await flush();
+
+    expect(pickStep.mock.calls.map(call => call[1])).toEqual(['direction', 'plot', 'heading']);
+    expect(controller.currentArgs.value).toEqual({ direction: 'north', plot: 11, heading: 'south' });
+    expect(controller.currentPick.value?.name).toBe('wake');
     wrapper.unmount();
   });
 });

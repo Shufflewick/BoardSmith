@@ -544,6 +544,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   if (isViewingHistory) {
     watch(isViewingHistory, (browsing) => {
       if (browsing) return;
+      autoFillOnReturn();
       if (heldFollowUp) {
         autoStartHeldFollowUp();
         return;
@@ -552,6 +553,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       followUpFromHistory = undefined;
       if (kept && !currentAction.value && !pendingFollowUp.value && !isExecuting.value) queueFollowUp(kept);
     });
+  }
+
+  /** Answer the pick an auto-fill was held back from while history was on screen, as handleOnSelectFill would have. */
+  function autoFillOnReturn(): void {
+    const sel = currentPick.value;
+    if (!sel || stepOutstanding() || !tryAutoFillSelection(sel) || !pendingOnServer.value) return;
+    void handleOnSelectFill(sel, currentArgs.value[sel.name]);
   }
 
   /**
@@ -1036,7 +1044,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   /** Whether anything rules out auto-filling `selection` before its choices are looked at. */
   function autoFillHeldBack(selection: EnrichedPickMetadata): boolean {
-    if (!getAutoFill() || isExecuting.value) return true;
+    // An auto-fill of a held action sends a step to the live game, so it waits for the return from history (#1385).
+    if (!getAutoFill() || isExecuting.value || isViewingHistoryValue()) return true;
     // A prefill the caller queued for this pick settles it, never a choice of ours (#226, #1298).
     if (actionSnapshot.value?.prefills.has(selection.name)) return true;
 
