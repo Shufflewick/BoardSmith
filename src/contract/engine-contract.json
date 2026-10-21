@@ -1,6 +1,6 @@
 {
   "revision": 260,
-  "surfaceHash": "519cd809e1ba6616",
+  "surfaceHash": "d5524da34a73a537",
   "payloadHash": "7418fecc0604b2a0",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -2019,7 +2019,7 @@
     {
       "revision": 260,
       "date": "2026-10-21",
-      "surfaceHash": "519cd809e1ba6616",
+      "surfaceHash": "d5524da34a73a537",
       "payloadHash": "7418fecc0604b2a0",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A world action can load partitions read-only with .reads() (also on worldClockAction): they are loaded like .needs() rounds but never reported dirty, so they are not saved, and a command that changes one is refused with the new game-owned refusal read-only-write (a new WORLD_REFUSALS key) and rolled back (#1334). Platform: re-vendor so worlds using .reads() stop rewriting partitions they only look at. Payload and stored format unchanged; games that do not use .reads() need no rebuild."
