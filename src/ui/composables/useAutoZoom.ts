@@ -85,7 +85,7 @@ export type FitAxis = 'both' | 'width';
 export const SETTLE_MS = 300;
 
 /** Largest zoom at which `natural` fits inside `avail` on the requested axes,
- *  clamped to [FIT_ZOOM_MIN, ZOOM_MAX]. Returns null when a box the chosen axes need is
+ *  clamped to [FIT_ZOOM_MIN, ZOOM_MAX], and never above 1 on `'width'`. Returns null when a box the chosen axes need is
  *  unmeasurable (not laid out yet). `fitAxis` is required, not defaulted: the
  *  axis is a property of the board, and a caller that hasn't decided it hasn't
  *  finished the measurement. */
@@ -99,7 +99,8 @@ export function computeFitZoom(
   const widthFit = avail.width / natural.width;
   // Width-only: the height boxes are irrelevant, and an unmeasurable height
   // (a tall board under a tall Action Panel) must not suppress the fit.
-  if (fitAxis === 'width') return clamp(widthFit);
+  // A pinned board narrower than the region has a stale pin, so zooming it up would overflow sideways (#1369).
+  if (fitAxis === 'width') return clamp(Math.min(1, widthFit));
   if (natural.height < 1 || avail.height < 1) return null;
   return clamp(Math.min(widthFit, avail.height / natural.height));
 }
