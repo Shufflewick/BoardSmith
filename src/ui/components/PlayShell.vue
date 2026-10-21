@@ -312,11 +312,11 @@ watch(actionBarCollapsed, async (down) => {
  * adapter drives, so they are exposed rather than duplicated.
  */
 const actionBarEl = ref<HTMLElement | null>(null);
-const modalClearance = ref(0);
-// Only the modal viewport follows panel height. Board fitting and scroll layout stay constant.
+const barClearance = ref(0);
+// Only the game modal host and game-over scrim follow panel height, so they never cover the bar. Board fitting and scroll layout stay constant.
 watch(actionBarEl, (bar, _previous, onCleanup) => {
   if (!bar) return;
-  const measure = () => { modalClearance.value = bar.getBoundingClientRect().height; };
+  const measure = () => { barClearance.value = bar.getBoundingClientRect().height; };
   const observer = new ResizeObserver(measure);
   observer.observe(bar);
   measure();
@@ -458,7 +458,7 @@ const mobileToggleLabel = computed(() => {
            Its padding-bottom reserves the Action Panel's CONSTANT footprint
            (--bsg-panel-reserved), so the board is fitted above the panel without
            anything measuring the panel. -->
-      <div class="board-viewport">
+      <div class="board-viewport" :style="{ '--bsg-bar-clearance': `${barClearance}px` }">
         <main
           class="boardregion"
           id="main"
@@ -510,7 +510,7 @@ const mobileToggleLabel = computed(() => {
              box instead of escaping to the viewport — the board-area sandbox
              invariant holds no matter what the game designer does.
              pointer-events are none on the host and auto on its children. -->
-        <div class="game-shell__game-modal-host" id="bs-game-modal" :style="{ bottom: `${modalClearance}px` }"></div>
+        <div class="game-shell__game-modal-host" id="bs-game-modal"></div>
 
       </div>
 
@@ -1267,11 +1267,12 @@ const mobileToggleLabel = computed(() => {
 .game-shell__game-modal-host {
   position: absolute;
   inset: 0;
-  /* Same stacking level as the GameOverCard scrim: above the board content and
-     the heatmap overlay, below the tutorial/hint bubbles (z-31), but NOT above the floating .actionbar
-     Action Panel (also z-index 30, a later sibling that therefore stays on top). A game
-     modal covers the board area only — never the Action Panel/header chrome. */
-  z-index: 30;
+  /* Same stacking level as the GameOverCard scrim: above the board content, the
+     action bar (z-30) and tutorial/hint bubbles about the board (z-31), so an open
+     modal covers them (#1346). It stops at the bar's top edge (--bsg-bar-clearance),
+     so it never covers the Action Panel/header chrome. */
+  bottom: var(--bsg-bar-clearance);
+  z-index: 32;
   contain: layout;
   /* Transparent to pointer events when no modal is open; a teleported modal
      (a direct child) re-enables them, so it blocks the board as expected. */

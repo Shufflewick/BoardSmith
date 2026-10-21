@@ -21,8 +21,10 @@
  * root has NO aria-hidden, so the bubble's role=status / aria-live=polite is
  * announced. Reduced motion: no ring animation.
  *
- * Z-index 31: above the action bar, game modals and game-over scrim (z-30),
- * below the mobile scrim (z-45) and modals (z-50) (#1341).
+ * Z-index 31: above the action bar (z-30) (#1341), below game modals and the
+ * game-over scrim (z-32), which cover bubbles about the board. While a target
+ * is inside an open game modal the layer rises to 33, so its ring shows (#1346).
+ * Always below the mobile scrim (z-45) and modals (z-50).
  */
 
 import { ref, toRef } from 'vue';
@@ -44,6 +46,8 @@ interface ResolvedAnnotation {
   ring: Record<string, string> | null;
   anchorStyle: Record<string, string>;
   caretSide?: 'top' | 'bottom';
+  /** The target is inside an open game modal (#bs-game-modal). */
+  inModal?: boolean;
 }
 
 const GAP = 8; // var(--bsg-s2)
@@ -94,6 +98,7 @@ function resolve(ann: Annotation, boardRect: DOMRect | null, layer: LayerSize): 
   }
 
   const rect = targetEl.getBoundingClientRect();
+  const inModal = targetEl.closest('#bs-game-modal') !== null;
   const ring = {
     left: `${rect.left - RING_OFFSET}px`,
     top: `${rect.top - RING_OFFSET}px`,
@@ -102,7 +107,7 @@ function resolve(ann: Annotation, boardRect: DOMRect | null, layer: LayerSize): 
     borderRadius: readRadius(targetEl),
   };
   if (ann.placement && ann.placement !== 'auto') {
-    return { text: ann.text, ring, anchorStyle: boardStyle(ann.placement, boardRect, layer) };
+    return { text: ann.text, ring, inModal, anchorStyle: boardStyle(ann.placement, boardRect, layer) };
   }
 
   // Next to the target: below it, or above when it would run off the bottom.
@@ -120,12 +125,12 @@ function resolve(ann: Annotation, boardRect: DOMRect | null, layer: LayerSize): 
   };
   const below = rect.top + rect.height + GAP;
   if (below + BUBBLE_HEIGHT_ESTIMATE <= layer.height) {
-    return { text: ann.text, ring, caretSide: 'top', anchorStyle: { left, top: `${below}px`, ...shifted } };
+    return { text: ann.text, ring, inModal, caretSide: 'top', anchorStyle: { left, top: `${below}px`, ...shifted } };
   }
   // Only CSS knows the bubble's height: lift it by that height, but never past the layer's top (#1331).
   const above = rect.top - GAP;
   const lifted = { ...shifted, transform: `translate(var(--bsg-bubble-shift), max(-100%, ${-above}px))` };
-  return { text: ann.text, ring, caretSide: 'bottom', anchorStyle: { left, top: `${above}px`, ...lifted } };
+  return { text: ann.text, ring, inModal, caretSide: 'bottom', anchorStyle: { left, top: `${above}px`, ...lifted } };
 }
 
 useOverlayTracking({
@@ -147,7 +152,7 @@ useOverlayTracking({
       v-if="annotations.length > 0"
       ref="overlayRoot"
       class="bsg-annotation-layer"
-      :class="overlayClass"
+      :class="[overlayClass, { 'bsg-annotation-layer--over-modal': resolvedAnnotations.some((r) => r.inModal) }]"
     >
       <template v-for="(resolved, i) in resolvedAnnotations" :key="i">
         <div
@@ -180,6 +185,10 @@ useOverlayTracking({
   z-index: 31;
   pointer-events: none;
   overflow: visible;
+}
+
+.bsg-annotation-layer--over-modal {
+  z-index: 33;
 }
 
 .bsg-tutorial-ring {
