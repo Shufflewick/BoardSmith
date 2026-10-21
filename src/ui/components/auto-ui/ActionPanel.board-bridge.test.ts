@@ -115,8 +115,19 @@ const steerAction: EnrichedActionMetadata = {
   ],
 };
 
-const AVAILABLE = ['move', 'tend', 'harvest', 'wait', 'board', 'steer'];
-const METADATA = { move: moveAction, tend: tendAction, harvest: harvestAction, wait: waitAction, board: boardAction, steer: steerAction };
+// A marked choice, a plot that marks nothing, another marked choice, then a pick to keep the action open.
+const chartAction: EnrichedActionMetadata = {
+  name: 'chart',
+  prompt: 'Chart',
+  selections: [
+    ...steerAction.selections,
+    { name: 'heading', type: 'choice', prompt: 'Then which way?', choices: COMPASS },
+    { name: 'wake', type: 'choice', prompt: 'And the wake?', choices: COMPASS },
+  ],
+};
+
+const AVAILABLE = ['move', 'tend', 'harvest', 'wait', 'board', 'steer', 'chart'];
+const METADATA = { move: moveAction, tend: tendAction, harvest: harvestAction, wait: waitAction, board: boardAction, steer: steerAction, chart: chartAction };
 
 interface Harness {
   board: BoardInteraction;
@@ -476,6 +487,57 @@ describe("ActionPanel's clear chip does what controller.clear() does (#1371)", (
     expect(board.currentPickName).toBe('direction');
     expect(board.selectedElement).toBeNull();
     expect(board.hoveredChoice).toBeNull();
+    wrapper.unmount();
+  });
+});
+
+describe('Clearing only the last answer keeps the board mark of an earlier one (#1377)', () => {
+  it.each([
+    ['the panel chip', (h: Harness) => h.wrapper.findAll('.clear-selection-btn').at(-1)!.trigger('click')],
+    ['controller.clear()', (h: Harness) => h.controller.clear('plot')],
+  ])('keeps the mark of the choice still standing when %s takes back the plot', async (_surface, clear) => {
+    const harness = mountHarness();
+    const { board, controller, wrapper } = harness;
+    await flush();
+    await wrapper.find('[data-bs-action="chart"]').trigger('click');
+    await flush();
+    const north = wrapper.findAll('.anchored-choice-btn').find(b => b.text() === 'North');
+    await north!.trigger('click');
+    await flush();
+    board.triggerElementSelect({ id: 11 });
+    await flush();
+    expect(controller.currentPick.value?.name).toBe('heading');
+    expect(board.selectedElement).toEqual({ notation: 'n' });
+
+    await clear(harness);
+    await flush();
+
+    expect(controller.currentArgs.value).toEqual({ direction: 'north' });
+    expect(board.currentPickName).toBe('plot');
+    expect(board.selectedElement).toEqual({ notation: 'n' });
+    wrapper.unmount();
+  });
+
+  it('puts back the mark of the earlier choice when the panel chip takes back a later marked one', async () => {
+    const { board, controller, wrapper } = mountHarness();
+    await flush();
+    await wrapper.find('[data-bs-action="chart"]').trigger('click');
+    await flush();
+    await wrapper.findAll('.anchored-choice-btn').find(b => b.text() === 'North')!.trigger('click');
+    await flush();
+    board.triggerElementSelect({ id: 11 });
+    await flush();
+    board.triggerChoiceSelect('heading', 'south');
+    await flush();
+    expect(controller.currentPick.value?.name).toBe('wake');
+    expect(board.selectedElement).toEqual({ notation: 's' });
+
+    await wrapper.findAll('.clear-selection-btn').at(-1)!.trigger('click');
+    await flush();
+
+    expect(controller.currentArgs.value).toEqual({ direction: 'north', plot: 11 });
+    expect(board.currentPickName).toBe('heading');
+    expect(board.selectedElement).toEqual({ notation: 'n' });
     wrapper.unmount();
   });
 });

@@ -36,7 +36,7 @@ import type {
   ChoiceWithRefs,
   EnrichedValidElement,
 } from './useActionControllerTypes.js';
-import { choiceBoardTarget, formatActionName, resolvePickCounts } from './actionControllerHelpers.js';
+import { answerMark, choiceBoardTarget, formatActionName, resolvePickCounts } from './actionControllerHelpers.js';
 import { devWarn } from '../../utils/dev.js';
 import { createActionMutators } from './actionMutators.js';
 
@@ -620,13 +620,19 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     });
   });
 
-  // Within one start, answers drop only by clear(), which takes back the last one given, or by the action ending, so the board's mark of it goes too (#1371).
+  // Within one start, answers drop only by clear(), which takes back the last ones given, or by the action ending,
+  // so the board marks what it marked before them: the last standing answer's mark (#1371, #1377).
   watch(
     () => [controller.actionStartTick.value, Object.keys(currentArgs.value).length] as const,
     ([tick, answered], [wasTick, wasAnswered]) => {
       if (tick !== wasTick || answered >= wasAnswered) return;
+      const args = currentArgs.value;
+      const marks = (currentActionMeta.value?.selections ?? [])
+        .filter(s => s.type === 'choice' && s.name in args)
+        .map(s => answerMark(args[s.name], controller.getChoices(s) as ChoiceWithRefs[]))
+        .filter(ref => ref !== undefined);
       // Also drops the hovered choice the panel keeps for the answer.
-      board.selectElement(null);
+      board.selectElement(marks.at(-1) ?? null);
     },
   );
 
