@@ -649,7 +649,7 @@ function plainSubject(value: object, path: string[], within: Set<object>): objec
   if (within.has(subject)) refuseCopy(path, "refers back to an object that contains it");
   const prototype = Object.getPrototypeOf(subject) as object | null;
   const plain = Array.isArray(subject) ? prototype === Array.prototype : prototype === Object.prototype || prototype === null;
-  if (!plain) refuseCopy(path, `is a ${kindOf(subject, prototype)}`);
+  if (!plain) refuseCopy(path, `is a ${kindOf(prototype)}`);
   return subject;
 }
 
@@ -660,9 +660,8 @@ function dataValue(subject: object, key: string, path: string[]): unknown {
   return held.value;
 }
 
-function kindOf(subject: object, prototype: object | null): string {
-  const tag = Object.prototype.toString.call(subject).slice("[object ".length, -1);
-  if (tag !== "Object" && tag !== "Array") return tag;
+/** The refused object's class name, read from its prototype's own data property so no game code runs. */
+function kindOf(prototype: object | null): string {
   const named = prototype === null ? undefined : Object.getOwnPropertyDescriptor(prototype, "constructor")?.value;
   return typeof named === "function" && named.name !== "" ? named.name : "class instance";
 }

@@ -736,9 +736,10 @@ through the read-only view was measured at 12 to 36 times a plain
 `JSON.stringify`, since every property it reads goes through the view.
 
 `plainCopy` copies only plain objects, arrays and primitive values such as
-strings, numbers, booleans and `null`. It throws a `TypeError` naming the path when it meets anything else (an
-element, a `Map`, a function, a getter, or an object that contains itself), and
-it never runs a getter or a method on the world's data.
+strings, numbers, booleans and `null`. It throws a `TypeError` naming the path
+when it meets anything else (an element, a `Map`, a function, a getter, or an
+object that contains itself), and it never runs a getter or a method on the
+world's data.
 
 ### Selections: what an action asks a player for
 

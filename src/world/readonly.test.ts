@@ -595,6 +595,18 @@ describe("plainCopy of plain data read through a projection (#1347)", () => {
     expect(run).not.toHaveBeenCalled();
   });
 
+  it("names a refused class without running its Symbol.toStringTag getter", () => {
+    const run = vi.fn(() => "Tagged");
+    class Ledger {
+      get [Symbol.toStringTag]() {
+        return run();
+      }
+    }
+
+    expect(() => plainCopy(readOnlyProjection({ ledger: new Ledger() }))).toThrow(/at "ledger" is a Ledger/);
+    expect(run).not.toHaveBeenCalled();
+  });
+
   it("refuses a cycle, which plain data cannot hold", () => {
     const live: Record<string, unknown> = {};
     live.self = live;
