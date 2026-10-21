@@ -184,6 +184,9 @@ describe('seatOptionsRefusal (#1323)', () => {
   });
 
   const holder = { ...personal, dictator: 'dictator' };
+  const constructorOption: Record<string, PlayerOptionDefinition> = {
+    constructor: { type: 'boolean', label: 'Constructor', default: false },
+  };
   it.each<[string, unknown, RegExp, Record<string, PlayerOptionDefinition>?]>([
     ['a table of the wrong size', table(holder), /one set of player options for each of the 2 seats/],
     ['a table that is not a list', { 1: holder, 2: personal }, /one set of player options for each of the 2 seats/],
@@ -198,7 +201,7 @@ describe('seatOptionsRefusal (#1323)', () => {
     ['a select value among none of its choices', table({ ...holder, side: 'west' }, personal), /Seat 1: Side is "west", which is none of its choices \(north, south\)\./],
     ['an exclusive value among none of its choices', table({ ...holder, dictator: 'king' }, personal), /Seat 1: Dictator is "king", which is none of its choices \(dictator\)\./],
     ['an exclusive option no seat holds', table(personal, personal), /Give Dictator to one seat\./],
-    ['an option a seat left out whose id an object has anyway', table(holder, personal), /Seat 1 has no value for Constructor\./, { constructor: { type: 'boolean', label: 'Constructor', default: false } }],
+    ['an option a seat left out whose id an object has anyway', table(holder, personal), /Seat 1 has no value for Constructor\./, constructorOption],
     ['an exclusive option two seats hold', table(holder, holder), /Dictator is given to seats 1 and 2; give it to one seat\./],
   ])('refuses %s', (_case, seats, message, more = {}) => {
     expect(seatOptionsRefusal({ ...declared, ...more }, seats, 2)).toMatch(message);
