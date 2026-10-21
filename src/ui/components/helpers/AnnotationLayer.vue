@@ -21,7 +21,8 @@
  * root has NO aria-hidden, so the bubble's role=status / aria-live=polite is
  * announced. Reduced motion: no ring animation.
  *
- * Z-index 20: above the turn prompt (z-5), below modal/game-over (z-50).
+ * Z-index 31: above the action bar, game modals and game-over scrim (z-30),
+ * below the mobile scrim (z-45) and modals (z-50) (#1341).
  */
 
 import { ref, toRef } from 'vue';
@@ -176,7 +177,7 @@ useOverlayTracking({
   font-family: var(--bsg-font);
   position: fixed;
   inset: 0;
-  z-index: 20;
+  z-index: 31;
   pointer-events: none;
   overflow: visible;
 }

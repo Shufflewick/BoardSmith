@@ -1440,14 +1440,14 @@ defineExpose({
         </template>
         <!-- Tutorial annotation overlay: mounts once here so it appears over BOTH
              the registry's board component (default or dev-switcher selection)
-             path. Its bubbles teleport to body (AnnotationLayer, position: fixed, z-index: 20).
-             Sits above the turn prompt (z-5) and below GameOverCard scrim (z-50).
+             path. Its bubbles teleport to body (AnnotationLayer, position: fixed, z-index: 31).
+             Sits above the action bar (z-30) and below modals (z-50).
              No props — injects gameState and renders only when tutorial.content
              is present (v-if internal). Not inside zoom-container so it measures
              boardregion rects unscaled by --zoom-level. -->
         <TutorialOverlay />
         <!-- bot hint overlay (bot-01): renders when state.hint is set.
-             Shares z-index 20 with TutorialOverlay — both may coexist (Phase 109).
+             Shares z-index 31 with TutorialOverlay — both may coexist (Phase 109).
              Teleports to body (position:fixed); resolves data-bs-el-* anchors the
              same way TutorialOverlay does — no renderer coupling (project hard-rule). -->
         <HintOverlay />
