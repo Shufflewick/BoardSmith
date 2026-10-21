@@ -37,6 +37,7 @@ import {
 } from '../../composables/useBoardInteraction.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 import type { EnrichedActionMetadata, PickStepResponse } from '../../composables/useActionControllerTypes.js';
+import type { FollowUpOffer } from '../../../engine/action/types.js';
 
 async function flush(n = 8): Promise<void> {
   for (let i = 0; i < n; i++) {
@@ -120,7 +121,7 @@ interface Harness {
  * shell creates the board substrate and runs the bridge, and PlayShell mounts
  * the panel inside it.
  */
-function mountHarness(pickStep?: () => Promise<PickStepResponse>): Harness {
+function mountHarness(pickStep?: () => Promise<PickStepResponse>, heldFollowUp?: FollowUpOffer): Harness {
   const sendAction = vi.fn().mockResolvedValue({ success: true });
   const cancelPendingAction = vi.fn().mockResolvedValue(undefined);
   const fetchPickChoices = vi.fn((action: string, selectionName: string) =>
@@ -148,6 +149,7 @@ function mountHarness(pickStep?: () => Promise<PickStepResponse>): Harness {
         fetchPickChoices,
         pickStep,
         cancelPendingAction,
+        heldFollowUp: ref(heldFollowUp),
       });
       provide(GAME_CONTEXT_KEYS.actionController, controller);
       useBoardActionBridge({
@@ -322,6 +324,35 @@ describe("ActionPanel's clear of a pick while a later pick's step is out (#1364)
     answer({ success: true });
     await crewFill;
     expect(controller.currentArgs.value).toEqual({ ship: 'dory', crew: 'ann' });
+    wrapper.unmount();
+  });
+});
+
+describe("ActionPanel's chip for a follow-up's server-bound value (#1366)", () => {
+  it('has no clear button, as the player cannot clear that value; a pick keeps its own', async () => {
+    const { controller, wrapper } = mountHarness(() => Promise.resolve({ success: true }), {
+      action: 'loot',
+      args: { site: 3 },
+      display: { site: 'Old Mill' },
+      metadata: {
+        name: 'loot',
+        prompt: 'Loot',
+        selections: [
+          { name: 'item', type: 'choice', prompt: 'Item', choices: [{ value: 'rope', display: 'Rope' }, { value: 'lamp', display: 'Lamp' }] },
+          { name: 'bag', type: 'choice', prompt: 'Bag', choices: [{ value: 'sack', display: 'Sack' }, { value: 'box', display: 'Box' }] },
+        ],
+      },
+    });
+    await flush();
+    await controller.fill('item', 'rope');
+    await flush();
+    expect(controller.currentAction.value).toBe('loot');
+
+    const chips = wrapper.findAll('.selected-value');
+    expect(chips).toHaveLength(2);
+    expect(chips[0].find('.value-display').text()).toBe('Old Mill');
+    expect(chips[0].find('.clear-selection-btn').exists()).toBe(false);
+    expect(chips[1].find('.clear-selection-btn').attributes('aria-label')).toBe('Clear item');
     wrapper.unmount();
   });
 });
