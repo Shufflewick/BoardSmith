@@ -18,7 +18,7 @@ import type { CatalogueRun } from './catalogue-check.js';
  * The stand-in for `boardsmith validate`. It passes only when, in the folder it runs in:
  * `node_modules/boardsmith` and `node_modules/.bin/boardsmith` are this tree, `node_modules/.bin/tool`
  * is still reachable, every catalogue dependency named in `deps.txt` is a committed copy that loads
- * this tree too, and there is no `BROKEN` file.
+ * this tree too, and neither it nor any of those has a `BROKEN` file.
  */
 const STUB_VALIDATE = `
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
@@ -36,6 +36,7 @@ const deps = existsSync('deps.txt') ? readFileSync('deps.txt', 'utf-8').split('\
 for (const dep of deps) {
   const dir = join('node_modules', dep);
   if (existsSync(join(dir, 'WORKING_TREE_ONLY'))) fail(dep + ' is its working tree, not its main');
+  if (existsSync(join(dir, 'BROKEN'))) fail(dep + ' BROKEN: ' + readFileSync(join(dir, 'BROKEN'), 'utf-8'));
   if (loads(dir) !== tree) fail(dep + ' loads boardsmith from ' + loads(dir));
 }
 if (existsSync('BROKEN')) fail('BROKEN: ' + readFileSync('BROKEN', 'utf-8'));
