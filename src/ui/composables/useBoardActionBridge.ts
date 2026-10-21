@@ -620,21 +620,17 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     });
   });
 
-  // Within one start, answers drop only by clear(), which takes back the last ones given, or by the action ending,
-  // so the board marks what it marked before them: the last standing answer's mark (#1371, #1377).
-  watch(
-    () => [controller.actionStartTick.value, Object.keys(currentArgs.value).length] as const,
-    ([tick, answered], [wasTick, wasAnswered]) => {
-      if (tick !== wasTick || answered >= wasAnswered) return;
-      const args = currentArgs.value;
-      const marks = (currentActionMeta.value?.selections ?? [])
-        .filter(s => s.type === 'choice' && s.name in args)
-        .map(s => answerMark(args[s.name], controller.getChoices(s) as ChoiceWithRefs[]))
-        .filter(ref => ref !== undefined);
-      // Also drops the hovered choice the panel keeps for the answer.
-      board.selectElement(marks.at(-1) ?? null);
-    },
-  );
+  // The board marks the last standing choice answer, however it was given: a panel or board click, a custom UI's
+  // fill(), auto-fill, a prefill, or a clear() taking later answers back (#1371, #1377, #1380).
+  const answeredMark = computed(() => {
+    const args = currentArgs.value;
+    const marks = (currentActionMeta.value?.selections ?? [])
+      .filter(s => s.type === 'choice' && s.name in args)
+      .map(s => answerMark(args[s.name], controller.getChoices(s) as ChoiceWithRefs[]))
+      .filter(ref => ref !== undefined);
+    return marks.at(-1) ?? null;
+  });
+  watch(answeredMark, mark => board.selectElement(mark));
 
   // Board element clicked: dispatch selection, or auto-start an action whose
   // first element selection accepts the clicked element.

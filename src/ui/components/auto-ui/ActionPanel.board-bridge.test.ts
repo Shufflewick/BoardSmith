@@ -126,8 +126,20 @@ const chartAction: EnrichedActionMetadata = {
   ],
 };
 
-const AVAILABLE = ['move', 'tend', 'harvest', 'wait', 'board', 'steer', 'chart'];
-const METADATA = { move: moveAction, tend: tendAction, harvest: harvestAction, wait: waitAction, board: boardAction, steer: steerAction, chart: chartAction };
+// A choice with one way to go, which auto-fill answers, then a plot.
+const driftAction: EnrichedActionMetadata = {
+  name: 'drift',
+  prompt: 'Drift',
+  selections: [
+    { name: 'direction', type: 'choice', prompt: 'Which way?', choices: [COMPASS[0]] },
+    { name: 'plot', type: 'element', prompt: 'Choose a plot' },
+  ],
+};
+
+const AVAILABLE = ['move', 'tend', 'harvest', 'wait', 'board', 'steer', 'chart', 'drift'];
+const METADATA: Record<string, EnrichedActionMetadata> = {
+  move: moveAction, tend: tendAction, harvest: harvestAction, wait: waitAction, board: boardAction, steer: steerAction, chart: chartAction, drift: driftAction,
+};
 
 interface Harness {
   board: BoardInteraction;
@@ -142,13 +154,13 @@ interface Harness {
  * shell creates the board substrate and runs the bridge, and PlayShell mounts
  * the panel inside it.
  */
-function mountHarness(pickStep?: () => Promise<PickStepResponse>, heldFollowUp?: FollowUpOffer): Harness {
+function mountHarness(pickStep?: () => Promise<PickStepResponse>, heldFollowUp?: FollowUpOffer, autoFill = false): Harness {
   const sendAction = vi.fn().mockResolvedValue({ success: true });
   const cancelPendingAction = vi.fn().mockResolvedValue(undefined);
   const fetchPickChoices = vi.fn((action: string, selectionName: string) =>
     selectionName === 'plot'
       ? Promise.resolve({ success: true, validElements: action === 'harvest' ? [{ id: 21 }, { id: 22 }] : [{ id: 11 }, { id: 12 }] })
-      : Promise.resolve({ success: true, choices: action === 'board' ? boardAction.selections.find(s => s.name === selectionName)?.choices : COMPASS }),
+      : Promise.resolve({ success: true, choices: METADATA[action]?.selections.find(s => s.name === selectionName)?.choices ?? COMPASS }),
   );
 
   let board!: BoardInteraction;
@@ -164,7 +176,7 @@ function mountHarness(pickStep?: () => Promise<PickStepResponse>, heldFollowUp?:
         availableActions: ref(AVAILABLE),
         actionMetadata: ref(METADATA),
         isMyTurn: ref(true),
-        autoFill: false,
+        autoFill,
         // Matches GameShell: once every pick is filled the action goes.
         autoExecute: true,
         fetchPickChoices,
@@ -538,6 +550,51 @@ describe('Clearing only the last answer keeps the board mark of an earlier one (
     expect(controller.currentArgs.value).toEqual({ direction: 'north', plot: 11 });
     expect(board.currentPickName).toBe('heading');
     expect(board.selectedElement).toEqual({ notation: 'n' });
+    wrapper.unmount();
+  });
+});
+
+describe('The board marks a chosen choice however it was answered (#1380)', () => {
+  it('marks an answer a custom UI gives through controller.fill(), and puts it back when a later answer is taken back', async () => {
+    const { board, controller, wrapper } = mountHarness();
+    await flush();
+    await controller.start('chart');
+    await flush();
+
+    await controller.fill('direction', 'north');
+    await flush();
+    expect(board.selectedElement).toEqual({ notation: 'n' });
+
+    await controller.fill('plot', 11);
+    await controller.fill('heading', 'south');
+    await flush();
+    expect(board.selectedElement).toEqual({ notation: 's' });
+
+    controller.clear('heading');
+    await flush();
+    expect(board.selectedElement).toEqual({ notation: 'n' });
+    wrapper.unmount();
+  });
+
+  it('marks a choice auto-fill answers', async () => {
+    const { board, controller, wrapper } = mountHarness(undefined, undefined, true);
+    await flush();
+    await wrapper.find('[data-bs-action="drift"]').trigger('click');
+    await flush();
+
+    expect(controller.currentArgs.value).toEqual({ direction: 'north' });
+    expect(board.selectedElement).toEqual({ notation: 'n' });
+    wrapper.unmount();
+  });
+
+  it('marks a choice a prefill answers', async () => {
+    const { board, controller, wrapper } = mountHarness();
+    await flush();
+    await controller.start('chart', { prefill: { direction: 'south' } });
+    await flush();
+
+    expect(controller.currentArgs.value).toEqual({ direction: 'south' });
+    expect(board.selectedElement).toEqual({ notation: 's' });
     wrapper.unmount();
   });
 });
