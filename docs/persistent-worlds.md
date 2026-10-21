@@ -1235,11 +1235,14 @@ next one's to read. On ShufflewickPub it is also deleted when the holder's
 account is erased.
 
 A host drives all of this with one function, `applyNoticeWrites(result.notices,
-readBox, { seatCount, budgets })`, which applies a dispatch's sends and takes in
-order and answers each touched seat's box, so every host agrees about what a
-full box does. The result comes from game code, so it first re-checks `perSeat`,
-the number of sends, each notice's size and every seat against the host's own
-budgets and seat count, and refuses a result they do not admit. The
+readBox, { seatCount, budgets, declaredNotices })`, which applies a dispatch's
+sends and takes in order and answers each touched seat's box, so every host
+agrees about what a full box does. The result comes from game code, so it first
+re-checks `perSeat`, the number of sends, each notice's size and every seat
+against the host's own budgets and seat count, and refuses a result they do not
+admit. It also refuses a take or a `refuse` send to a box that is not in
+`declaredNotices`, the boxes the command's walk declared (`dispatchStep` answers
+them as `answers.declaredNotices`), with `undeclared-notice-box`. The
 `WorldStore` interface carries `noticeBox(seat)` and a checkpoint's `notices`;
 `boardsmith dev` keeps boxes in its local store, and `TestWorld.noticeBox(seat)`
 shows a test what is waiting.

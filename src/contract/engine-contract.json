@@ -1,5 +1,5 @@
 {
-  "revision": 254,
+  "revision": 255,
   "surfaceHash": "42fb28e08af7d80f",
   "payloadHash": "0784e22c1b68bcca",
   "formatHash": "ed115e27605f2ca7",
@@ -1975,6 +1975,14 @@
       "payloadHash": "0784e22c1b68bcca",
       "formatHash": "ed115e27605f2ca7",
       "summary": "Coverage only, no engine behaviour changed: the payload fixture now hashes the whole view the executor publishes to each seat and the spectator (its state as well as its flow-state cut, all but the random game instance id), for every seat the fixture has, and the field names of the state it publishes, so a change to what a seat is sent moves payloadHash (#1296)."
+    },
+    {
+      "revision": 255,
+      "date": "2026-10-20",
+      "surfaceHash": "42fb28e08af7d80f",
+      "payloadHash": "0784e22c1b68bcca",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "applyNoticeWrites(notices, read, { seatCount, budgets, declaredNotices }) now also requires the boxes the command's walk declared, and refuses a take or a whenFull 'refuse' send to any other box with undeclared-notice-box before reading any box, so a forged result cannot empty a seat's box or fail late as notice-box-full (#975). dispatchStep's result gains answers, what the declaration walk answered; pass answers.declaredNotices. Platform: pass declaredNotices at games/src/world-session.ts and treat the throw as a refused command; re-vendor. No game needs a rebuild."
     }
   ]
 }

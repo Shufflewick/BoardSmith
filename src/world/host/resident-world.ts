@@ -85,6 +85,7 @@ import {
   type WorldActionOffer,
   type WorldOrder,
   type WorldTiming,
+  type DeclaredNoticeBox,
   type SettledNoticeBox,
   type WorldNoticeWrites,
 } from "../index.js";
@@ -1003,7 +1004,7 @@ export class ResidentWorld {
     // (BoardSmith #169), read this owner's allowance ONCE, apply with it, and
     // plan the command's schedules against the same allowance. The checkpoint
     // below is this host's own, per command.
-    const { result, plan } = await dispatchStep(
+    const { result, answers: walked, plan } = await dispatchStep(
       { player, command, timing, arrivedAt },
       {
         declare: (supplied, when, declared) =>
@@ -1092,7 +1093,7 @@ export class ResidentWorld {
         // THE NOTICE BOXES THIS DISPATCH SENT TO OR TOOK (ShufflewickPub #521),
         // in the same write as its effects, so a notice exists exactly when the
         // command that sent it does.
-        ...(await this.#noticeWrite(result.notices)),
+        ...(await this.#noticeWrite(result.notices, walked.declaredNotices)),
         // THE ENDING IS DURABLE WITH THE EFFECTS THAT DECLARED IT (#395), and
         // the store empties the queue in the same write.
         ...(result.ending === "completed" ? { endedAt: arrivedAt } : {}),
@@ -1121,12 +1122,14 @@ export class ResidentWorld {
   /** The boxes a dispatch's notice writes leave, for its checkpoint (#521). */
   async #noticeWrite(
     notices: WorldNoticeWrites | undefined,
+    declaredNotices: readonly DeclaredNoticeBox[],
   ): Promise<{ notices?: readonly SettledNoticeBox[] }> {
     if (notices === undefined) return {};
     return {
       notices: await applyNoticeWrites(notices, (seat) => this.#store.noticeBox(seat), {
         seatCount: this.#world.seatCount,
         budgets: this.#budgets,
+        declaredNotices,
       }),
     };
   }
