@@ -28,6 +28,8 @@
  *          scales down, which also proves the pinned path is measuring at all.
  *   B20-4: the pin is scoped to the board's lifetime — unmounting the pinned
  *          board restores both-axis fitting for whatever mounts next.
+ *   #1374: a brief sideways overflow that fits the board a hair under 1
+ *          (inside the zoom-up dead band) returns it to 1 once it clears.
  *   B20-5: GameShell hands `useAutoZoom` no pin/axis wiring of its own — a
  *          game states the model once, by calling `useBoardSize()`.
  *   #1332: `useBoardSize().zoom` is the shell's applied zoom and changes with
@@ -203,6 +205,18 @@ describe('B20: useBoardSize pins the board; useAutoZoom stops height-fitting it'
     await settle(shell.wrapper, 750);
 
     expect(shell.api.zoomLevel.value).toBe(ZOOM_MIN); // 375/750 = 0.5
+    shell.wrapper.unmount();
+  });
+
+  it('#1374: a pinned board returns to zoom 1 when a sideways overflow under the dead band clears', async () => {
+    const shell = mountShell(PinnedBoard);
+    // One pixel of unwrappable overflow fits the board to 375/376, about 0.9973.
+    await settle(shell.wrapper, REGION.width + 1);
+    expect(shell.api.zoomLevel.value).toBeCloseTo(REGION.width / (REGION.width + 1), 5);
+
+    // The overflow clears and the region lays out again: the fit is 1.
+    await settle(shell.wrapper);
+    expect(shell.api.zoomLevel.value).toBe(1);
     shell.wrapper.unmount();
   });
 

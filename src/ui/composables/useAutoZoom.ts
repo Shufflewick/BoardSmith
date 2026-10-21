@@ -155,7 +155,8 @@ export function useAutoZoom(options: {
     const fit = computeFitZoom(natural, avail, pinnedBoards.value > 0 ? 'width' : 'both');
     if (fit == null) return false;
     // Ignore sub-visible zoom-ups from layout rounding, but never keep a zoom above the fit: the board would overflow (#1357).
-    if (fit < zoomLevel.value || fit - zoomLevel.value > 0.005) zoomLevel.value = fit;
+    // A fit of exactly 1 is no rounding, so it always applies: a pinned board's overflow clearing must not leave it at 0.997 (#1374).
+    if (fit < zoomLevel.value || fit - zoomLevel.value > 0.005 || fit === 1) zoomLevel.value = fit;
     return true;
   }
 
