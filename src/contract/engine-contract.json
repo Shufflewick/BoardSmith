@@ -2062,7 +2062,7 @@
       "surfaceHash": "d615bc0c99f7b4b9",
       "payloadHash": "7418fecc0604b2a0",
       "formatHash": "ed115e27605f2ca7",
-      "summary": "A world's offer (offersFor) no longer runs a function prompt, multiSelect or orderedList on a pick past the first required one (#1350). Those may read an earlier pick, which the offer has not bound, and since r262 that pick's round is not resident there either; a function one threw and failed the whole offer as a rules error. The offer now carries such a pick's name, type and only the prompt and bounds given as values, and the re-ask (resolvePick) evaluates the functions with the earlier picks bound. The bundled panel (useWorldPlay, useActionController) shows the re-asked prompt. Platform: re-vendor so such an action is offered and its prompt shown. Payload and stored format unchanged; no game needs a rebuild."
+      "summary": "A world's offer (offersFor) no longer runs a function prompt, multiSelect or orderedList on a pick past the first required one (#1350). Those may read an earlier pick, which the offer has not bound, and since r262 that pick's round is not resident there either; a function one threw and failed the whole offer as a rules error. The offer now carries such a pick's name, type and only the prompt and bounds given as values, and the re-ask (resolvePick) evaluates the functions with the earlier picks bound. The bundled panel (useWorldPlay, useActionController) shows the re-asked prompt, and now asks a number or text pick too when it becomes current. Platform: re-vendor so such an action is offered and its prompt shown. Payload and stored format unchanged; no game needs a rebuild."
     }
   ]
 }
