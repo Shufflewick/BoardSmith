@@ -91,12 +91,12 @@ describe('every browser regression launches the one Chromium build the harness p
     // the run then refused instead of checking anything. The harness owns the
     // choice, so it is made once.
     const source = read(name);
-    expect(source, `${name} must launch with the harness's launch()`).toContain('await launch()');
+    expect(source, `${name} must launch with the harness's launch()`).toMatch(/await launch\((\{ classicScrollbars: true \})?\)/);
     expect(source, `${name} must not choose its own browser build`).not.toContain('chromium.launch(');
   });
 
   it('launches the full Chromium build, headless', () => {
-    expect(read('browser-harness.mjs')).toContain("chromium.launch({ channel: 'chromium' })");
+    expect(read('browser-harness.mjs')).toContain("chromium.launch({ channel: 'chromium',");
   });
 });
 

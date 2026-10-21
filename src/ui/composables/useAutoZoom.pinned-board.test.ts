@@ -30,15 +30,20 @@
  *          board restores both-axis fitting for whatever mounts next.
  *   B20-5: GameShell hands `useAutoZoom` no pin/axis wiring of its own — a
  *          game states the model once, by calling `useBoardSize()`.
+ *   #1332: `useBoardSize().zoom` is the shell's applied zoom and changes with
+ *          the slider, so a board fitted to the region can convert its pixels.
+ *   #1361: where the browser has no CSS zoom, the shell applies none, so
+ *          `useBoardSize().zoom` stays 1 and the slider cannot be set.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { defineComponent, h, ref, shallowRef, nextTick, type Component } from 'vue';
+import { defineComponent, h, ref, shallowRef, nextTick, watch, type Component, type Ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { useAutoZoom, ZOOM_MIN } from './useAutoZoom';
 import { useBoardSize } from './useBoardSize';
+import { withoutCssZoom } from './css-zoom.test-helper.js';
 
 /** The measured mobile case from the B20 report: a 375×812 viewport, a
  *  375×765 board region, and a board whose printed text cannot be truncated
@@ -76,13 +81,18 @@ function flushRaf() {
   fns.forEach((fn) => fn());
 }
 
+/** The zoom the last mounted PinnedBoard was handed by useBoardSize. */
+let boardZoom: Readonly<Ref<number>> | null = null;
+
 /** A board that opts into the region pin, exactly as the guide documents. */
 const PinnedBoard = defineComponent({
   name: 'PinnedBoard',
   setup() {
     const boardRef = ref<HTMLElement | null>(null);
-    const { boardStyle } = useBoardSize(boardRef);
-    return () => h('div', { ref: boardRef, class: 'my-board', style: boardStyle.value });
+    const { boardStyle, zoom } = useBoardSize(boardRef);
+    boardZoom = zoom;
+    // jsdom drops a `min(…, 100cqw)` width, so the pin is also kept where layOut can read it.
+    return () => h('div', { ref: boardRef, class: 'my-board', style: boardStyle.value, 'data-pin': boardStyle.value.width });
   },
 });
 
@@ -120,12 +130,14 @@ function layOut(wrapper: ReturnType<typeof mountShell>['wrapper'], minContentWid
   const region = wrapper.find('main.boardregion').element as HTMLElement;
   const zoom = wrapper.find('.zoom-container').element as HTMLElement;
   region.style.paddingBottom = `${PANEL_RESERVED}px`;
-  Object.defineProperty(region, 'clientWidth', { get: () => REGION.width, configurable: true });
+  region.style.width = `${REGION.width}px`;
   Object.defineProperty(region, 'clientHeight', { get: () => REGION.height, configurable: true });
   zoom.getBoundingClientRect = () => {
     const boardRoot = zoom.firstElementChild as HTMLElement | null;
-    const pinned = boardRoot ? parseFloat(boardRoot.style.width) : NaN;
-    const width = Math.max(Number.isFinite(pinned) ? pinned : NATURAL.width, minContentWidth);
+    // The pin is `min(<px>, 100cqw)`, and 100cqw is the region's width here.
+    const pin = boardRoot?.dataset.pin?.match(/min\((\d+(?:\.\d+)?)px, 100cqw\)/);
+    const pinned = pin ? Math.min(Number(pin[1]), REGION.width) : NATURAL.width;
+    const width = Math.max(pinned, minContentWidth);
     return { width, height: NATURAL.height } as DOMRect;
   };
   return { region, zoom };
@@ -208,6 +220,38 @@ describe('B20: useBoardSize pins the board; useAutoZoom stops height-fitting it'
 
     expect(shell.api.zoomLevel.value).toBeCloseTo((REGION.height - PANEL_RESERVED) / NATURAL.height, 5);
     shell.wrapper.unmount();
+  });
+
+  it('#1332: useBoardSize().zoom follows the fit and the slider', async () => {
+    const shell = mountShell(PinnedBoard);
+    await settle(shell.wrapper, 750);
+    expect(boardZoom!.value).toBe(ZOOM_MIN); // the fit's 375/750
+
+    const seen: number[] = [];
+    const stop = watch(boardZoom!, (z) => seen.push(z));
+    shell.api.setZoom(0.8);
+    await nextTick();
+    shell.api.setZoom(2);
+    await nextTick();
+    stop();
+
+    expect(seen).toEqual([0.8, 2]);
+    shell.wrapper.unmount();
+  });
+
+  it('#1361: where the browser has no CSS zoom, useBoardSize().zoom stays 1 and the slider cannot be set', async () => {
+    const restore = withoutCssZoom();
+    try {
+      const shell = mountShell(PinnedBoard);
+      // The same overflow the #1332 case fits to 0.5.
+      await settle(shell.wrapper, 750);
+      expect(boardZoom!.value).toBe(1);
+      expect(() => shell.api.setZoom(0.8)).toThrow(/cannot apply a zoom/);
+      expect(boardZoom!.value).toBe(1);
+      shell.wrapper.unmount();
+    } finally {
+      restore();
+    }
   });
 });
 

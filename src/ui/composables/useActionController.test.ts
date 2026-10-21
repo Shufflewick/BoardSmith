@@ -347,6 +347,23 @@ describe('useActionController', () => {
       expect(controller.isReady.value).toBe(false);
     });
 
+    it('leaves an arg that is not one of the action\'s picks, as skip() does (#1359)', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      await controller.start('playCard', { args: { boundByServer: 'x' } });
+      controller.clear('boundByServer');
+
+      expect(controller.currentArgs.value.boundByServer).toBe('x');
+      warnSpy.mockRestore();
+    });
+
     it('should cancel an action', async () => {
       const controller = useActionController({
         sendAction,

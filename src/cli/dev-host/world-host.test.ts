@@ -1034,11 +1034,7 @@ describe('#378: one pick, re-asked with the args bound so far', () => {
     .chooseFrom('logs', {
       prompt: 'Which logs?',
       choices: ['oak', 'ash', 'elm'],
-      multiSelect: ({ args }) => {
-        const size = args.size as string | undefined;
-        if (size === undefined) return { min: 1 };
-        return { min: 1, max: size === 'big' ? 3 : 1 };
-      },
+      multiSelect: ({ args }) => ({ min: 1, max: args.size === 'big' ? 3 : 1 }),
     })
     .execute(() => {});
 
@@ -1047,12 +1043,12 @@ describe('#378: one pick, re-asked with the args bound so far', () => {
   it('answers the cap the chosen size decides, which the offer could not know', async () => {
     const { host, sent } = await attached({ dir, definition: stacking() });
 
-    // WHAT THE OFFER SAID with nothing bound: no upper bound at all, and said
-    // by OMISSION rather than by a number the wire cannot carry.
+    // WHAT THE OFFER SAID with nothing bound: the pick's static prompt and no
+    // bound at all, since its function bound reads the size (#1350).
     const offered = (last(sent, 'c1', 'world_offers')!.actions as WorldActionOffer[])
       .find((offer) => offer.name === 'stack')!
       .selections.find((pick) => pick.name === 'logs')!;
-    expect(JSON.parse(JSON.stringify(offered.multiSelect))).toEqual({ min: 1 });
+    expect(offered).toEqual({ name: 'logs', type: 'choice', prompt: 'Which logs?' });
 
     await host.handleMessage('c1', {
       type: 'pick',

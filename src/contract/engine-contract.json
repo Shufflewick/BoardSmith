@@ -1,7 +1,7 @@
 {
-  "revision": 254,
-  "surfaceHash": "42fb28e08af7d80f",
-  "payloadHash": "0784e22c1b68bcca",
+  "revision": 267,
+  "surfaceHash": "d615bc0c99f7b4b9",
+  "payloadHash": "7418fecc0604b2a0",
   "formatHash": "ed115e27605f2ca7",
   "history": [
     {
@@ -1975,6 +1975,110 @@
       "payloadHash": "0784e22c1b68bcca",
       "formatHash": "ed115e27605f2ca7",
       "summary": "Coverage only, no engine behaviour changed: the payload fixture now hashes the whole view the executor publishes to each seat and the spectator (its state as well as its flow-state cut, all but the random game instance id), for every seat the fixture has, and the field names of the state it publishes, so a change to what a seat is sent moves payloadHash (#1296)."
+    },
+    {
+      "revision": 255,
+      "date": "2026-10-20",
+      "surfaceHash": "42fb28e08af7d80f",
+      "payloadHash": "0784e22c1b68bcca",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "applyNoticeWrites(notices, read, { seatCount, budgets, declaredNotices }) now also requires the boxes the command's walk declared, and refuses a take or a whenFull 'refuse' send to any other box with undeclared-notice-box before reading any box, so a forged result cannot empty a seat's box or fail late as notice-box-full (#975). dispatchStep's result gains answers, what the declaration walk answered; pass answers.declaredNotices. Platform: pass declaredNotices at games/src/world-session.ts and treat the throw as a refused command; re-vendor. No game needs a rebuild."
+    },
+    {
+      "revision": 256,
+      "date": "2026-10-21",
+      "surfaceHash": "869ce5eb83bfb570",
+      "payloadHash": "06a23811b8d27270",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A world fan-out shares one body again between seats shown the same count-only pile (#1207). Since #715 each seat's placeholder ids are its own, so every seat shown a placeholder held a body of its own: 500 watchers of a plaza with a 52-card face-down deck were 500 bodies and 6.9 MB. viewsFor now answers each body with every placeholder's id taken out (the node carries placeholder: k where its id was), and each answered seat carries placeholders: its own ids, in order (WorldAudienceSeat.placeholders; the runner's WorldViews.of[player] is now { at, placeholders } rather than a bare index, so a reader that used of[player] as an index no longer compiles and must call seatView(bodies[at], placeholders)). That plaza is one 13 KB body and 0.45 MB in all, and no body carries any seat's ids. A body is NOT a seat's view until seatView(body, placeholders), new in boardsmith/world, puts that seat's ids back: a host must call it before sending, since the world client fills in no ids. ResidentWorld.bodyFor, the dev host and TestWorld already do. viewFor is unchanged. Stored format unchanged; no game needs a rebuild."
+    },
+    {
+      "revision": 257,
+      "date": "2026-10-21",
+      "surfaceHash": "869ce5eb83bfb570",
+      "payloadHash": "7418fecc0604b2a0",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The world_state frame now carries placeholders: the seat's own ids for the placeholders in view, in order, and the world client puts them back with seatView before anything reads the view (#1326). A host sends the shared viewsFor body as view and of[player].placeholders beside it, so a body shown to many seats is encoded once on the wire instead of once per seat. placeholders is required: send [] when the view holds none (and on a refused frame). A world UI built on an earlier revision fills in no ids, so it must still be sent seatView(bodies[at], placeholders) as view. seatView moved out of the world engine module and is still exported from boardsmith/world. ResidentWorld.viewsFor's bodyFor is now seatFor, answering { view, placeholders } with view unfilled. Stored format unchanged; no game needs a rebuild."
+    },
+    {
+      "revision": 258,
+      "date": "2026-10-21",
+      "surfaceHash": "869ce5eb83bfb570",
+      "payloadHash": "7418fecc0604b2a0",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A world declaration's filter, map, slice, concat, flat, flatMap, toSorted, toReversed, toSpliced or with on a read-only array now answers a plain array of the caller's own, so writes to it work as they do for a spread copy, and structuredClone accepts it when its elements are plain values such as numbers and strings. Its elements stay read-only: an object or array element is still a projection, so cloning an array that holds one still fails with DataCloneError until those elements are copied (#1327, #1337). Platform: re-vendor so worlds that clone such an array (Lacuna Expanse NPC successor steps) stop failing with DataCloneError. Surface, payload and stored format unchanged; no game needs a rebuild."
+    },
+    {
+      "revision": 259,
+      "date": "2026-10-21",
+      "surfaceHash": "900feac3b56c4157",
+      "payloadHash": "7418fecc0604b2a0",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A seat's world command that leaves out a required pick, or sends null for one, is now refused before any of the action's declaration rounds read its args, with the new caller-owned refusal missing-pick (a new WORLD_REFUSALS key) and the sentence 'Missing required selection: <pick>' (#1328). commandNeeds with a player and applyCommand both refuse it, so a needs() round after a selection always sees that selection bound; previously the walk ran with the pick unbound and a round reading it crashed as a rules error. An optional pick may still be left out, and a scheduled event is not checked. Platform: re-vendor so a seat sent such a command reads the refusal instead of the generic rules-error sentence. Payload and stored format unchanged; no game needs a rebuild."
+    },
+    {
+      "revision": 260,
+      "date": "2026-10-21",
+      "surfaceHash": "d5524da34a73a537",
+      "payloadHash": "7418fecc0604b2a0",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A world action can load partitions read-only with .reads() (also on worldClockAction): they are loaded like .needs() rounds but never reported dirty, so they are not saved, and a command that changes one is refused with the new game-owned refusal read-only-write (a new WORLD_REFUSALS key) and rolled back (#1334). Platform: re-vendor so worlds using .reads() stop rewriting partitions they only look at. Payload and stored format unchanged; games that do not use .reads() need no rebuild."
+    },
+    {
+      "revision": 261,
+      "date": "2026-10-21",
+      "surfaceHash": "8038c52ebe4c2cc7",
+      "payloadHash": "7418fecc0604b2a0",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A world pick re-asked with earlier answers bound (resolvePick, pickPartitions) that leaves out a required pick before the asked one, or sends null for it, is now refused with the caller-owned missing-pick refusal and 'Missing required selection: <pick>' before any declaration round reads its args, as a command is since #1328 and as a table's makePicksBefore does (#1338). Previously the walk ran with the pick unbound and a selection's own needs: that read it crashed as a rules error. A quote is not checked: its rounds, the execute round included, run on the draft, where any pick may be absent, and the docs say so. Platform: re-vendor so the panel reads the refusal instead of the generic rules-error sentence. Payload and stored format unchanged; no game needs a rebuild."
+    },
+    {
+      "revision": 262,
+      "date": "2026-10-21",
+      "surfaceHash": "b6df8a9e36ac4679",
+      "payloadHash": "7418fecc0604b2a0",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A world's offer (offersFor, offerPartitions) now runs the declaration rounds and candidates of an action's picks only through the first required pick (#1345). A pick after it may read that pick, so it is offered by its shape alone (name, prompt, bounds, no choices or validElements) and its round first runs when the panel re-asks it with the picks before it bound. Previously the offer ran every pick's round with nothing bound, so a later pick's needs: that read an earlier pick crashed the whole offer as a rules error. Platform: re-vendor so such an action is offered. Payload and stored format unchanged; no game needs a rebuild."
+    },
+    {
+      "revision": 263,
+      "date": "2026-10-21",
+      "surfaceHash": "82496f56c69aa362",
+      "payloadHash": "7418fecc0604b2a0",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "boardsmith/world exports plainCopy, which answers a detached plain copy of plain data a world callback read through its read-only view, without the per-property cost of reading through the view (#1347)."
+    },
+    {
+      "revision": 264,
+      "date": "2026-10-21",
+      "surfaceHash": "d615bc0c99f7b4b9",
+      "payloadHash": "7418fecc0604b2a0",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "GameElement gains a protected afterRestore() hook and an engine-internal _afterRestoreSubtree(); the engine runs afterRestore on every element a restore or a world partition adoption rebuilds, once the restored tree is decoded, so a game can re-freeze attributes the stored bytes cannot carry, and an adoption whose hook throws is undone (#1349)."
+    },
+    {
+      "revision": 265,
+      "date": "2026-10-21",
+      "surfaceHash": "d615bc0c99f7b4b9",
+      "payloadHash": "7418fecc0604b2a0",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A world's offer (offersFor) no longer runs a function prompt, multiSelect or orderedList on a pick past the first required one (#1350). Those may read an earlier pick, which the offer has not bound, and since r262 that pick's round is not resident there either; a function one threw and failed the whole offer as a rules error. The offer now carries such a pick's name, type and only the prompt and bounds given as values, and the re-ask (resolvePick) evaluates the functions with the earlier picks bound. The bundled panel (useWorldPlay, useActionController) shows the re-asked prompt, and now asks a number or text pick too when it becomes current. Platform: re-vendor so such an action is offered and its prompt shown. Payload and stored format unchanged; no game needs a rebuild."
+    },
+    {
+      "revision": 266,
+      "date": "2026-10-21",
+      "surfaceHash": "d615bc0c99f7b4b9",
+      "payloadHash": "7418fecc0604b2a0",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "An element's afterRestore hook now runs last on every restore: after the turn order (flow) and random state are back on a cold restore, undo, rewind, a failed action's rollback and a scratch copy, and in a bot's search copy after its determinize sampler filled in the hidden values, so the hook sees the same state on every path and sampled values come back frozen as in the real game. Game.loadSerializedState no longer runs the hooks itself (#1352). Surface, payload and stored format unchanged; no game needs a rebuild."
+    },
+    {
+      "revision": 267,
+      "date": "2026-10-21",
+      "surfaceHash": "d615bc0c99f7b4b9",
+      "payloadHash": "7418fecc0604b2a0",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A world's offer (offersFor, offerPartitions) now runs the round and candidates of an action's first pick only (#1355). Since r262 it ran them through the first required pick, so a required pick after an optional one was read with that optional pick unbound, and a list or round built from it threw during the offer or sent the panel an empty list. Every later pick is now offered by its shape and asked on the re-ask (resolvePick) with the answers so far. The bundled panel (useWorldPlay) now re-asks any pick but the first even with nothing bound, as when the optional pick before it was skipped. Platform: re-vendor so such an action is offered and its later picks asked. Payload and stored format unchanged; no game needs a rebuild."
     }
   ]
 }

@@ -292,7 +292,11 @@ that shares its worker with other test files (`isolate: false`), and every
 test file when the config has a `globalSetup`. Once Vitest confirms that a
 mutant made a test fail, the mutation check stops that run's workers,
 including tests already running. A surviving mutant still runs every test file
-that loads its file to completion.
+that loads its file to completion. Those test files must pass on their own,
+without the rest of the suite: the check runs each such set once unmodified,
+and when a test there fails, because it needs something another test file left
+behind, the check stops and names it rather than count a failure the mutant
+may not have caused.
 
 A game with Vitest projects (`test.projects` in its config, or a workspace:
 `test.workspace`, or `vitest.workspace.ts` beside its config) gets each mutant

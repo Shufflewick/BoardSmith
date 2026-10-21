@@ -61,6 +61,7 @@ function climb(name: string, ends: boolean) {
 /** Offers one action, named by the `offer` option (`species` by default). Counts every number-input validate call. */
 class BudgetGame extends Game<BudgetGame, Player> {
   validateCalls = 0;
+  disabledCalls = 0;
 
   constructor(options: GameOptions & { offer?: string }) {
     super(options);
@@ -127,6 +128,16 @@ class BudgetGame extends Game<BudgetGame, Player> {
       // A repeat that ends at any pick, and one that never ends.
       climb: () => climb('climb', true),
       endless: () => climb('endless', false),
+      // 1 pack x 5 facings x 3,720 spaces, each space judged by a counted rule that depends on the facing (#1330).
+      pack: () =>
+        Action.create<BudgetGame>('pack')
+          .chooseFrom('unit', { choices: ['pack'] })
+          .chooseFrom('facing', { choices: range(5) })
+          .chooseFrom('space', {
+            choices: range(3720),
+            disabled: (space: number, ctx) => (this.disabledCalls++, space % 5 === ctx.args.facing ? false : 'Not facing it.'),
+          })
+          .execute(() => ({ success: true })),
       gridOver: () =>
         Action.create<BudgetGame>('gridOver')
           .chooseFrom('row', { choices: range(100) })
@@ -241,6 +252,18 @@ describe('enumeration budget across an action\'s selections (#691)', () => {
     it('draws the same moves from the same seed, and others from another', () => {
       expect(sample(started('species'), 'one')).toEqual(sample(started('species'), 'one'));
       expect(sample(started('species'), 'one')).not.toEqual(sample(started('species'), 'two'));
+    });
+
+    it('judges a selection once per distinct set of earlier picks, not once per draw (#1330)', () => {
+      const game = started('pack');
+      const moves = enumerateActionMoves(game, game.getAction('pack')!, game.getPlayer(1)!, {
+        sampleAboveBudget: { count: 20, random: new SeededRandom('pack') },
+      });
+      expect(moves).toHaveLength(20);
+      for (const { facing, space } of moves) expect((space as number) % 5).toBe(facing);
+      const facings = new Set(moves.map(({ facing }) => facing)).size;
+      // The full walk judges the spaces under 3 facings before it crosses the budget, then each facing drawn once.
+      expect(game.disabledCalls).toBe((3 + facings) * 3720);
     });
 
     it('still gets every move of an action within the budget', () => {

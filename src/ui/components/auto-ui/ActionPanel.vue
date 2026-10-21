@@ -1101,19 +1101,9 @@ function getSelectionDisplay(selectionName: string, value: unknown): string {
   return getDisplayFromValue(value);
 }
 
-// Clear a specific selection (and all subsequent selections)
+// Clear a specific selection; the controller clears every selection after it too
 function clearSelection(selectionName: string) {
-  if (!currentActionMeta.value) return;
-
-  // Find the index of this selection
-  const index = currentActionMeta.value.selections.findIndex(s => s.name === selectionName);
-  if (index === -1) return;
-
-  // Clear this selection and all subsequent ones
-  for (let i = index; i < currentActionMeta.value.selections.length; i++) {
-    const sel = currentActionMeta.value.selections[i];
-    actionController.clear(sel.name);
-  }
+  actionController.clear(selectionName);
 
   // Clear board interaction
   boardInteraction?.clear();
