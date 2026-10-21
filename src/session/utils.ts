@@ -4,7 +4,7 @@
 
 import { Player, canSeatAct, availableActionsForSeat, followUpForSeat, toPublicFlowState, isSeatExpiry, type FlowState, type Game, type ActionDefinition, type ActionTrace, type PendingActionState, type FollowUpAction, type FollowUpOffer } from '../engine/index.js';
 import { buildActionMetadata, buildPickMetadata } from '../engine/element/action-metadata.js';
-import { formatElementCandidates } from '../engine/element/pick-candidates.js';
+import { formatElementCandidates, type AnnotatedCandidate } from '../engine/element/pick-candidates.js';
 import { getActiveTutorialStepView } from '../engine/tutorial/gate.js';
 import { devWarn } from '../utils/dev.js';
 import { describeCheckpointAbsence } from '../runtime/index.js';
@@ -184,21 +184,23 @@ export function buildSingleActionMetadata(
 }
 
 /**
- * Labels for a follow-up's element picks the game pre-filled by id, by the rule
- * the pick's own choices are labelled with, so the panel never shows a raw id (#1378).
+ * Labels for a follow-up's element picks the game pre-filled, each read off
+ * that pick's own choices (its display(), else notation or name, numbered among
+ * its siblings), so the panel never shows a raw id (#1378).
  */
 function elementArgLabels(game: Game, player: Player, followUp: FollowUpAction): Record<string, string> {
-  const args = followUp.args ?? {};
+  const action = game.getAction(followUp.action);
+  if (!action || !followUp.args) return {};
+  const executor = game.getActionExecutor();
   const labels: Record<string, string> = {};
-  for (const selection of game.getAction(followUp.action)?.selections ?? []) {
-    if ((selection.type !== 'element' && selection.type !== 'elements') || args[selection.name] === undefined) continue;
-    const elements = [args[selection.name]].flat().map((id) => (typeof id === 'number' ? game.getElementById(id) : undefined));
-    if (elements.some((element) => element === undefined)) continue;
-    const candidates = elements.map((value) => ({ value, disabled: false as const }));
-    labels[selection.name] = formatElementCandidates(candidates, selection, { game, player, args }, [])
-      .map((element) => element.display)
-      .join(', ');
-  }
+  executor.resolveArgs(action, followUp.args, player, undefined, (selection, pick, before) => {
+    if (selection.type !== 'element' && selection.type !== 'elements') return;
+    const candidates = executor.getChoices(selection, player, before) as AnnotatedCandidate[];
+    const shown = formatElementCandidates(candidates, selection, { game, player, args: before }, []);
+    const at = [pick].flat().map((element) => candidates.findIndex((candidate) => candidate.value === element));
+    if (at.length === 0 || at.includes(-1)) return;
+    labels[selection.name] = at.map((index) => shown[index]!.display).join(', ');
+  });
   return labels;
 }
 
@@ -216,7 +218,8 @@ export function offerFollowUp(game: Game, flowState: FlowState | undefined, seat
   const followUp: FollowUpAction = { action: owned.action };
   if (owned.args !== undefined) followUp.args = owned.args;
   const player = game.getPlayer(seat);
-  const display = { ...(player && elementArgLabels(game, player, followUp)), ...owned.display };
+  const display = { ...owned.display };
+  for (const [name, label] of Object.entries(player ? elementArgLabels(game, player, followUp) : {})) display[name] ??= label;
   if (Object.keys(display).length > 0) followUp.display = display;
   // followUp.args reach the metadata so a dynamic prompt can read them (e.g. a sector's name).
   const metadata = player ? buildSingleActionMetadata(game, player, followUp.action, followUp.args) : undefined;

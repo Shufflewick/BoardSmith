@@ -19,23 +19,26 @@ import { GameRunner } from '../runtime/runner.js';
 import { offerFollowUp } from './utils.js';
 
 class JumpGame extends Game<JumpGame, Player> {
-  /** The follow-up `jump` returns: the action, plus any display it passes. */
-  chain: { action: string; display?: Record<string, string> } = { action: 'move' };
+  /** The follow-up `jump` returns: the action, the pieces a list pick is pre-filled with, and any display it passes. */
+  chain: { action: string; listed?: string[]; display?: Record<string, string | undefined> } = { action: 'move' };
 
   constructor(options: GameOptions) {
     super(options);
     const board = this.create(Space, 'board');
     board.create(Piece, 'red');
     board.create(Piece, 'blue');
+    board.create(Piece, 'twin');
+    board.create(Piece, 'twin');
     const pieces = (ctx: { game: JumpGame }) => ctx.game.first(Space, 'board')!.all(Piece);
     const onlyChained = { 'only as a follow-up': () => false };
     this.registerActions(
       Action.create<JumpGame>('jump')
         .chooseElement<'piece', Piece>('piece', { elements: pieces })
         .execute(({ piece }, ctx) => {
-          const { action, display } = (ctx.game as JumpGame).chain;
-          const args = action === 'shift' ? { pieces: pieces(ctx).map((p) => p.id) } : { piece: piece.id };
-          return { success: true, followUp: { action, args, ...(display && { display }) } };
+          const { action, listed, display } = (ctx.game as JumpGame).chain;
+          const args = listed ? { pieces: pieces(ctx).filter((p) => listed.some((name) => name === p.name)).map((p) => p.id) } : { piece: piece.id };
+          // A display built from values that may be missing reaches the engine as such once types are erased.
+          return { success: true, followUp: { action, args, ...(display && { display: display as Record<string, string> }) } };
         }),
       Action.create<JumpGame>('move')
         .condition(onlyChained)
@@ -58,12 +61,12 @@ class JumpGame extends Game<JumpGame, Player> {
 }
 
 /** The display the jumping seat's follow-up offer carries after `jump` chains as `chain` says. */
-function offeredDisplay(chain: JumpGame['chain']): Record<string, string> | undefined {
+function offeredDisplay(chain: JumpGame['chain'], jumper = 'red'): Record<string, string> | undefined {
   const r = new GameRunner({ GameClass: JumpGame, gameType: 'jump', gameOptions: { playerCount: 2, seed: 'follow-up-label' } });
   r.start();
   r.game.chain = chain;
-  const red = r.game.first(Piece, 'red')!;
-  expect(r.performAction('jump', 1, { piece: red.id }).success).toBe(true);
+  const piece = r.game.first(Piece, jumper)!;
+  expect(r.performAction('jump', 1, { piece: piece.id }).success).toBe(true);
   return offerFollowUp(r.game, r.getFlowState(), 1)?.display;
 }
 
@@ -76,11 +79,23 @@ describe('a follow-up element pick passed by id', () => {
     expect(offeredDisplay({ action: 'slide' })).toEqual({ piece: 'red' });
   });
 
-  it('labels every element of a list pick', () => {
-    expect(offeredDisplay({ action: 'shift' })).toEqual({ pieces: 'red, blue' });
+  it("is numbered among the pick's other candidates as its choice would be", () => {
+    expect(offeredDisplay({ action: 'slide' }, 'twin')).toEqual({ piece: 'twin #1' });
   });
 
-  it("keeps the display the game passed", () => {
+  it('labels every element of a list pick', () => {
+    expect(offeredDisplay({ action: 'shift', listed: ['red', 'blue'] })).toEqual({ pieces: 'red, blue' });
+  });
+
+  it('gives an empty list pick no label', () => {
+    expect(offeredDisplay({ action: 'shift', listed: [] })).toBeUndefined();
+  });
+
+  it('keeps the display the game passed', () => {
     expect(offeredDisplay({ action: 'move', display: { piece: 'Red checker' } })).toEqual({ piece: 'Red checker' });
+  });
+
+  it('labels an element whose passed display is undefined', () => {
+    expect(offeredDisplay({ action: 'move', display: { piece: undefined } })).toEqual({ piece: 'red square' });
   });
 });
