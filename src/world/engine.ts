@@ -2628,11 +2628,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // then meant "mutated, and durably so once anything else checkpointed the
     // same partition". The only way out of this block without the rollback is
     // the successful return at its end.
-    // Nothing saves a partition only `.reads()` named, so its bytes are always
-    // compared, however the handler reached it (#1334).
-    for (const name of named) {
-      if (!writable.has(name)) this.game.reachPartition(this.residentIds.get(name)!);
-    }
+    this.reachReadOnly(named, writable);
     bindWorldFacilities(this.game, facilities);
     try {
       const result =
@@ -2700,6 +2696,14 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // tree the host has since evicted, and a `schedule()` charged to whoever
       // acted next.
       bindWorldFacilities(this.game, null);
+    }
+  }
+
+  /** Nothing saves a partition only `.reads()` named, so its bytes are always
+   *  compared, however the handler reached it (#1334). */
+  private reachReadOnly(named: readonly string[], writable: ReadonlySet<string>): void {
+    for (const name of named) {
+      if (!writable.has(name)) this.game.reachPartition(this.residentIds.get(name)!);
     }
   }
 
