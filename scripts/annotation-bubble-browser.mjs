@@ -11,7 +11,8 @@
  * Served from `boardsmith init`'s table sample with a tutorial whose one step
  * points at three targets the board pins to the left edge, the right edge and
  * the bottom of the screen. Seat 1 starts the tutorial from the controls menu,
- * at 1440px and 390px.
+ * at 1440px and 390px. Each bubble must also be the topmost thing at its
+ * corners and middle, so the action bar cannot draw over it (#1341).
  *
  * Runs under `boardsmith test --browser`, or by hand with
  * `node scripts/annotation-bubble-browser.mjs`; a missing Chromium says to run
@@ -91,7 +92,12 @@ function measure(frame) {
       shown: names.map((name, i) => {
         const caret = bubbles[i]?.querySelector('.bsg-board-message__caret');
         const target = doc.querySelector(`[data-bs-el-name="${name}"]`);
+        const r = bubbles[i]?.getBoundingClientRect();
+        // 6px in from each corner, past the rounded border, plus the middle.
+        const points = r ? [[r.left + 6, r.top + 6], [r.right - 6, r.top + 6], [r.left + 6, r.bottom - 6], [r.right - 6, r.bottom - 6], [r.left + r.width / 2, r.top + r.height / 2]] : [];
+        const cover = points.map(([x, y]) => doc.elementFromPoint(x, y)).find((el) => el && !bubbles[i].contains(el));
         return {
+          coveredBy: cover ? `${cover.tagName}.${cover.className}` : null,
           target: target ? box(target) : null,
           bubble: bubbles[i] ? box(bubbles[i]) : null,
           caret: caret ? { ...box(caret), side: caret.className.match(/caret--(\w+)/)?.[1] } : null,
@@ -142,15 +148,22 @@ await runBrowserRegression(
 
       for (const viewport of VIEWPORTS) {
         await page.setViewportSize(viewport);
+        // Coverage is waited for too: after a resize the closed debug drawer slides to its phone position over the bubbles.
         const seen = await waitUntil(
           () => measure(frame),
-          (now) => now !== null && now.frameWidth <= viewport.width && TARGETS.every((_, i) => misses(now, i).length === 0),
+          (now) => now !== null && now.frameWidth <= viewport.width
+            && TARGETS.every((_, i) => misses(now, i).length === 0 && now.shown[i].coveredBy === null),
         );
         for (const [i, { side }] of TARGETS.entries()) {
           await check(`the bubble for a target at ${side} stays 8px inside the layer and points at it at ${viewport.width}px`, async () => {
             assert(seen !== null, 'the tutorial never showed its annotation layer');
             const found = misses(seen, i);
             assert(found.length === 0, found.join('; '));
+          });
+          await check(`the bubble for a target at ${side} is drawn above the action bar and the rest of the shell at ${viewport.width}px (#1341)`, async () => {
+            assert(seen !== null, 'the tutorial never showed its annotation layer');
+            const { coveredBy } = seen.shown[i];
+            assert(coveredBy === null, `part of the bubble is covered by ${coveredBy}`);
           });
         }
       }

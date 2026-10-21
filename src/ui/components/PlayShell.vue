@@ -1266,7 +1266,7 @@ const mobileToggleLabel = computed(() => {
   position: absolute;
   inset: 0;
   /* Same stacking level as the GameOverCard scrim: above the board content and
-     the tutorial/hint/heatmap overlays, but NOT above the floating .actionbar
+     the heatmap overlay, below the tutorial/hint bubbles (z-31), but NOT above the floating .actionbar
      Action Panel (also z-index 30, a later sibling that therefore stays on top). A game
      modal covers the board area only — never the Action Panel/header chrome. */
   z-index: 30;
