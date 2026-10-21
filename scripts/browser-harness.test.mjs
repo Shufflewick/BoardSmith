@@ -185,7 +185,10 @@ describe('#533: every browser regression runs automatically', () => {
 
   it('runs the browser suite after typecheck and before the slow related tests', () => {
     const names = policy.verify.map((check) => check.name);
-    const after = policy.merge.extraMergeSteps.find((s) => s.name === 'browser').after;
+    const step = policy.merge.extraMergeSteps.find((s) => s.name === 'browser');
+    expect(step, 'merge.extraMergeSteps has no step named browser').toBeDefined();
+    const after = step.after;
+    expect(names, 'the verify list needs typecheck and related-tests').toEqual(expect.arrayContaining(['typecheck', 'related-tests']));
     expect(names, `browser runs after "${after}", which is not a verify check`).toContain(after);
     expect(names.indexOf(after)).toBeGreaterThanOrEqual(names.indexOf('typecheck'));
     expect(names.indexOf(after)).toBeLessThan(names.indexOf('related-tests'));
