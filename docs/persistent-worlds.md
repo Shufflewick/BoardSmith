@@ -510,8 +510,11 @@ leaves out a required pick, or sends `null` for one, is refused with
 `missing-pick` before any round reads its args. An optional pick may still be
 absent. A pick re-asked with earlier answers bound is refused the same way when
 it leaves out a required pick BEFORE it, so a selection's own `needs:` sees the
-picks before it when the pick is re-asked. The offer is not: it is enumerated
-with nothing bound, so there every round runs with every pick absent (#1345).
+picks before it when the pick is re-asked. The offer is enumerated with nothing
+bound, so it runs the rounds and candidates of the picks only through the first
+required one; a pick after that is offered by its shape alone (name, prompt,
+bounds, no candidates) and its round first runs when it is re-asked with the
+picks before it bound (#1345).
 A quote is not checked either: its rounds, the execute round included, run on
 the player's draft, so any pick not chosen yet is absent there and a round a
 quote walks must not assume one is bound.
@@ -1422,9 +1425,9 @@ Seatless actions are filtered out here. An action whose `condition` is false is
 not offered, and neither is one whose **first** non-optional selection has no
 candidates at all -- a pick that would open on nothing.
 
-**A later selection never decides the offer** (BoardSmith #270). Every selection
-is enumerated in the same frame with `args: {}`, which is the right question to
-ask the first one and the wrong question to ask any other: a selection narrowed
+**A later selection never decides the offer** (BoardSmith #270). The offer's
+selections are enumerated in the same frame with `args: {}`, which is the right
+question to ask the first one and the wrong question to ask any other: a selection narrowed
 by an earlier answer has nothing to narrow by yet, so the natural
 `if (args.slot === undefined) return []` used to take the whole verb out of the
 seat's offer. It no longer does; the later selection's candidates are re-asked

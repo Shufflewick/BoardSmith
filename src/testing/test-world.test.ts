@@ -144,6 +144,27 @@ describe('TestWorld: a resident world a test can construct', () => {
     await world.close();
   });
 
+  it('offers a pick past the first required one by its shape, and runs its round on the re-ask (#1345)', async () => {
+    const build = worldAction<VaultWorld>('build')
+      .chooseFrom('plot', { choices: ['commons@1,1'] })
+      .chooseFrom('size', {
+        choices: ['small'],
+        needs: ({ args }) => [(args.plot as string).split('@')[0]!],
+      })
+      .execute(() => {});
+    const world = await createTestWorld({
+      definition: bundle({ ...vaultWorldBlock(), actions: [build] } as WorldDefinition),
+    });
+    const offer = (await world.offersFor(1)).find((candidate) => candidate.name === 'build')!;
+    expect(offer.selections.map((pick) => [pick.name, pick.choices?.length])).toEqual([
+      ['plot', 1],
+      ['size', undefined],
+    ]);
+    const size = await world.resolvePick(1, 'build', 'size', { plot: 'commons@1,1' });
+    expect(size.choices?.map((choice) => choice.value)).toEqual(['small']);
+    await world.close();
+  });
+
   it('moves the revision when a command commits, so a frame can be placed in time', async () => {
     const world = await createTestWorld({ definition: bundle() });
     const before = (await world.getPlayerView(1)).revision;

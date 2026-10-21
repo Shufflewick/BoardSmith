@@ -1,6 +1,6 @@
 {
-  "revision": 261,
-  "surfaceHash": "8038c52ebe4c2cc7",
+  "revision": 262,
+  "surfaceHash": "b6df8a9e36ac4679",
   "payloadHash": "7418fecc0604b2a0",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -2031,6 +2031,14 @@
       "payloadHash": "7418fecc0604b2a0",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A world pick re-asked with earlier answers bound (resolvePick, pickPartitions) that leaves out a required pick before the asked one, or sends null for it, is now refused with the caller-owned missing-pick refusal and 'Missing required selection: <pick>' before any declaration round reads its args, as a command is since #1328 and as a table's makePicksBefore does (#1338). Previously the walk ran with the pick unbound and a selection's own needs: that read it crashed as a rules error. A quote is not checked: its rounds, the execute round included, run on the draft, where any pick may be absent, and the docs say so. Platform: re-vendor so the panel reads the refusal instead of the generic rules-error sentence. Payload and stored format unchanged; no game needs a rebuild."
+    },
+    {
+      "revision": 262,
+      "date": "2026-10-21",
+      "surfaceHash": "b6df8a9e36ac4679",
+      "payloadHash": "7418fecc0604b2a0",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A world's offer (offersFor, offerPartitions) now runs the declaration rounds and candidates of an action's picks only through the first required pick (#1345). A pick after it may read that pick, so it is offered by its shape alone (name, prompt, bounds, no choices or validElements) and its round first runs when the panel re-asks it with the picks before it bound. Previously the offer ran every pick's round with nothing bound, so a later pick's needs: that read an earlier pick crashed the whole offer as a rules error. Platform: re-vendor so such an action is offered. Payload and stored format unchanged; no game needs a rebuild."
     }
   ]
 }
