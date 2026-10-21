@@ -542,6 +542,9 @@ export interface WorldPartitionsRound {
    *  the round before `execute`. */
   readonly before: number;
   readonly declare: WorldNeeds;
+  /** Named by `.reads()`: loaded but never saved, and a write to it refuses
+   *  the command (#1334). A name some writable round also gives stays writable. */
+  readonly readOnly: boolean;
 }
 
 /**
@@ -907,17 +910,29 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
     // second may read what the first loaded -- which is how a declaration whose
     // subject is itself state gets written without branching on whether the
     // partition happens to be there yet.
-    this.declareAt(this.definition.selections.length, declare as unknown as WorldNeeds);
+    this.declareAt(this.definition.selections.length, declare as unknown as WorldNeeds, false);
+    return this;
+  }
+
+  /**
+   * WHAT THIS STEP ONLY LOOKS AT (#1334): a round like `.needs()`, at the same
+   * position, whose partitions are loaded but never saved. A write to one
+   * refuses the command with `read-only-write` and keeps nothing it changed.
+   * A partition another round names with `.needs()` stays writable.
+   */
+  reads(declare: (context: WorldNeedsContext<G>) => readonly string[]): this {
+    this.declareAt(this.definition.selections.length, declare as unknown as WorldNeeds, true);
     return this;
   }
 
   /** Append one round of the walk. `worldClockAction`'s facade reaches it for
    *  a seatless action's rounds, which is why it is not private. */
-  declareAt(before: number, declare: WorldNeeds): void {
+  declareAt(before: number, declare: WorldNeeds, readOnly: boolean): void {
     (this.definition.world!.needs as WorldNeedsRound[]).push({
       kind: "partitions",
       before,
       declare,
+      readOnly,
     });
   }
 
@@ -1312,7 +1327,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
     // Called just BEFORE the selection is pushed, so `selections.length` is
     // this selection's own index -- which is exactly the step this round comes
     // before.
-    this.declareAt(this.definition.selections.length, declare as unknown as WorldNeeds);
+    this.declareAt(this.definition.selections.length, declare as unknown as WorldNeeds, false);
   }
 
   /**
@@ -1376,7 +1391,13 @@ export class WorldClockAction<G extends Game = Game> {
     // A seatless action has no selections, so every round comes before execute.
     // Called more than once they are consecutive rounds, and the second reads
     // what the first loaded.
-    this.action.declareAt(0, declare as unknown as WorldNeeds);
+    this.action.declareAt(0, declare as unknown as WorldNeeds, false);
+    return this;
+  }
+
+  /** As `WorldAction.reads()`: a round whose partitions are loaded but never saved (#1334). */
+  reads(declare: (context: WorldClockNeedsContext<G>) => readonly string[]): this {
+    this.action.declareAt(0, declare as unknown as WorldNeeds, true);
     return this;
   }
 

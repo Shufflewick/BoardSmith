@@ -438,11 +438,11 @@ export const tend = worldAction<VillageGame>('tend')
 ```
 
 The builder is the engine's own with every callback's context re-typed, so what
-you write is a table action with `ctx.world` in scope and one method added:
-`.needs()`. `prompt`, `help`, `condition`, `disabled`, `validate`, `manual`,
+you write is a table action with `ctx.world` in scope and two methods added:
+`.needs()` and `.reads()`. `prompt`, `help`, `condition`, `disabled`, `validate`, `manual`,
 `suppressFromActionPanel`, `destructive`, `group`, `order`, `chooseFrom`, `chooseElement`,
 `chooseElements`, `enterText`, `enterNumber`, `execute` and `build` all mean what
-they mean on a table. One method is a world's own beside `.needs()`: `.quote()`,
+they mean on a table. One more method is a world's own: `.quote()`,
 which prices the draft in front of the player before they commit it -- see
 [Quoting a draft](#quote-what-the-draft-will-cost-before-the-player-pays-it). `destructive` and `group`/`order` matter more here than they do at a table:
 a resident world offers every verb that is relevant at once, and a flat list of
@@ -551,6 +551,27 @@ until it stops changing its mind. The view path is allowed to be one, because a
 view has no steps. **A write is not**, because `walkDeclaration` has no ceiling:
 what bounds it is the number of rounds you wrote, and a round that re-answers
 differently every time it is asked is not that number.
+
+### `.reads()`: load a partition the action only looks at (#1334)
+
+Every partition a `.needs()` round names is saved after the command, whether or
+not it changed, because the action was free to write it. An action that looks
+at many partitions and changes few pays to rewrite all of them. `.reads()` is a
+round like `.needs()`, at the same position and with the same context, whose
+partitions are loaded but never saved:
+
+```ts
+worldAction<HallGame>('survey')
+  .needs(({ player }) => [roomPartition(player.seat)])                    // written
+  .reads(({ player }) => neighboursOf(player.seat).map(roomPartition))    // only looked at
+  .execute((_args, ctx) => { /* reads the neighbours, writes the own room */ });
+```
+
+A command that changes a partition it loaded only with `.reads()`, by an
+attribute write or by moving an element into or out of it, is refused with
+`read-only-write`, and nothing it changed is kept. A partition named by both a
+`.reads()` and a `.needs()` round is writable. `worldClockAction()` has
+`.reads()` too.
 
 ### A later round reads a root BY NAME: `world.partition(name)`
 
@@ -2817,6 +2838,7 @@ thing next time.
 | `invalid-world-action` | A world action the platform cannot offer or cannot bound: an action not built with `worldAction()`, an unbounded `from`/`filter`/`elementClass` element form, an element selection with no `elements:`, a candidate outside what the step declared, a selection past `maxCandidatesPerSelection`, a dependent or repeating selection, a seatless action that asks a question, or a round declared before a step the action does not have. |
 | `not-in-a-world` | An action built with `worldAction()` reached `ctx.world` with no world running it -- registered on a table, or reached after the dispatch that bound its facilities finished. |
 | `undeclared-partition` | `execute` read, or emitted an event in, a partition the action's own walk did not declare. |
+| `read-only-write` | An action changed a partition it loads only with `.reads()`, which is never saved. The command is refused and nothing it changed is kept. Load the partition with `.needs()` if the action writes to it. |
 | `declaration-unsettled` | A `world.view` named something new on every round. **A view only**, since an action's walk has no ceiling to trip. |
 | `view-dropped-partition` | A `world.view` stopped naming a partition it named on an earlier round of the same look, once more was loaded. Refused for that seat only. Keep naming it alongside what the loaded partitions add. |
 | `declaration-write` | A declaration, a view or a migration's `survey.root` tried to write through the read-only projection. Do it in `execute`, or in the migration's `partition` hook. |

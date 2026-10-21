@@ -1,6 +1,6 @@
 {
-  "revision": 259,
-  "surfaceHash": "900feac3b56c4157",
+  "revision": 260,
+  "surfaceHash": "519cd809e1ba6616",
   "payloadHash": "7418fecc0604b2a0",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -2015,6 +2015,14 @@
       "payloadHash": "7418fecc0604b2a0",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A seat's world command that leaves out a required pick, or sends null for one, is now refused before any of the action's declaration rounds read its args, with the new caller-owned refusal missing-pick (a new WORLD_REFUSALS key) and the sentence 'Missing required selection: <pick>' (#1328). commandNeeds with a player and applyCommand both refuse it, so a needs() round after a selection always sees that selection bound; previously the walk ran with the pick unbound and a round reading it crashed as a rules error. An optional pick may still be left out, and a scheduled event is not checked. Platform: re-vendor so a seat sent such a command reads the refusal instead of the generic rules-error sentence. Payload and stored format unchanged; no game needs a rebuild."
+    },
+    {
+      "revision": 260,
+      "date": "2026-10-21",
+      "surfaceHash": "519cd809e1ba6616",
+      "payloadHash": "7418fecc0604b2a0",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A world action can load partitions read-only with .reads() (also on worldClockAction): they are loaded like .needs() rounds but never reported dirty, so they are not saved, and a command that changes one is refused with the new game-owned refusal read-only-write (a new WORLD_REFUSALS key) and rolled back (#1334). Platform: re-vendor so worlds using .reads() stop rewriting partitions they only look at. Payload and stored format unchanged; games that do not use .reads() need no rebuild."
     }
   ]
 }
