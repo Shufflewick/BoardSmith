@@ -39,22 +39,22 @@ class Page extends Space<PageGame> {
 }
 
 class PageGame extends Game<PageGame, Player> {
-  first!: Page;
-  second!: Page;
+  front!: Page;
+  back!: Page;
 
   constructor(options: GameOptions) {
     super(options);
     this.registerElements([Page]);
-    this.first = this.create(Page, 'first');
-    this.second = this.create(Page, 'second');
-    this.first.data = deepFreeze({ kind: 'a', items: [1, 2] });
-    this.second.data = deepFreeze({ kind: 'b', items: [3] });
-    // `first` precedes `second` in the tree, so its hook runs first.
-    this.first.next = this.second;
+    this.front = this.create(Page, 'front');
+    this.back = this.create(Page, 'back');
+    this.front.data = deepFreeze({ kind: 'a', items: [1, 2] });
+    this.back.data = deepFreeze({ kind: 'b', items: [3] });
+    // `front` precedes `back` in the tree, so its hook runs first.
+    this.front.next = this.back;
 
     this.registerAction(
       Action.create('write').execute((_args, ctx) => {
-        (ctx.game as PageGame).first.data = deepFreeze({ kind: 'c', items: [4] });
+        (ctx.game as PageGame).front.data = deepFreeze({ kind: 'c', items: [4] });
         return { success: true };
       }),
     );
@@ -81,7 +81,7 @@ function startedRunner(): GameRunner<PageGame> {
 describe('afterRestore (#1349)', () => {
   it('runs on a cold restore, so a stored page comes back frozen', () => {
     const restored = GameRunner.fromSnapshot<PageGame>(roundTripJson(startedRunner().getSnapshot()), PageGame);
-    const page = restored.game.first;
+    const page = restored.game.front;
 
     expect(page.data).toEqual({ kind: 'a', items: [1, 2] });
     expect(Object.isFrozen(page.data)).toBe(true);
@@ -91,7 +91,7 @@ describe('afterRestore (#1349)', () => {
   it('runs once the whole tree is decoded, so a referenced element already holds its value', () => {
     const restored = GameRunner.fromSnapshot<PageGame>(roundTripJson(startedRunner().getSnapshot()), PageGame);
 
-    expect(restored.game.first._seenNextData).toEqual({ kind: 'b', items: [3] });
+    expect(restored.game.front._seenNextData).toEqual({ kind: 'b', items: [3] });
   });
 
   it('runs on undo, so the checkpoint restored is frozen too', () => {
@@ -100,8 +100,8 @@ describe('afterRestore (#1349)', () => {
 
     const undone = GameRunner.fromCheckpoint<PageGame>(roundTripJson(runner.getSnapshot()), 0, PageGame)!;
 
-    expect(undone.game.first.data).toEqual({ kind: 'a', items: [1, 2] });
-    expect(Object.isFrozen(undone.game.first.data!.items)).toBe(true);
+    expect(undone.game.front.data).toEqual({ kind: 'a', items: [1, 2] });
+    expect(Object.isFrozen(undone.game.front.data!.items)).toBe(true);
   });
 
   it('runs on a world partition adopted from storage', () => {
