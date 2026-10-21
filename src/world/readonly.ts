@@ -627,21 +627,12 @@ export function plainCopy<T>(value: T): T {
 
 function copyPlain(value: unknown, path: string[], within: Set<object>): unknown {
   if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
-  const subject = sources.get(value) ?? value;
-  if (typeof subject === "function") refuseCopy(path, "is a function");
-  if (within.has(subject)) refuseCopy(path, "refers back to an object that contains it");
-  const prototype = Object.getPrototypeOf(subject) as object | null;
-  const isArray = Array.isArray(subject);
-  if (isArray ? prototype !== Array.prototype : prototype !== Object.prototype && prototype !== null) {
-    refuseCopy(path, `is a ${kindOf(subject, prototype)}`);
-  }
+  const subject = plainSubject(value, path, within);
   within.add(subject);
-  const copy: Record<string, unknown> = isArray ? (new Array((subject as unknown[]).length) as never) : {};
+  const copy: Record<string, unknown> = Array.isArray(subject) ? (new Array(subject.length) as never) : {};
   for (const key of Object.keys(subject)) {
-    const held = Object.getOwnPropertyDescriptor(subject, key)!;
     path.push(key);
-    if (!("value" in held)) refuseCopy(path, "is a getter");
-    const item = copyPlain(held.value, path, within);
+    const item = copyPlain(dataValue(subject, key, path), path, within);
     // An own "__proto__" key, as JSON.parse makes, would set the copy's prototype if assigned.
     if (key === "__proto__") Object.defineProperty(copy, key, { value: item, enumerable: true, writable: true, configurable: true });
     else copy[key] = item;
@@ -649,6 +640,24 @@ function copyPlain(value: unknown, path: string[], within: Set<object>): unknown
   }
   within.delete(subject);
   return copy;
+}
+
+/** The real object behind a value, refused unless it is a plain object or array not already being copied. */
+function plainSubject(value: object, path: string[], within: Set<object>): object {
+  const subject = sources.get(value) ?? value;
+  if (typeof subject === "function") refuseCopy(path, "is a function");
+  if (within.has(subject)) refuseCopy(path, "refers back to an object that contains it");
+  const prototype = Object.getPrototypeOf(subject) as object | null;
+  const plain = Array.isArray(subject) ? prototype === Array.prototype : prototype === Object.prototype || prototype === null;
+  if (!plain) refuseCopy(path, `is a ${kindOf(subject, prototype)}`);
+  return subject;
+}
+
+/** An own property's value, refused unrun when it is a getter. */
+function dataValue(subject: object, key: string, path: string[]): unknown {
+  const held = Object.getOwnPropertyDescriptor(subject, key)!;
+  if (!("value" in held)) refuseCopy(path, "is a getter");
+  return held.value;
 }
 
 function kindOf(subject: object, prototype: object | null): string {
