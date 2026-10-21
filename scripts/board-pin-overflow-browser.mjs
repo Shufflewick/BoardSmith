@@ -57,6 +57,7 @@ function narrowTheRegion(frame) {
     const nextFrame = () => new Promise((settle) => win.requestAnimationFrame(settle));
 
     const start = sidebar.getBoundingClientRect().width;
+    const regionBefore = region.clientWidth;
     sidebar.style.transition = 'none';
     const overflows = [];
     for (let step = 1; step <= 24; step++) {
@@ -71,7 +72,20 @@ function narrowTheRegion(frame) {
 
     const pad = parseFloat(win.getComputedStyle(region).paddingLeft) + parseFloat(win.getComputedStyle(region).paddingRight);
     const board = doc.querySelector('.pinned-board').getBoundingClientRect().width;
-    return { overflows, board, available: region.clientWidth - pad };
+    return { overflows, narrowedBy: regionBefore - region.clientWidth, board, available: region.clientWidth - pad };
+  });
+}
+
+/** The board's rendered width over the region's available width, and whether the region scrolls sideways. */
+function zoomedBoard(frame) {
+  return frame.locator('body').evaluate(async (body) => {
+    const doc = body.ownerDocument;
+    const win = doc.defaultView;
+    await new Promise((settle) => win.requestAnimationFrame(() => win.requestAnimationFrame(settle)));
+    const region = doc.querySelector('.boardregion');
+    const pad = parseFloat(win.getComputedStyle(region).paddingLeft) + parseFloat(win.getComputedStyle(region).paddingRight);
+    const board = doc.querySelector('.pinned-board').getBoundingClientRect().width;
+    return { scale: board / (region.clientWidth - pad), scrolls: region.scrollWidth > region.clientWidth };
   });
 }
 
@@ -88,11 +102,23 @@ await runBrowserRegression(
 
       const seen = await narrowTheRegion(frame);
 
+      await check('widening the sidebar narrows the region', async () => {
+        assert(seen.narrowedBy >= 5, `the region narrowed by ${seen.narrowedBy}px, so nothing below was exercised`);
+      });
       await check('the pinned board never overflows the region sideways while the region narrows', async () => {
         assert(seen.overflows.length === 0, `the region scrolled sideways ${seen.overflows.length} times: ${seen.overflows.join('; ')}`);
       });
       await check('the pinned board still fills the region once it settles', async () => {
         assert(Math.abs(seen.board - seen.available) <= 1, `the board is ${seen.board}px wide in ${seen.available}px of region`);
+      });
+
+      await frame.getByRole('button', { name: 'Game controls' }).click();
+      await frame.getByRole('slider', { name: 'Zoom' }).fill('1.5');
+      await frame.getByRole('slider', { name: 'Zoom' }).press('Escape');
+      const zoomed = await zoomedBoard(frame);
+      await check('at 150% zoom the capped pin scales with the board, which scrolls sideways', async () => {
+        assert(Math.abs(zoomed.scale - 1.5) < 0.01 && zoomed.scrolls,
+          `the board renders at ${zoomed.scale.toFixed(3)}x the region's width${zoomed.scrolls ? '' : ' and the region does not scroll'}`);
       });
     } finally {
       await browser.close();
