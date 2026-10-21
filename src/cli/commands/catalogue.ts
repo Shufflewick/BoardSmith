@@ -9,27 +9,31 @@
  */
 import { styleText } from 'node:util';
 import { gitOutput as git } from '../lib/git-output.js';
-import { DEFAULT_CATALOGUE_ROOT, DEFAULT_GAME_TIME_LIMIT_MS, checkCatalogue, type CatalogueRun } from '../lib/catalogue-check.js';
+import { DEFAULT_CATALOGUE_ROOT, DEFAULT_GAME_TIME_LIMIT_MS, checkCatalogue, type CatalogueGameResult, type CatalogueRun } from '../lib/catalogue-check.js';
+
+/** What the report says of a game that passed. */
+function passLine(result: CatalogueGameResult): string {
+  const branch = result.ref === 'main' ? '' : `, on its branch ${result.ref}`;
+  return `  ${result.slug}: validates against this tree${branch}${result.status === 'cached' ? ' (passed before on these inputs)' : ''}`;
+}
+
+/** What the report says of a game that failed, and how to fix it. */
+function failureLines(failure: CatalogueGameResult): string[] {
+  return [
+    '',
+    `${failure.slug} FAILED boardsmith validate on its ${failure.ref} (${failure.commit.slice(0, 8)}) against this BoardSmith tree:`,
+    (failure.output ?? '').trimEnd(),
+    `Either this BoardSmith change broke ${failure.slug}, or its ${failure.ref} was already broken. Fix the change, or fix the game in ${failure.dir} and push its ${failure.ref}.`,
+    ...(failure.ref === 'main'
+      ? [`If this change needs a change to ${failure.slug}, commit it in ${failure.dir} on a branch with the same name as this BoardSmith branch: the check uses that branch instead of main.`]
+      : []),
+  ];
+}
 
 /** What the command prints for `run`, and whether it passes. */
 export function catalogueReport(run: CatalogueRun): { ok: boolean; text: string } {
-  const lines: string[] = [];
-  for (const result of run.results.filter((r) => r.status !== 'failed')) {
-    const branch = result.ref === 'main' ? '' : `, on its branch ${result.ref}`;
-    lines.push(`  ${result.slug}: validates against this tree${branch}${result.status === 'cached' ? ' (passed before on these inputs)' : ''}`);
-  }
   const failures = run.results.filter((r) => r.status === 'failed');
-  for (const failure of failures) {
-    lines.push(
-      '',
-      `${failure.slug} FAILED boardsmith validate on its ${failure.ref} (${failure.commit.slice(0, 8)}) against this BoardSmith tree:`,
-      (failure.output ?? '').trimEnd(),
-      `Either this BoardSmith change broke ${failure.slug}, or its ${failure.ref} was already broken. Fix the change, or fix the game in ${failure.dir} and push its ${failure.ref}.`,
-      ...(failure.ref === 'main'
-        ? [`If this change needs a change to ${failure.slug}, commit it in ${failure.dir} on a branch with the same name as this BoardSmith branch: the check uses that branch instead of main.`]
-        : []),
-    );
-  }
+  const lines = [...run.results.filter((r) => r.status !== 'failed').map(passLine), ...failures.flatMap(failureLines)];
   // Only a passing run lands, so only then is there a game branch to merge after it.
   for (const repo of failures.length === 0 ? run.paired : []) {
     lines.push(
