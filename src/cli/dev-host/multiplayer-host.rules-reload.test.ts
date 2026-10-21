@@ -353,7 +353,7 @@ async function serveTable(edit: Rules | Error, before: Rules = beforeEdit, seats
     }),
   );
   closing.push(server.close, queue.closeRules);
-  // `init` is the last frame of the hello's game start, whose lobby would otherwise answer a later step (#1339).
+  // `init` comes after the hello's game start has sent its lobby, which would otherwise answer a later step (#1339).
   const page = await openSocketPage(server.port, 'dev', (f) => f.type === 'init');
   let request = 0;
   /** Bump as the page, from the board it last drew; resolves with the host's answer. */
