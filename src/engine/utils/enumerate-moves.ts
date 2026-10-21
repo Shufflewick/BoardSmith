@@ -282,7 +282,8 @@ function enumerateGatedSelections(
  * until that budget was spent many times over made a dead-end action cost
  * about 21 full walks each time. A path is as dear as its selections' offers,
  * so an action whose first selection offers 10,000 values still costs that
- * per draw.
+ * once. The game cannot change during a sample, so a selection reached again
+ * under the same earlier picks is not judged again (#1330).
  */
 function sampleSelections(
   game: Game,
@@ -292,7 +293,7 @@ function sampleSelections(
   sample: { count: number; random: SeededRandom },
   accepts: (args: Record<string, unknown>) => boolean,
 ): Record<string, unknown>[] {
-  const walk: ActionWalk = { left: Infinity, random: sample.random };
+  const walk: ActionWalk = { left: Infinity, random: sample.random, judged: { offers: new Map(), ids: new Map() } };
   const moves: Record<string, unknown>[] = [];
   for (let draw = 0; draw < 2 * sample.count && moves.length < sample.count; draw++) {
     moves.push(...enumerateSelections(game, actionDef, player, start, walk).filter(accepts));
@@ -507,7 +508,7 @@ function nextStep(
     return { selection, values: spend(walk, actionDef, selection, { values: candidates, judged: candidates.length }) ?? [] };
   }
   const args = executor.resolveArgs(action, pending.collectedArgs, seatPlayer);
-  const offer = selectionValues(game, action, seatPlayer, selection, args, walk.random);
+  const offer = selectionValues(game, action, seatPlayer, selection, args, walk);
   const tried = spend(walk, actionDef, selection, offer);
   return { selection, values: tried?.length ? tried : selection.optional ? [null] : [] };
 }
@@ -699,6 +700,8 @@ interface ActionWalk {
   left: number;
   /** When present, the walk tries one value per selection, drawn with this. */
   random?: SeededRandom;
+  /** A sample's judged offers, by selection and the picks before it (see {@link judgedOnce}). */
+  judged?: { offers: Map<string, SelectionOffer>; ids: Map<object, number> };
 }
 
 function tooManyMoves(actionDef: ActionDefinition, selection: Selection): MoveListTooLargeError {
@@ -834,7 +837,7 @@ function _enumerateRecursive(
     return _enumerateRecursive(game, actionDef, player, index + 1, currentArgs, walk);
   }
   const seen = argsCallbacksSee(actionDef, currentArgs);
-  const tried = spend(walk, actionDef, selection, selectionValues(game, actionDef, player, selection, seen, walk.random));
+  const tried = spend(walk, actionDef, selection, selectionValues(game, actionDef, player, selection, seen, walk));
 
   // Nothing to offer (no enabled choice, a text input, a number input that
   // cannot be listed, a multiSelect with fewer candidates than its min): skip
@@ -904,13 +907,49 @@ function selectionValues(
   player: Player,
   selection: Selection,
   seen: Record<string, unknown>,
-  random: SeededRandom | undefined,
+  walk: ActionWalk,
 ): SelectionOffer {
   if (selection.type === 'text') return { values: null, judged: 0 };
-  if (selection.type === 'number') return numberInputPicks(game, actionDef, player, selection, seen);
-  const choices = _getChoices(game, actionDef.name, selection, player, seen);
-  if (choices.values.length === 0) return { values: null, judged: choices.judged };
-  return _valuesToTry(game, player, selection, choices, seen, random);
+  if (selection.type === 'number') {
+    return judgedOnce(walk, selection, seen, () => numberInputPicks(game, actionDef, player, selection, seen));
+  }
+  const choices = judgedOnce(walk, selection, seen, () => _getChoices(game, actionDef.name, selection, player, seen));
+  if (choices.values === null || choices.values.length === 0) return { values: null, judged: choices.judged };
+  return _valuesToTry(game, player, selection, { values: choices.values, judged: choices.judged }, seen, walk.random);
+}
+
+/**
+ * What `judge` finds for a selection under these earlier picks, judged once
+ * per sample (#1330): a sample's draws walk the same unchanged game, so a
+ * repeated path would get the same answer. A walk without `judged` judges
+ * every time. Only the judging is kept; a multiSelect's draw is still made anew.
+ */
+function judgedOnce(
+  walk: ActionWalk,
+  selection: Selection,
+  seen: Record<string, unknown>,
+  judge: () => SelectionOffer,
+): SelectionOffer {
+  if (!walk.judged) return judge();
+  const { offers, ids } = walk.judged;
+  const key = [selection.name, ...Object.entries(seen).map(([name, value]) => `${name}=${pickKey(value, ids)}`)].join('|');
+  let offer = offers.get(key);
+  if (!offer) offers.set(key, (offer = judge()));
+  return offer;
+}
+
+/**
+ * A pick as a key: a list by its entries, an object by identity (every draw
+ * picks from the same judged offer, and an element or player cannot be
+ * stringified), anything else by type and value.
+ */
+function pickKey(value: unknown, ids: Map<object, number>): string {
+  if (Array.isArray(value)) return `[${value.map((entry) => pickKey(entry, ids)).join(',')}]`;
+  if (typeof value === 'object' && value !== null) {
+    if (!ids.has(value)) ids.set(value, ids.size);
+    return `#${ids.get(value)}`;
+  }
+  return typeof value === 'string' ? JSON.stringify(value) : `${typeof value}:${String(value)}`;
 }
 
 /**
