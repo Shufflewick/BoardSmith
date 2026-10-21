@@ -397,7 +397,9 @@ describe('HintOverlay placement (#927)', () => {
     );
     await nextTick();
     expect(wrapper.find('.bsg-board-message__caret--bottom').exists()).toBe(true);
-    expect(bubbleStyle(wrapper).top).toBe('562px');
+    // The bubble's own height lifts it, so its caret's tip ends at the target's top edge whatever the text's length (#1331).
+    expect(bubbleStyle(wrapper).top).toBe('642px');
+    expect(bubbleStyle(wrapper).transform).toBe('translate(var(--bsg-bubble-shift), max(-100%, -642px))');
     wrapper.unmount();
   });
 

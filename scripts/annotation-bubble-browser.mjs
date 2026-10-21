@@ -109,14 +109,15 @@ function misses(seen, i) {
   const minLeft = seen.layer.left + EDGE_MARGIN;
   const maxRight = seen.layer.left + seen.layer.width - EDGE_MARGIN;
   const want = TARGETS[i].caret;
-  // A bubble above its target is placed by an 80px height estimate, so its tip is not checked yet (#1331).
-  const tipBelow = want !== 'top' || caret.top >= target.bottom - 0.5;
+  const tipClear = want === 'top' ? caret.top >= target.bottom - 0.5 : caret.bottom <= target.top + 0.5;
   return [
     [bubble.left >= minLeft - 0.5, `its left edge is at ${bubble.left.toFixed(1)}px, inside the ${minLeft}px margin`],
     [bubble.right <= maxRight + 0.5, `its right edge is at ${bubble.right.toFixed(1)}px, past the ${maxRight}px margin`],
     [Math.abs(caret.centre - target.centre) <= 1, `its caret is at x=${caret.centre.toFixed(1)}px, the target's centre at x=${target.centre.toFixed(1)}px`],
     [caret.side === want, `its caret is on its ${caret.side} side, not its ${want} side`],
-    [tipBelow, `its caret's tip (y=${caret.top.toFixed(1)}) is not below the target (bottom y=${target.bottom.toFixed(1)})`],
+    [tipClear, want === 'top'
+      ? `its caret's tip (y=${caret.top.toFixed(1)}) is not below the target (bottom y=${target.bottom.toFixed(1)})`
+      : `its caret's tip (y=${caret.bottom.toFixed(1)}) is not above the target (top y=${target.top.toFixed(1)})`],
   ].filter(([ok]) => !ok).map(([, why]) => why);
 }
 

@@ -121,8 +121,10 @@ function resolve(ann: Annotation, boardRect: DOMRect | null, layer: LayerSize): 
   if (below + BUBBLE_HEIGHT_ESTIMATE <= layer.height) {
     return { text: ann.text, ring, caretSide: 'top', anchorStyle: { left, top: `${below}px`, ...shifted } };
   }
-  const above = Math.max(0, rect.top - GAP - BUBBLE_HEIGHT_ESTIMATE);
-  return { text: ann.text, ring, caretSide: 'bottom', anchorStyle: { left, top: `${above}px`, ...shifted } };
+  // Only CSS knows the bubble's height: lift it by that height, but never past the layer's top (#1331).
+  const above = rect.top - GAP;
+  const lifted = { ...shifted, transform: `translate(var(--bsg-bubble-shift), max(-100%, ${-above}px))` };
+  return { text: ann.text, ring, caretSide: 'bottom', anchorStyle: { left, top: `${above}px`, ...lifted } };
 }
 
 useOverlayTracking({
