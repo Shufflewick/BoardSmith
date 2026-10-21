@@ -105,8 +105,18 @@ const boardAction: EnrichedActionMetadata = {
   ],
 };
 
-const AVAILABLE = ['move', 'tend', 'harvest', 'wait', 'board'];
-const METADATA = { move: moveAction, tend: tendAction, harvest: harvestAction, wait: waitAction, board: boardAction };
+// A choice the board marks once chosen, then a plot.
+const steerAction: EnrichedActionMetadata = {
+  name: 'steer',
+  prompt: 'Steer',
+  selections: [
+    { name: 'direction', type: 'choice', prompt: 'Which way?', choices: COMPASS },
+    { name: 'plot', type: 'element', prompt: 'Choose a plot' },
+  ],
+};
+
+const AVAILABLE = ['move', 'tend', 'harvest', 'wait', 'board', 'steer'];
+const METADATA = { move: moveAction, tend: tendAction, harvest: harvestAction, wait: waitAction, board: boardAction, steer: steerAction };
 
 interface Harness {
   board: BoardInteraction;
@@ -353,6 +363,61 @@ describe("ActionPanel's chip for a follow-up's server-bound value (#1366)", () =
     expect(chips[0].find('.value-display').text()).toBe('Old Mill');
     expect(chips[0].find('.clear-selection-btn').exists()).toBe(false);
     expect(chips[1].find('.clear-selection-btn').attributes('aria-label')).toBe('Clear item');
+    wrapper.unmount();
+  });
+});
+
+describe("ActionPanel's clear chip does what controller.clear() does (#1371)", () => {
+  it('keeps the action and asks the cleared pick again, on the panel and the board', async () => {
+    const { board, controller, wrapper, sendAction, cancelPendingAction } = mountHarness();
+    await flush();
+    await wrapper.find('[data-bs-action="harvest"]').trigger('click');
+    await flush();
+    board.triggerElementSelect({ id: 21 });
+    await flush();
+    expect(controller.currentPick.value?.name).toBe('direction');
+
+    await wrapper.find('.clear-selection-btn').trigger('click');
+    await flush();
+
+    expect(cancelPendingAction).not.toHaveBeenCalled();
+    expect(controller.currentAction.value).toBe('harvest');
+    expect(controller.currentPick.value?.name).toBe('plot');
+    expect(controller.currentArgs.value).toEqual({});
+    expect(board.currentAction).toBe('harvest');
+    expect(board.currentPickName).toBe('plot');
+    expect(board.validElements.map(e => e.id)).toEqual([21, 22]);
+
+    board.triggerElementSelect({ id: 22 });
+    await flush();
+    board.triggerChoiceSelect('direction', 'north');
+    await flush();
+    expect(sendAction).toHaveBeenCalledWith('harvest', { plot: 22, direction: 'north' });
+    wrapper.unmount();
+  });
+
+  it.each([
+    ['the panel chip', (h: Harness) => h.wrapper.find('.clear-selection-btn').trigger('click')],
+    ['controller.clear()', (h: Harness) => h.controller.clear('direction')],
+  ])('drops the board mark of the answer %s takes back', async (_surface, clear) => {
+    const harness = mountHarness();
+    const { board, controller, wrapper } = harness;
+    await flush();
+    await wrapper.find('[data-bs-action="steer"]').trigger('click');
+    await flush();
+    const north = wrapper.findAll('.anchored-choice-btn').find(b => b.text() === 'North');
+    await north!.trigger('click');
+    await flush();
+    expect(controller.currentPick.value?.name).toBe('plot');
+    expect(board.selectedElement).toEqual({ notation: 'n' });
+    expect(board.hoveredChoice?.display).toBe('North');
+
+    await clear(harness);
+    await flush();
+
+    expect(board.currentPickName).toBe('direction');
+    expect(board.selectedElement).toBeNull();
+    expect(board.hoveredChoice).toBeNull();
     wrapper.unmount();
   });
 });
