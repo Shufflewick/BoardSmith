@@ -21,6 +21,7 @@ export interface DevOptionDef {
   choices?: Array<{ value: unknown; label?: string }>;
   min?: number;
   max?: number;
+  step?: number;
   /** Shown with a "Designer only" mark: no player sees it (#687). */
   designerOnly?: true;
   [key: string]: unknown;

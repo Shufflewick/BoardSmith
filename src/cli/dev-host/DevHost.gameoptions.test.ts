@@ -416,3 +416,77 @@ describe('DevHost: designer-only game options (#687)', () => {
     expect(row?.find('[data-testid="designer-only"]').text()).toBe('Designer only');
   });
 });
+
+// ── Each seat's player options (#1323, #1325) ─────────────────────────────────
+//
+// Table setup shows each seat's player options as the host holds them, one
+// control per option type, and an exclusive option as one choice across the
+// seats. Apply sends the whole table in one `setPlayerOptions`, which the host
+// checks and deals a game with.
+const SEAT_OPTIONS_CONFIG: DevHostConfig = {
+  ...TEST_CONFIG,
+  playerOptions: [
+    { id: 'color', type: 'color', label: 'Color', choices: [{ value: '#ff0000', label: 'Red' }] },
+    { id: 'side', type: 'select', label: 'Side', default: 'north', choices: [{ value: 'north', label: 'North' }, { value: 'south', label: 'South' }] },
+    { id: 'handicap', type: 'number', label: 'Handicap', default: 2, min: 0, max: 5, step: 1 },
+    { id: 'ready', type: 'boolean', label: 'Ready', default: false },
+    { id: 'dictator', type: 'exclusive', label: 'Dictator', default: 'last', choices: [{ value: 'dictator', label: 'Dictator' }] },
+  ],
+};
+const personalDefaults = { side: 'north', handicap: 2, ready: false };
+const SEAT_OPTIONS_LOBBY = {
+  type: 'lobby',
+  seats: [
+    { seat: 1, held: true, mine: true, name: 'Ann', connected: true, bot: false, playerOptions: personalDefaults },
+    { seat: 2, held: false, mine: false, name: 'Seat 2', connected: false, bot: true, playerOptions: { ...personalDefaults, dictator: 'dictator' } },
+  ],
+  gameOptions: {},
+};
+
+describe("DevHost: Table setup sets each seat's player options (#1323, #1325)", () => {
+  async function openSeatOptions(): Promise<VueWrapper> {
+    const wrapper = mount(DevHost, { props: { config: SEAT_OPTIONS_CONFIG }, attachTo: document.body });
+    await wrapper.vm.$nextTick();
+    mockWsInstance!.simulateOpen();
+    mockWsInstance!.simulateMessage(SEAT_OPTIONS_LOBBY);
+    mockWsInstance!.simulateMessage({ type: 'init', seat: 1 });
+    await wrapper.vm.$nextTick();
+    await wrapper.findAll('[data-testid="table-setup-toggle"]')[0].trigger('click');
+    return wrapper;
+  }
+  const field = (wrapper: VueWrapper, seat: number, id: string) =>
+    wrapper.find(`[data-testid="seat-option-${seat}-${id}"]`).element as HTMLInputElement;
+
+  it("shows each seat's options as the host holds them, with no colour control", async () => {
+    const wrapper = await openSeatOptions();
+    expect(field(wrapper, 1, 'side').value).toBe('north');
+    expect(field(wrapper, 2, 'handicap').value).toBe('2');
+    expect(field(wrapper, 2, 'handicap').max).toBe('5');
+    expect(field(wrapper, 2, 'handicap').step).toBe('1');
+    expect(field(wrapper, 1, 'ready').checked).toBe(false);
+    expect([field(wrapper, 1, 'dictator').checked, field(wrapper, 2, 'dictator').checked]).toEqual([false, true]);
+    expect(wrapper.find('[data-testid="seat-option-1-color"]').exists()).toBe(false);
+  });
+
+  it('Apply sends every seat\'s options, the exclusive option on the one seat chosen', async () => {
+    const wrapper = await openSeatOptions();
+    await wrapper.find('[data-testid="seat-option-1-side"]').setValue('south');
+    await wrapper.find('[data-testid="seat-option-2-handicap"]').setValue('4');
+    await wrapper.find('[data-testid="seat-option-2-ready"]').setValue(true);
+    await wrapper.find('[data-testid="seat-option-1-dictator"]').setValue(true);
+    mockWsInstance!.send.mockClear();
+
+    await wrapper.find('[data-testid="apply-player-options"]').trigger('click');
+
+    const frames = mockWsInstance!.send.mock.calls.map((c) => JSON.parse(c[0] as string));
+    expect(frames).toEqual([
+      {
+        type: 'setPlayerOptions',
+        playerOptions: [
+          { side: 'south', handicap: 2, ready: false, dictator: 'dictator' },
+          { side: 'north', handicap: 4, ready: true },
+        ],
+      },
+    ]);
+  });
+});

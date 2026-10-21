@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { PlayerOptionDefinition } from '../../session/types.js';
+import { numberBoundsProblem } from '../../session/game-option-selection.js';
 
 /** A player option in boardsmith.json's list form, where its key is a field. */
 export interface ConfigOptionDefinition {
@@ -119,16 +120,120 @@ export function mergePlayerOptions(
   return merged;
 }
 
+type Exclusive = Extract<PlayerOptionDefinition, { type: 'exclusive' }>;
+type SeatOption = Exclude<PlayerOptionDefinition, { type: 'color' }>;
+
+/** The options a seat sets, by key: every declared one but colour, which is chosen with the seat. */
+function seatOptionEntries(options: Record<string, PlayerOptionDefinition>): Array<[string, SeatOption]> {
+  return Object.entries(options).filter((entry): entry is [string, SeatOption] => entry[1].type !== 'color');
+}
+
 /**
- * What each seat starts with for the player options `options` declares: each
- * select, number and boolean option's default (#1304). Colour is chosen per
- * seat from its palette, and an exclusive option's default names which seat
- * holds it, not a value every seat has, so neither is here.
+ * The seat (1-indexed) an exclusive option's default names, read as the
+ * platform's lobby reads it (ShufflewickPub `resolveExclusiveDefaultSeat`):
+ * "last" is the last seat, a whole number is that seat kept in range, and
+ * anything else is the first seat.
  */
-export function playerOptionDefaults(options: Record<string, PlayerOptionDefinition>): Record<string, unknown> {
+function defaultHolder(option: Exclusive, playerCount: number): number {
+  if (option.default === 'last') return playerCount;
+  const seat = option.default === '' ? NaN : Number(option.default);
+  return Number.isInteger(seat) ? Math.min(Math.max(seat, 1), playerCount) : 1;
+}
+
+/**
+ * What each seat starts with for the player options `options` declares
+ * (#1304, #1325): each select, number and boolean option's default, and each
+ * exclusive option's first choice on the one seat its default names, as the
+ * platform's lobby starts a table. Colour is chosen per seat from its palette,
+ * so it is not here.
+ */
+export function defaultSeatOptions(
+  options: Record<string, PlayerOptionDefinition>,
+  playerCount: number,
+): Array<Record<string, unknown>> {
+  const entries = seatOptionEntries(options);
+  const personal = Object.fromEntries(entries.flatMap(([key, option]) => (option.type === 'exclusive' ? [] : [[key, option.default]])));
+  const seats = Array.from({ length: playerCount }, () => ({ ...personal }) as Record<string, unknown>);
+  for (const [key, option] of entries) {
+    if (option.type === 'exclusive') seats[defaultHolder(option, playerCount) - 1][key] = option.choices[0].value;
+  }
+  return seats;
+}
+
+/** Which seat holds each exclusive option: the start op's `exclusiveSeats`, as the platform sends it. */
+export function exclusiveSeats(
+  options: Record<string, PlayerOptionDefinition>,
+  seats: Array<Record<string, unknown>>,
+): Record<string, number> {
   return Object.fromEntries(
-    Object.entries(options).flatMap(([key, option]) =>
-      option.type === 'select' || option.type === 'number' || option.type === 'boolean' ? [[key, option.default]] : [],
+    seatOptionEntries(options).flatMap(([key, option]) =>
+      option.type === 'exclusive' ? [[key, seats.findIndex((seat) => seat[key] !== undefined) + 1]] : [],
     ),
   );
+}
+
+function numberRefusal(option: Extract<SeatOption, { type: 'number' }>, value: unknown): string | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return `${option.label} must be a number, not ${JSON.stringify(value)}.`;
+  const problem = numberBoundsProblem(option, value);
+  return problem === undefined ? undefined : `${option.label} must be ${problem}, not ${value}.`;
+}
+
+/** Why `value` cannot be `option`'s value, or undefined when it can. */
+function valueRefusal(option: SeatOption, value: unknown): string | undefined {
+  if (option.type === 'number') return numberRefusal(option, value);
+  if (option.type === 'boolean') {
+    return typeof value === 'boolean' ? undefined : `${option.label} must be true or false, not ${JSON.stringify(value)}.`;
+  }
+  const values = option.choices.map((c) => c.value);
+  return values.includes(value as string)
+    ? undefined
+    : `${option.label} is ${JSON.stringify(value)}, which is none of its choices (${values.join(', ')}).`;
+}
+
+/** Why `seat`'s options cannot be set, or undefined when they can. */
+function seatRefusal(options: Record<string, PlayerOptionDefinition>, values: unknown, seat: number): string | undefined {
+  if (typeof values !== 'object' || values === null || Array.isArray(values)) {
+    return `Seat ${seat}'s player options must be a set of option values, such as { "ready": true }.`;
+  }
+  const entries = seatOptionEntries(options);
+  const missing = entries.find(([key, option]) => option.type !== 'exclusive' && !Object.hasOwn(values, key));
+  if (missing) return `Seat ${seat} has no value for ${missing[1].label}. Give each seat a value for every player option.`;
+  const declared = new Map(entries);
+  for (const [key, value] of Object.entries(values)) {
+    const option = declared.get(key);
+    if (!option) {
+      return `Seat ${seat}: "${key}" is not a player option of this game; its player options are ${[...declared.keys()].join(', ')}.`;
+    }
+    const refused = valueRefusal(option, value);
+    if (refused !== undefined) return `Seat ${seat}: ${refused}`;
+  }
+  return undefined;
+}
+
+/**
+ * Why `table` cannot be the seats' player options, or undefined when it can
+ * (#1323). It is one set of values per seat, in seat order: each a declared
+ * option's value of its type, refused as the platform's lobby refuses one,
+ * with each exclusive option on exactly one seat, since the platform will not
+ * start a table where one is unassigned or given twice.
+ */
+export function seatOptionsRefusal(
+  options: Record<string, PlayerOptionDefinition>,
+  table: unknown,
+  playerCount: number,
+): string | undefined {
+  if (!Array.isArray(table) || table.length !== playerCount) {
+    return `Send one set of player options for each of the ${playerCount} seats, in seat order.`;
+  }
+  for (const [index, values] of table.entries()) {
+    const refused = seatRefusal(options, values, index + 1);
+    if (refused !== undefined) return refused;
+  }
+  for (const [key, option] of seatOptionEntries(options)) {
+    if (option.type !== 'exclusive') continue;
+    const holders = table.flatMap((values: Record<string, unknown>, index) => (values[key] === undefined ? [] : [index + 1]));
+    if (holders.length === 0) return `Give ${option.label} to one seat.`;
+    if (holders.length > 1) return `${option.label} is given to seats ${holders.join(' and ')}; give it to one seat.`;
+  }
+  return undefined;
 }

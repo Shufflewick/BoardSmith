@@ -133,7 +133,10 @@ describe('MultiplayerHost — each declared player option\'s default reaches eve
       maxPlayers: def.maxPlayers,
       makeSeed: () => 'player-option-defaults',
       colorPalette: [{ value: '#123456', label: 'One' }, { value: '#abcdef', label: 'Two' }],
-      playerOptionDefaults: { handicap: 2, ready: false },
+      playerOptions: {
+        handicap: { type: 'number', label: 'Handicap', default: 2 },
+        ready: { type: 'boolean', label: 'Ready', default: false },
+      },
       executeOp: (gameOptions, snap, pend, op, hostOptions) => {
         if (op.type === 'start') startOptions = gameOptions;
         return executeOp(def, gameOptions, snap, pend, op, hostOptions);
@@ -160,7 +163,11 @@ describe('MultiplayerHost — a player option named like a seat field does not r
       maxPlayers: def.maxPlayers,
       makeSeed: () => 'seat-fields-win',
       botLevel: 'hard',
-      playerOptionDefaults: { name: 'Option', isBot: false, botLevel: 'easy' },
+      playerOptions: {
+        name: { type: 'select', label: 'Name', default: 'Option', choices: [{ value: 'Option', label: 'Option' }] },
+        isBot: { type: 'boolean', label: 'Bot', default: false },
+        botLevel: { type: 'select', label: 'Level', default: 'easy', choices: [{ value: 'easy', label: 'Easy' }] },
+      },
       executeOp: (gameOptions, snap, pend, op, hostOptions) => {
         if (op.type === 'start') startOptions = gameOptions;
         return executeOp(def, gameOptions, snap, pend, op, hostOptions);
