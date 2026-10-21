@@ -24,6 +24,7 @@
     }
   ],
   "untested": [
+    "**/*.md",
     "scripts/*-browser.mjs"
   ],
   "slice": {
