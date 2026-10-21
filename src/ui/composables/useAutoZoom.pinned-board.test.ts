@@ -88,7 +88,8 @@ const PinnedBoard = defineComponent({
     const boardRef = ref<HTMLElement | null>(null);
     const { boardStyle, zoom } = useBoardSize(boardRef);
     boardZoom = zoom;
-    return () => h('div', { ref: boardRef, class: 'my-board', style: boardStyle.value });
+    // jsdom drops a `min(…, 100cqw)` width, so the pin is also kept where layOut can read it.
+    return () => h('div', { ref: boardRef, class: 'my-board', style: boardStyle.value, 'data-pin': boardStyle.value.width });
   },
 });
 
@@ -130,8 +131,10 @@ function layOut(wrapper: ReturnType<typeof mountShell>['wrapper'], minContentWid
   Object.defineProperty(region, 'clientHeight', { get: () => REGION.height, configurable: true });
   zoom.getBoundingClientRect = () => {
     const boardRoot = zoom.firstElementChild as HTMLElement | null;
-    const pinned = boardRoot ? parseFloat(boardRoot.style.width) : NaN;
-    const width = Math.max(Number.isFinite(pinned) ? pinned : NATURAL.width, minContentWidth);
+    // The pin is `min(<px>, 100cqw)`, and 100cqw is the region's width here.
+    const pin = boardRoot?.dataset.pin?.match(/min\((\d+(?:\.\d+)?)px, 100cqw\)/);
+    const pinned = pin ? Math.min(Number(pin[1]), REGION.width) : NATURAL.width;
+    const width = Math.max(pinned, minContentWidth);
     return { width, height: NATURAL.height } as DOMRect;
   };
   return { region, zoom };

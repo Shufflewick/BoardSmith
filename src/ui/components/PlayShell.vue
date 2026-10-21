@@ -879,6 +879,9 @@ const mobileToggleLabel = computed(() => {
      toggle the scrollbar on/off, which would change clientWidth/clientHeight
      and create a resize-observer feedback path into useAutoZoom's re-fit. */
   scrollbar-gutter: stable;
+  /* A size container, so useBoardSize can cap a board's pin at 100cqw, this
+     content box at layout time, and a stale pin cannot overflow it (#1336). */
+  container-type: inline-size;
   padding: var(--bsg-s1);
   /* The Action Panel's reserved footprint is LAYOUT, not arithmetic: the region's
      own padding excludes it, so the fit's `region.clientHeight - padding` already
