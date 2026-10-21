@@ -569,6 +569,26 @@ describe('WorldShell — the shared chrome (#170)', () => {
     expect(said.types).toContain('error');
   });
 
+  it('speaks a refusal execute() makes before sending, for a button that ignores the result (#1342)', async () => {
+    const { toasts } = useToast();
+    const before = toasts.value.length;
+    const { wrapper, posted, done } = await watching();
+    tell(wrapper, stateFrame({
+      revision: 2,
+      actions: [{ name: 'look', selections: [] }, { name: 'move', selections: [], disabled: 'the door is barred' }],
+    }));
+    await flushPromises();
+
+    await (wrapper.vm as any).actionController.execute('move', { to: 'cellar' });
+    await flushPromises();
+
+    const said = toasts.value.slice(before);
+    expect(posted.some((m) => m.type === 'world_command')).toBe(false);
+    expect(said.map((t) => t.message)).toEqual(['the door is barred']);
+    expect(said.map((t) => t.type)).toEqual(['error']);
+    done();
+  });
+
   it('names the fix rather than rendering blank when the registry resolves to nothing', async () => {
     const wrapper = mount(WorldShell, {
       props: {
