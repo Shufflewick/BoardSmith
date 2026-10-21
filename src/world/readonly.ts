@@ -610,3 +610,66 @@ export function readOnlyProjection<T>(value: T): T {
   minted.add(projection);
   return projection as T;
 }
+
+/**
+ * A DETACHED PLAIN COPY OF DATA A CALLBACK READ (#1347).
+ *
+ * Serializing through a projection pays a trap per property and mints a proxy
+ * per nested object, measured at 12-36x a plain `JSON.stringify`. This walks
+ * the real data instead and answers a fresh copy, so nothing it hands back
+ * reaches the world. Only plain data is copied: a class instance, a built-in
+ * object, a function and an accessor are refused unrun, since running one
+ * against the live object is the write this module exists to prevent.
+ */
+export function plainCopy<T>(value: T): T {
+  return copyPlain(value, [], new Set()) as T;
+}
+
+function copyPlain(value: unknown, path: string[], within: Set<object>): unknown {
+  if (value === null || (typeof value !== "object" && typeof value !== "function")) return value;
+  const subject = plainSubject(value, path, within);
+  within.add(subject);
+  const copy: Record<string, unknown> = Array.isArray(subject) ? (new Array(subject.length) as never) : {};
+  for (const key of Object.keys(subject)) {
+    path.push(key);
+    const item = copyPlain(dataValue(subject, key, path), path, within);
+    // An own "__proto__" key, as JSON.parse makes, would set the copy's prototype if assigned.
+    if (key === "__proto__") Object.defineProperty(copy, key, { value: item, enumerable: true, writable: true, configurable: true });
+    else copy[key] = item;
+    path.pop();
+  }
+  within.delete(subject);
+  return copy;
+}
+
+/** The real object behind a value, refused unless it is a plain object or array not already being copied. */
+function plainSubject(value: object, path: string[], within: Set<object>): object {
+  const subject = sources.get(value) ?? value;
+  if (typeof subject === "function") refuseCopy(path, "is a function");
+  if (within.has(subject)) refuseCopy(path, "refers back to an object that contains it");
+  const prototype = Object.getPrototypeOf(subject) as object | null;
+  const plain = Array.isArray(subject) ? prototype === Array.prototype : prototype === Object.prototype || prototype === null;
+  if (!plain) refuseCopy(path, `is a ${kindOf(prototype)}`);
+  return subject;
+}
+
+/** An own property's value, refused unrun when it is a getter. */
+function dataValue(subject: object, key: string, path: string[]): unknown {
+  const held = Object.getOwnPropertyDescriptor(subject, key)!;
+  if (!("value" in held)) refuseCopy(path, "is a getter");
+  return held.value;
+}
+
+/** The refused object's class name, read from its prototype's own data property so no game code runs. */
+function kindOf(prototype: object | null): string {
+  const named = prototype === null ? undefined : Object.getOwnPropertyDescriptor(prototype, "constructor")?.value;
+  return typeof named === "function" && named.name !== "" ? named.name : "class instance";
+}
+
+function refuseCopy(path: string[], what: string): never {
+  const where = path.length === 0 ? "the value itself" : `the value at "${path.join(".")}"`;
+  throw new TypeError(
+    `plainCopy copies plain data only (plain objects, arrays and primitive values such as strings and numbers), but ${where} ${what}. ` +
+      "Copy only the plain fields you need, or read the rest through the read-only view as it is.",
+  );
+}

@@ -147,6 +147,7 @@ export {
   settleDeclaration,
   walkDeclaration,
 } from './declaration.js';
+export { plainCopy } from './readonly.js';
 export {
   catchUpPlan,
   nextDueBatch,
