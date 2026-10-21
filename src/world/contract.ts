@@ -167,7 +167,8 @@
  *
  * ### The overcount, and the optimisation that answers it
  *
- * A partition merely READ is reported dirty. The overcount is bounded by what
+ * A partition merely READ is reported dirty, unless the action loaded it with
+ * `.reads()` (#1334). The overcount is bounded by what
  * the command touched, so it is still O(room), and a resident DO amortises it:
  * an already-hydrated partition stays hydrated. If it ever matters, the fix is
  * PLATFORM-SIDE -- hash the serialized output and skip the storage write when

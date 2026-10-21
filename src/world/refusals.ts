@@ -202,6 +202,10 @@ export const WORLD_REFUSALS = {
     owner: "game",
     why: "a handler read, or emitted an event in, a partition its partitions() did not declare -- a bundle bug, and the same bundle will do it again next time",
   },
+  "read-only-write": {
+    owner: "game",
+    why: "#1334: an action changed a partition it loads only with `.reads()`. Such a partition is never saved, so the change would be lost; the command is refused and rolled back instead. GAME-owned: the declaration is in the bundle's source, so the same action does it again next time",
+  },
   "undeclared-activity": {
     owner: "game",
     why:

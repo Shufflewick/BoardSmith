@@ -21,7 +21,8 @@
  *
  * `dirty` is LOADED-OR-TOUCHED, exactly as the contract's header decided:
  *
- *   LOADED -- every partition the command NAMED. Not "every partition the
+ *   LOADED -- every partition the command NAMED, except one only `.reads()`
+ *     named (#1334), which is dirty only if touched. Not "every partition the
  *     command's load actually hydrated": a partition left resident by an
  *     earlier command is still one this command was free to write, and there
  *     is no write barrier that could tell us it did not. Reporting the named
@@ -2011,6 +2012,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
      *  notice box, so their notice rounds are not even asked (#521). */
     namedBoxes: number[] | null,
     when: WorldDispatchWhen,
+    /** The names a `.needs()` round gave, on the write path only (#1334). */
+    writable?: Set<string>,
   ): Promise<void> {
     for (const round of definition.world!.needs) {
       if (round.before !== step) continue;
@@ -2027,6 +2030,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       }
       for (const name of this.declareRound(round, seat, args, when)) {
         if (!named.includes(name)) named.push(name);
+        if (!round.readOnly) writable?.add(name);
         await this.ensureResident(name);
       }
     }
@@ -2524,6 +2528,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
     const namedSeats: number[] = [];
     // AND WHICH NOTICE BOXES (ShufflewickPub #521), on the same terms.
     const namedBoxes: number[] = [];
+    // AND WHICH OF `named` IT MAY WRITE: the rest came only from `.reads()` (#1334).
+    const writable = new Set<string>();
     for (let step = 0; step <= definition.selections.length; step++) {
       await this.hydrateRounds(
         definition,
@@ -2534,6 +2540,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         namedSeats,
         namedBoxes,
         when,
+        writable,
       );
     }
 
@@ -2621,6 +2628,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // then meant "mutated, and durably so once anything else checkpointed the
     // same partition". The only way out of this block without the rollback is
     // the successful return at its end.
+    this.reachReadOnly(named, writable);
     bindWorldFacilities(this.game, facilities);
     try {
       const result =
@@ -2667,7 +2675,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         // for the next command (#316) -- and since #295 that pass runs over the
         // partitions this command REACHED rather than over the resident set, so
         // what it costs is the room.
-        dirty: this.dirtySet(command.name, named, touchedOnce()),
+        dirty: this.dirtySet(command.name, named, writable, touchedOnce()),
         schedules: ledger.schedules,
         ...outcomeOf(ledger, this.noticesPerSeat),
       };
@@ -2691,22 +2699,34 @@ export class BoardSmithWorldEngine implements WorldEngine {
     }
   }
 
+  /** Nothing saves a partition only `.reads()` named, so its bytes are always
+   *  compared, however the handler reached it (#1334). */
+  private reachReadOnly(named: readonly string[], writable: ReadonlySet<string>): void {
+    for (const name of named) {
+      if (!writable.has(name)) this.game.reachPartition(this.residentIds.get(name)!);
+    }
+  }
+
   /**
    * WHAT THIS DISPATCH CHANGED: loaded-or-touched.
    *
-   * LOADED -- every partition the walk NAMED. Not "every partition the walk
-   * actually hydrated": one left resident by an earlier command is still one
-   * this action was free to write, and there is no write barrier that could
-   * tell us it did not. TOUCHED -- the engine's own half, which carries BOTH
-   * endpoints of every physical re-parent, the half a host structurally cannot
-   * see.
+   * LOADED -- every partition a `.needs()` round NAMED. Not "every partition
+   * the walk actually hydrated": one left resident by an earlier command is
+   * still one this action was free to write. TOUCHED -- the engine's own half:
+   * every partition whose bytes changed, and both endpoints of every physical
+   * re-parent, the half a host structurally cannot see.
+   *
+   * A partition only `.reads()` named is not loaded-for-writing (#1334), so it
+   * is dirty only if touched, and a touch on it refuses the command.
    */
   private dirtySet(
     action: string,
     named: readonly string[],
+    writable: ReadonlySet<string>,
     touched: ReadonlySet<number>,
   ): string[] {
-    const dirty = new Set<string>(named);
+    const dirty = new Set<string>(writable);
+    const readOnly = new Set(named.filter((name) => !writable.has(name)));
     for (const id of touched) {
       const name = this.residentNames.get(id);
       if (name === undefined) {
@@ -2715,6 +2735,14 @@ export class BoardSmithWorldEngine implements WorldEngine {
           `Action "${action}" moved something into or out of partition root ${id}, which this ` +
             `engine never loaded and cannot name. Every partition must reach the tree through ` +
             `the partition store, or its changes cannot be checkpointed.`,
+        );
+      }
+      if (readOnly.has(name)) {
+        throw worldRefusal(
+          "read-only-write",
+          `Action "${action}" changed partition "${name}", which it loads with .reads() and so ` +
+            `may only read. Load it with .needs() if the action writes to it, or move the write ` +
+            `to a partition it loads with .needs().`,
         );
       }
       dirty.add(name);
