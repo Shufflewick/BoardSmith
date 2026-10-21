@@ -203,9 +203,16 @@ export interface ActionStateSnapshot {
    * In-flight choice fetches, keyed by selection name. An entry exists only
    * while its request is outstanding, so a second caller joins the same request
    * instead of issuing a duplicate, and anything that needs the choices can
-   * await the request rather than racing it.
+   * await the request rather than racing it. A caller whose earlier answers
+   * differ from the entry's `askedAgainst` starts a fresh request instead (#1358).
    */
-  choiceFetches: Map<string, Promise<void>>;
+  choiceFetches: Map<string, ChoiceFetch>;
+}
+
+/** A choice fetch still out, with the answers to the picks before it that it was asked against. */
+export interface ChoiceFetch {
+  request: Promise<void>;
+  askedAgainst: (CollectedPick | undefined)[];
 }
 
 export interface UseActionControllerOptions {

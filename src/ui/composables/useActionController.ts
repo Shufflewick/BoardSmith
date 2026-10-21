@@ -1092,10 +1092,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    */
   function fetchChoicesForPick(selectionName: string): Promise<void> {
     const fetches = actionSnapshot.value?.choiceFetches;
+    const askedAgainst = answersBefore(selectionName);
     const inFlight = fetches?.get(selectionName);
-    if (inFlight) return inFlight;
+    if (inFlight && sameAnswers(inFlight.askedAgainst, askedAgainst)) return inFlight.request;
 
-    const request = requestChoicesForPick(selectionName);
+    const request = requestChoicesForPick(selectionName, askedAgainst);
     if (!fetches) return request;
 
     // The entry is cleared as soon as the request settles, so a pick whose
@@ -1103,11 +1104,25 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // Cleanup is registered on the side rather than chained onto what callers
     // await, so joining a fetch costs a caller no extra microtask.
     const forget = () => {
-      if (fetches.get(selectionName) === request) fetches.delete(selectionName);
+      if (fetches.get(selectionName)?.request === request) fetches.delete(selectionName);
     };
-    fetches.set(selectionName, request);
+    fetches.set(selectionName, { request, askedAgainst });
     void request.then(forget, forget);
     return request;
+  }
+
+  /** The answers to the picks before `selectionName`, which a fetch of its choices is asked against. */
+  function answersBefore(selectionName: string): (CollectedPick | undefined)[] {
+    const snapshot = actionSnapshot.value;
+    const names = snapshot?.metadata.selections.map(s => s.name) ?? [];
+    const index = names.indexOf(selectionName);
+    if (!snapshot || index === -1) return [];
+    return names.slice(0, index).map(name => snapshot.collectedPicks.get(name));
+  }
+
+  /** Each answer is stored as a new object, so one cleared or changed since is a different one. */
+  function sameAnswers(a: (CollectedPick | undefined)[], b: (CollectedPick | undefined)[]): boolean {
+    return a.length === b.length && a.every((pick, i) => pick === b[i]);
   }
 
   /** A refused re-ask leaves no answer to an earlier question in place of its own (#1354). */
@@ -1115,7 +1130,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (actionSnapshot.value?.pickSnapshots.delete(selectionName)) snapshotVersion.value++;
   }
 
-  async function requestChoicesForPick(selectionName: string): Promise<void> {
+  async function requestChoicesForPick(selectionName: string, askedAgainst: (CollectedPick | undefined)[]): Promise<void> {
     const fetchFn = options.fetchPickChoices;
     if (!fetchFn) {
       return;
@@ -1144,6 +1159,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // If the action is gone or replaced after the round trip, discard the
     // result, success or failure, rather than apply it to the new action (R-06, #663).
     const seq = actionStartTick.value;
+    // Nor apply it once an earlier pick it was asked against is cleared or changed (#1358).
+    const superseded = () => actionMovedOn(seq) || !sameAnswers(askedAgainst, answersBefore(selectionName));
 
     isLoadingChoices.value = true;
     const fetchStartTime = Date.now();
@@ -1157,7 +1174,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         buildServerArgs()
       );
 
-      if (actionMovedOn(seq)) return;
+      if (superseded()) return;
 
       const fetchDuration = Date.now() - fetchStartTime;
 
@@ -1188,7 +1205,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         setError(result.error ?? describeUndescribablePick(selection));
       }
     } catch (err) {
-      if (actionMovedOn(seq)) return;
+      if (superseded()) return;
       const fetchDuration = Date.now() - fetchStartTime;
       console.error(
         `[BoardSmith] Error fetching pick choices for '${selectionName}' after ${fetchDuration}ms:`,
@@ -1589,11 +1606,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // against an empty snapshot is discarded, and an auto-fill judged against
     // one choice that is really two picks for the player (#226). A fetch
     // started by start()/fill() is normally still in flight when this watcher
-    // first runs, so join it; otherwise start one for a pick not fetched yet.
-    const inFlight = actionSnapshot.value?.choiceFetches.get(sel.name);
-    if (inFlight) {
-      await inFlight;
-    } else if (!actionSnapshot.value?.pickSnapshots.has(sel.name)) {
+    // first runs, so join it, unless it was asked against earlier answers since
+    // cleared or changed (#1358); otherwise start one for a pick not fetched yet.
+    if (actionSnapshot.value?.choiceFetches.has(sel.name) || !actionSnapshot.value?.pickSnapshots.has(sel.name)) {
       await fetchChoicesForPick(sel.name);
     }
 

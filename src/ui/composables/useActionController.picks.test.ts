@@ -1981,6 +1981,80 @@ describe('useActionController picks', () => {
     expect(controller.lastError.value).toBe('The skiff has no crew list yet');
   });
 
+  it.each([true, false])("neither joins nor keeps a later pick's fetch still out for an earlier pick's old answer, cleared first: %s (#1358)", async (clearFirst) => {
+    actionMetadata.value = {
+      ...createTestMetadata(),
+      board: {
+        name: 'board',
+        selections: [
+          { name: 'ship', type: 'choice', prompt: 'Ship', choices: [{ value: 'dory', display: 'Dory' }, { value: 'skiff', display: 'Skiff' }] },
+          { name: 'crew', type: 'choice', prompt: 'Crew' },
+        ],
+      },
+    };
+    availableActions.value = [...(availableActions.value ?? []), 'board'];
+    const crew = [{ value: 'ann', display: 'Ann' }, { value: 'bo', display: 'Bo' }];
+    let settleDory!: () => void;
+    const fetchPickChoices = vi.fn(async (_action: string, pick: string, _player: number, args: Record<string, unknown>): Promise<PickChoicesResult> => {
+      if (pick !== 'crew') return { success: true, choices: [{ value: 'dory', display: 'Dory' }, { value: 'skiff', display: 'Skiff' }] };
+      if (args.ship === 'skiff') return { success: true, prompt: 'Crew for skiff', choices: crew, multiSelect: { min: 2, max: 2 } };
+      await new Promise<void>(resolve => { settleDory = resolve; });
+      return { success: true, prompt: 'Crew for dory', choices: crew, multiSelect: { min: 1, max: 1 } };
+    });
+    const controller = useActionController({
+      sendAction, availableActions, actionMetadata, isMyTurn,
+      autoExecute: false, autoFill: false, playerSeat: ref(0), fetchPickChoices,
+    });
+    await controller.start('board');
+
+    const doryFill = controller.fill('ship', 'dory');
+    await nextTick();
+    if (clearFirst) controller.clear('ship');
+    const skiffFill = controller.fill('ship', 'skiff');
+    settleDory();
+    await Promise.all([doryFill, skiffFill]);
+
+    expect(fetchPickChoices).toHaveBeenCalledWith('board', 'crew', 0, { ship: 'skiff' });
+    expect(controller.currentPick.value?.prompt).toBe('Crew for skiff');
+    expect(controller.actionSnapshot.value?.pickSnapshots.get('crew')?.multiSelect).toEqual({ min: 2, max: 2 });
+  });
+
+  it("asks a pick again when it comes up while its fetch for an earlier pick's old answer is still out (#1358)", async () => {
+    actionMetadata.value = {
+      ...createTestMetadata(),
+      board: {
+        name: 'board',
+        selections: [
+          { name: 'ship', type: 'choice', prompt: 'Ship', choices: [{ value: 'dory', display: 'Dory' }] },
+          { name: 'crew', type: 'choice', prompt: 'Crew' },
+        ],
+      },
+    };
+    availableActions.value = [...(availableActions.value ?? []), 'board'];
+    let settleFirst: (() => void) | undefined;
+    let crewAsks = 0;
+    const fetchPickChoices = vi.fn(async (_action: string, pick: string): Promise<PickChoicesResult> => {
+      if (pick !== 'crew') return { success: true, choices: [{ value: 'dory', display: 'Dory' }] };
+      crewAsks++;
+      if (crewAsks === 1) await new Promise<void>(resolve => { settleFirst = resolve; });
+      return { success: true, prompt: `Crew, ask ${crewAsks}`, choices: [{ value: 'ann', display: 'Ann' }, { value: 'bo', display: 'Bo' }] };
+    });
+    const controller = useActionController({
+      sendAction, availableActions, actionMetadata, isMyTurn,
+      autoExecute: false, playerSeat: ref(0), fetchPickChoices,
+    });
+
+    // The lone ship is auto-filled each time it comes up, which starts no fetch of its own for the crew.
+    const starting = controller.start('board');
+    await vi.waitFor(() => expect(settleFirst).toBeDefined());
+    controller.clear('ship');
+    await vi.waitFor(() => expect(crewAsks).toBe(2));
+    settleFirst?.();
+    await starting;
+
+    await vi.waitFor(() => expect(controller.actionSnapshot.value?.pickSnapshots.get('crew')?.prompt).toBe('Crew, ask 2'));
+  });
+
   describe('multiSelect validation', () => {
     // Note: Current implementation validates array elements individually,
     // which means multiSelect arrays pass if any element matches a choice.
