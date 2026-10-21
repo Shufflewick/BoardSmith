@@ -2667,11 +2667,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (index === -1) return true;
     const repeating = repeatingState.value;
     // The server holds a repeat once it took a step of it, and takes no pick at or before it again (#1365).
-    const heldRepeat = pendingOnServer.value
-      ? selections.findLastIndex(s => s.repeat && (s.name in currentArgs.value
-        || (s.name === repeating?.selectionName && repeating.accumulated.length > 0)))
-      : -1;
-    if (heldRepeat >= index) {
+    const repeatHeld = pendingOnServer.value && selections.slice(index).some(s => s.repeat
+      && (s.name in currentArgs.value || (s.name === repeating?.selectionName && repeating.accumulated.length > 0)));
+    if (repeatHeld) {
       setError(REPEAT_HELD);
       return false;
     }
