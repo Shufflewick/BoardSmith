@@ -7,7 +7,8 @@
  *         availWidth/boardStyle, and caps the pin at the region's own width so
  *         a stale pin cannot overflow it (#1336). The width is the one the
  *         region has with its vertical scrollbar showing, whether or not it
- *         shows, so the scrollbar coming or going never moves the pin (#1343).
+ *         shows, so the scrollbar coming or going never moves the pin (#1343),
+ *         and the cap takes off a scrollbar 100cqw leaves out (#1353).
  *   BS-2: boardStyle is empty until a measurement succeeds (no width-0 flash),
  *         and falls back to the parent element when no .boardregion exists
  *         (e.g. unit-test harnesses / non-GameShell hosts).
@@ -106,6 +107,23 @@ describe('useBoardSize', () => {
 
     expect(api.availWidth.value).toBe(737);
     expect(region.style.overflowY).toBe('auto');
+    wrapper.unmount();
+  });
+
+  it('BS-1: where 100cqw leaves out a scrollbar the region reserves no gutter for, the cap takes it off (#1353)', async () => {
+    const region = fakeRegion(752);
+    const realStyle = window.getComputedStyle.bind(window);
+    // Chromium and WebKit resolve 100cqw to the region's width as if its 15px scrollbar were not there.
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((el) => {
+      if (el === region) return { width: region.style.overflowY === 'scroll' ? '737px' : '752px' } as CSSStyleDeclaration;
+      if ((el as HTMLElement).style.width === '100cqw') return { width: '752px' } as CSSStyleDeclaration;
+      return realStyle(el);
+    });
+    const { api, wrapper } = mountBoardSize(ref(boardInRegion(region)));
+    await nextTick();
+
+    expect(api.boardStyle.value).toEqual({ width: 'min(737px, calc(100cqw - 15px))' });
+    expect(region.children).toHaveLength(1);
     wrapper.unmount();
   });
 

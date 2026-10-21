@@ -47,7 +47,7 @@
  * returned `zoom` to do that conversion (#1332).
  */
 import { ref, computed, watch, onBeforeUnmount, type Ref } from 'vue';
-import { registerBoardRegionPin, regionWidth } from './boardRegionPin.js';
+import { registerBoardRegionPin, regionWidth, cqwOverhang } from './boardRegionPin.js';
 
 export function useBoardSize(boardEl: Ref<HTMLElement | null>) {
   // Declare the model to the shell for this scope's lifetime. Done at call
@@ -68,21 +68,27 @@ export function useBoardSize(boardEl: Ref<HTMLElement | null>) {
    *  container, rather than from the board's parent element. */
   const inRegion = ref(false);
 
+  /** How much wider the region's `100cqw` is than `availWidth` (#1353). */
+  const overhang = ref(0);
+
   /** Bind to the board root. Empty until measured, so the board keeps its
    *  natural size for the first paint rather than flashing at width 0. In a
    *  region the pin is capped at `100cqw`, the region's content box at layout
    *  time: the pin is re-measured only after layout, and a pin from before the
-   *  region narrowed would otherwise overflow it sideways for a frame (#1336). */
+   *  region narrowed would otherwise overflow it sideways for a frame (#1336).
+   *  Less the scrollbar `100cqw` leaves out where the region has no gutter (#1353). */
   const boardStyle = computed(() => {
     if (!availWidth.value) return {};
     const pin = `${availWidth.value}px`;
-    return { width: inRegion.value ? `min(${pin}, 100cqw)` : pin };
+    const cap = overhang.value ? `calc(100cqw - ${overhang.value}px)` : '100cqw';
+    return { width: inRegion.value ? `min(${pin}, ${cap})` : pin };
   });
 
   function measure() {
     const region = boardEl.value?.closest('.boardregion') as HTMLElement | null | undefined;
     inRegion.value = !!region;
     if (region) {
+      overhang.value = cqwOverhang(region);
       availWidth.value = regionWidth(region);
       return;
     }
