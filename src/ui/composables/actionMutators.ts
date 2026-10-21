@@ -107,6 +107,7 @@ export function createActionMutators(
   }
 
   async function executeAction(actionName: string, args: Record<string, unknown>): Promise<boolean> {
+    if (guards.isViewingHistory()) return false;
     if (!guards.isMyTurn()) return false;
     if (guards.isCompleted()) return false;
     if (guards.disabledReason(actionName)) return false;
