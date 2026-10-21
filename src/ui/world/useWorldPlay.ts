@@ -309,7 +309,7 @@ export function useWorldPlay(host: WorldSeatHost): WorldPlay {
       };
     }
     // NOTHING BOUND YET, SO THE OFFER IS ALREADY THE ANSWER. A world's offer
-    // arrives with every selection's candidates resolved against empty args, so
+    // arrives with its selections' candidates resolved against empty args, so
     // the first pick of any action -- and every pick of a single-selection one,
     // which is most of them -- costs no round trip at all.
     if (Object.keys(currentArgs).length === 0) {

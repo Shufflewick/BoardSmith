@@ -1236,7 +1236,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     seat: number,
     now: number,
   ): readonly string[] {
-    for (let step = 0; step < definition.selections.length || step === 0; step++) {
+    for (let step = 0; step <= offeredThrough(definition); step++) {
       for (const round of definition.world!.needs) {
         if (round.before !== step) continue;
         const unmet = this.unmetOnASeatsRead(round, seat, {}, now);
@@ -1283,8 +1283,16 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // declaration names them. Interleaving is what makes enumeration possible
       // at all here -- selection i's candidates are evaluated with selection
       // i's declaration resident and not before.
+      //
+      // AND ONLY THROUGH THE FIRST REQUIRED PICK (#1345). A later pick's round and
+      // candidates may read that pick, so they wait for the re-ask with it bound,
+      // which refuses them without it (#1338); the offer carries their shape.
       const selections: PickMetadata[] = [];
       for (let index = 0; index < definition.selections.length; index++) {
+        if (index > offeredThrough(definition)) {
+          selections.push(this.pickShapeOf(definition, index, acting));
+          continue;
+        }
         if (index > 0) {
           await this.hydrateRounds(definition, index, seat, {}, named, namedSeats, null, arrivalAt(stamp.now));
         }
@@ -1710,6 +1718,14 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // bundle's own callbacks, and every one of them is answering a question
     // rather than taking a moment.
     return this.game.readingOnly(() => this.pickMetadata(definition, index, acting, named, args));
+  }
+
+  /** A pick's shape with no candidates, read-only as `pickOf`: what an offer
+   *  carries for a pick past the first required one (#1345). */
+  private pickShapeOf(definition: ActionDefinition, index: number, acting: Player): PickMetadata {
+    return this.game.readingOnly(() =>
+      buildPickMetadata(readOnlyProjection(this.game), acting, definition.name, definition.selections[index]!),
+    );
   }
 
   private pickMetadata(
@@ -3772,7 +3788,7 @@ function pruneRoster(json: ElementJSON, roster: ReadonlySet<number>): ElementJSO
 /**
  * THE FIRST QUESTION DECIDES THE OFFER, AND ONLY THE FIRST (BoardSmith #270).
  *
- * Every pick of an offer is enumerated with `args: {}`, which is the right
+ * An offer's picks are enumerated with `args: {}`, which is the right
  * question to ask the FIRST one -- that is exactly what the player will have in
  * hand when they are asked it -- and the wrong question to ask any other. A
  * second selection narrowed by the first has nothing to narrow by yet, so the
@@ -3874,6 +3890,13 @@ function offerOf(
       quote: definition.world?.quote === undefined ? undefined : true,
     }),
   };
+}
+
+/** The last pick an offer enumerates: the first required one, since a later
+ *  pick's round may read it and a re-ask without it is refused (#1338, #1345). */
+function offeredThrough(definition: ActionDefinition): number {
+  const required = definition.selections.findIndex((pick) => !pick.optional);
+  return required === -1 ? Math.max(definition.selections.length - 1, 0) : required;
 }
 
 /** The fields that have a value, as an object to spread. See `offerOf` for why

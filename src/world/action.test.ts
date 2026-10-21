@@ -977,6 +977,19 @@ describe("#665 — a seat sends only an action's picks, on every road", () => {
       expect(engine.pickPartitions("p1", "build", "plot", {}, STAMP.now)).toEqual([]);
       await expect(engine.resolvePick("p1", "build", "plot", {}, stamp)).resolves.toBeDefined();
     });
+
+    it("#1345 — the offer stops at the first required pick: a later pick's round and candidates wait for the re-ask", async () => {
+      const { engine, read } = sizing();
+      await engine.hydrate([holdingPartition(1)]);
+      expect(engine.offerPartitions("p1", STAMP.now)).toEqual([]);
+      const offer = (await engine.offersFor("p1", OFFER)).find((o) => o.name === "build")!;
+      expect(read).toEqual([]);
+      expect(offer.selections.map((pick) => [pick.name, pick.choices?.length])).toEqual([
+        ["note", 1],
+        ["plot", 2],
+        ["size", undefined],
+      ]);
+    });
   });
 
   it("leaves a scheduled event's args to the bundle that scheduled them: the clock asks no picks", async () => {
