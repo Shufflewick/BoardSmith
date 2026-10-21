@@ -891,7 +891,8 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * WHAT THIS STEP NEEDS RESIDENT, evaluated before the step runs.
    *
    * Called before any selection it is round one, answered with nothing loaded.
-   * Called after the last selection it is the execute round. Between them, put
+   * Called after the last selection it is the execute round, which sees every
+   * required pick bound: a command missing one is refused first (#1328). Between them, put
    * the declaration ON the selection it belongs to (`needs:` in its options),
    * so the order in the source is the order the engine walks.
    *

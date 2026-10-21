@@ -109,6 +109,22 @@ describe('TestWorld: a resident world a test can construct', () => {
     await world.close();
   });
 
+  it('refuses a command missing a required pick as the caller’s, before a later round reads it (#1328)', async () => {
+    const build = worldAction<VaultWorld>('build')
+      .chooseFrom('plot', { choices: ['commons@1,1'] })
+      // The read the ticket's game made: it crashes on a plot left unbound.
+      .needs(({ args }) => [(args.plot as string).split('@')[0]!])
+      .execute(() => {});
+    const world = await createTestWorld({
+      definition: bundle({ ...vaultWorldBlock(), actions: [build] } as WorldDefinition),
+    });
+    await expect(world.take(1, 'build')).rejects.toMatchObject({
+      code: 'missing-pick',
+      message: 'Missing required selection: plot',
+    });
+    await world.close();
+  });
+
   it('moves the revision when a command commits, so a frame can be placed in time', async () => {
     const world = await createTestWorld({ definition: bundle() });
     const before = (await world.getPlayerView(1)).revision;

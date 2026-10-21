@@ -1061,9 +1061,9 @@ export class BoardSmithWorldEngine implements WorldEngine {
     stamp: WorldCommandStamp,
   ): Promise<WorldCommandResult> {
     const seat = this.seatFor(player);
-    // A SEAT'S ARGS ARE ITS PICKS (#665), refused as the caller's before the
-    // walk or the handler sees them, as `commandNeeds` refuses them.
-    this.refuseUndeclaredArgs(this.actionFor(command.name, seat), command.args);
+    // A SEAT'S ARGS ARE ITS PICKS (#665, #1328), refused as the caller's before
+    // the walk or the handler sees them, as `commandNeeds` refuses them.
+    this.refuseCommandArgs(this.actionFor(command.name, seat), command.args);
     // The acting player is the schedule OWNER: their events are charged to
     // their budget, and a bundle cannot charge them to somebody else because
     // it never gets to name one.
@@ -1648,6 +1648,19 @@ export class BoardSmithWorldEngine implements WorldEngine {
     if (refusal !== undefined) throw worldRefusal("undeclared-arg", refusal);
   }
 
+  /** A whole command's args are every required pick and nothing else (#1328),
+   *  so a round after a selection always sees that selection bound. */
+  private refuseCommandArgs(
+    definition: ActionDefinition,
+    args: Readonly<Record<string, unknown>>,
+  ): void {
+    this.refuseUndeclaredArgs(definition, args);
+    const missing = definition.selections.find((pick) => !pick.optional && (args[pick.name] === undefined || args[pick.name] === null));
+    if (missing !== undefined) {
+      throw worldRefusal("missing-pick", `Missing required selection: ${missing.name}`);
+    }
+  }
+
   /** The action a seat could be offered under this name, or a refusal naming
    *  the ones it could. The clock's own verbs are not among them (#120). */
   private offerableAction(name: string): ActionDefinition {
@@ -1805,10 +1818,10 @@ export class BoardSmithWorldEngine implements WorldEngine {
   ): WorldDispatchNeeds {
     const seat = player === null ? null : this.seatFor(player);
     const definition = this.actionFor(command.name, seat);
-    // A SEAT'S ARGS ARE ITS PICKS (#665), refused before a declaration sees
-    // them. The clock's args are the bundle's own data: a seatless action asks
-    // no picks.
-    if (seat !== null) this.refuseUndeclaredArgs(definition, command.args);
+    // A SEAT'S ARGS ARE ITS PICKS (#665, #1328), refused before a declaration
+    // sees them. The clock's args are the bundle's own data: a seatless action
+    // asks no picks.
+    if (seat !== null) this.refuseCommandArgs(definition, command.args);
     assertClockIsTimed(command.name, seat, when);
     // WHICH OF THE HOST'S ANSWERS THIS WALK HAS ACCOUNTED FOR SO FAR.
     //

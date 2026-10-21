@@ -893,6 +893,46 @@ describe("#665 — a seat sends only an action's picks, on every road", () => {
     expect(calls).toContain("execute");
   });
 
+  describe("#1328 — a command missing a required pick is refused before a round reads it", () => {
+    /** `build`'s execute round reads `plot`, as a round after a selection may. */
+    function building() {
+      const read: unknown[] = [];
+      const build = worldAction<VillageFixture>("build")
+        .chooseFrom("plot", { choices: () => ["east", "west"] })
+        .chooseFrom("note", { choices: () => ["quick"], optional: true })
+        .needs(({ player, args }) => {
+          read.push(args.plot);
+          return [holdingPartition(player.seat)];
+        })
+        .execute(() => {});
+      return { read, ...newEngine([build]) };
+    }
+    const MISSING = { code: "missing-pick", message: "Missing required selection: plot" };
+
+    it.each([{}, { plot: null }])("refuses the walk for %o before any round reads its args", (args) => {
+      const { engine, read } = building();
+      expect(() =>
+        engine.commandNeeds("p1", { name: "build", args }, arrival(STAMP.now), STAMP),
+      ).toThrow(expect.objectContaining(MISSING));
+      expect(read).toEqual([]);
+    });
+
+    it("refuses the command itself before any round reads its args", async () => {
+      const { engine, read } = building();
+      await engine.hydrate([holdingPartition(1)]);
+      await expect(engine.applyCommand("p1", { name: "build", args: {} }, STAMP)).rejects.toMatchObject(
+        MISSING,
+      );
+      expect(read).toEqual([]);
+    });
+
+    it("takes a command that leaves out only an optional pick", async () => {
+      const { engine, read } = building();
+      await apply(engine, "p1", { name: "build", args: { plot: "east" } });
+      expect(read).toContain("east");
+    });
+  });
+
   it("leaves a scheduled event's args to the bundle that scheduled them: the clock asks no picks", async () => {
     // The clock's own verbs take no picks (`refuses a seatless action that asks a
     // question`), so a scheduled event's args are the bundle's data, not a seat's
