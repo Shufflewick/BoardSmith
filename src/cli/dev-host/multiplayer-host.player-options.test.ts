@@ -91,7 +91,7 @@ describe('MultiplayerHost — each seat\'s player options (#1323, #1325)', () =>
       playerOptions: [{ ...personal, handicap: 9, dictator: 'dictator' }, personal, personal],
     });
 
-    expect(sent.at(-1)).toEqual({ type: 'error', message: 'Seat 1: Handicap is 9, above its max of 5.' });
+    expect(sent.at(-1)).toEqual({ type: 'error', message: 'Seat 1: Handicap must be between 0 and 5, not 9.' });
     expect(starts).toHaveLength(1);
   });
 

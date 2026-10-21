@@ -1,5 +1,6 @@
 import { isDeepStrictEqual } from 'node:util';
 import type { PlayerOptionDefinition } from '../../session/types.js';
+import { numberBoundsProblem } from '../../session/game-option-selection.js';
 
 /** A player option in boardsmith.json's list form, where its key is a field. */
 export interface ConfigOptionDefinition {
@@ -173,9 +174,8 @@ export function exclusiveSeats(
 
 function numberRefusal(option: Extract<SeatOption, { type: 'number' }>, value: unknown): string | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value)) return `${option.label} must be a number, not ${JSON.stringify(value)}.`;
-  if (option.min !== undefined && value < option.min) return `${option.label} is ${value}, below its min of ${option.min}.`;
-  if (option.max !== undefined && value > option.max) return `${option.label} is ${value}, above its max of ${option.max}.`;
-  return undefined;
+  const problem = numberBoundsProblem(option, value);
+  return problem === undefined ? undefined : `${option.label} must be ${problem}, not ${value}.`;
 }
 
 /** Why `value` cannot be `option`'s value, or undefined when it can. */
@@ -196,7 +196,7 @@ function seatRefusal(options: Record<string, PlayerOptionDefinition>, values: un
     return `Seat ${seat}'s player options must be a set of option values, such as { "ready": true }.`;
   }
   const entries = seatOptionEntries(options);
-  const missing = entries.find(([key, option]) => option.type !== 'exclusive' && !(key in values));
+  const missing = entries.find(([key, option]) => option.type !== 'exclusive' && !Object.hasOwn(values, key));
   if (missing) return `Seat ${seat} has no value for ${missing[1].label}. Give each seat a value for every player option.`;
   const declared = new Map(entries);
   for (const [key, value] of Object.entries(values)) {

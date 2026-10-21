@@ -152,7 +152,7 @@ describe('the code types take only shapes the platform\'s manifest can carry (#9
 const declared: Record<string, PlayerOptionDefinition> = {
   color: createColorOption(),
   side: { type: 'select', label: 'Side', default: 'north', choices: [{ value: 'north', label: 'North' }, { value: 'south', label: 'South' }] },
-  handicap: { type: 'number', label: 'Handicap', default: 2, min: 0, max: 5 },
+  handicap: { type: 'number', label: 'Handicap', default: 2, min: 0, max: 5, step: 2 },
   ready: { type: 'boolean', label: 'Ready', default: false },
   dictator: { type: 'exclusive', label: 'Dictator', default: 'last', choices: [{ value: 'dictator', label: 'Dictator' }] },
 };
@@ -184,22 +184,23 @@ describe('seatOptionsRefusal (#1323)', () => {
   });
 
   const holder = { ...personal, dictator: 'dictator' };
-  it.each<[string, unknown, RegExp]>([
+  it.each<[string, unknown, RegExp, Record<string, PlayerOptionDefinition>?]>([
     ['a table of the wrong size', table(holder), /one set of player options for each of the 2 seats/],
     ['a table that is not a list', { 1: holder, 2: personal }, /one set of player options for each of the 2 seats/],
     ['a seat that is not a set of options', table(holder, 'south'), /Seat 2's player options must be a set of option values/],
     ['a seat missing an option', table(holder, { side: 'north', handicap: 2 }), /Seat 2 has no value for Ready\. Give each seat a value for every player option\./],
     ['an undeclared option', table(holder, { ...personal, speed: 3 }), /Seat 2: "speed" is not a player option of this game; its player options are side, handicap, ready, dictator\./],
     ['colour, which is chosen with the seat', table({ ...holder, color: '#fff' }, personal), /Seat 1: "color" is not a player option/],
-    ['a number below its min', table(holder, { ...personal, handicap: -1 }), /Seat 2: Handicap is -1, below its min of 0\./],
-    ['a number above its max', table({ ...holder, handicap: 6 }, personal), /Seat 1: Handicap is 6, above its max of 5\./],
+    ['a number off its step', table(holder, { ...personal, handicap: 3 }), /Seat 2: Handicap must be in steps of 2 from 0 \(0, 2, 4, \.\.\.\), not 3\./],
+    ['a number outside its range', table(holder, { ...personal, handicap: 6 }), /Seat 2: Handicap must be between 0 and 5, not 6\./],
     ['a number that is not one', table({ ...holder, handicap: '3' }, personal), /Seat 1: Handicap must be a number, not "3"\./],
     ['a boolean that is not one', table({ ...holder, ready: 'yes' }, personal), /Seat 1: Ready must be true or false, not "yes"\./],
     ['a select value among none of its choices', table({ ...holder, side: 'west' }, personal), /Seat 1: Side is "west", which is none of its choices \(north, south\)\./],
     ['an exclusive value among none of its choices', table({ ...holder, dictator: 'king' }, personal), /Seat 1: Dictator is "king", which is none of its choices \(dictator\)\./],
     ['an exclusive option no seat holds', table(personal, personal), /Give Dictator to one seat\./],
+    ['an option a seat left out whose id an object has anyway', table(holder, personal), /Seat 1 has no value for Constructor\./, { constructor: { type: 'boolean', label: 'Constructor', default: false } }],
     ['an exclusive option two seats hold', table(holder, holder), /Dictator is given to seats 1 and 2; give it to one seat\./],
-  ])('refuses %s', (_case, seats, message) => {
-    expect(seatOptionsRefusal(declared, seats, 2)).toMatch(message);
+  ])('refuses %s', (_case, seats, message, more = {}) => {
+    expect(seatOptionsRefusal({ ...declared, ...more }, seats, 2)).toMatch(message);
   });
 });
