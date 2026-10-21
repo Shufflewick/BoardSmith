@@ -1870,30 +1870,24 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
   }
 
+  /** Why execute() would send nothing for this action now, or undefined when it may send. */
+  function executeRefusal(actionName: string): string | undefined {
+    if (isExecuting.value) return 'Action already executing';
+    if (isViewingHistoryValue()) return 'Cannot execute an action while viewing historical state.';
+    if (!isMyTurn.value) return 'Not your turn';
+    if (isCommitted()) return 'You have already submitted your action for this step';
+    const disabledReason = disabledReasonFor(actionName);
+    if (disabledReason) return disabledReason;
+    if (!availableActions.value?.includes(actionName)) return `Action "${actionName}" is not available`;
+    return undefined;
+  }
+
   async function execute(actionName: string, args: Record<string, unknown> = {}): Promise<ControllerActionResult> {
-    if (isExecuting.value) {
-      return { success: false, error: 'Action already executing' };
-    }
-
-    if (isViewingHistoryValue()) {
-      return { success: false, error: 'Cannot execute an action while viewing historical state.' };
-    }
-
-    if (!isMyTurn.value) {
-      return { success: false, error: 'Not your turn' };
-    }
-
-    if (isCommitted()) {
-      return { success: false, error: 'You have already submitted your action for this step' };
-    }
-
-    const executeDisabledReason = disabledReasonFor(actionName);
-    if (executeDisabledReason) {
-      return { success: false, error: executeDisabledReason };
-    }
-
-    if (!availableActions.value?.includes(actionName)) {
-      return { success: false, error: `Action "${actionName}" is not available` };
+    // A custom UI button often ignores the result, so the refusal must reach the shell's toast (#1342).
+    const refused = executeRefusal(actionName);
+    if (refused) {
+      setError(refused);
+      return { success: false, error: refused };
     }
 
     // Snapshot the action-start seq so the post-send cleanup below won't clobber a
