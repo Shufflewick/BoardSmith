@@ -308,6 +308,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     resolveAction(actionName, player, { success: true, data: result.data, message: result.message, followUp: result.followUp });
   }
 
+  /** A reply to a step of an action since cancelled or replaced: only a completion is published. */
+  function lateStepReply(actionName: string, player: number, result: PickStepResponse): null {
+    if (result.success && result.actionComplete) resolveStep(actionName, player, result);
+    return null;
+  }
+
   /**
    * Send one pick step of the current action. Resolves null when the action
    * moved on before the reply, which then touches nothing current. A step that
@@ -326,13 +332,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     stepSeq.value = seq;
     try {
       const result = await stepFn(player, selectionName, value, actionName, buildServerArgs());
-      if (!actionMovedOn(seq)) {
-        // Set before the step stops being outstanding, so the action never reads unheld in between (#1388).
-        if (result.success) pendingOnServer.value = true;
-        return result;
-      }
-      if (result.success && result.actionComplete) resolveStep(actionName, player, result);
-      return null;
+      if (actionMovedOn(seq)) return lateStepReply(actionName, player, result);
+      // Set before the step stops being outstanding, so the action never reads unheld in between (#1388).
+      pendingOnServer.value ||= result.success;
+      return result;
     } catch (err) {
       // A failed step of an abandoned action is nothing the player needs told.
       if (actionMovedOn(seq)) return null;
