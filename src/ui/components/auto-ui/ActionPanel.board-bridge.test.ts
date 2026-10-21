@@ -671,3 +671,62 @@ describe('Coming back from history puts back the board mark of an action the ser
     wrapper.unmount();
   });
 });
+
+describe('Coming back from history puts back the board mark of an element pick the server holds (#1383)', () => {
+  it('marks the plot a custom board marked when clicked, once the live game is back on screen', async () => {
+    const { board, controller, wrapper, isViewingHistory } = mountHarness(() => Promise.resolve({ success: true }), {
+      action: 'harvest',
+      args: {},
+      display: {},
+      metadata: harvestAction,
+    });
+    await flush();
+    // A custom board marks the plot it was clicked on, as checkers does.
+    board.selectElement({ id: 21 });
+    board.triggerElementSelect({ id: 21 });
+    await flush();
+    expect(controller.pendingOnServer.value).toBe(true);
+    expect(controller.currentArgs.value).toEqual({ plot: 21 });
+    expect(board.selectedElement).toEqual({ id: 21 });
+
+    isViewingHistory.value = true;
+    await flush();
+    expect(board.currentAction).toBeNull();
+    expect(board.selectedElement).toBeNull();
+
+    isViewingHistory.value = false;
+    await flush();
+
+    expect(board.currentPickName).toBe('direction');
+    expect(board.selectedElement).toEqual({ id: 21 });
+    wrapper.unmount();
+  });
+
+  it('puts back no mark once the held action ends while history is on screen and the player starts it again', async () => {
+    const { board, controller, wrapper, isViewingHistory } = mountHarness(() => Promise.resolve({ success: true }), {
+      action: 'harvest',
+      args: {},
+      display: {},
+      metadata: harvestAction,
+    });
+    await flush();
+    board.selectElement({ id: 21 });
+    board.triggerElementSelect({ id: 21 });
+    await flush();
+    expect(controller.pendingOnServer.value).toBe(true);
+
+    isViewingHistory.value = true;
+    await flush();
+    controller.cancel();
+    await flush();
+    isViewingHistory.value = false;
+    await flush();
+    await controller.start('harvest');
+    await flush();
+
+    expect(controller.currentArgs.value).toEqual({});
+    expect(board.currentPickName).toBe('plot');
+    expect(board.selectedElement).toBeNull();
+    wrapper.unmount();
+  });
+});
