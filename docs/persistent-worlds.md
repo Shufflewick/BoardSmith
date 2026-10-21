@@ -505,11 +505,11 @@ would either roll inside its declaration -- which is refused, because a
 declaration is asked more than once and a rolled declaration would answer
 differently each time -- or write into a partition nothing checkpointed.
 
-**A round after a selection always sees that selection bound.** A seat's command
-that leaves out a required pick, or sends `null` for one, is refused with
-`missing-pick` before any round reads its args, so the execute round can read
-every required pick without checking that it is there. An optional pick may still
-be absent.
+**A command's rounds see every required pick bound.** A seat's command that
+leaves out a required pick, or sends `null` for one, is refused with
+`missing-pick` before any round reads its args. An optional pick may still be
+absent. A quote or a re-asked pick is not a command: its rounds run on the
+player's draft, so a pick not chosen yet is absent there.
 
 **This replaces the fixpoint for the write path, and it has no ceiling.** There
 is no number to tune and no unsettled refusal to explain, because the walk's

@@ -1649,7 +1649,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
   }
 
   /** A whole command's args are every required pick and nothing else (#1328),
-   *  so a round after a selection always sees that selection bound. */
+   *  so a command's rounds see every required pick bound. */
   private refuseCommandArgs(
     definition: ActionDefinition,
     args: Readonly<Record<string, unknown>>,
