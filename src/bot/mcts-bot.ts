@@ -16,6 +16,7 @@ import type {
   DeterminizeSampler,
 } from './types.js';
 import { DEFAULT_CONFIG } from './types.js';
+import { applyDeterminization } from './determinization.js';
 import { restoreSeatCopy } from './search-copy.js';
 import { SeededRandom, mintSeed } from '../utils/random.js';
 import { isDevMode } from '../utils/dev.js';
@@ -1115,6 +1116,22 @@ export class MCTSBot<G extends Game = Game> {
     this.savedCopiesFull = false;
   }
 
+  /**
+   * Draw one world consistent with this seat's information set into
+   * `game`, if the game declared a sampler (#73).
+   *
+   * No-op for every game without one, which is why a game with no hidden state
+   * pays nothing for this feature existing.
+   */
+  private sampleWorld(game: Game): void {
+    if (!this.determinize) return;
+    applyDeterminization(
+      game,
+      this.playerIndex,
+      this.determinize,
+      () => this.rng.next(),
+    );
+  }
 
   /**
    * Re-resolve any element-valued args to the CURRENT `searchGame`'s live
@@ -1364,13 +1381,9 @@ export class MCTSBot<G extends Game = Game> {
     return createSeatSnapshot(this.game, this.gameType, this.seed, { forSeat: this.playerIndex, reseed: String(this.rng.next()) });
   }
 
-  /**
-   * Restore this seat's search copy from `snapshot` (see `restoreSeatCopy`).
-   * `sampleWorld` draws a fresh world into it, if the game declared a sampler (#73).
-   */
+  /** Restore this seat's search copy from `snapshot` (see `restoreSeatCopy`), drawing a fresh world into it when `sampleWorld`. */
   private restoreGame(snapshot: GameStateSnapshot, randomState = snapshot.randomState, sampleWorld = false): G {
-    const sample = sampleWorld && this.determinize ? { determinize: this.determinize, rng: () => this.rng.next() } : undefined;
-    return restoreSeatCopy(this.GameClass, snapshot, this.playerIndex, randomState, sample);
+    return restoreSeatCopy(this.GameClass, snapshot, this.playerIndex, randomState, sampleWorld ? (game) => this.sampleWorld(game) : undefined);
   }
 
   /**

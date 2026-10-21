@@ -31,7 +31,7 @@ export interface WorldSample {
  * serialized tree keeps those mutations.
  *
  * `randomState` is the position the copy draws from next, and `sample` draws
- * a fresh world into it; both come before the elements' `afterRestore` hooks,
+ * a fresh world into it (through `applyDeterminization`); both come before the elements' `afterRestore` hooks,
  * which run last so they see the whole copy (#1352).
  */
 export function restoreSeatCopy<G extends Game>(
@@ -39,7 +39,7 @@ export function restoreSeatCopy<G extends Game>(
   snapshot: GameStateSnapshot,
   seat: number,
   randomState: RandomState,
-  sample?: WorldSample,
+  sample?: (game: G) => void,
 ): G {
   // The game's own constructor options, custom ones (playerConfigs) and its
   // element id key included, with the search game's own seed (#776). Every
@@ -92,7 +92,7 @@ export function restoreSeatCopy<G extends Game>(
     game.restoreFlowState(snapshot.flowState, snapshot.hiddenIdRemap);
   }
 
-  if (sample) applyDeterminization(game, seat, sample.determinize, sample.rng);
+  sample?.(game);
   game._afterRestoreSubtree();
   return game;
 }
@@ -111,5 +111,8 @@ export function restoreSeatCopy<G extends Game>(
 export function searchCopyForSeat<G extends Game>(game: G, seat: number, seed: string, sample?: WorldSample): G {
   // The restore reads neither the game type nor the bot's search seed.
   const snapshot = createSeatSnapshot(game, '', undefined, { forSeat: seat, reseed: seed });
-  return restoreSeatCopy(game.constructor as new (options: GameOptions) => G, snapshot, seat, snapshot.randomState, sample);
+  return restoreSeatCopy(
+    game.constructor as new (options: GameOptions) => G, snapshot, seat, snapshot.randomState,
+    sample && ((copy) => applyDeterminization(copy, seat, sample.determinize, sample.rng)),
+  );
 }
