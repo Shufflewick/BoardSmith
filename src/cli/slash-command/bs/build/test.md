@@ -102,7 +102,11 @@ here.
          whose tests fail under any mutant has no real test; both are findings. A test that reads
          source as text (the a11y floor's scans below) can never fail under a mutant, so it is a
          guard (next rule). Mutants are served
-         to vitest in memory, never written over the source. This runs one vitest process per
+         to vitest in memory, never written over the source. A mutant runs against only the test
+         files that still hold a test no mutant has failed, and a pinning file runs alone, so each
+         of those sets must pass on its own: the command runs each once unmodified, and when a test
+         there fails, because it needs something another test file left behind, it stops and names
+         that test. This runs one vitest process per
          mutant, so it takes minutes on a large chunk; let it finish.
        - **A guard holds scans only.** A file under `tests/guards/` reads source as text (the a11y
          floor's scans below) and is never mutation-tested, so the Spec Manifest never lists it and a

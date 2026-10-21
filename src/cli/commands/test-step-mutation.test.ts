@@ -183,6 +183,18 @@ const VITEST_CONFIG = `import { defineConfig } from 'vitest/config';
 export default defineConfig({ test: { include: ['tests/**/*.test.ts'] } });
 `;
 
+// One file at a time, in name order, so tests/a.test.ts always runs before tests/b.test.ts and leaves a file behind for it.
+const IN_ORDER = `import { defineConfig } from 'vitest/config';
+class ByName { async shard(files) { return files; } async sort(files) { return [...files].sort((x, y) => (x.moduleId < y.moduleId ? -1 : 1)); } }
+export default defineConfig({ test: { include: ['tests/**/*.test.ts'], fileParallelism: false, sequence: { sequencer: ByName } } });
+`;
+const WRITES_READY = `import { writeFileSync } from 'node:fs';
+writeFileSync(new URL('./ready', import.meta.url), '');
+`;
+const SETS_UP = `${WRITES_READY}import { it, expect } from 'vitest';
+it('sets up', () => { expect(1).toBe(1); });
+`;
+
 async function check(project: string, testSource: string, claims = [1, 2]) {
   const testPath = join(project, 'tests/auction.test.ts');
   await fs.mkdir(dirname(testPath), { recursive: true });
@@ -594,6 +606,51 @@ const props = defineProps<{ score: number }>();
     const project = join(tree, 'project');
     await fs.mkdir(join(project, 'tests'), { recursive: true });
     await expect(check(project, "it('x', () => {});\n")).rejects.toThrow(/npm install/);
+  });
+
+  // #1340: a mutant runs against only some of the chunk's test files, so a failure there counts only if they pass unmutated on their own.
+  describe('trusts a failure in some of the chunk test files only when they pass unmutated on their own (#1340)', () => {
+    // Fails without tests/a.test.ts's setup, and passes under any mutant of bid when it has it.
+    const NEEDS_SETUP = `import { existsSync, rmSync } from 'node:fs';
+import { it, expect } from 'vitest';
+import { bid } from '../src/rules';
+const ready = existsSync(new URL('./ready', import.meta.url));
+rmSync(new URL('./ready', import.meta.url), { force: true });
+it('needs setup', () => { bid(3, 4); expect(ready).toBe(true); });
+`;
+    const REFUSAL =
+      'The chunk test files tests/b.test.ts fail when run without the chunk\'s other test files, though together they pass: tests/b.test.ts > needs setup.';
+
+    async function chunkCheck(files: Record<string, string>, options: { pin?: string; added?: Map<string, Set<number>> }) {
+      const project = await makeProject({ 'vitest.config.ts': IN_ORDER, 'src/rules.ts': RULES, ...files });
+      return runMutationCheck({
+        projectDir: project,
+        testFiles: Object.entries(files).map(([path, source]) => ({ path, absPath: join(project, path), source, pin: path === options.pin })),
+        added: options.added ?? new Map(),
+        claims: [],
+        log: () => {},
+      });
+    }
+
+    it('refuses to count a kill from the files still holding a live test when they fail unmutated without the others', async () => {
+      // The first mutant runs both files and fails tests/a.test.ts, so later mutants run tests/b.test.ts alone, without its setup.
+      const run = chunkCheck(
+        {
+          'tests/a.test.ts': `${WRITES_READY}import { it, expect } from 'vitest';
+import { bid } from '../src/rules';
+it('a higher offer wins', () => { expect(bid(3, 4)).toBe(true); expect(bid(3, 3)).toBe(false); expect(bid(4, 3)).toBe(false); });
+`,
+          'tests/b.test.ts': NEEDS_SETUP,
+        },
+        { added: new Map([['src/rules.ts', lines(1, 2, 3)]]) },
+      );
+      await expect(run).rejects.toThrow(REFUSAL);
+    }, 120_000);
+
+    it('refuses to credit a pin that fails unmutated when run alone', async () => {
+      const run = chunkCheck({ 'tests/a.test.ts': SETS_UP, 'tests/b.test.ts': NEEDS_SETUP }, { pin: 'tests/b.test.ts' });
+      await expect(run).rejects.toThrow(REFUSAL);
+    }, 120_000);
   });
 });
 
@@ -1189,16 +1246,6 @@ it('needs setup', () => { note('needs setup'); expect(1).toBe(1); });
 
   // #1329: a mutant runs against a subset of the suite, so a failure there counts only if that subset passes unmutated.
   describe('trusts a failure in a subset of the suite only when that subset passes unmutated (#1329)', () => {
-    // One file at a time, in name order, so tests/a.test.ts always runs before tests/b.test.ts and leaves a file behind for it.
-    const IN_ORDER = `import { defineConfig } from 'vitest/config';
-class ByName { async shard(files) { return files; } async sort(files) { return [...files].sort((x, y) => (x.moduleId < y.moduleId ? -1 : 1)); } }
-export default defineConfig({ test: { include: ['tests/**/*.test.ts'], fileParallelism: false, sequence: { sequencer: ByName } } });
-`;
-    const SETS_UP = `import { writeFileSync } from 'node:fs';
-import { it, expect } from 'vitest';
-writeFileSync(new URL('./ready', import.meta.url), '');
-it('sets up', () => { expect(1).toBe(1); });
-`;
     // Nothing here checks the rule's value, so a mutant of it survives in an honest run.
     const NEEDS_SETUP = `import { existsSync, rmSync } from 'node:fs';
 import { it, expect } from 'vitest';
