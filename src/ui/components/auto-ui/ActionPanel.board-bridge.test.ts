@@ -147,10 +147,21 @@ const sightAction: EnrichedActionMetadata = {
   ],
 };
 
-const AVAILABLE = ['move', 'tend', 'harvest', 'wait', 'board', 'steer', 'chart', 'drift', 'sight'];
+// A pick whose onSelect makes the server hold the action, a plot, then a choice a prefill can answer.
+const musterAction: EnrichedActionMetadata = {
+  name: 'muster',
+  prompt: 'Muster',
+  selections: [
+    boardAction.selections[1],
+    { name: 'plot', type: 'element', prompt: 'Choose a plot' },
+    { name: 'heading', type: 'choice', prompt: 'Then which way?', choices: COMPASS },
+  ],
+};
+
+const AVAILABLE = ['move', 'tend', 'harvest', 'wait', 'board', 'steer', 'chart', 'drift', 'sight', 'muster'];
 const METADATA: Record<string, EnrichedActionMetadata> = {
   move: moveAction, tend: tendAction, harvest: harvestAction, wait: waitAction, board: boardAction, steer: steerAction, chart: chartAction, drift: driftAction,
-  sight: sightAction,
+  sight: sightAction, muster: musterAction,
 };
 
 interface Harness {
@@ -825,6 +836,35 @@ describe('A held pick whose step reply lands while history is on screen sends no
     expect(pickStep.mock.calls.map(call => call[1])).toEqual(['direction', 'plot', 'heading']);
     expect(controller.currentArgs.value).toEqual({ direction: 'north', plot: 11, heading: 'south' });
     expect(controller.currentPick.value?.name).toBe('wake');
+    wrapper.unmount();
+  });
+
+  it('sends the prefilled heading to the live game only once the live game is back on screen (review F1)', async () => {
+    let reply!: () => void;
+    const outstanding = new Promise<PickStepResponse>((resolve) => { reply = () => resolve({ success: true }); });
+    const pickStep = vi.fn((..._step: unknown[]) => (pickStep.mock.calls.length === 2 ? outstanding : Promise.resolve<PickStepResponse>({ success: true })));
+    const { controller, wrapper, isViewingHistory } = mountHarness(pickStep);
+    await flush();
+    await controller.start('muster', { prefill: { heading: 'south' } });
+    await flush();
+    await controller.fill('crew', 'ann');
+    await flush();
+    // Not awaited: the plot's step is the one still out when history opens.
+    void controller.fill('plot', 11);
+    await flush();
+    isViewingHistory.value = true;
+    await flush();
+
+    reply();
+    await flush();
+    expect(pickStep.mock.calls.map(call => call[1])).toEqual(['crew', 'plot']);
+
+    isViewingHistory.value = false;
+    await flush();
+
+    expect(pickStep.mock.calls.map(call => call[1])).toEqual(['crew', 'plot', 'heading']);
+    expect(controller.currentArgs.value).toEqual({ crew: 'ann', plot: 11, heading: 'south' });
+    expect(controller.lastError.value).toBeNull();
     wrapper.unmount();
   });
 });

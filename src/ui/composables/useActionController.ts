@@ -544,7 +544,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   if (isViewingHistory) {
     watch(isViewingHistory, (browsing) => {
       if (browsing) return;
-      autoFillOnReturn();
+      settlePickOnReturn();
       if (heldFollowUp) {
         autoStartHeldFollowUp();
         return;
@@ -555,11 +555,15 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     });
   }
 
-  /** Answer the pick an auto-fill was held back from while history was on screen, as handleOnSelectFill would have. */
-  function autoFillOnReturn(): void {
+  /** Answer the pick a prefill or auto-fill was held back from while history was on screen, as the pick watcher and handleOnSelectFill would have. */
+  function settlePickOnReturn(): void {
     const sel = currentPick.value;
-    if (!sel || stepOutstanding() || !tryAutoFillSelection(sel) || !pendingOnServer.value) return;
-    void handleOnSelectFill(sel, currentArgs.value[sel.name]);
+    const snapshot = actionSnapshot.value;
+    // A pick whose choices are still loading is settled by the pick watcher once they land.
+    if (!sel || !snapshot?.pickSnapshots.has(sel.name) || snapshot.choiceFetches.has(sel.name)) return;
+    if (stepOutstanding() || isExecuting.value || consumePrefill(sel) || !tryAutoFillSelection(sel)) return;
+    // A held action takes the auto-filled answer as a step; any other only records it, as the pick watcher does.
+    if (pendingOnServer.value) void handleOnSelectFill(sel, currentArgs.value[sel.name]);
   }
 
   /**
@@ -1636,6 +1640,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // The action can be cancelled, replaced or advanced while choices load.
     // The watcher refires for whatever pick is current now, so drop this run.
     if (isExecuting.value || actionMovedOn(seq) || currentPick.value?.name !== sel.name) return;
+
+    // A prefill or auto-fill can answer the live game, so it waits for the return from history (#1385).
+    if (isViewingHistoryValue()) return;
 
     // A prefill takes priority over auto-fill, and settles the pick either way.
     if (consumePrefill(sel)) return;
