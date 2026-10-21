@@ -326,7 +326,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     stepSeq.value = seq;
     try {
       const result = await stepFn(player, selectionName, value, actionName, buildServerArgs());
-      if (!actionMovedOn(seq)) return result;
+      if (!actionMovedOn(seq)) {
+        // Set before the step stops being outstanding, so the action never reads unheld in between (#1388).
+        if (result.success) pendingOnServer.value = true;
+        return result;
+      }
       if (result.success && result.actionComplete) resolveStep(actionName, player, result);
       return null;
     } catch (err) {
@@ -392,10 +396,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // Repeating selections state
   const repeatingState = ref<RepeatingState | null>(null);
 
-  // Tracks whether the current action has server-side pending state (via pickStep/onSelect routing)
+  // Tracks whether the current action has server-side pending state (via pickStep/onSelect routing).
+  // Once a step is accepted every later pick must continue it: sending the whole action would repeat its picks (#325).
   const pendingOnServer = ref(false);
-  // The server holds the action once a step reaches it, so a step still out counts too (#1388).
-  const heldOnServer = computed(() => pendingOnServer.value || stepOutstanding());
 
   // Pit of Success: Client-owned action state snapshot
   // When start() is called, we clone the metadata so we don't depend on server broadcasts
@@ -2445,11 +2448,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         return { valid: false, error };
       }
 
-      // The server now holds this action pending, with this pick's onEach
-      // already run. Every later pick must continue it: sending the whole
-      // action instead would make the repeat's picks a second time (#325).
-      pendingOnServer.value = true;
-
       // Check if action is complete (termination condition met)
       if (result.actionComplete) {
         // Capture the action name before it is nulled below, then publish the
@@ -2522,9 +2520,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         setError(error);
         return { valid: false, error };
       }
-
-      // Mark that we now have server-side pending state
-      pendingOnServer.value = true;
 
       if (result.actionComplete) {
         // Capture the action name BEFORE clearing currentAction — it is nulled below
@@ -2741,7 +2736,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   function cancel(): void {
-    if (heldOnServer.value && options.cancelPendingAction) {
+    // The server holds the action once a step reaches it, so a step still out counts too
+    if ((pendingOnServer.value || stepOutstanding()) && options.cancelPendingAction) {
       const player = playerSeat?.value ?? 0;
       options.cancelPendingAction(player).catch(err => {
         console.error('[ActionController] Failed to cancel pending action on server:', err);
@@ -3050,11 +3046,14 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     repeatingState,
     pendingFollowUp,         // Use to prevent starting new actions during followUp transition
     // True while the current action is a server-pending action (a followUp started
-    // via startFollowUp, or one with a pick step sent to the server, answered or not). Such actions are NEVER
+    // via startFollowUp, or an onSelect-routed selection). Such actions are NEVER
     // in availableActions by design, so UIs must NOT treat their absence from
     // availableActions as "stale, cancel it" — doing so cancels live followUp chains
     // (e.g. explore -> take equipment) the instant a state broadcast arrives.
-    pendingOnServer: heldOnServer,
+    pendingOnServer: readonly(pendingOnServer),
+    // True while a pick step of the current action is on its way to the server.
+    // The server may already hold the action, so cancelling it then tells the server too.
+    stepOutstanding: computed(stepOutstanding),
     heldFollowUp: heldFollowUpOffer,
     resumeFollowUp,
     // Reactive choices for the current pick (re-runs when async-fetched choices arrive).

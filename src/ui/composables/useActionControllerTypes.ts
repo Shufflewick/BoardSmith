@@ -438,12 +438,17 @@ export interface UseActionControllerReturn {
 
   /**
    * True while the current action is server-pending — a followUp started via
-   * startFollowUp, or one with a pick step (onSelect or repeating) sent to the
-   * server, whether or not its reply has landed. These actions are never in
+   * startFollowUp, or an onSelect-routed selection. These actions are never in
    * availableActions by design, so UIs must not treat their absence from
    * availableActions as a reason to cancel the current action.
    */
   pendingOnServer: Readonly<Ref<boolean>>;
+  /**
+   * True while a pick step of the current action (an onSelect or repeating
+   * pick) is on its way to the server and its reply has not landed. The server
+   * may already hold the action then, so `cancel()` tells the server too.
+   */
+  stepOutstanding: Readonly<Ref<boolean>>;
   /**
    * The follow-up the server holds for this seat (the `heldFollowUp` option),
    * or `undefined`. While it is held the seat keeps its turn, so a UI that lets
