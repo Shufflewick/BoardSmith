@@ -587,6 +587,14 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   //
   // History hides a held action's board mark, a choice's or a custom board's own, so it is shown again on return (#1383).
   let hiddenMark: { mark: ElementRef; start: number } | null = null;
+  function hideMark(start: number): void {
+    const mark = board.selectedElement;
+    hiddenMark = currentAction.value && mark ? { mark, start } : null;
+  }
+  function showHiddenMark(start: number): void {
+    if (hiddenMark?.start === start) board.selectElement(hiddenMark.mark);
+    hiddenMark = null;
+  }
   watch([shownAction, controller.actionStartTick], ([action, start]) => {
     if (action) {
       const pickName = currentPick.value?.name ?? null;
@@ -604,11 +612,9 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
             `Fill selections in order, or trigger the choice once '${selectionName}' is the active selection.`,
         );
       });
-      if (hiddenMark?.start === start) board.selectElement(hiddenMark.mark);
-      hiddenMark = null;
+      showHiddenMark(start);
     } else {
-      const mark = board.selectedElement;
-      hiddenMark = currentAction.value && mark ? { mark, start } : null;
+      hideMark(start);
       board.clear();
       feedStartCandidates();
     }
