@@ -544,6 +544,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   if (isViewingHistory) {
     watch(isViewingHistory, (browsing) => {
       if (browsing) return;
+      settlePickOnReturn();
       if (heldFollowUp) {
         autoStartHeldFollowUp();
         return;
@@ -552,6 +553,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       followUpFromHistory = undefined;
       if (kept && !currentAction.value && !pendingFollowUp.value && !isExecuting.value) queueFollowUp(kept);
     });
+  }
+
+  /** Answer the pick a prefill or auto-fill was held back from while history was on screen, as the pick watcher and handleOnSelectFill would have. */
+  function settlePickOnReturn(): void {
+    const sel = currentPick.value;
+    const snapshot = actionSnapshot.value;
+    // A pick whose choices are still loading is settled by the pick watcher once they land.
+    if (!sel || !snapshot?.pickSnapshots.has(sel.name) || snapshot.choiceFetches.has(sel.name)) return;
+    if (stepOutstanding() || isExecuting.value || consumePrefill(sel) || !tryAutoFillSelection(sel)) return;
+    // A held action takes the auto-filled answer as a step; any other only records it, as the pick watcher does.
+    if (pendingOnServer.value) void handleOnSelectFill(sel, currentArgs.value[sel.name]);
   }
 
   /**
@@ -1036,7 +1048,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   /** Whether anything rules out auto-filling `selection` before its choices are looked at. */
   function autoFillHeldBack(selection: EnrichedPickMetadata): boolean {
-    if (!getAutoFill() || isExecuting.value) return true;
+    // An auto-fill of a held action sends a step to the live game, so it waits for the return from history (#1385).
+    if (!getAutoFill() || isExecuting.value || isViewingHistoryValue()) return true;
     // A prefill the caller queued for this pick settles it, never a choice of ours (#226, #1298).
     if (actionSnapshot.value?.prefills.has(selection.name)) return true;
 
@@ -1627,6 +1640,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // The action can be cancelled, replaced or advanced while choices load.
     // The watcher refires for whatever pick is current now, so drop this run.
     if (isExecuting.value || actionMovedOn(seq) || currentPick.value?.name !== sel.name) return;
+
+    // A prefill or auto-fill can answer the live game, so it waits for the return from history (#1385).
+    if (isViewingHistoryValue()) return;
 
     // A prefill takes priority over auto-fill, and settles the pick either way.
     if (consumePrefill(sel)) return;
