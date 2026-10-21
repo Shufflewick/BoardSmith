@@ -2620,19 +2620,22 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
   }
 
+  /** A later pick was fetched against the cleared answer, so it is asked again (#1354). */
+  function dropLaterPickSnapshots(run: ActionStateSnapshot, selectionName: string): void {
+    const selections = run.metadata.selections;
+    const index = selections.findIndex(s => s.name === selectionName);
+    if (index === -1) return;
+    for (const later of selections.slice(index + 1)) run.pickSnapshots.delete(later.name);
+    snapshotVersion.value++;
+  }
+
   function clear(selectionName: string): void {
     delete currentArgs.value[selectionName];
 
     // Remove from snapshot
     if (actionSnapshot.value) {
       actionSnapshot.value.collectedPicks.delete(selectionName);
-      // A later pick was fetched against the cleared answer, so it is asked again (#1354).
-      const selections = currentActionMeta.value?.selections ?? [];
-      const index = selections.findIndex(s => s.name === selectionName);
-      for (const later of index === -1 ? [] : selections.slice(index + 1)) {
-        actionSnapshot.value.pickSnapshots.delete(later.name);
-      }
-      snapshotVersion.value++;
+      dropLaterPickSnapshots(actionSnapshot.value, selectionName);
     }
 
     // Drop an in-progress draft for this selection, if any
