@@ -185,8 +185,8 @@ export type {
 } from './dispatch.js';
 export {
   BoardSmithWorldEngine,
-  seatView,
 } from './engine.js';
+export { seatView } from '../engine/element/seat-placeholders.js';
 export type {
   BoardSmithWorldEngineOptions,
   WorldDeclarationFacilities,

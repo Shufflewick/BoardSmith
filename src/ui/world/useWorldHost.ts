@@ -1,5 +1,6 @@
 import { ref, shallowRef, type Ref, type ShallowRef } from 'vue';
 import { isOriginAllowed } from '../components/GameShellInit.js';
+import { seatView } from '../../engine/element/seat-placeholders.js';
 import { createOrderBook, type OrderBook, type PendingOrder } from './orderBook.js';
 import {
   WORLD_COMMAND_TIMEOUT_MS,
@@ -52,6 +53,7 @@ export interface WorldHostOptions {
 
 export interface WorldHost {
   phase: Ref<WorldPhase>;
+  /** This seat's own view: the frame's shared body with its placeholder ids put back (#1326). */
   view: ShallowRef<unknown>;
   seat: Ref<number | null>;
   /**
@@ -435,7 +437,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     }
 
     phase.value = data.phase;
-    view.value = data.view;
+    view.value = seatView(data.view, data.placeholders);
     // WHO IS LOOKING, WHICH IS THE OTHER HALF OF "WHAT IS ON SCREEN" (#272).
     //
     // A state frame that names a different seat is a SEAT SWITCH -- the dev

@@ -87,6 +87,21 @@ export function fillPlaceholders(view: SharedElementJSON, ids: readonly number[]
 }
 
 /**
+ * ONE SEAT'S VIEW OUT OF A `viewsFor` ANSWER (#1207): the body it holds, with
+ * its own placeholder ids put back. A body several seats share carries none of
+ * them, so the page a world view is sent to calls this before reading it (#1326).
+ */
+export function seatView(body: unknown, placeholders: readonly number[]): unknown {
+  // Another engine's body may be any shape, and it is never handed ids.
+  if (placeholders.length === 0) return body;
+  const { state } = (body ?? {}) as { state?: unknown };
+  if (typeof state !== 'object' || state === null) {
+    throw new Error(`This view holds no board, and was handed ${placeholders.length} placeholder ids for it.`);
+  }
+  return { ...(body as object), state: fillPlaceholders(state as SharedElementJSON, placeholders) };
+}
+
+/**
  * `node` with `replace` applied wherever it answers, copying only the nodes
  * above a change. A node `replace` passes over is the same in both shapes.
  */

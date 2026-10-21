@@ -36,6 +36,7 @@ function stateFrame(over: Partial<WorldStateMessage> = {}): WorldStateMessage {
     type: 'world_state',
     phase: 'watching',
     view: { player: 3, state: { id: 0, className: 'Game' } },
+    placeholders: [],
     seat: 3,
     revision: 1,
     notice: null,
@@ -122,6 +123,25 @@ describe('useWorldHost', () => {
     expect(host.worldName.value).toBe('Gloamhall Rooms');
     expect(host.presence.value).toEqual([3, 5]);
     expect(host.heardFromHost.value).toBe(true);
+  });
+
+  it("fills a shared body with this seat's own placeholder ids before anything reads the view (#1326)", () => {
+    const host = make();
+    const shared = {
+      state: {
+        id: 0,
+        className: 'Game',
+        children: [{ id: 5, className: 'Deck', children: [{ className: 'Card', placeholder: 0 }, { className: 'Card', placeholder: 1 }] }],
+      },
+    };
+    deliver(host, stateFrame({ view: shared, placeholders: [-41, -42] }));
+    expect(host.view.value).toEqual({
+      state: {
+        id: 0,
+        className: 'Game',
+        children: [{ id: 5, className: 'Deck', children: [{ className: 'Card', id: -41 }, { className: 'Card', id: -42 }] }],
+      },
+    });
   });
 
   /**

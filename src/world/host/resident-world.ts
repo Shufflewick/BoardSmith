@@ -71,7 +71,6 @@ import {
   receiptAt,
   receiptFloor,
   resolveOrder,
-  seatView,
   type PlannedEvent,
   type RoutedEvent,
   type SeatActivityStamp,
@@ -222,8 +221,12 @@ export interface WorldStartOutcome {
 
 /** One player's view, or the reason there is not one. */
 interface WorldSeatProjections {
-  /** This seat's own body, or null when it has none. */
-  bodyFor: (player: string) => unknown;
+  /**
+   * The body this seat holds, shared byte for byte with every seat shown the
+   * same thing, and the seat's own ids for its placeholders beside it (#1326):
+   * exactly what a `world_state` frame carries. `view` is null when it has none.
+   */
+  seatFor: (player: string) => { readonly view: unknown; readonly placeholders: readonly number[] };
   /** Why a named player has no body, by player. */
   readonly failed: Readonly<Record<string, { code?: string; message: string }>>;
   /**
@@ -711,9 +714,9 @@ export class ResidentWorld {
     // encoded once for everybody naming it.
     const { bodies, of, refused } = await runner.viewsFor(projecting);
     return {
-      bodyFor: (player: string): unknown => {
+      seatFor: (player: string) => {
         const held = of[player];
-        return held === undefined ? null : seatView(bodies[held.at], held.placeholders);
+        return held === undefined ? { view: null, placeholders: [] } : { view: bodies[held.at], placeholders: held.placeholders };
       },
       failed: { ...declined, ...refused },
       revision,

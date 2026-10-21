@@ -225,7 +225,9 @@ async function keysInsideWorldShell(world: TestWorld, seat: number): Promise<Set
       source: WORLD_HOST_SOURCE,
       type: 'world_state',
       phase: 'watching',
+      // The harness's view is already this seat's own, ids filled in.
       view: frame.view,
+      placeholders: [],
       seat,
       revision: frame.revision,
       notice: null,

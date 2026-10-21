@@ -79,6 +79,7 @@ function stateFrame(over: Record<string, unknown> = {}) {
     // lets AutoUI be a world's default board. Who is looking is NOT in it
     // (ShufflewickPub #408); `seat` beside it is where that lives.
     view: { phase: 'watching', state: { said: 'the fire is low' } },
+    placeholders: [],
     seat: 4,
     // #244: the offers ride their own frame now, and `tell` below splits this
     // literal into the two the host actually sends. Composed together here

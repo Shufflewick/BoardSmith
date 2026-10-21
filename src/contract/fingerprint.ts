@@ -353,7 +353,10 @@ const WORLD_WIRE_FIXTURE = {
     source: 'shufflewick-world',
     type: 'world_state',
     phase: 'watching',
-    view: { player: 2, state: { id: 0, className: 'Game' }, phase: 'started' },
+    view: { player: 2, state: { id: 0, className: 'Game', children: [{ className: 'Card', placeholder: 0 }] }, phase: 'started' },
+    // THIS SEAT'S OWN IDS FOR THE PLACEHOLDERS IN `view` (#1326). The view is
+    // the body every seat shown the same thing shares, so it carries none.
+    placeholders: [-7],
     seat: 2,
     // WHICH COMMITTED STATE THIS PROJECTION IS OF (#244). In the fixture
     // because the whole safety of publishing the view before the offers rests

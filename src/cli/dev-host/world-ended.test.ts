@@ -290,7 +290,7 @@ describe.each(STORES)('an ended world, on %s (#395)', (_name, makeStore) => {
 
     const views = await world.run(() => world.viewsFor([PLAYER]));
     expect(views.failed).toEqual({});
-    expect(JSON.stringify(views.bodyFor(PLAYER))).toContain('close');
+    expect(JSON.stringify(views.seatFor(PLAYER).view)).toContain('close');
     await world.close();
   });
 

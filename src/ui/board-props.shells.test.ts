@@ -299,6 +299,7 @@ describe('WorldShell binds WorldBoardProps onto a world board (#516)', () => {
       type: 'world_state',
       phase: 'watching',
       view: { phase: 'watching', state: { said: 'the fire is low' } },
+      placeholders: [],
       seat: 4,
       revision: 1,
       notice: null,
