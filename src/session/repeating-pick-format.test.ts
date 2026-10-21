@@ -85,7 +85,7 @@ class ColourGame extends Game<ColourGame, Player> {
 function gemHandler() {
   const runner = new GameRunner({ GameClass: GemGame, gameType: 'gems', gameOptions: { playerCount: 1, seed: 'bs605' } });
   runner.start();
-  return { runner, handler: new PickHandler(runner, 1) };
+  return { runner, handler: new PickHandler(runner) };
 }
 
 function gemId(runner: GameRunner<GemGame>, name: string): number {
@@ -140,7 +140,7 @@ describe('a repeating choice pick, after its first pass (#605)', () => {
     try {
       const runner = new GameRunner({ GameClass: ColourGame, gameType: 'colours', gameOptions: { playerCount: 1, seed: 'bs605' } });
       runner.start();
-      const handler = new PickHandler(runner, 1);
+      const handler = new PickHandler(runner);
 
       const first = handler.getPickChoices('name', 'colours', 1);
       if (!first.success) throw new Error(`first pass refused: ${first.error}`);

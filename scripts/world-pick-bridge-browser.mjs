@@ -91,11 +91,11 @@ const HOLD_PER_OPERATIVE = 350;
 const crewCap = (ship: Ship): number => Math.floor(ship.hold / HOLD_PER_OPERATIVE);
 
 /**
- * Choose a ship, then a crew whose SIZE is that ship's hold.
+ * Choose a ship, then a crew whose SIZE and PROMPT come from that ship.
  *
- * The cap cannot be known when the offer is enumerated, because nothing is
- * bound then -- which is exactly why the panel re-asks this selection, and
- * exactly what the dev bridge has to relay.
+ * Neither can be known when the offer is enumerated, because nothing is bound
+ * then, so the offer leaves both to the re-ask (#1350) -- which is exactly why
+ * the panel re-asks this selection, and exactly what the dev bridge has to relay.
  */
 const deploy = worldAction<Fleet>('deploy')
   .prompt('Deploy operatives')
@@ -105,11 +105,10 @@ const deploy = worldAction<Fleet>('deploy')
     choices: ({ game }) => game.all(Ship).map((ship) => ship.name!),
   })
   .chooseFrom('crew', {
-    prompt: 'Operatives',
+    prompt: ({ args }) => \`Operatives for the \${(args.ship as string).toUpperCase()}\`,
     choices: ({ game }) => game.all(Operative).map((one) => one.name!),
     multiSelect: ({ game, args }) => {
-      const chosen = args.ship as string | undefined;
-      if (chosen === undefined) return { min: 1 };
+      const chosen = args.ship as string;
       const ship = game.ship(chosen);
       if (ship.impounded) {
         throw new Error(\`The \${chosen} is impounded, so nobody may be loaded onto her.\`);
@@ -204,8 +203,8 @@ async function crewCount(page) {
 /**
  * Wait for the crew pick to read exactly `expected`.
  *
- * The panel draws the pick from the offer FIRST -- "Selected: 0", the unbounded
- * fallback -- and rewrites it when the re-ask lands, which is the whole
+ * The offer carries the crew pick's shape and no candidates (#1345), so the
+ * panel draws the count only when the re-ask lands, which is the whole
  * behaviour under test. So a single read is a race with the round trip, and
  * polling here is what makes the difference between the two states an
  * assertion rather than a coin toss.
@@ -215,10 +214,15 @@ async function expectCrewCount(page, expected) {
   assert(seen === expected, `the crew pick read "${seen}" rather than "${expected}"`);
 }
 
-/** Read the count once the surface has had a moment to settle. */
-async function settledCrewCount(page) {
+/** Wait for the crew pick to be asked with `expected`. */
+async function expectCrewPrompt(page, expected) {
+  await surfaceOf(page).locator('.selection-prompt', { hasText: expected }).first().waitFor({ timeout: 15_000 });
+}
+
+/** How many crew counts are drawn once the surface has had a moment to settle. */
+async function settledCrewCounts(page) {
   await new Promise((settle) => setTimeout(settle, 1000));
-  return crewCount(page);
+  return surfaceOf(page).locator('.multi-select-count').count();
 }
 
 // THE WHOLE RUN, IN THE HARNESS'S ORDER (#231). It checks the checkout is
@@ -257,6 +261,10 @@ async function driveThrough({ launch, hostUrl }) {
 
       await check('the action panel resolves the cap the chosen ship decides', async () => {
         await expectCrewCount(page, 'Selected: 0/5');
+      });
+
+      await check('the action panel asks with the prompt the chosen ship decides (#1350)', async () => {
+        await expectCrewPrompt(page, 'Operatives for the DORY');
       });
 
       await check('the re-ask crosses the socket with its id, action, selection and bound args', () => {
@@ -320,9 +328,10 @@ async function driveThrough({ launch, hostUrl }) {
       await page.goto(hostUrl);
       await waitForAction(page, 'deploy');
 
-      await check('a custom UI that prefills the ship lands on the resolved cap', async () => {
+      await check('a custom UI that prefills the ship lands on the resolved cap and prompt', async () => {
         await surfaceOf(page).locator('[data-fixture="prefill-dory"]').click();
         await expectCrewCount(page, 'Selected: 0/5');
+        await expectCrewPrompt(page, 'Operatives for the DORY');
       });
 
       // ── 4. A refusal the RULES issue, on the same road ────────────────────
@@ -334,8 +343,10 @@ async function driveThrough({ launch, hostUrl }) {
         // and nowhere else, which is how a refusal became a silent fallback to
         // the metadata the offer carried.
         await surface.locator('text=/impounded/').first().waitFor({ timeout: 15_000 });
-        const shown = await settledCrewCount(page);
-        assert(shown === 'Selected: 0', `a refused pick drew "${shown}" -- a cap the world never gave`);
+        // NO CREW AT ALL: the offer carries none past the ship (#1345), so there is
+        // nothing to fall back to and no cap the world never gave.
+        const drawn = await settledCrewCounts(page);
+        assert(drawn === 0, `a refused pick drew ${drawn} crew count(s) -- a pick the world never answered`);
       });
 
       await context.close();
@@ -370,11 +381,11 @@ async function driveThrough({ launch, hostUrl }) {
           .locator('text=/did not answer what "crew" may be/')
           .first()
           .waitFor({ timeout: WORLD_COMMAND_TIMEOUT_MS + 15_000 });
-        // "Selected: 0" AND a sentence saying why: the reporter's symptom was
-        // this count with nothing said, which is the state a bridge that drops
-        // the reply leaves behind.
-        const shown = await settledCrewCount(page);
-        assert(shown === 'Selected: 0', `an unanswered pick drew "${shown}" -- a cap nothing resolved`);
+        // A sentence saying why and no crew: the reporter's symptom was a count
+        // with nothing said, which is the state a bridge that drops the reply
+        // leaves behind.
+        const drawn = await settledCrewCounts(page);
+        assert(drawn === 0, `an unanswered pick drew ${drawn} crew count(s) -- a pick nothing answered`);
       });
 
       await context.close();

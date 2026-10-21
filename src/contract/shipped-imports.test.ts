@@ -20,7 +20,6 @@
  * in every game.
  */
 import { describe, it, expect } from 'vitest';
-import { spawnSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { builtinModules } from 'node:module';
 import { basename, dirname, extname, join, relative } from 'node:path';
@@ -30,6 +29,7 @@ import { parse as parseSfc } from 'vue/compiler-sfc';
 
 import { cliBuildOptions, CLI_OUTFILE, VITEST_REPORTER_ENTRY, WORKER_ENTRIES } from '../cli/lib/build-cli.js';
 import { tempTree } from '../testing/temp-tree.test-helper.js';
+import { packedFiles } from './npm-pack.test-helper.js';
 import { REPO_ROOT } from './vue-tsc-run.test-helper.js';
 
 interface PackageJson {
@@ -110,14 +110,7 @@ function describeAll(found: readonly UndeclaredImport[]): string {
 }
 
 // Slow one-time setup lives here, where no test timeout applies.
-const pack = spawnSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
-  cwd: REPO_ROOT,
-  encoding: 'utf8',
-});
-if (pack.status !== 0) {
-  throw new Error(`npm pack --dry-run failed, so the shipped file list is unknown:\n${pack.stderr}`);
-}
-const SHIPPED = (JSON.parse(pack.stdout) as { files: { path: string }[] }[])[0].files.map((f) => f.path);
+const SHIPPED = packedFiles(REPO_ROOT);
 const SHIPPED_SOURCE = SHIPPED.filter(
   (path) => !path.startsWith('dist/') && /\.(ts|mts|js|mjs|cjs|vue)$/.test(path),
 );
@@ -139,14 +132,7 @@ for (const output of bundle.outputFiles) {
   mkdirSync(dirname(target), { recursive: true });
   writeFileSync(target, output.contents);
 }
-const builtPack = spawnSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
-  cwd: builtPackage,
-  encoding: 'utf8',
-});
-if (builtPack.status !== 0) {
-  throw new Error(`npm pack --dry-run of the built package failed:\n${builtPack.stderr}`);
-}
-const PUBLISHED_BUILD = (JSON.parse(builtPack.stdout) as { files: { path: string }[] }[])[0].files.map((f) => f.path);
+const PUBLISHED_BUILD = packedFiles(builtPackage);
 
 /** How many times `source` starts a worker thread, and how many of those run inline source (`eval: true`) rather than a file. */
 const workerStarts = (source: string) => ({

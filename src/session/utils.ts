@@ -70,10 +70,10 @@ export interface SeatActionRefusal {
  */
 export function actionForSeat(
   game: Game,
-  playerCount: number,
   seat: number,
   actionName: string,
 ): { action: ActionDefinition } | { refusal: SeatActionRefusal } {
+  const playerCount = game.players.length;
   if (seat < 1 || seat > playerCount) {
     return {
       refusal: {

@@ -145,6 +145,11 @@ import type {
 /** What the world would not say, when it did not say why (#248). */
 const QUOTE_UNANSWERED = 'The world would not say what this costs.';
 
+/** A candidate element as a pick's choice: its id, labelled by its display. */
+function elementChoice(el: { id: number; display?: string; disabled?: string }): { value: number; display: string; disabled?: string } {
+  return { value: el.id, display: el.display || `Element ${el.id}`, ...(el.disabled && { disabled: el.disabled }) };
+}
+
 /**
  * ONE ANSWER, AS THE CONTROLLER HOLDS IT (#248).
  *
@@ -592,21 +597,18 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /**
-   * Find the display value for a selection value from snapshot.
-   * Used to store display alongside value in collectedPicks.
+   * The label a pick's value is stored with in collectedPicks: what the pick's
+   * choices call it, from wherever they came, and each entry's for a list,
+   * joined as a repeat's are (#1298).
    */
-  function findDisplayForValue(selectionName: string, value: unknown): string {
-    // Get from snapshot - single source of truth
-    const snapshot = actionSnapshot.value?.pickSnapshots.get(selectionName);
-
-    if (snapshot?.choices) return labelOfPick(value, snapshot.choices);
-
-    if (snapshot?.validElements) {
-      const match = snapshot.validElements.find(e => e.id === value);
-      if (match && match.display) return match.display;
-    }
-
-    return getDisplayFromValue(value);
+  function labelForPick(
+    selection: EnrichedPickMetadata,
+    value: unknown,
+    choices: Array<{ value: unknown; display: string }> = getChoices(selection),
+  ): string {
+    return Array.isArray(value) && selectionTakesList(selection)
+      ? value.map((entry) => labelOfPick(entry, choices)).join(', ')
+      : labelOfPick(value, choices);
   }
 
   /**
@@ -620,32 +622,104 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const takesList = selectionTakesList(selection);
     // The engine refuses a lone value for a list pick (#769), so say so before sending it.
     if (takesList && !Array.isArray(prefillValue)) return `Cannot prefill "${label}": it takes a list, so pass an array.`;
-    const choices = getChoices(selection);
-    if (!resolved.refusal && choices.length > 0 && (resolved.choice || takesList)) return undefined;
-    return describeRejectedPrefill(label, takesList ? (resolved.value as unknown[]) : undefined, prefillValue, choices);
+    const entries = takesList ? (resolved.value as unknown[]) : undefined;
+    return prefillChoiceRefusal(label, prefillValue, resolved, entries, getChoices(selection))
+      ?? prefillRuleRefusal(selection, label, resolved, entries);
   }
 
-  /** {@link prefillRefusal}'s message for a value it refuses; `entries` is a list pick's resolved entries. */
-  function describeRejectedPrefill(
+  /**
+   * Whether a prefill matched no choice. A repeat's refusals are set aside for
+   * the server, so a lone value is judged by the choice it names.
+   */
+  function matchedNothing(resolved: ResolvedPick, entries: unknown[] | undefined): boolean {
+    return 'unmatched' in resolved || (!entries && !resolved.choice && !resolved.refusal);
+  }
+
+  /** A prefill its pick's choices refuse: none on offer, a disabled one, or one that matches nothing. */
+  function prefillChoiceRefusal(
     label: string,
-    entries: unknown[] | undefined,
     prefillValue: unknown,
+    resolved: ResolvedPick,
+    entries: unknown[] | undefined,
     choices: Array<{ value: unknown; display: string; disabled?: string }>,
-  ): string {
-    const shown = entries ? entries.map(v => labelOfPick(v, choices)).join(', ') : getDisplayFromValue(prefillValue);
+  ): string | undefined {
+    const shown = entries ? entries.map(v => labelOfPick(v, choices)).join(', ') : labelOfPick(prefillValue, choices);
+    if (choices.length === 0) return `Cannot prefill "${label}" with "${shown}": it has no available choices.`;
     const disabledReason = (entries ?? [prefillValue]).map(v => findMatchingChoice(v, choices)?.disabled).find(Boolean);
     if (disabledReason) return `Cannot prefill "${label}" with "${shown}": ${disabledReason}.`;
+    return matchedNothing(resolved, entries) ? describeUnmatchedPrefill(label, shown, entries && resolved.unmatched, choices) : undefined;
+  }
 
-    if (choices.length === 0) {
-      return `Cannot prefill "${label}" with "${shown}": it has no available choices.`;
-    }
+  /** A prefill that matched its choices and still breaks a rule: a refusal in its own words, or its list's bounds (#1298). */
+  function prefillRuleRefusal(
+    selection: EnrichedPickMetadata,
+    label: string,
+    resolved: ResolvedPick,
+    entries: unknown[] | undefined,
+  ): string | undefined {
+    if (resolved.refusal) return `Cannot prefill "${label}": ${resolved.refusal}`;
+    const list = entries && listBoundsRefusal(selection, entries);
+    return list ? `Cannot prefill "${label}": ${list}` : undefined;
+  }
 
+  /**
+   * {@link prefillRefusal}'s message for a value that matched no choice, and
+   * what would have done: a list's names its entry that matched nothing.
+   */
+  function describeUnmatchedPrefill(
+    label: string,
+    shown: string,
+    unmatchedEntry: unknown,
+    choices: Array<{ value: unknown; display: string; disabled?: string }>,
+  ): string {
     const MAX_LISTED = 5;
     const displays = choices.map(c => c.display);
     const listed = displays.slice(0, MAX_LISTED).join(', ');
     const remainder = displays.length - MAX_LISTED;
     const suffix = remainder > 0 ? `, and ${remainder} more` : '';
-    return `Cannot prefill "${label}" with "${shown}". Pick one of: ${listed}${suffix}.`;
+    const entry = unmatchedEntry === undefined ? '.' : `: ${JSON.stringify(unmatchedEntry)} is not one of its choices.`;
+    return `Cannot prefill "${label}" with "${shown}"${entry} Pick one of: ${listed}${suffix}.`;
+  }
+
+  /**
+   * Why a list breaks its pick's bounds, or null (#1298): too few or too many
+   * entries, or, for a set, an entry repeated more often than it is offered.
+   * An ordered list may repeat its entries (#249).
+   */
+  function listBoundsRefusal(
+    selection: EnrichedPickMetadata,
+    entries: readonly unknown[],
+    offered: Array<{ value: unknown }> = getChoices(selection),
+  ): string | null {
+    const ordered = resolveOrderedListConfig(selection);
+    const bounds = ordered ?? resolveMultiSelectConfig(selection);
+    if (!bounds) return null;
+    const min = bounds.min ?? 1;
+    if (entries.length < min) return `"${selection.name}" takes at least ${min}, got ${entries.length}.`;
+    if (bounds.max !== undefined && entries.length > bounds.max) return `"${selection.name}" takes at most ${bounds.max}, got ${entries.length}.`;
+    if (ordered) return null;
+    const repeated = repeatedEntry(entries, offered);
+    return repeated === undefined ? null : `"${selection.name}" names ${JSON.stringify(repeated.entry)} more than once; each may be chosen once.`;
+  }
+
+  /** The first entry of a set given more often than it is offered, counted by the choice it matches in one pass. */
+  function repeatedEntry(entries: readonly unknown[], offered: Array<{ value: unknown }>): { entry: unknown } | undefined {
+    const counts = new Map<unknown, { given: number; offered: number }>();
+    const keyOf = (value: unknown) => findMatchingChoice(value, offered) ?? value;
+    for (const choice of offered) {
+      const key = keyOf(choice.value);
+      const count = counts.get(key) ?? { given: 0, offered: 0 };
+      count.offered++;
+      counts.set(key, count);
+    }
+    for (const entry of entries) {
+      const key = keyOf(entry);
+      const count = counts.get(key) ?? { given: 0, offered: 1 };
+      count.given++;
+      counts.set(key, count);
+      if (count.given > Math.max(1, count.offered)) return { entry };
+    }
+    return undefined;
   }
 
   /**
@@ -701,11 +775,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         if (snapshot.choices) {
           choices = snapshot.choices;
         } else if (snapshot.validElements) {
-          choices = snapshot.validElements.map(el => ({
-            value: el.id,
-            display: el.display || `Element ${el.id}`,
-            ...(el.disabled && { disabled: el.disabled }),
-          }));
+          choices = snapshot.validElements.map(elementChoice);
         }
       }
     }
@@ -726,22 +796,14 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         if (dependentValue !== undefined) {
           const depKey = String(dependentValue);
           const elements = selection.elementsByDependentValue[depKey] || [];
-          choices = elements.map(el => ({
-            value: el.id,
-            display: el.display || `Element ${el.id}`,
-            ...(el.disabled && { disabled: el.disabled }),
-          }));
+          choices = elements.map(elementChoice);
         }
       }
       // Regular static choices
       else if (selection.choices) {
         choices = selection.choices;
       } else if (selection.validElements) {
-        choices = selection.validElements.map(el => ({
-          value: el.id,
-          display: el.display || `Element ${el.id}`,
-          ...(el.disabled && { disabled: el.disabled }),
-        }));
+        choices = selection.validElements.map(elementChoice);
       }
     }
 
@@ -786,6 +848,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     choice?: { value: unknown; display: string; disabled?: string };
     /** Why fill would refuse the value, when it would. */
     refusal?: string;
+    /** The entry, or the lone value, that matched nothing on offer. */
+    unmatched?: unknown;
   }
 
   /**
@@ -828,13 +892,18 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (choices.length === 0) return { value };
     const resolveOne = (v: unknown): ResolvedPick => {
       const choice = findMatchingChoice(v, choices);
-      if (!choice) return { value: v, refusal: `Invalid selection for "${selection.name}"` };
+      if (!choice) return { value: v, refusal: `Invalid selection for "${selection.name}"`, unmatched: v };
       return { value: choice.value, choice, refusal: choice.disabled && `Selection disabled: ${choice.disabled}` };
     };
     const takesItems = selectionTakesList(selection);
     if (Array.isArray(value) && takesItems) {
       const items = value.map(resolveOne);
-      return { value: items.map(i => i.value), refusal: items.find(i => i.refusal)?.refusal };
+      const refused = items.find(i => i.refusal);
+      return {
+        value: items.map(i => i.value),
+        refusal: refused?.refusal,
+        ...(refused && 'unmatched' in refused && { unmatched: refused.unmatched }),
+      };
     }
     const listRefusal = selection.type === 'choice' && !takesItems
       ? oneChoiceListRefusal(selection.name, value, choices)
@@ -908,20 +977,26 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const prefillValue = actionSnapshot.value?.prefills.get(selection.name);
     if (prefillValue === undefined) return false;
 
-    actionSnapshot.value?.prefills.delete(selection.name);
-
     const resolved = resolvePick(selection, prefillValue);
     const refusal = prefillRefusal(selection, prefillValue, resolved);
     if (refusal) {
+      // Kept queued, so no auto-fill puts one of our choices in its place, and judged
+      // again when the pick comes up again, as after an earlier pick changed (#226, #1298).
       setError(refusal);
       return true;
     }
+    actionSnapshot.value?.prefills.delete(selection.name);
 
     const { value } = resolved;
+    // A pick the server takes step by step goes there through fill, with its guards and its routing (#1298).
+    if (selection.repeat || selection.hasOnSelect || pendingOnServer.value) {
+      void fill(selection.name, value);
+      return true;
+    }
     currentArgs.value[selection.name] = value;
     actionSnapshot.value?.collectedPicks.set(selection.name, {
       value,
-      display: findDisplayForValue(selection.name, value),
+      display: labelForPick(selection, value),
       skipped: false,
     });
     return true;
@@ -935,23 +1010,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * @returns true if auto-fill was applied, false otherwise
    */
   function tryAutoFillSelection(selection: EnrichedPickMetadata): boolean {
-    if (!getAutoFill() || isExecuting.value) return false;
-
-    // AUTOEXEC-01 / F-02 (v4.8): a `.manual()` action must never resolve a
-    // selection for the player. Auto-filling a single enabled choice would flip
-    // `isReady` true with no player input and the auto-execute watcher would
-    // then silently play the action (the D7 silent auto-draw). For a manual
-    // action the player picks every choice deliberately; their final pick is
-    // what flips `isReady` and executes. Suppressing auto-fill here (not
-    // auto-execute) keeps that single deliberate tap and preserves custom-UI ↔
-    // ActionPanel parity — both funnel through this one controller.
-    if (currentActionMeta.value?.manual) return false;
-
-    // Tutorial auto-fill suppression: when a step wants the learner to perform
-    // the click, preserve the teaching interaction instead of auto-resolving.
-    // The global `getAutoFill()` knob is separate; this is an additional,
-    // per-selection suppressor that applies only to the active taught selection.
-    if (isTutorialSuppressingAutoFill(selection.name)) return false;
+    if (autoFillHeldBack(selection)) return false;
 
     const choices = getChoices(selection);
     const enabledChoices = choices.filter(c => !c.disabled);
@@ -973,6 +1032,29 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return true;
   }
 
+  /** Whether anything rules out auto-filling `selection` before its choices are looked at. */
+  function autoFillHeldBack(selection: EnrichedPickMetadata): boolean {
+    if (!getAutoFill() || isExecuting.value) return true;
+    // A prefill the caller queued for this pick settles it, never a choice of ours (#226, #1298).
+    if (actionSnapshot.value?.prefills.has(selection.name)) return true;
+
+    // AUTOEXEC-01 / F-02 (v4.8): a `.manual()` action must never resolve a
+    // selection for the player. Auto-filling a single enabled choice would flip
+    // `isReady` true with no player input and the auto-execute watcher would
+    // then silently play the action (the D7 silent auto-draw). For a manual
+    // action the player picks every choice deliberately; their final pick is
+    // what flips `isReady` and executes. Suppressing auto-fill here (not
+    // auto-execute) keeps that single deliberate tap and preserves custom-UI ↔
+    // ActionPanel parity — both funnel through this one controller.
+    if (currentActionMeta.value?.manual) return true;
+
+    // Tutorial auto-fill suppression: when a step wants the learner to perform
+    // the click, preserve the teaching interaction instead of auto-resolving.
+    // The global `getAutoFill()` knob is separate; this is an additional,
+    // per-selection suppressor that applies only to the active taught selection.
+    return isTutorialSuppressingAutoFill(selection.name);
+  }
+
   /**
    * Fetch choices for a selection and attempt auto-fill.
    * Recursively handles next selection if current is auto-filled.
@@ -986,8 +1068,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
 
     const seq = actionStartTick.value;
-    await fetchChoicesForPick(selection.name);
-    if (actionMovedOn(seq)) return;
+    const kept = await fetchChoicesForPick(selection.name);
+    if (!kept || actionMovedOn(seq)) return;
 
     if (tryAutoFillSelection(selection)) {
       // Recursively handle next selection
@@ -1006,14 +1088,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * that knows a fetch is outstanding, so callers never have to mark a pick as
    * fetched themselves. Awaiting this function is always enough to have the
    * choices in hand (#226: the prefill watcher used to skip an in-flight fetch
-   * and then judged the player's prefill against an empty choice list).
+   * and then judged the player's prefill against an empty choice list), unless
+   * it resolves false: the fetch was dropped because the action moved on or an
+   * earlier answer it was asked against was cleared or changed (#1358).
    */
-  function fetchChoicesForPick(selectionName: string): Promise<void> {
+  function fetchChoicesForPick(selectionName: string): Promise<boolean> {
     const fetches = actionSnapshot.value?.choiceFetches;
+    const askedAgainst = answersBefore(selectionName);
     const inFlight = fetches?.get(selectionName);
-    if (inFlight) return inFlight;
+    if (inFlight && sameAnswers(inFlight.askedAgainst, askedAgainst)) return inFlight.request;
 
-    const request = requestChoicesForPick(selectionName);
+    const request = requestChoicesForPick(selectionName, askedAgainst);
     if (!fetches) return request;
 
     // The entry is cleared as soon as the request settles, so a pick whose
@@ -1021,20 +1106,39 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // Cleanup is registered on the side rather than chained onto what callers
     // await, so joining a fetch costs a caller no extra microtask.
     const forget = () => {
-      if (fetches.get(selectionName) === request) fetches.delete(selectionName);
+      if (fetches.get(selectionName)?.request === request) fetches.delete(selectionName);
     };
-    fetches.set(selectionName, request);
+    fetches.set(selectionName, { request, askedAgainst });
     void request.then(forget, forget);
     return request;
   }
 
-  async function requestChoicesForPick(selectionName: string): Promise<void> {
+  /** The answers to the picks before `selectionName`, which a fetch of its choices is asked against. */
+  function answersBefore(selectionName: string): (CollectedPick | undefined)[] {
+    const snapshot = actionSnapshot.value;
+    const names = snapshot?.metadata.selections.map(s => s.name) ?? [];
+    const index = names.indexOf(selectionName);
+    if (!snapshot || index === -1) return [];
+    return names.slice(0, index).map(name => snapshot.collectedPicks.get(name));
+  }
+
+  /** Each answer is stored as a new object, so one cleared or changed since is a different one. */
+  function sameAnswers(a: (CollectedPick | undefined)[], b: (CollectedPick | undefined)[]): boolean {
+    return a.length === b.length && a.every((pick, i) => pick === b[i]);
+  }
+
+  /** A refused re-ask leaves no answer to an earlier question in place of its own (#1354). */
+  function forgetPickSnapshot(selectionName: string): void {
+    if (actionSnapshot.value?.pickSnapshots.delete(selectionName)) snapshotVersion.value++;
+  }
+
+  async function requestChoicesForPick(selectionName: string, askedAgainst: (CollectedPick | undefined)[]): Promise<boolean> {
     const fetchFn = options.fetchPickChoices;
     if (!fetchFn) {
-      return;
+      return true;
     }
     if (!currentAction.value) {
-      return;
+      return true;
     }
 
     // Get pick metadata - check snapshot first (for followUp actions), then live metadata
@@ -1048,19 +1152,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const selection = meta?.selections.find(s => s.name === selectionName);
     if (!selection) {
       console.warn(`[ActionController] fetchChoicesForPick: pick "${selectionName}" not found in metadata`);
-      return;
+      return true;
     }
 
-    // Skip fetch for number/text picks - they don't have choices
-    if (selection.type === 'number' || selection.type === 'text') {
-      return;
-    }
-
+    // A number or text pick is asked too: a world's offer leaves out a later pick's function prompt (#1350).
     const player = playerSeat?.value ?? 0;
 
     // If the action is gone or replaced after the round trip, discard the
     // result, success or failure, rather than apply it to the new action (R-06, #663).
     const seq = actionStartTick.value;
+    // Nor apply it once an earlier pick it was asked against is cleared or changed (#1358).
+    const superseded = () => actionMovedOn(seq) || !sameAnswers(askedAgainst, answersBefore(selectionName));
 
     isLoadingChoices.value = true;
     const fetchStartTime = Date.now();
@@ -1074,7 +1176,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         buildServerArgs()
       );
 
-      if (actionMovedOn(seq)) return;
+      if (superseded()) return false;
 
       const fetchDuration = Date.now() - fetchStartTime;
 
@@ -1088,11 +1190,14 @@ export function useActionController(options: UseActionControllerOptions): UseAct
           // multiSelect's are here: a bound that reads an earlier pick is only
           // knowable once that pick is bound.
           orderedList: result.orderedList,
+          // A world's offer leaves out a later pick's prompt function, which may read an earlier pick (#1350).
+          prompt: result.prompt,
         });
         // Increment version to trigger reactive computeds (Maps aren't reactive)
         snapshotVersion.value++;
       } else if (!result.success) {
         console.error(`[BoardSmith] Failed to fetch pick choices for '${selectionName}' after ${fetchDuration}ms:`, result.error);
+        forgetPickSnapshot(selectionName);
         // SAID TO THE PLAYER, not only to the console (#227). A dependent
         // selection's list and bounds come from a round trip, and a refused one
         // left the panel quietly holding whatever the one-shot metadata carried
@@ -1102,17 +1207,20 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         setError(result.error ?? describeUndescribablePick(selection));
       }
     } catch (err) {
-      if (actionMovedOn(seq)) return;
+      if (superseded()) return false;
       const fetchDuration = Date.now() - fetchStartTime;
       console.error(
         `[BoardSmith] Error fetching pick choices for '${selectionName}' after ${fetchDuration}ms:`,
         err
       );
+      forgetPickSnapshot(selectionName);
       setError(describeUndescribablePick(selection));
     } finally {
-      // Only a request of the current action ends its loading state (#663).
-      if (!actionMovedOn(seq)) isLoadingChoices.value = false;
+      // Only a request of the current action ends its loading state (#663), and not while one asked against newer answers is out (#1358).
+      const out = actionSnapshot.value?.choiceFetches.get(selectionName);
+      if (!actionMovedOn(seq) && (!out || sameAnswers(out.askedAgainst, askedAgainst))) isLoadingChoices.value = false;
     }
+    return true;
   }
 
 
@@ -1142,7 +1250,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // pick's `dependsOn` and a world's re-asked list read earlier answers in,
     // and the only order the engine's step-wise path accepts.
     const next = currentActionMeta.value.selections.find(selectionNeedsInput);
-    return next ? enrichValidElements(next) : null;
+    if (!next) return null;
+    void snapshotVersion.value; // reactive dependency (Maps aren't reactive)
+    const prompt = actionSnapshot.value?.pickSnapshots.get(next.name)?.prompt;
+    return enrichValidElements(prompt === undefined ? next : { ...next, prompt });
   });
 
   const isReady = computed((): boolean => {
@@ -1499,16 +1610,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // against an empty snapshot is discarded, and an auto-fill judged against
     // one choice that is really two picks for the player (#226). A fetch
     // started by start()/fill() is normally still in flight when this watcher
-    // first runs, so join it; otherwise start one for a pick that has no
-    // choices yet.
-    const inFlight = actionSnapshot.value?.choiceFetches.get(sel.name);
-    if (inFlight) {
-      await inFlight;
-    } else if (
-      !actionSnapshot.value?.pickSnapshots.has(sel.name) &&
-      (sel.type === 'choice' || sel.type === 'element' || sel.type === 'elements')
-    ) {
-      await fetchChoicesForPick(sel.name);
+    // first runs, so join it; otherwise start one for a pick not fetched yet.
+    // A fetch dropped because an earlier answer changed is asked again (#1358).
+    while (actionSnapshot.value?.choiceFetches.has(sel.name) || !actionSnapshot.value?.pickSnapshots.has(sel.name)) {
+      if (await fetchChoicesForPick(sel.name) || actionMovedOn(seq) || currentPick.value?.name !== sel.name) break;
     }
 
     // The action can be cancelled, replaced or advanced while choices load.
@@ -1788,30 +1893,25 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
   }
 
+  /** Why execute() refuses this action with an error now, or undefined when it does not. */
+  function executeRefusal(actionName: string): string | undefined {
+    if (isViewingHistoryValue()) return 'Cannot execute an action while viewing historical state.';
+    if (!isMyTurn.value) return 'Not your turn';
+    if (isCommitted()) return 'You have already submitted your action for this step';
+    const disabledReason = disabledReasonFor(actionName);
+    if (disabledReason) return disabledReason;
+    if (!availableActions.value?.includes(actionName)) return `Action "${actionName}" is not available`;
+    return undefined;
+  }
+
   async function execute(actionName: string, args: Record<string, unknown> = {}): Promise<ControllerActionResult> {
-    if (isExecuting.value) {
-      return { success: false, error: 'Action already executing' };
-    }
-
-    if (isViewingHistoryValue()) {
-      return { success: false, error: 'Cannot execute an action while viewing historical state.' };
-    }
-
-    if (!isMyTurn.value) {
-      return { success: false, error: 'Not your turn' };
-    }
-
-    if (isCommitted()) {
-      return { success: false, error: 'You have already submitted your action for this step' };
-    }
-
-    const executeDisabledReason = disabledReasonFor(actionName);
-    if (executeDisabledReason) {
-      return { success: false, error: executeDisabledReason };
-    }
-
-    if (!availableActions.value?.includes(actionName)) {
-      return { success: false, error: `Action "${actionName}" is not available` };
+    // A double-click lands here while the first send is out: not the player's mistake, so no toast (#1348).
+    if (isExecuting.value) return { success: false, error: 'Action already executing' };
+    // A custom UI button often ignores the result, so the refusal must reach the shell's toast (#1342).
+    const refused = executeRefusal(actionName);
+    if (refused) {
+      setError(refused);
+      return { success: false, error: refused };
     }
 
     // Snapshot the action-start seq so the post-send cleanup below won't clobber a
@@ -2012,6 +2112,22 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return undefined;
   }
 
+  /** The label a pick an action starts with is shown by; one the board started from, its candidate's (#1313). */
+  function startArgLabel(
+    meta: EnrichedActionMetadata,
+    initialArgs: Record<string, unknown>,
+    opening: StartCandidates | undefined,
+    name: string,
+    value: unknown,
+  ): string {
+    const selection = meta.selections.find((s) => s.name === name);
+    if (!selection) return getDisplayFromValue(value);
+    const choices = opening?.pick === name
+      ? opening.elements.map(elementChoice)
+      : choicesIn(null, initialArgs, selection);
+    return labelForPick(selection, value, choices);
+  }
+
   /**
    * Begin wizard mode for an action (fetches the first selection's choices).
    *
@@ -2029,6 +2145,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   ): Promise<ControllerActionResult> {
     const initialArgs = startOptions?.args ?? {};
     const prefillArgs = startOptions?.prefill ?? {};
+    // What the board could start this action with, read before opening it clears them (#1313).
+    const opening = startCandidates.value.get(actionName);
 
     // LIBX-04/CR-01: refuse to start a new action while the debug panel is
     // showing historical state.
@@ -2111,7 +2229,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     };
 
     for (const [name, value] of Object.entries(initialArgs)) {
-      actionSnapshot.value.collectedPicks.set(name, { value, display: getDisplayFromValue(value), skipped: false });
+      actionSnapshot.value.collectedPicks.set(name, { value, display: startArgLabel(meta, initialArgs, opening, name, value), skipped: false });
     }
 
     // Fetch choices for the first selection that needs input
@@ -2166,6 +2284,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return editorRuleRefusal(selection, value);
   }
 
+  /** A list fill that breaks its pick's bounds (#1298), or null. */
+  function listFillRefusal(selection: EnrichedPickMetadata, value: unknown): string | null {
+    const list = Array.isArray(value) && selectionTakesList(selection) ? listBoundsRefusal(selection, value) : null;
+    return list && `fill('${selection.name}', ...) rejected: ${list}`;
+  }
+
   async function fill(selectionName: string, value: unknown): Promise<PickValidationResult> {
     // CR-02: EVERY fill() failure path must setError() — GameShell's UIX-01
     // watch is the only place a failed action surfaces (ActionPanel's direct
@@ -2209,6 +2333,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
 
     const { value: offered, refusal } = resolvePick(selection, value);
+    // Judged on the resolved values, so two spellings of one choice are one repeat (#1298).
+    const listRefusal = listFillRefusal(selection, offered);
+    if (listRefusal) {
+      setError(listRefusal);
+      return { valid: false, error: listRefusal };
+    }
 
     // Handle repeating selections
     if (selection.repeat) {
@@ -2227,7 +2357,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       // PIT OF SUCCESS: Store value+display together in snapshot
       // Single source of truth for display values
       if (actionSnapshot.value) {
-        const display = findDisplayForValue(selectionName, offered);
+        const display = labelForPick(selection, offered);
         actionSnapshot.value.collectedPicks.set(selectionName, {
           value: offered,
           display,
@@ -2409,7 +2539,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       currentArgs.value[selection.name] = value;
 
       if (actionSnapshot.value) {
-        const display = findDisplayForValue(selection.name, value);
+        const display = labelForPick(selection, value);
         actionSnapshot.value.collectedPicks.set(selection.name, {
           value,
           display,
@@ -2439,15 +2569,14 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /**
-   * Fetch choices for the pick after `afterName`, resolving that pick, or
-   * false when the action moved on meanwhile. Null, without waiting, when
-   * there is no next pick with choices to fetch.
+   * Fetch the pick after `afterName`, resolving that pick, or false when the
+   * action moved on or an earlier answer changed meanwhile. Null, without waiting, when there is no next pick.
    */
   function fetchNextPick(afterName: string): Promise<EnrichedPickMetadata | false> | null {
     const nextSel = getNextSelection(afterName);
-    if (!nextSel || (nextSel.type !== 'choice' && nextSel.type !== 'element' && nextSel.type !== 'elements')) return null;
+    if (!nextSel) return null;
     const seq = actionStartTick.value;
-    return fetchChoicesForPick(nextSel.name).then(() => (!actionMovedOn(seq) && nextSel));
+    return fetchChoicesForPick(nextSel.name).then(kept => (kept && !actionMovedOn(seq) && nextSel));
   }
 
   /** Get the next selection after the given one */
@@ -2517,20 +2646,24 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
   }
 
+  /** Forget one pick's answer and any draft of it. */
+  function forgetAnswer(name: string): void {
+    delete currentArgs.value[name];
+    actionSnapshot.value?.collectedPicks.delete(name);
+    if (multiSelectDraft.value?.selectionName === name) multiSelectDraft.value = null;
+    if (pickDraft.value?.identity === draftIdentityFor(name)) pickDraft.value = null;
+  }
+
   function clear(selectionName: string): void {
-    delete currentArgs.value[selectionName];
-
-    // Remove from snapshot
-    if (actionSnapshot.value) {
-      actionSnapshot.value.collectedPicks.delete(selectionName);
-    }
-
-    // Drop an in-progress draft for this selection, if any
-    if (multiSelectDraft.value?.selectionName === selectionName) {
-      multiSelectDraft.value = null;
-    }
-    if (pickDraft.value?.identity === draftIdentityFor(selectionName)) {
-      pickDraft.value = null;
+    const selections = currentActionMeta.value?.selections ?? [];
+    const index = selections.findIndex(s => s.name === selectionName);
+    // Not a pick (a follow-up's server-bound arg, say), so the player has nothing to clear.
+    if (index === -1) return;
+    forgetAnswer(selectionName);
+    // Later picks were answered and fetched against the old value, so they are asked again (#1354, #1359).
+    for (const later of selections.slice(index + 1)) {
+      forgetAnswer(later.name);
+      forgetPickSnapshot(later.name);
     }
   }
 

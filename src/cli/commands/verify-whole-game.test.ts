@@ -4,7 +4,7 @@
  * `boardsmith dev` in Chromium included.
  *
  * These are the slowest verify runs, each serving the game and walking it in a browser, so they
- * live in their own file: vitest runs it alongside `verify.test.ts` rather than after it.
+ * live in their own file: vitest runs it alongside the `verify*.test.ts` files rather than after them.
  */
 import { describe, expect, it, vi } from 'vitest';
 

@@ -143,7 +143,7 @@ describe('boardsmith test reports how a run ended when vitest does not finish it
     expect(run.stdout).toContain('RUN  v');
   });
 
-  it('names a file whose worker died, although vitest itself finished', async () => {
+  it('names a file whose worker died, which ends vitest 3 before it finishes', async () => {
     const project = await gameProject({
       'tests/worker-dies.test.ts':
         "import { it } from 'vitest';\nit('ends its own worker', () => { process.kill(process.pid, 'SIGKILL'); });\n",
@@ -152,8 +152,11 @@ describe('boardsmith test reports how a run ended when vitest does not finish it
     const run = await spawnCli(['test'], project);
 
     expect(run.code).toBe(1);
-    expect(run.stderr).toContain('vitest finished, but 1 test file never reported a result:\n  tests/worker-dies.test.ts');
-    expect(await logNamedIn(run.stderr)).toContain('Worker exited unexpectedly');
+    expect(run.stderr).toContain('vitest exited with code 1 before it finished, so this run has no result.');
+    expect(run.stderr).toMatch(/Still running when it stopped \(\d\):/);
+    expect(run.stderr).toContain('  tests/worker-dies.test.ts');
+    // vitest 3's worker pool rejects its next message to the dead worker, and that ends the run.
+    expect(await logNamedIn(run.stderr)).toContain('Error: Channel closed');
   });
 
   it('names the failing file of an ordinary failure, and writes the same verdict to --verdict-file', async () => {

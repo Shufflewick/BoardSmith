@@ -292,7 +292,9 @@ so the board and the action panel always agree on which card is which.
   and a world's stored partitions all keep it.
 - **Picks use it.** A `chooseElement` or `chooseFrom` candidate the seat cannot
   see goes out under the id the seat's board carries for it, with a neutral
-  label such as "Card #1" unless the selection has its own `display`. A card in
+  label such as "Card #1", even when the selection has its own `display`
+  (#1293, see `actions-and-flow.md` § "Text a player reads never names a card
+  they cannot see"). A card in
   a `contentsHidden()` zone, which the board does not draw at all, is offered
   the same way, so a blind pick from a hidden pile works and its real id is
   never sent.
@@ -469,6 +471,27 @@ element tree, not a log of operations that produced it.
   designs (mis-positioned flow state on restore).
 - **Undo**: Undo/redo, where supported, works from captured snapshots of prior
   states, not by reversing a command log.
+- **What a restore cannot carry**: saved state is plain data, so anything that
+  is not (a frozen object, for one) comes back without it. An element class
+  re-applies such a thing in `protected override afterRestore()`, which runs on
+  every element each time a restore rebuilds it (cold restore, undo, rewind, a
+  bot's search copy, a world partition adopted from storage). It runs last,
+  once the whole restored tree is decoded and the turn order and random state
+  are back, and in a bot's search copy once its `determinize` sampler has filled
+  in the hidden values, so those come back frozen too (in a world, a reference
+  into a partition that is not resident stays unresolved). It must not change a
+  saved value, and in a per-seat copy it asks `isAttributeRedacted(key)` before
+  reading an attribute the seat may not have been told:
+
+  ```typescript
+  class Page extends Space<MyGame> {
+    data: PageData | null = null;
+    protected override afterRestore(): void {
+      // deepFreeze is the game's own helper.
+      if (!this.isAttributeRedacted('data') && this.data) deepFreeze(this.data);
+    }
+  }
+  ```
 - **Security**: Direct manipulation is prevented because players only ever
   call actions (validated, server-side) — never touch element methods
   themselves — not because of a command-layer indirection.
@@ -761,7 +784,7 @@ const game = new MyWorld({ playerCount: 200, seed, worldMode: true, elementIdKey
 game.definePartition(regionId);
 
 // hydrate a partition the platform has in storage, back under the game
-const region = game.adoptSubtree(game.id, storedRegionJson);
+const region = game.adoptSubtree(storedRegionJson);
 
 // after a command runs, ask which partitions it dirtied. ONE call, and it
 // consumes: it reports what changed AND re-baselines from the same pass, so a
@@ -770,7 +793,7 @@ const dirty = game.takeTouchedPartitions();
 
 // the pre-command copy to roll a refused command back to, out of the baseline
 // the previous take already captured -- nothing is serialized to get it
-const point = game.partitionBaseline(regionId);   // { parentId, bytes }
+const bytes = game.partitionBaseline(regionId);   // the region's serialized bytes
 
 game.evictSubtree(regionId);     // residency change, not a game move: no onExit fires
 ```
@@ -1020,7 +1043,7 @@ For asymmetric games where exactly one player must have a specific role (e.g., 1
 }
 ```
 
-The platform needs `choices` and a string `default`; the game reads the default (here `"last"`) itself. The `ExclusivePlayerOption` and `StandardPlayerOption` types require the same shape in code, and `NumberPlayerOption` and `BooleanPlayerOption` type the `number` and `boolean` options.
+The platform needs `choices` and a string `default`. The default names the seat that holds the option when the table opens: `"last"` is the last seat, a seat number is that seat, and anything else is the first seat; the host can then give it to another seat. At start, the holder's `playerOptions[id]` is the first choice's value (here `"dictator"`), no other seat has the key, and the game options carry `exclusiveSeats`, mapping each exclusive option's id to its holder's seat. `boardsmith dev` starts a table the same way, and its Table setup sets each seat's player options and which seat holds each exclusive option, refusing a value the platform's lobby would refuse. The `ExclusivePlayerOption` and `StandardPlayerOption` types require the same shape in code, and `NumberPlayerOption` and `BooleanPlayerOption` type the `number` and `boolean` options.
 
 ### Presets
 

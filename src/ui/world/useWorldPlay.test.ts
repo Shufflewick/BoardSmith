@@ -183,6 +183,19 @@ describe('re-asking one pick once something is bound (ShufflewickPub #378)', () 
     expect(result.choices).toHaveLength(2);
   });
 
+  it("carries the re-asked pick's prompt, which the offer leaves out when it reads an earlier pick (#1350)", async () => {
+    const resolvePick = vi.fn(async () => ({
+      ok: true,
+      selection: { name: 'crew', type: 'choice' as const, prompt: 'Crew for the dory', choices: [{ value: 'ash', display: 'Ash' }] },
+    }));
+    const host = fakeHost({ resolvePick });
+    host.actions.value = [DEPLOY];
+
+    const result = await play(host).fetchPickChoices('deploy', 'crew', 4, { ship: 'dory' });
+
+    expect(result.prompt).toBe('Crew for the dory');
+  });
+
   it('#475: waits for the offers of a world that moved between two picks, and re-asks from them', async () => {
     const resolvePick = vi.fn(async () => ({
       ok: true,
@@ -236,6 +249,19 @@ describe('re-asking one pick once something is bound (ShufflewickPub #378)', () 
 
     expect(host.resolvePick).not.toHaveBeenCalled();
     expect(result.choices).toEqual(DEPLOY.selections[0]!.choices);
+  });
+
+  it('asks the world for a later pick even with nothing bound, since the offer carries only its shape (#1355)', async () => {
+    // A skipped optional first pick leaves the args empty when the next pick is asked.
+    const selection = { name: 'crew', type: 'choice' as const, choices: [{ value: 'ash', display: 'Ash' }] };
+    const resolvePick = vi.fn(async () => ({ ok: true, selection }));
+    const host = fakeHost({ resolvePick });
+    host.actions.value = [DEPLOY];
+
+    const result = await play(host).fetchPickChoices('deploy', 'crew', 4, {});
+
+    expect(resolvePick).toHaveBeenCalledWith('deploy', 'crew', {});
+    expect(result.choices).toEqual(selection.choices);
   });
 
   /** A world that answers `crew` with exactly this, offered as `deploy`. */

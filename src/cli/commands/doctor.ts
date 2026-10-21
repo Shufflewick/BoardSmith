@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
-import { gitSucceeds } from '../lib/git-output.js';
+import { projectGitSucceeds } from '../lib/git-output.js';
 import { readIfExists } from '../lib/read-if-exists.js';
-import { ingestHookState, installIngestHook } from '../lib/ingest-hook.js';
+import { ingestHookAdvice, ingestHookState, installIngestHook } from '../lib/ingest-hook.js';
 import { join, relative, resolve } from 'node:path';
 import { styleText } from 'node:util';
 import {
@@ -75,8 +75,10 @@ export type DoctorFindingKind =
   | 'test-run-collects-worktrees'
   /** The config is not built with `defineGameViteConfig` and has settings of its own; only a person should carry them over. */
   | 'test-config-needs-edit'
-  /** The `pre-commit` hook git runs is missing, not executable, or an older BoardSmith ingest hook; `--fix` writes the current one. */
+  /** The `pre-commit` hook git runs is missing or an older BoardSmith ingest hook; `--fix` writes the current one. */
   | 'ingest-hook-not-current'
+  /** The BoardSmith ingest hook git runs has lost its execute bit, so git skips it; `--fix` writes the current one, executable. */
+  | 'ingest-hook-not-executable'
   /** Both the root and the `design/` copy exist — a human has to decide which one is real. */
   | 'move-conflict';
 
@@ -193,15 +195,15 @@ async function move(projectDir: string, from: string, to: string): Promise<void>
  */
 async function untrack(projectDir: string, path: string): Promise<void> {
   if (!(await gitTracks(projectDir, path))) return;
-  await gitSucceeds(projectDir, ['rm', '--cached', '--quiet', '--', path]);
+  await projectGitSucceeds(projectDir, ['rm', '--cached', '--quiet', '--', path]);
 }
 
 function gitTracks(projectDir: string, path: string): Promise<boolean> {
-  return gitSucceeds(projectDir, ['ls-files', '--error-unmatch', '--', path]);
+  return projectGitSucceeds(projectDir, ['ls-files', '--error-unmatch', '--', path]);
 }
 
 function gitMv(projectDir: string, from: string, to: string): Promise<boolean> {
-  return gitSucceeds(projectDir, ['mv', '--', from, to]);
+  return projectGitSucceeds(projectDir, ['mv', '--', from, to]);
 }
 
 /** Design artifacts stranded in the project root. */
@@ -325,35 +327,20 @@ async function sortConfigs(projectDir: string): Promise<{ built: string | undefi
 /** The ingest hook as a finding when `--fix` can bring it up to date, or as a note when it is not ours to touch. */
 async function ingestHookCheck(projectDir: string): Promise<{ findings: DoctorFinding[]; notes: string[] }> {
   const hook = await ingestHookState(projectDir);
-  if (hook.state === 'no-git') return { findings: [], notes: [] };
-  const { state, path } = hook;
-  const byHand = 'or run boardsmith ingest-gaps yourself after transcription.';
-  if (state === 'outside') {
-    return { findings: [], notes: [
-      `Left ${path} alone: git runs hooks from a folder outside this project, which other repositories may share, ` +
-        `so the ingest hook is not installed. Run boardsmith ingest-gaps yourself after transcription.`,
-    ] };
+  if (hook.state === 'no-git' || hook.state === 'current') return { findings: [], notes: [] };
+  if (hook.state === 'missing' || hook.state === 'not-executable' || hook.state === 'stale') {
+    const { path } = hook;
+    const kind = hook.state === 'not-executable' ? 'ingest-hook-not-executable' : 'ingest-hook-not-current';
+    return { findings: [{ kind, from: path, to: path, fixed: false, detail: HOOK_DETAIL[hook.state] }], notes: [] };
   }
-  if (state === 'foreign') {
-    return { findings: [], notes: [
-      `Left ${path} alone: BoardSmith did not write it, so the ingest hook is not installed. To use BoardSmith's, ` +
-        `move your commands elsewhere, delete ${path} and run boardsmith doctor --fix; ${byHand}`,
-    ] };
-  }
-  if (state === 'unreadable') {
-    return { findings: [], notes: [
-      `Left ${path} alone: could not read ${path}, so doctor cannot tell whether BoardSmith wrote it. ` +
-        `Check that you can read it, then run boardsmith doctor again; ${byHand}`,
-    ] };
-  }
-  if (state === 'current') return { findings: [], notes: [] };
-  const detail = {
-    missing: 'no ingest pre-commit hook is installed, so commits do not run the ingest synthesis.',
-    'not-executable': 'the ingest pre-commit hook is not executable, so git skips it.',
-    stale: 'the ingest pre-commit hook is an older version than this BoardSmith writes.',
-  }[state];
-  return { findings: [{ kind: 'ingest-hook-not-current', from: path, to: path, fixed: false, detail }], notes: [] };
+  return { findings: [], notes: [ingestHookAdvice(hook)] };
 }
+
+const HOOK_DETAIL = {
+  missing: 'no ingest pre-commit hook is installed, so commits do not run the ingest synthesis.',
+  'not-executable': 'the ingest pre-commit hook is not executable, so git skips it.',
+  stale: 'the ingest pre-commit hook is an older version than this BoardSmith writes.',
+};
 
 /**
  * Resolve every finding `--fix` is allowed to resolve. `design/` and the scratch dir are created
@@ -367,12 +354,15 @@ async function fixAll(projectDir: string, findings: DoctorFinding[]): Promise<vo
   }
 }
 
+/** Write the current hook, and refuse loudly, with the reason, when git would not run it. */
+async function fixIngestHook(projectDir: string): Promise<void> {
+  const installed = await installIngestHook(projectDir);
+  if (installed.result === 'skipped') throw new Error(ingestHookAdvice(installed.hook));
+}
+
 /** Resolve one finding `--fix` is allowed to resolve. */
 async function fix(projectDir: string, f: DoctorFinding): Promise<void> {
-  if (f.kind === 'ingest-hook-not-current') {
-    if ((await installIngestHook(projectDir)).result === 'installed') return;
-    throw new Error(`Could not write ${f.from}. Check that you can write to its folder, then run boardsmith doctor --fix again.`);
-  }
+  if (f.kind === 'ingest-hook-not-current' || f.kind === 'ingest-hook-not-executable') return fixIngestHook(projectDir);
   if (f.kind === 'test-config-missing' || f.kind === 'test-run-collects-worktrees') {
     const { built, outdated } = await sortConfigs(projectDir);
     for (const config of outdated) await fs.rm(join(projectDir, config));
@@ -449,24 +439,32 @@ function configLine(f: DoctorFinding, rel: (p: string) => string): string {
   return `${styleText('yellow', f.kind === 'test-config-missing' ? 'missing ' : 'outdated')} ${where}\n          ${f.detail}`;
 }
 
-/** The ingest hook finding as a report line: installed, or what is wrong with it. */
+/** The ingest hook finding as a report line: installed, made executable again, or what is wrong with it. */
 function hookLine(f: DoctorFinding): string {
+  if (f.fixed && f.kind === 'ingest-hook-not-executable') {
+    return `${styleText('green', 'fixed   ')} ${f.from} ${styleText('dim', '->')} the current ingest hook, now executable`;
+  }
   if (f.fixed) return `${styleText('green', 'installed')} ${f.from} ${styleText('dim', '->')} the current ingest hook`;
   return `${styleText('yellow', 'hook    ')} ${f.from}\n          ${f.detail}`;
 }
 
+/** The kinds whose report line has a function of its own. */
+const LINE_OF: Partial<Record<DoctorFindingKind, (f: DoctorFinding, rel: (p: string) => string) => string>> = {
+  'test-config-missing': configLine,
+  'test-run-collects-worktrees': configLine,
+  'ingest-hook-not-current': hookLine,
+  'ingest-hook-not-executable': hookLine,
+};
+
 /** One finding as a report line; `rel` makes a project path relative to where doctor was run. */
 function reportLine(f: DoctorFinding, rel: (p: string) => string): string {
+  const line = LINE_OF[f.kind];
+  if (line) return line(f, rel);
   switch (f.kind) {
     case 'move-conflict':
       return `${styleText('red', 'conflict')} ${rel(f.from)}\n          ${f.detail}`;
     case 'test-config-needs-edit':
       return `${styleText('red', 'edit    ')} ${rel(f.from)}\n          ${f.detail}`;
-    case 'test-config-missing':
-    case 'test-run-collects-worktrees':
-      return configLine(f, rel);
-    case 'ingest-hook-not-current':
-      return hookLine(f);
     case 'scratch-dir-not-ignored':
       return `${f.fixed ? styleText('green', 'ignored ') : styleText('yellow', 'untracked')} ${rel(f.from)} ${styleText('dim', '->')} adds ${GITIGNORE_ENTRY}`;
     default:

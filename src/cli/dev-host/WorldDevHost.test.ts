@@ -109,6 +109,7 @@ function stateFrame(overrides: Record<string, unknown> = {}): Record<string, unk
     type: 'world_state',
     phase: 'watching',
     view: { here: 'hall' },
+    placeholders: [],
     seat: 1,
     revision: 1,
     notice: null,

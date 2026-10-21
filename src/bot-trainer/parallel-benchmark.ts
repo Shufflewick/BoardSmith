@@ -64,24 +64,26 @@ function tsxApiUrl(): string {
 /** One benchmark to run: a weight set and the games it plays. */
 export interface BenchmarkJob {
   weights: ObjectiveWeight[];
-  config: BenchmarkConfig;
+  config: BenchmarkConfig & { gameCount: number };
 }
 
 /**
- * Progress callback for parallel benchmarks
+ * Progress callback for parallel benchmarks: games played so far, of every job's games.
  */
 export type BenchmarkProgressCallback = (completed: number, total: number) => void;
 
 /**
- * Run benchmark jobs in parallel, one job per worker at a time.
+ * Run benchmark jobs in parallel. Every game of every job is its own piece of
+ * work (#1307), so even one job's games spread across the whole pool, and a
+ * reproducible job plays the same games however the pool shares them out.
  *
  * @param gameModulePath - Absolute path to the compiled game module (.js)
  * @param gameType - Game type identifier
  * @param jobs - Each weight set to benchmark, with its own benchmark configuration
  * @param options - Worker pool configuration
- * @param onProgress - Optional progress callback
- * @returns Array of win rates in the same order as `jobs`
- * @throws When a candidate's benchmark fails or a worker stops unexpectedly; the
+ * @param onProgress - Optional progress callback, once per game played
+ * @returns Each job's win rate, over the games that finished as `benchmarkBot` scores it, in the order of `jobs`
+ * @throws When a benchmark game fails or a worker stops unexpectedly; the
  *   remaining workers are terminated, so a failure is never scored as fitness 0.
  */
 export async function runParallelBenchmarks(
@@ -91,37 +93,22 @@ export async function runParallelBenchmarks(
   options?: ParallelBenchmarkOptions,
   onProgress?: BenchmarkProgressCallback
 ): Promise<number[]> {
-  const populationSize = jobs.length;
+  // An empty weight set is scored 0 and plays no game.
+  const pieces = jobs.flatMap((job, jobIndex) =>
+    job.weights.length === 0 ? [] : Array.from({ length: job.config.gameCount }, (_, game) => ({ jobIndex, game })),
+  );
+  const wins: number[] = new Array(jobs.length).fill(0);
+  const finished: number[] = new Array(jobs.length).fill(0);
+  const winRates = () => wins.map((won, job) => (finished[job] > 0 ? won / finished[job] : 0));
 
-  if (populationSize === 0) {
-    return [];
+  if (pieces.length === 0) {
+    return winRates();
   }
 
-  // Determine worker count
   const cpuCount = cpus().length;
-  let workerCount = options?.workerCount ?? Math.max(1, cpuCount - 1);
-  workerCount = Math.max(1, Math.min(workerCount, populationSize));
-
-  // Results array (indexed by individual index)
-  const fitnesses: number[] = new Array(populationSize).fill(0);
+  const workerCount = Math.max(1, Math.min(options?.workerCount ?? Math.max(1, cpuCount - 1), pieces.length));
   let completedCount = 0;
-
-  // Create work queue (indices of individuals to evaluate)
-  const workQueue: number[] = [];
-  for (let i = 0; i < populationSize; i++) {
-    // Skip empty objective sets (fitness = 0)
-    if (jobs[i].weights.length === 0) {
-      fitnesses[i] = 0;
-      completedCount++;
-    } else {
-      workQueue.push(i);
-    }
-  }
-
-  // If all were empty, return immediately
-  if (workQueue.length === 0) {
-    return fitnesses;
-  }
+  const workQueue = pieces.map((_, index) => index);
 
   // Create worker pool
   const { url: workerUrl, execArgv } = benchmarkWorker();
@@ -136,7 +123,10 @@ export async function runParallelBenchmarks(
 
   return new Promise((resolve, reject) => {
     let settled = false;
-    const candidate = (index: number) => `candidate ${index + 1} of ${populationSize}`;
+    const describePiece = (index: number) => {
+      const { jobIndex, game } = pieces[index];
+      return `game ${game + 1} of ${jobs[jobIndex].config.gameCount} of weight set ${jobIndex + 1} of ${jobs.length}`;
+    };
 
     function fail(message: string): void {
       settled = true;
@@ -160,23 +150,20 @@ export async function runParallelBenchmarks(
         workerState.busy = false;
 
         if ('error' in message) {
-          fail(`Benchmarking ${candidate(message.individualIndex)} for game "${gameType}" failed: ${message.error}`);
+          fail(`Benchmark ${describePiece(message.piece)} for "${gameType}" failed: ${message.error}`);
           return;
         }
-        fitnesses[message.individualIndex] = message.winRate;
+        const { jobIndex } = pieces[message.piece];
+        wins[jobIndex] += message.wins;
+        finished[jobIndex] += message.wins + message.losses + message.draws;
 
         completedCount++;
+        onProgress?.(completedCount, pieces.length);
 
-        // Report progress
-        if (onProgress) {
-          onProgress(completedCount, populationSize);
-        }
-
-        // Check if all done
-        if (completedCount >= populationSize) {
+        if (completedCount >= pieces.length) {
           settled = true;
           terminateAllWorkers();
-          resolve(fitnesses);
+          resolve(winRates());
           return;
         }
 
@@ -223,8 +210,8 @@ export async function runParallelBenchmarks(
       worker.on('exit', (code) => {
         if (settled || !workers.includes(workerState)) return;
         const lostIndex = inFlightWork.get(worker);
-        const during = lostIndex === undefined ? '' : ` while benchmarking ${candidate(lostIndex)}`;
-        fail(`A benchmark worker for game "${gameType}" stopped (exit code ${code})${during}.`);
+        const during = lostIndex === undefined ? '' : ` while playing benchmark ${describePiece(lostIndex)}`;
+        fail(`A benchmark worker for "${gameType}" stopped (exit code ${code})${during}.`);
       });
     }
 
@@ -240,12 +227,13 @@ export async function runParallelBenchmarks(
       workerState.busy = true;
       inFlightWork.set(workerState.worker, index);
 
+      const { jobIndex, game } = pieces[index];
       const request: BenchmarkRequest = {
-        individualIndex: index,
+        piece: index,
         gameModulePath,
         gameType,
-        weights: jobs[index].weights,
-        config: jobs[index].config,
+        weights: jobs[jobIndex].weights,
+        config: { ...jobs[jobIndex].config, game },
       };
 
       workerState.worker.postMessage(request);

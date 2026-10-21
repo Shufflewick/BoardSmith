@@ -116,43 +116,23 @@ export const PLAYER_KEY_PREFIX = "player:";
  * `END_STATE_BYTE_CAP` applies to `plays.endState`, and for the same reason:
  * an oversized payload should never be put on the wire at all.
  *
- * This is the ONLY persistence quota duplicated outside Convex. The real
- * quotas -- per entry, per game, per commit, and the key rules -- live solely
- * in `convex/persistenceQuotas.ts` and are enforced authoritatively by
- * `convex/gamePersistence.ts:stageCommit`. `games/` and `convex/` are
- * separate deployable units and cannot import from each other, so every
- * duplicated number is a number that can drift; this one earns its keep by
- * bounding the request itself, which Convex cannot do from the far end.
+ * The real quotas -- per entry, per game, per commit, and the key rules --
+ * live in `convex/persistenceQuotas.ts` and are enforced authoritatively by
+ * `convex/gamePersistence.ts:stageCommit`. This one earns its keep by bounding
+ * the request itself, which Convex cannot do from the far end. It is not a
+ * copy of a Convex number: it is the wire's own ceiling.
  *
- RE-DERIVED 2026-08-16. 64KB was sized against the game-over commit it was
- * written for, and it silently governed WORLD RESOLUTIONS too -- whose durable
- * delta is one record per player, because the campaign store is a world's only
- * home between rounds. At the measured ~1.2KB compact record, 64KB carried
- * about fifty players' worth of a world that advertised five hundred, and the
- * refusal is deterministic, so the round never succeeded.
- *
- * 2MiB is `convex/persistenceQuotas.ts:PERSIST_MAX_TOTAL_BYTES_PER_CAMPAIGN`:
- * one commit may legally rewrite the whole store, because a world that changed
- * every settlement this round genuinely did. Anything past the store's own
- * total is malformed or runaway rather than merely large.
- *
- * RE-DERIVED AGAIN 2026-08-16, and this is the correction that mattered. The
- * docblock asserted the identity with Convex's campaign total while the
- * literal stayed at 1MiB after that total moved to 2MiB -- and this cap is
- * the FIRST gate a resolution's commit passes, so it decided the platform's
- * real capacity while every arithmetic test agreed 500 players fit.
+ * 2MiB is `convex/persistenceQuotas.ts:PERSIST_MAX_TOTAL_BYTES_PER_CAMPAIGN`,
+ * the most a whole store may hold: anything past it is malformed or runaway
+ * rather than merely large. ShufflewickPub's
+ * `scripts/persistence-conformance.test.mjs` holds it at or under that total.
+ * A legal commit is far smaller -- Convex stages at most
+ * `PERSIST_MAX_ENTRIES_PER_COMMIT` entries of at most 8KB each -- so this
+ * ceiling is never what refuses a well-formed game.
  *
  * It measures `JSON.stringify(entries)`, and each entry's `value` is ALREADY a
  * JSON string, so every quote inside a persisted record is escaped a second
- * time on the way out: the calibrated 1,227-byte row rides the wire at ~1,477.
- * No calibration constant models that factor, which is why flat row arithmetic
- * could not see it. A legal whole-store rewrite --
- * `WORLD_RESOLUTION_MAX_ENTRIES_PER_COMMIT` (1,064) rows of the repo's own
- * pinned record -- measures 1,607,659 bytes here, 53% over the old 1MiB.
- *
- * `scripts/world-capacity.test.mjs` now builds that commit from
- * `scripts/world-fixtures.mjs` and measures it THE WAY `readPersistCommit`
- * does, so a future drift fails at the commit that introduces it.
+ * time on the way out.
  *
  * Still far under Convex's 16MiB per-mutation argument ceiling, which is the
  * wall behind this one.
@@ -160,14 +140,24 @@ export const PLAYER_KEY_PREFIX = "player:";
 export const PERSIST_MAX_COMMIT_BYTES = 2 * 1024 * 1024;
 
 /**
- * Convex's per-commit entry cap and key rules, restated from
+ * Convex's per-commit entry cap and key rules, COPIED from
  * `convex/persistenceQuotas.ts` (`PERSIST_MAX_ENTRIES_PER_COMMIT`,
  * `PERSIST_MAX_KEY_LENGTH`, `PERSIST_KEY_PATTERN`) so `boardsmith dev` refuses
  * what production refuses, with the same message and in the same order
  * (#949). Convex stays the authoritative gate; these only move its refusal
  * earlier.
+ *
+ * They are copies, not imports, because nothing in BoardSmith may import from
+ * the platform. The two numbers carry `@platform-limit` markers so
+ * ShufflewickPub's `scripts/platform-limits.test.mjs` holds them equal to
+ * Convex's on every re-vendor; that test refuses a marker it has not
+ * registered, so the first re-vendor after this change must register them
+ * (ShufflewickPub #656). The key pattern is a regex, which that scanner
+ * cannot read yet; #656 also covers comparing it.
  */
+// @platform-limit PERSIST_MAX_ENTRIES_PER_COMMIT
 const PERSIST_MAX_ENTRIES_PER_COMMIT = 25;
+// @platform-limit PERSIST_MAX_KEY_LENGTH
 const PERSIST_MAX_KEY_LENGTH = 128;
 const PERSIST_KEY_PATTERN = /^[A-Za-z0-9._:@/-]+$/;
 
@@ -257,7 +247,7 @@ export interface PersistStartPayload {
  * could not spell one: the store is the only other thing it is handed, so the
  * only way to name a sealed key would be to already hold a sealed key. A
  * campaign's FIRST mission holds none, so the capability
- * `docs/CAMPAIGNS.md` leads with was unreachable in the mode it was written
+ * ShufflewickPub's campaigns guide leads with was unreachable in the mode it was written
  * for. Issue #40's campaign example is what surfaced that -- prose could not.
  *
  * `playerId` is the same opaque token every other per-player handle carries:

@@ -550,3 +550,25 @@ describe('a turn that offers several actions and opens none, as Chess does (#119
     expect(boardInteraction.isSelectableElement({ id: 300, notation: 'd2' })).toBe(false);
   });
 });
+
+describe('the no-drop-targets warning (#1299)', () => {
+  it('states the rule the board uses for a choice: the ref with role target, else the first ref', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const pieces = [{ id: 1, refs: [{ ref: { id: 1 }, role: 'highlight' as const }] }, { id: 2, refs: [{ ref: { id: 2 }, role: 'highlight' as const }] }];
+    const fetchPickChoices = answerPicks({
+      piece: { validElements: pieces },
+      dest: { choices: [{ value: 'a1', display: 'A1' }, { value: 'a2', display: 'A2' }] },
+    });
+    const { boardInteraction } = await wireAll({
+      place: { name: 'place', selections: [{ name: 'piece', type: 'element', validElements: pieces }, { name: 'dest', type: 'choice' }] },
+    }, fetchPickChoices);
+
+    boardInteraction.startDrag({ id: 1 });
+    await flushAll();
+
+    const message = warn.mock.calls.map((call) => String(call[0])).find((text) => text.includes('no drop targets'));
+    expect(message).toContain("the ref with role 'target', else the first ref");
+    expect(message).not.toContain("refs with role 'target'");
+    warn.mockRestore();
+  });
+});

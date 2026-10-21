@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises';
-import { existsSync, rmSync, statSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { styleText } from 'node:util';
 import ora from 'ora';
@@ -29,7 +29,7 @@ import {
 import { worldEntryFiles } from '../lib/world-entry.js';
 import { SMOKE_SPEC_PATH } from '../../testing/browser-smoke-verdict.js';
 import { ingestArchiveCommand, rulebookArchivePaths } from './ingest-archive.js';
-import { installIngestHook } from '../lib/ingest-hook.js';
+import { ingestHookAdvice, installIngestHook } from '../lib/ingest-hook.js';
 import { assertGameName } from '../lib/user-name.js';
 import { gitOutput } from '../lib/git-output.js';
 import { boardsmithInstallKind, boardsmithPackageRoot } from '../lib/boardsmith-version.js';
@@ -305,24 +305,8 @@ async function initVersionControl(projectPath: string): Promise<void> {
  */
 async function installHookAndReport(projectPath: string): Promise<void> {
   const hook = await installIngestHook(projectPath);
-  const byHand = 'run `boardsmith ingest-gaps` manually after transcription';
-  if (hook.result === 'skipped-no-git') {
-    console.log(styleText('yellow', `  Could not install the ingest pre-commit hook: this folder has no git repository, so ${byHand}.`));
-  } else if (hook.result === 'installed') {
-    console.log(styleText('dim', `  (installed the ingest pre-commit hook at ${hook.path})`));
-  } else if (hook.result === 'skipped-existing') {
-    console.log(styleText('dim', `  (left your existing ${hook.path} alone — ${byHand})`));
-  } else if (hook.result === 'skipped-unreadable') {
-    console.log(
-      styleText('yellow', `  Left ${hook.path} alone: could not read it, so the ingest hook is not installed. Check that you can read it, or ${byHand}.`),
-    );
-  } else if (hook.result === 'skipped-outside') {
-    console.log(
-      styleText('yellow', `  Left ${hook.path} alone: git runs hooks from a folder outside this project, which other repositories may share, so the ingest hook is not installed. Run \`boardsmith ingest-gaps\` manually after transcription.`),
-    );
-  } else {
-    console.log(styleText('yellow', `  Could not write ${hook.path}, so the ingest hook is not installed. Check that you can write to its folder, or ${byHand}.`));
-  }
+  if (hook.result === 'installed') console.log(styleText('dim', `  (installed the ingest pre-commit hook at ${hook.path})`));
+  else console.log(styleText('yellow', `  ${ingestHookAdvice(hook.hook)}`));
 }
 
 /**
@@ -331,10 +315,11 @@ async function installHookAndReport(projectPath: string): Promise<void> {
  * `design/rulebook/` relative to the folder git runs it from, which is the top folder.
  */
 function assertGitTopFolder(projectPath: string): void {
-  if (statSync(join(projectPath, '.git'), { throwIfNoEntry: false })?.isDirectory() === true) return;
+  // A linked worktree's or submodule's .git is a file naming its git folder (#1321).
+  if (existsSync(join(projectPath, '.git'))) return;
   throw new Error(
     '--into-existing scaffolds into the git repository you run it from, and this folder is ' +
-      'not the top folder of a git repository (it has no .git folder).\n' +
+      'not the top folder of a git repository (it has no .git).\n' +
       "Run init from the repository's top folder, or run `git init` here first.",
   );
 }

@@ -2753,10 +2753,10 @@ describe('onSelect in executeAction', () => {
   });
 });
 
-// Regression test for audit2 F35: a throwing onSelect must FAIL LOUD — abort the
-// action, fire onCancel for selections whose onSelect already fired, and never
-// commit (execute() must not run).
-describe('onSelect throwing aborts the action (F35)', () => {
+// A throwing onSelect fails loud (audit2 F35, #1189). A whole submission aborts:
+// onCancel fires for the selections whose onSelect already ran, and execute()
+// never runs. A step fails the pick and leaves onCancel to the player's cancel.
+describe('a throwing onSelect (F35, #1189)', () => {
   let game: TestGame;
   let executor: ActionExecutor;
 
@@ -2842,6 +2842,18 @@ describe('onSelect throwing aborts the action (F35)', () => {
 
     executor.fireOnCancelCallbacks(action, pendingState);
     expect(events).toEqual(['onSelect:color', 'onCancel:color']);
+  });
+
+  it("says a repeating step whose onEach threw may have changed the game (#1242)", () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const action = Action.create('test')
+      .chooseFrom('items', { choices: ['x', 'done'], repeat: { until: (_ctx, item) => item === 'done', onEach: () => { throw new Error('each blew up'); } } })
+      .execute(() => {});
+    const pendingState = executor.createPendingActionState('test', 1);
+
+    const step = executor.processSelectionStep(action, game.getPlayer(1)!, pendingState, 'items', 'x');
+
+    expect(step).toMatchObject({ success: false, partiallyApplied: true });
   });
 });
 

@@ -744,7 +744,8 @@ boardInteraction.isSelectableElement(element)  // Can be clicked to select
 boardInteraction.triggerElementSelect(element)
 
 // Drag and drop
-boardInteraction.startDrag(element)  // A disabled candidate starts no drag, as a click chooses nothing
+boardInteraction.canStartDrag(element)  // False for a disabled candidate, as a click on it chooses nothing; the auto-filled source still drags
+boardInteraction.startDrag(element)  // Returns false, starting nothing, when canStartDrag refuses: cancel the browser drag then
 boardInteraction.endDrag()
 boardInteraction.isDropTarget(element)
 boardInteraction.isDraggedElement(element)
@@ -893,20 +894,19 @@ Use the pit-of-success API with the library's CSS for minimal boilerplate:
 ```vue
 <script setup lang="ts">
 import { computed } from 'vue';
-import { findElements, useDragDrop, type TableBoardProps } from 'boardsmith/ui';
+import { findElements, useBoardInteraction, useDragDrop, type TableBoardProps } from 'boardsmith/ui';
 import 'boardsmith/ui/animation/drag-drop.css';
 
 const props = defineProps<TableBoardProps>();
 const { drag, drop } = useDragDrop();
-const controller = props.actionController;
+const board = useBoardInteraction();
 
 const cards = computed(() => findElements(props.gameView, { className: 'Card' }));
 const zones = computed(() => findElements(props.gameView, { className: 'Zone' }));
 
+// A candidate of the open pick, an action's first pick when none is open, or the auto-filled card to drag on.
 const canDragCard = (cardId: number) =>
-  controller.currentAction.value === 'moveCard' &&
-  controller.currentPick.value?.name === 'card' &&
-  controller.validElements.value.some((valid) => valid.id === cardId);
+  board.isSelectableElement({ id: cardId }) || board.isDraggableSelectedElement({ id: cardId });
 </script>
 
 <template>
@@ -977,7 +977,7 @@ Or use your own class names alongside the library classes:
 | `isDropTarget` | `(ref) => boolean` | Check if element is valid drop target |
 
 **DragOptions:**
-- `when?: boolean | (() => boolean)` - Condition for enabling drag. When false, props are empty and `.bs-draggable` is not applied.
+- `when?: boolean | (() => boolean)` - Condition for enabling drag. When false, props are inert and `.bs-draggable` is not applied. A disabled candidate of the pick in progress is never draggable, whatever `when` says, as a click on it chooses nothing; the auto-filled source of the pick still drags on (#1299).
 
 **ElementRef:**
 - Can include `id`, `name`, or `notation` to identify the element.
@@ -1021,22 +1021,22 @@ function isZoneDropTarget(zoneName) { return isDropTarget({ name: zoneName }); }
 <!-- typecheck: board -->
 ```vue
 <script setup lang="ts">
-import { useDragDrop, type TableBoardProps } from 'boardsmith/ui';
+import { computed } from 'vue';
+import { findElements, useBoardInteraction, useDragDrop, type TableBoardProps } from 'boardsmith/ui';
 import 'boardsmith/ui/animation/drag-drop.css';
 
 const props = defineProps<TableBoardProps>();
 const { drag } = useDragDrop();
-const { currentAction, currentPick, validElements } = props.actionController;
+const board = useBoardInteraction();
+const cards = computed(() => findElements(props.gameView, { className: 'Card' }));
 
 const canDrag = (cardId: number) =>
-  currentAction.value === 'moveCard' &&
-  currentPick.value?.name === 'card' &&
-  validElements.value.some((valid) => valid.id === cardId);
+  board.isSelectableElement({ id: cardId }) || board.isDraggableSelectedElement({ id: cardId });
 </script>
 
 <template>
   <div
-    v-for="card in validElements"
+    v-for="card in cards"
     :key="card.id"
     v-bind="drag({ id: card.id }, { when: canDrag(card.id) }).props"
     :class="drag({ id: card.id }, { when: canDrag(card.id) }).classes"
@@ -2060,10 +2060,10 @@ Show feedback while actions are processing:
   <!-- Disable board interactions while executing -->
   <div
     class="game-board"
-    :class="{ 'is-loading': actionController.isExecuting }"
+    :class="{ 'is-loading': actionController.isExecuting.value }"
   >
     <!-- Loading overlay -->
-    <div v-if="actionController.isExecuting" class="loading-overlay">
+    <div v-if="actionController.isExecuting.value" class="loading-overlay">
       <span class="spinner" />
     </div>
 
@@ -2072,11 +2072,11 @@ Show feedback while actions are processing:
       v-for="action in availableActions"
       :key="action"
       v-disabled-reason="
-        disabledActions?.[action] || (actionController.isExecuting && 'Finishing your last move.')
+        disabledActions?.[action] || (actionController.isExecuting.value && 'Finishing your last move.')
       "
       @click="executeAction(action)"
     >
-      {{ actionController.isExecuting ? 'Working...' : action }}
+      {{ actionController.isExecuting.value ? 'Working...' : action }}
     </button>
   </div>
 </template>
@@ -2520,7 +2520,7 @@ async function onCardClick(card: any) {
   if (!props.availableActions.includes('play')) return;
 
   // Check if card is selectable via board interaction (wizard mode active)
-  if (boardInteraction?.isSelectableElement(card)) {
+  if (boardInteraction.isSelectableElement(card)) {
     boardInteraction.triggerElementSelect(card);
   } else {
     // Direct action execution
@@ -2547,9 +2547,9 @@ watch(() => props.gameView, (newView, oldView) => {
         :key="card.id"
         class="card"
         :class="{
-          'highlighted': boardInteraction?.isHighlighted(card),
-          'selected': boardInteraction?.isSelected(card),
-          'selectable': boardInteraction?.isSelectableElement(card),
+          'highlighted': boardInteraction.isHighlighted(card),
+          'selected': boardInteraction.isSelected(card),
+          'selectable': boardInteraction.isSelectableElement(card),
         }"
         :data-element-id="card.id"
         @click="onCardClick(card)"

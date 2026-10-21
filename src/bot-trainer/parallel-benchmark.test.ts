@@ -1,15 +1,18 @@
 /**
  * The evolution loop's work distributor. Real benchmarks spawn worker threads
  * that play hundreds of games, so the worker itself is faked here — what is
- * under test is the coordination: every individual gets a fitness, in order,
- * exactly once, a crashed worker cannot lose or duplicate work, and an erroring
- * or exiting worker fails the run.
+ * under test is the coordination: every game of every weight set is played
+ * exactly once, each set gets its win rate, in order, a crashed worker cannot
+ * lose or duplicate work, and an erroring or exiting worker fails the run.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'node:events';
 
+/** One benchmark game's outcome, as a worker reports it. */
+type GameOutcome = { wins: number; losses: number; draws: number; incomplete: number };
+
 /** Behaviour a fake worker applies to each request it receives. */
-type WorkerBehaviour = (request: any) => { winRate: number } | { error: string } | 'crash' | 'exit';
+type WorkerBehaviour = (request: any) => GameOutcome | { error: string } | 'crash' | 'exit';
 
 let behaviour: WorkerBehaviour;
 let createdWorkers: FakeWorker[];
@@ -37,9 +40,7 @@ class FakeWorker extends EventEmitter {
         this.emit('exit', 0);
         return;
       }
-      this.emit('message', 'error' in outcome
-        ? { individualIndex: request.individualIndex, error: outcome.error }
-        : { individualIndex: request.individualIndex, winRate: outcome.winRate });
+      this.emit('message', { piece: request.piece, ...outcome });
     });
   }
 
@@ -64,11 +65,13 @@ vi.mock('os', async (importOriginal) => {
 const { runParallelBenchmarks } = await import('./parallel-benchmark.js');
 
 import type { ObjectiveWeight } from './types.js';
-import type { BenchmarkConfig } from './benchmark.js';
+import type { BenchmarkJob } from './parallel-benchmark.js';
 
 const objectives = (weight: number): ObjectiveWeight[] => [{ id: `f${weight}`, weight }];
 
 const config = { gameCount: 10, mctsIterations: 5, timeout: 1000, maxActions: 100, seed: 's' };
+
+const won = (win: boolean): GameOutcome => ({ wins: win ? 1 : 0, losses: win ? 0 : 1, draws: 0, incomplete: 0 });
 
 const run = (
   population: ObjectiveWeight[][],
@@ -86,11 +89,16 @@ const settledBeforeNextMacrotask = (promise: Promise<number[]>) =>
     new Promise((resolve) => setImmediate(() => resolve('pending'))),
   ]);
 
+/** Each request as [weight, game], sorted. */
+const sent = () => createdWorkers
+  .flatMap((worker) => worker.received.map((r) => [r.weights[0].weight, r.config.game]))
+  .sort(([a, b], [c, d]) => a - c || b - d);
+
 beforeEach(() => {
   createdWorkers = [];
   terminated = 0;
-  // Fitness mirrors the individual's weight so results can be matched to inputs.
-  behaviour = (request) => ({ winRate: request.weights[0].weight / 100 });
+  // A set of weight w wins its first w of 10 games, so its win rate is w / 10 and results can be matched to inputs.
+  behaviour = (request) => won(request.config.game < request.weights[0].weight);
 });
 
 afterEach(() => {
@@ -108,46 +116,49 @@ describe('runParallelBenchmarks', () => {
     expect(createdWorkers).toHaveLength(0);
   });
 
-  it('returns one fitness per individual', async () => {
-    expect(await run([objectives(10), objectives(20), objectives(30)])).toHaveLength(3);
+  it('returns one win rate per weight set', async () => {
+    expect(await run([objectives(1), objectives(2), objectives(3)])).toHaveLength(3);
   });
 
-  it('indexes each result by its individual, not by arrival order', async () => {
-    // The worker answers with a fitness derived from the individual it was
-    // given, so a slot mix-up in the coordinator shows up as a reordering.
-    expect(await run([objectives(30), objectives(10), objectives(20)], { workerCount: 3 }))
-      .toEqual([0.3, 0.1, 0.2]);
+  it('indexes each result by its weight set, not by arrival order', async () => {
+    expect(await run([objectives(3), objectives(1), objectives(2)], { workerCount: 3 })).toEqual([0.3, 0.1, 0.2]);
   });
 
-  it('mixes scored and empty individuals correctly', async () => {
-    expect(await run([objectives(10), [], objectives(30)])).toEqual([0.1, 0, 0.3]);
+  it('mixes scored and empty weight sets correctly', async () => {
+    expect(await run([objectives(1), [], objectives(3)])).toEqual([0.1, 0, 0.3]);
   });
 
-  it('sends each individual to a worker exactly once', async () => {
-    await run([objectives(10), objectives(20), objectives(30)]);
-    const sentIndexes = createdWorkers
-      .flatMap((worker) => worker.received.map((r) => r.individualIndex))
-      .sort();
-    expect(sentIndexes).toEqual([0, 1, 2]);
+  it('sends each game of each weight set to a worker exactly once (#1307)', async () => {
+    await run([objectives(1), objectives(2)]);
+    expect(sent()).toEqual([1, 2].flatMap((weight) => Array.from({ length: 10 }, (_, game) => [weight, game])));
   });
 
-  it('passes the game module, type, weights and config through to the worker', async () => {
-    await run([objectives(10)]);
+  it('scores a set by its wins over the games that finished, as benchmarkBot does (#1307)', async () => {
+    behaviour = (request) => request.config.game === 0
+      ? { wins: 0, losses: 0, draws: 0, incomplete: 1 }
+      : won(request.config.game === 1);
+    expect(await run([objectives(5)])).toEqual([1 / 9]);
+  });
+
+  it('passes the game module, type, weights and config, with the one game to play, through to the worker', async () => {
+    await run([objectives(1)], { workerCount: 1 });
     expect(createdWorkers[0].received[0]).toMatchObject({
       gameModulePath: '/game.js',
       gameType: 'test',
-      weights: objectives(10),
-      config,
+      weights: objectives(1),
+      config: { ...config, game: 0 },
     });
   });
 
   it("sends each job its own config, so jobs can play differently seeded games (#1031)", async () => {
-    const seeded = (seed: string): BenchmarkConfig => ({ ...config, seed });
+    const seeded = (seed: string): BenchmarkJob['config'] => ({ ...config, gameCount: 2, seed });
     await runParallelBenchmarks('/game.js', 'test', [
-      { weights: objectives(10), config: seeded('a') },
-      { weights: objectives(10), config: seeded('b') },
+      { weights: objectives(1), config: seeded('a') },
+      { weights: objectives(1), config: seeded('b') },
     ], { workerCount: 1 });
-    expect(createdWorkers[0].received.map((request) => request.config)).toEqual([seeded('a'), seeded('b')]);
+    expect(createdWorkers[0].received.map((request) => request.config)).toEqual([
+      { ...seeded('a'), game: 0 }, { ...seeded('a'), game: 1 }, { ...seeded('b'), game: 0 }, { ...seeded('b'), game: 1 },
+    ]);
   });
 
   it('honours an explicit worker count', async () => {
@@ -155,8 +166,14 @@ describe('runParallelBenchmarks', () => {
     expect(createdWorkers).toHaveLength(2);
   });
 
-  it('never starts more workers than there are individuals', async () => {
-    await run([objectives(1)], { workerCount: 8 });
+  it("shares one weight set's games across the whole pool (#1307)", async () => {
+    await run([objectives(5)], { workerCount: 4 });
+    expect(createdWorkers).toHaveLength(4);
+    expect(createdWorkers.every((worker) => worker.received.length > 0)).toBe(true);
+  });
+
+  it('never starts more workers than there are games', async () => {
+    await runParallelBenchmarks('/game.js', 'test', [{ weights: objectives(1), config: { ...config, gameCount: 1 } }], { workerCount: 8 });
     expect(createdWorkers).toHaveLength(1);
   });
 
@@ -166,7 +183,7 @@ describe('runParallelBenchmarks', () => {
   });
 
   it('defaults the pool to one fewer than the CPU count', async () => {
-    await run(Array.from({ length: 10 }, (_, i) => objectives(i + 1)));
+    await run([objectives(1)]);
     expect(createdWorkers).toHaveLength(3);
   });
 
@@ -175,65 +192,61 @@ describe('runParallelBenchmarks', () => {
     expect(terminated).toBe(2);
   });
 
-  it('reports progress once per completed individual, ending at the total', async () => {
+  it('reports progress once per game played, ending at the total (#1307)', async () => {
     const progress: Array<[number, number]> = [];
-    await run(
-      [objectives(10), objectives(20), objectives(30)],
-      { workerCount: 1 },
-      (completed, total) => progress.push([completed, total]),
-    );
-    expect(progress).toEqual([[1, 3], [2, 3], [3, 3]]);
+    await run([objectives(1), objectives(2)], { workerCount: 1 }, (completed, total) => progress.push([completed, total]));
+    expect(progress).toEqual(Array.from({ length: 20 }, (_, i) => [i + 1, 20]));
   });
 
-  it('rejects, naming the candidate and the reason, when its worker reports an error', async () => {
-    behaviour = (request) => request.individualIndex === 1
+  it('rejects, naming the weight set, the game and the reason, when its worker reports an error (#1307)', async () => {
+    behaviour = (request) => request.weights[0].weight === 2 && request.config.game === 3
       ? { error: 'benchmark blew up' }
-      : { winRate: 0.5 };
+      : won(true);
     const outcome = await settledBeforeNextMacrotask(
-      run([objectives(10), objectives(20), objectives(30)], { workerCount: 3 }),
+      run([objectives(1), objectives(2), objectives(3)], { workerCount: 3 }),
     );
     expect(outcome).toBeInstanceOf(Error);
     expect((outcome as Error).message).toBe(
-      'Benchmarking candidate 2 of 3 for game "test" failed: benchmark blew up',
+      'Benchmark game 4 of 10 of weight set 2 of 3 for "test" failed: benchmark blew up',
     );
     expect(terminated).toBe(3);
   });
 
   it('rejects instead of hanging when a worker exits without an error event', async () => {
-    behaviour = (request) => request.individualIndex === 0 ? 'exit' : { winRate: 0.5 };
+    behaviour = (request) => request.weights[0].weight === 1 && request.config.game === 0 ? 'exit' : won(true);
     const outcome = await settledBeforeNextMacrotask(
-      run([objectives(10), objectives(20)], { workerCount: 2 }),
+      run([objectives(1), objectives(2)], { workerCount: 2 }),
     );
     expect(outcome).toBeInstanceOf(Error);
     expect((outcome as Error).message).toBe(
-      'A benchmark worker for game "test" stopped (exit code 0) while benchmarking candidate 1 of 2.',
+      'A benchmark worker for "test" stopped (exit code 0) while playing benchmark game 1 of 10 of weight set 1 of 2.',
     );
     expect(terminated).toBe(2);
   });
 
   it('re-queues work lost to a crashed worker instead of dropping it', async () => {
     let crashed = false;
+    const fair = behaviour;
     behaviour = (request) => {
-      if (!crashed && request.individualIndex === 0) {
+      if (!crashed && request.config.game === 0) {
         crashed = true;
         return 'crash';
       }
-      return { winRate: 0.7 };
+      return fair(request);
     };
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    expect(await run([objectives(10), objectives(20)], { workerCount: 2 }))
-      .toEqual([0.7, 0.7]);
+    expect(await run([objectives(1), objectives(2)], { workerCount: 2 })).toEqual([0.1, 0.2]);
   });
 
   it('rejects with an actionable error when every worker crashes', async () => {
     behaviour = () => 'crash';
     vi.spyOn(console, 'error').mockImplementation(() => {});
-    await expect(run([objectives(10)], { workerCount: 1 }))
+    await expect(run([objectives(1)], { workerCount: 1 }))
       .rejects.toThrow('All benchmark workers crashed');
   });
 
   it('completes a population larger than the pool by reusing workers', async () => {
-    const population = Array.from({ length: 7 }, (_, i) => objectives((i + 1) * 10));
+    const population = Array.from({ length: 7 }, (_, i) => objectives(i + 1));
     const result = await run(population, { workerCount: 2 });
     expect(result).toEqual([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]);
     expect(createdWorkers).toHaveLength(2);

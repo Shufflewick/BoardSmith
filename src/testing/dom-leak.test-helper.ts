@@ -4,9 +4,9 @@
  * Two seats, each with an owner-only `Hand` holding one secret card — the
  * smallest game where "what seat 1 may see" and "what the tree actually holds"
  * differ, which is the whole subject of a hidden-info scan. The seat on move may
- * `pass`, or `peek` at the other seat's card: a blind pick whose choice is
- * labelled with the card's hidden rank, the leak that exists only while an
- * action is open (#405). Lives here because
+ * `pass`, `peek` at the other seat's card (a blind pick), or `guess` with its
+ * own card, a choice labelled with the other card's hidden rank: the leak that
+ * exists only while an action is open (#405). Lives here because
  * both `dom-leak-custom-ui.test.ts` (the `component` seam) and
  * `dom-leak-board-interaction.test.ts` (the `provide` seam) need the same one,
  * and two copies of a fixture are two things to keep true.
@@ -49,8 +49,17 @@ export class SecretHandGame extends Game<SecretHandGame, Player> {
       Action.create<SecretHandGame>('peek')
         .chooseElement<'card', SecretCard>('card', {
           elements: (ctx) => this.all(SecretCard).filter((card) => (card.parent as Hand).player !== ctx.player),
-          // The bug under test: the target is labelled with the face it hides.
+          // Handed a card the seat cannot see, so the engine labels it instead (#1293).
           display: (card) => card.rank,
+        })
+        .execute(() => ({ success: true })),
+    );
+    this.registerAction(
+      Action.create<SecretHandGame>('guess')
+        .chooseElement<'card', SecretCard>('card', {
+          elements: (ctx) => this.all(SecretCard).filter((card) => (card.parent as Hand).player === ctx.player),
+          // The bug under test: a card the seat sees, labelled with the face of one it does not.
+          display: (card) => this.all(SecretCard).find((other) => other !== card)!.rank,
         })
         .execute(() => ({ success: true })),
     );
@@ -59,7 +68,7 @@ export class SecretHandGame extends Game<SecretHandGame, Player> {
       root: loop({
         while: () => true,
         maxIterations: 10,
-        do: eachPlayer({ do: actionStep({ actions: ['pass', 'peek'] }) }),
+        do: eachPlayer({ do: actionStep({ actions: ['pass', 'peek', 'guess'] }) }),
       }),
     });
   }

@@ -121,6 +121,20 @@ describe('a granted element nested below a concealed child (#961)', () => {
     }
   });
 
+  it('a hand hidden from one seat with hideContentsFrom shows that seat the nested card after its placeholder', () => {
+    const { game, hand } = setup();
+    hand.contentsVisible();
+    hand.hideContentsFrom(3);
+    const { crate, gem } = nest(hand);
+    gem.addVisibleTo(3);
+
+    const json = zoneIn(game, 3, 'hand');
+    expect(json.children!.map((c) => c.id)).toEqual([seatIdOf(crate, 3), gem.id]);
+    expect(json.childCount).toBe(1);
+    expect(getElementCount(json as GameViewElement)).toBe(1);
+    expect(zoneIn(game, 2, 'hand').children!.map((c) => c.id)).toEqual([crate.id]);
+  });
+
   it('reaches through hidden, count-only and individually hidden containers alike', () => {
     const { game, deck } = setup();
     deck.contentsHidden();

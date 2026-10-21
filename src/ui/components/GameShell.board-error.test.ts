@@ -153,6 +153,8 @@ describe('GameShell board error boundary and the zoom fit (#1154)', () => {
   const priorObserver = globalThis.ResizeObserver;
   /** A layout change: the observers of what changed size fire, then the region re-fit's frame runs. */
   async function relayout(changed: 'board' | 'board and region'): Promise<void> {
+    // The fit reads the region's computed width (#1343), which jsdom takes from the inline style.
+    if (changed === 'board and region') document.querySelector<HTMLElement>('[data-testid="bs-board"]')!.style.width = `${region.width}px`;
     for (const { target, fire } of observers) {
       if (changed === 'board and region' || target.classList.contains('game-shell__zoom-container')) fire();
     }
@@ -181,7 +183,6 @@ describe('GameShell board error boundary and the zoom fit (#1154)', () => {
       return (this.querySelector('.good-board') ? { width: 800, height: 600 } : { width: 0, height: 0 }) as DOMRect;
     });
     const isRegion = (el: HTMLElement) => el.dataset.testid === 'bs-board';
-    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) { return isRegion(this) ? region.width : 0; });
     vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(function (this: HTMLElement) { return isRegion(this) ? region.height : 0; });
     enterIframe();
   });
@@ -194,7 +195,8 @@ describe('GameShell board error boundary and the zoom fit (#1154)', () => {
   async function mountBoard(board: BoardComponent) {
     // Shaped like an ES module, which is what defineAsyncComponent unwraps `default` from.
     const bigModule = { __esModule: true, default: BigBoard };
-    const wrapper = mount(GameShell, { props: { uis: defineGameUIs({ Stub: defaultUI(board), Big: devUI(async () => bigModule) }) } });
+    // Attached, because jsdom recomputes a style change only for an element in the document.
+    const wrapper = mount(GameShell, { props: { uis: defineGameUIs({ Stub: defaultUI(board), Big: devUI(async () => bigModule) }) }, attachTo: document.body });
     mounted.push(wrapper);
     await nextTick();
     fromHost({ type: 'init', seat: 1 });

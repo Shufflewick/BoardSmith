@@ -910,7 +910,7 @@ async function handleSelectionStep(
   if (op.value === undefined) return errorResult(missingFieldError('selectionStep', 'value'), 'protocol');
   const runner = runnerFromSnapshot(snapshot, def);
 
-  const handler = new PickHandler(runner, gameOptions.playerCount);
+  const handler = new PickHandler(runner);
   const step = await handler.processSelectionStep(
     op.player,
     op.selectionName,
@@ -952,7 +952,7 @@ function handleResolveChoices(
 ): OpResultFor<'resolveChoices'> {
   const runner = runnerFromSnapshot(snapshot, def);
 
-  const handler = new PickHandler(runner, gameOptions.playerCount);
+  const handler = new PickHandler(runner);
   const result = handler.getPickChoices(op.actionName, op.selectionName, op.player, op.args, pendingState);
 
   if (!result.success) {
@@ -982,7 +982,7 @@ function handleCancelAction(
 ): OpResultFor<'cancelAction'> {
   const runner = runnerFromSnapshot(snapshot, def);
 
-  const handler = new PickHandler(runner, gameOptions.playerCount);
+  const handler = new PickHandler(runner);
   handler.cancelPendingAction(op.player, pendingState);
 
   return {

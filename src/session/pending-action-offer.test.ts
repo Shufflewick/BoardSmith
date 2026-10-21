@@ -118,7 +118,7 @@ async function session<G extends Game>(GameClass: GameClass<G>) {
 describe('GameRunner and PendingActionManager', () => {
   it('refuses to complete a pending action once another seat has finished the game', async () => {
     const r = runner(SimultaneousBuildGame);
-    const picks = new PendingActionManager(r, gameOptions.playerCount);
+    const picks = new PendingActionManager(r);
     picks.startPendingAction('build', 2);
     expect((await picks.processSelectionStep(2, 'where', 'north')).success).toBe(true);
 
@@ -136,7 +136,7 @@ describe('GameRunner and PendingActionManager', () => {
 
   it('refuses a pending action from a seat whose turn it is not, before it runs', async () => {
     const r = runner(TurnBuildGame);
-    const picks = new PendingActionManager(r, gameOptions.playerCount);
+    const picks = new PendingActionManager(r);
     const step = await picks.processSelectionStep(3, 'where', 'north', 'build');
 
     expect(step.success).toBe(false);
@@ -150,7 +150,7 @@ describe('GameRunner and PendingActionManager', () => {
 
   it('still completes a pending action the flow offers', async () => {
     const r = runner(TurnBuildGame);
-    const picks = new PendingActionManager(r, gameOptions.playerCount);
+    const picks = new PendingActionManager(r);
     picks.startPendingAction('build', 1);
     await picks.processSelectionStep(1, 'where', 'north');
     const step = await picks.processSelectionStep(1, 'what', 'farm');
@@ -275,7 +275,7 @@ describe('a follow-up belongs to the seat that published it', () => {
     expect(r.getFlowState()?.followUps).toEqual([{ action: 'loot', seat: 1 }]);
 
     expect(r.refusalToAct('loot', 2)).toEqual({ error: NOT_YOURS, errorCode: 'ACTION_NOT_AVAILABLE' });
-    const picks = new PendingActionManager(r, gameOptions.playerCount);
+    const picks = new PendingActionManager(r);
     const stolen = await picks.processSelectionStep(2, 'where', 'north', 'loot');
     expect(stolen).toMatchObject({ success: false, error: NOT_YOURS });
     expect(r.game.looted).toEqual([]);

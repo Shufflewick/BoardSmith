@@ -21,7 +21,8 @@
  *
  * `dirty` is LOADED-OR-TOUCHED, exactly as the contract's header decided:
  *
- *   LOADED -- every partition the command NAMED. Not "every partition the
+ *   LOADED -- every partition the command NAMED, except one only `.reads()`
+ *     named (#1334), which is dirty only if touched. Not "every partition the
  *     command's load actually hydrated": a partition left resident by an
  *     earlier command is still one this command was free to write, and there
  *     is no write barrier that could tell us it did not. Reporting the named
@@ -74,7 +75,8 @@ import type {
 } from "../engine/index.js";
 import type { ActionMetadata, PickMetadata } from "../session/types.js";
 import { buildPickMetadata } from "../engine/element/action-metadata.js";
-import { picksFromSeat } from "../engine/element/seat-placeholders.js";
+import { picksFromSeat, placeholderIdOf, sharePlaceholders } from "../engine/element/seat-placeholders.js";
+import { PARTITION_ROOT_RULE } from "../engine/element/game.js";
 import {
   formatChoiceCandidates,
   formatElementCandidates,
@@ -132,6 +134,7 @@ import {
 } from "./notices.js";
 import { devWarn, evaluateCondition, GameElement } from "../engine/index.js";
 import { failedExecute } from "../engine/action/action.js";
+import type { AnnotatedChoice } from "../engine/action/types.js";
 import { readOnlyProjection } from "./readonly.js";
 import { assertAnsweredAllocations, assertCreatedRoots } from "./migration.js";
 import { worldBudgets, type WorldBudgets } from "./budgets.js";
@@ -662,14 +665,14 @@ export class BoardSmithWorldEngine implements WorldEngine {
    */
   registerResident(name: string, root: GameElement): void {
     const taken = this.residentNames.get(root.id);
-    if (root.parent !== this.game || taken !== undefined) {
+    if (root._t.parent !== this.game || taken !== undefined) {
       throw worldRefusal(
         "invalid-partition-root",
         taken === undefined
-          ? `Partition "${name}" is not a direct child of the game: it sits inside another ` +
-              `element, so it would be stored twice and the world could not load again. ` +
-              `Create it with \`game.create(...)\`, or leave it out of the answer and let it ` +
-              `travel inside the partition that holds it.`
+          ? `Partition "${name}" is not in the game's own children (it sits inside another ` +
+              `element, or was removed), but ${PARTITION_ROOT_RULE} Create it with ` +
+              `\`game.create(...)\`, or leave it out of the answer and let it travel inside the ` +
+              `partition that holds it.`
           : `Partition "${name}" is the same element as partition "${taken}". One element can ` +
               `be one partition only; answer it under one name.`,
       );
@@ -858,7 +861,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       }
       sources ??= this.buildSourceGame();
       assertMintedUnderThisKey(name, stored.parentId, sources.id);
-      const root = readOnlyProjection(sources.adoptSubtree(sources.id, stored.json as ElementJSON));
+      const root = readOnlyProjection(sources.adoptSubtree(stored.json as ElementJSON));
       read.set(name, root);
       return root;
     });
@@ -1059,9 +1062,10 @@ export class BoardSmithWorldEngine implements WorldEngine {
     stamp: WorldCommandStamp,
   ): Promise<WorldCommandResult> {
     const seat = this.seatFor(player);
-    // A SEAT'S ARGS ARE ITS PICKS (#665), refused as the caller's before the
-    // walk or the handler sees them, as `commandNeeds` refuses them.
-    this.refuseUndeclaredArgs(this.actionFor(command.name, seat), command.args);
+    // A SEAT'S ARGS ARE ITS PICKS (#665, #1328), refused as the caller's before
+    // the walk or the handler sees them, as `commandNeeds` refuses them.
+    const definition = this.actionFor(command.name, seat);
+    this.refuseArgs(definition, command.args, definition.selections.length);
     // The acting player is the schedule OWNER: their events are charged to
     // their budget, and a bundle cannot charge them to somebody else because
     // it never gets to name one.
@@ -1128,7 +1132,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * this instant. That is the JSON box wearing a form's clothes.
    *
    * This answers the seat's ACTIONS, in the table's own `ActionMetadata` shape,
-   * with each selection's candidates already resolved -- so `tend` offers the
+   * with its first selection's candidates already resolved -- so `tend` offers the
    * two to four neighbouring holdings that exist right now, as element IDs the
    * board bridge wires straight to a click.
    *
@@ -1152,7 +1156,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
    *
    * ## What it costs
    *
-   * `O(actions) x (condition + each selection's own candidates)`. There is no
+   * `O(actions) x (condition + the first selection's candidates)`. There is no
    * term that scales with the world: it scales with what the declaration named,
    * and the declaration is authored, finite and readable. The hydration is the
    * union of the actions' round-one declarations, which for every game in the
@@ -1183,11 +1187,11 @@ export class BoardSmithWorldEngine implements WorldEngine {
    *
    * The read path's `commandPartitions`, and it exists for the same reason: a
    * host reads storage and the engine does not, so the engine names and the
-   * host supplies. It walks every action the seat could be offered -- round
-   * one, then each selection's own round -- and answers the first unmet round
-   * of each, unioned, because the actions are independent of one another and
-   * batching them keeps an offer to one storage round trip per LEVEL rather
-   * than one per action.
+   * host supplies. It walks every action the seat could be offered -- the rounds
+   * before its first selection, which is all an offer reads (#1355) -- and
+   * answers the first unmet round of each, unioned, because the actions are
+   * independent of one another and batching them keeps an offer to one storage
+   * round trip per LEVEL rather than one per action.
    *
    * Conditions run only in the stamped offer context. Declaration has no clock
    * or presence snapshot, so it cannot decide availability. It declares the
@@ -1232,15 +1236,14 @@ export class BoardSmithWorldEngine implements WorldEngine {
     seat: number,
     now: number,
   ): readonly string[] {
-    for (let step = 0; step < definition.selections.length || step === 0; step++) {
-      for (const round of definition.world!.needs) {
-        if (round.before !== step) continue;
-        const unmet = this.unmetOnASeatsRead(round, seat, {}, now);
-        // ONE ROUND AT A TIME. A later round may read what an earlier one
-        // loaded, so there is nothing to say about it until the host has
-        // supplied this one.
-        if (unmet.length > 0) return unmet;
-      }
+    // Only the first pick's place: the offer asks nothing past it (#1355).
+    for (const round of definition.world!.needs) {
+      if (round.before !== 0) continue;
+      const unmet = this.unmetOnASeatsRead(round, seat, {}, now);
+      // ONE ROUND AT A TIME. A later round may read what an earlier one
+      // loaded, so there is nothing to say about it until the host has
+      // supplied this one.
+      if (unmet.length > 0) return unmet;
     }
     return [];
   }
@@ -1270,22 +1273,19 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // round one.
       if (!this.conditionHolds(definition, acting)) return null;
 
-      // ONE ROUND, THEN ONE SELECTION, IN THE AUTHOR'S ORDER.
-      //
       // Deliberately NOT `isActionAvailable`, and the reason is the whole of
       // why `viewFor` refuses `createPlayerView`: that helper enumerates every
       // selection of every registered action in one pass, against whatever
       // happens to be resident, and a world's partitions are absent until a
-      // declaration names them. Interleaving is what makes enumeration possible
-      // at all here -- selection i's candidates are evaluated with selection
-      // i's declaration resident and not before.
-      const selections: PickMetadata[] = [];
-      for (let index = 0; index < definition.selections.length; index++) {
-        if (index > 0) {
-          await this.hydrateRounds(definition, index, seat, {}, named, namedSeats, null, arrivalAt(stamp.now));
-        }
-        selections.push(this.pickOf(definition, index, acting, named));
-      }
+      // declaration names them. The first pick's candidates are evaluated with
+      // round one resident and not before.
+      //
+      // AND ONLY THE FIRST PICK (#1345, #1355). A later pick's round and
+      // candidates may read an earlier pick, required or optional, so they wait
+      // for the re-ask with it bound (#1338); the offer carries their shape.
+      const selections = definition.selections.map((_, index) =>
+        index === 0 ? this.pickOf(definition, 0, acting, named) : this.pickShapeOf(definition, index, acting),
+      );
       const satisfiable = askable(selections[0]);
       // THE REASON IT CANNOT BE TAKEN OUTRANKS WHETHER IT HAS AN ANSWER (#187).
       //
@@ -1340,16 +1340,14 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * ONE PICK, RE-ASKED WITH THE ARGUMENTS BOUND SO FAR (ShufflewickPub #378).
    *
    * A world's offer is enumerated in ONE frame with `args: {}`, and that is the
-   * whole cost model rather than an oversight: a world action may not declare a
-   * dependent selection, so every question it asks can be answered before any
-   * of them is. What that does not cover is a selection whose SHAPE -- its
-   * `multiSelect` bounds, its `choices` callback -- reads an argument an earlier
-   * selection binds. Evaluated with nothing bound, a cap that depends on the
-   * chosen ship is the unbounded fallback, and the browser is left holding a
-   * limit the game never meant.
+   * whole cost model rather than an oversight. It resolves only the first
+   * selection: any later one -- its round, its candidates, its `multiSelect`
+   * bounds -- may read an argument an earlier selection binds, so the offer
+   * carries its shape only (#1345, #1350, #1355).
    *
-   * So the panel re-asks, the same way a table's does: `fetchPickChoices` hands
-   * over the args bound so far and gets this selection back. It is a READ --
+   * So the panel asks for it, the same way a table's does: `fetchPickChoices`
+   * hands over the args bound so far, none when only skipped optional picks
+   * precede it, and gets this selection back. It is a READ --
    * the same read-only facilities an offer runs under -- and it is paid only
    * while somebody is actually mid-action.
    *
@@ -1369,7 +1367,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // EVERY ROUND UP TO AND INCLUDING THIS SELECTION'S, with the args bound. A
     // later round may read what an earlier one loaded, and with arguments in hand
     // a round can name a partition the empty-args offer could not.
-    return this.answeringRead(player, definition, index, args, stamp, (acting, named, draft) =>
+    return this.answeringRead(player, definition, index, index, args, stamp, (acting, named, draft) =>
       this.pickOf(definition, index, acting, named, draft),
     );
   }
@@ -1388,6 +1386,10 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * and `selections.length` (the execute round) for a quote, which reads the state
    * the purchase writes to.
    *
+   * `boundBefore` is how many leading picks must be bound when required (#1338):
+   * a pick's own index, so its rounds see the picks before it, and 0 for a quote,
+   * whose rounds run on a draft where any pick may be absent.
+   *
    * `answer` is handed the DRAFT, not the args as they came in (#418): each
    * selection's value resolved the way dispatch resolves it, so a callback typed
    * to receive an element receives one. See `resolveDraft`.
@@ -1396,11 +1398,12 @@ export class BoardSmithWorldEngine implements WorldEngine {
     player: string,
     definition: ActionDefinition,
     through: number,
+    boundBefore: number,
     args: Readonly<Record<string, unknown>>,
     stamp: WorldOfferStamp,
     answer: (acting: Player, named: readonly string[], draft: Readonly<Record<string, unknown>>) => T,
   ): Promise<T> {
-    this.refuseUndeclaredArgs(definition, args);
+    this.refuseArgs(definition, args, boundBefore);
     const seat = this.seatFor(player);
     const acting = readOnlyProjection(this.playerFor(seat));
     const named: string[] = [];
@@ -1419,7 +1422,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
           );
         }
       }
-      return answer(acting, named, this.resolveDraft(definition, args, acting, named));
+      return answer(acting, named, this.resolveDraft(definition, args, acting, named, through));
     } finally {
       bindWorldFacilities(this.game, null);
     }
@@ -1455,7 +1458,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // THE WHOLE WALK, INCLUDING THE EXECUTE ROUND, because a price is read from
     // the state the purchase writes to and that partition is usually named by the
     // round after the last selection.
-    return this.answeringRead(player, definition, definition.selections.length, args, stamp,
+    return this.answeringRead(player, definition, definition.selections.length, 0, args, stamp,
       (acting, _named, draft) =>
         // READ-ONLY FOR THE WHOLE CALLBACK, exactly as a pick's own callbacks are
         // (ShufflewickPub #384/#295): the projection refuses a write and
@@ -1492,46 +1495,57 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * submitted; a read refuses it here rather than handing a callback a number
    * typed as an element, or an element whose residency is an accident of who
    * else is in the world.
+   *
+   * AND, BEFORE THE PICK ASKED (`through`), ONLY WHAT THAT PICK OFFERS (#1315):
+   * an element its own `elements` leave out is as stale as one outside the
+   * read, and no later callback sees it. Membership only, so a list still being
+   * filled in, or an element shown greyed, is quoted as it was.
    */
   private resolveDraft(
     definition: ActionDefinition,
     args: Readonly<Record<string, unknown>>,
     acting: Player,
     named: readonly string[],
+    through: number,
   ): Readonly<Record<string, unknown>> {
-    // The check reads each projected element's parent too, so it is a read with reach-marking off (#1203).
-    return this.game.readingOnly(() => {
-      const draft = this.game
-        .getActionExecutor()
-        .resolveArgs(definition, picksFromSeat(this.game, definition.name, args, acting.seat), acting, readOnlyProjection(this.game));
-      for (const selection of definition.selections) {
-        if (selection.type === "element" || selection.type === "elements") {
-          this.assertOfferable(definition.name, selection.name, draft[selection.name], args, named);
-        }
-      }
-      return draft;
-    });
+    const executor = this.game.getActionExecutor();
+    const reading = readOnlyProjection(this.game);
+    // The callbacks it runs read the tree, so it is a read with reach-marking off (#1203).
+    return this.game.readingOnly(() =>
+      // Each element pick is checked before a later pick is resolved against it (#1223).
+      executor.resolveArgs(definition, picksFromSeat(this.game, definition.name, args, acting.seat), acting, reading, (selection, value, before) => {
+        if (selection.type !== "element" && selection.type !== "elements") return;
+        const judged = definition.selections.indexOf(selection) < through;
+        this.assertOfferable(definition.name, selection.name, value, args, named,
+          judged ? () => executor.getChoices(selection, acting, before, undefined, reading) : undefined);
+      }),
+    );
   }
 
-  /** One element selection of a resolved draft: unanswered, or every element it
-   *  names inside a partition this read declared. `stale-draft` otherwise. */
+  /** One element selection of a resolved draft: every element it names inside a
+   *  partition this read declared and, when `offered` is given, among what the
+   *  pick offers. `stale-draft` otherwise. */
   private assertOfferable(
     action: string,
     selection: string,
     value: unknown,
     answers: Readonly<Record<string, unknown>>,
     named: readonly string[],
+    offered: (() => readonly AnnotatedChoice<unknown>[]) | undefined,
   ): void {
-    if (value === undefined || value === null) return;
-    for (const item of Array.isArray(value) ? value : [value]) {
-      if (item instanceof GameElement && named.includes(this.partitionOf(item))) continue;
-      throw worldRefusal(
-        "stale-draft",
-        `The draft of "${action}" answers "${selection}" with ${JSON.stringify(answers[selection])}, ` +
-          "which is not one of the elements this action can offer here now. Ask for the " +
-          "action's offer again and pick from it.",
-      );
+    const items = Array.isArray(value) ? value : [value];
+    // Residency first, so the pick's own callbacks never run on an element outside the read.
+    if (items.every((item) => item instanceof GameElement && named.includes(this.partitionOf(item)))) {
+      if (offered === undefined) return;
+      const ids = new Set(offered().map((choice) => (choice.value as GameElement).id));
+      if (items.every((item: GameElement) => ids.has(item.id))) return;
     }
+    throw worldRefusal(
+      "stale-draft",
+      `The draft of "${action}" answers "${selection}" with ${JSON.stringify(answers[selection])}, ` +
+        "which is not one of the elements this action can offer here now. Ask for the " +
+        "action's offer again and pick from it.",
+    );
   }
 
   /**
@@ -1550,7 +1564,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
   ): readonly string[] {
     const definition = this.offerableAction(action);
     this.quoteOf(definition);
-    return this.unmetThrough(player, definition, definition.selections.length, args, now);
+    return this.unmetThrough(player, definition, definition.selections.length, 0, args, now);
   }
 
   /** This action's quote, or the refusal that it has none. Asking an action that
@@ -1586,13 +1600,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
     now: number,
   ): readonly string[] {
     const definition = this.offerableAction(action);
-    return this.unmetThrough(
-      player,
-      definition,
-      this.selectionIndex(definition, selection),
-      args,
-      now,
-    );
+    const index = this.selectionIndex(definition, selection);
+    return this.unmetThrough(player, definition, index, index, args, now);
   }
 
   /**
@@ -1608,10 +1617,11 @@ export class BoardSmithWorldEngine implements WorldEngine {
     player: string,
     definition: ActionDefinition,
     through: number,
+    boundBefore: number,
     args: Readonly<Record<string, unknown>>,
     now: number,
   ): readonly string[] {
-    this.refuseUndeclaredArgs(definition, args);
+    this.refuseArgs(definition, args, boundBefore);
     const seat = this.seatFor(player);
     for (let step = 0; step <= through; step++) {
       for (const round of definition.world!.needs) {
@@ -1623,16 +1633,23 @@ export class BoardSmithWorldEngine implements WorldEngine {
     return [];
   }
 
-  /** A seat's args may carry only the action's picks (#662, #665): a command,
-   *  its declaration walk, a quote and a re-asked pick all refuse any other key
-   *  with this one caller-owned refusal, before a declaration or callback sees
-   *  the args. */
-  private refuseUndeclaredArgs(
+  /** A seat's args carry only the action's picks (#662, #665), and every
+   *  required one of the first `boundBefore` (#1328, #1338): all of them for a
+   *  command, those before the asked pick for a re-asked pick, none for a quote.
+   *  Refused before a declaration or callback sees the args. */
+  private refuseArgs(
     definition: ActionDefinition,
     args: Readonly<Record<string, unknown>>,
+    boundBefore: number,
   ): void {
     const refusal = this.game.getActionExecutor().undeclaredArgsRefusal(definition, args);
     if (refusal !== undefined) throw worldRefusal("undeclared-arg", refusal);
+    const missing = definition.selections
+      .slice(0, boundBefore)
+      .find((pick) => !pick.optional && (args[pick.name] === undefined || args[pick.name] === null));
+    if (missing !== undefined) {
+      throw worldRefusal("missing-pick", `Missing required selection: ${missing.name}`);
+    }
   }
 
   /** The action a seat could be offered under this name, or a refusal naming
@@ -1687,6 +1704,20 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // bundle's own callbacks, and every one of them is answering a question
     // rather than taking a moment.
     return this.game.readingOnly(() => this.pickMetadata(definition, index, acting, named, args));
+  }
+
+  /** A pick's shape with no candidates, read-only as `pickOf`: what an offer
+   *  carries for every pick after the first (#1345, #1355). Its function
+   *  `prompt`, `multiSelect` and `orderedList` may read the picks before it,
+   *  so they are left to the re-ask, as its round and candidates are (#1350). */
+  private pickShapeOf(definition: ActionDefinition, index: number, acting: Player): PickMetadata {
+    const selection = { ...definition.selections[index]! };
+    for (const key of ["prompt", "multiSelect", "orderedList"]) {
+      if (typeof Reflect.get(selection, key) === "function") Reflect.deleteProperty(selection, key);
+    }
+    return this.game.readingOnly(() =>
+      buildPickMetadata(readOnlyProjection(this.game), acting, definition.name, selection),
+    );
   }
 
   private pickMetadata(
@@ -1751,7 +1782,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * the author knows which candidate list to narrow.
    */
   private partitionOf(element: GameElement): string {
-    for (let node: GameElement | undefined = element; node; node = node.parent) {
+    // The tree's own parent link: the `parent` getter marks the partition reached, a write a read may not make (#1221).
+    for (let node: GameElement | undefined = element; node; node = node._t.parent as GameElement | undefined) {
       const name = this.residentNames.get(node.id);
       if (name !== undefined) return name;
     }
@@ -1791,10 +1823,10 @@ export class BoardSmithWorldEngine implements WorldEngine {
   ): WorldDispatchNeeds {
     const seat = player === null ? null : this.seatFor(player);
     const definition = this.actionFor(command.name, seat);
-    // A SEAT'S ARGS ARE ITS PICKS (#665), refused before a declaration sees
-    // them. The clock's args are the bundle's own data: a seatless action asks
-    // no picks.
-    if (seat !== null) this.refuseUndeclaredArgs(definition, command.args);
+    // A SEAT'S ARGS ARE ITS PICKS (#665, #1328), refused before a declaration
+    // sees them. The clock's args are the bundle's own data: a seatless action
+    // asks no picks.
+    if (seat !== null) this.refuseArgs(definition, command.args, definition.selections.length);
     assertClockIsTimed(command.name, seat, when);
     // WHICH OF THE HOST'S ANSWERS THIS WALK HAS ACCOUNTED FOR SO FAR.
     //
@@ -1984,6 +2016,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
      *  notice box, so their notice rounds are not even asked (#521). */
     namedBoxes: number[] | null,
     when: WorldDispatchWhen,
+    /** The names a `.needs()` round gave, on the write path only (#1334). */
+    writable?: Set<string>,
   ): Promise<void> {
     for (const round of definition.world!.needs) {
       if (round.before !== step) continue;
@@ -2000,6 +2034,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       }
       for (const name of this.declareRound(round, seat, args, when)) {
         if (!named.includes(name)) named.push(name);
+        if (!round.readOnly) writable?.add(name);
         await this.ensureResident(name);
       }
     }
@@ -2235,6 +2270,15 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * does one whose rooms are owner-only, which is decided against a reader's
    * ownership rather than by anything in the visibility state.
    *
+   * AND A COUNT-ONLY PILE NO LONGER SPLITS A GROUP (#1207). Each seat knows a
+   * card it cannot see by a placeholder id of its own (#715), so a seat shown
+   * one was a body of its own: 500 watchers of a plaza with a face-down deck
+   * were 500 bodies and 6.9 MB. A group's body now has each placeholder's id
+   * taken out (`sharePlaceholders`), and each seat is answered its own ids for
+   * them beside it, in `placeholders`; `seatView` puts them back. That plaza
+   * is one body of 13 KB and 500 lists of 52 ids, 0.45 MB in all, and no body
+   * holds any seat's id.
+   *
    * ONE SEAT'S PROJECTION IS STILL ONE SEAT'S FATE (#310). A view can throw for
    * one player while every other view in the batch is perfectly computable, the
    * observed case being a declaration reaching a deliberately absent partition
@@ -2264,19 +2308,25 @@ export class BoardSmithWorldEngine implements WorldEngine {
       asking,
     );
     const keys = [...sharing.groups.keys()];
+    const shownAs = keys.map(() => new Map<number, number>());
     const answered = projectGroups(
       keys,
       sharing.groups,
-      this.game.toJSONForPlayers(keys.map((key) => sharing.groups.get(key)!.seat)),
-      (state, named) => this.projectView(state, named),
+      this.game.toJSONForPlayers(keys.map((key) => sharing.groups.get(key)!.seat), shownAs),
+      (state, named, group) => {
+        const { state: seen, phase } = this.projectView(state, named);
+        // After the prune, so a seat is given ids only for what its body holds.
+        const shared = sharePlaceholders(seen, shownAs[group]!, this.game);
+        return { body: { state: shared.view, phase }, cards: shared.cards };
+      },
     );
 
-    for (const [index, { at }] of asking.entries()) {
+    for (const [index, { at, seat }] of asking.entries()) {
       const player = seats[at]!.player;
       const answer = answered.answerOf.get(sharing.keyOf[index]!)!;
       seats[at] =
         "at" in answer
-          ? { player, refused: false, at: answer.at }
+          ? { player, refused: false, at: answer.at, placeholders: answer.cards.map((card) => placeholderIdOf(card, seat)) }
           : { player, refused: true, failure: answer.failure };
     }
     return { bodies: answered.bodies, seats };
@@ -2482,6 +2532,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
     const namedSeats: number[] = [];
     // AND WHICH NOTICE BOXES (ShufflewickPub #521), on the same terms.
     const namedBoxes: number[] = [];
+    // AND WHICH OF `named` IT MAY WRITE: the rest came only from `.reads()` (#1334).
+    const writable = new Set<string>();
     for (let step = 0; step <= definition.selections.length; step++) {
       await this.hydrateRounds(
         definition,
@@ -2492,6 +2544,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         namedSeats,
         namedBoxes,
         when,
+        writable,
       );
     }
 
@@ -2579,6 +2632,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // then meant "mutated, and durably so once anything else checkpointed the
     // same partition". The only way out of this block without the rollback is
     // the successful return at its end.
+    this.reachReadOnly(named, writable);
     bindWorldFacilities(this.game, facilities);
     try {
       const result =
@@ -2625,7 +2679,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         // for the next command (#316) -- and since #295 that pass runs over the
         // partitions this command REACHED rather than over the resident set, so
         // what it costs is the room.
-        dirty: this.dirtySet(command.name, named, touchedOnce()),
+        dirty: this.dirtySet(command.name, named, writable, touchedOnce()),
         schedules: ledger.schedules,
         ...outcomeOf(ledger, this.noticesPerSeat),
       };
@@ -2649,22 +2703,34 @@ export class BoardSmithWorldEngine implements WorldEngine {
     }
   }
 
+  /** Nothing saves a partition only `.reads()` named, so its bytes are always
+   *  compared, however the handler reached it (#1334). */
+  private reachReadOnly(named: readonly string[], writable: ReadonlySet<string>): void {
+    for (const name of named) {
+      if (!writable.has(name)) this.game.reachPartition(this.residentIds.get(name)!);
+    }
+  }
+
   /**
    * WHAT THIS DISPATCH CHANGED: loaded-or-touched.
    *
-   * LOADED -- every partition the walk NAMED. Not "every partition the walk
-   * actually hydrated": one left resident by an earlier command is still one
-   * this action was free to write, and there is no write barrier that could
-   * tell us it did not. TOUCHED -- the engine's own half, which carries BOTH
-   * endpoints of every physical re-parent, the half a host structurally cannot
-   * see.
+   * LOADED -- every partition a `.needs()` round NAMED. Not "every partition
+   * the walk actually hydrated": one left resident by an earlier command is
+   * still one this action was free to write. TOUCHED -- the engine's own half:
+   * every partition whose bytes changed, and both endpoints of every physical
+   * re-parent, the half a host structurally cannot see.
+   *
+   * A partition only `.reads()` named is not loaded-for-writing (#1334), so it
+   * is dirty only if touched, and a touch on it refuses the command.
    */
   private dirtySet(
     action: string,
     named: readonly string[],
+    writable: ReadonlySet<string>,
     touched: ReadonlySet<number>,
   ): string[] {
-    const dirty = new Set<string>(named);
+    const dirty = new Set<string>(writable);
+    const readOnly = new Set(named.filter((name) => !writable.has(name)));
     for (const id of touched) {
       const name = this.residentNames.get(id);
       if (name === undefined) {
@@ -2673,6 +2739,14 @@ export class BoardSmithWorldEngine implements WorldEngine {
           `Action "${action}" moved something into or out of partition root ${id}, which this ` +
             `engine never loaded and cannot name. Every partition must reach the tree through ` +
             `the partition store, or its changes cannot be checkpointed.`,
+        );
+      }
+      if (readOnly.has(name)) {
+        throw worldRefusal(
+          "read-only-write",
+          `Action "${action}" changed partition "${name}", which it loads with .reads() and so ` +
+            `may only read. Load it with .needs() if the action writes to it, or move the write ` +
+            `to a partition it loads with .needs().`,
         );
       }
       dirty.add(name);
@@ -3241,23 +3315,23 @@ export class BoardSmithWorldEngine implements WorldEngine {
    */
   private snapshotResident(): ReadonlyMap<
     string,
-    { readonly id: number; readonly parentId: number; readonly bytes: string }
+    { readonly id: number; readonly bytes: string }
   > {
     const before = new Map<
       string,
-      { readonly id: number; readonly parentId: number; readonly bytes: string }
+      { readonly id: number; readonly bytes: string }
     >();
     for (const [name, id] of this.residentIds) {
-      const point = this.game.partitionBaseline(id);
-      if (!point) {
+      const bytes = this.game.partitionBaseline(id);
+      if (bytes === undefined) {
         throw worldRefusal(
           "partition-vanished",
           `Partition "${name}" is in this engine's residency but the engine holds no restorable ` +
-            `copy of it -- it is no longer a partition root, or it hangs from nothing, so there is ` +
-            `no attachment point to restore it to if this command fails.`,
+            `copy of it -- it is no longer a partition root, or nothing has baselined it -- so ` +
+            `there is nothing to restore it from if this command fails.`,
         );
       }
-      before.set(name, { id, parentId: point.parentId, bytes: point.bytes });
+      before.set(name, { id, bytes });
     }
     return before;
   }
@@ -3293,7 +3367,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
   private rollback(
     before: ReadonlyMap<
       string,
-      { readonly id: number; readonly parentId: number; readonly bytes: string }
+      { readonly id: number; readonly bytes: string }
     >,
     declared: readonly string[],
     touched: ReadonlySet<number>,
@@ -3321,7 +3395,6 @@ export class BoardSmithWorldEngine implements WorldEngine {
       .filter(([name]) => changed.has(name))
       .map(([name, point]) => ({
         name,
-        parentId: point.parentId,
         id: point.id,
         json: JSON.parse(point.bytes) as ElementJSON,
       }));
@@ -3348,7 +3421,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     }
 
     for (const point of restoring) {
-      const root = this.game.adoptSubtree(point.parentId, point.json);
+      const root = this.game.adoptSubtree(point.json);
       this.residentIds.set(point.name, root.id);
       this.residentNames.set(root.id, point.name);
     }
@@ -3375,12 +3448,12 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // an element is. This engine does: what it is handed is what its own
     // `serializePartitions` wrote, and `adoptSubtree` is the reader.
     // BEFORE ADOPTING: bytes minted under another key are the platform's to
-    // answer for, and would otherwise surface as a missing parent charged to
-    // the game (#482).
+    // answer for, and `adoptSubtree` reads no parent id that could catch them
+    // (#482, #1316).
     assertMintedUnderThisKey(name, stored.parentId, this.game.id);
     let root: GameElement;
     try {
-      root = this.game.adoptSubtree(stored.parentId, stored.json as ElementJSON);
+      root = this.game.adoptSubtree(stored.json as ElementJSON);
     } catch (error) {
       // A STALE STAMP IS THE PLATFORM'S FAULT, AND MUST SAY SO (#224).
       // `adoptSubtree` proves it from the bytes and throws its own class, and an
@@ -3612,17 +3685,17 @@ function projectGroups(
   keys: readonly string[],
   groups: ReadonlyMap<string, WorldSeatProjection>,
   states: readonly ElementJSON[],
-  project: (state: ElementJSON, named: readonly string[]) => unknown,
+  project: (state: ElementJSON, named: readonly string[], group: number) => { body: unknown; cards: readonly GameElement[] },
 ): {
   readonly bodies: readonly unknown[];
-  readonly answerOf: ReadonlyMap<string, { at: number } | { failure: unknown }>;
+  readonly answerOf: ReadonlyMap<string, { at: number; cards: readonly GameElement[] } | { failure: unknown }>;
 } {
   const bodies: unknown[] = [];
-  const answerOf = new Map<string, { at: number } | { failure: unknown }>();
+  const answerOf = new Map<string, { at: number; cards: readonly GameElement[] } | { failure: unknown }>();
   for (const [index, key] of keys.entries()) {
     try {
-      const body = project(states[index]!, groups.get(key)!.named);
-      answerOf.set(key, { at: bodies.length });
+      const { body, cards } = project(states[index]!, groups.get(key)!.named, index);
+      answerOf.set(key, { at: bodies.length, cards });
       bodies.push(body);
     } catch (error) {
       answerOf.set(key, { failure: error });
@@ -3707,9 +3780,9 @@ function pruneRoster(json: ElementJSON, roster: ReadonlySet<number>): ElementJSO
 /**
  * THE FIRST QUESTION DECIDES THE OFFER, AND ONLY THE FIRST (BoardSmith #270).
  *
- * Every pick of an offer is enumerated with `args: {}`, which is the right
- * question to ask the FIRST one -- that is exactly what the player will have in
- * hand when they are asked it -- and the wrong question to ask any other. A
+ * An offer enumerates only the first pick, with `args: {}`, which is exactly
+ * what the player will have in hand when they are asked it (#1355). Asking any
+ * other pick that way was the wrong question: a
  * second selection narrowed by the first has nothing to narrow by yet, so the
  * natural `if (args.slot === undefined) return []` came back candidateless and
  * took the whole verb out of the seat's offer, with no diagnostic anywhere and
@@ -3752,8 +3825,8 @@ function warnDropped(definition: ActionDefinition, seat: number): null {
     `World action '${definition.name}' was dropped from seat ${seat}'s offer: its FIRST ` +
     `question '${first.name}' has no selectable candidate (every candidate is either absent ` +
     `or disabled).\n` +
-    `  A later selection is never the reason -- it is asked with nothing bound and re-asked ` +
-    `once the seat answers this one (#270).\n` +
+    `  A later selection is never the reason -- it is asked only once the seat reaches it, ` +
+    `with the answers so far (#270, #1355).\n` +
     `  If the verb should be there, give '${first.name}' a candidate. If it should not, prefer ` +
     `.condition() / .disabled(), so the seat reads a reason instead of a missing verb.`,
   );

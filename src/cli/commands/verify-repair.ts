@@ -13,9 +13,7 @@ import {
   stagingSlicesDir,
   type ClassificationRecord,
 } from './verify-run.js';
-import { driftCheckCommand } from './drift-check.js';
 import {
-  computeRepairGate,
   verifyImpactStatusCommand,
   type ImpactMapEntry,
   type RepairGate,
@@ -30,12 +28,11 @@ import {
  *
  *   1. `selectStaleChunks`/`resolveStagedSlicePaths` — which chunks are in scope, and which
  *      FRESH STAGED slice paths (never live `rulebook/` slices, decision 9) a lens must read.
- *   2. `parseAuditRounds`/`planVerifyEpisodeRound`/`appendAuditRoundHeading` — a verify episode's
+ *   2. `parseAuditRounds`/`planVerifyRunRound`/`appendAuditRoundHeading` — a verify run's
  *      own fresh 3-round budget (decision 17), appended after a chunk's build-era rounds without
- *      renumbering them, legible in CHUNK.md as its own episode.
- *   3. `recomputeRepairGatePostRepair` — re-derives `computeRepairGate` from POST-repair code
- *      state; the pre-repair snapshot (`ImpactMapEntry.gate`) is structurally unpassable to it
- *      (Pitfall 1 — the whole reason this module exists).
+ *      renumbering them, each heading naming the run it belongs to (#1302).
+ *   3. `verify-repair-gate` — reads the repair gate `verify-impact-status` derives from the
+ *      chunk's code as it is when the gate is asked, so after repair (Pitfall 1).
  *
  * Every write in this module routes through `verify-run.ts`'s `atomicWriteFile` — the ONE atomic
  * ledger/artifact write path in the repo (173-REVIEW.md CR-01's defect class). No second parser,
@@ -121,7 +118,7 @@ function joinStagedPath(dir: string, relPath: string): string {
 }
 
 // -------------------------------------------------------------------------------------------
-// Task 2 — verify-episode round bookkeeping (decision 17)
+// Task 2 — verify-run round bookkeeping (decision 17)
 // -------------------------------------------------------------------------------------------
 
 /** Every existing `### Audit Round N` heading, matching all three real precedent shapes:
@@ -133,6 +130,8 @@ export interface AuditRoundHeading {
   absolute: number;
   /** The full trailing parenthetical text (without the surrounding parens), if present. */
   parenthetical?: string;
+  /** Whether nothing but blank lines stands between this heading and the next heading. */
+  empty: boolean;
 }
 
 const AUDIT_ROUND_HEADING_RE = /^### Audit Round (\d+)(?:\s*\(([^)]*)\))?\s*$/gm;
@@ -141,112 +140,80 @@ const AUDIT_ROUND_HEADING_RE = /^### Audit Round (\d+)(?:\s*\(([^)]*)\))?\s*$/gm
 export function parseAuditRounds(chunkMd: string): AuditRoundHeading[] {
   const rounds: AuditRoundHeading[] = [];
   for (const match of chunkMd.matchAll(AUDIT_ROUND_HEADING_RE)) {
+    const below = chunkMd.slice(match.index + match[0].length);
+    const nextHeading = /^#{1,3} /m.exec(below);
     rounds.push({
       absolute: Number(match[1]),
       ...(match[2] !== undefined ? { parenthetical: match[2] } : {}),
+      empty: below.slice(0, nextHeading?.index ?? below.length).trim() === '',
     });
   }
   return rounds;
 }
 
-/** The verify-episode parenthetical shape this module writes: `verify-repair episode E, round R of 3`. */
-const EPISODE_PARENTHETICAL_RE = /^verify-repair episode (\d+), round (\d+) of 3$/;
+/** The parenthetical this module writes: `verify-repair run <runId>, round R of 3`. */
+const RUN_PARENTHETICAL_RE = /^verify-repair run (\S+), round (\d+) of \d+$/;
 
-interface EpisodeRoundEntry {
-  episode: number;
-  episodeRound: number;
-}
+/** Decision 17: the max-3-round bound is per verify run, not per chunk lifetime. */
+export const VERIFY_RUN_ROUND_BUDGET = 3;
 
-function parseEpisodeRounds(chunkMd: string): EpisodeRoundEntry[] {
-  const entries: EpisodeRoundEntry[] = [];
-  for (const round of parseAuditRounds(chunkMd)) {
-    const match = round.parenthetical !== undefined ? EPISODE_PARENTHETICAL_RE.exec(round.parenthetical) : null;
-    if (match) {
-      entries.push({ episode: Number(match[1]), episodeRound: Number(match[2]) });
-    }
-  }
-  return entries;
-}
-
-/** Decision 17: the max-3-round bound is per-verify-episode, not per-chunk-lifetime. */
-export const VERIFY_EPISODE_ROUND_BUDGET = 3;
-
-export type VerifyEpisodeRoundPlan =
+export type VerifyRunRoundPlan =
   | {
       disposition: 'round';
       absoluteRound: number;
-      episode: number;
-      episodeRound: number;
+      runId: string;
+      runRound: number;
       heading: string;
+      /** The round is already in CHUNK.md with nothing under it yet, so opening it writes nothing. */
+      alreadyOpen: boolean;
     }
   | {
       disposition: 'triage';
-      episode: number;
+      runId: string;
       reason: string;
     };
 
 /**
- * Plans the next verify-episode audit round for `episode` against `chunkMd`'s CURRENT round
- * history. Pure — no I/O.
+ * Plans `runId`'s next audit round for a chunk against `chunkMd`'s CURRENT round history. Pure.
  *
- * The absolute round number is `max(every existing ### Audit Round N) + 1` — a chunk with three
- * build-era rounds (`best-seven-selection`, `table-and-draw`, `block`, `jab` — the four real
- * chunks research measured already at round 3) gets absolute round 4 on its FIRST verify
- * dispatch, never routed to triage on arrival (decision 17's whole point: the bound is a loop
- * guard against one session spinning forever, not a lifetime quota).
+ * The rounds are counted per verify run, from the run id each heading carries (#1302), so a
+ * resumed session counts the rounds its run already opened, and a new run gets its own budget
+ * whatever an earlier one used. The absolute round number is `max(every existing round) + 1`: a
+ * chunk with three build-era rounds gets absolute round 4 on its first verify round, never triage
+ * on arrival (decision 17: the bound is a loop guard, not a lifetime quota).
  *
- * The episode-relative round number is `(count of this episode's own prior rounds) + 1`. Once
- * that would exceed `VERIFY_EPISODE_ROUND_BUDGET`, this returns the `triage` disposition instead
- * of a heading — the episode's own budget is exhausted, regardless of the absolute round number.
+ * The run's latest round with nothing written under it yet is still open, so it is planned again
+ * rather than a second one opened beside it: opening a round twice, as a retry or a resumed
+ * session does, is harmless (#1302). Once the run has used `VERIFY_RUN_ROUND_BUDGET` rounds this
+ * returns `triage` instead.
  */
-export function planVerifyEpisodeRound(chunkMd: string, episode: number): VerifyEpisodeRoundPlan {
+export function planVerifyRunRound(chunkMd: string, runId: string): VerifyRunRoundPlan {
   const allRounds = parseAuditRounds(chunkMd);
-  const nextAbsolute = allRounds.length > 0 ? Math.max(...allRounds.map((r) => r.absolute)) + 1 : 1;
-
-  const episodeRoundsSoFar = parseEpisodeRounds(chunkMd).filter((r) => r.episode === episode).length;
-  const nextEpisodeRound = episodeRoundsSoFar + 1;
-
-  if (nextEpisodeRound > VERIFY_EPISODE_ROUND_BUDGET) {
+  const runRounds = allRounds.flatMap((round) => {
+    const match = round.parenthetical !== undefined ? RUN_PARENTHETICAL_RE.exec(round.parenthetical) : null;
+    return match?.[1] === runId ? [{ ...round, runRound: Number(match[2]) }] : [];
+  });
+  const latest = runRounds.at(-1);
+  if (latest?.empty) {
+    return { disposition: 'round', absoluteRound: latest.absolute, runId, runRound: latest.runRound, heading: runRoundHeading(latest.absolute, runId, latest.runRound), alreadyOpen: true };
+  }
+  if (runRounds.length >= VERIFY_RUN_ROUND_BUDGET) {
     return {
       disposition: 'triage',
-      episode,
+      runId,
       reason:
-        `Verify episode ${episode} has already used its ${VERIFY_EPISODE_ROUND_BUDGET}-round ` +
+        `Verify run ${runId} has already used its ${VERIFY_RUN_ROUND_BUDGET}-round ` +
         `budget (\`state-machine.md\` "Repair Loop Bound") — remaining findings are triaged with ` +
         `the user rather than dispatching a further round.`,
     };
   }
-
-  const heading =
-    `### Audit Round ${nextAbsolute} (verify-repair episode ${episode}, round ${nextEpisodeRound} ` +
-    `of ${VERIFY_EPISODE_ROUND_BUDGET})`;
-
-  return {
-    disposition: 'round',
-    absoluteRound: nextAbsolute,
-    episode,
-    episodeRound: nextEpisodeRound,
-    heading,
-  };
+  const absoluteRound = allRounds.length > 0 ? Math.max(...allRounds.map((r) => r.absolute)) + 1 : 1;
+  const runRound = runRounds.length + 1;
+  return { disposition: 'round', absoluteRound, runId, runRound, heading: runRoundHeading(absoluteRound, runId, runRound), alreadyOpen: false };
 }
 
-/**
- * Derives which verify episode a resumed dispatch continues, from the count of existing
- * episode-labelled headings already present (so a resumed pass continues its own episode rather
- * than opening a new one, mirroring `build/audit.md`'s cold-resume rule for a partial round).
- *
- * No episode-labelled heading at all → episode 1 (a fresh verify pass). Otherwise: if the
- * highest-numbered episode present has not yet used its full round budget, that same episode
- * number is returned (resume it); if it has, the next episode number is returned (a genuinely new
- * verify pass opens its own fresh budget, per decision 17).
- */
-export function resolveVerifyEpisodeNumber(chunkMd: string): number {
-  const episodeRounds = parseEpisodeRounds(chunkMd);
-  if (episodeRounds.length === 0) return 1;
-
-  const maxEpisode = Math.max(...episodeRounds.map((r) => r.episode));
-  const roundsInMaxEpisode = episodeRounds.filter((r) => r.episode === maxEpisode).length;
-  return roundsInMaxEpisode < VERIFY_EPISODE_ROUND_BUDGET ? maxEpisode : maxEpisode + 1;
+function runRoundHeading(absoluteRound: number, runId: string, runRound: number): string {
+  return `### Audit Round ${absoluteRound} (verify-repair run ${runId}, round ${runRound} of ${VERIFY_RUN_ROUND_BUDGET})`;
 }
 
 /**
@@ -260,33 +227,32 @@ export function resolveVerifyEpisodeNumber(chunkMd: string): number {
  * right after `## Findings Ledger`, with no trailing section to expose the defect.
  *
  * The new heading is inserted immediately before the next top-level `## ` heading that follows
- * `## Findings Ledger`, if one exists; if `## Findings Ledger` is the LAST section (as every
- * existing synthetic test fixture models, and as a document with no trailing content would),
- * this falls back to the original end-of-document append — unchanged behavior for that shape.
+ * `## Findings Ledger`, or at the end when `## Findings Ledger` is the last section. A document
+ * with no `## Findings Ledger` at all is refused rather than given a detached heading (#1302).
  *
  * Append-only in the sense that matters: every byte before the insertion point and every byte
  * after it survive unchanged, and every pre-existing round heading string survives unchanged
  * (`state-machine.md` Write Order — round entries are append-only, never overwritten or
  * renumbered). Pure — no I/O.
  */
+const FINDINGS_LEDGER_RE = /^## Findings Ledger\s*$/m;
+
 export function appendAuditRoundHeading(chunkMd: string, heading: string): string {
-  const findingsLedgerMatch = /^## Findings Ledger\s*$/m.exec(chunkMd);
-  if (findingsLedgerMatch) {
-    const searchFrom = findingsLedgerMatch.index + findingsLedgerMatch[0].length;
-    const nextHeadingMatch = /^## /m.exec(chunkMd.slice(searchFrom));
-    if (nextHeadingMatch) {
-      const insertAt = searchFrom + nextHeadingMatch.index;
-      const before = chunkMd.slice(0, insertAt).trimEnd();
-      const after = chunkMd.slice(insertAt);
-      return `${before}\n\n${heading}\n\n${after}`;
-    }
+  const findingsLedgerMatch = FINDINGS_LEDGER_RE.exec(chunkMd);
+  if (!findingsLedgerMatch) throw new Error('This CHUNK.md has no "## Findings Ledger" section, so the round has nowhere to go.');
+  const searchFrom = findingsLedgerMatch.index + findingsLedgerMatch[0].length;
+  const nextHeadingMatch = /^## /m.exec(chunkMd.slice(searchFrom));
+  if (nextHeadingMatch) {
+    const insertAt = searchFrom + nextHeadingMatch.index;
+    const before = chunkMd.slice(0, insertAt).trimEnd();
+    const after = chunkMd.slice(insertAt);
+    return `${before}\n\n${heading}\n\n${after}`;
   }
-  const trimmed = chunkMd.trimEnd();
-  return `${trimmed}\n\n${heading}\n`;
+  return `${chunkMd.trimEnd()}\n\n${heading}\n`;
 }
 
 /**
- * Writes a planned verify-episode round's heading into `chunkFile`, through `atomicWriteFile` —
+ * Writes a planned verify-run round's heading into `chunkFile`, through `atomicWriteFile` —
  * the ONE atomic write path in the repo (T-176-06: a torn `CHUNK.md` on crash mid-append is
  * mitigated only by never writing any other way).
  */
@@ -301,66 +267,60 @@ export async function writeAppendedAuditRound(
 }
 
 // -------------------------------------------------------------------------------------------
-// Task 3 — post-repair repair-gate re-derivation (Pitfall 1)
-// -------------------------------------------------------------------------------------------
-
-/**
- * Re-derives the repair gate AFTER repair has had a chance to move code (Pitfall 1: Step 4's
- * pre-repair `ImpactMapEntry.gate` snapshot answers a DIFFERENT question — "had code changed
- * BEFORE repair" — and would route every repaired chunk wrongly if reused here).
- *
- * Structurally, this function's input has no `driftState`/`gate` field — there is no way for a
- * caller to pass Step 4's stale snapshot through it. `driftState` is always freshly re-derived,
- * in this call, from `drift-check.ts` — the SOLE authority for "did this chunk's code move"
- * (175-CONTEXT.md decision 10) — never re-implemented here.
- */
-export async function recomputeRepairGatePostRepair(input: {
-  projectDir: string;
-  slug: string;
-  stale: boolean;
-  status: string;
-}): Promise<RepairGate> {
-  const { projectDir, slug, stale, status } = input;
-
-  const drift = await driftCheckCommand({ project: projectDir, quiet: true });
-  const chunkDrift = drift.chunks.find((c) => c.chunk === slug);
-  const driftState = chunkDrift?.state ?? 'unknown';
-
-  return computeRepairGate({ status, stale, driftState });
-}
-
-// -------------------------------------------------------------------------------------------
 // #838 — the post-repair helpers as commands `verify/repair-dispatch.md` calls
 // -------------------------------------------------------------------------------------------
 
+/** Why a stale chunk cannot take an audit round, said the same way by verify-repair and verify-repair-round. */
+function noFindingsLedger(slug: string): string {
+  return (
+    `${relChunkMdPath(slug)} has no "## Findings Ledger" section, so its rounds have nowhere to go. ` +
+    'Add the section build/audit.md describes, then run verify-repair-round again.'
+  );
+}
+
+/** The run's impact-map entry for a chunk it marked stale, or a refusal naming what is wrong. */
+async function staleEntryOf(projectDir: string, runId: string | undefined, chunk: string): Promise<{ runId: string; entry: ImpactMapEntry }> {
+  const impactStatus = await verifyImpactStatusCommand({ project: projectDir, runId, quiet: true });
+  const entry = impactStatus.entries.find((e) => e.slug === chunk);
+  const seeStatus = 'run `boardsmith verify-impact-status` to see which chunks it covers.';
+  if (entry === undefined) throw new Error(`Chunk "${chunk}" is not in run ${impactStatus.runId}'s impact map — ${seeStatus}`);
+  if (!entry.stale) throw new Error(`Chunk "${chunk}" is not stale in run ${impactStatus.runId}, so it has nothing to repair — ${seeStatus}`);
+  // A run whose map has entries always has an id.
+  return { runId: impactStatus.runId!, entry };
+}
+
 /**
- * `boardsmith verify-repair-round` — opens the next round of `episode` in a chunk's CHUNK.md by
- * appending its `### Audit Round N` heading, or reports `triage` and writes nothing once that
- * episode's budget is spent. The episode is passed in, not re-derived, because CHUNK.md alone
- * cannot tell a fourth round of this pass from the first round of a new one.
+ * `boardsmith verify-repair-round` — opens a stale chunk's next audit round for a verify run by
+ * writing its `### Audit Round` heading into the Findings Ledger, or reports `triage` and writes
+ * nothing once the run's budget is spent. A round already open with nothing under it is reported
+ * again and not written twice (#1302).
  */
 export async function verifyRepairRoundCommand(options: {
   project?: string;
+  runId?: string;
   chunk: string;
-  episode: number;
   json?: boolean;
-}): Promise<VerifyEpisodeRoundPlan> {
+}): Promise<VerifyRunRoundPlan> {
   assertBareName('--chunk', options.chunk, "Pass the stale chunk's slug, the name of its directory under design/chunks/.");
   const projectDir = resolve(options.project ?? process.cwd());
-  const chunkFile = chunkMdPath(projectDir, options.chunk);
+  const { runId } = await staleEntryOf(projectDir, options.runId, options.chunk);
 
   const chunkMd = await readChunkMdIfExists(projectDir, options.chunk);
   if (chunkMd === undefined) {
     throw new Error(`Chunk "${options.chunk}" has no ${relChunkMdPath(options.chunk)} — check the --chunk slug.`);
   }
 
-  const plan = planVerifyEpisodeRound(chunkMd, options.episode);
-  if (plan.disposition === 'round') await writeAppendedAuditRound(chunkFile, chunkMd, plan.heading);
+  if (!FINDINGS_LEDGER_RE.test(chunkMd)) throw new Error(noFindingsLedger(options.chunk));
+
+  const plan = planVerifyRunRound(chunkMd, runId);
+  if (plan.disposition === 'round' && !plan.alreadyOpen) {
+    await writeAppendedAuditRound(chunkMdPath(projectDir, options.chunk), chunkMd, plan.heading);
+  }
 
   if (options.json) {
     console.log(JSON.stringify(plan, null, 2));
   } else if (plan.disposition === 'round') {
-    console.log(styleText('green', `✓ ${options.chunk}: opened ${plan.heading}`));
+    console.log(styleText('green', `✓ ${options.chunk}: ${plan.alreadyOpen ? 'still open' : 'opened'} ${plan.heading}`));
   } else {
     console.log(styleText('yellow', `⚠ ${options.chunk}: ${plan.reason}`));
   }
@@ -368,8 +328,9 @@ export async function verifyRepairRoundCommand(options: {
 }
 
 /**
- * `boardsmith verify-repair-gate` — re-derives one stale chunk's repair gate from post-repair
- * code state, once its verify-episode rounds are closed. Read-only.
+ * `boardsmith verify-repair-gate` — one stale chunk's repair gate, once its rounds are closed.
+ * Read-only. The gate comes from `verify-impact-status`, which reads the chunk's code as it is
+ * now, so it answers for the code after repair (Pitfall 1).
  */
 export async function verifyRepairGateCommand(options: {
   project?: string;
@@ -378,27 +339,13 @@ export async function verifyRepairGateCommand(options: {
   json?: boolean;
 }): Promise<RepairGate> {
   const projectDir = resolve(options.project ?? process.cwd());
-
-  const impactStatus = await verifyImpactStatusCommand({ project: projectDir, runId: options.runId, quiet: true });
-  const entry = impactStatus.entries.find((e) => e.slug === options.chunk);
-  if (entry === undefined) {
-    throw new Error(
-      `Chunk "${options.chunk}" is not in run ${impactStatus.runId}'s impact map — run ` +
-        '`boardsmith verify-impact-status` to see which chunks it covers.',
-    );
-  }
-
-  const gate = await recomputeRepairGatePostRepair({
-    projectDir,
-    slug: entry.slug,
-    stale: entry.stale,
-    status: entry.status,
-  });
+  const { gate } = (await staleEntryOf(projectDir, options.runId, options.chunk)).entry;
 
   if (options.json) {
     console.log(JSON.stringify(gate, null, 2));
   } else {
-    console.log(styleText('green', `✓ ${options.chunk}: ${gate.disposition}`));
+    // Only a gate that settles the chunk clears its marker; the others need a person.
+    console.log(gate.clearMarker ? styleText('green', `✓ ${options.chunk}: ${gate.disposition}`) : styleText('yellow', `⚠ ${options.chunk}: ${gate.disposition}`));
     console.log(`  ${gate.reason}`);
   }
   return gate;
@@ -415,8 +362,8 @@ export interface RepairStatusRow {
   slicePaths?: string[];
   /** Populated only when `scopeLimited` is true — names the unresolved input. */
   scopeLimitedReason?: string;
-  /** This chunk's next verify-episode round plan (a fresh round to dispatch, or triage). */
-  roundPlan: VerifyEpisodeRoundPlan;
+  /** This chunk's next round for this verify run (a round to dispatch, or triage). */
+  roundPlan: VerifyRunRoundPlan;
 }
 
 export interface VerifyRepairStatusResult {
@@ -430,8 +377,7 @@ export interface VerifyRepairStatusResult {
  * `boardsmith verify-repair` — CHECK-02's read-only status report: for every chunk Phase 175's
  * impact map marks `stale === true`, resolves its fresh staged slice paths
  * (`resolveStagedSlicePaths`, decision 9 — scope-limited, never a live fallback, decision 10) and
- * plans its next verify-episode audit round (`resolveVerifyEpisodeNumber` +
- * `planVerifyEpisodeRound`, decision 17). This command computes and reports only — it never
+ * plans its next audit round for this run (`planVerifyRunRound`, decision 17). This command computes and reports only — it never
  * dispatches a lens, never writes a `### Audit Round` heading, and never re-derives a repair
  * gate; `verify-repair-round` and `verify-repair-gate` do those last two, called by
  * `verify/repair-dispatch.md`'s orchestration, an agent reading each row this command reports (the same "CLI computes, subagent judges" split CHECK-01 already
@@ -477,8 +423,11 @@ export async function verifyRepairStatusCommand(
         continue;
       }
 
-      const episode = resolveVerifyEpisodeNumber(chunkMd);
-      const roundPlan = planVerifyEpisodeRound(chunkMd, episode);
+      if (!FINDINGS_LEDGER_RE.test(chunkMd)) {
+        warnings.push(`[repair-status] ${noFindingsLedger(entry.slug)}`);
+        continue;
+      }
+      const roundPlan = planVerifyRunRound(chunkMd, runId);
 
       rows.push({
         slug: entry.slug,

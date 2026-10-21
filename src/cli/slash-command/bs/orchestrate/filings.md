@@ -7,8 +7,9 @@ ledger to the BoardSmith issue tracker, and what to do when it cannot get there 
 ## What Is Filed, and What Is Not
 
 `build/build.md` "Boundaries" rule 3 is the bar: a shortfall in the library is FILED, never patched
-— `node_modules/boardsmith` is a live symlink to the designer's real BoardSmith checkout and is
-read-only, so a "quick fix" there silently mutates their library. Two kinds of filing exist:
+— `node_modules/boardsmith` is the designer's BoardSmith, an installed copy or a link to their
+checkout, and is read-only, so a "quick fix" there is lost at the next install or silently mutates
+their library. Two kinds of filing exist:
 
 - **A bug.** BoardSmith does not do what it documents. This bar is low on purpose: a wrong behavior
   found while building a game is worth reporting even if the game routes around it, because the next

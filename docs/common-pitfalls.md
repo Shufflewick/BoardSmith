@@ -100,11 +100,11 @@ submitted either way.
 - **A step that declares `dependsOn` or `filterBy`.** That declaration asks the
   engine to walk the whole path, so it re-asks the dependent step once per value
   of the step it depends on, with that value bound. See below.
-- **Every selection of a persistent-world action.** A world's offer is
-  enumerated in a single frame, so each selection's candidates are produced with
-  `args: {}` once. The guard above is what that frame needs, and the candidates
-  are re-asked with the args bound as soon as the player answers
-  ([Persistent Worlds](./persistent-worlds.md)).
+- **The first selection of a persistent-world action.** A world's offer is
+  enumerated in a single frame with `args: {}`, and it produces only the first
+  selection's candidates. A later selection is asked when the player reaches it,
+  with the answers so far bound, so it sees an optional pick the player skipped
+  as `undefined` ([Persistent Worlds](./persistent-worlds.md)).
 
 In both cases the callback is called with its input `undefined`, so it must not
 assume otherwise:
@@ -1849,23 +1849,23 @@ Action.create('moveCard')
     elements: (ctx) => [...ctx.game.all(Card)],
   })
   .chooseFrom('destination', {
-    choices: (ctx) => ctx.game.all(Zone).map(zone => zone.name),
+    choices: (ctx) => ctx.game.all(Zone).map(zone => ({ zone: zone.name, zoneId: zone.id })),
     // Each choice names the board element it is dropped onto.
-    boardRefs: (zoneName, ctx) => ({
-      refs: [{ ref: { id: ctx.game.first(Zone, zoneName)!.id }, role: 'target' }],
+    boardRefs: (choice) => ({
+      refs: [{ ref: { id: choice.zoneId }, role: 'target' }],
     }),
   })
 ```
 
-`filterBy` is optional here. Use it only when the choices depend on the card. The engine applies it: `filterBy: { key: 'cardId', selectionName: 'card' }` keeps only the choices whose `cardId` equals the picked card's id, and a plain-string choice like the zone names above never has one, so every choice would be removed. Make each choice an object that carries the key:
+`filterBy` is optional here. Use it only when the choices depend on the card. The engine applies it: `filterBy: { key: 'cardId', selectionName: 'card' }` keeps only the choices whose `cardId` equals the picked card's id, and a choice that does not carry the key, like the zone choices above, is always removed. Make each choice carry the key:
 
 ```typescript
   .chooseFrom('destination', {
     choices: (ctx) => ctx.game.all(Card).flatMap(card =>
-      card.legalZones().map(zone => ({ zone: zone.name, cardId: card.id }))),
+      card.legalZones().map(zone => ({ zone: zone.name, zoneId: zone.id, cardId: card.id }))),
     filterBy: { key: 'cardId', selectionName: 'card' },
-    boardRefs: (choice, ctx) => ({
-      refs: [{ ref: { id: ctx.game.first(Zone, choice.zone)!.id }, role: 'target' }],
+    boardRefs: (choice) => ({
+      refs: [{ ref: { id: choice.zoneId }, role: 'target' }],
     }),
   })
 ```
@@ -1878,7 +1878,7 @@ Action.create('moveCard')
 
 3. **Choices with no board refs**: a `chooseFrom` choice is a drop target only through `boardRefs`. The board uses the ref with role `target`, or the first ref when none is marked target. A choice without refs is reachable from the Action Panel only.
 
-4. **Element ref mismatch**: the ref you pass to `drag()` and `drop()` must identify the same element the action offers, by `id` or `notation`. A passed ref matches when its id, notation or name equals the ref the action offers: the element's id by default, or whatever the action's `boardRef` returns:
+4. **Element ref mismatch**: the ref you pass to `drag()` and `drop()` must identify the same element the action offers, by `id`, `notation` or `name`. A passed ref matches the ref the action offers (the element's id by default, or whatever the action's `boardRef` returns) by its id if it has one, else by its notation, else by its name:
    ```typescript
    drag({ id: card.id })      // matches a candidate with that id
    drop({ id: zone.id })      // matches a choice whose boardRefs name zone.id
@@ -1894,26 +1894,25 @@ Action.create('moveCard')
 
 ### Drag-Drop in a Custom UI
 
-A custom UI marks what is draggable and what can receive a drop with `useDragDrop()`; the drop targets come from the same orchestration as the Action Panel's, so the two never disagree:
+A custom UI marks what is draggable and what can receive a drop with `useDragDrop()`; the drop targets come from the same orchestration as the Action Panel's, so the two never disagree. Guard the drag with `useBoardInteraction()`, not with the open action's name: with no action open, the board offers each action's first pick, so a drag can start an action. A disabled candidate is never draggable, so the guard need not check it:
 
 <!-- typecheck: board -->
 ```vue
 <script setup lang="ts">
 import { computed } from 'vue';
-import { findElements, useDragDrop, type TableBoardProps } from 'boardsmith/ui';
+import { findElements, useBoardInteraction, useDragDrop, type TableBoardProps } from 'boardsmith/ui';
 import 'boardsmith/ui/animation/drag-drop.css';
 
 const props = defineProps<TableBoardProps>();
 const { drag, drop } = useDragDrop();
-const controller = props.actionController;
+const board = useBoardInteraction();
 
 const cards = computed(() => findElements(props.gameView, { className: 'Card' }));
 const zones = computed(() => findElements(props.gameView, { className: 'Zone' }));
 
+// A candidate of the open pick, an action's first pick when none is open, or the auto-filled card to drag on.
 const canDragCard = (cardId: number) =>
-  controller.currentAction.value === 'moveCard' &&
-  controller.currentPick.value?.name === 'card' &&
-  controller.validElements.value.some((valid) => valid.id === cardId);
+  board.isSelectableElement({ id: cardId }) || board.isDraggableSelectedElement({ id: cardId });
 </script>
 
 <template>

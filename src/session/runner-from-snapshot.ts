@@ -28,7 +28,8 @@ export function runnerFromSnapshot(snapshot: GameStateSnapshot, def: RunnerPolic
   const runner = GameRunner.fromSnapshot(
     snapshot,
     def.gameClass,
-    { checkpoints: def.checkpoints, randomness: def.randomness, undo: def.undo },
+    // A host keeps the game from before a failed op, so a failed action changed nothing (#1254).
+    { checkpoints: def.checkpoints, randomness: def.randomness, undo: def.undo, discardsFailedOps: true },
   );
   if (def.tutorial) {
     (runner.game as Game).tutorialDefinition = def.tutorial;

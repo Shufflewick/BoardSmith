@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { type VerifyLookup, checkRunLogRoles, reviewRoundCommits, runLogEntries } from './run-log-roles.js';
+import { type VerifyLookup, checkRunLogRoles, reviewRoundVerifies, runLogEntries } from './run-log-roles.js';
 import { type VerifyResult, buildVerifyResult } from './verify-result.js';
 
 /**
@@ -526,10 +526,10 @@ describe('a review round\'s verify, confirmed against the result on file (#454)'
   const file = `.boardsmith/verify/${COMMIT}.json`;
   const text = log(dispatch(1, {}), round(1, { Verify: '0123456789ab passed' }));
 
-  it('lists the commit each round names, so the caller can look its result up', () => {
-    expect(reviewRoundCommits(log(text, round(2, { Verify: 'fedcba987654 passed' }), round(3, { Verify: 'pending' })))).toEqual([
-      '0123456789ab',
-      'fedcba987654',
+  it('lists the commit each round names, with the round\'s own id, so the caller can look its result up and name the round (#1302)', () => {
+    expect(reviewRoundVerifies(log(text, round(2, { Verify: 'pending' }), round(3, { Verify: 'fedcba987654 passed' })))).toEqual([
+      { round: '1', commit: '0123456789ab' },
+      { round: '3', commit: 'fedcba987654' },
     ]);
   });
 

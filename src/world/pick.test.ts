@@ -83,11 +83,7 @@ const deploy = worldAction<FleetGame>("deploy")
   .chooseFrom("crew", {
     prompt: "Operatives",
     choices: ({ game }) => game.all(Operative).map((one) => one.name!),
-    multiSelect: ({ game, args }) => {
-      const chosen = args.ship as string | undefined;
-      if (chosen === undefined) return { min: 1 };
-      return { min: 1, max: crewCap(game.ship(chosen)) };
-    },
+    multiSelect: ({ game, args }) => ({ min: 1, max: crewCap(game.ship(args.ship as string)) }),
   })
   .execute(() => {});
 
@@ -146,10 +142,17 @@ async function warmEngine(): Promise<BoardSmithWorldEngine> {
 
 describe("#378 — an unbounded cap is not a cap of null on the wire", () => {
   it("omits max entirely rather than sending a number JSON cannot carry", async () => {
-    const engine = await warmEngine();
+    const uncapped = worldAction<FleetGame>("deploy")
+      .needs(() => [FLEET])
+      .chooseFrom("ship", { choices: ({ game }) => game.all(Ship).map((ship) => ship.name!) })
+      .chooseFrom("crew", {
+        choices: ({ game }) => game.all(Operative).map((one) => one.name!),
+        multiSelect: () => ({ min: 1 }),
+      })
+      .execute(() => {});
+    const engine = await engineFor(uncapped);
 
-    const [offer] = await engine.offersFor("player-a", STAMP);
-    const crew = offer!.selections.find((pick) => pick.name === "crew")!;
+    const crew = await engine.resolvePick("player-a", "deploy", "crew", { ship: "dory" }, STAMP);
 
     // Through the wire and back, which is where `Infinity` became `null`.
     const wired = JSON.parse(JSON.stringify(crew)) as { multiSelect?: Record<string, unknown> };
@@ -236,10 +239,10 @@ describe("#378 — one pick, re-asked with the arguments bound so far", () => {
     // nothing resident, so the pick's own round is what it asks for.
     const engine = newEngine();
 
-    expect(engine.pickPartitions("player-a", "deploy", "crew", {}, STAMP.now)).toEqual([FLEET]);
+    expect(engine.pickPartitions("player-a", "deploy", "crew", { ship: "dory" }, STAMP.now)).toEqual([FLEET]);
 
     await engine.hydrate([FLEET]);
-    expect(engine.pickPartitions("player-a", "deploy", "crew", {}, STAMP.now)).toEqual([]);
+    expect(engine.pickPartitions("player-a", "deploy", "crew", { ship: "dory" }, STAMP.now)).toEqual([]);
   });
 });
 

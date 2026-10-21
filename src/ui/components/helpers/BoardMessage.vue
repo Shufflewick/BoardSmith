@@ -170,7 +170,7 @@ withDefaults(
   right: auto;
   width: max-content;
   justify-content: flex-start;
-  /* z-index is inherited from the TutorialOverlay stacking context (z-20);
+  /* z-index is inherited from the TutorialOverlay stacking context (z-31);
      we intentionally do not set it here so it does not create a new context. */
 }
 
@@ -208,7 +208,7 @@ withDefaults(
 /*
  * Displays the pre-move announcement during the bot demo (bot-02). Sits at the
  * top of the board area, horizontally centered, above turn-prompt (z-5) but
- * below heatmap (z-15) and tutorial ring (z-20).
+ * below heatmap (z-15) and tutorial ring (z-31).
  *
  * The wrapper position here is relative to the overlay stacking context (the
  * HintOverlay/TutorialOverlay teleport that mounts it at the board top).

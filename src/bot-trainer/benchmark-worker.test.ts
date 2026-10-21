@@ -19,10 +19,10 @@
  * publishes every file that build emits.
  */
 import { describe, it, expect } from 'vitest';
-import { spawnSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { copyFileSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { stripVTControlCharacters } from 'node:util';
+import { promisify, stripVTControlCharacters } from 'node:util';
 import { build } from 'esbuild';
 
 import { cliBuildOptions } from '../cli/lib/build-cli.js';
@@ -180,15 +180,23 @@ await build(cliBuildOptions(INSTALLED));
  * would (in `cwd`, a fresh High Card project by default), with `--workers 1`
  * and then `flags`. `botTs` is the bot.ts it leaves.
  */
-function evolveWith(
+async function evolveWith(
   bin: string,
   flags: string[] = [],
   cwd = gameProject(),
-): { status: number | null; output: string; botTs: string } {
-  const run = spawnSync(
+): Promise<{ status: number | null; output: string; botTs: string }> {
+  // Not spawnSync: vitest 3 fails the run when a test holds its worker for over a minute (#1333).
+  const run = await promisify(execFile)(
     process.execPath,
     [bin, 'evolve-bot-weights', '--generations', '1', '--population', '2', '--mcts', '5', '--workers', '1', ...flags],
     { cwd, encoding: 'utf-8', env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' } },
+  ).then(
+    ({ stdout, stderr }) => ({ status: 0, stdout, stderr }),
+    (error: { code?: unknown; stdout?: string; stderr?: string }) => ({
+      status: typeof error.code === 'number' ? error.code : null,
+      stdout: error.stdout ?? '',
+      stderr: error.stderr ?? '',
+    }),
   );
   return {
     status: run.status,
@@ -210,31 +218,31 @@ function expectEvolvedInRealWorkers({ status, output }: { status: number | null;
 }
 
 describe('evolve-bot-weights benchmarks in real workers, on the engine the game is built with (#401, #697)', () => {
-  it('from this checkout, where the CLI runs the TypeScript sources', () => {
-    expectEvolvedInRealWorkers(evolveWith(join(REPO_ROOT, 'bin', 'boardsmith.js')));
+  it('from this checkout, where the CLI runs the TypeScript sources', async () => {
+    expectEvolvedInRealWorkers(await evolveWith(join(REPO_ROOT, 'bin', 'boardsmith.js')));
   }, 180_000);
 
-  it('from an installed package, where the CLI runs the built bundle', () => {
-    expectEvolvedInRealWorkers(evolveWith(join(INSTALLED, 'bin', 'boardsmith.js')));
+  it('from an installed package, where the CLI runs the built bundle', async () => {
+    expectEvolvedInRealWorkers(await evolveWith(join(INSTALLED, 'bin', 'boardsmith.js')));
   }, 180_000);
 });
 
 describe('evolve-bot-weights --seed is reproducible whatever the worker count (#699)', () => {
   /** What a seeded run decided: its printed results and the weights it wrote, without the date it ran. */
-  function decided(bin: string, flags: string[]): string {
-    const run = evolveWith(bin, flags, gameProject(NIM_RULES, NIM_BOT));
+  async function decided(bin: string, flags: string[]): Promise<string> {
+    const run = await evolveWith(bin, flags, gameProject(NIM_RULES, NIM_BOT));
     expectEvolvedInRealWorkers(run);
     // A run that keeps the original ends at the line naming its temp bot.ts, and prints no "=== Done".
     const results = run.output.slice(run.output.indexOf('=== Evolution Results'), run.output.search(/=== Done|No improvement confirmed, so/));
     return `${results}\n${run.botTs.replace(/^\/\/ Weight Evolution \(.*\):$/m, '')}`;
   }
 
-  it('evolves the same weights from the same seed, on one worker or three', () => {
+  it('evolves the same weights from the same seed, on one worker or three', async () => {
     const bin = join(REPO_ROOT, 'bin', 'boardsmith.js');
     const flags = ['--population', '4', '--mcts', '10', '--seed', 'repeatable'];
-    const onOne = decided(bin, flags);
+    const onOne = await decided(bin, flags);
     expect(onOne).toContain('Search: original ');
-    expect(decided(bin, flags)).toBe(onOne);
-    expect(decided(bin, [...flags, '--workers', '3'])).toBe(onOne);
+    expect(await decided(bin, flags)).toBe(onOne);
+    expect(await decided(bin, [...flags, '--workers', '3'])).toBe(onOne);
   }, 300_000);
 });

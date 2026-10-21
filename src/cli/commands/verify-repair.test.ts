@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { promises as fs } from 'node:fs';
-import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,13 +7,11 @@ import {
   selectStaleChunks,
   resolveStagedSlicePaths,
   parseAuditRounds,
-  planVerifyEpisodeRound,
-  resolveVerifyEpisodeNumber,
+  planVerifyRunRound,
   appendAuditRoundHeading,
   writeAppendedAuditRound,
-  recomputeRepairGatePostRepair,
   verifyRepairRoundCommand,
-  VERIFY_EPISODE_ROUND_BUDGET,
+  VERIFY_RUN_ROUND_BUDGET,
 } from './verify-repair.js';
 import { createProgram } from '../cli.js';
 import { DESIGN_DIR, chunkMdPath } from '../lib/project-paths.js';
@@ -246,43 +243,88 @@ describe('episode — parseAuditRounds finds all three real heading precedents p
   });
 });
 
-describe('episode — planVerifyEpisodeRound', () => {
-  it("a 3-build-round chunk's first verify round is absolute 4, episode 1, round 1", () => {
+const RUN = '2026-10-20T10-00-00-000Z';
+const EARLIER_RUN = '2026-10-01T09-00-00-000Z';
+
+/** Open `run`'s next round in `md` and write a finding under it, as a dispatched lens would. */
+function roundWithFindings(md: string, run: string): string {
+  const plan = planVerifyRunRound(md, run);
+  if (plan.disposition !== 'round') throw new Error(`expected a round for ${run}, got triage`);
+  return appendAuditRoundHeading(md, plan.heading).replace(plan.heading, `${plan.heading}\n\n| F | a finding |`);
+}
+
+describe('round — planVerifyRunRound keys each round to its verify run (#1302)', () => {
+  it("a 3-build-round chunk's first verify round is absolute 4, round 1 of 3 of this run", () => {
     const md = threeBuildRoundChunkMd(TABLE_AND_DRAW_ROUND_3);
-    const plan = planVerifyEpisodeRound(md, 1);
+    const plan = planVerifyRunRound(md, RUN);
     expect(plan.disposition).toBe('round');
     if (plan.disposition !== 'round') throw new Error('unreachable');
     expect(plan.absoluteRound).toBe(4);
-    expect(plan.episode).toBe(1);
-    expect(plan.episodeRound).toBe(1);
-    expect(plan.heading).toMatch(/^### Audit Round 4 \(verify-repair episode 1, round 1 of 3\)$/m);
+    expect(plan.runId).toBe(RUN);
+    expect(plan.runRound).toBe(1);
+    expect(plan.alreadyOpen).toBe(false);
+    expect(plan.heading).toBe(`### Audit Round 4 (verify-repair run ${RUN}, round 1 of 3)`);
   });
 
-  it('the 4th episode-round request returns the triage disposition and produces no heading', () => {
+  it('a run that has used its 3 rounds is triaged, however many times it is asked: a resumed session gets no fresh budget', () => {
     let md = threeBuildRoundChunkMd(TABLE_AND_DRAW_ROUND_3);
-    for (let i = 0; i < VERIFY_EPISODE_ROUND_BUDGET; i++) {
-      const plan = planVerifyEpisodeRound(md, 1);
-      expect(plan.disposition).toBe('round');
-      if (plan.disposition !== 'round') throw new Error('unreachable');
-      md = appendAuditRoundHeading(md, plan.heading);
+    for (let i = 0; i < VERIFY_RUN_ROUND_BUDGET; i++) md = roundWithFindings(md, RUN);
+    for (let ask = 0; ask < 2; ask++) {
+      const plan = planVerifyRunRound(md, RUN);
+      expect(plan.disposition).toBe('triage');
+      expect((plan as { heading?: string }).heading).toBeUndefined();
     }
-    const fourth = planVerifyEpisodeRound(md, 1);
-    expect(fourth.disposition).toBe('triage');
-    expect((fourth as { heading?: string }).heading).toBeUndefined();
   });
 
-  it('a zero-round chunk gets absolute round 1, episode 1, round 1', () => {
+  it('a new run gets its own 3 rounds, whatever an earlier run used, more or fewer', () => {
+    let md = threeBuildRoundChunkMd(TABLE_AND_DRAW_ROUND_3);
+    md = roundWithFindings(md, EARLIER_RUN);
+    const afterOne = planVerifyRunRound(md, RUN);
+    if (afterOne.disposition !== 'round') throw new Error('unreachable');
+    expect(afterOne.runRound).toBe(1);
+
+    for (let i = 1; i < VERIFY_RUN_ROUND_BUDGET; i++) md = roundWithFindings(md, EARLIER_RUN);
+    const afterThree = planVerifyRunRound(md, RUN);
+    if (afterThree.disposition !== 'round') throw new Error('unreachable');
+    expect(afterThree.runRound).toBe(1);
+  });
+
+  it("reports this run's latest round again, already open, while nothing has been written under it", () => {
+    const md = threeBuildRoundChunkMd(TABLE_AND_DRAW_ROUND_3);
+    const first = planVerifyRunRound(md, RUN);
+    if (first.disposition !== 'round') throw new Error('unreachable');
+    const opened = appendAuditRoundHeading(md, first.heading);
+
+    const again = planVerifyRunRound(opened, RUN);
+    expect(again).toEqual({ ...first, alreadyOpen: true });
+  });
+
+  it("opens the next round once the open one has findings, and does not take another run's empty round for this run's", () => {
+    let md = threeBuildRoundChunkMd(TABLE_AND_DRAW_ROUND_3);
+    md = roundWithFindings(md, RUN);
+    const second = planVerifyRunRound(md, RUN);
+    if (second.disposition !== 'round') throw new Error('unreachable');
+    expect(second.runRound).toBe(2);
+    expect(second.alreadyOpen).toBe(false);
+
+    const otherRunOpen = appendAuditRoundHeading(md, `### Audit Round 9 (verify-repair run ${EARLIER_RUN}, round 1 of 3)`);
+    const still = planVerifyRunRound(otherRunOpen, RUN);
+    if (still.disposition !== 'round') throw new Error('unreachable');
+    expect(still.alreadyOpen).toBe(false);
+    expect(still.absoluteRound).toBe(10);
+  });
+
+  it('a zero-round chunk gets absolute round 1, round 1 of this run', () => {
     const md = '# Chunk: fresh\n\nStatus: built\n\n## Findings Ledger\n\n_No rounds yet._\n';
-    const plan = planVerifyEpisodeRound(md, 1);
-    expect(plan.disposition).toBe('round');
+    const plan = planVerifyRunRound(md, RUN);
     if (plan.disposition !== 'round') throw new Error('unreachable');
     expect(plan.absoluteRound).toBe(1);
-    expect(plan.episodeRound).toBe(1);
+    expect(plan.runRound).toBe(1);
   });
 
   it('append-only: output.startsWith(input.trimEnd()), and every original heading string survives exactly once', () => {
     const md = threeBuildRoundChunkMd(TABLE_AND_DRAW_ROUND_3);
-    const plan = planVerifyEpisodeRound(md, 1);
+    const plan = planVerifyRunRound(md, RUN);
     if (plan.disposition !== 'round') throw new Error('unreachable');
     const output = appendAuditRoundHeading(md, plan.heading);
 
@@ -304,7 +346,7 @@ describe('episode — planVerifyEpisodeRound', () => {
       `## Build Manifest\n\n| File | Status |\n|---|---|\n| a.ts | NEW |\n\n` +
       `## Verified Commit Hash\n\nabc123\n`;
 
-    const plan = planVerifyEpisodeRound(md, 1);
+    const plan = planVerifyRunRound(md, RUN);
     if (plan.disposition !== 'round') throw new Error('unreachable');
     const output = appendAuditRoundHeading(md, plan.heading);
 
@@ -323,38 +365,22 @@ describe('episode — planVerifyEpisodeRound', () => {
     expect(output.trimEnd().endsWith('abc123')).toBe(true);
     // Pre-existing round headings still survive exactly once.
     expect(output.split(TABLE_AND_DRAW_ROUND_3).length - 1).toBe(1);
+    // A round open under a trailing section is still seen as open.
+    expect(planVerifyRunRound(output, RUN)).toEqual({ ...plan, alreadyOpen: true });
   });
 
-  it('falls back to end-of-document append when ## Findings Ledger is the LAST section (matches every existing synthetic fixture\'s shape, unchanged behavior)', () => {
+  it('appends at the end when ## Findings Ledger is the last section', () => {
     const md = threeBuildRoundChunkMd(TABLE_AND_DRAW_ROUND_3);
-    const plan = planVerifyEpisodeRound(md, 1);
+    const plan = planVerifyRunRound(md, RUN);
     if (plan.disposition !== 'round') throw new Error('unreachable');
     const output = appendAuditRoundHeading(md, plan.heading);
     expect(output.startsWith(md.trimEnd())).toBe(true);
     expect(output.trimEnd().endsWith(plan.heading)).toBe(true);
   });
 
-  it('resolveVerifyEpisodeNumber: a zero-round chunk resolves to episode 1', () => {
-    const md = '# Chunk: fresh\n\nStatus: built\n\n## Findings Ledger\n\n_No rounds yet._\n';
-    expect(resolveVerifyEpisodeNumber(md)).toBe(1);
-  });
-
-  it('resolveVerifyEpisodeNumber: an in-progress episode 1 (1 of 3 rounds used) resumes as episode 1', () => {
-    let md = threeBuildRoundChunkMd(TABLE_AND_DRAW_ROUND_3);
-    const plan = planVerifyEpisodeRound(md, 1);
-    if (plan.disposition !== 'round') throw new Error('unreachable');
-    md = appendAuditRoundHeading(md, plan.heading);
-    expect(resolveVerifyEpisodeNumber(md)).toBe(1);
-  });
-
-  it('resolveVerifyEpisodeNumber: an exhausted episode 1 (3 of 3 rounds used) opens episode 2', () => {
-    let md = threeBuildRoundChunkMd(TABLE_AND_DRAW_ROUND_3);
-    for (let i = 0; i < VERIFY_EPISODE_ROUND_BUDGET; i++) {
-      const plan = planVerifyEpisodeRound(md, 1);
-      if (plan.disposition !== 'round') throw new Error('unreachable');
-      md = appendAuditRoundHeading(md, plan.heading);
-    }
-    expect(resolveVerifyEpisodeNumber(md)).toBe(2);
+  it('refuses a CHUNK.md with no ## Findings Ledger, rather than putting the round somewhere else (#1302)', () => {
+    const md = '# Chunk: bare\n\nStatus: verified\n\n## Build Manifest\n';
+    expect(() => appendAuditRoundHeading(md, '### Audit Round 1 (x)')).toThrow(/no "## Findings Ledger" section/);
   });
 });
 
@@ -370,7 +396,7 @@ describe('episode — writeAppendedAuditRound routes through atomicWriteFile onl
     const original = threeBuildRoundChunkMd(TABLE_AND_DRAW_ROUND_3);
     await fs.writeFile(chunkMdPath, original, 'utf-8');
 
-    const plan = planVerifyEpisodeRound(original, 1);
+    const plan = planVerifyRunRound(original, RUN);
     if (plan.disposition !== 'round') throw new Error('unreachable');
 
     const written = await writeAppendedAuditRound(chunkMdPath, original, plan.heading);
@@ -393,174 +419,27 @@ describe('episode — writeAppendedAuditRound routes through atomicWriteFile onl
 });
 
 // -------------------------------------------------------------------------------------------
-// Task 3 — recomputeRepairGatePostRepair
+// #838 — the post-repair helpers as registered commands (their runs: verify-impact.test.ts)
 // -------------------------------------------------------------------------------------------
 
-async function buildRepairGateTestProject(
-  root: string,
-  opts: { validHash?: boolean } = {},
-): Promise<{ project: string; slug: string; firstSha: string }> {
-  const project = join(root, `repair-gate-project-${Math.random().toString(36).slice(2)}`);
-  await fs.mkdir(project, { recursive: true });
-  await fs.mkdir(join(project, 'src'), { recursive: true });
-  await fs.writeFile(join(project, 'src', 'thing.ts'), 'export const thing = 1;\n');
-
-  execSync('git init', { cwd: project, stdio: 'ignore' });
-  execSync('git add -A', { cwd: project, stdio: 'ignore' });
-  execSync('git -c user.email=t@t -c user.name=t commit -m first', { cwd: project, stdio: 'ignore' });
-  const firstSha = execSync('git rev-parse HEAD', { cwd: project }).toString().trim();
-
-  const slug = 'movement';
-  const chunkDir = join(project, DESIGN_DIR, 'chunks', slug);
-  await fs.mkdir(chunkDir, { recursive: true });
-  const hash = opts.validHash === false ? 'not-a-hash' : firstSha;
-  await fs.writeFile(
-    join(chunkDir, 'CHUNK.md'),
-    `# Chunk: ${slug}\n\nStatus: verified\n\n` +
-      `## Build Manifest\n\n| File | Status |\n|---|---|\n| src/thing.ts | NEW |\n\n` +
-      `## Verified Commit Hash\n\n${hash}\n`,
-  );
-
-  return { project, slug, firstSha };
-}
-
-describe('post-repair gate — recomputeRepairGatePostRepair, over a real git fixture', () => {
-  let root: string;
-  let logSpy: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(async () => {
-    root = tempTree('bs-verify-repair-gate-');
-    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-  });
-
-  afterEach(async () => {
-    logSpy.mockRestore();
-  });
-
-  it('clean → drifted flip: first reading close-without-replaytest, second (after a real file modification) reopen-playtest', async () => {
-    const { project, slug } = await buildRepairGateTestProject(root);
-
-    const first = await recomputeRepairGatePostRepair({ projectDir: project, slug, stale: true, status: 'verified' });
-    expect(first.disposition).toBe('close-without-replaytest');
-
-    await fs.writeFile(join(project, 'src', 'thing.ts'), 'export const thing = 2;\n');
-    execSync('git add -A', { cwd: project, stdio: 'ignore' });
-    execSync('git -c user.email=t@t -c user.name=t commit -m second', { cwd: project, stdio: 'ignore' });
-
-    const second = await recomputeRepairGatePostRepair({ projectDir: project, slug, stale: true, status: 'verified' });
-    expect(second.disposition).toBe('reopen-playtest');
-    expect(second.nextStatus).toBe('built');
-  });
-
-  it('unchanged case preserves disposition across two invocations (not gratuitously destabilising)', async () => {
-    const { project, slug } = await buildRepairGateTestProject(root);
-
-    const first = await recomputeRepairGatePostRepair({ projectDir: project, slug, stale: true, status: 'verified' });
-    const second = await recomputeRepairGatePostRepair({ projectDir: project, slug, stale: true, status: 'verified' });
-
-    expect(first.disposition).toBe(second.disposition);
-    expect(first.disposition).toBe('close-without-replaytest');
-  });
-
-  it("driftState === 'unknown' still short-circuits first on the second invocation", async () => {
-    const { project, slug } = await buildRepairGateTestProject(root, { validHash: false });
-
-    const first = await recomputeRepairGatePostRepair({ projectDir: project, slug, stale: true, status: 'verified' });
-    const second = await recomputeRepairGatePostRepair({ projectDir: project, slug, stale: true, status: 'verified' });
-
-    expect(first.disposition).toBe('unknown-drift');
-    expect(second.disposition).toBe('unknown-drift');
-  });
-
-  it('prints nothing to stdout: the composed drift check is quiet, so a --json caller prints only its own result', async () => {
-    const { project, slug } = await buildRepairGateTestProject(root);
-    await recomputeRepairGatePostRepair({ projectDir: project, slug, stale: true, status: 'verified' });
-    expect(logSpy).not.toHaveBeenCalled();
-  });
-
-  it(
-    "structural guard: recomputeRepairGatePostRepair's parameter object has no driftState/gate member " +
-      '— the pre-repair snapshot is unpassable',
-    async () => {
-      const source = await fs.readFile(join(__dirname, 'verify-repair.ts'), 'utf-8');
-      const match = source.match(
-        /export async function recomputeRepairGatePostRepair\(input: \{([\s\S]*?)\}\): Promise<RepairGate>/,
-      );
-      expect(match).not.toBeNull();
-      const paramBlock = match![1];
-      expect(paramBlock).not.toMatch(/driftState/);
-      expect(paramBlock).not.toMatch(/\bgate\b/);
-    },
-  );
-});
-
-// -------------------------------------------------------------------------------------------
-// #838 — the post-repair helpers as registered commands
-// -------------------------------------------------------------------------------------------
-
-describe('verify-repair-round — opens the next verify-episode round in CHUNK.md', () => {
-  let root: string;
-  let logSpy: ReturnType<typeof vi.spyOn>;
-
-  beforeEach(() => {
-    root = tempTree('bs-verify-repair-round-');
-    logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    logSpy.mockRestore();
-  });
-
-  it('appends the planned heading on each call of one episode, then reports triage and writes nothing once that episode\'s budget is spent', async () => {
-    const slug = 'table-and-draw';
-    const file = chunkMdPath(root, slug);
-    await fs.mkdir(join(file, '..'), { recursive: true });
-    await fs.writeFile(file, threeBuildRoundChunkMd(TABLE_AND_DRAW_ROUND_3), 'utf-8');
-
-    for (let round = 1; round <= VERIFY_EPISODE_ROUND_BUDGET; round++) {
-      const plan = await verifyRepairRoundCommand({ project: root, chunk: slug, episode: 1 });
-      if (plan.disposition !== 'round') throw new Error(`round ${round} should open a round`);
-      expect(plan.episodeRound).toBe(round);
-      expect(await fs.readFile(file, 'utf-8')).toContain(plan.heading);
-    }
-
-    const before = await fs.readFile(file, 'utf-8');
-    const plan = await verifyRepairRoundCommand({ project: root, chunk: slug, episode: 1 });
-    expect(plan.disposition).toBe('triage');
-    expect(await fs.readFile(file, 'utf-8')).toBe(before);
-  });
-
+describe('verify-repair-round — refuses a path before it reads anything', () => {
   it('refuses a --chunk that is a path, writing nothing outside design/chunks/', async () => {
+    const root = tempTree('bs-verify-repair-round-');
     // `../..` resolves chunkMdPath to <project>/CHUNK.md, so plant one there to catch a write.
     const outside = join(root, 'CHUNK.md');
     await fs.writeFile(outside, threeBuildRoundChunkMd(TABLE_AND_DRAW_ROUND_3), 'utf-8');
     expect(chunkMdPath(root, '../..')).toBe(outside);
     const before = await fs.readFile(outside, 'utf-8');
 
-    await expect(verifyRepairRoundCommand({ project: root, chunk: '../..', episode: 1 })).rejects.toThrow(
+    await expect(verifyRepairRoundCommand({ project: root, runId: RUN, chunk: '../..' })).rejects.toThrow(
       /--chunk "\.\.\/\.\." is a path, not a name/,
     );
     expect(await fs.readFile(outside, 'utf-8')).toBe(before);
   });
-
-  it('refuses a chunk with no CHUNK.md, naming the path', async () => {
-    await expect(verifyRepairRoundCommand({ project: root, chunk: 'nope', episode: 1 })).rejects.toThrow(
-      /chunks\/nope\/CHUNK\.md/,
-    );
-  });
-
-  it('surfaces the real read error for a CHUNK.md that exists but cannot be read, not the wrong-slug message', async () => {
-    const slug = 'table-and-draw';
-    // A folder where CHUNK.md should be fails with EISDIR, an error that is not "missing".
-    await fs.mkdir(chunkMdPath(root, slug), { recursive: true });
-    const error = await verifyRepairRoundCommand({ project: root, chunk: slug, episode: 1 }).catch((e: Error) => e);
-    expect(String(error)).toMatch(/Could not read .*EISDIR/);
-    expect(String(error)).not.toMatch(/check the --chunk slug/);
-  });
 });
 
 describe('cli — the post-repair commands are registered', () => {
-  it('registers verify-repair-round (requiring --episode) and verify-repair-gate, each requiring --chunk', () => {
+  it('registers verify-repair-round and verify-repair-gate, each requiring --chunk and taking --run-id', () => {
     const program = createProgram();
     for (const name of ['verify-repair-round', 'verify-repair-gate']) {
       const command = program.commands.find((c) => c.name() === name);
@@ -569,9 +448,11 @@ describe('cli — the post-repair commands are registered', () => {
       expect(chunk?.mandatory).toBe(true);
       expect(command!.helpInformation()).toMatch(/--json/);
     }
-    const round = program.commands.find((c) => c.name() === 'verify-repair-round')!;
-    expect(round.options.find((o) => o.long === '--episode')?.mandatory).toBe(true);
-    const gate = program.commands.find((c) => c.name() === 'verify-repair-gate')!;
-    expect(gate.helpInformation()).toMatch(/--run-id/);
+    // Both are keyed to the verify run they repair, never to a count kept in the agent's memory (#1302).
+    for (const name of ['verify-repair-round', 'verify-repair-gate']) {
+      const command = program.commands.find((c) => c.name() === name)!;
+      expect(command.helpInformation()).toMatch(/--run-id/);
+      expect(command.options.find((o) => o.long === '--episode')).toBeUndefined();
+    }
   });
 });

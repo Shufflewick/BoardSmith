@@ -21,6 +21,7 @@ import { createBot, MCTSBot, parseBotLevel, DIFFICULTY_PRESETS } from 'boardsmit
 
 - `createBot()` - Create an MCTS bot for a game
 - `parseBotLevel()` - Parse difficulty from string (for CLI)
+- `searchCopyForSeat()` - The copy the bot searches for one seat, sampled the way the bot samples it, for testing a `determinize` sampler (see [Testing your sampler](../bot-system.md#testing-your-sampler))
 
 ### Classes
 
@@ -40,6 +41,7 @@ import { createBot, MCTSBot, parseBotLevel, DIFFICULTY_PRESETS } from 'boardsmit
 - `Objective` - A single weighted evaluation term
 - `ThreatResponse` - Threat response result
 - `DifficultyLevel` - Difficulty preset names (`'easy' | 'medium' | 'hard'`)
+- `WorldSample` - A sampler and its random source, for `searchCopyForSeat()`
 
 ## Examples
 

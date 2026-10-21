@@ -6,7 +6,8 @@
  * so the square is the board's candidate and the piece is not. The piece must
  * still be draggable, and its drag must carry the square, whose pick the shared
  * drag-start path resolves (useDragDropTargets.test.ts covers that half).
- * A disabled candidate, a piece, its square or a card, drags for nothing (#1190).
+ * A disabled candidate, a piece, its square or a card, drags for nothing (#1190),
+ * except the auto-filled source, and a disabled piece still drags for its square (#1299).
  */
 import { describe, it, expect } from 'vitest';
 import '../builtin-renderers.js';
@@ -66,6 +67,21 @@ describe('PieceRenderer on a candidate square (#943)', () => {
     }
     wrapper.unmount();
   });
+
+  it('a disabled piece on an enabled candidate square drags for its square (#1299)', async () => {
+    const interaction = createBoardInteraction();
+    interaction.setValidElements([
+      { id: 300, ref: { notation: 'd4' } },
+      { id: 42, ref: { id: 42 }, disabled: 'pinned' },
+    ], () => {});
+    const { wrapper } = mountBoardRenderer(GridBoardRenderer, board(), interaction);
+
+    const [piece] = wrapper.findAll('.piece');
+    expect(piece.attributes('draggable')).toBe('true');
+    await piece.trigger('dragstart', { dataTransfer });
+    expect(interaction.draggedElement).toEqual({ id: 300, name: 'd4', notation: 'd4' });
+    wrapper.unmount();
+  });
 });
 
 describe('CardRenderer for a disabled candidate (#1190)', () => {
@@ -77,6 +93,19 @@ describe('CardRenderer for a disabled candidate (#1190)', () => {
     const card = wrapper.find('.card-container');
     expect(card.classes()).toContain('is-disabled');
     expect(card.attributes('draggable')).toBe('false');
+    wrapper.unmount();
+  });
+
+  it('the auto-filled card drags on even when the pick lists it as a disabled destination (#1299)', async () => {
+    const interaction = createBoardInteraction();
+    interaction.setValidElements([{ id: 7, ref: { id: 7 }, disabled: 'already there' }], () => {});
+    interaction.setDraggableSelectedElement({ id: 7 });
+    const { wrapper } = mountBoardRenderer(CardRenderer, { id: 7, className: 'Card', name: 'ace', attributes: {} }, interaction);
+
+    const card = wrapper.find('.card-container');
+    expect(card.attributes('draggable')).toBe('true');
+    await card.trigger('dragstart', { dataTransfer });
+    expect(interaction.isDragging).toBe(true);
     wrapper.unmount();
   });
 });

@@ -577,20 +577,22 @@ only alternative is to guess, and a guessed world is scored as if it were real.
 
 ### Testing your sampler
 
-`applyDeterminization` is exported from `boardsmith/bot` so a game can run its own
-sampler through the same consistency check the search runs, without standing up an
-`MCTSBot`:
+`searchCopyForSeat` is exported from `boardsmith/bot` so a game can run its own
+sampler on the copy the search runs it on, without standing up an `MCTSBot`:
 
 ```typescript
-// applyDeterminization comes from 'boardsmith/bot'
+// searchCopyForSeat comes from 'boardsmith/bot'
 
 // Refused by name if the sampler writes anything this seat can see.
-applyDeterminization(sandboxForSeat(1), 1, myDeterminize, () => 0.5);
+const sandbox = searchCopyForSeat(game, 1, 'test-seed', { determinize: myDeterminize, rng: () => 0.5 });
 ```
 
-Build the sandbox the way the bot does -- `new MyGame(options)` followed by
-`loadSerializedState(truth.toJSONForPlayer(seat))` -- so the test sees exactly the
-redaction the search sees.
+It builds the copy exactly as the bot does: seat 1's view of `game`, read as the
+seat was shown it, with the game's turn and element id sequence and a random
+state seeded from `'test-seed'`. Then it runs the sampler, through the same
+consistency check the search runs, and last the elements' `afterRestore` hooks,
+so the hooks see the world the sampler drew. Leave out the last argument for the
+copy before any sampling, with what the seat was not told still redacted.
 
 ### What the check costs
 

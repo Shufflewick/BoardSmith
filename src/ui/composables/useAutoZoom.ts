@@ -50,15 +50,21 @@
  * - The board element carries CSS `zoom`, so its getBoundingClientRect() is
  *   scaled. Natural size = rect / the *applied* zoom read from computed style
  *   (not the ref, which may not have flushed to the DOM yet).
- * - Available space is the region's client box minus its padding — and the
- *   region's padding-bottom is the Action Panel's reserved footprint, so a
- *   fitted board sits fully above that footprint with no panel term needed.
+ * - Available space is the region's content box — and the region's
+ *   padding-bottom is the Action Panel's reserved footprint, so a fitted board
+ *   sits fully above that footprint with no panel term needed. Its width is
+ *   taken with the vertical scrollbar showing, the same width useBoardSize
+ *   pins to, so the scrollbar coming or going never moves the fit (#1343).
  * - Re-fits triggered by the region observer are rAF-coalesced into a single
  *   `measureAndFit()` per frame, so a cascade of layout changes (e.g. the
  *   sidebar collapsing plus a window resize) never thrashes.
+ *
+ * A browser without CSS `zoom` (Firefox before 126) drops the container's
+ * `zoom`, so there the shell fits none, offers no slider (`zoomSupported`)
+ * and `zoomLevel` stays 1, the zoom actually applied (#1361).
  */
 import { ref, watch, onUnmounted, type Ref } from 'vue';
-import { provideBoardRegionPin } from './boardRegionPin.js';
+import { provideBoardRegionPin, regionWidth } from './boardRegionPin.js';
 
 /** The slider's range. */
 export const ZOOM_MIN = 0.5;
@@ -113,11 +119,12 @@ export function useAutoZoom(options: {
   const { boardEl, boardUi, regionEl, boardFailed } = options;
 
   const zoomLevel = ref(1.0);
+  const zoomSupported = 'zoom' in document.documentElement.style;
 
   /** Non-zero while a `useBoardSize()`-pinned board is mounted below the shell.
    *  Such a board is width-fit only (see the module docblock). The game opts in
    *  by calling `useBoardSize()` — there is no second flag to remember. */
-  const pinnedBoards = provideBoardRegionPin();
+  const pinnedBoards = provideBoardRegionPin(zoomLevel);
 
   /** True once the user has manually zoomed (the slider). While true, the
    *  persistent available-space re-fit is a no-op — `fitZoom()` and a new board clear it. */
@@ -130,7 +137,7 @@ export function useAutoZoom(options: {
   function measureAndFit(): boolean {
     const board = boardEl.value;
     const region = regionEl.value;
-    if (!board || !region || boardFailed.value) return false;
+    if (!zoomSupported || !board || !region || boardFailed.value) return false;
 
     const appliedZoom = parseFloat(getComputedStyle(board).zoom) || 1;
     const rect = board.getBoundingClientRect();
@@ -138,9 +145,7 @@ export function useAutoZoom(options: {
 
     const regionStyle = getComputedStyle(region);
     const avail = {
-      width: region.clientWidth
-        - (parseFloat(regionStyle.paddingLeft) || 0)
-        - (parseFloat(regionStyle.paddingRight) || 0),
+      width: regionWidth(region),
       height: region.clientHeight
         - (parseFloat(regionStyle.paddingTop) || 0)
         - (parseFloat(regionStyle.paddingBottom) || 0),
@@ -148,8 +153,8 @@ export function useAutoZoom(options: {
 
     const fit = computeFitZoom(natural, avail, pinnedBoards.value > 0 ? 'width' : 'both');
     if (fit == null) return false;
-    // Epsilon guard: ignore sub-visible deltas from layout rounding.
-    if (Math.abs(fit - zoomLevel.value) > 0.005) zoomLevel.value = fit;
+    // Ignore sub-visible zoom-ups from layout rounding, but never keep a zoom above the fit: the board would overflow (#1357).
+    if (fit < zoomLevel.value || fit - zoomLevel.value > 0.005) zoomLevel.value = fit;
     return true;
   }
 
@@ -242,6 +247,7 @@ export function useAutoZoom(options: {
    *  takes manual control, so neither startup nor the persistent
    *  available-space re-fit ever stomps the user's choice. */
   function setZoom(value: number) {
+    if (!zoomSupported) throw new Error('This browser cannot apply a zoom (it has no CSS zoom), so the shell offers no zoom slider.');
     endStartup();
     userControlled = true;
     // A frame already queued by a prior scheduleRefit is intentionally left to
@@ -259,5 +265,5 @@ export function useAutoZoom(options: {
     measureAndFit();
   }
 
-  return { zoomLevel, setZoom, fitZoom, measureAndFit };
+  return { zoomLevel, zoomSupported, setZoom, fitZoom, measureAndFit };
 }

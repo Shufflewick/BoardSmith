@@ -188,6 +188,11 @@ export const WORLD_REFUSALS = {
     why: "#662, #665: a seat's command, its declaration walk, a quote, or a pick re-asked with earlier answers bound carried a key none of the action's picks declares. A client sends picks and nothing else, so the args are refused before any of the action's declarations or callbacks see them, rather than reaching the rules and coming back as the game's own refusal. A scheduled event is not checked: the clock's verbs ask no picks and their args are the bundle's own. One request refused; the world is unaffected",
   },
 
+  "missing-pick": {
+    owner: "caller",
+    why: "#1328, #1338: a seat's command, or its declaration walk, left out (or sent null for) a pick the action requires, or a pick re-asked with earlier answers bound left out a required pick before it. A round declared after a selection reads that selection, so the request is refused before any declaration round sees its args, rather than reaching game code with the pick unbound and coming back as a crash in the rules. A quote is not checked: it prices a draft. One request refused; the world is unaffected",
+  },
+
   // ---- GAME: the bundle's own doing; dead-letters, never parks ----
   "rules-error": {
     owner: "game",
@@ -196,6 +201,10 @@ export const WORLD_REFUSALS = {
   "undeclared-partition": {
     owner: "game",
     why: "a handler read, or emitted an event in, a partition its partitions() did not declare -- a bundle bug, and the same bundle will do it again next time",
+  },
+  "read-only-write": {
+    owner: "game",
+    why: "#1334: an action changed a partition it loads only with `.reads()`. Such a partition is never saved, so the change would be lost; the command is refused and rolled back instead. GAME-owned: the declaration is in the bundle's source, so the same action does it again next time",
   },
   "undeclared-activity": {
     owner: "game",

@@ -167,7 +167,8 @@
  *
  * ### The overcount, and the optimisation that answers it
  *
- * A partition merely READ is reported dirty. The overcount is bounded by what
+ * A partition merely READ is reported dirty, unless the action loaded it with
+ * `.reads()` (#1334). The overcount is bounded by what
  * the command touched, so it is still O(room), and a resident DO amortises it:
  * an already-hydrated partition stays hydrated. If it ever matters, the fix is
  * PLATFORM-SIDE -- hash the serialized output and skip the storage write when
@@ -219,7 +220,7 @@
  *
  * ### First implementation step
  *
- * In BoardSmith: `Game.adoptSubtree(parentId, json)` and
+ * In BoardSmith: `Game.adoptSubtree(json)` and
  * `Game.evictSubtree(id)`, grafting and removing one serialized subtree through
  * the existing element-restore path, plus the `moveToInternal` marking. Then a
  * `BoardSmithWorldEngine` here whose `applyCommand` is: ensure the named
@@ -253,12 +254,11 @@ import type { ActionMetadata, PickMetadata } from "../session/types.js";
  * legal this instant. An enumerated offer answers the second question, which is
  * the one a player is actually asking.
  *
- * ITS CANDIDATES ARE ALREADY RESOLVED. A table fetches each pick's choices on
- * demand, because a table's protocol is step-wise; a world's is single-shot, so
- * an offer carries `selections[i].choices` / `.validElements` filled in. That is
- * affordable exactly because a world action may not declare a dependent
- * selection -- see `assertWorldAction` -- so no selection's candidates are a
- * function of another's value and the whole offer is one pass.
+ * ITS FIRST PICK'S CANDIDATES ARE ALREADY RESOLVED. An offer carries
+ * `selections[0].choices` / `.validElements` filled in, so most verbs, which
+ * ask one question, cost no round trip. Every later selection carries its shape
+ * only (name, type, and a prompt or bounds given as a value) and is re-asked
+ * with `resolvePick` when the player reaches it (#1345, #1350, #1355).
  */
 export interface WorldActionOffer extends ActionMetadata {
   /**
@@ -678,7 +678,8 @@ export interface WorldCommandResult {
    * (ShufflewickPub #521).
    *
    * Sends and takes in the order the handler made them. A host applies them
-   * with `applyNoticeWrites`, reading each touched seat's box once, and writes
+   * with `applyNoticeWrites`, which refuses a take or a `refuse` send to a box
+   * the walk did not declare, reading each touched seat's box once, and writes
    * the boxes IN THE SAME TRANSACTION as this dispatch's checkpoint -- a
    * refused command sends nothing and takes nothing, so a notice exists
    * exactly when the command that sent it does.
@@ -894,7 +895,13 @@ export interface WorldPartitionSource extends WorldPartitionStore {
  * told to ask again.
  */
 export type WorldAudienceSeat =
-  | { readonly player: string; readonly refused: false; readonly at: number }
+  | {
+      readonly player: string;
+      readonly refused: false;
+      readonly at: number;
+      /** This seat's own ids for the placeholders in `bodies[at]`, in order; `seatView` puts them back (#1207). */
+      readonly placeholders: readonly number[];
+    }
   | { readonly player: string; readonly refused: true; readonly failure: unknown };
 
 /**
@@ -913,8 +920,12 @@ export type WorldAudienceSeat =
  * seats you.
  *
  * So `bodies` holds each distinct answer once and a seat says WHICH ONE IS
- * THEIRS. The host reads that as permission to encode once and send the same
- * bytes to everybody naming the same index -- which is the whole point, and the
+ * THEIRS, with its own placeholder ids for what it cannot see (#1207): a
+ * shared body carries no seat's ids, so a body is a seat's view only once
+ * `seatView` has put that seat's back. The host reads that as permission to
+ * project once and send the same answer to everybody naming the same index,
+ * each with its own ids beside it for the page to put back (#1326) -- which
+ * is the whole point, and the
  * reason this is a table rather than a per-seat map that happens to repeat
  * itself: a host cannot discover the repetition without doing the encoding it
  * would be trying to avoid.
@@ -1252,11 +1263,10 @@ export interface WorldEngine {
   /**
    * THAT PICK, RE-EVALUATED with the args bound so far (#378).
    *
-   * A world's offer is enumerated in one frame with nothing bound -- the whole
-   * cost model -- so a selection whose `multiSelect` bounds or `choices`
-   * callback read an earlier selection's value cannot be answered there. The
-   * panel asks again once it has something to ask with, exactly as a table's
-   * does. A READ, under the same read-only facilities an offer runs under.
+   * A world's offer resolves only the first selection, with nothing bound --
+   * the whole cost model -- so the panel asks for every later one when the
+   * player reaches it, with the answers so far (#1345, #1355). A READ, under
+   * the same read-only facilities an offer runs under.
    */
   resolvePick(
     player: string,

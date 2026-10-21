@@ -119,6 +119,13 @@ describe('#168: the product path is written down where an author lands', () => {
     ).not.toContain('npx boardsmith');
   });
 
+  it.each(LANDING_PAGES)('$path runs no command through npx boardsmith (#1306)', ({ path }) => {
+    expect(
+      read(path),
+      `${path} says to install BoardSmith and then run \`boardsmith\`, so its commands must not go back to npx.`,
+    ).not.toContain('npx boardsmith');
+  });
+
   it('does not promise infrastructure the author has to stand up', () => {
     expect(PITCH).toContain('no server, database or service to provision');
   });

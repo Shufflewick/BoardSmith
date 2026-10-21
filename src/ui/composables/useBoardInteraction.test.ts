@@ -75,6 +75,31 @@ describe('createBoardInteraction', () => {
   });
 });
 
+describe('which elements may start a drag (#1299)', () => {
+  it('a disabled candidate may not start a drag, and startDrag refuses it', () => {
+    const interaction = createBoardInteraction();
+    interaction.setValidElements([{ id: 10, ref: { id: 10 }, disabled: 'Blocked' }, { id: 11, ref: { id: 11 } }], () => {});
+
+    expect(interaction.canStartDrag({ id: 10 })).toBe(false);
+    expect(interaction.startDrag({ id: 10 })).toBe(false);
+    expect(interaction.isDragging).toBe(false);
+
+    expect(interaction.canStartDrag({ id: 11 })).toBe(true);
+    expect(interaction.startDrag({ id: 11 })).toBe(true);
+    expect(interaction.isDragging).toBe(true);
+  });
+
+  it('the auto-filled piece drags on even when the pick lists its ref as a disabled destination', () => {
+    const interaction = createBoardInteraction();
+    interaction.setValidElements([{ id: 300, ref: { notation: 'd4' }, disabled: 'Occupied' }], () => {});
+    interaction.setDraggableSelectedElement({ notation: 'd4' });
+
+    expect(interaction.canStartDrag({ id: 42, notation: 'd4' })).toBe(true);
+    expect(interaction.startDrag({ id: 42, notation: 'd4' })).toBe(true);
+    expect(interaction.isDragging).toBe(true);
+  });
+});
+
 describe('board interaction injection (F21)', () => {
   // Outside a Vue component setup / GameShell provider, inject() yields no value.
   it('useBoardInteraction throws an actionable error outside a GameShell', () => {

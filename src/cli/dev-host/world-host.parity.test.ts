@@ -18,7 +18,7 @@
  */
 import { describe, it, expect } from 'vitest';
 
-import { worldBudgets } from '../../world/index.js';
+import { seatView, worldBudgets } from '../../world/index.js';
 import type { WorldHostClock } from '../../world/host/index.js';
 import { createTestWorld, TEST_WORLD_EPOCH } from '../../testing/test-world.js';
 import { vaultBundle, codewordOf } from '../../testing/test-world.test-helper.js';
@@ -72,8 +72,10 @@ async function hostFrame(
   await host.close();
   const last = (type: string): Record<string, unknown> | undefined =>
     [...sent].reverse().find((message) => message['type'] === type);
+  const state = last('world_state');
   return {
-    view: last('world_state')?.['view'],
+    // What the page holds once it has read the frame (#1326).
+    view: seatView(state?.['view'], state?.['placeholders'] as readonly number[]),
     actions: last('world_offers')?.['actions'],
     elementIdKey,
   };
