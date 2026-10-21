@@ -8,9 +8,6 @@ import {
   incrementCounter,
   isTrackComplete,
   trackPoints,
-  MonotonicTrack,
-  UniqueTrack,
-  CounterTrack,
 } from './track.js';
 
 describe('track functions (#779)', () => {
@@ -37,6 +34,12 @@ describe('track functions (#779)', () => {
       { value: 4, points: 1, isSpecial: false },
       { value: 9, points: 3, isSpecial: false },
     ]);
+  });
+
+  it('addToTrack scores 0 for a position past the end of pointsPerEntry', () => {
+    const track = uniqueTrack({ id: 'u', maxEntries: 3, pointsPerEntry: [4] });
+    expect(addToTrack(track, 1)).toBe(4);
+    expect(addToTrack(track, 2)).toBe(0);
   });
 
   it('addToTrack throws, naming the value and track, and leaves the track untouched when refused', () => {
@@ -88,6 +91,12 @@ describe('track functions (#779)', () => {
       expect(canAddToTrack(track, 2, true)).toBe(true);
       expect(canAddToTrack(track, 9, true)).toBe(false);
     });
+
+    it('a special entry may not duplicate on a track that does not allow special entries', () => {
+      const track = uniqueTrack({ id: 'p', maxEntries: 5 });
+      addToTrack(track, 2);
+      expect(canAddToTrack(track, 2, true)).toBe(false);
+    });
   });
 
   describe('counter', () => {
@@ -128,9 +137,6 @@ describe('track size (#786)', () => {
     monotonicTrack: (maxEntries: number) => monotonicTrack({ id: 't', direction: 'increasing', maxEntries, completionBonus: 5 }),
     uniqueTrack: (maxEntries: number) => uniqueTrack({ id: 't', maxEntries, completionBonus: 5 }),
     counterTrack: (maxEntries: number) => counterTrack({ id: 't', maxEntries, completionBonus: 5 }),
-    MonotonicTrack: (maxEntries: number) => new MonotonicTrack({ id: 't', direction: 'increasing', maxEntries, completionBonus: 5 }),
-    UniqueTrack: (maxEntries: number) => new UniqueTrack({ id: 't', maxEntries, completionBonus: 5 }),
-    CounterTrack: (maxEntries: number) => new CounterTrack({ id: 't', maxEntries, completionBonus: 5 }),
   };
 
   for (const [name, make] of Object.entries(makers)) {
