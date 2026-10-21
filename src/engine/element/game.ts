@@ -2241,13 +2241,7 @@ export class Game<
     forEachInSubtree(element, (adopted) => this._ctx._elementsById.set(adopted._t.id, adopted));
 
     element.resolveElementReferences(this);
-    try {
-      element._afterRestoreSubtree();
-    } catch (error) {
-      // Undo the graft, so a failed adoption can be tried again.
-      this.evictSubtree(element._t.id);
-      throw error;
-    }
+    this._runAdoptedRestoreHooks(element);
 
     this._partitionRootTable().set(element._t.id, element);
     // Baselined from the GRAFTED tree, not from the incoming bytes: the two
@@ -2256,6 +2250,16 @@ export class Game<
     this._baselinePartition(element._t.id);
 
     return element;
+  }
+
+  /** Runs `afterRestore` over a grafted partition, and undoes the graft if a hook throws so the adoption can be tried again (#1349). */
+  private _runAdoptedRestoreHooks(element: GameElement): void {
+    try {
+      element._afterRestoreSubtree();
+    } catch (error) {
+      this.evictSubtree(element._t.id);
+      throw error;
+    }
   }
 
   /**
