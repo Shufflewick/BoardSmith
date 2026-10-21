@@ -704,8 +704,13 @@ static members, so `game.first(element.constructor)` searches by class.
 
 An array a standard method builds from what a declaration read (`filter`, `map`,
 `slice`, `concat`, `flat`, `flatMap`, `toSorted`, `toReversed`, `toSpliced`,
-`with`) is the declaration's own plain array: it can be cloned, pushed to and
-stored like any local value. What it holds is still read-only.
+`with`) is the declaration's own plain array: it can be pushed to and stored
+like any local value. What it holds is still read-only, so `structuredClone`
+copies it only when its items are plain values such as numbers and strings. An
+item that is an object or array from the world is still a projection, and
+cloning the array throws `DataCloneError`. A spread copy (`{ ...item }`,
+`[...item]`) is plain only at its own level, so copy every object and array
+inside the item too before cloning.
 
 ### Selections: what an action asks a player for
 
