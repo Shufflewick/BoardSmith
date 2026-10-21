@@ -15,7 +15,7 @@ describe('UseActionControllerReturn', () => {
       | 'isReady' | 'isExecuting' | 'lastError' | 'errorTick' | 'isLoadingChoices'
       | 'repeatingState' | 'pendingFollowUp' | 'pendingOnServer' | 'heldFollowUp'
       | 'resumeFollowUp' | 'actionCompletedTick' | 'actionStartTick' | 'lastActionResult'
-      | 'execute' | 'start' | 'fill' | 'skip' | 'clear' | 'cancel'
+      | 'execute' | 'start' | 'fill' | 'skip' | 'clear' | 'canClear' | 'cancel'
       | 'multiSelectDraft' | 'currentPickDraft' | 'setPickDraft'
       | 'actionQuote' | 'quotePending' | 'quoteError' | 'awaitingConfirmation'
       | 'confirmDisabledReason' | 'confirm' | 'actionMenuPath'

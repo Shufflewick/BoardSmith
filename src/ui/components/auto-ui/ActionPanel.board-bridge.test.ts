@@ -324,7 +324,10 @@ describe("ActionPanel's clear of a pick while a later pick's step is out (#1364)
     const crewFill = controller.fill('crew', 'ann');
     await flush();
 
-    await wrapper.find('.clear-selection-btn').trigger('click');
+    // The panel offers no clear the controller would refuse (#1373 review F2).
+    expect(wrapper.find('.selected-value').exists()).toBe(true);
+    expect(wrapper.find('.clear-selection-btn').exists()).toBe(false);
+    expect(controller.clear('ship')).toBe(false);
     await flush();
 
     expect(controller.currentAction.value).toBe('board');
@@ -339,7 +342,7 @@ describe("ActionPanel's clear of a pick while a later pick's step is out (#1364)
 });
 
 describe("ActionPanel's chip for a follow-up's server-bound value (#1366)", () => {
-  it('has no clear button, as the player cannot clear that value; a pick keeps its own', async () => {
+  it('has no clear button, as the player cannot clear that value, nor does a pick the server already holds', async () => {
     const { controller, wrapper } = mountHarness(() => Promise.resolve({ success: true }), {
       action: 'loot',
       args: { site: 3 },
@@ -362,7 +365,41 @@ describe("ActionPanel's chip for a follow-up's server-bound value (#1366)", () =
     expect(chips).toHaveLength(2);
     expect(chips[0].find('.value-display').text()).toBe('Old Mill');
     expect(chips[0].find('.clear-selection-btn').exists()).toBe(false);
-    expect(chips[1].find('.clear-selection-btn').attributes('aria-label')).toBe('Clear item');
+    // The step for 'item' reached the server, so clear() refuses it too (#1371, #1373).
+    expect(chips[1].find('.clear-selection-btn').exists()).toBe(false);
+    expect(controller.canClear('item')).toBe(false);
+    wrapper.unmount();
+  });
+});
+
+describe("ActionPanel's chip for a pick the held follow-up answered (#1373)", () => {
+  it('has no clear button, and controller.clear() refuses it, as the server will not use a new answer', async () => {
+    // Checkers' multi-jump: the capture chains to `move` with its own first pick bound.
+    const { board, controller, wrapper } = mountHarness(() => Promise.resolve({ success: true }), {
+      action: 'move',
+      args: { piece: 7 },
+      display: { piece: 'C3' },
+      metadata: {
+        name: 'move',
+        prompt: 'Move',
+        selections: [
+          { name: 'piece', type: 'element', prompt: 'Piece' },
+          { name: 'destination', type: 'choice', prompt: 'Destination', choices: [{ value: 'e5', display: 'E5' }, { value: 'a5', display: 'A5' }] },
+        ],
+      },
+    });
+    await flush();
+    expect(controller.currentPick.value?.name).toBe('destination');
+
+    const chips = wrapper.findAll('.selected-value');
+    expect(chips).toHaveLength(1);
+    expect(chips[0].find('.value-display').text()).toBe('C3');
+    expect(chips[0].find('.clear-selection-btn').exists()).toBe(false);
+    expect(controller.canClear('piece')).toBe(false);
+    expect(controller.clear('piece')).toBe(false);
+    expect(controller.lastError.value).toBe('The server already holds this answer, so it cannot be cleared now. Cancel the action to start it again.');
+    expect(controller.currentArgs.value).toEqual({ piece: 7 });
+    expect(board.currentPickName).toBe('destination');
     wrapper.unmount();
   });
 });
@@ -404,7 +441,10 @@ describe("ActionPanel's clear chip does what controller.clear() does (#1371)", (
     await controller.fill('crew', 'ann');
     await flush();
 
-    await wrapper.find('.clear-selection-btn').trigger('click');
+    // The panel offers no clear the controller would refuse (#1373).
+    expect(wrapper.findAll('.selected-value')).toHaveLength(2);
+    expect(wrapper.find('.clear-selection-btn').exists()).toBe(false);
+    expect(controller.clear('ship')).toBe(false);
     await flush();
 
     expect(controller.lastError.value).toBe('The server already holds this answer, so it cannot be cleared now. Cancel the action to start it again.');

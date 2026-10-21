@@ -520,8 +520,10 @@ export interface UseActionControllerReturn {
   fill: (selectionName: string, value: unknown) => Promise<PickValidationResult>;
   /** Skip an optional selection */
   skip: (selectionName: string) => void;
-  /** Clear a selection's value and the value of every selection after it, since those were answered against the old value. False, with lastError set, when refused because the name is not one of the action's picks (a follow-up's server-bound value, say), because a pick step still awaits the server, or because a repeating pick at or after it has steps the server holds (a finished repeat included). */
+  /** Clear a selection's value and the value of every selection after it, since those were answered against the old value. False, with lastError set, when refused because the name is not one of the action's picks (a follow-up's server-bound value, say), because a pick step still awaits the server, or because the server holds an answer to it or a later pick (a pick the held follow-up answered, or any step of a repeating pick, included). */
   clear: (selectionName: string) => boolean;
+  /** Whether clear() would take this value back now, by the same rules it refuses by. Draw a clear control only where this is true, as the action panel does. */
+  canClear: (selectionName: string) => boolean;
   /** Cancel the current action */
   cancel: () => void;
 

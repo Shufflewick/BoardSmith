@@ -294,8 +294,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   // The actionStartTick of the action whose pick step is awaiting the server, if any.
-  let stepSeq: number | null = null;
-  const stepOutstanding = (): boolean => stepSeq !== null && !actionMovedOn(stepSeq);
+  // A ref, so the panel's clear button (canClear) follows it.
+  const stepSeq = ref<number | null>(null);
+  const stepOutstanding = (): boolean => stepSeq.value !== null && !actionMovedOn(stepSeq.value);
   const STEP_OUTSTANDING = 'Still waiting for the server to answer your last pick.';
   const ANSWER_HELD = 'The server already holds this answer, so it cannot be cleared now. Cancel the action to start it again.';
   const NOT_A_PICK = 'This value was set by the game, not picked by you, so it cannot be cleared.';
@@ -322,7 +323,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const seq = actionStartTick.value;
     const actionName = currentAction.value as string;
     const player = playerSeat?.value ?? 0;
-    stepSeq = seq;
+    stepSeq.value = seq;
     try {
       const result = await stepFn(player, selectionName, value, actionName, buildServerArgs());
       if (!actionMovedOn(seq)) return result;
@@ -333,7 +334,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       if (actionMovedOn(seq)) return null;
       throw err;
     } finally {
-      if (stepSeq === seq) stepSeq = null;
+      if (stepSeq.value === seq) stepSeq.value = null;
     }
   }
 
@@ -2671,23 +2672,31 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       s.name in currentArgs.value || (s.name === repeating?.selectionName && repeating.accumulated.length > 0));
   }
 
-  function clear(selectionName: string): boolean {
+  /** Why this value cannot be cleared, or undefined when it can; the panel's clear button and clear() both ask it (#1373). */
+  function clearRefusal(selectionName: string): string | undefined {
     // The step's reply would write its pick back, answered against the value cleared here (#1364).
-    if (stepOutstanding()) {
-      setError(STEP_OUTSTANDING);
-      return false;
-    }
+    if (stepOutstanding()) return STEP_OUTSTANDING;
     const selections = currentActionMeta.value?.selections ?? [];
     const index = selections.findIndex(s => s.name === selectionName);
     // Not a pick (a follow-up's server-bound arg, say): true would have the caller clear the board, cancelling the action (#1366).
-    if (index === -1) {
-      setError(NOT_A_PICK);
+    if (index === -1) return NOT_A_PICK;
+    // A pick the held follow-up answered is held too, so the server would not use a new answer (#1373).
+    if (serverHoldsAnswer(selections.slice(index))) return ANSWER_HELD;
+    return undefined;
+  }
+
+  function canClear(selectionName: string): boolean {
+    return clearRefusal(selectionName) === undefined;
+  }
+
+  function clear(selectionName: string): boolean {
+    const refusal = clearRefusal(selectionName);
+    if (refusal) {
+      setError(refusal);
       return false;
     }
-    if (serverHoldsAnswer(selections.slice(index))) {
-      setError(ANSWER_HELD);
-      return false;
-    }
+    const selections = currentActionMeta.value!.selections;
+    const index = selections.findIndex(s => s.name === selectionName);
     forgetAnswer(selectionName);
     // Later picks were answered and fetched against the old value, so they are asked again (#1354, #1359).
     for (const later of selections.slice(index + 1)) {
@@ -3041,6 +3050,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     fill,
     skip,
     clear,
+    canClear,
     cancel,
 
     // The current editor's draft (shared source of truth for a typed value that
