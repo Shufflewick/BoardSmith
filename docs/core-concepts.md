@@ -469,6 +469,25 @@ element tree, not a log of operations that produced it.
   designs (mis-positioned flow state on restore).
 - **Undo**: Undo/redo, where supported, works from captured snapshots of prior
   states, not by reversing a command log.
+- **What a restore cannot carry**: saved state is plain data, so anything that
+  is not (a frozen object, for one) comes back without it. An element class
+  re-applies such a thing in `protected override afterRestore()`, which runs on
+  every element each time a restore rebuilds it (cold restore, undo, rewind, a
+  bot's search copy, a world partition adopted from storage), once the whole
+  restored tree is decoded (in a world, a reference into a partition that is
+  not resident stays unresolved). It must not change a saved value, and in a per-seat
+  copy it asks `isAttributeRedacted(key)` before reading an attribute the seat
+  may not have been told:
+
+  ```typescript
+  class Page extends Space<MyGame> {
+    data: PageData | null = null;
+    protected override afterRestore(): void {
+      // deepFreeze is the game's own helper.
+      if (!this.isAttributeRedacted('data') && this.data) deepFreeze(this.data);
+    }
+  }
+  ```
 - **Security**: Direct manipulation is prevented because players only ever
   call actions (validated, server-side) — never touch element methods
   themselves — not because of a command-layer indirection.
