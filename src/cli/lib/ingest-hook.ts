@@ -263,9 +263,12 @@ export async function installIngestHook(projectPath: string): Promise<IngestHook
   if (hook.state !== 'missing' && hook.state !== 'stale' && hook.state !== 'current' && hook.state !== 'not-executable') {
     return { result: 'skipped', hook };
   }
-  const { path, absolute } = hook;
-  const skipped = (state: 'unwritable' | 'not-owner' | 'not-executable'): IngestHookInstall => ({ result: 'skipped', hook: { state, path, absolute } });
+  return writeHook(hook.path, hook.absolute);
+}
 
+/** Write the current hook at `absolute`, executable, and say whether git will run it. */
+async function writeHook(path: string, absolute: string): Promise<IngestHookInstall> {
+  const skipped = (state: 'unwritable' | 'not-owner' | 'not-executable'): IngestHookInstall => ({ result: 'skipped', hook: { state, path, absolute } });
   try {
     await fs.mkdir(dirname(absolute), { recursive: true });
     await fs.writeFile(absolute, INGEST_PRE_COMMIT_HOOK, { mode: 0o755 });
@@ -284,51 +287,41 @@ export async function installIngestHook(projectPath: string): Promise<IngestHook
 
 const BY_HAND = 'or run boardsmith ingest-gaps yourself after transcription.';
 
+/** What each hook trouble says, so init and doctor use the same words for the same hook (#1321). */
+const ADVICE: { [S in IngestHookTrouble['state']]: (hook: Extract<IngestHookTrouble, { state: S }>) => string } = {
+  'no-git': () =>
+    `This folder has no git repository, so the ingest pre-commit hook is not installed. Run git init, then boardsmith doctor --fix, ${BY_HAND}`,
+  'git-failed': (hook) =>
+    `Could not check the ingest pre-commit hook: ${hook.reason}. Fix what git reports, then run boardsmith doctor --fix, ${BY_HAND}`,
+  'in-project': (hook) =>
+    `Left ${hook.path} alone: git runs hooks from a folder inside this project that git does not ignore (core.hooksPath), ` +
+    `so a hook written there would be committed and shared with everyone, and the ingest hook is not installed. ` +
+    `If that folder is meant to stay out of git, add it to .gitignore and run boardsmith doctor --fix, ${BY_HAND}`,
+  tracked: (hook) =>
+    `Left ${hook.path} alone: git runs it as the pre-commit hook and it is committed to this project, ` +
+    `so a change to it would be shared with everyone, and the ingest hook is not installed. ` +
+    `If its folder is meant to stay out of git, add it to .gitignore, run git rm --cached ${hook.path}, then boardsmith doctor --fix, ${BY_HAND}`,
+  outside: (hook) =>
+    `Left ${hook.path} alone: git runs hooks from a folder outside this project, which other repositories may share, ` +
+    `so the ingest hook is not installed. Run boardsmith ingest-gaps yourself after transcription.`,
+  foreign: (hook) =>
+    `Left ${hook.path} alone: BoardSmith did not write it, so the ingest hook is not installed. To use BoardSmith's, ` +
+    `move your commands elsewhere, delete ${hook.path} and run boardsmith doctor --fix, ${BY_HAND}`,
+  unreadable: (hook) =>
+    `Left ${hook.path} alone: could not read it, so BoardSmith cannot tell whether it wrote it, and the ingest hook is not installed. ` +
+    `Check that you can read it, then run boardsmith doctor --fix, ${BY_HAND}`,
+  unwritable: (hook) =>
+    `Could not write ${hook.path}, so the ingest hook is not installed. Check that you can write to its folder, then run boardsmith doctor --fix, ${BY_HAND}`,
+  'not-owner': (hook) =>
+    `Could not make ${hook.path} executable: it belongs to another user, so git skips it. ` +
+    `Ask them to make it executable or delete it, then run boardsmith doctor --fix, ${BY_HAND}`,
+  'not-executable': (hook) =>
+    `Wrote ${hook.path}, but git skips it: its execute bit did not take, as on a filesystem that keeps no permissions or is mounted noexec. ` +
+    `Move the project to a filesystem that lets files run, ${BY_HAND}`,
+};
+
 /** Why the ingest hook is not installed and what to do about it, in the same words from init and doctor (#1321). */
 export function ingestHookAdvice(hook: IngestHookTrouble): string {
-  switch (hook.state) {
-    case 'no-git':
-      return `This folder has no git repository, so the ingest pre-commit hook is not installed. Run git init, then boardsmith doctor --fix, ${BY_HAND}`;
-    case 'git-failed':
-      return `Could not check the ingest pre-commit hook: ${hook.reason}. Fix what git reports, then run boardsmith doctor --fix, ${BY_HAND}`;
-    case 'in-project':
-      return (
-        `Left ${hook.path} alone: git runs hooks from a folder inside this project that git does not ignore (core.hooksPath), ` +
-        `so a hook written there would be committed and shared with everyone, and the ingest hook is not installed. ` +
-        `If that folder is meant to stay out of git, add it to .gitignore and run boardsmith doctor --fix, ${BY_HAND}`
-      );
-    case 'tracked':
-      return (
-        `Left ${hook.path} alone: git runs it as the pre-commit hook and it is committed to this project, ` +
-        `so a change to it would be shared with everyone, and the ingest hook is not installed. ` +
-        `If its folder is meant to stay out of git, add it to .gitignore, run git rm --cached ${hook.path}, then boardsmith doctor --fix, ${BY_HAND}`
-      );
-    case 'outside':
-      return (
-        `Left ${hook.path} alone: git runs hooks from a folder outside this project, which other repositories may share, ` +
-        `so the ingest hook is not installed. Run boardsmith ingest-gaps yourself after transcription.`
-      );
-    case 'foreign':
-      return (
-        `Left ${hook.path} alone: BoardSmith did not write it, so the ingest hook is not installed. To use BoardSmith's, ` +
-        `move your commands elsewhere, delete ${hook.path} and run boardsmith doctor --fix, ${BY_HAND}`
-      );
-    case 'unreadable':
-      return (
-        `Left ${hook.path} alone: could not read it, so BoardSmith cannot tell whether it wrote it, and the ingest hook is not installed. ` +
-        `Check that you can read it, then run boardsmith doctor --fix, ${BY_HAND}`
-      );
-    case 'unwritable':
-      return `Could not write ${hook.path}, so the ingest hook is not installed. Check that you can write to its folder, then run boardsmith doctor --fix, ${BY_HAND}`;
-    case 'not-owner':
-      return (
-        `Could not make ${hook.path} executable: it belongs to another user, so git skips it. ` +
-        `Ask them to make it executable or delete it, then run boardsmith doctor --fix, ${BY_HAND}`
-      );
-    case 'not-executable':
-      return (
-        `Wrote ${hook.path}, but git skips it: its execute bit did not take, as on a filesystem that keeps no permissions or is mounted noexec. ` +
-        `Move the project to a filesystem that lets files run, ${BY_HAND}`
-      );
-  }
+  // TypeScript cannot pair a union member with its own entry, so the lookup is widened.
+  return (ADVICE[hook.state] as (hook: IngestHookTrouble) => string)(hook);
 }

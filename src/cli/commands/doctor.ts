@@ -448,19 +448,23 @@ function hookLine(f: DoctorFinding): string {
   return `${styleText('yellow', 'hook    ')} ${f.from}\n          ${f.detail}`;
 }
 
+/** The kinds whose report line has a function of its own. */
+const LINE_OF: Partial<Record<DoctorFindingKind, (f: DoctorFinding, rel: (p: string) => string) => string>> = {
+  'test-config-missing': configLine,
+  'test-run-collects-worktrees': configLine,
+  'ingest-hook-not-current': hookLine,
+  'ingest-hook-not-executable': hookLine,
+};
+
 /** One finding as a report line; `rel` makes a project path relative to where doctor was run. */
 function reportLine(f: DoctorFinding, rel: (p: string) => string): string {
+  const line = LINE_OF[f.kind];
+  if (line) return line(f, rel);
   switch (f.kind) {
     case 'move-conflict':
       return `${styleText('red', 'conflict')} ${rel(f.from)}\n          ${f.detail}`;
     case 'test-config-needs-edit':
       return `${styleText('red', 'edit    ')} ${rel(f.from)}\n          ${f.detail}`;
-    case 'test-config-missing':
-    case 'test-run-collects-worktrees':
-      return configLine(f, rel);
-    case 'ingest-hook-not-current':
-    case 'ingest-hook-not-executable':
-      return hookLine(f);
     case 'scratch-dir-not-ignored':
       return `${f.fixed ? styleText('green', 'ignored ') : styleText('yellow', 'untracked')} ${rel(f.from)} ${styleText('dim', '->')} adds ${GITIGNORE_ENTRY}`;
     default:
