@@ -1,5 +1,5 @@
 {
-  "revision": 268,
+  "revision": 269,
   "surfaceHash": "d615bc0c99f7b4b9",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2087,6 +2087,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A game callback handed a card the acting seat cannot see no longer writes text that seat reads (#1293): a pick's display and choice labels, disabled reasons, selection and action validate messages, function prompts and unavailable sentences become the engine's neutral text (\"Card #1\", a generic reason or refusal, no prompt), with the game's text in the dev log; rule outcomes are unchanged. The world fixture now offers a neighbour the looker cannot see. Platform: re-vendor; worlds get it then, and a table game when it is rebuilt. Not an ABI break."
+    },
+    {
+      "revision": 269,
+      "date": "2026-10-21",
+      "surfaceHash": "d615bc0c99f7b4b9",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A follow-up offer now labels each chooseElement/chooseElements arg the game pre-filled with element ids and gave no display for, by that pick's own label rule (its display(), else the element's notation or name; a hidden element gets its neutral label), so the action panel's chip no longer shows the raw id (Checkers' multi-jump showed '1873686213') (#1378). A display the game passes still wins. Platform: re-vendor; a table game gets it when it is rebuilt. Not an ABI break."
     }
   ]
 }
