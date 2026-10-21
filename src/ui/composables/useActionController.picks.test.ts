@@ -2045,7 +2045,7 @@ describe('useActionController picks', () => {
     expect(controller.isLoadingChoices.value).toBe(false);
   });
 
-  it("keeps loading while a later pick's fetch is out after an earlier pick's settles (#1367)", async () => {
+  it.each([false, true])("keeps loading while a later pick's fetch is out after an earlier pick's settles, both in one tick: %s (#1367)", async (oneTick) => {
     actionMetadata.value = {
       ...createTestMetadata(),
       board: {
@@ -2069,11 +2069,13 @@ describe('useActionController picks', () => {
     const filled = controller.fill('ship', 'dory');
     await vi.waitFor(() => expect(held.has('crew')).toBe(true));
     held.get('ship')?.({ success: true, choices: [{ value: 'dory', display: 'Dory' }, { value: 'skiff', display: 'Skiff' }] });
-    await started;
-    expect(controller.isLoadingChoices.value).toBe(true);
+    if (!oneTick) {
+      await started;
+      expect(controller.isLoadingChoices.value).toBe(true);
+    }
 
     held.get('crew')?.({ success: true, choices: [{ value: 'ann', display: 'Ann' }, { value: 'bo', display: 'Bo' }] });
-    await filled;
+    await Promise.all([started, filled]);
     expect(controller.isLoadingChoices.value).toBe(false);
   });
 
