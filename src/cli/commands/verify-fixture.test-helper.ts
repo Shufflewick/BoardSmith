@@ -95,7 +95,6 @@ export const CHECKS = {
 export const signoff = (project: string) =>
   recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: new Date('2026-09-29T12:00:00Z') });
 
-
 /** `checks` with a build that writes an uncommitted file into the project while verify runs. */
 export function dirtiesTheTree<T extends object>(dir: string, checks: T): T {
   return {
@@ -106,7 +105,6 @@ export function dirtiesTheTree<T extends object>(dir: string, checks: T): T {
     },
   };
 }
-
 
 /** Every check stood in for as passing, counting how many ran: for the tests about when verify runs at all. */
 export function countingChecks() {
