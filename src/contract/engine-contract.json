@@ -2006,7 +2006,7 @@
       "surfaceHash": "869ce5eb83bfb570",
       "payloadHash": "7418fecc0604b2a0",
       "formatHash": "ed115e27605f2ca7",
-      "summary": "A world declaration's filter, map, slice, concat, flat, flatMap, toSorted, toReversed, toSpliced or with on a read-only array now answers a plain array of the caller's own, so structuredClone and writes to it work as they do for a spread copy; its elements stay read-only (#1327). Platform: re-vendor so worlds that clone such an array (Lacuna Expanse NPC successor steps) stop failing with DataCloneError. Surface, payload and stored format unchanged; no game needs a rebuild."
+      "summary": "A world declaration's filter, map, slice, concat, flat, flatMap, toSorted, toReversed, toSpliced or with on a read-only array now answers a plain array of the caller's own, so writes to it work as they do for a spread copy, and structuredClone accepts it when its elements are plain values such as numbers and strings. Its elements stay read-only: an object or array element is still a projection, so cloning an array that holds one still fails with DataCloneError until those elements are copied (#1327, #1337). Platform: re-vendor so worlds that clone such an array (Lacuna Expanse NPC successor steps) stop failing with DataCloneError. Surface, payload and stored format unchanged; no game needs a rebuild."
     },
     {
       "revision": 259,

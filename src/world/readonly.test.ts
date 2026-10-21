@@ -532,6 +532,13 @@ describe("readOnlyProjection over arrays a standard method builds (#1327)", () =
     expect(here.tags).toEqual(["calm"]);
   });
 
+  it("still refuses structuredClone of a built array whose elements are objects, since they stay projections (#1337)", () => {
+    const projection = readOnlyProjection({ a: [{ n: 1 }] });
+
+    expect(() => structuredClone(projection.a.filter(() => true))).toThrow(DOMException);
+    expect(structuredClone(projection.a.map((item) => ({ ...item })))).toEqual([{ n: 1 }]);
+  });
+
   it("answers an ElementCollection's own filter and slice as the caller's, as its inherited map is", () => {
     const { game, here } = world();
     const rooms = readOnlyProjection(game).all(Room);
