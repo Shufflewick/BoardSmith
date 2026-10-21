@@ -2627,29 +2627,24 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
   }
 
-  /** A later pick was fetched against the cleared answer, so it is asked again (#1354). */
-  function dropLaterPickSnapshots(run: ActionStateSnapshot, selectionName: string): void {
-    const selections = run.metadata.selections;
-    const index = selections.findIndex(s => s.name === selectionName);
-    if (index === -1) return;
-    for (const later of selections.slice(index + 1)) forgetPickSnapshot(later.name);
+  /** Forget one pick's answer and any draft of it. */
+  function forgetAnswer(name: string): void {
+    delete currentArgs.value[name];
+    actionSnapshot.value?.collectedPicks.delete(name);
+    if (multiSelectDraft.value?.selectionName === name) multiSelectDraft.value = null;
+    if (pickDraft.value?.identity === draftIdentityFor(name)) pickDraft.value = null;
   }
 
   function clear(selectionName: string): void {
-    delete currentArgs.value[selectionName];
-
-    // Remove from snapshot
-    if (actionSnapshot.value) {
-      actionSnapshot.value.collectedPicks.delete(selectionName);
-      dropLaterPickSnapshots(actionSnapshot.value, selectionName);
-    }
-
-    // Drop an in-progress draft for this selection, if any
-    if (multiSelectDraft.value?.selectionName === selectionName) {
-      multiSelectDraft.value = null;
-    }
-    if (pickDraft.value?.identity === draftIdentityFor(selectionName)) {
-      pickDraft.value = null;
+    const selections = currentActionMeta.value?.selections ?? [];
+    const index = selections.findIndex(s => s.name === selectionName);
+    // Not a pick (a follow-up's server-bound arg, say), so the player has nothing to clear.
+    if (index === -1) return;
+    forgetAnswer(selectionName);
+    // Later picks were answered and fetched against the old value, so they are asked again (#1354, #1359).
+    for (const later of selections.slice(index + 1)) {
+      forgetAnswer(later.name);
+      forgetPickSnapshot(later.name);
     }
   }
 
