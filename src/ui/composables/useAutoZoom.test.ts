@@ -52,13 +52,16 @@ describe('computeFitZoom (AZ-1)', () => {
   });
 
   it("B20: 'width' ignores the height term entirely", () => {
-    // Same boxes as the constraining-axis case: height would force 1.5.
-    expect(computeFitZoom({ width: 500, height: 400 }, { width: 1000, height: 600 }, 'width')).toBe(2);
     // A board far taller than the space still fits at 1 when its width matches.
     expect(computeFitZoom({ width: 367, height: 4000 }, { width: 367, height: 600 }, 'width')).toBe(1);
     // Genuine horizontal overflow is still fitted — that is the one case where
     // scaling a pinned board down is correct.
     expect(computeFitZoom({ width: 800, height: 100 }, { width: 400, height: 600 }, 'width')).toBe(0.5);
+  });
+
+  it("#1369: 'width' never zooms a pinned board up, so a pin from a narrower region cannot overflow the region sideways", () => {
+    // The region widened and the pin has not caught up yet: zooming to 1000/950 would leave the board wider than the region once it does.
+    expect(computeFitZoom({ width: 950, height: 400 }, { width: 1000, height: 600 }, 'width')).toBe(1);
   });
 
   it("B20: 'width' still fits when the height boxes are unmeasurable", () => {
