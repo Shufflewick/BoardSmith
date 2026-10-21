@@ -13,6 +13,8 @@
  *   BS-4: wires up per board element — a late-mounting or remounting board
  *         (v-if / new game) still gets measured — and tears down observers
  *         on unmount.
+ *   BS-5: zoom is 1 outside a GameShell (the shell case is tested in
+ *         useAutoZoom.pinned-board.test.ts).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { defineComponent, h, ref, nextTick, type Ref } from 'vue';
@@ -152,6 +154,13 @@ describe('useBoardSize', () => {
     Object.defineProperty(regionB, 'clientWidth', { value: 100, configurable: true });
     window.dispatchEvent(new Event('resize'));
     expect(api.availWidth.value).toBe(640); // unchanged — listener is gone
+  });
+
+  it('BS-5: zoom is 1 outside a GameShell, where nothing zooms the board (#1332)', async () => {
+    const { api, wrapper } = mountBoardSize(ref(boardInRegion(fakeRegion(800))));
+    await nextTick();
+    expect(api.zoom.value).toBe(1);
+    wrapper.unmount();
   });
 
   it('cancels the pending first-frame measure on unmount (#868)', async () => {
