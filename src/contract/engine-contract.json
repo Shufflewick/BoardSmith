@@ -1,6 +1,6 @@
 {
   "revision": 264,
-  "surfaceHash": "c22d721d99782c44",
+  "surfaceHash": "d615bc0c99f7b4b9",
   "payloadHash": "7418fecc0604b2a0",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -2051,10 +2051,10 @@
     {
       "revision": 264,
       "date": "2026-10-21",
-      "surfaceHash": "c22d721d99782c44",
+      "surfaceHash": "d615bc0c99f7b4b9",
       "payloadHash": "7418fecc0604b2a0",
       "formatHash": "ed115e27605f2ca7",
-      "summary": "GameElement gains a protected afterRestore() hook and an engine-internal _afterRestoreSubtree(); the engine runs afterRestore on every element a restore or a world partition adoption rebuilds, once the restored tree is decoded, so a game can re-freeze attributes the stored bytes cannot carry (#1349)."
+      "summary": "GameElement gains a protected afterRestore() hook and an engine-internal _afterRestoreSubtree(); the engine runs afterRestore on every element a restore or a world partition adoption rebuilds, once the restored tree is decoded, so a game can re-freeze attributes the stored bytes cannot carry, and an adoption whose hook throws is undone (#1349)."
     }
   ]
 }
