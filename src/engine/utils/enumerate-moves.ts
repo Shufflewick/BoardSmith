@@ -587,6 +587,7 @@ function scratchCopy(source: Game) {
     game._ctx.sequence = sequence;
     game.setRandomState(randomState);
     if (flowState) game.restoreFlowState(flowState);
+    game._afterRestoreSubtree();
   };
 
   /** Put the copy back and open the action for `seat`, with no picks made. */

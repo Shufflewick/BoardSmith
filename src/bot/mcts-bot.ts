@@ -357,12 +357,11 @@ export class MCTSBot<G extends Game = Game> {
     // full-search one. For perfect-information games (no hidden zones) the
     // redacted view is byte-identical to the full view, so this is a no-op.
     this.rootSnapshot = this.captureSnapshot();
-    this.searchGame = this.restoreGame(this.rootSnapshot) as G;
-    this.dropSavedCopies();
     // #73: the first world. Every later iteration gets its own from
     // `restoreSearchGameToRoot`, so the tree's statistics average over worlds
     // rather than describing the one this root happened to draw.
-    this.sampleWorld();
+    this.searchGame = this.restoreGame(this.rootSnapshot, this.rootSnapshot.randomState, true) as G;
+    this.dropSavedCopies();
     const flowState = this.searchGame.getFlowState() ?? liveFlowState;
 
     // Cache UCT constant once per move (not per selectChild call)
@@ -1051,11 +1050,10 @@ export class MCTSBot<G extends Game = Game> {
    * args resolve by element id, and ids are stable across restore, so making
    * the tree path's moves on the fresh instance is sound (see `rebindArgs`).
    */
-  private resumeSearchGame(copy?: string): void {
+  private resumeSearchGame(copy?: string, sampleWorld = false): void {
     if (!this.rootSnapshot || !this.searchGame) return;
     const rngState = this.searchGame.getRandomState();
-    this.searchGame = this.restoreGame(copy === undefined ? this.rootSnapshot : JSON.parse(copy)) as G;
-    this.searchGame.setRandomState(rngState);
+    this.searchGame = this.restoreGame(copy === undefined ? this.rootSnapshot : JSON.parse(copy), rngState, sampleWorld) as G;
     this.resumedRandomState = rngState;
     // F-07: drop any baseline captured last iteration — it was cloned from the
     // now-discarded searchGame instance. It is re-captured fresh during this
@@ -1068,11 +1066,10 @@ export class MCTSBot<G extends Game = Game> {
    * a world sampler, after every step (see runSearch).
    */
   private restoreSearchGameToRoot(): void {
-    this.resumeSearchGame();
     // #73: a fresh world for the next iteration. Re-sampling HERE — per
     // playout, not per move — is what makes the tree's statistics describe the
     // seat's uncertainty instead of one hypothesis it happened to draw.
-    this.sampleWorld();
+    this.resumeSearchGame(undefined, true);
   }
 
   /**
@@ -1121,15 +1118,15 @@ export class MCTSBot<G extends Game = Game> {
 
   /**
    * Draw one world consistent with this seat's information set into
-   * `searchGame`, if the game declared a sampler (#73).
+   * `game`, if the game declared a sampler (#73).
    *
    * No-op for every game without one, which is why a game with no hidden state
    * pays nothing for this feature existing.
    */
-  private sampleWorld(): void {
-    if (!this.determinize || !this.searchGame) return;
+  private sampleWorld(game: Game): void {
+    if (!this.determinize) return;
     applyDeterminization(
-      this.searchGame,
+      game,
       this.playerIndex,
       this.determinize,
       () => this.rng.next(),
@@ -1395,8 +1392,12 @@ export class MCTSBot<G extends Game = Game> {
    * recorded in action history, so a root carrying such a mutation lost it on
    * every clone and the bot searched from a wrong position. Adopting the
    * serialized tree keeps those mutations.
+   *
+   * `randomState` is the position the search game draws from next, and
+   * `sampleWorld` draws a fresh world into it; both come before the elements'
+   * `afterRestore` hooks, which run last so they see the whole copy (#1352).
    */
-  private restoreGame(snapshot: GameStateSnapshot): Game {
+  private restoreGame(snapshot: GameStateSnapshot, randomState = snapshot.randomState, sampleWorld = false): Game {
     // The game's own constructor options, custom ones (playerConfigs) and its
     // element id key included, with the search game's own seed (#776). Every
     // snapshot this bot restores is one it captured itself, and
@@ -1431,8 +1432,8 @@ export class MCTSBot<G extends Game = Game> {
       game._ctx.sequence = snapshot.sequence;
     }
 
-    // Restore the snapshot's RNG position: the search game's own, never the live game's (#776).
-    game.setRandomState(snapshot.randomState);
+    // The search game's own RNG position, never the live game's (#776).
+    game.setRandomState(randomState);
 
     // Restore the authoritative flow position. Every element the flow holds
     // (flow variables and frame data, `forEach` items included) was written as
@@ -1448,6 +1449,8 @@ export class MCTSBot<G extends Game = Game> {
       game.restoreFlowState(snapshot.flowState, snapshot.hiddenIdRemap);
     }
 
+    if (sampleWorld) this.sampleWorld(game);
+    game._afterRestoreSubtree();
     return game;
   }
 

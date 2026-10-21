@@ -473,11 +473,13 @@ element tree, not a log of operations that produced it.
   is not (a frozen object, for one) comes back without it. An element class
   re-applies such a thing in `protected override afterRestore()`, which runs on
   every element each time a restore rebuilds it (cold restore, undo, rewind, a
-  bot's search copy, a world partition adopted from storage), once the whole
-  restored tree is decoded (in a world, a reference into a partition that is
-  not resident stays unresolved). It must not change a saved value, and in a per-seat
-  copy it asks `isAttributeRedacted(key)` before reading an attribute the seat
-  may not have been told:
+  bot's search copy, a world partition adopted from storage). It runs last,
+  once the whole restored tree is decoded and the turn order and random state
+  are back, and in a bot's search copy once its `determinize` sampler has filled
+  in the hidden values, so those come back frozen too (in a world, a reference
+  into a partition that is not resident stays unresolved). It must not change a
+  saved value, and in a per-seat copy it asks `isAttributeRedacted(key)` before
+  reading an attribute the seat may not have been told:
 
   ```typescript
   class Page extends Space<MyGame> {

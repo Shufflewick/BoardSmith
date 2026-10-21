@@ -5324,6 +5324,10 @@ export class Game<
    * state-authoritative restore (runner, bot, scratch copies), so that direct
    * tree mutations (e.g. `Piece.putInto` inside a completed pending action,
    * which is not recorded in actionHistory) survive a snapshot round-trip.
+   *
+   * It does not run the elements' `afterRestore` hooks: the caller runs
+   * `_afterRestoreSubtree()` once it has also put back the sequence, random
+   * state and flow, so every hook sees the whole restored game (#1352).
    */
   loadSerializedState(
     json: ReturnType<Game['toJSON']>,
@@ -5586,7 +5590,11 @@ export class Game<
     this.pile.resolveElementReferences(this);
     // `_`-prefixed, so not walked above; the buffer holds elements live, as `toJSON` expects (#752).
     for (const event of this._animationEvents) event.data = decodeValue(event.data, this) as Record<string, unknown>;
-    this._afterRestoreSubtree();
+  }
+
+  /** Runs `afterRestore` over the tree and the pile; the caller of `loadSerializedState` calls it last, once everything it restores is back (#1352). */
+  override _afterRestoreSubtree(): void {
+    super._afterRestoreSubtree();
     this.pile._afterRestoreSubtree();
   }
 }
