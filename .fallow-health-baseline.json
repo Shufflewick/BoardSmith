@@ -22,11 +22,6 @@
         "count": 1
       }
     },
-    "src/bot-trainer/weight-evolver.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/bot/determinization.ts": {
       "complexity_moderate": {
         "count": 1

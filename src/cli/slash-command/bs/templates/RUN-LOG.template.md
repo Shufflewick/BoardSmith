@@ -23,7 +23,7 @@
      Historical entries from the old Pipeline template stay unchanged, with unknown routing
      facts left unrecorded and any original "never launched" Detail preserved. ledger-check
      recognizes them only with pre-#454 git provenance; all new dispatches need the fields below.
-     See routing.md "The Run Log" and docs/migration-guide.md (#710). Historical entries supply
+     See routing.md "The Run Log" and node_modules/boardsmith/docs/migration-guide.md (#710). Historical entries supply
      no routing or retry count to current work and cannot be a new retry or review's source.
 
      CHECKED AS CODE: `boardsmith ledger-check` fails when a Dispatched at or Finished at is not a

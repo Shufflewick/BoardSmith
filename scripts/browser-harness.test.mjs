@@ -28,7 +28,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { browserScripts, recordWorldFrames } from './browser-harness.mjs';
+import { browserScripts, recordWorldFrames, runBrowserRegression } from './browser-harness.mjs';
 import { BROWSER_SUITE_CONFIG } from '../src/cli/commands/test.ts';
 
 const SCRIPTS = dirname(fileURLToPath(import.meta.url));
@@ -249,6 +249,14 @@ describe('#922: one recorder for the world socket\'s frames', () => {
   it.each(browserScripts())('%s records socket frames through recordWorldFrames', (name) => {
     expect(read(name), `${name} listens for socket frames itself; use recordWorldFrames`).not.toMatch(
       /framesent|framereceived/,
+    );
+  });
+});
+
+describe('#1318: a table fixture is `true` or `{ files }`', () => {
+  it.each([[{}], [{ file: {} }], [{ files: null }]])('refuses table: %j before it serves anything', async (table) => {
+    await expect(runBrowserRegression({ script: 'x-browser.mjs', table }, () => 0)).rejects.toThrow(
+      'x-browser.mjs: `table` is `true` or `{ files: { <path in the project>: <text> } }`',
     );
   });
 });

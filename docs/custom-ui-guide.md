@@ -1112,7 +1112,7 @@ is scrolled; a `position: absolute; inset: 0` wrapper fills that layer), or set
 Then no card is drawn, but the shell still announces the result. Either form
 works in a template: `provides-own-game-over-ui` or `providesOwnGameOverUi`.
 (Every public component prop is named so its kebab-case form camelizes back to
-it, which `src/ui/public-prop-names.test.ts` holds, #433.)
+it, which `src/ui/public-prop-names.test.ts` in the BoardSmith repository holds, #433.)
 
 **When it is shown.** By default, the moment the flow completes. A board that
 holds its result back on purpose (until the player has watched a replay of
@@ -1389,7 +1389,7 @@ async function onCardClick(card: GameViewElement) {
   if (!isCardPlayable(card.id)) return;
 
   // If in wizard mode, fill the selection
-  if (boardInteraction?.isSelectableElement(card)) {
+  if (boardInteraction.isSelectableElement(card)) {
     boardInteraction.triggerElementSelect(card);
     return;
   }
@@ -1422,8 +1422,8 @@ async function drawCard() {
         class="card"
         :class="{
           playable: isCardPlayable(card.id),
-          highlighted: boardInteraction?.isHighlighted(card),
-          selected: boardInteraction?.isSelected(card),
+          highlighted: boardInteraction.isHighlighted(card),
+          selected: boardInteraction.isSelected(card),
         }"
         @click="onCardClick(card)"
       >

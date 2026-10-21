@@ -18,7 +18,7 @@ The reference for everything used here is [boardsmith/sim](./api/sim.md).
 Start a project with no UI:
 
 ```bash
-npx boardsmith init bazaar --sim
+boardsmith init bazaar --sim
 cd bazaar
 npm install
 ```
@@ -508,5 +508,5 @@ Bazaar above, 3,000 games at each of 2, 4 and 6 players, is timed by
 has the latest measurement.
 
 The code blocks on this page are run, in order, by
-`docs/balance-simulator.test.ts`; keep the `<!-- doc-test: ... -->` comment
-in front of each one.
+`docs/balance-simulator.test.ts` in the BoardSmith repository (an install does
+not carry it); keep the `<!-- doc-test: ... -->` comment in front of each one.

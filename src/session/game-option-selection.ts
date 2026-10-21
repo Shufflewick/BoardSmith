@@ -28,13 +28,14 @@ import type { GamePreset } from './types.js';
  * Every option name a player's selection may not use: each `GameOptions`
  * field, and the fields the session or the dev host adds to a game's
  * constructor options from the lobby (`playerConfigs`, `playerOptions`,
- * `playerIsBot`) or from the persistence store.
+ * `playerIsBot`, `exclusiveSeats`) or from the persistence store.
  */
 export const HOST_OWNED_GAME_OPTION_KEYS: readonly string[] = [
   ...ENGINE_OWNED_GAME_OPTION_KEYS,
   'playerConfigs',
   'playerOptions',
   'playerIsBot',
+  'exclusiveSeats',
   PERSIST_KEY,
 ];
 
@@ -198,19 +199,19 @@ function plain(n: number): string {
  * that does not grow with the distance from the base (0.3 is not an exact
  * multiple of 0.1 in binary, but 1000000001 is plainly not a multiple of 2).
  */
-function numberBoundsProblem(def: NumberOption, n: number): string | undefined {
+export function numberBoundsProblem(def: Pick<NumberOption, 'min' | 'max' | 'step'>, n: number): string | undefined {
   return rangeProblem(def, n) ?? stepProblem(def, n);
 }
 
 /** The option's range, said for a message, if `n` is outside it. */
-function rangeProblem({ min, max }: NumberOption, n: number): string | undefined {
+function rangeProblem({ min, max }: Pick<NumberOption, 'min' | 'max'>, n: number): string | undefined {
   if ((min === undefined || n >= min) && (max === undefined || n <= max)) return undefined;
   if (min === undefined) return `at most ${plain(max as number)}`;
   return max === undefined ? `at least ${plain(min)}` : `between ${plain(min)} and ${plain(max)}`;
 }
 
 /** The option's step, said for a message, if `n` is off it (see `numberBoundsProblem`). */
-function stepProblem({ min, step }: NumberOption, n: number): string | undefined {
+function stepProblem({ min, step }: Pick<NumberOption, 'min' | 'step'>, n: number): string | undefined {
   if (step === undefined) return undefined;
   const base = min ?? 0;
   const k = Math.round((n - base) / step);

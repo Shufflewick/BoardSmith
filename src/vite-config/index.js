@@ -1,3 +1,4 @@
+import { resolve, sep } from 'node:path';
 import vue from '@vitejs/plugin-vue';
 import { configDefaults, mergeConfig } from 'vitest/config';
 
@@ -25,7 +26,9 @@ import { configDefaults, mergeConfig } from 'vitest/config';
  *   because setting `exclude` at all replaces vitest's defaults.
  * - `boardsmith.json` as a rerun trigger, so `vitest --changed` runs the whole suite when it changes
  *   (#1211). No test imports it, but `TestGame` and the headless session read game options from it.
- *   vitest's own triggers are spread in for the same reason as `exclude`.
+ *   Every trigger, vitest's own included, is anchored at the project root (#1307): vitest matches
+ *   triggers against absolute paths and its `**` skips dot folders, so an unanchored trigger missed
+ *   a game checked out under `.worktrees/`, and matched other checkouts' and folders' files.
  *
  * `boardsmith test`, `constraint-check`, `chunk-merge` and `verify` refuse a project whose config is
  * not built with this (`testRunScopeProblem`).
@@ -40,14 +43,29 @@ import { configDefaults, mergeConfig } from 'vitest/config';
 export function defineGameViteConfig(overrides = {}) {
   return mergeConfig(
     {
-      plugins: [vue()],
+      plugins: [vue(), rerunTriggers()],
       resolve: { dedupe: ['vue'] },
       test: {
         exclude: [...configDefaults.exclude, '.boardsmith/**', '.worktrees/**', '**/tests/browser/**'],
-        // vitest matches absolute paths and `**` skips dot folders, so `*(*/|.*/)` lets it pass the `.worktrees/` verify runs in.
-        forceRerunTriggers: [...configDefaults.forceRerunTriggers, '**/*(*/|.*/)boardsmith.json'],
       },
     },
     overrides,
   );
+}
+
+/**
+ * vitest's rerun triggers and the project's own `boardsmith.json`, each under the project root
+ * (vite's `root`, not a `test.root` inside it), which a plugin learns from the config it is handed.
+ *
+ * @returns {import('vite').Plugin}
+ */
+function rerunTriggers() {
+  return {
+    name: 'boardsmith:rerun-triggers',
+    config(config) {
+      // vitest compares forward-slash paths, so a Windows root is written with them before glob characters are escaped.
+      const root = resolve(config.root || process.cwd()).split(sep).join('/').replace(/[\\*?[\]{}()!+@|]/g, '\\$&');
+      return { test: { forceRerunTriggers: [...configDefaults.forceRerunTriggers, 'boardsmith.json'].map((trigger) => `${root}/${trigger}`) } };
+    },
+  };
 }

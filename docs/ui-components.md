@@ -2060,10 +2060,10 @@ Show feedback while actions are processing:
   <!-- Disable board interactions while executing -->
   <div
     class="game-board"
-    :class="{ 'is-loading': actionController.isExecuting }"
+    :class="{ 'is-loading': actionController.isExecuting.value }"
   >
     <!-- Loading overlay -->
-    <div v-if="actionController.isExecuting" class="loading-overlay">
+    <div v-if="actionController.isExecuting.value" class="loading-overlay">
       <span class="spinner" />
     </div>
 
@@ -2072,11 +2072,11 @@ Show feedback while actions are processing:
       v-for="action in availableActions"
       :key="action"
       v-disabled-reason="
-        disabledActions?.[action] || (actionController.isExecuting && 'Finishing your last move.')
+        disabledActions?.[action] || (actionController.isExecuting.value && 'Finishing your last move.')
       "
       @click="executeAction(action)"
     >
-      {{ actionController.isExecuting ? 'Working...' : action }}
+      {{ actionController.isExecuting.value ? 'Working...' : action }}
     </button>
   </div>
 </template>
@@ -2520,7 +2520,7 @@ async function onCardClick(card: any) {
   if (!props.availableActions.includes('play')) return;
 
   // Check if card is selectable via board interaction (wizard mode active)
-  if (boardInteraction?.isSelectableElement(card)) {
+  if (boardInteraction.isSelectableElement(card)) {
     boardInteraction.triggerElementSelect(card);
   } else {
     // Direct action execution
@@ -2547,9 +2547,9 @@ watch(() => props.gameView, (newView, oldView) => {
         :key="card.id"
         class="card"
         :class="{
-          'highlighted': boardInteraction?.isHighlighted(card),
-          'selected': boardInteraction?.isSelected(card),
-          'selectable': boardInteraction?.isSelectableElement(card),
+          'highlighted': boardInteraction.isHighlighted(card),
+          'selected': boardInteraction.isSelected(card),
+          'selectable': boardInteraction.isSelectableElement(card),
         }"
         :data-element-id="card.id"
         @click="onCardClick(card)"

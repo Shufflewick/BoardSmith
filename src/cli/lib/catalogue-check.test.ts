@@ -207,6 +207,88 @@ const [afterLinkedGameMoves, afterTreeInstallChanges] = await (async () => {
   return [moved, statusOf(await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue }))];
 })();
 
+describe("a game's branch paired with the BoardSmith branch (#1322)", () => {
+  const BRANCH = 'i975-notice-boxes';
+
+  /** A game whose main fails and whose branch `BRANCH` fixes it, left checked out on main. */
+  async function pairedGame(fx: ReturnType<typeof fixture>, slug: string): Promise<{ dir: string; fixed: string }> {
+    const dir = await makeGame(fx, slug, { files: { BROKEN: 'calls applyNoticeWrites the old way' } });
+    git(dir, 'switch', '-q', '-c', BRANCH);
+    rmSync(join(dir, 'BROKEN'));
+    const fixed = commitAll(dir, 'pass declaredNotices');
+    git(dir, 'switch', '-q', 'main');
+    return { dir, fixed };
+  }
+
+  it("checks a game's branch named as the tree's branch instead of its main, and every other game on main", async () => {
+    const fx = fixture();
+    await makeTree(fx.tree);
+    git(fx.tree, 'switch', '-q', '-c', BRANCH);
+    const mud = await pairedGame(fx, 'example-mud');
+    await makeGame(fx, 'hex');
+
+    const run = await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue });
+
+    expect(statusOf(run)).toEqual({ 'example-mud': 'passed', hex: 'passed' });
+    expect(run.results.find((r) => r.slug === 'example-mud')).toMatchObject({ ref: BRANCH, commit: mud.fixed });
+    expect(run.results.find((r) => r.slug === 'hex')).toMatchObject({ ref: 'main' });
+  });
+
+  it("links a catalogue game at its paired branch too", async () => {
+    const fx = fixture();
+    await makeTree(fx.tree);
+    git(fx.tree, 'switch', '-q', '-c', BRANCH);
+    await pairedGame(fx, 'legacy');
+    await makeGame(fx, 'legacy-world', { links: ['legacy'] });
+
+    const run = await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue });
+
+    expect(statusOf(run)).toEqual({ legacy: 'passed', 'legacy-world': 'passed' });
+  });
+
+  it("checks the paired branch on the detached merge commit a merge validates, which merges the tree's branch (#1322 review F1)", async () => {
+    const fx = fixture();
+    await makeTree(fx.tree);
+    git(fx.tree, 'switch', '-q', '-c', BRANCH);
+    await writeFiles(fx.tree, { 'src/engine.ts': 'export const declared = true;' });
+    commitAll(fx.tree, 'the BoardSmith change');
+    await pairedGame(fx, 'example-mud');
+    git(fx.tree, 'switch', '-q', '--detach', 'main');
+    git(fx.tree, 'merge', '-q', '--no-ff', '-m', `Merge branch '${BRANCH}'`, BRANCH);
+
+    const run = await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue });
+
+    expect(run.results).toEqual([expect.objectContaining({ ref: BRANCH, status: 'passed' })]);
+  });
+
+  it('lists every repository used at its paired branch, a skipped one a game links to included (#1322 review F3)', async () => {
+    const fx = fixture();
+    await makeTree(fx.tree);
+    git(fx.tree, 'switch', '-q', '-c', BRANCH);
+    const legacy = await pairedGame(fx, 'legacy');
+    await makeGame(fx, 'legacy-world', { links: ['legacy'] });
+
+    const run = await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue, skip: { legacy: 'slow (#1)' } });
+
+    expect(statusOf(run)).toEqual({ 'legacy-world': 'passed' });
+    expect(run.paired).toEqual([{ slug: 'legacy', dir: legacy.dir, ref: BRANCH, commit: legacy.fixed }]);
+  });
+
+  it("checks main when the tree is on another branch or on none", async () => {
+    const fx = fixture();
+    await makeTree(fx.tree);
+    await pairedGame(fx, 'example-mud');
+
+    git(fx.tree, 'switch', '-q', '-c', 'i1-unrelated');
+    const onOther = await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue });
+    git(fx.tree, 'switch', '-q', '--detach');
+    const detached = await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue });
+
+    expect(onOther.results).toEqual([expect.objectContaining({ ref: 'main', status: 'failed' })]);
+    expect(detached.results).toEqual([expect.objectContaining({ ref: 'main', status: 'failed' })]);
+  });
+});
+
 describe('the cache of passing games (#591)', () => {
   it('keeps passes in the git common directory of the tree', async () => {
     const fx = fixture();
