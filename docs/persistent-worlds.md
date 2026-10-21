@@ -509,10 +509,12 @@ differently each time -- or write into a partition nothing checkpointed.
 leaves out a required pick, or sends `null` for one, is refused with
 `missing-pick` before any round reads its args. An optional pick may still be
 absent. A pick re-asked with earlier answers bound is refused the same way when
-it leaves out a required pick BEFORE it, so a selection's own `needs:` always
-sees the picks before it. A quote is neither: its rounds, the execute round
-included, run on the player's draft, so any pick not chosen yet is absent there
-and a round a quote walks must not assume one is bound.
+it leaves out a required pick BEFORE it, so a selection's own `needs:` sees the
+picks before it when the pick is re-asked. The offer is not: it is enumerated
+with nothing bound, so there every round runs with every pick absent (#1345).
+A quote is not checked either: its rounds, the execute round included, run on
+the player's draft, so any pick not chosen yet is absent there and a round a
+quote walks must not assume one is bound.
 
 **This replaces the fixpoint for the write path, and it has no ceiling.** There
 is no number to tune and no unsettled refusal to explain, because the walk's

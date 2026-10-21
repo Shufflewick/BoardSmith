@@ -1606,14 +1606,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
     now: number,
   ): readonly string[] {
     const definition = this.offerableAction(action);
-    return this.unmetThrough(
-      player,
-      definition,
-      this.selectionIndex(definition, selection),
-      this.selectionIndex(definition, selection),
-      args,
-      now,
-    );
+    const index = this.selectionIndex(definition, selection);
+    return this.unmetThrough(player, definition, index, index, args, now);
   }
 
   /**
