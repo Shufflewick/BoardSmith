@@ -36,7 +36,7 @@ import {
   type BoardInteraction,
 } from '../../composables/useBoardInteraction.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
-import type { EnrichedActionMetadata } from '../../composables/useActionControllerTypes.js';
+import type { EnrichedActionMetadata, PickStepResponse } from '../../composables/useActionControllerTypes.js';
 
 async function flush(n = 8): Promise<void> {
   for (let i = 0; i < n; i++) {
@@ -94,14 +94,25 @@ const harvestAction: EnrichedActionMetadata = {
 // test is the one the test performed.
 const waitAction: EnrichedActionMetadata = { name: 'wait', prompt: 'Wait', selections: [] };
 
-const AVAILABLE = ['move', 'tend', 'harvest', 'wait'];
-const METADATA = { move: moveAction, tend: tendAction, harvest: harvestAction, wait: waitAction };
+// A pick whose onSelect makes the server answer it, after one the player can clear.
+const boardAction: EnrichedActionMetadata = {
+  name: 'board',
+  prompt: 'Board',
+  selections: [
+    { name: 'ship', type: 'choice', prompt: 'Ship', choices: [{ value: 'dory', display: 'Dory' }, { value: 'skiff', display: 'Skiff' }] },
+    { name: 'crew', type: 'choice', prompt: 'Crew', hasOnSelect: true, choices: [{ value: 'ann', display: 'Ann' }, { value: 'bo', display: 'Bo' }] },
+  ],
+};
+
+const AVAILABLE = ['move', 'tend', 'harvest', 'wait', 'board'];
+const METADATA = { move: moveAction, tend: tendAction, harvest: harvestAction, wait: waitAction, board: boardAction };
 
 interface Harness {
   board: BoardInteraction;
   controller: ReturnType<typeof useActionController>;
   wrapper: ReturnType<typeof mount>;
   sendAction: ReturnType<typeof vi.fn>;
+  cancelPendingAction: ReturnType<typeof vi.fn>;
 }
 
 /**
@@ -109,12 +120,13 @@ interface Harness {
  * shell creates the board substrate and runs the bridge, and PlayShell mounts
  * the panel inside it.
  */
-function mountHarness(): Harness {
+function mountHarness(pickStep?: () => Promise<PickStepResponse>): Harness {
   const sendAction = vi.fn().mockResolvedValue({ success: true });
+  const cancelPendingAction = vi.fn().mockResolvedValue(undefined);
   const fetchPickChoices = vi.fn((action: string, selectionName: string) =>
     selectionName === 'plot'
       ? Promise.resolve({ success: true, validElements: action === 'harvest' ? [{ id: 21 }, { id: 22 }] : [{ id: 11 }, { id: 12 }] })
-      : Promise.resolve({ success: true, choices: COMPASS }),
+      : Promise.resolve({ success: true, choices: action === 'board' ? boardAction.selections.find(s => s.name === selectionName)?.choices : COMPASS }),
   );
 
   let board!: BoardInteraction;
@@ -134,6 +146,8 @@ function mountHarness(): Harness {
         // Matches GameShell: once every pick is filled the action goes.
         autoExecute: true,
         fetchPickChoices,
+        pickStep,
+        cancelPendingAction,
       });
       provide(GAME_CONTEXT_KEYS.actionController, controller);
       useBoardActionBridge({
@@ -157,7 +171,7 @@ function mountHarness(): Harness {
   });
 
   const wrapper = mount(Host);
-  return { board, controller, wrapper, sendAction };
+  return { board, controller, wrapper, sendAction, cancelPendingAction };
 }
 
 describe('ActionPanel start leaves the board wired (#185)', () => {
@@ -282,6 +296,32 @@ describe("ActionPanel's post-execute clear leaves a newer action alone (#445)", 
     expect(board.currentAction).toBeNull();
     // Only what a click can start is left on the board (#1192).
     expect(board.validElements.map(e => e.id)).toEqual([11, 12, 21, 22]);
+    wrapper.unmount();
+  });
+});
+
+describe("ActionPanel's clear of a pick while a later pick's step is out (#1364)", () => {
+  it('keeps the action, its picks and the board, as the controller does', async () => {
+    let answer!: (reply: PickStepResponse) => void;
+    const { board, controller, wrapper, cancelPendingAction } = mountHarness(
+      () => new Promise<PickStepResponse>(resolve => { answer = resolve; }),
+    );
+    await flush();
+    await controller.start('board');
+    await controller.fill('ship', 'dory');
+    const crewFill = controller.fill('crew', 'ann');
+    await flush();
+
+    await wrapper.find('.clear-selection-btn').trigger('click');
+    await flush();
+
+    expect(controller.currentAction.value).toBe('board');
+    expect(board.currentAction).toBe('board');
+    expect(cancelPendingAction).not.toHaveBeenCalled();
+    expect(controller.lastError.value).toBe('Still waiting for the server to answer your last pick.');
+    answer({ success: true });
+    await crewFill;
+    expect(controller.currentArgs.value).toEqual({ ship: 'dory', crew: 'ann' });
     wrapper.unmount();
   });
 });
