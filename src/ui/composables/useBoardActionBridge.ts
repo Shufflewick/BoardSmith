@@ -621,8 +621,10 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   });
 
   // The board marks the last standing choice answer, however it was given: a panel or board click, a custom UI's
-  // fill(), auto-fill, a prefill, or a clear() taking later answers back (#1371, #1377, #1380).
+  // fill(), auto-fill, a prefill, or a clear() taking later answers back (#1371, #1377, #1380). None while history is
+  // on screen, as the action is hidden then, so a held action's mark comes back on return (#1381).
   const answeredMark = computed(() => {
+    if (!shownAction.value) return null;
     const args = currentArgs.value;
     const marks = (currentActionMeta.value?.selections ?? [])
       .filter(s => s.type === 'choice' && s.name in args)

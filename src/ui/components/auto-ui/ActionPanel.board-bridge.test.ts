@@ -26,7 +26,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { defineComponent, h, nextTick, provide, ref, watch } from 'vue';
+import { defineComponent, h, nextTick, provide, ref, watch, type Ref } from 'vue';
 import ActionPanel from './ActionPanel.vue';
 import { useActionController } from '../../composables/useActionController.js';
 import { useBoardActionBridge } from '../../composables/useBoardActionBridge.js';
@@ -147,6 +147,7 @@ interface Harness {
   wrapper: ReturnType<typeof mount>;
   sendAction: ReturnType<typeof vi.fn>;
   cancelPendingAction: ReturnType<typeof vi.fn>;
+  isViewingHistory: Ref<boolean>;
 }
 
 /**
@@ -165,6 +166,7 @@ function mountHarness(pickStep?: () => Promise<PickStepResponse>, heldFollowUp?:
 
   let board!: BoardInteraction;
   let controller!: ReturnType<typeof useActionController>;
+  const isViewingHistory = ref(false);
 
   const Host = defineComponent({
     name: 'BridgeHost',
@@ -193,7 +195,7 @@ function mountHarness(pickStep?: () => Promise<PickStepResponse>, heldFollowUp?:
         actionMetadata: ref(METADATA),
         availableActions: ref(AVAILABLE),
         disabledActions: ref({}),
-        isViewingHistory: ref(false),
+        isViewingHistory,
         runnerIdentity: ref(undefined),
       });
       return () =>
@@ -206,7 +208,7 @@ function mountHarness(pickStep?: () => Promise<PickStepResponse>, heldFollowUp?:
   });
 
   const wrapper = mount(Host);
-  return { board, controller, wrapper, sendAction, cancelPendingAction };
+  return { board, controller, wrapper, sendAction, cancelPendingAction, isViewingHistory };
 }
 
 describe('ActionPanel start leaves the board wired (#185)', () => {
@@ -636,6 +638,36 @@ describe('The board marks a chosen choice however it was answered (#1380)', () =
     expect(controller.currentArgs.value).toEqual({ direction: 'north', plot: 11 });
     expect(board.selectedElement).toEqual({ notation: 'n' });
     expect(board.hoveredChoice).toBeNull();
+    wrapper.unmount();
+  });
+});
+
+describe('Coming back from history puts back the board mark of an action the server holds (#1381)', () => {
+  it('marks the standing choice again once the live game is back on screen', async () => {
+    const { board, controller, wrapper, isViewingHistory } = mountHarness(() => Promise.resolve({ success: true }), {
+      action: 'steer',
+      args: {},
+      display: {},
+      metadata: steerAction,
+    });
+    await flush();
+    await controller.fill('direction', 'north');
+    await flush();
+    expect(controller.pendingOnServer.value).toBe(true);
+    expect(board.selectedElement).toEqual({ notation: 'n' });
+
+    isViewingHistory.value = true;
+    await flush();
+    expect(board.currentAction).toBeNull();
+    expect(board.selectedElement).toBeNull();
+
+    isViewingHistory.value = false;
+    await flush();
+
+    expect(controller.currentArgs.value).toEqual({ direction: 'north' });
+    expect(wrapper.find('.selected-value .value-display').text()).toBe('North');
+    expect(board.currentPickName).toBe('plot');
+    expect(board.selectedElement).toEqual({ notation: 'n' });
     wrapper.unmount();
   });
 });
