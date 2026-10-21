@@ -498,8 +498,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     repeatingState.value = null;
     actionSnapshot.value = null;
     pendingOnServer.value = false;
-    // A fetch still in flight for the torn-down action no longer ends the
-    // loading state (#663), so it ends here.
+    // The torn-down action's fetches are no longer in use (#663), so loading ends here.
     isLoadingChoices.value = false;
   }
 
@@ -1109,6 +1108,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // await, so joining a fetch costs a caller no extra microtask.
     const forget = () => {
       if (fetches.get(selectionName)?.request === request) fetches.delete(selectionName);
+      // Loading ends once no fetch of the current action still in use is out (#663, #1358, #1367).
+      if (!fetchInUse()) isLoadingChoices.value = false;
     };
     fetches.set(selectionName, { request, askedAgainst });
     void request.then(forget, forget);
@@ -1127,6 +1128,14 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   /** Each answer is stored as a new object, so one cleared or changed since is a different one. */
   function sameAnswers(a: (CollectedPick | undefined)[], b: (CollectedPick | undefined)[]): boolean {
     return a.length === b.length && a.every((pick, i) => pick === b[i]);
+  }
+
+  /** Whether a choice fetch of the current action is out and not dropped for a changed earlier answer. */
+  function fetchInUse(): boolean {
+    for (const [name, out] of actionSnapshot.value?.choiceFetches ?? []) {
+      if (sameAnswers(out.askedAgainst, answersBefore(name))) return true;
+    }
+    return false;
   }
 
   /** A refused re-ask leaves no answer to an earlier question in place of its own (#1354). */
@@ -1217,10 +1226,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       );
       forgetPickSnapshot(selectionName);
       setError(describeUndescribablePick(selection));
-    } finally {
-      // Only a request of the current action ends its loading state (#663), and not while one asked against newer answers is out (#1358).
-      const out = actionSnapshot.value?.choiceFetches.get(selectionName);
-      if (!actionMovedOn(seq) && (!out || sameAnswers(out.askedAgainst, askedAgainst))) isLoadingChoices.value = false;
     }
     return true;
   }
