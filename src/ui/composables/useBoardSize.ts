@@ -43,6 +43,8 @@
  * The pin is deliberately measured WITHOUT dividing out the applied zoom:
  * compensating would feed the pinned width back into useAutoZoom's
  * natural-size measurement mid-settle and the two would chase each other.
+ * A board that fits more of itself to the region (its height, say) reads the
+ * returned `zoom` to do that conversion (#1332).
  */
 import { ref, computed, watch, onBeforeUnmount, type Ref } from 'vue';
 import { registerBoardRegionPin } from './boardRegionPin.js';
@@ -51,7 +53,11 @@ export function useBoardSize(boardEl: Ref<HTMLElement | null>) {
   // Declare the model to the shell for this scope's lifetime. Done at call
   // time, not on first measurement: calling useBoardSize IS the declaration,
   // and the fit must not depend on which composable measured first.
-  registerBoardRegionPin();
+  /** The zoom GameShell applies to the board (the controls-menu slider or
+   *  the fit), 1 outside a shell. The region is not zoomed and the board is,
+   *  so a board fitting itself to the region divides region pixels by this.
+   *  Watch it to re-fit: a zoom change resizes nothing a ResizeObserver sees. */
+  const zoom = registerBoardRegionPin();
 
   /** Region width available to the board (region client box minus horizontal
    *  padding), in CSS pixels. 0 until the first successful measurement. */
@@ -113,5 +119,5 @@ export function useBoardSize(boardEl: Ref<HTMLElement | null>) {
 
   onBeforeUnmount(teardown);
 
-  return { availWidth, boardStyle, measure };
+  return { availWidth, boardStyle, measure, zoom };
 }

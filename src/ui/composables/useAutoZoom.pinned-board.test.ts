@@ -30,9 +30,11 @@
  *          board restores both-axis fitting for whatever mounts next.
  *   B20-5: GameShell hands `useAutoZoom` no pin/axis wiring of its own — a
  *          game states the model once, by calling `useBoardSize()`.
+ *   #1332: `useBoardSize().zoom` is the shell's applied zoom and changes with
+ *          the slider, so a board fitted to the region can convert its pixels.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { defineComponent, h, ref, shallowRef, nextTick, type Component } from 'vue';
+import { defineComponent, h, ref, shallowRef, nextTick, watch, type Component, type Ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -82,6 +84,18 @@ const PinnedBoard = defineComponent({
   setup() {
     const boardRef = ref<HTMLElement | null>(null);
     const { boardStyle } = useBoardSize(boardRef);
+    return () => h('div', { ref: boardRef, class: 'my-board', style: boardStyle.value });
+  },
+});
+
+/** The zoom the last mounted ZoomReadingBoard was handed by useBoardSize. */
+let boardZoom: Readonly<Ref<number>> | null = null;
+const ZoomReadingBoard = defineComponent({
+  name: 'ZoomReadingBoard',
+  setup() {
+    const boardRef = ref<HTMLElement | null>(null);
+    const { boardStyle, zoom } = useBoardSize(boardRef);
+    boardZoom = zoom;
     return () => h('div', { ref: boardRef, class: 'my-board', style: boardStyle.value });
   },
 });
@@ -207,6 +221,42 @@ describe('B20: useBoardSize pins the board; useAutoZoom stops height-fitting it'
     await settle(shell.wrapper);
 
     expect(shell.api.zoomLevel.value).toBeCloseTo((REGION.height - PANEL_RESERVED) / NATURAL.height, 5);
+    shell.wrapper.unmount();
+  });
+});
+
+describe('#1332: a pinned board reads the shell zoom', () => {
+  beforeEach(() => {
+    FakeResizeObserver.instances = [];
+    rafQueue = [];
+    boardZoom = null;
+    vi.stubGlobal('ResizeObserver', FakeResizeObserver);
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => {
+      rafQueue.push(() => cb(0));
+      return rafQueue.length;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => {});
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    document.body.innerHTML = '';
+  });
+
+  it('useBoardSize().zoom is the zoom the shell applies, and follows the slider', async () => {
+    const shell = mountShell(ZoomReadingBoard);
+    await settle(shell.wrapper);
+    expect(boardZoom!.value).toBe(shell.api.zoomLevel.value);
+
+    const seen: number[] = [];
+    watch(boardZoom!, (z) => seen.push(z));
+    shell.api.setZoom(0.5);
+    await nextTick();
+    shell.api.setZoom(2);
+    await nextTick();
+
+    expect(seen).toEqual([0.5, 2]);
+    expect(boardZoom!.value).toBe(2);
     shell.wrapper.unmount();
   });
 });

@@ -117,7 +117,7 @@ export function useAutoZoom(options: {
   /** Non-zero while a `useBoardSize()`-pinned board is mounted below the shell.
    *  Such a board is width-fit only (see the module docblock). The game opts in
    *  by calling `useBoardSize()` — there is no second flag to remember. */
-  const pinnedBoards = provideBoardRegionPin();
+  const pinnedBoards = provideBoardRegionPin(zoomLevel);
 
   /** True once the user has manually zoomed (the slider). While true, the
    *  persistent available-space re-fit is a no-op — `fitZoom()` and a new board clear it. */
