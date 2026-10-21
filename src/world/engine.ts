@@ -1725,17 +1725,12 @@ export class BoardSmithWorldEngine implements WorldEngine {
    *  `prompt`, `multiSelect` and `orderedList` may read the picks before it,
    *  so they are left to the re-ask, as its round and candidates are (#1350). */
   private pickShapeOf(definition: ActionDefinition, index: number, acting: Player): PickMetadata {
-    const selection: Record<string, unknown> = { ...definition.selections[index]! };
+    const selection = { ...definition.selections[index]! };
     for (const key of ["prompt", "multiSelect", "orderedList"]) {
-      if (typeof selection[key] === "function") delete selection[key];
+      if (typeof Reflect.get(selection, key) === "function") Reflect.deleteProperty(selection, key);
     }
     return this.game.readingOnly(() =>
-      buildPickMetadata(
-        readOnlyProjection(this.game),
-        acting,
-        definition.name,
-        selection as ActionDefinition["selections"][number],
-      ),
+      buildPickMetadata(readOnlyProjection(this.game), acting, definition.name, selection),
     );
   }
 
