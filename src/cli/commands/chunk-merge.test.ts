@@ -530,6 +530,23 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
     expect(status()).toBe('');
   });
 
+  it('refuses a shortened id a parenthetical separates from its provisional id, and leaves main as it was (#1363)', async () => {
+    await buildOnBranch('trading', 100, {
+      'design/QUESTIONS.md': '# Questions\n\n### Question @trading.9\n- a\n\n### Question @trading.10\n- b\n',
+      'design/notes.md': 'Questions @trading.9 (owner-only data, issue #92) and .10 (round-3 triage).\n',
+    });
+    const before = head();
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([
+      'design/notes.md writes ".10" after Question @trading.9, but not in a list with it, so the merge cannot read it ' +
+        'as Question @trading.10 and would leave it naming nothing. Write the id in full on the branch (for example ' +
+        '"Question @trading.10"), and merge again.',
+    ]);
+    expect(head()).toBe(before);
+    expect(status()).toBe('');
+  });
+
   it('refuses a provisional id written with no kind before it, naming the file and the form to write (#439)', async () => {
     await buildOnBranch('trading', 100, {
       'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',

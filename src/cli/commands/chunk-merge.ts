@@ -18,7 +18,8 @@
  *      RUN.md, and may not write another chunk's run log. Real numbers are allocated here, on the
  *      combined tree, and every citation of each provisional id is rewritten, shorthand included
  *      (`Rulings @a.1 to .3`); a range it cannot rewrite one to one, or shorthand that names no id
- *      it can map (`@a.1-3`, `Decision .2`), is refused (#446).
+ *      it can map (`@a.1-3`, `Decision .2`, or a `.N` outside its id's list, `Decision @a.2 supersedes
+ *      .1`), is refused (#446, #1363).
  *   3. On the combined tree, before anything is committed, it re-runs every tree-wide check:
  *      the chunk is verified; the chunks really built alongside it (not yet verified on the main
  *      line when the branch left, merged by chunk-merge since, or whose code the main line

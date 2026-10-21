@@ -296,6 +296,74 @@ describe('shorthand ids and ranges after a provisional id (#446)', () => {
   });
 });
 
+/**
+ * #1363: a `.N` past a word or parenthetical after its provisional id (`Decision @a.2 supersedes .1`)
+ * is not in the id's list, so it was left as written and named nothing after the merge. The merge
+ * cannot tell such a `.N` from prose, so it refuses it when that slug's id N has an entry.
+ */
+describe('a shortened id outside its provisional id\'s list (#1363)', () => {
+  const DECISIONS = NUMBERED_LEDGER_SPECS.find((s) => s.kind === 'Decision')!;
+  const allocate = (notes: string) =>
+    allocateProvisional(
+      { 'design/DECISIONS.md': '### Decision 1\n\n### Decision @a.1\n\n### Decision @a.2\n', 'design/notes.md': notes },
+      [{ spec: DECISIONS, path: 'design/DECISIONS.md' }],
+    );
+
+  it('refuses a .N separated from its provisional id by a word or a parenthetical', () => {
+    const result = allocate('Decision @a.2 supersedes .1.\nDecisions @a.1 (first) and .2 (second).\n');
+    expect(result.problems).toEqual([
+      {
+        path: 'design/notes.md',
+        ids: [],
+        detail:
+          'writes ".1" after Decision @a.2, but not in a list with it, so the merge cannot read it as ' +
+          'Decision @a.1 and would leave it naming nothing. Write the id in full on the branch (for example ' +
+          '"Decision @a.1"), and merge again.',
+      },
+      {
+        path: 'design/notes.md',
+        ids: [],
+        detail:
+          'writes ".2" after Decision @a.1, but not in a list with it, so the merge cannot read it as ' +
+          'Decision @a.2 and would leave it naming nothing. Write the id in full on the branch (for example ' +
+          '"Decision @a.2"), and merge again.',
+      },
+    ]);
+  });
+
+  it('reads no id in a .N that names no entry, is part of a word or number, or is in another paragraph', () => {
+    const notes = 'Decision @a.1 halves it to .5, per p.2 and 0.2 and .2em.\n\n.2 of the deck is drawn.\nDecision @a.1 and Decision .2\n';
+    expect(allocate(notes).problems).toEqual([]);
+  });
+
+  it('reads no id in code past the comment that cites the provisional id, or in a quoted .N', () => {
+    const code = "// Decision @a.1: halve the rate, split on '.2'\nconst rate = .2;\n";
+    const result = allocateProvisional(
+      { 'design/DECISIONS.md': '### Decision @a.1\n\n### Decision @a.2\n', 'src/game.ts': code },
+      [{ spec: DECISIONS, path: 'design/DECISIONS.md' }],
+    );
+    expect(result.problems).toEqual([]);
+  });
+
+  it('reads a blank comment line, and a blank line in a CRLF file, as the end of the paragraph', () => {
+    const files = {
+      'design/DECISIONS.md': '### Decision @a.1\n\n### Decision @a.2\n',
+      'src/game.ts': '/**\n * Decision @a.1 sets the deck.\n *\n * .2 of the deck is drawn.\n */\n',
+      'design/notes.md': 'Decision @a.1 sets the deck.\r\n\r\n.2 of the deck is drawn.\r\n',
+    };
+    expect(allocateProvisional(files, [{ spec: DECISIONS, path: 'design/DECISIONS.md' }]).problems).toEqual([]);
+  });
+
+  it('refuses a .N on a later comment line of the same paragraph', () => {
+    const files = {
+      'design/DECISIONS.md': '### Decision @a.1\n\n### Decision @a.2\n',
+      'src/game.ts': '// Decision @a.1 sets the deck, and\n// .2 draws from it.\nexport const x = 1;\n',
+    };
+    const result = allocateProvisional(files, [{ spec: DECISIONS, path: 'design/DECISIONS.md' }]);
+    expect(result.problems.map((p) => p.detail)).toEqual([expect.stringMatching(/^writes "\.2" after Decision @a\.1,/)]);
+  });
+});
+
 describe('shorthand the merge cannot read (#446)', () => {
   it('names a dash then a plain number after a provisional id, and a shortened id after a kind word', () => {
     const text = 'Rulings @a.1-3 apply. Rulings @a.1 and Decision .2 too. Ruling @a.1 - .2 and Ruling 4-5 are fine.\n';

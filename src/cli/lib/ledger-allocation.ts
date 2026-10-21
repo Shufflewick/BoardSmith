@@ -178,7 +178,10 @@ function readList(citable: string, at: number, length: number): { items: ListIte
 }
 
 /** Every provisional id cited in file `path`, in file order, and every range one ends. */
-function provisionalCitations(path: string, text: string): { citations: ProvisionalCitation[]; ranges: ProvisionalRange[] } {
+function provisionalCitations(
+  path: string,
+  text: string,
+): { citable: string; citations: ProvisionalCitation[]; ranges: ProvisionalRange[] } {
   const citable = citableText(path, text);
   const citations: ProvisionalCitation[] = [];
   const ranges: ProvisionalRange[] = [];
@@ -195,7 +198,7 @@ function provisionalCitations(path: string, text: string): { citations: Provisio
   for (const m of citable.matchAll(BARE_PROVISIONAL)) {
     if (!attributed.has(m.index)) citations.push({ index: m.index, written: m[0], id: undefined });
   }
-  return { citations: citations.sort((a, b) => a.index - b.index), ranges };
+  return { citable, citations: citations.sort((a, b) => a.index - b.index), ranges };
 }
 
 /**
@@ -231,7 +234,7 @@ export function plainNumbersAdded(base: string, tip: string, spec: NumberedLedge
     .map((n) => `${spec.kind}${spec.sep}${n}`);
 }
 
-/** A range of citations the merge cannot rewrite one to one, in file `path`, and why. */
+/** A range or shortened id the merge cannot rewrite one to one, in file `path`, and why. */
 interface AllocationProblem {
   path: string;
   /** The provisional ids at the range's ends, which the merge leaves as written. */
@@ -295,6 +298,50 @@ function runProblem(
   return `, but those ids became ${plural(kind)}${listed(became.map(String))}, which are not one unbroken run of numbers. ${listFix(kind, ids)}`;
 }
 
+/** A `.N` standing alone: not part of a word or number (`p.20`, `0.5`), a unit (`.5em`) or a quote (`'.2'`). */
+const LONE_SHORTHAND = new RegExp(`(?<![\\w@.)\\]'"\`\\\\])${SHORTHAND}(?!\\w)`, 'g');
+/** A line break that ends a paragraph: a blank line, or one holding only a comment or quote marker. */
+const PARAGRAPH_BREAK = /\n[ \t\r]*(?:(?:\*|\/\/|#|>)[ \t\r]*)?\n/;
+/** A line of source code that is not a comment line, so not the comment's prose. */
+const CODE_LINE = /\n(?![ \t]*(?:\*|\/\/|#))/;
+
+/** Whether `between`, the text from a citation to a `.N`, stays in one paragraph of prose. */
+const oneParagraph = (path: string, between: string): boolean =>
+  !PARAGRAPH_BREAK.test(between) && (path.endsWith('.md') || !CODE_LINE.test(between));
+
+/**
+ * Each `.N` no citation list read, after a provisional id in the same paragraph of prose, whose
+ * slug's id N the merge allocated (#1363): `Decision @a.2 supersedes .1`. The merge cannot tell it
+ * from prose, so it refuses it rather than leave it naming nothing. A `.N` straight after a kind
+ * word is `unreadableShorthand`'s.
+ */
+function strayShorthand(
+  path: string,
+  citable: string,
+  citations: ProvisionalCitation[],
+  mapping: Record<string, string>,
+): AllocationProblem[] {
+  const read = new Set(citations.map((c) => c.index));
+  const afterKind = new Set([...citable.matchAll(SHORTHAND_AFTER_KIND)].map((m) => m.index + m[0].length));
+  const problems: AllocationProblem[] = [];
+  for (const m of citable.matchAll(LONE_SHORTHAND)) {
+    if (read.has(m.index) || afterKind.has(m.index + m[0].length)) continue;
+    const before = citations.filter((c) => c.index < m.index).at(-1);
+    if (before === undefined || !oneParagraph(path, citable.slice(before.index, m.index))) continue;
+    const after = before.id ?? before.written;
+    const id = `${after.slice(0, after.lastIndexOf('.'))}${m[0]}`;
+    if (!(id in mapping)) continue;
+    problems.push({
+      path,
+      ids: [],
+      detail:
+        `writes "${m[0]}" after ${after}, but not in a list with it, so the merge cannot read it as ${id} and would ` +
+        `leave it naming nothing. Write the id in full on the branch (for example "${id}"), and merge again.`,
+    });
+  }
+  return problems;
+}
+
 /**
  * `text` with each provisional id `mapping` allocated replaced by its real number, and every range
  * that cannot be rewritten one to one, left as written. Found on the citable text, spliced into the
@@ -305,8 +352,8 @@ function rewriteCitations(
   text: string,
   mapping: Record<string, string>,
 ): { text: string; problems: AllocationProblem[] } {
-  const { citations, ranges } = provisionalCitations(path, text);
-  const problems: AllocationProblem[] = [];
+  const { citable, citations, ranges } = provisionalCitations(path, text);
+  const problems = strayShorthand(path, citable, citations, mapping);
   const kept = new Set<number>();
   for (const range of ranges) {
     const detail = rangeProblem(range, mapping);
@@ -330,7 +377,7 @@ interface AllocationResult {
   files: Record<string, string>;
   /** Each provisional id and the real id it became, e.g. `{ 'Ruling @a.1': 'Ruling 139' }`. */
   mapping: Record<string, string>;
-  /** Every range of ids that could not be rewritten one to one, left as written (#446). */
+  /** Every range or shortened id that could not be rewritten one to one, left as written (#446, #1363). */
   problems: AllocationProblem[];
 }
 
