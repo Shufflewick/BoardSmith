@@ -1673,7 +1673,8 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    * (#1349): a cold restore, undo, rewind, a bot's search copy, and a world
    * partition adopted from storage. It runs once the whole restored tree is
    * decoded, so element references and other elements' attributes hold their
-   * real values. It does not run on construction or on replay, where the
+   * real values, except that in a world a reference into a partition that is
+   * not resident stays unresolved. It does not run on construction or on replay, where the
    * game's own code writes every value again.
    *
    * Use it to re-apply what the saved bytes cannot carry, such as freezing an

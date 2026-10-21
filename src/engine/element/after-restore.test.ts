@@ -118,6 +118,28 @@ describe('afterRestore (#1349)', () => {
     expect(Object.isFrozen(page.data!.items)).toBe(true);
   });
 
+  it('leaves nothing adopted when a hook throws, so the adoption can be tried again', () => {
+    let failing = true;
+    class FragilePage extends Page {
+      protected override afterRestore(): void {
+        if (failing) throw new Error('hook failed');
+      }
+    }
+    const game = new PageGame({ playerCount: 2, seed: 'world', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
+    game.registerElements([FragilePage]);
+    const room = game.create(Space, 'room');
+    room.create(FragilePage, 'stored');
+    game.definePartition(room.id);
+    const stored = roundTripJson(room.toJSON());
+    game.evictSubtree(room.id);
+
+    expect(() => game.adoptSubtree(stored)).toThrow('hook failed');
+    expect(game.getElementById(room.id)).toBeUndefined();
+
+    failing = false;
+    expect(game.adoptSubtree(stored).first(FragilePage)).toBeDefined();
+  });
+
   it('runs in a per-seat copy, where a withheld attribute must be asked about first', () => {
     class SecretPage extends Space<SecretGame> {
       static override visibleAttributes = ['name'];

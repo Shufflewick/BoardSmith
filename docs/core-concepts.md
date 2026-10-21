@@ -474,7 +474,8 @@ element tree, not a log of operations that produced it.
   re-applies such a thing in `protected override afterRestore()`, which runs on
   every element each time a restore rebuilds it (cold restore, undo, rewind, a
   bot's search copy, a world partition adopted from storage), once the whole
-  restored tree is decoded. It must not change a saved value, and in a per-seat
+  restored tree is decoded (in a world, a reference into a partition that is
+  not resident stays unresolved). It must not change a saved value, and in a per-seat
   copy it asks `isAttributeRedacted(key)` before reading an attribute the seat
   may not have been told:
 
