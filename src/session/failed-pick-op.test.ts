@@ -526,7 +526,7 @@ describe('checkpoints off: a repeating pick whose onEach or until crashed is dro
         expect(seat.pending()?.repeating).toEqual(repeat);
 
         expect(await seat.pick('items', 'done')).toMatchObject({ success: true, actionComplete: true });
-        expect(r.actionHistory.at(-1)?.args.items).toEqual(['one', 'done']);
+        expect(r.actionHistory.at(-1)).toMatchObject({ args: { items: ['one', 'done'] } });
       });
     }
 
@@ -541,7 +541,7 @@ describe('checkpoints off: a repeating pick whose onEach or until crashed is dro
 
       expect(await seat.pick('items', 'done')).toMatchObject({ success: true, actionComplete: true });
       expect(r.game.selects).toBe(1);
-      expect(r.actionHistory.at(-1)?.args.items).toEqual(['done']);
+      expect(r.actionHistory.at(-1)).toMatchObject({ args: { items: ['done'] } });
     });
   }
 });
