@@ -297,6 +297,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   let stepSeq: number | null = null;
   const stepOutstanding = (): boolean => stepSeq !== null && !actionMovedOn(stepSeq);
   const STEP_OUTSTANDING = 'Still waiting for the server to answer your last pick.';
+  const REPEAT_HELD = 'The server already holds this answer, so it cannot be cleared now. Cancel the action to start it again.';
   // Not set as lastError: the player moved on themselves, so there is nothing to report.
   const MOVED_ON: PickValidationResult = { valid: false, error: 'The action changed before the server answered this pick.' };
 
@@ -2652,6 +2653,15 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     actionSnapshot.value?.collectedPicks.delete(name);
     if (multiSelectDraft.value?.selectionName === name) multiSelectDraft.value = null;
     if (pickDraft.value?.identity === draftIdentityFor(name)) pickDraft.value = null;
+    // Only reached when the server holds none of its rounds, so it starts again from the first.
+    if (repeatingState.value?.selectionName === name) repeatingState.value = null;
+  }
+
+  /** Whether any of these picks is a repeat the server took a step of: it then takes no pick at or before it again (#1365). */
+  function serverHoldsRepeat(picks: EnrichedPickMetadata[]): boolean {
+    const repeating = repeatingState.value;
+    return pendingOnServer.value && picks.some(s => s.repeat
+      && (s.name in currentArgs.value || (s.name === repeating?.selectionName && repeating.accumulated.length > 0)));
   }
 
   function clear(selectionName: string): boolean {
@@ -2664,6 +2674,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const index = selections.findIndex(s => s.name === selectionName);
     // Not a pick (a follow-up's server-bound arg, say), so the player has nothing to clear.
     if (index === -1) return true;
+    if (serverHoldsRepeat(selections.slice(index))) {
+      setError(REPEAT_HELD);
+      return false;
+    }
     forgetAnswer(selectionName);
     // Later picks were answered and fetched against the old value, so they are asked again (#1354, #1359).
     for (const later of selections.slice(index + 1)) {
