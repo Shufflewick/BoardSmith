@@ -63,23 +63,28 @@ export function useBoardSize(boardEl: Ref<HTMLElement | null>) {
    *  padding), in CSS pixels. 0 until the first successful measurement. */
   const availWidth = ref(0);
 
-  /** Bind to the board root. Empty until measured, so the board keeps its
-   *  natural size for the first paint rather than flashing at width 0. */
-  const boardStyle = computed(() =>
-    availWidth.value ? { width: `${availWidth.value}px` } : {},
-  );
+  /** True when the width came from a `.boardregion`, which is a size
+   *  container, rather than from the board's parent element. */
+  const inRegion = ref(false);
 
-  function findRegion(): HTMLElement | null {
-    return (boardEl.value?.closest('.boardregion') as HTMLElement | null)
-      ?? boardEl.value?.parentElement
-      ?? null;
-  }
+  /** Bind to the board root. Empty until measured, so the board keeps its
+   *  natural size for the first paint rather than flashing at width 0. In a
+   *  region the pin is capped at `100cqw`, the region's content box at layout
+   *  time: the pin is re-measured only after layout, and a pin from before the
+   *  region narrowed would otherwise overflow it sideways for a frame (#1336). */
+  const boardStyle = computed(() => {
+    if (!availWidth.value) return {};
+    const pin = `${availWidth.value}px`;
+    return { width: inRegion.value ? `min(${pin}, 100cqw)` : pin };
+  });
 
   function measure() {
-    const host = findRegion();
+    const region = boardEl.value?.closest('.boardregion') as HTMLElement | null | undefined;
+    const host = region ?? boardEl.value?.parentElement;
     if (!host) return;
     const cs = getComputedStyle(host);
     const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+    inRegion.value = !!region;
     availWidth.value = Math.max(0, host.clientWidth - padX);
   }
 

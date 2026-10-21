@@ -4,7 +4,8 @@
  *
  * Behaviors under test:
  *   BS-1: measures the nearest .boardregion ancestor's client width minus its
- *         horizontal padding into availWidth/boardStyle.
+ *         horizontal padding into availWidth/boardStyle, and caps the pin at
+ *         the region's own width so a stale pin cannot overflow it (#1336).
  *   BS-2: boardStyle is empty until a measurement succeeds (no width-0 flash),
  *         and falls back to the parent element when no .boardregion exists
  *         (e.g. unit-test harnesses / non-GameShell hosts).
@@ -85,7 +86,9 @@ describe('useBoardSize', () => {
     await nextTick(); // flush: 'post' watcher measures
 
     expect(api.availWidth.value).toBe(800 - 48);
-    expect(api.boardStyle.value).toEqual({ width: '752px' });
+    // 100cqw is the region's content box at layout time, so a pin measured
+    // before the region narrowed never runs past it (#1336).
+    expect(api.boardStyle.value).toEqual({ width: 'min(752px, 100cqw)' });
     wrapper.unmount();
   });
 
@@ -105,6 +108,8 @@ describe('useBoardSize', () => {
     await nextTick();
 
     expect(api.availWidth.value).toBe(500);
+    // No .boardregion, so no container for cqw to resolve against.
+    expect(api.boardStyle.value).toEqual({ width: '500px' });
     wrapper.unmount();
   });
 

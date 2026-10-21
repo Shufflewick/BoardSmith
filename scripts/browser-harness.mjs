@@ -341,7 +341,7 @@ export async function runBrowserRegression(run, body) {
   }
   const { withFixtureWorld, withFixtureTable } = await loadFixtures(run.script);
   const chromium = await loadChromium();
-  const drive = ({ hostUrl, fixture }) => body({ launch: () => launchChromium(chromium), hostUrl, fixture });
+  const drive = ({ hostUrl, fixture }) => body({ launch: (options) => launchChromium(chromium, options), hostUrl, fixture });
   process.exit(await (table ? withFixtureTable(drive, table) : withFixtureWorld(run.fixture, drive)));
 }
 
@@ -359,6 +359,7 @@ export async function runBrowserRegression(run, body) {
  * BoardSmith's Playwright drives (`--no-shell`), the same browser
  * `boardsmith verify`'s smoke check uses.
  */
-function launchChromium(chromium) {
-  return chromium.launch({ channel: 'chromium' });
+function launchChromium(chromium, { classicScrollbars = false } = {}) {
+  // Headless hides scrollbars; `classicScrollbars` keeps the space-taking ones Windows and Linux show.
+  return chromium.launch({ channel: 'chromium', ignoreDefaultArgs: classicScrollbars ? ['--hide-scrollbars'] : [] });
 }

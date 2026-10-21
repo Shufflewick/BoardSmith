@@ -1194,6 +1194,11 @@ For these boards, use `useBoardSize()`: it measures `.boardregion` (the
 ancestor GameShell sizes to the visible viewport) and pins your board root to
 the region's available width, so wrapping works and growth is
 vertical-scroll only. It re-measures on region resize and window resize.
+The pin is capped at `100cqw` (`.boardregion` is an inline-size container),
+so while the region narrows, as it does while the sidebar opens, the board
+never runs past it in the frames before the pin is re-measured. The same
+container is what a `cqw` unit or an unnamed `@container` query in your board
+resolves against when nothing closer is a container.
 
 Calling it also tells GameShell which model your board is in, so the startup
 zoom-fit stops fitting your board's **height**: a pinned board that grows
