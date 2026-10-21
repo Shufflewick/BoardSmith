@@ -403,6 +403,20 @@ describe('HintOverlay placement (#927)', () => {
     wrapper.unmount();
   });
 
+  it('stops a bubble above a target at the layer\'s top edge (#1331)', async () => {
+    // A 750px-tall target 3px from the top leaves no room below, and its bubble's anchor 5px above the layer.
+    const wrapper = mountOnBoard(
+      { text: 'Suggested move', target: { kind: 'element', ref: { id: 1331 } } },
+      '<div data-bs-el-id="1331"></div>',
+      new DOMRect(100, 3, 20, 750),
+    );
+    await nextTick();
+    expect(wrapper.find('.bsg-board-message__caret--bottom').exists()).toBe(true);
+    expect(bubbleStyle(wrapper).top).toBe('-5px');
+    expect(bubbleStyle(wrapper).transform).toBe('translate(var(--bsg-bubble-shift), max(-100%, 5px))');
+    wrapper.unmount();
+  });
+
   it('keeps an untargeted bubble without placement below the board', async () => {
     const wrapper = mountOnBoard({ text: 'Suggested: c5 to a3' });
     await nextTick();
