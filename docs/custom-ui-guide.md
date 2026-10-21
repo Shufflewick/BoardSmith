@@ -533,8 +533,8 @@ const boardInteraction = useBoardInteraction();
 // Check if element is highlighted (hovering in ActionPanel)
 boardInteraction.isHighlighted(element)
 
-// Check if element is currently selected: the board element of the last choice
-// answered, however it was answered (panel, board, actionController.fill(), auto-fill, prefill)
+// Check if element is currently selected: the last board click, or the board element of the
+// choice just answered, however it was answered (panel, board, actionController.fill(), auto-fill, prefill)
 boardInteraction.isSelected(element)
 
 // Check if element is a valid selection target

@@ -597,4 +597,45 @@ describe('The board marks a chosen choice however it was answered (#1380)', () =
     expect(board.selectedElement).toEqual({ notation: 's' });
     wrapper.unmount();
   });
+
+  it('puts the standing mark back when a clear takes back a later answer the board had marked itself (review F1)', async () => {
+    const { board, controller, wrapper } = mountHarness();
+    await flush();
+    await controller.start('chart');
+    await controller.fill('direction', 'north');
+    await flush();
+    board.triggerElementSelect({ id: 11 });
+    // A custom board marks the plot it was clicked on.
+    board.selectElement({ id: 11 });
+    await flush();
+
+    controller.clear('plot');
+    await flush();
+
+    expect(board.selectedElement).toEqual({ notation: 'n' });
+    wrapper.unmount();
+  });
+
+  it('drops the hovered answer a clear takes back when the standing mark is the same (review F2)', async () => {
+    const { board, controller, wrapper } = mountHarness();
+    await flush();
+    await wrapper.find('[data-bs-action="chart"]').trigger('click');
+    await flush();
+    await wrapper.findAll('.anchored-choice-btn').find(b => b.text() === 'North')!.trigger('click');
+    await flush();
+    board.triggerElementSelect({ id: 11 });
+    await flush();
+    await wrapper.findAll('.anchored-choice-btn').find(b => b.text() === 'North')!.trigger('click');
+    await flush();
+    expect(controller.currentPick.value?.name).toBe('wake');
+    expect(board.hoveredChoice?.display).toBe('North');
+
+    await wrapper.findAll('.clear-selection-btn').at(-1)!.trigger('click');
+    await flush();
+
+    expect(controller.currentArgs.value).toEqual({ direction: 'north', plot: 11 });
+    expect(board.selectedElement).toEqual({ notation: 'n' });
+    expect(board.hoveredChoice).toBeNull();
+    wrapper.unmount();
+  });
 });

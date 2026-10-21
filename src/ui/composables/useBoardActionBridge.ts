@@ -630,7 +630,13 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
       .filter(ref => ref !== undefined);
     return marks.at(-1) ?? null;
   });
-  watch(answeredMark, mark => board.selectElement(mark));
+  watch(
+    () => [answeredMark.value, Object.keys(currentArgs.value).length] as const,
+    ([mark, answered], [wasMark, wasAnswered]) => {
+      // A clear() re-marks even when the mark stands, dropping what the board showed for the answers taken back.
+      if (mark !== wasMark || answered < wasAnswered) board.selectElement(mark);
+    },
+  );
 
   // Board element clicked: dispatch selection, or auto-start an action whose
   // first element selection accepts the clicked element.
