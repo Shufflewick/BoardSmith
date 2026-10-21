@@ -512,9 +512,11 @@ absent. A pick re-asked with earlier answers bound is refused the same way when
 it leaves out a required pick BEFORE it, so a selection's own `needs:` sees the
 picks before it when the pick is re-asked. The offer is enumerated with nothing
 bound, so it runs the rounds and candidates of the picks only through the first
-required one; a pick after that is offered by its shape alone (name, prompt,
-bounds, no candidates) and its round first runs when it is re-asked with the
-picks before it bound (#1345).
+required one; a pick after that is offered by its shape alone (name, type, and
+a `prompt`, `multiSelect` or `orderedList` only when it is a value rather than a
+function; no candidates). Its round, its candidates and those functions first
+run when it is re-asked with the picks before it bound, and the panel and a
+custom UI take its prompt and bounds from that answer (#1345, #1350).
 A quote is not checked either: its rounds, the execute round included, run on
 the player's draft, so any pick not chosen yet is absent there and a round a
 quote walks must not assume one is bound.
@@ -1373,16 +1375,16 @@ the earlier argument and returns a number. Nothing is enumerated per candidate,
 so nothing is hydrated per candidate.
 
 **And the panel does narrow it live** (ShufflewickPub #378). The offer is
-enumerated once with nothing bound, so a bound like the one above resolves to
-the unbounded fallback in that first frame -- which is the honest answer, and
-which the wire says by leaving `max` out rather than by sending a number JSON
-cannot carry. The moment the player picks the ship, the panel re-asks that one
-selection with the args it has, and the world answers it against the resident
-tree:
+enumerated once with nothing bound, so it leaves a function bound like the one
+above out of a pick after the first required one, with that pick's function
+`prompt` and `orderedList` (#1350); it says nothing it would have to guess. The
+moment the player picks the ship, the panel re-asks that one selection with the
+args it has, and the world answers it against the resident tree:
 
 ```ts
 const answer = await runner.resolvePick('alice', 'deploy', 'crew', { ship: 4 }, stamp);
 answer.multiSelect;   // { min: 1, max: 2 } — from the ship they actually chose
+answer.prompt;        // a function prompt, evaluated with the same args
 answer.choices;       // and its candidates, evaluated with the same args
 ```
 
@@ -1395,8 +1397,8 @@ costs one round trip per pick AFTER the first, only while somebody is mid-action
 
 The re-ask is two frames on the world wire -- `world_pick` out, `world_pick_result`
 back -- so **every host has to relay both**, `boardsmith dev` included. Its world
-bar does (#227); a host that relays only one leaves the panel holding the
-unbounded fallback until the pick times out, with nothing on screen to say why.
+bar does (#227); a host that relays only one leaves the panel without the
+pick's candidates and bounds until the pick times out, with nothing on screen to say why.
 `scripts/world-pick-bridge-browser.mjs` is the browser regression that holds the
 local bar to it, because no test on either side of a bridge can see the bridge.
 

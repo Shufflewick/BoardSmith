@@ -395,5 +395,6 @@ function answeredPick(
     validElements: answered.validElements,
     multiSelect: answered.multiSelect,
     orderedList: answered.orderedList,
+    prompt: answered.prompt,
   };
 }

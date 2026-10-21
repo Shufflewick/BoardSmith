@@ -137,6 +137,8 @@ export interface PickChoicesResult {
   multiSelect?: { min: number; max?: number };
   /** Ordered-list entry bounds for this step (#249), resolved server-side */
   orderedList?: { min: number; max?: number };
+  /** The pick's prompt as re-asked, for one the metadata could not word yet (#1350) */
+  prompt?: string;
   error?: string;
 }
 
@@ -171,6 +173,8 @@ export interface PickSnapshot {
   multiSelect?: { min: number; max?: number };
   /** Ordered-list entry bounds (#249), evaluated when fetched */
   orderedList?: { min: number; max?: number };
+  /** The pick's prompt, evaluated when fetched (#1350) */
+  prompt?: string;
 }
 
 /**

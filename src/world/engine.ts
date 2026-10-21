@@ -1721,10 +1721,21 @@ export class BoardSmithWorldEngine implements WorldEngine {
   }
 
   /** A pick's shape with no candidates, read-only as `pickOf`: what an offer
-   *  carries for a pick past the first required one (#1345). */
+   *  carries for a pick past the first required one (#1345). Its function
+   *  `prompt`, `multiSelect` and `orderedList` may read the picks before it,
+   *  so they are left to the re-ask, as its round and candidates are (#1350). */
   private pickShapeOf(definition: ActionDefinition, index: number, acting: Player): PickMetadata {
+    const selection: Record<string, unknown> = { ...definition.selections[index]! };
+    for (const key of ["prompt", "multiSelect", "orderedList"]) {
+      if (typeof selection[key] === "function") delete selection[key];
+    }
     return this.game.readingOnly(() =>
-      buildPickMetadata(readOnlyProjection(this.game), acting, definition.name, definition.selections[index]!),
+      buildPickMetadata(
+        readOnlyProjection(this.game),
+        acting,
+        definition.name,
+        selection as ActionDefinition["selections"][number],
+      ),
     );
   }
 

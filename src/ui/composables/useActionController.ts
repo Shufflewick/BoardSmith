@@ -1170,6 +1170,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
           // multiSelect's are here: a bound that reads an earlier pick is only
           // knowable once that pick is bound.
           orderedList: result.orderedList,
+          // A world's offer leaves out a later pick's prompt function, which may read an earlier pick (#1350).
+          prompt: result.prompt,
         });
         // Increment version to trigger reactive computeds (Maps aren't reactive)
         snapshotVersion.value++;
@@ -1224,7 +1226,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // pick's `dependsOn` and a world's re-asked list read earlier answers in,
     // and the only order the engine's step-wise path accepts.
     const next = currentActionMeta.value.selections.find(selectionNeedsInput);
-    return next ? enrichValidElements(next) : null;
+    if (!next) return null;
+    void snapshotVersion.value; // reactive dependency (Maps aren't reactive)
+    const prompt = actionSnapshot.value?.pickSnapshots.get(next.name)?.prompt;
+    return enrichValidElements(prompt === undefined ? next : { ...next, prompt });
   });
 
   const isReady = computed((): boolean => {

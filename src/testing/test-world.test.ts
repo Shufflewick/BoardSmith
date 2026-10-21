@@ -165,6 +165,36 @@ describe('TestWorld: a resident world a test can construct', () => {
     await world.close();
   });
 
+  it("defers a later pick's prompt, multiSelect and orderedList callbacks to the re-ask (#1350)", async () => {
+    const plotName = (args: Record<string, unknown>) => (args.plot as string).split('@')[0]!;
+    const build = worldAction<VaultWorld>('build')
+      .chooseFrom('plot', { choices: ['commons@1,1'] })
+      .chooseFrom('size', {
+        choices: ['small', 'large'],
+        prompt: ({ args }) => `Size for ${plotName(args)}`,
+        multiSelect: ({ args }) => ({ min: 1, max: plotName(args).length }),
+      })
+      .chooseFrom('route', {
+        choices: ['north', 'south'],
+        prompt: 'Route',
+        orderedList: ({ args }) => ({ min: 1, max: plotName(args).length }),
+      })
+      .execute(() => {});
+    const world = await createTestWorld({
+      definition: bundle({ ...vaultWorldBlock(), actions: [build] } as WorldDefinition),
+    });
+    const offer = (await world.offersFor(1)).find((candidate) => candidate.name === 'build')!;
+    expect(offer.selections.slice(1)).toEqual([
+      { name: 'size', type: 'choice' },
+      { name: 'route', type: 'choice', prompt: 'Route' },
+    ]);
+    const size = await world.resolvePick(1, 'build', 'size', { plot: 'commons@1,1' });
+    expect([size.prompt, size.multiSelect]).toEqual(['Size for commons', { min: 1, max: 7 }]);
+    const route = await world.resolvePick(1, 'build', 'route', { plot: 'commons@1,1', size: ['small'] });
+    expect(route.orderedList).toEqual({ min: 1, max: 7 });
+    await world.close();
+  });
+
   it('moves the revision when a command commits, so a frame can be placed in time', async () => {
     const world = await createTestWorld({ definition: bundle() });
     const before = (await world.getPlayerView(1)).revision;

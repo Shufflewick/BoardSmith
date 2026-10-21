@@ -1858,6 +1858,34 @@ describe('useActionController picks', () => {
     });
   });
 
+  it("asks a pick with the prompt its fetch answered, which a world's offer leaves out when it reads an earlier pick (#1350)", async () => {
+    actionMetadata.value = {
+      ...createTestMetadata(),
+      build: {
+        name: 'build',
+        selections: [
+          { name: 'plot', type: 'choice', prompt: 'Plot', choices: [{ value: 'commons', display: 'Commons' }] },
+          { name: 'size', type: 'choice' },
+        ],
+      },
+    };
+    availableActions.value = [...(availableActions.value ?? []), 'build'];
+    const fetchPickChoices = vi.fn(async (_action: string, pick: string): Promise<PickChoicesResult> =>
+      pick === 'size'
+        ? { success: true, prompt: 'Size for commons', choices: [{ value: 'small', display: 'Small' }] }
+        : { success: true, choices: [{ value: 'commons', display: 'Commons' }] });
+    const controller = useActionController({
+      sendAction, availableActions, actionMetadata, isMyTurn,
+      autoExecute: false, autoFill: false, playerSeat: ref(0), fetchPickChoices,
+    });
+
+    await controller.start('build');
+    expect(controller.currentPick.value?.prompt).toBe('Plot');
+    await controller.fill('plot', 'commons');
+
+    expect(controller.currentPick.value?.prompt).toBe('Size for commons');
+  });
+
   describe('multiSelect validation', () => {
     // Note: Current implementation validates array elements individually,
     // which means multiSelect arrays pass if any element matches a choice.
