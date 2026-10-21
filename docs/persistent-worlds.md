@@ -730,8 +730,9 @@ const saved = plainCopy((world.partition("room:1") as Room).data);
 const bytes = JSON.stringify(saved).length;
 ```
 
-It reads the data itself rather than through the read-only view, so it costs
-about what `structuredClone` of the same data costs. `JSON.stringify` straight
+It reads the data itself rather than through the read-only view, so on a JSON
+payload it costs about what `structuredClone` of the same data costs. Like
+`JSON.stringify`, it copies an object once for every place that refers to it. `JSON.stringify` straight
 through the read-only view was measured at 12 to 36 times a plain
 `JSON.stringify`, since every property it reads goes through the view.
 
