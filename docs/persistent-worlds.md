@@ -511,12 +511,13 @@ leaves out a required pick, or sends `null` for one, is refused with
 absent. A pick re-asked with earlier answers bound is refused the same way when
 it leaves out a required pick BEFORE it, so a selection's own `needs:` sees the
 picks before it when the pick is re-asked. The offer is enumerated with nothing
-bound, so it runs the rounds and candidates of the picks only through the first
-required one; a pick after that is offered by its shape alone (name, type, and
+bound, so it runs the round and candidates of the first pick only; every pick
+after it, required or optional, is offered by its shape alone (name, type, and
 a `prompt`, `multiSelect` or `orderedList` only when it is a value rather than a
 function; no candidates). Its round, its candidates and those functions first
-run when it is re-asked with the picks before it bound, and the panel and a
-custom UI take its prompt and bounds from that answer (#1345, #1350).
+run when it is re-asked with the answers so far, which leave out an optional
+pick the player skipped, and the panel and a custom UI take its prompt and
+bounds from that answer (#1345, #1350, #1355).
 A quote is not checked either: its rounds, the execute round included, run on
 the player's draft, so any pick not chosen yet is absent there and a round a
 quote walks must not assume one is bound.
@@ -1376,7 +1377,7 @@ so nothing is hydrated per candidate.
 
 **And the panel does narrow it live** (ShufflewickPub #378). The offer is
 enumerated once with nothing bound, so it leaves a function bound like the one
-above out of a pick after the first required one, with that pick's function
+above out of every pick after the first, with that pick's function
 `prompt` and `orderedList` (#1350); it says nothing it would have to guess. The
 moment the player picks the ship, the panel re-asks that one selection with the
 args it has, and the world answers it against the resident tree:
@@ -1435,32 +1436,32 @@ form's clothes.
 What comes back is the seat's actions in the table's own **`ActionMetadata`**
 shape -- the same shape the shared action panel, the board bridge and the
 drag-drop targets already consume -- with an optional `disabled` reason added,
-and **each selection's candidates already resolved**. `tend` offers the two
+and **the first selection's candidates already resolved**. `tend` offers the two
 neighbouring holdings that exist right now, as element ids the board bridge wires
 straight to a click.
 
-**The candidates arrive with the offer rather than being fetched per pick**
-because a world's protocol is single-shot where a table's is step-wise. That is
-affordable exactly because rule (d) above holds: no selection's candidates are a
-function of another's value, so the whole offer is one pass and there is no
-product to enumerate.
+**The first pick's candidates arrive with the offer**, so most verbs, which ask
+one question, cost no round trip. Every later pick is offered by its shape and
+asked when the player reaches it, with the answers so far (#1345, #1355).
+Rule (d) above still holds: no selection's candidates are enumerated per value
+of another's, so the offer is one pass and there is no product to enumerate.
 
 Seatless actions are filtered out here. An action whose `condition` is false is
 not offered, and neither is one whose **first** selection is required and has no
 candidates at all -- a pick that would open on nothing. An optional first
-selection can always be skipped, so its action is offered even when a later
-required selection is empty with nothing bound: that selection may narrow on the
-optional answer, and a table's availability stops at an optional step for the
-same reason (BoardSmith #1351).
+selection can always be skipped, so its action is offered without reading the
+selections after it: the next required one may narrow on the optional answer,
+and a table's availability stops at an optional step for the same reason
+(BoardSmith #1351, #1355).
 
-**A later selection never decides the offer** (BoardSmith #270). The offer's
-selections are enumerated in the same frame with `args: {}`, which is the right
-question to ask the first one and the wrong question to ask any other: a selection narrowed
-by an earlier answer has nothing to narrow by yet, so the natural
+**A later selection never decides the offer** (BoardSmith #270). The offer
+reads only the first selection, with `args: {}`, which is the right question to
+ask it and the wrong question to ask any other: a selection narrowed by an
+earlier answer has nothing to narrow by yet, so the natural
 `if (args.slot === undefined) return []` used to take the whole verb out of the
-seat's offer. It no longer does; the later selection's candidates are re-asked
-with the args bound as soon as the player answers (`resolvePick`), and that
-narrowed list is what `apply` validates against. When a re-asked pick comes back
+seat's offer. It no longer does; a later selection's candidates are asked when
+the player reaches it, with the answers so far (`resolvePick`), and that list is
+what `apply` validates against. When a re-asked pick comes back
 with nothing in it, the panel says so -- naming the question, the verb and the
 answers that narrowed it -- rather than drawing an empty list under a prompt.
 
@@ -1471,7 +1472,7 @@ candidate, which is most of what a seat cannot do right now, and a warning on
 every one of those would train its reader to ignore the one that means
 something.
 
-It costs `O(actions) x (condition + each selection's own candidates)`. There is
+It costs `O(actions) x (condition + the first selection's candidates)`. There is
 no term that scales with the world.
 
 ### What an offer costs to hydrate, and how to keep it free

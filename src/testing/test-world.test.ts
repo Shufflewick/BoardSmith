@@ -165,6 +165,28 @@ describe('TestWorld: a resident world a test can construct', () => {
     await world.close();
   });
 
+  it('offers a required pick after an optional first one by its shape, and runs its round on the re-ask (#1355)', async () => {
+    const plots: Record<string, string[]> = { quick: ['commons@1,1'] };
+    const build = worldAction<VaultWorld>('build')
+      .chooseFrom('note', { choices: ['quick'], optional: true })
+      .chooseFrom('plot', {
+        choices: ({ args }) => plots[args.note as string]!,
+        needs: ({ args }) => [plots[args.note as string]![0]!.split('@')[0]!],
+      })
+      .execute(() => {});
+    const world = await createTestWorld({
+      definition: bundle({ ...vaultWorldBlock(), actions: [build] } as WorldDefinition),
+    });
+    const offer = (await world.offersFor(1)).find((candidate) => candidate.name === 'build')!;
+    expect(offer.selections.map((pick) => [pick.name, pick.choices?.length])).toEqual([
+      ['note', 1],
+      ['plot', undefined],
+    ]);
+    const plot = await world.resolvePick(1, 'build', 'plot', { note: 'quick' });
+    expect(plot.choices?.map((choice) => choice.value)).toEqual(['commons@1,1']);
+    await world.close();
+  });
+
   it("defers a later pick's prompt, multiSelect and orderedList callbacks to the re-ask (#1350)", async () => {
     const plotName = (args: Record<string, unknown>) => (args.plot as string).split('@')[0]!;
     const build = worldAction<VaultWorld>('build')

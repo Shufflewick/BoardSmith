@@ -137,12 +137,11 @@ export interface WorldHost {
   /**
    * RE-ASK ONE PICK with the arguments bound so far (ShufflewickPub #378).
    *
-   * A world's offer arrives whole, with every selection's candidates already
-   * resolved against nothing bound. That is right for a candidate LIST -- a
-   * world action may not declare a dependent selection -- and wrong for a
-   * selection's SHAPE, which may read an earlier selection's value: a crew whose
-   * size is the chosen ship's cargo hold resolved to the unbounded fallback, and
-   * the panel was left holding a limit the game never meant.
+   * A world's offer resolves only the first selection's candidates, against
+   * nothing bound, and carries every later selection's shape (#1345, #1355). A
+   * later selection's list and SHAPE may read an earlier selection's value -- a
+   * crew whose size is the chosen ship's cargo hold -- so it is asked here with
+   * the answers so far.
    */
   resolvePick(
     action: string,
