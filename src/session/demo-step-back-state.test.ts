@@ -17,6 +17,10 @@ async function until(pred: () => boolean): Promise<void> {
   throw new Error('condition not met in time');
 }
 
+
+// A seat's pending state after the first pick of a two-pick action.
+const HALF_MADE = { actionName: 'two', playerPosition: 2, collectedArgs: { first: 'a' }, currentSelectionIndex: 1 };
+
 describe('demo step back (#811)', () => {
   it("drops every seat's half-made picks, hints and heatmaps", async () => {
     let moves = 0;
@@ -28,7 +32,7 @@ describe('demo step back (#811)', () => {
       heatmapToggle: (op) => ({ success: true, heatmapUpdate: { seat: (op as { seat: number }).seat, visible: true, entries: [] } }),
       selectionStep: (op, pend) => {
         if ((op as { selectionName: string }).selectionName === 'first') {
-          return { ...lastEnvelope, actionComplete: false, pendingState: { first: 'a' } };
+          return { ...lastEnvelope, actionComplete: false, pendingState: HALF_MADE };
         }
         return pend === null
           ? { success: false, error: 'There is no selection in progress to continue.', category: 'bundle' }
@@ -64,7 +68,7 @@ describe('demo step back (#811)', () => {
       type: 'selectionStep', player: 2, selectionName: 'first', value: 'a', actionName: 'twoPick',
       boundaryKey: boundaryKeyOfHost(host),
     }));
-    expect(host.durableState().pendingStates['2']).toEqual({ first: 'a' });
+    expect(host.durableState().pendingStates['2']).toEqual(HALF_MADE);
 
     await host.handleOp(1, { type: 'demoControl', control: 'back' });
 

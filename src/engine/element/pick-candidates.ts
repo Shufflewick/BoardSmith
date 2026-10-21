@@ -24,6 +24,7 @@ import { isDevThrowEnabled } from '../../utils/dev.js';
 import { isElement, type GameElement } from './game-element.js';
 import { seatIdOf } from './seat-placeholders.js';
 import { labelOfValue } from '../action/choice-matching.js';
+import { hidesFrom, seatText } from '../action/seat-text.js';
 import type { ElementRef } from '../../types/protocol.js';
 import type {
   ChoiceSelection,
@@ -91,7 +92,12 @@ export function formatChoiceCandidates(
   const sight = seatSight(candidates.map((c) => c.value), ctx);
   return candidates.map(({ value, label, disabled }) => {
     const neutral = sight.neutralLabel(value);
-    const display = label ?? (selection.display ? selection.display(value) : neutral ?? labelOfValue(value));
+    const engineLabel = neutral ?? labelOfValue(value);
+    const authored = label ?? selection.display?.(value);
+    // Only the choice itself: `display` is handed nothing else, and a label is part of what `choices` returned.
+    const display = authored === undefined
+      ? engineLabel
+      : seatText(authored, engineLabel, hidesFrom(ctx.player.seat, value), `display or label for selection '${selection.name}'`);
     const choice: ChoiceWithRefs = {
       value: neutral === undefined ? value : { id: sight.idOf(value as GameElement), className: (value as GameElement).constructor.name },
       display,
@@ -99,7 +105,7 @@ export function formatChoiceCandidates(
 
     if (selection.boardRefs) {
       try {
-        choice.refs = selection.boardRefs(value, ctx).refs;
+        choice.refs = selection.boardRefs(value, ctx).refs.map((r) => (r.ref ? { ...r, ref: sight.safeRef(r.ref) } : r));
       } catch (e) {
         warnings.push({
           code: 'BOARD_REFS_ERROR',
@@ -176,6 +182,12 @@ interface SeatSight {
   idOf(element: ElementLike): number;
   /** "Card #1" for an element the seat cannot see, else undefined. */
   neutralLabel(value: unknown): string | undefined;
+  /**
+   * A game's ref as the seat may be sent it (#1293): an element the seat
+   * cannot see, named by its id or as a hidden candidate by its name, goes
+   * by the seat's id for it, never its real id, name or notation.
+   */
+  safeRef(ref: ElementRef): ElementRef;
 }
 
 /**
@@ -186,7 +198,12 @@ interface SeatSight {
  */
 function seatSight(values: readonly unknown[], ctx: CandidateContext): SeatSight {
   const hidden = values.filter((v): v is GameElement => isElement(v) && !v.isVisibleTo(ctx.player.seat));
-  if (hidden.length === 0) return { idOf: (element) => element.id, neutralLabel: () => undefined };
+  const hiddenByName = new Map(hidden.filter((element) => element.name).map((element) => [element.name, element]));
+  const safeRef = (ref: ElementRef): ElementRef => {
+    const element = ref.id !== undefined ? ctx.game.getElementById(ref.id) : ref.name !== undefined ? hiddenByName.get(ref.name) : undefined;
+    return element && !element.isVisibleTo(ctx.player.seat) ? { id: seatIdOf(element, ctx.player.seat) } : ref;
+  };
+  if (hidden.length === 0) return { idOf: (element) => element.id, neutralLabel: () => undefined, safeRef };
   const seat = ctx.player.seat;
 
   const labels = new Map<unknown, string>();
@@ -197,7 +214,11 @@ function seatSight(values: readonly unknown[], ctx: CandidateContext): SeatSight
     perClass.set(className, index);
     labels.set(element, `${className} #${index}`);
   }
-  return { idOf: (element) => (isElement(element) ? seatIdOf(element, seat) : element.id), neutralLabel: (value) => labels.get(value) };
+  return {
+    idOf: (element) => (isElement(element) ? seatIdOf(element, seat) : element.id),
+    neutralLabel: (value) => labels.get(value),
+    safeRef,
+  };
 }
 
 /**
@@ -207,7 +228,8 @@ function seatSight(values: readonly unknown[], ctx: CandidateContext): SeatSight
  * label are numbered, because "Holding" and
  * "Holding" is a choice nobody can make. A `display()` the game supplied wins,
  * and receives the whole candidate list so it can disambiguate on something
- * better than an index.
+ * better than an index, unless it was handed an element the seat cannot see
+ * (#1293).
  */
 function labelElements(
   elements: readonly ElementLike[],
@@ -219,22 +241,28 @@ function labelElements(
   const display = selection.display as
     | ((element: never, context: CandidateContext, all: never[]) => string)
     | undefined;
+  if (!display) return engineLabels(elements, sight);
 
-  if (display) {
-    return elements.map((element) => {
-      try {
-        return display(element as never, ctx, elements as never[]);
-      } catch (e) {
-        warnings.push({
-          code: 'DISPLAY_ERROR',
-          message: sanitizeCallbackError(e, 'display(...)'),
-          source: 'display(...)',
-        });
-        return sight.neutralLabel(element) ?? (element.name || String(element.id));
-      }
-    });
-  }
+  const authored = elements.map((element) => {
+    try {
+      return display(element as never, ctx, elements as never[]);
+    } catch (e) {
+      warnings.push({
+        code: 'DISPLAY_ERROR',
+        message: sanitizeCallbackError(e, 'display(...)'),
+        source: 'display(...)',
+      });
+      return sight.neutralLabel(element) ?? (element.name || String(element.id));
+    }
+  });
+  // Every call was handed the whole list and the earlier picks, so one hidden element is in all of them.
+  if (!hidesFrom(ctx.player.seat, [ctx.args, elements])) return authored;
+  const engine = engineLabels(elements, sight);
+  return authored.map((label, index) => seatText(label, engine[index]!, true, `display for selection '${selection.name}'`));
+}
 
+/** The engine's own labels: a hidden element's neutral one, else its notation or name, numbered when shared. */
+function engineLabels(elements: readonly ElementLike[], sight: SeatSight): string[] {
   const baseNameOf = (element: ElementLike) => element.notation || element.name || 'Element';
   const counts = new Map<string, number>();
   for (const element of elements) {
@@ -272,7 +300,7 @@ function refFor(
     return { id: sight.idOf(element), ...(element.notation && !hidden ? { notation: element.notation } : {}) };
   }
   try {
-    return boardRef(element as never, ctx);
+    return sight.safeRef(boardRef(element as never, ctx));
   } catch (e) {
     // CHOICES_ERROR is the reserved stable code for boardRef() failures.
     warnings.push({

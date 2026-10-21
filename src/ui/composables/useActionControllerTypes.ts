@@ -129,14 +129,9 @@ export interface ResolvedAction {
   result: ControllerActionResult;
 }
 
-/** Result from fetching pick choices */
-export interface PickChoicesResult {
+/** Result from fetching pick choices: the pick as resolved server-side, which the controller snapshots */
+export interface PickChoicesResult extends PickSnapshot {
   success: boolean;
-  choices?: Array<{ value: unknown; display: string; refs?: RefWithRole[]; disabled?: string }>;
-  validElements?: EnrichedValidElement[];
-  multiSelect?: { min: number; max?: number };
-  /** Ordered-list entry bounds for this step (#249), resolved server-side */
-  orderedList?: { min: number; max?: number };
   error?: string;
 }
 
@@ -171,6 +166,8 @@ export interface PickSnapshot {
   multiSelect?: { min: number; max?: number };
   /** Ordered-list entry bounds (#249), evaluated when fetched */
   orderedList?: { min: number; max?: number };
+  /** The pick's prompt, evaluated when fetched, for one the metadata could not word yet (#1350) */
+  prompt?: string;
 }
 
 /**
@@ -206,9 +203,17 @@ export interface ActionStateSnapshot {
    * In-flight choice fetches, keyed by selection name. An entry exists only
    * while its request is outstanding, so a second caller joins the same request
    * instead of issuing a duplicate, and anything that needs the choices can
-   * await the request rather than racing it.
+   * await the request rather than racing it. A caller whose earlier answers
+   * differ from the entry's `askedAgainst` starts a fresh request instead (#1358).
    */
-  choiceFetches: Map<string, Promise<void>>;
+  choiceFetches: Map<string, ChoiceFetch>;
+}
+
+/** A choice fetch still out, with the answers to the picks before it that it was asked against. */
+export interface ChoiceFetch {
+  /** Resolves false when the result was dropped: the action moved on or an earlier answer changed. */
+  request: Promise<boolean>;
+  askedAgainst: (CollectedPick | undefined)[];
 }
 
 export interface UseActionControllerOptions {
@@ -374,6 +379,12 @@ export interface RepeatingState {
   currentChoices?: Array<{ value: unknown; display: string }>;
 }
 
+/** An action's opening element pick and the candidates it offers. */
+export interface StartCandidates {
+  pick: string;
+  elements: EnrichedValidElement[];
+}
+
 export interface UseActionControllerReturn {
   // === State ===
   /** Currently active action name */
@@ -393,6 +404,12 @@ export interface UseActionControllerReturn {
    * Re-runs when async-fetched choices arrive; use getChoices(pick) for an arbitrary pick.
    */
   currentChoices: ComputedRef<ChoiceWithRefs[]>;
+  /**
+   * With no action open, what a board click or drag can start (#1192): each
+   * available, enabled action that opens with an element pick, in
+   * `availableActions` order, with that pick's candidates. Empty off turn.
+   */
+  startCandidates: ComputedRef<ReadonlyMap<string, StartCandidates>>;
   /** Whether all selections are filled and action is ready */
   isReady: ComputedRef<boolean>;
   /** Whether the current seat has an action out to the server */
@@ -503,7 +520,7 @@ export interface UseActionControllerReturn {
   fill: (selectionName: string, value: unknown) => Promise<PickValidationResult>;
   /** Skip an optional selection */
   skip: (selectionName: string) => void;
-  /** Clear a selection's value */
+  /** Clear a selection's value and the value of every selection after it, since those were answered against the old value */
   clear: (selectionName: string) => void;
   /** Cancel the current action */
   cancel: () => void;

@@ -22,11 +22,6 @@
         "count": 1
       }
     },
-    "src/bot-trainer/weight-evolver.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/bot/determinization.ts": {
       "complexity_moderate": {
         "count": 1
@@ -289,7 +284,7 @@
         "count": 1
       },
       "complexity_moderate": {
-        "count": 8
+        "count": 7
       }
     },
     "src/engine/element/typed-array-codec.ts": {
@@ -605,7 +600,7 @@
     },
     "src/ui/composables/useDragDropTargets.ts": {
       "complexity_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "src/ui/composables/useFLIP.ts": {

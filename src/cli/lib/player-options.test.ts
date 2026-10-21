@@ -5,7 +5,7 @@
  * carry, since dev and the live lobby must offer the same list.
  */
 import { describe, it, expect } from 'vitest';
-import { mergePlayerOptions } from './player-options.js';
+import { defaultSeatOptions, exclusiveSeats, mergePlayerOptions, seatOptionsRefusal } from './player-options.js';
 import { createColorOption, type PlayerOptionDefinition } from '../../session/index.js';
 
 const role: PlayerOptionDefinition = {
@@ -146,5 +146,64 @@ describe('the code types take only shapes the platform\'s manifest can carry (#9
     const seats: PlayerOptionDefinition = { type: 'number', label: 'Seats', default: 2, min: 1, max: 4, step: 1 };
     const ready: PlayerOptionDefinition = { type: 'boolean', label: 'Ready', description: 'Start at once', default: false };
     expect(mergePlayerOptions({ seats, ready }, [{ id: 'seats', ...seats }])).toEqual({ seats, ready });
+  });
+});
+
+const declared: Record<string, PlayerOptionDefinition> = {
+  color: createColorOption(),
+  side: { type: 'select', label: 'Side', default: 'north', choices: [{ value: 'north', label: 'North' }, { value: 'south', label: 'South' }] },
+  handicap: { type: 'number', label: 'Handicap', default: 2, min: 0, max: 5, step: 2 },
+  ready: { type: 'boolean', label: 'Ready', default: false },
+  dictator: { type: 'exclusive', label: 'Dictator', default: 'last', choices: [{ value: 'dictator', label: 'Dictator' }] },
+};
+const personal = { side: 'north', handicap: 2, ready: false };
+
+describe('defaultSeatOptions (#1304, #1325)', () => {
+  it("gives each seat every select, number and boolean default, and an exclusive option's value to the seat its default names", () => {
+    expect(defaultSeatOptions(declared, 3)).toEqual([personal, personal, { ...personal, dictator: 'dictator' }]);
+  });
+
+  it.each([
+    ['first', 1],
+    ['', 1],
+    ['2', 2],
+    ['9', 3],
+    ['0', 1],
+    ['anyone', 1],
+  ])('names the holder of an exclusive option whose default is "%s" as the platform does: seat %i', (initial, holder) => {
+    const options: Record<string, PlayerOptionDefinition> = { lead: { ...declared.dictator, default: initial } as PlayerOptionDefinition };
+    expect(exclusiveSeats(options, defaultSeatOptions(options, 3))).toEqual({ lead: holder });
+  });
+});
+
+describe('seatOptionsRefusal (#1323)', () => {
+  const table = (...seats: unknown[]) => seats;
+
+  it('accepts one set of declared values per seat, with each exclusive option held by one seat', () => {
+    expect(seatOptionsRefusal(declared, table({ ...personal, side: 'south', ready: true }, { ...personal, dictator: 'dictator' }), 2)).toBeUndefined();
+  });
+
+  const holder = { ...personal, dictator: 'dictator' };
+  const constructorOption = Object.fromEntries<PlayerOptionDefinition>([
+    ['constructor', { type: 'boolean', label: 'Constructor', default: false }],
+  ]);
+  it.each<[string, unknown, RegExp, Record<string, PlayerOptionDefinition>?]>([
+    ['a table of the wrong size', table(holder), /one set of player options for each of the 2 seats/],
+    ['a table that is not a list', { 1: holder, 2: personal }, /one set of player options for each of the 2 seats/],
+    ['a seat that is not a set of options', table(holder, 'south'), /Seat 2's player options must be a set of option values/],
+    ['a seat missing an option', table(holder, { side: 'north', handicap: 2 }), /Seat 2 has no value for Ready\. Give each seat a value for every player option\./],
+    ['an undeclared option', table(holder, { ...personal, speed: 3 }), /Seat 2: "speed" is not a player option of this game; its player options are side, handicap, ready, dictator\./],
+    ['colour, which is chosen with the seat', table({ ...holder, color: '#fff' }, personal), /Seat 1: "color" is not a player option/],
+    ['a number off its step', table(holder, { ...personal, handicap: 3 }), /Seat 2: Handicap must be in steps of 2 from 0 \(0, 2, 4, \.\.\.\), not 3\./],
+    ['a number outside its range', table(holder, { ...personal, handicap: 6 }), /Seat 2: Handicap must be between 0 and 5, not 6\./],
+    ['a number that is not one', table({ ...holder, handicap: '3' }, personal), /Seat 1: Handicap must be a number, not "3"\./],
+    ['a boolean that is not one', table({ ...holder, ready: 'yes' }, personal), /Seat 1: Ready must be true or false, not "yes"\./],
+    ['a select value among none of its choices', table({ ...holder, side: 'west' }, personal), /Seat 1: Side is "west", which is none of its choices \(north, south\)\./],
+    ['an exclusive value among none of its choices', table({ ...holder, dictator: 'king' }, personal), /Seat 1: Dictator is "king", which is none of its choices \(dictator\)\./],
+    ['an exclusive option no seat holds', table(personal, personal), /Give Dictator to one seat\./],
+    ['an option a seat left out whose id an object has anyway', table(holder, personal), /Seat 1 has no value for Constructor\./, constructorOption],
+    ['an exclusive option two seats hold', table(holder, holder), /Dictator is given to seats 1 and 2; give it to one seat\./],
+  ])('refuses %s', (_case, seats, message, more = {}) => {
+    expect(seatOptionsRefusal({ ...declared, ...more }, seats, 2)).toMatch(message);
   });
 });

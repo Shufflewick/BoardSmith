@@ -35,6 +35,7 @@ export function useElementBoardState(element: () => BoardElement) {
     () => !!boardInteraction && !isSelected.value && boardInteraction.isDraggableSelectedElement(identity()),
   );
   const isDisabled = computed(() => !!boardInteraction && boardInteraction.isDisabledElement(identity()) !== false);
+  const canStartDrag = computed(() => !!boardInteraction && boardInteraction.canStartDrag(identity()));
   const isDropTarget = computed(() => boardInteraction?.isDropTarget(identity()) ?? false);
   const isDragged = computed(() => boardInteraction?.isDraggedElement(identity()) ?? false);
 
@@ -46,6 +47,7 @@ export function useElementBoardState(element: () => BoardElement) {
     isActionSelectable,
     isDraggableSelected,
     isDisabled,
+    canStartDrag,
     isDropTarget,
     isDragged,
   };

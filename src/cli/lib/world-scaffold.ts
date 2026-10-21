@@ -358,6 +358,7 @@ import {
   createWorld,
   EMPTY_NOTICE_BOX,
   mintWorldElementIdKey,
+  seatView,
   settleDeclaration,
   walkDeclaration,
 } from 'boardsmith/world';
@@ -638,7 +639,7 @@ describe('the world', () => {
 
     const { bodies, of } = await runner.viewsFor(['alice']);
     const views: Record<string, unknown> = {};
-    for (const [player, at] of Object.entries(of)) views[player] = bodies[at];
+    for (const [player, { at, placeholders }] of Object.entries(of)) views[player] = seatView(bodies[at], placeholders);
     expect(JSON.stringify(views.alice)).toContain('plot-1');
     expect(JSON.stringify(views.alice)).not.toContain('plot-2');
   });

@@ -179,8 +179,14 @@ const SEATS = new Map([
   ["p4", 4],
 ]);
 
-/** What a host tells `applyNoticeWrites` about itself (#789). */
-const HOST = { seatCount: SEATS.size, budgets: worldBudgets() };
+/** What a host tells `applyNoticeWrites` about itself (#789), and the boxes the
+ *  command's walk declared (#975): here every seat's, so only the case under
+ *  test refuses. */
+const HOST = {
+  seatCount: SEATS.size,
+  budgets: worldBudgets(),
+  declaredNotices: [...SEATS.values()].map((seat) => ({ seat, box: EMPTY_NOTICE_BOX })),
+};
 
 async function launched(notices: { perSeat: number } | null = { perSeat: PER_SEAT }) {
   const definition = definitionWith(notices);
@@ -648,5 +654,60 @@ describe("#789 — applyNoticeWrites re-checks what the child isolate returned",
       message: expect.stringMatching(/^This dispatch's result carries/),
     });
     expect(reads).toEqual([]);
+  });
+});
+
+/**
+ * #975: THE CHILD IS NOT BELIEVED ABOUT WHICH BOXES IT TOUCHED. A take empties a
+ * box and a `refuse` send must know how full it is, so both need the box
+ * declared; the host answered the declaration, so it re-checks every one before
+ * it reads a box. A forged take could otherwise empty any seat's box, and a
+ * forged `refuse` send would fail late at the write as `notice-box-full`.
+ */
+describe("#975 — applyNoticeWrites refuses a take or refuse send to a box the command did not declare", () => {
+  const send = (seat: number, whenFull: "refuse" | "dropOldest") => ({
+    kind: "send" as const,
+    seat,
+    whenFull,
+    notice: { at: NOW, payload: null },
+  });
+  const declaring = (...seats: number[]) => ({
+    ...HOST,
+    declaredNotices: seats.map((seat) => ({ seat, box: EMPTY_NOTICE_BOX })),
+  });
+  const run = (writes: readonly WorldNoticeWrite[], declared: readonly number[]) => {
+    const reads: number[] = [];
+    const settled = applyNoticeWrites(
+      { perSeat: 1, writes },
+      (seat) => {
+        reads.push(seat);
+        return box("full");
+      },
+      declaring(...declared),
+    );
+    return { settled, reads };
+  };
+
+  it.each([
+    ["a take", { kind: "take" as const, seat: 3 }],
+    ["a refuse send", send(3, "refuse")],
+  ])("refuses %s to an undeclared box, before reading any box", async (_, write) => {
+    const { settled, reads } = run([send(2, "dropOldest"), write], [2]);
+    await expect(settled).rejects.toMatchObject({
+      code: "undeclared-notice-box",
+      message: expect.stringMatching(/seat 3's notice box.*did not declare.*Nothing was changed/),
+    });
+    expect(reads).toEqual([]);
+  });
+
+  it("refuses a refuse send to an undeclared full box by name, not as a full box", async () => {
+    await expect(run([send(3, "refuse")], []).settled).rejects.toMatchObject({
+      code: "undeclared-notice-box",
+    });
+  });
+
+  it("applies a take and a refuse send to declared boxes, and a dropOldest send to any box", async () => {
+    const { settled } = run([{ kind: "take", seat: 2 }, send(2, "refuse"), send(4, "dropOldest")], [2]);
+    expect((await settled).map(({ seat }) => seat)).toEqual([2, 4]);
   });
 });

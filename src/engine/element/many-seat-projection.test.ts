@@ -33,6 +33,7 @@ import {
   type GameOptions,
   type VisibilityMode,
 } from '../index.js';
+import { fillPlaceholders, placeholderIdOf, sharePlaceholders } from './seat-placeholders.js';
 
 /** Counts every full-tree serialization any instance of it takes part in. */
 class Stall extends Space<PlazaGame> {
@@ -193,14 +194,23 @@ describe("#408/#411/#413 -- which seats hold the same projection", () => {
   /**
    * How the predicate would group an audience, beside how the projections
    * really group -- which is the only thing that makes a predicate worth
-   * trusting.
+   * trusting. A projection is compared with its placeholder ids taken out,
+   * which is how seats share it (#1207), and each seat's own ids must put its
+   * own view back exactly.
    */
   function grouping(
     game: PlazaGame,
     audience: readonly number[] = [1, 2],
   ): { predicted: number[][] | null; observed: number[][] } {
     const signatures = game.projectionSignaturesFor(audience);
-    const bodies = audience.map((seat) => JSON.stringify(game.toJSONForPlayer(seat)));
+    const bodies = audience.map((seat) => {
+      const shownAs = new Map<number, number>();
+      const own = game.toJSONForPlayer(seat, shownAs);
+      const shared = sharePlaceholders(own, shownAs, game);
+      const ids = shared.cards.map((card) => placeholderIdOf(card, seat));
+      expect(fillPlaceholders(shared.view, ids), `seat ${seat}'s ids put its own view back`).toEqual(own);
+      return JSON.stringify(shared.view);
+    });
     return {
       predicted: signatures === null ? null : split(audience, signatures),
       observed: split(audience, bodies),
@@ -363,16 +373,33 @@ describe("#408/#411/#413 -- which seats hold the same projection", () => {
 
   it("refuses for an owner-only zone even where every seat is DENIED it", () => {
     // The refusal is of the MODE rather than of a branch. A denied owner and a
-    // denied stranger are both shown placeholders (#750), each its own (#715),
-    // and the predicate does not reason about ownership at all.
+    // denied stranger are both shown placeholders (#750), alike once their ids
+    // are taken out (#1207), and the predicate does not reason about ownership at all.
     const game = newSquare();
     const square = game.first(Stall, 'square')!;
     square.setZoneVisibility('owner');
     square.player = game.players[0];
     square.hideContentsFrom(1, 2);
     const { predicted, observed } = grouping(game);
-    expect(observed, 'each denied seat is shown placeholders of its own').toEqual([[1], [2]]);
+    expect(observed, 'both denied seats are shown placeholders').toEqual([[1, 2]]);
     expect(predicted).toBe(null);
+  });
+
+  it("puts every seat shown a count-only pile in one group, each with ids of its own (#1207)", () => {
+    // #715 gave each seat its own placeholder ids, which made every seat
+    // shown one a group of its own; with the ids taken out they are one body.
+    const game = newSquare();
+    game.first(Stall, 'square')!.contentsCountOnly();
+    const audience = seatsOf(SEATS);
+    const { predicted, observed } = grouping(game, audience);
+    expect(observed).toEqual([audience]);
+    expect(predicted).toEqual([audience]);
+    const ids = audience.map((seat) => {
+      const shownAs = new Map<number, number>();
+      game.toJSONForPlayer(seat, shownAs);
+      return [...shownAs.values()];
+    });
+    expect(new Set(ids.flat()).size, 'no two seats share a placeholder id').toBe(ids.flat().length);
   });
 
   it("refuses for a game that rewrites its own player view", () => {

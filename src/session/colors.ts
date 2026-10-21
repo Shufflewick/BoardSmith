@@ -33,7 +33,8 @@ export interface ColorChoice {
  */
 export interface ColorOptionDefinition {
   type: 'color';
-  label: string;
+  /** Always "Color": the lobby builds this option from the palette, and reads no other label (#1304). */
+  label: 'Color';
   choices: ColorChoice[];
 }
 

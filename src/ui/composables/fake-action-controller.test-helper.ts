@@ -5,7 +5,7 @@
  */
 import { vi } from 'vitest';
 import { ref, computed } from 'vue';
-import type { UseActionControllerReturn, EnrichedPickMetadata, EnrichedValidElement } from './useActionControllerTypes.js';
+import type { UseActionControllerReturn, EnrichedPickMetadata, EnrichedValidElement, StartCandidates } from './useActionControllerTypes.js';
 
 export function makeController(opts: {
   pick?: EnrichedPickMetadata | null;
@@ -13,6 +13,8 @@ export function makeController(opts: {
   validElements?: EnrichedValidElement[];
   /** The picks already answered in the open action. */
   args?: Record<string, unknown>;
+  /** What each action can start with while none is open, as the server answers it (#1192). */
+  startCandidates?: Record<string, StartCandidates>;
 }) {
   const currentAction = ref<string | null>(opts.action ?? null);
   const currentPick = computed<EnrichedPickMetadata | null>(() => opts.pick ?? null);
@@ -37,6 +39,7 @@ export function makeController(opts: {
   // reads snapshotVersion so async-fetched choices/elements surface reactively).
   const currentChoices = computed(() => opts.pick?.choices ?? []);
   const validElements = computed(() => opts.validElements ?? []);
+  const startCandidates = ref(new Map(Object.entries(opts.startCandidates ?? {})));
 
   const controller = {
     currentAction,
@@ -52,6 +55,7 @@ export function makeController(opts: {
     heldFollowUp,
     currentChoices,
     validElements,
+    startCandidates,
     getValidElements: () => opts.validElements ?? [],
     fill,
     start,

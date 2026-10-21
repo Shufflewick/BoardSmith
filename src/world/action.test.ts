@@ -893,6 +893,105 @@ describe("#665 — a seat sends only an action's picks, on every road", () => {
     expect(calls).toContain("execute");
   });
 
+  describe("#1328 — a command missing a required pick is refused before a round reads it", () => {
+    /** `build`'s execute round reads `plot`, as a round after a selection may. */
+    function building() {
+      const read: unknown[] = [];
+      const build = worldAction<VillageFixture>("build")
+        .chooseFrom("plot", { choices: () => ["east", "west"] })
+        .chooseFrom("note", { choices: () => ["quick"], optional: true })
+        .needs(({ player, args }) => {
+          read.push(args.plot);
+          return [holdingPartition(player.seat)];
+        })
+        .execute(() => {});
+      return { read, ...newEngine([build]) };
+    }
+    const MISSING = { code: "missing-pick", message: "Missing required selection: plot" };
+
+    it.each([{}, { plot: null }])("refuses the walk for %o before any round reads its args", (args) => {
+      const { engine, read } = building();
+      expect(() =>
+        engine.commandNeeds("p1", { name: "build", args }, arrival(STAMP.now), STAMP),
+      ).toThrow(expect.objectContaining(MISSING));
+      expect(read).toEqual([]);
+    });
+
+    it("refuses the command itself before any round reads its args", async () => {
+      const { engine, read } = building();
+      await engine.hydrate([holdingPartition(1)]);
+      await expect(engine.applyCommand("p1", { name: "build", args: {} }, STAMP)).rejects.toMatchObject(
+        MISSING,
+      );
+      expect(read).toEqual([]);
+    });
+
+    it("takes a command that leaves out only an optional pick", async () => {
+      const { engine, read } = building();
+      await apply(engine, "p1", { name: "build", args: { plot: "east" } });
+      expect(read).toContain("east");
+    });
+  });
+
+  describe("#1338 — a re-asked pick missing an earlier required pick is refused before its round reads it", () => {
+    /** `size`'s own round reads `plot`, the required pick before it. */
+    function sizing() {
+      const read: unknown[] = [];
+      const build = worldAction<VillageFixture>("build")
+        .chooseFrom("note", { choices: () => ["quick"], optional: true })
+        .chooseFrom("plot", { choices: () => ["east", "west"] })
+        .chooseFrom("size", {
+          choices: () => ["small", "large"],
+          needs: ({ player, args }) => {
+            read.push(args.plot);
+            return [holdingPartition(player.seat)];
+          },
+        })
+        .execute(() => {});
+      return { read, ...newEngine([build]) };
+    }
+    const MISSING = { code: "missing-pick", message: "Missing required selection: plot" };
+    const stamp = { now: STAMP.now, presence: [], activity: STAMP.activity };
+
+    it.each([{}, { plot: null }])("refuses the pick for %o before any round reads its args", async (args) => {
+      const { engine, read } = sizing();
+      await engine.hydrate([holdingPartition(1)]);
+      expect(() => engine.pickPartitions("p1", "build", "size", args, STAMP.now)).toThrow(
+        expect.objectContaining(MISSING),
+      );
+      await expect(engine.resolvePick("p1", "build", "size", args, stamp)).rejects.toMatchObject(MISSING);
+      expect(read).toEqual([]);
+    });
+
+    it("answers a pick whose earlier picks are bound, an optional one left out", async () => {
+      const { engine, read } = sizing();
+      await engine.hydrate([holdingPartition(1)]);
+      expect(engine.pickPartitions("p1", "build", "size", { plot: "east" }, STAMP.now)).toEqual([]);
+      await engine.resolvePick("p1", "build", "size", { plot: "east" }, stamp);
+      expect(read).toEqual(["east", "east"]);
+    });
+
+    it("does not ask for the asked pick itself or a later one", async () => {
+      const { engine } = sizing();
+      await engine.hydrate([holdingPartition(1)]);
+      expect(engine.pickPartitions("p1", "build", "plot", {}, STAMP.now)).toEqual([]);
+      await expect(engine.resolvePick("p1", "build", "plot", {}, stamp)).resolves.toBeDefined();
+    });
+
+    it("#1345, #1355 — the offer stops at the first pick, optional or not: a later pick's round and candidates wait for the re-ask", async () => {
+      const { engine, read } = sizing();
+      await engine.hydrate([holdingPartition(1)]);
+      expect(engine.offerPartitions("p1", STAMP.now)).toEqual([]);
+      const offer = (await engine.offersFor("p1", OFFER)).find((o) => o.name === "build")!;
+      expect(read).toEqual([]);
+      expect(offer.selections.map((pick) => [pick.name, pick.choices?.length])).toEqual([
+        ["note", 1],
+        ["plot", undefined],
+        ["size", undefined],
+      ]);
+    });
+  });
+
   it("leaves a scheduled event's args to the bundle that scheduled them: the clock asks no picks", async () => {
     // The clock's own verbs take no picks (`refuses a seatless action that asks a
     // question`), so a scheduled event's args are the bundle's data, not a seat's

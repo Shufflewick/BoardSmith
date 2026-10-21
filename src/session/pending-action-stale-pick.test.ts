@@ -137,7 +137,7 @@ const gem = (r: GameRunner<GemGame>) => r.game.first(Gem, 'gem')!;
 describe('PendingActionManager on a runner, pick by pick', () => {
   it("refuses a pending action once another seat's action took an earlier pick, and keeps it open to cancel (#1169)", async () => {
     const r = runner();
-    const picks = new PendingActionManager(r, 2);
+    const picks = new PendingActionManager(r);
     picks.startPendingAction('draft', 1);
     expect((await picks.processSelectionStep(1, 'gem', gem(r).id)).success).toBe(true);
     expect(r.performAction('grab', 2, { gem: gem(r).id }).success).toBe(true);
@@ -153,7 +153,7 @@ describe('PendingActionManager on a runner, pick by pick', () => {
 
   it('completes a pending action whose own onSelect took its pick off the offer', async () => {
     const r = runner();
-    const picks = new PendingActionManager(r, 2);
+    const picks = new PendingActionManager(r);
     picks.startPendingAction('claim', 1);
     expect((await picks.processSelectionStep(1, 'gem', gem(r).id)).success).toBe(true);
     expect(gem(r).parent!.name).toBe('held');
@@ -164,7 +164,7 @@ describe('PendingActionManager on a runner, pick by pick', () => {
 
   it('completes a pending action whose own onSelect took its pick off the offer, when another seat acted in between', async () => {
     const r = runner();
-    const picks = new PendingActionManager(r, 2);
+    const picks = new PendingActionManager(r);
     picks.startPendingAction('claim', 1);
     expect((await picks.processSelectionStep(1, 'gem', gem(r).id)).success).toBe(true);
     expect(r.performAction('rest', 2, {}).success).toBe(true);
@@ -175,7 +175,7 @@ describe('PendingActionManager on a runner, pick by pick', () => {
 
   it('completes a pending action whose own onSelect took a chooseFrom pick off the offer, when another seat acted in between', async () => {
     const r = runner();
-    const picks = new PendingActionManager(r, 2);
+    const picks = new PendingActionManager(r);
     picks.startPendingAction('paint', 1);
     expect((await picks.processSelectionStep(1, 'color', 'red')).success).toBe(true);
     expect(r.performAction('rest', 2, {}).success).toBe(true);
@@ -186,7 +186,7 @@ describe('PendingActionManager on a runner, pick by pick', () => {
 
   it("refuses a pending action once another seat's pick took its chooseFrom pick off the offer", async () => {
     const r = runner();
-    const picks = new PendingActionManager(r, 2);
+    const picks = new PendingActionManager(r);
     picks.startPendingAction('dye', 1);
     expect((await picks.processSelectionStep(1, 'color', 'red')).success).toBe(true);
     picks.startPendingAction('paint', 2);
@@ -201,7 +201,7 @@ describe('PendingActionManager on a runner, pick by pick', () => {
 
   it('keeps a pick another seat took marked across later picks, and refuses the last one', async () => {
     const r = runner();
-    const picks = new PendingActionManager(r, 2);
+    const picks = new PendingActionManager(r);
     picks.startPendingAction('stamp', 1);
     expect((await picks.processSelectionStep(1, 'gem', gem(r).id)).success).toBe(true);
     expect(r.performAction('grab', 2, { gem: gem(r).id }).success).toBe(true);
@@ -213,7 +213,7 @@ describe('PendingActionManager on a runner, pick by pick', () => {
 
   it("refuses a pending action once another seat's action took its element pick off the offer without moving it, and keeps it open (#1169)", async () => {
     const r = runner();
-    const picks = new PendingActionManager(r, 2);
+    const picks = new PendingActionManager(r);
     picks.startPendingAction('draft', 1);
     expect((await picks.processSelectionStep(1, 'gem', gem(r).id)).success).toBe(true);
     expect(r.performAction('reserve', 2, { gem: gem(r).id }).success).toBe(true);
@@ -228,7 +228,7 @@ describe('PendingActionManager on a runner, pick by pick', () => {
 
   it("does not re-check a pick a held follow-up answered, when another seat's action took it", async () => {
     const r = runner();
-    const picks = new PendingActionManager(r, 2);
+    const picks = new PendingActionManager(r);
     expect(r.performAction('mark', 1, { gem: gem(r).id }).success).toBe(true);
     picks.startPendingAction('stamp', 1);
     expect((await picks.processSelectionStep(1, 'gem', gem(r).id)).success).toBe(true);
@@ -241,7 +241,7 @@ describe('PendingActionManager on a runner, pick by pick', () => {
 
   it("completes a pending action when another seat's action left its picks on offer", async () => {
     const r = runner();
-    const picks = new PendingActionManager(r, 2);
+    const picks = new PendingActionManager(r);
     picks.startPendingAction('draft', 1);
     expect((await picks.processSelectionStep(1, 'gem', gem(r).id)).success).toBe(true);
     expect(r.performAction('rest', 2, {}).success).toBe(true);

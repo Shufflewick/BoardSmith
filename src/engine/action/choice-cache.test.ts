@@ -268,7 +268,7 @@ describe('every change to the game is seen by the next question', () => {
     const runner = start(DuelGame);
     const game = runner.game;
     expect(movable(game, 2)).toContain('p2-6');
-    const picks = new PendingActionManager(runner, 2);
+    const picks = new PendingActionManager(runner);
     picks.startPendingAction('stun', 1);
     expect((await picks.processSelectionStep(1, 'target', game.first(Pawn, 'p2-6')!)).success).toBe(true);
     expect(movable(game, 2)).not.toContain('p2-6');
@@ -282,7 +282,7 @@ describe('every change to the game is seen by the next question', () => {
 
     // One submission, then pick by pick, then a cancelled pick.
     expect(runner.performAction('act', 1, { x: 1, z: 1 }).success).toBe(true);
-    const picks = new PendingActionManager(runner, 1);
+    const picks = new PendingActionManager(runner);
     picks.startPendingAction('act', 1);
     await picks.processSelectionStep(1, 'x', 1);
     await picks.processSelectionStep(1, 'z', 2);

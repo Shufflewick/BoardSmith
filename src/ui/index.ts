@@ -276,6 +276,8 @@ export {
   getPlayerAttribute,
   findAllHands,
   getElementCount,
+  isSizeHidden,
+  directChildren,
   getCards,
   getFirstCard,
   getElementOwner,

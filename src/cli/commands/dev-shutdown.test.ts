@@ -20,7 +20,7 @@ import { join } from 'node:path';
 
 import { WebSocket as WsClient } from 'ws';
 
-import { devProject, EXIT_WITHIN_MS, spawnDev, type DevRunEnding } from './dev-project.test-helper.js';
+import { devProject, endsWithTest, EXIT_WITHIN_MS, spawnDev, type DevRunEnding } from './dev-project.test-helper.js';
 import { freePort } from '../lib/free-port.js';
 import { openWorldStore, worldStorePath } from '../dev-host/world-store.js';
 import { worldBudgets } from '../../world/index.js';
@@ -69,6 +69,7 @@ vi.setConfig({ testTimeout: 120_000 });
 async function stopWhileOptimising(cwd: string, signal: NodeJS.Signals): Promise<DevRunEnding> {
   const port = await freePort();
   const run = spawnDev(cwd, port);
+  endsWithTest(run.child);
   const ready = new Promise<boolean>((resolve) => {
     run.child.stdout.on('data', () => {
       if (run.output().includes('Ready!')) resolve(true);
@@ -138,6 +139,7 @@ describe('boardsmith dev stopped with SIGTERM (#382)', () => {
     const expectAuthorFilesKept = plantAuthorFiles(cwd);
     const port = await freePort();
     const run = spawnDev(cwd, port);
+    endsWithTest(run.child);
     const ready = await new Promise<boolean>((resolve) => {
       run.child.stdout.on('data', () => {
         if (run.output().includes('Ready!')) resolve(true);
@@ -192,6 +194,7 @@ describe('boardsmith dev stopped with SIGTERM (#382)', () => {
 async function stopDuringStartup(cwd: string, stage: string): Promise<void> {
   const expectAuthorFilesKept = plantAuthorFiles(cwd);
   const run = spawnDev(cwd, await freePort());
+  endsWithTest(run.child);
   const reached = await new Promise<boolean>((resolve) => {
     run.child.stdout.on('data', () => {
       if (run.output().includes(stage)) resolve(true);

@@ -204,8 +204,57 @@ describe('world-action callbacks receive element selections as elements (#418)',
       await expect(world.resolvePick(1, 'survey', 'look', { room })).rejects.toMatchObject({
         code: 'stale-draft',
       });
+      // A later pick answered too is never resolved against the refused one (#1223).
+      await expect(world.quote(1, 'survey', { room, look: 'stare' })).rejects.toMatchObject({ code: 'stale-draft' });
     }
     expect(seen.size).toBe(0);
+    await world.close();
+  });
+
+  it('a draft naming a declared element its pick no longer offers is refused before a later pick sees it (#1315)', async () => {
+    let offering = true;
+    const handed: unknown[] = [];
+    const peek = worldAction<VaultWorld>('peek')
+      .chooseElement('room', {
+        needs: ({ player }) => [`vault:${player.seat}`],
+        elements: ({ game, player }) => (offering ? [game.first(Vault, `vault-${player.seat}`)!] : []),
+      })
+      .chooseFrom('look', {
+        choices: ({ args }) => {
+          if (args.room !== undefined) handed.push(args.room);
+          return ['glance', 'stare'];
+        },
+      })
+      .quote(() => null)
+      .execute(() => {});
+    const world = await createTestWorld({
+      definition: { ...vaultBundle(), world: { ...vaultWorldBlock(), actions: [peek] } as WorldDefinition },
+    });
+    const room = (await world.resolvePick(1, 'peek', 'room', {})).validElements![0]!.id;
+    // Still resident and inside the declared partition, but no longer offered.
+    offering = false;
+
+    await expect(world.quote(1, 'peek', { room, look: 'stare' })).rejects.toMatchObject({ code: 'stale-draft' });
+    await expect(world.resolvePick(1, 'peek', 'look', { room })).rejects.toMatchObject({ code: 'stale-draft' });
+    expect(handed).toEqual([]);
+    await world.close();
+  });
+
+  it('a quote over a list pick still being filled in is priced, not refused (#1315)', async () => {
+    const gather = worldAction<VaultWorld>('gather')
+      .chooseElements('rooms', {
+        needs: ({ player }) => [`vault:${player.seat}`],
+        elements: ({ game, player }) => [game.first(Vault, `vault-${player.seat}`)!],
+        multiSelect: { min: 2, max: 3 },
+      })
+      .quote(({ rooms }) => [`${rooms?.length ?? 0} rooms`])
+      .execute(() => {});
+    const world = await createTestWorld({
+      definition: { ...vaultBundle(), world: { ...vaultWorldBlock(), actions: [gather] } as WorldDefinition },
+    });
+    const room = (await world.resolvePick(1, 'gather', 'rooms', {})).validElements![0]!.id;
+
+    await expect(world.quote(1, 'gather', { rooms: [room] })).resolves.toEqual(['1 rooms']);
     await world.close();
   });
 });

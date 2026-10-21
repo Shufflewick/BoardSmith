@@ -253,7 +253,7 @@ describe('every element reference a seat receives is redacted the same way (#104
     const discardJson = JSON.parse(JSON.stringify(game.discard.toJSON())) as ElementJSON;
     game.evictSubtree(game.hand.id);
     game.evictSubtree(game.discard.id);
-    game.adoptSubtree(game.id, discardJson);
+    game.adoptSubtree(discardJson);
 
     const view = seatView(game, seat);
     const discard = view.children!.find((node) => node.name === 'discard')!;

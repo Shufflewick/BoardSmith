@@ -124,6 +124,13 @@ export interface GameRunnerOptions<G extends Game, O extends GameOptions = GameO
    * them, so a save keeps the options it started with.
    */
   declaredGameOptions?: Readonly<Record<string, GameOptionDefinition>>;
+  /**
+   * Whoever runs this runner throws it away when an op fails and keeps the
+   * game from before the op, as a host does. A failed action then tells the
+   * player nothing was changed, even where the runner itself could not undo
+   * it (#1254).
+   */
+  discardsFailedOps?: boolean;
 }
 
 /**
@@ -223,6 +230,12 @@ function failureCode(result: ActionResult | undefined): ErrorCode {
 export function pickFailureCode(refused: { rulesError?: boolean }): ErrorCode {
   return refused.rulesError ? ErrorCode.ENGINE_ERROR : ErrorCode.INVALID_PICK;
 }
+
+/** What a player is told when a failed action could not be undone (checkpoints off, #808, #989). */
+const PARTIAL_CHANGES_KEPT =
+  'The action failed part way through, and the game may still hold its partial changes, ' +
+  'because per-action checkpoints are turned off for this session so it could not be undone. ' +
+  'Check the board before playing on, or restart the game from a save.';
 
 /** The kept history entries before action `actionIndex`, which a checkpoint there restores with. */
 function historyBefore(snapshot: GameStateSnapshot, actionIndex: number): HistoryEntry[] {
@@ -391,7 +404,10 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   readonly seed?: string;
 
+  readonly #discardsFailedOps: boolean;
+
   constructor(options: GameRunnerOptions<G, O>) {
+    this.#discardsFailedOps = options.discardsFailedOps ?? false;
     this.gameType = options.gameType;
     this.checkpointPolicy_ = {
       max: options.checkpoints?.max ?? Number.POSITIVE_INFINITY,
@@ -641,11 +657,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   private undoneError(error: string | undefined, restored: boolean): string {
     const kept = error === undefined ? '' : `${error} `;
-    if (restored) return kept + NOTHING_CHANGED;
-    return kept +
-      'The action failed part way through, and the game may still hold its partial changes, ' +
-      'because per-action checkpoints are turned off for this session so it could not be undone. ' +
-      'Check the board before playing on, or restart the game from a save.';
+    return kept + (restored || this.#discardsFailedOps ? NOTHING_CHANGED : PARTIAL_CHANGES_KEPT);
   }
 
   /** Put the game back to the head checkpoint, if there is one, and say whether it did. */
@@ -660,6 +672,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       this.game._ctx.sequence = checkpoint.sequence;
     }
     this.game.setRandomState(checkpoint.randomState);
+    this.game._afterRestoreSubtree();
     return true;
   }
 
@@ -675,6 +688,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * (`partiallyApplied`): an `execute()` that refuses cleanly changed nothing,
    * as `performAction` takes it. `undone` says the game is as before the op;
    * the caller then puts the seat's pending action back as it was.
+   * @internal The pick-by-pick state machine's runner half: the session's PendingActionManager is its only caller (#1231).
    */
   runPickOp<R extends { success: boolean; error?: string; partiallyApplied?: boolean }>(run: () => R): { result: R; undone: boolean } {
     const recorded = this.actionCount;
@@ -943,6 +957,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * after the action is refused, as in `performAction`, rather than thrown (#1120).
    * A pick that is no longer on offer, or the action's `validate`, refuses it
    * before anything runs: the step is undone and `onCancel` does not run (#1169).
+   * @internal The pick-by-pick state machine's runner half: the session's PendingActionManager is its only caller (#1231).
    */
   executeCollectedAction(pendingState: PendingActionState, playerPosition: number): ActionExecutionResult {
     const action = this.game.getAction(pendingState.actionName);
@@ -1102,6 +1117,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * `executePendingAction` to re-check (#767). Only another action can have
    * taken it in between, so a pick the action's own `onSelect` took off the
    * offer is never marked.
+   * @internal The pick-by-pick state machine's runner half: the session's PendingActionManager is its only caller (#1231).
    */
   markStalePicks(pending: PendingActionState, seat: number): void {
     if (!pending.picksOnOffer) return;
@@ -1192,6 +1208,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * was published with before any client pick: a follow-up runs with those,
    * and a pick they answer is passed over, whatever the client sends for it.
    * Every pending action is started through this.
+   * @internal The pick-by-pick state machine's runner half: the session's PendingActionManager is its only caller (#1231).
    */
   bindFollowUpArgs(pendingState: PendingActionState, seat: number): void {
     Object.assign(pendingState.collectedArgs, this.followUpArgsFor(pendingState.actionName, seat));
@@ -1203,6 +1220,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * is the pick the action is at, make it, and say whether the action is now
    * complete. It does not run the action: the caller does, with
    * `executeCollectedAction`.
+   * @internal The pick-by-pick state machine's runner half: the session's PendingActionManager is its only caller (#1231).
    */
   takePick(pendingState: PendingActionState, playerPosition: number, selectionName: string, value: unknown) {
     const action = this.game.getAction(pendingState.actionName);
@@ -1367,6 +1385,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       checkpoints?: RunnerCheckpointPolicy;
       randomness?: RandomnessPolicy;
       undo?: UndoPolicy;
+      discardsFailedOps?: boolean;
     }
   ): GameRunner<G> {
     const tree = snapshotTree(snapshot);
@@ -1395,6 +1414,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       // draws for the rest of the session.
       randomness: options?.randomness,
       undo: options?.undo,
+      discardsFailedOps: options?.discardsFailedOps,
     });
 
     // Preserve action history for the undo op (which reads runner.actionHistory).
@@ -1506,6 +1526,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // observation fresh from the persisted number adopted above.
     runner.lastSeenIrreversibleCommits = runner.game.getIrreversibleCommitCount();
 
+    runner.game._afterRestoreSubtree();
     return runner;
   }
 

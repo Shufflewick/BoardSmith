@@ -109,6 +109,114 @@ describe('TestWorld: a resident world a test can construct', () => {
     await world.close();
   });
 
+  it('refuses a command missing a required pick as the caller’s, before a later round reads it (#1328)', async () => {
+    const build = worldAction<VaultWorld>('build')
+      .chooseFrom('plot', { choices: ['commons@1,1'] })
+      // The read the ticket's game made: it crashes on a plot left unbound.
+      .needs(({ args }) => [(args.plot as string).split('@')[0]!])
+      .execute(() => {});
+    const world = await createTestWorld({
+      definition: bundle({ ...vaultWorldBlock(), actions: [build] } as WorldDefinition),
+    });
+    await expect(world.take(1, 'build')).rejects.toMatchObject({
+      code: 'missing-pick',
+      message: 'Missing required selection: plot',
+    });
+    await world.close();
+  });
+
+  it('refuses a re-asked pick missing an earlier required pick as the caller’s, before its round reads it (#1338)', async () => {
+    const build = worldAction<VaultWorld>('build')
+      .chooseFrom('plot', { choices: ['commons@1,1'] })
+      .chooseFrom('size', {
+        choices: ['small'],
+        // The read the ticket names: it crashes on a plot left unbound.
+        needs: ({ args }) => [(args.plot as string).split('@')[0]!],
+      })
+      .execute(() => {});
+    const world = await createTestWorld({
+      definition: bundle({ ...vaultWorldBlock(), actions: [build] } as WorldDefinition),
+    });
+    await expect(world.resolvePick(1, 'build', 'size', {})).rejects.toMatchObject({
+      code: 'missing-pick',
+      message: 'Missing required selection: plot',
+    });
+    await world.close();
+  });
+
+  it('offers a pick past the first required one by its shape, and runs its round on the re-ask (#1345)', async () => {
+    const build = worldAction<VaultWorld>('build')
+      .chooseFrom('plot', { choices: ['commons@1,1'] })
+      .chooseFrom('size', {
+        choices: ['small'],
+        needs: ({ args }) => [(args.plot as string).split('@')[0]!],
+      })
+      .execute(() => {});
+    const world = await createTestWorld({
+      definition: bundle({ ...vaultWorldBlock(), actions: [build] } as WorldDefinition),
+    });
+    const offer = (await world.offersFor(1)).find((candidate) => candidate.name === 'build')!;
+    expect(offer.selections.map((pick) => [pick.name, pick.choices?.length])).toEqual([
+      ['plot', 1],
+      ['size', undefined],
+    ]);
+    const size = await world.resolvePick(1, 'build', 'size', { plot: 'commons@1,1' });
+    expect(size.choices?.map((choice) => choice.value)).toEqual(['small']);
+    await world.close();
+  });
+
+  it('offers a required pick after an optional first one by its shape, and runs its round on the re-ask (#1355)', async () => {
+    const plots: Record<string, string[]> = { quick: ['commons@1,1'] };
+    const build = worldAction<VaultWorld>('build')
+      .chooseFrom('note', { choices: ['quick'], optional: true })
+      .chooseFrom('plot', {
+        choices: ({ args }) => plots[args.note as string]!,
+        needs: ({ args }) => [plots[args.note as string]![0]!.split('@')[0]!],
+      })
+      .execute(() => {});
+    const world = await createTestWorld({
+      definition: bundle({ ...vaultWorldBlock(), actions: [build] } as WorldDefinition),
+    });
+    const offer = (await world.offersFor(1)).find((candidate) => candidate.name === 'build')!;
+    expect(offer.selections.map((pick) => [pick.name, pick.choices?.length])).toEqual([
+      ['note', 1],
+      ['plot', undefined],
+    ]);
+    const plot = await world.resolvePick(1, 'build', 'plot', { note: 'quick' });
+    expect(plot.choices?.map((choice) => choice.value)).toEqual(['commons@1,1']);
+    await world.close();
+  });
+
+  it("defers a later pick's prompt, multiSelect and orderedList callbacks to the re-ask (#1350)", async () => {
+    const plotName = (args: Record<string, unknown>) => (args.plot as string).split('@')[0]!;
+    const build = worldAction<VaultWorld>('build')
+      .chooseFrom('plot', { choices: ['commons@1,1'] })
+      .chooseFrom('size', {
+        choices: ['small', 'large'],
+        prompt: ({ args }) => `Size for ${plotName(args)}`,
+        multiSelect: ({ args }) => ({ min: 1, max: plotName(args).length }),
+      })
+      .chooseFrom('route', {
+        choices: ['north', 'south'],
+        prompt: 'Route',
+        orderedList: ({ args }) => ({ min: 1, max: plotName(args).length }),
+      })
+      .execute(() => {});
+    const world = await createTestWorld({
+      definition: bundle({ ...vaultWorldBlock(), actions: [build] } as WorldDefinition),
+    });
+    const offer = (await world.offersFor(1)).find((candidate) => candidate.name === 'build')!;
+    expect(offer.selections.slice(1)).toEqual([
+      { name: 'size', type: 'choice' },
+      { name: 'route', type: 'choice', prompt: 'Route' },
+    ]);
+    const size = await world.resolvePick(1, 'build', 'size', { plot: 'commons@1,1' });
+    expect([size.prompt, size.multiSelect]).toEqual(['Size for commons', { min: 1, max: 7 }]);
+    const route = await world.resolvePick(1, 'build', 'route', { plot: 'commons@1,1', size: ['small'] });
+    expect(route.orderedList).toEqual({ min: 1, max: 7 });
+    await world.close();
+  });
+
   it('moves the revision when a command commits, so a frame can be placed in time', async () => {
     const world = await createTestWorld({ definition: bundle() });
     const before = (await world.getPlayerView(1)).revision;

@@ -98,6 +98,7 @@ import { tryUseBoardInteraction } from './useBoardInteraction.js';
 import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
 import { isDevThrowEnabled } from '../../utils/dev.js';
 import { isHiddenPlaceholder, isPlaceholderId } from '../../engine/element/hidden-placeholder.js';
+import { getElementCount } from './useGameViewHelpers.js';
 import type { SpriteData } from '../utils/image.js';
 
 /**
@@ -963,14 +964,6 @@ export function useFlyingElements(
     }
 
     /**
-     * Count children in a container element
-     */
-    function countChildren(containerEl: AutoWatchGameElement | null): number {
-      if (!containerEl) return 0;
-      return containerEl.childCount ?? containerEl.children?.length ?? 0;
-    }
-
-    /**
      * Default shouldFlip: flip when visibility changes
      */
     function defaultShouldFlip(
@@ -1035,7 +1028,7 @@ export function useFlyingElements(
         const currentCounts = new Map<string, number>();
         for (const container of getContainers()) {
           const el = getContainerElement(container);
-          currentCounts.set(container.name, countChildren(el));
+          currentCounts.set(container.name, getElementCount(el));
         }
 
         // Skip on first run (no old state)

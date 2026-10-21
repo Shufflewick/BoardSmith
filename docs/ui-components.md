@@ -744,7 +744,8 @@ boardInteraction.isSelectableElement(element)  // Can be clicked to select
 boardInteraction.triggerElementSelect(element)
 
 // Drag and drop
-boardInteraction.startDrag(element)  // A disabled candidate starts no drag, as a click chooses nothing
+boardInteraction.canStartDrag(element)  // False for a disabled candidate, as a click on it chooses nothing; the auto-filled source still drags
+boardInteraction.startDrag(element)  // Returns false, starting nothing, when canStartDrag refuses: cancel the browser drag then
 boardInteraction.endDrag()
 boardInteraction.isDropTarget(element)
 boardInteraction.isDraggedElement(element)
@@ -893,20 +894,19 @@ Use the pit-of-success API with the library's CSS for minimal boilerplate:
 ```vue
 <script setup lang="ts">
 import { computed } from 'vue';
-import { findElements, useDragDrop, type TableBoardProps } from 'boardsmith/ui';
+import { findElements, useBoardInteraction, useDragDrop, type TableBoardProps } from 'boardsmith/ui';
 import 'boardsmith/ui/animation/drag-drop.css';
 
 const props = defineProps<TableBoardProps>();
 const { drag, drop } = useDragDrop();
-const controller = props.actionController;
+const board = useBoardInteraction();
 
 const cards = computed(() => findElements(props.gameView, { className: 'Card' }));
 const zones = computed(() => findElements(props.gameView, { className: 'Zone' }));
 
+// A candidate of the open pick, an action's first pick when none is open, or the auto-filled card to drag on.
 const canDragCard = (cardId: number) =>
-  controller.currentAction.value === 'moveCard' &&
-  controller.currentPick.value?.name === 'card' &&
-  controller.validElements.value.some((valid) => valid.id === cardId);
+  board.isSelectableElement({ id: cardId }) || board.isDraggableSelectedElement({ id: cardId });
 </script>
 
 <template>
@@ -977,13 +977,13 @@ Or use your own class names alongside the library classes:
 | `isDropTarget` | `(ref) => boolean` | Check if element is valid drop target |
 
 **DragOptions:**
-- `when?: boolean | (() => boolean)` - Condition for enabling drag. When false, props are empty and `.bs-draggable` is not applied.
+- `when?: boolean | (() => boolean)` - Condition for enabling drag. When false, props are inert and `.bs-draggable` is not applied. A disabled candidate of the pick in progress is never draggable, whatever `when` says, as a click on it chooses nothing; the auto-filled source of the pick still drags on (#1299).
 
 **ElementRef:**
 - Can include `id`, `name`, or `notation` to identify the element.
 - Matching is **precedence-based**, not OR-based: if `id` is present it is the sole criterion (`name`/`notation` are ignored); otherwise `notation` is tried, then `name`. This prevents duplicate-named elements (e.g. several `'Militia'` pieces) from cross-talking — a ref carrying a precise `id` always resolves to exactly that element. Use `id` for unambiguous selection; reserve bare `name`/`notation` refs for when you genuinely want to match every element sharing that property.
-- A board click (`selectElement`) or drag (`startDrag`) starts an action by the same rule: it starts the first action whose first element pick has a candidate that is the ref's element, or whose board ref the element matches as above. So a name-only ref starts an action exactly when the candidate's board ref is that name (#945). This needs the action's first-pick candidates on the client; the server does not send them before an action opens yet, which is #1192.
-- In the AutoUI, while a pick is open, a piece standing on a square that is one of that pick's candidates is draggable, and its drag carries the square, so it chooses that square's candidate (#943). Checkers is the case: its move action opens on its own, and each piece's board ref is its square's notation. With no action open, no piece is draggable this way yet; fetching first-pick candidates for that case is #1192.
+- A board click (`selectElement`) or drag (`startDrag`) starts an action by the same rule: it starts the first action whose first element pick has a candidate that is the ref's element, or whose board ref the element matches as above. So a name-only ref starts an action exactly when the candidate's board ref is that name (#945). With no action open, the client asks the server for each available action's first-pick candidates (`actionController.startCandidates`), so this works when a turn offers several actions and opens none, as Chess does (#1192).
+- In the AutoUI, while a pick is open, a piece standing on a square that is one of that pick's candidates is draggable, and its drag carries the square, so it chooses that square's candidate (#943). Checkers is the case: its move action opens on its own, and each piece's board ref is its square's notation. With no action open, the board offers each action's first-pick candidates instead, so a piece is clickable and draggable when it, or the square it stands on, can start an action (#1192).
 
 #### Migration from Verbose Pattern
 
@@ -1021,22 +1021,22 @@ function isZoneDropTarget(zoneName) { return isDropTarget({ name: zoneName }); }
 <!-- typecheck: board -->
 ```vue
 <script setup lang="ts">
-import { useDragDrop, type TableBoardProps } from 'boardsmith/ui';
+import { computed } from 'vue';
+import { findElements, useBoardInteraction, useDragDrop, type TableBoardProps } from 'boardsmith/ui';
 import 'boardsmith/ui/animation/drag-drop.css';
 
 const props = defineProps<TableBoardProps>();
 const { drag } = useDragDrop();
-const { currentAction, currentPick, validElements } = props.actionController;
+const board = useBoardInteraction();
+const cards = computed(() => findElements(props.gameView, { className: 'Card' }));
 
 const canDrag = (cardId: number) =>
-  currentAction.value === 'moveCard' &&
-  currentPick.value?.name === 'card' &&
-  validElements.value.some((valid) => valid.id === cardId);
+  board.isSelectableElement({ id: cardId }) || board.isDraggableSelectedElement({ id: cardId });
 </script>
 
 <template>
   <div
-    v-for="card in validElements"
+    v-for="card in cards"
     :key="card.id"
     v-bind="drag({ id: card.id }, { when: canDrag(card.id) }).props"
     :class="drag({ id: card.id }, { when: canDrag(card.id) }).classes"
@@ -2060,10 +2060,10 @@ Show feedback while actions are processing:
   <!-- Disable board interactions while executing -->
   <div
     class="game-board"
-    :class="{ 'is-loading': actionController.isExecuting }"
+    :class="{ 'is-loading': actionController.isExecuting.value }"
   >
     <!-- Loading overlay -->
-    <div v-if="actionController.isExecuting" class="loading-overlay">
+    <div v-if="actionController.isExecuting.value" class="loading-overlay">
       <span class="spinner" />
     </div>
 
@@ -2072,11 +2072,11 @@ Show feedback while actions are processing:
       v-for="action in availableActions"
       :key="action"
       v-disabled-reason="
-        disabledActions?.[action] || (actionController.isExecuting && 'Finishing your last move.')
+        disabledActions?.[action] || (actionController.isExecuting.value && 'Finishing your last move.')
       "
       @click="executeAction(action)"
     >
-      {{ actionController.isExecuting ? 'Working...' : action }}
+      {{ actionController.isExecuting.value ? 'Working...' : action }}
     </button>
   </div>
 </template>
@@ -2520,7 +2520,7 @@ async function onCardClick(card: any) {
   if (!props.availableActions.includes('play')) return;
 
   // Check if card is selectable via board interaction (wizard mode active)
-  if (boardInteraction?.isSelectableElement(card)) {
+  if (boardInteraction.isSelectableElement(card)) {
     boardInteraction.triggerElementSelect(card);
   } else {
     // Direct action execution
@@ -2547,9 +2547,9 @@ watch(() => props.gameView, (newView, oldView) => {
         :key="card.id"
         class="card"
         :class="{
-          'highlighted': boardInteraction?.isHighlighted(card),
-          'selected': boardInteraction?.isSelected(card),
-          'selectable': boardInteraction?.isSelectableElement(card),
+          'highlighted': boardInteraction.isHighlighted(card),
+          'selected': boardInteraction.isSelected(card),
+          'selectable': boardInteraction.isSelectableElement(card),
         }"
         :data-element-id="card.id"
         @click="onCardClick(card)"

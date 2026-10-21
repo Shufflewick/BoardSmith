@@ -168,15 +168,15 @@ describe('a hex cell hidden from a seat (#1198)', () => {
     south!: number;
     secret?: string;
   }
-  class Map extends HexGrid<HexGame> {
+  class HexMap extends HexGrid<HexGame> {
     $qCoord = 'east';
     $rCoord = 'south';
   }
   class HexGame extends Game<HexGame, Player> {
-    map!: Map;
+    map!: HexMap;
     constructor(options: { playerCount: number }) {
       super(options);
-      this.map = this.create(Map, 'map');
+      this.map = this.create(HexMap, 'map');
       this.map.create(Tile, 'tile', { east: 2, south: -1, secret: 'treasure' });
     }
   }

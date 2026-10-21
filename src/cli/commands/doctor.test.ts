@@ -1,12 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { promises as fs } from 'node:fs';
+import { promises as fs, realpathSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { join } from 'node:path';
 import { appendGitignoreEntry, doctorCommand } from './doctor.js';
 import { DESIGN_DIR, SCRATCH_DIR } from '../lib/project-paths.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { GAME_VITE_CONFIG, GAME_VITE_CONFIG_FILE } from '../lib/test-run-scope.js';
-import { INGEST_PRE_COMMIT_HOOK, installIngestHook } from '../lib/ingest-hook.js';
+import { INGEST_PRE_COMMIT_HOOK, ingestHookAdvice, installIngestHook } from '../lib/ingest-hook.js';
 
 /**
  * `doctor` is issue #6's migration path: design artifacts belong under `design/`, throwaway
@@ -29,6 +29,7 @@ beforeEach(async () => {
 afterEach(async () => {
   logSpy.mockRestore();
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
   process.exitCode = undefined;
 });
 
@@ -259,6 +260,22 @@ describe('boardsmith doctor', () => {
     const status = execSync('git status --porcelain', { cwd: projectDir }).toString();
     expect(status).toMatch(/^R.*SKETCH\.md/m);
     expect(status).not.toMatch(/^\?\?\s+design\//m);
+  });
+
+  it('moves tracked files with git mv in the project\'s own repository, not one an inherited GIT_DIR names (#1321)', async () => {
+    const projectDir = await project({ 'SKETCH.md': '# sketch\n' });
+    commitAll(projectDir);
+    const other = join(dir, 'other');
+    await fs.mkdir(other);
+    execSync('git init', { cwd: other, stdio: 'ignore' });
+    vi.stubEnv('GIT_DIR', join(other, '.git'));
+    vi.stubEnv('GIT_WORK_TREE', other);
+
+    await doctorCommand({ project: projectDir, fix: true });
+
+    vi.unstubAllEnvs();
+    const status = execSync('git status --porcelain', { cwd: projectDir }).toString();
+    expect(status).toMatch(/^R.*SKETCH\.md/m);
   });
 
   it('still migrates a project that is not a git repo at all', async () => {
@@ -588,7 +605,7 @@ describe('boardsmith doctor', () => {
       expect(process.exitCode).toBeUndefined();
       expect(await fs.readdir(shared)).toEqual([]);
       expect(result.notes).toHaveLength(1);
-      expect(result.notes[0]).toContain(`Left ${join(shared, 'pre-commit')} alone`);
+      expect(result.notes[0]).toContain(`Left ${join(realpathSync(shared), 'pre-commit')} alone`);
       expect(result.notes[0]).toMatch(/boardsmith ingest-gaps/);
     });
 
@@ -606,7 +623,7 @@ describe('boardsmith doctor', () => {
       expect(result.healthy).toBe(true);
       expect(process.exitCode).toBeUndefined();
       expect(await read(hookPath(projectDir))).toBe(OWN_HOOK);
-      expect(result.notes[0]).toMatch(/could not read \.git\/hooks\/pre-commit/);
+      expect(result.notes[0]).toMatch(/^Left \.git\/hooks\/pre-commit alone: could not read it/);
     });
 
     it('reports a missing hook from a linked worktree, and --fix installs it where git runs it (#1186)', async () => {
@@ -630,17 +647,22 @@ describe('boardsmith doctor', () => {
 
       const report = await doctorCommand({ project: projectDir });
       expect(report.findings.map((f) => [f.kind, f.detail])).toEqual([
-        ['ingest-hook-not-current', 'the ingest pre-commit hook is not executable, so git skips it.'],
+        ['ingest-hook-not-executable', 'the ingest pre-commit hook is not executable, so git skips it.'],
       ]);
 
       process.exitCode = undefined;
+      logSpy.mockClear();
       await doctorCommand({ project: projectDir, fix: true });
       expect((await fs.stat(hookPath(projectDir))).mode & 0o111).toBeGreaterThan(0);
+      // The line says the bit was restored, not that a hook was installed (#1321).
+      expect(printed()).toContain(`fixed    ${join('.git', 'hooks', 'pre-commit')} -> the current ingest hook, now executable`);
+      expect(printed()).not.toContain('installed');
     });
 
     it('reports a missing hook where core.hooksPath points, and --fix installs it there (#1186)', async () => {
       const projectDir = await gitProject();
       execSync('git config core.hooksPath githooks', { cwd: projectDir });
+      await fs.appendFile(join(projectDir, '.git', 'info', 'exclude'), 'githooks/\n');
       await fs.writeFile(hookPath(projectDir), INGEST_PRE_COMMIT_HOOK, { mode: 0o755 });
 
       const report = await doctorCommand({ project: projectDir });
@@ -649,6 +671,67 @@ describe('boardsmith doctor', () => {
       process.exitCode = undefined;
       await doctorCommand({ project: projectDir, fix: true });
       expect(await read(join(projectDir, 'githooks', 'pre-commit'))).toBe(INGEST_PRE_COMMIT_HOOK);
+    });
+
+    it('leaves a hooks folder the project tracks alone, with a note saying why (#1301)', async () => {
+      const projectDir = await gitProject();
+      execSync('git config core.hooksPath .husky', { cwd: projectDir });
+
+      const result = await doctorCommand({ project: projectDir });
+      expect(result.findings.filter((f) => f.kind === 'ingest-hook-not-current')).toEqual([]);
+      expect(result.notes).toHaveLength(1);
+      expect(result.notes[0]).toMatch(/^Left \.husky\/pre-commit alone: .*would be committed/);
+      expect(result.notes[0]).toMatch(/boardsmith ingest-gaps/);
+    });
+
+    it('says git could not name the hooks folder, in git\'s words, rather than nothing (#1301)', async () => {
+      const projectDir = await project();
+      await fs.writeFile(join(projectDir, '.git'), `gitdir: ${join(projectDir, 'pruned')}\n`);
+
+      const result = await doctorCommand({ project: projectDir });
+      expect(result.findings.filter((f) => f.kind === 'ingest-hook-not-current')).toEqual([]);
+      expect(result.notes).toHaveLength(1);
+      expect(result.notes[0]).toMatch(/^Could not check the ingest pre-commit hook: .*not a git repository/);
+    });
+
+    it.skipIf(process.platform === 'win32')('--fix says the execute bit did not stick, rather than that it was restored, on a filesystem that drops it (#1301)', async () => {
+      const projectDir = await gitProject();
+      await installIngestHook(projectDir);
+      await fs.chmod(hookPath(projectDir), 0o644);
+      // A filesystem that keeps no mode bits takes the chmod and changes nothing.
+      vi.spyOn(fs, 'chmod').mockResolvedValue(undefined);
+
+      await expect(doctorCommand({ project: projectDir, fix: true })).rejects.toThrow(
+        `Wrote ${join('.git', 'hooks', 'pre-commit')}, but git skips it: its execute bit did not take`,
+      );
+      vi.restoreAllMocks();
+    });
+
+    it.skipIf(process.platform === 'win32')('--fix says the hook belongs to another user, rather than that its folder is unwritable, when it may not set the execute bit (#1321)', async () => {
+      const projectDir = await gitProject();
+      await installIngestHook(projectDir);
+      await fs.chmod(hookPath(projectDir), 0o644);
+      vi.spyOn(fs, 'chmod').mockRejectedValue(Object.assign(new Error('operation not permitted'), { code: 'EPERM' }));
+
+      await expect(doctorCommand({ project: projectDir, fix: true })).rejects.toThrow(
+        `Could not make ${join('.git', 'hooks', 'pre-commit')} executable: it belongs to another user`,
+      );
+      vi.restoreAllMocks();
+    });
+
+    it('says a committed hook is tracked, which ignoring its folder cannot change (#1321)', async () => {
+      const projectDir = await gitProject();
+      execSync('git config core.hooksPath .githooks', { cwd: projectDir });
+      await fs.mkdir(join(projectDir, '.githooks'));
+      await fs.writeFile(join(projectDir, '.githooks', 'pre-commit'), OWN_HOOK, { mode: 0o755 });
+      execSync('git add .githooks/pre-commit', { cwd: projectDir });
+      await fs.appendFile(join(projectDir, '.gitignore'), '.githooks/\n');
+
+      const result = await doctorCommand({ project: projectDir });
+      const path = join('.githooks', 'pre-commit');
+      expect(result.notes).toEqual([ingestHookAdvice({ state: 'tracked', path, absolute: join(projectDir, path) })]);
+      expect(result.notes[0]).toContain(`it is committed to this project`);
+      expect(result.notes[0]).toContain(`git rm --cached ${path}`);
     });
   });
 });

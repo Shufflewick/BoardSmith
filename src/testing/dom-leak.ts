@@ -827,7 +827,7 @@ async function wireTableSeat(
     import('vue'),
     loadTableSeatModules(),
   ]);
-  const picks = new PickHandler(table.runner, table.game.players.length);
+  const picks = new PickHandler(table.runner);
   // The frame a host hands GameShell: the session's seat state under the flow state.
   const frame = {
     flowState: table.runner.getFlowState(),

@@ -1,3 +1,4 @@
+/// <reference path="../types/node-globals.d.ts" />
 /**
  * @module utils/dev
  *

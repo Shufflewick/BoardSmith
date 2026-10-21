@@ -240,3 +240,28 @@ describe('#230: minimizing the bar reserves one row and gives the rest back', ()
     },
   );
 });
+
+describe('#1341, #1346: how the bubbles, the action bar, game modals and the demo controls stack', () => {
+  const layerSource = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'helpers/AnnotationLayer.vue'), 'utf-8');
+  const layerZ = (selector: string) => {
+    const m = layerSource.match(new RegExp(`\\n${selector} \\{[^}]*z-index:\\s*(\\d+);`));
+    expect(m, `z-index not declared on ${selector}`).not.toBeNull();
+    return Number(m![1]);
+  };
+  const z = (selector: string) => Number(declaration(selector, 'z-index'));
+
+  it('orders action bar < bubbles < game modal < bubbles about a target in the modal < demo controls', () => {
+    const annotations = layerZ('.bsg-annotation-layer');
+    const overModal = layerZ('.bsg-annotation-layer--over-modal');
+    expect(annotations).toBeGreaterThan(z('.actionbar'));
+    expect(z('.game-shell__game-modal-host')).toBeGreaterThan(annotations);
+    expect(overModal).toBeGreaterThan(z('.game-shell__game-modal-host'));
+    expect(z('.bsg-demo-controls')).toBeGreaterThan(overModal);
+  });
+
+  it('keeps the bar\'s edge toggle, which overhangs the board, above a game modal', () => {
+    // Equal is enough: the toggle comes later in the page, so it wins a tie.
+    expect(z('.bar-edge')).toBeGreaterThanOrEqual(z('.game-shell__game-modal-host'));
+    expect(block('.actionbar-frame'), 'a z-index on the frame would trap the toggle under the modal').not.toMatch(/z-index/);
+  });
+});

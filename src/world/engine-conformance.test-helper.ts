@@ -14,6 +14,7 @@
 // measure that output shrinks with input, which a type cannot express.
 import { expect, it } from "vitest";
 import type { WorldCommandStamp, WorldEngine, WorldEventStamp } from "./contract.js";
+import { seatView } from "../engine/element/seat-placeholders.js";
 
 /** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
  *  The clock's road passes its whole occurrence instead. */
@@ -228,7 +229,7 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     expect(audience.seats.map((seat) => seat.refused)).toEqual([false, false]);
     expect(
       audience.seats.map((seat) =>
-        JSON.stringify(seat.refused ? null : audience.bodies[seat.at]),
+        JSON.stringify(seat.refused ? null : seatView(audience.bodies[seat.at], seat.placeholders)),
       ),
     ).toEqual([one, two]);
   });
@@ -249,7 +250,7 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
       expect(
         JSON.stringify(await engine.viewFor(seat.player)),
         `${seat.player} was pointed at the body they actually hold`,
-      ).toEqual(encoded[seat.at]);
+      ).toEqual(JSON.stringify(seatView(audience.bodies[seat.at], seat.placeholders)));
     }
   });
 

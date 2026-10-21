@@ -7,6 +7,7 @@
 import type { InjectionKey } from 'vue';
 import type { ElementRef } from '../../composables/useBoardInteraction.js';
 import { parseImageInfo, type ImageInfo } from '../../utils/image.js';
+import { isHiddenPlaceholder } from '../../../engine/element/hidden-placeholder.js';
 
 // ---------------------------------------------------------------------------
 // GameElement: the element shape every auto-UI module reads (dependency-free)
@@ -18,6 +19,7 @@ export interface GameElement {
   attributes?: Record<string, unknown>;
   children?: GameElement[];
   childCount?: number;
+  zoneVisibility?: { mode: string };
 }
 
 /** The grid cell an element stands on, provided by ElementRenderer for a piece to drag on its behalf (#943). */
@@ -87,7 +89,7 @@ export function resolveGridSize(element: GameElement): GridResult {
   }
   const error = cellCoordinateError(element, rowCoord, colCoord, 'Grid');
   if (error) return { ok: false, error };
-  const children = element.children ?? [];
+  const children = placedCells(element, rowCoord, colCoord);
   const coord = (cell: GameElement, name: string) => cell.attributes![name] as number;
   const [minRow, rows] = span(children.map((c) => coord(c, rowCoord)));
   const [minCol, cols] = span(children.map((c) => coord(c, colCoord)));
@@ -103,9 +105,21 @@ const cantRender = (board: GameElement, kind: BoardKind) => `${kind} "${board.na
 
 type BoardKind = 'Grid' | 'Hex board';
 
-/** Why a board's cells cannot be placed, or undefined when every cell has both declared coordinates. */
+const hasCoordinates = (cell: GameElement, first: string, second: string) =>
+  typeof cell.attributes?.[first] === 'number' && typeof cell.attributes?.[second] === 'number';
+
+/**
+ * The children a board places. One sent face down without the board's
+ * coordinates, such as a piece placed straight on a grid, is not sent its
+ * place (#1199), so it is left out rather than refusing the board (#1294).
+ */
+export function placedCells(element: GameElement, first: string, second: string): GameElement[] {
+  return (element.children ?? []).filter((child) => !isHiddenPlaceholder(child) || hasCoordinates(child, first, second));
+}
+
+/** Why a board's cells cannot be placed, or undefined when every cell it places has both declared coordinates. */
 export function cellCoordinateError(element: GameElement, first: string, second: string, kind: BoardKind): string | undefined {
-  for (const child of element.children ?? []) {
+  for (const child of placedCells(element, first, second)) {
     const missing = [first, second].find((name) => typeof child.attributes?.[name] !== 'number');
     if (missing) {
       return `${cantRender(element, kind)}: cell "${child.name ?? child.id}" has no numeric "${missing}"; give every cell numeric ${first} and ${second} values`;

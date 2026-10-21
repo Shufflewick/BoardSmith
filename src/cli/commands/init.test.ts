@@ -13,12 +13,13 @@
  * pin that pattern so the template can't regress to the crashing shape.
  */
 import { describe, it, expect, afterEach, beforeEach, vi, type MockInstance } from 'vitest';
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { generateGameTs, generateTestTs, initCommand, type InitOptions } from './init.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { ingestHookAdvice } from '../lib/ingest-hook.js';
 import { rejectionMessage } from '../../testing/rejection.test-helper.js';
 import { createTestGame, simulateRandomGames } from '../../testing/index.js';
 import { _clearShownWarnings } from '../../utils/dev.js';
@@ -833,6 +834,18 @@ describe('initCommand --into-existing — scaffold into the repository you are i
     expect(snapshot(repo)).toEqual(before);
   });
 
+  it('scaffolds into a linked worktree, whose .git is a file, and installs the hook git runs there (#1321)', async () => {
+    const repo = researchRepo('bs-init-1321-worktree-');
+    const worktree = join(dirname(repo), 'wt');
+    execSync(`git worktree add -q "${worktree}"`, { cwd: repo });
+    process.chdir(worktree);
+
+    await initCommand('sample-game', { withoutRulebook: true, intoExisting: true });
+
+    expect(existsSync(join(worktree, 'boardsmith.json'))).toBe(true);
+    expect(readFileSync(join(repo, '.git', 'hooks', 'pre-commit'), 'utf-8')).toContain('BoardSmith ingest synthesis');
+  });
+
   it('leaves the repository exactly as it was when a later step fails', async () => {
     const repo = researchRepo('bs-init-304-failure-');
     const before = snapshot(repo);
@@ -877,12 +890,26 @@ describe('initCommand --into-existing — scaffold into the repository you are i
   it('names where it installed the hook, which is where core.hooksPath points (#1186)', async () => {
     const repo = researchRepo('bs-init-1186-hook-');
     execSync('git config core.hooksPath githooks', { cwd: repo });
+    appendFileSync(join(repo, '.git', 'info', 'exclude'), 'githooks/\n');
     process.chdir(repo);
 
     await initCommand('sample-game', { withoutRulebook: true, intoExisting: true });
 
     expect(vi.mocked(console.log).mock.calls.flat().join('\n')).toContain(`installed the ingest pre-commit hook at ${join('githooks', 'pre-commit')}`);
     expect(existsSync(join(repo, 'githooks', 'pre-commit'))).toBe(true);
+  });
+
+  it('writes nothing into a hooks folder the repository tracks, and says why (#1301)', async () => {
+    const repo = researchRepo('bs-init-1301-hook-');
+    execSync('git config core.hooksPath .husky', { cwd: repo });
+    process.chdir(repo);
+
+    await initCommand('sample-game', { withoutRulebook: true, intoExisting: true });
+
+    const path = join('.husky', 'pre-commit');
+    // The same words doctor's note uses for the same hook (#1321).
+    expect(vi.mocked(console.log).mock.calls.flat().join('\n')).toContain(ingestHookAdvice({ state: 'in-project', path, absolute: join(repo, path) }));
+    expect(existsSync(join(repo, '.husky', 'pre-commit'))).toBe(false);
   });
 
   it('writes nothing into a hooks folder outside the repository, and names it (#1186)', async () => {
@@ -894,7 +921,7 @@ describe('initCommand --into-existing — scaffold into the repository you are i
 
     await initCommand('sample-game', { withoutRulebook: true, intoExisting: true });
 
-    expect(vi.mocked(console.log).mock.calls.flat().join('\n')).toContain(`Left ${join(shared, 'pre-commit')} alone`);
+    expect(vi.mocked(console.log).mock.calls.flat().join('\n')).toContain(`Left ${join(realpathSync(shared), 'pre-commit')} alone`);
     expect(readdirSync(shared)).toEqual([]);
   });
 });
