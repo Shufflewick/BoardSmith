@@ -297,7 +297,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   let stepSeq: number | null = null;
   const stepOutstanding = (): boolean => stepSeq !== null && !actionMovedOn(stepSeq);
   const STEP_OUTSTANDING = 'Still waiting for the server to answer your last pick.';
-  const REPEAT_HELD = 'The server already holds this answer, so it cannot be cleared now. Cancel the action to start it again.';
+  const ANSWER_HELD = 'The server already holds this answer, so it cannot be cleared now. Cancel the action to start it again.';
   const NOT_A_PICK = 'This value was set by the game, not picked by you, so it cannot be cleared.';
   // Not set as lastError: the player moved on themselves, so there is nothing to report.
   const MOVED_ON: PickValidationResult = { valid: false, error: 'The action changed before the server answered this pick.' };
@@ -2663,11 +2663,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (repeatingState.value?.selectionName === name) repeatingState.value = null;
   }
 
-  /** Whether any of these picks is a repeat the server took a step of: it then takes no pick at or before it again (#1365). */
-  function serverHoldsRepeat(picks: EnrichedPickMetadata[]): boolean {
+  /** Whether the server holds an answer to any of these picks: it then takes no pick at or before it again (#1365, #1371). */
+  function serverHoldsAnswer(picks: EnrichedPickMetadata[]): boolean {
     const repeating = repeatingState.value;
-    return pendingOnServer.value && picks.some(s => s.repeat
-      && (s.name in currentArgs.value || (s.name === repeating?.selectionName && repeating.accumulated.length > 0)));
+    // Once the action is pending every step carries all answers so far, so the server holds each one.
+    return pendingOnServer.value && picks.some(s =>
+      s.name in currentArgs.value || (s.name === repeating?.selectionName && repeating.accumulated.length > 0));
   }
 
   function clear(selectionName: string): boolean {
@@ -2683,8 +2684,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       setError(NOT_A_PICK);
       return false;
     }
-    if (serverHoldsRepeat(selections.slice(index))) {
-      setError(REPEAT_HELD);
+    if (serverHoldsAnswer(selections.slice(index))) {
+      setError(ANSWER_HELD);
       return false;
     }
     forgetAnswer(selectionName);

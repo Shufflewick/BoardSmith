@@ -620,6 +620,16 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     });
   });
 
+  // Within one start, answers drop only by clear(), which takes back the last one given, or by the action ending, so the board's mark of it goes too (#1371).
+  watch(
+    () => [controller.actionStartTick.value, Object.keys(currentArgs.value).length] as const,
+    ([tick, answered], [wasTick, wasAnswered]) => {
+      if (tick !== wasTick || answered >= wasAnswered) return;
+      // Also drops the hovered choice the panel keeps for the answer.
+      board.selectElement(null);
+    },
+  );
+
   // Board element clicked: dispatch selection, or auto-start an action whose
   // first element selection accepts the clicked element.
   watch(() => board.selectedElement, (selected) => {
