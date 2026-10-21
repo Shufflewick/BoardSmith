@@ -164,7 +164,7 @@ describe('getDisplayFromValue agrees with the server label (#509)', () => {
     formatChoiceCandidates(
       [{ value, disabled: false }],
       { type: 'choice', name: 'pick', choices: [] } as ChoiceSelection,
-      {} as never,
+      { player: { seat: 1 }, args: {} } as never,
       [],
     )[0]!.display;
 

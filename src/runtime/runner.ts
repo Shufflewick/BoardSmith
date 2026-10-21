@@ -672,6 +672,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       this.game._ctx.sequence = checkpoint.sequence;
     }
     this.game.setRandomState(checkpoint.randomState);
+    this.game._afterRestoreSubtree();
     return true;
   }
 
@@ -1525,6 +1526,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // observation fresh from the persisted number adopted above.
     runner.lastSeenIrreversibleCommits = runner.game.getIrreversibleCommitCount();
 
+    runner.game._afterRestoreSubtree();
     return runner;
   }
 

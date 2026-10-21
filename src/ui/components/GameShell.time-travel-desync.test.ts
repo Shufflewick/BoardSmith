@@ -405,15 +405,15 @@ describe('actionMutators.ts source: isViewingHistory guard wired at every mutati
     expect(mutatorsSource).toContain('isViewingHistory: () => boolean;');
   });
 
-  // FOUR: start, set-selection, the multi-select toggle and the ordered-list
-  // append (#249). Execute is not among them: controller.execute() refuses while
-  // viewing history itself, for every caller (#855). The count is the point of
-  // the assertion: a new mutating function added without the guard is exactly
-  // the regression this catches, so the number moves only alongside a function
-  // that carries one.
-  it('every mutating function guards with `if (guards.isViewingHistory())` (count == 4)', () => {
+  // FIVE: start, execute, set-selection, the multi-select toggle and the
+  // ordered-list append (#249). controller.execute() also refuses in history
+  // (#855), but that refusal toasts (#1342), so the board's auto-execute must not
+  // reach it. The count is the point of the assertion: a new mutating function
+  // added without the guard is exactly the regression this catches, so the
+  // number moves only alongside a function that carries one.
+  it('every mutating function guards with `if (guards.isViewingHistory())` (count == 5)', () => {
     const occurrences = (mutatorsSource.match(/if \(guards\.isViewingHistory\(\)\) return/g) ?? []).length;
-    expect(occurrences).toBe(4);
+    expect(occurrences).toBe(5);
   });
 });
 

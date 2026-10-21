@@ -43,38 +43,60 @@
  * The pin is deliberately measured WITHOUT dividing out the applied zoom:
  * compensating would feed the pinned width back into useAutoZoom's
  * natural-size measurement mid-settle and the two would chase each other.
+ * A board that fits more of itself to the region (its height, say) reads the
+ * returned `zoom` to do that conversion (#1332).
  */
 import { ref, computed, watch, onBeforeUnmount, type Ref } from 'vue';
-import { registerBoardRegionPin } from './boardRegionPin.js';
+import { registerBoardRegionPin, regionWidth, cqwOverhang } from './boardRegionPin.js';
 
 export function useBoardSize(boardEl: Ref<HTMLElement | null>) {
   // Declare the model to the shell for this scope's lifetime. Done at call
   // time, not on first measurement: calling useBoardSize IS the declaration,
   // and the fit must not depend on which composable measured first.
-  registerBoardRegionPin();
+  /** The zoom GameShell applies to the board (the controls-menu slider or
+   *  the fit), 1 outside a shell or without CSS zoom (#1361). The region is not zoomed and the board is,
+   *  so a board fitting itself to the region divides region pixels by this.
+   *  Watch it to re-fit: a zoom change resizes nothing a ResizeObserver sees. */
+  const zoom = registerBoardRegionPin();
 
-  /** Region width available to the board (region client box minus horizontal
-   *  padding), in CSS pixels. 0 until the first successful measurement. */
+  /** Width available to the board, in CSS pixels: the region's content box
+   *  with its vertical scrollbar showing, whether or not it shows (#1343), or
+   *  the parent's client box less padding outside a region. 0 until measured. */
   const availWidth = ref(0);
 
-  /** Bind to the board root. Empty until measured, so the board keeps its
-   *  natural size for the first paint rather than flashing at width 0. */
-  const boardStyle = computed(() =>
-    availWidth.value ? { width: `${availWidth.value}px` } : {},
-  );
+  /** True when the width came from a `.boardregion`, which is a size
+   *  container, rather than from the board's parent element. */
+  const inRegion = ref(false);
 
-  function findRegion(): HTMLElement | null {
-    return (boardEl.value?.closest('.boardregion') as HTMLElement | null)
-      ?? boardEl.value?.parentElement
-      ?? null;
-  }
+  /** How much wider the region's `100cqw` is than `availWidth` (#1353). */
+  const overhang = ref(0);
+
+  /** Bind to the board root. Empty until measured, so the board keeps its
+   *  natural size for the first paint rather than flashing at width 0. In a
+   *  region the pin is capped at `100cqw`, the region's content box at layout
+   *  time: the pin is re-measured only after layout, and a pin from before the
+   *  region narrowed would otherwise overflow it sideways for a frame (#1336).
+   *  Less the scrollbar `100cqw` leaves out where the region has no gutter (#1353). */
+  const boardStyle = computed(() => {
+    if (!availWidth.value) return {};
+    const pin = `${availWidth.value}px`;
+    const cap = overhang.value ? `calc(100cqw - ${overhang.value}px)` : '100cqw';
+    return { width: inRegion.value ? `min(${pin}, ${cap})` : pin };
+  });
 
   function measure() {
-    const host = findRegion();
-    if (!host) return;
-    const cs = getComputedStyle(host);
+    const region = boardEl.value?.closest('.boardregion') as HTMLElement | null | undefined;
+    inRegion.value = !!region;
+    if (region) {
+      overhang.value = cqwOverhang(region);
+      availWidth.value = regionWidth(region);
+      return;
+    }
+    const parent = boardEl.value?.parentElement;
+    if (!parent) return;
+    const cs = getComputedStyle(parent);
     const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
-    availWidth.value = Math.max(0, host.clientWidth - padX);
+    availWidth.value = Math.max(0, parent.clientWidth - padX);
   }
 
   let regionObserver: ResizeObserver | null = null;
@@ -113,5 +135,5 @@ export function useBoardSize(boardEl: Ref<HTMLElement | null>) {
 
   onBeforeUnmount(teardown);
 
-  return { availWidth, boardStyle, measure };
+  return { availWidth, boardStyle, measure, zoom };
 }

@@ -124,10 +124,11 @@ the wrong move (patch or suppress) is always out of bounds:
 1. **The agent controls the game board only.** Everything this step writes lives in the game's own
    project source. The platform the game runs on is not this chunk's concern and is never edited to
    make a chunk's build easier.
-2. **`node_modules/boardsmith` is a live symlink to the client's real BoardSmith checkout — it is
-   READ-ONLY and is NEVER patched or edited.** A change made there does not stay local to this
-   project; it silently mutates the client's actual library on disk. There is no scenario in which
-   editing a file under `node_modules/boardsmith` is the correct move for a `build` chunk.
+2. **`node_modules/boardsmith` is the client's BoardSmith, an installed copy or a link to their
+   checkout — it is READ-ONLY and is NEVER patched or edited.** A change made there does not stay
+   with this project: in a copy the next install throws it away, and through a link it silently
+   mutates the client's actual library on disk. There is no scenario in which editing a file under
+   `node_modules/boardsmith` is the correct move for a `build` chunk.
 3. **A shortfall in the library is a library gap, and a library gap is FILED, never patched.** If
    this chunk's design needs something the library does not do, the correct action is to file the
    gap and build the chunk around the gap — never reach into
@@ -256,7 +257,7 @@ group by what the player is trying to DO, never by which chunk built the action.
 nothing: every action is still offered, still disabled for its own reason, still validated
 identically, and one press further away rather than gone. Opening a group is navigation and submits
 no order, so it is never a game event and there is nothing to wire. A game that declares no groups
-keeps the flat panel it has. Full rule in `docs/actions-and-flow.md`.
+keeps the flat panel it has. Full rule in `node_modules/boardsmith/docs/actions-and-flow.md`.
 
 ## Downstream Shape (cite, never restate)
 

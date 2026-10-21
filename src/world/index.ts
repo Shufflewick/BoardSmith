@@ -147,6 +147,7 @@ export {
   settleDeclaration,
   walkDeclaration,
 } from './declaration.js';
+export { plainCopy } from './readonly.js';
 export {
   catchUpPlan,
   nextDueBatch,
@@ -186,6 +187,7 @@ export type {
 export {
   BoardSmithWorldEngine,
 } from './engine.js';
+export { seatView } from '../engine/element/seat-placeholders.js';
 export type {
   BoardSmithWorldEngineOptions,
   WorldDeclarationFacilities,

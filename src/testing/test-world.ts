@@ -33,6 +33,7 @@
 import type { ElementJSON, SeatViewJSON } from '../engine/index.js';
 import {
   mintWorldElementIdKey,
+  seatView,
   worldBudgets,
   type StoredPartition,
   type WorldActionOffer,
@@ -284,7 +285,7 @@ export class TestWorld {
       // from each other share one body. Asking for this seat alone would take a
       // road no host takes.
       const audience = [...new Set([...this.#watching, seat])].map(worldSeatPlayer);
-      const { bodyFor, failed, revision } = await this.#world.viewsFor(audience);
+      const { seatFor, failed, revision } = await this.#world.viewsFor(audience);
       const refusal = failed[player];
       if (refusal !== undefined) {
         throw new Error(
@@ -298,7 +299,9 @@ export class TestWorld {
       for (const offer of offers) {
         if (offer.disabled !== undefined) disabledActions[offer.name] = offer.disabled;
       }
-      const view = bodyFor(player);
+      // What the page holds once it has read the frame: the shared body with this seat's own ids put back.
+      const held = seatFor(player);
+      const view = seatView(held.view, held.placeholders);
       // THE SAME UNWRAP `useWorldPlay` DOES. The frame is an envelope and the
       // tree is one field of it; a harness that handed a board the envelope
       // would be handing it something no board has ever received. A host

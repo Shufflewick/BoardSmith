@@ -6,7 +6,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { runDiffMutationCheck } from './test-step-mutation.js';
+import { limitWorkers, runDiffMutationCheck, writeRunConfig } from './test-step-mutation.js';
 import { designProjectFixtures } from './design-project.test-helper.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 import { fixtureSandbox } from '../../testing/fixture-sandbox.test-helper.js';
@@ -102,12 +102,12 @@ async function seen(dir: string): Promise<Seen[]> {
 const memoryCache = (hints = new Map<string, KillerHint>()) => ({
   fingerprint: () => undefined, get: () => undefined, set: () => {}, save: async () => {},
   killerHint: (m: { source: string }) => hints.get(m.source),
-  setKillerHint: (m: { source: string }, hint: KillerHint) => { hints.set(m.source, hint); },
+  setKillerHint: (m: { source: string }, hint: KillerHint | undefined) => { if (hint) hints.set(m.source, hint); else hints.delete(m.source); },
 });
 
-function check(dir: string, budget: MutationBudget | undefined, contextChange?: () => Promise<string | undefined>, hints?: Map<string, KillerHint>) {
+function check(dir: string, budget: MutationBudget | undefined, contextChange?: () => Promise<string | undefined>, hints?: Map<string, KillerHint>, log: (line: string) => void = () => {}) {
   return runDiffMutationCheck({
-    projectDir: dir, added: new Map([['src/rules.ts', new Set([2, 5])]]), cache: memoryCache(hints), log: () => {},
+    projectDir: dir, added: new Map([['src/rules.ts', new Set([2, 5])]]), cache: memoryCache(hints), log,
     ...(budget ? { budget } : {}), ...(contextChange ? { contextChange } : {}),
   });
 }
@@ -174,6 +174,49 @@ describe('runDiffMutationCheck with a mutation budget (#955)', () => {
     }
   });
 
+  it('names how many mutants had finished when a context change stops a trial before its run', async () => {
+    try {
+      const dir = await project(2);
+      let calls = 0;
+      // Call 2 is the second trial's check before mutant 2 runs, while mutant 1 is still running.
+      const changed = async () => (++calls === 2 ? 'the linked package moved' : undefined);
+      await expect(check(dir, { trials: 2, workers: 2 }, changed)).rejects.toThrow(
+        'what the tests run with changed after 0 mutants had run or been reused: the linked package moved',
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('keeps the first failure when stopping the other trials fails too, and waits for every trial before removing them', async () => {
+    try {
+      const dir = await project(2);
+      let calls = 0;
+      let changedYet = false;
+      // Call 2 is the second trial's check before its run; it waits until the first trial's test file is held at the barrier.
+      const changed = async () => {
+        if (++calls !== 2) return undefined;
+        while ((await fs.readdir(join(dir, 'trials/active')).catch(() => [])).length === 0) await new Promise((resolve) => setTimeout(resolve, 25));
+        changedYet = true;
+        return 'the linked package moved';
+      };
+      const kill = process.kill.bind(process);
+      // Once the context changes, the probe of a stopped trial's process group fails as no real system would.
+      vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
+        if (changedYet && pid < 0 && signal === 0) throw Object.assign(new Error('process group observation failed'), { code: 'EINVAL' });
+        return kill(pid, signal);
+      });
+      const logged: string[] = [];
+      await expect(check(dir, { trials: 2, workers: 2 }, changed, undefined, (line) => logged.push(line)))
+        .rejects.toThrow(/^what the tests run with changed .*: the linked package moved$/);
+      expect(logged.some((line) => line.startsWith('Could not confirm that Vitest process group'))).toBe(true);
+      expect(await fs.readdir(join(dir, '.boardsmith'))).toEqual([]);
+    } finally {
+      vi.restoreAllMocks();
+      vi.unstubAllEnvs();
+    }
+  });
+
   for (const [settings, named] of [
     [", poolOptions: { forks: { maxForks: 4 } }", 'poolOptions.forks.maxForks'],
     [", poolMatchGlobs: [['tests/fee.test.ts', 'threads']]", 'poolMatchGlobs'],
@@ -187,4 +230,49 @@ describe('runDiffMutationCheck with a mutation budget (#955)', () => {
       }
     });
   }
+});
+
+describe('the budget a Vitest 4 run is held to (#1310)', () => {
+  it('passes Vitest 4 no --minWorkers, which it removed, and Vitest 2 and 3 a minimum of one', () => {
+    expect(limitWorkers(2, 4, {})).toEqual(['--maxWorkers=2']);
+    expect(limitWorkers(2, 3, {})).toEqual(['--maxWorkers=2', '--minWorkers=1']);
+  });
+
+  /** What the generated reporter says, on starting, of a run whose root and projects resolved to `configs`. */
+  async function refusal(vitestMajor: number, root: object, projects: object[]): Promise<string | undefined> {
+    try {
+      const dir = await project(2);
+      const workDir = join(dir, '.boardsmith', 'run');
+      await fs.mkdir(workDir, { recursive: true });
+      const configPath = await writeRunConfig(dir, workDir, vitestMajor);
+      vi.stubEnv('BOARDSMITH_WORKERS', '2');
+      // Dynamic import: the config this test just generated.
+      const { default: config } = await import(configPath);
+      const [reporter] = (await config({ command: 'serve', mode: 'test' })).test.reporters;
+      const plugins = [{ name: 'boardsmith-mutant' }];
+      const ctx = { config: root, projects: projects.map((config) => ({ config, vite: { config: { plugins } } })) };
+      try {
+        reporter.onInit(ctx);
+        return undefined;
+      } catch (error) {
+        return (error as Error).message;
+      }
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  }
+
+  it("refuses a Vitest 4 project whose own maxWorkers is over the budget, since Vitest 4 runs that project's files with it", async () => {
+    const message = await refusal(4, { maxWorkers: 2 }, [{ pool: 'forks', maxWorkers: 2 }, { pool: 'forks', maxWorkers: 4 }]);
+    expect(message).toMatch(/budget of 2 test workers.*VITEST_MAX_WORKERS\) sets maxWorkers, which Vitest uses/);
+  });
+
+  it('runs a Vitest 4 project whose maxWorkers is within the budget', async () => {
+    expect(await refusal(4, { maxWorkers: 2 }, [{ pool: 'forks', maxWorkers: 1 }, { pool: 'forks' }])).toBeUndefined();
+  });
+
+  it('names only the custom pool as custom, beside a built-in one', async () => {
+    const message = await refusal(3, { maxWorkers: 2 }, [{ pool: 'forks' }, { pool: './my-pool.ts' }]);
+    expect(message).toContain('sets a different pool per project (forks, ./my-pool.ts), the custom pool ./my-pool.ts, which');
+  });
 });

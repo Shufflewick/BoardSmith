@@ -438,11 +438,11 @@ export const tend = worldAction<VillageGame>('tend')
 ```
 
 The builder is the engine's own with every callback's context re-typed, so what
-you write is a table action with `ctx.world` in scope and one method added:
-`.needs()`. `prompt`, `help`, `condition`, `disabled`, `validate`, `manual`,
+you write is a table action with `ctx.world` in scope and two methods added:
+`.needs()` and `.reads()`. `prompt`, `help`, `condition`, `disabled`, `validate`, `manual`,
 `suppressFromActionPanel`, `destructive`, `group`, `order`, `chooseFrom`, `chooseElement`,
 `chooseElements`, `enterText`, `enterNumber`, `execute` and `build` all mean what
-they mean on a table. One method is a world's own beside `.needs()`: `.quote()`,
+they mean on a table. One more method is a world's own: `.quote()`,
 which prices the draft in front of the player before they commit it -- see
 [Quoting a draft](#quote-what-the-draft-will-cost-before-the-player-pays-it). `destructive` and `group`/`order` matter more here than they do at a table:
 a resident world offers every verb that is relevant at once, and a flat list of
@@ -505,6 +505,23 @@ would either roll inside its declaration -- which is refused, because a
 declaration is asked more than once and a rolled declaration would answer
 differently each time -- or write into a partition nothing checkpointed.
 
+**A command's rounds see every required pick bound.** A seat's command that
+leaves out a required pick, or sends `null` for one, is refused with
+`missing-pick` before any round reads its args. An optional pick may still be
+absent. A pick re-asked with earlier answers bound is refused the same way when
+it leaves out a required pick BEFORE it, so a selection's own `needs:` sees the
+picks before it when the pick is re-asked. The offer is enumerated with nothing
+bound, so it runs the round and candidates of the first pick only; every pick
+after it, required or optional, is offered by its shape alone (name, type, and
+a `prompt`, `multiSelect` or `orderedList` only when it is a value rather than a
+function; no candidates). Its round, its candidates and those functions first
+run when it is re-asked with the answers so far, which leave out an optional
+pick the player skipped, and the panel and a custom UI take its prompt and
+bounds from that answer (#1345, #1350, #1355).
+A quote is not checked either: its rounds, the execute round included, run on
+the player's draft, so any pick not chosen yet is absent there and a round a
+quote walks must not assume one is bound.
+
 **This replaces the fixpoint for the write path, and it has no ceiling.** There
 is no number to tune and no unsettled refusal to explain, because the walk's
 length is the number of rounds you wrote, which is bounded by the action's own
@@ -545,6 +562,29 @@ until it stops changing its mind. The view path is allowed to be one, because a
 view has no steps. **A write is not**, because `walkDeclaration` has no ceiling:
 what bounds it is the number of rounds you wrote, and a round that re-answers
 differently every time it is asked is not that number.
+
+### `.reads()`: load a partition the action only looks at (#1334)
+
+Every partition a `.needs()` round names is saved after the command, whether or
+not it changed, because the action was free to write it. An action that looks
+at many partitions and changes few pays to rewrite all of them. `.reads()` is a
+round like `.needs()`, at the same position and with the same context, whose
+partitions are loaded but never saved:
+
+```ts
+worldAction<HallGame>('survey')
+  .needs(({ player }) => [roomPartition(player.seat)])                    // written
+  .reads(({ player }) => neighboursOf(player.seat).map(roomPartition))    // only looked at
+  .execute((_args, ctx) => { /* reads the neighbours, writes the own room */ });
+```
+
+A command that changes a partition it loaded only with `.reads()`, by an
+attribute write or by moving an element into or out of it, is refused with
+`read-only-write`, and nothing it changed is kept. To catch every such change,
+the engine compares each `.reads()` partition's bytes after the command, which
+costs serializing it in memory but never a storage write. A partition named by both a
+`.reads()` and a `.needs()` round is writable. `worldClockAction()` has
+`.reads()` too.
 
 ### A later round reads a root BY NAME: `world.partition(name)`
 
@@ -672,6 +712,38 @@ or be reverted at the next hibernation with nobody told. Do the write in
 Everything a declaration reads answers as it does in `execute`, classes
 included: `element.constructor` is the element's own class, with its name and
 static members, so `game.first(element.constructor)` searches by class.
+
+An array a standard method builds from what a declaration read (`filter`, `map`,
+`slice`, `concat`, `flat`, `flatMap`, `toSorted`, `toReversed`, `toSpliced`,
+`with`) is the declaration's own plain array: it can be pushed to and stored
+like any local value. What it holds is still read-only, so `structuredClone`
+copies it only when its items are plain values such as numbers and strings. An
+item that is an object or array from the world is still a projection, and
+cloning the array throws `DataCloneError`. A spread copy (`{ ...item }`,
+`[...item]`) is plain only at its own level.
+
+To copy plain data a declaration (or any other world callback) read, such as a
+JSON payload saved on a `Space`, use `plainCopy` from `boardsmith/world`
+(#1347). It answers a fresh copy, all the way down, that you can change, clone
+or `JSON.stringify` like any local value, and changing it never reaches the
+world:
+
+```ts
+const saved = plainCopy((world.partition("room:1") as Room).data);
+const bytes = JSON.stringify(saved).length;
+```
+
+It reads the data itself rather than through the read-only view, so on a JSON
+payload it costs about what `structuredClone` of the same data costs. Like
+`JSON.stringify`, it copies an object once for every place that refers to it. `JSON.stringify` straight
+through the read-only view was measured at 12 to 36 times a plain
+`JSON.stringify`, since every property it reads goes through the view.
+
+`plainCopy` copies only plain objects, arrays and primitive values such as
+strings, numbers, booleans and `null`. It throws a `TypeError` naming the path
+when it meets anything else (an element, a `Map`, a function, a getter, or an
+object that contains itself), and it never runs a getter or a method on the
+world's data.
 
 ### Selections: what an action asks a player for
 
@@ -880,7 +952,9 @@ player is still answering, so every selection is `undefined` until they bind it 
 and an omitted optional number reaches both `.quote()` and `execute` as
 `undefined`, which is how "skip for one week" and "zero weeks" stay two different
 answers the whole way down. Return `null` for a draft there is nothing to say
-about yet.
+about yet. The action's `needs()` rounds run on the same partial draft while it
+is quoted, the execute round included, so a round that reads a pick must answer
+for it being absent too.
 
 **Each selection's value is what `execute` would get.** A `chooseElement` is the
 element, not the id the panel sent, and so is every element in a `chooseElements`
@@ -888,8 +962,9 @@ element, not the id the panel sent, and so is every element in a `chooseElements
 pick re-asked with earlier answers bound (`prompt`, `choices`/`elements`,
 `prepare`, `disabled`, `multiSelect`). Those elements are read-only, like
 everything else a read sees. A draft naming an element this action cannot offer
-the seat any more is refused with `stale-draft` rather than handed over as a bare
-number, and a draft carrying a key none of the action's picks declares is refused
+the seat any more (outside what the read declared, or not among the elements
+its pick's own `elements` offer now) is refused with `stale-draft` before any later
+pick's callback sees it, and a draft carrying a key none of the action's picks declares is refused
 with `undeclared-arg`, as the command itself is.
 
 **The number being typed is in there.** That is the point: the panel sends the
@@ -1234,11 +1309,14 @@ next one's to read. On ShufflewickPub it is also deleted when the holder's
 account is erased.
 
 A host drives all of this with one function, `applyNoticeWrites(result.notices,
-readBox, { seatCount, budgets })`, which applies a dispatch's sends and takes in
-order and answers each touched seat's box, so every host agrees about what a
-full box does. The result comes from game code, so it first re-checks `perSeat`,
-the number of sends, each notice's size and every seat against the host's own
-budgets and seat count, and refuses a result they do not admit. The
+readBox, { seatCount, budgets, declaredNotices })`, which applies a dispatch's
+sends and takes in order and answers each touched seat's box, so every host
+agrees about what a full box does. The result comes from game code, so it first
+re-checks `perSeat`, the number of sends, each notice's size and every seat
+against the host's own budgets and seat count, and refuses a result they do not
+admit. It also refuses a take or a `refuse` send to a box that is not in
+`declaredNotices`, the boxes the command's walk declared (`dispatchStep` answers
+them as `answers.declaredNotices`), with `undeclared-notice-box`. The
 `WorldStore` interface carries `noticeBox(seat)` and a checkpoint's `notices`;
 `boardsmith dev` keeps boxes in its local store, and `TestWorld.noticeBox(seat)`
 shows a test what is waiting.
@@ -1298,16 +1376,16 @@ the earlier argument and returns a number. Nothing is enumerated per candidate,
 so nothing is hydrated per candidate.
 
 **And the panel does narrow it live** (ShufflewickPub #378). The offer is
-enumerated once with nothing bound, so a bound like the one above resolves to
-the unbounded fallback in that first frame -- which is the honest answer, and
-which the wire says by leaving `max` out rather than by sending a number JSON
-cannot carry. The moment the player picks the ship, the panel re-asks that one
-selection with the args it has, and the world answers it against the resident
-tree:
+enumerated once with nothing bound, so it leaves a function bound like the one
+above out of every pick after the first, with that pick's function
+`prompt` and `orderedList` (#1350); it says nothing it would have to guess. The
+moment the player picks the ship, the panel re-asks that one selection with the
+args it has, and the world answers it against the resident tree:
 
 ```ts
 const answer = await runner.resolvePick('alice', 'deploy', 'crew', { ship: 4 }, stamp);
 answer.multiSelect;   // { min: 1, max: 2 } — from the ship they actually chose
+answer.prompt;        // a function prompt, evaluated with the same args
 answer.choices;       // and its candidates, evaluated with the same args
 ```
 
@@ -1320,8 +1398,8 @@ costs one round trip per pick AFTER the first, only while somebody is mid-action
 
 The re-ask is two frames on the world wire -- `world_pick` out, `world_pick_result`
 back -- so **every host has to relay both**, `boardsmith dev` included. Its world
-bar does (#227); a host that relays only one leaves the panel holding the
-unbounded fallback until the pick times out, with nothing on screen to say why.
+bar does (#227); a host that relays only one leaves the panel without the
+pick's candidates and bounds until the pick times out, with nothing on screen to say why.
 `scripts/world-pick-bridge-browser.mjs` is the browser regression that holds the
 local bar to it, because no test on either side of a bridge can see the bridge.
 
@@ -1358,28 +1436,32 @@ form's clothes.
 What comes back is the seat's actions in the table's own **`ActionMetadata`**
 shape -- the same shape the shared action panel, the board bridge and the
 drag-drop targets already consume -- with an optional `disabled` reason added,
-and **each selection's candidates already resolved**. `tend` offers the two
+and **the first selection's candidates already resolved**. `tend` offers the two
 neighbouring holdings that exist right now, as element ids the board bridge wires
 straight to a click.
 
-**The candidates arrive with the offer rather than being fetched per pick**
-because a world's protocol is single-shot where a table's is step-wise. That is
-affordable exactly because rule (d) above holds: no selection's candidates are a
-function of another's value, so the whole offer is one pass and there is no
-product to enumerate.
+**The first pick's candidates arrive with the offer**, so most verbs, which ask
+one question, cost no round trip. Every later pick is offered by its shape and
+asked when the player reaches it, with the answers so far (#1345, #1355).
+Rule (d) above still holds: no selection's candidates are enumerated per value
+of another's, so the offer is one pass and there is no product to enumerate.
 
 Seatless actions are filtered out here. An action whose `condition` is false is
-not offered, and neither is one whose **first** non-optional selection has no
-candidates at all -- a pick that would open on nothing.
+not offered, and neither is one whose **first** selection is required and has no
+candidates at all -- a pick that would open on nothing. An optional first
+selection can always be skipped, so its action is offered without reading the
+selections after it: the next required one may narrow on the optional answer,
+and a table's availability stops at an optional step for the same reason
+(BoardSmith #1351, #1355).
 
-**A later selection never decides the offer** (BoardSmith #270). Every selection
-is enumerated in the same frame with `args: {}`, which is the right question to
-ask the first one and the wrong question to ask any other: a selection narrowed
-by an earlier answer has nothing to narrow by yet, so the natural
+**A later selection never decides the offer** (BoardSmith #270). The offer
+reads only the first selection, with `args: {}`, which is the right question to
+ask it and the wrong question to ask any other: a selection narrowed by an
+earlier answer has nothing to narrow by yet, so the natural
 `if (args.slot === undefined) return []` used to take the whole verb out of the
-seat's offer. It no longer does; the later selection's candidates are re-asked
-with the args bound as soon as the player answers (`resolvePick`), and that
-narrowed list is what `apply` validates against. When a re-asked pick comes back
+seat's offer. It no longer does; a later selection's candidates are asked when
+the player reaches it, with the answers so far (`resolvePick`), and that list is
+what `apply` validates against. When a re-asked pick comes back
 with nothing in it, the panel says so -- naming the question, the verb and the
 answers that narrowed it -- rather than drawing an empty list under a prompt.
 
@@ -1390,7 +1472,7 @@ candidate, which is most of what a seat cannot do right now, and a warning on
 every one of those would train its reader to ignore the one that means
 something.
 
-It costs `O(actions) x (condition + each selection's own candidates)`. There is
+It costs `O(actions) x (condition + the first selection's candidates)`. There is
 no term that scales with the world.
 
 ### What an offer costs to hydrate, and how to keep it free
@@ -1574,6 +1656,19 @@ and a room everybody is granted is a single body for the whole audience. The
 engine decides that STRUCTURALLY, from the visibility each element declares,
 because deciding it by comparing encoded bodies would cost the encoding the
 sharing removes.
+
+**A count-only pile shares too (#1207).** A seat knows a card it cannot see by a
+placeholder id of its own (#715), so the body seats share has each placeholder's
+id taken out, and `viewsFor` answers each seat its own ids beside the body it
+holds (`placeholders`, in order); the runner's `of[player]` is
+`{ at, placeholders }`, so a seat's body index never comes without its ids.
+`seatView(bodies[at], placeholders)` from `boardsmith/world` is that seat's
+view. A host sends the shared body as the `world_state` frame's `view` and the
+seat's ids as its `placeholders` (#1326), so a host can encode the body once per
+group; the world client calls `seatView` before anything reads the
+view. A host that serves the view some other way calls `seatView` itself before
+sending. No shared body carries
+any seat's ids, and a seat is given ids only for the placeholders in its own body.
 
 **The authoring lever is still the visibility you declare.** Two kinds of
 declaration are per-seat output whatever the audience, because neither is decided
@@ -2776,6 +2871,7 @@ your game.
 | `order-outcome-unknown` | A repeat arrived for an order minted before this world's receipt floor, so nothing can say whether it committed. Refused rather than run, because running it is the second spend the identity exists to prevent. |
 | `stale-draft` | A quote, or a pick re-asked with earlier answers bound, was asked about a draft whose element selection names nothing this action can offer the seat now: the element was taken since the offer was sent, or the id was never in an offer. Ask for the offer again. |
 | `undeclared-arg` | A seat's command, a quote, or a pick re-asked with earlier answers bound, was sent a key none of the action's picks declares. A client sends only picks. Refused before any of the action's declarations or callbacks run. A scheduled event is not checked: the clock's verbs ask no picks, and their args are the bundle's own. |
+| `missing-pick` | A seat's command left out a pick the action requires, or sent `null` for it, or a pick re-asked with earlier answers bound left out a required pick before it. Refused, with `Missing required selection: <pick>`, before any of the action's declaration rounds read its args, so a command's rounds see every required pick bound and a re-asked pick's rounds see every required pick before it. An optional pick may be left out. A quote is not checked: it prices a draft. |
 
 **`game`**: your bundle's own doing. Fix these; the same bundle does the same
 thing next time.
@@ -2788,6 +2884,7 @@ thing next time.
 | `invalid-world-action` | A world action the platform cannot offer or cannot bound: an action not built with `worldAction()`, an unbounded `from`/`filter`/`elementClass` element form, an element selection with no `elements:`, a candidate outside what the step declared, a selection past `maxCandidatesPerSelection`, a dependent or repeating selection, a seatless action that asks a question, or a round declared before a step the action does not have. |
 | `not-in-a-world` | An action built with `worldAction()` reached `ctx.world` with no world running it -- registered on a table, or reached after the dispatch that bound its facilities finished. |
 | `undeclared-partition` | `execute` read, or emitted an event in, a partition the action's own walk did not declare. |
+| `read-only-write` | An action changed a partition it loads only with `.reads()`, which is never saved. The command is refused and nothing it changed is kept. Load the partition with `.needs()` if the action writes to it. |
 | `declaration-unsettled` | A `world.view` named something new on every round. **A view only**, since an action's walk has no ceiling to trip. |
 | `view-dropped-partition` | A `world.view` stopped naming a partition it named on an earlier round of the same look, once more was loaded. Refused for that seat only. Keep naming it alongside what the loaded partitions add. |
 | `declaration-write` | A declaration, a view or a migration's `survey.root` tried to write through the read-only projection. Do it in `execute`, or in the migration's `partition` hook. |

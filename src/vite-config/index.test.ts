@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { cpSync, mkdirSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, existsSync, mkdirSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -32,10 +32,16 @@ function packedGame(prefix: string, within = ''): string {
 describe('defineGameViteConfig', () => {
   it('gives a game the Vue plugin, one Vue runtime, and a test run that covers only its own checkout', () => {
     const config = defineGameViteConfig();
-    expect(config.plugins?.flat().map((p) => (p && typeof p === 'object' && 'name' in p ? p.name : p))).toEqual(['vite:vue']);
+    expect(config.plugins?.flat().map((p) => (p && typeof p === 'object' && 'name' in p ? p.name : p))).toEqual(['vite:vue', 'boardsmith:rerun-triggers']);
     expect(config.resolve?.dedupe).toEqual(['vue']);
     expect(config.test?.exclude).toEqual([...configDefaults.exclude, '.boardsmith/**', '.worktrees/**', '**/tests/browser/**']);
-    expect(config.test?.forceRerunTriggers).toEqual([...configDefaults.forceRerunTriggers, '**/*(*/|.*/)boardsmith.json']);
+  });
+
+  it("anchors the rerun triggers at the project root, not a test root inside it (#1307)", () => {
+    // boardsmith.json, package.json and vite.config.ts sit at the project root, whatever folder the tests run from.
+    const plugin = defineGameViteConfig().plugins?.flat().find((p) => p && typeof p === 'object' && 'name' in p && p.name === 'boardsmith:rerun-triggers') as unknown as { config: (c: object) => { test: { forceRerunTriggers: string[] } } };
+    const { test } = plugin.config({ root: '/p/game', test: { root: '/p/game/tests' } });
+    expect(test.forceRerunTriggers).toEqual([...configDefaults.forceRerunTriggers, 'boardsmith.json'].map((t) => `/p/game/${t}`));
   });
 
   it("keeps a game's own settings, adding its excludes to the shipped ones", () => {
@@ -49,7 +55,6 @@ describe('defineGameViteConfig', () => {
       'tests/tdd/**',
     ]);
     expect(config.resolve?.dedupe).toEqual(['vue']);
-    expect(config.test?.forceRerunTriggers).toEqual([...configDefaults.forceRerunTriggers, '**/*(*/|.*/)boardsmith.json']);
   });
 
   it('loads from a packed boardsmith under node_modules, where Node strips no TypeScript', () => {
@@ -66,22 +71,44 @@ describe('defineGameViteConfig', () => {
     expect(listed.status).toBe(0);
   }, 60_000);
 
-  it.each(['', '.worktrees/t'])('runs every test under --changed when only boardsmith.json changed, in a game at "%s" (#1211)', (within) => {
-    // No test imports boardsmith.json, yet TestGame and the headless session read their options from it.
-    // A thread or chunk worktree puts the game under a dot folder, where verify runs.
+  /** `vitest run --changed HEAD` in a packed game at `within` whose only uncommitted change is `changed`. */
+  function changedRun(within: string, changed: string) {
     const game = packedGame('bs-vite-config-rerun-', within);
     writeFileSync(join(game, 'boardsmith.json'), '{ "name": "g" }\n');
+    mkdirSync(dirname(join(game, changed)), { recursive: true });
+    if (!existsSync(join(game, changed))) writeFileSync(join(game, changed), '{ "name": "g" }\n');
     mkdirSync(join(game, 'tests'), { recursive: true });
     writeFileSync(join(game, 'tests', 'a.test.ts'), "import { it } from 'vitest';\nit('holds', () => {});\n");
     writeFileSync(join(game, '.gitignore'), 'node_modules\n');
     initRepo(game);
     commitAll(game, 'base');
-    writeFileSync(join(game, 'boardsmith.json'), '{ "name": "g", "minPlayers": 2 }\n');
-    expect(git(game, 'status', '--porcelain')).toBe(' M boardsmith.json\n');
+    appendFileSync(join(game, changed), '\n');
+    expect(git(game, 'status', '--porcelain')).toBe(` M ${changed}\n`);
+    return spawnSync(join(INSTALLED_MODULES, '.bin', 'vitest'), ['run', '--changed', 'HEAD', '--passWithNoTests'], { cwd: game, encoding: 'utf-8' });
+  }
 
-    const run = spawnSync(join(INSTALLED_MODULES, '.bin', 'vitest'), ['run', '--changed', 'HEAD', '--passWithNoTests=false'], { cwd: game, encoding: 'utf-8' });
+  it.each([
+    ['', 'boardsmith.json'],
+    ['.worktrees/t', 'boardsmith.json'],
+    ['.worktrees/t', 'package.json'],
+  ])('runs every test under --changed when only its own config changed, in a game at "%s": %s (#1211, #1307)', (within, changed) => {
+    // No test imports boardsmith.json, yet TestGame and the headless session read their options from it.
+    // A thread or chunk worktree puts the game under a dot folder, where verify runs.
+    const run = changedRun(within, changed);
 
     expect(`${run.stdout}${run.stderr}`).toContain('tests/a.test.ts');
     expect(run.status).toBe(0);
   }, 60_000);
+
+  it.each(['sub/boardsmith.json', '.worktrees/x/boardsmith.json', '.boardsmith/worktrees/y/boardsmith.json'])(
+    'runs no test under --changed when only a boardsmith.json other than its own changed: %s (#1307)',
+    (changed) => {
+      // A nested checkout or another folder's file is not the options this game's tests read.
+      const run = changedRun('', changed);
+
+      expect(`${run.stdout}${run.stderr}`).not.toContain('tests/a.test.ts');
+      expect(run.status).toBe(0);
+    },
+    60_000,
+  );
 });

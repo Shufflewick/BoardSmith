@@ -200,7 +200,8 @@ Which means, precisely:
 
 ## 6. The cases the tests hold
 
-Held by `src/session/testing/stale-submission.test.ts`, driven on
+Held by `src/session/testing/stale-submission.test.ts` in the BoardSmith
+repository (an install does not carry its tests), driven on
 `src/session/testing/fixtures/simultaneous-rounds-fixture.ts` (multi-round
 simultaneous) and `src/session/testing/fixtures/collect-turns-fixture.ts`
 (sequential, real `eachPlayer` turn boundaries, plus a selection-step action).

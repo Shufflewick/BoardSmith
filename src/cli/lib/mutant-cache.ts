@@ -72,10 +72,12 @@ import { readIfExists } from './read-if-exists.js';
  * rest of the run, keeping nothing more, when the context changed before or while a mutant ran, or
  * by its end (#932, #940): outcomes from a mixed run would be stored under a key they do not fit.
  *
- * Beside the outcomes, `killer-hints.json` keeps, for each mutated text, the test that last failed on
- * an assertion of its own under it (#954). It is keyed by the mutant's file and text alone, so it
- * outlives the changes that make the outcome run again, and it is only advice on which test to try
- * first: `runDiffMutationCheck` still decides the outcome from a run made now.
+ * Beside the outcomes, `killer-hints.json` keeps, for each mutation, the test that last failed on
+ * an assertion of its own under it (#954), and drops it when a run finds none. It is keyed by the game
+ * folder, the mutant's file, the line it changes and the change alone (#1308), so it outlives the
+ * changes that make the outcome run again, edits elsewhere in the file included, and it is kept
+ * even when outcomes cannot be. It is only advice on which test to try first:
+ * `runDiffMutationCheck` still decides the outcome from a run made now.
  */
 
 const CACHE_FORMAT = 5;
@@ -93,6 +95,11 @@ type CachedOutcome = 'killed' | 'survived';
 interface MutantText {
   file: string;
   source: string;
+}
+
+/** A mutant as its killer hint is keyed: also the change, where `offset` is in the unmutated text and `after` replaced `before`. */
+interface MutantChange extends MutantText {
+  change: { offset: number; before: string; after: string };
 }
 
 /**
@@ -433,12 +440,15 @@ async function readEntries<T>(path: string, format: number, valid: (value: unkno
   }
 }
 
-/** Puts `used` in front of the entries on file now, keeping up to `MAX_STORED_OUTCOMES`; leaves the file alone when `used` is empty. */
-async function saveEntries<T>(path: string, format: number, valid: (value: unknown) => value is T, used: Map<string, T>): Promise<void> {
+/**
+ * Puts `used` in front of the entries on file now, keeping up to `MAX_STORED_OUTCOMES`, and drops the keys
+ * `used` holds as undefined; leaves the file alone when `used` is empty.
+ */
+async function saveEntries<T>(path: string, format: number, valid: (value: unknown) => value is T, used: Map<string, T | undefined>): Promise<void> {
   if (used.size === 0) return;
   // Read again: another checkout may have saved since this run opened the cache.
   const onFile = await readEntries(path, format, valid);
-  const outcomes = [...used, ...[...onFile].filter(([key]) => !used.has(key))].slice(0, MAX_STORED_OUTCOMES);
+  const outcomes = [...used, ...[...onFile].filter(([key]) => !used.has(key))].filter(([, value]) => value !== undefined).slice(0, MAX_STORED_OUTCOMES);
   await fs.mkdir(dirname(path), { recursive: true });
   const partial = `${path}.${process.pid}.tmp`;
   await fs.writeFile(partial, `${JSON.stringify({ format, outcomes })}\n`);
@@ -468,14 +478,15 @@ export interface KillerHint {
 
 export interface MutantCache extends MutationFingerprints {
   /** The stored outcome of `mutant` for the project's HEAD, or undefined when it must run. */
-  get(mutant: MutantText): CachedOutcome | undefined;
+  get(mutant: MutantChange): CachedOutcome | undefined;
   set(mutant: MutantText, outcome: CachedOutcome): void;
   /**
-   * The test that killed this exact mutated text in an earlier run, whatever else has changed since
-   * (#954). Only advice on which test to try first: it is never evidence of an outcome.
+   * The test that killed this mutation in an earlier run, whatever else has changed since (#954).
+   * Only advice on which test to try first: it is never evidence of an outcome.
    */
-  killerHint(mutant: MutantText): KillerHint | undefined;
-  setKillerHint(mutant: MutantText, hint: KillerHint): void;
+  killerHint(mutant: MutantChange): KillerHint | undefined;
+  /** Records the test that killed `mutant` on its own assertion in a run made now; undefined, when none did, drops its hint. */
+  setKillerHint(mutant: MutantChange, hint: KillerHint | undefined): void;
   /**
    * Puts the outcomes and hints this run looked up or recorded in front of those on file now, keeping
    * up to `MAX_STORED_OUTCOMES` of each. A run that tried no mutant (a red suite, or no code changed)
@@ -528,70 +539,69 @@ export async function executionContextChange(projectDir: string, before: Executi
   return changed.length === 0 ? undefined : changed.join('; ');
 }
 
-async function mutationFingerprints(projectDir: string, context: ExecutionContext): Promise<MutationFingerprints> {
-  if (context.unavailable !== undefined) return uncached(context.unavailable);
+async function mutationFingerprints(projectDir: string, context: ExecutionContext, prefix: string): Promise<MutationFingerprints> {
+  if (context.unavailable !== undefined) return { unavailable: context.unavailable, fingerprint: () => undefined };
   const { boardsmith, installed, linked } = context.parts;
-  const [prefix, tree] = await Promise.all([
-    git(projectDir, ['rev-parse', '--show-prefix']).then((p) => p.trim()),
-    repositoryTreeHash(projectDir, 'HEAD'),
-  ]);
+  const tree = await repositoryTreeHash(projectDir, 'HEAD');
   return { fingerprint: (m) => sha256Hex(JSON.stringify([CACHE_FORMAT, boardsmith, process.version, tree, installed, linked, prefix, m.file, 'source' in m ? sha256Hex(m.source) : m.sourceHash])) };
+}
+
+/**
+ * The key of a mutant's killer hint: its game folder, file, the mutated text of the line it changes, which
+ * of the file's lines with that unmutated text it is, and the change.
+ */
+function hintKey(prefix: string, { file, source, change }: MutantChange): string {
+  const lineStart = source.lastIndexOf('\n', change.offset - 1) + 1;
+  const lineEnd = source.indexOf('\n', change.offset + change.after.length);
+  const line = source.slice(lineStart, lineEnd === -1 ? undefined : lineEnd);
+  const column = change.offset - lineStart;
+  const unmutated = line.slice(0, column) + change.before + line.slice(column + change.after.length);
+  const copy = source.slice(0, lineStart).split('\n').filter((l) => l === unmutated).length;
+  return sha256Hex(JSON.stringify([prefix, file, line, copy, column, change.before, change.after]));
 }
 
 /**
  * The cache for the commit checked out in `projectDir`, as its tests run in `context` (by default,
  * what is installed now). `boardsmith verify` hands in the context it captured when it started, so
- * the outcomes it stores are keyed by the context it checks again before saving them.
+ * the outcomes it stores are keyed by the context it checks again before saving them. When that
+ * context cannot be fingerprinted it holds no outcomes, but still its killer hints.
  */
 export async function openMutantCache(projectDir: string, context?: ExecutionContext): Promise<MutantCache> {
   const path = await mutantCachePath(projectDir);
-  const fingerprints = await mutationFingerprints(projectDir, context ?? (await captureExecutionContext(projectDir)));
-  if (fingerprints.unavailable !== undefined) return uncached(fingerprints.unavailable);
+  const prefix = (await git(projectDir, ['rev-parse', '--show-prefix'])).trim();
+  const fingerprints = await mutationFingerprints(projectDir, context ?? (await captureExecutionContext(projectDir)), prefix);
   const hintsPath = join(dirname(path), KILLER_HINTS_NAME);
-  const stored = await readEntries(path, CACHE_FORMAT, isOutcome);
+  const stored = fingerprints.unavailable === undefined ? await readEntries(path, CACHE_FORMAT, isOutcome) : new Map<string, CachedOutcome>();
   const storedHints = await readEntries(hintsPath, KILLER_HINTS_FORMAT, isKillerHint);
   const used = new Map<string, CachedOutcome>();
-  const usedHints = new Map<string, KillerHint>();
-  const keyOf = (m: MutantText) => fingerprints.fingerprint(m)!;
-  // The mutated text alone, so a hint outlives the context changes that make the outcome run again.
-  const hintKeyOf = (m: MutantText) => sha256Hex(JSON.stringify([m.file, sha256Hex(m.source)]));
+  const usedHints = new Map<string, KillerHint | undefined>();
 
   return {
-    fingerprint: fingerprints.fingerprint,
+    ...fingerprints,
     get(mutant) {
-      const key = keyOf(mutant);
-      const outcome = stored.get(key);
-      if (outcome !== undefined) used.set(key, outcome);
+      const key = fingerprints.fingerprint(mutant);
+      const outcome = key === undefined ? undefined : stored.get(key);
+      if (outcome === undefined) return undefined;
+      used.set(key!, outcome);
+      // A reused outcome keeps its hint in use too, so the hint is there when the outcome next runs.
+      const hint = hintKey(prefix, mutant);
+      if (!usedHints.has(hint) && storedHints.has(hint)) usedHints.set(hint, storedHints.get(hint));
       return outcome;
     },
     set(mutant, outcome) {
-      used.set(keyOf(mutant), outcome);
+      const key = fingerprints.fingerprint(mutant);
+      if (key !== undefined) used.set(key, outcome);
     },
     killerHint(mutant) {
-      const key = hintKeyOf(mutant);
-      const hint = usedHints.get(key) ?? storedHints.get(key);
-      if (hint !== undefined) usedHints.set(key, hint);
-      return hint;
+      const key = hintKey(prefix, mutant);
+      return usedHints.has(key) ? usedHints.get(key) : storedHints.get(key);
     },
     setKillerHint(mutant, hint) {
-      usedHints.set(hintKeyOf(mutant), hint);
+      usedHints.set(hintKey(prefix, mutant), hint);
     },
     async save() {
-      await saveEntries(path, CACHE_FORMAT, isOutcome, used);
+      if (fingerprints.unavailable === undefined) await saveEntries(path, CACHE_FORMAT, isOutcome, used);
       await saveEntries(hintsPath, KILLER_HINTS_FORMAT, isKillerHint, usedHints);
     },
-  };
-}
-
-/** A cache that holds nothing and stores nothing, for a run whose key could not be computed. */
-function uncached(reason: string): MutantCache {
-  return {
-    unavailable: reason,
-    fingerprint: () => undefined,
-    get: () => undefined,
-    set: () => {},
-    killerHint: () => undefined,
-    setKillerHint: () => {},
-    save: async () => {},
   };
 }

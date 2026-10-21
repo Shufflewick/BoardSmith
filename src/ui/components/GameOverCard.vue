@@ -115,11 +115,14 @@ const titleText = computed(() => {
 
 <style scoped>
 /* Scrim: absolute over .board-viewport so it overlays the visible board but cannot
-   reach the .actionbar (sibling of .stage) or browser chrome (T-100-06-02). */
+   reach the .actionbar (sibling of .stage) or browser chrome (T-100-06-02).
+   Above tutorial/hint bubbles (z-31) so it covers them, and stopped at the bar's
+   top edge so it never dims the bar (#1346). */
 .game-over-scrim {
   position: absolute;
   inset: 0;
-  z-index: 30;
+  bottom: var(--bsg-bar-clearance);
+  z-index: 32;
   /* Dark theme: rgba equivalent of --bsg-bg at 66% opacity.
      Light theme: a lighter scrim — same opacity ratio, lighter base.
      color-mix lets us derive both from existing tokens without hex.    */

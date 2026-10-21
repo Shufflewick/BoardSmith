@@ -223,9 +223,9 @@ sketch writing) writes its artifacts into this directory, never the parent.
 ## Required Reading Pointer
 
 A fresh session about to touch the scaffolded project's output should still read the base
-BoardSmith docs before generating any code: `docs/core-concepts.md` and
-`docs/common-pitfalls.md` always; `docs/actions-and-flow.md` when building actions;
-`docs/custom-ui-guide.md` and `docs/ui-components.md` when building UI; `docs/dice-and-scoring.md`
+BoardSmith docs before generating any code: `node_modules/boardsmith/docs/core-concepts.md` and
+`node_modules/boardsmith/docs/common-pitfalls.md` always; `node_modules/boardsmith/docs/actions-and-flow.md` when building actions;
+`node_modules/boardsmith/docs/custom-ui-guide.md` and `node_modules/boardsmith/docs/ui-components.md` when building UI; `node_modules/boardsmith/docs/dice-and-scoring.md`
 for dice games. (This list is cited by the docs' own names deliberately — the old skill's
 `instructions.md`, which used to host it, is deleted when the bs- skills ship; the docs
 themselves are the durable reference.) This file does not restate the docs' content;

@@ -49,7 +49,8 @@ export interface BaseSelection<T = unknown> {
   name: string;
   /**
    * User-facing prompt. Can be a static string or a function that returns a string.
-   * Functions are evaluated at render time with the current game state.
+   * Functions are evaluated at render time with the current game state. A
+   * function's prompt is not shown when `args` holds a card the player cannot see (#1293).
    */
   prompt?: string | ((context: ActionContext) => string);
   /** Make this selection optional. If a string, shows that text instead of "Skip". */
@@ -63,7 +64,9 @@ export interface BaseSelection<T = unknown> {
    * {@link ActionDefinition.validate}:
    * - `true` → accepted
    * - `false` → rejected, with a generic `Invalid <name>` message
-   * - a string → rejected, and the string IS the player-facing message
+   * - a string → rejected, and the string IS the player-facing message, unless
+   *   the value or `args` holds a card the player cannot see: then the generic
+   *   message is shown and the string goes to the dev log (#1293)
    *
    * Any other return value (notably a `{ valid, message }` object) is a
    * programming error and is reported as one — it is never silently treated as
@@ -238,6 +241,8 @@ export interface DisabledRule<T> {
    * Returns a reason string if disabled, or false if selectable.
    * Only runs on items that passed filter (filter = visibility, disabled = selectability).
    * `prepared` is what `prepare` returned for this evaluation (undefined without one).
+   * The reason is not shown for a choice the player cannot see, or while
+   * `args` holds one; the choice stays disabled (#1293).
    */
   disabled?: (choice: T, context: ActionContext, prepared: unknown) => string | false;
 }
@@ -259,7 +264,8 @@ export interface UnavailableRule {
    * after the card was hidden again (#1293). Return the
    * sentence the player reads, saying what happened and what to do next.
    * Without it the player reads a plain default, and the engine's detailed
-   * text (the value and the current choices) goes to the dev log.
+   * text (the value and the current choices) goes to the dev log. The default
+   * is also shown when `context.args` holds a card the player cannot see (#1293).
    */
   unavailable?: (value: unknown, context: ActionContext) => string;
 }
@@ -292,7 +298,7 @@ export interface ChoiceSelection<T = unknown> extends BaseSelection<T>, Disabled
   type: 'choice';
   /** Choices - can be static array or function. Each is a value or a {@link LabelledChoice}. */
   choices: unknown[] | ((context: ActionContext) => unknown[]);
-  /** Display function for choices */
+  /** Display function for choices. Not shown for a choice that is or holds a card the player cannot see (#1293). */
   display?: (choice: T) => string;
   /** Get board element references for highlighting (source/target) */
   boardRefs?: (choice: T, context: ActionContext) => ChoiceBoardRefs;
@@ -386,7 +392,8 @@ export interface ElementSelection<T extends GameElement = GameElement> extends B
    * Custom display function for the element's label (for UI buttons). If not
    * provided, uses element.name with automatic disambiguation. Same shape as
    * {@link ElementsSelection.display} on purpose: both element selections are
-   * formatted by the same code, so one signature covers both.
+   * formatted by the same code, so one signature covers both. Not shown when a
+   * candidate or `args` holds a card the player cannot see (#1293).
    */
   display?: (element: T, context: ActionContext, allElements: T[]) => string;
   /** Get board element reference for highlighting */
@@ -439,7 +446,8 @@ export interface ElementsSelection<T extends GameElement = GameElement> extends 
   elements: T[] | ((context: ActionContext) => T[]);
   /**
    * Custom display function. If not provided, uses element.name with
-   * automatic disambiguation (e.g., "Militia #1", "Militia #2").
+   * automatic disambiguation (e.g., "Militia #1", "Militia #2"). Not shown
+   * when a candidate or `args` holds a card the player cannot see (#1293).
    */
   display?: (element: T, context: ActionContext, allElements: T[]) => string;
   /** Get board element reference for highlighting */
@@ -708,7 +716,9 @@ export interface ActionDefinition {
    * confused for one another:
    * - `true` → the action may proceed
    * - `false` → refused, with a generic message
-   * - a string → refused, and the string IS the player-facing message
+   * - a string → refused, and the string IS the player-facing message, unless
+   *   `args` holds a card the player cannot see: then the generic message is
+   *   shown and the string goes to the dev log (#1293)
    *
    * Any other return value (notably a `{ valid, message }` object) is a
    * programming error: the action is refused and the engine explains the real

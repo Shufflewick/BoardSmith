@@ -3,7 +3,7 @@
  * HeatmapOverlay — per-cell MCTS evaluation chips (bot-03).
  *
  * Renders via `<Teleport to="body">` as a `position:fixed; inset:0` layer at
- * z-index 15 (below TutorialOverlay/HintOverlay at z-20).
+ * z-index 15 (below TutorialOverlay/HintOverlay at z-31).
  *
  * Reads `gameState.state.heatmap` — renders chips only when `visible === true`
  * and `entries` is non-empty. Each chip is centered on the resolved cell's
@@ -167,7 +167,7 @@ useOverlayTracking({
 <template>
   <!--
     Teleport to body: fixed viewport layer.
-    z-index 15 — below TutorialOverlay/HintOverlay (z-20), above turn-prompt (z-5).
+    z-index 15 — below TutorialOverlay/HintOverlay (z-31), above turn-prompt (z-5).
     pointer-events:none — chips never intercept board input (T-107-09).
   -->
   <Teleport to="body">

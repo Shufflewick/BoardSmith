@@ -26,6 +26,7 @@ import type { ValidElement } from '../types/protocol.js';
 import { PendingActionManager, type PickStepResult } from './pending-action-manager.js';
 import { picksFromSeat } from '../engine/element/seat-placeholders.js';
 import { actionForSeat, deserializePendingState, serializePendingActionState } from './utils.js';
+import { evaluatePrompt } from '../engine/element/action-metadata.js';
 import { resolveMultiSelect, resolveOrderedList } from '../engine/utils/resolve-multiselect.js';
 import {
   deadEndPickMessage,
@@ -137,14 +138,8 @@ function answerPick(
  * to an optional step, and a step whose candidates are all greyed already tells
  * the player more than this could -- every row carries its own reason.
  */
-function deadEnd(
-  action: { name: string; prompt?: string },
-  selection: { name: string; prompt?: unknown },
-  ctx: { game: Game; player: Player; args: Record<string, unknown> },
-): PickChoicesResponse {
-  const prompt = typeof selection.prompt === 'function'
-    ? (selection.prompt as (c: typeof ctx) => string)(ctx)
-    : (selection.prompt as string | undefined);
+function deadEnd(action: ActionDefinition, selection: Selection, ctx: ActionContext): PickChoicesResponse {
+  const prompt = evaluatePrompt(action.name, selection, ctx);
   return {
     success: false,
     error: deadEndPickMessage({

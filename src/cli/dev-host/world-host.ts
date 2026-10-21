@@ -130,6 +130,9 @@ export type WorldDevRequest =
   | { type: 'fire_due' }
   | { type: 'wake' };
 
+/** What a refused frame carries in place of a projection. */
+const NO_VIEW = { view: null, placeholders: [] } as const;
+
 /**
  * A WORLD, RUNNING ON A LAPTOP.
  *
@@ -538,10 +541,10 @@ export class LocalWorldHost {
    * ONE SELECTION, RE-EVALUATED WITH THE ARGS BOUND SO FAR (ShufflewickPub
    * #378).
    *
-   * A world's offer is enumerated in one frame with nothing bound, so a
-   * selection whose `multiSelect` bounds or `choices` callback read an earlier
-   * selection's value cannot be answered there: the panel asks again once it has
-   * something to ask with, exactly as a table's does.
+   * A world's offer resolves only the first selection, with nothing bound, so
+   * the panel asks for every later one when the player reaches it, with the
+   * answers so far -- none, when only skipped optional picks precede it
+   * (#1345, #1355).
    *
    * It is a READ. Nothing is dispatched, nothing is checkpointed and no view is
    * pushed.
@@ -749,13 +752,13 @@ export class LocalWorldHost {
       for (const [clientId] of watching) {
         this.#send(
           clientId,
-          this.#stateFrame(clientId, null, messageOf(error), 'refused', this.#world.revision),
+          this.#stateFrame(clientId, NO_VIEW, messageOf(error), 'refused', this.#world.revision),
         );
       }
       this.#broadcastStatus();
       return;
     }
-    const { bodyFor, failed, revision } = projections;
+    const { seatFor, failed, revision } = projections;
     // THE PROJECTION GOES OUT FIRST, TO EVERY WATCHER (#244).
     //
     // It is finished: the world committed, the projection has answered, and
@@ -770,12 +773,12 @@ export class LocalWorldHost {
       const player = devWorldPlayer(seat);
       const refusal = failed[player];
       if (refusal !== undefined) {
-        this.#send(clientId, this.#stateFrame(clientId, null, refusal.message, 'refused', revision));
+        this.#send(clientId, this.#stateFrame(clientId, NO_VIEW, refusal.message, 'refused', revision));
         continue;
       }
       this.#send(
         clientId,
-        this.#stateFrame(clientId, bodyFor(player), this.#notices(), 'watching', revision),
+        this.#stateFrame(clientId, seatFor(player), this.#notices(), 'watching', revision),
       );
       offering.push({ clientId, seat });
     }
@@ -827,7 +830,7 @@ export class LocalWorldHost {
 
   #stateFrame(
     clientId: string,
-    view: unknown,
+    held: { readonly view: unknown; readonly placeholders: readonly number[] },
     notice: string | null,
     phase: 'watching' | 'refused',
     revision: number,
@@ -835,7 +838,9 @@ export class LocalWorldHost {
     return {
       type: 'world_state',
       phase,
-      view,
+      // The shared body and this seat's own ids for it; the page puts them together (#1326).
+      view: held.view,
+      placeholders: held.placeholders,
       seat: this.#attached.get(clientId) ?? null,
       // WHICH COMMITTED STATE THIS PROJECTION IS OF (#244). The offer frame
       // that follows carries the same number, which is the whole of what stops

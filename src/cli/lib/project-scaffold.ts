@@ -175,8 +175,8 @@ export function generatePackageJson(config: ProjectConfig, projectPath: string):
       // and resolves vue per-file, so this project can upgrade vue whenever it
       // likes.
       'vue-tsc': '^2.2.12',
-      vitest: '^2.0.0',
-      // Vitest v2 does not bundle jsdom; the a11y example opens with
+      vitest: '^3.2.7',
+      // Vitest does not bundle jsdom; the a11y example opens with
       // `// @vitest-environment jsdom` and needs the package installed.
       jsdom: '^29.1.1',
       'axe-core': '^4.12.1',

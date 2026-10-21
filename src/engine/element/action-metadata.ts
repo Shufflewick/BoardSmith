@@ -14,6 +14,7 @@ import { evaluateCondition } from '../action/action.js';
 import { devWarn } from '../../utils/dev.js';
 import { resolveMultiSelect, resolveOrderedList } from '../utils/resolve-multiselect.js';
 import { numberValueLabels } from '../action/number-labels.js';
+import { hidesFrom, seatText } from '../action/seat-text.js';
 import type { Game } from './game.js';
 import type { Player } from '../player/player.js';
 import type { Selection, ActionContext, ActionDefinition, TextSelection, NumberSelection } from '../action/types.js';
@@ -173,11 +174,15 @@ function describeNumberPick(base: PickMetadata, selection: NumberSelection): voi
   }
 }
 
-/** A pick's prompt: a static string, or the author's function evaluated now, its failure named. */
-function evaluatePrompt(actionName: string, selection: Selection, ctx: ActionContext): string | undefined {
+/**
+ * A pick's prompt: a static string, or the author's function evaluated now, its
+ * failure named. None when the function was handed a card the seat cannot see (#1293).
+ */
+export function evaluatePrompt(actionName: string, selection: Selection, ctx: ActionContext): string | undefined {
   if (typeof selection.prompt !== 'function') return selection.prompt;
   try {
-    return selection.prompt(ctx);
+    const prompt = selection.prompt(ctx);
+    return seatText(prompt, undefined, hidesFrom(ctx.player.seat, ctx.args), `prompt for selection '${selection.name}'`);
   } catch (error) {
     throw new Error(
       `The prompt function for "${selection.name}" in action "${actionName}" threw an error: ` +

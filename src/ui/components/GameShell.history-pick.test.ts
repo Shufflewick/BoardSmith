@@ -283,6 +283,8 @@ describe('GameShell defers a follow-up from an action reply that arrives while v
     });
     const sends = posted.filter((message) => (message as { op?: string }).op === 'action') as { requestId: string }[];
     expect(sends).toHaveLength(1);
+    const { toasts } = useToast();
+    const toastsBefore = toasts.value.length;
 
     debugPanel.vm.$emit('time-travel', { view: {}, players: DEBUG_TABLE_PLAYERS }, 3, null);
     await flushPromises();
@@ -296,6 +298,8 @@ describe('GameShell defers a follow-up from an action reply that arrives while v
     expect(fetches()).toHaveLength(0);
     expect(wrapper.findComponent(ActionPanel).text()).not.toContain('Loot which site?');
     expect(wrapper.find('[data-testid="board-pick"]').text()).toBe('none');
+    // The board's auto-start must not try the past board's sole action and toast its refusal (#1342).
+    expect(toasts.value.slice(toastsBefore).map((t) => t.message)).toEqual([]);
     return { wrapper, debugPanel, controller, fetches };
   }
 
