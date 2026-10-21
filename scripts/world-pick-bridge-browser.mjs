@@ -204,8 +204,8 @@ async function crewCount(page) {
 /**
  * Wait for the crew pick to read exactly `expected`.
  *
- * The panel draws the pick from the offer FIRST -- "Selected: 0", the unbounded
- * fallback -- and rewrites it when the re-ask lands, which is the whole
+ * The offer carries the crew pick's shape and no candidates (#1345), so the
+ * panel draws the count only when the re-ask lands, which is the whole
  * behaviour under test. So a single read is a race with the round trip, and
  * polling here is what makes the difference between the two states an
  * assertion rather than a coin toss.
@@ -215,10 +215,10 @@ async function expectCrewCount(page, expected) {
   assert(seen === expected, `the crew pick read "${seen}" rather than "${expected}"`);
 }
 
-/** Read the count once the surface has had a moment to settle. */
-async function settledCrewCount(page) {
+/** How many crew counts are drawn once the surface has had a moment to settle. */
+async function settledCrewCounts(page) {
   await new Promise((settle) => setTimeout(settle, 1000));
-  return crewCount(page);
+  return surfaceOf(page).locator('.multi-select-count').count();
 }
 
 // THE WHOLE RUN, IN THE HARNESS'S ORDER (#231). It checks the checkout is
@@ -334,8 +334,10 @@ async function driveThrough({ launch, hostUrl }) {
         // and nowhere else, which is how a refusal became a silent fallback to
         // the metadata the offer carried.
         await surface.locator('text=/impounded/').first().waitFor({ timeout: 15_000 });
-        const shown = await settledCrewCount(page);
-        assert(shown === 'Selected: 0', `a refused pick drew "${shown}" -- a cap the world never gave`);
+        // NO CREW AT ALL: the offer carries none past the ship (#1345), so there is
+        // nothing to fall back to and no cap the world never gave.
+        const drawn = await settledCrewCounts(page);
+        assert(drawn === 0, `a refused pick drew ${drawn} crew count(s) -- a pick the world never answered`);
       });
 
       await context.close();
@@ -370,11 +372,11 @@ async function driveThrough({ launch, hostUrl }) {
           .locator('text=/did not answer what "crew" may be/')
           .first()
           .waitFor({ timeout: WORLD_COMMAND_TIMEOUT_MS + 15_000 });
-        // "Selected: 0" AND a sentence saying why: the reporter's symptom was
-        // this count with nothing said, which is the state a bridge that drops
-        // the reply leaves behind.
-        const shown = await settledCrewCount(page);
-        assert(shown === 'Selected: 0', `an unanswered pick drew "${shown}" -- a cap nothing resolved`);
+        // A sentence saying why and no crew: the reporter's symptom was a count
+        // with nothing said, which is the state a bridge that drops the reply
+        // leaves behind.
+        const drawn = await settledCrewCounts(page);
+        assert(drawn === 0, `an unanswered pick drew ${drawn} crew count(s) -- a pick nothing answered`);
       });
 
       await context.close();
