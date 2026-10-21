@@ -625,8 +625,8 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     () => [controller.actionStartTick.value, Object.keys(currentArgs.value).length] as const,
     ([tick, answered], [wasTick, wasAnswered]) => {
       if (tick !== wasTick || answered >= wasAnswered) return;
+      // Also drops the hovered choice the panel keeps for the answer.
       board.selectElement(null);
-      board.setHoveredChoice(null);
     },
   );
 
