@@ -221,6 +221,14 @@ describe('a pick step that is still awaiting the server (#854)', () => {
         { name: 'pile', type: 'choice', prompt: 'Pile', choices: [{ value: 'l', display: 'Left' }, { value: 'r', display: 'Right' }] },
       ],
     },
+    board: {
+      name: 'board',
+      prompt: 'Board',
+      selections: [
+        { name: 'ship', type: 'choice', prompt: 'Ship', choices: [{ value: 'dory', display: 'Dory' }, { value: 'skiff', display: 'Skiff' }] },
+        { name: 'crew', type: 'choice', prompt: 'Crew', hasOnSelect: true, choices: [{ value: 'ann', display: 'Ann' }, { value: 'bo', display: 'Bo' }] },
+      ],
+    },
   };
 
   function controllerWithHeldSteps() {
@@ -229,7 +237,7 @@ describe('a pick step that is still awaiting the server (#854)', () => {
     const cancelPendingAction = vi.fn(async () => {});
     const controller = useActionController({
       sendAction,
-      availableActions: ref(['move', 'shift', 'collect', 'draw']),
+      availableActions: ref(['move', 'shift', 'collect', 'draw', 'board']),
       actionMetadata: ref(metadata),
       isMyTurn: ref(true),
       pickStep: steps.fn,
@@ -346,6 +354,19 @@ describe('a pick step that is still awaiting the server (#854)', () => {
     await first;
 
     expect(controller.currentArgs.value).toEqual({ piece: 'p1' });
+    expect(controller.lastError.value).toBe('Still waiting for the server to answer your last pick.');
+  });
+
+  it('a clear of an earlier pick while a later pick\'s step is out is refused, visibly, so the step cannot answer it against the old value (#1364)', async () => {
+    const { controller, steps } = controllerWithHeldSteps();
+    await controller.start('board');
+    await controller.fill('ship', 'dory');
+    const crewFill = controller.fill('crew', 'ann');
+    controller.clear('ship');
+    steps.reply(0, { success: true });
+    await crewFill;
+
+    expect(controller.currentArgs.value).toEqual({ ship: 'dory', crew: 'ann' });
     expect(controller.lastError.value).toBe('Still waiting for the server to answer your last pick.');
   });
 

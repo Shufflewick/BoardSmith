@@ -304,12 +304,11 @@ async function driveThrough({ launch, hostUrl }) {
       // ── 2. A CHANGED earlier argument gets the other ship's cap ──────────
       await check('changing the ship re-asks, and the cap follows the new one', async () => {
         const surface = surfaceOf(page);
-        // Clearing the first selection puts the whole action back, which is the
-        // controller's own answer to "I chose the wrong ship" -- so the change
-        // is made the way a player makes it, and what matters is that the
-        // SECOND bind is re-asked rather than answered from the first one.
+        // Clearing the ship keeps the action and asks for the ship again (#1371),
+        // so the change is made the way a player makes it, and what matters is
+        // that the SECOND bind is re-asked rather than answered from the first one.
         await surface.locator('.selected-values .clear-selection-btn').first().click();
-        await panelDeploy(page, 'skiff');
+        await surface.locator('.action-config .choice-btn', { hasText: 'skiff' }).click();
         await expectCrewCount(page, 'Selected: 0/2');
         assert(asked().length >= 2, 'changing the ship asked the world nothing');
         assert(

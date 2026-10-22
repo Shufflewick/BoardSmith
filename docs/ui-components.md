@@ -1980,6 +1980,11 @@ actionController.fill('destination', cellId);
 // Skip an optional selection (pass the selection's name)
 actionController.skip('destination');
 
+// Take a pick back (and every pick after it). Draw the control only where
+// canClear() is true, as the Action Panel does: a value the game set, or a pick
+// the server already holds (one a follow-up answered, say), cannot be cleared.
+if (actionController.canClear('piece')) actionController.clear('piece');
+
 // Cancel and clear
 actionController.cancel();
 ```

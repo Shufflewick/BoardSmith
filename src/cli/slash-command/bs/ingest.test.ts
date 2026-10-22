@@ -23,15 +23,16 @@
  * per requirement ID.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { SKILL_FILES, skillMarkdown } from '../skill-markdown.test-helper.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /** Read a bs/ shared-reference file relative to this test file's directory. */
 function read(relativePath: string): string {
-  return readFileSync(join(__dirname, relativePath), 'utf-8');
+  return skillMarkdown(`bs/${relativePath}`);
 }
 
 /**
@@ -153,21 +154,11 @@ describe('INGEST-04 — scaffold with compile+serve verification', () => {
 // clean. `vue-tsc` is the checker `boardsmith validate` runs and the one a scaffold installs.
 // A skill that names plain `tsc --noEmit` as a gate sends a session into a loop it cannot win.
 describe('#303 — every compile gate in the skill text is vue-tsc', () => {
-  const skillRoot = join(__dirname, '..');
-
-  function markdownFiles(dir: string): string[] {
-    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-      const full = join(dir, entry.name);
-      if (entry.isDirectory()) return markdownFiles(full);
-      return entry.name.endsWith('.md') ? [full] : [];
-    });
-  }
-
   it('no skill file names plain `tsc --noEmit`', () => {
-    const offenders = markdownFiles(skillRoot).flatMap((file) =>
-      readFileSync(file, 'utf-8')
+    const offenders = SKILL_FILES.flatMap((file) =>
+      skillMarkdown(file)
         .split('\n')
-        .map((line, i) => ({ line, at: `${file.slice(skillRoot.length + 1)}:${i + 1}` }))
+        .map((line, i) => ({ line, at: `${file}:${i + 1}` }))
         .filter(({ line }) => /(?<!vue-)\btsc --noEmit/.test(line))
         .map(({ at }) => at),
     );
@@ -471,8 +462,8 @@ describe('transcription-subagent.md — output directory is a dispatch input (VE
     // ingest/transcription-subagent.md, this must fail loudly -- a fork here silently
     // reintroduces the copy-drift trap (f73153a3 and its Phase 172 recurrence) at the exact
     // point decision 15 forbids it.
-    const verifyDir = join(__dirname, 'verify');
-    if (!existsSync(verifyDir)) return;
+    const verifyFiles = SKILL_FILES.filter((file) => file.startsWith('bs/verify/'));
+    if (verifyFiles.length === 0) return;
 
     // Markers unique to the contract body itself (not merely a mention/citation of it).
     const CONTRACT_BODY_MARKERS = [
@@ -480,15 +471,8 @@ describe('transcription-subagent.md — output directory is a dispatch input (VE
       'Do not accept a paraphrase of this file in place of the file',
     ];
 
-    const walk = (dir: string): string[] =>
-      readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-        const full = join(dir, entry.name);
-        if (entry.isDirectory()) return walk(full);
-        return entry.name.endsWith('.md') ? [full] : [];
-      });
-
-    for (const filePath of walk(verifyDir)) {
-      const text = readFileSync(filePath, 'utf-8');
+    for (const filePath of verifyFiles) {
+      const text = skillMarkdown(filePath);
       for (const marker of CONTRACT_BODY_MARKERS) {
         expect(
           text,
@@ -967,7 +951,7 @@ describe('return-shape field names — pinned across the file set (WR-07)', () =
 
 describe('CLI string claims in scaffold.md match the CLI source (WR-07)', () => {
   it('init.ts still emits the already-exists error scaffold.md quotes', () => {
-    const initSrc = read('../../commands/init.ts');
+    const initSrc = readFileSync(join(__dirname, '../../commands/init.ts'), 'utf-8');
     expect(initSrc).toContain('Directory "${name}" already exists');
     const scaffold = read('ingest/scaffold.md');
     expect(scaffold).toContain('already exists');
@@ -976,7 +960,7 @@ describe('CLI string claims in scaffold.md match the CLI source (WR-07)', () => 
   it('scaffold.md offers --into-existing for a game that already lives in a git repo (#304)', () => {
     // Without it, a research-first project was scaffolded elsewhere and copied in by hand, which
     // silently drops the ingest pre-commit hook `init` installs into `.git`.
-    const cli = read('../../cli.ts');
+    const cli = readFileSync(join(__dirname, '../../cli.ts'), 'utf-8');
     expect(cli).toContain("'--into-existing'");
     const scaffold = read('ingest/scaffold.md');
     expect(scaffold).toContain('npx boardsmith init <name> --rulebook <absolute-rulebookPath> --into-existing');
@@ -985,7 +969,7 @@ describe('CLI string claims in scaffold.md match the CLI source (WR-07)', () => 
     // session in a research repository scaffolds a nested `<name>/` beside the research.
     expect(read('ingest-rules.md')).toContain('init --into-existing');
     // The two refusals the file tells a session to expect are the ones init.ts raises.
-    const initSrc = read('../../commands/init.ts');
+    const initSrc = readFileSync(join(__dirname, '../../commands/init.ts'), 'utf-8');
     expect(initSrc).toContain('not the top folder of a git repository');
     expect(scaffold).toContain('not the top folder of a git repository');
     expect(initSrc).toContain('already exist here, so nothing was changed');
@@ -1002,7 +986,7 @@ describe('CLI string claims in scaffold.md match the CLI source (WR-07)', () => 
   });
 
   it('dev.ts still emits the --no-open skip message scaffold.md quotes', () => {
-    const devSrc = read('../../commands/dev.ts');
+    const devSrc = readFileSync(join(__dirname, '../../commands/dev.ts'), 'utf-8');
     const skipMessage = 'Skipping auto-open (--no-open): connect a client to claim seat 1 yourself.';
     expect(devSrc).toContain(skipMessage);
     const scaffold = read('ingest/scaffold.md');
@@ -1010,7 +994,7 @@ describe('CLI string claims in scaffold.md match the CLI source (WR-07)', () => 
   });
 
   it('dev.ts still emits the load-bearing ready line scaffold.md waits for verbatim', () => {
-    const devSrc = read('../../commands/dev.ts');
+    const devSrc = readFileSync(join(__dirname, '../../commands/dev.ts'), 'utf-8');
     const readyLine = 'Ready! Press Ctrl+C to stop.';
     expect(devSrc).toContain(readyLine);
     const scaffold = read('ingest/scaffold.md');

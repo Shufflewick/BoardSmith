@@ -347,7 +347,7 @@ describe('useActionController', () => {
       expect(controller.isReady.value).toBe(false);
     });
 
-    it('leaves an arg that is not one of the action\'s picks, as skip() does (#1359)', async () => {
+    it('refuses to clear an arg that is not one of the action\'s picks, and leaves it (#1359, #1366)', async () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
       const controller = useActionController({
         sendAction,
@@ -358,9 +358,11 @@ describe('useActionController', () => {
       });
 
       await controller.start('playCard', { args: { boundByServer: 'x' } });
-      controller.clear('boundByServer');
+      // True would tell a caller to clear the board, which cancels the action (#1366).
+      expect(controller.clear('boundByServer')).toBe(false);
 
       expect(controller.currentArgs.value.boundByServer).toBe('x');
+      expect(controller.lastError.value).toBe('This value was set by the game, not picked by you, so it cannot be cleared.');
       warnSpy.mockRestore();
     });
 

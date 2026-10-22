@@ -8,15 +8,15 @@
  * post-execute clear, the panel never marked a fetched choice on the board, only
  * the panel resumed a held follow-up, and each refused a different set of
  * actions. A caller keeps only what is its own (the panel's emits and hover
- * text); everything that changes the controller or the board is here.
+ * text); everything that changes the controller or the board is here, except
+ * the chosen choice's board mark, which the bridge works out from the answers (#1380).
  *
  * Create one per surface with {@link createActionMutators}, handing it that
  * surface's view of the guards.
  */
 import type { BoardInteraction } from './useBoardInteraction.js';
 import type { EnrichedActionMetadata, UseActionControllerReturn } from './useActionControllerTypes.js';
-import { choiceBoardTarget } from './actionControllerHelpers.js';
-import { findMatchingChoice, valuesEqual } from '../../engine/action/choice-matching.js';
+import { valuesEqual } from '../../engine/action/choice-matching.js';
 
 /** What a surface knows about whether the seat may act. Read on every call. */
 export interface ActionMutatorGuards {
@@ -129,19 +129,9 @@ export function createActionMutators(
 
   async function setSelectionValue(selectionName: string, value: unknown): Promise<boolean> {
     if (guards.isViewingHistory()) return false;
-    const selection = controller.currentPick.value;
-    // Snapshot the offered choices BEFORE fill(): fill() moves the pick on, after
-    // which `currentChoices` lists the NEXT pick's. `selection.choices` holds only
-    // the static metadata choices, so a fetched choice is found only here.
-    const offered = selection?.type === 'choice' ? controller.currentChoices.value.slice() : [];
     const result = await controller.fill(selectionName, value);
     // A refusal is already in the controller's `lastError`.
-    if (!result.valid) return false;
-    // Keep the chosen board element marked: the choice fill's own rule names.
-    const chosen = findMatchingChoice(value, offered);
-    const ref = chosen && choiceBoardTarget(chosen);
-    if (ref) board?.selectElement(ref);
-    return true;
+    return result.valid;
   }
 
   async function toggleMultiSelectValue(selectionName: string, value: unknown): Promise<void> {
