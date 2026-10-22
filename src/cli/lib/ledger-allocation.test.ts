@@ -151,7 +151,17 @@ describe('quoted ids are never citations (#437)', () => {
         expect({ eol, lone, cites: provisionalReferences('design/notes.md', text) }).toEqual({ eol, lone, cites: ['Ruling @a.1'] });
         const wrapped = `${prefix}see \`Ruling${eol}${prefix}@x.1\` here${eol}`;
         expect({ eol, lone, cites: provisionalReferences('design/notes.md', wrapped) }).toEqual({ eol, lone, cites: [] });
+        for (const fence of ['```', '~~~']) {
+          const block = `${prefix}${fence}${eol}${prefix}Ruling @x.1${eol}${lone}${eol}${prefix}${fence}${eol}${prefix}Ruling @a.1${eol}`;
+          expect({ eol, lone, fence, cites: provisionalReferences('design/notes.md', block) }).toEqual({ eol, lone, fence, cites: ['Ruling @a.1'] });
+          // A fence the quote ends without closing ends with the quote.
+          const unclosed = `${prefix}${fence}${eol}${prefix}Ruling @x.1${eol}${lone}${eol}${eol}Ruling @a.1${eol}`;
+          expect({ eol, lone, fence, cites: provisionalReferences('design/notes.md', unclosed) }).toEqual({ eol, lone, fence, cites: ['Ruling @a.1'] });
+        }
       }
+      // Indented four spaces, a `>` is paragraph text, so the span runs on past it.
+      const indented = `see \`Ruling${eol}    >${eol}@x.1\` here${eol}`;
+      expect({ eol, cites: provisionalReferences('design/notes.md', indented) }).toEqual({ eol, cites: [] });
     }
   });
 
