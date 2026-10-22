@@ -715,7 +715,9 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
     expect(result.refusals).toEqual([
       'design/notes.md cites Ruling @trading.2, but no ledger entry is headed Ruling @trading.2. Correct the citation on the ' +
         'branch, or, if it is an example rather than a citation, put it in a code span. Inside an HTML block such as ' +
-        '<details> backticks are plain text, so leave a blank line after the opening tag to make the line Markdown again.',
+        '<details>, backticks and <code> are plain text: there, put the example in an HTML comment, or on a line of its ' +
+        'own after a blank line, where Markdown is read again (not inside <pre>, <script>, <style> or <textarea>, which ' +
+        'end only at their closing tag).',
     ]);
   });
 

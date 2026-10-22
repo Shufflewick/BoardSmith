@@ -335,8 +335,10 @@ An example id (a reproduction in a filing, a form like `Ruling @<slug>.<n>`) goe
 a fenced code block. In a Markdown file an id inside a code span, a fenced block or an HTML comment
 is quoted text and never a citation: `chunk-merge` neither rewrites it nor asks for an entry headed
 with it. Written bare in prose, `Filing @x.1` is a citation, and a citation of an id no entry
-declares stops the merge. Inside an HTML block such as `<details>` Markdown is not read, so backticks
-there are plain text and the id is a citation; leave a blank line after the opening tag to quote it.
+declares stops the merge. Inside an HTML block such as `<details>` Markdown is not read, so an id in
+backticks or `<code>` there is a citation; quote it in an HTML comment, or in a code span on a line of
+its own after a blank line (not inside `<pre>`, `<script>`, `<style>` or `<textarea>`, which end only
+at their closing tag).
 
 A citation writes its kind, then its id: `Ruling @<slug>.<n>`. In a list the kind word may be
 written once, plural, and every id after it takes that kind: `Rulings 8 and @<slug>.1`,
