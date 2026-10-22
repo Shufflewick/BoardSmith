@@ -61,7 +61,7 @@ These are all of `BotStrategy`'s hooks. Each is optional. Every bot gets the fiv
 
 Add a situational hook when the game calls for it:
 
-- **`candidateMoves`** - Decides which moves the search considers for a seat: at the root, in every tree node and in every playout. The other hooks see only what it returns. Add it when some legal moves are never worth searching, or when an action has a large or open-ended set of args that the search should not list in full. It is the only hook that leaves a move out of the search; `moveOrdering` only reorders.
+- **`candidateMoves`** - Decides which moves the search considers for a seat: at the root, in every tree node and in every playout. The other hooks see only what it returns. Add it when some legal moves are never worth searching, or when an action has a large or open-ended set of args that the search should not list in full. It is the only hook that leaves a move out everywhere the search lists moves; `threatResponseMoves` with `urgent: true` narrows only the root, and `moveOrdering` only reorders.
 - **`determinize`** - Samples a world consistent with what the seat can see. Add it when the game has hidden information (hands, face-down cards, deck order); follow `node_modules/boardsmith/docs/bot-system.md` "Determinization: searching hidden state instead of skipping it".
 - **`hintTargetFromMove`** - Maps a move to the board element a hint highlights. Add it when a move's destination arg is named something other than `to`, `destination`, `target`, `square`, `cell` or `position`.
 
@@ -435,7 +435,7 @@ export function getCandidateMoves(
 
 - Return only legal moves, in wire form (element ids). The bot can play any move it is given.
 - Return at least one move whenever `listMoves()` returns any. An empty list throws.
-- For an action with a large or open-ended set of args, build the game's own short list of sensible moves instead of calling `listMoves`, which spares the full enumeration.
+- For an action with a large or open-ended set of args, build the game's own short list of sensible moves, covering every action the seat can take, instead of calling `listMoves`, which spares the full enumeration.
 
 ---
 
