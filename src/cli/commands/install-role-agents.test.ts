@@ -8,13 +8,11 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { ROLES } from '../lib/agent-roles.js';
 import { installClaudeCommand, uninstallClaudeCommand } from './install-claude-command.js';
 import { globalInstallInTempHome, installedSkillsTree } from './installed-skills.test-helper.js';
-
-const AGENTS_SOURCE = join(dirname(fileURLToPath(import.meta.url)), '..', 'slash-command', 'agents');
+import { skillMarkdown } from '../slash-command/skill-markdown.test-helper.js';
 
 /** The frontmatter fields of an agent file, as `key: value` pairs. */
 function frontmatter(text: string): Record<string, string> {
@@ -36,7 +34,7 @@ describe('the role agents a global install writes into the home directory', () =
     for (const role of ROLES) {
       const installed = join(agentsDir(), `bs-${role}.md`);
       expect(existsSync(installed), `bs-${role}.md must be installed`).toBe(true);
-      expect(readFileSync(installed, 'utf-8')).toBe(readFileSync(join(AGENTS_SOURCE, `bs-${role}.md`), 'utf-8'));
+      expect(readFileSync(installed, 'utf-8')).toBe(skillMarkdown(`agents/bs-${role}.md`));
     }
   });
 

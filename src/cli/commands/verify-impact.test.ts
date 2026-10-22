@@ -63,6 +63,8 @@ const CONTRADICTORY_FIXTURE_ROOT = join(
   __dirname,
   '../../../.planning/phases/175-impact-map-repair-gating/175-FIXTURES/174-07-contradictory',
 );
+// These tests read the fixture from disk; importing it links them to it (#1370).
+import.meta.glob('/.planning/phases/175-impact-map-repair-gating/175-FIXTURES/**/*.md', { eager: true });
 
 /**
  * `verify-impact.test.ts` — Task 1: the rules-staleness marker's constants, renderer, and

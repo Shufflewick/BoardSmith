@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { DESIGN_DIR } from '../lib/project-paths.js';
 import { SIGNOFF_HEADING } from './chunk-signoff.js';
+import { skillMarkdown } from '../slash-command/skill-markdown.test-helper.js';
 
 /**
  * A game project on disk with the chunks a sign-off test needs: each chunk's CHUNK.md made from
@@ -64,10 +65,7 @@ export async function makeChunkProject(root: string, chunks: ChunkSpec[]): Promi
   const project = join(root, 'game');
   const design = join(project, DESIGN_DIR);
   await fs.mkdir(design, { recursive: true });
-  const template = await fs.readFile(
-    new URL('../slash-command/bs/templates/CHUNK.template.md', import.meta.url),
-    'utf-8',
-  );
+  const template = skillMarkdown('bs/templates/CHUNK.template.md');
 
   for (const c of chunks) {
     for (const [path, content] of Object.entries(c.manifest ?? {})) {
@@ -79,10 +77,7 @@ export async function makeChunkProject(root: string, chunks: ChunkSpec[]): Promi
     await fs.mkdir(chunkDir, { recursive: true });
     await fs.writeFile(join(chunkDir, 'CHUNK.md'), chunkText(template, c));
   }
-  await fs.copyFile(
-    new URL('../slash-command/bs/templates/CONSTRAINTS.template.md', import.meta.url),
-    join(design, 'CONSTRAINTS.md'),
-  );
+  await fs.writeFile(join(design, 'CONSTRAINTS.md'), skillMarkdown('bs/templates/CONSTRAINTS.template.md'));
   await fs.writeFile(
     join(design, 'SKETCH.md'),
     `# Sketch\n\n## Ordered Chunk List\n\n${chunks.map(sketchEntry).join('\n')}\n### later-tail\n- What it builds: later\n- ui: none\n- Milestone: none\n- Status: proposed (sketch-level — no CHUNK.md yet)\n`,

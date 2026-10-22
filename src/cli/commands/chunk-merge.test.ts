@@ -29,6 +29,7 @@ import {
   head,
   status,
 } from './chunk-merge.test-helper.js';
+import { skillMarkdown } from '../slash-command/skill-markdown.test-helper.js';
 
 /**
  * These tests merge real branches, so each one runs real git processes: at most about 80 (building
@@ -434,10 +435,7 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
   });
 
   it('merges a filing whose reproduction quotes example ids, written into the shipped FILINGS template (#437)', async () => {
-    const template = await fs.readFile(
-      new URL('../slash-command/bs/templates/FILINGS.template.md', import.meta.url),
-      'utf-8',
-    );
+    const template = skillMarkdown('bs/templates/FILINGS.template.md');
     const filing = [
       '### Filing @trading.1',
       '- Kind: bug',

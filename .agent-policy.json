@@ -24,6 +24,25 @@
     }
   ],
   "untested": [
+    ".planning/*.md",
+    ".planning/codebase/**/*.md",
+    ".planning/debug/**/*.md",
+    ".planning/milestones/**/*.md",
+    ".planning/research/**/*.md",
+    ".planning/todos/**/*.md",
+    ".planning/ui-reviews/**/*.md",
+    ".planning/phases/*/*.md",
+    ".planning/phases/*/*-MEASUREMENT/**/*.md",
+    ".planning/phases/*/*-EXPERIMENTS/**/*.md",
+    ".planning/phases/*/*-PROOF/**/*.md",
+    ".planning/phases/*/*-EVIDENCE/**/*.md",
+    ".planning/phases/176-stale-chunk-repair/176-FIXTURES/**/*.md",
+    "planning/**/*.md",
+    "docs/plans/**/*.md",
+    "docs/superpowers/**/*.md",
+    "CLAUDE.md",
+    "scripts/ingest-harness/__fixtures__/README.md",
+    "scripts/ingest-harness/__fixtures__/interactive-nonconforming/**/*.md",
     "scripts/*-browser.mjs"
   ],
   "slice": {
