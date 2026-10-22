@@ -4,6 +4,8 @@ import vue from '@vitejs/plugin-vue';
 import { rerunTriggers } from './src/vite-config/index.js';
 
 export default defineConfig({
+  // The checkout, not the working directory, so the rerun triggers stay anchored here when vitest starts elsewhere (#1420).
+  root: __dirname,
   plugins: [
     vue(),
     rerunTriggers(),

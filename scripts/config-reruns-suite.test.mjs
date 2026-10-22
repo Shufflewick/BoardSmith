@@ -10,6 +10,9 @@ import { createVitest } from 'vitest/node';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Links the shared rerun-trigger rule vitest.config.ts loads, so `--changed` runs this guard when it alone changes; nothing loads.
+import.meta.glob('/src/vite-config/index.js');
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SELF = fileURLToPath(import.meta.url);
 
