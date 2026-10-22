@@ -233,7 +233,7 @@ describe('runDiffMutationCheck with a mutation budget (#955)', () => {
 });
 
 describe('the budget a Vitest 4 run is held to (#1310)', () => {
-  it('passes Vitest 4 no --minWorkers, which it removed, and Vitest 2 and 3 a minimum of one', () => {
+  it('passes Vitest 4 no --minWorkers, which it removed, and Vitest 3 a minimum of one', () => {
     expect(limitWorkers(2, 4, {})).toEqual(['--maxWorkers=2']);
     expect(limitWorkers(2, 3, {})).toEqual(['--maxWorkers=2', '--minWorkers=1']);
   });
