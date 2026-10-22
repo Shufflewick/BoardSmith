@@ -371,3 +371,37 @@ describe('shorthand the merge cannot read (#446)', () => {
     expect(unreadableShorthand('design/notes.md', 'quoted: `Rulings @a.1-3`, and 0.5 seconds\n')).toEqual([]);
   });
 });
+
+/**
+ * #1389: a list may wrap after a kind word, so `Decision\n.2` is the same shortened id as `Decision .2`,
+ * in an LF or CRLF file or on the next line of a comment. It was not caught, so it was refused under the
+ * kind of the provisional id before it, or merged naming nothing.
+ */
+describe('a shortened id on the line after its kind word (#1389)', () => {
+  it('names it as written on one line, in an LF or CRLF file or a wrapped comment', () => {
+    expect(unreadableShorthand('design/notes.md', 'Rulings @a.1 and Decision\n.2.\n')).toEqual(['Decision .2']);
+    expect(unreadableShorthand('design/notes.md', 'See Decisions\r\n.2 too.\r\n')).toEqual(['Decisions .2']);
+    expect(unreadableShorthand('src/game.ts', '// See Decision\n//   .2 too.\n')).toEqual(['Decision .2']);
+  });
+
+  it('names nothing across a blank line', () => {
+    expect(unreadableShorthand('design/notes.md', 'See Decision\n\n.2 of the deck.\n')).toEqual([]);
+    expect(unreadableShorthand('design/notes.md', 'See Decision\r\n\r\n.2 of the deck.\r\n')).toEqual([]);
+  });
+
+  it('does not refuse it again under the kind of the provisional id before it', () => {
+    const RULINGS = NUMBERED_LEDGER_SPECS.find((s) => s.kind === 'Ruling')!;
+    const result = allocateProvisional(
+      {
+        'design/RULINGS.md': '### Ruling @trading.1\n\n### Ruling @trading.2\n',
+        'design/notes.md': 'Prices follow Rulings @trading.1 and Decision\r\n.2.\r\n',
+      },
+      [{ spec: RULINGS, path: 'design/RULINGS.md' }],
+    );
+    expect(result.problems).toEqual([]);
+  });
+
+  it('reads a list that wraps after its kind word in a CRLF file as it does in an LF one', () => {
+    expect(provisionalReferences('design/notes.md', 'Rulings 8 and\r\n@a.1.\r\n')).toEqual(['Ruling @a.1']);
+  });
+});
