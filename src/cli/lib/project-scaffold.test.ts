@@ -118,6 +118,8 @@ const uiImportMetaEnvErrors = ((): { without: string[]; with: string[] } => {
       ...scaffold.options,
       noEmit: true,
       types,
+      // The converter leaves the scaffold's relative `paths` unanchored; a real project's resolve from its tsconfig dir.
+      baseUrl: dir,
       paths: { ...scaffold.options.paths, 'boardsmith/ui': [uiEntry] },
     });
     return ts
