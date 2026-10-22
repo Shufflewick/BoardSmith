@@ -142,6 +142,29 @@ describe('quoted ids are never citations (#437)', () => {
     }
   });
 
+  // #1396: a line holding only `>` ends a paragraph in a blockquote, but did not end a code span.
+  it('ends a code span at a blockquote line holding only quote markers, in an LF or a CRLF file', () => {
+    const quotes = [['> ', '>'], ['> ', ' > '], ['> > ', '> >'], ['>> ', '>>']];
+    for (const eol of ['\n', '\r\n']) {
+      for (const [prefix, lone] of quotes) {
+        const text = `${prefix}a \`b${eol}${lone}${eol}${prefix}See Ruling @a.1 and \`c${eol}`;
+        expect({ eol, lone, cites: provisionalReferences('design/notes.md', text) }).toEqual({ eol, lone, cites: ['Ruling @a.1'] });
+        const wrapped = `${prefix}see \`Ruling${eol}${prefix}@x.1\` here${eol}`;
+        expect({ eol, lone, cites: provisionalReferences('design/notes.md', wrapped) }).toEqual({ eol, lone, cites: [] });
+        for (const fence of ['```', '~~~']) {
+          const block = `${prefix}${fence}${eol}${prefix}Ruling @x.1${eol}${lone}${eol}${prefix}${fence}${eol}${prefix}Ruling @a.1${eol}`;
+          expect({ eol, lone, fence, cites: provisionalReferences('design/notes.md', block) }).toEqual({ eol, lone, fence, cites: ['Ruling @a.1'] });
+          // A fence the quote ends without closing ends with the quote.
+          const unclosed = `${prefix}${fence}${eol}${prefix}Ruling @x.1${eol}${lone}${eol}${eol}Ruling @a.1${eol}`;
+          expect({ eol, lone, fence, cites: provisionalReferences('design/notes.md', unclosed) }).toEqual({ eol, lone, fence, cites: ['Ruling @a.1'] });
+        }
+      }
+      // Indented four spaces, a `>` is paragraph text, so the span runs on past it.
+      const indented = `see \`Ruling${eol}    >${eol}@x.1\` here${eol}`;
+      expect({ eol, cites: provisionalReferences('design/notes.md', indented) }).toEqual({ eol, cites: [] });
+    }
+  });
+
   it('finds no citation in any shipped template or skill file, so they pass chunk-merge unchanged', async () => {
     const root = new URL('../slash-command/bs/', import.meta.url).pathname;
     const markdown = (await fs.readdir(root, { recursive: true })).filter((f) => f.endsWith('.md'));
