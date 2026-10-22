@@ -31,11 +31,13 @@ import { fileURLToPath } from 'node:url';
 import { browserScripts, recordWorldFrames, runBrowserRegression } from './browser-harness.mjs';
 import { BROWSER_SUITE_CONFIG } from '../src/cli/commands/test.ts';
 // Imported so `vitest run --changed` runs this file, which lists the suite through it, when it changes (#1375).
-import '../vitest.browser.config.ts';
+import browserConfig from '../vitest.browser.config.ts';
 import policy from '../.agent-policy.json';
 
 // Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
 import.meta.glob(['../src/cli/commands/dev-world.ts', '../src/cli/commands/fixture-table.test-helper.ts', '../src/cli/commands/fixture-world.test-helper.ts']);
+// Links the browser suite's test file, which `vitest list` below collects, so `--changed` runs this file when it changes; nothing loads (#1409).
+import.meta.glob('./browser-regressions.browser-test.mjs');
 
 const SCRIPTS = dirname(fileURLToPath(import.meta.url));
 const REPO = join(SCRIPTS, '..');
@@ -174,15 +176,17 @@ describe('#358: a browser regression finds the packages where Node does', () => 
 });
 
 describe('#533: every browser regression runs automatically', () => {
-  it('runs the browser suite at merge when UI, dev host, world, browser script or browser config files change', () => {
+  it('runs the browser suite at merge when UI, dev host, world or a file the browser suite is built from changes', () => {
     expect(policy.merge?.extraMergeSteps, 'merge.extraMergeSteps in .agent-policy.json').toBeDefined();
     const step = policy.merge.extraMergeSteps.find((s) => s.name === 'browser');
     expect(step).toMatchObject({ run: 'node bin/boardsmith.js test --browser' });
     const runsFor = (path) => new RegExp(step.whenChanged).test(path);
-    for (const path of ['src/ui/components/GameShell.vue', 'src/cli/dev-host/bridge.ts', 'src/world/engine.ts', 'scripts/ordered-list-browser.mjs', 'vitest.browser.config.ts']) {
+    const { include, globalSetup, setupFiles } = browserConfig.test;
+    const suite = [BROWSER_SUITE_CONFIG, 'src/cli/commands/test.ts', 'scripts/browser-harness.mjs', ...include, ...globalSetup, ...setupFiles, 'scripts/untracked-guard/guard.mjs'];
+    for (const path of ['src/ui/components/GameShell.vue', 'src/cli/dev-host/bridge.ts', 'src/world/engine.ts', 'scripts/ordered-list-browser.mjs', ...suite]) {
       expect(runsFor(path), path).toBe(true);
     }
-    for (const path of ['src/bot/mcts-bot.ts', 'src/cli/commands/verify.ts', 'docs/browser-testing.md', 'vitest.config.ts']) {
+    for (const path of ['src/bot/mcts-bot.ts', 'src/cli/commands/verify.ts', 'docs/browser-testing.md', 'vitest.config.ts', 'scripts/browser-harness.test.mjs']) {
       expect(runsFor(path), path).toBe(false);
     }
   });

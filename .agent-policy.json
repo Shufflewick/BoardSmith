@@ -57,7 +57,7 @@
         "name": "browser",
         "run": "node bin/boardsmith.js test --browser",
         "after": "catalogue",
-        "whenChanged": "^(src/ui/|src/cli/dev-host/|src/world/|scripts/[^/]*-browser\\.mjs$|vitest\\.browser\\.config\\.ts$)"
+        "whenChanged": "^(src/ui/|src/cli/dev-host/|src/world/|scripts/[^/]*-browser\\.mjs$|vitest\\.browser\\.config\\.ts$|src/cli/commands/test\\.ts$|scripts/browser-harness\\.mjs$|scripts/browser-regressions\\.browser-test\\.mjs$|scripts/untracked-guard/)"
       }
     ]
   },
