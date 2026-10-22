@@ -80,7 +80,7 @@ import {
 import { describeFinding, ledgerCheck, verifyResultsOnFile } from './ledger-check.js';
 import { reviewRoundVerifies } from '../lib/run-log-roles.js';
 import { type TestRunner, checkConstraints, runVitest, unranTestsProblem } from './constraint-check.js';
-import { chunkTests } from './verify.js';
+import { chunkTests, preSpecRefusal } from './verify.js';
 import { type TypeCheckRun, typeCheckProject } from './validate.js';
 import { chunkVerifyBase } from '../lib/chunk-commits.js';
 import { VERIFIED, assessSignoffs, checkSignoff, chunkCodeFiles, readStatus, unaccountedEdits } from './chunk-signoff.js';
@@ -483,6 +483,8 @@ async function combinedTreeProblems(ctx: MergeContext, alongside: string[], { ru
   const base = await chunkVerifyBase(ctx.projectDir, ctx.slug);
   // The files the chunk's branch changed, as its own `verify --chunk` measured them; not what the main line changed.
   const changed = (await git(ctx.projectDir, ['diff', '--relative', '--name-only', '-z', base, ctx.branchCommit])).split('\0').filter(Boolean);
+  const early = await preSpecRefusal(ctx.projectDir, ctx.slug, 'chunk-merge');
+  if (early) return [`${early.summary} ${early.next}`];
   const tests = await chunkTests(ctx.projectDir, ctx.slug, base, changed);
   if (!Array.isArray(tests)) {
     if (!tests.passed) return [`${tests.summary} ${tests.next ?? ''} Then run chunk-merge again.`];

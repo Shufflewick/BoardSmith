@@ -381,7 +381,9 @@ even in a file the branch renamed, does not.
   `chunk-<slug>/` commit is `step-investigate`, `step-redteam` or `step-ask`, the chunk passes on
   typecheck alone too (#995). Those steps write only files under `design/`: a
   `step-investigate`, `step-redteam` or `step-ask` commit that changes any other file fails the
-  fast checks, naming the commit and file (#1201). The full checks (the whole suite, build, validate,
+  fast checks and chunk-merge, naming the commit and file (#1201). Only commits not yet pushed to
+  the main branch's upstream are checked, since those are the ones still safe to rewrite; with no
+  upstream every commit is checked. The full checks (the whole suite, build, validate,
   the smoke test and the mutation check) run once, before the game is published
   (`boardsmith publish` refuses without a full `boardsmith verify` for the commit), not per chunk.
 
