@@ -65,7 +65,7 @@ const blank = (quoted: string): string => quoted.replace(/[^\n]/g, ' ');
 
 const QUOTES = String.raw`(?: {0,3}>[ \t]?)*`;
 const ATX_HEADING = String.raw`${QUOTES} {0,3}#{1,6}(?![^ \t\r\n])`;
-// shortcut: an unquoted = line lazily continuing a quote or list paragraph is text, not an underline; it ends the span here too.
+// shortcut: an unquoted = line lazily continuing a quote or list paragraph is text, yet ends the span here too; #1402 tracks containers.
 const SETEXT_UNDERLINE = String.raw`${QUOTES} {0,3}=+[ \t\r]*(?![^\n])`;
 // A line that starts a block ends the paragraph before it, and so any code span open in it (#1393, #1396, #1397).
 const BLOCK_START = String.raw`(?: {0,3}>)*[ \t\r]*\n|${ATX_HEADING}|${SETEXT_UNDERLINE}`;
