@@ -262,8 +262,9 @@ refused action and its reason.
 The simulator lets the event loop run after each game, so a run of many games
 does not hold its vitest worker: vitest 3 fails the whole run when a worker
 cannot answer it for over a minute. A single game still runs without a break.
-Run it with real timers: under `vi.useFakeTimers()` it stops after the first
-game until the test advances the fake timers.
+It keeps the `setImmediate` it found when `boardsmith/testing` loaded, so
+`vi.useFakeTimers()` in a test does not stall it; fake timers a setup file
+installs before that load do.
 
 A game whose longest or heaviest configuration sits behind a game option needs
 `gameOptions`, or the run only ever measures the declared default:
