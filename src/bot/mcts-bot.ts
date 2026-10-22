@@ -96,6 +96,7 @@ export class MCTSBot<G extends Game = Game> {
   private threatResponseMoves?: (game: Game, playerIndex: number, availableMoves: BotMove[]) => ThreatResponse;
   private playoutPolicy?: (game: Game, playerIndex: number, availableMoves: BotMove[], rng: () => number) => BotMove;
   private moveOrdering?: (game: Game, playerIndex: number, moves: BotMove[]) => BotMove[];
+  private candidateMoves?: BotStrategy['candidateMoves'];
   private uctConstant?: (game: Game, playerIndex: number) => number;
   /**
    * The game's declared world sampler (#73). Its presence, and nothing else,
@@ -171,6 +172,7 @@ export class MCTSBot<G extends Game = Game> {
     this.threatResponseMoves = botStrategy?.threatResponseMoves;
     this.playoutPolicy = botStrategy?.playoutPolicy;
     this.moveOrdering = botStrategy?.moveOrdering;
+    this.candidateMoves = botStrategy?.candidateMoves;
     this.uctConstant = botStrategy?.uctConstant;
     this.determinize = botStrategy?.determinize;
     this.seed = this.config.seed;
@@ -298,6 +300,7 @@ export class MCTSBot<G extends Game = Game> {
           threatResponseMoves: this.threatResponseMoves,
           playoutPolicy: this.playoutPolicy,
           moveOrdering: this.moveOrdering,
+          candidateMoves: this.candidateMoves,
           uctConstant: this.uctConstant,
           determinize: this.determinize,
         }
@@ -1232,12 +1235,32 @@ export class MCTSBot<G extends Game = Game> {
    * when one was captured (T-159-07): a co-decider's moves must not depend on
    * what an earlier co-decider already picked. The action list and follow-up
    * still come from `flowState`, the world's own position.
+   *
+   * A game's `candidateMoves` hook, when it has one, decides what this
+   * returns, from the listing or from its own list (#1387).
    */
   private movesFor(game: G, flowState: FlowState, seat: number, options: { sample: boolean }): BotMove[] {
     const enumerationGame: G =
       flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0 && this.simultaneousBaseline
         ? this.simultaneousBaseline
         : game;
+    let listed: BotMove[] | undefined;
+    const listMoves = () => (listed ??= this.listSeatMoves(enumerationGame, flowState, seat, options));
+    if (!this.candidateMoves) return listMoves();
+
+    // The game narrows or replaces the listing here, so every listing the search makes obeys it (#1387).
+    const candidates = this.candidateMoves(enumerationGame, seat, listMoves);
+    if (candidates.length === 0 && listMoves().length > 0) {
+      throw new Error(
+        `The bot strategy's candidateMoves returned no moves for seat ${seat}, which has ${listMoves().length} moves to make, ` +
+          'so the bot cannot choose one. Return at least one move whenever listMoves() returns any.',
+      );
+    }
+    return candidates;
+  }
+
+  /** Every move `seat` may make in `flowState`, listed against `enumerationGame`; see {@link movesFor}. */
+  private listSeatMoves(enumerationGame: G, flowState: FlowState, seat: number, options: { sample: boolean }): BotMove[] {
     // The player and action definitions come from the SAME game instance the
     // args are enumerated against: their closures are bound to it.
     const player = enumerationGame.getPlayer(seat);

@@ -243,7 +243,8 @@ export interface BotStrategy {
    * Optional function to order moves by heuristic value for exploration.
    * Returns moves sorted by priority (highest first) to explore promising moves early.
    * Unlike threatResponseMoves (which forces specific moves), this is soft ordering:
-   * MCTS still explores all moves, just in a better order.
+   * MCTS still explores all moves, just in a better order. To leave moves out
+   * of the search, use `candidateMoves`.
    *
    * Typical ordering heuristics:
    * - Moves near opponent's recent pieces (contest territory)
@@ -256,6 +257,28 @@ export interface BotStrategy {
    * @returns Moves sorted by priority (explore first → last)
    */
   moveOrdering?: (game: Game, playerIndex: number, moves: BotMove[]) => BotMove[];
+
+  /**
+   * Optional function that decides which moves the search considers for a
+   * seat, everywhere it lists them: the root, every tree node (including the
+   * per-world refresh under a `determinize` sampler) and every playout. The
+   * other hooks see only what this returns (#1387).
+   *
+   * Narrow the listing (`listMoves().filter(...)`) to leave a move out of the
+   * search entirely, or return the game's own short list of sensible moves
+   * without calling `listMoves`, which spares the full enumeration of an
+   * action with a large or open-ended set of args. Moves are in wire form
+   * (element ids). A move the engine refuses is dropped from the search.
+   *
+   * Return at least one move whenever `listMoves()` returns any: an empty
+   * list for a seat that has moves throws.
+   *
+   * @param game - The search's copy of the game at this position
+   * @param seat - The seat whose moves are listed, which is not always the bot's
+   * @param listMoves - Lists every move the search would otherwise consider, on first call
+   * @returns The moves to search for `seat`
+   */
+  candidateMoves?: (game: Game, seat: number, listMoves: () => BotMove[]) => BotMove[];
 
   /**
    * Optional function to map the chosen move to its target element for hint and
