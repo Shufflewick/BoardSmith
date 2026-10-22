@@ -978,7 +978,13 @@ it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
       );
     });
 
-    // These read the generated config the way each Vitest major would, whichever one is installed.
+    it('refuses a project with Vitest 2 installed, saying how to upgrade it (#1435)', async () => {
+      await expect(pnpmProject({ version: '2.1.9' })).rejects.toThrow(
+        'The mutation check needs Vitest 3 or later, and this project has Vitest 2.1.9 installed.\n' +
+          'Upgrade it with: npm install -D vitest@3',
+      );
+    });
+
     describe('the generated config, as Vitest 3 reads it', () => {
       const HOOK = 'boardsmith-mutant';
       const hasHook = (project: { plugins?: Array<{ name?: string }> }) => project.plugins?.some((p) => p.name === HOOK) ?? false;
@@ -1020,30 +1026,20 @@ export default defineConfig({ test: { workspace: [{ test: { name: 'a' } }] } });
         expect(hasHook(await config.test.workspace[0])).toBe(true);
       });
 
-      async function workspaceProject(vitestMajor: number) {
+      it("resolves a workspace file's extends and root against that file", async () => {
         const { project, workDir, config } = await generated({
           'vitest.config.ts': `import { defineConfig } from 'vitest/config';
 export default defineConfig({ test: { workspace: './config/projects.ts' } });
 `,
           'config/projects.ts': "export default [{ extends: '../a.config.ts', root: '../sub' }];\n",
-        }, vitestMajor);
+        }, 3);
         expect(config.test.workspace).toBe(join(workDir, 'workspace.mjs'));
         // Dynamic import: the workspace module this test just generated.
         const { default: entries } = await import(config.test.workspace);
-        return { project, hooked: await entries[0] };
-      }
-
-      it("resolves a workspace file's extends and root against that file under Vitest 3", async () => {
-        const { project, hooked } = await workspaceProject(3);
+        const hooked = await entries[0];
         expect(hasHook(hooked)).toBe(true);
         expect(hooked.extends).toBe(join(project, 'a.config.ts'));
         expect(hooked.root).toBe(join(project, 'sub'));
-      });
-
-      it("resolves a workspace file's root against the project under Vitest 2, as Vitest 2 does", async () => {
-        const { project, hooked } = await workspaceProject(2);
-        expect(hooked.extends).toBe(join(project, 'a.config.ts'));
-        expect(hooked.root).toBe(join(dirname(project), 'sub'));
       });
     });
   });
