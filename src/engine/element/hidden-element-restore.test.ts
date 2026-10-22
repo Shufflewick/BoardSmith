@@ -189,3 +189,46 @@ describe('#147: a hidden element restores as unknown, not as its class defaults'
     expect(findById(restored.toJSON(), card.id)!.attributes.rank).toBe('Q');
   });
 });
+
+/** A card whose own attributes share their names with a player's identity fields (#1433). */
+class TintedCard extends Card<TintedGame> {
+  static override visibleAttributes: string[] = [];
+  color = 'red';
+  colorLabel = 'Red';
+  seat = 7;
+  status = 'fresh';
+}
+
+class TintedGame extends Game<TintedGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([TintedCard, Hand, Table]);
+    const hand = this.create(Hand, 'hand-2');
+    hand.player = this.getPlayer(2)!;
+    hand.contentsVisibleToOwner();
+    hand.create(TintedCard, 'hidden');
+    this.create(Table, 'table').create(TintedCard, 'shown');
+  }
+}
+
+describe('#1433: a non-player element\'s color, seat and status are its own game attributes', () => {
+  const truth = new TintedGame({ playerCount: 2, elementIdKey: ID_KEY });
+  const restored = new TintedGame({ playerCount: 2, elementIdKey: ID_KEY });
+  restored.loadSerializedState(truth.toJSONForPlayer(1));
+
+  it.each([
+    ['hidden', () => restored.first(Hand, 'hand-2')!.first(TintedCard)!],
+    ['shown', () => restored.first(Table, 'table')!.first(TintedCard)!],
+  ])('withholds them on the %s card', (_where, card) => {
+
+    expect(card().redactedAttributes).toEqual(expect.arrayContaining(['color', 'colorLabel', 'seat', 'status']));
+    expect(() => card().color).toThrow(RedactedAttributeError);
+  });
+
+  it('still tells every seat a player\'s colour', () => {
+    const rival = restored.getPlayer(2)!;
+
+    expect(rival.isAttributeRedacted('color')).toBe(false);
+    expect(rival.color).toBe(truth.getPlayer(2)!.color);
+  });
+});
