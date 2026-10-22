@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import { resolve } from 'path';
 import vue from '@vitejs/plugin-vue';
 
@@ -27,6 +27,8 @@ export default defineConfig({
     // ignores (#579): scripts/untracked-guard/guard.mjs says why and how to fix one.
     globalSetup: ['scripts/untracked-guard/global-setup.mjs'],
     setupFiles: ['scripts/untracked-guard/after-each-file.mjs'],
+    // vitest 3's default config glob (`**/vitest.config.*/**`) misses the file itself (#1419); on vitest 5 drop the first glob here, its default matches.
+    forceRerunTriggers: [...configDefaults.forceRerunTriggers, '**/{vitest,vite}.config.*', '**/vitest.browser.config.ts'],
   },
   resolve: {
     alias: {
