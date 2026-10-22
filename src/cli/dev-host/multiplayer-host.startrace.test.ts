@@ -65,7 +65,7 @@ function makeDeferred(): { promise: Promise<void>; resolve: () => void } {
 /**
  * Builds a host whose `start` op suspends on `gate.promise` when `gate` is
  * supplied — the deterministic interleave hook. With `botGate`, seat 1 is the
- * bot's and its first `botSuggest` waits on `botGate.wait`, calling
+ * bot's and every `botSuggest` waits on `botGate.wait`, calling
  * `botGate.reached` as it does. Every other op runs immediately against the
  * real pure executor.
  */

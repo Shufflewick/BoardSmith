@@ -1488,7 +1488,7 @@ export class MultiplayerHost {
     // come back within the reconnect grace) is not driven by anyone:
     // `playerIsBot` in the start op was computed pre-await from the same stale
     // `humanSeats`, so the game treats it as human. bot-cover it now so
-    // `runBotTurns()` (next) has a driver and the flow loop cannot stall on a
+    // `runBotTurns()` (after the reinit below) has a driver and the flow loop cannot stall on a
     // vanished human. A seat still within its grace is left alone: its player
     // is reloading (#412). The seat's `clientId` reservation is untouched —
     // this is a loop-driver-only cover; `hello`'s reconnect branch removes it
