@@ -616,8 +616,27 @@ describe('a Markdown line that starts a block does not continue a wrapped line (
     }
   });
 
-  it('still reads a wrap inside a blockquote, and a # comment line in source code', () => {
+  it('reads no # or * on the next line as a comment marker, in an LF or CRLF file', () => {
+    for (const eol of ['\n', '\r\n']) {
+      expect(unreadableShorthand('design/notes.md', `Rulings @a.1 -${eol}#3 players${eol}`)).toEqual([]);
+      expect(unreadableShorthand('design/notes.md', `Rulings @a.1 -${eol}*3 players*${eol}`)).toEqual([]);
+    }
+  });
+
+  it('refuses no .N in the paragraph after a heading or on a list item as a stray of the id before it (#1398 review F1, F2)', () => {
+    const allocate = (notes: string) =>
+      allocateProvisional({ 'design/RULINGS.md': '### Ruling @a.1\n\n### Ruling @a.2\n', 'design/notes.md': notes }, [
+        { spec: RULINGS, path: 'design/RULINGS.md' },
+      ]).problems;
+    for (const eol of ['\n', '\r\n']) {
+      expect(allocate(`Rulings @a.1 and Decision${eol}* .2 of the deck${eol}`)).toEqual([]);
+      expect(allocate(`## Changes since Ruling @a.1${eol}Players draw .2 cards first${eol}`)).toEqual([]);
+    }
+  });
+
+  it('still reads a wrap inside a blockquote, nested or not, and a # comment line in source code', () => {
     expect(unreadableShorthand('design/notes.md', '> Rulings @a.1 -\r\n> 3 apply.\r\n')).toEqual(['@a.1 - 3']);
+    expect(unreadableShorthand('design/notes.md', '> > Rulings @a.1 -\n> > 3 apply.\n')).toEqual(['@a.1 - 3']);
     expect(unreadableShorthand('tools/deal.py', '# Rulings @a.1 -\n# 3 apply.\n')).toEqual(['@a.1 - 3']);
   });
 });

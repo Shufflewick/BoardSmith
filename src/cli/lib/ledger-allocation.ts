@@ -15,7 +15,7 @@
  * a comment, is not a citation (`citableText`, #437). `chunk-merge` refuses a branch that added a real number,
  * so the only way a number reaches `main` from a parallel branch is through this allocation.
  */
-import { BLANK_LINE, PARAGRAPH_ENDED, PROVISIONAL_NUMBER, blankComments, citableText, entryHeadingPattern } from './ledger-entries.js';
+import { BLANK_LINE, PARAGRAPH_ENDED, PROVISIONAL_NUMBER, QUOTES, blankComments, citableText, entryHeadingPattern } from './ledger-entries.js';
 import { escapeRegExp } from '../../utils/regexp.js';
 import { CONSTRAINTS_MD, DECISIONS_MD, FILINGS_MD, QUESTIONS_MD, RULINGS_MD } from './project-paths.js';
 
@@ -94,10 +94,9 @@ function citationGrammar(gap: string) {
  * Whitespace that may wrap onto the next line, never across a blank line. The next line may open
  * with a comment or quote marker (` * `, `// `, `# `, `> `), since prose is wrapped inside those too.
  */
-const wrap = (newLine: string) => `[ \\t]*(?:\\r?\\n${newLine}[ \\t]*(?:(?:\\*|//|#|>)[ \\t]*)?)?`;
-const CODE_GRAMMAR = citationGrammar(wrap(''));
-// In Markdown a heading or a list item starts a block, so it does not continue the line before it (#1398).
-const MARKDOWN_GRAMMAR = citationGrammar(wrap(`(?!${PARAGRAPH_ENDED})`));
+const CODE_GRAMMAR = citationGrammar('[ \\t]*(?:\\r?\\n[ \\t]*(?:(?:\\*|//|#|>)[ \\t]*)?)?');
+// In Markdown only a quote marker opens a wrapped line, and a line that starts a block continues none (#1398).
+const MARKDOWN_GRAMMAR = citationGrammar(`[ \\t]*(?:\\r?\\n(?!${PARAGRAPH_ENDED})${QUOTES}[ \\t]*)?`);
 type CitationGrammar = ReturnType<typeof citationGrammar>;
 const grammarOf = (path: string) => (path.endsWith('.md') ? MARKDOWN_GRAMMAR : CODE_GRAMMAR);
 const BARE_PROVISIONAL = new RegExp(`(?<![\\w@.])${PROVISIONAL_NUMBER}(?!\\d)`, 'g');
@@ -246,7 +245,7 @@ export function unreadableShorthand(path: string, text: string): string[] {
   return [
     // A kind word, or a range's dash, may wrap onto the next line; it is quoted on one.
     ...[...citable.matchAll(grammar.dashThenNumber)]
-      .filter((m) => oneParagraph(path, m[2]))
+      .filter((m) => oneParagraph(path, citable, m.index + m[1].length, m.index + m[1].length + m[2].length))
       .map((m) => ({ index: m.index, written: `${m[1]}${m[2].includes('\n') ? ' ' : m[2]}${m[3]}` })),
     ...[...citable.matchAll(grammar.shorthandAfterKind)].map((m) => ({ index: m.index, written: `${m[1]} ${m[2]}` })),
   ]
@@ -330,14 +329,21 @@ function runProblem(
 const LONE_SHORTHAND = new RegExp(`(?<![\\w@.)\\]'"\`\\\\])${SHORTHAND}(?!\\w)`, 'g');
 /** A `.N` straight after a constraint letter (`G.2`), not the start of a longer label (`C.3.1`). */
 const LETTER_SHORTHAND = new RegExp(`\\b(${LETTER_KINDS.join('|')})(${SHORTHAND})(?!\\w|\\.\\d)`, 'g');
-/** A line break that ends a paragraph: a blank line, or one holding only a comment marker or quote markers. */
+/** A line break that ends a comment's paragraph: a blank line, or one holding only a comment marker. */
 const PARAGRAPH_BREAK = new RegExp(String.raw`\n(?:[ \t\r]*(?:\*|\/\/|#)[ \t\r]*\n|${BLANK_LINE})`);
 /** A line of source code that is not a comment line, so not the comment's prose. */
 const CODE_LINE = /\n(?![ \t]*(?:\*|\/\/|#))/;
+const MARKDOWN_PARAGRAPH_END = new RegExp(String.raw`\n${PARAGRAPH_ENDED}`, 'gm');
 
-/** Whether `between`, the text from a citation to a `.N`, stays in one paragraph of prose. */
-const oneParagraph = (path: string, between: string): boolean =>
-  !PARAGRAPH_BREAK.test(between) && (path.endsWith('.md') || !CODE_LINE.test(between));
+/** Whether `text[from, to)`, from a citation to a `.N`, stays in one paragraph of prose. */
+function oneParagraph(path: string, text: string, from: number, to: number): boolean {
+  const between = text.slice(from, to);
+  if (!path.endsWith('.md')) return !PARAGRAPH_BREAK.test(between) && !CODE_LINE.test(between);
+  // Read in the whole text, since where a paragraph ends depends on the line before the break.
+  MARKDOWN_PARAGRAPH_END.lastIndex = from;
+  const end = MARKDOWN_PARAGRAPH_END.exec(text);
+  return end === null || end.index >= to;
+}
 
 /**
  * Each `.N` no citation list read, after a provisional id in the same paragraph of prose, whose
@@ -361,7 +367,7 @@ function strayShorthand(
   const problems: AllocationProblem[] = [];
   for (const { index, written, letter, short } of [...lone, ...afterLetter].sort((a, b) => a.index - b.index)) {
     const before = citations.filter((c) => c.index < index).at(-1);
-    if (before === undefined || !oneParagraph(path, citable.slice(before.index, index))) continue;
+    if (before === undefined || !oneParagraph(path, citable, before.index, index)) continue;
     const after = before.id ?? before.written;
     const slug = after.slice(0, after.lastIndexOf('.'));
     const id = letter === undefined ? `${slug}${short}` : `${letter}${slug.slice(slug.indexOf('@'))}${short}`;
