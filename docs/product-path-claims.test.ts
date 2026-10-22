@@ -27,13 +27,13 @@
  *    thing that makes it false must fail here first.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
 
-const DOCS = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(DOCS, '..');
-const read = (path: string) => readFileSync(join(ROOT, path), 'utf-8');
+/** The landing pages below, keyed by path from the repo root with a leading `/`. */
+const PAGES = import.meta.glob<string>(['/README.md', '/docs/README.md', '/docs/getting-started.md'], {
+  eager: true,
+  import: 'default',
+});
+const read = (path: string) => PAGES[`/${path}`];
 
 /**
  * Every page a new author lands on, with the relative prefix each one needs to

@@ -17,9 +17,8 @@
  * the commands accept now fails here.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { promises as fs, readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { promises as fs } from 'node:fs';
+import { join } from 'node:path';
 import { DESIGN_DIR } from '../lib/project-paths.js';
 import { generateTsConfig } from '../lib/project-scaffold.js';
 import { buildExampleExtractionPayload } from './example-derivation.js';
@@ -32,14 +31,8 @@ import { verifyExampleEmitCommand } from './example-test-emit.js';
 import { verifyExampleRunCommand } from './example-test-run.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
+import { skillMarkdown } from '../slash-command/skill-markdown.test-helper.js';
 
-const CONTRACT_DIR = join(
-  dirname(fileURLToPath(import.meta.url)),
-  '..',
-  'slash-command',
-  'bs',
-  'verify',
-);
 
 /** The slice both contracts' examples are written against. */
 const SLICE_PATH = 'rulebook/02-guards.md';
@@ -73,7 +66,7 @@ const GUARDS_SOURCE = [
  * this suite rather than quietly skipping it.
  */
 function fencedBlocks(contract: string, heading: string, language: string): string[] {
-  const text = readFileSync(join(CONTRACT_DIR, contract), 'utf-8');
+  const text = skillMarkdown(`bs/verify/${contract}`);
   const start = text.indexOf(`\n## ${heading}\n`);
   if (start === -1) throw new Error(`${contract} has no "## ${heading}" section.`);
   const rest = text.slice(start + heading.length + 5);

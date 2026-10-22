@@ -64,10 +64,15 @@ function makeDeferred(): { promise: Promise<void>; resolve: () => void } {
 
 /**
  * Builds a host whose `start` op suspends on `gate.promise` when `gate` is
- * supplied — the deterministic interleave hook. Every other op (botSuggest,
- * action, ...) runs immediately against the real pure executor.
+ * supplied — the deterministic interleave hook. With `botGate`, seat 1 is the
+ * bot's and every `botSuggest` waits on `botGate.wait`, calling
+ * `botGate.reached` as it does. Every other op runs immediately against the
+ * real pure executor.
  */
-function makeRaceHost(gate: { promise: Promise<void> } | null) {
+function makeRaceHost(
+  gate: { promise: Promise<void> } | null,
+  botGate?: { wait: Promise<void>; reached: () => void },
+) {
   const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
   const graces = manualGraceTimer();
   const host = new MultiplayerHost({
@@ -75,9 +80,14 @@ function makeRaceHost(gate: { promise: Promise<void> } | null) {
     playerCount: 2,
     minPlayers: 2,
     maxPlayers: raceDef.maxPlayers,
+    designatedBotSeats: botGate ? [1] : undefined,
     makeSeed: () => 'race',
     executeOp: async (gameOptions, snap, pend, op, hostOptions) => {
       if (op.type === 'start' && gate) await gate.promise;
+      if (op.type === 'botSuggest' && botGate) {
+        botGate.reached();
+        await botGate.wait;
+      }
       return executeOp(raceDef, gameOptions, snap, pend, op, hostOptions);
     },
     send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
@@ -328,5 +338,29 @@ describe('MultiplayerHost — a reload is a reconnect, not a vacancy (#412)', ()
 
     expect(graces.armed()).toEqual([]);
     expect(botCovers(host, 1)).toBe(false);
+  });
+});
+
+describe('MultiplayerHost — the opening bot run (#1384)', () => {
+  it('sends the auto-seated page its init and view before the bots that open the game have moved', async () => {
+    const bot = makeDeferred();
+    const asked = makeDeferred();
+    const { host, to } = makeRaceHost(null, { wait: bot.promise, reached: asked.resolve });
+
+    // A is auto-seated in seat 2; seat 1 is the bot's and is due first.
+    const hello = host.handleMessage('A', { type: 'hello' });
+    await asked.promise;
+
+    // The bot is still thinking, and A already holds its seat and its view.
+    const types = to('A').map((m) => m.type);
+    expect(types).toContain('init');
+    expect(types.lastIndexOf('game_state')).toBeGreaterThan(types.indexOf('init'));
+    expect(to('A').find((m) => m.type === 'init')).toMatchObject({ seat: 2 });
+
+    // The bot's move then reaches A as an ordinary push.
+    const statesBefore = types.filter((t) => t === 'game_state').length;
+    bot.resolve();
+    await hello;
+    expect(to('A').filter((m) => m.type === 'game_state').length).toBeGreaterThan(statesBefore);
   });
 });

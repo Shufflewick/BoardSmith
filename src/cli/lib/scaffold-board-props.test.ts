@@ -6,13 +6,10 @@
  * the opposite, and its list drifts from what the shell binds.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
 import { generateGameTableVue } from './project-scaffold.js';
 import { generateWorldBoardVue } from './world-scaffold.js';
 
-const ASPECTS = join(dirname(fileURLToPath(import.meta.url)), '..', 'slash-command', 'aspects');
+const ASPECTS = import.meta.glob<string>('../slash-command/aspects/*.md', { eager: true, import: 'default' });
 
 /** Every `defineProps<...>()` argument in a source text. */
 function declaredProps(text: string): string[] {
@@ -34,8 +31,7 @@ describe('scaffolded boards declare the exported board prop types (#516)', () =>
 
   for (const aspect of ['playing-cards', 'hex-grid', 'dice', 'square-grid']) {
     it(`the ${aspect} aspect's board declares TableBoardProps`, () => {
-      const text = readFileSync(join(ASPECTS, `${aspect}.md`), 'utf-8');
-      expect(declaredProps(text)).toEqual(['TableBoardProps']);
+      expect(declaredProps(ASPECTS[`../slash-command/aspects/${aspect}.md`])).toEqual(['TableBoardProps']);
     });
   }
 });

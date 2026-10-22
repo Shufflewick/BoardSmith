@@ -533,7 +533,8 @@ const boardInteraction = useBoardInteraction();
 // Check if element is highlighted (hovering in ActionPanel)
 boardInteraction.isHighlighted(element)
 
-// Check if element is currently selected
+// Check if element is currently selected: the last board click, or the board element of the
+// choice just answered, however it was answered (panel, board, actionController.fill(), auto-fill, prefill)
 boardInteraction.isSelected(element)
 
 // Check if element is a valid selection target
@@ -1211,8 +1212,9 @@ Calling it also tells GameShell which model your board is in, so the startup
 zoom-fit stops fitting your board's **height**: a pinned board that grows
 taller than the region scrolls — it is never scaled down to avoid that
 scrollbar (which would shrink every glyph on the board below its declared
-size). Width is still fitted, but since the board *is* the region's width,
-that lands at 100% in the normal case. You do not wire this up; calling
+size). Width is still fitted, but never above 100%: the board *is* the
+region's width, so it renders at 100% unless its content overflows sideways,
+which scales it down. You do not wire this up; calling
 `useBoardSize()` is the whole opt-in.
 
 <!-- typecheck: board -->

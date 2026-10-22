@@ -22,6 +22,8 @@ import { afterAll, beforeAll, vi } from 'vitest';
 import { join } from 'node:path';
 import { installClaudeCommand } from './install-claude-command.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+// The installer copies the skill Markdown from disk; importing it links these suites to it (#1370).
+import '../slash-command/skill-markdown.test-helper.js';
 
 /** The temp project a suite runs inside, and where the installer writes in it. */
 class SkillsTree {

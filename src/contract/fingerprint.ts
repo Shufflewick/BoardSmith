@@ -1245,6 +1245,7 @@ function assertCoversWorldOffer(facts: {
   activityWatermarkIsRendered: boolean;
   ownLandIsBare: boolean;
   everyNeighbourIsGreyed: boolean;
+  hiddenNeighbourIsOffered: boolean;
 }): void {
   const shapes = facts.selectionShapes;
   const placements = facts.menuPlacements;
@@ -1285,6 +1286,8 @@ function assertCoversWorldOffer(facts: {
     // `disabled` callbacks ask it rather than restating their rule.
     ["the looker's own land bare, so the disabled reason is live", facts.ownLandIsBare],
     ['every neighbour at full growth, so every candidate is greyed', facts.everyNeighbourIsGreyed],
+    // #1293: a candidate the seat cannot see goes out with the engine's label and reason, never the game's.
+    ['a neighbour the looker cannot see, so its candidate is labelled by the engine', facts.hiddenNeighbourIsOffered],
   ];
 
   assertCovers(
@@ -1688,6 +1691,8 @@ async function computeWorldFixture(): Promise<{
     // THE REFERENCE THAT MAKES THE ROSTER PRUNE A REAL QUESTION (#181), and the
     // one example-rts writes: a holding names its owner.
     holding.player = born.players[seat - 1];
+    // A NEIGHBOUR THE LOOKER CANNOT SEE (#1293), so its greying reason on the offer is the engine's.
+    if (seat === neighboursOf(LOOKER_SEAT)[1]) holding.hideFrom(LOOKER_SEAT);
     stored.set(holdingPartition(seat), {
       parentId: born.id,
       json: throughStorage(holding.toJSON()),
@@ -1842,6 +1847,9 @@ async function computeWorldFixture(): Promise<{
     ownLandIsBare: isBare(holdingOf(live, LOOKER_SEAT)),
     everyNeighbourIsGreyed: neighboursOf(LOOKER_SEAT).every((seat) =>
       isAtFullGrowth(holdingOf(live, seat)),
+    ),
+    hiddenNeighbourIsOffered: neighboursOf(LOOKER_SEAT).some((seat) =>
+      !holdingOf(live, seat).isVisibleTo(LOOKER_SEAT),
     ),
   });
 

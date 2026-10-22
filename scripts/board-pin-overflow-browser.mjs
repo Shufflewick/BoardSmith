@@ -167,8 +167,8 @@ function narrowTheRegion(frame, scrolling = false) {
  * Narrow the sidebar in three steps, one a frame, each before the zoom's queued
  * re-fit runs, so that re-fit reads the wider region against the last pin, as
  * when the sidebar's width transition or a host frame widens the region (#1357).
- * The last step is under half a percent of the region. Ten frames later, read
- * the zoom and whether the region scrolls sideways.
+ * The last step is under half a percent of the region. Read the zoom every
+ * frame, and ten frames later whether the region scrolls sideways.
  */
 function widenTheRegionInSteps(frame) {
   return frame.locator('body').evaluate(async (body) => {
@@ -181,16 +181,49 @@ function widenTheRegionInSteps(frame) {
     sidebar.style.transition = 'none';
     const start = sidebar.getBoundingClientRect().width;
     const regionBefore = region.clientWidth;
+    const zooms = [];
     for (const narrowedBy of [50, 60, 62]) {
       await nextFrame();
+      zooms.push(win.getComputedStyle(zoomed).zoom);
       sidebar.style.width = `${start - narrowedBy}px`;
     }
-    for (let i = 0; i < 10; i++) await nextFrame();
+    for (let i = 0; i < 10; i++) {
+      await nextFrame();
+      zooms.push(win.getComputedStyle(zoomed).zoom);
+    }
     return {
       widenedBy: region.clientWidth - regionBefore,
-      zoom: win.getComputedStyle(zoomed).zoom,
+      zooms: [...new Set(zooms)],
       sideways: region.scrollWidth > region.clientWidth,
     };
+  });
+}
+
+/**
+ * Make the board one pixel wider than its pin and the region a pixel narrower,
+ * so the fit drops a hair under 1; then clear the overflow and widen the region
+ * back (#1374). Ten frames after each, read the zoom.
+ */
+function overflowBrieflyThenClear(frame) {
+  return frame.locator('body').evaluate(async (body) => {
+    const doc = body.ownerDocument;
+    const win = doc.defaultView;
+    const sidebar = doc.querySelector('.sidebar');
+    const board = doc.querySelector('.pinned-board');
+    const zoomed = doc.querySelector('.game-shell__zoom-container');
+    const tenFrames = async () => {
+      for (let i = 0; i < 10; i++) await new Promise((settle) => win.requestAnimationFrame(settle));
+    };
+    sidebar.style.transition = 'none';
+    const start = sidebar.getBoundingClientRect().width;
+    board.style.minWidth = `${board.getBoundingClientRect().width + 1}px`;
+    sidebar.style.width = `${start + 1}px`;
+    await tenFrames();
+    const during = win.getComputedStyle(zoomed).zoom;
+    board.style.minWidth = '';
+    sidebar.style.width = `${start}px`;
+    await tenFrames();
+    return { during, after: win.getComputedStyle(zoomed).zoom };
   });
 }
 
@@ -261,9 +294,16 @@ await runBrowserRegression(
         assert(Math.abs(settled.board - settled.available) <= 1, `the board is ${settled.board}px wide in ${settled.available}px of region`);
       });
       const widened = await widenTheRegionInSteps(frame);
-      await check('once the region has widened in steps, the zoom is back at 1 and the region does not scroll sideways', async () => {
-        assert(widened.widenedBy >= 60 && widened.zoom === '1' && !widened.sideways,
-          `the region widened by ${widened.widenedBy}px and the zoom is ${widened.zoom}${widened.sideways ? ', so the region scrolls sideways' : ''}`);
+      await check('while the region widens in steps, the zoom stays at 1 and the region does not scroll sideways', async () => {
+        assert(widened.widenedBy >= 60 && widened.zooms.join() === '1' && !widened.sideways,
+          `the region widened by ${widened.widenedBy}px and the zoom was ${widened.zooms.join(', then ')}${widened.sideways ? ', and the region scrolls sideways' : ''}`);
+      });
+
+      const overflow = await overflowBrieflyThenClear(frame);
+      await check('a pinned board fitted a hair under 1 by a brief sideways overflow returns to 1 once it clears', async () => {
+        const during = Number(overflow.during);
+        assert(during < 1 && during > 0.995 && overflow.after === '1',
+          `the zoom was ${overflow.during} during the overflow and ${overflow.after} after it cleared`);
       });
 
       await frame.getByRole('button', { name: 'Game controls' }).click();

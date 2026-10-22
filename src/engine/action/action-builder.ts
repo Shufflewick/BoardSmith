@@ -105,15 +105,16 @@ type NonRepeatingOptions = { repeat?: undefined; repeatUntil?: undefined };
 type DisabledOptions<G extends Game, A extends Record<string, unknown>, T, P> = {
   /** Work shared by every `disabled` call of one evaluation; its result is `disabled`'s `prepared`. */
   prepare?: (context: PickContext<G, A>) => P;
-  /** Check if a choice should be disabled. Returns reason string or false. */
+  /** Check if a choice should be disabled. Returns reason string or false; the reason is not shown for a card the player cannot see, or while `args` holds one (#1293). */
   disabled?: (choice: T, context: PickContext<G, A>, prepared: P) => string | false;
   /**
    * The player-facing refusal for a submitted value that is no longer listed
    * (#393). `value` is what was submitted: a choice's value; for an element,
    * the element if it still exists and the player can see it, otherwise the
    * id the player knows it by, or `undefined` for an id the player may no
-   * longer use (#1205, #1293). Without it the player reads a plain default
-   * and the engine's detail goes to the dev log.
+   * longer use (#1205, #1293). Without it, or while `args` holds a card the
+   * player cannot see, the player reads a plain default and the engine's
+   * detail goes to the dev log.
    */
   unavailable?: (value: unknown, context: PickContext<G, A>) => string;
 };

@@ -39,6 +39,8 @@ const FIXTURES_ROOT = join(
   __dirname,
   '../../../.planning/phases/177-derived-line-re-derivation/177-FIXTURES',
 );
+// These tests read the fixture from disk; importing it links them to it (#1370).
+import.meta.glob('/.planning/phases/177-derived-line-re-derivation/177-FIXTURES/**/*.md', { eager: true });
 
 async function readFixture(relPath: string): Promise<string> {
   return fs.readFile(join(FIXTURES_ROOT, relPath), 'utf-8');
