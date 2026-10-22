@@ -2371,9 +2371,9 @@ export class BoardSmithWorldEngine implements WorldEngine {
     //
     // AND IT IS STATE, NOT A TURN (#126). This used to be
     // `createPlayerView(game, seat)`, the projection a TABLE sends -- and that
-    // one calls `getDisabledActions` -> `getAvailableActions`, which evaluates
-    // EVERY action the bundle registered for the table, selection choices and
-    // all, to decide which are open right now.
+    // one then called `getDisabledActions` -> `getAvailableActions`, which
+    // evaluated EVERY action the bundle registered for the table, selection
+    // choices and all, to decide which were open right now.
     //
     // A world may not pay that and may not survive it. A table action is
     // written for a table, where the whole board is there; a resident world

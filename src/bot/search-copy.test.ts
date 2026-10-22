@@ -11,6 +11,7 @@ import {
 } from '../engine/index.js';
 import { SeededRandom } from '../utils/random.js';
 import { _clearShownWarnings } from '../utils/dev.js';
+import { dueSeatOffers } from '../engine/flow/seat-activity.js';
 import { searchCopyForSeat } from './index.js';
 
 class HiddenPage extends Space<PagesGame> {
@@ -237,6 +238,43 @@ describe('the actions a step offers in a search copy (#1431)', () => {
       copy.continueFlow('draw', {}, 2);
 
       expect(offered(copy)).toEqual([[1, ['score']]]);
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/Action "score" .* seat 2 .*"secret" on Holder/));
+    } finally {
+      warn.mockRestore();
+    }
+  });
+});
+
+/** Both seats have discarded and drawn; seat 1's copy is where both are offered `score`, as the truth offered it. */
+function copyAtTheScore(): RoundGame {
+  const truth = new RoundGame({ playerCount: 2, seed: 'truth' });
+  truth.getPlayer(1)!.secret = 3;
+  truth.getPlayer(2)!.secret = 5;
+  truth.startFlow();
+  for (const action of ['discard', 'draw']) for (const seat of [1, 2]) truth.continueFlow(action, {}, seat);
+  return searchCopyForSeat(truth, 1, 'search');
+}
+
+describe('the reasons a seat\'s actions are disabled in a search copy (#1432)', () => {
+  it('checks only the actions the seat is offered, so an undeclared one that reads a hidden secret never runs', () => {
+    const copy = copyBeforeTheLastDiscard();
+
+    expect(copy.getDisabledActions(2)).toEqual({});
+  });
+
+  it('gives a seat whose offered action reads its withheld secret no move, and names the action and attribute', () => {
+    const copy = copyAtTheScore();
+    _clearShownWarnings();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const offers = dueSeatOffers(copy.getFlowState(), copy);
+
+      expect(offers.map(({ seat, enabled, canMove }) => ({ seat, enabled, canMove }))).toEqual([
+        { seat: 1, enabled: ['score'], canMove: true },
+        { seat: 2, enabled: [], canMove: false },
+      ]);
+      expect(offers[1].refused.score).toMatch(/"secret" on Holder/);
       expect(warn).toHaveBeenCalledWith(expect.stringMatching(/Action "score" .* seat 2 .*"secret" on Holder/));
     } finally {
       warn.mockRestore();

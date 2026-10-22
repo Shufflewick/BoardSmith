@@ -285,6 +285,11 @@ describe('BL-01: a restored SnapshotSessionHost keeps the tutorial definition', 
       type: 'action', actionName: 'move', player: 1, args: { piece: 'a' }, boundaryKey: boundaryKeyOfHost(host),
     });
     expect(move.success).toBe(true);
+    // Seat 2 takes its turn, so seat 1 is offered its actions again.
+    const pass = await host.handleOp(2, {
+      type: 'action', actionName: 'pass', player: 2, args: {}, boundaryKey: boundaryKeyOfHost(host),
+    });
+    expect(pass.success).toBe(true);
 
     // step-1's advanceWhen fired, so seat 1 is on step-2, which gates to 'pass'.
     const seat1 = published.at(-1)![0]!.state;

@@ -183,9 +183,9 @@ export interface DueSeatOffer {
   seat: number;
   /** Offered actions no `.disabled()` rule or tutorial gate refuses. */
   enabled: string[];
-  /** Offered actions that are refused, each with its reason. */
+  /** Offered actions and a held follow-up that are refused, each with its reason. */
   refused: Record<string, string>;
-  /** Whether the seat has a move: an enabled action or a held follow-up. */
+  /** Whether the seat has a move: an enabled action or a held follow-up that is not refused. */
   canMove: boolean;
 }
 
@@ -200,11 +200,10 @@ export function dueSeatOffers(
   game: { getDisabledActions(seat: number): Record<string, string> },
 ): DueSeatOffer[] {
   return dueSeats(flowState).map((seat) => {
-    const disabled = game.getDisabledActions(seat);
-    const offered = availableActionsForSeat(flowState, seat);
-    const enabled = offered.filter((name) => !(name in disabled));
-    const refused = Object.fromEntries(offered.filter((name) => name in disabled).map((name) => [name, disabled[name]]));
-    return { seat, enabled, refused, canMove: enabled.length > 0 || followUpForSeat(flowState, seat) !== undefined };
+    const refused = game.getDisabledActions(seat);
+    const enabled = availableActionsForSeat(flowState, seat).filter((name) => !(name in refused));
+    const followUp = followUpForSeat(flowState, seat)?.action;
+    return { seat, enabled, refused, canMove: enabled.length > 0 || (followUp !== undefined && !(followUp in refused)) };
   });
 }
 

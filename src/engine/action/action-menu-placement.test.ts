@@ -13,7 +13,7 @@
  * about what it is called.
  */
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action } from '../index.js';
+import { Game, Player, Action, simultaneousActionStep } from '../index.js';
 import { buildActionMetadata } from '../element/action-metadata.js';
 
 class PlacementGame extends Game<PlacementGame, Player> {
@@ -39,6 +39,8 @@ function makeGame(): { game: PlacementGame; player: Player } {
       .execute(() => {}),
     Action.create<PlacementGame>('skipMission').prompt('Skip mission').execute(() => {}),
   );
+  game.setFlow({ root: simultaneousActionStep({ actions: game.getActionNames() }) });
+  game.startFlow();
   return { game, player: game.getPlayer(1)! };
 }
 

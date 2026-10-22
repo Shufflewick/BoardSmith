@@ -185,9 +185,9 @@ describe('a decision point is worked out once per game state (#631)', () => {
     expect(game.legalMovesRuns).toBe(before + perSeat);
 
     // The platform's action op then builds every seat's view: seat 2's reuses the
-    // flow's offer, and seat 1's choices are worked out once.
+    // flow's offer, and seat 1, offered nothing, has no choices to work out (#1432).
     runner.getAllPlayerViews();
-    expect(game.legalMovesRuns).toBe(before + 2 * perSeat);
+    expect(game.legalMovesRuns).toBe(before + perSeat);
 
     // Every other question about this state reuses them.
     const asked = game.legalMovesRuns;

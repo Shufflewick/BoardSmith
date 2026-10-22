@@ -12,24 +12,36 @@
  *      the button gave.
  *   3. Tutorial gate reasons and `.disabled()` reasons arrive through the one
  *      channel, with the tutorial's more immediate instruction winning.
+ *   4. Only what the seat is offered is checked: its step's actions and a
+ *      follow-up it holds (#1432).
  *
  * Uses a minimal in-test Game subclass; no external game packages.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Game, Player, Action } from '../index.js';
+import { Game, Player, Action, actionStep, simultaneousActionStep } from '../index.js';
 import type { TutorialDefinition } from '../tutorial/types.js';
+import { dueSeatOffers } from '../flow/seat-activity.js';
 
 class DisabledTestGame extends Game<DisabledTestGame, Player> {
   /** Wood available to seat 1; drives the `build` action's disabled rule. */
   wood = 1;
   /** Set by `build` so the tests can prove execution really was blocked. */
   built = 0;
+  /** Set by `start`, which is then refused, so a seat holding its follow-up has nothing else to take. */
+  started = false;
 }
 
 const NOT_ENOUGH_WOOD = 'You need 3 wood to build; you have 1.';
 
-function makeGame(): DisabledTestGame {
+/** Opens one step that offers `actions` to both seats at once. */
+function offerToBothSeats(game: DisabledTestGame, actions: string[]): void {
+  game.setFlow({ root: simultaneousActionStep({ actions }) });
+  game.startFlow();
+}
+
+/** `build`, `pass` and `start`, whose follow-up is `rebuild`, offered as `offer` says. */
+function makeGame(offer: (game: DisabledTestGame) => void = (game) => offerToBothSeats(game, ['build', 'pass'])): DisabledTestGame {
   const game = new DisabledTestGame({ playerCount: 2 });
   game.registerActions(
     Action.create<DisabledTestGame>('build')
@@ -38,8 +50,30 @@ function makeGame(): DisabledTestGame {
         ctx.game.built += 1;
       }),
     Action.create<DisabledTestGame>('pass').execute(() => {}),
+    Action.create<DisabledTestGame>('start')
+      .disabled(ctx => (ctx.game.started ? 'You have already started.' : false))
+      .execute((_args, ctx) => {
+        ctx.game.started = true;
+        return { success: true, followUp: { action: 'rebuild', args: {} } };
+      }),
+    // Reached only as a follow-up, which skips the condition, as performAction does.
+    Action.create<DisabledTestGame>('rebuild')
+      .condition({ 'only as a follow-up': () => false })
+      .disabled(ctx => (ctx.game.wood < 3 ? `You need 3 wood to build; you have ${ctx.game.wood}.` : false))
+      .execute(() => {}),
   );
+  offer(game);
   return game;
+}
+
+/** Seat 1 has taken `start` and holds its follow-up, `rebuild`. */
+function holdingRebuild(): DisabledTestGame {
+  const held = makeGame((game) => {
+    game.setFlow({ root: actionStep({ actions: ['start'] }) });
+    game.startFlow();
+  });
+  held.continueFlow('start', {}, 1);
+  return held;
 }
 
 describe('action-level .disabled()', () => {
@@ -93,6 +127,7 @@ describe('action-level .disabled()', () => {
         .disabled(ctx => (ctx.player.seat === 2 ? 'Only the first player may act.' : false))
         .execute(() => {}),
     );
+    offerToBothSeats(perSeat, ['act']);
 
     expect(perSeat.getDisabledActions(1)).toEqual({});
     expect(perSeat.getDisabledActions(2)).toEqual({ act: 'Only the first player may act.' });
@@ -100,6 +135,27 @@ describe('action-level .disabled()', () => {
 
   it('reports nothing for a seat that does not exist', () => {
     expect(game.getDisabledActions(99)).toEqual({});
+  });
+
+  it('reports nothing for an action the seat is not offered, and never runs its rule', () => {
+    const unoffered = makeGame((game) => offerToBothSeats(game, ['pass']));
+
+    expect(unoffered.getDisabledActions(1)).toEqual({});
+  });
+
+  it('reports the reason for a follow-up the seat holds, whose condition the server skips', () => {
+    const held = holdingRebuild();
+
+    expect(held.getDisabledActions(1)).toEqual({ start: 'You have already started.', rebuild: NOT_ENOUGH_WOOD });
+    expect(held.performAction('rebuild', held.getPlayer(1)!, {}, { followUp: { action: 'rebuild', args: {} } }).error).toContain(NOT_ENOUGH_WOOD);
+  });
+
+  it('gives a seat holding only a refused follow-up no move', () => {
+    const held = holdingRebuild();
+
+    expect(dueSeatOffers(held.getFlowState(), held)).toEqual([
+      { seat: 1, enabled: [], refused: { start: 'You have already started.', rebuild: NOT_ENOUGH_WOOD }, canMove: false },
+    ]);
   });
 });
 
