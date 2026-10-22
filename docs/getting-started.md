@@ -322,7 +322,7 @@ Then `trials` mutants run at once, each in its own Vitest run with `workers / tr
 test workers (rounded down), and the unmutated run first gets all `workers`.
 Outcomes are reported in the same order as a serial run. Vitest 3 sizes its pools
 from `poolOptions` (`maxForks`, `maxThreads`, `minForks`, `minThreads`) before
-the worker count, and run files of different pools at the same time, so with a
+the worker count, and runs files of different pools at the same time, so with a
 budget the mutation check refuses a config that sets those, `poolMatchGlobs`,
 typecheck mode (`typecheck.enabled`), browser mode (`browser.enabled`), a
 different pool per project or a custom pool, rather than run more workers than
