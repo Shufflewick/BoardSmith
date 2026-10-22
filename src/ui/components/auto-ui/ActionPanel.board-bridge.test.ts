@@ -26,7 +26,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { defineComponent, h, nextTick, provide, ref, watch } from 'vue';
+import { defineComponent, h, nextTick, provide, ref, watch, type Ref } from 'vue';
 import ActionPanel from './ActionPanel.vue';
 import { useActionController } from '../../composables/useActionController.js';
 import { useBoardActionBridge } from '../../composables/useBoardActionBridge.js';
@@ -105,8 +105,64 @@ const boardAction: EnrichedActionMetadata = {
   ],
 };
 
-const AVAILABLE = ['move', 'tend', 'harvest', 'wait', 'board'];
-const METADATA = { move: moveAction, tend: tendAction, harvest: harvestAction, wait: waitAction, board: boardAction };
+// A choice the board marks once chosen, then a plot.
+const steerAction: EnrichedActionMetadata = {
+  name: 'steer',
+  prompt: 'Steer',
+  selections: [
+    { name: 'direction', type: 'choice', prompt: 'Which way?', choices: COMPASS },
+    { name: 'plot', type: 'element', prompt: 'Choose a plot' },
+  ],
+};
+
+// A marked choice, a plot that marks nothing, another marked choice, then a pick to keep the action open.
+const chartAction: EnrichedActionMetadata = {
+  name: 'chart',
+  prompt: 'Chart',
+  selections: [
+    ...steerAction.selections,
+    { name: 'heading', type: 'choice', prompt: 'Then which way?', choices: COMPASS },
+    { name: 'wake', type: 'choice', prompt: 'And the wake?', choices: COMPASS },
+  ],
+};
+
+// A choice with one way to go, which auto-fill answers, then a plot.
+const driftAction: EnrichedActionMetadata = {
+  name: 'drift',
+  prompt: 'Drift',
+  selections: [
+    { name: 'direction', type: 'choice', prompt: 'Which way?', choices: [COMPASS[0]] },
+    { name: 'plot', type: 'element', prompt: 'Choose a plot' },
+  ],
+};
+
+// A marked choice, a plot, a heading with one way to go, which auto-fill answers, then a pick to keep the action open.
+const sightAction: EnrichedActionMetadata = {
+  name: 'sight',
+  prompt: 'Sight',
+  selections: [
+    ...steerAction.selections,
+    { name: 'heading', type: 'choice', prompt: 'Then which way?', choices: [COMPASS[1]] },
+    { name: 'wake', type: 'choice', prompt: 'And the wake?', choices: COMPASS },
+  ],
+};
+
+// A pick whose onSelect makes the server hold the action, a plot, then a choice a prefill can answer.
+const musterAction: EnrichedActionMetadata = {
+  name: 'muster',
+  prompt: 'Muster',
+  selections: [
+    boardAction.selections[1],
+    { name: 'plot', type: 'element', prompt: 'Choose a plot' },
+    { name: 'heading', type: 'choice', prompt: 'Then which way?', choices: COMPASS },
+  ],
+};
+
+const AVAILABLE = ['move', 'tend', 'harvest', 'wait', 'board', 'steer', 'chart', 'drift', 'sight', 'muster'];
+const METADATA: Record<string, EnrichedActionMetadata> = {
+  move: moveAction, tend: tendAction, harvest: harvestAction, wait: waitAction, board: boardAction, steer: steerAction, chart: chartAction, drift: driftAction,
+  sight: sightAction, muster: musterAction,
+};
 
 interface Harness {
   board: BoardInteraction;
@@ -114,6 +170,7 @@ interface Harness {
   wrapper: ReturnType<typeof mount>;
   sendAction: ReturnType<typeof vi.fn>;
   cancelPendingAction: ReturnType<typeof vi.fn>;
+  isViewingHistory: Ref<boolean>;
 }
 
 /**
@@ -121,17 +178,18 @@ interface Harness {
  * shell creates the board substrate and runs the bridge, and PlayShell mounts
  * the panel inside it.
  */
-function mountHarness(pickStep?: () => Promise<PickStepResponse>, heldFollowUp?: FollowUpOffer): Harness {
+function mountHarness(pickStep?: () => Promise<PickStepResponse>, heldFollowUp?: FollowUpOffer, autoFill = false): Harness {
   const sendAction = vi.fn().mockResolvedValue({ success: true });
   const cancelPendingAction = vi.fn().mockResolvedValue(undefined);
   const fetchPickChoices = vi.fn((action: string, selectionName: string) =>
     selectionName === 'plot'
       ? Promise.resolve({ success: true, validElements: action === 'harvest' ? [{ id: 21 }, { id: 22 }] : [{ id: 11 }, { id: 12 }] })
-      : Promise.resolve({ success: true, choices: action === 'board' ? boardAction.selections.find(s => s.name === selectionName)?.choices : COMPASS }),
+      : Promise.resolve({ success: true, choices: METADATA[action]?.selections.find(s => s.name === selectionName)?.choices ?? COMPASS }),
   );
 
   let board!: BoardInteraction;
   let controller!: ReturnType<typeof useActionController>;
+  const isViewingHistory = ref(false);
 
   const Host = defineComponent({
     name: 'BridgeHost',
@@ -143,13 +201,14 @@ function mountHarness(pickStep?: () => Promise<PickStepResponse>, heldFollowUp?:
         availableActions: ref(AVAILABLE),
         actionMetadata: ref(METADATA),
         isMyTurn: ref(true),
-        autoFill: false,
+        autoFill,
         // Matches GameShell: once every pick is filled the action goes.
         autoExecute: true,
         fetchPickChoices,
         pickStep,
         cancelPendingAction,
         heldFollowUp: ref(heldFollowUp),
+        isViewingHistory,
       });
       provide(GAME_CONTEXT_KEYS.actionController, controller);
       useBoardActionBridge({
@@ -160,7 +219,7 @@ function mountHarness(pickStep?: () => Promise<PickStepResponse>, heldFollowUp?:
         actionMetadata: ref(METADATA),
         availableActions: ref(AVAILABLE),
         disabledActions: ref({}),
-        isViewingHistory: ref(false),
+        isViewingHistory,
         runnerIdentity: ref(undefined),
       });
       return () =>
@@ -173,7 +232,7 @@ function mountHarness(pickStep?: () => Promise<PickStepResponse>, heldFollowUp?:
   });
 
   const wrapper = mount(Host);
-  return { board, controller, wrapper, sendAction, cancelPendingAction };
+  return { board, controller, wrapper, sendAction, cancelPendingAction, isViewingHistory };
 }
 
 describe('ActionPanel start leaves the board wired (#185)', () => {
@@ -314,7 +373,10 @@ describe("ActionPanel's clear of a pick while a later pick's step is out (#1364)
     const crewFill = controller.fill('crew', 'ann');
     await flush();
 
-    await wrapper.find('.clear-selection-btn').trigger('click');
+    // The panel offers no clear the controller would refuse (#1373 review F2).
+    expect(wrapper.find('.selected-value').exists()).toBe(true);
+    expect(wrapper.find('.clear-selection-btn').exists()).toBe(false);
+    expect(controller.clear('ship')).toBe(false);
     await flush();
 
     expect(controller.currentAction.value).toBe('board');
@@ -329,7 +391,7 @@ describe("ActionPanel's clear of a pick while a later pick's step is out (#1364)
 });
 
 describe("ActionPanel's chip for a follow-up's server-bound value (#1366)", () => {
-  it('has no clear button, as the player cannot clear that value; a pick keeps its own', async () => {
+  it('has no clear button, as the player cannot clear that value, nor does a pick the server already holds', async () => {
     const { controller, wrapper } = mountHarness(() => Promise.resolve({ success: true }), {
       action: 'loot',
       args: { site: 3 },
@@ -352,7 +414,505 @@ describe("ActionPanel's chip for a follow-up's server-bound value (#1366)", () =
     expect(chips).toHaveLength(2);
     expect(chips[0].find('.value-display').text()).toBe('Old Mill');
     expect(chips[0].find('.clear-selection-btn').exists()).toBe(false);
-    expect(chips[1].find('.clear-selection-btn').attributes('aria-label')).toBe('Clear item');
+    // The step for 'item' reached the server, so clear() refuses it too (#1371, #1373).
+    expect(chips[1].find('.clear-selection-btn').exists()).toBe(false);
+    expect(controller.canClear('item')).toBe(false);
+    wrapper.unmount();
+  });
+});
+
+describe("ActionPanel's chip for a pick the held follow-up answered (#1373)", () => {
+  it('has no clear button, and controller.clear() refuses it, as the server will not use a new answer', async () => {
+    // Checkers' multi-jump: the capture chains to `move` with its own first pick bound.
+    const { board, controller, wrapper } = mountHarness(() => Promise.resolve({ success: true }), {
+      action: 'move',
+      args: { piece: 7 },
+      display: { piece: 'C3' },
+      metadata: {
+        name: 'move',
+        prompt: 'Move',
+        selections: [
+          { name: 'piece', type: 'element', prompt: 'Piece' },
+          { name: 'destination', type: 'choice', prompt: 'Destination', choices: [{ value: 'e5', display: 'E5' }, { value: 'a5', display: 'A5' }] },
+        ],
+      },
+    });
+    await flush();
+    expect(controller.currentPick.value?.name).toBe('destination');
+
+    const chips = wrapper.findAll('.selected-value');
+    expect(chips).toHaveLength(1);
+    expect(chips[0].find('.value-display').text()).toBe('C3');
+    expect(chips[0].find('.clear-selection-btn').exists()).toBe(false);
+    expect(controller.canClear('piece')).toBe(false);
+    expect(controller.clear('piece')).toBe(false);
+    expect(controller.lastError.value).toBe('The server already holds this answer, so it cannot be cleared now. Cancel the action to start it again.');
+    expect(controller.currentArgs.value).toEqual({ piece: 7 });
+    expect(board.currentPickName).toBe('destination');
+    wrapper.unmount();
+  });
+});
+
+describe("ActionPanel's clear chip does what controller.clear() does (#1371)", () => {
+  it('keeps the action and asks the cleared pick again, on the panel and the board', async () => {
+    const { board, controller, wrapper, sendAction, cancelPendingAction } = mountHarness();
+    await flush();
+    await wrapper.find('[data-bs-action="harvest"]').trigger('click');
+    await flush();
+    board.triggerElementSelect({ id: 21 });
+    await flush();
+    expect(controller.currentPick.value?.name).toBe('direction');
+
+    await wrapper.find('.clear-selection-btn').trigger('click');
+    await flush();
+
+    expect(cancelPendingAction).not.toHaveBeenCalled();
+    expect(controller.currentAction.value).toBe('harvest');
+    expect(controller.currentPick.value?.name).toBe('plot');
+    expect(controller.currentArgs.value).toEqual({});
+    expect(board.currentAction).toBe('harvest');
+    expect(board.currentPickName).toBe('plot');
+    expect(board.validElements.map(e => e.id)).toEqual([21, 22]);
+
+    board.triggerElementSelect({ id: 22 });
+    await flush();
+    board.triggerChoiceSelect('direction', 'north');
+    await flush();
+    expect(sendAction).toHaveBeenCalledWith('harvest', { plot: 22, direction: 'north' });
+    wrapper.unmount();
+  });
+
+  it('refuses to clear a pick the server holds once an onSelect step went, keeping the action there and here (#1371 review F1)', async () => {
+    const { board, controller, wrapper, cancelPendingAction } = mountHarness(() => Promise.resolve({ success: true }));
+    await flush();
+    await controller.start('board');
+    await controller.fill('ship', 'dory');
+    await controller.fill('crew', 'ann');
+    await flush();
+
+    // The panel offers no clear the controller would refuse (#1373).
+    expect(wrapper.findAll('.selected-value')).toHaveLength(2);
+    expect(wrapper.find('.clear-selection-btn').exists()).toBe(false);
+    expect(controller.clear('ship')).toBe(false);
+    await flush();
+
+    expect(controller.lastError.value).toBe('The server already holds this answer, so it cannot be cleared now. Cancel the action to start it again.');
+    expect(controller.currentArgs.value).toEqual({ ship: 'dory', crew: 'ann' });
+    expect(board.currentAction).toBe('board');
+    expect(cancelPendingAction).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it.each([
+    ['the panel chip', (h: Harness) => h.wrapper.find('.clear-selection-btn').trigger('click')],
+    ['controller.clear()', (h: Harness) => h.controller.clear('direction')],
+  ])('drops the board mark of the answer %s takes back', async (_surface, clear) => {
+    const harness = mountHarness();
+    const { board, controller, wrapper } = harness;
+    await flush();
+    await wrapper.find('[data-bs-action="steer"]').trigger('click');
+    await flush();
+    const north = wrapper.findAll('.anchored-choice-btn').find(b => b.text() === 'North');
+    await north!.trigger('click');
+    await flush();
+    expect(controller.currentPick.value?.name).toBe('plot');
+    expect(board.selectedElement).toEqual({ notation: 'n' });
+    expect(board.hoveredChoice?.display).toBe('North');
+
+    await clear(harness);
+    await flush();
+
+    expect(board.currentPickName).toBe('direction');
+    expect(board.selectedElement).toBeNull();
+    expect(board.hoveredChoice).toBeNull();
+    wrapper.unmount();
+  });
+});
+
+describe('Clearing only the last answer keeps the board mark of an earlier one (#1377)', () => {
+  it.each([
+    ['the panel chip', (h: Harness) => h.wrapper.findAll('.clear-selection-btn').at(-1)!.trigger('click')],
+    ['controller.clear()', (h: Harness) => h.controller.clear('plot')],
+  ])('keeps the mark of the choice still standing when %s takes back the plot', async (_surface, clear) => {
+    const harness = mountHarness();
+    const { board, controller, wrapper } = harness;
+    await flush();
+    await wrapper.find('[data-bs-action="chart"]').trigger('click');
+    await flush();
+    const north = wrapper.findAll('.anchored-choice-btn').find(b => b.text() === 'North');
+    await north!.trigger('click');
+    await flush();
+    board.triggerElementSelect({ id: 11 });
+    await flush();
+    expect(controller.currentPick.value?.name).toBe('heading');
+    expect(board.selectedElement).toEqual({ notation: 'n' });
+
+    await clear(harness);
+    await flush();
+
+    expect(controller.currentArgs.value).toEqual({ direction: 'north' });
+    expect(board.currentPickName).toBe('plot');
+    expect(board.selectedElement).toEqual({ notation: 'n' });
+    wrapper.unmount();
+  });
+
+  it('puts back the mark of the earlier choice when the panel chip takes back a later marked one', async () => {
+    const { board, controller, wrapper } = mountHarness();
+    await flush();
+    await wrapper.find('[data-bs-action="chart"]').trigger('click');
+    await flush();
+    await wrapper.findAll('.anchored-choice-btn').find(b => b.text() === 'North')!.trigger('click');
+    await flush();
+    board.triggerElementSelect({ id: 11 });
+    await flush();
+    board.triggerChoiceSelect('heading', 'south');
+    await flush();
+    expect(controller.currentPick.value?.name).toBe('wake');
+    expect(board.selectedElement).toEqual({ notation: 's' });
+
+    await wrapper.findAll('.clear-selection-btn').at(-1)!.trigger('click');
+    await flush();
+
+    expect(controller.currentArgs.value).toEqual({ direction: 'north', plot: 11 });
+    expect(board.currentPickName).toBe('heading');
+    expect(board.selectedElement).toEqual({ notation: 'n' });
+    wrapper.unmount();
+  });
+});
+
+describe('The board marks a chosen choice however it was answered (#1380)', () => {
+  it('marks an answer a custom UI gives through controller.fill(), and puts it back when a later answer is taken back', async () => {
+    const { board, controller, wrapper } = mountHarness();
+    await flush();
+    await controller.start('chart');
+    await flush();
+
+    await controller.fill('direction', 'north');
+    await flush();
+    expect(board.selectedElement).toEqual({ notation: 'n' });
+
+    await controller.fill('plot', 11);
+    await controller.fill('heading', 'south');
+    await flush();
+    expect(board.selectedElement).toEqual({ notation: 's' });
+
+    controller.clear('heading');
+    await flush();
+    expect(board.selectedElement).toEqual({ notation: 'n' });
+    wrapper.unmount();
+  });
+
+  it('marks a choice auto-fill answers', async () => {
+    const { board, controller, wrapper } = mountHarness(undefined, undefined, true);
+    await flush();
+    await wrapper.find('[data-bs-action="drift"]').trigger('click');
+    await flush();
+
+    expect(controller.currentArgs.value).toEqual({ direction: 'north' });
+    expect(board.selectedElement).toEqual({ notation: 'n' });
+    wrapper.unmount();
+  });
+
+  it('marks a choice a prefill answers', async () => {
+    const { board, controller, wrapper } = mountHarness();
+    await flush();
+    await controller.start('chart', { prefill: { direction: 'south' } });
+    await flush();
+
+    expect(controller.currentArgs.value).toEqual({ direction: 'south' });
+    expect(board.selectedElement).toEqual({ notation: 's' });
+    wrapper.unmount();
+  });
+
+  it('puts the standing mark back when a clear takes back a later answer the board had marked itself (review F1)', async () => {
+    const { board, controller, wrapper } = mountHarness();
+    await flush();
+    await controller.start('chart');
+    await controller.fill('direction', 'north');
+    await flush();
+    board.triggerElementSelect({ id: 11 });
+    // A custom board marks the plot it was clicked on.
+    board.selectElement({ id: 11 });
+    await flush();
+
+    controller.clear('plot');
+    await flush();
+
+    expect(board.selectedElement).toEqual({ notation: 'n' });
+    wrapper.unmount();
+  });
+
+  it('drops the hovered answer a clear takes back when the standing mark is the same (review F2)', async () => {
+    const { board, controller, wrapper } = mountHarness();
+    await flush();
+    await wrapper.find('[data-bs-action="chart"]').trigger('click');
+    await flush();
+    await wrapper.findAll('.anchored-choice-btn').find(b => b.text() === 'North')!.trigger('click');
+    await flush();
+    board.triggerElementSelect({ id: 11 });
+    await flush();
+    await wrapper.findAll('.anchored-choice-btn').find(b => b.text() === 'North')!.trigger('click');
+    await flush();
+    expect(controller.currentPick.value?.name).toBe('wake');
+    expect(board.hoveredChoice?.display).toBe('North');
+
+    await wrapper.findAll('.clear-selection-btn').at(-1)!.trigger('click');
+    await flush();
+
+    expect(controller.currentArgs.value).toEqual({ direction: 'north', plot: 11 });
+    expect(board.selectedElement).toEqual({ notation: 'n' });
+    expect(board.hoveredChoice).toBeNull();
+    wrapper.unmount();
+  });
+});
+
+describe('Coming back from history puts back the board mark of an action the server holds (#1381)', () => {
+  it('marks the standing choice again once the live game is back on screen', async () => {
+    const { board, controller, wrapper, isViewingHistory } = mountHarness(() => Promise.resolve({ success: true }), {
+      action: 'steer',
+      args: {},
+      display: {},
+      metadata: steerAction,
+    });
+    await flush();
+    await controller.fill('direction', 'north');
+    await flush();
+    expect(controller.pendingOnServer.value).toBe(true);
+    expect(board.selectedElement).toEqual({ notation: 'n' });
+
+    isViewingHistory.value = true;
+    await flush();
+    expect(board.currentAction).toBeNull();
+    expect(board.selectedElement).toBeNull();
+
+    isViewingHistory.value = false;
+    await flush();
+
+    expect(controller.currentArgs.value).toEqual({ direction: 'north' });
+    expect(wrapper.find('.selected-value .value-display').text()).toBe('North');
+    expect(board.currentPickName).toBe('plot');
+    expect(board.selectedElement).toEqual({ notation: 'n' });
+    wrapper.unmount();
+  });
+});
+
+// The held pick's step is still out when history opens, and its reply lands while history is on screen.
+function replyWhileInHistory(action: 'harvest' | 'sight') {
+  let reply!: () => void;
+  const outstanding = new Promise<PickStepResponse>((resolve) => { reply = () => resolve({ success: true }); });
+  // Sight's first step (the direction) goes through at once; harvest's (the plot) is the one left out.
+  const late = action === 'sight' ? 2 : 1;
+  const pickStep = vi.fn((..._step: unknown[]) => (pickStep.mock.calls.length === late ? outstanding : Promise.resolve<PickStepResponse>({ success: true })));
+  const harness = mountHarness(pickStep, {
+    action,
+    args: {},
+    display: {},
+    metadata: METADATA[action],
+  }, true);
+  return { ...harness, reply, pickStep };
+}
+
+describe('Coming back from history puts back the board mark of an element pick the server holds (#1383)', () => {
+  it('marks the plot a custom board marked when clicked, once the live game is back on screen', async () => {
+    const { board, controller, wrapper, isViewingHistory } = mountHarness(() => Promise.resolve({ success: true }), {
+      action: 'harvest',
+      args: {},
+      display: {},
+      metadata: harvestAction,
+    });
+    await flush();
+    // A custom board marks the plot it was clicked on, as checkers does.
+    board.selectElement({ id: 21 });
+    board.triggerElementSelect({ id: 21 });
+    await flush();
+    expect(controller.pendingOnServer.value).toBe(true);
+    expect(controller.currentArgs.value).toEqual({ plot: 21 });
+    expect(board.selectedElement).toEqual({ id: 21 });
+
+    isViewingHistory.value = true;
+    await flush();
+    expect(board.currentAction).toBeNull();
+    expect(board.selectedElement).toBeNull();
+
+    isViewingHistory.value = false;
+    await flush();
+
+    expect(board.currentPickName).toBe('direction');
+    expect(board.selectedElement).toEqual({ id: 21 });
+    wrapper.unmount();
+  });
+
+  it('puts back no mark once the held action ends while history is on screen and the player starts it again', async () => {
+    const { board, controller, wrapper, isViewingHistory } = mountHarness(() => Promise.resolve({ success: true }), {
+      action: 'harvest',
+      args: {},
+      display: {},
+      metadata: harvestAction,
+    });
+    await flush();
+    board.selectElement({ id: 21 });
+    board.triggerElementSelect({ id: 21 });
+    await flush();
+    expect(controller.pendingOnServer.value).toBe(true);
+
+    isViewingHistory.value = true;
+    await flush();
+    controller.cancel();
+    await flush();
+    isViewingHistory.value = false;
+    await flush();
+    await controller.start('harvest');
+    await flush();
+
+    expect(controller.currentArgs.value).toEqual({});
+    expect(board.currentPickName).toBe('plot');
+    expect(board.selectedElement).toBeNull();
+    wrapper.unmount();
+  });
+
+  it('keeps the plot a custom board marked when the server takes it while history is on screen', async () => {
+    const { board, controller, wrapper, isViewingHistory, reply } = replyWhileInHistory('harvest');
+    await flush();
+    board.selectElement({ id: 21 });
+    board.triggerElementSelect({ id: 21 });
+    await flush();
+    isViewingHistory.value = true;
+    await flush();
+
+    reply();
+    await flush();
+    expect(controller.currentArgs.value).toEqual({ plot: 21 });
+    isViewingHistory.value = false;
+    await flush();
+
+    expect(board.currentPickName).toBe('direction');
+    expect(board.selectedElement).toEqual({ id: 21 });
+    wrapper.unmount();
+  });
+
+  it('draws no mark on the past board for a choice auto-fill answers there, and marks that choice on return (review F1, F2)', async () => {
+    const { board, controller, wrapper, isViewingHistory, reply } = replyWhileInHistory('sight');
+    await flush();
+    await controller.fill('direction', 'north');
+    await flush();
+    board.selectElement({ id: 11 });
+    board.triggerElementSelect({ id: 11 });
+    await flush();
+    isViewingHistory.value = true;
+    await flush();
+
+    reply();
+    await flush();
+    expect(controller.currentArgs.value).toEqual({ direction: 'north', plot: 11 });
+    expect(board.selectedElement).toBeNull();
+    isViewingHistory.value = false;
+    await flush();
+
+    expect(board.currentPickName).toBe('wake');
+    expect(board.selectedElement).toEqual({ notation: 's' });
+    wrapper.unmount();
+  });
+});
+
+describe('A held pick whose step reply lands while history is on screen sends no auto-filled pick until the player returns (#1385)', () => {
+  it('sends the one-choice heading to the live game only once the live game is back on screen', async () => {
+    const { controller, wrapper, isViewingHistory, reply, pickStep } = replyWhileInHistory('sight');
+    await flush();
+    await controller.fill('direction', 'north');
+    await flush();
+    // Not awaited: the plot's step is the one still out when history opens.
+    void controller.fill('plot', 11);
+    await flush();
+    isViewingHistory.value = true;
+    await flush();
+
+    reply();
+    await flush();
+    expect(pickStep.mock.calls.map(call => call[1])).toEqual(['direction', 'plot']);
+
+    isViewingHistory.value = false;
+    await flush();
+
+    expect(pickStep.mock.calls.map(call => call[1])).toEqual(['direction', 'plot', 'heading']);
+    expect(controller.currentArgs.value).toEqual({ direction: 'north', plot: 11, heading: 'south' });
+    expect(controller.currentPick.value?.name).toBe('wake');
+    wrapper.unmount();
+  });
+
+  it('sends the prefilled heading to the live game only once the live game is back on screen (review F1)', async () => {
+    let reply!: () => void;
+    const outstanding = new Promise<PickStepResponse>((resolve) => { reply = () => resolve({ success: true }); });
+    const pickStep = vi.fn((..._step: unknown[]) => (pickStep.mock.calls.length === 2 ? outstanding : Promise.resolve<PickStepResponse>({ success: true })));
+    const { controller, wrapper, isViewingHistory } = mountHarness(pickStep);
+    await flush();
+    await controller.start('muster', { prefill: { heading: 'south' } });
+    await flush();
+    await controller.fill('crew', 'ann');
+    await flush();
+    // Not awaited: the plot's step is the one still out when history opens.
+    void controller.fill('plot', 11);
+    await flush();
+    isViewingHistory.value = true;
+    await flush();
+
+    reply();
+    await flush();
+    expect(pickStep.mock.calls.map(call => call[1])).toEqual(['crew', 'plot']);
+
+    isViewingHistory.value = false;
+    await flush();
+
+    expect(pickStep.mock.calls.map(call => call[1])).toEqual(['crew', 'plot', 'heading']);
+    expect(controller.currentArgs.value).toEqual({ crew: 'ann', plot: 11, heading: 'south' });
+    expect(controller.lastError.value).toBeNull();
+    wrapper.unmount();
+  });
+});
+
+describe('Opening history while an action\'s first step is still out keeps the action open (#1388)', () => {
+  it('sends no cancel to the live game and keeps muster open past its crew step', async () => {
+    let reply!: () => void;
+    const outstanding = new Promise<PickStepResponse>((resolve) => { reply = () => resolve({ success: true }); });
+    const { controller, wrapper, isViewingHistory, cancelPendingAction } = mountHarness(() => outstanding);
+    await flush();
+    await controller.start('muster');
+    await flush();
+    // Not awaited: the crew pick's onSelect step is the one still out when history opens.
+    void controller.fill('crew', 'ann');
+    await flush();
+    isViewingHistory.value = true;
+    await flush();
+    expect(cancelPendingAction).not.toHaveBeenCalled();
+
+    reply();
+    await flush();
+    isViewingHistory.value = false;
+    await flush();
+
+    expect(cancelPendingAction).not.toHaveBeenCalled();
+    expect(controller.currentAction.value).toBe('muster');
+    expect(controller.currentPick.value?.name).toBe('plot');
+    wrapper.unmount();
+  });
+
+  it('closes muster with no cancel to the live game when the server refuses the crew step while history is on screen (review F1)', async () => {
+    let refuse!: () => void;
+    const outstanding = new Promise<PickStepResponse>((resolve) => { refuse = () => resolve({ success: false, error: 'Muster is no longer possible.' }); });
+    const { board, controller, wrapper, isViewingHistory, cancelPendingAction } = mountHarness(() => outstanding);
+    await flush();
+    await controller.start('muster');
+    await flush();
+    void controller.fill('crew', 'ann');
+    await flush();
+    isViewingHistory.value = true;
+    await flush();
+
+    refuse();
+    await flush();
+
+    expect(controller.currentAction.value).toBeNull();
+    expect(board.currentAction).toBeNull();
+    expect(cancelPendingAction).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 });

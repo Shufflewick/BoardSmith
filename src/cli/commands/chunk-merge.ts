@@ -18,7 +18,8 @@
  *      RUN.md, and may not write another chunk's run log. Real numbers are allocated here, on the
  *      combined tree, and every citation of each provisional id is rewritten, shorthand included
  *      (`Rulings @a.1 to .3`); a range it cannot rewrite one to one, or shorthand that names no id
- *      it can map (`@a.1-3`, `Decision .2`), is refused (#446).
+ *      it can map (`@a.1-3`, `Decision .2`, or a `.N` outside its id's list, `Decision @a.2 supersedes
+ *      .1`), is refused (#446, #1363).
  *   3. On the combined tree, before anything is committed, it re-runs every tree-wide check:
  *      the chunk is verified; the chunks really built alongside it (not yet verified on the main
  *      line when the branch left, merged by chunk-merge since, or whose code the main line
@@ -278,10 +279,58 @@ function shorthandRefusal(name: string, written: string): string {
     );
   }
   return (
-    `${name} writes "${written}", a shortened id with no provisional id before it to take its slug from, so the ` +
-    `merge cannot give it a real number. Write the id in full on the branch (for example ` +
+    `${name} writes "${written}", a shortened id straight after a kind word. A kind word must be followed by an id ` +
+    `in full: a shortened id is read only after a provisional id in a list (as in "@<slug>.1, .2"), so the merge ` +
+    `cannot give this one a real number. Write the id in full on the branch (for example ` +
     `\`${written.replace(/\.(\d+)$/, '@<slug>.$1')}\`), and merge again.`
   );
+}
+
+/** Each file in the combined tree that git reads as renamed or copied from a main-line file, and that file. */
+async function sourcesOnMain(ctx: MergeContext): Promise<Map<string, string>> {
+  const fields = (await git(ctx.top, ['diff', '-M', '--name-status', '-z', ctx.mainCommit])).split('\0');
+  const sources = new Map<string, string>();
+  for (let i = 0; i < fields.length - 1; ) {
+    if (/^[RC]/.test(fields[i])) {
+      sources.set(fields[i + 2], fields[i + 1]);
+      i += 3;
+    } else i += 2;
+  }
+  return sources;
+}
+
+/**
+ * Each run of lines of `name` in the combined tree that differs from the main line's copy (`from`
+ * when git reads it as renamed), as its first line and count. A count of 0 is lines deleted after `start`.
+ */
+async function linesBranchWrote(ctx: MergeContext, name: string, from: string | undefined): Promise<[number, number][]> {
+  const args = ['diff', '-M', '--unified=0', '--no-color', '--no-ext-diff', '--no-textconv', ctx.mainCommit, '--', name];
+  const diff = await git(ctx.top, from ? [...args, from] : args);
+  return [...diff.matchAll(/^@@ -\S+ \+(\d+)(?:,(\d+))? @@/gm)].map(([, start, count]) => [Number(start), Number(count ?? 1)]);
+}
+
+/**
+ * A refusal for each `unreadableShorthand` in `files` (the combined tree) on a line the branch wrote,
+ * by git's diff against the main line: one main already had is not the branch's to fix (#1395), even
+ * in a file the branch moved it within or renamed (#1399).
+ */
+async function branchShorthandRefusals(ctx: MergeContext, files: Record<string, string>): Promise<string[]> {
+  const refusals: string[] = [];
+  let sources: Map<string, string> | undefined;
+  for (const [name, text] of Object.entries(files)) {
+    const found = unreadableShorthand(name, text);
+    if (found.length === 0) continue;
+    sources ??= await sourcesOnMain(ctx);
+    const wrote = await linesBranchWrote(ctx, name, sources.get(name));
+    for (const { written, firstLine, lastLine } of found) {
+      // A deletion touches it only by joining two of its lines (#1399 review F1).
+      const touched = wrote.some(([start, count]) =>
+        count === 0 ? firstLine <= start && start < lastLine : start <= lastLine && firstLine < start + count,
+      );
+      if (touched) refusals.push(shorthandRefusal(name, written));
+    }
+  }
+  return refusals;
 }
 
 /**
@@ -300,10 +349,7 @@ async function allocate(
   }
   const { files: rewritten, mapping, problems } = allocateProvisional(files, ledgers);
   // A range left as written is refused for what it is, not again as ids nobody declared.
-  const refusals = [
-    ...Object.entries(files).flatMap(([name, text]) => unreadableShorthand(name, text).map((written) => shorthandRefusal(name, written))),
-    ...problems.map((p) => `${p.path} ${p.detail}`),
-  ];
+  const refusals = [...(await branchShorthandRefusals(ctx, files)), ...problems.map((p) => `${p.path} ${p.detail}`)];
   const kept = new Set(problems.flatMap((p) => p.ids.map((id) => `${p.path}\0${id}`)));
   const renumbered: string[] = [];
   const design = `${ctx.prefix}${DESIGN_DIR}/`;

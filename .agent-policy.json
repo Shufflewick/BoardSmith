@@ -42,7 +42,8 @@
     "docs/superpowers/**/*.md",
     "CLAUDE.md",
     "scripts/ingest-harness/__fixtures__/README.md",
-    "scripts/ingest-harness/__fixtures__/interactive-nonconforming/**/*.md"
+    "scripts/ingest-harness/__fixtures__/interactive-nonconforming/**/*.md",
+    "scripts/*-browser.mjs"
   ],
   "slice": {
     "count": 20,
