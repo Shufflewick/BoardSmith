@@ -47,6 +47,9 @@ import { useAutoZoom, ZOOM_MIN } from './useAutoZoom';
 import { useBoardSize } from './useBoardSize';
 import { withoutCssZoom } from './css-zoom.test-helper.js';
 
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob('../components/GameShell.vue');
+
 /** The measured mobile case from the B20 report: a 375×812 viewport, a
  *  375×765 board region, and a board whose printed text cannot be truncated
  *  running 736px tall — taller than the region minus the Action Panel. */

@@ -156,6 +156,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob(['./GameShell.vue', './PlayShell.vue', '../composables/useTableSeat.ts']);
+
 describe('GameShell.vue source: panel ordering wiring', () => {
   const source = fs.readFileSync(
     path.join(path.dirname(fileURLToPath(import.meta.url)), 'GameShell.vue'),

@@ -20,6 +20,9 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob('./index.ts');
+
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const SRC = join(HERE, '..', '..', '..');
 const DICE_INDEX = join(HERE, 'index.ts');

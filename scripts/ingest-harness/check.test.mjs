@@ -26,6 +26,9 @@ import { CONFORMING_DIR, CONFORMING_SOURCE_HASH } from './conforming-fixture.tes
 import { tempTree } from '../../src/testing/temp-tree.test-helper.ts';
 import README from './README.md';
 
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob('./run.mjs');
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 

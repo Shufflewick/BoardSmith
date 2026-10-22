@@ -29,6 +29,9 @@ import { VERIFY_PIPELINE_STEPS } from '../../commands/verify-source-free.js';
 import { installedSkillsTree } from '../../commands/installed-skills.test-helper.js';
 import { skillMarkdown } from '../skill-markdown.test-helper.js';
 
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob('../../cli.ts');
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /** Read a bs/ shared-reference file relative to this test file's directory. */

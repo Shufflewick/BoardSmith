@@ -45,16 +45,14 @@
 
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { tempTree } from '../src/testing/temp-tree.test-helper.ts';
 import { toolCommand } from '../src/cli/lib/run-tool.ts';
-
-const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+import fallowrc from '../.fallowrc.json';
 
 /** The `health` block `boardsmith audit` grades against. */
-const HEALTH = JSON.parse(readFileSync(path.join(PROJECT_ROOT, '.fallowrc.json'), 'utf8')).health;
+const HEALTH = fallowrc.health;
 
 /**
  * A function whose cyclomatic complexity is exactly `cc` and whose COGNITIVE

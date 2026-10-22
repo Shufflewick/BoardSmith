@@ -75,6 +75,9 @@ import { WORLD_SCAFFOLD_SEATS } from '../lib/world-scaffold.js';
 import { validateAssetPaths } from './validate.js';
 import { ASSET_PATH_KEYS } from '../lib/config-schema.js';
 
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob('../cli.ts');
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 describe('generateGameTs — scaffolded game template', () => {
