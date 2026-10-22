@@ -251,6 +251,9 @@ export async function simulateRandomGames<G extends Game>(
       if (onGameComplete) {
         onGameComplete(result, { completed: total, total: count });
       }
+
+      // Lets the worker answer its test runner: vitest 3 fails the run when a worker is held over a minute (#1429).
+      await new Promise((resolve) => setImmediate(resolve));
     }
   }
 
