@@ -42,8 +42,7 @@
     "docs/superpowers/**/*.md",
     "CLAUDE.md",
     "scripts/ingest-harness/__fixtures__/README.md",
-    "scripts/ingest-harness/__fixtures__/interactive-nonconforming/**/*.md",
-    "scripts/*-browser.mjs"
+    "scripts/ingest-harness/__fixtures__/interactive-nonconforming/**/*.md"
   ],
   "slice": {
     "count": 20,
@@ -57,7 +56,7 @@
         "name": "browser",
         "run": "node bin/boardsmith.js test --browser",
         "after": "catalogue",
-        "whenChanged": "^(src/ui/|src/cli/dev-host/|src/world/|scripts/[^/]*-browser\\.mjs$)"
+        "whenChanged": "^(src/ui/|src/cli/dev-host/|src/world/|scripts/[^/]*-browser\\.mjs$|scripts/browser-harness\\.mjs$|scripts/browser-regressions\\.browser-test\\.mjs$|scripts/untracked-guard/|vitest\\.browser\\.config\\.ts$|bin/boardsmith\\.js$|src/cli/(cli|spawn-cli\\.test-helper)\\.ts$|src/cli/commands/(derived-line-pattern|dev|dev-server|dev-table-runtime|dev-world|fixture-table\\.test-helper|fixture-world\\.test-helper|game-runtime|ingest-archive|init|rulebook-sources|smoke|test|typecheck|verify-run)\\.ts$|src/cli/lib/(boardsmith-version|child-output|command-build-dir|config-schema|free-port|game-project|git-output|hash|ingest-hook|ledger-lock|path-inside|player-options|project-context|project-paths|project-scaffold|read-if-exists|run-tool|started-processes|test-progress-reporter|test-run-scope|user-name|user-path|vitest-run|world-entry|world-project|world-scaffold)\\.ts$|src/cli/lib/boardsmith\\.schema\\.json$|src/testing/(browser-smoke-clock|browser-smoke-verdict|installed-modules\\.test-helper)\\.ts$)"
       }
     ]
   },
