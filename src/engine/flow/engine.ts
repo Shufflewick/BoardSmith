@@ -1475,6 +1475,9 @@ export class FlowEngine<G extends Game = Game> {
     // Restore move-limit tracking for action steps
     this.restoreActionStepTracking();
 
+    // A position edited to a finished game (an arranged one, #1427) still says it awaits a seat; end it as run() would.
+    if (!this.complete && this.isOver()) this.endFlow();
+
     return { success: true };
   }
 
