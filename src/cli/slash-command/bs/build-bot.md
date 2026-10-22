@@ -1,11 +1,11 @@
 ---
 name: bs-build-bot
-description: Generate a complete bot opponent (all 5 hooks) for a BoardSmith game project. Use as a late sketch chunk after game-end/scoring exists (MCTS needs terminal states); also usable earlier for --bot solo-playtest seat-fill.
+description: Generate a complete bot opponent for a BoardSmith game project. Use as a late sketch chunk after game-end/scoring exists (MCTS needs terminal states); also usable earlier for --bot solo-playtest seat-fill.
 ---
 
 # BoardSmith bot Generation Instructions
 
-You are helping the user generate custom bot evaluation functions for their BoardSmith game. Your goal is to create a complete bot implementation with all 5 hooks, modeled on production-quality patterns.
+You are helping the user generate custom bot evaluation functions for their BoardSmith game. Your goal is to create a complete bot implementation with the five core hooks and every situational hook the game calls for, modeled on production-quality patterns.
 
 ## How to Talk to the Designer
 
@@ -49,9 +49,9 @@ opponent — stops the work and comes back in the report's `gate`/`questions` fi
 digest already settles, then return; the orchestrator asks, records the answer in the game's
 question ledger, and re-dispatches with it. Final message = the report, nothing else.
 
-## The 5 Bot Hooks
+## The Bot Hooks
 
-A complete bot implementation provides these hooks (all optional, but recommended):
+These are all of `BotStrategy`'s hooks. Each is optional. Every bot gets the five core hooks:
 
 1. **`objectives`** - Position evaluation (gradient scores 0.0-1.0)
 2. **`threatResponseMoves`** - Defensive/blocking moves with urgency flag
@@ -59,7 +59,13 @@ A complete bot implementation provides these hooks (all optional, but recommende
 4. **`moveOrdering`** - Prioritize promising moves for exploration
 5. **`uctConstant`** - Dynamic exploration tuning by game phase
 
-Reference: The Hex game bot implementation demonstrates all 5 hooks with production-quality patterns.
+Add a situational hook when the game calls for it:
+
+- **`candidateMoves`** - Decides which moves the search considers for a seat: at the root, in every tree node and in every playout. The other hooks see only what it returns. Add it when some legal moves are never worth searching, or when an action has a large or open-ended set of args that the search should not list in full. It is the only hook that leaves a move out of the search; `moveOrdering` only reorders.
+- **`determinize`** - Samples a world consistent with what the seat can see. Add it when the game has hidden information (hands, face-down cards, deck order); follow `node_modules/boardsmith/docs/bot-system.md` "Determinization: searching hidden state instead of skipping it".
+- **`hintTargetFromMove`** - Maps a move to the board element a hint highlights. Add it when a move's destination arg is named something other than `to`, `destination`, `target`, `square`, `cell` or `position`.
+
+Reference: The Hex game bot implementation demonstrates the five core hooks with production-quality patterns.
 
 ---
 
@@ -134,9 +140,9 @@ Ask game-type-specific questions to design the bot:
 
 ---
 
-## Phase 5: Generate All 5 Bot Hooks
+## Phase 5: Generate the Bot Hooks
 
-Create `bot.ts` with all 5 hooks following these patterns:
+Create `bot.ts` with the five core hooks and each situational hook the game calls for, following these patterns:
 
 ### File Structure
 
@@ -185,6 +191,13 @@ export function get<GameName>UctConstant(
   game: Game,
   playerIndex: number
 ): number { ... }
+
+// === SITUATIONAL: CANDIDATE MOVES (only when the game calls for it) ===
+export function get<GameName>CandidateMoves(
+  game: Game,
+  seat: number,
+  listMoves: () => BotMove[]
+): BotMove[] { ... }
 ```
 
 ---
@@ -400,6 +413,29 @@ export function getMoveOrdering(
   return scoredMoves.map(sm => sm.move);
 }
 ```
+
+---
+
+## Pattern Reference: Candidate Moves
+
+**Returns the moves the search considers for `seat`, which is not always the bot's own:**
+
+```typescript
+export function getCandidateMoves(
+  game: Game,
+  seat: number,
+  listMoves: () => BotMove[]
+): BotMove[] {
+  const moves = listMoves();
+  // Game-specific: drop moves that are legal but never worth searching
+  const useful = moves.filter(move => move.action !== 'movePack');
+  return useful.length > 0 ? useful : moves;
+}
+```
+
+- Return only legal moves, in wire form (element ids). The bot can play any move it is given.
+- Return at least one move whenever `listMoves()` returns any. An empty list throws.
+- For an action with a large or open-ended set of args, build the game's own short list of sensible moves instead of calling `listMoves`, which spares the full enumeration.
 
 ---
 

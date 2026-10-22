@@ -5,7 +5,7 @@
  * against a scratch temp directory with `skipLink: true`, then asserts the full installed
  * layout, that every SKILL.md entry-point relative reference resolves to a real file, that
  * no `.test.ts` leaks into the installed tree, that no design-game residue remains, and that
- * `bs-build-bot` (not `generate-bot`/`bs-generate-bot`) is present with its 5 bot hooks.
+ * `bs-build-bot` (not `generate-bot`/`bs-generate-bot`) is present naming every `BotStrategy` hook.
  *
  * `skipLink: true` is MANDATORY here — Plan 02 added it specifically so this test never runs
  * the `npm link --force` step and never leaves a global side-effect. The install only ever
@@ -23,6 +23,7 @@ import { installClaudeCommand, uninstallClaudeCommand, SKILL_NAMES, skillSourceF
 import { installedSkillsTree, uninstalledSkillsTree } from './installed-skills.test-helper.js';
 import { readBoardsmithVersion } from '../lib/boardsmith-version.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import type { BotStrategy } from '../../bot/index.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..', '..', '..');
@@ -221,18 +222,23 @@ describe('installClaudeCommand — real install to temp dir (DIST-01, DIST-02)',
   });
 
   describe('DIST-02', () => {
-    it('bs-build-bot renamed and repositioned: generate-bot/ and bs-generate-bot/ absent, bs-build-bot/SKILL.md present with all 5 hooks', () => {
+    it('bs-build-bot renamed and repositioned: generate-bot/ and bs-generate-bot/ absent, bs-build-bot/SKILL.md present naming every BotStrategy hook', () => {
       expect(existsSync(join(skills.root, 'generate-bot'))).toBe(false);
       expect(existsSync(join(skills.root, 'bs-generate-bot'))).toBe(false);
       const body = readFileSync(join(skills.root, 'bs-build-bot', 'SKILL.md'), 'utf-8');
-      for (const hook of [
-        'objectives',
-        'threatResponseMoves',
-        'playoutPolicy',
-        'moveOrdering',
-        'uctConstant',
-      ]) {
-        expect(body).toContain(hook);
+      // Typed by BotStrategy's keys, so a hook added there fails typecheck until it is listed here and in the skill (#1392).
+      const hooks: Record<keyof BotStrategy, true> = {
+        objectives: true,
+        threatResponseMoves: true,
+        playoutPolicy: true,
+        moveOrdering: true,
+        candidateMoves: true,
+        hintTargetFromMove: true,
+        uctConstant: true,
+        determinize: true,
+      };
+      for (const hook of Object.keys(hooks)) {
+        expect(body).toContain(`\`${hook}\``);
       }
       expect(body).toMatch(/late sketch chunk|terminal state|game-end/i);
     });
