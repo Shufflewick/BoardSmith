@@ -12,6 +12,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ElementCollection } from './element-collection.js';
 import { Game, GameElement, Piece, Player, Space } from '../index.js';
 import type { ElementClass, ElementFinder } from './types.js';
+// Type imports are erased; this links the test to the file for verify's related-tests check.
+import './types.js';
 import { isDevMode } from '../../utils/dev.js';
 import { createSeededRandom } from '../../utils/random.js';
 
