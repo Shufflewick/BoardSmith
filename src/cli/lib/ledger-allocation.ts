@@ -217,14 +217,16 @@ const SHORTHAND_AFTER_KIND = new RegExp(`\\b((?:${WORD_KINDS.join('|')})s?)(?=\\
  * Shorthand in file `path` that names no id the merge can map (#446), as written: a dash then a
  * plain number after a provisional id (`@a.1-3`, which may mean `@a.3` or real number 3), and a
  * shortened id right after a kind word (`Decision .2`), which takes no slug from an id before the
- * kind word. Either may wrap onto the next line after its dash or kind word. Quoted text
- * (`citableText`) is not read.
+ * kind word. Either may wrap onto the next line of its prose after its dash or kind word. Quoted
+ * text (`citableText`) is not read.
  */
 export function unreadableShorthand(path: string, text: string): string[] {
   const citable = citableText(path, text);
   return [
     // A kind word, or a range's dash, may wrap onto the next line; it is quoted on one.
-    ...[...citable.matchAll(DASH_THEN_NUMBER)].map((m) => ({ index: m.index, written: `${m[1]}${m[2].includes('\n') ? ' ' : m[2]}${m[3]}` })),
+    ...[...citable.matchAll(DASH_THEN_NUMBER)]
+      .filter((m) => oneParagraph(path, m[2]))
+      .map((m) => ({ index: m.index, written: `${m[1]}${m[2].includes('\n') ? ' ' : m[2]}${m[3]}` })),
     ...[...citable.matchAll(SHORTHAND_AFTER_KIND)].map((m) => ({ index: m.index, written: `${m[1]} ${m[2]}` })),
   ]
     .sort((a, b) => a.index - b.index)
