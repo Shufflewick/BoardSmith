@@ -1497,11 +1497,7 @@ export class MultiplayerHost {
       if (!this.heldByHuman(seat) && this.followerClientId === null) this.addBotSeat(seat);
     }
 
-    // The opening seat may belong to a bot (e.g. a bot dictator that acts first);
-    // drive any bot turns before handing control to the humans, then send state.
     this.announceRoster();
-    await session.host.runBotTurns();
-
     this.broadcastLobby();
     // WR-02: reinit every CURRENTLY seated + connected client, not just the
     // pre-await `humanSeats` snapshot. A `join` (handleJoin has no `starting`
@@ -1521,6 +1517,8 @@ export class MultiplayerHost {
       if (clientId === this.followerClientId) this.reinitFollower();
       else if (clientId) this.reinitSeat(clientId, seat);
     }
+    // After the reinit, so a long opening bot run reaches the seated pages as ordinary pushes (#1384).
+    await session.host.runBotTurns();
   }
 
   /**
