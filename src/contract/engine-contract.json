@@ -1,6 +1,6 @@
 {
-  "revision": 270,
-  "surfaceHash": "1cd31abda6ec9808",
+  "revision": 271,
+  "surfaceHash": "6589109a6e37a1e0",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -2103,6 +2103,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The Track, MonotonicTrack, UniqueTrack, CounterTrack and AbilityManager classes are gone from 'boardsmith' (#969); games use the plain-data track and ability functions from #779 (monotonicTrack/uniqueTrack/counterTrack, addToTrack, trackPoints, addAbility, spendAbility and the rest), which polyhedral-potions now does. No change to snapshots, views or ops. Platform: re-vendor; a polyhedral-potions build from before its #7 merge imports the removed classes and must be rebuilt."
+    },
+    {
+      "revision": 271,
+      "date": "2026-10-22",
+      "surfaceHash": "6589109a6e37a1e0",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "Game gains endFlowIfFinished(), which a host calls after restoring an arranged position so a finished game's flow ends and no seat is offered an action (#1427)"
     }
   ]
 }

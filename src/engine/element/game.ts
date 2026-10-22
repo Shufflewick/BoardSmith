@@ -3455,6 +3455,17 @@ export class Game<
   }
 
   /**
+   * End a restored flow whose game is finished, and finish the game with it,
+   * so no seat is offered an action the host refuses (#1427). A host calls it
+   * once a restore of a position it did not record (an arranged one) is
+   * complete, `afterRestore` included.
+   * @internal `restoreEarlierSnapshot` is its only caller.
+   */
+  endFlowIfFinished(): void {
+    if (this._flowEngine?.endIfOver()) this.#applyFlowCompletion(this._flowEngine.getState());
+  }
+
+  /**
    * Read the seeded RNG's state so it can be captured in a snapshot. It is a
    * {@link RandomState} string; restoring it makes the next `game.random()` draw
    * identical to the live game's (see setRandomState).
@@ -3520,7 +3531,11 @@ export class Game<
   }
 
   /**
-   * Get current player from flow (if awaiting input)
+   * The seat an `actionStep` is prompting right now, or none.
+   *
+   * Not the same as {@link Game.currentPlayer}, whose turn it is: while the
+   * flow runs (or has stopped in) an `execute`, the turn still belongs to a
+   * seat but no step is prompting anyone, so this says none (#1428).
    */
   getCurrentFlowPlayer(): P | undefined {
     const state = this._flowEngine?.getState();

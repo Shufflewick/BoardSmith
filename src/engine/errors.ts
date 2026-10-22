@@ -1,3 +1,5 @@
+import { devWarn } from '../utils/dev.js';
+
 /**
  * Engine errors whose message is written FOR the person who will read it.
  *
@@ -141,6 +143,22 @@ export class RedactedAttributeError extends NotSimulableError {
     );
     this.name = 'RedactedAttributeError';
   }
+}
+
+/**
+ * Says, once per action and seat, that the action gives the seat no move
+ * because a rule it runs read what this copy of the game was not told: move
+ * listing and a step's offer both answer that way (#19, #1431).
+ */
+export function warnNoMoveFromWhatThisCopyKnows(actionName: string, seat: number, error: NotSimulableError): void {
+  devWarn(
+    `redacted-enumeration-skip:${actionName}:${seat}`,
+    `Action "${actionName}" gave seat ${seat} no move because a rule it runs read information ` +
+      `this copy of the game does not have: ${error.message.split('\n')[0]} ` +
+      `This is expected inside a bot's search sandbox for a seat other than its own. If this ` +
+      `action should be searchable there, derive its condition, choices, disabled and validate ` +
+      `from public information, or check element.isAttributeRedacted(key) before reading.`,
+  );
 }
 
 /**

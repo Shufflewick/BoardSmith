@@ -4,8 +4,8 @@
  *
  * The rules are bundled with the engine inlined, so the policies and the game loop that drive
  * them must come out of the same bundle, or `mcts` would search on a second copy of the engine.
- * A worker thread imports the bundle and calls {@link playShard} on its slice of the games; a run
- * with `--jobs 1` and a replay call the same function in-process.
+ * Every run, `--jobs 1` and `--replay` included, plays on worker threads: each imports the bundle
+ * and calls {@link playShard} on its slice of the games (see sim-workers.ts).
  */
 import { playGame, type SingleGameResult } from '../../sim/play-game.js';
 import { random, mcts, type Policy, type SimulatedGame } from '../../sim/policies.js';
@@ -100,6 +100,7 @@ export async function playShard(bundle: SimulationBundle, request: ShardRequest)
   // Always a metrics object, so a game that records without declaring gameDefinition.metrics is refused, naming the metric.
   const recorded = { ...bundle.gameDefinition, metrics: bundle.gameDefinition.metrics ?? {} };
   const played: SingleGameResult[] = [];
+  // No pause between games, unlike simulateRandomGames: no message is ever sent to the worker this runs on, and terminate() stops it mid-game (#1430).
   for (const game of request.games) {
     played.push(await playGame(recorded, {
       playerCount: game.players,

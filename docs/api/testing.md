@@ -259,6 +259,13 @@ enabled action, one of those seats moves. When no seat has one, the game stops
 as stuck with "no player has an enabled action to take", followed by each
 refused action and its reason.
 
+The simulator lets the event loop run after each game, so a run of many games
+does not hold its vitest worker: vitest 3 fails the whole run when a worker
+cannot answer it for over a minute. A single game still runs without a break.
+It keeps the `setImmediate` it found when `boardsmith/testing` loaded, so
+`vi.useFakeTimers()` in a test does not stall it; fake timers a setup file
+installs before that load do.
+
 A game whose longest or heaviest configuration sits behind a game option needs
 `gameOptions`, or the run only ever measures the declared default:
 

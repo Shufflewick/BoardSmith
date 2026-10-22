@@ -1666,7 +1666,7 @@ export function restoreEarlierSnapshot<G extends Game>(
       'A restore only goes back in the same game; start a new game from it instead.',
     );
   }
-  return GameRunner.fromSnapshot(
+  const runner = GameRunner.fromSnapshot(
     { ...earlier, restoreEpoch: (live.restoreEpoch ?? 0) + 1 },
     GameClass,
     {
@@ -1676,6 +1676,9 @@ export function restoreEarlierSnapshot<G extends Game>(
       undo: options?.undo,
     },
   );
+  // `earlier` may be an arranged position, edited to a finished game after its flow was saved.
+  runner.game.endFlowIfFinished();
+  return runner;
 }
 
 /**

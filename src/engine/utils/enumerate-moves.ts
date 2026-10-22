@@ -28,7 +28,7 @@ import { elementsAsIds } from './arg-builder.js';
 import { isElement } from '../element/game-element.js';
 import { numberRangeValues } from '../action/number-labels.js';
 import { choiceValueKey } from '../action/choice-matching.js';
-import { MoveListTooLargeError, NotSimulableError } from '../errors.js';
+import { MoveListTooLargeError, NotSimulableError, warnNoMoveFromWhatThisCopyKnows } from '../errors.js';
 import { devWarn } from '../../utils/dev.js';
 import type { SeededRandom } from '../../utils/random.js';
 
@@ -214,14 +214,7 @@ export function enumerateActionMoves(
     // world that does not exist. Anything else propagates — a rule that
     // crashes is still a bug and still fails loud.
     if (!(error instanceof NotSimulableError)) throw error;
-    devWarn(
-      `redacted-enumeration-skip:${actionDef.name}:${player.seat}`,
-      `Action "${actionDef.name}" contributed no moves for seat ${player.seat} because a rule it ` +
-        `runs read information this copy of the game does not have: ${error.message.split('\n')[0]} ` +
-        `This is expected inside a bot's search sandbox for a seat other than its own. If this ` +
-        `action should be searchable there, derive its condition, choices, disabled and validate ` +
-        `from public information, or check element.isAttributeRedacted(key) before reading.`,
-    );
+    warnNoMoveFromWhatThisCopyKnows(actionDef.name, player.seat, error);
     return [];
   }
 }
