@@ -1,7 +1,6 @@
 import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join, dirname, basename, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
 import { describe, it, expect } from 'vitest';
 import ts from 'typescript';
 import {
@@ -30,6 +29,7 @@ import {
   generateTestTs,
 } from '../commands/init.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { gameProject } from './game-tsconfig.test-helper.js';
 
 // Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
 import.meta.glob('../../ui/global.d.ts');
@@ -71,24 +71,16 @@ const rulesDiagnostics = ((): string[] => {
   mkdirSync(join(rulesDir, 'data'));
   writeFileSync(join(rulesDir, 'data', 'cards.csv'), generateCardsCsv());
 
-  // vite/client is the scaffold tsconfig's one `types` entry, which types the `?raw` import.
-  const viteClient = join(dirname(createRequire(import.meta.url).resolve('vite/package.json')), 'client.d.ts');
-  const program = ts.createProgram([join(rulesDir, 'index.ts'), viteClient], {
-    // Mirrors the scaffold's generateTsConfig() compiler options.
-    strict: true,
-    noEmit: true,
-    skipLibCheck: true,
-    target: ts.ScriptTarget.ES2022,
-    module: ts.ModuleKind.ESNext,
-    moduleResolution: ts.ModuleResolutionKind.Bundler,
-    baseUrl: dir,
+  const project = gameProject(dir, ['rules/**/*.ts']);
+  const program = ts.createProgram(project.fileNames, {
+    ...project.options,
     // 'boardsmith' resolves to the same entry the package.json "." export
     // points at (src/engine/index.ts), matching a real scaffolded project.
-    paths: { boardsmith: [join(repoRoot, 'src', 'engine', 'index.ts')] },
+    paths: { ...project.options.paths, boardsmith: [join(repoRoot, 'src', 'engine', 'index.ts')] },
   });
-  return ts.getPreEmitDiagnostics(program)
-    .filter((d) => d.file && d.file.fileName.startsWith(dir))
-    .map((d) => `${d.file!.fileName.replace(dir, '')} TS${d.code}: ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`);
+  return [...project.errors, ...ts.getPreEmitDiagnostics(program)]
+    .filter((d) => !d.file || d.file.fileName.startsWith(dir))
+    .map((d) => `${d.file?.fileName.replace(dir, '') ?? 'tsconfig'} TS${d.code}: ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`);
 })();
 
 /**
@@ -110,17 +102,14 @@ const uiImportMetaEnvErrors = ((): { without: string[]; with: string[] } => {
   );
   const uiEntry = join(repoRoot, 'src', 'ui', 'index.ts');
 
-  const scaffold = ts.convertCompilerOptionsFromJson(JSON.parse(generateTsConfig()).compilerOptions, dir);
-  expect(scaffold.errors).toEqual([]);
+  const project = gameProject(dir, ['ui/**/*.ts']);
+  expect(project.errors).toEqual([]);
 
   const errors = (types: string[] | undefined): string[] => {
-    const program = ts.createProgram([join(uiDir, 'index.ts')], {
-      ...scaffold.options,
-      noEmit: true,
+    const program = ts.createProgram(project.fileNames, {
+      ...project.options,
       types,
-      // The converter leaves the scaffold's relative `paths` unanchored; a real project's resolve from its tsconfig dir.
-      baseUrl: dir,
-      paths: { ...scaffold.options.paths, 'boardsmith/ui': [uiEntry] },
+      paths: { ...project.options.paths, 'boardsmith/ui': [uiEntry] },
     });
     return ts
       .getPreEmitDiagnostics(program)
@@ -130,7 +119,7 @@ const uiImportMetaEnvErrors = ((): { without: string[]; with: string[] } => {
       .map((d) => ts.flattenDiagnosticMessageText(d.messageText, ' '))
       .filter((m) => m.includes('env'));
   };
-  return { without: errors([]), with: errors(scaffold.options.types) };
+  return { without: errors([]), with: errors(project.options.types) };
 })();
 
 describe('generateIndexHtml', () => {

@@ -1,5 +1,5 @@
 /**
- * THE CODE BLOCKS THE DOCS MARK FOR COMPILING, AND THE TSCONFIG A GAME COMPILES THEM UNDER.
+ * THE CODE BLOCKS THE DOCS MARK FOR COMPILING.
  *
  * A doc marks a fenced block as code the suite compiles by putting a line
  * `<!-- typecheck: <kind> [<path>] -->` directly above the block's opening
@@ -12,9 +12,8 @@
  *
  * `docs-game-typecheck.test.ts` compiles the `game` blocks (#511).
  * `aspect-boards-typecheck.test.ts` compiles the `board` blocks (#570), and
- * the boards the aspect templates teach under the same `gameTsConfig`.
+ * the boards the aspect templates teach, both under `gameTsConfig` (game-tsconfig.test-helper.ts).
  */
-import { generateTsConfig } from '../cli/lib/project-scaffold.js';
 
 /** One marked block: the doc it is in, the path its marker names, and its code. */
 export interface MarkedDocBlock {
@@ -135,23 +134,4 @@ export function gameBlockFiles(blocks: readonly MarkedDocBlock[]): Map<string, s
     files.set(file, block.code);
   }
   return files;
-}
-
-/** The game's tsconfig as `boardsmith init` writes it, compiling the files `include` names. */
-export function gameTsConfig(include: readonly string[]): string {
-  const scaffolded = JSON.parse(generateTsConfig()) as { compilerOptions: Record<string, unknown> };
-  return JSON.stringify(
-    {
-      ...scaffolded,
-      compilerOptions: {
-        ...scaffolded.compilerOptions,
-        noEmit: true,
-        // Resolve from where the file SITS, not from where it really lives (see consumerInstall).
-        preserveSymlinks: true,
-      },
-      include,
-    },
-    null,
-    2,
-  );
 }
