@@ -7,7 +7,8 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import {
-  Game, Player, Space, Card, Action, loop, eachPlayer, actionStep, sequence, simultaneousActionStep, execute, type GameOptions,
+  Game, Player, Space, Card, Action, loop, eachPlayer, actionStep, sequence, simultaneousActionStep, execute, RedactedAttributeError,
+  type GameOptions,
 } from '../engine/index.js';
 import { SeededRandom } from '../utils/random.js';
 import { _clearShownWarnings } from '../utils/dev.js';
@@ -96,9 +97,10 @@ describe('searchCopyForSeat (#1362)', () => {
   });
 });
 
-/** Seven's card (#1433): its own `color` shares a name with a player's identity field. */
+/** Seven's card (#1433): its own `color` and `seat` share names with a player's identity fields. */
 class TintedCard extends Card<TintedGame> {
   color = 'red';
+  seat = 2;
 }
 
 class TintedGame extends Game<TintedGame, Player> {
@@ -127,6 +129,15 @@ describe('a sampler and a hidden card\'s own color (#1433)', () => {
     });
 
     expect(copy.first(TintedCard)!.color).toBe('blue');
+  });
+
+  it('throws on reading a hidden piece\'s own seat, so a lookup by owner needs a sampler (#1434)', () => {
+    const truth = new TintedGame({ playerCount: 2, seed: 'truth' });
+    truth.startFlow();
+
+    const copy = searchCopyForSeat(truth, 1, 'search');
+
+    expect(() => copy.first(TintedCard, (card) => card.seat === 2)).toThrow(RedactedAttributeError);
   });
 });
 
