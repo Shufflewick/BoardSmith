@@ -358,6 +358,19 @@ describe("chunkMerge: the merged chunk's tests and typecheck, never the whole su
     expect((await chunkMerge(main, 'quests', { runTests: recording, typeCheck })).refusals).toEqual([]);
     expect(runs).toEqual([['tests/budget.test.ts']]);
   });
+
+  it('refuses a chunk whose step before spec changed game code, saying once to run chunk-merge again (#1201)', async () => {
+    const before = head();
+    const quests = await buildOnBranch('quests', 100);
+    await write(quests, { 'src/extra.ts': 'export const extra = 2;\n' });
+    git(quests, 'add', '-A');
+    git(quests, 'commit', '-q', '-m', 'chunk-quests/step-investigate');
+    const refusal = (await chunkMerge(main, 'quests', { runTests: budgetRunner, typeCheck })).refusals.join('\n');
+    expect(refusal).toMatch(/^Chunk "quests" changed files outside design\/ in a step before spec[\s\S]* changed src\/extra\.ts\./);
+    expect(refusal).toMatch(/Then run chunk-merge again\.$/);
+    expect(refusal).not.toMatch(/verify --chunk/);
+    expect([head(), status()]).toEqual([before, '']);
+  });
 });
 
 describe("chunkMerge: parallel-check's refusals for chunks built together (#820)", () => {

@@ -80,7 +80,7 @@ import {
 import { describeFinding, ledgerCheck, verifyResultsOnFile } from './ledger-check.js';
 import { reviewRoundVerifies } from '../lib/run-log-roles.js';
 import { type TestRunner, checkConstraints, runVitest, unranTestsProblem } from './constraint-check.js';
-import { chunkTests } from './verify.js';
+import { chunkTests, preSpecRefusal } from './verify.js';
 import { type TypeCheckRun, typeCheckProject } from './validate.js';
 import { chunkVerifyBase } from '../lib/chunk-commits.js';
 import { VERIFIED, assessSignoffs, checkSignoff, chunkCodeFiles, readStatus, unaccountedEdits } from './chunk-signoff.js';
@@ -465,6 +465,12 @@ async function signoffProblems(projectDir: string): Promise<string[]> {
 
 const tail = (output: string) => output.trimEnd().split('\n').slice(-25).join('\n');
 
+/** A step before spec that changed game code (#1201), as chunk-merge refuses it. */
+async function preSpecProblems(ctx: MergeContext): Promise<string[]> {
+  const early = await preSpecRefusal(ctx.projectDir, ctx.slug, 'chunk-merge');
+  return early ? [`${early.summary} ${early.next}`] : [];
+}
+
 /**
  * Every tree-wide check on the combined tree, then, only if they pass, the merged chunk's fast
  * checks (#987): the tests it added or changed since its base, and typecheck, as its gates ran them
@@ -478,6 +484,7 @@ async function combinedTreeProblems(ctx: MergeContext, alongside: string[], { ru
     ...ledgers.findings.map(describeFinding),
     ...(await checkConstraints(ctx.projectDir, { runTests })).refusals,
     ...(await signoffProblems(ctx.projectDir)),
+    ...(await preSpecProblems(ctx)),
   ];
   if (problems.length > 0) return problems;
   const base = await chunkVerifyBase(ctx.projectDir, ctx.slug);
