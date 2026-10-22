@@ -72,6 +72,7 @@ export function stubActionController(overrides: Record<string, unknown> = {}) {
     getValidElements: vi.fn(() => [] as unknown[]),
     getCollectedPick: vi.fn(() => null),
     isMultiSelectSelected: vi.fn(() => false),
+    canClear: vi.fn(() => true),
 
     // Reached from event handlers only.
     start: vi.fn(async () => {}),

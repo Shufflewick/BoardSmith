@@ -13,10 +13,8 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { applyTheme, themeCSS, SEAT_PALETTE } from './theme.js';
+import docs from '../../docs/ui-components.md';
 
 function cleanup(): void {
   // Remove injected style tag
@@ -193,11 +191,6 @@ describe('applyTheme — base injection idempotence', () => {
  */
 describe('docs/ui-components.md "Theming" example matches the real contract', () => {
   beforeEach(cleanup);
-
-  const docs = readFileSync(
-    join(dirname(fileURLToPath(import.meta.url)), '../../docs/ui-components.md'),
-    'utf-8',
-  );
 
   // The prose deliberately names ThemeConfig to say it does NOT exist; what must never
   // come back is importing it or annotating with it.

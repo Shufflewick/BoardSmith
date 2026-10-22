@@ -215,7 +215,11 @@ await runBrowserRegression(
         modal.style.cssText = 'position: absolute; inset: 0; background: teal';
         host.append(modal);
       });
-      const underModal = await waitUntil(() => topmost(frame), (now) => now.bubble === 'DIV.test-modal');
+      // The bar is waited for too: after the resize the closed debug drawer slides from its phone spot to its desktop spot across the toggle (#1360).
+      const underModal = await waitUntil(
+        () => topmost(frame),
+        (now) => now.bubble === 'DIV.test-modal' && now.bar === 'itself' && now.toggle === 'itself',
+      );
       await check('a bubble about the board is drawn under an open game modal (#1346)', async () => {
         assert(underModal.bubble === 'DIV.test-modal', `the middle of the bubble shows ${underModal.bubble}, not the modal`);
       });

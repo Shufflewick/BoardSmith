@@ -1,14 +1,10 @@
 /**
  * Scoring system exports
  *
- * Provides track abstractions for dice/roll-and-write games.
+ * Plain-data scoring tracks for dice and roll-and-write games.
  */
 
 export {
-  Track,
-  MonotonicTrack,
-  UniqueTrack,
-  CounterTrack,
   monotonicTrack,
   uniqueTrack,
   counterTrack,

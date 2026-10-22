@@ -3,7 +3,12 @@ import { resolve } from 'path';
 import vue from '@vitejs/plugin-vue';
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [
+    vue(),
+    // A test imports the Markdown it reads, so `--changed` runs it when that Markdown changes (#1370).
+    // shortcut: vitest 3 drops `?raw` imports from `--changed`; on vitest 5 use `?raw` and delete this.
+    { name: 'markdown-as-text', transform: (text, id) => (id.endsWith('.md') ? `export default ${JSON.stringify(text)};` : undefined) },
+  ],
   test: {
     globals: true,
     environment: 'node',

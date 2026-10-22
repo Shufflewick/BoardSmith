@@ -1741,6 +1741,8 @@ Don't use `followUp` when:
 
 When followUp args are displayed in the action panel (as chips showing context), plain IDs like `mercId: 51` display as "51" which isn't user-friendly.
 
+An arg that pre-fills a `chooseElement` or `chooseElements` pick of the follow-up action with element ids needs neither option below: the chip reads what that pick's own choices would, its `display()`, else the element's notation or name (#1378). A `display` you pass still wins. The options are for every other arg, such as an id carried in a `chooseFrom` pick or in args no pick reads.
+
 **Option 1: Pass objects with a `name` or `label` property**
 
 ```typescript
