@@ -86,8 +86,8 @@ function vitestArgs(patterns: string[], options: TestOptions): string[] {
 
 /**
  * THE BOARDSMITH REPOSITORY TYPE-CHECKS BEFORE IT TESTS (#312), so a type error stops the run,
- * and the merge that runs it, before a test starts. `--browser` does not: it runs after the
- * default suite (in `agent-policy verify`, on the same commit), which has type-checked already.
+ * and the merge that runs it, before a test starts. `--browser` does not: the merge runs it after
+ * its `typecheck` check, on the same commit, so the type check has run already.
  */
 async function typecheckFirst(cwd: string, options: TestOptions): Promise<void> {
   if (options.browser) return;
