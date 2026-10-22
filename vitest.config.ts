@@ -1,6 +1,9 @@
-import { defineConfig } from 'vitest/config';
-import { resolve } from 'path';
+import { configDefaults, defineConfig } from 'vitest/config';
+import { resolve, sep } from 'path';
 import vue from '@vitejs/plugin-vue';
+
+// vitest matches rerun triggers against absolute paths and its `**` skips dot folders, so a trigger is anchored here (#1307).
+const CHECKOUT_GLOB = __dirname.split(sep).join('/').replace(/[\\*?[\]{}()!+@|]/g, '\\$&');
 
 export default defineConfig({
   plugins: [
@@ -27,6 +30,8 @@ export default defineConfig({
     // ignores (#579): scripts/untracked-guard/guard.mjs says why and how to fix one.
     globalSetup: ['scripts/untracked-guard/global-setup.mjs'],
     setupFiles: ['scripts/untracked-guard/after-each-file.mjs'],
+    // vitest 3's default config glob (`**/vitest.config.*/**`) misses the file itself (#1419); vitest 5's default matches it, but not under a dot folder.
+    forceRerunTriggers: [...configDefaults.forceRerunTriggers, `${CHECKOUT_GLOB}/{vitest,vite}.config.*`],
   },
   resolve: {
     alias: {
