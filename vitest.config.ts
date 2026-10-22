@@ -9,6 +9,8 @@ export default defineConfig({
     // shortcut: vitest 3 drops `?raw` imports from `--changed`; on vitest 5 use `?raw` and delete this.
     { name: 'markdown-as-text', transform: (text, id) => (id.endsWith('.md') ? `export default ${JSON.stringify(text)};` : undefined) },
   ],
+  // A test links the dev host pages it serves with `import.meta.glob`, and `--changed` reads each linked file as a module (#1416).
+  assetsInclude: ['**/*.html'],
   test: {
     globals: true,
     environment: 'node',

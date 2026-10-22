@@ -7,6 +7,8 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(__dirname, '__fixtures__', 'asset-scan');
+// These tests scan the fixtures by their paths; this links them to the fixtures, loading nothing (#1416).
+import.meta.glob('./__fixtures__/asset-scan/**');
 
 /** Write a single UI source file into a throwaway project and scan it. */
 function scanWith(files: Record<string, string>): ReturnType<typeof scanAssetReachability> {

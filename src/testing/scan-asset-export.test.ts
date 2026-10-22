@@ -18,6 +18,8 @@ const WRAPPED_FIXTURE = join(
   'asset-scan',
   'wrapped',
 );
+// This test scans the fixture by its path; this links it to the fixture, loading nothing (#1416).
+import.meta.glob('../cli/lib/__fixtures__/asset-scan/wrapped/**');
 
 describe('scanAssetReachability export surface (boardsmith/asset-scan)', () => {
   it('resolves to a callable function', () => {

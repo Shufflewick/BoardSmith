@@ -375,9 +375,6 @@ async function dealCard(card: GameViewElement | undefined) {
 ```typescript
 // Drag-drop styles
 import 'boardsmith/ui/animation/drag-drop.css';
-
-// Card flip animation styles
-import 'boardsmith/ui/animation/card-flip.css';
 ```
 
 ## See Also
