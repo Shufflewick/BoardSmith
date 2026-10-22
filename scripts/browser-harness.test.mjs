@@ -30,6 +30,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { browserScripts, recordWorldFrames, runBrowserRegression } from './browser-harness.mjs';
 import { BROWSER_SUITE_CONFIG } from '../src/cli/commands/test.ts';
+// Imported so `vitest run --changed` runs this file, which lists the suite through it, when it changes (#1375).
+import '../vitest.browser.config.ts';
 
 const SCRIPTS = dirname(fileURLToPath(import.meta.url));
 const REPO = join(SCRIPTS, '..');
@@ -181,10 +183,6 @@ describe('#533: every browser regression runs automatically', () => {
     for (const path of ['src/bot/mcts-bot.ts', 'src/cli/commands/verify.ts', 'docs/browser-testing.md', 'vitest.config.ts']) {
       expect(runsFor(path), path).toBe(false);
     }
-  });
-
-  it('needs no related vitest tests for the browser config alone, since no unit test imports it (#1375)', () => {
-    expect(policy.untested, 'untested in .agent-policy.json').toContain('vitest.browser.config.ts');
   });
 
   it('runs the browser suite after typecheck and before the slow related tests', () => {
