@@ -11,6 +11,9 @@ import { MultiplayerHost, type HostOutbound, type MultiplayerHostOptions } from 
 import { rulesProject } from './rules-project.test-helper.js';
 import type { createDevHostClientMemory } from './test-client-memory.js';
 
+// The bundle runs the rules worker by its path; this links the tests that use this to it, loading nothing (#1415).
+import.meta.glob('./table-rules-worker.ts');
+
 /** A table project whose rules are `source`, and the one move an author makes to it: saving them. */
 export function tableProject(prefix: string, source: string) {
   const { rulesPath, tempDir, save } = rulesProject(prefix, source);

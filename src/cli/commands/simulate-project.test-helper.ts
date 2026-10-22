@@ -12,6 +12,8 @@ import { fileURLToPath } from 'node:url';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
+// The tests that use this run the fixture by its path; this links them to it, loading nothing (#1415).
+import.meta.glob('./simulate.fixture.ts');
 
 export function scoreProject(): string {
   const dir = tempTree('boardsmith-simulate-score-');

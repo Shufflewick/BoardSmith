@@ -19,6 +19,8 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixtureGame = resolve(here, 'simulate.fixture.ts');
+// These tests run the fixture by its path; this links them to it, loading nothing (#1415).
+import.meta.glob('./simulate.fixture.ts');
 const engine = resolve(here, '../../engine/index.ts');
 
 const dir = tempTree('boardsmith-raw-data-');
