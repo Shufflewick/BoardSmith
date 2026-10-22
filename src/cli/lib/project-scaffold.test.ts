@@ -94,8 +94,9 @@ const rulesDiagnostics = ((): string[] => {
 /**
  * The ImportMeta.env errors in a UI entry that re-exports a type from
  * `boardsmith/ui`, which reaches `useActionController.ts`'s
- * `import.meta.env.DEV` (a Vite-ambient global), compiled without and with
- * `types: ['vite/client']` (Phase 149 dry-run Defect 1, WR-02).
+ * `import.meta.env.DEV` (a Vite-ambient global), compiled under the compiler
+ * options `generateTsConfig()` returns, and under the same options with
+ * `types` emptied (Phase 149 dry-run Defect 1, WR-02, #1423).
  */
 const uiImportMetaEnvErrors = ((): { without: string[]; with: string[] } => {
   const dir = tempTree('bs-scaffold-ui-compile-');
@@ -109,18 +110,17 @@ const uiImportMetaEnvErrors = ((): { without: string[]; with: string[] } => {
   );
   const uiEntry = join(repoRoot, 'src', 'ui', 'index.ts');
 
-  const errors = (types: string[]): string[] => {
+  const scaffold = ts.convertCompilerOptionsFromJson(JSON.parse(generateTsConfig()).compilerOptions, dir);
+  expect(scaffold.errors).toEqual([]);
+
+  const errors = (types: string[] | undefined): string[] => {
     const program = ts.createProgram([join(uiDir, 'index.ts')], {
-      strict: true,
+      ...scaffold.options,
       noEmit: true,
-      skipLibCheck: true,
-      target: ts.ScriptTarget.ES2022,
-      module: ts.ModuleKind.ESNext,
-      moduleResolution: ts.ModuleResolutionKind.Bundler,
-      lib: ['lib.es2022.d.ts', 'lib.dom.d.ts', 'lib.dom.iterable.d.ts'],
       types,
+      // The converter leaves the scaffold's relative `paths` unanchored; a real project's resolve from its tsconfig dir.
       baseUrl: dir,
-      paths: { 'boardsmith/ui': [uiEntry] },
+      paths: { ...scaffold.options.paths, 'boardsmith/ui': [uiEntry] },
     });
     return ts
       .getPreEmitDiagnostics(program)
@@ -130,7 +130,7 @@ const uiImportMetaEnvErrors = ((): { without: string[]; with: string[] } => {
       .map((d) => ts.flattenDiagnosticMessageText(d.messageText, ' '))
       .filter((m) => m.includes('env'));
   };
-  return { without: errors([]), with: errors(['vite/client']) };
+  return { without: errors([]), with: errors(scaffold.options.types) };
 })();
 
 describe('generateIndexHtml', () => {
@@ -345,9 +345,9 @@ describe('generateTsConfig — vite/client types (Phase 149 dry-run Defect 1)', 
     // The string assertion above proves the config CONTAINS 'vite/client'; it
     // does not prove that removing it re-breaks a fresh scaffold. This test
     // reproduces the actual failing graph (see uiImportMetaEnvErrors), compiled
-    // without and with `types: ['vite/client']`: the ImportMeta.env error
-    // appears without it and vanishes with it. Dropping 'vite/client' from
-    // generateTsConfig() therefore turns this test RED.
+    // under generateTsConfig()'s own options and with `types` emptied: the
+    // ImportMeta.env error appears without the types and vanishes with them.
+    // Dropping 'vite/client' from generateTsConfig() therefore turns this test RED.
     expect(uiImportMetaEnvErrors.without.length).toBeGreaterThan(0);
     expect(uiImportMetaEnvErrors.with).toEqual([]);
   });
