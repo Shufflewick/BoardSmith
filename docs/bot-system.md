@@ -539,9 +539,10 @@ against the sampler rather than swallowed.
   a move only rare worlds allow is starved forever.
 - **The root searches the union.** Root moves accumulate across samples instead
   of being capped to one world's list. A forced `threatResponseMoves` block
-  still wins: the game said MUST. Each world checks a forced move against all
-  of its moves, not the 20 per action it samples elsewhere, so a forced move is
-  searched in every world that allows it (#1391).
+  still wins: the game said MUST. Each world is asked whether it takes each
+  forced move, with the same gates enumeration applies, rather than finding it
+  in that world's sampled move list, so a forced move is searched in every world
+  that allows it, however many moves its action has (#1391).
 - **Costs nothing when absent.** No sampler means no sampling, no per-world
   refresh, and the classic UCT term unchanged. Games without hidden state pay
   for none of this.
