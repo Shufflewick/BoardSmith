@@ -86,8 +86,7 @@
       "types": "./src/world/index.ts",
       "import": "./src/world/index.ts"
     },
-    "./ui/animation/drag-drop.css": "./src/ui/animation/drag-drop.css",
-    "./ui/animation/card-flip.css": "./src/ui/animation/card-flip.css"
+    "./ui/animation/drag-drop.css": "./src/ui/animation/drag-drop.css"
   },
   "scripts": {
     "setup": "npm link"

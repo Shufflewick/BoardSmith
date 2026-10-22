@@ -13,8 +13,14 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { applyTheme, themeCSS, SEAT_PALETTE } from './theme.js';
 import docs from '../../docs/ui-components.md';
+
+// A test reads the stylesheet by its path; this links it to the stylesheet, loading nothing (#1416).
+import.meta.glob('./animation/drag-drop.css');
 
 function cleanup(): void {
   // Remove injected style tag
@@ -71,6 +77,13 @@ describe('themeCSS — Slate default emission', () => {
     expect(themeCSS).toContain('--bsg-draggable-cursor: grab');
     expect(themeCSS).toContain('--bsg-dragging-cursor: grabbing');
     expect(themeCSS).toContain('--bsg-drag-transition:');
+  });
+
+  it('defines every token drag-drop.css reads, so no drag style falls back to nothing', () => {
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'animation', 'drag-drop.css'), 'utf-8');
+    const read = [...new Set([...css.matchAll(/var\((--bsg-[a-z0-9-]+)\)/g)].map((m) => m[1]!))];
+    expect(read).toContain('--bsg-draggable-cursor');
+    expect(read.filter((token) => !themeCSS.includes(`${token}:`))).toEqual([]);
   });
 
   it('does not contain dead light-blue defaults', () => {

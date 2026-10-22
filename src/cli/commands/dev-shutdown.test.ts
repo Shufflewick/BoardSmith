@@ -29,6 +29,9 @@ import { commandBuildDirs } from '../lib/command-build-dirs.test-helper.js';
 import { DEV_HOST_WS_PATH } from '../dev-host/socket-path.js';
 import { WORLD_WS_PATH } from './dev-world.js';
 
+// The dev server serves its host page by its path; this links these tests to it, loading nothing (#1416).
+import.meta.glob('../dev-host/host.html');
+
 /**
  * #391: WHAT `.boardsmith/` HOLDS THAT DEV DID NOT MAKE, AND MUST NOT REMOVE.
  *
