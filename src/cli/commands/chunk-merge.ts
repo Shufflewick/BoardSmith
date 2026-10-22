@@ -287,19 +287,23 @@ function shorthandRefusal(name: string, written: string): string {
 }
 
 /**
- * The `unreadableShorthand` in `name` on the combined tree that the branch wrote: each one already
- * in the main line's copy is left out, as the branch did not write it and cannot fix it (#1395).
+ * A refusal for each `unreadableShorthand` in `files` (the combined tree) that the branch wrote: each
+ * one already in the main line's copy is left out, as the branch did not write it and cannot fix it (#1395).
  */
-async function branchShorthand(ctx: MergeContext, name: string, text: string): Promise<string[]> {
-  const written = unreadableShorthand(name, text);
-  if (written.length === 0) return written;
-  // A file the branch added has no main-line copy.
-  const onMain = unreadableShorthand(name, await git(ctx.top, ['show', `${ctx.mainCommit}:${name}`]).catch(() => ''));
-  return written.filter((w) => {
-    const at = onMain.indexOf(w);
-    if (at !== -1) onMain.splice(at, 1);
-    return at === -1;
-  });
+async function branchShorthandRefusals(ctx: MergeContext, files: Record<string, string>): Promise<string[]> {
+  const refusals: string[] = [];
+  for (const [name, text] of Object.entries(files)) {
+    const written = unreadableShorthand(name, text);
+    if (written.length === 0) continue;
+    // A file the branch added has no main-line copy.
+    const onMain = unreadableShorthand(name, await git(ctx.top, ['show', `${ctx.mainCommit}:${name}`]).catch(() => ''));
+    for (const w of written) {
+      const at = onMain.indexOf(w);
+      if (at === -1) refusals.push(shorthandRefusal(name, w));
+      else onMain.splice(at, 1);
+    }
+  }
+  return refusals;
 }
 
 /**
@@ -317,12 +321,8 @@ async function allocate(
     if (text !== undefined) files[name] = text;
   }
   const { files: rewritten, mapping, problems } = allocateProvisional(files, ledgers);
-  const refusals: string[] = [];
-  for (const [name, text] of Object.entries(files)) {
-    for (const written of await branchShorthand(ctx, name, text)) refusals.push(shorthandRefusal(name, written));
-  }
   // A range left as written is refused for what it is, not again as ids nobody declared.
-  refusals.push(...problems.map((p) => `${p.path} ${p.detail}`));
+  const refusals = [...(await branchShorthandRefusals(ctx, files)), ...problems.map((p) => `${p.path} ${p.detail}`)];
   const kept = new Set(problems.flatMap((p) => p.ids.map((id) => `${p.path}\0${id}`)));
   const renumbered: string[] = [];
   const design = `${ctx.prefix}${DESIGN_DIR}/`;
