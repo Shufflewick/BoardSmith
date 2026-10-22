@@ -216,8 +216,8 @@ const SHORTHAND_AFTER_KIND = new RegExp(`\\b(?:${WORD_KINDS.join('|')})s?[ \\t]+
 /**
  * Shorthand in file `path` that names no id the merge can map (#446), as written: a dash then a
  * plain number after a provisional id (`@a.1-3`, which may mean `@a.3` or real number 3), and a
- * shortened id right after a kind word (`Decision .2`), which has no provisional id before it to
- * take its slug from. Quoted text (`citableText`) is not read.
+ * shortened id right after a kind word (`Decision .2`), which takes no slug from an id before the
+ * kind word. Quoted text (`citableText`) is not read.
  */
 export function unreadableShorthand(path: string, text: string): string[] {
   const citable = citableText(path, text);
