@@ -9,6 +9,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import type { UseActionControllerReturn } from './useActionControllerTypes.js';
+// Type imports are erased; this links the test to the file for verify's related-tests check.
+import './useActionControllerTypes.js';
 import docs from '../../../docs/ui-components.md';
 
 type Table = 'Controller Methods' | 'Controller State';
