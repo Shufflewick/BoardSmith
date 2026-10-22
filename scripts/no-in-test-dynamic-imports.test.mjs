@@ -160,13 +160,15 @@ describe('unexplainedDynamicImports', () => {
   });
 });
 
+// Parsing every test file is slow on a busy machine, so it runs here, where no test timeout applies (#1422).
+const findings = trackedTestFiles(['src', 'docs', 'scripts']).flatMap(({ path, text }) =>
+  unexplainedDynamicImports(path, text).map(
+    ({ line, text }) => `${path}:${line}  ${text}`,
+  ),
+);
+
 describe('the test suite (#365)', () => {
   it('loads no module inside a function without saying why', () => {
-    const findings = trackedTestFiles(['src', 'docs', 'scripts']).flatMap(({ path, text }) =>
-      unexplainedDynamicImports(path, text).map(
-        ({ line, text }) => `${path}:${line}  ${text}`,
-      ),
-    );
     expect(
       findings,
       'These tests load a module inside a function, so the first load counts against a test '
