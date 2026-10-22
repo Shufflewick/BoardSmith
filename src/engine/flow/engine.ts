@@ -3,7 +3,7 @@ import type { VisibilityState } from '../element/visibility.js';
 import { GameElement, hasZoneVisibility, withheldFromSeat, WITHHELD_PILE_BRANCH } from '../element/game-element.js';
 import { Player } from '../player/player.js';
 import { devWarn, isDevMode } from '../../utils/dev.js';
-import { PlayerFacingError } from '../errors.js';
+import { PlayerFacingError, RedactedAttributeError, warnNoMoveFromWhatThisCopyKnows } from '../errors.js';
 import { withDevDetail } from '../action/rules-error.js';
 import { changing, flowStateRead } from '../element/state-version.js';
 import type { ActionResult, FollowUpAction } from '../action/types.js';
@@ -350,12 +350,22 @@ export class FlowEngine<G extends Game = Game> {
    * The names in `declared` that `player` can take right now: the one answer
    * every step gives to "which of this step's actions does this seat get".
    * Refuses an unregistered name first (see requireRegisteredActions), and
-   * reads the seat's available actions once, not once per declared name.
+   * checks only the declared actions, so an action the step does not offer never runs.
    */
   private offeredActions(declared: string[], player: Player, stepName: string): string[] {
     this.requireRegisteredActions(declared, stepName);
-    const available = new Set(this.game.getAvailableActions(player).map((a) => a.name));
-    return declared.filter((name) => available.has(name));
+    const executor = this.game.getActionExecutor();
+    return declared.filter((name) => {
+      const action = this.game.getAction(name)!;
+      try {
+        return executor.isActionAvailable(action, player);
+      } catch (error) {
+        // Only a search copy withholds attributes, and there the seat gets no move, as move listing gives it (#1431).
+        if (!(error instanceof RedactedAttributeError)) throw error;
+        warnNoMoveFromWhatThisCopyKnows(name, player.seat, error);
+        return false;
+      }
+    });
   }
 
   /**
