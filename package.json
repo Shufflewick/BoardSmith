@@ -112,6 +112,7 @@
     "eslint": "10.11.0",
     "fallow": "3.28.0",
     "jscpd": "5.3.2",
+    "mdast-util-from-markdown": "^2.1.0",
     "open": "^10.0.0",
     "ora": "^8.0.0",
     "typescript": "^5.7.0",

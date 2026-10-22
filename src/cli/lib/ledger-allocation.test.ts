@@ -203,7 +203,6 @@ describe('quoted ids are never citations (#437)', () => {
         `a \`b${eol}+\tSee Ruling @a.1 and \`c${eol}`,
         `a \`b${eol}* See Ruling @a.1 and \`c${eol}`,
         `a \`b${eol}1. See Ruling @a.1 and \`c${eol}`,
-        `a \`b${eol}  01) See Ruling @a.1 and \`c${eol}`,
         `- a \`b${eol}- See Ruling @a.1 and \`c${eol}`,
         `> a \`b${eol}> - See Ruling @a.1 and \`c${eol}`,
         `a \`b${eol}---${eol}See Ruling @a.1 and \`c${eol}`,
@@ -226,6 +225,11 @@ describe('quoted ids are never citations (#437)', () => {
       const commented = `> x <!-- c${eol}> d --> \`Ruling${eol}> @x.1\` here${eol}`;
       expect({ eol, cites: provisionalReferences('design/notes.md', commented) }).toEqual({ eol, cites: [] });
     }
+  });
+
+  // micromark lets only a one-digit 1 interrupt a paragraph, though CommonMark's start number of 01 is 1 (micromark/micromark#254).
+  it.fails('ends a code span at a list item numbered 01, once micromark/micromark#254 is fixed', () => {
+    expect(provisionalReferences('design/notes.md', 'a `b\n  01) See Ruling @a.1 and `c\n')).toEqual(['Ruling @a.1']);
   });
 
   // #1401 review: a quote prefix the pattern could split two ways at each marker took twice as long per marker.
@@ -646,5 +650,64 @@ describe('a Markdown line that starts a block does not continue a wrapped line (
     expect(shorthandWritten('design/notes.md', '> Rulings @a.1 -\r\n> 3 apply.\r\n')).toEqual(['@a.1 - 3']);
     expect(shorthandWritten('design/notes.md', '> > Rulings @a.1 -\n> > 3 apply.\n')).toEqual(['@a.1 - 3']);
     expect(shorthandWritten('tools/deal.py', '# Rulings @a.1 -\n# 3 apply.\n')).toEqual(['@a.1 - 3']);
+  });
+});
+
+/**
+ * #1402, #1404: whether a line starts a block depends on the list item or blockquote it is in, and on
+ * the columns a tab reaches, which no regex can track. A Markdown file is read with a CommonMark parser
+ * (#1403), so a code span, a wrap and a stray `.N` each stay inside the paragraph the parser finds.
+ */
+describe('Markdown blocks inside lists and blockquotes (#1402, #1404)', () => {
+  it('ends a code span where a list item or blockquote starts a block, and only there, in an LF or a CRLF file', () => {
+    for (const eol of ['\n', '\r\n']) {
+      const cases: Array<[string[], string[]]> = [
+        // An unquoted = line after a quote or list paragraph continues it lazily, as text (#1402 case 1).
+        [['> see `Ruling', '===', '@x.1` here'], []],
+        [['- see `Ruling', '===', '@x.1` here'], []],
+        // An underline may sit up to 3 spaces past the list item's content (#1402 case 2).
+        [['1. a `b', '    ===', '    See Ruling @a.1 and `c'], ['Ruling @a.1']],
+        // A > > line in a quote paragraph opens a nested quote (#1402 case 3).
+        [['> a `b', '> > See Ruling @a.1 and `c'], ['Ruling @a.1']],
+        // In a list, an item numbered 2 starts a sibling item (#1402 case 4).
+        [['1. use `foo', '2. See Ruling @a.1 and `bar'], ['Ruling @a.1']],
+        // A quote line after a lazy line is the same quote paragraph (#1402 case 5).
+        [['> a `b', 'lazy text', '> See Ruling @a.1 and `c'], []],
+        // A sublist at a content indent of 4 or more starts a block (#1402 case 6).
+        [['10. a `b', '    - See Ruling @a.1 and `c'], ['Ruling @a.1']],
+        // A space then a tab between quote markers reads as two markers (#1404).
+        [['> > a `b', '> \t>', '> > See Ruling @a.1 and `c'], ['Ruling @a.1']],
+        // An indented code block is code, as a fenced one is (#1403).
+        [['Intro.', '', '    ### Ruling @x.1', '', 'Ruling @a.1'], ['Ruling @a.1']],
+      ];
+      for (const [lines, cites] of cases) {
+        const text = lines.join(eol) + eol;
+        expect({ text, cites: provisionalReferences('design/notes.md', text) }).toEqual({ text, cites });
+      }
+    }
+  });
+
+  it('reads no wrapped dash range onto the next list item or a nested one, in an LF or a CRLF file (#1402)', () => {
+    for (const eol of ['\n', '\r\n']) {
+      for (const lines of [
+        ['1. Changes since Ruling @a.1 -', '2. Players draw first'],
+        ['- Rules', '    - Ruling @a.1 -', '      1. three players'],
+      ]) {
+        const text = lines.join(eol) + eol;
+        expect({ text, read: shorthandWritten('design/notes.md', text) }).toEqual({ text, read: [] });
+      }
+    }
+  });
+
+  it('reads a line of quote markers with a space then a tab between them as the end of a paragraph (#1404)', () => {
+    const DECISIONS = NUMBERED_LEDGER_SPECS.find((s) => s.kind === 'Decision')!;
+    for (const eol of ['\n', '\r\n']) {
+      const notes = ['> > Decision @a.1 sets the deck.', '> \t>', '> > .2 of the deck is drawn.'].join(eol) + eol;
+      const result = allocateProvisional(
+        { 'design/DECISIONS.md': '### Decision @a.1\n\n### Decision @a.2\n', 'design/notes.md': notes },
+        [{ spec: DECISIONS, path: 'design/DECISIONS.md' }],
+      );
+      expect({ eol, problems: result.problems }).toEqual({ eol, problems: [] });
+    }
   });
 });
