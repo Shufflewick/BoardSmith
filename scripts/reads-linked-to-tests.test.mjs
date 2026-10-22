@@ -40,9 +40,25 @@ const PATH_CALLS = { join, resolve, dirname };
 const IMPORT_META = { url: (file) => pathToFileURL(file), dirname, filename: (file) => file };
 const nameOf = (callee) => (ts.isIdentifier(callee) ? callee.text : ts.isPropertyAccessExpression(callee) ? callee.name.text : undefined);
 const WRAPPERS = [ts.isParenthesizedExpression, ts.isAsExpression, ts.isSatisfiesExpression, ts.isNonNullExpression];
+const unwrap = (node) => (WRAPPERS.some((is) => is(node)) ? unwrap(node.expression) : node);
+const isImportMeta = (node) =>
+  ts.isPropertyAccessExpression(node) && ts.isMetaProperty(node.expression) && node.expression.keywordToken === ts.SyntaxKind.ImportKeyword;
+const isNewUrl = (node) => ts.isNewExpression(node) && nameOf(node.expression) === 'URL' && node.arguments?.length === 2;
+const isExported = (node) => node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword);
+/** The `export const` declaration of `name` in a file. */
+const exportedConst = (sourceFile, name) =>
+  sourceFile.statements
+    .filter((node) => ts.isVariableStatement(node) && isExported(node))
+    .flatMap((node) => node.declarationList.declarations)
+    .find((node) => ts.isIdentifier(node.name) && node.name.text === name);
 
 // The files tests import constants from, each parsed once.
 const imports = new Map();
+const parsedImport = (file) => {
+  if (!imports.has(file)) imports.set(file, evaluatorFor(file, readFileSync(file, 'utf-8')));
+  return imports.get(file);
+};
+
 /** What each expression in one file always holds: a string, a URL, or undefined when it is built at run time. */
 function evaluatorFor(fileName, source) {
   const sourceFile = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
@@ -59,46 +75,45 @@ function evaluatorFor(fileName, source) {
   /** An `export const` of the repository file an import specifier names. */
   const imported = (specifier) => {
     const from = specifier.parent.parent.parent.moduleSpecifier.text;
-    const target = from.startsWith('.') && [from.replace(/\.js$/, '.ts'), from].map((path) => resolve(dirname(fileName), path)).find((path) => existsSync(path));
+    if (!from.startsWith('.')) return undefined;
+    const target = [from.replace(/\.js$/, '.ts'), from].map((path) => resolve(dirname(fileName), path)).find((path) => existsSync(path));
     if (!target) return undefined;
-    if (!imports.has(target)) imports.set(target, evaluatorFor(target, readFileSync(target, 'utf-8')));
-    const other = imports.get(target);
-    const name = (specifier.propertyName ?? specifier.name).text;
-    const declarations = other.sourceFile.statements
-      .filter((node) => ts.isVariableStatement(node) && node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword))
-      .flatMap((node) => node.declarationList.declarations);
-    const declaration = declarations.find((node) => ts.isIdentifier(node.name) && node.name.text === name);
+    const other = parsedImport(target);
+    const declaration = exportedConst(other.sourceFile, (specifier.propertyName ?? specifier.name).text);
     return declaration && other.held(declaration);
   };
+  const template = (node) => {
+    const parts = [node.head.text, ...node.templateSpans.flatMap((span) => [value(span.expression), span.literal.text])];
+    return parts.every((part) => typeof part === 'string') ? parts.join('') : undefined;
+  };
+  const identifier = (node) => {
+    const [declaration] = checker.getSymbolAtLocation(node)?.declarations ?? [];
+    // vite-node gives every module its own `__dirname` and `__filename`.
+    if (!declaration) return { __dirname: dirname(fileName), __filename: fileName }[node.text];
+    return ts.isImportSpecifier(declaration) ? imported(declaration) : held(declaration);
+  };
+  const newUrl = (node) => {
+    const [spec, base] = node.arguments.map(value);
+    return typeof spec === 'string' && base instanceof URL ? new URL(spec, base) : undefined;
+  };
+  const call = (node) => {
+    const name = nameOf(node.expression);
+    const args = node.arguments.map(value);
+    if (name === 'fileURLToPath') return args[0] instanceof URL ? fileURLToPath(args[0]) : undefined;
+    const pathCall = Object.hasOwn(PATH_CALLS, name) && args.every((arg) => typeof arg === 'string') && isAbsolute(args[0] ?? '');
+    return pathCall ? PATH_CALLS[name](...args) : undefined;
+  };
+  const KINDS = [
+    [ts.isStringLiteralLike, (node) => node.text],
+    [ts.isTemplateExpression, template],
+    [isImportMeta, (node) => IMPORT_META[node.name.text]?.(fileName)],
+    [ts.isIdentifier, identifier],
+    [isNewUrl, newUrl],
+    [ts.isCallExpression, call],
+  ];
   const value = (node) => {
-    while (WRAPPERS.some((is) => is(node))) node = node.expression;
-    if (ts.isStringLiteralLike(node)) return node.text;
-    if (ts.isTemplateExpression(node)) {
-      const parts = node.templateSpans.map((span) => value(span.expression));
-      return parts.every((part) => typeof part === 'string')
-        ? node.head.text + node.templateSpans.map((span, i) => parts[i] + span.literal.text).join('')
-        : undefined;
-    }
-    if (ts.isPropertyAccessExpression(node) && ts.isMetaProperty(node.expression) && node.expression.keywordToken === ts.SyntaxKind.ImportKeyword) {
-      return IMPORT_META[node.name.text]?.(fileName);
-    }
-    if (ts.isIdentifier(node)) {
-      const [declaration] = checker.getSymbolAtLocation(node)?.declarations ?? [];
-      // vite-node gives every module its own `__dirname` and `__filename`.
-      if (!declaration) return { __dirname: dirname(fileName), __filename: fileName }[node.text];
-      return ts.isImportSpecifier(declaration) ? imported(declaration) : held(declaration);
-    }
-    if (ts.isNewExpression(node) && nameOf(node.expression) === 'URL' && node.arguments?.length === 2) {
-      const [spec, base] = node.arguments.map(value);
-      return typeof spec === 'string' && base instanceof URL ? new URL(spec, base) : undefined;
-    }
-    if (ts.isCallExpression(node)) {
-      const name = nameOf(node.expression);
-      const args = node.arguments.map(value);
-      if (name === 'fileURLToPath') return args[0] instanceof URL ? fileURLToPath(args[0]) : undefined;
-      if (Object.hasOwn(PATH_CALLS, name) && args.every((arg) => typeof arg === 'string') && isAbsolute(args[0] ?? '')) return PATH_CALLS[name](...args);
-    }
-    return undefined;
+    const bare = unwrap(node);
+    return KINDS.find(([is]) => is(bare))?.[1](bare);
   };
   return { sourceFile, value, held };
 }
