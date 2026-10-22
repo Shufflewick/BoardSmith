@@ -388,6 +388,11 @@ describe('generatePackageJson — axe-core scaffold devDependency', () => {
     const own = JSON.parse(readFileSync(join(boardsmithPackageRoot(), 'package.json'), 'utf8'));
     expect(parsed.devDependencies.vitest).toBe(own.devDependencies.vitest);
   });
+
+  it('requires, as a peer, at least the vitest it pins, and leaves later majors open (#1344; the CLI handles Vitest 4, #1310)', () => {
+    const own = JSON.parse(readFileSync(join(boardsmithPackageRoot(), 'package.json'), 'utf8'));
+    expect(own.peerDependencies.vitest).toBe(own.devDependencies.vitest.replace(/^\^/, '>='));
+  });
 });
 
 describe('tableUiFiles — a11y example test harness', () => {
