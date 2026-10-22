@@ -33,6 +33,9 @@ import { WORLD_IFRAME_PATH } from './dev-world.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 import { REPO_ROOT } from '../spawn-cli.test-helper.js';
 
+// Links these tests to the rules worker the fixture runs by path (#1415); not in the helper, which the browser harness loads under tsx.
+import.meta.glob('../dev-host/world-rules-worker.ts');
+
 // Bundling the rules and starting Vite is the slow part, seconds on a busy
 // machine. A hang guard, not a budget.
 vi.setConfig({ testTimeout: 120_000 });

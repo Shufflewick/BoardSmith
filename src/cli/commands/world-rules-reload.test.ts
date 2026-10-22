@@ -15,6 +15,9 @@ import { openSocketPage, serveSockets } from '../dev-host/socket-page.test-helpe
 import { takeWorldLock, worldStorePath } from '../dev-host/world-store.js';
 import { bundleWorldRules, loadWorldRuntime, openWorldRun, startWorldRuntime, type WorldRuntime } from './dev-world.js';
 
+// The bundle runs the rules worker by its path; this links these tests to it, loading nothing (#1415).
+import.meta.glob('../dev-host/world-rules-worker.ts');
+
 /**
  * A one-fire world whose `stoke` adds `step` logs, written the way an author
  * writes one. `kindle` schedules a `burn` a second later, which adds `step`

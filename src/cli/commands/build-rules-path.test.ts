@@ -20,6 +20,8 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /** A real game class, so the build can load the rules it compiled. */
 const fixtureGame = resolve(dirname(fileURLToPath(import.meta.url)), 'simulate.fixture.ts');
+// These tests run the fixture by its path; this links them to it, loading nothing (#1415).
+import.meta.glob('./simulate.fixture.ts');
 
 /** Rules whose only distinguishing fact is their seat range. */
 function rulesSource(maxPlayers: number): string {
