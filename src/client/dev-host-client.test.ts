@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createDevHostClient } from './dev-host-client.js';
+// Through the package entry, `boardsmith/client`, as a game imports it.
+import { createDevHostClient } from './index.js';
 
 /** Minimal in-memory WebSocket: opens at once and records what the client sends. */
 class FakeSocket extends EventTarget {

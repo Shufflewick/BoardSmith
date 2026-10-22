@@ -1,4 +1,5 @@
 import { gitOutput as git } from './git-output.js';
+import { DESIGN_DIR } from './project-paths.js';
 
 /**
  * A chunk's own commits, and the commit it started from.
@@ -39,11 +40,11 @@ async function checkoutTips(projectDir: string): Promise<string[]> {
   return merging.trim() === '' ? ['HEAD'] : ['HEAD', 'MERGE_HEAD'];
 }
 
-/** The chunk's commits, newest first, each with its parents and subject. */
-async function chunkLog(projectDir: string, slug: string): Promise<{ hash: string; parents: string[]; subject: string }[]> {
+/** The chunk's commits, newest first, each with its parents and subject; with `unpushed`, only those on no remote-tracking branch. */
+async function readChunkLog(projectDir: string, slug: string, unpushed = false): Promise<{ hash: string; parents: string[]; subject: string }[]> {
   let log: string;
   try {
-    log = await git(projectDir, ['log', '--topo-order', '--format=%H%x09%P%x09%s', ...(await checkoutTips(projectDir)), '--']);
+    log = await git(projectDir, ['log', '--topo-order', '--format=%H%x09%P%x09%s', ...(await checkoutTips(projectDir)), ...(unpushed ? ['--not', '--remotes'] : []), '--']);
   } catch {
     throw new Error(
       `${projectDir} is not a git repository with commits.\n` +
@@ -51,14 +52,19 @@ async function chunkLog(projectDir: string, slug: string): Promise<{ hash: strin
     );
   }
   const prefix = `chunk-${slug}/`;
-  const commits = log
+  return log
     .split('\n')
     .map((line) => line.split('\t'))
     .filter(([, , subject]) => subject?.startsWith(prefix))
     .map(([hash, parents, subject]) => ({ hash, parents: parents.split(' ').filter(Boolean), subject }));
+}
+
+/** The chunk's commits, newest first, each with its parents and subject. Throws when there is none. */
+async function chunkLog(projectDir: string, slug: string): Promise<{ hash: string; parents: string[]; subject: string }[]> {
+  const commits = await readChunkLog(projectDir, slug);
   if (commits.length === 0) {
     throw new Error(
-      `No commit for chunk "${slug}" yet: none of its commit messages starts with "${prefix}".\n` +
+      `No commit for chunk "${slug}" yet: none of its commit messages starts with "chunk-${slug}/".\n` +
         `Commit each finished step as "chunk-${slug}/step-<name>" (state-machine.md "Git Protocol"), then run this again.`,
     );
   }
@@ -78,8 +84,28 @@ const BEFORE_SPEC = new Set(['step-investigate', 'step-redteam', 'step-ask']);
  * (#995). Read from its `chunk-<slug>/step-<name>` commits, the record of which steps it finished.
  */
 export async function chunkBeforeSpec(projectDir: string, slug: string): Promise<boolean> {
-  const prefix = `chunk-${slug}/`;
-  return (await chunkLog(projectDir, slug)).every((c) => BEFORE_SPEC.has(c.subject.slice(prefix.length).split(/[\s:]/)[0]));
+  return (await chunkLog(projectDir, slug)).every((c) => isBeforeSpec(slug, c.subject));
+}
+
+const isBeforeSpec = (slug: string, subject: string) => BEFORE_SPEC.has(subject.slice(`chunk-${slug}/`.length).split(/[\s:]/)[0]);
+
+/**
+ * The chunk's commits named for a step before spec that changed files outside `design/`, oldest
+ * first, each with those files (project-relative). Those steps write only design files, so game
+ * code cannot arrive under their name and skip the tests spec writes (#1201). Only commits on no
+ * remote-tracking branch are read, since pushed ones cannot be rewritten; a repository with no
+ * remote has pushed nothing, so every commit is read.
+ */
+export async function preSpecCodeChanges(projectDir: string, slug: string): Promise<{ commit: ChunkCommit; files: string[] }[]> {
+  const found: { commit: ChunkCommit; files: string[] }[] = [];
+  for (const c of (await readChunkLog(projectDir, slug, true)).reverse()) {
+    if (!isBeforeSpec(slug, c.subject)) continue;
+    // --cc: a merge commit's own changes, the files it left unlike every parent.
+    const changed = await git(projectDir, ['diff-tree', '--root', '--cc', '--no-commit-id', '--name-only', '-r', '-z', '--relative', c.hash]);
+    const files = changed.split('\0').filter((f) => f !== '' && !f.startsWith(`${DESIGN_DIR}/`));
+    if (files.length > 0) found.push({ commit: { hash: c.hash, label: c.subject }, files });
+  }
+  return found;
 }
 
 /** The first parent of the oldest of `commits` (newest first): the code as it stood before the chunk. */

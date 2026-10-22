@@ -15,7 +15,7 @@
  * a comment, is not a citation (`citableText`, #437). `chunk-merge` refuses a branch that added a real number,
  * so the only way a number reaches `main` from a parallel branch is through this allocation.
  */
-import { BLANK_LINE, PARAGRAPH_ENDED, PROVISIONAL_NUMBER, QUOTES, blankComments, citableText, entryHeadingPattern, lineOf } from './ledger-entries.js';
+import { type Citable, PROVISIONAL_NUMBER, blankComments, citableText, entryHeadingPattern, lineOf } from './ledger-entries.js';
 import { escapeRegExp } from '../../utils/regexp.js';
 import { CONSTRAINTS_MD, DECISIONS_MD, FILINGS_MD, QUESTIONS_MD, RULINGS_MD } from './project-paths.js';
 
@@ -95,11 +95,18 @@ function citationGrammar(gap: string) {
  * with a comment or quote marker (` * `, `// `, `# `, `> `), since prose is wrapped inside those too.
  */
 const CODE_GRAMMAR = citationGrammar('[ \\t]*(?:\\r?\\n[ \\t]*(?:(?:\\*|//|#|>)[ \\t]*)?)?');
-// In Markdown only a quote marker opens a wrapped line, and a line that starts a block continues none (#1398).
-const MARKDOWN_GRAMMAR = citationGrammar(`[ \\t]*(?:\\r?\\n(?!${PARAGRAPH_ENDED})${QUOTES}[ \\t]*)?`);
+// In Markdown a citation is read within one block (`citableText`), whose wrapped lines open only with quote markers (#1398).
+const MARKDOWN_GRAMMAR = citationGrammar('[ \\t]*(?:\\r?\\n[ \\t>]*)?');
 type CitationGrammar = ReturnType<typeof citationGrammar>;
 const grammarOf = (path: string) => (path.endsWith('.md') ? MARKDOWN_GRAMMAR : CODE_GRAMMAR);
 const BARE_PROVISIONAL = new RegExp(`(?<![\\w@.])${PROVISIONAL_NUMBER}(?!\\d)`, 'g');
+
+/** Each match of `pattern` within one block of `citable`, so none runs out of its block, at its offset in the whole text. */
+function blockMatches({ text, blocks }: Citable, pattern: RegExp): RegExpExecArray[] {
+  return blocks.flatMap(([start, end]) =>
+    [...text.slice(start, end).matchAll(pattern)].map((m) => Object.assign(m, { index: m.index + start })),
+  );
+}
 
 /** One id in a citation list: a real number, or a provisional one (a shorthand `.N` read as its full id). */
 interface ListItem {
@@ -202,14 +209,14 @@ function readList(
 function provisionalCitations(
   path: string,
   text: string,
-): { citable: string; citations: ProvisionalCitation[]; ranges: ProvisionalRange[] } {
+): { citable: Citable; citations: ProvisionalCitation[]; ranges: ProvisionalRange[] } {
   const citable = citableText(path, text);
   const citations: ProvisionalCitation[] = [];
   const ranges: ProvisionalRange[] = [];
   const attributed = new Set<number>();
   const grammar = grammarOf(path);
-  for (const list of citable.matchAll(grammar.list)) {
-    const read = readList(grammar, citable, list.index, list[0].length);
+  for (const list of blockMatches(citable, grammar.list)) {
+    const read = readList(grammar, citable.text, list.index, list[0].length);
     ranges.push(...read.ranges);
     for (const item of read.items) {
       if (item.provisional === undefined) continue;
@@ -217,7 +224,7 @@ function provisionalCitations(
       citations.push({ index: item.index, written: item.written, id: `${item.kind}${item.provisional}` });
     }
   }
-  for (const m of citable.matchAll(BARE_PROVISIONAL)) {
+  for (const m of citable.text.matchAll(BARE_PROVISIONAL)) {
     if (!attributed.has(m.index)) citations.push({ index: m.index, written: m[0], id: undefined });
   }
   return { citable, citations: citations.sort((a, b) => a.index - b.index), ranges };
@@ -252,15 +259,15 @@ export function unreadableShorthand(path: string, text: string): UnreadableShort
   const at = (m: RegExpExecArray, written: string) => ({
     index: m.index,
     written,
-    firstLine: lineOf(citable, m.index),
-    lastLine: lineOf(citable, m.index + m[0].length),
+    firstLine: lineOf(citable.text, m.index),
+    lastLine: lineOf(citable.text, m.index + m[0].length),
   });
   return [
     // A kind word, or a range's dash, may wrap onto the next line; it is quoted on one.
-    ...[...citable.matchAll(grammar.dashThenNumber)]
+    ...blockMatches(citable, grammar.dashThenNumber)
       .filter((m) => oneParagraph(path, citable, m.index + m[1].length, m.index + m[1].length + m[2].length))
       .map((m) => at(m, `${m[1]}${m[2].includes('\n') ? ' ' : m[2]}${m[3]}`)),
-    ...[...citable.matchAll(grammar.shorthandAfterKind)].map((m) => at(m, `${m[1]} ${m[2]}`)),
+    ...blockMatches(citable, grammar.shorthandAfterKind).map((m) => at(m, `${m[1]} ${m[2]}`)),
   ]
     .sort((a, b) => a.index - b.index)
     .map(({ written, firstLine, lastLine }) => ({ written, firstLine, lastLine }));
@@ -343,19 +350,15 @@ const LONE_SHORTHAND = new RegExp(`(?<![\\w@.)\\]'"\`\\\\])${SHORTHAND}(?!\\w)`,
 /** A `.N` straight after a constraint letter (`G.2`), not the start of a longer label (`C.3.1`). */
 const LETTER_SHORTHAND = new RegExp(`\\b(${LETTER_KINDS.join('|')})(${SHORTHAND})(?!\\w|\\.\\d)`, 'g');
 /** A line break that ends a comment's paragraph: a blank line, or one holding only a comment marker. */
-const PARAGRAPH_BREAK = new RegExp(String.raw`\n(?:[ \t\r]*(?:\*|\/\/|#)[ \t\r]*\n|${BLANK_LINE})`);
+const PARAGRAPH_BREAK = /\n[ \t\r]*(?:\*|\/\/|#)?[ \t\r]*\n/;
 /** A line of source code that is not a comment line, so not the comment's prose. */
 const CODE_LINE = /\n(?![ \t]*(?:\*|\/\/|#))/;
-const MARKDOWN_PARAGRAPH_END = new RegExp(String.raw`\n${PARAGRAPH_ENDED}`, 'gm');
 
 /** Whether `text[from, to)`, from a citation to a `.N`, stays in one paragraph of prose. */
-function oneParagraph(path: string, text: string, from: number, to: number): boolean {
+function oneParagraph(path: string, { text, blocks }: Citable, from: number, to: number): boolean {
+  if (path.endsWith('.md')) return blocks.some(([start, end]) => start <= from && to <= end);
   const between = text.slice(from, to);
-  if (!path.endsWith('.md')) return !PARAGRAPH_BREAK.test(between) && !CODE_LINE.test(between);
-  // Read in the whole text, since where a paragraph ends depends on the line before the break.
-  MARKDOWN_PARAGRAPH_END.lastIndex = from;
-  const end = MARKDOWN_PARAGRAPH_END.exec(text);
-  return end === null || end.index >= to;
+  return !PARAGRAPH_BREAK.test(between) && !CODE_LINE.test(between);
 }
 
 /**
@@ -367,16 +370,16 @@ function oneParagraph(path: string, text: string, from: number, to: number): boo
  */
 function strayShorthand(
   path: string,
-  citable: string,
+  citable: Citable,
   citations: ProvisionalCitation[],
   mapping: Record<string, string>,
 ): AllocationProblem[] {
   const read = new Set(citations.map((c) => c.index));
-  const afterKind = new Set([...citable.matchAll(grammarOf(path).shorthandAfterKind)].map((m) => m.index + m[0].length));
-  const lone = [...citable.matchAll(LONE_SHORTHAND)]
+  const afterKind = new Set(blockMatches(citable, grammarOf(path).shorthandAfterKind).map((m) => m.index + m[0].length));
+  const lone = [...citable.text.matchAll(LONE_SHORTHAND)]
     .filter((m) => !read.has(m.index) && !afterKind.has(m.index + m[0].length))
     .map((m) => ({ index: m.index, written: m[0], letter: undefined, short: m[0] }));
-  const afterLetter = [...citable.matchAll(LETTER_SHORTHAND)].map((m) => ({ index: m.index, written: m[0], letter: m[1], short: m[2] }));
+  const afterLetter = [...citable.text.matchAll(LETTER_SHORTHAND)].map((m) => ({ index: m.index, written: m[0], letter: m[1], short: m[2] }));
   const problems: AllocationProblem[] = [];
   for (const { index, written, letter, short } of [...lone, ...afterLetter].sort((a, b) => a.index - b.index)) {
     const before = citations.filter((c) => c.index < index).at(-1);

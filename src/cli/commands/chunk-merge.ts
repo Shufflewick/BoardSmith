@@ -80,7 +80,7 @@ import {
 import { describeFinding, ledgerCheck, verifyResultsOnFile } from './ledger-check.js';
 import { reviewRoundVerifies } from '../lib/run-log-roles.js';
 import { type TestRunner, checkConstraints, runVitest, unranTestsProblem } from './constraint-check.js';
-import { chunkTests } from './verify.js';
+import { chunkTests, preSpecRefusal } from './verify.js';
 import { type TypeCheckRun, typeCheckProject } from './validate.js';
 import { chunkVerifyBase } from '../lib/chunk-commits.js';
 import { VERIFIED, assessSignoffs, checkSignoff, chunkCodeFiles, readStatus, unaccountedEdits } from './chunk-signoff.js';
@@ -252,7 +252,12 @@ async function keepMainLock(ctx: MergeContext): Promise<void> {
 
 /** Why a provisional id cited in file `name` after allocation stops the merge, and the fix. */
 function citationRefusal(name: string, id: string): string {
-  const orExample = name.endsWith('.md') ? `, or, if it is an example rather than a citation, put it in a code span.` : '.';
+  const orExample = name.endsWith('.md')
+    ? ', or, if it is an example rather than a citation, put it in a code span. Inside an HTML block such as <details>, ' +
+      'backticks and <code> are plain text: there, put the example in an HTML comment, or on a line of its own after a ' +
+      'blank line, where Markdown is read again (not inside <pre>, <script>, <style> or <textarea>, which end only at ' +
+      'their closing tag).'
+    : '.';
   if (id.startsWith('@')) {
     return (
       `${name} cites ${id} without saying what kind of entry it is. Write the kind in front of it ` +
@@ -465,6 +470,12 @@ async function signoffProblems(projectDir: string): Promise<string[]> {
 
 const tail = (output: string) => output.trimEnd().split('\n').slice(-25).join('\n');
 
+/** A step before spec that changed game code (#1201), as chunk-merge refuses it. */
+async function preSpecProblems(ctx: MergeContext): Promise<string[]> {
+  const early = await preSpecRefusal(ctx.projectDir, ctx.slug, 'chunk-merge');
+  return early ? [`${early.summary} ${early.next}`] : [];
+}
+
 /**
  * Every tree-wide check on the combined tree, then, only if they pass, the merged chunk's fast
  * checks (#987): the tests it added or changed since its base, and typecheck, as its gates ran them
@@ -478,6 +489,7 @@ async function combinedTreeProblems(ctx: MergeContext, alongside: string[], { ru
     ...ledgers.findings.map(describeFinding),
     ...(await checkConstraints(ctx.projectDir, { runTests })).refusals,
     ...(await signoffProblems(ctx.projectDir)),
+    ...(await preSpecProblems(ctx)),
   ];
   if (problems.length > 0) return problems;
   const base = await chunkVerifyBase(ctx.projectDir, ctx.slug);

@@ -18,6 +18,8 @@ import { fixtureSandbox } from '../../testing/fixture-sandbox.test-helper.js';
 import { openWorldStore, resetWorldStore, takeWorldLock, worldStorePath } from './world-store.js';
 
 const CHILD = join(dirname(fileURLToPath(import.meta.url)), 'world-store-child.test-helper.mjs');
+// These tests run the child by its path; this links them to it, loading nothing (#1416).
+import.meta.glob('./world-store-child.test-helper.mjs');
 const BUDGETS = worldBudgets();
 
 /** A child process holding the store at `path` open, resolved once it says so. */

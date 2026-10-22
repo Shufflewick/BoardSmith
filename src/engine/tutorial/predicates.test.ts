@@ -27,6 +27,8 @@ import {
 } from '../index.js';
 import { GameRunner } from '../../runtime/runner.js';
 import type { TutorialDefinition, TutorialAdvanceCondition, TutorialGateContext } from './types.js';
+// Type imports are erased; this links the test to the file for verify's related-tests check.
+import './types.js';
 import { evaluateAdvanceWhen } from './progress.js';
 import { afterFirstTurn, afterTurns, whenForced } from './predicates.js';
 

@@ -1864,15 +1864,15 @@ The `actionController` (type: `UseActionControllerReturn`) is the unified interf
 | `clear` | `(selectionName: string) => boolean` | Take back a pick and every pick after it, keeping the action open so the cleared pick is asked again. Returns `false` and sets `lastError` when refused: a pick step still waiting on the server, a name that is not one of the action's picks, or a pick at or before an answer the server already holds. The Action Panel's clear button calls it |
 | `canClear` | `(selectionName: string) => boolean` | Whether `clear()` would take this pick back now, by the same rules. Draw a clear control only where this is true, as the Action Panel does |
 | `cancel` | `() => void` | Cancel wizard mode and clear selections |
-| `confirm` | `() => Promise<ControllerActionResult>` | Submit a quoted action's complete draft. Refused unless the price on screen is that draft's price (see `confirmDisabledReason`) |
-| `resumeFollowUp` | `() => Promise<void>` | Start the follow-up the server holds for this seat (`heldFollowUp`), even one cancelled before. Does nothing while another action is open |
-| `toggleMultiSelect` | `(selectionName: string, value: unknown) => Promise<void>` | Add or remove a value in the multiSelect draft. Confirms on its own when `min === max` and that count is reached |
+| `confirm` | `() => Promise<ControllerActionResult>` | Send the open action to the server with its picks so far. A quoted action is refused until every pick is answered and the price on screen is that draft's price (see `confirmDisabledReason`) |
+| `resumeFollowUp` | `() => Promise<void>` | Start the follow-up the server holds for this seat (`heldFollowUp`), even one cancelled before. Does nothing while another action is open, while an action is out to the server, while viewing history, or when no follow-up is held |
+| `toggleMultiSelect` | `(selectionName: string, value: unknown) => Promise<void>` | Add or remove a value in the draft of a multiSelect pick of the open action; ignored for a name that is not one. An add past `max` is ignored. Confirms on its own when `min === max` and that count is reached |
 | `confirmMultiSelect` | `() => Promise<PickValidationResult \| void>` | Fill the multiSelect or ordered-list selection with its draft |
 | `isMultiSelectSelected` | `(selectionName: string, value: unknown) => boolean` | Whether a value is in the draft for that selection |
 | `appendListEntry` | `(selectionName: string, value: unknown) => Promise<void>` | Add one entry to an `orderedList` draft (the same value again adds a second entry). Appends past `max` are ignored |
 | `removeListEntry` | `(selectionName: string, index: number) => void` | Drop the ordered-list draft entry at `index` |
 | `setPickDraft` | `(value: string \| number \| null) => void` | Record what the player has typed into the current number or text editor and not submitted, or `null` to clear it |
-| `getChoices` | `(pick: EnrichedPickMetadata) => Array<{ value, display, disabled? }>` | Choices for a pick (handles `filterBy` and `dependsOn`) |
+| `getChoices` | `(pick: EnrichedPickMetadata) => Array<{ value: unknown; display: string; disabled?: string }>` | Choices for a pick (handles `filterBy` and `dependsOn`). `disabled` is the reason a choice cannot be picked, absent when it can |
 | `getValidElements` | `(pick: EnrichedPickMetadata) => EnrichedValidElement[]` | Valid elements for an element pick, from the cache. Not reactive; use `validElements` for the current pick |
 | `getActionMetadata` | `(actionName: string) => EnrichedActionMetadata \| undefined` | Metadata for an action |
 | `getCollectedPick` | `(name: string) => CollectedPick \| undefined` | A pick collected so far: `{ value, display, skipped }` |

@@ -5,6 +5,9 @@ import { dirname, join } from 'node:path';
 import { boardsmithInstallKind, readBoardsmithVersion } from './boardsmith-version.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob('../cli.ts');
+
 /**
  * `readBoardsmithVersion()` exists because `src/cli/cli.ts:27` hardcoded `.version('0.0.1')` and
  * never read `package.json` — so `boardsmith --version` reported a stale literal regardless of

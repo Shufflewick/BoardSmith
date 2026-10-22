@@ -122,6 +122,109 @@ describe('boardsmith verify --chunk <slug>: the chunk\'s fast checks', () => {
     expect(check(result, 'test').next).toMatch(/Write the chunk's tests \(its spec step\).*boardsmith verify --chunk combat/);
   });
 
+  // #1201: a step before spec writes only design files, so game code cannot arrive untested under its name.
+  it('fails a chunk whose step before spec changed a file outside design/, naming the commit and file', async () => {
+    const dir = await gameOnBranch(false);
+    await write(dir, {
+      'design/chunks/combat/CHUNK.md': '# combat\n',
+      'src/rules.ts': `${await fs.readFile(join(dir, 'src', 'rules.ts'), 'utf-8')}export const tax = 1;\n`,
+    });
+    commitAll(dir, 'chunk-combat/step-investigate');
+    const investigate = git(dir, 'rev-parse', 'HEAD').trim();
+
+    const { result } = await runVerify({ projectDir: dir, chunk: 'combat', log: () => {} });
+
+    expect(result.passed).toBe(false);
+    expect(check(result, 'test').summary).toBe(
+      `Chunk "combat" changed files outside design/ in a step before spec, which writes no game code: ` +
+        `${investigate.slice(0, 10)} (chunk-combat/step-investigate) changed src/rules.ts.`,
+    );
+    expect(check(result, 'test').next).toMatch(/rewrite those commits, which are not pushed yet,.*a new commit on top, a revert included, does not clear this/);
+  });
+
+  it('keeps failing a chunk whose step before spec changed game code after later commits add passing tests, naming every such commit', async () => {
+    const dir = await gameOnBranch(false);
+    await write(dir, { 'design/chunks/combat/CHUNK.md': '# combat\n', 'src/rules.ts': `${await fs.readFile(join(dir, 'src', 'rules.ts'), 'utf-8')}export const tax = 1;\n` });
+    commitAll(dir, 'chunk-combat/step-investigate');
+    const investigate = git(dir, 'rev-parse', 'HEAD').trim();
+    await write(dir, { 'src/extra.ts': 'export const extra = 2;\n' });
+    commitAll(dir, 'chunk-combat/step-ask');
+    const ask = git(dir, 'rev-parse', 'HEAD').trim();
+    await write(dir, { 'tests/fee.test.ts': FEE_TEST });
+    commitAll(dir, 'chunk-combat/step-spec');
+
+    const { result } = await runVerify({ projectDir: dir, chunk: 'combat', log: () => {} });
+
+    expect(result.passed).toBe(false);
+    expect(check(result, 'test').summary).toBe(
+      `Chunk "combat" changed files outside design/ in a step before spec, which writes no game code: ` +
+        `${investigate.slice(0, 10)} (chunk-combat/step-investigate) changed src/rules.ts; ${ask.slice(0, 10)} (chunk-combat/step-ask) changed src/extra.ts.`,
+    );
+  });
+
+  it('checks only the commits not yet pushed to a remote, wherever they were pushed, so pushed history is left alone (#1201)', async () => {
+    const dir = await gameOnBranch(false);
+    await write(dir, { 'src/rules.ts': `${await fs.readFile(join(dir, 'src', 'rules.ts'), 'utf-8')}export const tax = 1;\n` });
+    commitAll(dir, 'chunk-combat/step-investigate');
+    const origin = join(dirname(dir), 'origin.git');
+    git(dirname(dir), 'init', '-q', '--bare', origin);
+    git(dir, 'remote', 'add', 'origin', origin);
+    git(dir, 'push', '-q', 'origin', 'chunk/deal');
+    await write(dir, { 'design/chunks/combat/CHUNK.md': '# combat\n' });
+    commitAll(dir, 'chunk-combat/step-redteam');
+
+    const pushed = await runVerify({ projectDir: dir, chunk: 'combat', log: () => {} });
+    expect(check(pushed.result, 'test').summary).toMatch(/^No test ran: chunk "combat" has only reached the steps before spec/);
+
+    await write(dir, { 'src/extra.ts': 'export const extra = 2;\n' });
+    const ask = commitAll(dir, 'chunk-combat/step-ask');
+    const unpushed = await runVerify({ projectDir: dir, chunk: 'combat', log: () => {} });
+    expect(check(unpushed.result, 'test').summary).toBe(
+      `Chunk "combat" changed files outside design/ in a step before spec, which writes no game code: ${ask.slice(0, 10)} (chunk-combat/step-ask) changed src/extra.ts.`,
+    );
+  });
+
+  it('reads a step before spec that is a merge commit by what the merge itself changed (#1201)', async () => {
+    const dir = await gameOnBranch(false);
+    git(dir, 'checkout', '-q', '-b', 'side');
+    await write(dir, { 'design/notes.md': 'notes\n' });
+    commitAll(dir, 'notes');
+    git(dir, 'checkout', '-q', 'chunk/deal');
+    git(dir, 'merge', '-q', '--no-ff', '--no-commit', 'side');
+    await write(dir, { 'src/extra.ts': 'export const extra = 2;\n' });
+    const merge = commitAll(dir, 'chunk-combat/step-investigate');
+
+    const { result } = await runVerify({ projectDir: dir, chunk: 'combat', log: () => {} });
+
+    expect(check(result, 'test').summary).toBe(
+      `Chunk "combat" changed files outside design/ in a step before spec, which writes no game code: ${merge.slice(0, 10)} (chunk-combat/step-investigate) changed src/extra.ts.`,
+    );
+  });
+
+  it('passes a step before spec that wrote a design file whose name git would quote (#1201)', async () => {
+    const dir = await gameOnBranch(false);
+    await write(dir, { 'design/notes "draft".md': 'notes\n' });
+    commitAll(dir, 'chunk-combat/step-investigate');
+
+    const { result } = await runVerify({ projectDir: dir, chunk: 'combat', log: () => {} });
+
+    expect(check(result, 'test').summary).toMatch(/^No test ran: chunk "combat" has only reached the steps before spec/);
+  });
+
+  it('fails a step before spec that changed game code even when the suite cannot run (#1201)', async () => {
+    const dir = await gameOnBranch(false);
+    await fs.rm(join(dir, 'tests'), { recursive: true });
+    commitAll(dir, 'drop the tests');
+    await write(dir, { 'src/extra.ts': 'export const extra = 2;\n' });
+    const investigate = commitAll(dir, 'chunk-combat/step-investigate');
+
+    const { result } = await runVerify({ projectDir: dir, chunk: 'combat', log: () => {} });
+
+    expect(check(result, 'test').summary).toBe(
+      `Chunk "combat" changed files outside design/ in a step before spec, which writes no game code: ${investigate.slice(0, 10)} (chunk-combat/step-investigate) changed src/extra.ts.`,
+    );
+  });
+
   it('passes an exempt chunk with no test of its own on typecheck alone, saying no test ran and why', async () => {
     const dir = await gameOnBranch(false);
     await chunkWithoutTests(dir, '| exempt | a restyle, no rules change | n/a |');

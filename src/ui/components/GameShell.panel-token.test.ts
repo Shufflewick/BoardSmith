@@ -30,6 +30,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import PlayerToken from './PlayerToken.vue';
 
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob(['./GameShell.vue', './PlayShell.vue']);
+
 interface TestPlayer { seat: number; name: string; color?: string }
 
 const PLAYERS: TestPlayer[] = [

@@ -37,6 +37,9 @@ import { Game, Player, type GameElement } from '../engine/index.js';
 import { worldAction } from '../world/index.js';
 import type { GameDefinition } from './types.js';
 
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob('./types.ts');
+
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..');
 const types = readFileSync(join(SRC, 'session', 'types.ts'), 'utf-8');
 

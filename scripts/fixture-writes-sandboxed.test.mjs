@@ -108,12 +108,14 @@ describe('unsandboxedWritingFixture', () => {
   });
 });
 
+// Parsing every test file takes seconds on a busy machine, so it runs here, where no test timeout applies (#1412).
+const findings = trackedTestFiles(['src', 'scripts'])
+  // This file's own examples above are unsandboxed on purpose.
+  .filter(({ path, text }) => path !== 'scripts/fixture-writes-sandboxed.test.mjs' && unsandboxedWritingFixture(text))
+  .map(({ path }) => path);
+
 describe('the test suite (#430)', () => {
   it('runs every fixture program that writes to a path it is handed in a fixture sandbox', () => {
-    const findings = trackedTestFiles(['src', 'scripts'])
-      // This file's own examples above are unsandboxed on purpose.
-      .filter(({ path, text }) => path !== 'scripts/fixture-writes-sandboxed.test.mjs' && unsandboxedWritingFixture(text))
-      .map(({ path }) => path);
     expect(
       findings,
       'These tests write a program that writes to a path it is handed, and run it where it can write anywhere. '

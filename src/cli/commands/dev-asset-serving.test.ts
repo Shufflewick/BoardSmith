@@ -22,6 +22,8 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const devHostDir = resolve(__dirname, '..', 'dev-host');
+// The plugin serves the dev host page by its path; this links these tests to it, loading nothing (#1416).
+import.meta.glob('../dev-host/host.html');
 
 const devConfig = {
   gameType: 'fixture',

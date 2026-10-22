@@ -25,6 +25,9 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { loadWorldRuntime } from './dev-world.js';
 import { loadGameDefinition } from './game-runtime.js';
 
+// The bundle runs the rules worker by its path; this links these tests to it, loading nothing (#1415).
+import.meta.glob('../dev-host/world-rules-worker.ts');
+
 /** A one-room world project, written the way an author writes one. */
 function worldProject(): { rulesPath: string; tempDir: string } {
   const dir = tempTree('bs-dev-world-runtime-');

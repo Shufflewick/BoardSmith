@@ -30,6 +30,8 @@ import { openWorldStore, worldStorePath } from './world-store.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const CHILD = join(dirname(fileURLToPath(import.meta.url)), 'world-store-child.test-helper.mjs');
+// These tests run the child by its path; this links them to it, loading nothing (#1416).
+import.meta.glob('./world-store-child.test-helper.mjs');
 const BUDGETS = worldBudgets();
 
 /**

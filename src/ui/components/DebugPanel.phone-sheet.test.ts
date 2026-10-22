@@ -18,6 +18,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BREAKPOINTS } from '../theme.js';
 
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob('./DebugPanel.vue');
+
 const SOURCE = fs.readFileSync(
   path.join(path.dirname(fileURLToPath(import.meta.url)), 'DebugPanel.vue'),
   'utf-8',

@@ -193,6 +193,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob(['./GameShell.vue', './PlayShell.vue', './auto-ui/ActionPanel.vue']);
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 
 describe('source: the guarantee lives in the filter, not in a shell guard', () => {

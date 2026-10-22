@@ -27,6 +27,9 @@ import { fileURLToPath } from 'node:url';
 import { BREAKPOINTS } from '../../theme.js';
 import { stubActionController, mountPanel } from './action-panel-controller.test-helper.js';
 
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob('../PlayShell.vue');
+
 const SOURCE = fs.readFileSync(
   path.join(path.dirname(fileURLToPath(import.meta.url)), 'ActionPanel.vue'),
   'utf-8',

@@ -6,6 +6,8 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ObjectiveWeight, TrainingProgress } from './types.js';
+// Type imports are erased; this links the test to the file for verify's related-tests check.
+import './types.js';
 import type { WeightEvolverConfig } from './weight-evolver.js';
 import type { BenchmarkConfig } from './benchmark.js';
 import type { BenchmarkJob } from './parallel-benchmark.js';

@@ -11,6 +11,8 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 const here = dirname(fileURLToPath(import.meta.url));
+// These tests read the pages by their paths; this links them to the pages, loading nothing (#1416).
+import.meta.glob(['./host.html', './world-host.html']);
 
 describe('the dev host pages', () => {
   it.each(['host.html', 'world-host.html'])('%s declares an inline icon, so no /favicon.ico is requested', (page) => {

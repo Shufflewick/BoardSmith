@@ -335,7 +335,10 @@ An example id (a reproduction in a filing, a form like `Ruling @<slug>.<n>`) goe
 a fenced code block. In a Markdown file an id inside a code span, a fenced block or an HTML comment
 is quoted text and never a citation: `chunk-merge` neither rewrites it nor asks for an entry headed
 with it. Written bare in prose, `Filing @x.1` is a citation, and a citation of an id no entry
-declares stops the merge.
+declares stops the merge. Inside an HTML block such as `<details>` Markdown is not read, so an id in
+backticks or `<code>` there is a citation; quote it in an HTML comment, or in a code span on a line of
+its own after a blank line (not inside `<pre>`, `<script>`, `<style>` or `<textarea>`, which end only
+at their closing tag).
 
 A citation writes its kind, then its id: `Ruling @<slug>.<n>`. In a list the kind word may be
 written once, plural, and every id after it takes that kind: `Rulings 8 and @<slug>.1`,
@@ -379,7 +382,11 @@ even in a file the branch renamed, does not.
   (`build/spec.md` "Exemptions"): an exempt chunk passes on typecheck alone. Before `spec`, the
   step that writes the chunk's tests, no test of its own is asked for: while every
   `chunk-<slug>/` commit is `step-investigate`, `step-redteam` or `step-ask`, the chunk passes on
-  typecheck alone too (#995). The full checks (the whole suite, build, validate,
+  typecheck alone too (#995). Those steps write only files under `design/`: a
+  `step-investigate`, `step-redteam` or `step-ask` commit that changes any other file fails the
+  fast checks and chunk-merge, naming the commit and file (#1201). Only commits not yet pushed to
+  any remote are checked, since those are the ones still safe to rewrite; in a repository with no
+  remote every commit is checked. The full checks (the whole suite, build, validate,
   the smoke test and the mutation check) run once, before the game is published
   (`boardsmith publish` refuses without a full `boardsmith verify` for the commit), not per chunk.
 

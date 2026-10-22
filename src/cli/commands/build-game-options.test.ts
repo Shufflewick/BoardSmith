@@ -20,6 +20,8 @@ import * as session from '../../session/index.js';
 import { declaredGameOptionsOf } from '../../session/game-option-selection.js';
 
 const fixtureGame = resolve(dirname(fileURLToPath(import.meta.url)), 'simulate.fixture.ts');
+// These tests run the fixture by its path; this links them to it, loading nothing (#1415).
+import.meta.glob('./simulate.fixture.ts');
 
 const lobbyOption = { id: 'rounds', type: 'number', label: 'Rounds', min: 1, max: 9, default: 3 };
 const knob = { id: 'lootScale', type: 'number', label: 'Loot scale', default: 1, designerOnly: true };

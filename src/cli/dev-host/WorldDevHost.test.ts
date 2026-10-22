@@ -16,6 +16,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import WorldDevHost from './WorldDevHost.vue';
 import type { WorldDevConfig } from './world-config-types.js';
+// Type imports are erased; this links the test to the file for verify's related-tests check.
+import './world-config-types.js';
 import { WORLD_HOST_SOURCE, WORLD_UI_SOURCE } from '../../ui/world/worldProtocol.js';
 
 // ── A socket that records rather than connects ──────────────────────────────

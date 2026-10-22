@@ -14,6 +14,9 @@ import path from 'node:path';
 import ts from 'typescript';
 import { fileURLToPath } from 'node:url';
 
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob('./index.ts');
+
 const INDEX = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'index.ts');
 
 // Built once, at the top of the file, where no test timeout applies.

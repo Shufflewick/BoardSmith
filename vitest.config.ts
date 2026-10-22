@@ -1,14 +1,20 @@
 import { defineConfig } from 'vitest/config';
 import { resolve } from 'path';
 import vue from '@vitejs/plugin-vue';
+import { rerunTriggers } from './src/vite-config/index.js';
 
 export default defineConfig({
+  // The checkout, not the working directory, so the rerun triggers stay anchored here when vitest starts elsewhere (#1420).
+  root: __dirname,
   plugins: [
     vue(),
+    rerunTriggers(),
     // A test imports the Markdown it reads, so `--changed` runs it when that Markdown changes (#1370).
     // shortcut: vitest 3 drops `?raw` imports from `--changed`; on vitest 5 use `?raw` and delete this.
     { name: 'markdown-as-text', transform: (text, id) => (id.endsWith('.md') ? `export default ${JSON.stringify(text)};` : undefined) },
   ],
+  // A test links the dev host pages it serves with `import.meta.glob`, and `--changed` reads each linked file as a module (#1416).
+  assetsInclude: ['**/*.html'],
   test: {
     globals: true,
     environment: 'node',

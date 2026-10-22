@@ -41,6 +41,9 @@ import path from 'node:path';
 import ts from 'typescript';
 import { fileURLToPath } from 'node:url';
 
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob('./protocol.ts');
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SRC = path.resolve(HERE, '..');
 const OWNER = path.join(SRC, 'types', 'protocol.ts');

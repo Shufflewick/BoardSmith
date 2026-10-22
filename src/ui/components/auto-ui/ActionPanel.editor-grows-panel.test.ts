@@ -30,6 +30,9 @@ import { fileURLToPath } from 'node:url';
 import { mountPanelAt, submitText } from './action-panel-editor.test-helper.js';
 import type { EnrichedActionMetadata } from '../../composables/useActionControllerTypes.js';
 
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob('../PlayShell.vue');
+
 const MARK = '[data-bs-grows-panel]';
 const BOX = '[data-bs-grows-panel="box"]';
 const FIELD = '[data-bs-grows-panel="field"]';
