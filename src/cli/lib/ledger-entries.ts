@@ -55,15 +55,25 @@ export interface LedgerEntry {
 /**
  * Replaces every HTML comment with blanks of the same shape, so the template's illustrative
  * examples (which live inside `<!-- -->`) are never read as entries, and every line number still
- * points at the real line in the file.
+ * points at the real line in the file. The `>` markers that start a line inside one are kept, so a
+ * blockquote's line still reads as quoted (#1401).
  */
 export function blankComments(text: string): string {
-  return text.replace(/<!--[\s\S]*?-->/g, (comment) => comment.replace(/[^\n]/g, ' '));
+  return text.replace(/<!--[\s\S]*?-->/g, (comment) =>
+    comment.replace(/(\n(?: {0,3}>)*)|[^\n]/g, (_, lineStart?: string) => lineStart ?? ' '),
+  );
 }
 
 const blank = (quoted: string): string => quoted.replace(/[^\n]/g, ' ');
 
-const QUOTES = String.raw`(?: {0,3}>[ \t]?)*`;
+// Each space between two markers has one place to go, so a failed match tries each split once (#1401).
+const QUOTE_MARKERS = String.raw` {0,3}>(?:(?:\t {0,3}| {0,4})>)*[ \t]?`;
+const QUOTES = `(?:${QUOTE_MARKERS})?`;
+// A fence in a blockquote ends at its closing fence or where the quote ends (#1396).
+const QUOTED_FENCE = new RegExp(
+  String.raw`^${QUOTE_MARKERS} {0,3}(\`{3,}|~{3,})[^\n]*(?:\n {0,3}>[^\n]*)*?(?:\n${QUOTE_MARKERS} {0,3}\1[\`~]*[ \t]*$|(?=\n(?! {0,3}>))|(?![\s\S]))`,
+  'gm',
+);
 const ATX_HEADING = String.raw`${QUOTES} {0,3}#{1,6}(?![^ \t\r\n])`;
 // shortcut: an unquoted = or -- line lazily continuing a quote or list paragraph is text, yet ends the span here too; #1402 tracks containers.
 const SETEXT_UNDERLINE = String.raw`${QUOTES} {0,3}(?:=+|-+)[ \t\r]*(?![^\n])`;
@@ -93,8 +103,7 @@ export function citableText(path: string, text: string): string {
   if (!path.endsWith('.md')) return text;
   return blankComments(text)
     .replace(/^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^ {0,3}\1[`~]*[ \t]*$|(?![\s\S]))/gm, blank)
-    // A fence in a blockquote ends at its closing fence or where the quote ends (#1396).
-    .replace(/^(?: {0,3}>[ \t]?)+ {0,3}(`{3,}|~{3,})[^\n]*(?:\n {0,3}>[^\n]*)*?(?:\n(?: {0,3}>[ \t]?)+ {0,3}\1[`~]*[ \t]*$|(?=\n(?! {0,3}>))|(?![\s\S]))/gm, blank)
+    .replace(QUOTED_FENCE, blank)
     .replace(CODE_SPAN, blank);
 }
 

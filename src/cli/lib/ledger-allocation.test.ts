@@ -220,7 +220,17 @@ describe('quoted ids are never citations (#437)', () => {
         const text = `see \`Ruling${eol}${line}${eol}@x.1\` here${eol}`;
         expect({ line, cites: provisionalReferences('design/notes.md', text) }).toEqual({ line, cites: [] });
       }
+      // A comment over a quote's line breaks keeps them quoted, so the next quote line continues the span.
+      const commented = `> x <!-- c${eol}> d --> \`Ruling${eol}> @x.1\` here${eol}`;
+      expect({ eol, cites: provisionalReferences('design/notes.md', commented) }).toEqual({ eol, cites: [] });
     }
+  });
+
+  // #1401 review: a quote prefix the pattern could split two ways at each marker took twice as long per marker.
+  it('reads a line of many quote markers in one pass', () => {
+    const markers = '> '.repeat(48);
+    expect(provisionalReferences('design/notes.md', `a \`b\n${markers}See Ruling @a.1 and \`c\n`)).toEqual(['Ruling @a.1']);
+    expect(provisionalReferences('design/notes.md', `${markers}x\n${markers}See Ruling @a.1\n`)).toEqual(['Ruling @a.1']);
   });
 
   it('finds no citation in any shipped template or skill file, so they pass chunk-merge unchanged', async () => {
