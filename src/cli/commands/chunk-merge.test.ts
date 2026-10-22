@@ -575,15 +575,20 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
   });
 
   it('refuses a shortened id straight after a constraint letter, and leaves main as it was (#1390)', async () => {
+    const constraints = await fs.readFile(join(main, 'design/CONSTRAINTS.md'), 'utf-8');
     await buildOnBranch('trading', 100, {
-      'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',
-      'design/notes.md': 'Prices follow Ruling @trading.1, within G.2.\n',
+      'design/CONSTRAINTS.md':
+        `${constraints}\n### G@trading.1\n- State: Market.prices\n- Grows with: turns\n- Chunk: trading\n- Ruling: Ruling 1\n` +
+        '\n### G@trading.2\n- State: Market.offers\n- Grows with: turns\n- Chunk: trading\n- Ruling: Ruling 1\n',
+      'design/notes.md': 'Prices follow G@trading.1 and G.2.\n',
     });
     const before = head();
     const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
     expect(result.merged).toBe(false);
     expect(result.refusals).toEqual([
-      expect.stringMatching(/^design\/notes\.md writes "G\.2", a shortened id straight after a kind word\..*`G@<slug>\.2`/),
+      'design/notes.md writes "G.2" after G@trading.1, but a shortened id is never read after a constraint letter, so ' +
+        'the merge cannot read it as G@trading.2 and would leave it naming nothing. Write the id in full on the branch ' +
+        '(for example "G@trading.2"), and merge again.',
     ]);
     expect(head()).toBe(before);
     expect(status()).toBe('');

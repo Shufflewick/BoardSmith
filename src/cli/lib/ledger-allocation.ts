@@ -211,26 +211,20 @@ export function provisionalReferences(path: string, text: string): string[] {
 }
 
 const DASH_THEN_NUMBER = new RegExp(`(?<![\\w@.])${PROVISIONAL_NUMBER}[ \\t]*[-–][ \\t]*\\d+(?!\\d)`, 'g');
-const SHORTHAND_AFTER_KIND = new RegExp(
-  `\\b(?:((?:${WORD_KINDS.join('|')})s?)(?=\\s)${GAP}|(${LETTER_KINDS.join('|')}))(${SHORTHAND})(?!\\d)`,
-  'g',
-);
+const SHORTHAND_AFTER_KIND = new RegExp(`\\b((?:${WORD_KINDS.join('|')})s?)(?=\\s)${GAP}(${SHORTHAND})(?!\\d)`, 'g');
 
 /**
  * Shorthand in file `path` that names no id the merge can map (#446), as written: a dash then a
  * plain number after a provisional id (`@a.1-3`, which may mean `@a.3` or real number 3), and a
- * shortened id right after a kind word or letter (`Decision .2`, even wrapped onto the next line, or
- * `G.2`), which takes no slug from an id before the kind. Quoted text (`citableText`) is not read.
+ * shortened id right after a kind word (`Decision .2`, even wrapped onto the next line), which takes
+ * no slug from an id before the kind word. Quoted text (`citableText`) is not read.
  */
 export function unreadableShorthand(path: string, text: string): string[] {
   const citable = citableText(path, text);
   return [
     ...[...citable.matchAll(DASH_THEN_NUMBER)].map((m) => ({ index: m.index, written: m[0] })),
     // A kind word may wrap onto the next line; it is quoted on one.
-    ...[...citable.matchAll(SHORTHAND_AFTER_KIND)].map((m) => ({
-      index: m.index,
-      written: m[1] === undefined ? `${m[2]}${m[3]}` : `${m[1]} ${m[3]}`,
-    })),
+    ...[...citable.matchAll(SHORTHAND_AFTER_KIND)].map((m) => ({ index: m.index, written: `${m[1]} ${m[2]}` })),
   ]
     .sort((a, b) => a.index - b.index)
     .map((m) => m.written);
@@ -310,6 +304,8 @@ function runProblem(
 
 /** A `.N` standing alone: not part of a word or number (`p.20`, `0.5`), a unit (`.5em`) or a quote (`'.2'`). */
 const LONE_SHORTHAND = new RegExp(`(?<![\\w@.)\\]'"\`\\\\])${SHORTHAND}(?!\\w)`, 'g');
+/** A `.N` straight after a constraint letter (`G.2`), not the start of a longer label (`C.3.1`). */
+const LETTER_SHORTHAND = new RegExp(`\\b(${LETTER_KINDS.join('|')})(${SHORTHAND})(?!\\w|\\.\\d)`, 'g');
 /** A line break that ends a paragraph: a blank line, or one holding only a comment or quote marker. */
 const PARAGRAPH_BREAK = /\n[ \t\r]*(?:(?:\*|\/\/|#|>)[ \t\r]*)?\n/;
 /** A line of source code that is not a comment line, so not the comment's prose. */
@@ -321,9 +317,10 @@ const oneParagraph = (path: string, between: string): boolean =>
 
 /**
  * Each `.N` no citation list read, after a provisional id in the same paragraph of prose, whose
- * slug's id N the merge allocated (#1363): `Decision @a.2 supersedes .1`. The merge cannot tell it
- * from prose, so it refuses it rather than leave it naming nothing. A `.N` straight after a kind
- * word is `unreadableShorthand`'s.
+ * slug's id N the merge allocated (#1363): `Decision @a.2 supersedes .1`, and `G@a.1 and G.2`, as
+ * the letter's kind (#1390). The merge cannot tell it from prose ("Appendix G.2"), so it refuses it
+ * only then, rather than leave it naming nothing. A `.N` straight after a kind word is
+ * `unreadableShorthand`'s.
  */
 function strayShorthand(
   path: string,
@@ -333,19 +330,24 @@ function strayShorthand(
 ): AllocationProblem[] {
   const read = new Set(citations.map((c) => c.index));
   const afterKind = new Set([...citable.matchAll(SHORTHAND_AFTER_KIND)].map((m) => m.index + m[0].length));
+  const lone = [...citable.matchAll(LONE_SHORTHAND)]
+    .filter((m) => !read.has(m.index) && !afterKind.has(m.index + m[0].length))
+    .map((m) => ({ index: m.index, written: m[0], letter: undefined, short: m[0] }));
+  const afterLetter = [...citable.matchAll(LETTER_SHORTHAND)].map((m) => ({ index: m.index, written: m[0], letter: m[1], short: m[2] }));
   const problems: AllocationProblem[] = [];
-  for (const m of citable.matchAll(LONE_SHORTHAND)) {
-    if (read.has(m.index) || afterKind.has(m.index + m[0].length)) continue;
-    const before = citations.filter((c) => c.index < m.index).at(-1);
-    if (before === undefined || !oneParagraph(path, citable.slice(before.index, m.index))) continue;
+  for (const { index, written, letter, short } of [...lone, ...afterLetter].sort((a, b) => a.index - b.index)) {
+    const before = citations.filter((c) => c.index < index).at(-1);
+    if (before === undefined || !oneParagraph(path, citable.slice(before.index, index))) continue;
     const after = before.id ?? before.written;
-    const id = `${after.slice(0, after.lastIndexOf('.'))}${m[0]}`;
+    const slug = after.slice(0, after.lastIndexOf('.'));
+    const id = letter === undefined ? `${slug}${short}` : `${letter}${slug.slice(slug.indexOf('@'))}${short}`;
     if (!(id in mapping)) continue;
+    const why = letter === undefined ? 'not in a list with it' : 'a shortened id is never read after a constraint letter';
     problems.push({
       path,
       ids: [],
       detail:
-        `writes "${m[0]}" after ${after}, but not in a list with it, so the merge cannot read it as ${id} and would ` +
+        `writes "${written}" after ${after}, but ${why}, so the merge cannot read it as ${id} and would ` +
         `leave it naming nothing. Write the id in full on the branch (for example "${id}"), and merge again.`,
     });
   }
