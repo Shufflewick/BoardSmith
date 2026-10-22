@@ -203,26 +203,33 @@ describe('a simultaneous step decides a seat the same way at entry, on refresh a
   });
 });
 
-describe('every site reads a seat\'s action list once, not once per declared name (#501)', () => {
+/** Spy on the one availability check, counting how often each `seat:action` is checked. */
+function countChecks(game: SeatGame) {
+  const calls = vi.spyOn(game.getActionExecutor(), 'isActionAvailable');
+  return () => {
+    const counts = calls.mock.calls.map(([action, player]) => `${player.seat}:${action.name}`).sort();
+    calls.mockClear();
+    return counts;
+  };
+}
+
+describe('every site checks each declared action once per seat, and no action the step does not declare (#501, #1431)', () => {
   it('at simultaneous step entry, on refresh, and after a seat acts', () => {
     // Taking an action changes nothing, so the acting seat stays awaited and
-    // is re-evaluated rather than finished.
+    // is re-evaluated rather than finished. `undeclared` is never on offer.
     const game = new SeatGame({ playerCount: 2, seed: 's' });
-    for (const name of NAMES) game.registerAction(Action.create(name).execute(() => {}));
-    const calls = vi.spyOn(game, 'getAvailableActions');
+    for (const name of [...NAMES, 'undeclared']) game.registerAction(Action.create(name).execute(() => {}));
+    const checks = countChecks(game);
     const engine = simultaneousEngine(game);
 
     engine.start();
-    expect(calls).toHaveBeenCalledTimes(2);
+    expect(checks()).toEqual(['1:a', '1:b', '1:c', '2:a', '2:b', '2:c']);
 
-    calls.mockClear();
     engine.refreshAwaitingActions();
-    expect(calls).toHaveBeenCalledTimes(2);
+    expect(checks()).toEqual(['1:a', '1:b', '1:c', '2:a', '2:b', '2:c']);
 
-    calls.mockClear();
     engine.resume('a', {}, 1);
-    const actingSeatReads = calls.mock.calls.filter(([p]) => p === game.players[0]).length;
-    expect(actingSeatReads).toBe(1);
+    expect(checks().filter((check) => check.startsWith('1:'))).toEqual(['1:a', '1:b', '1:c']);
   });
 
   it('at a sequential step\'s entry and when it re-opens for a seat holding a follow-up', () => {
@@ -232,21 +239,21 @@ describe('every site reads a seat\'s action list once, not once per declared nam
     );
     game.registerAction(Action.create('b').execute(() => {}));
     game.registerAction(Action.create('finish').execute(() => {}));
-    const calls = vi.spyOn(game, 'getAvailableActions');
+    game.registerAction(Action.create('undeclared').execute(() => {}));
+    const checks = countChecks(game);
     const engine = new FlowEngine(
       game,
       { root: actionStep({ name: 'turn', actions: ['a', 'b', 'finish'], maxMoves: 1 }) },
     );
 
     const entry = engine.start();
-    expect(calls).toHaveBeenCalledTimes(1);
+    expect(checks()).toEqual(['1:a', '1:b', '1:finish']);
 
-    calls.mockClear();
     const held = engine.resume('a', {});
     // The step's one move is spent, but the held follow-up re-opens it, and the
     // seat is offered the same names its plain entry would offer it.
     expect(held.awaitingInput).toBe(true);
     expect(held.availableActions).toEqual(entry.availableActions);
-    expect(calls).toHaveBeenCalledTimes(1);
+    expect(checks()).toEqual(['1:a', '1:b', '1:finish']);
   });
 });
